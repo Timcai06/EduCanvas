@@ -26,9 +26,11 @@ __pycache__/
 .venv/
 venv/
 
-# Editors
+# Editors（.vscode 里共享的两个配置文件例外，用于统一团队编辑器行为）
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .claude/
 *.swp
 *.swo
@@ -40,9 +42,13 @@ tmp/
 temp/
 
 # Local runtime data and large generated artifacts
-uploads/
-models/
-checkpoints/
-artifacts/
+# 注意：只匹配仓库根目录，避免误伤 packages/canvas-protocol/src/artifacts/ 等源码目录
+/uploads/
+/models/
+/checkpoints/
+/artifacts/
+
+# TypeScript incremental build info
+*.tsbuildinfo
 
 
