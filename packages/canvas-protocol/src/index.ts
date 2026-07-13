@@ -1,3 +1,9 @@
+/**
+ * Canvas 协议包的唯一公共入口。
+ * 集中导出可避免调用方依赖内部文件布局，并让协议演进保持在 ADR-0002 的受控边界内。
+ * @packageDocumentation
+ */
+
 export {
   ARTIFACT_SCHEMA_VERSION,
   artifactSchema,

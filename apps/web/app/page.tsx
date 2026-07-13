@@ -1,5 +1,9 @@
 import Link from 'next/link';
 
+/**
+ * 保持首页为低认知负担的单入口，让首次使用的学生直接进入学习主流程。
+ * 产品入口原则见 doc/01-product/product-definition.md。
+ */
 export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
