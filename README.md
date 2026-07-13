@@ -6,9 +6,9 @@
 
 ## 从哪里开始
 
-- 产品、架构和研发文档：[doc/README.md](doc/README.md)
+- 产品、架构和研发文档：[docs/README.md](docs/README.md)
 - 团队协作方法：[协作.md](协作.md)
-- 官方赛题：[第二届浙江省大学生人工智能竞赛赛题细则.docx](doc/00-overview/第二届浙江省大学生人工智能竞赛赛题细则.docx)
+- 官方赛题：[第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx)
 
 ## 仓库地图
 
@@ -27,7 +27,7 @@ EduCanvas/
 ├── packages/
 │   ├── canvas-protocol/      # Canvas Artifact与学习事件的共享协议；新增教学组件或事件前必须先看。
 │   └── db/                   # Drizzle表结构、数据库连接和迁移；涉及持久化数据时必须先看。
-├── doc/                      # 产品、架构、AI、数据和运维的共同事实源；做方案或跨模块改动前从其README进入。
+├── docs/                     # 保留00到10编号的共同事实源；方案、原始赛题和跨模块约定从其README进入。
 ├── CLAUDE.md                 # AI agent的工作规则入口；让agent改仓库前必须先读。
 ├── README.md                 # 新成员的仓库入口；第一次打开项目时从这里开始。
 ├── 协作.md                    # 面向队友的Git/GitHub操作指南；第一次参与或准备提交PR时查看。
@@ -45,4 +45,4 @@ EduCanvas/
 2. 每项工作先创建自己的分支。
 3. 完成后推送分支并创建Pull Request。
 4. 至少让一位队友检查后再合并。
-5. 产品、接口或技术决策发生变化时，同时更新`doc/`。
+5. 产品、接口或技术决策发生变化时，同时更新`docs/`。

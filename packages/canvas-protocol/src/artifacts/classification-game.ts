@@ -16,7 +16,7 @@ export const classificationCategorySchema = z
 
 /**
  * 待分类项目保持短标签并仅允许内联 emoji：20 字符避免卡片变成正文，8 字符为组合 emoji 留余量，
- * 同时不引入待审核的外部图片地址。资源边界见 doc/06-quality/security-and-privacy.md。
+ * 同时不引入待审核的外部图片地址。资源边界见 docs/06-quality/security-and-privacy.md。
  */
 export const classificationItemSchema = z
   .object({

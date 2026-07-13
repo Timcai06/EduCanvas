@@ -2,7 +2,7 @@
 
 ## 这个包是什么
 
-这是EduCanvas当前唯一的Web应用，使用Next.js App Router承载学生端页面、三栏学习工作台和阶段一的BFF能力。它消费`@educanvas/canvas-protocol`与`@educanvas/db`，但不应把共享协议或数据库定义复制进应用私有目录；该边界来自[ADR-0003](../../doc/09-decisions/0003-phase1-monorepo-and-drizzle.md)。
+这是EduCanvas当前唯一的Web应用，使用Next.js App Router承载学生端页面、三栏学习工作台和阶段一的BFF能力。它消费`@educanvas/canvas-protocol`与`@educanvas/db`，但不应把共享协议或数据库定义复制进应用私有目录；该边界来自[ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)。
 
 ## 核心文件导读
 
@@ -30,11 +30,11 @@ pnpm --filter @educanvas/web build      # 生成生产构建
 
 需要同时启动所有拥有`dev`脚本的workspace时使用`pnpm dev`。涉及数据库的页面还要先执行`pnpm db:up`并准备本地`.env`。
 
-## 改动前必读的doc/文档
+## 改动前必读的 docs/ 文档
 
-- [产品定义](../../doc/01-product/product-definition.md)：确认页面服务的用户与核心产品形态。
-- [用户流程](../../doc/01-product/user-flows.md)：确认页面处于哪一段学习流程。
-- [Canvas与GSAP](../../doc/02-architecture/canvas-and-gsap.md)：修改Canvas或动画前必读。
-- [前端工程](../../doc/05-engineering/frontend.md)：遵守组件边界、Server/Client Component和可访问性要求。
-- [API约定](../../doc/05-engineering/api-conventions.md)：新增Route Handler或流式接口前必读。
-- [ADR-0003](../../doc/09-decisions/0003-phase1-monorepo-and-drizzle.md)：理解阶段一为什么暂由Next.js交付。
+- [产品定义](../../docs/01-product/product-definition.md)：确认页面服务的用户与核心产品形态。
+- [用户流程](../../docs/01-product/user-flows.md)：确认页面处于哪一段学习流程。
+- [Canvas与GSAP](../../docs/02-architecture/canvas-and-gsap.md)：修改Canvas或动画前必读。
+- [前端工程](../../docs/05-engineering/frontend.md)：遵守组件边界、Server/Client Component和可访问性要求。
+- [API约定](../../docs/05-engineering/api-conventions.md)：新增Route Handler或流式接口前必读。
+- [ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)：理解阶段一为什么暂由Next.js交付。

@@ -4,7 +4,7 @@ import { ProgressPanel } from '@/features/progress/progress-panel';
 
 /**
  * 三栏布局让“教师引导—动手理解—学习反馈”始终同时可见，避免退化成通用聊天页。
- * 各栏职责来自 doc/01-product/product-definition.md，前端边界见 doc/05-engineering/frontend.md。
+ * 各栏职责来自 docs/01-product/product-definition.md，前端边界见 docs/05-engineering/frontend.md。
  */
 export default function LearnPage() {
   return (

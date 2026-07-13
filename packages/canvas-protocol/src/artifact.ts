@@ -5,12 +5,12 @@ import { quizParamsSchema } from './artifacts/quiz';
 // 受控 Canvas 协议（ADR-0002）：模型输出结构化 Artifact，经此白名单 Schema
 // 校验后由预注册 React 组件渲染。绝不执行模型生成的任意 HTML/JS/GSAP 源码。
 //
-// doc/02-architecture/canvas-and-gsap.md 规划了 10 种 Artifact 类型，
+// docs/02-architecture/canvas-and-gsap.md 规划了 10 种 Artifact 类型，
 // 阶段一先实现 classification_game 和 quiz，其余类型随组件逐个加入本联合。
 
 /**
  * 协议版本必须随 Artifact 持久化，便于旧会话回放时选择兼容的校验与渲染逻辑。
- * 版本升级规则见 doc/09-decisions/0002-controlled-canvas.md。
+ * 版本升级规则见 docs/09-decisions/0002-controlled-canvas.md。
  */
 export const ARTIFACT_SCHEMA_VERSION = '1' as const;
 
@@ -58,7 +58,7 @@ export type ArtifactValidation =
 
 /**
  * 在模型输出进入渲染层前执行唯一的白名单校验，并把 Zod 问题收敛成可展示、可记录的路径消息。
- * 调用方不得在失败时降级执行原始内容，安全边界见 doc/09-decisions/0002-controlled-canvas.md。
+ * 调用方不得在失败时降级执行原始内容，安全边界见 docs/09-decisions/0002-controlled-canvas.md。
  */
 export function validateArtifact(input: unknown): ArtifactValidation {
   const result = artifactSchema.safeParse(input);
