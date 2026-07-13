@@ -42,9 +42,13 @@ tmp/
 temp/
 
 # Local runtime data and large generated artifacts
-uploads/
-models/
-checkpoints/
-artifacts/
+# 注意：只匹配仓库根目录，避免误伤 packages/canvas-protocol/src/artifacts/ 等源码目录
+/uploads/
+/models/
+/checkpoints/
+/artifacts/
+
+# TypeScript incremental build info
+*.tsbuildinfo
 
 
