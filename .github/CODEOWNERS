@@ -1,0 +1,9 @@
+# CODEOWNERS：定义哪些文件的PR必须由谁批准才能合并。
+# 生效前提：main分支保护规则中勾选 "Require review from Code Owners"。
+# 语法：<路径模式> <@用户名>，越靠后的规则优先级越高。
+
+# 项目初期：所有PR必须由仓库负责人批准
+* @Timcai06
+
+# 进入密集开发期后，可以改为只对关键路径把关，例如：
+# doc/09-decisions/ @Timcai06
