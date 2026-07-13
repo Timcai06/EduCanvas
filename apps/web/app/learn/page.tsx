@@ -2,9 +2,10 @@ import { ChatPanel } from '@/features/chat/chat-panel';
 import { CanvasStage } from '@/features/canvas/canvas-stage';
 import { ProgressPanel } from '@/features/progress/progress-panel';
 
-// 产品定义（doc/01-product/product-definition.md）中的三栏主形态：
-// 左侧对话 / 中间教学 Canvas / 右侧知识地图与掌握度。
-
+/**
+ * 三栏布局让“教师引导—动手理解—学习反馈”始终同时可见，避免退化成通用聊天页。
+ * 各栏职责来自 doc/01-product/product-definition.md，前端边界见 doc/05-engineering/frontend.md。
+ */
 export default function LearnPage() {
   return (
     <main className="grid h-screen grid-cols-[minmax(280px,1fr)_minmax(0,2fr)_minmax(240px,1fr)] gap-px bg-slate-200">
