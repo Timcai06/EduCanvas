@@ -12,18 +12,26 @@ import {
 // 阶段一最小表集（doc/04-data/data-design.md 的子集）。
 // users/courses 等完整实体在阶段二引入，当前 studentId 先用匿名标识。
 
-/** 一次学习会话：一个学生在一门课程上的一次连续学习过程 */
+/**
+ * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
+ * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 doc/04-data/data-design.md。
+ */
 export const lessonSessions = pgTable('lesson_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   studentId: text('student_id').notNull(),
-  gradeBand: text('grade_band').notNull(), // primary | junior | senior
-  courseSlug: text('course_slug').notNull(), // 阶段一固定为 cat-vs-dog
-  state: text('state').notNull().default('EXPLAIN'), // 教学状态机当前状态
+  // 年级段和课程目录尚在迭代，阶段一用 text 接受稳定外部标识，待正式实体表落地后再加外键。
+  gradeBand: text('grade_band').notNull(),
+  courseSlug: text('course_slug').notNull(),
+  // 状态机仍处早期演进期，text 避免每次新增教学分支都先修改数据库枚举。
+  state: text('state').notNull().default('EXPLAIN'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** 会话中产生的 Canvas Artifact，params 为已通过白名单校验的参数 */
+/**
+ * 保存已经白名单校验的 Artifact 快照，供学习过程回放、问题审计和协议兼容使用。
+ * `params` 使用 JSONB 是因为不同 Artifact 的联合参数结构不同，但写入前仍必须通过 canvas-protocol；见 ADR-0002。
+ */
 export const canvasArtifacts = pgTable('canvas_artifacts', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: uuid('session_id')
@@ -37,7 +45,11 @@ export const canvasArtifacts = pgTable('canvas_artifacts', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** 学习事件，只追加，不更新不删除 */
+/**
+ * 只追加的学习事实流，作为掌握度重算和教学决策的可追溯输入；业务代码不得原地改写历史事件。
+ * `occurredAt` 不设数据库默认值，以保存客户端实际发生时间；`payload` 用 JSONB 承载事件专属字段，
+ * `schemaVersion` 用于消费端兼容演进，口径见 doc/04-data/data-design.md。
+ */
 export const learningEvents = pgTable('learning_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   studentId: text('student_id').notNull(),
@@ -51,7 +63,11 @@ export const learningEvents = pgTable('learning_events', {
   schemaVersion: text('schema_version').notNull().default('1'),
 });
 
-/** 掌握度：结构化字段，不由模型凭感觉决定（doc/04-data/data-design.md） */
+/**
+ * 每个“学生 × 知识节点”只有一行可计算掌握状态，复合主键防止同一口径出现多份当前值。
+ * 分数用 real 支持连续更新，次数字段保留可解释证据，JSONB 标签允许误区分类逐步扩展；
+ * `version` 为并发更新的乐观锁预留，模型不得直接决定这些值，见 doc/04-data/data-design.md。
+ */
 export const masteryStates = pgTable(
   'mastery_states',
   {
