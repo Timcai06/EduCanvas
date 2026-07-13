@@ -26,9 +26,11 @@ __pycache__/
 .venv/
 venv/
 
-# Editors
+# Editors（.vscode 里共享的两个配置文件例外，用于统一团队编辑器行为）
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .claude/
 *.swp
 *.swo

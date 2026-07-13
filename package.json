@@ -1,0 +1,24 @@
+{
+  "name": "educanvas",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:up": "docker compose up -d",
+    "db:generate": "pnpm --filter @educanvas/db generate",
+    "db:migrate": "pnpm --filter @educanvas/db migrate"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.5",
+    "turbo": "^2.10.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
+  }
+}

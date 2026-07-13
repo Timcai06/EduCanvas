@@ -5,7 +5,7 @@
 ## 当前主选
 
 - 核心API：NestJS + Fastify；
-- 数据访问：Kysely或Drizzle配合原生SQL，最终在编码前确定；
+- 数据访问：Drizzle配合原生SQL（ADR-0003已确定）；
 - AI计算：Python Worker；
 - 长任务：Temporal；
 - 缓存和限流：Redis；
