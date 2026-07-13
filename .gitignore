@@ -29,6 +29,7 @@ venv/
 # Editors
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 
@@ -43,4 +44,5 @@ uploads/
 models/
 checkpoints/
 artifacts/
+
 
