@@ -1,6 +1,6 @@
 /**
  * 对话栏负责教师引导与教学状态推进，不负责直接拼装 Canvas 可执行内容。
- * 流式响应和智能体边界见 doc/03-ai/agent-orchestration.md。
+ * 流式响应和智能体边界见 docs/03-ai/agent-orchestration.md。
  */
 export function ChatPanel() {
   return (

@@ -9,12 +9,12 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-// 阶段一最小表集（doc/04-data/data-design.md 的子集）。
+// 阶段一最小表集（docs/04-data/data-design.md 的子集）。
 // users/courses 等完整实体在阶段二引入，当前 studentId 先用匿名标识。
 
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
- * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 doc/04-data/data-design.md。
+ * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 docs/04-data/data-design.md。
  */
 export const lessonSessions = pgTable('lesson_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -48,7 +48,7 @@ export const canvasArtifacts = pgTable('canvas_artifacts', {
 /**
  * 只追加的学习事实流，作为掌握度重算和教学决策的可追溯输入；业务代码不得原地改写历史事件。
  * `occurredAt` 不设数据库默认值，以保存客户端实际发生时间；`payload` 用 JSONB 承载事件专属字段，
- * `schemaVersion` 用于消费端兼容演进，口径见 doc/04-data/data-design.md。
+ * `schemaVersion` 用于消费端兼容演进，口径见 docs/04-data/data-design.md。
  */
 export const learningEvents = pgTable('learning_events', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -66,7 +66,7 @@ export const learningEvents = pgTable('learning_events', {
 /**
  * 每个“学生 × 知识节点”只有一行可计算掌握状态，复合主键防止同一口径出现多份当前值。
  * 分数用 real 支持连续更新，次数字段保留可解释证据，JSONB 标签允许误区分类逐步扩展；
- * `version` 为并发更新的乐观锁预留，模型不得直接决定这些值，见 doc/04-data/data-design.md。
+ * `version` 为并发更新的乐观锁预留，模型不得直接决定这些值，见 docs/04-data/data-design.md。
  */
 export const masteryStates = pgTable(
   'mastery_states',

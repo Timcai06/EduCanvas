@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// 学习事件（doc/02-architecture/canvas-and-gsap.md）：Artifact 的关键交互
+// 学习事件（docs/02-architecture/canvas-and-gsap.md）：Artifact 的关键交互
 // 必须产生结构化事件，用于掌握度更新和教学决策，采用只追加写入。
 
 /**
@@ -17,7 +17,7 @@ export const learningEventTypes = [
 
 /**
  * 事件信封固定类型、Artifact 标识和带时区发生时间，保证跨端排序与审计口径一致。
- * `payload` 保持事件级扩展空间，但外层 strict，避免核心索引字段被随意改名；见 doc/04-data/data-design.md。
+ * `payload` 保持事件级扩展空间，但外层 strict，避免核心索引字段被随意改名；见 docs/04-data/data-design.md。
  */
 export const learningEventSchema = z
   .object({

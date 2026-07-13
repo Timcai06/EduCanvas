@@ -33,7 +33,7 @@ export const quizQuestionSchema = z
 
 /**
  * 单个 Artifact 限定 1–10 题，避免一次互动过长而无法插入讲解或补救分支；
- * 题量与教学节奏要求见 doc/02-architecture/canvas-and-gsap.md。
+ * 题量与教学节奏要求见 docs/02-architecture/canvas-and-gsap.md。
  */
 export const quizParamsSchema = z
   .object({

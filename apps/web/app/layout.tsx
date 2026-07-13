@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 /**
  * 提供全站唯一的 HTML 语义与视觉基线；`zh-CN` 也供读屏器和浏览器选择正确的中文规则。
- * 页面级布局应留在具体路由中，避免根布局承担教学业务，见 doc/05-engineering/frontend.md。
+ * 页面级布局应留在具体路由中，避免根布局承担教学业务，见 docs/05-engineering/frontend.md。
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

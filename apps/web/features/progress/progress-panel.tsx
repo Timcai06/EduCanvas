@@ -1,6 +1,6 @@
 /**
  * 进度栏把学习事件转换为可解释的知识节点反馈，掌握度来自结构化状态而非模型主观判断。
- * 数据口径与更新边界见 doc/04-data/data-design.md。
+ * 数据口径与更新边界见 docs/04-data/data-design.md。
  */
 export function ProgressPanel() {
   return (

@@ -26,10 +26,10 @@ pnpm lint                                            # 运行仓库现有lint任
 
 本包当前没有独立`dev`、`lint`或`build`脚本；`pnpm lint`目前不会单独扫描本包源码，不能把它描述为本包级Lint通过。为保持本次纯文档/注释改动，README只记录现状，不修改脚本配置。
 
-## 改动前必读的doc/文档
+## 改动前必读的 docs/ 文档
 
-- [Canvas与GSAP](../../doc/02-architecture/canvas-and-gsap.md)：Artifact类型、动画控制和事件要求。
-- [智能体编排](../../doc/03-ai/agent-orchestration.md)：模型通过哪些受控工具生成Canvas。
-- [数据设计](../../doc/04-data/data-design.md)：学习事件和Artifact如何持久化。
-- [安全与隐私](../../doc/06-quality/security-and-privacy.md)：为什么协议必须使用白名单和沙箱。
-- [ADR-0002](../../doc/09-decisions/0002-controlled-canvas.md)：受控Canvas的正式架构决定。
+- [Canvas与GSAP](../../docs/02-architecture/canvas-and-gsap.md)：Artifact类型、动画控制和事件要求。
+- [智能体编排](../../docs/03-ai/agent-orchestration.md)：模型通过哪些受控工具生成Canvas。
+- [数据设计](../../docs/04-data/data-design.md)：学习事件和Artifact如何持久化。
+- [安全与隐私](../../docs/06-quality/security-and-privacy.md)：为什么协议必须使用白名单和沙箱。
+- [ADR-0002](../../docs/09-decisions/0002-controlled-canvas.md)：受控Canvas的正式架构决定。

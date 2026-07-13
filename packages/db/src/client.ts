@@ -15,7 +15,7 @@ function createDb() {
 
 /**
  * 在单个服务进程内复用连接池，避免每次请求创建新连接；惰性初始化也让构建阶段无需可用数据库。
- * 该单例不跨进程共享，高并发下的连接上限仍由部署与 PostgreSQL 配置负责，见 doc/05-engineering/backend.md。
+ * 该单例不跨进程共享，高并发下的连接上限仍由部署与 PostgreSQL 配置负责，见 docs/05-engineering/backend.md。
  */
 export function getDb() {
   cached ??= createDb();
