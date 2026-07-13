@@ -5,7 +5,7 @@
 ## Git 规则（GitHub 分支保护已强制执行）
 
 - 绝不直接 commit 或 push 到 `main`。开始任务先 `git switch main && git pull origin main`，再创建分支
-- 分支命名：`feat/xxx`、`fix/xxx`、`docs/xxx`、`refactor/xxx`、`test/xxx`、`chore/xxx`，小写英文加短横线
+- 分支命名：`类型/YYYYMMDD-简短任务名`，全小写英文；日期取创建分支当天的中国时区日期，例如 `feat/20260713-lesson-canvas`。类型限 `feat`、`fix`、`docs`、`refactor`、`test`、`chore`；日期只标记任务开始，不因后续提交跨天而改名
 - 提交说明格式：`类型: 做了什么`（如 `feat: add lesson canvas`）。一次提交只做一件事，禁止 "update" 这类空洞说明
 - 仓库只允许 Squash merge，PR 标题会成为 main 上的提交说明，必须同样按 `类型: 做了什么` 格式写
 - 所有 PR 必须经 Code Owner（@Timcai06）批准才能合并
