@@ -38,7 +38,7 @@
 - `packages/db` 需要一次迁移：删除 `lesson_sessions.state` 的默认值；
 - teaching-runtime 实现时需要：状态定义、guard 函数、状态×工具白名单矩阵、中断栈字段（`lesson_sessions` 后续增加 `interrupted_state` 列或等价设计，实现时定）；
 - 状态机核心为纯逻辑，按测试规则必须在实现 PR 内附带单元测试；
-- guard 的具体阈值在掌握度算法 ADR（预计 ADR-0006）确定后补充。
+- guard 的具体阈值在掌握度算法 ADR（ADR-0005）确定后补充。
 
 ## 验证方式
 
