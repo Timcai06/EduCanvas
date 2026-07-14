@@ -23,7 +23,9 @@ export const lessonSessions = pgTable('lesson_sessions', {
   gradeBand: text('grade_band').notNull(),
   courseSlug: text('course_slug').notNull(),
   // 状态机仍处早期演进期，text 避免每次新增教学分支都先修改数据库枚举。
-  state: text('state').notNull().default('EXPLAIN'),
+  // 不设默认值：初始状态必须由 runtime 显式决定（新学生 DIAGNOSE、有掌握记录可直入 EXPLAIN），
+  // 让"跳过诊断"成为显式决策而非默认值副作用，见 ADR-0004。
+  state: text('state').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
