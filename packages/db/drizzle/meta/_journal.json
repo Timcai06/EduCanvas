@@ -15,6 +15,20 @@
       "when": 1783998865038,
       "tag": "0001_light_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784012082280,
+      "tag": "0002_common_cerebro",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784012435844,
+      "tag": "0003_wealthy_wildside",
+      "breakpoints": true
     }
   ]
 }

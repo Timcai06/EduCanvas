@@ -9,6 +9,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "test": "turbo test",
     "typecheck": "turbo typecheck",
     "db:up": "docker compose up -d",
     "db:generate": "pnpm --filter @educanvas/db generate",

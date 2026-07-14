@@ -53,8 +53,7 @@ export type ArtifactType = Artifact['type'];
  * 校验边界使用显式判别结果，调用方必须处理失败分支，不能用异常或类型断言跳过协议检查。
  */
 export type ArtifactValidation =
-  | { ok: true; artifact: Artifact }
-  | { ok: false; errors: string[] };
+  { ok: true; artifact: Artifact } | { ok: false; errors: string[] };
 
 /**
  * 在模型输出进入渲染层前执行唯一的白名单校验，并把 Zod 问题收敛成可展示、可记录的路径消息。

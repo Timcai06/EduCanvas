@@ -6,11 +6,14 @@
 
 ## 核心文件导读
 
-- `src/index.ts`：包的公共出口；其他workspace只应从这里导入稳定API。
+- `src/index.ts`：浏览器安全公共出口，只含公开Artifact与不可信交互事件。
+- `src/server.ts`：服务端专用出口，包含完整答案、私有判分键和确定性判分函数。
 - `src/artifact.ts`：Artifact版本、白名单联合Schema和统一校验结果。
+- `src/public-artifact.ts`：结构上排除答案与解析的浏览器投影。
+- `src/grading.ts`：公开投影/私有判分键拆分和服务端确定性判分。
 - `src/artifacts/classification-game.ts`：分类游戏类别、题目与跨字段一致性约束。
 - `src/artifacts/quiz.ts`：单选测验、选项以及正确答案引用约束。
-- `src/events.ts`：Canvas关键交互可产生的学习事件信封。
+- `src/events.ts`：不可信Canvas交互事件的逐类型strict Schema；服务端可信领域事件不属于本包。
 - `tsconfig.json`：协议包的TypeScript检查范围。
 
 ## 常用命令
@@ -19,12 +22,13 @@
 
 ```bash
 pnpm --filter @educanvas/canvas-protocol typecheck  # 检查协议类型和Zod定义
+pnpm --filter @educanvas/canvas-protocol test       # 运行Artifact与交互事件契约测试
 pnpm dev                                             # 启动消费本包的Web应用进行联调
 pnpm build                                           # 由Web生产构建验证源码包可被正确转译
 pnpm lint                                            # 运行仓库现有lint任务
 ```
 
-本包当前没有独立`dev`、`lint`或`build`脚本；`pnpm lint`目前不会单独扫描本包源码，不能把它描述为本包级Lint通过。为保持本次纯文档/注释改动，README只记录现状，不修改脚本配置。
+本包当前没有独立`dev`、`lint`或`build`脚本；`pnpm lint`目前不会单独扫描本包源码，协议边界主要由TypeScript、Zod与Vitest覆盖。
 
 ## 改动前必读的 docs/ 文档
 

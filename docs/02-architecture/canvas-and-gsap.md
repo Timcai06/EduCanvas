@@ -24,10 +24,12 @@ Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选
 
 原规划的`step_animation`隐含"用Schema描述任意动画"的目标，本质是设计动画DSL：约束紧则动画呆板，约束松则安全边界失守。取舍改为：
 
-- **每种教学动画是一个人工编写的参数化模板组件**，GSAP编排由人手写手调；模型输出的`params`只包含教学内容（步骤文案、旁白、图片引用、高亮区域、正确答案），不含任何动画指令，Schema校验退化为普通数据校验；
+- **每种教学动画是一个人工编写的参数化模板组件**，GSAP编排由人手写手调；模型输出的`params`只包含教学内容和模板允许的语义步骤（步骤文案、旁白、已注册语义槽位、高亮顺序、暂停答题点），不包含CSS选择器、任意属性、任意时长或GSAP指令；
 - 表达力靠**随时间增加模板**扩展，不靠放松单个Schema的约束。首个模板为`pipeline_flow`（数据流经模型各层，覆盖"图片→特征→判断"的猫狗分类演示）；
 - 候选模板还包括`feature_highlight`（在图片上逐个高亮特征）、`comparison_morph`（两个概念的对比演变），按课程需要逐个立项；
 - 各模板共享一个`AnimationShell`包装组件，统一提供控制协议和学习事件上报，模板只声明自己的timeline步骤。
+
+这里的“受控教学交互语言”是各模板自己的类型化语义参数，不是一套跨模板操纵DOM和动画属性的万能DSL。模型可以组合模板和教学步骤，Renderer始终掌握实际布局、动画属性、时长与Timeline。
 
 ## GSAP要求
 
@@ -51,15 +53,16 @@ Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选
 animation_started
 animation_paused
 animation_step_completed
-animation_hint_requested
-animation_answer_submitted
+hint_requested
+quiz_answer_submitted
+classification_submitted
 ```
 
 ## 安全边界
 
-模型生成的是教学语义和参数，不是任意GSAP源码。所有目标元素、可动画属性、持续时间和事件类型均由Schema白名单校验。
+模型生成的是教学语义和模板参数，不是任意GSAP源码。可操作目标只能引用模板注册的语义槽位；实际DOM、可动画属性和持续时间由人工Renderer决定。
 
-**信任分界线**：凡是产生的学习事件会进入掌握度计算的Artifact，必须走白名单Schema——否则模型生成的代码可以谎报学习结果，污染自适应链路。
+**信任分界线**：Canvas产生的交互事件只表示客户端发生了什么，不能直接证明学生答对或掌握。服务端必须依据保存的答案、当前会话与状态机规则完成验证，再生成可信领域事件；只有可信领域事件可以进入掌握度计算。详细契约见[学习事件契约](../04-data/learning-event-contract.md)与[ADR-0006](../09-decisions/0006-trusted-learning-events.md)。
 
 ## 开放问题
 

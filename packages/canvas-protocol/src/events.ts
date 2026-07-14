@@ -1,35 +1,157 @@
 import { z } from 'zod';
 
-// 学习事件（docs/02-architecture/canvas-and-gsap.md）：Artifact 的关键交互
-// 必须产生结构化事件，用于掌握度更新和教学决策，采用只追加写入。
+// Canvas交互事件只描述浏览器发生的操作，是进入服务端验证边界前的不可信输入。
+// 服务端验证后产生的state_transition、assessment_graded等可信领域事件归teaching-core所有，
+// 不能与本文件的客户端事件混为同一种类型（ADR-0006）。
 
-/**
- * 阶段一允许进入事件流的闭合集合；新增值会影响掌握度计算、分析和回放，必须同步评审数据设计。
- */
-export const learningEventTypes = [
+/** 客户端Canvas交互协议版本；领域事件拥有独立版本，不能复用此常量。 */
+export const CANVAS_INTERACTION_SCHEMA_VERSION = '1' as const;
+
+/** 阶段一允许从Canvas提交到服务端的交互类型闭集。 */
+export const canvasInteractionEventTypes = [
   'artifact_rendered',
   'animation_started',
   'animation_paused',
   'animation_step_completed',
-  'animation_hint_requested',
-  'animation_answer_submitted',
+  'hint_requested',
+  'quiz_answer_submitted',
+  'classification_submitted',
 ] as const;
 
-/**
- * 事件信封固定类型、Artifact 标识和带时区发生时间，保证跨端排序与审计口径一致。
- * `payload` 保持事件级扩展空间，但外层 strict，避免核心索引字段被随意改名；见 docs/04-data/data-design.md。
- */
-export const learningEventSchema = z
+const eventBaseShape = {
+  schemaVersion: z.literal(CANVAS_INTERACTION_SCHEMA_VERSION),
+  eventId: z.uuid(),
+  artifactId: z.string().min(1).max(128),
+  occurredAt: z.iso.datetime(),
+};
+
+const templateKeySchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*$/, '模板标识必须使用snake_case');
+
+const classificationSubmissionPayloadSchema = z
   .object({
-    type: z.enum(learningEventTypes),
-    artifactId: z.string().min(1),
-    occurredAt: z.iso.datetime(),
-    payload: z.record(z.string(), z.unknown()).default({}),
+    assignments: z
+      .array(
+        z
+          .object({
+            itemId: z.string().min(1).max(128),
+            categoryId: z.string().min(1).max(128),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(12),
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    const itemIds = payload.assignments.map((assignment) => assignment.itemId);
+    if (new Set(itemIds).size !== itemIds.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['assignments'],
+        message: '同一itemId只能提交一次分类结果',
+      });
+    }
+  });
 
-/** 掌握度管线可以识别的事件类型，直接从运行时白名单推导以保持一致。 */
-export type LearningEventType = (typeof learningEventTypes)[number];
+/**
+ * Canvas客户端事件使用按type判别的strict联合，每种payload只允许已评审字段。
+ * 客户端不得提交isCorrect、masteryScore或目标状态；这些事实只能由服务端验证后生成。
+ */
+export const canvasInteractionEventSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('artifact_rendered'),
+      payload: z
+        .object({
+          artifactType: z
+            .string()
+            .min(1)
+            .max(64)
+            .regex(/^[a-z][a-z0-9_]*$/, 'Artifact类型必须使用snake_case'),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('animation_started'),
+      payload: z
+        .object({
+          templateKey: templateKeySchema,
+          stepId: z.string().min(1).max(128).optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('animation_paused'),
+      payload: z
+        .object({
+          templateKey: templateKeySchema,
+          stepId: z.string().min(1).max(128).optional(),
+          positionMs: z.number().int().nonnegative().max(3_600_000),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('animation_step_completed'),
+      payload: z
+        .object({
+          templateKey: templateKeySchema,
+          stepId: z.string().min(1).max(128),
+          stepIndex: z.number().int().nonnegative().max(999),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('hint_requested'),
+      payload: z
+        .object({
+          contextType: z.enum(['animation', 'quiz', 'classification_game']),
+          contextId: z.string().min(1).max(128),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('quiz_answer_submitted'),
+      payload: z
+        .object({
+          questionId: z.string().min(1).max(128),
+          selectedOptionId: z.string().min(1).max(128),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('classification_submitted'),
+      payload: classificationSubmissionPayloadSchema,
+    })
+    .strict(),
+]);
 
-/** 通过统一事件信封校验、可进入只追加事件表的 Canvas 交互。 */
-export type LearningEvent = z.infer<typeof learningEventSchema>;
+/** 可以提交给服务端验证、但尚未成为可信学习事实的Canvas交互。 */
+export type CanvasInteractionEvent = z.infer<
+  typeof canvasInteractionEventSchema
+>;
+
+/** Canvas交互事件名称集合，直接从协议联合推导。 */
+export type CanvasInteractionEventType = CanvasInteractionEvent['type'];

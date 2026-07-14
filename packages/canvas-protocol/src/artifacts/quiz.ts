@@ -26,10 +26,23 @@ export const quizQuestionSchema = z
     explanation: z.string().max(300).optional(),
   })
   .strict()
-  .refine(
-    (question) => question.options.some((option) => option.id === question.correctOptionId),
-    { message: 'correctOptionId 必须存在于 options 中' },
-  );
+  .superRefine((question, context) => {
+    const optionIds = question.options.map((option) => option.id);
+    if (new Set(optionIds).size !== optionIds.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['options'],
+        message: 'option id不能重复',
+      });
+    }
+    if (!optionIds.includes(question.correctOptionId)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['correctOptionId'],
+        message: 'correctOptionId必须存在于options中',
+      });
+    }
+  });
 
 /**
  * 单个 Artifact 限定 1–10 题，避免一次互动过长而无法插入讲解或补救分支；
@@ -39,7 +52,17 @@ export const quizParamsSchema = z
   .object({
     questions: z.array(quizQuestionSchema).min(1).max(10),
   })
-  .strict();
+  .strict()
+  .superRefine((params, context) => {
+    const questionIds = params.questions.map((question) => question.id);
+    if (new Set(questionIds).size !== questionIds.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['questions'],
+        message: 'question id不能重复',
+      });
+    }
+  });
 
 /** 通过单选测验协议校验、可用于确定性判分的数据。 */
 export type QuizParams = z.infer<typeof quizParamsSchema>;
