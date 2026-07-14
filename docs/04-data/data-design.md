@@ -30,7 +30,7 @@
 - `model_calls`
 - `audit_logs`
 
-## 掌握度建议字段
+## 掌握度字段
 
 ```text
 student_id
@@ -44,6 +44,10 @@ last_practiced_at
 next_review_at
 version
 ```
+
+- `mastery_score` 的计算公式、REMEDIATE/ADVANCE 阈值和复习调度规则由 [ADR-0005](../09-decisions/0005-mastery-modeling.md) 确定，实现规格见 `docs/03-ai/mastery-and-misconceptions.md`；
+- `misconception_tags` 为对象数组 `{ tag, status: active | resolved, first_seen_at, last_seen_at }`——标签有生命周期，只有 `active` 参与掌握度计算；JSONB 形状变化，无需 SQL 迁移；
+- `learning_events` 是事实源，`mastery_states` 是导出值：必须能从事件流完整重算，重算结果与线上值一致是回放测试的验收标准。
 
 ## 学习事件
 
