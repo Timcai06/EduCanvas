@@ -38,6 +38,18 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 
 工具必须有Schema校验、权限、超时、幂等、限流和审计。**每个脊柱状态绑定工具白名单**，runtime 按当前状态限制可调用集合，越权调用直接拒绝并记录。
 
+阶段一白名单由`packages/teaching-core/src/tools.ts`维护：
+
+| 状态 | 允许工具 |
+|---|---|
+| `DIAGNOSE` | `retrieveKnowledge`、`getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
+| `EXPLAIN` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint` |
+| `DEMONSTRATE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint` |
+| `PRACTICE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
+| `ASSESS` | `getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`、`recommendNextNode` |
+
+工具获准不等于结果自动可信：`gradeAnswer`仍需服务端答案判定，状态转移仍需guard，掌握度仍只消费可信领域事件。
+
 ### 持久工作流
 
 Temporal负责教材处理、批量生成、学习报告、定时任务和Embedding迁移等长流程。按 ADR-0003，阶段一不引入。
@@ -51,6 +63,5 @@ Temporal负责教材处理、批量生成、学习报告、定时任务和Embedd
 
 ## 开放问题
 
-- 状态×工具白名单矩阵的具体内容，随 teaching-runtime 实现定稿后回写本文档；
-- guard 的掌握度阈值与滞后区间，等掌握度算法选型 ADR；
-- 中断栈的持久化字段设计（`lesson_sessions` 增列或独立表），随实现定。
+- PRACTICE进入ASSESS所需的最少练习证据量由课程配置提供，待猫狗课程规格确定；
+- 中断栈的持久化字段设计（`lesson_sessions` 增列或独立表），随数据库适配器实现定。

@@ -5,3 +5,15 @@
 
 export { getDb } from './client';
 export * from './schema';
+export {
+  DrizzleArtifactRepository,
+  type SavedArtifactReference,
+} from './artifact-repository';
+export {
+  DrizzleEventStore,
+  DrizzleMasteryRepository,
+  DrizzleSessionRepository,
+  DrizzleTeachingUnitOfWork,
+  IdempotencyConflictError,
+  OptimisticLockError,
+} from './teaching-adapters';

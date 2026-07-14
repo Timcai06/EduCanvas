@@ -11,6 +11,8 @@
     "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@educanvas/canvas-protocol": "workspace:*",
+    "@educanvas/teaching-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },

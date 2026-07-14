@@ -16,11 +16,11 @@
 
 ## 从哪里开始
 
-| 你想了解 | 入口 |
-|---|---|
-| 产品、架构和研发文档 | [docs/README.md](docs/README.md) |
-| 团队协作方法 | [协作.md](协作.md) |
-| 官方赛题 | [第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx) |
+| 你想了解             | 入口                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| 产品、架构和研发文档 | [docs/README.md](docs/README.md)                                                                          |
+| 团队协作方法         | [协作.md](协作.md)                                                                                        |
+| 官方赛题             | [第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx) |
 
 ## 产品闭环
 
@@ -54,6 +54,8 @@ flowchart LR
 - 所有模型调用和教学决策可追踪、可审计。
 
 ### 服务拆解（目标形态）
+
+当前阶段一仍是 `apps/web + packages/*` 的模块化单体；下图是阶段二以后按负载和职责逐步拆分的目标形态，不代表这些服务已经实现。阶段一先用独立 workspace 包守住领域、协议和数据边界。
 
 ```mermaid
 flowchart TB
@@ -110,11 +112,12 @@ stateDiagram-v2
     EXPLAIN --> DEMONSTRATE: 讲解完成
     DEMONSTRATE --> PRACTICE: 演示完成
     PRACTICE --> ASSESS: 练习完成
-    ASSESS --> REMEDIATE: 未达掌握标准
-    ASSESS --> ADVANCE: 达到掌握标准
-    REMEDIATE --> EXPLAIN: 针对误区重新讲解
-    ADVANCE --> [*]: 推荐下一知识点
+    ASSESS --> EXPLAIN: REMEDIATE / 针对误区重讲
+    ASSESS --> PRACTICE: REMEDIATE / 补充针对性练习
+    ASSESS --> [*]: ADVANCE / 推荐下一知识点
 ```
+
+`REMEDIATE`和`ADVANCE`是 `ASSESS` 的出口决策，不是持久化状态；状态转移权属于教学运行时，不属于模型。
 
 受控工具包括 `retrieveKnowledge`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`recommendNextNode` 等，每个工具都有Schema校验、权限、超时、幂等和审计。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
 
@@ -134,26 +137,31 @@ stateDiagram-v2
 ```mermaid
 flowchart LR
     llm["模型输出<br/>结构化Artifact JSON"] --> validate{"白名单Zod校验<br/>strict判别联合"}
-    validate -- 通过 --> registry["预注册React组件<br/>按type分派渲染"]
+    validate -- 通过 --> split["服务端拆分<br/>公开投影 / 私有判分键"]
+    split --> registry["预注册React组件<br/>按type分派渲染"]
+    split --> grading[("私有判分键")]
     validate -- 拒绝 --> reject["返回错误路径<br/>记录审计"]
     registry --> canvas["教学Canvas"]
-    canvas -- 学习事件 --> events[("learning_events")]
+    canvas -- 不可信交互 --> runtime["teaching-runtime<br/>确定性判分"]
+    grading --> runtime
+    runtime -- 可信事件 --> events[("learning_events")]
 ```
 
-- 协议规划10种Artifact类型（`story_book`、`concept_card`、`step_animation`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`），阶段一先实现 `classification_game` 和 `quiz`；
-- 协议版本随Artifact持久化，支持旧会话回放时选择兼容的校验与渲染逻辑。
+- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；阶段一先实现 `classification_game`、`quiz` 与 `pipeline_flow`；
+- 阶段一使用编译期静态注册表，确保每种Artifact都有经过审核的Schema和Renderer；阶段二再增加版本兼容与平台化管理能力；
+- 当前只实现协议版本 `1`；版本随Artifact持久化，后续新增版本时必须同时注册对应Validator和Renderer，才能回放旧会话。
 
 ### AI层（规划中，状态`draft`）
 
 **模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace），业务代码不写死模型ID。
 
-| 任务 | 主选方向 |
-|---|---|
-| 意图识别、查询改写 | Flash级模型 |
-| 日常教学和Canvas结构生成 | Plus级模型 |
-| 高价值课程离线生成与审核 | Max级模型 |
-| 实时语音和视觉 | Omni Realtime |
-| 跨供应商文本容灾 | 第二供应商Flash级 |
+| 任务                     | 主选方向          |
+| ------------------------ | ----------------- |
+| 意图识别、查询改写       | Flash级模型       |
+| 日常教学和Canvas结构生成 | Plus级模型        |
+| 高价值课程离线生成与审核 | Max级模型         |
+| 实时语音和视觉           | Omni Realtime     |
+| 跨供应商文本容灾         | 第二供应商Flash级 |
 
 **RAG检索**（[docs/03-ai/rag-embedding.md](docs/03-ai/rag-embedding.md)）：
 
@@ -180,6 +188,7 @@ PostgreSQL + Drizzle ORM，pgvector承载向量检索（[docs/04-data/data-desig
 ```mermaid
 erDiagram
     lesson_sessions ||--o{ canvas_artifacts : "产生"
+    canvas_artifacts ||--|| canvas_artifact_grading_keys : "私有判分"
     lesson_sessions ||--o{ learning_events : "记录"
     learning_events }o--|| mastery_states : "重算依据"
 
@@ -195,12 +204,18 @@ erDiagram
         uuid session_id FK
         text type
         text schema_version "协议版本随快照持久化"
-        jsonb params "写入前必须通过白名单校验"
+        jsonb params "仅浏览器安全公开投影"
+    }
+    canvas_artifact_grading_keys {
+        uuid artifact_record_id PK
+        jsonb grading_key "仅服务端判分器读取"
     }
     learning_events {
         uuid id PK
         uuid session_id FK
         text event_type
+        text idempotency_key
+        integer sequence "会话内单调递增"
         jsonb payload
         timestamp occurred_at "只追加,不改写历史"
     }
@@ -224,7 +239,9 @@ EduCanvas/
 ├── apps/
 │   └── web/                  # Next.js学生端应用；开发页面、对话区或教学Canvas前先读这里的README。
 ├── packages/
-│   ├── canvas-protocol/      # Canvas Artifact与学习事件的共享协议；新增教学组件或事件前必须先看。
+│   ├── canvas-protocol/      # Canvas Artifact与客户端交互协议；新增教学组件或交互前必须先看。
+│   ├── teaching-core/        # 状态机、掌握度、可信领域事件与Port；新增教学规则前必须先看。
+│   ├── teaching-runtime/     # 服务端判分与教学事务编排；新增应用用例前必须先看。
 │   └── db/                   # Drizzle表结构、数据库连接和迁移；涉及持久化数据时必须先看。
 ├── docs/                     # 保留00到10编号的共同事实源；方案、原始赛题和跨模块约定从其README进入。
 ├── CLAUDE.md                 # AI agent的工作规则入口；让agent改仓库前必须先读。
@@ -239,16 +256,16 @@ EduCanvas/
 <details>
 <summary>其余根目录配置文件说明（普通功能开发通常不用动）</summary>
 
-| 文件 | 用途 |
-|---|---|
-| `.editorconfig` | 编辑器通用格式约定；出现缩进或换行差异时查看 |
-| `.env.example` | 环境变量模板；首次启动时复制为不提交的`.env` |
-| `.gitattributes` | Git文本规范；排查跨系统换行问题时查看 |
-| `.github/` | CI、PR模板和Code Owner规则 |
-| `.gitignore` | Git忽略规则；新增构建产物或缓存类型时查看 |
-| `.nvmrc` | 项目Node.js版本；本地或CI版本不一致时查看 |
-| `.prettierrc` | 代码格式化规则 |
-| `pnpm-lock.yaml` | 精确依赖版本锁；由pnpm更新，不要手工编辑 |
+| 文件             | 用途                                         |
+| ---------------- | -------------------------------------------- |
+| `.editorconfig`  | 编辑器通用格式约定；出现缩进或换行差异时查看 |
+| `.env.example`   | 环境变量模板；首次启动时复制为不提交的`.env` |
+| `.gitattributes` | Git文本规范；排查跨系统换行问题时查看        |
+| `.github/`       | CI、PR模板和Code Owner规则                   |
+| `.gitignore`     | Git忽略规则；新增构建产物或缓存类型时查看    |
+| `.nvmrc`         | 项目Node.js版本；本地或CI版本不一致时查看    |
+| `.prettierrc`    | 代码格式化规则                               |
+| `pnpm-lock.yaml` | 精确依赖版本锁；由pnpm更新，不要手工编辑     |
 
 </details>
 
@@ -263,7 +280,7 @@ pnpm db:migrate             # 应用数据库迁移
 pnpm dev                    # 启动开发服务（turbo dev）
 ```
 
-其他常用命令：`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm db:generate`（生成迁移）。
+其他常用命令：`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm db:generate`（生成迁移）。
 
 ## 当前进度
 
@@ -272,13 +289,13 @@ pnpm dev                    # 启动开发服务（turbo dev）
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议v1 ✅ : 阶段一表集 ✅ : 三栏学习页 ✅ : AI对话链路 : 教材RAG : GSAP动画 : 掌握度更新
-    阶段二 平台化 : Artifact注册表 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集 ✅ : 三栏学习页 ✅ : 静态Artifact注册表 ✅ : Drizzle事务适配器 ✅ : AI对话链路 : 教材RAG : GSAP动画
+    阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：骨架已落地，AI对话链路、教材RAG、GSAP动画、Python实验、掌握度更新和状态机运行时尚未实现。
+当前处于**阶段一（产品纵切）**：协议、状态机、掌握度纯逻辑、服务端确定性判分、静态Canvas注册表和数据库事务适配器已经落地；认证后的提交入口、AI对话链路、教材RAG、GSAP动画、Python实验和完整教学运行时仍待接入。
 
 ## 最简单的团队协作规则
 

@@ -1,4 +1,9 @@
-import { validateArtifact } from '@educanvas/canvas-protocol';
+import 'server-only';
+import {
+  artifactSchema,
+  prepareArtifact,
+} from '@educanvas/canvas-protocol/server';
+import { CanvasArtifactRenderer } from './canvas-registry';
 
 // 样例固定写在客户端代码中，是为了在模型接入前持续验证“协议校验→受控渲染”边界，
 // 后续接入真实输出时也不能绕过 validateArtifact（docs/09-decisions/0002-controlled-canvas.md）。
@@ -25,25 +30,29 @@ const sampleArtifact = {
  * 当前样例是注册表和 GSAP 组件接入前的边界探针，完整约束见 docs/02-architecture/canvas-and-gsap.md。
  */
 export function CanvasStage() {
-  const validation = validateArtifact(sampleArtifact);
+  const validation = artifactSchema.safeParse(sampleArtifact);
+  const publicArtifact = validation.success
+    ? prepareArtifact(validation.data).publicArtifact
+    : null;
+  const validationErrors = validation.success ? [] : validation.error.issues;
 
   return (
     <div className="flex h-full flex-col">
       <h2 className="mb-4 text-lg font-semibold">教学 Canvas</h2>
       <div className="flex-1 rounded-lg border border-dashed border-slate-300 p-4 text-sm">
-        {validation.ok ? (
+        {publicArtifact ? (
           <div>
             <p className="mb-2 font-medium text-green-700">
-              ✓ 协议校验通过：{validation.artifact.title}（{validation.artifact.type}）
+              ✓ 受控组件：{publicArtifact.title}（{publicArtifact.type}）
             </p>
-            <p className="text-slate-400">
-              Canvas 渲染区占位——T2 任务在这里实现 Artifact 注册表和 GSAP 组件。
-            </p>
+            <CanvasArtifactRenderer artifact={publicArtifact} />
           </div>
         ) : (
           <ul className="text-red-600">
-            {validation.errors.map((error) => (
-              <li key={error}>{error}</li>
+            {validationErrors.map((issue) => (
+              <li key={`${issue.path.join('.')}:${issue.message}`}>
+                {issue.path.join('.') || '(root)'}: {issue.message}
+              </li>
             ))}
           </ul>
         )}

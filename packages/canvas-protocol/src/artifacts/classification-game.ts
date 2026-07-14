@@ -39,13 +39,38 @@ export const classificationGameParamsSchema = z
     successMessage: z.string().max(200).optional(),
   })
   .strict()
-  .refine(
-    (params) => {
-      const categoryIds = new Set(params.categories.map((c) => c.id));
-      return params.items.every((item) => categoryIds.has(item.correctCategoryId));
-    },
-    { message: '每个 item 的 correctCategoryId 必须存在于 categories 中' },
-  );
+  .superRefine((params, context) => {
+    const categoryIds = params.categories.map((category) => category.id);
+    const itemIds = params.items.map((item) => item.id);
+
+    if (new Set(categoryIds).size !== categoryIds.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['categories'],
+        message: 'category id不能重复',
+      });
+    }
+    if (new Set(itemIds).size !== itemIds.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['items'],
+        message: 'item id不能重复',
+      });
+    }
+
+    const categoryIdSet = new Set(categoryIds);
+    params.items.forEach((item, index) => {
+      if (!categoryIdSet.has(item.correctCategoryId)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['items', index, 'correctCategoryId'],
+          message: 'correctCategoryId必须存在于categories中',
+        });
+      }
+    });
+  });
 
 /** 通过分类游戏协议校验、可直接交给预注册组件的数据。 */
-export type ClassificationGameParams = z.infer<typeof classificationGameParamsSchema>;
+export type ClassificationGameParams = z.infer<
+  typeof classificationGameParamsSchema
+>;

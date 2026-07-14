@@ -9,8 +9,11 @@
 - `src/index.ts`：包的公共出口，统一导出数据库客户端与表定义。
 - `src/client.ts`：读取`DATABASE_URL`并惰性创建Drizzle客户端，避免构建阶段连接数据库。
 - `src/schema.ts`：阶段一学习会话、Canvas产物、学习事件和掌握度表。
+- `src/teaching-adapters.ts`：会话、掌握度、可信事件与事务Unit of Work的Drizzle实现。
+- `src/artifact-repository.ts`：公开Artifact与私有判分键的原子保存和分级读取。
 - `drizzle.config.ts`：Drizzle Kit读取Schema、连接本地数据库和输出迁移的位置。
-- `drizzle/0000_careless_lady_bullseye.sql`：当前基线迁移；禁止手工改写已经共享的历史迁移。
+- `drizzle/0000_careless_lady_bullseye.sql`：基线迁移；禁止手工改写已经共享的历史迁移。
+- `drizzle/0002_common_cerebro.sql`与`0003_wealthy_wildside.sql`：可信事件信封、答案分表、乐观锁和原子事件序号迁移。
 - `drizzle/meta/`：Drizzle Kit的迁移快照与日志，生成迁移时同步更新。
 - `tsconfig.json`：数据库包和Drizzle配置的TypeScript检查范围。
 
