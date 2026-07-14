@@ -1,67 +1,122 @@
 # 多模态K12人工智能通识课教学助手
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-React_+_TS-black?logo=nextdotjs" alt="Next.js">
+  <img src="https://img.shields.io/badge/PostgreSQL-pgvector-336791?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/动画-GSAP-88CE02?logo=greensock&logoColor=black" alt="GSAP">
+  <img src="https://img.shields.io/badge/monorepo-pnpm_+_Turbo-F69220?logo=pnpm&logoColor=white" alt="pnpm">
+  <img src="https://img.shields.io/badge/赛题-JBGS--2026--02-blue" alt="赛题">
+</p>
+
 本仓库用于开发浙江省大学生人工智能竞赛赛题 **JBGS-2026-02：多模态K12人工智能通识课教学助手对话智能体**。
 
-项目目标：做一个面向小学到高中学生的AI教师。它能通过对话、动画、绘本、编程和游戏化练习进行教学，并根据学生的学习表现调整下一步内容。北极星目标：在缺少专业AI教师的情况下，学生仍能独立完成一节准确、有趣、可操作、有反馈的AI通识微课。
+项目目标：做一个面向小学到高中学生的AI教师。它能通过对话、动画、绘本、编程和游戏化练习进行教学，并根据学生的学习表现调整下一步内容。
+
+> **北极星目标**：在缺少专业AI教师的情况下，学生仍能独立完成一节准确、有趣、可操作、有反馈的AI通识微课。
 
 ## 从哪里开始
 
-- 产品、架构和研发文档：[docs/README.md](docs/README.md)
-- 团队协作方法：[协作.md](协作.md)
-- 官方赛题：[第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx)
+| 你想了解 | 入口 |
+|---|---|
+| 产品、架构和研发文档 | [docs/README.md](docs/README.md) |
+| 团队协作方法 | [协作.md](协作.md) |
+| 官方赛题 | [第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx) |
 
 ## 产品闭环
 
 系统必须形成完整的教学闭环（详见 [docs/00-overview/project-brief.md](docs/00-overview/project-brief.md)）：
 
-```text
-选择学段或课程
-→ 判断当前水平
-→ 对话讲解与主动引导
-→ Canvas互动学习
-→ 练习或编程实践
-→ 自动评价与反馈
-→ 更新学生掌握度
-→ 推荐下一步内容
+```mermaid
+flowchart LR
+    A[选择学段或课程] --> B[判断当前水平]
+    B --> C[对话讲解与主动引导]
+    C --> D[Canvas互动学习]
+    D --> E[练习或编程实践]
+    E --> F[自动评价与反馈]
+    F --> G[更新学生掌握度]
+    G --> H[推荐下一步内容]
+    H -.-> B
 ```
 
-示范主题为"AI如何识别猫和狗"：同一知识点分别用绘本、分类游戏、特征可视化和Python实验适配不同学段。
+示范主题为**"AI如何识别猫和狗"**：同一知识点分别用绘本、分类游戏、特征可视化和Python实验适配不同学段。
 
 ## 系统架构
 
+> [!NOTE]
 > 架构全貌见 [docs/02-architecture/system-architecture.md](docs/02-architecture/system-architecture.md)（`draft`）。本节为速览，冲突时以 docs 为准。
 
 ### 设计原则
 
 - Next.js只负责Web与BFF，不承载全部后端；核心API无状态化、可水平扩展；
 - **教学正确性由确定性状态机和规则保证**，大模型只负责自然语言表达、内容组织和受控工具调用；
-- **Canvas是受控组件运行时**：模型输出结构化Artifact，经白名单Schema校验后由预注册React组件渲染，绝不执行模型生成的任意HTML/JS/GSAP源码；
+- **Canvas是受控组件运行时**：模型输出结构化Artifact，经白名单Schema校验后由预注册React组件渲染；
 - PostgreSQL是业务事实源，Redis只放短期状态，长任务可重试可恢复；
 - 所有模型调用和教学决策可追踪、可审计。
 
 ### 服务拆解（目标形态）
 
-| 服务 | 职责 |
-|---|---|
-| `web` | Next.js页面、SSR、BFF和流式UI |
-| `core-api` | 用户、课程、会话、权限和业务API |
-| `realtime-gateway` | SSE、WebSocket和语音信令 |
-| `teaching-runtime` | 教学状态机、工具调用和学生状态 |
-| `retrieval-service` | 混合检索、重排和证据组装 |
-| `ai-worker` | OCR、切块、Embedding和批处理 |
-| `workflow-worker` | 教材处理、报告和再索引等长任务 |
+```mermaid
+flowchart TB
+    subgraph 客户端
+        student[学生浏览器]
+    end
 
-基础设施：PostgreSQL + pgvector、PgBouncer、Redis、对象存储、Temporal（长流程编排）、OpenTelemetry（观测）；事件总线在学习事件量增长后接入。
+    subgraph 应用层
+        web["web<br/>Next.js页面 / SSR / BFF / 流式UI"]
+        rtgw["realtime-gateway<br/>SSE / WebSocket / 语音信令"]
+    end
+
+    subgraph 领域服务
+        coreapi["core-api<br/>用户 / 课程 / 会话 / 权限"]
+        teaching["teaching-runtime<br/>教学状态机 / 工具调用 / 学生状态"]
+        retrieval["retrieval-service<br/>混合检索 / 重排 / 证据组装"]
+    end
+
+    subgraph 异步处理
+        aiworker["ai-worker<br/>OCR / 切块 / Embedding / 批处理"]
+        wfworker["workflow-worker<br/>教材处理 / 报告 / 再索引"]
+    end
+
+    subgraph 基础设施
+        pg[("PostgreSQL<br/>+ pgvector")]
+        redis[("Redis<br/>短期状态")]
+        oss[("对象存储")]
+        temporal["Temporal<br/>长流程编排"]
+    end
+
+    student --> web
+    student --> rtgw
+    web --> coreapi
+    rtgw --> teaching
+    coreapi --> pg
+    teaching --> retrieval
+    teaching --> pg
+    teaching --> redis
+    retrieval --> pg
+    aiworker --> pg
+    aiworker --> oss
+    wfworker --> temporal
+    temporal --> aiworker
+```
 
 ### 教学状态机
 
-教学流程由确定性状态机约束（[docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md)）：
+教学流程由确定性状态机约束（[docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md)），模型在状态机内通过受控工具工作：
 
-```text
-DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS → REMEDIATE / ADVANCE
+```mermaid
+stateDiagram-v2
+    [*] --> DIAGNOSE: 开始课程
+    DIAGNOSE --> EXPLAIN: 判定当前水平
+    EXPLAIN --> DEMONSTRATE: 讲解完成
+    DEMONSTRATE --> PRACTICE: 演示完成
+    PRACTICE --> ASSESS: 练习完成
+    ASSESS --> REMEDIATE: 未达掌握标准
+    ASSESS --> ADVANCE: 达到掌握标准
+    REMEDIATE --> EXPLAIN: 针对误区重新讲解
+    ADVANCE --> [*]: 推荐下一知识点
 ```
 
-模型在状态机内通过受控工具工作（`retrieveKnowledge`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`recommendNextNode`等），每个工具都有Schema校验、权限、超时、幂等和审计。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
+受控工具包括 `retrieveKnowledge`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`recommendNextNode` 等，每个工具都有Schema校验、权限、超时、幂等和审计。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
 
 ## 技术拆解
 
@@ -73,18 +128,48 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS → REMEDIATE / ADV
 
 ### 受控Canvas协议（packages/canvas-protocol）
 
-项目核心安全设计（[ADR-0002](docs/09-decisions/0002-controlled-canvas.md)，`accepted`）：
+> [!IMPORTANT]
+> 项目核心安全设计（[ADR-0002](docs/09-decisions/0002-controlled-canvas.md)，`accepted`）：**绝不执行模型生成的任意HTML/JS/GSAP源码**。模型生成的是教学语义和参数，不是代码。
 
-- 模型输出结构化Artifact JSON，经**白名单Zod判别联合**（strict模式）校验后，由预注册React组件渲染；
+```mermaid
+flowchart LR
+    llm["模型输出<br/>结构化Artifact JSON"] --> validate{"白名单Zod校验<br/>strict判别联合"}
+    validate -- 通过 --> registry["预注册React组件<br/>按type分派渲染"]
+    validate -- 拒绝 --> reject["返回错误路径<br/>记录审计"]
+    registry --> canvas["教学Canvas"]
+    canvas -- 学习事件 --> events[("learning_events")]
+```
+
 - 协议规划10种Artifact类型（`story_book`、`concept_card`、`step_animation`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`），阶段一先实现 `classification_game` 和 `quiz`；
 - 协议版本随Artifact持久化，支持旧会话回放时选择兼容的校验与渲染逻辑。
 
 ### AI层（规划中，状态`draft`）
 
-- **模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由——意图识别用Flash级、日常教学用Plus级、离线高价值生成用Max级（当前候选为Qwen系列），跨供应商容灾；业务代码不写死模型ID，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace）；
-- **RAG检索**（[docs/03-ai/rag-embedding.md](docs/03-ai/rag-embedding.md)）：学段/教材/知识点过滤 → 查询改写 → 全文召回 + pgvector向量召回 → RRF融合 → Reranker → 返回证据、页码和置信度；
-- **Embedding治理**：每个向量空间必须记录模型、版本、维度、指令和切块版本，不同模型即使维度相同也不混用同一空间；模型迁移走双写、回填、Shadow、灰度、保留回滚窗口的流程；
-- **教材切块**：保留教材/年级/章节/知识点结构，父子块策略，图片保存OCR与多模态向量，公式代码表格不被无意义截断。
+**模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace），业务代码不写死模型ID。
+
+| 任务 | 主选方向 |
+|---|---|
+| 意图识别、查询改写 | Flash级模型 |
+| 日常教学和Canvas结构生成 | Plus级模型 |
+| 高价值课程离线生成与审核 | Max级模型 |
+| 实时语音和视觉 | Omni Realtime |
+| 跨供应商文本容灾 | 第二供应商Flash级 |
+
+**RAG检索**（[docs/03-ai/rag-embedding.md](docs/03-ai/rag-embedding.md)）：
+
+```mermaid
+flowchart LR
+    q[问题分类] --> f[学段/教材/知识点过滤]
+    f --> rw[查询改写]
+    rw --> fts[全文召回]
+    rw --> vec[pgvector向量召回]
+    fts --> rrf[RRF融合]
+    vec --> rrf
+    rrf --> rerank[Reranker]
+    rerank --> out[证据 + 页码 + 置信度]
+```
+
+**Embedding治理**：每个向量空间必须记录模型、版本、维度、指令和切块版本，不同模型即使维度相同也不混用同一空间；模型迁移走双写 → 回填 → Shadow → 灰度 → 保留回滚窗口的流程。教材切块保留教材/年级/章节/知识点结构，采用父子块策略，公式代码表格不被无意义截断。
 
 ### 数据层（packages/db）
 
@@ -92,12 +177,41 @@ PostgreSQL + Drizzle ORM，pgvector承载向量检索（[docs/04-data/data-desig
 
 阶段一最小表集（[ADR-0003](docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)，`accepted`）：
 
-| 表 | 职责 |
-|---|---|
-| `lesson_sessions` | 教学会话与状态机当前状态 |
-| `canvas_artifacts` | 已通过白名单校验的Artifact快照，供回放与审计 |
-| `learning_events` | 只追加的学习事实流，掌握度重算的可追溯输入 |
-| `mastery_states` | 学生×知识节点的掌握度（分数、次数、误区标签、乐观锁） |
+```mermaid
+erDiagram
+    lesson_sessions ||--o{ canvas_artifacts : "产生"
+    lesson_sessions ||--o{ learning_events : "记录"
+    learning_events }o--|| mastery_states : "重算依据"
+
+    lesson_sessions {
+        uuid id PK
+        text student_id
+        text grade_band
+        text course_slug
+        text state "状态机当前状态"
+    }
+    canvas_artifacts {
+        uuid id PK
+        uuid session_id FK
+        text type
+        text schema_version "协议版本随快照持久化"
+        jsonb params "写入前必须通过白名单校验"
+    }
+    learning_events {
+        uuid id PK
+        uuid session_id FK
+        text event_type
+        jsonb payload
+        timestamp occurred_at "只追加,不改写历史"
+    }
+    mastery_states {
+        text student_id PK
+        text knowledge_node_id PK
+        real mastery_score
+        jsonb misconception_tags
+        integer version "乐观锁"
+    }
+```
 
 `users`、`courses`、`knowledge_nodes`、`embedding_spaces`等完整实体在阶段二引入。
 
@@ -122,7 +236,21 @@ EduCanvas/
 └── tsconfig.base.json        # 全仓库TypeScript基础约束；修改编译规则时查看。
 ```
 
-其余根目录文件（`.editorconfig`、`.prettierrc`、`.nvmrc`、`.gitattributes`、`.github/`等）为格式与CI约定，普通功能开发通常不用动。
+<details>
+<summary>其余根目录配置文件说明（普通功能开发通常不用动）</summary>
+
+| 文件 | 用途 |
+|---|---|
+| `.editorconfig` | 编辑器通用格式约定；出现缩进或换行差异时查看 |
+| `.env.example` | 环境变量模板；首次启动时复制为不提交的`.env` |
+| `.gitattributes` | Git文本规范；排查跨系统换行问题时查看 |
+| `.github/` | CI、PR模板和Code Owner规则 |
+| `.gitignore` | Git忽略规则；新增构建产物或缓存类型时查看 |
+| `.nvmrc` | 项目Node.js版本；本地或CI版本不一致时查看 |
+| `.prettierrc` | 代码格式化规则 |
+| `pnpm-lock.yaml` | 精确依赖版本锁；由pnpm更新，不要手工编辑 |
+
+</details>
 
 ## 快速开始
 
@@ -139,9 +267,18 @@ pnpm dev                    # 启动开发服务（turbo dev）
 
 ## 当前进度
 
-按[路线图](docs/10-planning/roadmap.md)分四个阶段：产品纵切 → 平台化 → 生产强化 → 竞赛交付。
+按[路线图](docs/10-planning/roadmap.md)分四个阶段：
 
-当前处于**阶段一（产品纵切）**：monorepo骨架、受控Canvas协议v1（`classification_game`/`quiz`）、阶段一最小表集和`/learn`三栏布局已落地；AI对话链路、教材RAG、GSAP动画、Python实验、掌握度更新和状态机运行时尚未实现。
+```mermaid
+timeline
+    title 项目路线图
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议v1 ✅ : 阶段一表集 ✅ : 三栏学习页 ✅ : AI对话链路 : 教材RAG : GSAP动画 : 掌握度更新
+    阶段二 平台化 : Artifact注册表 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
+    阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
+    阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
+```
+
+当前处于**阶段一（产品纵切）**：骨架已落地，AI对话链路、教材RAG、GSAP动画、Python实验、掌握度更新和状态机运行时尚未实现。
 
 ## 最简单的团队协作规则
 
