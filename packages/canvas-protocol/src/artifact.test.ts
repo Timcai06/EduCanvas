@@ -52,20 +52,50 @@ describe('validateArtifact', () => {
   });
 
   it('拒绝不存在的正确答案引用', () => {
-    const artifact = structuredClone(validQuiz);
-    artifact.params.questions[0].correctOptionId = 'missing';
+    const artifact = {
+      ...validQuiz,
+      params: {
+        questions: [
+          {
+            ...validQuiz.params.questions[0],
+            correctOptionId: 'missing',
+          },
+        ],
+      },
+    };
 
     expect(validateArtifact(artifact).ok).toBe(false);
   });
 
   it('拒绝重复的类别、项目、题目和选项标识', () => {
-    const classification = structuredClone(validClassificationGame);
-    classification.params.categories[1].id = 'cat';
-    classification.params.items[1].id = 'cat-1';
+    const classification = {
+      ...validClassificationGame,
+      params: {
+        ...validClassificationGame.params,
+        categories: [
+          validClassificationGame.params.categories[0],
+          { ...validClassificationGame.params.categories[1], id: 'cat' },
+        ],
+        items: [
+          validClassificationGame.params.items[0],
+          { ...validClassificationGame.params.items[1], id: 'cat-1' },
+        ],
+      },
+    };
 
-    const quiz = structuredClone(validQuiz);
-    quiz.params.questions.push(structuredClone(quiz.params.questions[0]));
-    quiz.params.questions[0].options[1].id = 'a';
+    const duplicatedQuestion = {
+      ...validQuiz.params.questions[0],
+      options: [
+        validQuiz.params.questions[0].options[0],
+        { ...validQuiz.params.questions[0].options[1], id: 'a' },
+      ],
+    };
+    const quiz = {
+      ...validQuiz,
+      params: {
+        questions: [duplicatedQuestion, duplicatedQuestion],
+      },
+    };
 
     expect(validateArtifact(classification).ok).toBe(false);
     expect(validateArtifact(quiz).ok).toBe(false);
