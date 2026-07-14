@@ -1,0 +1,1 @@
+ALTER TABLE "lesson_sessions" ALTER COLUMN "state" DROP DEFAULT;
