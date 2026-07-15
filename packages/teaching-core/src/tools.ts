@@ -63,7 +63,7 @@ export const defaultToolPolicy: Readonly<
   ),
 });
 
-/** 判断工具在当前状态是否获准；未知工具不会通过TypeScript边界。 */
+/** 判断已解析的工具在当前状态是否获准；运行时未知字符串必须先经Schema解析。 */
 export function isToolAllowed(
   state: TeachingState,
   tool: TeachingTool,

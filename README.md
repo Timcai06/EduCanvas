@@ -119,7 +119,7 @@ stateDiagram-v2
 
 `REMEDIATE`和`ADVANCE`是 `ASSESS` 的出口决策，不是持久化状态；状态转移权属于教学运行时，不属于模型。
 
-受控工具包括 `retrieveKnowledge`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`recommendNextNode` 等，每个工具都有Schema校验、权限、超时、幂等和审计。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
+受控工具闭集和“状态 × 工具”白名单已经落地；工具参数Schema、权限执行器、超时/重试、幂等、限流和审计仍属于待实现的Agent运行时能力。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
 
 ## 技术拆解
 
@@ -147,7 +147,7 @@ flowchart LR
     runtime -- 可信事件 --> events[("learning_events")]
 ```
 
-- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；阶段一先实现 `classification_game`、`quiz` 与 `pipeline_flow`；
+- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；当前已实现 `classification_game` 与 `quiz`，`pipeline_flow` 是阶段一待实现的首个动画模板；
 - 阶段一使用编译期静态注册表，确保每种Artifact都有经过审核的Schema和Renderer；阶段二再增加版本兼容与平台化管理能力；
 - 当前只实现协议版本 `1`；版本随Artifact持久化，后续新增版本时必须同时注册对应Validator和Renderer，才能回放旧会话。
 
@@ -181,9 +181,9 @@ flowchart LR
 
 ### 数据层（packages/db）
 
-PostgreSQL + Drizzle ORM，pgvector承载向量检索（[docs/04-data/data-design.md](docs/04-data/data-design.md)，`draft`）。原则：Redis丢失不能导致学习历史丢失；掌握度用结构化字段计算，不让大模型凭感觉决定；未成年人数据最小化收集。
+PostgreSQL + Drizzle ORM 是当前业务数据底座；pgvector是已选定但尚未接入表结构与检索适配器的向量检索方向（[docs/04-data/data-design.md](docs/04-data/data-design.md)，`draft`）。原则：Redis丢失不能导致学习历史丢失；掌握度用结构化字段计算，不让大模型凭感觉决定；未成年人数据最小化收集。
 
-阶段一最小表集（[ADR-0003](docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)，`accepted`）：
+阶段一最小表集的概念关系如下（不是完整物理Schema；字段与索引以 [`packages/db/src/schema.ts`](packages/db/src/schema.ts) 和[数据设计](docs/04-data/data-design.md)为准）：
 
 ```mermaid
 erDiagram
@@ -289,13 +289,13 @@ pnpm dev                    # 启动开发服务（turbo dev）
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集 ✅ : 三栏学习页 ✅ : 静态Artifact注册表 ✅ : Drizzle事务适配器 ✅ : AI对话链路 : 教材RAG : GSAP动画
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集Schema ✅ : 三栏UI骨架 ✅ : 静态Artifact注册表 ✅ : Drizzle事务适配器 ✅ : AI对话链路 : 教材RAG : GSAP动画
     阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：协议、状态机、掌握度纯逻辑、服务端确定性判分、静态Canvas注册表和数据库事务适配器已经落地；认证后的提交入口、AI对话链路、教材RAG、GSAP动画、Python实验和完整教学运行时仍待接入。
+当前处于**阶段一（产品纵切）**：协议、状态机、掌握度纯逻辑、服务端确定性判分、静态Canvas注册表、数据库Schema与事务适配器已经落地；迁移 `0002`/`0003` 尚未在真实PostgreSQL上完成应用验证，适配器测试目前也未连接真实数据库。认证后的浏览器提交入口、AI对话链路、教材RAG、GSAP动画、Python实验和完整教学运行时仍待接入。
 
 ## 最简单的团队协作规则
 

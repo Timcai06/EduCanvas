@@ -9,7 +9,7 @@ import { quizParamsSchema } from './artifacts/quiz';
 // 阶段一先实现 classification_game 和 quiz，其余类型随组件逐个加入本联合。
 
 /**
- * 协议版本必须随 Artifact 持久化，便于旧会话回放时选择兼容的校验与渲染逻辑。
+ * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
  * 版本升级规则见 docs/09-decisions/0002-controlled-canvas.md。
  */
 export const ARTIFACT_SCHEMA_VERSION = '1' as const;
@@ -56,7 +56,7 @@ export type ArtifactValidation =
   { ok: true; artifact: Artifact } | { ok: false; errors: string[] };
 
 /**
- * 在模型输出进入渲染层前执行唯一的白名单校验，并把 Zod 问题收敛成可展示、可记录的路径消息。
+ * 在模型输出进入渲染层前执行完整服务端Artifact的规范白名单校验，并把 Zod 问题收敛成可展示、可记录的路径消息。
  * 调用方不得在失败时降级执行原始内容，安全边界见 docs/09-decisions/0002-controlled-canvas.md。
  */
 export function validateArtifact(input: unknown): ArtifactValidation {

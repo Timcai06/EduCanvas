@@ -44,7 +44,7 @@ export type GradeCanvasSubmissionRejection =
   | 'SESSION_NOT_FOUND'
   | 'NO_ACTIVE_KNOWLEDGE_NODE';
 
-/** 成功结果同时返回可信事件和最新掌握度投影，replayed表示安全幂等重试。 */
+/** 成功结果同时返回可信事件和最新掌握度投影；replayed表示发现已提交的同幂等键事件。 */
 export type GradeCanvasSubmissionOutcome =
   | {
       ok: true;
@@ -80,6 +80,7 @@ function daysBetween(previousIso: string | null, current: Date): number {
 /**
  * 把不可信Canvas提交提升为可信assessment_graded事件，并在同一事务更新掌握度投影。
  * 本服务不负责HTTP认证；Web组合根必须先验证当前用户对session的访问权。
+ * 非法客户端事件返回拒绝结果；无效先修分数或下游Port失败会抛出异常，由调用边界处理。
  */
 export class GradeCanvasSubmissionService {
   constructor(

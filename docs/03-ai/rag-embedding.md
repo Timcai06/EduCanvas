@@ -2,15 +2,17 @@
 
 - 状态：`draft`
 
+> 当前实现状态：`packages/teaching-core` 已定义 `KnowledgeRetriever` Port和证据结构；尚无教材摄取流水线、知识/向量表、pgvector检索适配器、Reranker或评测集。下文是目标检索与治理规格。
+
 ## 当前主选
 
-| 用途 | 候选模型 | 建议维度 |
-|---|---|---:|
-| 中文教材文本 | Qwen3-Embedding-4B | 1024 |
-| 多模态教材 | Qwen3-VL-Embedding-2B | 1024，独立空间 |
-| 在线文本重排 | Qwen3-Reranker-0.6B | 不适用 |
-| 高精度文本重排 | Qwen3-Reranker-4B | 不适用 |
-| 多模态重排 | Qwen3-VL-Reranker-2B | 不适用 |
+| 用途           | 候选模型              |       建议维度 |
+| -------------- | --------------------- | -------------: |
+| 中文教材文本   | Qwen3-Embedding-4B    |           1024 |
+| 多模态教材     | Qwen3-VL-Embedding-2B | 1024，独立空间 |
+| 在线文本重排   | Qwen3-Reranker-0.6B   |         不适用 |
+| 高精度文本重排 | Qwen3-Reranker-4B     |         不适用 |
+| 多模态重排     | Qwen3-VL-Reranker-2B  |         不适用 |
 
 最终选择必须经过项目内部K12中文评测，不能只依赖公开榜单。
 
@@ -65,4 +67,3 @@
 - p50/p95延迟；
 - 单次成本；
 - 最终答案引用覆盖率。
-

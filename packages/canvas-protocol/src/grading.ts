@@ -6,7 +6,7 @@ import {
 } from './events';
 import { publicArtifactSchema, type PublicArtifact } from './public-artifact';
 
-/** 服务端私有判分键；必须与公开Artifact分表或分密级保存。 */
+/** 服务端私有判分键；调用方必须与公开Artifact分表或分密级保存。 */
 export const artifactGradingKeySchema = z.discriminatedUnion('type', [
   z
     .object({
@@ -204,7 +204,10 @@ function gradeClassification(
   };
 }
 
-/** 仅在服务端使用保存的判分键验证客户端提交；客户端自报结果永远不参与计算。 */
+/**
+ * 仅在服务端使用保存的判分键验证客户端提交；客户端自报结果永远不参与计算。
+ * Schema不合法的输入抛出ZodError；通过Schema但语义冲突的提交返回显式拒绝结果。
+ */
 export function gradeCanvasSubmission(
   gradingKeyInput: unknown,
   eventInput: unknown,

@@ -25,6 +25,18 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 
 ### Agent Tool Loop
 
+#### 当前实现状态
+
+| 能力                                      | 状态       | 当前边界                                                        |
+| ----------------------------------------- | ---------- | --------------------------------------------------------------- |
+| 五态教学状态机、guard与中断恢复纯函数     | 已实现     | `packages/teaching-core/src/state-machine.ts`                   |
+| 工具名称闭集与“状态 × 工具”白名单         | 已实现     | `packages/teaching-core/src/tools.ts`；只判断已解析工具是否获准 |
+| 模型与知识检索Port                        | 已实现契约 | 仅有供应商无关接口，尚无真实适配器                              |
+| Turn Orchestrator与状态感知Prompt         | 待实现     | 尚未形成模型调用—工具执行—状态推进循环                          |
+| 工具参数Schema注册表与白名单Tool Executor | 待实现     | 未知工具解析、参数校验、权限和执行隔离尚未落地                  |
+| 工具超时、重试、幂等、限流与审计          | 待实现     | 属于运行时执行策略，不能由当前白名单替代                        |
+| Prompt/Trace持久化与Agent评测             | 待实现     | 尚无完整调用链审计与回放                                        |
+
 初始工具：
 
 - `retrieveKnowledge`
@@ -36,17 +48,17 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 - `updateMisconception`
 - `recommendNextNode`
 
-工具必须有Schema校验、权限、超时、幂等、限流和审计。**每个脊柱状态绑定工具白名单**，runtime 按当前状态限制可调用集合，越权调用直接拒绝并记录。
+完整运行时中的工具必须有Schema校验、权限、超时、幂等、限流和审计。**每个脊柱状态绑定工具白名单**，runtime 按当前状态限制可调用集合，越权调用直接拒绝并记录。当前代码只实现工具闭集和白名单判断，不能把这些运行时要求视为已经完成。
 
 阶段一白名单由`packages/teaching-core/src/tools.ts`维护：
 
-| 状态 | 允许工具 |
-|---|---|
-| `DIAGNOSE` | `retrieveKnowledge`、`getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
-| `EXPLAIN` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint` |
-| `DEMONSTRATE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint` |
-| `PRACTICE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
-| `ASSESS` | `getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`、`recommendNextNode` |
+| 状态          | 允许工具                                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `DIAGNOSE`    | `retrieveKnowledge`、`getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`                 |
+| `EXPLAIN`     | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint`                                                       |
+| `DEMONSTRATE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint`                                                       |
+| `PRACTICE`    | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
+| `ASSESS`      | `getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`、`recommendNextNode`                 |
 
 工具获准不等于结果自动可信：`gradeAnswer`仍需服务端答案判定，状态转移仍需guard，掌握度仍只消费可信领域事件。
 
@@ -64,4 +76,4 @@ Temporal负责教材处理、批量生成、学习报告、定时任务和Embedd
 ## 开放问题
 
 - PRACTICE进入ASSESS所需的最少练习证据量由课程配置提供，待猫狗课程规格确定；
-- 中断栈的持久化字段设计（`lesson_sessions` 增列或独立表），随数据库适配器实现定。
+- 深度为1的中断状态当前使用 `lesson_sessions.interrupted_state` 持久化；若未来支持嵌套中断，需要新ADR决定是否改为独立栈结构。
