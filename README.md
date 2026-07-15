@@ -300,15 +300,15 @@ E2E_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e p
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集Schema ✅ : 匿名会话与归属校验 ✅ : 浏览器提交与持久化进度 ✅ : Playwright纵切E2E ✅ : AI对话链路 : 教材RAG : GSAP动画
-    阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 匿名会话与归属校验 ✅ : 浏览器提交与持久化进度 ✅ : 最小Agent Runtime ✅ : Playwright纵切E2E ✅ : 真实模型链路 : 教材RAG : GSAP动画
+    阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : 多供应商路由治理 : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。当前基线为57个单元测试、8个真实PostgreSQL集成测试和4个Playwright E2E，CI按基础检查、集成测试、浏览器E2E三个job执行。
+当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。Agent侧已经形成“状态感知结构化计划 → 受控工具授权/执行 → 显式STAY”的最小无持久化纵切。当前基线为103个单元测试、8个真实PostgreSQL集成测试和4个Playwright E2E，CI按基础检查、集成测试、浏览器E2E三个job执行。
 
-这仍是匿名演示纵切，不等同于正式用户认证。下一步是实现Turn Orchestrator、Model Gateway与状态感知工具执行，再接入教材RAG、SSE对话和首个GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。
+这仍是匿名演示纵切，不等同于正式用户认证。下一步是接入真实Model Gateway和首批只读知识工具，再完成工具结果合成、教材RAG、SSE对话和首个GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。
 
 ## 最简单的团队协作规则
 

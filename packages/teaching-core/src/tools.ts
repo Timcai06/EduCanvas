@@ -1,6 +1,7 @@
 import type { TeachingState } from './state-machine';
+import { z } from 'zod';
 
-/** runtime允许模型请求的受控教学工具闭集。 */
+/** runtime可识别的受控教学操作闭集；是否向模型暴露由执行层定义。 */
 export const teachingTools = [
   'retrieveKnowledge',
   'getStudentState',
@@ -12,8 +13,11 @@ export const teachingTools = [
   'recommendNextNode',
 ] as const;
 
+/** 运行时用于拒绝未知工具字符串的唯一名称Schema。 */
+export const teachingToolSchema = z.enum(teachingTools);
+
 /** runtime可识别的受控教学工具名称。 */
-export type TeachingTool = (typeof teachingTools)[number];
+export type TeachingTool = z.infer<typeof teachingToolSchema>;
 
 const freezeToolList = (...tools: TeachingTool[]): readonly TeachingTool[] =>
   Object.freeze(tools);

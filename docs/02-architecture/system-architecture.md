@@ -19,13 +19,13 @@
 flowchart LR
     student[学生浏览器] --> web["apps/web<br/>页面 / 服务端组合根"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
-    web --> runtime["packages/teaching-runtime<br/>判分 / 事务用例编排"]
+    web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
     runtime --> teaching["packages/teaching-core<br/>状态机 / 掌握度 / 领域事件 / Port"]
     runtime --> db["packages/db<br/>Drizzle适配器 / PostgreSQL"]
     db --> teaching
 ```
 
-当前代码已经拆出Canvas协议、教学核心、应用运行时与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`目前只实现`GradeCanvasSubmissionService`，用于编排服务端判分、可信测评事件和掌握度事务，不代表完整Agent教学运行时已经完成；Next.js组合根只注入具体实现。认证和session归属校验落地前，不开放浏览器可直接调用的判分Route Handler。
+当前代码已经拆出Canvas协议、教学核心、应用运行时与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`已经包含可信判分事务、最小Turn Orchestrator和状态感知Tool Executor，但仍没有真实模型/RAG适配器、生产工具Handler、工具结果合成或状态转移持久化。Next.js组合根已经在匿名演示边界内接通Canvas Server Action；Agent轮次尚未接入浏览器与SSE。
 
 ## 目标服务形态
 

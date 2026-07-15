@@ -18,28 +18,26 @@
 - 掌握度更新；
 - 下一步推荐。
 
-已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配。
+已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；以及无供应商依赖的最小Turn Orchestrator、状态感知Prompt、Scripted Model Gateway和受控Tool Executor。
 
-已完成的验证基线：57个单元测试、8个真实PostgreSQL集成测试、4个Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job。
+已完成的验证基线：103个单元测试、8个真实PostgreSQL集成测试、4个Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job。
 
 阶段一剩余工作按可验证纵切拆分：
 
-1. 实现Turn Orchestrator和状态感知Prompt；
-2. 接入Model Gateway适配器与结构化输出校验；
-3. 实现工具Schema注册表、状态白名单Tool Executor及超时/审计策略；
+1. 实现真实Model Gateway适配器、任务别名路由与结构化输出错误归一；
+2. 注入首批只读生产工具Handler，并建立教材摄取、混合检索与`KnowledgeRetriever`适配器；
+3. 增加工具结果二次合成与SSE流式对话；
 4. 补齐状态转移、提示、误区生命周期和下一节点推荐应用服务；
-5. 建立教材摄取、混合检索与`KnowledgeRetriever`适配器；
-6. 接入SSE流式对话；
-7. 实现Prompt/Trace持久化、事件回放和Agent评测；
-8. 接入首个GSAP动画和Python实验；
-9. 在匿名演示纵切之外实现正式用户认证、账号恢复、授权与会话吊销；上线前补齐匿名bootstrap限流、配额和过期数据清理；
-10. 继续完成迁移向下回退、备份恢复演练和整节课E2E；当前4个E2E只覆盖匿名Canvas判分纵切。
+5. 实现持久幂等、限流、Prompt/Trace存储、事件回放和Agent评测；
+6. 接入首个GSAP动画和Python实验；
+7. 在匿名演示纵切之外实现正式用户认证、账号恢复、授权与会话吊销；上线前补齐匿名bootstrap限流、配额和过期数据清理；
+8. 继续完成迁移向下回退、备份恢复演练和整节课E2E；当前4个E2E只覆盖匿名Canvas判分纵切。
 
 ## 阶段二：平台化
 
 - Canvas Artifact版本兼容、课程组合与管理能力；
 - 教材上传和审核；
-- Model Gateway；
+- 多供应商路由、Fallback、熔断、配额与成本治理；
 - Embedding版本管理；
 - 教师端基础能力；
 - 完整监控和评测集。

@@ -27,17 +27,17 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 
 #### 当前实现状态
 
-| 能力                                      | 状态       | 当前边界                                                        |
-| ----------------------------------------- | ---------- | --------------------------------------------------------------- |
-| 五态教学状态机、guard与中断恢复纯函数     | 已实现     | `packages/teaching-core/src/state-machine.ts`                   |
-| 工具名称闭集与“状态 × 工具”白名单         | 已实现     | `packages/teaching-core/src/tools.ts`；只判断已解析工具是否获准 |
-| 模型与知识检索Port                        | 已实现契约 | 仅有供应商无关接口，尚无真实适配器                              |
-| Turn Orchestrator与状态感知Prompt         | 待实现     | 尚未形成模型调用—工具执行—状态推进循环                          |
-| 工具参数Schema注册表与白名单Tool Executor | 待实现     | 未知工具解析、参数校验、权限和执行隔离尚未落地                  |
-| 工具超时、重试、幂等、限流与审计          | 待实现     | 属于运行时执行策略，不能由当前白名单替代                        |
-| Prompt/Trace持久化与Agent评测             | 待实现     | 尚无完整调用链审计与回放                                        |
+| 能力                                      | 状态           | 当前边界                                                                                                  |
+| ----------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------- |
+| 五态教学状态机、guard与中断恢复纯函数     | 已实现         | `packages/teaching-core/src/state-machine.ts`                                                             |
+| 工具名称闭集与“状态 × 工具”白名单         | 已实现         | `packages/teaching-core/src/tools.ts`；只判断已解析工具是否获准                                           |
+| 模型与知识检索Port                        | 已实现契约     | 有确定性Scripted Model Gateway测试替身；尚无真实供应商与RAG适配器                                         |
+| Turn Orchestrator与状态感知Prompt         | 已实现最小纵切 | 支持结构化直接回答/工具计划；工具结果二次合成与持久化尚未实现                                             |
+| 工具参数Schema注册表与白名单Tool Executor | 已实现基础层   | 已覆盖未知工具、参数/输出Schema、权限交集、整批预检和执行隔离                                             |
+| 工具超时、重试、幂等、限流与审计          | 部分实现       | 已有读超时取消、写超时结果未知、有界进程内幂等和非阻塞脱敏审计Hook；持久幂等、重试、限流与Trace存储待实现 |
+| Prompt/Trace持久化与Agent评测             | 待实现         | 尚无完整调用链审计与回放                                                                                  |
 
-初始工具：
+runtime可识别的初始教学操作：
 
 - `retrieveKnowledge`
 - `getStudentState`
@@ -48,7 +48,7 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 - `updateMisconception`
 - `recommendNextNode`
 
-完整运行时中的工具必须有Schema校验、权限、超时、幂等、限流和审计。**每个脊柱状态绑定工具白名单**，runtime 按当前状态限制可调用集合，越权调用直接拒绝并记录。当前代码只实现工具闭集和白名单判断，不能把这些运行时要求视为已经完成。
+这些名称不等于全部向模型开放。模型每轮实际可见集合是“权威状态白名单 ∩ 已注册Handler ∩ `exposure=model`”；`gradeAnswer`等可信操作应由Canvas事件或runtime触发，不能仅因名称在闭集中就暴露。执行器会在启动Handler前完成整批预检；运行期失败后立即停止，含写工具的多调用批次直接拒绝。写工具软超时只表示结果未知，不能自动重试。完整生产运行时还必须补齐持久幂等、限流、重试策略和Trace存储。
 
 阶段一白名单由`packages/teaching-core/src/tools.ts`维护：
 
@@ -61,6 +61,8 @@ DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
 | `ASSESS`      | `getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`、`recommendNextNode`                 |
 
 工具获准不等于结果自动可信：`gradeAnswer`仍需服务端答案判定，状态转移仍需guard，掌握度仍只消费可信领域事件。
+
+当前`TeachingTurnOrchestrator`刻意只返回`STAY`：直接回答不改变脊柱状态；工具执行结果也不会自动触发状态转移。后续状态转移应用服务必须通过guard、Unit of Work与`state_transition`可信事件完成，不能在模型计划中直接增加可持久化状态字段。
 
 ### 持久工作流
 

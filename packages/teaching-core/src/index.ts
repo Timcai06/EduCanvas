@@ -50,6 +50,7 @@ export {
 export {
   defaultToolPolicy,
   isToolAllowed,
+  teachingToolSchema,
   teachingTools,
   type TeachingTool,
 } from './tools';
