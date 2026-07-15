@@ -9,17 +9,27 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "test": "turbo test",
+    "test": "pnpm test:unit",
+    "test:unit": "turbo test",
+    "test:integration": "turbo test:integration --filter=@educanvas/db",
+    "pretest:e2e": "pnpm build",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "typecheck": "turbo typecheck",
     "db:up": "docker compose up -d",
     "db:generate": "pnpm --filter @educanvas/db generate",
     "db:migrate": "pnpm --filter @educanvas/db migrate"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "prettier": "^3.9.5",
     "turbo": "^2.10.4"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

@@ -1,6 +1,10 @@
 'use client';
 
 import type {
+  CanvasFeedbackDTO,
+  CanvasSubmissionDraft,
+} from '@/features/learning/learning-contracts';
+import type {
   PublicArtifact,
   PublicArtifactType,
 } from '@educanvas/canvas-protocol';
@@ -11,54 +15,111 @@ type ArtifactOf<Type extends PublicArtifactType> = Extract<
   { type: Type }
 >;
 
+interface RendererInteractionProps {
+  disabled: boolean;
+  feedback: CanvasFeedbackDTO | null;
+  onSubmit: (draft: CanvasSubmissionDraft) => void;
+}
+
 type ArtifactRendererRegistry = {
-  [Type in PublicArtifactType]: ComponentType<{
-    artifact: ArtifactOf<Type>;
-  }>;
+  [Type in PublicArtifactType]: ComponentType<
+    {
+      artifact: ArtifactOf<Type>;
+    } & RendererInteractionProps
+  >;
 };
 
-function QuizRenderer({ artifact }: { artifact: ArtifactOf<'quiz'> }) {
+function QuizRenderer({
+  artifact,
+  disabled,
+  feedback,
+  onSubmit,
+}: {
+  artifact: ArtifactOf<'quiz'>;
+} & RendererInteractionProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   return (
     <div className="space-y-5">
-      {artifact.params.questions.map((question, questionIndex) => (
-        <fieldset
-          key={question.id}
-          className="rounded-xl border border-slate-200 p-4"
-        >
-          <legend className="px-2 font-medium text-slate-800">
-            {questionIndex + 1}. {question.question}
-          </legend>
-          <div className="mt-3 grid gap-2">
-            {question.options.map((option) => {
-              const selected = answers[question.id] === option.id;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() =>
-                    setAnswers((current) => ({
-                      ...current,
-                      [question.id]: option.id,
-                    }))
+      {artifact.params.questions.map((question, questionIndex) => {
+        const selectedOptionId = answers[question.id];
+        const itemResult = feedback?.itemResults.find(
+          (result) => result.itemId === question.id,
+        );
+
+        return (
+          <fieldset
+            key={question.id}
+            className="rounded-xl border border-slate-200 p-4"
+            disabled={disabled}
+          >
+            <legend className="px-2 font-medium text-slate-800">
+              {questionIndex + 1}. {question.question}
+            </legend>
+            <div className="mt-3 grid gap-2">
+              {question.options.map((option) => {
+                const selected = selectedOptionId === option.id;
+                return (
+                  <label
+                    key={option.id}
+                    className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-600 has-[:focus-visible]:ring-offset-2 ${
+                      selected
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                        : 'border-slate-200 hover:border-slate-400'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`quiz-${artifact.artifactId}-${question.id}`}
+                      value={option.id}
+                      checked={selected}
+                      onChange={() =>
+                        setAnswers((current) => ({
+                          ...current,
+                          [question.id]: option.id,
+                        }))
+                      }
+                      className="size-5 shrink-0 accent-indigo-600"
+                    />
+                    <span>{option.text}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={disabled || !selectedOptionId}
+                onClick={() => {
+                  if (!selectedOptionId) return;
+                  onSubmit({
+                    type: 'quiz_answer_submitted',
+                    artifactId: artifact.artifactId,
+                    payload: {
+                      questionId: question.id,
+                      selectedOptionId,
+                    },
+                  });
+                }}
+                className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {disabled ? '正在提交…' : '提交本题'}
+              </button>
+              {itemResult ? (
+                <span
+                  className={
+                    itemResult.isCorrect ? 'text-emerald-700' : 'text-amber-700'
                   }
-                  className={`rounded-lg border px-3 py-2 text-left transition-colors ${
-                    selected
-                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                      : 'border-slate-200 hover:border-slate-400'
-                  }`}
                 >
-                  {option.text}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-      ))}
+                  {itemResult.isCorrect ? '回答正确' : '还可以再想一想'}
+                </span>
+              ) : null}
+            </div>
+          </fieldset>
+        );
+      })}
       <p className="text-xs text-slate-500">
-        客户端只记录选择；正确答案由服务端判分键验证。
+        客户端只提交选择；正确答案与掌握度始终由服务端计算。
       </p>
     </div>
   );
@@ -66,58 +127,106 @@ function QuizRenderer({ artifact }: { artifact: ArtifactOf<'quiz'> }) {
 
 function ClassificationGameRenderer({
   artifact,
+  disabled,
+  feedback,
+  onSubmit,
 }: {
   artifact: ArtifactOf<'classification_game'>;
-}) {
+} & RendererInteractionProps) {
   const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const selectedCount = artifact.params.items.filter(
+    (item) => assignments[item.id],
+  ).length;
+  const complete = selectedCount === artifact.params.items.length;
 
   return (
     <div className="space-y-4">
       <p className="text-slate-700">{artifact.params.prompt}</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {artifact.params.items.map((item) => (
-          <article
-            key={item.id}
-            className="rounded-xl border border-slate-200 p-3"
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <span className="text-2xl" aria-hidden="true">
-                {item.emoji}
-              </span>
-              <span className="font-medium">{item.label}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {artifact.params.categories.map((category) => {
-                const selected = assignments[item.id] === category.id;
-                return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() =>
-                      setAssignments((current) => ({
-                        ...current,
-                        [item.id]: category.id,
-                      }))
-                    }
-                    className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                      selected
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-                        : 'border-slate-200 hover:border-slate-400'
-                    }`}
-                  >
-                    {category.label}
-                  </button>
-                );
-              })}
-            </div>
-          </article>
-        ))}
+        {artifact.params.items.map((item) => {
+          const itemResult = feedback?.itemResults.find(
+            (result) => result.itemId === item.id,
+          );
+          return (
+            <fieldset
+              key={item.id}
+              className="rounded-xl border border-slate-200 p-3"
+              disabled={disabled}
+            >
+              <legend className="px-1 font-medium">
+                <span className="mr-2 text-2xl" aria-hidden="true">
+                  {item.emoji}
+                </span>
+                {item.label}
+              </legend>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {artifact.params.categories.map((category) => {
+                  const selected = assignments[item.id] === category.id;
+                  return (
+                    <label
+                      key={category.id}
+                      className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-600 has-[:focus-visible]:ring-offset-2 ${
+                        selected
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                          : 'border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`classification-${artifact.artifactId}-${item.id}`}
+                        value={category.id}
+                        checked={selected}
+                        onChange={() =>
+                          setAssignments((current) => ({
+                            ...current,
+                            [item.id]: category.id,
+                          }))
+                        }
+                        className="size-4 shrink-0 accent-emerald-600"
+                      />
+                      <span>{category.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {itemResult ? (
+                <p
+                  className={`mt-2 text-sm ${
+                    itemResult.isCorrect ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
+                >
+                  {itemResult.isCorrect ? '分类正确' : '分类不正确，请再观察'}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        })}
       </div>
-      <p className="text-xs text-slate-500">
-        已选择 {Object.keys(assignments).length}/{artifact.params.items.length}{' '}
-        项；当前仅保存在本页，认证后的服务端提交入口仍待接入。
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={disabled || !complete}
+          onClick={() => {
+            if (!complete) return;
+            onSubmit({
+              type: 'classification_submitted',
+              artifactId: artifact.artifactId,
+              payload: {
+                assignments: artifact.params.items.map((item) => ({
+                  itemId: item.id,
+                  categoryId: assignments[item.id]!,
+                })),
+              },
+            });
+          }}
+          className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {disabled ? '正在提交…' : '提交分类'}
+        </button>
+        <span className="text-sm text-slate-600">
+          已选择 {selectedCount}/{artifact.params.items.length} 项
+        </span>
+      </div>
     </div>
   );
 }
@@ -134,17 +243,34 @@ export const canvasArtifactRegistry = {
 /** 通过判别联合分派受控Renderer；switch保证组件Props保持精确类型。 */
 export function CanvasArtifactRenderer({
   artifact,
+  disabled,
+  feedback,
+  onSubmit,
 }: {
   artifact: PublicArtifact;
-}) {
+} & RendererInteractionProps) {
   switch (artifact.type) {
     case 'classification_game': {
       const Renderer = canvasArtifactRegistry.classification_game;
-      return <Renderer artifact={artifact} />;
+      return (
+        <Renderer
+          artifact={artifact}
+          disabled={disabled}
+          feedback={feedback}
+          onSubmit={onSubmit}
+        />
+      );
     }
     case 'quiz': {
       const Renderer = canvasArtifactRegistry.quiz;
-      return <Renderer artifact={artifact} />;
+      return (
+        <Renderer
+          artifact={artifact}
+          disabled={disabled}
+          feedback={feedback}
+          onSubmit={onSubmit}
+        />
+      );
     }
   }
 }

@@ -118,6 +118,7 @@ describe('GradeCanvasSubmissionService', () => {
   it('在一个事务内生成可信事件并更新掌握度', async () => {
     const harness = createHarness();
     const outcome = await harness.service.execute({
+      trustedStudentId: 'student-1',
       sessionId,
       clientEvent,
       prerequisiteScores: [],
@@ -142,7 +143,12 @@ describe('GradeCanvasSubmissionService', () => {
 
   it('相同客户端事件重试时返回原事实且不重复计数', async () => {
     const harness = createHarness();
-    const command = { sessionId, clientEvent, prerequisiteScores: [] };
+    const command = {
+      trustedStudentId: 'student-1',
+      sessionId,
+      clientEvent,
+      prerequisiteScores: [],
+    };
     await harness.service.execute(command);
     const replay = await harness.service.execute(command);
 
@@ -156,11 +162,13 @@ describe('GradeCanvasSubmissionService', () => {
   it('相同事件ID对应不同判分结果时拒绝幂等冲突', async () => {
     const harness = createHarness();
     await harness.service.execute({
+      trustedStudentId: 'student-1',
       sessionId,
       clientEvent,
       prerequisiteScores: [],
     });
     const conflict = await harness.service.execute({
+      trustedStudentId: 'student-1',
       sessionId,
       clientEvent: {
         ...clientEvent,
@@ -179,6 +187,7 @@ describe('GradeCanvasSubmissionService', () => {
   it('拒绝伪造选项且不打开写事务', async () => {
     const harness = createHarness();
     const outcome = await harness.service.execute({
+      trustedStudentId: 'student-1',
       sessionId,
       clientEvent: {
         ...clientEvent,
@@ -188,6 +197,22 @@ describe('GradeCanvasSubmissionService', () => {
     });
 
     expect(outcome).toEqual({ ok: false, code: 'UNKNOWN_CHOICE' });
+    expect(harness.getState()).toMatchObject({
+      sequence: 0,
+      saveCount: 0,
+    });
+  });
+
+  it('拒绝不属于可信学生的会话且不进入判分写路径', async () => {
+    const harness = createHarness();
+    const outcome = await harness.service.execute({
+      trustedStudentId: 'student-forged',
+      sessionId,
+      clientEvent,
+      prerequisiteScores: [],
+    });
+
+    expect(outcome).toEqual({ ok: false, code: 'SESSION_NOT_FOUND' });
     expect(harness.getState()).toMatchObject({
       sequence: 0,
       saveCount: 0,

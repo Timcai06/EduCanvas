@@ -127,7 +127,8 @@ stateDiagram-v2
 
 - **技术栈**：Next.js + React + TypeScript，Headless组件 + 自有设计系统（[ADR-0001](docs/09-decisions/0001-core-stack.md)，`accepted`）；
 - **学习页三栏布局**：AI教师对话 | 教学Canvas | 学习进度，让"教师引导—动手理解—学习反馈"始终同时可见；
-- **动画统一使用GSAP**：`@gsap/react` + `useGSAP()`、独立scope、卸载时回收Timeline、不在SSR阶段执行；动画Artifact支持播放/暂停/跳转/步进/重置/变速，关键节点产生学习事件（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
+- **已接通首条浏览器纵切**：匿名学习会话、受控Canvas提交、服务端判分、PostgreSQL掌握度持久化与进度回显；AI教师对话仍是占位区；
+- **GSAP是待接入的动画标准**：计划使用`@gsap/react` + `useGSAP()`、独立scope并在卸载时回收Timeline；当前尚未安装GSAP依赖或实现动画Artifact（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
 
 ### 受控Canvas协议（packages/canvas-protocol）
 
@@ -280,7 +281,17 @@ pnpm db:migrate             # 应用数据库迁移
 pnpm dev                    # 启动开发服务（turbo dev）
 ```
 
-其他常用命令：`pnpm build`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm db:generate`（生成迁移）。
+基础验证命令：
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+TEST_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_integration pnpm test:integration
+E2E_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e pnpm test:e2e
+```
+
+集成测试和E2E必须使用独立测试数据库：集成库名以`_integration`或`_test`结尾，E2E库名以`_e2e`或`_test`结尾。`pnpm test:e2e`会先执行生产构建；其他常用命令包括`pnpm build`和`pnpm db:generate`（生成迁移）。
 
 ## 当前进度
 
@@ -289,13 +300,15 @@ pnpm dev                    # 启动开发服务（turbo dev）
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集Schema ✅ : 三栏UI骨架 ✅ : 静态Artifact注册表 ✅ : Drizzle事务适配器 ✅ : AI对话链路 : 教材RAG : GSAP动画
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 阶段一表集Schema ✅ : 匿名会话与归属校验 ✅ : 浏览器提交与持久化进度 ✅ : Playwright纵切E2E ✅ : AI对话链路 : 教材RAG : GSAP动画
     阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : Model Gateway : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：协议、状态机、掌握度纯逻辑、服务端确定性判分、静态Canvas注册表、数据库Schema与事务适配器已经落地；全部迁移已在真实PostgreSQL上验证，CI集成测试覆盖事务写入/回滚、乐观锁和并发幂等。迁移向下回退与备份恢复演练、认证后的浏览器提交入口、AI对话链路、教材RAG、GSAP动画、Python实验和完整教学运行时仍待接入。
+当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。当前基线为57个单元测试、8个真实PostgreSQL集成测试和4个Playwright E2E，CI按基础检查、集成测试、浏览器E2E三个job执行。
+
+这仍是匿名演示纵切，不等同于正式用户认证。下一步是实现Turn Orchestrator、Model Gateway与状态感知工具执行，再接入教材RAG、SSE对话和首个GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。
 
 ## 最简单的团队协作规则
 

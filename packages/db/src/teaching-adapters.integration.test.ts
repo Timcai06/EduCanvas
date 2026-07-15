@@ -8,6 +8,11 @@ import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleArtifactRepository } from './artifact-repository';
+import {
+  ANONYMOUS_LEARNING_SESSION_TTL_MS,
+  ArtifactContentConflictError,
+  DrizzleLearningSessionRepository,
+} from './learning-session-repository';
 import * as schema from './schema';
 import {
   DrizzleTeachingUnitOfWork,
@@ -124,6 +129,7 @@ describeWithDatabase('Drizzle教学链路集成', () => {
   it('通过真实事务写入可信事件与掌握度投影', async () => {
     const artifacts = await seedSessionAndArtifact();
     const outcome = await createService(artifacts).execute({
+      trustedStudentId: studentId,
       sessionId,
       clientEvent,
       prerequisiteScores: [],
@@ -141,6 +147,27 @@ describeWithDatabase('Drizzle教学链路集成', () => {
     expect(
       await getDatabase().select().from(schema.masteryStates),
     ).toMatchObject([{ attemptCount: 1, correctCount: 1, version: 1 }]);
+  });
+
+  it('可信学生不匹配时拒绝写入真实事件与掌握度', async () => {
+    const artifacts = await seedSessionAndArtifact();
+    const outcome = await createService(artifacts).execute({
+      trustedStudentId: 'student-forged',
+      sessionId,
+      clientEvent,
+      prerequisiteScores: [],
+    });
+
+    expect(outcome).toEqual({ ok: false, code: 'SESSION_NOT_FOUND' });
+    expect(
+      await getDatabase().select().from(schema.learningEvents),
+    ).toHaveLength(0);
+    expect(
+      await getDatabase().select().from(schema.masteryStates),
+    ).toHaveLength(0);
+    expect(
+      await getDatabase().select().from(schema.lessonSessions),
+    ).toMatchObject([{ eventSequence: 0 }]);
   });
 
   it('事务失败时同时回滚事件与会话序号', async () => {
@@ -239,7 +266,12 @@ describeWithDatabase('Drizzle教学链路集成', () => {
   it('相同提交并发重试时只计数一次并返回重放结果', async () => {
     const artifacts = await seedSessionAndArtifact();
     const service = createService(artifacts);
-    const command = { sessionId, clientEvent, prerequisiteScores: [] };
+    const command = {
+      trustedStudentId: studentId,
+      sessionId,
+      clientEvent,
+      prerequisiteScores: [],
+    };
     const results = await Promise.allSettled([
       service.execute(command),
       service.execute(command),
@@ -264,5 +296,94 @@ describeWithDatabase('Drizzle教学链路集成', () => {
     expect(
       await getDatabase().select().from(schema.lessonSessions),
     ).toMatchObject([{ eventSequence: 1 }]);
+  });
+
+  it('并发bootstrap原子复用同一会话和同一Artifact', async () => {
+    const repository = new DrizzleLearningSessionRepository(getDatabase());
+    const input = {
+      studentId,
+      gradeBand: 'middle_school',
+      courseSlug: 'cat-dog-ai',
+      knowledgeNodeId,
+      completeArtifact,
+    };
+    const [first, second] = await Promise.all([
+      repository.bootstrap(input),
+      repository.bootstrap(input),
+    ]);
+
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(
+      await getDatabase().select().from(schema.lessonSessions),
+    ).toHaveLength(1);
+    expect(
+      await getDatabase().select().from(schema.canvasArtifacts),
+    ).toHaveLength(1);
+    expect(
+      await getDatabase().select().from(schema.canvasArtifactGradingKeys),
+    ).toHaveLength(1);
+    await expect(
+      repository.getPageSnapshot(input, completeArtifact.artifactId),
+    ).resolves.toMatchObject({
+      sessionId: first.sessionId,
+      studentId,
+      artifact: { artifactId: completeArtifact.artifactId },
+      mastery: null,
+    });
+  });
+
+  it('服务端不复用超过匿名有效期的会话', async () => {
+    const expiredSessionId = '44444444-4444-4444-8444-444444444444';
+    await getDatabase()
+      .insert(schema.lessonSessions)
+      .values({
+        id: expiredSessionId,
+        studentId,
+        gradeBand: 'middle_school',
+        courseSlug: 'cat-dog-ai',
+        knowledgeNodeId,
+        state: 'PRACTICE',
+        createdAt: new Date(
+          Date.now() - ANONYMOUS_LEARNING_SESSION_TTL_MS - 60_000,
+        ),
+      });
+    const repository = new DrizzleLearningSessionRepository(getDatabase());
+    const input = {
+      studentId,
+      gradeBand: 'middle_school',
+      courseSlug: 'cat-dog-ai',
+      knowledgeNodeId,
+      completeArtifact,
+    };
+
+    await expect(repository.getCurrentOwned(input)).resolves.toBeNull();
+    const active = await repository.bootstrap(input);
+
+    expect(active.sessionId).not.toBe(expiredSessionId);
+    expect(
+      await getDatabase().select().from(schema.lessonSessions),
+    ).toHaveLength(2);
+  });
+
+  it('同一Artifact ID内容变化时显式拒绝bootstrap覆盖', async () => {
+    const repository = new DrizzleLearningSessionRepository(getDatabase());
+    const input = {
+      studentId,
+      gradeBand: 'middle_school',
+      courseSlug: 'cat-dog-ai',
+      knowledgeNodeId,
+      completeArtifact,
+    };
+    await repository.bootstrap(input);
+
+    await expect(
+      repository.bootstrap({
+        ...input,
+        completeArtifact: { ...completeArtifact, title: '被篡改的标题' },
+      }),
+    ).rejects.toBeInstanceOf(ArtifactContentConflictError);
+    expect(
+      await getDatabase().select().from(schema.lessonSessions),
+    ).toHaveLength(1);
   });
 });

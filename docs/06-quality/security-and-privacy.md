@@ -11,6 +11,18 @@
 - 敏感日志脱敏；
 - 生产环境遵循适用的个人信息和未成年人保护要求。
 
+## 当前匿名纵切边界
+
+- 首次显式开始课程时生成32-byte高熵随机token，使用无padding base64url规范编码；
+- token仅写入HttpOnly、SameSite=Lax Cookie；生产环境同时启用Secure和`__Host-`前缀，阻止Domain Cookie覆盖；
+- PostgreSQL不保存原始token，只保存带版本前缀的SHA-256派生学生标识；
+- Cookie仅在已经拥有有效会话时复用；否则开始课程会轮换新token，数据库读取同时执行30天服务端有效期检查；
+- 页面和提交边界不接收客户端student ID或session ID，而是从Cookie身份和服务端课程范围恢复会话；
+- 教学运行时在事务内再次校验session属于可信学生，归属失败统一返回会话不存在；
+- 浏览器只接收公开Artifact、判分反馈和Progress DTO，不接收私有判分键或内部学习事件。
+
+Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie轮换和篡改Cookie后无法读取原会话；真实PostgreSQL集成测试覆盖错误归属不写事件/掌握度。当前token仍是bearer凭证，匿名机制没有账号恢复、主动撤销、角色授权或跨设备登录；正式用户认证、CSRF专项验证、匿名bootstrap限流/配额、过期数据清理和隐私生命周期仍是生产上线门禁。
+
 ## 模型安全
 
 - 输入、输出和工具调用分别设置Guardrail；
@@ -35,4 +47,3 @@
 - `main`启用分支保护；
 - 生产权限使用最小权限原则；
 - 关键操作保留审计日志。
-
