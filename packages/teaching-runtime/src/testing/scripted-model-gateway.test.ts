@@ -1,155 +1,212 @@
-import { z } from 'zod';
+import type {
+  StreamTurnTextRequest,
+  StructuredModelRequest,
+  TurnModelEvent,
+} from '@educanvas/teaching-core';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   ScriptedModelGateway,
   ScriptedModelGatewayError,
-  defaultScriptedModelMetadata,
 } from './scripted-model-gateway';
 
 const outputSchema = z
   .object({
-    answer: z.string().min(1),
+    title: z.string().min(1),
     confidence: z.number().min(0).max(1),
   })
   .strict();
 
-function request(taskAlias = 'teaching.turn', promptVersion = 'turn-v1') {
+function structuredRequest(
+  promptVersion = 'artifact-v1',
+): StructuredModelRequest<z.infer<typeof outputSchema>> {
   return {
-    taskAlias,
+    taskAlias: 'artifact.generate',
+    modelAlias: 'structured',
     messages: [
-      { role: 'system', content: '保持教学状态约束。' },
-      { role: 'user', content: '为什么模型需要训练数据？' },
-    ] as const,
+      { role: 'system', content: '只生成受控Artifact JSON。' },
+      { role: 'user', content: '生成猫狗分类互动。' },
+    ],
     schema: outputSchema,
     promptVersion,
     traceId: 'trace-1',
+    operationId: 'proposal-1',
   };
 }
 
+function streamRequest(
+  phase: StreamTurnTextRequest['phase'] = 'answer',
+): StreamTurnTextRequest {
+  return {
+    taskAlias: 'teaching.turn',
+    modelAlias: 'primary',
+    phase,
+    messages: [
+      { role: 'system', content: '保持教学状态约束。' },
+      { role: 'user', content: '为什么模型需要训练数据？' },
+    ],
+    tools: [],
+    toolResults: [],
+    promptVersion: phase === 'answer' ? 'turn-answer-v1' : 'turn-synthesis-v1',
+    traceId: 'trace-1',
+    turnId: 'turn-1',
+  };
+}
+
+async function collectStream(
+  gateway: ScriptedModelGateway,
+  request: StreamTurnTextRequest,
+) {
+  const events: TurnModelEvent[] = [];
+  for await (const event of gateway.streamTurnText(request)) events.push(event);
+  return events;
+}
+
 describe('ScriptedModelGateway', () => {
-  it('按FIFO返回通过Schema校验的结果并合并默认元数据', async () => {
+  it('保持结构化Fixture兼容，但teaching.turn不进入该入口', async () => {
     const gateway = new ScriptedModelGateway([
       {
-        expectedTaskAlias: 'teaching.turn',
-        expectedPromptVersion: 'turn-v1',
-        output: { answer: '用于提供可学习的样例。', confidence: 0.9 },
-      },
-      {
-        output: { answer: '第二轮回答。', confidence: 0.8 },
-        metadata: { modelRevision: 'scripted-v2', latencyMs: 12 },
+        expectedTaskAlias: 'artifact.generate',
+        expectedModelAlias: 'structured',
+        expectedPromptVersion: 'artifact-v1',
+        output: { title: '猫狗分类', confidence: 0.9 },
       },
     ]);
 
-    await expect(gateway.generateStructured(request())).resolves.toEqual({
-      output: { answer: '用于提供可学习的样例。', confidence: 0.9 },
-      ...defaultScriptedModelMetadata,
+    await expect(
+      gateway.generateStructured(structuredRequest()),
+    ).resolves.toMatchObject({
+      output: { title: '猫狗分类', confidence: 0.9 },
+      metadata: {
+        provider: 'scripted',
+        taskAlias: 'artifact.generate',
+        modelAlias: 'structured',
+        traceId: 'trace-1',
+      },
     });
-    await expect(gateway.generateStructured(request())).resolves.toEqual({
-      output: { answer: '第二轮回答。', confidence: 0.8 },
-      ...defaultScriptedModelMetadata,
-      modelRevision: 'scripted-v2',
-      latencyMs: 12,
-    });
-    expect(gateway.remainingStepCount).toBe(0);
-    expect(() => gateway.assertExhausted()).not.toThrow();
-  });
-
-  it('捕获不可变请求快照', async () => {
-    const gateway = new ScriptedModelGateway([
-      { output: { answer: '回答。', confidence: 1 } },
-    ]);
-
-    await gateway.generateStructured(request());
-
     expect(gateway.getCapturedRequests()).toEqual([
       {
-        taskAlias: 'teaching.turn',
+        kind: 'structured',
+        taskAlias: 'artifact.generate',
+        modelAlias: 'structured',
         messages: [
-          { role: 'system', content: '保持教学状态约束。' },
-          { role: 'user', content: '为什么模型需要训练数据？' },
+          { role: 'system', content: '只生成受控Artifact JSON。' },
+          { role: 'user', content: '生成猫狗分类互动。' },
         ],
-        promptVersion: 'turn-v1',
+        promptVersion: 'artifact-v1',
         traceId: 'trace-1',
+        operationId: 'proposal-1',
       },
     ]);
     expect(Object.isFrozen(gateway.getCapturedRequests()[0])).toBe(true);
-    expect(Object.isFrozen(gateway.getCapturedRequests()[0]?.messages)).toBe(
-      true,
+    gateway.assertExhausted();
+  });
+
+  it('按FIFO提供流式事件并捕获阶段、工具与toolResults', async () => {
+    const events = [
+      { type: 'text_delta', phase: 'answer', delta: '训练数据提供样例。' },
+      {
+        type: 'completed',
+        phase: 'answer',
+        metadata: {
+          providerResponseId: 'response-1',
+          provider: 'scripted',
+          taskAlias: 'teaching.turn',
+          modelAlias: 'primary',
+          resolvedModelId: 'scripted/model',
+          modelRevision: 'v1',
+          systemFingerprint: null,
+          finishReason: 'stop',
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheHitTokens: 0,
+            reasoningTokens: 0,
+          },
+          latencyMs: 1,
+          traceId: 'trace-1',
+        },
+      },
+    ] as const;
+    const gateway = new ScriptedModelGateway([
+      {
+        kind: 'stream',
+        expectedTaskAlias: 'teaching.turn',
+        expectedModelAlias: 'primary',
+        expectedPhase: 'answer',
+        expectedPromptVersion: 'turn-answer-v1',
+        events,
+      },
+    ]);
+
+    await expect(collectStream(gateway, streamRequest())).resolves.toEqual(
+      events,
     );
+    expect(gateway.getCapturedStreamRequests()).toEqual([
+      expect.objectContaining({
+        kind: 'stream',
+        taskAlias: 'teaching.turn',
+        modelAlias: 'primary',
+        phase: 'answer',
+        tools: [],
+        toolResults: [],
+        traceId: 'trace-1',
+        turnId: 'turn-1',
+      }),
+    ]);
   });
 
   it.each([
     {
-      step: { expectedTaskAlias: 'another.task', output: {} },
+      step: { expectedTaskAlias: 'retrieval.query_rewrite', output: {} },
       code: 'TASK_ALIAS_MISMATCH',
     },
     {
-      step: { expectedPromptVersion: 'turn-v2', output: {} },
+      step: { expectedModelAlias: 'fast', output: {} },
+      code: 'MODEL_ALIAS_MISMATCH',
+    },
+    {
+      step: { expectedPromptVersion: 'artifact-v2', output: {} },
       code: 'PROMPT_VERSION_MISMATCH',
     },
   ] as const)(
-    '以稳定错误码拒绝调用契约不一致：$code',
+    '以稳定错误码拒绝结构化调用契约不一致：$code',
     async ({ step, code }) => {
       const gateway = new ScriptedModelGateway([step]);
-
-      await expect(gateway.generateStructured(request())).rejects.toMatchObject(
-        {
-          name: 'ScriptedModelGatewayError',
-          code,
-        },
-      );
+      await expect(
+        gateway.generateStructured(structuredRequest()),
+      ).rejects.toMatchObject({ name: 'ScriptedModelGatewayError', code });
     },
   );
 
-  it('以稳定错误码拒绝未通过strict Schema的输出', async () => {
+  it('拒绝未通过strict Schema的结构化输出', async () => {
     const gateway = new ScriptedModelGateway([
       {
         output: {
-          answer: '回答。',
+          title: '猫狗分类',
           confidence: 0.7,
           untrustedField: true,
         },
       },
     ]);
 
-    await expect(gateway.generateStructured(request())).rejects.toMatchObject({
+    await expect(
+      gateway.generateStructured(structuredRequest()),
+    ).rejects.toMatchObject({
       name: 'ScriptedModelGatewayError',
       code: 'OUTPUT_SCHEMA_MISMATCH',
       cause: expect.any(z.ZodError),
     });
   });
 
-  it('原样抛出脚本指定的模型调用错误', async () => {
-    const providerError = new Error('provider unavailable');
-    const gateway = new ScriptedModelGateway([{ error: providerError }]);
-
-    await expect(gateway.generateStructured(request())).rejects.toBe(
-      providerError,
-    );
-  });
-
-  it('检测非法步骤、脚本耗尽和未消费步骤', async () => {
-    expect(
-      () =>
-        new ScriptedModelGateway([
-          { output: { answer: '回答。', confidence: 1 }, error: new Error() },
-        ]),
-    ).toThrowError(
-      expect.objectContaining<Partial<ScriptedModelGatewayError>>({
-        code: 'INVALID_STEP',
-      }),
-    );
-    expect(() => new ScriptedModelGateway([{}])).toThrowError(
-      expect.objectContaining<Partial<ScriptedModelGatewayError>>({
-        code: 'INVALID_STEP',
-      }),
-    );
+  it('区分流式与结构化步骤并检测脚本耗尽和非法步骤', async () => {
     expect(
       () =>
         new ScriptedModelGateway([
           {
-            output: { answer: '回答。', confidence: 1 },
-            metadata: { latencyMs: -1 },
+            kind: 'stream',
+            events: [],
+            error: new Error('invalid'),
           },
         ]),
     ).toThrowError(
@@ -158,13 +215,20 @@ describe('ScriptedModelGateway', () => {
       }),
     );
 
+    const kindMismatch = new ScriptedModelGateway([
+      { kind: 'stream', events: [] },
+    ]);
+    await expect(
+      kindMismatch.generateStructured(structuredRequest()),
+    ).rejects.toMatchObject({ code: 'STEP_KIND_MISMATCH' });
+
     const emptyGateway = new ScriptedModelGateway([]);
     await expect(
-      emptyGateway.generateStructured(request()),
+      emptyGateway.generateStructured(structuredRequest()),
     ).rejects.toMatchObject({ code: 'SCRIPT_EXHAUSTED' });
 
     const pendingGateway = new ScriptedModelGateway([
-      { output: { answer: '回答。', confidence: 1 } },
+      { output: { title: '未消费', confidence: 1 } },
     ]);
     expect(() => pendingGateway.assertExhausted()).toThrowError(
       expect.objectContaining<Partial<ScriptedModelGatewayError>>({

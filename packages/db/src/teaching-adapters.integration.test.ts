@@ -334,19 +334,20 @@ describeWithDatabase('Drizzle教学链路集成', () => {
 
   it('服务端不复用超过匿名有效期的会话', async () => {
     const expiredSessionId = '44444444-4444-4444-8444-444444444444';
-    await getDatabase()
-      .insert(schema.lessonSessions)
-      .values({
-        id: expiredSessionId,
-        studentId,
-        gradeBand: 'middle_school',
-        courseSlug: 'cat-dog-ai',
-        knowledgeNodeId,
-        state: 'PRACTICE',
-        createdAt: new Date(
-          Date.now() - ANONYMOUS_LEARNING_SESSION_TTL_MS - 60_000,
-        ),
-      });
+    const expiredAt = new Date(
+      Date.now() - ANONYMOUS_LEARNING_SESSION_TTL_MS - 60_000,
+    );
+    await getDatabase().insert(schema.lessonSessions).values({
+      id: expiredSessionId,
+      studentId,
+      gradeBand: 'middle_school',
+      courseSlug: 'cat-dog-ai',
+      knowledgeNodeId,
+      state: 'PRACTICE',
+      createdAt: expiredAt,
+      updatedAt: expiredAt,
+      lastActivityAt: expiredAt,
+    });
     const repository = new DrizzleLearningSessionRepository(getDatabase());
     const input = {
       studentId,
@@ -363,6 +364,12 @@ describeWithDatabase('Drizzle教学链路集成', () => {
     expect(
       await getDatabase().select().from(schema.lessonSessions),
     ).toHaveLength(2);
+    expect(
+      await getDatabase()
+        .select({ status: schema.lessonSessions.status })
+        .from(schema.lessonSessions)
+        .where(sql`${schema.lessonSessions.id} = ${expiredSessionId}`),
+    ).toEqual([{ status: 'archived' }]);
   });
 
   it('同一Artifact ID内容变化时显式拒绝bootstrap覆盖', async () => {

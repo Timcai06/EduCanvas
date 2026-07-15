@@ -5,6 +5,10 @@ import type {
   TeachingTransaction,
   TeachingUnitOfWork,
 } from '@educanvas/teaching-core';
+import {
+  createDefaultLearningProjectionConfig,
+  replayLearningEvents,
+} from '@educanvas/teaching-core';
 import { describe, expect, it } from 'vitest';
 import { GradeCanvasSubmissionService } from './grade-submission';
 
@@ -132,6 +136,14 @@ describe('GradeCanvasSubmissionService', () => {
         sequence: 1,
         eventType: 'assessment_graded',
         source: 'grading_service',
+        payload: {
+          prerequisiteScores: [],
+          masteryPolicyVersion: 'mastery-v1',
+          masteryConfig: expect.objectContaining({
+            enterThreshold: 0.85,
+            exitThreshold: 0.75,
+          }),
+        },
       },
       mastery: { attemptCount: 1, correctCount: 1, version: 1 },
     });
@@ -139,6 +151,17 @@ describe('GradeCanvasSubmissionService', () => {
       sequence: 1,
       saveCount: 1,
     });
+    if (!outcome.ok) throw new Error('测试前置条件失败');
+    const replayed = replayLearningEvents(
+      {
+        sessionId,
+        studentId: 'student-1',
+        initialState: 'PRACTICE',
+      },
+      [outcome.event],
+      createDefaultLearningProjectionConfig(0),
+    );
+    expect(replayed.masteryByKnowledgeNode['node-1']).toEqual(outcome.mastery);
   });
 
   it('相同客户端事件重试时返回原事实且不重复计数', async () => {

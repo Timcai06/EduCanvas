@@ -15,6 +15,87 @@ export const teachingStateSchema = z.enum(teachingStates);
 /** 教学脊柱状态；REMEDIATE和ADVANCE不属于此类型。 */
 export type TeachingState = z.infer<typeof teachingStateSchema>;
 
+/**
+ * Orchestrator可以提出的候选教学信号闭集。信号只表达“某阶段可能完成”，
+ * 不携带目标状态、模型原文或客户端自报分数；最终转移仍由runtime guard决定。
+ */
+export const teachingTransitionCandidateSignals = [
+  'DIAGNOSIS_COMPLETED',
+  'EXPLANATION_COMPLETED',
+  'DEMONSTRATION_COMPLETED',
+  'PRACTICE_COMPLETED',
+  'ASSESSMENT_COMPLETED',
+] as const;
+
+/** 候选教学信号的严格运行时Schema。 */
+export const teachingTransitionCandidateSignalSchema = z.enum(
+  teachingTransitionCandidateSignals,
+);
+
+/** 模型或受控工具只能提出此闭集中的候选信号。 */
+export type TeachingTransitionCandidateSignal = z.infer<
+  typeof teachingTransitionCandidateSignalSchema
+>;
+
+/** 静态候选信号解析结果；ASSESS出口必须另由可信掌握度决定。 */
+export type CandidateTransitionResolution =
+  | {
+      ok: true;
+      kind: 'STATE_TARGET';
+      from: TeachingState;
+      to: TeachingState;
+    }
+  | { ok: true; kind: 'ASSESSMENT_EXIT'; from: 'ASSESS' }
+  | {
+      ok: false;
+      code: 'CANDIDATE_NOT_APPLICABLE';
+      state: TeachingState;
+      signal: TeachingTransitionCandidateSignal;
+    };
+
+/**
+ * 把封闭候选信号映射到当前状态的唯一下一步。
+ * 该函数故意不接受`targetState`，从协议层消除模型请求跳级的通道。
+ */
+export function resolveTransitionCandidate(
+  state: TeachingState,
+  rawSignal: TeachingTransitionCandidateSignal,
+): CandidateTransitionResolution {
+  const parsedState = teachingStateSchema.parse(state);
+  const signal = teachingTransitionCandidateSignalSchema.parse(rawSignal);
+  if (parsedState === 'DIAGNOSE' && signal === 'DIAGNOSIS_COMPLETED') {
+    return { ok: true, kind: 'STATE_TARGET', from: parsedState, to: 'EXPLAIN' };
+  }
+  if (parsedState === 'EXPLAIN' && signal === 'EXPLANATION_COMPLETED') {
+    return {
+      ok: true,
+      kind: 'STATE_TARGET',
+      from: parsedState,
+      to: 'DEMONSTRATE',
+    };
+  }
+  if (parsedState === 'DEMONSTRATE' && signal === 'DEMONSTRATION_COMPLETED') {
+    return {
+      ok: true,
+      kind: 'STATE_TARGET',
+      from: parsedState,
+      to: 'PRACTICE',
+    };
+  }
+  if (parsedState === 'PRACTICE' && signal === 'PRACTICE_COMPLETED') {
+    return { ok: true, kind: 'STATE_TARGET', from: parsedState, to: 'ASSESS' };
+  }
+  if (parsedState === 'ASSESS' && signal === 'ASSESSMENT_COMPLETED') {
+    return { ok: true, kind: 'ASSESSMENT_EXIT', from: parsedState };
+  }
+  return {
+    ok: false,
+    code: 'CANDIDATE_NOT_APPLICABLE',
+    state: parsedState,
+    signal,
+  };
+}
+
 /** ASSESS完成后的两个出口决策，不得写入lesson_sessions.state。 */
 export const assessmentExitDecisions = ['REMEDIATE', 'ADVANCE'] as const;
 export const assessmentExitDecisionSchema = z.enum(assessmentExitDecisions);

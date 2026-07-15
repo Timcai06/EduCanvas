@@ -9,9 +9,11 @@ import {
   type GradingResult,
 } from '@educanvas/canvas-protocol/server';
 import {
-  calculateMastery,
+  DEFAULT_MASTERY_POLICY_VERSION,
+  createDefaultLearningProjectionConfig,
+  defaultMasteryConfig,
   domainLearningEventSchema,
-  getReviewIntervalDays,
+  projectMasterySnapshot,
   type DomainLearningEvent,
   type MasterySnapshot,
   type TeachingUnitOfWork,
@@ -69,14 +71,6 @@ function isGradableEvent(
   return (
     event.type === 'quiz_answer_submitted' ||
     event.type === 'classification_submitted'
-  );
-}
-
-function daysBetween(previousIso: string | null, current: Date): number {
-  if (!previousIso) return 0;
-  return Math.max(
-    0,
-    (current.getTime() - new Date(previousIso).getTime()) / 86_400_000,
   );
 }
 
@@ -191,6 +185,9 @@ export class GradeCanvasSubmissionService {
           attemptedItems: gradingDecision.result.attemptedItems,
           correctItems: gradingDecision.result.correctItems,
           usedHint,
+          prerequisiteScores: [...prerequisiteScores],
+          masteryPolicyVersion: DEFAULT_MASTERY_POLICY_VERSION,
+          masteryConfig: defaultMasteryConfig,
         },
         occurredAt: event.occurredAt,
         recordedAt: recordedAt.toISOString(),
@@ -198,48 +195,19 @@ export class GradeCanvasSubmissionService {
         causationId: event.eventId,
       });
 
-      const attemptCount =
-        (existingMastery?.attemptCount ?? 0) +
-        gradingDecision.result.attemptedItems;
-      const correctCount =
-        (existingMastery?.correctCount ?? 0) +
-        gradingDecision.result.correctItems;
-      const activeMisconceptions = existingMastery?.activeMisconceptions ?? [];
-      const masteryCalculation = calculateMastery({
-        previousScore: existingMastery?.masteryScore ?? 0,
-        attemptCount,
-        correctCount,
-        hintCount: existingMastery?.hintCount ?? 0,
-        activeMisconceptionCount: activeMisconceptions.length,
-        daysSincePracticed: daysBetween(
-          existingMastery?.lastPracticedAt ?? null,
-          recordedAt,
-        ),
-        prerequisiteScores: [...prerequisiteScores],
-      });
-      const reviewIntervalDays = getReviewIntervalDays(
-        masteryCalculation.score,
-        activeMisconceptions.length,
+      const projectedMastery = projectMasterySnapshot(
+        existingMastery,
+        trustedEvent,
+        createDefaultLearningProjectionConfig(0),
       );
-      const nextReviewAt = new Date(
-        recordedAt.getTime() + reviewIntervalDays * 86_400_000,
-      ).toISOString();
+      if (!projectedMastery) {
+        throw new Error('assessment_graded未产生掌握度投影');
+      }
 
       const appendedEvent = await transaction.events.append(trustedEvent);
       const mastery = await transaction.mastery.save({
         expectedVersion: existingMastery?.version ?? 0,
-        snapshot: {
-          studentId: session.studentId,
-          knowledgeNodeId: session.knowledgeNodeId,
-          masteryScore: masteryCalculation.score,
-          attemptCount,
-          correctCount,
-          hintCount: existingMastery?.hintCount ?? 0,
-          activeMisconceptions,
-          lastPracticedAt: recordedAt.toISOString(),
-          nextReviewAt,
-          version: existingMastery?.version ?? 0,
-        },
+        snapshot: projectedMastery,
       });
       return {
         ok: true,

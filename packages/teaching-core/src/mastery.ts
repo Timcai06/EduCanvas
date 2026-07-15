@@ -60,6 +60,9 @@ export const masteryConfigSchema = z
 /** 掌握度v1的可校准参数，业务代码不得散落同名数字。 */
 export type MasteryConfig = z.infer<typeof masteryConfigSchema>;
 
+/** 默认掌握度策略的稳定版本；事件同时保存完整参数以支持确定性历史回放。 */
+export const DEFAULT_MASTERY_POLICY_VERSION = 'mastery-v1' as const;
+
 /** ADR-0005确认的初始默认值；试点后通过配置整体替换。 */
 export const defaultMasteryConfig: Readonly<MasteryConfig> = Object.freeze(
   masteryConfigSchema.parse({
@@ -197,15 +200,19 @@ export const assessmentEvidenceSchema = z
 /** 通过运行时Schema约束的ASSESS证据。 */
 export type AssessmentEvidence = z.infer<typeof assessmentEvidenceSchema>;
 
-/** ASSESS出口决策的稳定解释码，可直接用于日志和教师侧解释。 */
-export type AssessmentReason =
-  | 'MASTERY_CONFIRMED'
-  | 'MASTERY_BELOW_ENTER_THRESHOLD'
-  | 'MASTERY_BELOW_EXIT_THRESHOLD'
-  | 'PREREQUISITE_BELOW_GATE'
-  | 'INSUFFICIENT_RECENT_ATTEMPTS'
-  | 'RECENT_ACCURACY_BELOW_THRESHOLD'
-  | 'ACTIVE_SEVERE_MISCONCEPTION';
+/** ASSESS出口决策的稳定解释码闭集，可直接用于日志和教师侧解释。 */
+export const assessmentReasons = [
+  'MASTERY_CONFIRMED',
+  'MASTERY_BELOW_ENTER_THRESHOLD',
+  'MASTERY_BELOW_EXIT_THRESHOLD',
+  'PREREQUISITE_BELOW_GATE',
+  'INSUFFICIENT_RECENT_ATTEMPTS',
+  'RECENT_ACCURACY_BELOW_THRESHOLD',
+  'ACTIVE_SEVERE_MISCONCEPTION',
+] as const;
+
+export const assessmentReasonSchema = z.enum(assessmentReasons);
+export type AssessmentReason = z.infer<typeof assessmentReasonSchema>;
 
 /** ASSESS出口决策及其全部证据原因。 */
 export interface AssessmentExit {

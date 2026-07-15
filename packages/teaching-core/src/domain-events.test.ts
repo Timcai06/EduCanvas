@@ -20,7 +20,34 @@ describe('domainLearningEventSchema', () => {
     {
       ...eventBase,
       eventType: 'state_transition',
-      payload: { from: 'EXPLAIN', to: 'DEMONSTRATE', reason: '讲解完成' },
+      payload: {
+        from: 'EXPLAIN',
+        to: 'DEMONSTRATE',
+        reason: 'EXPLANATION_COMPLETED',
+        policyVersion: 'policy-v1',
+        minimumPracticeEvents: 1,
+        practiceEventCount: 0,
+      },
+    },
+    {
+      ...eventBase,
+      eventType: 'assessment_exit_decided',
+      payload: {
+        from: 'ASSESS',
+        signal: 'ASSESSMENT_COMPLETED',
+        decision: 'ADVANCE',
+        reasons: ['MASTERY_CONFIRMED'],
+        recentAccuracy: 1,
+        policyVersion: 'policy-v1',
+        evidence: {
+          score: 0.9,
+          previouslyMastered: true,
+          prerequisiteScores: [],
+          recentAttemptCount: 3,
+          recentCorrectCount: 3,
+          hasActiveSevereMisconception: false,
+        },
+      },
     },
     {
       ...eventBase,
@@ -102,5 +129,40 @@ describe('domainLearningEventSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('拒绝错误生产者、模型自由文本和与from/to不匹配的reason', () => {
+    const wrongProducer = domainLearningEventSchema.safeParse({
+      ...eventBase,
+      source: 'grading_service',
+      eventType: 'state_transition',
+      payload: {
+        from: 'EXPLAIN',
+        to: 'DEMONSTRATE',
+        reason: 'EXPLANATION_COMPLETED',
+      },
+    });
+    const wrongReason = domainLearningEventSchema.safeParse({
+      ...eventBase,
+      eventType: 'state_transition',
+      payload: {
+        from: 'EXPLAIN',
+        to: 'DEMONSTRATE',
+        reason: 'PRACTICE_COMPLETED',
+      },
+    });
+    const modelReason = domainLearningEventSchema.safeParse({
+      ...eventBase,
+      eventType: 'state_transition',
+      payload: {
+        from: 'EXPLAIN',
+        to: 'DEMONSTRATE',
+        reason: 'model_requested',
+      },
+    });
+
+    expect(wrongProducer.success).toBe(false);
+    expect(wrongReason.success).toBe(false);
+    expect(modelReason.success).toBe(false);
   });
 });

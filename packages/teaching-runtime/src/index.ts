@@ -8,6 +8,16 @@ export {
   type GradeCanvasSubmissionRejection,
 } from './grade-submission';
 export {
+  ProgressTeachingStateService,
+  progressTeachingStateCommandSchema,
+  teachingProgressionPolicySchema,
+  type ProgressTeachingStateCommand,
+  type ProgressTeachingStateOutcome,
+  type ProgressTeachingStateRejectionCode,
+  type TeachingProgressionPolicy,
+  type TeachingProgressionPolicyReader,
+} from './state-transition';
+export {
   TeachingToolExecutor,
   defineTeachingTool,
   rawTeachingToolCallSchema,
@@ -29,16 +39,40 @@ export {
   type TrustedToolExecutionContext,
 } from './tool-executor';
 export {
+  TEACHING_TURN_ANSWER_PROMPT_VERSION,
+  TEACHING_TURN_MODEL_ALIAS,
   TEACHING_TURN_PROMPT_VERSION,
+  TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
   TEACHING_TURN_TASK_ALIAS,
   TeachingTurnOrchestrator,
+  createTeachingTurnAnswerPromptMaterial,
   teachingTurnCommandSchema,
-  teachingTurnPlanSchema,
+  type TeachingTurnAnswerPromptInput,
+  type TeachingTurnAnswerPromptMaterial,
   type TeachingTurnCommand,
   type TeachingTurnModelMetadata,
   type TeachingTurnOutcome,
-  type TeachingTurnPlan,
   type TeachingTurnRejectionCode,
   type TeachingTurnStayDecision,
+  type TeachingTurnStreamEvent,
+  type TeachingTurnStreamOptions,
   type TeachingTurnToolFailure,
 } from './turn-orchestrator';
+export {
+  K12_TEACHING_SYSTEM_POLICY,
+  K12_TEACHING_SYSTEM_POLICY_VERSION,
+  TEACHING_OUTPUT_CONTEXT_TAIL_CHARACTERS,
+  TEACHING_OUTPUT_MAX_UNBROKEN_BUFFER_CHARACTERS,
+  TeachingOutputSafetyGate,
+  type TeachingOutputSafetyGateFinishResult,
+  type TeachingOutputSafetyGatePushResult,
+} from './teaching-safety';
+export {
+  observableProviderAliases,
+  recordTeachingMetric,
+  teachingMetricNames,
+  type ObservableProviderAlias,
+  type TeachingMetricEvent,
+  type TeachingMetricName,
+  type TeachingObservabilityPort,
+} from './observability';

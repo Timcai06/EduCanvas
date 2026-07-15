@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beginInterruption,
   evaluateTransition,
+  resolveTransitionCandidate,
   resumeInterruption,
   selectInitialState,
   type TeachingState,
@@ -42,6 +43,26 @@ describe('教学状态机', () => {
       ok: false,
       code: 'ILLEGAL_TRANSITION',
     });
+  });
+
+  it('候选信号不能携带目标状态并且只能推进当前相邻阶段', () => {
+    expect(
+      resolveTransitionCandidate('DIAGNOSE', 'DIAGNOSIS_COMPLETED'),
+    ).toEqual({
+      ok: true,
+      kind: 'STATE_TARGET',
+      from: 'DIAGNOSE',
+      to: 'EXPLAIN',
+    });
+    expect(
+      resolveTransitionCandidate('DIAGNOSE', 'PRACTICE_COMPLETED'),
+    ).toMatchObject({
+      ok: false,
+      code: 'CANDIDATE_NOT_APPLICABLE',
+    });
+    expect(
+      resolveTransitionCandidate('ASSESS', 'ASSESSMENT_COMPLETED'),
+    ).toEqual({ ok: true, kind: 'ASSESSMENT_EXIT', from: 'ASSESS' });
   });
 
   it('证据不足时拒绝从PRACTICE进入ASSESS', () => {
