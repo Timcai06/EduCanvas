@@ -3,7 +3,7 @@
 - 状态：`draft`
 - 注意：模型名称变化快，上线前必须重新核对供应商文档并锁定快照版本。
 
-> 当前实现状态：`packages/teaching-core` 已定义供应商无关的 `ModelGateway` Port和结构化请求/结果类型；Provider适配、路由策略、Fallback、配额、Trace与持久化均尚未实现。下文描述目标能力，不代表当前已有可调用的模型链路。
+> 当前实现状态：`packages/teaching-core` 已定义供应商无关的 `ModelGateway` Port和结构化请求/结果类型；`packages/teaching-runtime/src/testing`提供FIFO Scripted替身，用于确定性验证Schema、Prompt版本与Trace透传。真实Provider适配、路由策略、Fallback、配额、Trace持久化仍尚未实现。下文描述目标能力，不代表当前已有生产模型链路。
 
 ## 路由原则
 

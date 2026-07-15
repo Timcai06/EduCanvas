@@ -37,9 +37,10 @@
 
 ## 当前实现边界
 
-- 已实现：模块化monorepo骨架、两种Canvas Artifact、静态Renderer注册表、确定性判分、教学状态机与掌握度纯逻辑、可信测评事件、阶段一Drizzle Schema与事务适配器、Chat-first学生端布局（对话/Canvas协作/资产与产物抽屉，对话由演示脚本驱动）；
-- 仅有契约：模型网关与知识检索Port；
-- 尚未实现：完整Turn Orchestrator、模型与RAG适配器、认证后的浏览器提交入口、误区生命周期投影、完整事件回放、GSAP动画和数据库/E2E验证；
+- 已实现：模块化monorepo骨架、两种Canvas Artifact、静态Renderer注册表、匿名Canvas Server Action、确定性判分、教学状态机与掌握度纯逻辑、可信测评事件、阶段一Drizzle事务适配器、Chat-first学生端布局（对话/Canvas协作/资产与产物抽屉，由演示脚本驱动），以及最小Turn Orchestrator与状态感知Tool Executor；
+- 测试替身：Scripted Model Gateway仅验证模型请求、结构化输出与Trace契约，不代表真实供应商链路；
+- 仅有契约：真实模型网关与知识检索Port；
+- 尚未实现：真实模型与RAG适配器、Agent浏览器/SSE入口、工具结果合成、可信状态转移服务、正式用户认证、误区生命周期投影、完整事件回放和GSAP动画；
 - `draft`文档中的服务和生产基础设施是演进目标，不能作为当前部署事实。
 
 ## 文档状态
