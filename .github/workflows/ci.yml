@@ -8,22 +8,6 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: educanvas
-          POSTGRES_PASSWORD: educanvas
-          POSTGRES_DB: educanvas_integration
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U educanvas -d educanvas_integration"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-    env:
-      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
     steps:
       - uses: actions/checkout@v4
 
@@ -43,8 +27,96 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      - name: Unit tests
+        run: pnpm test:unit
 
       - name: Build
         run: pnpm build
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_integration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: PostgreSQL integration tests
+        run: pnpm test:integration
+
+  e2e:
+    needs: [checks, integration]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_e2e"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e
+      E2E_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e
+      PLAYWRIGHT_PORT: 3100
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
+      - name: Build production application
+        run: pnpm build
+
+      - name: Browser E2E
+        run: pnpm exec playwright test
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: output/playwright
+          if-no-files-found: ignore

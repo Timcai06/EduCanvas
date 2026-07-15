@@ -23,15 +23,27 @@
 
 ## 当前覆盖状态
 
-| 层级                 | 当前状态                                                               |
-| -------------------- | ---------------------------------------------------------------------- |
-| 纯领域单元测试       | 已覆盖Canvas Schema/判分、状态机、工具白名单、掌握度与应用服务主要分支 |
-| 协议/契约测试        | 已覆盖Canvas公开/私有边界与可信学习事件Schema                          |
-| CI                   | 本仓库CI必须执行`pnpm test`，与lint、typecheck、build共同作为基础门禁  |
-| PostgreSQL集成测试   | 已接入CI；覆盖真实事务、回滚、乐观锁与并发幂等                         |
-| 迁移应用/回滚测试    | 全新安装和历史数据升级已验证；向下回退与备份恢复演练待完成             |
-| 浏览器E2E与并发测试  | 待完成；认证提交链路和完整课程纵切尚未接通                             |
-| 模型、RAG与Agent评测 | 待完成；真实适配器和评测集尚未落地                                     |
+| 层级                 | 当前状态                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| 单元测试             | 57个；覆盖Canvas Schema/判分、状态机、工具白名单、掌握度、匿名身份与应用服务主要分支                    |
+| 协议/契约测试        | 已覆盖Canvas公开/私有边界与可信学习事件Schema                                                           |
+| CI                   | 三个job：基础检查（lint/typecheck/57单元测试/build）、PostgreSQL集成测试、生产构建上的浏览器E2E         |
+| PostgreSQL集成测试   | 8个；覆盖事务写入/回滚、乐观锁、提交并发幂等、归属拒绝、匿名会话服务端过期、原子bootstrap与Artifact冲突 |
+| 迁移应用/回滚测试    | 全新安装和历史数据升级已验证；向下回退与备份恢复演练待完成                                              |
+| 浏览器E2E            | 4个；覆盖匿名HttpOnly Cookie隔离、Canvas提交和Progress持久化、快速重复提交、篡改Cookie拒绝              |
+| 模型、RAG与Agent评测 | 待完成；真实适配器和评测集尚未落地                                                                      |
+
+## 本地验证
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+TEST_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_integration pnpm test:integration
+E2E_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e pnpm test:e2e
+```
+
+运行集成测试和E2E前，应先创建对应测试数据库并执行迁移。两类测试都校验数据库名后缀，避免清空开发共享库或生产库；E2E串行运行并使用生产构建。
 
 ## AI评测
 

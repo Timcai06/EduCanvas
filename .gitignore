@@ -16,6 +16,7 @@ build/
 coverage/
 .turbo/
 .pnpm-store/
+/output/playwright/
 
 # Python
 __pycache__/

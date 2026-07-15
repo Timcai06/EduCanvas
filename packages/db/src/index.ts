@@ -17,3 +17,13 @@ export {
   IdempotencyConflictError,
   OptimisticLockError,
 } from './teaching-adapters';
+export {
+  ANONYMOUS_LEARNING_SESSION_TTL_MS,
+  ArtifactContentConflictError,
+  DrizzleLearningSessionRepository,
+  type BootstrappedLearningSession,
+  type BootstrapLearningSessionInput,
+  type LearningPageSnapshot,
+  type LearningSessionScope,
+  type OwnedLearningSession,
+} from './learning-session-repository';

@@ -30,6 +30,8 @@ const prerequisiteScoresSchema = z.array(z.number().min(0).max(1));
 
 /** 服务端判分命令；先修分数必须来自知识图谱投影，不能取自客户端payload。 */
 export interface GradeCanvasSubmissionCommand {
+  /** 由认证边界解析出的可信学生标识，禁止直接取客户端字段。 */
+  trustedStudentId: string;
   sessionId: string;
   clientEvent: unknown;
   prerequisiteScores: readonly number[];
@@ -93,6 +95,11 @@ export class GradeCanvasSubmissionService {
   async execute(
     command: GradeCanvasSubmissionCommand,
   ): Promise<GradeCanvasSubmissionOutcome> {
+    const trustedStudentId = z
+      .string()
+      .min(1)
+      .max(128)
+      .parse(command.trustedStudentId);
     const parsedEvent = canvasInteractionEventSchema.safeParse(
       command.clientEvent,
     );
@@ -106,22 +113,24 @@ export class GradeCanvasSubmissionService {
     const prerequisiteScores = prerequisiteScoresSchema.parse(
       command.prerequisiteScores,
     );
-    const gradingKey = await this.gradingKeys.getGradingKey(
-      command.sessionId,
-      event.artifactId,
-    );
-    if (!gradingKey) return { ok: false, code: 'ARTIFACT_NOT_FOUND' };
-    const gradingDecision = gradeCanvasSubmission(gradingKey, event);
-    if (!gradingDecision.ok) return gradingDecision;
-    const idempotencyKey = `canvas:${event.eventId}:assessment_graded`;
 
     return this.unitOfWork.run(async (transaction) => {
-      await transaction.events.lockIdempotencyKey(idempotencyKey);
       const session = await transaction.sessions.getById(command.sessionId);
-      if (!session) return { ok: false, code: 'SESSION_NOT_FOUND' };
+      if (!session || session.studentId !== trustedStudentId) {
+        return { ok: false, code: 'SESSION_NOT_FOUND' };
+      }
       if (!session.knowledgeNodeId) {
         return { ok: false, code: 'NO_ACTIVE_KNOWLEDGE_NODE' };
       }
+      const gradingKey = await this.gradingKeys.getGradingKey(
+        session.id,
+        event.artifactId,
+      );
+      if (!gradingKey) return { ok: false, code: 'ARTIFACT_NOT_FOUND' };
+      const gradingDecision = gradeCanvasSubmission(gradingKey, event);
+      if (!gradingDecision.ok) return gradingDecision;
+      const idempotencyKey = `canvas:${event.eventId}:assessment_graded`;
+      await transaction.events.lockIdempotencyKey(idempotencyKey);
 
       const existingEvent =
         await transaction.events.getByIdempotencyKey(idempotencyKey);
