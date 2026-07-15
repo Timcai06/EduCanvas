@@ -18,9 +18,9 @@
 - 掌握度更新；
 - 下一步推荐。
 
-已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；以及无供应商依赖的最小Turn Orchestrator、状态感知Prompt、Scripted Model Gateway和受控Tool Executor。
+已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；Chat-first学生端布局、对话演示脚本、Canvas协作区、资产/进度/产物抽屉；以及无供应商依赖的最小Turn Orchestrator、状态感知Prompt、Scripted Model Gateway和受控Tool Executor。
 
-已完成的验证基线：103个单元测试、8个真实PostgreSQL集成测试、4个Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job。
+已完成的验证基线：109个单元测试、8个真实PostgreSQL集成测试、4个Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job。
 
 阶段一剩余工作按可验证纵切拆分：
 

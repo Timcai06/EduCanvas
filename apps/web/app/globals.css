@@ -1,1 +1,45 @@
 @import 'tailwindcss';
+
+/*
+ * 学生端「晨雾」设计 token（docs/01-product/student-ui-spec.md）。
+ * 命名面向语义而非色值，组件一律通过 token 取色，方便后续整体调色或接入深色模式。
+ * surface 系刻意偏蓝灰（参考 Gemini 的 #f0f4f9），让白底上的灰面自带冷静感。
+ */
+@theme {
+  --color-canvas: #ffffff;
+  --color-surface: #f0f2f9;
+  --color-surface-strong: #e3e6f2;
+  --color-ink: #1f2330;
+  --color-ink-muted: #5b6273;
+  --color-ink-faint: #8f95a6;
+  --color-line: #e6e8f0;
+  --color-accent: #4a51d4;
+  --color-accent-strong: #3c43b8;
+  --color-accent-soft: #eceefc;
+  --color-good: #1a7f4e;
+  --color-good-soft: #e6f5ec;
+  --color-warn: #a3611b;
+  --color-warn-soft: #fdf3e4;
+  --color-bad: #b3384a;
+  --color-bad-soft: #fbebee;
+
+  --font-display: 'Songti SC', 'Noto Serif SC', 'SimSun', Georgia, serif;
+
+  --radius-pill: 1.75rem;
+  --shadow-float: 0 1px 2px rgb(31 35 48 / 0.06), 0 8px 24px rgb(31 35 48 / 0.08);
+  --shadow-sheet: 0 8px 40px rgb(31 35 48 / 0.18);
+}
+
+/* 打字指示点；组件侧用 motion-reduce:animate-none 尊重减少动态偏好 */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-0.2rem);
+  }
+}
