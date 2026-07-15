@@ -2,6 +2,8 @@
 
 - 状态：`draft`
 
+本文件维护跨阶段目标和长期交付边界，不维护某个PR或短周期阶段的任务清单。当前执行计划及验收证据见[`../plan/README.md`](../plan/README.md)；计划完成后，稳定事实应回写到对应canonical文档或ADR，本路线图只更新阶段级进度与范围变化。
+
 ## 阶段一：产品纵切
 
 目标：完成“AI如何识别猫和狗”的跨学段完整课程。
@@ -18,9 +20,9 @@
 - 掌握度更新；
 - 下一步推荐。
 
-已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；Chat-first学生端布局、对话演示脚本、Canvas协作区、资产/进度/产物抽屉；以及无供应商依赖的最小Turn Orchestrator、状态感知Prompt、Scripted Model Gateway和受控Tool Executor。
+已完成的基础设施：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；Chat-first学生端布局、无Provider诚实错误态、Canvas协作区、资产/进度/产物抽屉与基础UI GSAP动效；以及无供应商依赖的最小Turn Orchestrator、状态感知Prompt、仅测试使用的Scripted Model Gateway和受控Tool Executor。聊天消息持久化与真实模型链路仍未落地。
 
-已完成的验证基线：109个单元测试、8个真实PostgreSQL集成测试、4个Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job。
+已完成的验证基线覆盖单元测试、真实PostgreSQL集成测试和Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job，具体数量和通过状态以当前分支CI为准。
 
 阶段一剩余工作按可验证纵切拆分：
 
@@ -29,9 +31,9 @@
 3. 增加工具结果二次合成与SSE流式对话；
 4. 补齐状态转移、提示、误区生命周期和下一节点推荐应用服务；
 5. 实现持久幂等、限流、Prompt/Trace存储、事件回放和Agent评测；
-6. 接入首个GSAP动画和Python实验；
+6. 接入首个教学GSAP动画Artifact和Python实验；
 7. 在匿名演示纵切之外实现正式用户认证、账号恢复、授权与会话吊销；上线前补齐匿名bootstrap限流、配额和过期数据清理；
-8. 继续完成迁移向下回退、备份恢复演练和整节课E2E；当前4个E2E只覆盖匿名Canvas判分纵切。
+8. 继续完成迁移向下回退、备份恢复演练和整节课E2E；当前E2E主要覆盖匿名Canvas判分纵切和Chat-first基础状态。
 
 ## 阶段二：平台化
 

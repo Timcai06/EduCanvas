@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { classificationGameParamsSchema } from './artifacts/classification-game';
 import { quizParamsSchema } from './artifacts/quiz';
+import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
 
 // 受控 Canvas 协议（ADR-0002）：模型输出结构化 Artifact，经此白名单 Schema
 // 校验后由预注册 React 组件渲染。绝不执行模型生成的任意 HTML/JS/GSAP 源码。
 //
-// docs/02-architecture/canvas-and-gsap.md 规划了 10 种 Artifact 类型，
-// 阶段一先实现 classification_game 和 quiz，其余类型随组件逐个加入本联合。
+// docs/02-architecture/canvas-and-gsap.md 规划了候选 Artifact 类型；当前联合实现
+// classification_game、quiz 和 render-only pipeline_flow，其余随组件逐个加入。
 
 /**
  * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
@@ -28,23 +29,43 @@ const artifactBaseSchema = z.object({
  * Canvas 只接受白名单联合中的类型；判别联合让 `type` 同时决定参数结构和预注册渲染器。
  * 每个分支使用 strict 模式，防止未评审字段穿透到 UI，见 ADR-0002。
  */
+const classificationGameArtifactSchema = artifactBaseSchema
+  .extend({
+    type: z.literal('classification_game'),
+    params: classificationGameParamsSchema,
+  })
+  .strict();
+
+const quizArtifactSchema = artifactBaseSchema
+  .extend({
+    type: z.literal('quiz'),
+    params: quizParamsSchema,
+  })
+  .strict();
+
+const pipelineFlowArtifactSchema = artifactBaseSchema
+  .extend({
+    type: z.literal('pipeline_flow'),
+    params: pipelineFlowParamsSchema,
+  })
+  .strict();
+
+/** Existing persistence/grading path remains intentionally assessment-only. */
+export const gradableArtifactSchema = z.discriminatedUnion('type', [
+  classificationGameArtifactSchema,
+  quizArtifactSchema,
+]);
+
+/** All human-rendered Artifact contracts, including render-only templates. */
 export const artifactSchema = z.discriminatedUnion('type', [
-  artifactBaseSchema
-    .extend({
-      type: z.literal('classification_game'),
-      params: classificationGameParamsSchema,
-    })
-    .strict(),
-  artifactBaseSchema
-    .extend({
-      type: z.literal('quiz'),
-      params: quizParamsSchema,
-    })
-    .strict(),
+  classificationGameArtifactSchema,
+  quizArtifactSchema,
+  pipelineFlowArtifactSchema,
 ]);
 
 /** 经过白名单校验、可以安全交给 Canvas 注册表分派的 Artifact。 */
 export type Artifact = z.infer<typeof artifactSchema>;
+export type GradableArtifact = z.infer<typeof gradableArtifactSchema>;
 
 /** 注册表允许实现的 Artifact 类型集合，始终从协议联合推导以避免双份清单漂移。 */
 export type ArtifactType = Artifact['type'];

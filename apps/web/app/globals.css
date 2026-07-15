@@ -1,36 +1,164 @@
 @import 'tailwindcss';
 
-/*
- * 学生端「晨雾」设计 token（docs/01-product/student-ui-spec.md）。
- * 命名面向语义而非色值，组件一律通过 token 取色，方便后续整体调色或接入深色模式。
- * surface 系刻意偏蓝灰（参考 Gemini 的 #f0f4f9），让白底上的灰面自带冷静感。
- */
+/* 学习界面共享的语义化颜色、圆角和阴影 token。 */
 @theme {
-  --color-canvas: #ffffff;
-  --color-surface: #f0f2f9;
-  --color-surface-strong: #e3e6f2;
-  --color-ink: #1f2330;
-  --color-ink-muted: #5b6273;
-  --color-ink-faint: #8f95a6;
-  --color-line: #e6e8f0;
-  --color-accent: #4a51d4;
-  --color-accent-strong: #3c43b8;
-  --color-accent-soft: #eceefc;
-  --color-good: #1a7f4e;
-  --color-good-soft: #e6f5ec;
-  --color-warn: #a3611b;
-  --color-warn-soft: #fdf3e4;
-  --color-bad: #b3384a;
-  --color-bad-soft: #fbebee;
+  --color-canvas: #0b0c0f;
+  --color-surface: #1d1f23;
+  --color-surface-strong: #292c32;
+  --color-ink: #e8eaed;
+  --color-ink-muted: #bdc1c6;
+  --color-ink-faint: #9aa0a6;
+  --color-line: #646a74;
+  --color-accent: #6f82ff;
+  --color-accent-strong: #8d9cff;
+  --color-accent-soft: #242b49;
+  --color-good: #81c995;
+  --color-good-soft: #173c2a;
+  --color-warn: #fdd663;
+  --color-warn-soft: #493815;
+  --color-bad: #f28b82;
+  --color-bad-soft: #4a2024;
 
-  --font-display: 'Songti SC', 'Noto Serif SC', 'SimSun', Georgia, serif;
+  --font-sans:
+    'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display:
+    'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 
   --radius-pill: 1.75rem;
-  --shadow-float: 0 1px 2px rgb(31 35 48 / 0.06), 0 8px 24px rgb(31 35 48 / 0.08);
-  --shadow-sheet: 0 8px 40px rgb(31 35 48 / 0.18);
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 36px rgb(0 0 0 / 0.38);
+  --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.55);
 }
 
-/* 打字指示点；组件侧用 motion-reduce:animate-none 尊重减少动态偏好 */
+html {
+  color-scheme: dark;
+  background: var(--color-canvas);
+}
+
+/*
+ * Chat-empty 的三层环境光场。渐变与 blur 只存在于静态 visual 子层，动画只作用于
+ * wrapper 的 transform/opacity；输入框层级始终高于光场和暗角。
+ */
+.ambient-halo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-halo::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: radial-gradient(
+    ellipse 62% 48% at 50% 52%,
+    transparent 22%,
+    rgb(11 12 15 / 24%) 68%,
+    rgb(11 12 15 / 82%) 100%
+  );
+}
+
+.ambient-halo__layer {
+  position: absolute;
+  top: 52%;
+  left: 50%;
+  translate: -50% -50%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.ambient-halo__visual {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.ambient-halo__haze {
+  width: min(90rem, 112vw);
+  height: min(43rem, 61vw);
+}
+
+.ambient-halo__haze .ambient-halo__visual {
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgb(43 75 164 / 68%) 0%,
+    rgb(31 52 116 / 46%) 42%,
+    rgb(20 30 66 / 24%) 66%,
+    transparent 84%
+  );
+  filter: blur(72px);
+}
+
+.ambient-halo__bloom {
+  top: 49%;
+  left: 46%;
+  width: min(64rem, 82vw);
+  height: min(30rem, 43vw);
+}
+
+.ambient-halo__bloom .ambient-halo__visual {
+  background: radial-gradient(
+    ellipse at 44% 52%,
+    rgb(112 75 210 / 66%) 0%,
+    rgb(69 53 157 / 42%) 38%,
+    rgb(37 31 89 / 20%) 66%,
+    transparent 84%
+  );
+  filter: blur(56px);
+}
+
+.ambient-halo__core {
+  top: 54%;
+  left: 53%;
+  width: min(52rem, 72vw);
+  height: min(23rem, 34vw);
+}
+
+.ambient-halo__core .ambient-halo__visual {
+  background: radial-gradient(
+    ellipse at 50% 48%,
+    rgb(86 112 244 / 72%) 0%,
+    rgb(57 79 199 / 50%) 38%,
+    rgb(34 49 119 / 26%) 67%,
+    transparent 86%
+  );
+  filter: blur(48px);
+}
+
+@media (max-width: 640px) {
+  .ambient-halo__haze {
+    top: 49%;
+    width: 46rem;
+    height: 30rem;
+    will-change: auto;
+  }
+
+  .ambient-halo__haze .ambient-halo__visual {
+    filter: blur(58px);
+  }
+
+  .ambient-halo__bloom {
+    display: none;
+  }
+
+  .ambient-halo__core {
+    top: 51%;
+    left: 52%;
+    width: 31rem;
+    height: 19rem;
+  }
+
+  .ambient-halo__core .ambient-halo__visual {
+    filter: blur(38px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-halo__layer {
+    will-change: auto;
+  }
+}
+
+/* 减少动态模式由组件上的 motion-reduce:animate-none 停用此动画。 */
 @keyframes typing-dot {
   0%,
   60%,

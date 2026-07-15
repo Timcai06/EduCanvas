@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { artifactSchema, type Artifact } from './artifact';
+import {
+  artifactSchema,
+  gradableArtifactSchema,
+  type Artifact,
+  type GradableArtifact,
+} from './artifact';
 import {
   canvasInteractionEventSchema,
   type CanvasInteractionEvent,
@@ -59,22 +64,52 @@ export interface PreparedArtifact {
   gradingKey: ArtifactGradingKey;
 }
 
-function prepareValidatedArtifact(artifact: Artifact): PreparedArtifact {
+/**
+ * Produce the browser-safe projection for every registered renderer.
+ * Render-only templates deliberately stop here: no grading key is invented and
+ * no assessment persistence contract is implied.
+ */
+export function projectRenderableArtifact(input: unknown): PublicArtifact {
+  const artifact: Artifact = artifactSchema.parse(input);
+  if (artifact.type === 'pipeline_flow') {
+    return publicArtifactSchema.parse(artifact);
+  }
+  if (artifact.type === 'quiz') {
+    return publicArtifactSchema.parse({
+      schemaVersion: artifact.schemaVersion,
+      artifactId: artifact.artifactId,
+      type: artifact.type,
+      title: artifact.title,
+      params: {
+        questions: artifact.params.questions.map((question) => ({
+          id: question.id,
+          question: question.question,
+          options: question.options,
+        })),
+      },
+    });
+  }
+  return publicArtifactSchema.parse({
+    schemaVersion: artifact.schemaVersion,
+    artifactId: artifact.artifactId,
+    type: artifact.type,
+    title: artifact.title,
+    params: {
+      prompt: artifact.params.prompt,
+      categories: artifact.params.categories,
+      items: artifact.params.items.map(({ id, label, emoji }) => ({
+        id,
+        label,
+        emoji,
+      })),
+    },
+  });
+}
+
+function prepareValidatedArtifact(artifact: GradableArtifact): PreparedArtifact {
   if (artifact.type === 'quiz') {
     return {
-      publicArtifact: publicArtifactSchema.parse({
-        schemaVersion: artifact.schemaVersion,
-        artifactId: artifact.artifactId,
-        type: artifact.type,
-        title: artifact.title,
-        params: {
-          questions: artifact.params.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            options: question.options,
-          })),
-        },
-      }),
+      publicArtifact: projectRenderableArtifact(artifact),
       gradingKey: artifactGradingKeySchema.parse({
         schemaVersion: artifact.schemaVersion,
         artifactId: artifact.artifactId,
@@ -90,21 +125,7 @@ function prepareValidatedArtifact(artifact: Artifact): PreparedArtifact {
   }
 
   return {
-    publicArtifact: publicArtifactSchema.parse({
-      schemaVersion: artifact.schemaVersion,
-      artifactId: artifact.artifactId,
-      type: artifact.type,
-      title: artifact.title,
-      params: {
-        prompt: artifact.params.prompt,
-        categories: artifact.params.categories,
-        items: artifact.params.items.map(({ id, label, emoji }) => ({
-          id,
-          label,
-          emoji,
-        })),
-      },
-    }),
+    publicArtifact: projectRenderableArtifact(artifact),
     gradingKey: artifactGradingKeySchema.parse({
       schemaVersion: artifact.schemaVersion,
       artifactId: artifact.artifactId,
@@ -121,7 +142,7 @@ function prepareValidatedArtifact(artifact: Artifact): PreparedArtifact {
 
 /** 验证模型输出并在单一服务端边界生成公开投影与私有判分键。 */
 export function prepareArtifact(input: unknown): PreparedArtifact {
-  return prepareValidatedArtifact(artifactSchema.parse(input));
+  return prepareValidatedArtifact(gradableArtifactSchema.parse(input));
 }
 
 /** 服务端判分成功后返回的逐项结果，可用于生成可信assessment_graded事件。 */

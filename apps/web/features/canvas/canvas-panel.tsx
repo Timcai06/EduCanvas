@@ -4,10 +4,14 @@ import type {
   CanvasFeedbackDTO,
   CanvasSubmissionDraft,
 } from '@/features/learning/learning-contracts';
+import {
+  getFocusableElements,
+  makeWorkspaceBackgroundInert,
+} from '@/features/workspace/modal-focus';
 import type { PublicArtifact } from '@educanvas/canvas-protocol';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CanvasArtifactRenderer } from './canvas-registry';
 
 /**
@@ -35,6 +39,9 @@ export function CanvasPanel({
   onToggleFull: () => void;
 }) {
   const rootRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const [isCompact, setIsCompact] = useState(false);
+  const isModal = isFull || isCompact;
 
   useGSAP(
     () => {
@@ -51,11 +58,77 @@ export function CanvasPanel({
     { scope: rootRef },
   );
 
+  useEffect(() => {
+    openerRef.current = document.activeElement as HTMLElement | null;
+    rootRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onCollapse();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const opener = openerRef.current;
+      queueMicrotask(() => opener?.focus());
+    };
+  }, [onCollapse]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1023px)');
+    const update = () => setIsCompact(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!isModal) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    root.focus();
+    const restoreBackground = makeWorkspaceBackgroundInert(root);
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements(root);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        root.focus();
+        return;
+      }
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === root)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || active === root)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', trapFocus);
+
+    return () => {
+      document.removeEventListener('keydown', trapFocus);
+      restoreBackground();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isModal]);
+
   return (
     <section
       ref={rootRef}
+      role={isModal ? 'dialog' : 'region'}
       aria-label="教学Canvas"
+      aria-modal={isModal || undefined}
       aria-busy={isPending}
+      tabIndex={-1}
       className={`${
         isFull
           ? 'fixed inset-0 z-40 p-0 lg:p-4'

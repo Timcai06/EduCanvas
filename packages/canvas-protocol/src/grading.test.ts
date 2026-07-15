@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { gradeCanvasSubmission, prepareArtifact } from './grading';
+import {
+  gradeCanvasSubmission,
+  prepareArtifact,
+  projectRenderableArtifact,
+} from './grading';
 
 const quizArtifact = {
   schemaVersion: '1',
@@ -41,6 +45,24 @@ const classificationArtifact = {
   },
 } as const;
 
+const pipelineArtifact = {
+  schemaVersion: '1',
+  artifactId: 'pipeline-1',
+  type: 'pipeline_flow',
+  title: '图像分类流程',
+  params: {
+    templateKey: 'pipeline_flow',
+    objective: '观察模型如何完成分类',
+    steps: [
+      { slot: 'input', label: '输入', narration: '接收图片。' },
+      { slot: 'classification', label: '分类', narration: '比较特征。' },
+      { slot: 'output', label: '输出', narration: '显示类别。' },
+    ],
+    highlightOrder: ['input', 'classification', 'output'],
+    pausePoints: ['classification'],
+  },
+} as const;
+
 const eventBase = {
   schemaVersion: '1',
   eventId: '11111111-1111-4111-8111-111111111111',
@@ -73,6 +95,13 @@ describe('公开Artifact与私有判分键', () => {
       'items.0',
       expect.objectContaining({ itemId: 'i1', correctCategoryId: 'cat' }),
     );
+  });
+
+  it('允许render-only投影，但拒绝伪造判分键', () => {
+    expect(projectRenderableArtifact(pipelineArtifact)).toEqual(
+      pipelineArtifact,
+    );
+    expect(() => prepareArtifact(pipelineArtifact)).toThrow();
   });
 });
 
@@ -131,5 +160,21 @@ describe('服务端确定性判分', () => {
         payload: { assignments: [{ itemId: 'i1', categoryId: 'cat' }] },
       }),
     ).toEqual({ ok: false, code: 'INCOMPLETE_SUBMISSION' });
+  });
+
+  it('普通动画交互不能产生assessment判分成功', () => {
+    const { gradingKey } = prepareArtifact(quizArtifact);
+    expect(
+      gradeCanvasSubmission(gradingKey, {
+        ...eventBase,
+        artifactId: 'quiz-1',
+        type: 'animation_step_completed',
+        payload: {
+          templateKey: 'pipeline_flow',
+          stepId: 'output',
+          stepIndex: 3,
+        },
+      }),
+    ).toEqual({ ok: false, code: 'EVENT_TYPE_MISMATCH' });
   });
 });

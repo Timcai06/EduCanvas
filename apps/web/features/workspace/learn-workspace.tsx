@@ -5,16 +5,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
-import {
-  canvasOpenedMessage,
-  continueTextMessage,
-  gradedMessage,
-  initialTeacherMessages,
-  nextMessageId,
-  replyToStudent,
-  type ChatMessage,
-  type TeacherMessage,
-} from '@/features/chat/demo-teacher-script';
+import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import type {
@@ -26,15 +17,15 @@ import type {
 import { ProgressDrawer } from '@/features/progress/progress-drawer';
 import { StudioDrawer } from '@/features/studio/studio-drawer';
 import { CANVAS_INTERACTION_SCHEMA_VERSION } from '@educanvas/canvas-protocol';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Sheet } from './sheet';
+import { EmptyChatHero } from './empty-chat-hero';
+import {
+  PENDING_FIRST_MENU_ACTION_KEY,
+  PENDING_FIRST_PROMPT_KEY,
+} from './first-prompt';
 import { TopBar } from './top-bar';
+import { LearningRail } from './learning-rail';
 
 interface RetryableSubmission {
   fingerprint: string;
@@ -70,7 +61,9 @@ function createSubmissionInput(
   };
 }
 
-type DrawerKind = 'assets' | 'studio' | 'progress' | null;
+type DrawerKind = 'assets' | 'studio' | 'progress' | 'sessions' | null;
+
+const AI_UNAVAILABLE_MESSAGE = 'AI 老师暂时无法连接，请稍后重试。';
 
 /** 桌面协作态对话列的宽度百分比边界；保证对话永远可读、Canvas 永远可用。 */
 const CHAT_PCT_DEFAULT = 40;
@@ -79,21 +72,42 @@ const CHAT_PCT_MAX = 62;
 
 /**
  * 学习页大脑：持有布局状态机（Chat-only / Chat+Canvas / 抽屉互斥）、可信判分
- * 提交状态（幂等指纹重试，自旧 CanvasProgressWorkspace 迁移）与演示对话流。
+ * 提交状态（幂等指纹重试，自旧 CanvasProgressWorkspace 迁移）与消息展示。
  * 布局状态机是纯 UI 状态，与教学脊柱状态机无关；可信判分和掌握度仍全部来自
  * Server Action，见 docs/01-product/student-ui-spec.md。
  */
-export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }) {
+interface LearnWorkspaceProps {
+  initialData: LearningPageDTO;
+  sessionActions?: {
+    onNewSession?: () => void | Promise<void>;
+    onResumeSession?: (sessionId: string) => void | Promise<void>;
+  };
+}
+
+/** A session switch remounts all session-local UI state on the same /learn URL. */
+export function LearnWorkspace(props: LearnWorkspaceProps) {
+  return (
+    <LearnWorkspaceSession
+      key={props.initialData.currentSessionId ?? 'no-session'}
+      {...props}
+    />
+  );
+}
+
+function LearnWorkspaceSession({
+  initialData,
+  sessionActions,
+}: LearnWorkspaceProps) {
   const [progress, setProgress] = useState(initialData.progress);
   const [feedback, setFeedback] = useState<CanvasFeedbackDTO | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const retryableSubmission = useRef<RetryableSubmission | null>(null);
 
-  const [messages, setMessages] = useState<readonly ChatMessage[]>(() =>
-    initialTeacherMessages(),
-  );
-  const [isTyping, setIsTyping] = useState(false);
+  const teachingTurn = useTeachingTurn(initialData.initialMessages);
+  const sendTeachingTurn = teachingTurn.send;
+  const messages = teachingTurn.messages;
+  const [chatError, setChatError] = useState<string | null>(null);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [canvasFull, setCanvasFull] = useState(false);
   const [drawer, setDrawer] = useState<DrawerKind>(null);
@@ -103,55 +117,44 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
       id: 'courseware-3',
       label: '课件 · 图像是怎么被认出来的',
       kind: '课程资料',
-      enabled: true,
+      enabled: false,
+      selectable: false,
     },
     {
       id: 'courseware-cats',
       label: '猫狗图片集',
       kind: '课程资料',
       enabled: false,
+      selectable: false,
     },
   ]);
 
-  const studentCount = useRef(0);
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPromptConsumed = useRef(false);
+  const pendingMenuActionConsumed = useRef(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const nearChatBottom = useRef(true);
+  const justSentMessage = useRef(false);
   const savedScrollTop = useRef(0);
   const splitRef = useRef<HTMLDivElement>(null);
 
-  useEffect(
-    () => () => {
-      if (replyTimer.current) clearTimeout(replyTimer.current);
-    },
-    [],
-  );
-
-  /* 新消息或打字指示出现时贴底，学生视线不需要追消息 */
+  /* 只在学生原本位于底部或刚发送时跟随流式内容，不抢走向上阅读的位置。 */
   useEffect(() => {
     const container = chatScrollRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
-  }, [messages, isTyping]);
+    if (container && (nearChatBottom.current || justSentMessage.current)) {
+      container.scrollTop = container.scrollHeight;
+      nearChatBottom.current = true;
+    }
+    justSentMessage.current = false;
+  }, [messages]);
 
-  const appendTeacher = useCallback((incoming: TeacherMessage[]) => {
-    setIsTyping(true);
-    if (replyTimer.current) clearTimeout(replyTimer.current);
-    replyTimer.current = setTimeout(() => {
-      setIsTyping(false);
-      setMessages((current) => [...current, ...incoming]);
-    }, 600);
+  const openCanvas = useCallback(() => {
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      savedScrollTop.current = chatScrollRef.current?.scrollTop ?? 0;
+    }
+    setDrawer(null);
+    setChatError(null);
+    setCanvasOpen(true);
   }, []);
-
-  const openCanvas = useCallback(
-    (withTeacherFollowUp: boolean) => {
-      if (window.matchMedia('(max-width: 1023px)').matches) {
-        savedScrollTop.current = chatScrollRef.current?.scrollTop ?? 0;
-      }
-      setDrawer(null);
-      setCanvasOpen(true);
-      if (withTeacherFollowUp) appendTeacher([canvasOpenedMessage()]);
-    },
-    [appendTeacher],
-  );
 
   const closeCanvas = useCallback(() => {
     setCanvasOpen(false);
@@ -167,19 +170,21 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
 
   const handleSend = useCallback(
     (text: string) => {
-      setMessages((current) => [
-        ...current,
-        { id: nextMessageId(), role: 'student', text },
-      ]);
-      const replies = replyToStudent(text, {
-        canvasOpen,
-        replyCount: studentCount.current,
-      });
-      studentCount.current += 1;
-      appendTeacher(replies);
+      setChatError(null);
+      justSentMessage.current = true;
+      void sendTeachingTurn(text);
     },
-    [appendTeacher, canvasOpen],
+    [sendTeachingTurn],
   );
+
+  useEffect(() => {
+    if (pendingPromptConsumed.current) return;
+    pendingPromptConsumed.current = true;
+    const pendingPrompt = sessionStorage.getItem(PENDING_FIRST_PROMPT_KEY);
+    if (!pendingPrompt) return;
+    sessionStorage.removeItem(PENDING_FIRST_PROMPT_KEY);
+    queueMicrotask(() => handleSend(pendingPrompt));
+  }, [handleSend]);
 
   const handleMenuAction = useCallback(
     (action: PlusMenuActionId) => {
@@ -188,28 +193,24 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
         return;
       }
       if (action === 'create_demo') {
-        if (canvasOpen) return;
-        appendTeacher([
-          {
-            id: nextMessageId(),
-            role: 'teacher',
-            text: '好，我们打开互动演示：把每个特征分给猫或狗。准备好了就开始吧。',
-            suggestsCanvas: true,
-          },
-        ]);
+        if (!canvasOpen) openCanvas();
         return;
       }
-      /* 其余能力尚未建设：用教学语言告知，不出现技术错误或伪装成功 */
-      appendTeacher([
-        {
-          id: nextMessageId(),
-          role: 'teacher',
-          text: '这个功能我还在准备中，很快就能用了。现在我们可以先聊聊，或者打开互动演示练一练。',
-        },
-      ]);
+      setChatError('这项功能尚未开放。');
     },
-    [appendTeacher, canvasOpen],
+    [canvasOpen, openCanvas],
   );
+
+  useEffect(() => {
+    if (pendingMenuActionConsumed.current) return;
+    pendingMenuActionConsumed.current = true;
+    const pendingAction = sessionStorage.getItem(
+      PENDING_FIRST_MENU_ACTION_KEY,
+    ) as PlusMenuActionId | null;
+    if (!pendingAction) return;
+    sessionStorage.removeItem(PENDING_FIRST_MENU_ACTION_KEY);
+    queueMicrotask(() => handleMenuAction(pendingAction));
+  }, [handleMenuAction]);
 
   const handleToggleAsset = useCallback((id: string) => {
     setAssets((current) =>
@@ -219,41 +220,32 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
     );
   }, []);
 
-  const handleSubmit = useCallback(
-    (draft: CanvasSubmissionDraft) => {
-      const fingerprint = JSON.stringify(draft);
-      const previous = retryableSubmission.current;
-      const input =
-        previous?.fingerprint === fingerprint
-          ? previous.input
-          : createSubmissionInput(draft);
+  const handleSubmit = useCallback((draft: CanvasSubmissionDraft) => {
+    const fingerprint = JSON.stringify(draft);
+    const previous = retryableSubmission.current;
+    const input =
+      previous?.fingerprint === fingerprint
+        ? previous.input
+        : createSubmissionInput(draft);
 
-      retryableSubmission.current = { fingerprint, input };
-      setErrorMessage(null);
+    retryableSubmission.current = { fingerprint, input };
+    setErrorMessage(null);
 
-      startTransition(async () => {
-        try {
-          const result = await submitCanvasAction(input);
-          if (result.status === 'success') {
-            retryableSubmission.current = null;
-            setFeedback(result.feedback);
-            setProgress(result.progress);
-            appendTeacher([
-              gradedMessage(
-                result.feedback.correctItems,
-                result.feedback.attemptedItems,
-              ),
-            ]);
-            return;
-          }
-          setErrorMessage(result.message);
-        } catch {
-          setErrorMessage('提交暂时失败，请检查网络后重试。');
+    startTransition(async () => {
+      try {
+        const result = await submitCanvasAction(input);
+        if (result.status === 'success') {
+          retryableSubmission.current = null;
+          setFeedback(result.feedback);
+          setProgress(result.progress);
+          return;
         }
-      });
-    },
-    [appendTeacher],
-  );
+        setErrorMessage(result.message);
+      } catch {
+        setErrorMessage('提交暂时失败，请检查网络后重试。');
+      }
+    });
+  }, []);
 
   /* 拖拽中缝调整对话/Canvas 比例；键盘用左右方向键微调 */
   const handleDividerPointerDown = useCallback(
@@ -280,17 +272,41 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
   const artifactCompleted =
     feedback !== null && feedback.correctItems === feedback.attemptedItems;
   const splitActive = canvasOpen && !canvasFull;
+  const isLanding = messages.length === 0 && !canvasOpen;
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas text-ink">
+    <div
+      data-learning-workspace
+      className="flex h-dvh flex-col bg-canvas text-ink"
+    >
       <TopBar
         courseTitle="人工智能通识 · 图像是怎么被认出来的"
-        stageLabel="练习"
+        stageLabel={null}
         masteryPercent={progress?.masteryPercent ?? null}
         onOpenStudio={() => setDrawer('studio')}
         onOpenProgress={() => setDrawer('progress')}
+        onOpenSessions={() => setDrawer('sessions')}
+        quiet={isLanding}
       />
-      <div ref={splitRef} className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1">
+        <LearningRail
+          sessions={initialData.initialSessions}
+          currentSessionId={initialData.currentSessionId}
+          mobileOpen={drawer === 'sessions'}
+          onMobileClose={() => setDrawer(null)}
+          onNewSession={
+            sessionActions?.onNewSession
+              ? () => void sessionActions.onNewSession?.()
+              : undefined
+          }
+          onResumeSession={
+            sessionActions?.onResumeSession
+              ? (sessionId) =>
+                  void sessionActions.onResumeSession?.(sessionId)
+              : undefined
+          }
+        />
+        <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
         <div
           className="flex min-h-0 min-w-0 flex-col"
           style={{
@@ -299,40 +315,76 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
             flexShrink: 0,
           }}
         >
-          <div
-            ref={chatScrollRef}
-            className="min-h-0 flex-1 overflow-y-auto"
-            aria-label="AI教师对话"
-            role="region"
-          >
-            <ChatPanel
-              messages={messages}
-              isTyping={isTyping}
-              canvasOpen={canvasOpen}
-              artifactTitle={initialData.artifact.title}
-              onOpenCanvas={() => openCanvas(!canvasOpen)}
-              onContinueText={() => appendTeacher([continueTextMessage()])}
-            />
-          </div>
-          <Composer
-            chips={enabledAssets.map((asset) => ({
-              id: asset.id,
-              label: asset.label,
-            }))}
-            busy={isTyping || isPending}
-            statusText={
-              isPending ? '老师正在批改…' : isTyping ? '老师正在输入…' : null
-            }
-            onSend={handleSend}
-            onRemoveChip={handleToggleAsset}
-            onMenuAction={handleMenuAction}
-          />
+          {isLanding ? (
+            <EmptyChatHero>
+              <Composer
+                chips={[]}
+                busy={false}
+                statusText={null}
+                onSend={handleSend}
+                onRemoveChip={handleToggleAsset}
+                onMenuAction={handleMenuAction}
+                variant="landing"
+              />
+            </EmptyChatHero>
+          ) : (
+            <>
+              <div
+                ref={chatScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto"
+                aria-label="AI教师对话"
+                role="region"
+                onScroll={(event) => {
+                  const container = event.currentTarget;
+                  nearChatBottom.current =
+                    container.scrollHeight -
+                      container.scrollTop -
+                      container.clientHeight <=
+                    96;
+                }}
+              >
+                <ChatPanel
+                  messages={messages}
+                  canvasOpen={canvasOpen}
+                  artifactTitle={initialData.artifact.title}
+                  onOpenCanvas={openCanvas}
+                  onContinueText={() => setChatError(AI_UNAVAILABLE_MESSAGE)}
+                  onRetry={(messageId) => teachingTurn.retry(messageId)}
+                />
+              </div>
+              <Composer
+                chips={enabledAssets.map((asset) => ({
+                  id: asset.id,
+                  label: asset.label,
+                }))}
+                busy={teachingTurn.busy || isPending}
+                statusText={
+                  teachingTurn.statusText ??
+                  (isPending ? '老师正在批改…' : chatError)
+                }
+                statusTone={
+                  chatError && !teachingTurn.busy && !isPending
+                    ? 'error'
+                    : 'info'
+                }
+                onSend={handleSend}
+                onRemoveChip={handleToggleAsset}
+                onMenuAction={handleMenuAction}
+                stopAvailable={teachingTurn.stopAvailable}
+                onStop={() => void teachingTurn.stop()}
+              />
+            </>
+          )}
         </div>
         {splitActive ? (
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label="调整对话与演示的宽度"
+            aria-valuemin={CHAT_PCT_MIN}
+            aria-valuemax={CHAT_PCT_MAX}
+            aria-valuenow={Math.round(chatPct)}
+            aria-valuetext={`对话区域占 ${Math.round(chatPct)}%`}
             tabIndex={0}
             onPointerDown={handleDividerPointerDown}
             onKeyDown={(event) => {
@@ -340,7 +392,10 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
                 event.preventDefault();
                 const delta = event.key === 'ArrowLeft' ? -3 : 3;
                 setChatPct((current) =>
-                  Math.min(CHAT_PCT_MAX, Math.max(CHAT_PCT_MIN, current + delta)),
+                  Math.min(
+                    CHAT_PCT_MAX,
+                    Math.max(CHAT_PCT_MIN, current + delta),
+                  ),
                 );
               }
             }}
@@ -359,7 +414,15 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
             onToggleFull={() => setCanvasFull((value) => !value)}
           />
         ) : null}
+        </div>
       </div>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {teachingTurn.announcement ? (
+          <span key={teachingTurn.announcement.id}>
+            {teachingTurn.announcement.text}
+          </span>
+        ) : null}
+      </p>
       {drawer === 'assets' ? (
         <Sheet label="本课资料" onClose={() => setDrawer(null)}>
           <AssetsDrawer assets={assets} onToggle={handleToggleAsset} />
@@ -373,12 +436,12 @@ export function LearnWorkspace({ initialData }: { initialData: LearningPageDTO }
                 id: initialData.artifact.artifactId,
                 title: initialData.artifact.title,
                 kind: '互动分类',
-                status: artifactCompleted ? '已完成' : '已生成',
+                status: artifactCompleted ? '已完成' : '本课预置',
               },
             ]}
             onOpen={() => {
               setDrawer(null);
-              openCanvas(false);
+              openCanvas();
             }}
           />
         </Sheet>

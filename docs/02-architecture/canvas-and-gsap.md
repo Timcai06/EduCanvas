@@ -9,8 +9,10 @@ Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选
 
 ## 当前实现状态
 
-- **已实现**：`classification_game`、`quiz`的严格Schema，公开投影/私有判分键拆分，编译期静态Renderer注册表和确定性服务端判分；
-- **阶段一待实现**：`pipeline_flow`动画模板、共享`AnimationShell`、GSAP时间线与播放控制、学习事件上报、认证后的浏览器提交链路；
+- **已实现**：`classification_game`、`quiz`的严格Schema，公开投影/私有判分键拆分，编译期静态Renderer注册表和确定性服务端判分；匿名会话范围内的浏览器提交、可信事件写入和进度回显已连通；`pipeline_flow`以render-only Artifact加入公开投影，不伪造判分键，也不复用assessment持久化路径；
+- **已实现的GSAP范围**：`gsap`与`@gsap/react`已经安装；`AmbientHalo`、`CanvasPanel`和`Sheet`使用`useGSAP()`实现呼吸或表面进入动效。三层Halo的gradient/blur为静态子层，Timeline只修改wrapper的transform/opacity；页面不可见时暂停，reduced-motion不创建无限Timeline，移动端降为一层动画core加静态haze；
+- **已实现的教学动画范围**：首个`pipeline_flow`模板、静态React Renderer和共享`AnimationShell`已落地，支持播放/暂停/跳转/上下步/重置/速度、键盘控制、页面隐藏暂停及reduced-motion即时切换；模型只可提供严格Schema中的步骤文案、注册槽位、高亮顺序和暂停点；
+- **阶段一待实现**：将客户端动画观察与真实runtime完成确认对齐后再提升为可信学习事件，以及正式身份认证后的浏览器提交链路；普通播放不得改变mastery；
 - **候选能力**：其余Artifact与动画模板按课程需求逐个增加，不因出现在规划清单中就视为已实现。
 
 ## 初始Artifact类型
@@ -41,6 +43,8 @@ Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选
 
 ## GSAP要求
 
+以下是全部GSAP代码的工程约束。`AnimationShell`与`pipeline_flow`人工Timeline已按这些约束实现；后续模板必须逐个复用并重新验证。
+
 - 使用`@gsap/react`和`useGSAP()`；
 - 每个组件使用独立`scope`；
 - 组件卸载时必须回收Timeline；
@@ -51,9 +55,13 @@ Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选
 - 高频指针跟随优先使用`quickTo()`；
 - 低端设备也要验证动画流畅度。
 
+当前 `AmbientHalo` 是装饰性 UI 动效，不是模型可生成 Artifact，也不进入统一教学动画控制协议。Canvas 在桌面分栏使用 `region`；移动端和桌面全屏使用 `dialog + aria-modal`，背景分支 `inert`，焦点约束和归还由共享模态工具管理。
+
 ## 统一控制协议
 
 动画Artifact需要支持：播放、暂停、跳转、上一步、下一步、重置和速度控制。
+
+`pipeline_flow`已实现以上控制。reduced-motion下播放会同步跳到下一个人工暂停点或终点，不创建插值Timeline；页面hidden时仅暂停且不会自动恢复。设计QA入口`/design-qa/pipeline-flow`由`EDUCANVAS_ENABLE_DESIGN_QA=true`显式开启，默认返回404，不读取数据库、Provider或用户输入。
 
 动画的关键节点必须产生学习事件，例如：
 

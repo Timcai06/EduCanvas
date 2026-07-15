@@ -20,12 +20,14 @@ flowchart LR
     student[学生浏览器] --> web["apps/web<br/>页面 / 服务端组合根"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
     web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
+    web --> gateway["packages/model-gateway<br/>Provider配置 / OpenAI-compatible SSE"]
     runtime --> teaching["packages/teaching-core<br/>状态机 / 掌握度 / 领域事件 / Port"]
     runtime --> db["packages/db<br/>Drizzle适配器 / PostgreSQL"]
+    gateway --> runtime
     db --> teaching
 ```
 
-当前代码已经拆出Canvas协议、教学核心、应用运行时与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`已经包含可信判分事务、最小Turn Orchestrator和状态感知Tool Executor，但仍没有真实模型/RAG适配器、生产工具Handler、工具结果合成或状态转移持久化。Next.js组合根已经在匿名演示边界内接通Canvas Server Action；Agent轮次尚未接入浏览器与SSE。
+当前代码已经拆出Canvas协议、教学核心、应用运行时、模型网关与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放；`model-gateway`封装OpenAI-compatible SSE，不把供应商类型泄露给业务层。Next.js组合根已接通匿名身份、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复。知识资料的不可变版本、FTS、Turn快照、候选和引用仓储已经落地，但尚未组合进Turn工具与引用UI；可信状态推进也尚未接入Web判分后的应用流程。
 
 ## 目标服务形态
 

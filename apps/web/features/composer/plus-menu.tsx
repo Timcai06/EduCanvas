@@ -1,5 +1,6 @@
 'use client';
 
+import { Plus } from '@phosphor-icons/react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 export type PlusMenuActionId =
@@ -16,32 +17,80 @@ interface PlusMenuItem {
   id: PlusMenuActionId;
   label: string;
   hint: string;
+  available: boolean;
 }
 
-/** 菜单固定两组八项，与 docs/01-product/student-ui-spec.md 的输入栏规格一一对应。 */
+/**
+ * 菜单保留目标能力信息架构，但只有已经存在的本课预置互动可执行；其余项明确
+ * disabled，也不会进入 roving focus，避免把路线图伪装成当前产品能力。
+ */
 const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
   [
     {
       title: '添加学习材料',
       items: [
-        { id: 'upload_file', label: '上传文件', hint: 'PDF、文档' },
-        { id: 'upload_image', label: '上传图片', hint: '拍题、截图' },
-        { id: 'pick_course_material', label: '选择课程资料', hint: '本课教材' },
-        { id: 'add_link', label: '添加链接', hint: '网页资料' },
+        {
+          id: 'upload_file',
+          label: '上传文件',
+          hint: '即将开放',
+          available: false,
+        },
+        {
+          id: 'upload_image',
+          label: '上传图片',
+          hint: '即将开放',
+          available: false,
+        },
+        {
+          id: 'pick_course_material',
+          label: '选择课程资料',
+          hint: '即将开放',
+          available: false,
+        },
+        {
+          id: 'add_link',
+          label: '添加链接',
+          hint: '即将开放',
+          available: false,
+        },
       ],
     },
     {
       title: '请老师创建',
       items: [
-        { id: 'create_demo', label: '创建互动演示', hint: '动手试概念' },
-        { id: 'create_slides', label: '生成 Slide', hint: '讲解页' },
-        { id: 'create_quiz', label: '生成测验', hint: '老师批改' },
-        { id: 'more_tools', label: '更多教学工具', hint: '陆续开放' },
+        {
+          id: 'create_demo',
+          label: '打开本课互动演示',
+          hint: '课程预置',
+          available: true,
+        },
+        {
+          id: 'create_slides',
+          label: '生成 Slide',
+          hint: '即将开放',
+          available: false,
+        },
+        {
+          id: 'create_quiz',
+          label: '生成测验',
+          hint: '即将开放',
+          available: false,
+        },
+        {
+          id: 'more_tools',
+          label: '更多教学工具',
+          hint: '即将开放',
+          available: false,
+        },
       ],
     },
   ];
 
 const allItems = menuGroups.flatMap((group) => group.items);
+const enabledIndexes = allItems.flatMap((item, index) =>
+  item.available ? [index] : [],
+);
+const firstEnabledIndex = enabledIndexes[0] ?? 0;
 
 /**
  * 「+」菜单自管开合与键盘漫游（↑↓/Enter/Esc），动作语义交给上层：
@@ -53,7 +102,7 @@ export function PlusMenu({
   onAction: (action: PlusMenuActionId) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(firstEnabledIndex);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -87,9 +136,13 @@ export function PlusMenu({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const delta = event.key === 'ArrowDown' ? 1 : -1;
-      setActiveIndex(
-        (current) => (current + delta + allItems.length) % allItems.length,
-      );
+      setActiveIndex((current) => {
+        const enabledPosition = enabledIndexes.indexOf(current);
+        const nextPosition =
+          (enabledPosition + delta + enabledIndexes.length) %
+          enabledIndexes.length;
+        return enabledIndexes[nextPosition] ?? firstEnabledIndex;
+      });
     }
   };
 
@@ -103,12 +156,12 @@ export function PlusMenu({
         aria-controls={open ? menuId : undefined}
         aria-label="添加材料或请老师创建"
         onClick={() => {
-          setActiveIndex(0);
+          setActiveIndex(firstEnabledIndex);
           setOpen((value) => !value);
         }}
-        className="grid size-10 shrink-0 place-items-center rounded-full text-xl text-ink-muted transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <span aria-hidden="true">＋</span>
+        <Plus aria-hidden="true" size={22} weight="regular" />
       </button>
       {open ? (
         <div
@@ -133,12 +186,14 @@ export function PlusMenu({
                     }}
                     type="button"
                     role="menuitem"
-                    tabIndex={index === activeIndex ? 0 : -1}
+                    disabled={!item.available}
+                    aria-disabled={!item.available}
+                    tabIndex={item.available && index === activeIndex ? 0 : -1}
                     onClick={() => {
                       close(true);
                       onAction(item.id);
                     }}
-                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface focus-visible:bg-surface focus-visible:outline-none"
+                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink transition-colors enabled:hover:bg-surface enabled:focus-visible:bg-surface enabled:focus-visible:outline-none disabled:cursor-not-allowed disabled:text-ink-faint disabled:opacity-65"
                   >
                     <span className="font-medium">{item.label}</span>
                     <span className="text-xs text-ink-faint">{item.hint}</span>

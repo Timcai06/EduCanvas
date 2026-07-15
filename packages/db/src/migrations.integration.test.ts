@@ -1,0 +1,561 @@
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import postgres from 'postgres';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import * as schema from './schema';
+
+function resolveTestDatabaseUrl() {
+  const value = process.env.TEST_DATABASE_URL;
+  if (!value) return undefined;
+  const databaseName = decodeURIComponent(new URL(value).pathname.slice(1));
+  if (
+    !databaseName.endsWith('_integration') &&
+    !databaseName.endsWith('_test')
+  ) {
+    throw new Error('迁移测试拒绝使用非隔离数据库');
+  }
+  return value;
+}
+
+const testDatabaseUrl = resolveTestDatabaseUrl();
+const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
+const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url));
+
+function withDatabaseName(url: string, databaseName: string): string {
+  const parsed = new URL(url);
+  parsed.pathname = `/${databaseName}`;
+  return parsed.toString();
+}
+
+async function applyMigrationFile(
+  connection: ReturnType<typeof postgres>,
+  fileName: string,
+): Promise<void> {
+  const sqlText = await readFile(`${migrationsFolder}/${fileName}`, 'utf8');
+  for (const statement of sqlText.split('--> statement-breakpoint')) {
+    if (statement.trim()) await connection.unsafe(statement);
+  }
+}
+
+async function withTemporaryDatabase(
+  operation: (
+    connection: ReturnType<typeof postgres>,
+    url: string,
+  ) => Promise<void>,
+): Promise<void> {
+  if (!testDatabaseUrl) throw new Error('TEST_DATABASE_URL未设置');
+  const databaseName = `educanvas_migration_${randomUUID().replaceAll('-', '')}_test`;
+  const admin = postgres(withDatabaseName(testDatabaseUrl, 'postgres'), {
+    max: 1,
+  });
+  await admin.unsafe(`create database "${databaseName}"`);
+  const url = withDatabaseName(testDatabaseUrl, databaseName);
+  const connection = postgres(url, { max: 1 });
+  try {
+    await operation(connection, url);
+  } finally {
+    await connection.end({ timeout: 5 });
+    await admin.unsafe(
+      `drop database if exists "${databaseName}" with (force)`,
+    );
+    await admin.end({ timeout: 5 });
+  }
+}
+
+describeWithDatabase('对话/Agent账本 additive migration', () => {
+  it('全新数据库可应用全部迁移并生成最终Schema', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      await migrate(drizzle(connection, { schema }), { migrationsFolder });
+      const tables = await connection<{ table_name: string }[]>`
+        select table_name
+        from information_schema.tables
+        where table_schema = 'public'
+          and table_name in (
+            'lesson_sessions', 'chat_messages', 'model_runs', 'tool_calls',
+            'turn_safety_decisions', 'knowledge_sources',
+            'knowledge_documents', 'knowledge_chunks',
+            'session_source_bindings', 'turn_source_snapshots', 'turn_source_versions',
+            'retrieval_candidates', 'message_citations'
+          )
+        order by table_name
+      `;
+      expect(tables.map((table) => table.table_name)).toEqual([
+        'chat_messages',
+        'knowledge_chunks',
+        'knowledge_documents',
+        'knowledge_sources',
+        'lesson_sessions',
+        'message_citations',
+        'model_runs',
+        'retrieval_candidates',
+        'session_source_bindings',
+        'tool_calls',
+        'turn_safety_decisions',
+        'turn_source_snapshots',
+        'turn_source_versions',
+      ]);
+      const statusDefault = await connection<
+        { column_default: string | null; is_nullable: string }[]
+      >`
+        select column_default, is_nullable
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'lesson_sessions'
+          and column_name = 'last_activity_at'
+      `;
+      expect(statusDefault[0]).toMatchObject({ is_nullable: 'NO' });
+      expect(statusDefault[0]?.column_default).toContain('now()');
+    });
+  });
+
+  it('从0003升级时按scope收敛旧重复行并保留原活动时间', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const oldId = '70000000-0000-4000-8000-000000000001';
+      const latestId = '70000000-0000-4000-8000-000000000002';
+      const oldUpdatedAt = '2026-04-01T00:00:00.000Z';
+      const latestUpdatedAt = '2026-05-01T00:00:00.000Z';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, created_at, updated_at
+        ) values
+          (
+            ${oldId}, 'migration-student', 'middle_school', 'migration-course', null,
+            'EXPLAIN', '2026-03-01T00:00:00.000Z', ${oldUpdatedAt}
+          ),
+          (
+            ${latestId}, 'migration-student', 'middle_school', 'migration-course', null,
+            'EXPLAIN', '2026-04-15T00:00:00.000Z', ${latestUpdatedAt}
+          )
+      `;
+
+      await applyMigrationFile(connection, '0004_nifty_spyke.sql');
+      const rows = await connection<
+        {
+          id: string;
+          status: string;
+          last_activity_at: Date;
+          archived_at: Date | null;
+        }[]
+      >`
+        select id, status, last_activity_at, archived_at
+        from lesson_sessions
+        order by id
+      `;
+      expect(rows).toMatchObject([
+        {
+          id: oldId,
+          status: 'archived',
+          last_activity_at: new Date(oldUpdatedAt),
+          archived_at: new Date(oldUpdatedAt),
+        },
+        {
+          id: latestId,
+          status: 'active',
+          last_activity_at: new Date(latestUpdatedAt),
+          archived_at: null,
+        },
+      ]);
+
+      await expect(
+        connection`
+          insert into lesson_sessions (
+            student_id, grade_band, course_slug, knowledge_node_id, state
+          ) values (
+            'migration-student', 'middle_school', 'migration-course', null, 'EXPLAIN'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23505' });
+    });
+  });
+
+  it('从0004升级时将无lease的活跃Turn和run收敛为interrupted', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+        '0004_nifty_spyke.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '71000000-0000-4000-8000-000000000001';
+      const studentMessageId = '71000000-0000-4000-8000-000000000002';
+      const assistantMessageId = '71000000-0000-4000-8000-000000000003';
+      const turnId = '71000000-0000-4000-8000-000000000004';
+      const runId = '71000000-0000-4000-8000-000000000005';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'lease-migration-student', 'middle_school',
+          'lease-migration-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, client_message_id, request_hash,
+          role, status, content, completed_at
+        ) values (
+          ${studentMessageId}, ${sessionId}, ${turnId}, 'migration-client',
+          ${'a'.repeat(64)}, 'student', 'completed', '问题', now()
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, role, status, content
+        ) values (
+          ${assistantMessageId}, ${sessionId}, ${turnId},
+          'assistant', 'pending', ''
+        )
+      `;
+      await connection`
+        insert into model_runs (
+          id, session_id, operation_id, operation_kind,
+          assistant_message_id, turn_id, phase, attempt, trace_id,
+          task_alias, model_alias, prompt_version, prompt_hash, status
+        ) values (
+          ${runId}, ${sessionId}, ${turnId}, 'teaching_turn',
+          ${assistantMessageId}, ${turnId}, 'answer', 1, 'migration-trace',
+          'teaching.turn', 'primary', 'v1', ${'b'.repeat(64)}, 'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0005_exotic_starhawk.sql');
+      expect(
+        await connection`
+          select status, failure_code, lease_id, lease_expires_at
+          from chat_messages where id = ${assistantMessageId}
+        `,
+      ).toMatchObject([
+        {
+          status: 'interrupted',
+          failure_code: 'lease_missing_after_upgrade',
+          lease_id: null,
+          lease_expires_at: null,
+        },
+      ]);
+      expect(
+        await connection`
+          select status, error_code from model_runs where id = ${runId}
+        `,
+      ).toMatchObject([
+        {
+          status: 'interrupted',
+          error_code: 'lease_missing_after_upgrade',
+        },
+      ]);
+      expect(
+        await connection`
+          select table_name from information_schema.tables
+          where table_schema = 'public' and table_name = 'tool_calls'
+        `,
+      ).toHaveLength(1);
+    });
+  });
+
+  it('从0005升级时仅新增脱敏安全决策表并保留既有会话', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+        '0004_nifty_spyke.sql',
+        '0005_exotic_starhawk.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '72000000-0000-4000-8000-000000000001';
+      const turnId = '72000000-0000-4000-8000-000000000002';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, ${`anon:v1:${'a'.repeat(64)}`}, 'middle_school',
+          'safety-migration-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0006_windy_silver_sable.sql');
+      expect(
+        await connection`
+          select id from lesson_sessions where id = ${sessionId}
+        `,
+      ).toHaveLength(1);
+      await connection`
+        insert into turn_safety_decisions (
+          session_id, turn_id, phase, policy_version,
+          category, action, detector_version
+        ) values (
+          ${sessionId}, ${turnId}, 'input', 'k12-v1',
+          'normal', 'block', 'structural-v1'
+        )
+      `;
+      await expect(
+        connection`
+          insert into turn_safety_decisions (
+            session_id, turn_id, phase, policy_version,
+            category, action, detector_version
+          ) values (
+            ${sessionId}, ${'72000000-0000-4000-8000-000000000003'},
+            'input', 'unsafe version', 'normal', 'allow', 'detector-v1'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+      const columns = await connection<{ column_name: string }[]>`
+        select column_name
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'turn_safety_decisions'
+        order by ordinal_position
+      `;
+      expect(columns.map((column) => column.column_name)).toEqual([
+        'session_id',
+        'turn_id',
+        'phase',
+        'policy_version',
+        'category',
+        'action',
+        'detector_version',
+        'created_at',
+      ]);
+      await connection`delete from lesson_sessions where id = ${sessionId}`;
+      expect(
+        await connection`
+          select * from turn_safety_decisions where session_id = ${sessionId}
+        `,
+      ).toHaveLength(0);
+    });
+  });
+
+  it('从0006升级时additive新增审核资料、FTS和引用表', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+        '0004_nifty_spyke.sql',
+        '0005_exotic_starhawk.sql',
+        '0006_windy_silver_sable.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '73000000-0000-4000-8000-000000000001';
+      const sourceId = '73000000-0000-4000-8000-000000000002';
+      const documentId = '73000000-0000-4000-8000-000000000003';
+      const chunkId = '73000000-0000-4000-8000-000000000004';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, ${`anon:v1:${'b'.repeat(64)}`}, 'middle_school',
+          'fts-migration-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0007_ambiguous_silver_surfer.sql');
+      expect(
+        await connection`
+          select id from lesson_sessions where id = ${sessionId}
+        `,
+      ).toHaveLength(1);
+      await connection`
+        insert into knowledge_sources (
+          id, grade_band, course_slug, source_key, title, source_type
+        ) values (
+          ${sourceId}, 'middle_school', 'fts-migration-course',
+          'approved-source', '审核教材', 'pdf'
+        )
+      `;
+      await connection`
+        insert into knowledge_documents (
+          id, source_id, version, content_hash, object_key,
+          parser_version, parse_status, parsed_at
+        ) values (
+          ${documentId}, ${sourceId}, 1, ${'c'.repeat(64)},
+          'courses/fts-migration/document-v1.pdf', 'pdf-text-v1',
+          'ready', now()
+        )
+      `;
+      await connection`
+        insert into knowledge_chunks (
+          id, document_id, chunk_index, content_hash, content
+        ) values (
+          ${chunkId}, ${documentId}, 0, ${'d'.repeat(64)},
+          '猫 特征 图像 分类'
+        )
+      `;
+      expect(
+        await connection`
+          select id from knowledge_chunks
+          where search_vector @@ websearch_to_tsquery('simple', '猫 特征')
+        `,
+      ).toEqual([{ id: chunkId }]);
+      expect(
+        await connection`
+          select indexname from pg_indexes
+          where schemaname = 'public'
+            and indexname = 'knowledge_chunks_fts_idx'
+        `,
+      ).toHaveLength(1);
+      await expect(
+        connection`
+          update knowledge_chunks set content = '篡改' where id = ${chunkId}
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+      expect(
+        await connection`
+          select extname from pg_extension where extname = 'vector'
+        `,
+      ).toHaveLength(0);
+    });
+  });
+
+  it('从0007升级时冻结已有Turn、清除跨文档候选并收紧半空页码', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+        '0004_nifty_spyke.sql',
+        '0005_exotic_starhawk.sql',
+        '0006_windy_silver_sable.sql',
+        '0007_ambiguous_silver_surfer.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const sessionId = '74000000-0000-4000-8000-000000000001';
+      const sourceA = '74000000-0000-4000-8000-000000000002';
+      const documentA = '74000000-0000-4000-8000-000000000003';
+      const chunkA = '74000000-0000-4000-8000-000000000004';
+      const sourceB = '74000000-0000-4000-8000-000000000005';
+      const documentB = '74000000-0000-4000-8000-000000000006';
+      const chunkB = '74000000-0000-4000-8000-000000000007';
+      const snapshotId = '74000000-0000-4000-8000-000000000008';
+      const candidateId = '74000000-0000-4000-8000-000000000009';
+      const turnId = '74000000-0000-4000-8000-000000000010';
+
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-k1-student', 'middle_school',
+          'migration-k1-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into knowledge_sources (
+          id, grade_band, course_slug, source_key, title, source_type
+        ) values
+          (${sourceA}, 'middle_school', 'migration-k1-course', 'source-a', '教材A', 'pdf'),
+          (${sourceB}, 'middle_school', 'migration-k1-course', 'source-b', '教材B', 'pdf')
+      `;
+      await connection`
+        insert into knowledge_documents (
+          id, source_id, version, content_hash, object_key,
+          parser_version, parse_status, parsed_at
+        ) values
+          (
+            ${documentA}, ${sourceA}, 1, ${'a'.repeat(64)},
+            'courses/migration-k1/a.pdf', 'pdf-text-v1', 'ready', now()
+          ),
+          (
+            ${documentB}, ${sourceB}, 1, ${'b'.repeat(64)},
+            'courses/migration-k1/b.pdf', 'pdf-text-v1', 'ready', now()
+          )
+      `;
+      // 0007 的 CHECK 对一端 NULL 返回 UNKNOWN，因此这条历史异常当时可以写入。
+      await connection`
+        insert into knowledge_chunks (
+          id, document_id, chunk_index, content_hash, content,
+          page_start, page_end
+        ) values
+          (${chunkA}, ${documentA}, 0, ${'c'.repeat(64)}, '教材A片段', null, 5),
+          (${chunkB}, ${documentB}, 0, ${'d'.repeat(64)}, '教材B片段', 2, 2)
+      `;
+      await connection`
+        insert into turn_source_versions (
+          id, session_id, turn_id, source_id, document_id,
+          document_version, content_hash
+        ) values (
+          ${snapshotId}, ${sessionId}, ${turnId}, ${sourceA}, ${documentA},
+          1, ${'a'.repeat(64)}
+        )
+      `;
+      // 0007 只有两个独立 FK，可以把 A 快照与 B chunk 拼成候选。
+      await connection`
+        insert into retrieval_candidates (
+          id, session_id, turn_id, turn_source_version_id, chunk_id,
+          retriever, retriever_version, rank, score, query_hash, trace_id
+        ) values (
+          ${candidateId}, ${sessionId}, ${turnId}, ${snapshotId}, ${chunkB},
+          'fixture', 'fixture-v1', 1, 0.5, ${'e'.repeat(64)}, 'trace-forged'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0008_k1_snapshot_integrity.sql');
+
+      expect(
+        await connection`
+          select session_id, turn_id from turn_source_snapshots
+        `,
+      ).toEqual([{ session_id: sessionId, turn_id: turnId }]);
+      expect(
+        await connection`select id from retrieval_candidates`,
+      ).toHaveLength(0);
+      expect(
+        await connection`
+          select page_start, page_end from knowledge_chunks where id = ${chunkA}
+        `,
+      ).toEqual([{ page_start: null, page_end: null }]);
+
+      await expect(
+        connection`
+          insert into retrieval_candidates (
+            session_id, turn_id, turn_source_version_id, chunk_id, document_id,
+            retriever, retriever_version, rank, score, query_hash, trace_id
+          ) values (
+            ${sessionId}, ${turnId}, ${snapshotId}, ${chunkB}, ${documentA},
+            'fixture', 'fixture-v1', 1, 0.5, ${'e'.repeat(64)}, 'trace-forged'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23503' });
+      await expect(
+        connection`
+          insert into knowledge_chunks (
+            document_id, chunk_index, content_hash, content, page_start, page_end
+          ) values (
+            ${documentA}, 1, ${'f'.repeat(64)}, '未来半空页码', null, 6
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        connection`
+          update turn_source_snapshots set created_at = now()
+          where session_id = ${sessionId} and turn_id = ${turnId}
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+});

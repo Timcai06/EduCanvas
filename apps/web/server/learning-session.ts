@@ -1,7 +1,13 @@
 import 'server-only';
 
 import { canvasInteractionEventSchema } from '@educanvas/canvas-protocol';
-import { DrizzleLearningSessionRepository } from '@educanvas/db';
+import {
+  DrizzleChatRepository,
+  DrizzleLearningSessionRepository,
+  DrizzleSessionRepository,
+  getDb,
+} from '@educanvas/db';
+import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
 import type { GradeCanvasSubmissionOutcome } from '@educanvas/teaching-runtime';
 import type {
   CanvasSubmissionInput,
@@ -16,6 +22,7 @@ import { demoLesson } from './demo-lesson';
 import { gradeCanvasSubmissionService } from './teaching-runtime';
 
 const learningSessions = new DrizzleLearningSessionRepository();
+const chatMessages = new DrizzleChatRepository();
 
 function scopeFor(studentId: string) {
   return {
@@ -54,6 +61,24 @@ export async function bootstrapAnonymousLesson(
   });
 }
 
+/** 显式创建新的学习记录；旧 active 会话由仓储在同一事务内归档。 */
+export async function startNewAnonymousLesson(
+  identity: AnonymousIdentity,
+): Promise<void> {
+  await learningSessions.startNew({
+    ...scopeFor(identity.studentId),
+    completeArtifact: demoLesson.artifact,
+  });
+}
+
+/** 恢复操作只接受会话 ID，所有权与课程范围仍由服务端可信身份收窄。 */
+export async function resumeOwnedAnonymousLesson(
+  identity: AnonymousIdentity,
+  sessionId: string,
+): Promise<void> {
+  await learningSessions.resume(scopeFor(identity.studentId), sessionId);
+}
+
 /** 只有已经绑定当前有效会话的Cookie才允许在start Action中继续复用。 */
 export async function hasActiveAnonymousLesson(
   identity: AnonymousIdentity,
@@ -61,6 +86,21 @@ export async function hasActiveAnonymousLesson(
   return Boolean(
     await learningSessions.getCurrentOwned(scopeFor(identity.studentId)),
   );
+}
+
+/** Agent runtime 只从可信 Cookie + 固定课程范围恢复完整会话游标。 */
+export async function loadOwnedTeachingSession(
+  identity: AnonymousIdentity,
+): Promise<LessonSessionSnapshot | null> {
+  const owned = await learningSessions.getCurrentOwned(
+    scopeFor(identity.studentId),
+  );
+  if (!owned) return null;
+  const session = await new DrizzleSessionRepository(getDb()).getById(
+    owned.sessionId,
+  );
+  if (!session || session.studentId !== identity.studentId) return null;
+  return session;
 }
 
 /** 页面只得到公共Artifact和公开进度，不得到session、student或判分键。 */
@@ -72,6 +112,29 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
     demoLesson.artifact.artifactId,
   );
   if (!snapshot) return null;
+  const [history, recent] = await Promise.all([
+    chatMessages.listHistory({
+      sessionId: snapshot.sessionId,
+      trustedStudentId: identity.studentId,
+      limit: 100,
+    }),
+    learningSessions.listOwnedRecent(
+      {
+        studentId: identity.studentId,
+        gradeBand: demoLesson.gradeBand,
+        courseSlug: demoLesson.courseSlug,
+      },
+      { limit: 20 },
+    ),
+  ]);
+  const clientMessageIdByTurn = new Map(
+    history.messages
+      .filter(
+        (message): message is typeof message & { clientMessageId: string } =>
+          message.role === 'student' && message.clientMessageId !== null,
+      )
+      .map((message) => [message.turnId, message.clientMessageId]),
+  );
   return {
     artifact: snapshot.artifact,
     progress: snapshot.mastery
@@ -80,6 +143,32 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
           ...snapshot.mastery,
         })
       : null,
+    initialMessages: history.messages.map((message) => {
+      const clientMessageId = clientMessageIdByTurn.get(message.turnId);
+      if (!clientMessageId) {
+        throw new Error('聊天消息缺少所属 Turn 的 clientMessageId');
+      }
+      return {
+        id: message.id,
+        turnId: message.turnId,
+        clientMessageId,
+        role: message.role,
+        status: message.status,
+        content: message.content,
+        failureCode: message.failureCode,
+        createdAt: message.createdAt,
+        completedAt: message.completedAt,
+      };
+    }),
+    initialSessions: recent.sessions.map((session) => ({
+      id: session.sessionId,
+      title: session.title ?? demoLesson.courseTitle,
+      courseTitle: demoLesson.courseTitle,
+      status: session.status,
+      lastActivityAt: session.lastActivityAt,
+      hasInterruptedTurn: session.hasInterruptedTurn,
+    })),
+    currentSessionId: snapshot.sessionId,
   };
 }
 

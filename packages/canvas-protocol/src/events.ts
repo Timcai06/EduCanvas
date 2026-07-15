@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pipelineFlowSlotSchema } from './artifacts/pipeline-flow';
 
 // Canvas交互事件只描述浏览器发生的操作，是进入服务端验证边界前的不可信输入。
 // 服务端验证后产生的state_transition、assessment_graded等可信领域事件归teaching-core所有，
@@ -25,11 +26,7 @@ const eventBaseShape = {
   occurredAt: z.iso.datetime(),
 };
 
-const templateKeySchema = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z][a-z0-9_]*$/, '模板标识必须使用snake_case');
+const animationTemplateKeySchema = z.literal('pipeline_flow');
 
 const classificationSubmissionPayloadSchema = z
   .object({
@@ -83,8 +80,8 @@ export const canvasInteractionEventSchema = z.discriminatedUnion('type', [
       type: z.literal('animation_started'),
       payload: z
         .object({
-          templateKey: templateKeySchema,
-          stepId: z.string().min(1).max(128).optional(),
+          templateKey: animationTemplateKeySchema,
+          stepId: pipelineFlowSlotSchema.optional(),
         })
         .strict(),
     })
@@ -95,8 +92,8 @@ export const canvasInteractionEventSchema = z.discriminatedUnion('type', [
       type: z.literal('animation_paused'),
       payload: z
         .object({
-          templateKey: templateKeySchema,
-          stepId: z.string().min(1).max(128).optional(),
+          templateKey: animationTemplateKeySchema,
+          stepId: pipelineFlowSlotSchema.optional(),
           positionMs: z.number().int().nonnegative().max(3_600_000),
         })
         .strict(),
@@ -108,9 +105,9 @@ export const canvasInteractionEventSchema = z.discriminatedUnion('type', [
       type: z.literal('animation_step_completed'),
       payload: z
         .object({
-          templateKey: templateKeySchema,
-          stepId: z.string().min(1).max(128),
-          stepIndex: z.number().int().nonnegative().max(999),
+          templateKey: animationTemplateKeySchema,
+          stepId: pipelineFlowSlotSchema,
+          stepIndex: z.number().int().nonnegative().max(3),
         })
         .strict(),
     })

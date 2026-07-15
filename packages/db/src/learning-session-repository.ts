@@ -8,12 +8,17 @@ import {
   type PublicArtifact,
 } from '@educanvas/canvas-protocol';
 import { selectInitialState } from '@educanvas/teaching-core';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, lt, or, sql } from 'drizzle-orm';
 import { isDeepStrictEqual } from 'node:util';
+import {
+  anonymousSubjectLockKey,
+  isAnonymousSyntheticSubjectId,
+} from './anonymous-data-lifecycle';
 import { getDb } from './client';
 import {
   canvasArtifactGradingKeys,
   canvasArtifacts,
+  chatMessages,
   lessonSessions,
   masteryStates,
 } from './schema';
@@ -30,11 +35,24 @@ function activeSessionCutoff(): Date {
   return new Date(Date.now() - ANONYMOUS_LEARNING_SESSION_TTL_MS);
 }
 
+async function lockAnonymousSubjectLifecycle(
+  transaction: DatabaseTransaction,
+  studentId: string,
+): Promise<void> {
+  if (!isAnonymousSyntheticSubjectId(studentId)) return;
+  await transaction.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${anonymousSubjectLockKey(studentId)}, 0))`,
+  );
+}
+
 /** 阶段一课程纵切的稳定范围；匿名身份只能在此范围内恢复自己的当前会话。 */
-export interface LearningSessionScope {
+export interface LearningSessionCourseScope {
   studentId: string;
   gradeBand: string;
   courseSlug: string;
+}
+
+export interface LearningSessionScope extends LearningSessionCourseScope {
   knowledgeNodeId: string;
 }
 
@@ -55,6 +73,25 @@ export interface OwnedLearningSession {
   knowledgeNodeId: string;
 }
 
+export interface LearningSessionSummary extends OwnedLearningSession {
+  status: 'active' | 'archived';
+  title: string | null;
+  lastActivityAt: string;
+  archivedAt: string | null;
+  createdAt: string;
+  hasInterruptedTurn: boolean;
+}
+
+export interface LearningSessionListCursor {
+  lastActivityAt: string;
+  id: string;
+}
+
+export interface LearningSessionListPage {
+  sessions: readonly LearningSessionSummary[];
+  nextCursor: LearningSessionListCursor | null;
+}
+
 export interface LearningPageSnapshot extends OwnedLearningSession {
   artifact: PublicArtifact;
   mastery: {
@@ -71,6 +108,16 @@ export class ArtifactContentConflictError extends Error {
   constructor(artifactId: string) {
     super(`Canvas Artifact ${artifactId}已存在但内容不一致`);
     this.name = 'ArtifactContentConflictError';
+  }
+}
+
+/** 恢复/归档不可见的会话时统一返回，避免泄露其他学生的 session ID。 */
+export class LearningSessionNotFoundError extends Error {
+  readonly code = 'session_not_found';
+
+  constructor() {
+    super('学习会话不存在或不属于当前学生');
+    this.name = 'LearningSessionNotFoundError';
   }
 }
 
@@ -154,6 +201,112 @@ async function ensurePreparedArtifact(
   });
 }
 
+function scopeLockKey(scope: LearningSessionScope): string {
+  return [
+    'lesson-session-scope-v2',
+    scope.studentId,
+    scope.gradeBand,
+    scope.courseSlug,
+    scope.knowledgeNodeId,
+  ].join(':');
+}
+
+function scopeCondition(scope: LearningSessionScope) {
+  return and(
+    eq(lessonSessions.studentId, scope.studentId),
+    eq(lessonSessions.gradeBand, scope.gradeBand),
+    eq(lessonSessions.courseSlug, scope.courseSlug),
+    eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
+  );
+}
+
+function courseScopeCondition(scope: LearningSessionCourseScope) {
+  return and(
+    eq(lessonSessions.studentId, scope.studentId),
+    eq(lessonSessions.gradeBand, scope.gradeBand),
+    eq(lessonSessions.courseSlug, scope.courseSlug),
+  );
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function toSessionSummary(
+  row: typeof lessonSessions.$inferSelect,
+  hasInterruptedTurn = false,
+): LearningSessionSummary {
+  if (!row.knowledgeNodeId) {
+    throw new Error('当前学习会话缺少 knowledgeNodeId');
+  }
+  return {
+    sessionId: row.id,
+    studentId: row.studentId,
+    knowledgeNodeId: row.knowledgeNodeId,
+    status: row.status as 'active' | 'archived',
+    title: row.title,
+    lastActivityAt: row.lastActivityAt.toISOString(),
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    hasInterruptedTurn,
+  };
+}
+
+async function insertSession(
+  transaction: DatabaseTransaction,
+  scope: LearningSessionScope,
+  now: Date,
+): Promise<string> {
+  const [existingMastery] = await transaction
+    .select({ studentId: masteryStates.studentId })
+    .from(masteryStates)
+    .where(
+      and(
+        eq(masteryStates.studentId, scope.studentId),
+        eq(masteryStates.knowledgeNodeId, scope.knowledgeNodeId),
+      ),
+    )
+    .limit(1);
+  const [created] = await transaction
+    .insert(lessonSessions)
+    .values({
+      studentId: scope.studentId,
+      gradeBand: scope.gradeBand,
+      courseSlug: scope.courseSlug,
+      knowledgeNodeId: scope.knowledgeNodeId,
+      state: selectInitialState(Boolean(existingMastery)),
+      status: 'active',
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: lessonSessions.id });
+  if (!created) throw new Error('学习会话写入失败');
+  return created.id;
+}
+
+async function archiveActiveScope(
+  transaction: DatabaseTransaction,
+  scope: LearningSessionScope,
+  now: Date,
+  exceptSessionId?: string,
+): Promise<void> {
+  await transaction
+    .update(lessonSessions)
+    .set({ status: 'archived', archivedAt: now, updatedAt: now })
+    .where(
+      and(
+        scopeCondition(scope),
+        eq(lessonSessions.status, 'active'),
+        exceptSessionId
+          ? sql`${lessonSessions.id} <> ${exceptSessionId}`
+          : undefined,
+      ),
+    );
+}
+
 /**
  * 匿名学习纵切仓储。bootstrap通过事务级advisory lock保证同一学生和课程并发请求只创建一个会话，
  * 并把Session、公开Artifact与私有判分键作为一个原子提交。
@@ -169,15 +322,10 @@ export class DrizzleLearningSessionRepository {
     input: BootstrapLearningSessionInput,
   ): Promise<BootstrappedLearningSession> {
     const prepared = prepareArtifact(input.completeArtifact);
-    const lockKey = [
-      'lesson-bootstrap-v1',
-      input.studentId,
-      input.gradeBand,
-      input.courseSlug,
-      input.knowledgeNodeId,
-    ].join(':');
+    const lockKey = scopeLockKey(input);
 
     return this.database.transaction(async (transaction) => {
+      await lockAnonymousSubjectLifecycle(transaction, input.studentId);
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
       );
@@ -186,40 +334,20 @@ export class DrizzleLearningSessionRepository {
         .from(lessonSessions)
         .where(
           and(
-            eq(lessonSessions.studentId, input.studentId),
-            eq(lessonSessions.gradeBand, input.gradeBand),
-            eq(lessonSessions.courseSlug, input.courseSlug),
-            eq(lessonSessions.knowledgeNodeId, input.knowledgeNodeId),
-            gte(lessonSessions.createdAt, activeSessionCutoff()),
+            scopeCondition(input),
+            eq(lessonSessions.status, 'active'),
+            gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
           ),
         )
-        .orderBy(desc(lessonSessions.createdAt), desc(lessonSessions.id))
+        .orderBy(desc(lessonSessions.lastActivityAt), desc(lessonSessions.id))
         .limit(1);
 
       let sessionId = existingSession?.id;
       if (!sessionId) {
-        const [existingMastery] = await transaction
-          .select({ studentId: masteryStates.studentId })
-          .from(masteryStates)
-          .where(
-            and(
-              eq(masteryStates.studentId, input.studentId),
-              eq(masteryStates.knowledgeNodeId, input.knowledgeNodeId),
-            ),
-          )
-          .limit(1);
-        const [created] = await transaction
-          .insert(lessonSessions)
-          .values({
-            studentId: input.studentId,
-            gradeBand: input.gradeBand,
-            courseSlug: input.courseSlug,
-            knowledgeNodeId: input.knowledgeNodeId,
-            state: selectInitialState(Boolean(existingMastery)),
-          })
-          .returning({ id: lessonSessions.id });
-        if (!created) throw new Error('学习会话写入失败');
-        sessionId = created.id;
+        const now = new Date();
+        // 过期 active 行仍会命中部分唯一索引，必须先显式归档再新建。
+        await archiveActiveScope(transaction, input, now);
+        sessionId = await insertSession(transaction, input, now);
       }
 
       await ensurePreparedArtifact(transaction, sessionId, prepared);
@@ -248,10 +376,11 @@ export class DrizzleLearningSessionRepository {
           eq(lessonSessions.gradeBand, scope.gradeBand),
           eq(lessonSessions.courseSlug, scope.courseSlug),
           eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
-          gte(lessonSessions.createdAt, activeSessionCutoff()),
+          eq(lessonSessions.status, 'active'),
+          gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
         ),
       )
-      .orderBy(desc(lessonSessions.createdAt), desc(lessonSessions.id))
+      .orderBy(desc(lessonSessions.lastActivityAt), desc(lessonSessions.id))
       .limit(1);
     if (!row || !row.knowledgeNodeId) return null;
     return { ...row, knowledgeNodeId: row.knowledgeNodeId };
@@ -305,6 +434,187 @@ export class DrizzleLearningSessionRepository {
             nextReviewAt: masteryRow.nextReviewAt?.toISOString() ?? null,
           }
         : null,
+    };
+  }
+
+  /** 显式新建学习会话：在同一事务中归档旧 active，再创建新 active。 */
+  async startNew(
+    input: BootstrapLearningSessionInput,
+  ): Promise<BootstrappedLearningSession> {
+    const prepared = prepareArtifact(input.completeArtifact);
+    const now = new Date();
+    return this.database.transaction(async (transaction) => {
+      await lockAnonymousSubjectLifecycle(transaction, input.studentId);
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(input)}, 0))`,
+      );
+      await archiveActiveScope(transaction, input, now);
+      const sessionId = await insertSession(transaction, input, now);
+      await ensurePreparedArtifact(transaction, sessionId, prepared);
+      return {
+        sessionId,
+        studentId: input.studentId,
+        knowledgeNodeId: input.knowledgeNodeId,
+        artifact: prepared.publicArtifact,
+      };
+    });
+  }
+
+  /** 显式恢复已归档的近期会话；操作不冒充消息活动，因此不改 lastActivityAt。 */
+  async resume(
+    scope: LearningSessionScope,
+    sessionId: string,
+  ): Promise<LearningSessionSummary> {
+    const now = new Date();
+    return this.database.transaction(async (transaction) => {
+      await lockAnonymousSubjectLifecycle(transaction, scope.studentId);
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(scope)}, 0))`,
+      );
+      const [target] = await transaction
+        .select()
+        .from(lessonSessions)
+        .where(
+          and(
+            eq(lessonSessions.id, sessionId),
+            scopeCondition(scope),
+            gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
+          ),
+        )
+        .limit(1);
+      if (!target) throw new LearningSessionNotFoundError();
+      if (target.status === 'active') return toSessionSummary(target);
+
+      await archiveActiveScope(transaction, scope, now, sessionId);
+      const [resumed] = await transaction
+        .update(lessonSessions)
+        .set({ status: 'active', archivedAt: null, updatedAt: now })
+        .where(
+          and(
+            eq(lessonSessions.id, sessionId),
+            eq(lessonSessions.status, 'archived'),
+          ),
+        )
+        .returning();
+      if (!resumed) throw new LearningSessionNotFoundError();
+      return toSessionSummary(resumed);
+    });
+  }
+
+  async archive(
+    scope: LearningSessionScope,
+    sessionId: string,
+  ): Promise<LearningSessionSummary> {
+    const now = new Date();
+    return this.database.transaction(async (transaction) => {
+      await lockAnonymousSubjectLifecycle(transaction, scope.studentId);
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(scope)}, 0))`,
+      );
+      const [existing] = await transaction
+        .select()
+        .from(lessonSessions)
+        .where(and(eq(lessonSessions.id, sessionId), scopeCondition(scope)))
+        .limit(1);
+      if (!existing) throw new LearningSessionNotFoundError();
+      if (existing.status === 'archived') return toSessionSummary(existing);
+      const [archived] = await transaction
+        .update(lessonSessions)
+        .set({ status: 'archived', archivedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(lessonSessions.id, sessionId),
+            eq(lessonSessions.status, 'active'),
+          ),
+        )
+        .returning();
+      if (!archived) throw new LearningSessionNotFoundError();
+      return toSessionSummary(archived);
+    });
+  }
+
+  async listOwnedRecent(
+    scope: LearningSessionCourseScope,
+    options: {
+      before?: LearningSessionListCursor | null;
+      limit?: number;
+    } = {},
+  ): Promise<LearningSessionListPage> {
+    const limit = Math.max(1, Math.min(options.limit ?? 20, 50));
+    const beforeDate = options.before
+      ? new Date(options.before.lastActivityAt)
+      : null;
+    if (beforeDate && Number.isNaN(beforeDate.getTime())) {
+      throw new Error('会话列表 cursor 时间无效');
+    }
+    if (options.before && !isUuid(options.before.id)) {
+      throw new Error('会话列表 cursor ID 无效');
+    }
+    const cursorCondition =
+      options.before && beforeDate
+        ? or(
+            lt(lessonSessions.lastActivityAt, beforeDate),
+            and(
+              eq(lessonSessions.lastActivityAt, beforeDate),
+              lt(lessonSessions.id, options.before.id),
+            ),
+          )
+        : undefined;
+    const interruptedSessions = this.database
+      .select({ sessionId: chatMessages.sessionId })
+      .from(chatMessages)
+      .where(
+        and(
+          eq(chatMessages.role, 'assistant'),
+          eq(chatMessages.status, 'interrupted'),
+        ),
+      )
+      .groupBy(chatMessages.sessionId)
+      .as('interrupted_sessions');
+    const rows = await this.database
+      .select({
+        id: lessonSessions.id,
+        studentId: lessonSessions.studentId,
+        gradeBand: lessonSessions.gradeBand,
+        courseSlug: lessonSessions.courseSlug,
+        knowledgeNodeId: lessonSessions.knowledgeNodeId,
+        state: lessonSessions.state,
+        interruptedState: lessonSessions.interruptedState,
+        status: lessonSessions.status,
+        title: lessonSessions.title,
+        lastActivityAt: lessonSessions.lastActivityAt,
+        archivedAt: lessonSessions.archivedAt,
+        eventSequence: lessonSessions.eventSequence,
+        version: lessonSessions.version,
+        createdAt: lessonSessions.createdAt,
+        updatedAt: lessonSessions.updatedAt,
+        interruptedSessionId: interruptedSessions.sessionId,
+      })
+      .from(lessonSessions)
+      .leftJoin(
+        interruptedSessions,
+        eq(interruptedSessions.sessionId, lessonSessions.id),
+      )
+      .where(
+        and(
+          courseScopeCondition(scope),
+          gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
+          cursorCondition,
+        ),
+      )
+      .orderBy(desc(lessonSessions.lastActivityAt), desc(lessonSessions.id))
+      .limit(limit + 1);
+    const hasNext = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    return {
+      sessions: pageRows.map((row) =>
+        toSessionSummary(row, row.interruptedSessionId !== null),
+      ),
+      nextCursor:
+        hasNext && last
+          ? { lastActivityAt: last.lastActivityAt.toISOString(), id: last.id }
+          : null,
     };
   }
 }

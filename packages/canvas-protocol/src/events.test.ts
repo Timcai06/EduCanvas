@@ -30,7 +30,7 @@ describe('canvasInteractionEventSchema', () => {
       type: 'animation_step_completed',
       payload: {
         templateKey: 'pipeline_flow',
-        stepId: 'features',
+        stepId: 'feature_extraction',
         stepIndex: 1,
       },
     },
@@ -70,6 +70,19 @@ describe('canvasInteractionEventSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it.each([
+    { templateKey: 'freeform', stepId: 'input' },
+    { templateKey: 'pipeline_flow', stepId: 'selector:#root' },
+  ])('拒绝未注册动画模板或槽位 %#', (payload) => {
+    expect(
+      canvasInteractionEventSchema.safeParse({
+        ...eventBase,
+        type: 'animation_started',
+        payload,
+      }).success,
+    ).toBe(false);
   });
 
   it('拒绝同一分类项目提交多次', () => {

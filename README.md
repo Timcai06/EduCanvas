@@ -119,16 +119,16 @@ stateDiagram-v2
 
 `REMEDIATE`和`ADVANCE`是 `ASSESS` 的出口决策，不是持久化状态；状态转移权属于教学运行时，不属于模型。
 
-受控工具闭集和“状态 × 工具”白名单已经落地；工具参数Schema、权限执行器、超时/重试、幂等、限流和审计仍属于待实现的Agent运行时能力。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
+受控工具闭集、“状态 × 工具”白名单、参数Schema、权限执行器、超时、幂等、调用上限与审计已经落地；当前待接的是知识检索和状态推进的应用层组合，而不是再造一套Agent框架。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
 
 ## 技术拆解
 
 ### 前端（apps/web）
 
 - **技术栈**：Next.js + React + TypeScript，Headless组件 + 自有设计系统（[ADR-0001](docs/09-decisions/0001-core-stack.md)，`accepted`）；
-- **学习页三栏布局**：AI教师对话 | 教学Canvas | 学习进度，让"教师引导—动手理解—学习反馈"始终同时可见；
-- **已接通首条浏览器纵切**：匿名学习会话、受控Canvas提交、服务端判分、PostgreSQL掌握度持久化与进度回显；AI教师对话仍是占位区；
-- **GSAP是待接入的动画标准**：计划使用`@gsap/react` + `useGSAP()`、独立scope并在卸载时回收Timeline；当前尚未安装GSAP依赖或实现动画Artifact（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
+- **Chat-first学习页**：默认是深色的S0空对话入口；首条消息后进入S1对话态，当前Canvas可由「+」菜单或Studio产物入口按需进入S2协作态，未来真实Agent可以提供受控建议卡；Assets / Studio / Progress使用互斥抽屉承载；
+- **已接通首条浏览器纵切**：匿名学习会话、受控Canvas提交、服务端判分、PostgreSQL掌握度持久化与进度回显已经连通；正常学习页不再导入确定性老师话术，无真实Provider时会明确显示服务未接入，而不是伪造AI回答；
+- **GSAP已接入UI与受控教学动画**：空对话光场、Canvas面板和Sheet使用`useGSAP()`、独立scope及`prefers-reduced-motion`降级；首个 render-only `pipeline_flow` 已通过严格语义Schema、静态React Renderer和统一 `AnimationShell` 实现，模型不能提交选择器、时长、任意属性或GSAP代码（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
 
 ### 受控Canvas协议（packages/canvas-protocol）
 
@@ -148,11 +148,15 @@ flowchart LR
     runtime -- 可信事件 --> events[("learning_events")]
 ```
 
-- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；当前已实现 `classification_game` 与 `quiz`，`pipeline_flow` 是阶段一待实现的首个动画模板；
+- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；当前已实现可判分的 `classification_game`、`quiz`，以及只渲染、不生成判分键的 `pipeline_flow`；
 - 阶段一使用编译期静态注册表，确保每种Artifact都有经过审核的Schema和Renderer；阶段二再增加版本兼容与平台化管理能力；
 - 当前只实现协议版本 `1`；版本随Artifact持久化，后续新增版本时必须同时注册对应Validator和Renderer，才能回放旧会话。
 
-### AI层（规划中，状态`draft`）
+### AI层（真实纵切收口中）
+
+当前已落地供应商无关的流式模型契约、原生OpenAI-compatible SSE Adapter、两阶段 `answer → tools → synthesis` Orchestrator、浏览器到Web BFF的EduCanvas SSE、消息/模型/工具/安全账本、取消与刷新恢复，以及K12输入/流式输出安全Gate。`ScriptedModelGateway`和前端Demo Script仍只用于确定性测试，生产组合根有依赖边界测试防止误用。
+
+知识侧已完成审核资料的不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和防伪引用仓储；教学侧已完成可信状态推进、投影/回放与下一节点推荐。两者尚需接入Web应用纵切；Artifact提议/确认/独立生成链路仍未实现，因此当前不能宣称整节课Agent闭环完成。
 
 **模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace），业务代码不写死模型ID。
 
@@ -300,15 +304,15 @@ E2E_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e p
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端 ✅ : 浏览器提交与持久化进度 ✅ : 最小Agent Runtime ✅ : Playwright纵切E2E ✅ : 真实模型链路 : 教材RAG : GSAP动画
+    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 浏览器提交与持久化进度 ✅ : 最小Agent Runtime骨架 ✅ : Playwright纵切E2E ✅ : 真实模型链路 : 教材RAG : 教学GSAP动画
     阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : 多供应商路由治理 : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；学生端已定稿为Chat-first布局，并通过演示脚本串联对话、Canvas、资产与产物抽屉。浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。Agent侧已经形成“状态感知结构化计划 → 受控工具授权/执行 → 显式STAY”的最小无持久化纵切。当前基线为109个单元测试、8个真实PostgreSQL集成测试和4个Playwright E2E，CI按基础检查、集成测试、浏览器E2E三个job执行。
+当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；学生端已经转向Chat-first布局，Canvas、资产与产物抽屉可按需打开。正常学习页已经切断确定性老师话术依赖；在真实Provider接入前，学生消息只进入本地未持久化视图并显示明确的不可用状态。浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。Agent侧已经形成“状态感知结构化计划 → 受控工具授权/执行 → 显式STAY”的最小无持久化骨架。CI按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行；具体测试数量与通过状态以当前分支的CI结果为准。
 
-这仍是匿名演示纵切，不等同于正式用户认证。下一步是接入真实Model Gateway和首批只读知识工具，再完成工具结果合成、教材RAG、SSE对话和首个GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。
+这仍是匿名演示纵切，不等同于正式用户认证。下一步是接入真实Model Gateway和首批只读知识工具，再完成工具结果合成、教材RAG、聊天消息持久化、SSE对话和首个教学GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。当前已使用GSAP的空态、Canvas和Sheet动效属于UI状态动画，不等同于教学动画Artifact。
 
 ## 最简单的团队协作规则
 
