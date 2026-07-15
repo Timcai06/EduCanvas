@@ -8,6 +8,22 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_integration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
     steps:
       - uses: actions/checkout@v4
 

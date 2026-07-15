@@ -205,6 +205,12 @@ function toDomainEvent(
 export class DrizzleEventStore implements EventStore {
   constructor(private readonly executor: DatabaseExecutor) {}
 
+  async lockIdempotencyKey(idempotencyKey: string): Promise<void> {
+    await this.executor.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))`,
+    );
+  }
+
   async getByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<DomainLearningEvent | null> {

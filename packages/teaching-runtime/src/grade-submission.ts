@@ -42,7 +42,8 @@ export type GradeCanvasSubmissionRejection =
   | 'EVENT_NOT_GRADABLE'
   | 'ARTIFACT_NOT_FOUND'
   | 'SESSION_NOT_FOUND'
-  | 'NO_ACTIVE_KNOWLEDGE_NODE';
+  | 'NO_ACTIVE_KNOWLEDGE_NODE'
+  | 'IDEMPOTENCY_CONFLICT';
 
 /** 成功结果同时返回可信事件和最新掌握度投影；replayed表示发现已提交的同幂等键事件。 */
 export type GradeCanvasSubmissionOutcome =
@@ -112,15 +113,16 @@ export class GradeCanvasSubmissionService {
     if (!gradingKey) return { ok: false, code: 'ARTIFACT_NOT_FOUND' };
     const gradingDecision = gradeCanvasSubmission(gradingKey, event);
     if (!gradingDecision.ok) return gradingDecision;
+    const idempotencyKey = `canvas:${event.eventId}:assessment_graded`;
 
     return this.unitOfWork.run(async (transaction) => {
+      await transaction.events.lockIdempotencyKey(idempotencyKey);
       const session = await transaction.sessions.getById(command.sessionId);
       if (!session) return { ok: false, code: 'SESSION_NOT_FOUND' };
       if (!session.knowledgeNodeId) {
         return { ok: false, code: 'NO_ACTIVE_KNOWLEDGE_NODE' };
       }
 
-      const idempotencyKey = `canvas:${event.eventId}:assessment_graded`;
       const existingEvent =
         await transaction.events.getByIdempotencyKey(idempotencyKey);
       const existingMastery = await transaction.mastery.get(
@@ -128,6 +130,23 @@ export class GradeCanvasSubmissionService {
         session.knowledgeNodeId,
       );
       if (existingEvent && existingMastery) {
+        if (
+          existingEvent.eventType !== 'assessment_graded' ||
+          existingEvent.eventId !== event.eventId ||
+          existingEvent.sessionId !== session.id ||
+          existingEvent.studentId !== session.studentId ||
+          existingEvent.knowledgeNodeId !== session.knowledgeNodeId ||
+          existingEvent.occurredAt !== event.occurredAt ||
+          existingEvent.payload.artifactId !== event.artifactId ||
+          existingEvent.payload.assessmentType !==
+            gradingDecision.result.assessmentType ||
+          existingEvent.payload.attemptedItems !==
+            gradingDecision.result.attemptedItems ||
+          existingEvent.payload.correctItems !==
+            gradingDecision.result.correctItems
+        ) {
+          return { ok: false, code: 'IDEMPOTENCY_CONFLICT' };
+        }
         return {
           ok: true,
           replayed: true,
@@ -135,6 +154,9 @@ export class GradeCanvasSubmissionService {
           event: existingEvent,
           mastery: existingMastery,
         };
+      }
+      if (existingEvent) {
+        throw new Error('幂等事件已存在但掌握度投影缺失');
       }
 
       const priorEvents = await transaction.events.listBySession(session.id);
@@ -194,7 +216,7 @@ export class GradeCanvasSubmissionService {
         recordedAt.getTime() + reviewIntervalDays * 86_400_000,
       ).toISOString();
 
-      await transaction.events.append(trustedEvent);
+      const appendedEvent = await transaction.events.append(trustedEvent);
       const mastery = await transaction.mastery.save({
         expectedVersion: existingMastery?.version ?? 0,
         snapshot: {
@@ -214,7 +236,7 @@ export class GradeCanvasSubmissionService {
         ok: true,
         replayed: false,
         grading: gradingDecision.result,
-        event: trustedEvent,
+        event: appendedEvent,
         mastery,
       };
     });

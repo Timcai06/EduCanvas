@@ -58,6 +58,8 @@ export interface MasteryRepository {
 
 /** 可信事件存储Port；append必须在幂等键冲突时返回原事件或明确拒绝。 */
 export interface EventStore {
+  /** 在当前事务内串行化同一幂等键；业务写入必须先加锁再检查已有事实。 */
+  lockIdempotencyKey(idempotencyKey: string): Promise<void>;
   getByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<DomainLearningEvent | null>;
