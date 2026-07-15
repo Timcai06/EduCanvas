@@ -25,15 +25,16 @@
 ```bash
 pnpm db:up                              # 启动本地PostgreSQL + pgvector
 pnpm --filter @educanvas/db typecheck   # 检查Schema和客户端类型
+TEST_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_integration pnpm --filter @educanvas/db test:integration
 pnpm db:generate                        # 根据src/schema.ts生成新迁移
 pnpm db:migrate                         # 将待执行迁移应用到DATABASE_URL
 pnpm build                              # 由Web生产构建验证数据库包可被消费
 pnpm lint                               # 运行仓库现有lint任务
 ```
 
-本包当前没有独立`dev`、`lint`或`build`脚本；数据库开发以`pnpm db:up`启动依赖，`pnpm lint`目前不会单独扫描本包源码。不要手改数据库后再反向猜Schema，应先修改`src/schema.ts`，再生成和检查迁移。
+本包当前没有独立`dev`、`lint`或`build`脚本；数据库开发以`pnpm db:up`启动依赖，真实集成测试必须显式提供隔离的`TEST_DATABASE_URL`，并会清空该数据库中的阶段一业务表，禁止指向开发共享库或生产库。`pnpm lint`目前不会单独扫描本包源码。不要手改数据库后再反向猜Schema，应先修改`src/schema.ts`，再生成和检查迁移。
 
-> 验证状态：`0002`与`0003`已生成并纳入版本控制，但尚未在真实PostgreSQL上完成应用、事务集成与回滚验证。执行迁移前应备份目标数据库；历史迁移不承诺自动向下回滚，回退方案必须在发布前单独演练。
+> 验证状态：全部迁移已在真实PostgreSQL完成全新安装和含历史事件的升级验证；CI集成测试覆盖事务写入/回滚、乐观锁与并发幂等。执行迁移前仍应备份目标数据库；历史迁移不承诺自动向下回滚，回退与恢复方案必须在发布前单独演练。
 
 ## 改动前必读的 docs/ 文档
 

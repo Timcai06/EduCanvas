@@ -31,7 +31,7 @@
 7. 建立教材摄取、混合检索与`KnowledgeRetriever`适配器；
 8. 接入SSE流式对话；
 9. 实现Prompt/Trace持久化、事件回放和Agent评测；
-10. 在真实PostgreSQL上验证迁移与事务适配器，并完成整节课E2E。
+10. 继续完成迁移回退/恢复演练与整节课E2E；真实PostgreSQL迁移、事务适配器和并发幂等已验证。
 
 ## 阶段二：平台化
 

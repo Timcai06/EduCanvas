@@ -76,6 +76,7 @@ function createHarness() {
       },
     },
     events: {
+      async lockIdempotencyKey() {},
       async getByIdempotencyKey(key) {
         return events.find((event) => event.idempotencyKey === key) ?? null;
       },
@@ -146,6 +147,29 @@ describe('GradeCanvasSubmissionService', () => {
     const replay = await harness.service.execute(command);
 
     expect(replay).toMatchObject({ ok: true, replayed: true });
+    expect(harness.getState()).toMatchObject({
+      sequence: 1,
+      saveCount: 1,
+    });
+  });
+
+  it('相同事件ID对应不同判分结果时拒绝幂等冲突', async () => {
+    const harness = createHarness();
+    await harness.service.execute({
+      sessionId,
+      clientEvent,
+      prerequisiteScores: [],
+    });
+    const conflict = await harness.service.execute({
+      sessionId,
+      clientEvent: {
+        ...clientEvent,
+        payload: { questionId: 'q1', selectedOptionId: 'b' },
+      },
+      prerequisiteScores: [],
+    });
+
+    expect(conflict).toEqual({ ok: false, code: 'IDEMPOTENCY_CONFLICT' });
     expect(harness.getState()).toMatchObject({
       sequence: 1,
       saveCount: 1,
