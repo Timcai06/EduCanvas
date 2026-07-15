@@ -5,10 +5,22 @@ import type {
   CanvasSubmissionDraft,
 } from '@/features/learning/learning-contracts';
 import type {
+  PipelineFlowSlot,
   PublicArtifact,
   PublicArtifactType,
 } from '@educanvas/canvas-protocol';
-import { useState, type ComponentType } from 'react';
+import {
+  CheckCircle,
+  GitBranch,
+  Image,
+  Sparkle,
+  type Icon,
+} from '@phosphor-icons/react';
+import { useId, useState, type ComponentType } from 'react';
+import {
+  AnimationShell,
+  type AnimationClientObservation,
+} from './animation-shell';
 
 type ArtifactOf<Type extends PublicArtifactType> = Extract<
   PublicArtifact,
@@ -19,6 +31,9 @@ interface RendererInteractionProps {
   disabled: boolean;
   feedback: CanvasFeedbackDTO | null;
   onSubmit: (draft: CanvasSubmissionDraft) => void;
+  onAnimationObservation?: (
+    observation: AnimationClientObservation,
+  ) => void;
 }
 
 type ArtifactRendererRegistry = {
@@ -231,12 +246,120 @@ function ClassificationGameRenderer({
   );
 }
 
+const pipelineSlotPresentation: Record<
+  PipelineFlowSlot,
+  { eyebrow: string; Icon: Icon }
+> = {
+  input: { eyebrow: '01 · 数据进入', Icon: Image },
+  feature_extraction: { eyebrow: '02 · 信息提炼', Icon: Sparkle },
+  classification: { eyebrow: '03 · 模型判断', Icon: GitBranch },
+  output: { eyebrow: '04 · 结果呈现', Icon: CheckCircle },
+};
+
+export function PipelineFlowRenderer({
+  artifact,
+  onAnimationObservation,
+}: {
+  artifact: ArtifactOf<'pipeline_flow'>;
+} & RendererInteractionProps) {
+  const stepsBySlot = new Map(
+    artifact.params.steps.map((step) => [step.slot, step]),
+  );
+  const orderedSteps = artifact.params.highlightOrder.map((slot) =>
+    stepsBySlot.get(slot)!,
+  );
+  const objectiveId = useId();
+
+  return (
+    <AnimationShell
+      steps={orderedSteps.map((step) => ({
+        id: step.slot,
+        label: step.label,
+      }))}
+      pausePoints={artifact.params.pausePoints}
+      onObservation={onAnimationObservation}
+    >
+      {({ isComplete }) => (
+        <section
+          aria-labelledby={objectiveId}
+          className="overflow-hidden rounded-3xl border border-line/70 bg-[radial-gradient(circle_at_50%_0%,rgba(111,130,255,0.18),transparent_48%),linear-gradient(180deg,rgba(29,31,35,0.96),rgba(11,12,15,0.96))] p-4 shadow-2xl shadow-black/30 sm:p-6"
+          data-testid="pipeline-flow"
+        >
+          <div className="mb-5 max-w-2xl">
+            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-accent-strong uppercase">
+              受控流程演示
+            </p>
+            <h3
+              id={objectiveId}
+              className="font-display text-xl font-semibold text-ink sm:text-2xl"
+            >
+              {artifact.params.objective}
+            </h3>
+          </div>
+
+          <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {orderedSteps.map((step, index) => {
+              const { eyebrow, Icon } = pipelineSlotPresentation[step.slot];
+              return (
+                <li
+                  key={step.slot}
+                  data-animation-step={step.slot}
+                  className="relative min-h-48 rounded-2xl border border-line/70 bg-canvas/75 p-4 [will-change:transform,opacity] motion-reduce:will-change-auto"
+                >
+                  <div className="mb-7 flex items-start justify-between gap-3">
+                    <span className="text-xs font-medium tracking-wide text-ink-faint">
+                      {eyebrow}
+                    </span>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-strong">
+                      <Icon aria-hidden="true" size={21} weight="duotone" />
+                    </span>
+                  </div>
+                  <h4 className="font-display text-base font-semibold text-ink">
+                    {step.label}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-ink-muted">
+                    {step.narration}
+                  </p>
+                  {index < orderedSteps.length - 1 ? (
+                    <span
+                      data-animation-connector=""
+                      aria-hidden="true"
+                      className="absolute inset-x-4 bottom-3 h-0.5 rounded-full bg-accent [will-change:transform,opacity] motion-reduce:will-change-auto"
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+
+          {artifact.params.completionMessage ? (
+            <p
+              className={`mt-4 min-h-12 rounded-xl border px-4 py-3 text-sm ${
+                isComplete
+                  ? 'border-good/30 bg-good-soft/70 text-good'
+                  : 'border-line/70 bg-canvas/55 text-ink-muted'
+              }`}
+              aria-live="polite"
+              data-testid="pipeline-completion"
+            >
+              {isComplete
+                ? artifact.params.completionMessage
+                : '播放到最后一步后，再用自己的话解释这个流程。'}
+            </p>
+          ) : null}
+        </section>
+      )}
+    </AnimationShell>
+  );
+}
+
 /**
  * Canvas静态注册表：每新增一种协议类型，TypeScript都会要求同时注册人工审核的Renderer。
  * 注册值只能是本地React组件，模型输出无法提供组件、源码或GSAP指令。
  */
 export const canvasArtifactRegistry = {
   classification_game: ClassificationGameRenderer,
+  pipeline_flow: PipelineFlowRenderer,
   quiz: QuizRenderer,
 } satisfies ArtifactRendererRegistry;
 
@@ -246,6 +369,7 @@ export function CanvasArtifactRenderer({
   disabled,
   feedback,
   onSubmit,
+  onAnimationObservation,
 }: {
   artifact: PublicArtifact;
 } & RendererInteractionProps) {
@@ -269,6 +393,18 @@ export function CanvasArtifactRenderer({
           disabled={disabled}
           feedback={feedback}
           onSubmit={onSubmit}
+        />
+      );
+    }
+    case 'pipeline_flow': {
+      const Renderer = canvasArtifactRegistry.pipeline_flow;
+      return (
+        <Renderer
+          artifact={artifact}
+          disabled={disabled}
+          feedback={feedback}
+          onSubmit={onSubmit}
+          onAnimationObservation={onAnimationObservation}
         />
       );
     }

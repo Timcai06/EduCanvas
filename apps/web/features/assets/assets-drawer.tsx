@@ -5,11 +5,13 @@ export interface AssetItem {
   label: string;
   kind: '课程资料' | '我的上传' | '链接';
   enabled: boolean;
+  /** 只有真实检索与引用链路接通后，资料才允许加入本轮上下文。 */
+  selectable: boolean;
 }
 
 /**
- * 知识资产抽屉：展示、启用/停用本课资料。阶段一为演示数据，上传与解析链路
- * 尚未建设；入口保留但引导为「即将开放」，不伪装成已生效能力。
+ * 知识资产抽屉：当前只展示本课预置资料目录。检索与引用链路尚未建设时，
+ * 选择控件明确禁用，不能产生上下文标签或暗示资料已经用于回答。
  */
 export function AssetsDrawer({
   assets,
@@ -20,16 +22,24 @@ export function AssetsDrawer({
 }) {
   return (
     <div className="space-y-5">
-      <p className="text-sm text-ink-muted">
-        勾选的资料会成为老师讲解和出题的依据，回答里会标注来源。
+      <p id="assets-availability" className="text-sm text-ink-muted">
+        本课资料接入后，老师才能基于资料回答并标注来源；当前仅供预览。
       </p>
       <ul className="space-y-2">
         {assets.map((asset) => (
           <li key={asset.id}>
-            <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-line px-4 py-2.5 transition-colors hover:bg-surface has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent">
+            <label
+              className={`flex min-h-12 items-center gap-3 rounded-2xl border border-line px-4 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+                asset.selectable
+                  ? 'cursor-pointer hover:bg-surface'
+                  : 'cursor-not-allowed opacity-70'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={asset.enabled}
+                disabled={!asset.selectable}
+                aria-describedby="assets-availability"
                 onChange={() => onToggle(asset.id)}
                 className="size-4 accent-accent"
               />
@@ -38,7 +48,7 @@ export function AssetsDrawer({
                   {asset.label}
                 </span>
                 <span className="block text-xs text-ink-faint">
-                  {asset.kind}
+                  {asset.kind} · {asset.selectable ? '可选择' : '尚未接入'}
                 </span>
               </span>
             </label>
@@ -46,7 +56,7 @@ export function AssetsDrawer({
         ))}
       </ul>
       <div className="rounded-2xl bg-surface p-4 text-sm text-ink-muted">
-        上传文件、图片和添加链接即将开放；到时候它们也会出现在这里。
+        上传文件、图片和添加链接尚未开放；开放后会先完成解析与来源校验。
       </div>
     </div>
   );

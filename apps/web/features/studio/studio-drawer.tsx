@@ -1,15 +1,17 @@
 'use client';
 
+import { ArrowRight, PresentationChart } from '@phosphor-icons/react';
+
 export interface StudioOutput {
   id: string;
   title: string;
   kind: string;
-  status: '已生成' | '已完成';
+  status: '本课预置' | '已完成';
 }
 
 /**
- * 本课产物抽屉：聚合本节课生成过的教学产物。阶段一只有当前分类游戏一件产物；
- * 打开产物即进入 Chat+Canvas 协作态，由 LearnWorkspace 装载对应 Artifact。
+ * 本课产物抽屉：阶段一只有课程预置分类互动，不把它描述成 AI 已生成产物。
+ * 打开后进入 Chat+Canvas 协作态，由 LearnWorkspace 装载受控 Artifact。
  */
 export function StudioDrawer({
   outputs,
@@ -21,7 +23,7 @@ export function StudioDrawer({
   return (
     <div className="space-y-5">
       <p className="text-sm text-ink-muted">
-        老师为你生成过的演示、测验都收在这里，随时可以重新打开。
+        这里收纳本课可用的互动与学习成果；当前互动由课程预置。
       </p>
       <ul className="space-y-2">
         {outputs.map((output) => (
@@ -35,7 +37,11 @@ export function StudioDrawer({
                 aria-hidden="true"
                 className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft font-semibold text-accent"
               >
-                ◫
+                <PresentationChart
+                  aria-hidden="true"
+                  size={21}
+                  weight="regular"
+                />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-ink">
@@ -53,14 +59,17 @@ export function StudioDrawer({
                 </span>
               </span>
               <span className="shrink-0 text-sm font-semibold text-accent">
-                打开 ›
+                <span className="inline-flex items-center gap-1">
+                  打开
+                  <ArrowRight aria-hidden="true" size={14} weight="bold" />
+                </span>
               </span>
             </button>
           </li>
         ))}
       </ul>
       <div className="rounded-2xl bg-surface p-4 text-sm text-ink-muted">
-        Slide、讲解动画等更多产物类型即将开放。
+        AI 生成 Slide、讲解动画等能力尚未开放。
       </div>
     </div>
   );

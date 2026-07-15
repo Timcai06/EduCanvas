@@ -18,3 +18,10 @@ export {
   type CanvasInteractionEvent,
   type CanvasInteractionEventType,
 } from './events';
+export {
+  pipelineFlowParamsSchema,
+  pipelineFlowSlotSchema,
+  pipelineFlowSlots,
+  type PipelineFlowParams,
+  type PipelineFlowSlot,
+} from './artifacts/pipeline-flow';

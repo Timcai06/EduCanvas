@@ -1,30 +1,9 @@
+import type { TeacherMessage } from './messages';
+
 /**
- * 阶段一演示脚本：在 Agent 运行时（TeachingTurnOrchestrator）接入浏览器入口之前，
- * 用确定性规则生成老师回复，让 UI 的消息流、建议卡、产物卡全链路可运行可验收。
- * 消息结构与 docs/03-ai/agent-orchestration.md 的轮次产出对齐：老师只能「说话」、
- * 「建议打开受控产物」或「附来源标签」，不存在任何直接改状态/掌握度的消息类型。
- * 接入真实编排器时只替换本文件的产出来源，UI 组件不感知差异。
+ * 仅供测试和显式演示使用的确定性话术，不得由正常学习页导入。
+ * 真实用户轮次必须经过服务端 ModelGateway 与 TeachingTurnOrchestrator。
  */
-
-export interface TeacherMessage {
-  id: string;
-  role: 'teacher';
-  text: string;
-  /** 来源标签文案；真实链路中来自知识检索证据（KnowledgeEvidence）。 */
-  cite?: string;
-  /** 渲染「打开互动演示 / 继续文字讲解」建议卡。 */
-  suggestsCanvas?: boolean;
-  /** 渲染本课产物卡片（当前指向唯一的分类游戏 Artifact）。 */
-  outputCard?: boolean;
-}
-
-export interface StudentMessage {
-  id: string;
-  role: 'student';
-  text: string;
-}
-
-export type ChatMessage = TeacherMessage | StudentMessage;
 
 let seed = 0;
 /** 演示消息 id 只需页面内唯一；不进入任何持久化或事件链路。 */
@@ -138,7 +117,10 @@ export function continueTextMessage(): TeacherMessage {
 }
 
 /** 服务端判分返回后的老师反馈；数字来自可信反馈 DTO，不由脚本自行判断对错。 */
-export function gradedMessage(correct: number, attempted: number): TeacherMessage {
+export function gradedMessage(
+  correct: number,
+  attempted: number,
+): TeacherMessage {
   const allCorrect = correct === attempted && attempted > 0;
   return {
     id: nextMessageId(),

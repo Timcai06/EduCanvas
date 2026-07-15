@@ -4,6 +4,7 @@ import 'server-only';
 export const demoLesson = {
   gradeBand: 'primary_school',
   courseSlug: 'cat-dog-ai',
+  courseTitle: '图像是怎么被认出来的',
   knowledgeNodeId: 'cat-dog-classification',
   artifact: {
     schemaVersion: '1',

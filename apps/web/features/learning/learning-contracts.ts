@@ -2,6 +2,7 @@ import type {
   CanvasInteractionEvent,
   PublicArtifact,
 } from '@educanvas/canvas-protocol';
+import type { InitialChatMessageDTO } from '@/features/chat/messages';
 
 /** 浏览器可见的学习进度投影；不包含匿名身份、会话ID或数据库版本。 */
 export interface ProgressDTO {
@@ -17,6 +18,19 @@ export interface ProgressDTO {
 export interface LearningPageDTO {
   artifact: PublicArtifact;
   progress: ProgressDTO | null;
+  initialMessages: readonly InitialChatMessageDTO[];
+  initialSessions: readonly LearningSessionSummaryDTO[];
+  currentSessionId: string | null;
+}
+
+/** Sidebar projection; ownership and pagination internals stay server-only. */
+export interface LearningSessionSummaryDTO {
+  id: string;
+  title: string;
+  courseTitle: string;
+  status: 'active' | 'archived';
+  lastActivityAt: string;
+  hasInterruptedTurn: boolean;
 }
 
 /** Renderer 只描述学生选择；事件身份与时间由客户端工作区统一补齐。 */

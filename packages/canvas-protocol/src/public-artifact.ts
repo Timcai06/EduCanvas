@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ARTIFACT_SCHEMA_VERSION } from './artifact';
+import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
 
 const publicArtifactBaseSchema = z.object({
   schemaVersion: z.literal(ARTIFACT_SCHEMA_VERSION),
@@ -67,6 +68,12 @@ export const publicArtifactSchema = z.discriminatedUnion('type', [
           questions: z.array(publicQuizQuestionSchema).min(1).max(10),
         })
         .strict(),
+    })
+    .strict(),
+  publicArtifactBaseSchema
+    .extend({
+      type: z.literal('pipeline_flow'),
+      params: pipelineFlowParamsSchema,
     })
     .strict(),
 ]);

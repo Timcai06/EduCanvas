@@ -1,6 +1,7 @@
 'use client';
 
-import type { ChatMessage } from './demo-teacher-script';
+import { ArrowRight, PresentationChart, Sparkle } from '@phosphor-icons/react';
+import type { ChatMessage } from './messages';
 
 /**
  * 消息流是纯展示组件：所有可变状态（消息、Canvas开合、判分）由 LearnWorkspace 持有。
@@ -9,39 +10,78 @@ import type { ChatMessage } from './demo-teacher-script';
  */
 export function ChatPanel({
   messages,
-  isTyping,
   canvasOpen,
   artifactTitle,
   onOpenCanvas,
   onContinueText,
+  onRetry,
 }: {
   messages: readonly ChatMessage[];
-  isTyping: boolean;
   canvasOpen: boolean;
   artifactTitle: string;
   onOpenCanvas: () => void;
   onContinueText: () => void;
+  onRetry: (assistantMessageId: string) => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 pt-6 pb-4">
-      {messages.map((message) =>
-        message.role === 'student' ? (
+      {messages.map((message) => {
+        if (message.role === 'student') {
+          return (
           <div
             key={message.id}
             className="max-w-[80%] self-end rounded-[1.25rem] rounded-br-md bg-surface px-4 py-2.5 text-ink"
           >
             {message.text}
           </div>
-        ) : (
+          );
+        }
+
+        const isPersistedSafetyResponse =
+          message.text.length > 0 &&
+          message.failureCode?.startsWith('k12_') === true;
+        return (
           <div key={message.id} className="flex gap-3">
             <span
               aria-hidden="true"
-              className="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-strong text-xs font-semibold text-white"
+              className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white"
             >
-              ✦
+              <Sparkle size={15} weight="fill" />
             </span>
             <div className="min-w-0 flex-1 space-y-2">
-              <p className="leading-7 text-ink">{message.text}</p>
+              {message.status === 'pending' ? (
+                <p className="leading-7 text-ink-muted">正在连接 AI 老师…</p>
+              ) : null}
+              {message.text ? (
+                <p className="whitespace-pre-wrap leading-7 text-ink">
+                  {message.text}
+                </p>
+              ) : null}
+              {!isPersistedSafetyResponse &&
+              (message.status === 'failed' ||
+                message.status === 'interrupted' ||
+                message.status === 'cancelled') ? (
+                <div className="space-y-2">
+                  <p className="text-sm leading-6 text-ink-muted">
+                    {message.status === 'cancelled'
+                      ? '你已停止这次回答。'
+                      : message.failureMessage ??
+                        (message.status === 'interrupted'
+                          ? '回答意外中断了，你可以重新发送这条问题。'
+                          : 'AI 老师暂时无法连接，请稍后重试。')}
+                  </p>
+                  {(message.retryable || message.status === 'cancelled') &&
+                  message.retryText ? (
+                    <button
+                      type="button"
+                      onClick={() => onRetry(message.id)}
+                      className="min-h-10 rounded-full border border-line bg-canvas px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                    >
+                      重新发送
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               {message.cite ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-xs font-medium text-ink-muted">
                   <span
@@ -79,48 +119,28 @@ export function ChatPanel({
                     aria-hidden="true"
                     className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft font-semibold text-accent"
                   >
-                    ◫
+                    <PresentationChart size={21} weight="regular" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-ink">
                       {artifactTitle}
                     </span>
                     <span className="block text-xs text-ink-muted">
-                      互动分类 · 已生成
+                      互动分类 · 本课预置
                     </span>
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-accent">
-                    打开 ›
+                    <span className="inline-flex items-center gap-1">
+                      打开
+                      <ArrowRight aria-hidden="true" size={14} weight="bold" />
+                    </span>
                   </span>
                 </button>
               ) : null}
             </div>
           </div>
-        ),
-      )}
-      {isTyping ? (
-        <div
-          className="flex items-center gap-3"
-          role="status"
-          aria-label="老师正在输入"
-        >
-          <span
-            aria-hidden="true"
-            className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-strong text-xs text-white"
-          >
-            ✦
-          </span>
-          <span className="flex gap-1" aria-hidden="true">
-            {[0, 1, 2].map((dot) => (
-              <span
-                key={dot}
-                className="size-2 rounded-full bg-ink-faint [animation:typing-dot_1.2s_ease-in-out_infinite] motion-reduce:animate-none"
-                style={{ animationDelay: `${dot * 0.18}s` }}
-              />
-            ))}
-          </span>
-        </div>
-      ) : null}
+        );
+      })}
     </div>
   );
 }

@@ -15,6 +15,8 @@ import {
   bootstrapAnonymousLesson,
   hasActiveAnonymousLesson,
   progressFromSubmission,
+  resumeOwnedAnonymousLesson,
+  startNewAnonymousLesson,
   submitOwnedCanvas,
 } from '@/server/learning-session';
 
@@ -27,6 +29,22 @@ export async function startAnonymousLessonAction(): Promise<void> {
       : createAnonymousIdentity();
   await bootstrapAnonymousLesson(identity);
   await writeAnonymousIdentityCookie(identity.token);
+  redirect('/learn');
+}
+
+export async function startNewAnonymousLessonAction(): Promise<void> {
+  const identity = await readAnonymousIdentity();
+  if (!identity) redirect('/learn');
+  await startNewAnonymousLesson(identity);
+  redirect('/learn');
+}
+
+export async function resumeAnonymousLessonAction(
+  sessionId: string,
+): Promise<void> {
+  const identity = await readAnonymousIdentity();
+  if (!identity) redirect('/learn');
+  await resumeOwnedAnonymousLesson(identity, sessionId);
   redirect('/learn');
 }
 

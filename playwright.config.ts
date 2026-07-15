@@ -50,6 +50,7 @@ export default defineConfig({
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,
+      EDUCANVAS_ENABLE_DESIGN_QA: 'true',
     },
     reuseExistingServer: false,
     timeout: 120_000,
