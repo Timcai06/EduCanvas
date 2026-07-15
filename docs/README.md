@@ -16,7 +16,8 @@
 | `07-operations`    | 部署、扩容、监控和故障处理                          | 后端、运维       |
 | `08-collaboration` | 开发和文档协作机制                                  | 所有人           |
 | `09-decisions`     | 已确认的架构决策ADR                                 | 所有人           |
-| `10-planning`      | 里程碑、阶段目标和交付检查                          | 项目负责人       |
+| `10-planning`      | 跨阶段路线图、里程碑和长期交付边界                  | 项目负责人       |
+| `plan`             | 当前阶段的短期执行计划、验收证据和收尾记录          | 计划负责人、研发 |
 | `templates`        | 新文档模板                                          | 所有人           |
 
 ## 已接受的架构方向
@@ -37,10 +38,10 @@
 
 ## 当前实现边界
 
-- 已实现：模块化monorepo骨架、两种Canvas Artifact、静态Renderer注册表、匿名Canvas Server Action、确定性判分、教学状态机与掌握度纯逻辑、可信测评事件、阶段一Drizzle事务适配器、Chat-first学生端布局（对话/Canvas协作/资产与产物抽屉，由演示脚本驱动），以及最小Turn Orchestrator与状态感知Tool Executor；
-- 测试替身：Scripted Model Gateway仅验证模型请求、结构化输出与Trace契约，不代表真实供应商链路；
-- 仅有契约：真实模型网关与知识检索Port；
-- 尚未实现：真实模型与RAG适配器、Agent浏览器/SSE入口、工具结果合成、可信状态转移服务、正式用户认证、误区生命周期投影、完整事件回放和GSAP动画；
+- 已实现：模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、真实EduCanvas SSE对话UI、消息/模型/工具/安全账本、取消与刷新恢复、状态感知Tool Executor，以及原生OpenAI-compatible SSE Provider Adapter；
+- 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
+- 数据基础已实现但尚未接入应用纵切：审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和只接受本轮candidate的防伪引用；
+- 尚未实现：K1检索/引用和T1状态推进的Web应用层接线、受控Artifact提议/确认/生成与真实Studio列表、正式用户认证、真实Provider live smoke及完整整节课E2E；
 - `draft`文档中的服务和生产基础设施是演进目标，不能作为当前部署事实。
 
 ## 文档状态
@@ -59,3 +60,15 @@
 3. 改变重大技术选择，先新增ADR；
 4. 文档只写当前事实，历史争论放入ADR；
 5. 未确定内容明确写入“开放问题”，不能伪装成结论。
+
+## 路线图与执行计划
+
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区。两者不能互相替代：
+
+- 路线图说明阶段目标、依赖和长期交付边界；
+- `plan/active/`只存正在执行且有明确验收条件的阶段计划；
+- 完成计划前，必须把实现后的稳定事实回写到对应产品、架构、数据、工程文档或ADR；
+- 完成证据写入计划的收尾记录后，再将精简后的计划移入`plan/completed/`；
+- 计划中的临时任务拆分、排查过程和候选方案不是长期事实源，过期内容应在归档时删除或压缩。
+
+计划目录的命名、状态和归档流程见[`plan/README.md`](plan/README.md)。
