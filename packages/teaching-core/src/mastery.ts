@@ -131,6 +131,7 @@ export function calculateMastery(
     -parsedConfig.recencyDecayRate * input.daysSincePracticed,
   );
   const recencyAdjustedPrevious = input.previousScore * recencyDecay;
+  // Beta(1,1)先验避免冷启动时被一次结果推到0或1；+1/+2对应一次虚拟成功与失败。
   const successRate = (input.correctCount + 1) / (input.attemptCount + 2);
   const hintFactor = Math.max(
     parsedConfig.hintFactorFloor,
@@ -149,6 +150,7 @@ export function calculateMastery(
           1,
           parsedConfig.prerequisiteBaseCap +
             parsedConfig.prerequisiteWeight *
+              // 最弱先修决定上限，避免其他高分先修掩盖关键知识缺口。
               Math.min(...input.prerequisiteScores),
         );
   const evidence = successRate * hintFactor * misconceptionFactor;
@@ -274,6 +276,7 @@ export function getReviewIntervalDays(
     throw new RangeError('activeMisconceptionCount必须是非负整数');
   }
 
+  // v1分桶是可校准教学策略，不是由掌握度公式推导出的固定常数。
   const baseInterval =
     score < 0.45
       ? 1

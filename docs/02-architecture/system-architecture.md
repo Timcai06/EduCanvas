@@ -25,7 +25,7 @@ flowchart LR
     db --> teaching
 ```
 
-当前代码已经拆出Canvas协议、教学核心、应用运行时与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`编排服务端判分、可信事件和掌握度事务；Next.js组合根只注入具体实现。认证和session归属校验落地前，不开放浏览器可直接调用的判分Route Handler。
+当前代码已经拆出Canvas协议、教学核心、应用运行时与数据库适配器。`teaching-core`保持纯逻辑并只声明Port；`teaching-runtime`目前只实现`GradeCanvasSubmissionService`，用于编排服务端判分、可信测评事件和掌握度事务，不代表完整Agent教学运行时已经完成；Next.js组合根只注入具体实现。认证和session归属校验落地前，不开放浏览器可直接调用的判分Route Handler。
 
 ## 目标服务形态
 

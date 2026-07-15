@@ -61,6 +61,10 @@ export interface EventStore {
   getByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<DomainLearningEvent | null>;
+  /**
+   * 在当前Unit of Work内原子分配会话级单调序号；事务回滚也必须撤销分配。
+   * 事件序号独立于会话状态version，禁止使用“查询最大值+1”。
+   */
   allocateSequence(sessionId: string): Promise<number>;
   append(event: DomainLearningEvent): Promise<DomainLearningEvent>;
   listBySession(sessionId: string): Promise<readonly DomainLearningEvent[]>;

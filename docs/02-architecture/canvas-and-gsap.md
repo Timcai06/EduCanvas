@@ -7,7 +7,15 @@
 
 Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选择审核过的React组件渲染。模型不能在主页面执行任意HTML或JavaScript。
 
+## 当前实现状态
+
+- **已实现**：`classification_game`、`quiz`的严格Schema，公开投影/私有判分键拆分，编译期静态Renderer注册表和确定性服务端判分；
+- **阶段一待实现**：`pipeline_flow`动画模板、共享`AnimationShell`、GSAP时间线与播放控制、学习事件上报、认证后的浏览器提交链路；
+- **候选能力**：其余Artifact与动画模板按课程需求逐个增加，不因出现在规划清单中就视为已实现。
+
 ## 初始Artifact类型
+
+以下是目标类型清单；当前落地范围以“当前实现状态”为准。
 
 - `story_book`
 - `concept_card`

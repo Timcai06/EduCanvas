@@ -5,8 +5,8 @@ import {
 } from '@educanvas/canvas-protocol/server';
 import { CanvasArtifactRenderer } from './canvas-registry';
 
-// 样例固定写在客户端代码中，是为了在模型接入前持续验证“协议校验→受控渲染”边界，
-// 后续接入真实输出时也不能绕过 validateArtifact（docs/09-decisions/0002-controlled-canvas.md）。
+// 服务端样例用于持续验证“完整Artifact校验→公开投影→受控渲染”边界。
+// 接入模型、持久化与真实课程后仍必须经过同一服务端协议边界。
 const sampleArtifact = {
   schemaVersion: '1',
   artifactId: 'demo-cat-dog',
@@ -27,7 +27,8 @@ const sampleArtifact = {
 
 /**
  * Canvas 教学区只接收协议校验通过的 Artifact，模型不能直接生成可执行 HTML、JS 或 GSAP 代码。
- * 当前样例是注册表和 GSAP 组件接入前的边界探针，完整约束见 docs/02-architecture/canvas-and-gsap.md。
+ * 当前已接入静态Renderer注册表；GSAP模板、持久化和浏览器提交链路仍待实现。
+ * 完整约束见 docs/02-architecture/canvas-and-gsap.md。
  */
 export function CanvasStage() {
   const validation = artifactSchema.safeParse(sampleArtifact);

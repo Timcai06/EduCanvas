@@ -87,23 +87,25 @@ score < 0.45 → 1 天    0.45–0.65 → 3 天    0.65–0.80 → 7 天
 
 ## 误区标签体系（v1 封闭核心集）
 
-| 组 | 标签 | 含义 |
-|---|---|---|
-| AI 系统本质 | `ANTHROPOMORPHISM` | 拟人化（AI"想""喜欢""知道"） |
-| | `PROGRAMMED_BEHAVIOR_ONLY` | 认为 AI 行为全部由人逐条编程 |
-| | `AI_IS_EXACT_OR_CERTAIN` | 认为 AI 输出精确无误、非概率 |
-| ML 流程误解 | `TRAINS_DURING_USE` | 认为模型在使用时持续训练 |
-| | `USER_TRAINS_MODEL_NOW` | 认为自己此刻的使用在训练模型 |
-| | `STORES_RAW_EXAMPLES` | 认为模型存储并检索原始样本 |
-| | `AUTONOMOUS_DATA_ACQUISITION` | 认为模型自己出去找数据 |
-| | `CONFUSES_MODEL_WITH_DATA` | 混淆模型与训练数据 |
-| 学习与评价误解 | `FEATURE_IS_SINGLE_OBVIOUS_TRAIT` | 认为分类只看一个显眼特征 |
-| | `MEMORIZATION_EQUALS_GENERALIZATION` | 把记住样本当成学会泛化 |
-| | `MORE_DATA_ALWAYS_FIXES_ERRORS` | 认为加数据必然消除错误 |
-| | `CORRELATION_EQUALS_REASON` | 把相关当因果/理由 |
-| | `ONE_METRIC_IS_ENOUGH` | 认为一个指标足以评价模型 |
+| 组             | 标签                                 | 含义                         |
+| -------------- | ------------------------------------ | ---------------------------- |
+| AI 系统本质    | `ANTHROPOMORPHISM`                   | 拟人化（AI"想""喜欢""知道"） |
+|                | `PROGRAMMED_BEHAVIOR_ONLY`           | 认为 AI 行为全部由人逐条编程 |
+|                | `AI_IS_EXACT_OR_CERTAIN`             | 认为 AI 输出精确无误、非概率 |
+| ML 流程误解    | `TRAINS_DURING_USE`                  | 认为模型在使用时持续训练     |
+|                | `USER_TRAINS_MODEL_NOW`              | 认为自己此刻的使用在训练模型 |
+|                | `STORES_RAW_EXAMPLES`                | 认为模型存储并检索原始样本   |
+|                | `AUTONOMOUS_DATA_ACQUISITION`        | 认为模型自己出去找数据       |
+|                | `CONFUSES_MODEL_WITH_DATA`           | 混淆模型与训练数据           |
+| 学习与评价误解 | `FEATURE_IS_SINGLE_OBVIOUS_TRAIT`    | 认为分类只看一个显眼特征     |
+|                | `MEMORIZATION_EQUALS_GENERALIZATION` | 把记住样本当成学会泛化       |
+|                | `MORE_DATA_ALWAYS_FIXES_ERRORS`      | 认为加数据必然消除错误       |
+|                | `CORRELATION_EQUALS_REASON`          | 把相关当因果/理由            |
+|                | `ONE_METRIC_IS_ENOUGH`               | 认为一个指标足以评价模型     |
 
 标签生命周期：`misconception_tags` 存对象 `{ tag, status: active | resolved, first_seen_at, last_seen_at }`。REMEDIATE 完成且针对性测评通过 → `resolved`；同一标签再次出现 → 重新 `active` 并更新 `last_seen_at`。只有 `active` 标签进入公式与 guard。
+
+> 当前实现说明：阶段一Port与Drizzle适配器暂时只保存活跃标签的字符串数组，这是上述生命周期投影的简化子集。`resolved`历史、时间字段、生命周期投影器、迁移与回放测试尚未实现；这里定义的完整对象契约仍是验收目标。
 
 ## 误区标注工具契约（`updateMisconception` 的上游）
 
@@ -129,13 +131,13 @@ LLM 标注器的输出必须满足，否则整体拒绝：
 
 REMEDIATE 时由状态机按误区类型选择补救形式（对应 Canvas Artifact）：
 
-| 误区类型 | 策略 | Canvas 形式 |
-|---|---|---|
-| ML 流程误解 | 针对性重讲流程结构 | `pipeline_flow` 动画对比"训练时/使用时" |
-| 精确性/确定性误解 | 反例 + 认知冲突（需即时脚手架） | 两张相近图片产生不同置信度的演示 |
-| 仅编程行为误解 | 认知桥接：规则程序 vs 学习模型并排对比 | `comparison_morph` / 分类游戏两种模式 |
-| 拟人化 | 驳斥式对比人类能力与机器能力 | `concept_card` 驳斥文本 |
-| 泛化/特征误解 | 工作样例对比（训练样本/表面特征陷阱/真迁移） | `classification_game` 定制题组 |
+| 误区类型          | 策略                                         | Canvas 形式                             |
+| ----------------- | -------------------------------------------- | --------------------------------------- |
+| ML 流程误解       | 针对性重讲流程结构                           | `pipeline_flow` 动画对比"训练时/使用时" |
+| 精确性/确定性误解 | 反例 + 认知冲突（需即时脚手架）              | 两张相近图片产生不同置信度的演示        |
+| 仅编程行为误解    | 认知桥接：规则程序 vs 学习模型并排对比       | `comparison_morph` / 分类游戏两种模式   |
+| 拟人化            | 驳斥式对比人类能力与机器能力                 | `concept_card` 驳斥文本                 |
+| 泛化/特征误解     | 工作样例对比（训练样本/表面特征陷阱/真迁移） | `classification_game` 定制题组          |
 
 ## 开放问题
 

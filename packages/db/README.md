@@ -13,6 +13,7 @@
 - `src/artifact-repository.ts`：公开Artifact与私有判分键的原子保存和分级读取。
 - `drizzle.config.ts`：Drizzle Kit读取Schema、连接本地数据库和输出迁移的位置。
 - `drizzle/0000_careless_lady_bullseye.sql`：基线迁移；禁止手工改写已经共享的历史迁移。
+- `drizzle/0001_light_the_initiative.sql`：Canvas公开题面与私有判分键分表迁移。
 - `drizzle/0002_common_cerebro.sql`与`0003_wealthy_wildside.sql`：可信事件信封、答案分表、乐观锁和原子事件序号迁移。
 - `drizzle/meta/`：Drizzle Kit的迁移快照与日志，生成迁移时同步更新。
 - `tsconfig.json`：数据库包和Drizzle配置的TypeScript检查范围。
@@ -31,6 +32,8 @@ pnpm lint                               # 运行仓库现有lint任务
 ```
 
 本包当前没有独立`dev`、`lint`或`build`脚本；数据库开发以`pnpm db:up`启动依赖，`pnpm lint`目前不会单独扫描本包源码。不要手改数据库后再反向猜Schema，应先修改`src/schema.ts`，再生成和检查迁移。
+
+> 验证状态：`0002`与`0003`已生成并纳入版本控制，但尚未在真实PostgreSQL上完成应用、事务集成与回滚验证。执行迁移前应备份目标数据库；历史迁移不承诺自动向下回滚，回退方案必须在发布前单独演练。
 
 ## 改动前必读的 docs/ 文档
 

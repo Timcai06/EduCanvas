@@ -115,8 +115,8 @@ function ClassificationGameRenderer({
         ))}
       </div>
       <p className="text-xs text-slate-500">
-        已完成 {Object.keys(assignments).length}/{artifact.params.items.length}{' '}
-        项；分类结果提交后由服务端确定性判分。
+        已选择 {Object.keys(assignments).length}/{artifact.params.items.length}{' '}
+        项；当前仅保存在本页，认证后的服务端提交入口仍待接入。
       </p>
     </div>
   );

@@ -30,6 +30,10 @@ export class DrizzleArtifactRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  /**
+   * 原子保存公开投影与私有判分键。相同(sessionId, artifactId)再次保存会触发唯一约束，
+   * 调用方若需要重试幂等语义，必须先定义读取或冲突处理策略。
+   */
   async save(
     sessionId: string,
     completeArtifact: unknown,

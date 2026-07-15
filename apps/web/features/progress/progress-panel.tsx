@@ -7,7 +7,7 @@ export function ProgressPanel() {
     <div className="flex h-full flex-col">
       <h2 className="mb-4 text-lg font-semibold">学习进度</h2>
       <div className="flex-1 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-400">
-        知识地图与掌握度占位——T5 任务在这里接入 learning_events 和 mastery_states。
+        学习进度正在建设中，后续将在这里接入知识地图与掌握度。
       </div>
     </div>
   );

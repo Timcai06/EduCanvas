@@ -70,8 +70,8 @@ export const canvasArtifacts = pgTable(
 );
 
 /**
- * 与公开Canvas快照物理分离的私有判分键。Web页面和客户端注册表不得查询此表；
- * 只有服务端判分器可以按artifact记录主键读取并产生可信assessment_graded事件。
+ * 与公开Canvas快照物理分离的私有判分键。应用层必须保证Web页面和客户端注册表不查询此表；
+ * 服务端判分器按artifact记录主键读取后才能产生可信assessment_graded事件。
  */
 export const canvasArtifactGradingKeys = pgTable(
   'canvas_artifact_grading_keys',
@@ -125,7 +125,7 @@ export const learningEvents = pgTable(
 /**
  * 每个“学生 × 知识节点”只有一行可计算掌握状态，复合主键防止同一口径出现多份当前值。
  * 分数用 real 支持连续更新，次数字段保留可解释证据，JSONB 标签允许误区分类逐步扩展；
- * `version` 为并发更新的乐观锁预留，模型不得直接决定这些值，见 docs/04-data/data-design.md。
+ * `version` 已由Drizzle适配器用于并发更新的乐观锁，模型不得直接决定这些值，见 docs/04-data/data-design.md。
  */
 export const masteryStates = pgTable(
   'mastery_states',
