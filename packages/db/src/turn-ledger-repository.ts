@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { AgentMessagePart } from '@educanvas/agent-core';
 import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
@@ -7,8 +8,6 @@ import {
   DEFAULT_ASSISTANT_LEASE_MS,
   LearningSessionOwnershipError,
   TurnInProgressError,
-  hashStudentMessageContent,
-  normalizeStudentMessageContent,
   teachingTurnSessionLockKey,
   validateAssistantLeaseDuration,
   type ChatMessageSnapshot,
@@ -16,6 +15,12 @@ import {
 } from './chat-repository';
 import type { ModelRunSnapshot } from './model-run-repository';
 import { chatMessages, lessonSessions, modelRuns } from './schema';
+import {
+  assertOwnedReadyAssetParts,
+  insertMessageParts,
+  loadMessageParts,
+  prepareStudentMessage,
+} from './message-parts';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -26,7 +31,8 @@ export interface BeginTeachingTurnInput {
   sessionId: string;
   trustedStudentId: string;
   clientMessageId: string;
-  text: string;
+  text?: string;
+  parts?: readonly AgentMessagePart[];
   traceId: string;
   modelAlias: string;
   promptVersion: string;
@@ -72,6 +78,7 @@ export const DEFAULT_TURN_RATE_LIMIT = Object.freeze({
 
 function toMessageSnapshot(
   row: typeof chatMessages.$inferSelect,
+  parts?: readonly AgentMessagePart[],
 ): ChatMessageSnapshot {
   return {
     id: row.id,
@@ -81,6 +88,11 @@ function toMessageSnapshot(
     role: row.role as ChatMessageSnapshot['role'],
     status: row.status as ChatMessageSnapshot['status'],
     content: row.content,
+    parts:
+      parts ??
+      (row.content.trim()
+        ? ([{ type: 'text', text: row.content }] satisfies AgentMessagePart[])
+        : []),
     failureCode: row.failureCode,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
@@ -138,6 +150,7 @@ function makeTitle(courseSlug: string, content: string): string {
 
 function validateInput(input: BeginTeachingTurnInput): {
   content: string;
+  parts: readonly AgentMessagePart[];
   requestHash: string;
   leaseDurationMs: number;
   rateLimit: { maxTurns: number; windowMs: number };
@@ -145,11 +158,12 @@ function validateInput(input: BeginTeachingTurnInput): {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientMessageId)) {
     throw new ChatLifecycleError('clientMessageId 格式或长度无效');
   }
-  const content = normalizeStudentMessageContent(input.text);
-  if (!content) throw new ChatLifecycleError('学生消息不能为空');
-  if (content.length > 4_000) {
-    throw new ChatLifecycleError('学生消息不能超过 4000 字符');
-  }
+  const message = prepareStudentMessage({
+    clientMessageId: input.clientMessageId,
+    text: input.text,
+    parts: input.parts,
+  });
+  const content = message.content;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.traceId)) {
     throw new ChatLifecycleError('traceId 格式或长度无效');
   }
@@ -177,7 +191,8 @@ function validateInput(input: BeginTeachingTurnInput): {
   }
   return {
     content,
-    requestHash: hashStudentMessageContent(content),
+    parts: message.parts,
+    requestHash: message.requestHash,
     leaseDurationMs: validateAssistantLeaseDuration(
       input.leaseDurationMs ?? DEFAULT_ASSISTANT_LEASE_MS,
     ),
@@ -219,12 +234,13 @@ async function loadLedgerSnapshot(
       '教学 Turn 缺少学生消息、老师消息或 answer model run',
     );
   }
+  const parts = await loadMessageParts(transaction, [student.id, assistant.id]);
   return {
     replayed,
     turn: {
       turnId,
-      studentMessage: toMessageSnapshot(student),
-      assistantMessage: toMessageSnapshot(assistant),
+      studentMessage: toMessageSnapshot(student, parts.get(student.id)),
+      assistantMessage: toMessageSnapshot(assistant, parts.get(assistant.id)),
     },
     answerRun: toRunSnapshot(answerRun),
     leaseId: assistant.leaseId,
@@ -306,6 +322,12 @@ export class DrizzleTeachingTurnLedger {
         throw new TurnInProgressError(activeAssistant.turnId);
       }
 
+      await assertOwnedReadyAssetParts(transaction, {
+        ownerSubjectId: input.trustedStudentId,
+        spaceId: input.sessionId,
+        parts: prepared.parts,
+      });
+
       const windowStart = new Date(now.getTime() - prepared.rateLimit.windowMs);
       const recentTurns = await transaction
         .select({ createdAt: chatMessages.createdAt })
@@ -365,9 +387,13 @@ export class DrizzleTeachingTurnLedger {
       const assistant = insertedMessages.find(
         (message) => message.role === 'assistant',
       );
-      if (!assistant) {
-        throw new TurnLedgerInvariantError('老师消息写入失败');
+      const student = insertedMessages.find(
+        (message) => message.role === 'student',
+      );
+      if (!assistant || !student) {
+        throw new TurnLedgerInvariantError('学生或老师消息写入失败');
       }
+      await insertMessageParts(transaction, student.id, prepared.parts);
       await transaction.insert(modelRuns).values({
         sessionId: input.sessionId,
         operationId: turnId,
@@ -388,7 +414,7 @@ export class DrizzleTeachingTurnLedger {
       await transaction
         .update(lessonSessions)
         .set({
-          title: sql`coalesce(${lessonSessions.title}, ${makeTitle(session.courseSlug, prepared.content)})`,
+          title: sql`coalesce(${lessonSessions.title}, ${makeTitle(session.courseSlug, prepared.content || '附件消息')})`,
           lastActivityAt: now,
           updatedAt: now,
         })

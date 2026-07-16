@@ -18,6 +18,7 @@ import {
   DrizzleModelRunRepository,
   ModelRunLifecycleError,
 } from './model-run-repository';
+import { MessagePartValidationError } from './message-parts';
 import * as schema from './schema';
 
 function resolveTestDatabaseUrl() {
@@ -218,7 +219,7 @@ describeWithDatabase('对话与Model Run账本', () => {
         clientMessageId: 'valid-id',
         text: 'x'.repeat(4_001),
       }),
-    ).rejects.toBeInstanceOf(ChatLifecycleError);
+    ).rejects.toBeInstanceOf(MessagePartValidationError);
     expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
       0,
     );

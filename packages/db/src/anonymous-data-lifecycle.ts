@@ -1,6 +1,9 @@
 import { eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
+  agentMessageParts,
+  assets,
+  assetVersions,
   canvasArtifactGradingKeys,
   canvasArtifacts,
   chatMessages,
@@ -39,7 +42,10 @@ export function anonymousSubjectLockKey(subjectId: string): string {
 
 export type AnonymousDataOwnershipPath =
   | 'session_id'
+  | 'message_id -> chat_messages.session_id'
   | 'artifact_record_id -> canvas_artifacts.session_id'
+  | 'asset_id -> assets.owner_subject_id'
+  | 'owner_subject_id'
   | 'student_id';
 
 interface AnonymousLifecycleDeletionContext {
@@ -181,6 +187,70 @@ async function deleteChatMessages(
   ).length;
 }
 
+async function deleteAgentMessageParts(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  const messages = await context.transaction
+    .select({ id: chatMessages.id })
+    .from(chatMessages)
+    .where(inArray(chatMessages.sessionId, [...context.sessionIds]));
+  if (messages.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(agentMessageParts)
+      .where(
+        inArray(
+          agentMessageParts.messageId,
+          messages.map((message) => message.id),
+        ),
+      )
+      .returning({ messageId: agentMessageParts.messageId })
+  ).length;
+}
+
+async function deleteAssetVersions(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  const ownedAssets = await context.transaction
+    .select({ id: assets.id })
+    .from(assets)
+    .where(eq(assets.ownerSubjectId, context.subjectId));
+  if (ownedAssets.length === 0) return 0;
+  // ready资产通过current_version_id形成受约束的回指。先在同一事务内进入
+  // tombstoned形态并解除回指，随后才能显式删除不可变版本并保留逐表计数。
+  await context.transaction
+    .update(assets)
+    .set({
+      status: 'tombstoned',
+      currentVersionId: null,
+      tombstonedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(assets.ownerSubjectId, context.subjectId));
+  return (
+    await context.transaction
+      .delete(assetVersions)
+      .where(
+        inArray(
+          assetVersions.assetId,
+          ownedAssets.map((asset) => asset.id),
+        ),
+      )
+      .returning({ id: assetVersions.id })
+  ).length;
+}
+
+async function deleteAssets(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(assets)
+      .where(eq(assets.ownerSubjectId, context.subjectId))
+      .returning({ id: assets.id })
+  ).length;
+}
+
 async function deleteLearningEvents(
   context: AnonymousLifecycleDeletionContext,
 ): Promise<number> {
@@ -270,6 +340,11 @@ const lifecycleDefinitions = [
     deleteRows: deleteSessionSourceBindings,
   },
   {
+    tableName: 'agent_message_parts',
+    ownershipPath: 'message_id -> chat_messages.session_id',
+    deleteRows: deleteAgentMessageParts,
+  },
+  {
     tableName: 'chat_messages',
     ownershipPath: 'session_id',
     deleteRows: deleteChatMessages,
@@ -278,6 +353,16 @@ const lifecycleDefinitions = [
     tableName: 'learning_events',
     ownershipPath: 'session_id',
     deleteRows: deleteLearningEvents,
+  },
+  {
+    tableName: 'asset_versions',
+    ownershipPath: 'asset_id -> assets.owner_subject_id',
+    deleteRows: deleteAssetVersions,
+  },
+  {
+    tableName: 'assets',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteAssets,
   },
   {
     tableName: 'lesson_sessions',

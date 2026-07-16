@@ -6,6 +6,15 @@
 export { getDb } from './client';
 export * from './schema';
 export {
+  AssetAccessError,
+  AssetPersistenceError,
+  DrizzleAssetRepository,
+  type AssetSnapshot,
+  type CreateUploadedAssetInput,
+  type MaterializedAssetVersion,
+} from './asset-repository';
+export { MessagePartValidationError } from './message-parts';
+export {
   DrizzleArtifactRepository,
   type SavedArtifactReference,
 } from './artifact-repository';

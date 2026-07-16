@@ -3,6 +3,8 @@
 import { submitCanvasAction } from '@/app/learn/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
+import { loadAssets } from '@/features/assets/asset-client';
+import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
@@ -112,22 +114,8 @@ function LearnWorkspaceSession({
   const [canvasFull, setCanvasFull] = useState(false);
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [chatPct, setChatPct] = useState(CHAT_PCT_DEFAULT);
-  const [assets, setAssets] = useState<readonly AssetItem[]>([
-    {
-      id: 'courseware-3',
-      label: '课件 · 图像是怎么被认出来的',
-      kind: '课程资料',
-      enabled: false,
-      selectable: false,
-    },
-    {
-      id: 'courseware-cats',
-      label: '猫狗图片集',
-      kind: '课程资料',
-      enabled: false,
-      selectable: false,
-    },
-  ]);
+  const [assets, setAssets] = useState<readonly AssetItem[]>([]);
+  const [uploadKind, setUploadKind] = useState<AssetItem['kind'] | null>(null);
 
   const pendingPromptConsumed = useRef(false);
   const pendingMenuActionConsumed = useRef(false);
@@ -146,6 +134,24 @@ function LearnWorkspaceSession({
     }
     justSentMessage.current = false;
   }, [messages]);
+
+  useEffect(() => {
+    let active = true;
+    void loadAssets()
+      .then((loaded) => {
+        if (active) setAssets(loaded);
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setChatError(
+            reason instanceof Error ? reason.message : '暂时无法读取资料。',
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const openCanvas = useCallback(() => {
     if (window.matchMedia('(max-width: 1023px)').matches) {
@@ -172,9 +178,32 @@ function LearnWorkspaceSession({
     (text: string) => {
       setChatError(null);
       justSentMessage.current = true;
-      void sendTeachingTurn(text);
+      const parts = assets.flatMap((asset) =>
+        asset.enabled && asset.versionId
+          ? [
+              {
+                type: 'asset_ref' as const,
+                reference: {
+                  assetId: asset.id,
+                  versionId: asset.versionId,
+                  kind: asset.kind,
+                },
+                usage: 'attachment' as const,
+                label: asset.label,
+              },
+            ]
+          : [],
+      );
+      void sendTeachingTurn(text, undefined, parts).then((accepted) => {
+        if (!accepted) return;
+        setAssets((current) =>
+          current.map((asset) =>
+            asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
+          ),
+        );
+      });
     },
-    [sendTeachingTurn],
+    [assets, sendTeachingTurn],
   );
 
   useEffect(() => {
@@ -190,6 +219,11 @@ function LearnWorkspaceSession({
     (action: PlusMenuActionId) => {
       if (action === 'pick_course_material') {
         setDrawer('assets');
+        return;
+      }
+      if (action === 'upload_file' || action === 'upload_image') {
+        setDrawer(null);
+        setUploadKind(action === 'upload_image' ? 'image' : 'document');
         return;
       }
       if (action === 'create_demo') {
@@ -215,7 +249,9 @@ function LearnWorkspaceSession({
   const handleToggleAsset = useCallback((id: string) => {
     setAssets((current) =>
       current.map((asset) =>
-        asset.id === id ? { ...asset, enabled: !asset.enabled } : asset,
+        asset.id === id && asset.selectable
+          ? { ...asset, enabled: !asset.enabled }
+          : asset,
       ),
     );
   }, []);
@@ -301,119 +337,121 @@ function LearnWorkspaceSession({
           }
           onResumeSession={
             sessionActions?.onResumeSession
-              ? (sessionId) =>
-                  void sessionActions.onResumeSession?.(sessionId)
+              ? (sessionId) => void sessionActions.onResumeSession?.(sessionId)
               : undefined
           }
         />
         <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
-        <div
-          className="flex min-h-0 min-w-0 flex-col"
-          style={{
-            flexBasis: splitActive ? `${chatPct}%` : '100%',
-            flexGrow: splitActive ? 0 : 1,
-            flexShrink: 0,
-          }}
-        >
-          {isLanding ? (
-            <EmptyChatHero>
-              <Composer
-                chips={[]}
-                busy={false}
-                statusText={null}
-                onSend={handleSend}
-                onRemoveChip={handleToggleAsset}
-                onMenuAction={handleMenuAction}
-                variant="landing"
-              />
-            </EmptyChatHero>
-          ) : (
-            <>
-              <div
-                ref={chatScrollRef}
-                className="min-h-0 flex-1 overflow-y-auto"
-                aria-label="AI教师对话"
-                role="region"
-                onScroll={(event) => {
-                  const container = event.currentTarget;
-                  nearChatBottom.current =
-                    container.scrollHeight -
-                      container.scrollTop -
-                      container.clientHeight <=
-                    96;
-                }}
-              >
-                <ChatPanel
-                  messages={messages}
-                  canvasOpen={canvasOpen}
-                  artifactTitle={initialData.artifact.title}
-                  onOpenCanvas={openCanvas}
-                  onContinueText={() => setChatError(AI_UNAVAILABLE_MESSAGE)}
-                  onRetry={(messageId) => teachingTurn.retry(messageId)}
-                />
-              </div>
-              <Composer
-                chips={enabledAssets.map((asset) => ({
-                  id: asset.id,
-                  label: asset.label,
-                }))}
-                busy={teachingTurn.busy || isPending}
-                statusText={
-                  teachingTurn.statusText ??
-                  (isPending ? '老师正在批改…' : chatError)
-                }
-                statusTone={
-                  chatError && !teachingTurn.busy && !isPending
-                    ? 'error'
-                    : 'info'
-                }
-                onSend={handleSend}
-                onRemoveChip={handleToggleAsset}
-                onMenuAction={handleMenuAction}
-                stopAvailable={teachingTurn.stopAvailable}
-                onStop={() => void teachingTurn.stop()}
-              />
-            </>
-          )}
-        </div>
-        {splitActive ? (
           <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="调整对话与演示的宽度"
-            aria-valuemin={CHAT_PCT_MIN}
-            aria-valuemax={CHAT_PCT_MAX}
-            aria-valuenow={Math.round(chatPct)}
-            aria-valuetext={`对话区域占 ${Math.round(chatPct)}%`}
-            tabIndex={0}
-            onPointerDown={handleDividerPointerDown}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                const delta = event.key === 'ArrowLeft' ? -3 : 3;
-                setChatPct((current) =>
-                  Math.min(
-                    CHAT_PCT_MAX,
-                    Math.max(CHAT_PCT_MIN, current + delta),
-                  ),
-                );
-              }
+            className="flex min-h-0 min-w-0 flex-col"
+            style={{
+              flexBasis: splitActive ? `${chatPct}%` : '100%',
+              flexGrow: splitActive ? 0 : 1,
+              flexShrink: 0,
             }}
-            className="hidden w-1.5 shrink-0 cursor-col-resize rounded-full transition-colors hover:bg-accent/25 focus-visible:bg-accent/40 focus-visible:outline-none lg:block"
-          />
-        ) : null}
-        {canvasOpen ? (
-          <CanvasPanel
-            artifact={initialData.artifact}
-            feedback={feedback}
-            errorMessage={errorMessage}
-            isPending={isPending}
-            isFull={canvasFull}
-            onSubmit={handleSubmit}
-            onCollapse={closeCanvas}
-            onToggleFull={() => setCanvasFull((value) => !value)}
-          />
-        ) : null}
+          >
+            {isLanding ? (
+              <EmptyChatHero>
+                <Composer
+                  chips={enabledAssets.map((asset) => ({
+                    id: asset.id,
+                    label: asset.label,
+                  }))}
+                  busy={false}
+                  statusText={null}
+                  onSend={handleSend}
+                  onRemoveChip={handleToggleAsset}
+                  onMenuAction={handleMenuAction}
+                  variant="landing"
+                />
+              </EmptyChatHero>
+            ) : (
+              <>
+                <div
+                  ref={chatScrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto"
+                  aria-label="AI教师对话"
+                  role="region"
+                  onScroll={(event) => {
+                    const container = event.currentTarget;
+                    nearChatBottom.current =
+                      container.scrollHeight -
+                        container.scrollTop -
+                        container.clientHeight <=
+                      96;
+                  }}
+                >
+                  <ChatPanel
+                    messages={messages}
+                    canvasOpen={canvasOpen}
+                    artifactTitle={initialData.artifact.title}
+                    onOpenCanvas={openCanvas}
+                    onContinueText={() => setChatError(AI_UNAVAILABLE_MESSAGE)}
+                    onRetry={(messageId) => teachingTurn.retry(messageId)}
+                  />
+                </div>
+                <Composer
+                  chips={enabledAssets.map((asset) => ({
+                    id: asset.id,
+                    label: asset.label,
+                  }))}
+                  busy={teachingTurn.busy || isPending}
+                  statusText={
+                    teachingTurn.statusText ??
+                    (isPending ? '老师正在批改…' : chatError)
+                  }
+                  statusTone={
+                    chatError && !teachingTurn.busy && !isPending
+                      ? 'error'
+                      : 'info'
+                  }
+                  onSend={handleSend}
+                  onRemoveChip={handleToggleAsset}
+                  onMenuAction={handleMenuAction}
+                  stopAvailable={teachingTurn.stopAvailable}
+                  onStop={() => void teachingTurn.stop()}
+                />
+              </>
+            )}
+          </div>
+          {splitActive ? (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="调整对话与演示的宽度"
+              aria-valuemin={CHAT_PCT_MIN}
+              aria-valuemax={CHAT_PCT_MAX}
+              aria-valuenow={Math.round(chatPct)}
+              aria-valuetext={`对话区域占 ${Math.round(chatPct)}%`}
+              tabIndex={0}
+              onPointerDown={handleDividerPointerDown}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                  event.preventDefault();
+                  const delta = event.key === 'ArrowLeft' ? -3 : 3;
+                  setChatPct((current) =>
+                    Math.min(
+                      CHAT_PCT_MAX,
+                      Math.max(CHAT_PCT_MIN, current + delta),
+                    ),
+                  );
+                }
+              }}
+              className="hidden w-1.5 shrink-0 cursor-col-resize rounded-full transition-colors hover:bg-accent/25 focus-visible:bg-accent/40 focus-visible:outline-none lg:block"
+            />
+          ) : null}
+          {canvasOpen ? (
+            <CanvasPanel
+              artifact={initialData.artifact}
+              feedback={feedback}
+              errorMessage={errorMessage}
+              isPending={isPending}
+              isFull={canvasFull}
+              onSubmit={handleSubmit}
+              onCollapse={closeCanvas}
+              onToggleFull={() => setCanvasFull((value) => !value)}
+            />
+          ) : null}
         </div>
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -424,8 +462,25 @@ function LearnWorkspaceSession({
         ) : null}
       </p>
       {drawer === 'assets' ? (
-        <Sheet label="本课资料" onClose={() => setDrawer(null)}>
+        <Sheet label="知识与媒体资产" onClose={() => setDrawer(null)}>
           <AssetsDrawer assets={assets} onToggle={handleToggleAsset} />
+        </Sheet>
+      ) : null}
+      {uploadKind ? (
+        <Sheet
+          label={uploadKind === 'image' ? '添加图片' : '添加PDF'}
+          onClose={() => setUploadKind(null)}
+        >
+          <AssetUploadPanel
+            kind={uploadKind}
+            onUploaded={(asset) => {
+              setAssets((current) => [
+                { ...asset, enabled: asset.selectable },
+                ...current.filter((item) => item.id !== asset.id),
+              ]);
+              setUploadKind(null);
+            }}
+          />
         </Sheet>
       ) : null}
       {drawer === 'studio' ? (

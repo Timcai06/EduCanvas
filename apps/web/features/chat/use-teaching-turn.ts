@@ -1,11 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { AgentAssetPart } from '@educanvas/agent-core';
 import type { InitialChatMessageDTO } from './messages';
-import {
-  createTeachingTurnState,
-  teachingTurnReducer,
-} from './turn-state';
+import { createTeachingTurnState, teachingTurnReducer } from './turn-state';
 import {
   consumeTeachingTurnResponse,
   type TeachingTurnEvent,
@@ -66,125 +64,160 @@ export function useTeachingTurn(
     };
   }, []);
 
-  const send = useCallback(async (text: string, suppliedId?: string) => {
-    const normalizedText = text.trim();
-    if (!normalizedText || inFlight.current) return false;
+  const send = useCallback(
+    async (
+      text: string,
+      suppliedId?: string,
+      assetParts: readonly (AgentAssetPart & { label?: string })[] = [],
+    ) => {
+      const normalizedText = text.trim();
+      if ((!normalizedText && assetParts.length === 0) || inFlight.current)
+        return false;
 
-    const clientMessageId = suppliedId ?? crypto.randomUUID();
-    const current: InFlightTurn = {
-      clientMessageId,
-      controller: new AbortController(),
-      turnId: null,
-      assistantMessageId: null,
-      terminalReceived: false,
-      stopConfirmed: false,
-    };
-    inFlight.current = current;
-    setControlError(null);
-    dispatch({ type: 'send.started', clientMessageId, text: normalizedText });
-
-    try {
-      const response = await fetch('/api/v1/learn/turn', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ clientMessageId, text: normalizedText }),
-        signal: current.controller.signal,
+      const clientMessageId = suppliedId ?? crypto.randomUUID();
+      const current: InFlightTurn = {
+        clientMessageId,
+        controller: new AbortController(),
+        turnId: null,
+        assistantMessageId: null,
+        terminalReceived: false,
+        stopConfirmed: false,
+      };
+      inFlight.current = current;
+      setControlError(null);
+      dispatch({
+        type: 'send.started',
+        clientMessageId,
+        text: normalizedText,
+        attachments: assetParts.map((part) => ({
+          id: `${part.reference.assetId}:${part.reference.versionId}`,
+          label:
+            part.label ??
+            (part.reference.kind === 'image' ? '图片附件' : 'PDF资料'),
+          kind: part.reference.kind === 'image' ? 'image' : 'document',
+        })),
       });
-      if (!response.ok) {
-        const routeError = await readPublicRouteError(response);
-        if (mounted.current) {
+
+      try {
+        const response = await fetch('/api/v1/learn/turn', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(
+            assetParts.length > 0
+              ? {
+                  clientMessageId,
+                  parts: [
+                    ...(normalizedText
+                      ? [{ type: 'text' as const, text: normalizedText }]
+                      : []),
+                    ...assetParts.map((part) => ({
+                      type: part.type,
+                      reference: part.reference,
+                      usage: part.usage,
+                    })),
+                  ],
+                }
+              : { clientMessageId, text: normalizedText },
+          ),
+          signal: current.controller.signal,
+        });
+        if (!response.ok) {
+          const routeError = await readPublicRouteError(response);
+          if (mounted.current) {
+            dispatch({
+              type: 'stream.failed',
+              status: 'failed',
+              code: routeError.code,
+              message: routeError.message,
+              retryable: response.status >= 500 || response.status === 429,
+            });
+          }
+          return false;
+        }
+
+        await consumeTeachingTurnResponse(
+          response,
+          (event: TeachingTurnEvent) => {
+            if (!mounted.current || inFlight.current !== current) return;
+            if (current.terminalReceived) {
+              throw new TurnStreamProtocolError(
+                'turn stream emitted an event after its terminal event',
+              );
+            }
+            if (event.type === 'turn.accepted') {
+              if (current.turnId !== null) {
+                throw new TurnStreamProtocolError(
+                  'turn stream emitted duplicate acceptance',
+                );
+              }
+              current.turnId = event.turnId;
+              current.assistantMessageId = event.assistantMessageId;
+            } else if (current.turnId === null) {
+              throw new TurnStreamProtocolError(
+                'turn stream emitted an event before acceptance',
+              );
+            } else if (current.turnId !== event.turnId) {
+              throw new TurnStreamProtocolError(
+                'turn stream changed its turn identity',
+              );
+            } else if (
+              'messageId' in event &&
+              current.assistantMessageId !== event.messageId
+            ) {
+              throw new TurnStreamProtocolError(
+                'turn stream changed its message identity',
+              );
+            }
+            if (
+              event.type === 'turn.completed' ||
+              event.type === 'turn.failed' ||
+              event.type === 'turn.cancelled'
+            ) {
+              current.terminalReceived = true;
+              setControlError(null);
+            }
+            dispatch({ type: 'stream.event', event });
+          },
+        );
+
+        if (
+          mounted.current &&
+          inFlight.current === current &&
+          !current.terminalReceived &&
+          !current.stopConfirmed
+        ) {
           dispatch({
             type: 'stream.failed',
-            status: 'failed',
-            code: routeError.code,
-            message: routeError.message,
-            retryable: response.status >= 500 || response.status === 429,
+            status: 'interrupted',
+            code: 'interrupted',
+            message: SAFE_INTERRUPTED_ERROR,
+            retryable: true,
+          });
+        }
+        return current.terminalReceived;
+      } catch (error) {
+        const aborted =
+          error instanceof DOMException && error.name === 'AbortError';
+        if (
+          mounted.current &&
+          inFlight.current === current &&
+          !(aborted && current.stopConfirmed)
+        ) {
+          dispatch({
+            type: 'stream.failed',
+            status: aborted ? 'interrupted' : 'failed',
+            code: aborted ? 'interrupted' : 'stream_unavailable',
+            message: aborted ? SAFE_INTERRUPTED_ERROR : SAFE_CONNECTION_ERROR,
+            retryable: true,
           });
         }
         return false;
+      } finally {
+        if (inFlight.current === current) inFlight.current = null;
       }
-
-      await consumeTeachingTurnResponse(
-        response,
-        (event: TeachingTurnEvent) => {
-          if (!mounted.current || inFlight.current !== current) return;
-          if (current.terminalReceived) {
-            throw new TurnStreamProtocolError(
-              'turn stream emitted an event after its terminal event',
-            );
-          }
-          if (event.type === 'turn.accepted') {
-            if (current.turnId !== null) {
-              throw new TurnStreamProtocolError(
-                'turn stream emitted duplicate acceptance',
-              );
-            }
-            current.turnId = event.turnId;
-            current.assistantMessageId = event.assistantMessageId;
-          } else if (current.turnId === null) {
-            throw new TurnStreamProtocolError(
-              'turn stream emitted an event before acceptance',
-            );
-          } else if (current.turnId !== event.turnId) {
-            throw new TurnStreamProtocolError(
-              'turn stream changed its turn identity',
-            );
-          } else if (
-            'messageId' in event &&
-            current.assistantMessageId !== event.messageId
-          ) {
-            throw new TurnStreamProtocolError(
-              'turn stream changed its message identity',
-            );
-          }
-          if (
-            event.type === 'turn.completed' ||
-            event.type === 'turn.failed' ||
-            event.type === 'turn.cancelled'
-          ) {
-            current.terminalReceived = true;
-            setControlError(null);
-          }
-          dispatch({ type: 'stream.event', event });
-        },
-      );
-
-      if (
-        mounted.current &&
-        inFlight.current === current &&
-        !current.terminalReceived &&
-        !current.stopConfirmed
-      ) {
-        dispatch({
-          type: 'stream.failed',
-          status: 'interrupted',
-          code: 'interrupted',
-          message: SAFE_INTERRUPTED_ERROR,
-          retryable: true,
-        });
-      }
-      return current.terminalReceived;
-    } catch (error) {
-      const aborted =
-        error instanceof DOMException && error.name === 'AbortError';
-      if (
-        mounted.current &&
-        inFlight.current === current &&
-        !(aborted && current.stopConfirmed)
-      ) {
-        dispatch({
-          type: 'stream.failed',
-          status: aborted ? 'interrupted' : 'failed',
-          code: aborted ? 'interrupted' : 'stream_unavailable',
-          message: aborted ? SAFE_INTERRUPTED_ERROR : SAFE_CONNECTION_ERROR,
-          retryable: true,
-        });
-      }
-      return false;
-    } finally {
-      if (inFlight.current === current) inFlight.current = null;
-    }
-  }, []);
+    },
+    [],
+  );
 
   const stop = useCallback(async () => {
     const current = inFlight.current;
@@ -224,8 +257,7 @@ export function useTeachingTurn(
     (assistantMessageId: string) => {
       const message = state.messages.find(
         (candidate) =>
-          candidate.role === 'assistant' &&
-          candidate.id === assistantMessageId,
+          candidate.role === 'assistant' && candidate.id === assistantMessageId,
       );
       if (
         !message ||
@@ -245,12 +277,12 @@ export function useTeachingTurn(
   const statusText = controlError
     ? controlError
     : state.activeToolLabel
-    ? state.activeToolLabel
-    : activeStatus === 'streaming'
-      ? 'AI 老师正在回答…'
-      : activeStatus === 'pending'
-        ? '正在连接 AI 老师…'
-        : null;
+      ? state.activeToolLabel
+      : activeStatus === 'streaming'
+        ? 'AI 老师正在回答…'
+        : activeStatus === 'pending'
+          ? '正在连接 AI 老师…'
+          : null;
 
   return {
     messages: state.messages,

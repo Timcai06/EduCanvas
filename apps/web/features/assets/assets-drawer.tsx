@@ -1,17 +1,20 @@
 'use client';
 
+import { FilePdf, Image as ImageIcon, SpinnerGap } from '@phosphor-icons/react';
+
 export interface AssetItem {
   id: string;
+  versionId: string | null;
   label: string;
-  kind: '课程资料' | '我的上传' | '链接';
+  kind: 'image' | 'document';
+  scope: 'turn' | 'space';
+  status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
   enabled: boolean;
-  /** 只有真实检索与引用链路接通后，资料才允许加入本轮上下文。 */
   selectable: boolean;
 }
 
 /**
- * 知识资产抽屉：当前只展示本课预置资料目录。检索与引用链路尚未建设时，
- * 选择控件明确禁用，不能产生上下文标签或暗示资料已经用于回答。
+ * 只展示服务端持久化的真实Asset；选择状态决定下一轮消息引用，不伪造来源或处理状态。
  */
 export function AssetsDrawer({
   assets,
@@ -23,40 +26,65 @@ export function AssetsDrawer({
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        本课资料接入后，老师才能基于资料回答并标注来源；当前仅供预览。
+        选择已就绪的资料加入下一轮对话。PDF会提取文字；当前模型暂不读取图片像素。
       </p>
-      <ul className="space-y-2">
-        {assets.map((asset) => (
-          <li key={asset.id}>
-            <label
-              className={`flex min-h-12 items-center gap-3 rounded-2xl border border-line px-4 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
-                asset.selectable
-                  ? 'cursor-pointer hover:bg-surface'
-                  : 'cursor-not-allowed opacity-70'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={asset.enabled}
-                disabled={!asset.selectable}
-                aria-describedby="assets-availability"
-                onChange={() => onToggle(asset.id)}
-                className="size-4 accent-accent"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-ink">
-                  {asset.label}
+      {assets.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
+          <p className="text-sm font-medium text-ink">还没有资料</p>
+          <p className="mt-1 text-xs text-ink-faint">
+            使用输入栏左侧的“+”上传图片或PDF。
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {assets.map((asset) => (
+            <li key={asset.id}>
+              <label
+                className={`flex min-h-12 items-center gap-3 rounded-2xl border border-line px-4 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+                  asset.selectable
+                    ? 'cursor-pointer hover:bg-surface'
+                    : 'cursor-not-allowed opacity-70'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={asset.enabled}
+                  disabled={!asset.selectable}
+                  aria-describedby="assets-availability"
+                  onChange={() => onToggle(asset.id)}
+                  className="size-4 accent-accent"
+                />
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-strong text-ink-muted">
+                  {asset.status === 'processing' ||
+                  asset.status === 'pending' ? (
+                    <SpinnerGap className="animate-spin" size={18} />
+                  ) : asset.kind === 'image' ? (
+                    <ImageIcon size={18} />
+                  ) : (
+                    <FilePdf size={18} />
+                  )}
                 </span>
-                <span className="block text-xs text-ink-faint">
-                  {asset.kind} · {asset.selectable ? '可选择' : '尚未接入'}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-ink">
+                    {asset.label}
+                  </span>
+                  <span className="block text-xs text-ink-faint">
+                    {asset.kind === 'image' ? '图片' : 'PDF'} ·{' '}
+                    {asset.scope === 'space' ? '长期资料' : '仅本轮'} ·{' '}
+                    {asset.status === 'ready'
+                      ? '已就绪'
+                      : asset.status === 'failed'
+                        ? '处理失败'
+                        : '处理中'}
+                  </span>
                 </span>
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="rounded-2xl bg-surface p-4 text-sm text-ink-muted">
-        上传文件、图片和添加链接尚未开放；开放后会先完成解析与来源校验。
+        所有附件都先经过类型、大小、所有权和处理状态校验；浏览器不会接触对象存储地址。
       </div>
     </div>
   );

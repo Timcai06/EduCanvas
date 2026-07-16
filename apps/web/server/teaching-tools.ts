@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  DrizzleKnowledgeRetrievalRepository,
   DrizzleMasteryRepository,
   DrizzleSessionRepository,
   getDb,
@@ -72,7 +73,67 @@ const getStudentStateTool = defineTeachingTool({
   },
 });
 
+const knowledgeEvidenceSchema = z
+  .object({
+    candidateId: z.uuid(),
+    sourceTitle: z.string().min(1).max(300),
+    heading: z.string().max(500).nullable(),
+    pageStart: z.number().int().positive().nullable(),
+    pageEnd: z.number().int().positive().nullable(),
+    text: z.string().min(1).max(16_000),
+  })
+  .strict();
+
+const retrieveKnowledgeTool = defineTeachingTool({
+  name: 'retrieveKnowledge',
+  description:
+    '从本轮已经冻结的课程资料版本中检索证据。只在回答需要教材事实、定义或引用时调用。',
+  exposure: 'model',
+  effect: 'read',
+  timeoutMs: 3_000,
+  inputSchema: z
+    .object({
+      query: z.string().trim().min(1).max(512),
+      limit: z.number().int().min(1).max(8).default(5),
+    })
+    .strict(),
+  outputSchema: z
+    .object({
+      queryHash: z.string().regex(/^[a-f0-9]{64}$/),
+      evidence: z.array(knowledgeEvidenceSchema).max(8),
+    })
+    .strict(),
+  async handler(input, context) {
+    if (context.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const repository = new DrizzleKnowledgeRetrievalRepository(getDb());
+    await repository.freezeTurnSourceVersions({
+      trustedStudentId: context.studentId,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+    });
+    const result = await repository.retrieveFts({
+      trustedStudentId: context.studentId,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      query: input.query,
+      limit: input.limit,
+      traceId: context.traceId,
+    });
+    return {
+      queryHash: result.queryHash,
+      evidence: result.candidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        sourceTitle: candidate.sourceTitle,
+        heading: candidate.heading,
+        pageStart: candidate.pageStart,
+        pageEnd: candidate.pageEnd,
+        text: candidate.text,
+      })),
+    };
+  },
+});
+
 /** 每个 Turn 使用独立 executor，避免跨学生复用进程内 execution cache。 */
 export function createTeachingToolExecutor(): TeachingToolExecutor {
-  return new TeachingToolExecutor([getStudentStateTool]);
+  return new TeachingToolExecutor([getStudentStateTool, retrieveKnowledgeTool]);
 }

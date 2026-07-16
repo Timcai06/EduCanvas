@@ -16,8 +16,11 @@ const currentSubjectOwnedTables = [
   'turn_source_versions',
   'turn_source_snapshots',
   'session_source_bindings',
+  'agent_message_parts',
   'chat_messages',
   'learning_events',
+  'asset_versions',
+  'assets',
   'lesson_sessions',
   'mastery_states',
 ] as const;
@@ -29,7 +32,7 @@ describe('匿名数据生命周期注册表', () => {
     ).toEqual(currentSubjectOwnedTables);
     expect(
       ANONYMOUS_DATA_LIFECYCLE_REGISTRY.map((entry) => entry.deletionOrder),
-    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     expect(() =>
       assertAnonymousDataLifecycleRegistryCoverage(currentSubjectOwnedTables),
     ).not.toThrow();

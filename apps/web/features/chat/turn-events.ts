@@ -27,6 +27,18 @@ export interface MessageDeltaEvent extends TurnEventBase {
   delta: string;
 }
 
+export interface MessageCitationEvent extends TurnEventBase {
+  type: 'message.citation';
+  messageId: string;
+  citationId: string;
+  sourceId: string;
+  documentId: string;
+  chunkId: string;
+  label: string;
+  pageStart: number | null;
+  pageEnd: number | null;
+}
+
 export interface TurnCompletedEvent extends TurnEventBase {
   type: 'turn.completed';
   messageId: string;
@@ -55,6 +67,7 @@ export interface ToolLifecycleEvent extends TurnEventBase {
 export type TeachingTurnEvent =
   | TurnAcceptedEvent
   | MessageDeltaEvent
+  | MessageCitationEvent
   | TurnCompletedEvent
   | TurnFailedEvent
   | TurnCancelledEvent
@@ -100,6 +113,19 @@ function readBoolean(
   return value;
 }
 
+function readNullablePositiveInteger(
+  data: Record<string, unknown>,
+  key: string,
+  eventName: string,
+): number | null {
+  const value = data[key];
+  if (value === null) return null;
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    throw new TurnStreamProtocolError(`${eventName}.${key} is invalid`);
+  }
+  return value as number;
+}
+
 /**
  * Parses one named SSE event. Unknown event names are ignored so later
  * additive protocol events do not break an older browser; known events remain
@@ -112,6 +138,7 @@ export function parseTeachingTurnEvent(
   const knownEvents = new Set([
     'turn.accepted',
     'message.delta',
+    'message.citation',
     'turn.completed',
     'turn.failed',
     'turn.cancelled',
@@ -131,10 +158,14 @@ export function parseTeachingTurnEvent(
     throw new TurnStreamProtocolError(`${eventName} data is not an object`);
   }
   if (parsed.schemaVersion !== TURN_EVENT_SCHEMA_VERSION) {
-    throw new TurnStreamProtocolError(`${eventName} schema version is unsupported`);
+    throw new TurnStreamProtocolError(
+      `${eventName} schema version is unsupported`,
+    );
   }
   if (parsed.type !== eventName) {
-    throw new TurnStreamProtocolError(`${eventName} payload type does not match`);
+    throw new TurnStreamProtocolError(
+      `${eventName} payload type does not match`,
+    );
   }
 
   const turnId = readString(parsed, 'turnId', eventName);
@@ -155,6 +186,21 @@ export function parseTeachingTurnEvent(
       turnId,
       messageId: readString(parsed, 'messageId', eventName),
       delta: readString(parsed, 'delta', eventName, MAX_DELTA_LENGTH),
+    };
+  }
+  if (eventName === 'message.citation') {
+    return {
+      type: eventName,
+      schemaVersion: TURN_EVENT_SCHEMA_VERSION,
+      turnId,
+      messageId: readString(parsed, 'messageId', eventName),
+      citationId: readString(parsed, 'citationId', eventName),
+      sourceId: readString(parsed, 'sourceId', eventName),
+      documentId: readString(parsed, 'documentId', eventName),
+      chunkId: readString(parsed, 'chunkId', eventName),
+      label: readString(parsed, 'label', eventName, 400),
+      pageStart: readNullablePositiveInteger(parsed, 'pageStart', eventName),
+      pageEnd: readNullablePositiveInteger(parsed, 'pageEnd', eventName),
     };
   }
   if (eventName === 'turn.completed') {
@@ -231,7 +277,9 @@ export async function consumeTeachingTurnResponse(
   onEvent: (event: TeachingTurnEvent) => void,
 ): Promise<void> {
   if (!response.ok) {
-    throw new TurnStreamProtocolError(`turn request failed with ${response.status}`);
+    throw new TurnStreamProtocolError(
+      `turn request failed with ${response.status}`,
+    );
   }
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   if (!contentType.includes('text/event-stream') || !response.body) {

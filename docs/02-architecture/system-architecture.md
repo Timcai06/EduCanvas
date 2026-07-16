@@ -50,9 +50,9 @@ flowchart LR
     db --> teaching
 ```
 
-当前代码已经拆出通用`agent-core`契约、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的全模态Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`model-gateway`已经只依赖该通用包。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复。知识资料的不可变版本、FTS、Turn快照、候选和引用仓储已经落地，但尚未组合进Turn工具与引用UI；可信状态推进也尚未接入Web判分后的应用流程。
+当前代码已经拆出通用`agent-core`契约、`agent-runtime`上下文物化、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的全模态Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`agent-runtime`在不暴露私有存储地址的前提下物化已验证Asset；`model-gateway`只依赖通用契约。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、Asset上传、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复；K1的FTS检索、候选白名单、引用持久化/SSE/UI已经进入Turn纵切；Canvas判分后只在可信`ASSESS`状态触发受控状态推进。
 
-当前Web Turn编排仍位于`teaching-runtime`，`teaching-core`也暂时兼容导出通用模型类型。下一步按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)为通用Asset补齐所有权、持久化、处理任务和供应商输入物化，再抽取通用Tool/Turn编排；不以一次性重命名或微服务拆分制造高风险重写。
+当前Web Turn编排仍位于`teaching-runtime`，`teaching-core`也暂时兼容导出通用模型类型。通用Asset已经补齐匿名所有权、持久化、不可变版本、PDF解析和供应商上下文物化的首条纵切；下一步按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)补对象存储/异步处理与原生视觉Provider，再增量抽取通用Tool/Turn编排，不以一次性重命名或微服务拆分制造高风险重写。
 
 ## 目标服务形态
 

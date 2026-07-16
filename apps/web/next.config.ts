@@ -6,12 +6,16 @@ import type { NextConfig } from 'next';
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 const nextConfig: NextConfig = {
+  // 本地自动化和多设备验收会通过127.0.0.1访问；显式允许其加载dev HMR资源，
+  // 否则页面只有SSR HTML而不会完成React hydration。
+  allowedDevOrigins: ['127.0.0.1'],
   turbopack: {
     root: workspaceRoot,
   },
   // 内部包直接发布TypeScript源码且不单独产出构建目录，因此交给Next.js一并转译。
   transpilePackages: [
     '@educanvas/agent-core',
+    '@educanvas/agent-runtime',
     '@educanvas/canvas-protocol',
     '@educanvas/db',
     '@educanvas/teaching-core',

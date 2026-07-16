@@ -20,7 +20,8 @@ describe('workspace truth and motion boundaries', () => {
     expect(workspace).not.toContain('stageLabel="练习"');
     expect(assets).not.toContain('勾选的资料会成为老师讲解和出题的依据');
     expect(studio).not.toContain('老师为你生成过的演示');
-    expect(menu).toContain("label: '打开本课互动演示'");
+    expect(menu).toContain("label: '打开互动演示'");
+    expect(menu).toContain("hint: '受控模板'");
     expect(menu).toContain('disabled={!item.available}');
   });
 

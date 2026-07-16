@@ -31,7 +31,16 @@ export interface TeachingTurnState {
 }
 
 export type TeachingTurnAction =
-  | { type: 'send.started'; clientMessageId: string; text: string }
+  | {
+      type: 'send.started';
+      clientMessageId: string;
+      text: string;
+      attachments?: readonly {
+        id: string;
+        label: string;
+        kind: 'image' | 'document';
+      }[];
+    }
   | { type: 'stream.event'; event: TeachingTurnEvent }
   | {
       type: 'stream.failed';
@@ -64,6 +73,17 @@ export function hydrateChatMessages(
 
   return initialMessages.map((message): ChatMessage => {
     if (message.role === 'student') {
+      const attachments = (message.parts ?? []).flatMap((part) =>
+        part.type === 'asset_ref'
+          ? [
+              {
+                id: `${part.reference.assetId}:${part.reference.versionId}`,
+                label: part.reference.kind === 'image' ? '图片附件' : 'PDF资料',
+                kind: part.reference.kind === 'image' ? 'image' : 'document',
+              } as const,
+            ]
+          : [],
+      );
       return {
         id: message.id,
         turnId: message.turnId,
@@ -71,6 +91,7 @@ export function hydrateChatMessages(
         role: 'student',
         status: 'completed',
         text: message.content,
+        attachments,
       };
     }
     return {
@@ -80,6 +101,8 @@ export function hydrateChatMessages(
       role: 'assistant',
       status: message.status,
       text: message.content,
+      attachments: [],
+      citations: message.citations ?? [],
       failureCode: message.failureCode,
       retryText: studentTextByTurn.get(message.turnId),
       retryable:
@@ -137,6 +160,7 @@ export function teachingTurnReducer(
       role: 'student',
       status: 'completed',
       text: action.text,
+      attachments: action.attachments ?? [],
     };
     const assistant: AssistantMessage = {
       id: localAssistantId,
@@ -145,6 +169,8 @@ export function teachingTurnReducer(
       role: 'assistant',
       status: 'pending',
       text: '',
+      attachments: [],
+      citations: [],
       retryText: action.text,
     };
     return {
@@ -240,12 +266,37 @@ export function teachingTurnReducer(
     return {
       ...state,
       activeToolLabel:
-        event.type === 'tool.started' ? (event.label ?? '正在使用学习工具') : null,
+        event.type === 'tool.started'
+          ? (event.label ?? '正在使用学习工具')
+          : null,
     };
   }
 
   if (!('messageId' in event)) return state;
   const assistantId = active.assistantMessageId ?? active.localAssistantId;
+  if (event.type === 'message.citation') {
+    if (event.messageId !== assistantId) return state;
+    return {
+      ...state,
+      messages: updateAssistant(state.messages, assistantId, (message) => ({
+        ...message,
+        citations: [
+          ...(message.citations ?? []).filter(
+            (citation) => citation.id !== event.citationId,
+          ),
+          {
+            id: event.citationId,
+            sourceId: event.sourceId,
+            documentId: event.documentId,
+            chunkId: event.chunkId,
+            label: event.label,
+            pageStart: event.pageStart,
+            pageEnd: event.pageEnd,
+          },
+        ],
+      })),
+    };
+  }
   if (event.type === 'message.delta') {
     if (event.messageId !== assistantId) return state;
     return {

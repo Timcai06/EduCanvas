@@ -133,7 +133,7 @@ stateDiagram-v2
 
 `REMEDIATE`和`ADVANCE`是 `ASSESS` 的出口决策，不是持久化状态；状态转移权属于教学运行时，不属于模型。
 
-受控工具闭集、“状态 × 工具”白名单、参数Schema、权限执行器、超时、幂等、调用上限与审计已经落地；当前待接的是知识检索和状态推进的应用层组合，而不是再造一套Agent框架。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
+受控工具闭集、“状态 × 工具”白名单、参数Schema、权限执行器、超时、幂等、调用上限与审计已经落地；`retrieveKnowledge` 已与 PostgreSQL FTS、候选白名单、引用持久化和 Web 引用呈现接通。Canvas 服务端判分会在可信状态确实处于 `ASSESS` 时调用状态推进服务；其余状态仍不会由模型或浏览器越权推进。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
 
 ## 技术拆解
 
@@ -142,7 +142,8 @@ stateDiagram-v2
 - **技术栈**：Next.js + React + TypeScript，Headless组件 + 自有设计系统（[ADR-0001](docs/09-decisions/0001-core-stack.md)，`accepted`）；
 - **Chat-first学习页**：默认是深色的S0空对话入口；首条消息后进入S1对话态，当前Canvas可由「+」菜单或Studio产物入口按需进入S2协作态，未来真实Agent可以提供受控建议卡；Assets / Studio / Progress使用互斥抽屉承载；
 - **已接通首条浏览器纵切**：匿名学习会话、受控Canvas提交、服务端判分、PostgreSQL掌握度持久化与进度回显已经连通；正常学习页不再导入确定性老师话术，无真实Provider时会明确显示服务未接入，而不是伪造AI回答；
-- **GSAP已接入UI与受控教学动画**：空对话光场、Canvas面板和Sheet使用`useGSAP()`、独立scope及`prefers-reduced-motion`降级；首个 render-only `pipeline_flow` 已通过严格语义Schema、静态React Renderer和统一 `AnimationShell` 实现，模型不能提交选择器、时长、任意属性或GSAP代码（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
+- **通用资产纵切**：`+` 菜单可上传 PDF、PNG、JPEG 与 WebP，服务端校验魔数和大小、使用私有存储键保存不可变版本；PDF 可解析文本进入受限上下文，当前文本 Provider 无法消费图片时返回明确的模态不支持错误，不静默丢图；
+- **GSAP已接入UI与受控教学动画**：空对话光场、消息、上传面板、菜单和Canvas使用`useGSAP()`、独立scope及`prefers-reduced-motion`降级；动效只改变 `transform` / `opacity`，菜单不使用会阻断焦点的 `visibility` 动画。首个 render-only `pipeline_flow` 已通过严格语义Schema、静态React Renderer和统一 `AnimationShell` 实现，模型不能提交选择器、时长、任意属性或GSAP代码（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
 
 ### 受控Canvas协议（packages/canvas-protocol）
 
@@ -170,7 +171,7 @@ flowchart LR
 
 当前已落地供应商无关的流式模型契约、原生OpenAI-compatible SSE Adapter、两阶段 `answer → tools → synthesis` Orchestrator、浏览器到Web BFF的EduCanvas SSE、消息/模型/工具/安全账本、取消与刷新恢复，以及K12输入/流式输出安全Gate。`ScriptedModelGateway`和前端Demo Script仍只用于确定性测试，生产组合根有依赖边界测试防止误用。
 
-知识侧已完成审核资料的不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和防伪引用仓储；教学侧已完成可信状态推进、投影/回放与下一节点推荐。两者尚需接入Web应用纵切；Artifact提议/确认/独立生成链路仍未实现，因此当前不能宣称整节课Agent闭环完成。
+知识侧已将审核资料的不可变版本、PostgreSQL FTS、Turn资料快照、检索候选、防伪引用仓储、`retrieveKnowledge` 工具、引用 SSE 与引用 UI 接成一条生产纵切。教学侧已在服务端判分后接入受控状态推进，但当前仅在可信状态为 `ASSESS` 时提交 `ASSESSMENT_COMPLETED`，其余教学节点仍待逐事件接线。Artifact提议/确认/独立生成链路仍未实现，因此当前不能宣称整节课Agent闭环完成。
 
 **模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace），业务代码不写死模型ID。
 
@@ -318,15 +319,15 @@ make e2e
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : 受控Canvas与教学动画 ✅ : teaching-core与runtime基础 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 消息与模型账本 ✅ : 真实Provider与SSE契约 ✅ : 两阶段工具循环 ✅ : PostgreSQL集成与Playwright基线 ✅ : K1/T1应用接线 : Artifact提议确认 : 整节课E2E
+    阶段一 产品纵切 : monorepo骨架 ✅ : 通用Asset纵切 ✅ : 受控Canvas与教学动画 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 消息与模型账本 ✅ : 真实Provider与SSE契约 ✅ : 两阶段工具循环 ✅ : K1检索引用接线 ✅ : T1 ASSESS推进接线 ✅ : Artifact提议确认 : 整节课E2E
     阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : 多供应商路由治理 : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）的本地真实Agent收口阶段**：匿名身份、学习会话、消息与模型运行账本、EduCanvas SSE、真实OpenAI-compatible Provider适配器、两阶段工具循环、取消与刷新恢复、安全Gate、服务端判分和Progress持久化已经连通。审核资料不可变版本、PostgreSQL FTS、Turn资料快照和防伪引用已经落在数据层；可信状态投影、回放和下一节点推荐已经落在Core/Runtime，但两者尚未接入Web应用纵切。Provider未配置时页面会进入明确的不可用状态，不会回退到确定性脚本伪造老师回答。CI按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行；具体测试数量与通过状态以当前分支的CI结果为准。
+当前处于**阶段一（产品纵切）的本地真实Agent收口阶段**：匿名身份、学习会话、通用Asset与消息Part、消息/模型运行账本、EduCanvas SSE、真实OpenAI-compatible Provider适配器、两阶段工具循环、取消与刷新恢复、安全Gate、K1检索引用、服务端判分、受控ASSESS状态推进和Progress持久化已经连通。Provider未配置时页面会进入明确的不可用状态，不会回退到确定性脚本伪造老师回答。当前分支已通过280项单元测试、42项PostgreSQL集成测试、23项Chromium E2E、类型检查和生产构建；CI仍按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行。
 
-这仍是匿名演示纵切，不等同于正式用户认证或可供未成年人使用的生产环境。下一步是完成K1检索/引用和T1状态推进的Web应用接线，再实现受控Artifact的提议、学生确认、独立生成和真实Studio列表；最后用轮换后的本地Provider Key完成合成数据live smoke与整节课E2E。正式认证、迁移向下回退、备份恢复、生产SLO与运维门禁仍属于后续production-hardening计划。
+这仍是匿名演示纵切，不等同于正式用户认证或可供未成年人使用的生产环境。下一步是实现受控Artifact的提议、学生确认、独立生成和真实Studio列表，补齐非ASSESS节点的可信状态事件接线，并用轮换后的本地Provider Key完成合成数据live smoke与整节课E2E。正式认证、完整资产删除/对象存储治理、备份恢复、生产SLO与运维门禁仍属于后续production-hardening计划。
 
 ## 最简单的团队协作规则
 

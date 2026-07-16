@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import {
   DEFAULT_ASSISTANT_LEASE_MS,
   DrizzleChatRepository,
+  DrizzleKnowledgeRetrievalRepository,
   DrizzleModelRunRepository,
   DrizzleTeachingTurnLedger,
   DrizzleToolCallRepository,
@@ -19,7 +20,7 @@ import {
   evaluateTeachingInput,
   type TeachingSafetyDecision,
 } from '@educanvas/teaching-core';
-import type { TurnModelEvent } from '@educanvas/agent-core';
+import type { AgentMessagePart, TurnModelEvent } from '@educanvas/agent-core';
 import {
   TeachingOutputSafetyGate,
   TeachingTurnOrchestrator,
@@ -31,6 +32,7 @@ import {
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import type { AnonymousIdentity } from './anonymous-identity';
 import { AuditedTurnModelGateway } from './audited-model-gateway';
+import { materializeAssetContext } from './asset-materialization';
 import { loadOwnedTeachingSession } from './learning-session';
 import { resolveTurnModelRuntime } from './model-runtime';
 import { hashPromptMaterial } from './prompt-hash';
@@ -44,6 +46,7 @@ const modelRuns = new DrizzleModelRunRepository();
 const leases = new DrizzleTurnLeaseRepository();
 const toolCalls = new DrizzleToolCallRepository();
 const safetyDecisions = new DrizzleTurnSafetyDecisionRepository();
+const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
 
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const CANCELLATION_POLL_MS = 500;
@@ -60,6 +63,7 @@ interface PreparedTurn {
   ledger: TeachingTurnLedgerSnapshot;
   session: NonNullable<Awaited<ReturnType<typeof loadOwnedTeachingSession>>>;
   studentMessage: string;
+  modelStudentMessage: string;
   toolExecutor: ReturnType<typeof createTeachingToolExecutor>;
   modelRuntime: ReturnType<typeof resolveTurnModelRuntime>;
 }
@@ -203,6 +207,17 @@ async function* replayTurn(
       };
     }
     if (!['pending', 'streaming'].includes(current.status)) {
+      if (current.status === 'completed') {
+        const citations = await knowledgeRetrieval.listOwnedMessageCitations({
+          trustedStudentId: identity.studentId,
+          sessionId: current.sessionId,
+          turnId: current.turnId,
+          assistantMessageId: current.id,
+        });
+        for (const citation of citations) {
+          yield citationEvent(current.turnId, citation);
+        }
+      }
       yield terminalEventForMessage(current);
       return;
     }
@@ -242,7 +257,34 @@ function stableToolExecutionId(input: {
 
 function toolLabel(tool: string): string | undefined {
   if (tool === 'getStudentState') return '正在查看学习进度';
+  if (tool === 'retrieveKnowledge') return '正在检索课程资料';
   return undefined;
+}
+
+function citationEvent(
+  turnId: string,
+  citation: Awaited<
+    ReturnType<DrizzleKnowledgeRetrievalRepository['listOwnedMessageCitations']>
+  >[number],
+): TeachingTurnEvent {
+  const pageLabel = citation.pageStart
+    ? citation.pageEnd && citation.pageEnd !== citation.pageStart
+      ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
+      : ` · 第${citation.pageStart}页`
+    : '';
+  return {
+    type: 'message.citation',
+    schemaVersion: '1',
+    turnId,
+    messageId: citation.assistantMessageId,
+    citationId: citation.id,
+    sourceId: citation.sourceId,
+    documentId: citation.documentId,
+    chunkId: citation.chunkId,
+    label: `${citation.sourceTitle}${pageLabel}`,
+    pageStart: citation.pageStart,
+    pageEnd: citation.pageEnd,
+  };
 }
 
 async function settleUnfinishedToolAudits(
@@ -448,6 +490,7 @@ async function* runFreshTurn(
     modelTools.map((descriptor) => [descriptor.name, descriptor]),
   );
   const outputSafety = new TeachingOutputSafetyGate();
+  const retrievalCandidateIds: string[] = [];
   let assistantStreaming = false;
 
   try {
@@ -457,7 +500,7 @@ async function* runFreshTurn(
         traceId: snapshot.answerRun.traceId,
         turnId: snapshot.turn.turnId,
         session: prepared.session,
-        studentMessage: prepared.studentMessage,
+        studentMessage: prepared.modelStudentMessage,
       },
       { signal: controller.signal },
     )) {
@@ -652,6 +695,25 @@ async function* runFreshTurn(
           Math.round(event.result.audit.durationMs),
         );
         if (event.result.ok) {
+          if (
+            audit.tool === 'retrieveKnowledge' &&
+            typeof event.result.output === 'object' &&
+            event.result.output !== null &&
+            'evidence' in event.result.output &&
+            Array.isArray(event.result.output.evidence)
+          ) {
+            for (const candidate of event.result.output.evidence) {
+              if (
+                typeof candidate === 'object' &&
+                candidate !== null &&
+                'candidateId' in candidate &&
+                typeof candidate.candidateId === 'string' &&
+                !retrievalCandidateIds.includes(candidate.candidateId)
+              ) {
+                retrievalCandidateIds.push(candidate.candidateId);
+              }
+            }
+          }
           const settled = await toolCalls.settle({
             trustedStudentId: prepared.identity.studentId,
             toolCallId: audit.record.id,
@@ -730,6 +792,16 @@ async function* runFreshTurn(
           turnId: snapshot.turn.turnId,
           decision: safetyResult.decision,
         });
+        const citationResult =
+          retrievalCandidateIds.length > 0
+            ? await knowledgeRetrieval.persistMessageCitations({
+                trustedStudentId: prepared.identity.studentId,
+                sessionId: assistant.sessionId,
+                turnId: snapshot.turn.turnId,
+                assistantMessageId: assistant.id,
+                candidateIds: retrievalCandidateIds,
+              })
+            : null;
         const settled = await chat.settleAssistantMessage({
           sessionId: assistant.sessionId,
           trustedStudentId: prepared.identity.studentId,
@@ -743,6 +815,9 @@ async function* runFreshTurn(
           taskAlias: 'teaching.turn',
           modelAlias: 'primary',
         });
+        for (const citation of citationResult?.citations ?? []) {
+          yield citationEvent(snapshot.turn.turnId, citation);
+        }
         yield terminalEventForMessage(settled.message);
         return;
       }
@@ -822,15 +897,30 @@ async function* runFreshTurn(
 
 export async function beginOwnedTeachingTurn(
   identity: AnonymousIdentity,
-  input: { clientMessageId: string; text: string },
+  input: {
+    clientMessageId: string;
+    text: string;
+    parts: readonly AgentMessagePart[];
+  },
 ): Promise<StartedOwnedTeachingTurn> {
   await leases.convergeExpired({ limit: 25 });
   const session = await loadOwnedTeachingSession(identity);
   if (!session) throw new LearningSessionOwnershipError();
   const studentMessage = normalizeStudentMessageContent(input.text);
+  const assetContext = await materializeAssetContext({
+    identity,
+    spaceId: session.id,
+    parts: input.parts,
+  });
+  const modelStudentMessage = [
+    studentMessage || '请分析我提供的资料。',
+    assetContext,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const toolExecutor = createTeachingToolExecutor();
   const promptMaterial = createTeachingTurnAnswerPromptMaterial(
-    { session, studentMessage },
+    { session, studentMessage: modelStudentMessage },
     toolExecutor.listModelTools(session.state),
   );
   const modelRuntime = resolveTurnModelRuntime();
@@ -840,6 +930,7 @@ export async function beginOwnedTeachingTurn(
     trustedStudentId: identity.studentId,
     clientMessageId: input.clientMessageId,
     text: studentMessage,
+    parts: input.parts,
     traceId,
     modelAlias: promptMaterial.modelAlias,
     promptVersion: promptMaterial.promptVersion,
@@ -852,6 +943,7 @@ export async function beginOwnedTeachingTurn(
     ledger: turnLedger,
     session,
     studentMessage,
+    modelStudentMessage,
     toolExecutor,
     modelRuntime,
   };

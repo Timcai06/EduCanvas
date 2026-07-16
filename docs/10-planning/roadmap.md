@@ -37,16 +37,16 @@ K12垂直纵切：
 
 真实Agent基础设施已经完成A2/A3/A4与S1基线：固定Turn/Cancel Route和版本化EduCanvas SSE、可配置的原生OpenAI-compatible Provider Adapter、`answer → tools → synthesis`两阶段编排、首个只读`getStudentState`工具、消息/Model Run/Tool Call/安全决策账本、发送幂等、单会话活动Turn限制、PostgreSQL窗口限流、租约/heartbeat、显式取消和刷新恢复。`ScriptedModelGateway`仅保留在确定性测试边界，未配置Provider时不会生成伪回答。
 
-K1的数据层已经实现审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和只接受本轮candidate的防伪引用；T1的Core/Runtime已经实现可信状态推进、事件回放、掌握度更新与下一节点推荐。二者都尚未接入Web应用纵切。C1的Artifact提议、学生确认、独立生成和真实Studio列表尚未实现。
+通用Asset首条纵切已经实现匿名所有权、不可变版本、PDF/图片上传、PDF文本解析、消息Part和刷新恢复；当前文本Provider不支持图片时会明确失败。K1的数据层与Web纵切已经接通审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选、防伪引用、引用SSE和UI。T1的Core/Runtime已经实现可信状态推进、事件回放、掌握度更新与下一节点推荐，Web在Canvas判分后仅对可信`ASSESS`状态完成了首条推进接线。C1的Artifact提议、学生确认、独立生成和真实Studio列表尚未实现。
 
 已完成的验证基线覆盖单元测试、真实PostgreSQL集成测试和Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job，具体数量和通过状态以当前分支CI为准。
 
 阶段一剩余工作按平台与垂直纵切拆分：
 
-1. 为已经抽取的通用`agent-core`补齐Asset所有权、持久化、处理任务和供应商输入物化；现有契约已覆盖全模态类型、不可变版本引用、多Part消息、模型事件、Gateway Port和运行元数据；
+1. 将通用Asset首条纵切从本地私有存储扩展到对象存储、异步解析/恶意文件扫描和原生视觉Provider；现有契约与数据库已覆盖全模态类型、匿名所有权、不可变版本引用、多Part消息和文本上下文物化；
 2. 形成通用Artifact术语和生命周期，课程资料、教学Canvas继续作为K12适配；
-3. 完成K1应用接线：把受控教材摄取结果、Turn快照、FTS候选和引用防伪仓储组合进K12 Agent工具与引用UI；
-4. 完成T1应用接线：让Canvas判分和受控runtime决策真正推进可信状态、误区/掌握度投影与下一节点；
+3. 为K1建立冻结中文检索评测集，并仅在FTS指标触发阈值时引入向量/重排，不为了架构对称提前增加复杂度；
+4. 补齐T1非`ASSESS`节点的可信事件接线，并验证完整状态回放与下一节点推荐；
 5. 完成C1：实现平台级Artifact提议/确认/生成/Studio生命周期，并由K12 Agent注册首批教学Artifact；
 6. 将通用对话、资料引用、受控Artifact、教学判分、状态推进和刷新恢复串成完整E2E，再执行受控Provider live smoke。
 

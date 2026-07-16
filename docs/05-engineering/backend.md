@@ -28,16 +28,17 @@
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
 - Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
-- `TeachingTurnOrchestrator`支持`answer → tools → synthesis`两阶段编排；当前生产组合只注册只读`getStudentState`，工具可见性仍由可信教学状态、注册Handler和exposure共同收敛；
+- `TeachingTurnOrchestrator`支持`answer → tools → synthesis`两阶段编排；当前生产组合注册只读`getStudentState`与`retrieveKnowledge`，工具可见性仍由可信教学状态、注册Handler和exposure共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
 - 学生消息、老师消息、Model Run、Tool Call和安全决策分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
-## 已实现但未接Web的后端能力
+## 当前后端接线状态
 
-- K1数据层：审核资料不可变版本、PostgreSQL FTS、Session资料绑定、Turn资料快照、检索候选和引用防伪仓储已经实现；`retrieveKnowledge`工具、引用持久化编排和Web引用呈现尚未接线；
-- T1 Core/Runtime：可信状态转移、策略快照、事件回放、掌握度更新、误区与下一节点推荐服务已经实现；当前Canvas判分后的Web流程尚未调用完整状态推进链路；
+- 通用Asset：`assets / asset_versions / agent_message_parts` 已支持匿名归属、不可变版本、PDF文本物化、图片原生引用保留与刷新恢复；浏览器永远拿不到私有存储键；
+- K1：审核资料不可变版本、PostgreSQL FTS、Session资料绑定、Turn资料快照、检索候选和引用防伪仓储已接入`retrieveKnowledge`工具、引用持久化编排和Web引用呈现；
+- T1：可信状态转移、策略快照、事件回放、掌握度更新、误区与下一节点推荐服务已经实现；Canvas判分后的Web流程仅在当前可信状态为`ASSESS`时提交完成信号，其他状态事件仍需逐项接线；
 - C1尚未实现：Artifact proposal、学生确认、独立生成Model Run、proposal到Artifact幂等提交和真实Studio查询仍是下一阶段工作。
 
 该身份机制只服务阶段一匿名演示，不提供注册、登录、账号恢复、角色权限或跨设备身份，因此不能替代正式认证。

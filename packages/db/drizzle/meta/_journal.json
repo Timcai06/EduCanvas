@@ -64,6 +64,13 @@
       "when": 1784127759989,
       "tag": "0008_k1_snapshot_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784174297179,
+      "tag": "0009_slow_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

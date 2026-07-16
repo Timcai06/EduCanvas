@@ -48,12 +48,13 @@ export function Composer({
   const [value, setValue] = useState('');
   const isLanding = variant === 'landing';
   const hasText = value.trim().length > 0;
+  const hasPayload = hasText || chips.length > 0;
 
   const submit = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     const text = value.trim();
-    if (!text || busy) return;
+    if (!hasPayload || busy) return;
     setValue('');
     textarea.style.height = 'auto';
     onSend(text);
@@ -62,7 +63,7 @@ export function Composer({
   return (
     <div
       className={`mx-auto w-full px-4 ${
-        isLanding ? 'max-w-[46rem]' : 'max-w-3xl pb-3'
+        isLanding ? 'max-w-[42rem]' : 'max-w-3xl pb-3'
       }`}
     >
       {chips.length > 0 ? (
@@ -70,7 +71,7 @@ export function Composer({
           {chips.map((chip) => (
             <span
               key={chip.id}
-              className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1 text-xs font-medium text-ink-muted"
+              className="inline-flex items-center gap-1 rounded-full border border-line/80 bg-surface/90 px-3 py-1 text-xs font-medium text-ink-muted shadow-[0_6px_20px_rgb(0_0_0_/_0.14)]"
             >
               {chip.label}
               <button
@@ -86,9 +87,9 @@ export function Composer({
         </div>
       ) : null}
       <div
-        className={`flex items-end gap-1 border border-line bg-surface p-2 transition-[box-shadow,background-color] focus-within:bg-surface focus-within:shadow-[var(--shadow-float)] focus-within:ring-2 focus-within:ring-accent ${
+        className={`flex items-end gap-1 border border-line/80 bg-surface/95 p-2 backdrop-blur-xl transition-[border-color,box-shadow,background-color] focus-within:border-accent/55 focus-within:bg-surface focus-within:shadow-[var(--shadow-float),0_0_0_1px_rgb(124_141_255_/_0.16)] ${
           isLanding
-            ? 'min-h-16 rounded-[2rem] shadow-[0_1px_2px_rgb(0_0_0_/_0.4)]'
+            ? 'min-h-16 rounded-[2rem] shadow-[0_14px_44px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.035)]'
             : 'rounded-[var(--radius-pill)]'
         }`}
       >
@@ -98,8 +99,8 @@ export function Composer({
           value={value}
           disabled={busy}
           rows={1}
-          aria-label="向 AI 老师提问"
-          placeholder={isLanding ? '问问 AI 老师' : '继续和老师聊聊…'}
+          aria-label="向 EduCanvas 提问"
+          placeholder={isLanding ? '向 EduCanvas 提问' : '继续对话…'}
           onChange={(event) => setValue(event.currentTarget.value)}
           onInput={(event) => {
             const textarea = event.currentTarget;
@@ -124,7 +125,7 @@ export function Composer({
         {isLanding ? (
           <span className="hidden shrink-0 items-center gap-1.5 px-2 text-sm font-medium text-ink-muted sm:inline-flex">
             <Sparkle aria-hidden="true" size={15} weight="fill" />
-            AI 老师
+            EduCanvas
           </span>
         ) : null}
         {busy && stopAvailable && onStop ? (
@@ -137,7 +138,7 @@ export function Composer({
           >
             <StopCircle aria-hidden="true" size={21} weight="fill" />
           </button>
-        ) : hasText ? (
+        ) : hasPayload ? (
           <button
             type="button"
             onClick={submit}
@@ -165,7 +166,7 @@ export function Composer({
             statusTone === 'error' ? 'text-bad' : 'text-ink-faint'
           }`}
         >
-          {statusText ?? 'AI 老师也可能出错，重要内容记得和课本核对。'}
+          {statusText ?? 'AI 也可能出错，请核对重要信息。'}
         </p>
       ) : null}
     </div>

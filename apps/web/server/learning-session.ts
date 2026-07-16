@@ -3,6 +3,7 @@ import 'server-only';
 import { canvasInteractionEventSchema } from '@educanvas/canvas-protocol';
 import {
   DrizzleChatRepository,
+  DrizzleKnowledgeRetrievalRepository,
   DrizzleLearningSessionRepository,
   DrizzleSessionRepository,
   getDb,
@@ -19,10 +20,14 @@ import {
   type AnonymousIdentity,
 } from './anonymous-identity';
 import { demoLesson } from './demo-lesson';
-import { gradeCanvasSubmissionService } from './teaching-runtime';
+import {
+  gradeCanvasSubmissionService,
+  progressTeachingStateService,
+} from './teaching-runtime';
 
 const learningSessions = new DrizzleLearningSessionRepository();
 const chatMessages = new DrizzleChatRepository();
+const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
 
 function scopeFor(studentId: string) {
   return {
@@ -135,6 +140,39 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
       )
       .map((message) => [message.turnId, message.clientMessageId]),
   );
+  const citationsByMessage = new Map(
+    await Promise.all(
+      history.messages
+        .filter((message) => message.role === 'assistant')
+        .map(async (message) => {
+          const citations = await knowledgeRetrieval.listOwnedMessageCitations({
+            trustedStudentId: identity.studentId,
+            sessionId: snapshot.sessionId,
+            turnId: message.turnId,
+            assistantMessageId: message.id,
+          });
+          return [
+            message.id,
+            citations.map((citation) => {
+              const pageLabel = citation.pageStart
+                ? citation.pageEnd && citation.pageEnd !== citation.pageStart
+                  ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
+                  : ` · 第${citation.pageStart}页`
+                : '';
+              return {
+                id: citation.id,
+                sourceId: citation.sourceId,
+                documentId: citation.documentId,
+                chunkId: citation.chunkId,
+                label: `${citation.sourceTitle}${pageLabel}`,
+                pageStart: citation.pageStart,
+                pageEnd: citation.pageEnd,
+              };
+            }),
+          ] as const;
+        }),
+    ),
+  );
   return {
     artifact: snapshot.artifact,
     progress: snapshot.mastery
@@ -155,6 +193,8 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
         role: message.role,
         status: message.status,
         content: message.content,
+        parts: message.parts,
+        citations: citationsByMessage.get(message.id) ?? [],
         failureCode: message.failureCode,
         createdAt: message.createdAt,
         completedAt: message.completedAt,
@@ -194,14 +234,33 @@ export async function submitOwnedCanvas(
   );
   if (!session) return { authenticated: false };
 
+  const outcome = await gradeCanvasSubmissionService.execute({
+    trustedStudentId: identity.studentId,
+    sessionId: session.sessionId,
+    clientEvent: parsed.data,
+    prerequisiteScores: [],
+  });
+  if (outcome.ok) {
+    const current = await new DrizzleSessionRepository(getDb()).getById(
+      session.sessionId,
+    );
+    if (current?.state === 'ASSESS') {
+      const progression = await progressTeachingStateService.execute({
+        trustedStudentId: identity.studentId,
+        sessionId: session.sessionId,
+        causationId: outcome.event.eventId,
+        candidateSignal: 'ASSESSMENT_COMPLETED',
+      });
+      if (!progression.ok) {
+        throw new Error(
+          `trusted_assessment_progression_failed:${progression.code}`,
+        );
+      }
+    }
+  }
   return {
     authenticated: true,
-    outcome: await gradeCanvasSubmissionService.execute({
-      trustedStudentId: identity.studentId,
-      sessionId: session.sessionId,
-      clientEvent: parsed.data,
-      prerequisiteScores: [],
-    }),
+    outcome,
   };
 }
 

@@ -20,8 +20,8 @@
 
 - 状态机、ASSESS出口、掌握度、误区、可信事件、回放和下一节点推荐已经实现为纯领域逻辑；
 - `KnowledgeRetriever`与`TeachingUnitOfWork`是K12 Port；`TurnModelGateway`来自`@educanvas/agent-core`并由本包兼容导出；具体Drizzle、Provider和检索实现位于外层包；
-- T1 状态推进应用服务已在 `@educanvas/teaching-runtime` 实现，但尚未由 Web 在 Canvas 判分后调用；
-- K1 PostgreSQL FTS 仓储已在 `@educanvas/db` 实现，但尚未注入 Web 生产工具；
+- T1 状态推进应用服务已在 `@educanvas/teaching-runtime` 实现，并由 Web 在可信 `ASSESS` Canvas 判分后调用；其余节点事件仍需外层逐项接线；
+- K1 PostgreSQL FTS 仓储已由 Web 注入生产 `retrieveKnowledge` 工具，引用仍由外层候选白名单和数据库约束验证；
 - 本包不会自动运行 Agent、写数据库、发送 SSE 或渲染 Canvas，也不允许模型文本直接成为可信状态事实。
 
 ## 依赖方向
