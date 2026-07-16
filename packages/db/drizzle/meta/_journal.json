@@ -78,6 +78,20 @@
       "when": 1784181665216,
       "tag": "0010_tricky_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784182568770,
+      "tag": "0011_legal_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784183036603,
+      "tag": "0012_wandering_black_queen",
+      "breakpoints": true
     }
   ]
 }

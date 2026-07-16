@@ -359,9 +359,6 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           yield { type: 'usage', phase: request.phase, usage };
           continue;
         }
-        if (chunk.usage !== null && chunk.usage !== undefined) {
-          throw new SseProtocolError();
-        }
         if (chunk.choices.length !== 1 || providerFinishReason !== null) {
           throw new SseProtocolError();
         }
@@ -460,6 +457,17 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           } else if (toolCalls.size > 0) {
             throw new SseProtocolError();
           }
+        }
+
+        // OpenAI 会在末尾追加 choices=[] 的 usage chunk；DeepSeek V4 则把
+        // usage 放在携带 finish_reason 的最后一个 choice chunk。两种布局都
+        // 属于其公开兼容协议，但 usage 只能出现一次且不得早于终止原因。
+        if (chunk.usage !== null && chunk.usage !== undefined) {
+          if (providerFinishReason === null || usage !== null) {
+            throw new SseProtocolError();
+          }
+          usage = parseUsage(chunk.usage);
+          yield { type: 'usage', phase: request.phase, usage };
         }
       }
 

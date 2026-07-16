@@ -80,15 +80,19 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'session_source_bindings', 'turn_source_snapshots', 'turn_source_versions',
             'retrieval_candidates', 'message_citations',
             'assets', 'asset_versions', 'agent_message_parts',
-            'turn_context_snapshots'
+            'turn_context_snapshots', 'spaces', 'conversations',
+            'agent_operations', 'conversation_messages'
           )
         order by table_name
       `;
       expect(tables.map((table) => table.table_name)).toEqual([
         'agent_message_parts',
+        'agent_operations',
         'asset_versions',
         'assets',
         'chat_messages',
+        'conversation_messages',
+        'conversations',
         'knowledge_chunks',
         'knowledge_documents',
         'knowledge_sources',
@@ -97,6 +101,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'model_runs',
         'retrieval_candidates',
         'session_source_bindings',
+        'spaces',
         'tool_calls',
         'turn_context_snapshots',
         'turn_safety_decisions',
@@ -271,6 +276,63 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
           where table_schema = 'public' and table_name = 'tool_calls'
         `,
       ).toHaveLength(1);
+    });
+  });
+
+  it('从0010升级时为既有K12会话回填Space和Conversation', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      for (const migration of [
+        '0000_careless_lady_bullseye.sql',
+        '0001_light_the_initiative.sql',
+        '0002_common_cerebro.sql',
+        '0003_wealthy_wildside.sql',
+        '0004_nifty_spyke.sql',
+        '0005_exotic_starhawk.sql',
+        '0006_windy_silver_sable.sql',
+        '0007_ambiguous_silver_surfer.sql',
+        '0008_k1_snapshot_integrity.sql',
+        '0009_slow_shinobi_shaw.sql',
+        '0010_tricky_impossible_man.sql',
+      ]) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '74000000-0000-4000-8000-000000000001';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status, title
+        ) values (
+          ${sessionId}, 'backfill-owner', 'middle_school', 'backfill-course',
+          'node', 'EXPLAIN', 'active', '既有课程对话'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0011_legal_nocturne.sql');
+
+      const [row] = await connection<
+        {
+          conversation_id: string | null;
+          space_owner: string;
+          conversation_owner: string;
+          agent_profile_id: string;
+        }[]
+      >`
+        select
+          ls.conversation_id,
+          s.owner_subject_id as space_owner,
+          c.owner_subject_id as conversation_owner,
+          c.agent_profile_id
+        from lesson_sessions ls
+        join conversations c on c.id = ls.conversation_id
+        join spaces s on s.id = c.space_id
+        where ls.id = ${sessionId}
+      `;
+      expect(row).toEqual({
+        conversation_id: sessionId,
+        space_owner: 'backfill-owner',
+        conversation_owner: 'backfill-owner',
+        agent_profile_id: 'k12.teacher',
+      });
     });
   });
 

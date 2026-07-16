@@ -148,6 +148,37 @@ describe('OpenAICompatibleTurnModelGateway', () => {
     expect(body).not.toHaveProperty('user_id');
   });
 
+  it('接受DeepSeek在终止choice中内联usage的SSE布局', async () => {
+    const finishChunk = textStreamChunks.at(-2) as Record<string, unknown>;
+    const usageChunk = textStreamChunks.at(-1) as Record<string, unknown>;
+    const deepSeekChunks = [
+      ...textStreamChunks.slice(0, -2),
+      { ...finishChunk, usage: usageChunk.usage },
+    ];
+    const gateway = new OpenAICompatibleTurnModelGateway(config, {
+      fetchImpl: oneResponseFetch(() =>
+        createFixtureResponse(deepSeekChunks, { splitEvery: 9 }),
+      ),
+    });
+
+    const events = await collect(gateway);
+
+    expect(events.map((event) => event.type)).toEqual([
+      'text_delta',
+      'text_delta',
+      'usage',
+      'completed',
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      metadata: {
+        resolvedModelId: 'explicitly-configured-model',
+        finishReason: 'stop',
+        usage: { inputTokens: 24, outputTokens: 9 },
+      },
+    });
+  });
+
   it('在供应商终止事件到达前立即交付首个文本增量', async () => {
     const encoder = new TextEncoder();
     let releaseRemaining!: () => void;
@@ -475,6 +506,19 @@ describe('OpenAICompatibleTurnModelGateway', () => {
           },
           ...textStreamChunks.slice(2),
         ]),
+    },
+    {
+      name: 'usage before finish reason',
+      response: () => {
+        const usageChunk = textStreamChunks.at(-1) as Record<string, unknown>;
+        return createFixtureResponse([
+          {
+            ...(textStreamChunks[0] as Record<string, unknown>),
+            usage: usageChunk.usage,
+          },
+          ...textStreamChunks.slice(1),
+        ]);
+      },
     },
   ])('把畸形SSE（$name）收敛为invalid_response', async ({ response }) => {
     const gateway = new OpenAICompatibleTurnModelGateway(config, {

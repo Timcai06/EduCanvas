@@ -16,6 +16,16 @@
 
 阶段一继续使用一个PostgreSQL数据库，但按职责区分四组逻辑数据。物理同库不代表领域同层，字段、约束和迁移仍以`packages/db/src/schema.ts`与`packages/db/drizzle/`为准。
 
+### 通用平台主干
+
+- `spaces`：Assets、Conversations与未来Artifacts的所有权和生命周期容器；
+- `conversations`：Chat主叙事线程与Agent Profile选择，不包含课程或掌握度字段；
+- `agent_operations`：通用Turn/Artifact Generation操作信封；
+- `conversation_messages`：可脱离K12持久化和恢复的通用消息骨架；
+- `lesson_sessions.conversation_id`：K12 Vertical Context到通用Conversation的关联。0011迁移为旧会话回填同ID Space/Conversation，新会话在同一事务双写。
+
+当前仍处additive migration：生产K12 Turn继续使用`chat_messages/model_runs`，通用消息尚未承载SSE、工具、Message Parts与Model Run。不得删除旧表或宣称迁移完成。
+
 ### K12垂直领域
 
 - `lesson_sessions`：教学状态、中断状态、课程范围、事件序号和乐观锁版本；

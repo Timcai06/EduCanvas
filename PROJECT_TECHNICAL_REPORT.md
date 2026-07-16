@@ -19,7 +19,7 @@ EduCanvas 的平台定位是一个 **Chat-first、资产化、可扩展的全模
 - Studio 管理可持续编辑、版本化和复用的输出；
 - K12 AI 教师是当前首个垂直 Agent，而不是整个平台的唯一产品定义。
 
-当前代码已经越过“UI 原型”阶段，具备真实 Provider SSE、消息与运行账本、受控工具循环、资产上传、引用链路、确定性 Canvas 判分、可信教学状态推进，以及有界跨轮历史与上下文快照。它仍然是一个 **K12 纵切驱动的模块化单体**，尚未完成通用 Space/Conversation 数据主干、摘要/Artifact 上下文、原生图片/音视频模型输入、Artifact 生命周期和真正插件装配。
+当前代码已经越过“UI 原型”阶段，具备真实 Provider SSE、消息与运行账本、受控工具循环、资产上传、引用链路、确定性 Canvas 判分、可信教学状态推进、有界跨轮历史与上下文快照，以及首个通用 Space/Conversation 数据骨架。它仍然是一个 **K12 纵切驱动的模块化单体**；通用消息尚未接入真实 Turn Engine，摘要/Artifact 上下文、原生图片/音视频模型输入、Artifact 生命周期和真正插件装配仍未完成。
 
 架构健康度可以概括为：
 
@@ -99,7 +99,7 @@ flowchart LR
 
 ### 3.3 尚未实现
 
-- 一等 `Space / Conversation / Operation` 数据主干；
+- 通用 `Operation / Model Run / Message Parts` 全量迁移（`Space / Conversation / Message` 骨架已落地）；
 - 跨轮摘要、长期记忆和 Artifact 上下文装配；
 - 原生图片、音频、视频 Provider 输入；
 - Provider Capability Registry 与动态路由；
@@ -685,7 +685,7 @@ make e2e          # build + Playwright 全栈测试
 make build        # production build
 ```
 
-本报告随首个 Runtime 整改增量复核后的结果为：lint、TypeScript typecheck、289 项单元测试、43 项 PostgreSQL integration、23 项 Chromium E2E 和 production build 通过；Markdown 相对链接亦已重新检查。
+本报告随首个 Runtime/Data 整改增量复核后的结果为：lint、TypeScript typecheck、289 项单元测试、46 项 PostgreSQL integration、23 项 Chromium E2E 和 production build 通过；Markdown 相对链接亦已重新检查。
 
 ## 16. 本地运行方式
 

@@ -19,8 +19,10 @@ import {
   canvasArtifactGradingKeys,
   canvasArtifacts,
   chatMessages,
+  conversations,
   lessonSessions,
   masteryStates,
+  spaces,
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
@@ -269,9 +271,36 @@ async function insertSession(
       ),
     )
     .limit(1);
+  const [space] = await transaction
+    .insert(spaces)
+    .values({
+      ownerSubjectId: scope.studentId,
+      kind: 'course',
+      title: scope.courseSlug,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: spaces.id });
+  if (!space) throw new Error('学习Space写入失败');
+  const [conversation] = await transaction
+    .insert(conversations)
+    .values({
+      spaceId: space.id,
+      ownerSubjectId: scope.studentId,
+      agentProfileId: 'k12.teacher',
+      title: scope.courseSlug,
+      status: 'active',
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: conversations.id });
+  if (!conversation) throw new Error('学习Conversation写入失败');
   const [created] = await transaction
     .insert(lessonSessions)
     .values({
+      conversationId: conversation.id,
       studentId: scope.studentId,
       gradeBand: scope.gradeBand,
       courseSlug: scope.courseSlug,
@@ -574,6 +603,7 @@ export class DrizzleLearningSessionRepository {
     const rows = await this.database
       .select({
         id: lessonSessions.id,
+        conversationId: lessonSessions.conversationId,
         studentId: lessonSessions.studentId,
         gradeBand: lessonSessions.gradeBand,
         courseSlug: lessonSessions.courseSlug,

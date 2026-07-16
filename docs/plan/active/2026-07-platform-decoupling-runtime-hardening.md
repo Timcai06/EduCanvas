@@ -57,8 +57,10 @@
 
 ### PR-P1：通用 Space / Conversation 数据骨架
 
-- 新增 `spaces`、`conversations` 和通用消息/operation 语义；
-- `lesson_sessions`通过 Vertical Context 关联 Conversation，不再作为平台父实体；
+- [x] 新增 `spaces`、`conversations`、`agent_operations`和通用消息骨架；
+- [x] `lesson_sessions`通过`conversation_id`关联Conversation，旧数据完成回填，新Session原子双写；
+- [x] 通用Conversation可脱离课程/掌握度持久化和恢复消息；
+- [ ] 将生产Turn、Message Parts和Model Run双写/迁移到通用Operation；
 - Asset 真正归属 Space，`turn`范围绑定创建它的 Turn；
 - `model_runs.operationKind/phase`支持通用 Turn 与 Artifact Generation；
 - 通过 additive migration、回填和兼容读取迁移既有匿名数据。
