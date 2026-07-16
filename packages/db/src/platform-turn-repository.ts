@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   assertOwnedReadyAssetParts,
@@ -40,6 +40,7 @@ export interface PlatformTurnMessageSnapshot {
 export interface PlatformTurnSnapshot {
   turnId: string;
   traceId: string;
+  cancelRequestedAt: string | null;
   replayed: boolean;
   studentMessage: PlatformTurnMessageSnapshot;
   assistantMessage: PlatformTurnMessageSnapshot;
@@ -154,6 +155,7 @@ async function loadTurn(
   return {
     turnId: operation.id,
     traceId: operation.traceId,
+    cancelRequestedAt: operation.cancelRequestedAt?.toISOString() ?? null,
     replayed,
     studentMessage: toMessage(student, operation.idempotencyKey),
     assistantMessage: toMessage(assistant, operation.idempotencyKey),
@@ -318,7 +320,10 @@ export class DrizzlePlatformTurnRepository {
         input.trustedSubjectId,
       );
       const [operation] = await transaction
-        .select({ id: agentOperations.id })
+        .select({
+          id: agentOperations.id,
+          cancelRequestedAt: agentOperations.cancelRequestedAt,
+        })
         .from(agentOperations)
         .where(
           and(
@@ -329,6 +334,11 @@ export class DrizzlePlatformTurnRepository {
         )
         .limit(1);
       if (!operation) throw new PlatformTurnOwnershipError();
+      if (input.status === 'cancelled' && !operation.cancelRequestedAt) {
+        throw new PlatformTurnLifecycleError(
+          '只有已请求取消的通用Turn才能进入cancelled终态',
+        );
+      }
 
       const [updated] = await transaction
         .update(agentOperations)
@@ -367,6 +377,79 @@ export class DrizzlePlatformTurnRepository {
       }
       return loadTurn(transaction, input.turnId, false);
     });
+  }
+
+  async requestTurnCancellation(input: {
+    trustedSubjectId: string;
+    turnId: string;
+    now?: Date;
+  }): Promise<{ turn: PlatformTurnSnapshot | null; accepted: boolean }> {
+    if (!/^[0-9a-f-]{36}$/i.test(input.turnId)) {
+      throw new PlatformTurnLifecycleError('turnId格式无效');
+    }
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [owned] = await transaction
+        .select({
+          id: agentOperations.id,
+          status: agentOperations.status,
+          cancelRequestedAt: agentOperations.cancelRequestedAt,
+        })
+        .from(agentOperations)
+        .innerJoin(
+          conversations,
+          eq(conversations.id, agentOperations.conversationId),
+        )
+        .where(
+          and(
+            eq(agentOperations.id, input.turnId),
+            eq(agentOperations.kind, 'turn'),
+            eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          ),
+        )
+        .limit(1);
+      if (!owned) return { turn: null, accepted: false };
+      const [updated] = await transaction
+        .update(agentOperations)
+        .set({ cancelRequestedAt: now })
+        .where(
+          and(
+            eq(agentOperations.id, input.turnId),
+            inArray(agentOperations.status, ['pending', 'running']),
+            isNull(agentOperations.cancelRequestedAt),
+          ),
+        )
+        .returning({ id: agentOperations.id });
+      return {
+        turn: await loadTurn(transaction, input.turnId, false),
+        accepted:
+          Boolean(updated) ||
+          (['pending', 'running'].includes(owned.status) &&
+            owned.cancelRequestedAt !== null),
+      };
+    });
+  }
+
+  async isTurnCancellationRequested(input: {
+    trustedSubjectId: string;
+    turnId: string;
+  }): Promise<boolean> {
+    const [owned] = await this.database
+      .select({ cancelRequestedAt: agentOperations.cancelRequestedAt })
+      .from(agentOperations)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, agentOperations.conversationId),
+      )
+      .where(
+        and(
+          eq(agentOperations.id, input.turnId),
+          eq(agentOperations.kind, 'turn'),
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .limit(1);
+    return Boolean(owned?.cancelRequestedAt);
   }
 
   async listMessages(input: {
