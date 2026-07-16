@@ -13,8 +13,17 @@
 - `src/grading.ts`：公开投影/私有判分键拆分和服务端确定性判分。
 - `src/artifacts/classification-game.ts`：分类游戏类别、题目与跨字段一致性约束。
 - `src/artifacts/quiz.ts`：单选测验、选项以及正确答案引用约束。
+- `src/artifacts/pipeline-flow.ts`：固定槽位、步骤顺序、暂停点和文案上限等 render-only 教学动画语义。
 - `src/events.ts`：不可信Canvas交互事件的逐类型strict Schema；服务端可信领域事件不属于本包。
 - `tsconfig.json`：协议包的TypeScript检查范围。
+
+## 当前实现边界
+
+- 协议版本当前只有 `1`；白名单联合已注册 `classification_game`、`quiz` 和 `pipeline_flow`；
+- `classification_game` 与 `quiz` 可拆分公开投影/私有判分键，并由服务端确定性判分；
+- `pipeline_flow` 只渲染教学流程动画，不生成判分键，也不接受模型提供选择器、时长、任意动画属性或 GSAP 代码；
+- `apps/web` 已为三种协议注册静态 React Renderer，但当前课程 Artifact 来自服务端预置数据；Agent 提议、学生确认、独立生成和 Studio 持久化列表仍未实现；
+- 本包只定义和校验协议，不负责数据库存储、Renderer 生命周期、模型调用或教学状态推进。
 
 ## 常用命令
 

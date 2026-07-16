@@ -2,11 +2,11 @@
 
 ## 这个包是什么
 
-这是EduCanvas共享的PostgreSQL数据访问包，使用Drizzle定义阶段一表结构、生成迁移并提供惰性数据库客户端。PostgreSQL是业务事实源；这里的Schema必须与`docs/04-data`和迁移文件保持一致，不能为了页面方便复制一套临时数据结构。
+这是EduCanvas共享的PostgreSQL数据访问包，使用Drizzle定义阶段一表结构、生成迁移并提供惰性数据库客户端、仓储和领域Port适配器。PostgreSQL是业务事实源；这里的Schema必须与`docs/04-data`和迁移文件保持一致，不能为了页面方便复制一套临时数据结构。
 
 ## 核心文件导读
 
-- `src/index.ts`：包的公共出口，统一导出数据库客户端与表定义。
+- `src/index.ts`：包的公共出口，统一导出数据库客户端、表定义、仓储和Drizzle适配器。
 - `src/client.ts`：读取`DATABASE_URL`并惰性创建Drizzle客户端，避免构建阶段连接数据库。
 - `src/schema.ts`：阶段一学习会话、对话/Model Run账本、Canvas产物、学习事件和掌握度表。
 - `src/chat-repository.ts`与`src/model-run-repository.ts`：发送幂等、消息生命周期、历史cursor与Provider运行审计。
@@ -26,6 +26,7 @@
 - `drizzle/0005_exotic_starhawk.sql`：active Turn互斥、streaming lease和tool call脱敏审计。
 - `drizzle/0006_windy_silver_sable.sql`：不含正文的Turn安全决策表、严格值域与审计索引。
 - `drizzle/0007_ambiguous_silver_surfer.sql`：审核资料、generated `tsvector`/GIN、Turn检索快照、候选与引用审计。
+- `drizzle/0008_k1_snapshot_integrity.sql`：强化K1快照与版本归属约束，保证快照完成后不可变并拒绝跨快照候选。
 - `drizzle/meta/`：Drizzle Kit的迁移快照与日志，生成迁移时同步更新。
 - `tsconfig.json`：数据库包和Drizzle配置的TypeScript检查范围。
 
@@ -49,6 +50,14 @@ pnpm lint                               # 运行仓库现有lint任务
 匿名生命周期以整个规范`anon:v1:<sha256>`主体为删除单位：仅当其所有Session的`last_activity_at`都严格早于7天cutoff时，才在单个可串行化事务内按注册顺序删除；任何近期Session都会保留整个主体。PR-K1、PR-T1、PR-C1或后续工作一旦新增`student_id/session_id/turn_id/artifact_record_id`关联表，必须同时扩展`ANONYMOUS_DATA_LIFECYCLE_REGISTRY`和`assertAnonymousDataLifecycleRegistryCoverage`测试清单。共享课程/知识数据不得加入该注册表。
 
 K1只支持服务端受控任务交付的纯文本/可解析PDF结果：数据库保存私有`object_key`而非公开URL；FTS使用PostgreSQL `simple`配置的generated `tsvector`与GIN，不引入pgvector。`knowledge_sources/documents/chunks`是共享课程资料，不随匿名学生清理；`session_source_bindings/turn_source_snapshots/turn_source_versions/retrieval_candidates/message_citations`属于匿名主体闭包。每个Turn都会先写入不可变的快照完成事实，即使结果为空也不会在后续绑定资料后改变；候选通过复合外键证明snapshot与chunk属于同一document。引用写入口只接受本轮持久化的`candidateId`，不接受浏览器声明的source/document/chunk。
+
+## 当前接线状态
+
+- 对话消息、Model Run、Turn ledger/lease、Tool Call和安全决策账本已由Web真实Turn链路使用；
+- `DrizzleArtifactRepository`与`DrizzleTeachingUnitOfWork`已接入预置Canvas判分、可信事件和掌握度更新；
+- K1审核资料、FTS、Turn快照、候选与引用防伪仓储已经实现并通过PostgreSQL集成测试，但尚未接入Web生产工具、SSE引用事件或引用UI；
+- T1需要的数据Port与事务适配器已经实现，状态推进服务也位于`@educanvas/teaching-runtime`，但Web尚未在Canvas判分后触发该服务；
+- Artifact仓储支持公开投影与私有判分键分级持久化，当前产品纵切仍使用课程bootstrap预置Artifact，不代表Agent提议/生成链路已经完成。
 
 > 验证状态：全部迁移已在真实PostgreSQL完成全新安装和含历史事件的升级验证；CI集成测试覆盖事务写入/回滚、乐观锁与并发幂等。执行迁移前仍应备份目标数据库；历史迁移不承诺自动向下回滚，回退与恢复方案必须在发布前单独演练。
 

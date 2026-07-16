@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-15
+- 最后验证时间：2026-07-16
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -19,6 +19,8 @@
 ## 当前计划
 
 当前计划：[`active/2026-07-real-agent-learning-vertical-slice.md`](active/2026-07-real-agent-learning-vertical-slice.md)。该计划把深入调研结果与真实仓库核验合并为“真实对话 → 可恢复消息 → 两阶段工具 → 可验证教材引用 → 受控产物 → 教学闭环”，并加入 K12 安全与可观测性门禁；完成终点是受控 shared dev，staging/production 另走 production-hardening 计划。
+
+当前证据状态（2026-07-16）：主线自动化基线已通过 257 unit、39 PostgreSQL integration、23 Chromium E2E、typecheck 和 production build；计划尚缺 live Provider smoke、K1/T1 Web 接线、C1 与整节课 E2E，因此不得归档或宣称进入 staging。
 
 最近完成：[`completed/2026-07-pre-research-safe-development.md`](completed/2026-07-pre-research-safe-development.md)。
 
@@ -47,5 +49,7 @@ draft -> active -> completed
 5. 保留实际交付范围、未完成项、关键偏差、证据和事实文档链接；
 6. 将文件移至`completed/`并更新本索引；
 7. 清理`active/`中的重复、暂停和被替代计划，必要时基于下一阶段重新组织目录。
+
+单项自动化验证通过只更新 active 计划中的证据状态；只要完成终点仍有未验收能力，计划就继续留在`active/`。
 
 详细协作规则见[`../08-collaboration/documentation-rules.md`](../08-collaboration/documentation-rules.md)。新计划从[`_template.md`](_template.md)开始。
