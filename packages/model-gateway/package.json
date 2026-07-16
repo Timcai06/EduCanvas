@@ -13,6 +13,7 @@
     "@educanvas/agent-core": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
