@@ -1,7 +1,7 @@
 import type {
-  StreamTurnTextRequest,
+  StreamAgentTextRequest,
   TurnModelEvent,
-} from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
 import type { EnabledModelGatewayConfiguration } from './config';
 import {
@@ -26,7 +26,7 @@ const config: EnabledModelGatewayConfiguration = {
   maxOutputTokens: 2_048,
 };
 
-const answerRequest: StreamTurnTextRequest = {
+const answerRequest: StreamAgentTextRequest = {
   taskAlias: 'teaching.turn',
   modelAlias: 'primary',
   phase: 'answer',
@@ -53,7 +53,7 @@ const answerRequest: StreamTurnTextRequest = {
 
 const collect = async (
   gateway: OpenAICompatibleTurnModelGateway,
-  request: StreamTurnTextRequest = answerRequest,
+  request: StreamAgentTextRequest = answerRequest,
 ): Promise<TurnModelEvent[]> => {
   const events: TurnModelEvent[] = [];
   for await (const event of gateway.streamTurnText(request)) events.push(event);
@@ -265,7 +265,7 @@ describe('OpenAICompatibleTurnModelGateway', () => {
         },
       ),
     });
-    const request: StreamTurnTextRequest = {
+    const request: StreamAgentTextRequest = {
       ...answerRequest,
       phase: 'synthesis',
       tools: [],

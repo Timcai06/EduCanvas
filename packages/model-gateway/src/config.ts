@@ -1,4 +1,4 @@
-import type { ModelAlias } from '@educanvas/teaching-core';
+import type { ModelAlias } from '@educanvas/agent-core';
 
 export const deploymentEnvironments = [
   'local',

@@ -1,6 +1,5 @@
+import type { ModelAlias, TaskAlias } from '@educanvas/agent-core';
 import type {
-  ModelAlias,
-  TaskAlias,
   TeachingSafetyAction,
   TeachingSafetyCategory,
   TeachingSafetyPhase,

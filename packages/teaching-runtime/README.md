@@ -2,7 +2,7 @@
 
 ## 这个包是什么
 
-EduCanvas 的教学应用层：在 `@educanvas/canvas-protocol` 与 `@educanvas/teaching-core` 领域规则之间编排用例，并通过 Port 访问外部能力。它不依赖 Drizzle、Next.js 或模型供应商 SDK；Web 组合根负责认证、会话归属校验、HTTP/SSE、持久化适配器和真实 Provider 注入。
+EduCanvas 的 K12 教学应用层：在 `@educanvas/agent-core` 通用模型契约、`@educanvas/canvas-protocol` Artifact 协议与 `@educanvas/teaching-core` 教学领域规则之间编排用例。它不依赖 Drizzle、Next.js 或模型供应商 SDK；Web 组合根负责认证、会话归属校验、HTTP/SSE、持久化适配器和真实 Provider 注入。
 
 ## 当前实现
 

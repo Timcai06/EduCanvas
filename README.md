@@ -258,7 +258,9 @@ EduCanvas/
 ├── apps/
 │   └── web/                  # Next.js学生端应用；开发页面、对话区或教学Canvas前先读这里的README。
 ├── packages/
+│   ├── agent-core/           # 通用模型消息、流事件、Gateway Port与运行元数据；不依赖K12领域。
 │   ├── canvas-protocol/      # Canvas Artifact与客户端交互协议；新增教学组件或交互前必须先看。
+│   ├── model-gateway/        # OpenAI-compatible Provider适配器；只依赖通用Agent契约。
 │   ├── teaching-core/        # 状态机、掌握度、可信领域事件与Port；新增教学规则前必须先看。
 │   ├── teaching-runtime/     # 服务端判分与教学事务编排；新增应用用例前必须先看。
 │   └── db/                   # Drizzle表结构、数据库连接和迁移；涉及持久化数据时必须先看。

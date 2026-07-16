@@ -2,13 +2,13 @@
 
 ## 这个包是什么
 
-`model-gateway` 是 `TurnModelGateway` 的供应商适配层。它把 OpenAI-compatible Chat Completions + SSE 协议映射为 `@educanvas/teaching-core` 的稳定事件，不承载教学编排、数据库事务、HTTP Route、业务重试或 UI 状态。
+`model-gateway` 是 `TurnModelGateway` 的供应商适配层。它把 OpenAI-compatible Chat Completions + SSE 协议映射为 `@educanvas/agent-core` 的稳定事件，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
 实现使用原生 `fetch` + WHATWG Stream，不把供应商 SDK 类型带入领域层。
 
 ## 协议边界
 
-- 输入为 `StreamTurnTextRequest`：任务/模型别名、阶段、消息、受控工具、工具结果、Trace 和取消信号；
+- 输入为 `StreamAgentTextRequest`：任务/模型别名、阶段、消息、受控工具、工具结果、Trace 和取消信号；
 - 输出为 `text_delta`、增量 `tool_call`、`usage`，以及唯一的 `completed | failed` 终态；
 - 不输出供应商原始 chunk、错误正文、API Key 或 `reasoning_content`；
 - synthesis 根据显式 `toolResults` 重建 `assistant.tool_calls` 和 `role=tool` 消息，不依赖 Gateway 进程内记忆；

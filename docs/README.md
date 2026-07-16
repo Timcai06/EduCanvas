@@ -40,7 +40,7 @@
 
 ## 当前实现边界
 
-- 已实现：模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、EduCanvas SSE对话UI、消息/模型/工具/安全账本、两阶段Tool Loop、取消与刷新恢复、状态感知Tool Executor，以及可配置的原生OpenAI-compatible SSE Provider Adapter；
+- 已实现：通用`agent-core`模型/流事件/Gateway契约基座、模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、EduCanvas SSE对话UI、消息/模型/工具/安全账本、两阶段Tool Loop、取消与刷新恢复、状态感知Tool Executor，以及可配置的原生OpenAI-compatible SSE Provider Adapter；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
 - 数据基础已实现但尚未接入应用纵切：审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和只接受本轮candidate的防伪引用；
 - 尚未实现：K1检索/引用和T1状态推进的Web应用层接线、受控Artifact提议/确认/生成与真实Studio列表、正式用户认证、真实Provider live smoke及完整整节课E2E；

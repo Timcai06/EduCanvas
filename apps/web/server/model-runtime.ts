@@ -5,7 +5,7 @@ import {
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
-import type { TurnModelGateway } from '@educanvas/teaching-core';
+import type { TurnModelGateway } from '@educanvas/agent-core';
 
 /**
  * Web 组合根只显式转交模型路由所需的环境变量，避免把整个 process.env
@@ -15,14 +15,12 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
   return {
     EDUCANVAS_DEPLOYMENT_ENV: process.env.EDUCANVAS_DEPLOYMENT_ENV,
     MODEL_GATEWAY_PROVIDER: process.env.MODEL_GATEWAY_PROVIDER,
-    MODEL_GATEWAY_ALLOW_DEEPSEEK:
-      process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
+    MODEL_GATEWAY_ALLOW_DEEPSEEK: process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
     MODEL_GATEWAY_BASE_URL: process.env.MODEL_GATEWAY_BASE_URL,
     MODEL_GATEWAY_API_KEY: process.env.MODEL_GATEWAY_API_KEY,
     MODEL_GATEWAY_PRIMARY_MODEL: process.env.MODEL_GATEWAY_PRIMARY_MODEL,
     MODEL_GATEWAY_FAST_MODEL: process.env.MODEL_GATEWAY_FAST_MODEL,
-    MODEL_GATEWAY_STRUCTURED_MODEL:
-      process.env.MODEL_GATEWAY_STRUCTURED_MODEL,
+    MODEL_GATEWAY_STRUCTURED_MODEL: process.env.MODEL_GATEWAY_STRUCTURED_MODEL,
     MODEL_GATEWAY_TIMEOUT_MS: process.env.MODEL_GATEWAY_TIMEOUT_MS,
     MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
       process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
