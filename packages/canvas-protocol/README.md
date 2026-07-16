@@ -45,4 +45,4 @@ pnpm lint                                            # 运行仓库现有lint任
 - [智能体编排](../../docs/03-ai/agent-orchestration.md)：模型通过哪些受控工具生成Canvas。
 - [数据设计](../../docs/04-data/data-design.md)：学习事件和Artifact如何持久化。
 - [安全与隐私](../../docs/06-quality/security-and-privacy.md)：为什么协议必须使用白名单和沙箱。
-- [ADR-0002](../../docs/09-decisions/0002-controlled-canvas.md)：受控Canvas的正式架构决定。
+- [ADR-0010](../../docs/09-decisions/0010-canvas-trust-tiers.md)：Canvas 分层信任模型的正式架构决定（本包契约对应 Tier 1，取代 [ADR-0002](../../docs/09-decisions/0002-controlled-canvas.md)）。

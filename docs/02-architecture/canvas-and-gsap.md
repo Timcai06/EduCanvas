@@ -1,11 +1,11 @@
 # 教学Canvas与GSAP
 
 - 状态：`accepted`
-- 相关决策：[ADR-0002](../09-decisions/0002-controlled-canvas.md)
+- 相关决策：[ADR-0010](../09-decisions/0010-canvas-trust-tiers.md)（取代 [ADR-0002](../09-decisions/0002-controlled-canvas.md)）
 
 ## 核心决定
 
-Canvas是受控教学组件运行时。模型输出结构化Artifact，前端选择审核过的React组件渲染。模型不能在主页面执行任意HTML或JavaScript。
+Canvas 采用分层信任模型。Tier 1（判分型可信 Artifact）：模型输出结构化 Artifact，前端选择审核过的 React 组件渲染，服务端判分；Tier 2（沙箱探索型产物）：模型生成的 HTML/JS 只能在无 same-origin、禁网络的 sandboxed iframe 中运行，交互不产生可信学习事件。模型在任何 tier 下都不能在主页面执行任意 HTML 或 JavaScript。本文档"当前实现状态"仅覆盖 Tier 1；**Tier 2 沙箱运行时尚未实现**，实现要求见 ADR-0010 的决定与验证方式。
 
 ## 当前实现状态
 

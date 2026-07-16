@@ -1,7 +1,8 @@
 # ADR-0002：采用受控教学Canvas
 
-- 状态：`accepted`
+- 状态：`superseded`
 - 日期：2026-07-13
+- 取代者：[ADR-0010](0010-canvas-trust-tiers.md)——判分型 Artifact 机制原样保留为 Tier 1；新增沙箱探索型 Tier 2，"主页面不执行模型代码"的不变量继续有效
 
 ## 背景
 

@@ -37,7 +37,7 @@
 
 - 继续使用模块化单体；当前不拆独立微服务；
 - K12 可以依赖通用平台能力，通用平台包不得反向依赖教学状态、掌握度或课程；
-- 不执行模型生成的任意 HTML、JavaScript 或 GSAP；
+- 主页面不直接执行模型生成的任意 HTML、JavaScript 或 GSAP；沙箱探索型产物遵循 ADR-0010 分层信任模型；
 - Provider SDK、模型 ID、原始事件和 Secret 只存在于 Adapter/组合根；
 - PostgreSQL 继续作为事实源，数据迁移采用 additive migration、回填和双读/双写；
 - 每项迁移必须保持现有 K12 纵切可回放、可验证和可回滚。

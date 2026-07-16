@@ -3,6 +3,7 @@
 - 状态：`accepted`
 - 日期：2026-07-15
 - 负责人：@Timcai06
+- 修订：第 3 条"answer 文本与工具调用互斥"由 [ADR-0011](0011-answer-phase-tool-preamble.md) 修订，其余条款不受影响
 - 实现入口：`packages/teaching-core/src/model-contracts.ts`、`packages/teaching-runtime/src/turn-orchestrator.ts`、`packages/model-gateway/src/openai-compatible-turn-model-gateway.ts`
 
 ## 背景
