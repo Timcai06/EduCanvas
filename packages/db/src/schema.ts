@@ -132,6 +132,9 @@ export const agentOperations = pgTable(
     traceId: text('trace_id').notNull(),
     status: text('status').notNull().default('pending'),
     failureCode: text('failure_code'),
+    cancelRequestedAt: timestamp('cancel_requested_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

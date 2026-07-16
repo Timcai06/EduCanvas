@@ -191,4 +191,58 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       }),
     ).rejects.toBeInstanceOf(PlatformMessageIdConflictError);
   });
+
+  it('通用Turn取消以数据库事实收敛，并拒绝跨主体取消', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'cancel-owner',
+      spaceKind: 'personal',
+      spaceTitle: '可取消对话',
+    });
+    const started = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'cancel-owner',
+      clientMessageId: 'cancel-message',
+      text: '生成一个较长回答',
+      now: new Date('2026-07-16T08:00:00.000Z'),
+    });
+
+    expect(
+      await turns.requestTurnCancellation({
+        trustedSubjectId: 'other-owner',
+        turnId: started.turnId,
+      }),
+    ).toEqual({ turn: null, accepted: false });
+    const requested = await turns.requestTurnCancellation({
+      trustedSubjectId: 'cancel-owner',
+      turnId: started.turnId,
+      now: new Date('2026-07-16T08:00:01.000Z'),
+    });
+    expect(requested.accepted).toBe(true);
+    expect(requested.turn?.cancelRequestedAt).toBe('2026-07-16T08:00:01.000Z');
+    expect(
+      await turns.isTurnCancellationRequested({
+        trustedSubjectId: 'cancel-owner',
+        turnId: started.turnId,
+      }),
+    ).toBe(true);
+
+    const settled = await turns.settleTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'cancel-owner',
+      turnId: started.turnId,
+      status: 'cancelled',
+      content: '部分回答',
+      failureCode: 'aborted',
+      now: new Date('2026-07-16T08:00:02.000Z'),
+    });
+    expect(settled.assistantMessage).toMatchObject({
+      status: 'cancelled',
+      content: '部分回答',
+      failureCode: 'aborted',
+    });
+  });
 });

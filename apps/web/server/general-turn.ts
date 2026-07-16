@@ -11,10 +11,12 @@ import type { AnonymousIdentity } from './anonymous-identity';
 import { materializeAssetContext } from './asset-materialization';
 import { loadOwnedGeneralConversation } from './general-conversation';
 import { resolveTurnModelRuntime } from './model-runtime';
+import { registerTurnAbortController } from './turn-abort-registry';
 import type { TeachingTurnRequestBody } from './turn-request';
 
 const turns = new DrizzlePlatformTurnRepository();
 const PROMPT_VERSION = 'general-chat-v1';
+const CANCELLATION_POLL_MS = 250;
 const GENERAL_SYSTEM_PROMPT = `你是 EduCanvas，一个通用的对话式 AI 助手。
 默认不要假定用户是学生，不要主动读取或评价学习状态，也不要把对话强行改造成课程。
 根据用户真实意图回答；只有当用户明确进入学习模式或请求教学时，才采用教师式引导。
@@ -68,6 +70,12 @@ async function replayEvents(
       type: 'turn.completed',
       messageId: turn.assistantMessage.id,
     });
+  } else if (turn.assistantMessage.status === 'cancelled') {
+    events.push({
+      ...eventBase(turn.turnId),
+      type: 'turn.cancelled',
+      messageId: turn.assistantMessage.id,
+    });
   } else {
     events.push({
       ...eventBase(turn.turnId),
@@ -82,6 +90,33 @@ async function replayEvents(
     });
   }
   return events;
+}
+
+function watchCancellation(input: {
+  identity: AnonymousIdentity;
+  turnId: string;
+  controller: AbortController;
+}): () => void {
+  let checking = false;
+  const timer = setInterval(() => {
+    if (checking || input.controller.signal.aborted) return;
+    checking = true;
+    void turns
+      .isTurnCancellationRequested({
+        trustedSubjectId: input.identity.studentId,
+        turnId: input.turnId,
+      })
+      .then((requested) => {
+        if (requested && !input.controller.signal.aborted) {
+          input.controller.abort('explicit_user_stop');
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        checking = false;
+      });
+  }, CANCELLATION_POLL_MS);
+  return () => clearInterval(timer);
 }
 
 async function* runGeneralTurn(input: {
@@ -106,6 +141,13 @@ async function* runGeneralTurn(input: {
   };
 
   let answer = '';
+  const controller = new AbortController();
+  const unregisterAbort = registerTurnAbortController(turn.turnId, controller);
+  const stopWatchingCancellation = watchCancellation({
+    identity: input.identity,
+    turnId: turn.turnId,
+    controller,
+  });
   try {
     const runtime = resolveTurnModelRuntime();
     if (!runtime) {
@@ -153,6 +195,7 @@ async function* runGeneralTurn(input: {
       promptVersion: PROMPT_VERSION,
       traceId: turn.traceId,
       turnId: turn.turnId,
+      signal: controller.signal,
     })) {
       if (event.type === 'text_delta') {
         answer += event.delta;
@@ -186,6 +229,29 @@ async function* runGeneralTurn(input: {
       return;
     }
 
+    const cancellationRequested = await turns
+      .isTurnCancellationRequested({
+        trustedSubjectId: input.identity.studentId,
+        turnId: turn.turnId,
+      })
+      .catch(() => false);
+    if (failure?.code === 'aborted' && cancellationRequested) {
+      await turns.settleTurn({
+        conversationId: input.conversationId,
+        trustedSubjectId: input.identity.studentId,
+        turnId: turn.turnId,
+        status: 'cancelled',
+        content: answer,
+        failureCode: 'aborted',
+      });
+      yield {
+        ...eventBase(turn.turnId),
+        type: 'turn.cancelled',
+        messageId: turn.assistantMessage.id,
+      };
+      return;
+    }
+
     const safe = failure
       ? safeModelFailure(failure)
       : {
@@ -208,6 +274,30 @@ async function* runGeneralTurn(input: {
       ...safe,
     };
   } catch {
+    const cancellationRequested = await turns
+      .isTurnCancellationRequested({
+        trustedSubjectId: input.identity.studentId,
+        turnId: turn.turnId,
+      })
+      .catch(() => false);
+    if (cancellationRequested) {
+      await turns
+        .settleTurn({
+          conversationId: input.conversationId,
+          trustedSubjectId: input.identity.studentId,
+          turnId: turn.turnId,
+          status: 'cancelled',
+          content: answer,
+          failureCode: 'aborted',
+        })
+        .catch(() => undefined);
+      yield {
+        ...eventBase(turn.turnId),
+        type: 'turn.cancelled',
+        messageId: turn.assistantMessage.id,
+      };
+      return;
+    }
     await turns.settleTurn({
       conversationId: input.conversationId,
       trustedSubjectId: input.identity.studentId,
@@ -224,6 +314,9 @@ async function* runGeneralTurn(input: {
       message: 'AI 暂时无法回答，请稍后重试。',
       retryable: true,
     };
+  } finally {
+    stopWatchingCancellation();
+    unregisterAbort();
   }
 }
 
