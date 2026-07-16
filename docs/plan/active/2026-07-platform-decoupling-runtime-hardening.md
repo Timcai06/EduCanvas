@@ -24,7 +24,7 @@
 
 必须修复的结构性缺口：
 
-1. 模型每轮只收到当前消息，没有历史上下文；
+1. 模型跨轮历史已完成首个有界窗口与快照增量，摘要和Artifact上下文仍缺失；
 2. `ModelMessage`仍是纯文本，原生图片/音频/视频引用无法进入 Provider；
 3. Message、Model Run、Asset Space 仍依附 `lesson_sessions`；
 4. `agent-runtime`尚未承载通用 Turn/Tool/Context 编排；
@@ -46,10 +46,11 @@
 
 ### PR-P0：连续对话与诚实终态
 
-- 增加 `ContextSnapshotBuilder`，按预算装配最近消息、摘要、Sources、Artifact 与 Vertical Context；
-- 持久化本轮实际使用的上下文版本；
-- Retry 保留完整 `AgentMessagePart[]`，不丢附件；
-- `length`进入`incomplete/output_limit`，未知 finish reason 进入协议失败；
+- [x] 增加有界`ConversationContextBuilder`，装配最近完整消息；
+- [x] 持久化本轮实际使用的消息与Asset版本清单；
+- [x] Retry 保留完整 `AgentMessagePart[]`，不丢附件；
+- [x] `length`进入`output_limit`，未知 finish reason 进入协议失败；
+- [ ] 增加摘要、Sources、Artifact 与 Vertical Context 的统一预算策略；
 - Synthesis 显式返回实际使用的候选引用子集。
 
 验收：跨轮上下文、附件失败重试、截断回答和引用子集均有 unit/integration/E2E。

@@ -479,6 +479,53 @@ describeWithDatabase('对话与Model Run账本', () => {
     ).rejects.toBeInstanceOf(ChatLifecycleError);
   });
 
+  it('Runtime最近历史返回最新窗口并恢复时间顺序', async () => {
+    await seedSession();
+    const chat = new DrizzleChatRepository(getDatabase());
+    const firstTurn = await createTurn(
+      'client-recent-1',
+      '较早问题',
+      new Date('2026-07-15T02:01:00.000Z'),
+    );
+    await chat.settleAssistantMessage({
+      sessionId,
+      trustedStudentId: studentId,
+      assistantMessageId: firstTurn.assistantMessage.id,
+      status: 'interrupted',
+      failureCode: 'fixture_interrupted',
+      now: new Date('2026-07-15T02:01:30.000Z'),
+    });
+    await createTurn(
+      'client-recent-2',
+      '最新问题',
+      new Date('2026-07-15T02:02:00.000Z'),
+    );
+
+    const recent = await chat.listRecentHistory({
+      sessionId,
+      trustedStudentId: studentId,
+      limit: 2,
+    });
+
+    expect(recent).toHaveLength(2);
+    expect(new Set(recent.map((message) => message.content))).toEqual(
+      new Set(['', '最新问题']),
+    );
+    expect(
+      recent.map((message) => new Date(message.createdAt).getTime()),
+    ).toEqual(
+      [...recent]
+        .map((message) => new Date(message.createdAt).getTime())
+        .sort((left, right) => left - right),
+    );
+    await expect(
+      chat.listRecentHistory({
+        sessionId,
+        trustedStudentId: 'forged-student',
+      }),
+    ).rejects.toBeInstanceOf(LearningSessionOwnershipError);
+  });
+
   it('新建、归档、恢复和课程级最近列表保持单active及所有权', async () => {
     const sessions = new DrizzleLearningSessionRepository(getDatabase());
     const first = await sessions.bootstrap({ ...scope, completeArtifact });

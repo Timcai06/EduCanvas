@@ -5,6 +5,7 @@ import type {
   InitialChatMessageDTO,
   StudentMessage,
 } from './messages';
+import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
 import type { TeachingTurnEvent } from './turn-events';
 
 export interface ActiveTeachingTurn {
@@ -35,6 +36,7 @@ export type TeachingTurnAction =
       type: 'send.started';
       clientMessageId: string;
       text: string;
+      parts?: readonly AgentMessagePart[];
       attachments?: readonly {
         id: string;
         label: string;
@@ -65,10 +67,13 @@ function announce(
 export function hydrateChatMessages(
   initialMessages: readonly InitialChatMessageDTO[],
 ): readonly ChatMessage[] {
-  const studentTextByTurn = new Map(
+  const studentInputByTurn = new Map(
     initialMessages
       .filter((message) => message.role === 'student')
-      .map((message) => [message.turnId, message.content]),
+      .map((message) => [
+        message.turnId,
+        { content: message.content, parts: message.parts ?? [] },
+      ]),
   );
 
   return initialMessages.map((message): ChatMessage => {
@@ -104,7 +109,8 @@ export function hydrateChatMessages(
       attachments: [],
       citations: message.citations ?? [],
       failureCode: message.failureCode,
-      retryText: studentTextByTurn.get(message.turnId),
+      retryText: studentInputByTurn.get(message.turnId)?.content,
+      retryParts: studentInputByTurn.get(message.turnId)?.parts,
       retryable:
         message.status === 'failed' || message.status === 'interrupted',
     };
@@ -121,6 +127,15 @@ export function createTeachingTurnState(
     announcement: null,
     announcementSequence: 0,
   };
+}
+
+/** 从失败消息恢复服务端可验证的附件引用，不重建浏览器临时上传对象。 */
+export function getRetryAssetParts(
+  message: AssistantMessage,
+): readonly AgentAssetPart[] {
+  return (message.retryParts ?? []).filter(
+    (part): part is AgentAssetPart => part.type === 'asset_ref',
+  );
 }
 
 function updateAssistant(
@@ -172,6 +187,7 @@ export function teachingTurnReducer(
       attachments: [],
       citations: [],
       retryText: action.text,
+      retryParts: action.parts ?? [],
     };
     return {
       ...state,

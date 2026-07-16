@@ -26,6 +26,7 @@
 ### 对话与Agent执行账本
 
 - `chat_messages`：用户可见消息、发送幂等、流式终态、取消和lease；
+- `turn_context_snapshots`：本轮实际选用的历史消息ID、AssetVersion ID、Builder版本和预算计数；不复制正文；
 - `agent_message_parts`：文本、不可变Asset引用和Artifact引用；
 - `model_runs`：Provider、模型、Prompt版本/hash、usage、latency和终态；
 - `tool_calls`：脱敏参数/结果摘要、权限判定、幂等执行和终态；

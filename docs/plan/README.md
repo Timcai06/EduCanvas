@@ -23,7 +23,7 @@
 1. **平台主线**：[`active/2026-07-platform-decoupling-runtime-hardening.md`](active/2026-07-platform-decoupling-runtime-hardening.md)，负责连续对话、通用Space/Conversation、Agent Runtime、全模态Asset/Source、Artifact Runtime与Platform Shell；
 2. **K12垂直线**：[`active/2026-07-real-agent-learning-vertical-slice.md`](active/2026-07-real-agent-learning-vertical-slice.md)，负责教学状态、可信判分、课程纵切和竞赛闭环，不得反向定义平台基础对象。
 
-当前证据状态（2026-07-16）：自动化基线已通过280 unit、42 PostgreSQL integration、23 Chromium E2E、typecheck和production build；真实Provider/SSE、K1检索引用与T1的`ASSESS`推进已接线。架构健康检查同时确认跨轮上下文、原生多模态、通用Space/Conversation、Asset/Source统一、真实Artifact生命周期和生产数据治理仍未完成，因此不得宣称进入staging或production。
+当前证据状态（2026-07-16）：自动化基线已通过289 unit、43 PostgreSQL integration、23 Chromium E2E、typecheck和production build；真实Provider/SSE、K1检索引用、T1的`ASSESS`推进以及首个有界跨轮Context Snapshot已接线。架构健康检查同时确认摘要/Artifact上下文、原生多模态、通用Space/Conversation、Asset/Source统一、真实Artifact生命周期和生产数据治理仍未完成，因此不得宣称进入staging或production。
 
 最近完成：[`completed/2026-07-pre-research-safe-development.md`](completed/2026-07-pre-research-safe-development.md)。
 

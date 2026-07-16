@@ -322,6 +322,57 @@ export const agentMessageParts = pgTable(
   ],
 );
 
+/**
+ * 单次 Turn 实际选用的上下文清单。只保存不可变标识和计数，不复制消息/资产正文；
+ * Prompt 正文仍由消息账本与 AssetVersion 在受控组合根中按需重建。
+ */
+export const turnContextSnapshots = pgTable(
+  'turn_context_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => lessonSessions.id, { onDelete: 'cascade' }),
+    turnId: uuid('turn_id').notNull(),
+    builderVersion: text('builder_version').notNull(),
+    includedMessageIds: jsonb('included_message_ids')
+      .$type<string[]>()
+      .notNull(),
+    selectedAssetVersionIds: jsonb('selected_asset_version_ids')
+      .$type<string[]>()
+      .notNull(),
+    omittedMessageCount: integer('omitted_message_count').notNull(),
+    characterCount: integer('character_count').notNull(),
+    contextHash: text('context_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('turn_context_snapshots_session_turn_unique').on(
+      table.sessionId,
+      table.turnId,
+    ),
+    index('turn_context_snapshots_session_created_idx').on(
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'turn_context_snapshots_counts_check',
+      sql`${table.omittedMessageCount} >= 0 and ${table.characterCount} >= 0 and ${table.characterCount} <= 128000`,
+    ),
+    check(
+      'turn_context_snapshots_hash_check',
+      sql`${table.contextHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'turn_context_snapshots_version_check',
+      sql`char_length(${table.builderVersion}) between 1 and 128`,
+    ),
+  ],
+);
+
 /** 模型运行是与可见消息分层的审计记录；D1 只允许 teaching_turn operation。 */
 export const modelRuns = pgTable(
   'model_runs',

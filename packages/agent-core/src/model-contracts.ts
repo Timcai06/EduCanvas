@@ -137,6 +137,7 @@ export type ProviderCallMetadata = z.infer<typeof providerCallMetadataSchema>;
 export const normalizedModelErrorCodes = [
   'timeout',
   'rate_limit',
+  'output_limit',
   'content_filtered',
   'invalid_response',
   'aborted',

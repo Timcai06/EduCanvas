@@ -3,6 +3,7 @@ import type { AgentMessagePart } from '@educanvas/agent-core';
 import {
   and,
   asc,
+  desc,
   eq,
   gt,
   inArray,
@@ -780,6 +781,39 @@ export class DrizzleChatRepository {
           ? { createdAt: last.createdAt.toISOString(), id: last.id }
           : null,
     };
+  }
+
+  /**
+   * 为 Runtime 加载最近一段已持久化对话，并按时间升序返回。
+   * 与面向 UI 的前向分页分离，避免长会话永远只把最早一页送给模型。
+   */
+  async listRecentHistory(input: {
+    sessionId: string;
+    trustedStudentId: string;
+    limit?: number;
+  }): Promise<readonly ChatMessageSnapshot[]> {
+    await requireOwnedSession(
+      this.database,
+      input.sessionId,
+      input.trustedStudentId,
+    );
+    const limit = Math.max(1, Math.min(input.limit ?? 24, 100));
+    const rows = await this.database
+      .select()
+      .from(chatMessages)
+      .where(eq(chatMessages.sessionId, input.sessionId))
+      .orderBy(
+        desc(chatMessages.createdAt),
+        sql`case when ${chatMessages.role} = 'assistant' then 1 else 0 end desc`,
+        desc(chatMessages.id),
+      )
+      .limit(limit);
+    rows.reverse();
+    const parts = await loadMessageParts(
+      this.database,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => toSnapshot(row, parts.get(row.id)));
   }
 
   private async requireAssistantMessage(

@@ -419,6 +419,34 @@ describe('OpenAICompatibleTurnModelGateway', () => {
     });
   });
 
+  it('length保留已核算usage但以可重试的不完整错误终止', async () => {
+    const chunks = textStreamChunks.map((chunk) => {
+      if (
+        typeof chunk === 'object' &&
+        chunk !== null &&
+        'choices' in chunk &&
+        Array.isArray(chunk.choices) &&
+        chunk.choices[0]?.finish_reason === 'stop'
+      ) {
+        return {
+          ...chunk,
+          choices: [{ ...chunk.choices[0], finish_reason: 'length' }],
+        };
+      }
+      return chunk;
+    });
+    const gateway = new OpenAICompatibleTurnModelGateway(config, {
+      fetchImpl: oneResponseFetch(() => createFixtureResponse(chunks)),
+    });
+
+    const events = await collect(gateway);
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      error: { code: 'output_limit', retryable: true },
+      metadata: { finishReason: 'length' },
+    });
+  });
+
   it.each([
     {
       name: 'malformed JSON',

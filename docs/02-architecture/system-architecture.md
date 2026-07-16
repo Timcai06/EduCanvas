@@ -39,7 +39,7 @@ flowchart TB
 flowchart LR
     student[学生浏览器] --> web["apps/web<br/>页面 / 服务端组合根"]
     web --> agent["packages/agent-core<br/>Asset / 消息Part / 模型 / Gateway Port"]
-    web --> agentRuntime["packages/agent-runtime<br/>当前仅Asset上下文物化"]
+    web --> agentRuntime["packages/agent-runtime<br/>Asset / Conversation Context"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
     web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
     web --> gateway["packages/model-gateway<br/>Provider配置 / OpenAI-compatible SSE"]
@@ -54,11 +54,11 @@ flowchart LR
     db --> canvas
 ```
 
-当前代码已经拆出通用`agent-core`契约、`agent-runtime`上下文物化、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`model-gateway`已只依赖通用契约。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、Asset上传、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复；K1的FTS检索、候选白名单、引用持久化/SSE/UI已经进入Turn纵切；Canvas判分后只在可信`ASSESS`状态触发受控状态推进。
+当前代码已经拆出通用`agent-core`契约、`agent-runtime`上下文装配、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-runtime`现已同时负责Asset文本物化与有界Conversation历史选择；实际消息/Asset版本选择写入`turn_context_snapshots`。`agent-core`定义供应商无关的Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`model-gateway`已只依赖通用契约。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、Asset上传、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复；K1的FTS检索、候选白名单、引用持久化/SSE/UI已经进入Turn纵切；Canvas判分后只在可信`ASSESS`状态触发受控状态推进。
 
 ### 已确认的迁移缺口
 
-- `agent-runtime`当前只负责Asset文本上下文物化，通用Turn/Tool/Context编排仍位于`teaching-runtime`；
+- `agent-runtime`已负责Asset与Conversation Context装配，但通用Turn/Tool编排仍位于`teaching-runtime`；
 - 模型输入契约仍是纯文本`ModelMessage.content`，原生图片、音频和视频引用尚不能进入Provider；
 - Chat、Model Run与Asset的Space语义仍以`lesson_sessions`为临时父实体，尚无一等Space/Conversation；
 - 用户上传Asset与可检索Source/Chunk仍是两条链路；

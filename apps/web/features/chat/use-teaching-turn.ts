@@ -1,9 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { AgentAssetPart } from '@educanvas/agent-core';
+import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
 import type { InitialChatMessageDTO } from './messages';
-import { createTeachingTurnState, teachingTurnReducer } from './turn-state';
+import {
+  createTeachingTurnState,
+  getRetryAssetParts,
+  teachingTurnReducer,
+} from './turn-state';
 import {
   consumeTeachingTurnResponse,
   type TeachingTurnEvent,
@@ -85,10 +89,21 @@ export function useTeachingTurn(
       };
       inFlight.current = current;
       setControlError(null);
+      const requestParts: readonly AgentMessagePart[] = [
+        ...(normalizedText
+          ? [{ type: 'text' as const, text: normalizedText }]
+          : []),
+        ...assetParts.map((part) => ({
+          type: part.type,
+          reference: part.reference,
+          usage: part.usage,
+        })),
+      ];
       dispatch({
         type: 'send.started',
         clientMessageId,
         text: normalizedText,
+        parts: requestParts,
         attachments: assetParts.map((part) => ({
           id: `${part.reference.assetId}:${part.reference.versionId}`,
           label:
@@ -106,16 +121,7 @@ export function useTeachingTurn(
             assetParts.length > 0
               ? {
                   clientMessageId,
-                  parts: [
-                    ...(normalizedText
-                      ? [{ type: 'text' as const, text: normalizedText }]
-                      : []),
-                    ...assetParts.map((part) => ({
-                      type: part.type,
-                      reference: part.reference,
-                      usage: part.usage,
-                    })),
-                  ],
+                  parts: requestParts,
                 }
               : { clientMessageId, text: normalizedText },
           ),
@@ -262,12 +268,14 @@ export function useTeachingTurn(
       if (
         !message ||
         message.role !== 'assistant' ||
-        !message.retryText ||
+        (!message.retryText &&
+          !message.retryParts?.some((part) => part.type === 'asset_ref')) ||
         inFlight.current
       ) {
         return false;
       }
-      void send(message.retryText, crypto.randomUUID());
+      const assetParts = getRetryAssetParts(message);
+      void send(message.retryText ?? '', crypto.randomUUID(), assetParts);
       return true;
     },
     [send, state.messages],

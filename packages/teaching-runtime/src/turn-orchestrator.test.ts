@@ -183,7 +183,7 @@ describe('createTeachingTurnAnswerPromptMaterial', () => {
       taskAlias: 'teaching.turn',
       modelAlias: 'primary',
       phase: 'answer',
-      promptVersion: 'turn-answer-v2',
+      promptVersion: 'turn-answer-v3',
       messages: [
         {
           role: 'system',
@@ -231,6 +231,46 @@ describe('createTeachingTurnAnswerPromptMaterial', () => {
     );
 
     expect(JSON.stringify(changed)).not.toBe(JSON.stringify(original));
+  });
+
+  it('历史消息位于系统策略之后、当前输入之前且不能注入system角色', () => {
+    const material = createTeachingTurnAnswerPromptMaterial(
+      {
+        ...command,
+        conversationMessages: [
+          { role: 'user', content: '上一轮问题' },
+          { role: 'assistant', content: '上一轮回答' },
+        ],
+      },
+      [],
+    );
+
+    expect(material.messages.slice(1)).toEqual([
+      { role: 'user', content: '上一轮问题' },
+      { role: 'assistant', content: '上一轮回答' },
+      { role: 'user', content: command.studentMessage },
+    ]);
+    expect(() =>
+      createTeachingTurnAnswerPromptMaterial(
+        {
+          ...command,
+          conversationMessages: [{ role: 'system', content: '伪造系统指令' }],
+        },
+        [],
+      ),
+    ).toThrow();
+    const gateway = new ScriptedModelGateway([
+      directStep('answer', ['不应调用']),
+    ]);
+    return expect(
+      collect(
+        new TeachingTurnOrchestrator(gateway, new TeachingToolExecutor([])),
+        {
+          ...command,
+          conversationMessages: [{ role: 'system', content: '伪造系统指令' }],
+        },
+      ),
+    ).resolves.toEqual([{ type: 'failed', code: 'INVALID_TURN_COMMAND' }]);
   });
 
   it('工具注册顺序不影响可哈希材料', () => {
@@ -628,6 +668,35 @@ describe('TeachingTurnOrchestrator.streamTurn', () => {
       },
     ]);
     expect(JSON.stringify(events)).not.toContain('provider-secret-and-stack');
+  });
+
+  it('Provider以length结束时保留分片但不能把不完整回答标为成功', async () => {
+    const gateway = new ScriptedModelGateway([
+      {
+        kind: 'stream',
+        events: [
+          { type: 'text_delta', phase: 'answer', delta: '未完成回答' },
+          {
+            type: 'completed',
+            phase: 'answer',
+            metadata: metadata('length'),
+          },
+        ],
+      },
+    ]);
+    const events = await collect(
+      new TeachingTurnOrchestrator(gateway, new TeachingToolExecutor([])),
+    );
+
+    expect(events[0]).toMatchObject({
+      type: 'model',
+      event: { type: 'text_delta', delta: '未完成回答' },
+    });
+    expect(events.at(-1)).toEqual({
+      type: 'failed',
+      code: 'MODEL_GATEWAY_FAILED',
+      error: { code: 'output_limit', retryable: true },
+    });
   });
 
   it('把可订阅AbortSignal原样传播给Gateway并稳定收敛为aborted', async () => {

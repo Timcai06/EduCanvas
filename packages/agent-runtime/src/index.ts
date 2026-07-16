@@ -6,3 +6,10 @@ export {
   type BuiltAssetContext,
   type MaterializedAssetInput,
 } from './asset-context';
+export {
+  CONVERSATION_CONTEXT_VERSION,
+  buildConversationContext,
+  type ConversationContextMessage,
+  type ConversationContextOptions,
+  type ConversationContextSnapshot,
+} from './conversation-context';

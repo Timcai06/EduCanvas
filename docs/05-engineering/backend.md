@@ -30,7 +30,8 @@
 - Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
 - `TeachingTurnOrchestrator`支持`answer → tools → synthesis`两阶段编排；当前生产组合注册只读`getStudentState`与`retrieveKnowledge`，工具可见性仍由可信教学状态、注册Handler和exposure共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
-- 学生消息、老师消息、Model Run、Tool Call和安全决策分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
+- 学生消息、老师消息、Model Run、Tool Call、安全决策和Turn Context Snapshot分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
+- `agent-runtime`按消息数/字符预算选择最新完整历史，Web在创建Turn时把选择的消息ID、AssetVersion ID、builder版本和计数与消息/Model Run原子落账；历史不能注入`system`角色；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
@@ -38,7 +39,7 @@
 K12 纵切，但尚不能据此宣称已经形成通用 Agent Runtime。当前已确认的
 平台化缺口包括：
 
-- Answer 上下文只含当前消息与物化后的 Asset 文本，不含持久化会话历史、摘要或 Artifact 状态；
+- Answer 已包含有界的持久化会话历史与本轮物化 Asset 文本，但尚不包含摘要或 Artifact 状态；
 - Web BFF 同时承担 lease、replay、安全、审计、引用和 SSE 映射，应用服务边界过宽；
 - Tool Registry、Provider Registry 与 Artifact Plugin 仍是编译期闭集，缺少能力元数据和统一扩展契约；
 - 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；

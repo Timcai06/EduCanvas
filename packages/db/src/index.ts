@@ -89,6 +89,15 @@ export {
   type ExpiredTurnConvergence,
 } from './turn-lease-repository';
 export {
+  DrizzleTurnContextRepository,
+  TurnContextConflictError,
+  prepareTurnContextMaterial,
+  type RecordTurnContextInput,
+  type PreparedTurnContextMaterial,
+  type TurnContextMaterial,
+  type TurnContextSnapshot,
+} from './turn-context-repository';
+export {
   DrizzleToolCallRepository,
   MAX_TOOL_AUDIT_VALUE_BYTES,
   ToolCallConflictError,
