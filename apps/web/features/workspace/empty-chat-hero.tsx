@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { AmbientHalo } from './ambient-halo';
+import { HeroGreeting } from './hero-greeting';
 
 gsap.registerPlugin(useGSAP);
 
@@ -26,7 +27,7 @@ export function EmptyChatHero({ children }: { children: ReactNode }) {
             autoAlpha: 1,
             y: 0,
             duration: 0.72,
-            delay: 0.12,
+            delay: 0.3,
             ease: 'power2.out',
           },
         );
@@ -46,12 +47,8 @@ export function EmptyChatHero({ children }: { children: ReactNode }) {
     >
       <AmbientHalo />
       <section className="relative z-10 w-full -translate-y-6 text-center sm:-translate-y-8">
-        <div ref={contentRef}>
-          <h1 className="mb-8 px-4 text-[clamp(2rem,3vw,2.75rem)] leading-tight font-normal tracking-[-0.045em] text-ink text-balance">
-            你好，今天想探索什么？
-          </h1>
-          {children}
-        </div>
+        <HeroGreeting />
+        <div ref={contentRef}>{children}</div>
       </section>
     </main>
   );

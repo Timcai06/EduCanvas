@@ -106,12 +106,13 @@ html {
   height: min(29rem, 40vw);
 }
 
+/* bloom 承担紫→暖粉的过渡色相,与蓝色 core 交叠出 Gemini 式的多色光场。 */
 .ambient-halo__bloom .ambient-halo__visual {
   background: radial-gradient(
     ellipse at 46% 51%,
-    rgb(86 75 205 / 48%) 0%,
-    rgb(57 51 150 / 32%) 40%,
-    rgb(32 31 87 / 14%) 68%,
+    rgb(139 92 246 / 44%) 0%,
+    rgb(103 72 191 / 32%) 38%,
+    rgb(142 68 130 / 16%) 66%,
     transparent 86%
   );
   filter: blur(56px);
@@ -167,6 +168,212 @@ html {
   .ambient-halo__layer {
     will-change: auto;
   }
+}
+
+/*
+ * 助手消息 Markdown 排版。行高与间距对齐 Gemini 的松弛密度;
+ * 全部取色自语义 token,禁止散写色值。
+ */
+.chat-prose {
+  line-height: 1.75;
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+.chat-prose > :first-child {
+  margin-top: 0;
+}
+
+.chat-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-prose p {
+  margin-block: 0.6em;
+}
+
+.chat-prose h1,
+.chat-prose h2,
+.chat-prose h3,
+.chat-prose h4 {
+  margin-block: 1.1em 0.45em;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.chat-prose h1 {
+  font-size: 1.25rem;
+}
+
+.chat-prose h2 {
+  font-size: 1.125rem;
+}
+
+.chat-prose h3,
+.chat-prose h4 {
+  font-size: 1rem;
+}
+
+.chat-prose ul,
+.chat-prose ol {
+  margin-block: 0.6em;
+  padding-inline-start: 1.4em;
+}
+
+.chat-prose ul {
+  list-style: disc;
+}
+
+.chat-prose ol {
+  list-style: decimal;
+}
+
+.chat-prose li {
+  margin-block: 0.28em;
+}
+
+.chat-prose li::marker {
+  color: var(--color-ink-faint);
+}
+
+.chat-prose a {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.chat-prose blockquote {
+  margin-block: 0.8em;
+  border-inline-start: 2px solid var(--color-line);
+  padding-inline-start: 0.9em;
+  color: var(--color-ink-muted);
+}
+
+.chat-prose hr {
+  margin-block: 1.2em;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.chat-prose table {
+  margin-block: 0.8em;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.chat-prose th,
+.chat-prose td {
+  border: 1px solid var(--color-line);
+  padding: 0.42em 0.8em;
+  text-align: left;
+}
+
+.chat-prose th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+
+.chat-prose__inline-code {
+  border-radius: 0.375rem;
+  background: var(--color-surface-strong);
+  padding: 0.12em 0.4em;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.875em;
+}
+
+.chat-prose__code-block {
+  position: relative;
+  margin-block: 0.8em;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-surface) 72%, var(--color-canvas));
+}
+
+.chat-prose__code-block pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.chat-prose__code-lang {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.8rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/*
+ * Gemini 式问候语渐变。渐变只作用于文字填充,静态呈现;
+ * 入场动效由 SplitText 在组件内实现,reduced-motion 下直接静态显示。
+ */
+.hero-gradient-text {
+  background: linear-gradient(
+    96deg,
+    var(--color-accent-strong) 0%,
+    #a78bfa 34%,
+    #e0a6c8 62%,
+    var(--color-ink) 96%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* SplitText 切分中文字符时避免字距抖动。 */
+.hero-gradient-text.is-splitting {
+  font-kerning: none;
+  text-rendering: optimizeSpeed;
+}
+
+/*
+ * 流式回答占位 shimmer:静态灰条 + GSAP 平移的高光层。
+ * 高光只动 transform,reduced-motion 下由组件停用,灰条保持静态。
+ */
+.stream-shimmer {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.stream-shimmer__line {
+  position: relative;
+  height: 0.8rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.stream-shimmer__line:nth-child(2) {
+  width: 82%;
+}
+
+.stream-shimmer__line:nth-child(3) {
+  width: 56%;
+}
+
+.stream-shimmer__glint {
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-accent) 26%, transparent) 50%,
+    transparent 100%
+  );
+  will-change: transform;
 }
 
 /* 减少动态模式由组件上的 motion-reduce:animate-none 停用此动画。 */

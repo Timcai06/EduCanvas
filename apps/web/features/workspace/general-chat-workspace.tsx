@@ -5,6 +5,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
+import { HtmlSandbox } from '@/features/canvas/html-sandbox';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import {
@@ -13,15 +14,23 @@ import {
 } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import { Plus, Sparkle } from '@phosphor-icons/react';
+import { useGSAP } from '@gsap/react';
+import { Plus } from '@phosphor-icons/react';
+import gsap from 'gsap';
+import { Flip } from 'gsap/Flip';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EmptyChatHero } from './empty-chat-hero';
+import { AmbientHalo } from './ambient-halo';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
 } from './general-chat-entry';
+import { HeroGreeting } from './hero-greeting';
+import { LogoMark } from './logo-mark';
+import { PromptSuggestions } from './prompt-suggestions';
 import { Sheet } from './sheet';
+
+gsap.registerPlugin(useGSAP, Flip);
 
 const ASSET_ENDPOINT = '/api/v1/chat/assets';
 const GENERAL_TURN_OPTIONS: AgentTurnClientOptions = {
@@ -45,8 +54,13 @@ export function GeneralChatWorkspace({
   const [assetPanel, setAssetPanel] = useState<
     'assets' | AssetItem['kind'] | null
   >(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const haloWrapRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
+  const flipStateRef = useRef<Flip.FlipState | null>(null);
   const nearBottom = useRef(true);
   const pendingConsumed = useRef(false);
   const pendingMenuConsumed = useRef(false);
@@ -88,6 +102,10 @@ export function GeneralChatWorkspace({
   const send = useCallback(
     (text: string) => {
       setError(null);
+      /* Flip 三段式:状态翻转前捕获输入坞位置,渲染后由下方 useGSAP 播放位移。 */
+      if (turn.messages.length === 0 && composerDockRef.current) {
+        flipStateRef.current = Flip.getState(composerDockRef.current);
+      }
       const selected = assets.flatMap((asset) =>
         asset.enabled && asset.versionId
           ? [
@@ -143,12 +161,45 @@ export function GeneralChatWorkspace({
 
   const isLanding = turn.messages.length === 0;
   const selectedAssets = assets.filter((asset) => asset.enabled);
+
+  /* 落地 → 对话:输入坞 Flip 位移,光场沉降为环境底光;reduced-motion 直接跳变。 */
+  useGSAP(
+    () => {
+      const haloWrap = haloWrapRef.current;
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        if (haloWrap) {
+          gsap.to(haloWrap, {
+            autoAlpha: isLanding ? 1 : 0.24,
+            duration: 0.9,
+            ease: 'power2.inOut',
+          });
+        }
+        const flipState = flipStateRef.current;
+        if (flipState && !isLanding) {
+          flipStateRef.current = null;
+          Flip.from(flipState, {
+            duration: 0.6,
+            ease: 'power3.inOut',
+            scale: false,
+          });
+        }
+      });
+      media.add('(prefers-reduced-motion: reduce)', () => {
+        flipStateRef.current = null;
+        if (haloWrap) gsap.set(haloWrap, { autoAlpha: isLanding ? 1 : 0.24 });
+      });
+      return () => media.revert();
+    },
+    { scope: mainRef, dependencies: [isLanding] },
+  );
+
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
-      <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
+      <header className="z-20 flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
         <span className="inline-flex items-center gap-2 font-display text-base font-semibold tracking-[-0.02em]">
-          <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-accent">
-            <Sparkle size={16} weight="fill" />
+          <span className="grid size-8 place-items-center rounded-full bg-accent-soft">
+            <LogoMark size={17} />
           </span>
           EduCanvas
         </span>
@@ -178,61 +229,82 @@ export function GeneralChatWorkspace({
         </form>
       </header>
 
-      {isLanding ? (
-        <EmptyChatHero>
-          <Composer
-            chips={selectedAssets.map((asset) => ({
-              id: asset.id,
-              label: asset.label,
-            }))}
-            busy={turn.busy}
-            statusText={turn.statusText ?? error}
-            statusTone={error && !turn.busy ? 'error' : 'info'}
-            onSend={send}
-            onRemoveChip={toggleAsset}
-            onMenuAction={handleMenuAction}
-            availableMenuActions={GENERAL_MENU_ACTIONS}
-            variant="landing"
-          />
-        </EmptyChatHero>
-      ) : (
-        <main className="flex min-h-0 flex-1 flex-col">
-          <div
-            ref={scrollRef}
-            className="min-h-0 flex-1 overflow-y-auto"
-            role="region"
-            aria-label="AI 对话"
-            onScroll={(event) => {
-              const node = event.currentTarget;
-              nearBottom.current =
-                node.scrollHeight - node.scrollTop - node.clientHeight <= 96;
-            }}
-          >
-            <ChatPanel
-              messages={turn.messages}
-              canvasOpen={false}
-              artifactTitle=""
-              onOpenCanvas={() => undefined}
-              onContinueText={() => undefined}
-              onRetry={(messageId) => turn.retry(messageId)}
-              assistantLabel="AI"
-            />
+      <main
+        ref={mainRef}
+        className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        {/* 光场常驻:落地态满亮,对话态沉降为环境底光,避免转场时硬切。 */}
+        <div
+          ref={haloWrapRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+        >
+          <AmbientHalo />
+        </div>
+
+        {isLanding ? (
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
+            <HeroGreeting />
+            <div ref={composerDockRef} className="w-full">
+              <Composer
+                chips={selectedAssets.map((asset) => ({
+                  id: asset.id,
+                  label: asset.label,
+                }))}
+                busy={turn.busy}
+                statusText={turn.statusText ?? error}
+                statusTone={error && !turn.busy ? 'error' : 'info'}
+                onSend={send}
+                onRemoveChip={toggleAsset}
+                onMenuAction={handleMenuAction}
+                availableMenuActions={GENERAL_MENU_ACTIONS}
+                variant="landing"
+              />
+            </div>
+            <PromptSuggestions onPick={send} disabled={turn.busy} />
           </div>
-          <Composer
-            chips={selectedAssets.map((asset) => ({
-              id: asset.id,
-              label: asset.label,
-            }))}
-            busy={turn.busy}
-            statusText={turn.statusText ?? error}
-            statusTone={error && !turn.busy ? 'error' : 'info'}
-            onSend={send}
-            onRemoveChip={toggleAsset}
-            onMenuAction={handleMenuAction}
-            availableMenuActions={GENERAL_MENU_ACTIONS}
-          />
-        </main>
-      )}
+        ) : (
+          <>
+            <div
+              ref={scrollRef}
+              className="relative z-10 min-h-0 flex-1 overflow-y-auto"
+              role="region"
+              aria-label="AI 对话"
+              onScroll={(event) => {
+                const node = event.currentTarget;
+                nearBottom.current =
+                  node.scrollHeight - node.scrollTop - node.clientHeight <= 96;
+              }}
+            >
+              <ChatPanel
+                messages={turn.messages}
+                canvasOpen={false}
+                artifactTitle=""
+                onOpenCanvas={() => undefined}
+                onContinueText={() => undefined}
+                onRetry={(messageId) => turn.retry(messageId)}
+                onPreviewHtml={({ source }) => setPreviewHtml(source)}
+                assistantLabel="AI"
+              />
+            </div>
+            <div ref={composerDockRef} className="relative z-10">
+              <Composer
+                chips={selectedAssets.map((asset) => ({
+                  id: asset.id,
+                  label: asset.label,
+                }))}
+                busy={turn.busy}
+                statusText={turn.statusText ?? error}
+                statusTone={error && !turn.busy ? 'error' : 'info'}
+                onSend={send}
+                onRemoveChip={toggleAsset}
+                onMenuAction={handleMenuAction}
+                availableMenuActions={GENERAL_MENU_ACTIONS}
+              />
+            </div>
+          </>
+        )}
+      </main>
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {turn.announcement?.text ?? ''}
@@ -258,6 +330,13 @@ export function GeneralChatWorkspace({
               setAssetPanel(null);
             }}
           />
+        </Sheet>
+      ) : null}
+      {previewHtml !== null ? (
+        <Sheet label="互动内容 · 沙箱预览" onClose={() => setPreviewHtml(null)}>
+          <div className="h-full min-h-[55dvh]">
+            <HtmlSandbox source={previewHtml} title="互动内容沙箱预览" />
+          </div>
         </Sheet>
       ) : null}
     </div>

@@ -3,12 +3,21 @@
 import {
   ArrowUp,
   Microphone,
-  Sparkle,
   StopCircle,
   X,
 } from '@phosphor-icons/react';
+import { LogoMark } from '@/features/workspace/logo-mark';
 import { useRef, useState } from 'react';
+import {
+  COMPOSER_FOCUS_EVENT,
+  COMPOSER_SEND_EVENT,
+} from '@/features/workspace/ambient-halo';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
+
+/** 光场对输入行为的呼应是纯装饰,事件失败不影响输入,故直接触发不做防御。 */
+const notifyHalo = (event: string, detail?: unknown) => {
+  window.dispatchEvent(new CustomEvent(event, { detail }));
+};
 
 export interface ContextChip {
   id: string;
@@ -59,6 +68,7 @@ export function Composer({
     if (!hasPayload || busy) return;
     setValue('');
     textarea.style.height = 'auto';
+    notifyHalo(COMPOSER_SEND_EVENT);
     onSend(text);
   };
 
@@ -107,6 +117,8 @@ export function Composer({
           aria-label="向 EduCanvas 提问"
           placeholder={isLanding ? '向 EduCanvas 提问' : '继续对话…'}
           onChange={(event) => setValue(event.currentTarget.value)}
+          onFocus={() => notifyHalo(COMPOSER_FOCUS_EVENT, { focused: true })}
+          onBlur={() => notifyHalo(COMPOSER_FOCUS_EVENT, { focused: false })}
           onInput={(event) => {
             const textarea = event.currentTarget;
             textarea.style.height = 'auto';
@@ -129,7 +141,7 @@ export function Composer({
         />
         {isLanding ? (
           <span className="hidden shrink-0 items-center gap-1.5 px-2 text-sm font-medium text-ink-muted sm:inline-flex">
-            <Sparkle aria-hidden="true" size={15} weight="fill" />
+            <LogoMark size={15} />
             EduCanvas
           </span>
         ) : null}

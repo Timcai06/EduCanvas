@@ -6,9 +6,14 @@ import { useRef } from 'react';
 
 gsap.registerPlugin(useGSAP);
 
+/** Composer 通过 window 事件与光场对话,避免跨组件 prop 钻孔。 */
+export const COMPOSER_FOCUS_EVENT = 'educanvas:composer-focus';
+export const COMPOSER_SEND_EVENT = 'educanvas:composer-send';
+
 /**
  * S0 的环境光场。模糊和渐变留在静态子层，GSAP 只改变外层 wrapper 的
  * transform/opacity，避免呼吸动效逐帧重绘大面积 filter。
+ * 输入框 focus/发送的呼应只作用于根容器,与作用于子层的呼吸 Timeline 无属性冲突。
  */
 export function AmbientHalo() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -17,11 +22,35 @@ export function AmbientHalo() {
   const coreRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
-    () => {
+    (_, contextSafe) => {
+      const root = rootRef.current;
       const haze = hazeRef.current;
       const bloom = bloomRef.current;
       const core = coreRef.current;
-      if (!haze || !bloom || !core) return;
+      if (!root || !haze || !bloom || !core || !contextSafe) return;
+
+      const reduceMotionQuery = window.matchMedia(
+        '(prefers-reduced-motion: reduce)',
+      );
+      const scaleTo = gsap.quickTo(root, 'scale', {
+        duration: 0.7,
+        ease: 'power2.out',
+      });
+      const onComposerFocus = contextSafe((event: Event) => {
+        if (reduceMotionQuery.matches) return;
+        const focused = (event as CustomEvent<{ focused: boolean }>).detail
+          ?.focused;
+        scaleTo(focused ? 1.045 : 1);
+      });
+      const onComposerSend = contextSafe(() => {
+        if (reduceMotionQuery.matches) return;
+        gsap
+          .timeline()
+          .to(root, { scale: 1.08, duration: 0.22, ease: 'power2.out' })
+          .to(root, { scale: 1, duration: 0.9, ease: 'elastic.out(1, 0.6)' });
+      });
+      window.addEventListener(COMPOSER_FOCUS_EVENT, onComposerFocus);
+      window.addEventListener(COMPOSER_SEND_EVENT, onComposerSend);
 
       const animations: gsap.core.Animation[] = [];
       const syncVisibility = () => {
@@ -134,6 +163,8 @@ export function AmbientHalo() {
       document.addEventListener('visibilitychange', syncVisibility);
       return () => {
         document.removeEventListener('visibilitychange', syncVisibility);
+        window.removeEventListener(COMPOSER_FOCUS_EVENT, onComposerFocus);
+        window.removeEventListener(COMPOSER_SEND_EVENT, onComposerSend);
         media.revert();
       };
     },
