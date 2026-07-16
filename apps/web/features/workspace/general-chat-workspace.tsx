@@ -54,6 +54,7 @@ export function GeneralChatWorkspace({
     'assets' | AssetItem['kind'] | null
   >(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewFull, setPreviewFull] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -300,7 +301,12 @@ export function GeneralChatWorkspace({
             {previewHtml !== null ? (
               <HtmlPreviewPanel
                 source={previewHtml}
-                onClose={() => setPreviewHtml(null)}
+                isFull={previewFull}
+                onToggleFull={() => setPreviewFull((value) => !value)}
+                onClose={() => {
+                  setPreviewHtml(null);
+                  setPreviewFull(false);
+                }}
               />
             ) : null}
           </div>
