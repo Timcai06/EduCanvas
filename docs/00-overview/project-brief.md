@@ -1,7 +1,9 @@
-# 项目简报
+# K12 AI 教师垂直产品简报
 
 - 状态：`accepted`
 - 来源：官方赛题细则与团队讨论
+
+> 本文只定义 EduCanvas 的首个 K12 垂直产品和竞赛交付范围。平台级产品北星与通用能力边界以[产品定义](../01-product/product-definition.md)和[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)为准；不能用本文把整个 EduCanvas 等同于教学产品。
 
 ## 赛题
 
@@ -40,4 +42,3 @@ JBGS-2026-02：多模态K12人工智能通识课教学助手对话智能体。
 ## 当前示范主题建议
 
 “AI如何识别猫和狗”：同一知识点分别用绘本、分类游戏、特征可视化和Python实验适配不同学段。
-

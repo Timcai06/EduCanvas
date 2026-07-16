@@ -22,13 +22,15 @@
 
 ## 已接受的架构方向
 
+- EduCanvas是Chat-first全模态AI平台，K12 AI教师是首个可插拔垂直Agent，不是平台本体；
+- 通用Chat、Assets、Agent Runtime、Artifact Runtime和Studio不得依赖教学状态机、掌握度或课程概念；
 - Web端采用Next.js、React和TypeScript；
 - UI使用可自由修改的Headless组件与自有设计系统；
 - 动画统一使用GSAP；
 - Canvas使用受控组件协议，不直接执行模型生成的任意代码；
 - 核心后端与Next.js解耦；
 - PostgreSQL是业务事实数据库，pgvector承载向量检索；
-- 教学流程由确定性状态机约束，模型负责表达和受控工具调用；
+- K12 Agent的教学流程由确定性状态机约束，模型负责表达和受控工具调用；
 - 状态机、掌握度、可信领域事件和外部Port集中在`packages/teaching-core`，不依赖Web、数据库或模型供应商；
 - 服务端教学用例集中在`packages/teaching-runtime`，由Web组合根注入Drizzle等适配器；
 - Canvas交互事件必须经服务端验证后才能提升为影响掌握度的可信领域事件；
@@ -38,11 +40,12 @@
 
 ## 当前实现边界
 
-- 已实现：模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、真实EduCanvas SSE对话UI、消息/模型/工具/安全账本、取消与刷新恢复、状态感知Tool Executor，以及原生OpenAI-compatible SSE Provider Adapter；
+- 已实现：模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、EduCanvas SSE对话UI、消息/模型/工具/安全账本、两阶段Tool Loop、取消与刷新恢复、状态感知Tool Executor，以及可配置的原生OpenAI-compatible SSE Provider Adapter；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
 - 数据基础已实现但尚未接入应用纵切：审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和只接受本轮candidate的防伪引用；
 - 尚未实现：K1检索/引用和T1状态推进的Web应用层接线、受控Artifact提议/确认/生成与真实Studio列表、正式用户认证、真实Provider live smoke及完整整节课E2E；
-- `draft`文档中的服务和生产基础设施是演进目标，不能作为当前部署事实。
+- 当前证据只支持本地开发基线；在K1/T1应用接线、C1、受控live smoke和整节课E2E完成前，不宣称已进入shared dev、staging或production；
+- `draft`文档中的独立服务和生产基础设施是演进目标，不能作为当前部署事实。
 
 ## 文档状态
 

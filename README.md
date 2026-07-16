@@ -1,4 +1,4 @@
-# 多模态K12人工智能通识课教学助手
+# EduCanvas：对话式全模态 AI 平台
 
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-React_+_TS-black?logo=nextdotjs" alt="Next.js">
@@ -8,11 +8,11 @@
   <img src="https://img.shields.io/badge/赛题-JBGS--2026--02-blue" alt="赛题">
 </p>
 
-本仓库用于开发浙江省大学生人工智能竞赛赛题 **JBGS-2026-02：多模态K12人工智能通识课教学助手对话智能体**。
+EduCanvas 的产品本体是一个以对话为核心、能够理解和生成文本、图片、音频、视频、Slide、文档与可交互内容的全模态 AI。文件与媒体是可复用资产，Canvas 与 Studio 承载生成产物，专业 Agent 以可插拔垂直能力接入平台。
 
-项目目标：做一个面向小学到高中学生的AI教师。它能通过对话、动画、绘本、编程和游戏化练习进行教学，并根据学生的学习表现调整下一步内容。
+本仓库同时交付浙江省大学生人工智能竞赛赛题 **JBGS-2026-02：多模态K12人工智能通识课教学助手对话智能体**。K12 AI 教师是平台的首个专业 Agent 和当前验证纵切，不是平台全部产品边界。
 
-> **北极星目标**：在缺少专业AI教师的情况下，学生仍能独立完成一节准确、有趣、可操作、有反馈的AI通识微课。
+> **北极星目标**：用户通过一个持续、可信、可恢复的对话入口组织多模态上下文，并让 AI 使用受控工具生成可继续编辑、交互和复用的数字产物。
 
 ## 从哪里开始
 
@@ -22,7 +22,19 @@
 | 团队协作方法         | [协作.md](协作.md)                                                                                        |
 | 官方赛题             | [第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx) |
 
-## 产品闭环
+## 平台闭环
+
+```mermaid
+flowchart LR
+    A[对话表达意图] --> B[选择多模态上下文]
+    B --> C[Agent规划与受控工具]
+    C --> D[文本或Artifact输出]
+    D --> E[用户确认、编辑与交互]
+    E --> F[持久化资产、产物与运行Trace]
+    F -.-> A
+```
+
+## 首个垂直产品：K12 AI 教师
 
 系统必须形成完整的教学闭环（详见 [docs/00-overview/project-brief.md](docs/00-overview/project-brief.md)）：
 
@@ -47,8 +59,10 @@ flowchart LR
 
 ### 设计原则
 
+- Chat是平台核心交互；Assets、Canvas、Studio和专业Agent按意图出现；
+- 通用Agent协议、模型网关、资产与Artifact运行时不能依赖K12教学状态机；
 - Next.js只负责Web与BFF，不承载全部后端；核心API无状态化、可水平扩展；
-- **教学正确性由确定性状态机和规则保证**，大模型只负责自然语言表达、内容组织和受控工具调用；
+- K12 Agent内部的教学正确性由确定性状态机和规则保证，大模型只负责自然语言表达、内容组织和受控工具调用；
 - **Canvas是受控组件运行时**：模型输出结构化Artifact，经白名单Schema校验后由预注册React组件渲染；
 - PostgreSQL是业务事实源，Redis只放短期状态，长任务可重试可恢复；
 - 所有模型调用和教学决策可追踪、可审计。
@@ -304,15 +318,15 @@ E2E_DATABASE_URL=postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e p
 ```mermaid
 timeline
     title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : Canvas协议基础 ✅ : teaching-core基础 ✅ : teaching-runtime判分基础 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 浏览器提交与持久化进度 ✅ : 最小Agent Runtime骨架 ✅ : Playwright纵切E2E ✅ : 真实模型链路 : 教材RAG : 教学GSAP动画
+    阶段一 产品纵切 : monorepo骨架 ✅ : 受控Canvas与教学动画 ✅ : teaching-core与runtime基础 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 消息与模型账本 ✅ : 真实Provider与SSE契约 ✅ : 两阶段工具循环 ✅ : PostgreSQL集成与Playwright基线 ✅ : K1/T1应用接线 : Artifact提议确认 : 整节课E2E
     阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : 多供应商路由治理 : Embedding版本管理 : 教师端
     阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
     阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
 ```
 
-当前处于**阶段一（产品纵切）**：匿名高熵HttpOnly Cookie在数据库中映射为哈希学生标识；学习会话、公开Artifact和私有判分键可原子bootstrap；学生端已经转向Chat-first布局，Canvas、资产与产物抽屉可按需打开。正常学习页已经切断确定性老师话术依赖；在真实Provider接入前，学生消息只进入本地未持久化视图并显示明确的不可用状态。浏览器通过Server Action提交后，由教学运行时执行session归属校验、确定性判分，并持久化Canvas与Progress。Agent侧已经形成“状态感知结构化计划 → 受控工具授权/执行 → 显式STAY”的最小无持久化骨架。CI按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行；具体测试数量与通过状态以当前分支的CI结果为准。
+当前处于**阶段一（产品纵切）的本地真实Agent收口阶段**：匿名身份、学习会话、消息与模型运行账本、EduCanvas SSE、真实OpenAI-compatible Provider适配器、两阶段工具循环、取消与刷新恢复、安全Gate、服务端判分和Progress持久化已经连通。审核资料不可变版本、PostgreSQL FTS、Turn资料快照和防伪引用已经落在数据层；可信状态投影、回放和下一节点推荐已经落在Core/Runtime，但两者尚未接入Web应用纵切。Provider未配置时页面会进入明确的不可用状态，不会回退到确定性脚本伪造老师回答。CI按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行；具体测试数量与通过状态以当前分支的CI结果为准。
 
-这仍是匿名演示纵切，不等同于正式用户认证。下一步是接入真实Model Gateway和首批只读知识工具，再完成工具结果合成、教材RAG、聊天消息持久化、SSE对话和首个教学GSAP动画；正式认证、迁移向下回退、备份恢复、生产可观测性与运维门禁仍待完成。当前已使用GSAP的空态、Canvas和Sheet动效属于UI状态动画，不等同于教学动画Artifact。
+这仍是匿名演示纵切，不等同于正式用户认证或可供未成年人使用的生产环境。下一步是完成K1检索/引用和T1状态推进的Web应用接线，再实现受控Artifact的提议、学生确认、独立生成和真实Studio列表；最后用轮换后的本地Provider Key完成合成数据live smoke与整节课E2E。正式认证、迁移向下回退、备份恢复、生产SLO与运维门禁仍属于后续production-hardening计划。
 
 ## 最简单的团队协作规则
 

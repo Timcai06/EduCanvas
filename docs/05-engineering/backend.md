@@ -4,7 +4,8 @@
 
 ## 当前主选
 
-- 阶段一Web/BFF：Next.js Server Component与Server Action；
+- 阶段一部署形态：Next.js Web/BFF组合根 + workspace内的Core、Runtime、Provider和Drizzle适配器，保持模块化单体部署；
+- 浏览器入口：Next.js Server Component、Server Action和Route Handler；
 - 阶段二核心API候选：NestJS + Fastify；
 - 数据访问：Drizzle配合原生SQL（ADR-0003已确定）；
 - AI计算：Python Worker；
@@ -23,9 +24,29 @@
 - `GradeCanvasSubmissionService`在事务内再次校验可信学生对session的归属，再判分、追加可信事件并更新掌握度投影；
 - 页面读取只返回公共Artifact和Progress DTO，私有判分键不进入浏览器。
 
+## 真实教学Turn已实现边界
+
+- `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
+- Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
+- `TeachingTurnOrchestrator`支持`answer → tools → synthesis`两阶段编排；当前生产组合只注册只读`getStudentState`，工具可见性仍由可信教学状态、注册Handler和exposure共同收敛；
+- Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
+- 学生消息、老师消息、Model Run、Tool Call和安全决策分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
+- 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
+- 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
+
+## 已实现但未接Web的后端能力
+
+- K1数据层：审核资料不可变版本、PostgreSQL FTS、Session资料绑定、Turn资料快照、检索候选和引用防伪仓储已经实现；`retrieveKnowledge`工具、引用持久化编排和Web引用呈现尚未接线；
+- T1 Core/Runtime：可信状态转移、策略快照、事件回放、掌握度更新、误区与下一节点推荐服务已经实现；当前Canvas判分后的Web流程尚未调用完整状态推进链路；
+- C1尚未实现：Artifact proposal、学生确认、独立生成Model Run、proposal到Artifact幂等提交和真实Studio查询仍是下一阶段工作。
+
 该身份机制只服务阶段一匿名演示，不提供注册、登录、账号恢复、角色权限或跨设备身份，因此不能替代正式认证。
 
-## 为什么独立于Next.js
+## 独立后端的演进边界
+
+当前不需要为了“独立后端”先拆服务。领域规则位于`teaching-core`、应用编排位于`teaching-runtime`、Provider位于`model-gateway`、持久化位于`db`，已经与Next.js组件解耦；Next.js只是当前部署组合根。
+
+当长任务、连接规模或团队发布边界产生可测压力时，再把现有Port/Adapter边界迁移到独立API或Worker。拆分目标包括：
 
 - 后端可以单独扩容和发布；
 - 避免长任务占用Web进程；
@@ -34,6 +55,8 @@
 - 不依赖单一前端部署平台。
 
 ## 高并发策略
+
+当前已落地的是PostgreSQL窗口限流、单Session活动Turn、租约/heartbeat、请求幂等和Provider超时/Abort。以下条目是shared dev到production的演进要求，不应描述为当前全部已启用：
 
 - API保持无状态；
 - 模型、数据库、检索分别设置并发舱壁；
