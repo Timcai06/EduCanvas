@@ -5,7 +5,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
-import { HtmlSandbox } from '@/features/canvas/html-sandbox';
+import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import {
@@ -18,7 +18,6 @@ import { useGSAP } from '@gsap/react';
 import { Plus } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AmbientHalo } from './ambient-halo';
 import {
@@ -211,12 +210,6 @@ export function GeneralChatWorkspace({
         >
           资产
         </button>
-        <Link
-          href="/learn"
-          className="rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-        >
-          K12 学习模式
-        </Link>
         <form action={startNewGeneralChatAction}>
           <button
             type="submit"
@@ -264,10 +257,11 @@ export function GeneralChatWorkspace({
             <PromptSuggestions onPick={send} disabled={turn.busy} />
           </div>
         ) : (
-          <>
+          <div className="relative z-10 flex min-h-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               ref={scrollRef}
-              className="relative z-10 min-h-0 flex-1 overflow-y-auto"
+              className="min-h-0 flex-1 overflow-y-auto"
               role="region"
               aria-label="AI 对话"
               onScroll={(event) => {
@@ -302,7 +296,14 @@ export function GeneralChatWorkspace({
                 availableMenuActions={GENERAL_MENU_ACTIONS}
               />
             </div>
-          </>
+            </div>
+            {previewHtml !== null ? (
+              <HtmlPreviewPanel
+                source={previewHtml}
+                onClose={() => setPreviewHtml(null)}
+              />
+            ) : null}
+          </div>
         )}
       </main>
 
@@ -330,13 +331,6 @@ export function GeneralChatWorkspace({
               setAssetPanel(null);
             }}
           />
-        </Sheet>
-      ) : null}
-      {previewHtml !== null ? (
-        <Sheet label="互动内容 · 沙箱预览" onClose={() => setPreviewHtml(null)}>
-          <div className="h-full min-h-[55dvh]">
-            <HtmlSandbox source={previewHtml} title="互动内容沙箱预览" />
-          </div>
         </Sheet>
       ) : null}
     </div>

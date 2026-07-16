@@ -476,7 +476,8 @@ test('「+」菜单开放真实上传能力，并跳过尚未接入的动作', a
   });
   await expect(upload).toBeEnabled();
   await expect(uploadImage).toBeEnabled();
-  await expect(courseMaterial).toBeDisabled();
+  /* 未接入的动作不再以 disabled 占位,直接不渲染(诚实 UI) */
+  await expect(courseMaterial).toHaveCount(0);
   await expect(demo).toBeEnabled();
   await expect(upload).toBeFocused();
   await page.keyboard.press('ArrowDown');
