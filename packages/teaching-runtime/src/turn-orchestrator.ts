@@ -241,6 +241,10 @@ const isAborted = (signal: ModelAbortSignal | undefined): boolean =>
 /**
  * 学生文本始终使用独立 user 消息，不能改变 system 约束。
  * 工具描述只来自“状态白名单 ∩ 已注册 ∩ model exposure”。
+ *
+ * 这是当前 K12 单轮纵切的已知边界：这里只包含本轮消息，不会从聊天账本加载
+ * 历史对话、会话摘要或 Artifact。消息可持久化不等于模型具备连续对话上下文；
+ * 在通用 ContextSnapshotBuilder 接入前，产品不得宣称跨轮记忆已经完成。
  */
 function buildAnswerMessages(
   command: TeachingTurnAnswerPromptInput,

@@ -22,8 +22,8 @@ const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => 'tsvector',
 });
 
-// 阶段一最小表集（docs/04-data/data-design.md 的子集）。
-// users/courses 等完整实体在阶段二引入，当前 studentId 先用匿名标识。
+// 阶段一模块化单体的现行表集。它同时包含通用 Agent/Asset/RAG 账本和 K12 纵切，
+// 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/data-design.md。
 
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
@@ -89,7 +89,9 @@ export const lessonSessions = pgTable(
 
 /**
  * 平台通用 Asset。ownerSubjectId 与 spaceId 都是可信服务端解析出的不透明标识，
- * 因而不依赖 K12 用户、课程或学习状态表。对象存储地址只存在于不可变版本表。
+ * 对象存储地址只存在于不可变版本表。当前 K12 纵切尚无一等 Space 表，组合根会
+ * 暂用 lessonSession.id 作为 spaceId，因此这里还不能提供 Workspace 级参照完整性；
+ * 新增 spaces/conversations 后必须通过回填与双读迁移解除该临时绑定。
  */
 export const assets = pgTable(
   'assets',
@@ -205,8 +207,9 @@ export const assetVersions = pgTable(
 );
 
 /**
- * 用户可见的文本消息账本。学生消息保存发送幂等证据，老师消息保存可恢复的生命周期；
- * Provider trace 和内部工具结果不写入该表。
+ * K12 v1 用户可见消息账本。学生消息保存发送幂等证据，老师消息保存可恢复的生命周期；
+ * Provider trace 和内部工具结果不写入该表。当前外键仍指向 lesson_sessions、角色仍是
+ * student/assistant，不能被当作平台通用 Conversation 模型；通用数据骨架落地后迁移。
  */
 export const chatMessages = pgTable(
   'chat_messages',

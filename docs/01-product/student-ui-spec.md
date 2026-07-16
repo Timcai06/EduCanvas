@@ -56,22 +56,22 @@
 - `html`声明`color-scheme: dark`，Chat、Canvas与抽屉共用同一套深色语义token；正文和展示字体当前都使用Inter/PingFang等系统无衬线回退；
 - 消息直接落底、输入栏为深灰胶囊、Canvas为深色浮层；组件必须通过token取色，禁止散写色值；
 - S0 使用近黑背景、三层错位低透明度蓝/紫光场与暗部 vignette。渐变和 blur 固定在静态子层，GSAP 只动画 wrapper 的 `transform`/`opacity`；页面 hidden 时暂停、visible 时恢复；`prefers-reduced-motion` 不创建无限 Timeline；移动端隐藏紫色 bloom，只保留静态 haze 与单个动画 core；
-- Halo 是 EduCanvas 自己的视觉实现，只参考“输入优先、暗部包围、无硬边”的质感原则，不复制 Gemini 品牌色值或精确几何参数。截图和 5 秒性能 trace 以 [`design-qa.md`](../../design-qa.md) 为证据面。
+- Halo 是 EduCanvas 自己的视觉实现，只参考“输入优先、暗部包围、无硬边”的质感原则，不复制 Gemini 品牌色值或精确几何参数。自动化快照、动效性能边界与人工复核清单统一维护在[视觉回归与动效验收](../06-quality/visual-regression.md)。
 
 ## 阶段一实现边界
 
 - 正常学习页已经切断`features/chat/demo-teacher-script.ts`依赖；浏览器通过固定 Route 消费供应商无关 SSE，消息和终态由服务端账本恢复；无可用 Provider 时显示明确的不可用状态，不返回关键词规则或固定老师话术；
 - 浏览器状态机覆盖`pending / streaming / completed / failed / cancelled / interrupted`，刷新恢复服务端持久化消息；首版不承诺逐 token 断点续传。确定性脚本只允许留在单元测试、E2E Fixture或明确标识的离线Demo模式；
-- 知识资产当前只是不可选择的课程预置目录，上传/解析/检索/引用链路未建设；Studio 只把当前 Artifact 描述为“本课预置”，不声称由 AI 生成；
+- PDF/图片上传、不可变Asset版本、消息Part、课程资料FTS、Turn快照、候选白名单和引用SSE/UI已经接通；用户上传Asset尚未统一进入可检索Source/Chunk链路，当前文本Provider也不能原生理解图片；
 - 判分、掌握度、进度全部走既有 Server Action 可信链路，客户端不自算；
-- 引用、知识资产检索和 Agent 生成 Artifact 仍未进入学生端事件投影，相关入口继续保持不可用或只读。
+- 引用已进入学生端事件投影，但当前仍按检索候选落库，尚未绑定最终回答实际使用的claim/span；Agent生成Artifact的提议、确认、独立生成和真实Studio列表仍未实现，相关入口继续保持不可用或准确标注为预置。
 
 ## 验收标准
 
 1. `/learn` 的无消息会话默认 Chat-empty：无预置对话、桌面 Learning Rail 默认折叠、居中输入栏可直接发起第一轮；发送后进入 Chat-only，刷新恢复已持久化消息；
 2. Canvas 当前仅经预置产物卡/「+」的可用项打开；可拖拽调宽、全屏、收起；
 3. 「+」菜单八项目标齐全，未接项 disabled 且跳过键盘漫游，唯一可用项全键盘可达；
-4. RAG 接入前资产不可选择、不产生上下文标签、不暗示老师已使用资料；
+4. 只有服务端确认ready且当前Provider可消费的Asset才能选择；引用必须来自本轮候选白名单，UI不得暗示未索引的上传资料已经进入RAG；
 5. 产物抽屉可重新打开预置产物；进度入口只在 S1 且存在可信投影时出现；
 6. 既有判分闭环回归：提交 → 服务端判分 → 反馈 → 进度更新（Playwright e2e）；
 7. 移动端默认完整 Chat，Canvas 全屏打开、关闭恢复上下文；

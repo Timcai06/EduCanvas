@@ -16,8 +16,10 @@ const assets = new DrizzleAssetRepository();
 export class UnsupportedAssetModalityError extends UnsupportedAgentInputModalityError {}
 
 /**
- * 当前 OpenAI-compatible Adapter 仍是文本输入，因此文档通过受控提取文本物化；
- * 图片不能被静默忽略，必须等视觉Provider/描述工具可用后再进入模型。
+ * K12 v1 的文本兼容物化边界。当前函数有意只返回字符串：文档通过受控提取文本
+ * 进入 Prompt，图片等原生引用会明确失败而不是静默丢弃。它不代表平台已经具备
+ * 原生全模态输入；后续由通用 Agent Runtime 返回结构化 ModelInputPart，并在
+ * Provider Adapter 内解析已授权的不可变 Asset 版本。
  */
 export async function materializeAssetContext(input: {
   identity: AnonymousIdentity;

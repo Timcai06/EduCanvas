@@ -43,12 +43,14 @@ K12垂直纵切：
 
 阶段一剩余工作按平台与垂直纵切拆分：
 
-1. 将通用Asset首条纵切从本地私有存储扩展到对象存储、异步解析/恶意文件扫描和原生视觉Provider；现有契约与数据库已覆盖全模态类型、匿名所有权、不可变版本引用、多Part消息和文本上下文物化；
-2. 形成通用Artifact术语和生命周期，课程资料、教学Canvas继续作为K12适配；
-3. 为K1建立冻结中文检索评测集，并仅在FTS指标触发阈值时引入向量/重排，不为了架构对称提前增加复杂度；
-4. 补齐T1非`ASSESS`节点的可信事件接线，并验证完整状态回放与下一节点推荐；
-5. 完成C1：实现平台级Artifact提议/确认/生成/Studio生命周期，并由K12 Agent注册首批教学Artifact；
-6. 将通用对话、资料引用、受控Artifact、教学判分、状态推进和刷新恢复串成完整E2E，再执行受控Provider live smoke。
+1. 修复连续对话和诚实终态：历史Context Snapshot、完整Parts重试、输出截断状态和实际引用子集；
+2. 建立通用Space/Conversation/Message/Operation数据骨架，把`lesson_sessions`迁移为K12 Vertical Context；
+3. 将通用Turn、Context、Tool Registry、Policy和Trace Port迁入`agent-runtime`，K12作为首个Agent Profile注册；
+4. 统一Asset/Source/Representation/Chunk/Citation链路，加入异步解析、恶意文件扫描、对象删除和原生多模态Provider；
+5. 为中文检索建立冻结评测集，并按指标引入关键词/n-gram、Embedding和Rerank；
+6. 实现平台级Artifact提议/确认/生成/版本/Studio生命周期，并由K12 Agent注册首批受控Artifact；
+7. 补齐T1非`ASSESS`节点的可信事件接线，并验证完整状态回放与下一节点推荐；
+8. 将通用对话、长期Sources、受控Artifact、教学判分、状态推进和刷新恢复串成完整E2E，再执行受控Provider live smoke。
 
 ## 阶段二：平台化
 

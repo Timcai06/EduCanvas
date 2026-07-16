@@ -30,8 +30,8 @@ EduCanvas 最初以 K12 AI 通识课竞赛纵切建立真实对话、Provider、
 
 ## 后果
 
-- 当前`model-gateway -> teaching-core`依赖需要逐步消除；
-- Web与数据库中带教学语义的现有对象继续服务K12纵切，通用Workspace/Asset/Artifact对象按真实功能到来增量引入；
+- `model-gateway`已迁移为只依赖`agent-core`，该验证项完成；通用Turn/Tool编排仍位于`teaching-runtime`，需要继续迁入`agent-runtime`；
+- Web与数据库中带教学语义的现有对象继续服务K12纵切；通用Space/Conversation/Artifact对象按additive migration、回填和兼容读取增量引入；
 - canonical文档必须区分平台北星、K12垂直产品和竞赛交付，不再把三者混写；
 - K1/T1仍是K12纵切的重要工作，但不能阻塞通用Agent与Artifact基础契约的抽取；
 - 安全策略分为平台通用基线与K12增强策略，未成年人规则不能被其他Agent绕过，也不要求所有Agent都持有学习状态。
@@ -39,7 +39,7 @@ EduCanvas 最初以 K12 AI 通识课竞赛纵切建立真实对话、Provider、
 ## 验证方式
 
 - 依赖图证明`agent-core`不依赖`teaching-*`、Web、数据库或供应商SDK；
-- `model-gateway`迁移后不再依赖`teaching-core`，现有Provider Fixture与Turn测试保持通过；
+- `model-gateway`不依赖`teaching-core`，现有Provider Fixture与Turn测试保持通过；
 - K12状态机、掌握度和判分测试继续只位于教学边界；
 - 新增一个不加载课程/掌握度的通用Agent契约测试，证明通用Turn可以独立成立；
 - 生产依赖边界测试禁止通用平台包反向导入`teaching-core`或`teaching-runtime`。

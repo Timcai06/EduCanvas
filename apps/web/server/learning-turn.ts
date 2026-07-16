@@ -1,5 +1,12 @@
 import 'server-only';
 
+/**
+ * K12 v1 Turn 的 Next.js/BFF 组合根。该模块暂时汇集租约、回放、安全、模型审计、
+ * 工具审计、引用和 SSE 投影，以保持现有真实纵切可运行；它不是通用 Agent Runtime
+ * 的目标边界。平台化迁移应把 Start/Run/Replay 用例与传输契约抽到独立应用层，
+ * 这里只保留身份恢复、HTTP/SSE 映射和适配器装配。
+ */
+
 import { randomUUID } from 'node:crypto';
 import {
   DEFAULT_ASSISTANT_LEASE_MS,
