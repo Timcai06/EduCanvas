@@ -31,6 +31,7 @@ export function Composer({
   stopAvailable = false,
   variant = 'conversation',
   statusTone = 'info',
+  availableMenuActions,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -43,6 +44,7 @@ export function Composer({
   stopAvailable?: boolean;
   variant?: 'landing' | 'conversation';
   statusTone?: 'info' | 'error';
+  availableMenuActions?: readonly PlusMenuActionId[];
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -93,7 +95,10 @@ export function Composer({
             : 'rounded-[var(--radius-pill)]'
         }`}
       >
-        <PlusMenu onAction={onMenuAction} />
+        <PlusMenu
+          onAction={onMenuAction}
+          availableActions={availableMenuActions}
+        />
         <textarea
           ref={textareaRef}
           value={value}

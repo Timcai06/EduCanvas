@@ -14,8 +14,20 @@ import {
   TurnStreamProtocolError,
 } from './turn-events';
 
-const SAFE_CONNECTION_ERROR = 'AI 老师暂时无法连接，请稍后重试。';
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
+
+export interface AgentTurnClientOptions {
+  endpoint: string;
+  assistantLabel: string;
+  cancelEndpoint?: (turnId: string) => string;
+}
+
+const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
+  endpoint: '/api/v1/learn/turn',
+  assistantLabel: 'AI 老师',
+  cancelEndpoint: (turnId) =>
+    `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
+};
 
 interface InFlightTurn {
   clientMessageId: string;
@@ -32,6 +44,7 @@ interface PublicRouteError {
 
 async function readPublicRouteError(
   response: Response,
+  fallback: string,
 ): Promise<{ code: string; message: string }> {
   try {
     const body = (await response.json()) as PublicRouteError;
@@ -44,12 +57,14 @@ async function readPublicRouteError(
   } catch {
     // The browser never exposes raw upstream errors; use the stable fallback.
   }
-  return { code: 'turn_unavailable', message: SAFE_CONNECTION_ERROR };
+  return { code: 'turn_unavailable', message: fallback };
 }
 
-export function useTeachingTurn(
+export function useAgentTurn(
   initialMessages: readonly InitialChatMessageDTO[],
+  options: AgentTurnClientOptions,
 ) {
+  const safeConnectionError = `${options.assistantLabel}暂时无法连接，请稍后重试。`;
   const [state, dispatch] = useReducer(
     teachingTurnReducer,
     initialMessages,
@@ -111,10 +126,11 @@ export function useTeachingTurn(
             (part.reference.kind === 'image' ? '图片附件' : 'PDF资料'),
           kind: part.reference.kind === 'image' ? 'image' : 'document',
         })),
+        assistantLabel: options.assistantLabel,
       });
 
       try {
-        const response = await fetch('/api/v1/learn/turn', {
+        const response = await fetch(options.endpoint, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(
@@ -128,7 +144,10 @@ export function useTeachingTurn(
           signal: current.controller.signal,
         });
         if (!response.ok) {
-          const routeError = await readPublicRouteError(response);
+          const routeError = await readPublicRouteError(
+            response,
+            safeConnectionError,
+          );
           if (mounted.current) {
             dispatch({
               type: 'stream.failed',
@@ -213,7 +232,7 @@ export function useTeachingTurn(
             type: 'stream.failed',
             status: aborted ? 'interrupted' : 'failed',
             code: aborted ? 'interrupted' : 'stream_unavailable',
-            message: aborted ? SAFE_INTERRUPTED_ERROR : SAFE_CONNECTION_ERROR,
+            message: aborted ? SAFE_INTERRUPTED_ERROR : safeConnectionError,
             retryable: true,
           });
         }
@@ -222,18 +241,18 @@ export function useTeachingTurn(
         if (inFlight.current === current) inFlight.current = null;
       }
     },
-    [],
+    [options.assistantLabel, options.endpoint, safeConnectionError],
   );
 
   const stop = useCallback(async () => {
     const current = inFlight.current;
-    if (!current?.turnId || current.terminalReceived) return false;
+    if (!current?.turnId || current.terminalReceived || !options.cancelEndpoint)
+      return false;
     setControlError(null);
     try {
-      const response = await fetch(
-        `/api/v1/learn/turn/${encodeURIComponent(current.turnId)}/cancel`,
-        { method: 'POST' },
-      );
+      const response = await fetch(options.cancelEndpoint(current.turnId), {
+        method: 'POST',
+      });
       if (!response.ok) {
         setControlError('暂时无法停止回答，请稍后重试。');
         return false;
@@ -257,7 +276,7 @@ export function useTeachingTurn(
       setControlError('暂时无法停止回答，请稍后重试。');
       return false;
     }
-  }, []);
+  }, [options]);
 
   const retry = useCallback(
     (assistantMessageId: string) => {
@@ -287,9 +306,9 @@ export function useTeachingTurn(
     : state.activeToolLabel
       ? state.activeToolLabel
       : activeStatus === 'streaming'
-        ? 'AI 老师正在回答…'
+        ? `${options.assistantLabel}正在回答…`
         : activeStatus === 'pending'
-          ? '正在连接 AI 老师…'
+          ? `正在连接${options.assistantLabel}…`
           : null;
 
   return {
@@ -298,9 +317,15 @@ export function useTeachingTurn(
     activeStatus,
     statusText,
     busy: state.active !== null,
-    stopAvailable: Boolean(state.active?.turnId),
+    stopAvailable: Boolean(state.active?.turnId && options.cancelEndpoint),
     send,
     stop,
     retry,
   } as const;
+}
+
+export function useTeachingTurn(
+  initialMessages: readonly InitialChatMessageDTO[],
+) {
+  return useAgentTurn(initialMessages, TEACHING_TURN_OPTIONS);
 }

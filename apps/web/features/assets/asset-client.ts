@@ -42,8 +42,10 @@ async function publicError(
   return fallback;
 }
 
-export async function loadAssets(): Promise<readonly AssetItem[]> {
-  const response = await fetch('/api/v1/assets', { cache: 'no-store' });
+export async function loadAssets(
+  endpoint = '/api/v1/assets',
+): Promise<readonly AssetItem[]> {
+  const response = await fetch(endpoint, { cache: 'no-store' });
   if (!response.ok)
     throw new Error(await publicError(response, '暂时无法读取资料。'));
   const body = (await response.json()) as { assets?: unknown };
@@ -54,11 +56,12 @@ export async function loadAssets(): Promise<readonly AssetItem[]> {
 export async function uploadAsset(input: {
   file: File;
   scope: AssetItem['scope'];
+  endpoint?: string;
 }): Promise<AssetItem> {
   const form = new FormData();
   form.set('file', input.file);
   form.set('scope', input.scope);
-  const response = await fetch('/api/v1/assets', {
+  const response = await fetch(input.endpoint ?? '/api/v1/assets', {
     method: 'POST',
     body: form,
   });

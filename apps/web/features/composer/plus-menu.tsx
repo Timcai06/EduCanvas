@@ -3,7 +3,7 @@
 import { useGSAP } from '@gsap/react';
 import { Plus } from '@phosphor-icons/react';
 import gsap from 'gsap';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 gsap.registerPlugin(useGSAP);
 
@@ -89,21 +89,40 @@ const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
     },
   ];
 
-const allItems = menuGroups.flatMap((group) => group.items);
-const enabledIndexes = allItems.flatMap((item, index) =>
-  item.available ? [index] : [],
-);
-const firstEnabledIndex = enabledIndexes[0] ?? 0;
-
 /**
  * 「+」菜单自管开合与键盘漫游（↑↓/Enter/Esc），动作语义交给上层：
  * 「添加材料」进入上下文标签，「请老师创建」必须先产生参数确认卡，绝不静默生成。
  */
 export function PlusMenu({
   onAction,
+  availableActions,
 }: {
   onAction: (action: PlusMenuActionId) => void;
+  availableActions?: readonly PlusMenuActionId[];
 }) {
+  const renderedGroups = useMemo(
+    () =>
+      menuGroups.map((group) => ({
+        ...group,
+        items: group.items.map((item) => ({
+          ...item,
+          available:
+            item.available &&
+            (availableActions === undefined ||
+              availableActions.includes(item.id)),
+        })),
+      })),
+    [availableActions],
+  );
+  const allItems = useMemo(
+    () => renderedGroups.flatMap((group) => group.items),
+    [renderedGroups],
+  );
+  const enabledIndexes = useMemo(
+    () => allItems.flatMap((item, index) => (item.available ? [index] : [])),
+    [allItems],
+  );
+  const firstEnabledIndex = enabledIndexes[0] ?? 0;
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(firstEnabledIndex);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -218,7 +237,7 @@ export function PlusMenu({
           onKeyDown={handleMenuKeyDown}
           className="absolute bottom-12 left-0 z-50 max-h-[min(70dvh,22rem)] w-64 origin-bottom-left overflow-y-auto rounded-2xl border border-line/90 bg-canvas/95 p-2 shadow-[var(--shadow-sheet)] backdrop-blur-xl sm:grid sm:w-[32rem] sm:grid-cols-2 sm:gap-2 sm:overflow-visible"
         >
-          {menuGroups.map((group) => (
+          {renderedGroups.map((group) => (
             <div key={group.title} role="group" aria-label={group.title}>
               <p className="px-3 pt-2 pb-1 text-xs font-semibold text-ink-faint">
                 {group.title}

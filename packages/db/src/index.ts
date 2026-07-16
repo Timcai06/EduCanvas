@@ -21,6 +21,16 @@ export {
   type PlatformMessageSnapshot,
 } from './conversation-platform-repository';
 export {
+  DrizzlePlatformTurnRepository,
+  PlatformMessageIdConflictError,
+  PlatformTurnInProgressError,
+  PlatformTurnLifecycleError,
+  PlatformTurnOwnershipError,
+  type PlatformTurnMessageSnapshot,
+  type PlatformTurnSnapshot,
+  type PlatformTurnTerminalStatus,
+} from './platform-turn-repository';
+export {
   DrizzleArtifactRepository,
   type SavedArtifactReference,
 } from './artifact-repository';

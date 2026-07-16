@@ -75,6 +75,24 @@ export class DrizzlePlatformConversationRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  async getOwned(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformConversationSnapshot | null> {
+    const [conversation] = await this.database
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, input.conversationId),
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          eq(conversations.status, 'active'),
+        ),
+      )
+      .limit(1);
+    return conversation ? toConversation(conversation) : null;
+  }
+
   async create(input: {
     ownerSubjectId: string;
     spaceKind: 'personal' | 'notebook' | 'course';

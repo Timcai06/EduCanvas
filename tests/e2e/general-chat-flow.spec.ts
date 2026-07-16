@@ -1,0 +1,55 @@
+import { expect, test } from '@playwright/test';
+
+test('根入口默认创建通用Chat，并将K12保留为显式模式', async ({
+  context,
+  page,
+}) => {
+  await page.route('**/api/v1/chat/turn', async (route) => {
+    const encoder = new TextEncoder();
+    const turnId = 'general-turn-e2e';
+    const messageId = 'general-assistant-e2e';
+    const frame = (type: string, data: Record<string, unknown>) =>
+      encoder.encode(
+        `event: ${type}\ndata: ${JSON.stringify({ type, schemaVersion: '1', ...data })}\n\n`,
+      );
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      body: Buffer.concat([
+        frame('turn.accepted', {
+          turnId,
+          studentMessageId: 'general-student-e2e',
+          assistantMessageId: messageId,
+          replayed: false,
+        }),
+        frame('message.delta', {
+          turnId,
+          messageId,
+          delta: '我们先明确目标，再选择最合适的实现路径。',
+        }),
+        frame('turn.completed', { turnId, messageId }),
+      ]).toString(),
+    });
+  });
+
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'K12 学习模式' })).toBeVisible();
+  await expect(page.getByText(/猫狗|学习进度|开始学习/)).toHaveCount(0);
+
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill('帮我分析一个产品想法');
+  await composer.press('Enter');
+
+  await expect(page.getByText('帮我分析一个产品想法')).toBeVisible();
+  await expect(
+    page.getByText('我们先明确目标，再选择最合适的实现路径。'),
+  ).toBeVisible();
+  const cookieNames = (await context.cookies())
+    .filter((cookie) => cookie.httpOnly && cookie.path === '/')
+    .map((cookie) => cookie.name);
+  expect(cookieNames).toContain('__Host-educanvas_anonymous_identity');
+  expect(cookieNames).toContain('__Host-educanvas_active_conversation');
+});
