@@ -6,6 +6,7 @@ import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
+import { HtmlSandbox } from '@/features/canvas/html-sandbox';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
@@ -120,6 +121,7 @@ function LearnWorkspaceSession({
   const [chatPct, setChatPct] = useState(CHAT_PCT_DEFAULT);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [uploadKind, setUploadKind] = useState<AssetItem['kind'] | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
 
   const pendingPromptConsumed = useRef(false);
   const pendingMenuActionConsumed = useRef(false);
@@ -392,6 +394,7 @@ function LearnWorkspaceSession({
                     onOpenCanvas={openCanvas}
                     onContinueText={() => setChatError(AI_UNAVAILABLE_MESSAGE)}
                     onRetry={(messageId) => teachingTurn.retry(messageId)}
+                    onPreviewHtml={({ source }) => setPreviewHtml(source)}
                   />
                 </div>
                 <Composer
@@ -508,6 +511,13 @@ function LearnWorkspaceSession({
       {drawer === 'progress' ? (
         <Sheet label="学习进度" onClose={() => setDrawer(null)}>
           <ProgressDrawer progress={progress} />
+        </Sheet>
+      ) : null}
+      {previewHtml !== null ? (
+        <Sheet label="互动内容 · 沙箱预览" onClose={() => setPreviewHtml(null)}>
+          <div className="h-full min-h-[55dvh]">
+            <HtmlSandbox source={previewHtml} title="互动内容沙箱预览" />
+          </div>
         </Sheet>
       ) : null}
     </div>

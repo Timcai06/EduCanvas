@@ -11,9 +11,51 @@ import {
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
+import type { HtmlPreviewRequest } from './markdown';
+import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
+import { StreamShimmer } from './stream-shimmer';
 
 gsap.registerPlugin(useGSAP);
+
+/** 助手头像在等待/流式期间轻微呼吸,完成后回到静态;reduced-motion 不动。 */
+function AssistantAvatar({ active }: { active: boolean }) {
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  useGSAP(
+    () => {
+      const root = rootRef.current;
+      if (!root) return;
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        if (!active) {
+          gsap.set(root, { scale: 1, rotate: 0 });
+          return;
+        }
+        gsap.to(root, {
+          scale: 1.12,
+          rotate: 12,
+          duration: 0.9,
+          ease: 'sine.inOut',
+          repeat: -1,
+          yoyo: true,
+        });
+      });
+      return () => media.revert();
+    },
+    { scope: rootRef, dependencies: [active], revertOnUpdate: true },
+  );
+
+  return (
+    <span
+      ref={rootRef}
+      aria-hidden="true"
+      className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white"
+    >
+      <Sparkle size={15} weight="fill" />
+    </span>
+  );
+}
 
 function AnimatedMessage({
   children,
@@ -61,6 +103,7 @@ export function ChatPanel({
   onOpenCanvas,
   onContinueText,
   onRetry,
+  onPreviewHtml,
   assistantLabel = 'AI 老师',
 }: {
   messages: readonly ChatMessage[];
@@ -69,6 +112,8 @@ export function ChatPanel({
   onOpenCanvas: () => void;
   onContinueText: () => void;
   onRetry: (assistantMessageId: string) => void;
+  /** 提供后,助手消息中的 ```html 代码块渲染为可点击的沙箱预览卡(ADR-0010 Tier 2)。 */
+  onPreviewHtml?: (request: HtmlPreviewRequest) => void;
   assistantLabel?: string;
 }) {
   return (
@@ -109,22 +154,23 @@ export function ChatPanel({
           message.failureCode?.startsWith('k12_') === true;
         return (
           <AnimatedMessage key={message.id} className="flex gap-3">
-            <span
-              aria-hidden="true"
-              className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white"
-            >
-              <Sparkle size={15} weight="fill" />
-            </span>
+            <AssistantAvatar
+              active={
+                message.status === 'pending' || message.status === 'streaming'
+              }
+            />
             <div className="min-w-0 flex-1 space-y-2">
-              {message.status === 'pending' ? (
-                <p className="leading-7 text-ink-muted">
-                  正在连接{assistantLabel}…
-                </p>
+              {message.status === 'pending' && !message.text ? (
+                <>
+                  <StreamShimmer />
+                  <p className="sr-only">正在连接{assistantLabel}…</p>
+                </>
               ) : null}
               {message.text ? (
-                <p className="whitespace-pre-wrap leading-7 text-ink">
-                  {message.text}
-                </p>
+                <MessageMarkdown
+                  text={message.text}
+                  onPreviewHtml={onPreviewHtml}
+                />
               ) : null}
               {!isPersistedSafetyResponse &&
               (message.status === 'failed' ||

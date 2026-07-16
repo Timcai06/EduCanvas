@@ -3,9 +3,9 @@
 import {
   ChartDonut,
   ClockCounterClockwise,
-  Sparkle,
   SquaresFour,
 } from '@phosphor-icons/react';
+import { LogoMark } from './logo-mark';
 
 /**
  * 顶栏只保留必要上下文。quiet 空态严格只显示品牌；阶段徽章只有服务端传入
@@ -32,8 +32,8 @@ export function TopBar({
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
       <span className="inline-flex items-center gap-2 text-base font-semibold tracking-[-0.02em] text-ink">
-        <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-accent">
-          <Sparkle aria-hidden="true" size={17} weight="fill" />
+        <span className="grid size-8 place-items-center rounded-full bg-accent-soft">
+          <LogoMark size={17} />
         </span>
         EduCanvas
       </span>
