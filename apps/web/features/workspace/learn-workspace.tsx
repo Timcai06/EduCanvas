@@ -6,7 +6,7 @@ import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
-import { HtmlSandbox } from '@/features/canvas/html-sandbox';
+import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
@@ -122,6 +122,7 @@ function LearnWorkspaceSession({
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [uploadKind, setUploadKind] = useState<AssetItem['kind'] | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewFull, setPreviewFull] = useState(false);
 
   const pendingPromptConsumed = useRef(false);
   const pendingMenuActionConsumed = useRef(false);
@@ -165,6 +166,9 @@ function LearnWorkspaceSession({
     }
     setDrawer(null);
     setChatError(null);
+    /* 判分 Canvas 与沙箱预览共用同一个分栏宿主槽位,互斥展开 */
+    setPreviewHtml(null);
+    setPreviewFull(false);
     setCanvasOpen(true);
   }, []);
 
@@ -313,7 +317,9 @@ function LearnWorkspaceSession({
   const enabledAssets = assets.filter((asset) => asset.enabled);
   const artifactCompleted =
     feedback !== null && feedback.correctItems === feedback.attemptedItems;
-  const splitActive = canvasOpen && !canvasFull;
+  const previewOpen = previewHtml !== null;
+  const splitActive =
+    (canvasOpen && !canvasFull) || (previewOpen && !previewFull);
   const isLanding = messages.length === 0 && !canvasOpen;
 
   return (
@@ -394,7 +400,12 @@ function LearnWorkspaceSession({
                     onOpenCanvas={openCanvas}
                     onContinueText={() => setChatError(AI_UNAVAILABLE_MESSAGE)}
                     onRetry={(messageId) => teachingTurn.retry(messageId)}
-                    onPreviewHtml={({ source }) => setPreviewHtml(source)}
+                    onPreviewHtml={({ source }) => {
+                      setCanvasOpen(false);
+                      setCanvasFull(false);
+                      setDrawer(null);
+                      setPreviewHtml(source);
+                    }}
                   />
                 </div>
                 <Composer
@@ -458,6 +469,16 @@ function LearnWorkspaceSession({
               onCollapse={closeCanvas}
               onToggleFull={() => setCanvasFull((value) => !value)}
             />
+          ) : previewHtml !== null ? (
+            <HtmlPreviewPanel
+              source={previewHtml}
+              isFull={previewFull}
+              onToggleFull={() => setPreviewFull((value) => !value)}
+              onClose={() => {
+                setPreviewHtml(null);
+                setPreviewFull(false);
+              }}
+            />
           ) : null}
         </div>
       </div>
@@ -511,13 +532,6 @@ function LearnWorkspaceSession({
       {drawer === 'progress' ? (
         <Sheet label="学习进度" onClose={() => setDrawer(null)}>
           <ProgressDrawer progress={progress} />
-        </Sheet>
-      ) : null}
-      {previewHtml !== null ? (
-        <Sheet label="互动内容 · 沙箱预览" onClose={() => setPreviewHtml(null)}>
-          <div className="h-full min-h-[55dvh]">
-            <HtmlSandbox source={previewHtml} title="互动内容沙箱预览" />
-          </div>
         </Sheet>
       ) : null}
     </div>
