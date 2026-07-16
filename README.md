@@ -198,17 +198,17 @@ EduCanvas/
 
 ## 关键安全设计
 
-### 受控 Canvas
+### 分层信任 Canvas
 
-模型输出结构化 Artifact JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染。公开题面与私有判分键物理分离；浏览器交互必须通过服务端验证，才能提升为可信学习事件。
+Canvas 按"产物是否进入可信学习事实"分两级信任（ADR-0010）。Tier 1 判分型 Artifact：模型输出结构化 JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染，公开题面与私有判分键物理分离，浏览器交互必须通过服务端验证才能提升为可信学习事件。Tier 2 沙箱探索型产物：模型生成的 HTML/JS 只允许在无 same-origin、禁网络的 sandboxed iframe 中运行，不产生可信学习事件（尚未实现）。任何 tier 都不在主页面直接执行模型代码。
 
-已实现：
+已实现（均为 Tier 1）：
 
 - `classification_game`：可判分；
 - `quiz`：可判分；
 - `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0002](docs/09-decisions/0002-controlled-canvas.md)。
+详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0010](docs/09-decisions/0010-canvas-trust-tiers.md)。
 
 ### 可信 K12 状态
 

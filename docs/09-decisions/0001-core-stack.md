@@ -1,7 +1,8 @@
 # ADR-0001：核心技术栈
 
-- 状态：`accepted`
+- 状态：`superseded`
 - 日期：2026-07-13
+- 取代者：[ADR-0003](0003-phase1-monorepo-and-drizzle.md) 与 [ADR-0009](0009-general-multimodal-platform-and-k12-vertical.md)——当前架构是 Next.js 模块化单体；NestJS/Fastify 独立后端、Python 服务、Redis 与 Temporal 未被采用。Web 技术栈、GSAP、Headless 组件与 PostgreSQL + pgvector 等仍有效的结论已由后续 ADR 和 canonical 文档承接
 
 ## 背景
 
