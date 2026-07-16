@@ -79,7 +79,8 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'knowledge_documents', 'knowledge_chunks',
             'session_source_bindings', 'turn_source_snapshots', 'turn_source_versions',
             'retrieval_candidates', 'message_citations',
-            'assets', 'asset_versions', 'agent_message_parts'
+            'assets', 'asset_versions', 'agent_message_parts',
+            'turn_context_snapshots'
           )
         order by table_name
       `;
@@ -97,6 +98,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'retrieval_candidates',
         'session_source_bindings',
         'tool_calls',
+        'turn_context_snapshots',
         'turn_safety_decisions',
         'turn_source_snapshots',
         'turn_source_versions',

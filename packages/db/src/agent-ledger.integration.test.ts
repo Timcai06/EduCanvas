@@ -87,6 +87,13 @@ function beginInput(clientMessageId = 'agent-client-1', now = baseTime) {
     promptVersion: 'teaching-turn-v1',
     promptHash: 'a'.repeat(64),
     provider: 'fixture',
+    contextSnapshot: {
+      builderVersion: 'conversation-context-v1',
+      includedMessageIds: [],
+      selectedAssetVersionIds: [],
+      omittedMessageCount: 0,
+      characterCount: 0,
+    },
     leaseDurationMs: 5_000,
     now,
   };
@@ -149,6 +156,7 @@ describeWithDatabase('A2/A3/A4 持久账本', () => {
     await getDatabase().execute(sql`
       truncate table
         tool_calls,
+        turn_context_snapshots,
         model_runs,
         chat_messages,
         canvas_artifact_grading_keys,
@@ -178,6 +186,18 @@ describeWithDatabase('A2/A3/A4 持久账本', () => {
       true,
     ]);
     expect(results[0]?.turn.turnId).toBe(results[1]?.turn.turnId);
+    const contexts = await getDatabase()
+      .select()
+      .from(schema.turnContextSnapshots);
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      turnId: results[0]?.turn.turnId,
+      builderVersion: 'conversation-context-v1',
+      includedMessageIds: [],
+      selectedAssetVersionIds: [],
+      omittedMessageCount: 0,
+      characterCount: 0,
+    });
     expect(results[0]?.answerRun.id).toBe(results[1]?.answerRun.id);
     expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
       2,

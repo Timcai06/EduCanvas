@@ -8,6 +8,7 @@ import 'server-only';
  */
 
 import { randomUUID } from 'node:crypto';
+import { buildConversationContext } from '@educanvas/agent-runtime';
 import {
   DEFAULT_ASSISTANT_LEASE_MS,
   DrizzleChatRepository,
@@ -71,6 +72,7 @@ interface PreparedTurn {
   session: NonNullable<Awaited<ReturnType<typeof loadOwnedTeachingSession>>>;
   studentMessage: string;
   modelStudentMessage: string;
+  conversationMessages: ReturnType<typeof buildConversationContext>['messages'];
   toolExecutor: ReturnType<typeof createTeachingToolExecutor>;
   modelRuntime: ReturnType<typeof resolveTurnModelRuntime>;
 }
@@ -98,6 +100,11 @@ const failurePresentation = (
     case 'timeout':
       return {
         message: 'AI 老师这次思考超时了，请再试一次。',
+        retryable: true,
+      };
+    case 'output_limit':
+      return {
+        message: '这次回答达到长度上限，已保留当前内容，可以继续提问或重试。',
         retryable: true,
       };
     case 'content_filtered':
@@ -507,6 +514,7 @@ async function* runFreshTurn(
         traceId: snapshot.answerRun.traceId,
         turnId: snapshot.turn.turnId,
         session: prepared.session,
+        conversationMessages: prepared.conversationMessages,
         studentMessage: prepared.modelStudentMessage,
       },
       { signal: controller.signal },
@@ -925,9 +933,40 @@ export async function beginOwnedTeachingTurn(
   ]
     .filter(Boolean)
     .join('\n\n');
+  const recentHistory = await chat.listRecentHistory({
+    sessionId: session.id,
+    trustedStudentId: identity.studentId,
+    limit: 24,
+  });
+  const completedTurnIds = new Set(
+    recentHistory
+      .filter(
+        (message) =>
+          message.role === 'assistant' && message.status === 'completed',
+      )
+      .map((message) => message.turnId),
+  );
+  const conversationContext = buildConversationContext(
+    recentHistory
+      // 失败/取消/中断轮次可能只有半段输出；整轮排除，避免把悬空问题当作已完成历史。
+      .filter((message) => completedTurnIds.has(message.turnId))
+      .map((message) => ({
+        id: message.id,
+        role:
+          message.role === 'student'
+            ? ('user' as const)
+            : ('assistant' as const),
+        content: message.content,
+      })),
+    { maxMessages: 20, maxCharacters: 24_000 },
+  );
   const toolExecutor = createTeachingToolExecutor();
   const promptMaterial = createTeachingTurnAnswerPromptMaterial(
-    { session, studentMessage: modelStudentMessage },
+    {
+      session,
+      conversationMessages: conversationContext.messages,
+      studentMessage: modelStudentMessage,
+    },
     toolExecutor.listModelTools(session.state),
   );
   const modelRuntime = resolveTurnModelRuntime();
@@ -943,6 +982,15 @@ export async function beginOwnedTeachingTurn(
     promptVersion: promptMaterial.promptVersion,
     promptHash: hashPromptMaterial(promptMaterial),
     provider: modelRuntime?.provider ?? null,
+    contextSnapshot: {
+      builderVersion: conversationContext.version,
+      includedMessageIds: conversationContext.includedMessageIds,
+      selectedAssetVersionIds: input.parts.flatMap((part) =>
+        part.type === 'asset_ref' ? [part.reference.versionId] : [],
+      ),
+      omittedMessageCount: conversationContext.omittedMessageCount,
+      characterCount: conversationContext.characterCount,
+    },
     leaseDurationMs: DEFAULT_ASSISTANT_LEASE_MS,
   });
   const prepared: PreparedTurn = {
@@ -951,6 +999,7 @@ export async function beginOwnedTeachingTurn(
     session,
     studentMessage,
     modelStudentMessage,
+    conversationMessages: conversationContext.messages,
     toolExecutor,
     modelRuntime,
   };

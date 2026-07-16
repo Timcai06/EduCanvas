@@ -136,7 +136,10 @@ export function ChatPanel({
                           : 'AI 老师暂时无法连接，请稍后重试。'))}
                   </p>
                   {(message.retryable || message.status === 'cancelled') &&
-                  message.retryText ? (
+                  (message.retryText ||
+                    message.retryParts?.some(
+                      (part) => part.type === 'asset_ref',
+                    )) ? (
                     <button
                       type="button"
                       onClick={() => onRetry(message.id)}

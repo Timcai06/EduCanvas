@@ -133,9 +133,13 @@ const mapFinishReason = (
 } => {
   switch (providerReason) {
     case 'stop':
-    case 'length':
     case 'tool_calls':
       return { finishReason: providerReason };
+    case 'length':
+      return {
+        finishReason: 'length',
+        failure: { code: 'output_limit', retryable: true },
+      };
     case 'content_filter':
       return {
         finishReason: 'content_filter',
@@ -147,7 +151,10 @@ const mapFinishReason = (
         failure: { code: 'unavailable', retryable: true },
       };
     default:
-      return { finishReason: 'other' };
+      return {
+        finishReason: 'other',
+        failure: { code: 'invalid_response', retryable: false },
+      };
   }
 };
 

@@ -19,7 +19,7 @@ EduCanvas 的平台定位是一个 **Chat-first、资产化、可扩展的全模
 - Studio 管理可持续编辑、版本化和复用的输出；
 - K12 AI 教师是当前首个垂直 Agent，而不是整个平台的唯一产品定义。
 
-当前代码已经越过“UI 原型”阶段，具备真实 Provider SSE、消息与运行账本、受控工具循环、资产上传、引用链路、确定性 Canvas 判分和可信教学状态推进。它仍然是一个 **K12 纵切驱动的模块化单体**，尚未完成通用 Space/Conversation 数据主干、跨轮上下文、原生图片/音视频模型输入、Artifact 生命周期和真正插件装配。
+当前代码已经越过“UI 原型”阶段，具备真实 Provider SSE、消息与运行账本、受控工具循环、资产上传、引用链路、确定性 Canvas 判分、可信教学状态推进，以及有界跨轮历史与上下文快照。它仍然是一个 **K12 纵切驱动的模块化单体**，尚未完成通用 Space/Conversation 数据主干、摘要/Artifact 上下文、原生图片/音视频模型输入、Artifact 生命周期和真正插件装配。
 
 架构健康度可以概括为：
 
@@ -28,7 +28,7 @@ EduCanvas 的平台定位是一个 **Chat-first、资产化、可扩展的全模
 | 模块化 | 良好 | Web、协议、领域、运行时、Provider 与数据库已经拆包 |
 | 领域隔离 | 良好 | 教学状态、掌握度、可信事件位于 `teaching-core` |
 | Provider 解耦 | 基础完成 | 领域只依赖 `TurnModelGateway`，供应商 SSE 留在适配器 |
-| 通用 Agent Runtime | 未完成 | Turn/Tool 编排仍在 `teaching-runtime`，`agent-runtime` 目前只做 Asset 上下文物化 |
+| 通用 Agent Runtime | 部分完成 | `agent-runtime` 已做 Asset/Conversation Context，Turn/Tool 编排仍在 `teaching-runtime` |
 | 数据通用性 | 部分完成 | Agent/Asset 表存在，但仍借用 `lesson_sessions` 作为 Space/Conversation |
 | 多模态 | 资产层部分完成 | PDF 和图片可上传；当前 Provider 输入仍是文本，图片不能被模型原生理解 |
 | Artifact 安全 | 良好 | Zod 白名单协议 + 静态 React Renderer，不执行模型生成的任意代码 |
@@ -89,8 +89,8 @@ flowchart LR
 
 ### 3.2 部分实现
 
-- `agent-core` 已通用化，但 `agent-runtime` 只包含 Asset Context；
-- 消息已经持久化，但 Answer Prompt 只装配当前轮，不读取历史对话；
+- `agent-core` 已通用化，`agent-runtime` 已包含 Asset Context 与 Conversation Context Builder，但通用 Turn/Tool Engine 尚未迁入；
+- Answer Prompt 已装配有界历史对话，选择证据写入 `turn_context_snapshots`；摘要、记忆和 Artifact 上下文仍未实现；
 - 图片已经作为 Asset 保存，但没有进入模型的原生视觉输入；
 - 上传 Asset 和审核 Knowledge Source 是两条并行链路；
 - Citation 可验证来自候选白名单，但尚未绑定最终回答的具体 claim/span；
@@ -100,7 +100,7 @@ flowchart LR
 ### 3.3 尚未实现
 
 - 一等 `Space / Conversation / Operation` 数据主干；
-- 跨轮上下文、摘要、记忆和 Artifact 上下文装配；
+- 跨轮摘要、长期记忆和 Artifact 上下文装配；
 - 原生图片、音频、视频 Provider 输入；
 - Provider Capability Registry 与动态路由；
 - 通用 Tool/Policy/Agent Profile 插件协议；
@@ -685,7 +685,7 @@ make e2e          # build + Playwright 全栈测试
 make build        # production build
 ```
 
-本报告生成前最近一次验证结果为：lint 通过、TypeScript typecheck 通过、280 项单元测试通过、45 个 Markdown 文件相对链接检查通过。完整 integration、E2E 和 production build 未在本次纯文档工作中重跑。
+本报告随首个 Runtime 整改增量复核后的结果为：lint、TypeScript typecheck、289 项单元测试、43 项 PostgreSQL integration、23 项 Chromium E2E 和 production build 通过；Markdown 相对链接亦已重新检查。
 
 ## 16. 本地运行方式
 
@@ -727,13 +727,13 @@ make stop
 
 ## 17. 当前架构问题与优化优先级
 
-### P0：对话完整性
+### P0：对话完整性（已完成首个可运行增量）
 
-- 构建 `ContextSnapshotBuilder`；
-- 将历史消息、摘要、Artifact 和选择的 Asset 纳入 Prompt；
-- 修复带 Asset parts 的重试；
-- 统一刷新、取消、中断和恢复的终态语义；
-- 保持上下文预算、截断策略和审计 hash 可解释。
+- 已构建有消息数/字符预算的 `ConversationContextBuilder`；
+- 已将最近完整历史和选择的 Asset 纳入 Prompt，并原子保存上下文快照；
+- 已修复带 Asset parts 的失败重试；
+- 已将 `length` 收敛为可重试 `output_limit`，未知 finish reason 进入协议失败；
+- 待继续补充摘要、Artifact 上下文和引用 claim/span 对齐。
 
 ### P1：Space/Conversation 数据主干
 

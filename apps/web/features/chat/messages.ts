@@ -1,3 +1,5 @@
+import type { AgentMessagePart } from '@educanvas/agent-core';
+
 export type ChatMessageStatus =
   | 'pending'
   | 'streaming'
@@ -64,6 +66,7 @@ export interface AssistantMessage extends ChatMessageBase {
   failureMessage?: string;
   retryable?: boolean;
   retryText?: string;
+  retryParts?: readonly AgentMessagePart[];
   cite?: string;
   citations?: readonly MessageCitationDTO[];
   suggestsCanvas?: boolean;
@@ -81,4 +84,3 @@ export interface TeacherMessage {
   suggestsCanvas?: boolean;
   outputCard?: boolean;
 }
-import type { AgentMessagePart } from '@educanvas/agent-core';

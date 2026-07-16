@@ -71,6 +71,13 @@
       "when": 1784174297179,
       "tag": "0009_slow_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784181665216,
+      "tag": "0010_tricky_impossible_man",
+      "breakpoints": true
     }
   ]
 }

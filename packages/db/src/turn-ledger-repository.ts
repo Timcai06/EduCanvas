@@ -14,7 +14,17 @@ import {
   type TeachingTurnSnapshot,
 } from './chat-repository';
 import type { ModelRunSnapshot } from './model-run-repository';
-import { chatMessages, lessonSessions, modelRuns } from './schema';
+import {
+  chatMessages,
+  lessonSessions,
+  modelRuns,
+  turnContextSnapshots,
+} from './schema';
+import {
+  prepareTurnContextMaterial,
+  type PreparedTurnContextMaterial,
+  type TurnContextMaterial,
+} from './turn-context-repository';
 import {
   assertOwnedReadyAssetParts,
   insertMessageParts,
@@ -38,6 +48,7 @@ export interface BeginTeachingTurnInput {
   promptVersion: string;
   promptHash: string;
   provider?: string | null;
+  contextSnapshot?: TurnContextMaterial;
   leaseDurationMs?: number;
   rateLimit?: {
     maxTurns: number;
@@ -154,6 +165,7 @@ function validateInput(input: BeginTeachingTurnInput): {
   requestHash: string;
   leaseDurationMs: number;
   rateLimit: { maxTurns: number; windowMs: number };
+  contextSnapshot: PreparedTurnContextMaterial | null;
 } {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientMessageId)) {
     throw new ChatLifecycleError('clientMessageId 格式或长度无效');
@@ -197,6 +209,9 @@ function validateInput(input: BeginTeachingTurnInput): {
       input.leaseDurationMs ?? DEFAULT_ASSISTANT_LEASE_MS,
     ),
     rateLimit,
+    contextSnapshot: input.contextSnapshot
+      ? prepareTurnContextMaterial(input.contextSnapshot)
+      : null,
   };
 }
 
@@ -411,6 +426,20 @@ export class DrizzleTeachingTurnLedger {
         status: 'pending',
         createdAt: now,
       });
+      if (prepared.contextSnapshot) {
+        await transaction.insert(turnContextSnapshots).values({
+          sessionId: input.sessionId,
+          turnId,
+          builderVersion: prepared.contextSnapshot.builderVersion,
+          includedMessageIds: prepared.contextSnapshot.includedMessageIds,
+          selectedAssetVersionIds:
+            prepared.contextSnapshot.selectedAssetVersionIds,
+          omittedMessageCount: prepared.contextSnapshot.omittedMessageCount,
+          characterCount: prepared.contextSnapshot.characterCount,
+          contextHash: prepared.contextSnapshot.contextHash,
+          createdAt: now,
+        });
+      }
       await transaction
         .update(lessonSessions)
         .set({

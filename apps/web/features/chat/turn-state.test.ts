@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { InitialChatMessageDTO } from './messages';
-import { createTeachingTurnState, teachingTurnReducer } from './turn-state';
+import {
+  createTeachingTurnState,
+  getRetryAssetParts,
+  teachingTurnReducer,
+} from './turn-state';
 
 function accepted(turnId = 'turn-1') {
   return {
@@ -91,10 +95,20 @@ describe('teaching turn browser state machine', () => {
   });
 
   it('maps interrupted failures and retains the source text for retry', () => {
+    const assetPart = {
+      type: 'asset_ref' as const,
+      reference: {
+        assetId: 'asset-1',
+        versionId: 'version-1',
+        kind: 'image' as const,
+      },
+      usage: 'attachment' as const,
+    };
     let state = teachingTurnReducer(createTeachingTurnState([]), {
       type: 'send.started',
       clientMessageId: 'client-1',
       text: '再解释一次',
+      parts: [{ type: 'text', text: '再解释一次' }, assetPart],
     });
     state = teachingTurnReducer(state, {
       type: 'stream.event',
@@ -116,9 +130,15 @@ describe('teaching turn browser state machine', () => {
     expect(state.messages.at(-1)).toMatchObject({
       status: 'interrupted',
       retryText: '再解释一次',
+      retryParts: [{ type: 'text', text: '再解释一次' }, assetPart],
       retryable: true,
     });
     expect(state.announcement?.text).toBe('AI 老师回答失败');
+    const assistant = state.messages.at(-1);
+    if (!assistant || assistant.role !== 'assistant') {
+      throw new Error('fixture assistant missing');
+    }
+    expect(getRetryAssetParts(assistant)).toEqual([assetPart]);
   });
 
   it('hydrates persisted terminal messages without inventing an active stream', () => {
@@ -130,6 +150,18 @@ describe('teaching turn browser state machine', () => {
         role: 'student',
         status: 'completed',
         content: '继续讲',
+        parts: [
+          { type: 'text', text: '继续讲' },
+          {
+            type: 'asset_ref',
+            reference: {
+              assetId: 'asset-2',
+              versionId: 'version-2',
+              kind: 'document',
+            },
+            usage: 'context',
+          },
+        ],
         failureCode: null,
         createdAt: '2026-07-15T00:00:00.000Z',
         completedAt: '2026-07-15T00:00:00.000Z',
@@ -153,6 +185,9 @@ describe('teaching turn browser state machine', () => {
     expect(state.messages.at(-1)).toMatchObject({
       status: 'interrupted',
       retryText: '继续讲',
+      retryParts: expect.arrayContaining([
+        expect.objectContaining({ type: 'asset_ref' }),
+      ]),
     });
   });
 });

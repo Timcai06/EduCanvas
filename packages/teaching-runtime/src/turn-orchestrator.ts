@@ -1,5 +1,6 @@
 import {
   normalizeModelGatewayError,
+  modelMessageSchema,
   turnModelEventSchema,
   type ModelAbortSignal,
   type ModelMessage,
@@ -33,9 +34,9 @@ export const TEACHING_TURN_TASK_ALIAS = 'teaching.turn' as const;
 export const TEACHING_TURN_MODEL_ALIAS = 'primary' as const;
 
 /** 两个模型运行阶段使用独立 Prompt 版本，便于审计与回放。 */
-export const TEACHING_TURN_ANSWER_PROMPT_VERSION = 'turn-answer-v2' as const;
+export const TEACHING_TURN_ANSWER_PROMPT_VERSION = 'turn-answer-v3' as const;
 export const TEACHING_TURN_SYNTHESIS_PROMPT_VERSION =
-  'turn-synthesis-v2' as const;
+  'turn-synthesis-v3' as const;
 
 /** @deprecated 使用 TEACHING_TURN_ANSWER_PROMPT_VERSION。 */
 export const TEACHING_TURN_PROMPT_VERSION = TEACHING_TURN_ANSWER_PROMPT_VERSION;
@@ -56,6 +57,10 @@ const trustedSessionSnapshotSchema = z
   .strict();
 
 const trustedStudentIdSchema = z.string().min(1).max(128);
+const conversationMessageSchema = modelMessageSchema.refine(
+  (message) => message.role !== 'system',
+  'conversation history cannot inject system messages',
+);
 
 /** Web 组合根传入的轮次命令；可信学生身份通过独立参数注入。 */
 export const teachingTurnCommandSchema = z
@@ -67,6 +72,7 @@ export const teachingTurnCommandSchema = z
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
     session: trustedSessionSnapshotSchema,
+    conversationMessages: z.array(conversationMessageSchema).max(24).optional(),
     studentMessage: z.string().trim().min(1).max(4_000),
   })
   .strict();
@@ -163,10 +169,11 @@ export interface TeachingTurnAnswerPromptMaterial {
   tools: readonly ModelToolDefinition[];
 }
 
-export type TeachingTurnAnswerPromptInput = Pick<
-  TeachingTurnCommand,
-  'session' | 'studentMessage'
->;
+export interface TeachingTurnAnswerPromptInput {
+  session: TeachingTurnCommand['session'];
+  conversationMessages?: readonly ModelMessage[];
+  studentMessage: string;
+}
 
 interface ParsedToolCall {
   callId: string;
@@ -242,9 +249,8 @@ const isAborted = (signal: ModelAbortSignal | undefined): boolean =>
  * 学生文本始终使用独立 user 消息，不能改变 system 约束。
  * 工具描述只来自“状态白名单 ∩ 已注册 ∩ model exposure”。
  *
- * 这是当前 K12 单轮纵切的已知边界：这里只包含本轮消息，不会从聊天账本加载
- * 历史对话、会话摘要或 Artifact。消息可持久化不等于模型具备连续对话上下文；
- * 在通用 ContextSnapshotBuilder 接入前，产品不得宣称跨轮记忆已经完成。
+ * 历史消息由通用 Agent Runtime 在数据库身份校验后构建；这里再次拒绝 system
+ * 角色，并始终把当前输入放在末尾，避免历史内容覆盖系统策略。
  */
 function buildAnswerMessages(
   command: TeachingTurnAnswerPromptInput,
@@ -260,8 +266,13 @@ function buildAnswerMessages(
     K12_TEACHING_SYSTEM_POLICY,
   ].join('\n');
 
+  const conversationMessages = z
+    .array(conversationMessageSchema)
+    .max(24)
+    .parse(command.conversationMessages ?? []);
   return [
     { role: 'system', content: systemPrompt },
+    ...conversationMessages,
     { role: 'user', content: command.studentMessage },
   ];
 }
@@ -281,6 +292,7 @@ function buildSynthesisMessages(
 
   return [
     { role: 'system', content: systemPrompt },
+    ...(command.conversationMessages ?? []),
     { role: 'user', content: command.studentMessage },
   ];
 }
@@ -448,6 +460,12 @@ async function* validateModelRun(
   }
 
   if (terminalEvent === null || terminalEvent.type !== 'completed') {
+    return invalidModelStream();
+  }
+  if (terminalMetadata.finishReason === 'length') {
+    return modelFailure({ code: 'output_limit', retryable: true });
+  }
+  if (!['stop', 'tool_calls'].includes(terminalMetadata.finishReason)) {
     return invalidModelStream();
   }
   yield terminalEvent;
