@@ -59,7 +59,11 @@ describe('teaching turn SSE protocol', () => {
       `event: tool.started\r\ndata: ${tool}\r\n\r\n` +
       `event: message.delta\r\ndata: ${delta}\r\n\r\n` +
       `event: turn.completed\r\ndata: ${completed}\r\n\r\n`;
-    const chunks = [payload.slice(0, 31), payload.slice(31, 97), payload.slice(97)];
+    const chunks = [
+      payload.slice(0, 31),
+      payload.slice(31, 97),
+      payload.slice(97),
+    ];
     const { response, stream } = responseFromChunks(chunks);
     const onEvent = vi.fn();
 
@@ -85,6 +89,31 @@ describe('teaching turn SSE protocol', () => {
         JSON.stringify({ type: 'citation.added', schemaVersion: '1' }),
       ),
     ).toBeNull();
+  });
+
+  it('严格解析服务端验证过的引用事件', () => {
+    expect(
+      parseTeachingTurnEvent(
+        'message.citation',
+        JSON.stringify({
+          type: 'message.citation',
+          schemaVersion: '1',
+          turnId: 'turn-1',
+          messageId: 'assistant-1',
+          citationId: 'citation-1',
+          sourceId: 'source-1',
+          documentId: 'document-1',
+          chunkId: 'chunk-1',
+          label: '课程讲义 · 第3页',
+          pageStart: 3,
+          pageEnd: 3,
+        }),
+      ),
+    ).toMatchObject({
+      type: 'message.citation',
+      citationId: 'citation-1',
+      pageStart: 3,
+    });
   });
 
   it.each([

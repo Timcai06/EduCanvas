@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InitialChatMessageDTO } from './messages';
-import {
-  createTeachingTurnState,
-  teachingTurnReducer,
-} from './turn-state';
+import { createTeachingTurnState, teachingTurnReducer } from './turn-state';
 
 function accepted(turnId = 'turn-1') {
   return {
@@ -44,6 +41,26 @@ describe('teaching turn browser state machine', () => {
     expect(state.messages.at(-1)).toMatchObject({
       status: 'streaming',
       text: '因为耳朵形状是明显特征。',
+    });
+
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'message.citation',
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        messageId: 'assistant-1',
+        citationId: 'citation-1',
+        sourceId: 'source-1',
+        documentId: 'document-1',
+        chunkId: 'chunk-1',
+        label: '课程讲义 · 第3页',
+        pageStart: 3,
+        pageEnd: 3,
+      },
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      citations: [{ id: 'citation-1', label: '课程讲义 · 第3页' }],
     });
 
     state = teachingTurnReducer(state, {

@@ -1,7 +1,53 @@
 'use client';
 
-import { ArrowRight, PresentationChart, Sparkle } from '@phosphor-icons/react';
+import { useGSAP } from '@gsap/react';
+import {
+  ArrowRight,
+  FilePdf,
+  Image as ImageIcon,
+  PresentationChart,
+  Sparkle,
+} from '@phosphor-icons/react';
+import gsap from 'gsap';
+import type { ReactNode } from 'react';
+import { useRef } from 'react';
 import type { ChatMessage } from './messages';
+
+gsap.registerPlugin(useGSAP);
+
+function AnimatedMessage({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className: string;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useGSAP(
+    () => {
+      const root = rootRef.current;
+      if (!root) return;
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        gsap.fromTo(
+          root,
+          { autoAlpha: 0, y: 8 },
+          { autoAlpha: 1, y: 0, duration: 0.34, ease: 'power2.out' },
+        );
+      });
+      media.add('(prefers-reduced-motion: reduce)', () => {
+        gsap.set(root, { autoAlpha: 1, y: 0 });
+      });
+      return () => media.revert();
+    },
+    { scope: rootRef },
+  );
+  return (
+    <div ref={rootRef} className={className}>
+      {children}
+    </div>
+  );
+}
 
 /**
  * 消息流是纯展示组件：所有可变状态（消息、Canvas开合、判分）由 LearnWorkspace 持有。
@@ -28,12 +74,31 @@ export function ChatPanel({
       {messages.map((message) => {
         if (message.role === 'student') {
           return (
-          <div
-            key={message.id}
-            className="max-w-[80%] self-end rounded-[1.25rem] rounded-br-md bg-surface px-4 py-2.5 text-ink"
-          >
-            {message.text}
-          </div>
+            <AnimatedMessage
+              key={message.id}
+              className="max-w-[80%] self-end rounded-[1.25rem] rounded-br-md border border-white/[0.035] bg-surface px-4 py-2.5 text-ink shadow-[0_8px_30px_rgb(0_0_0_/_0.12)]"
+            >
+              {message.text ? <p>{message.text}</p> : null}
+              {message.attachments.length > 0 ? (
+                <div
+                  className={`flex flex-wrap gap-2 ${message.text ? 'mt-2' : ''}`}
+                >
+                  {message.attachments.map((attachment) => (
+                    <span
+                      key={attachment.id}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas/60 px-2.5 py-1 text-xs text-ink-muted"
+                    >
+                      {attachment.kind === 'image' ? (
+                        <ImageIcon size={13} />
+                      ) : (
+                        <FilePdf size={13} />
+                      )}
+                      {attachment.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </AnimatedMessage>
           );
         }
 
@@ -41,7 +106,7 @@ export function ChatPanel({
           message.text.length > 0 &&
           message.failureCode?.startsWith('k12_') === true;
         return (
-          <div key={message.id} className="flex gap-3">
+          <AnimatedMessage key={message.id} className="flex gap-3">
             <span
               aria-hidden="true"
               className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white"
@@ -65,10 +130,10 @@ export function ChatPanel({
                   <p className="text-sm leading-6 text-ink-muted">
                     {message.status === 'cancelled'
                       ? '你已停止这次回答。'
-                      : message.failureMessage ??
+                      : (message.failureMessage ??
                         (message.status === 'interrupted'
                           ? '回答意外中断了，你可以重新发送这条问题。'
-                          : 'AI 老师暂时无法连接，请稍后重试。')}
+                          : 'AI 老师暂时无法连接，请稍后重试。'))}
                   </p>
                   {(message.retryable || message.status === 'cancelled') &&
                   message.retryText ? (
@@ -90,6 +155,26 @@ export function ChatPanel({
                   />
                   {message.cite}
                 </span>
+              ) : null}
+              {message.citations && message.citations.length > 0 ? (
+                <div
+                  className="flex flex-wrap gap-2 pt-1"
+                  aria-label="回答引用"
+                >
+                  {message.citations.map((citation) => (
+                    <span
+                      key={citation.id}
+                      title="来自本轮冻结的课程资料版本"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line/80 bg-surface/75 px-3 py-1 text-xs font-medium text-ink-muted"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 rounded-full bg-accent"
+                      />
+                      {citation.label}
+                    </span>
+                  ))}
+                </div>
               ) : null}
               {message.suggestsCanvas && !canvasOpen ? (
                 <div className="flex flex-wrap gap-2 pt-1">
@@ -138,7 +223,7 @@ export function ChatPanel({
                 </button>
               ) : null}
             </div>
-          </div>
+          </AnimatedMessage>
         );
       })}
     </div>

@@ -4,14 +4,14 @@
 
 ## 先弄懂几个词
 
-| 词 | 大白话解释 |
-|---|---|
-| 仓库（repo） | 存放项目所有文件和修改历史的地方，我们的仓库在 GitHub 上 |
-| 克隆（clone） | 把 GitHub 上的仓库完整复制一份到你自己的电脑 |
-| 分支（branch） | 项目的一条"平行副本"。你在自己的分支上随便改，不会影响别人 |
-| main 分支 | 主分支，永远保持"随时能用"的状态，所有人共享 |
-| 提交（commit） | 给你的修改存一个"进度存档"，附一句话说明改了什么 |
-| 推送（push） | 把你电脑上的存档上传到 GitHub |
+| 词                 | 大白话解释                                                        |
+| ------------------ | ----------------------------------------------------------------- |
+| 仓库（repo）       | 存放项目所有文件和修改历史的地方，我们的仓库在 GitHub 上          |
+| 克隆（clone）      | 把 GitHub 上的仓库完整复制一份到你自己的电脑                      |
+| 分支（branch）     | 项目的一条"平行副本"。你在自己的分支上随便改，不会影响别人        |
+| main 分支          | 主分支，永远保持"随时能用"的状态，所有人共享                      |
+| 提交（commit）     | 给你的修改存一个"进度存档"，附一句话说明改了什么                  |
+| 推送（push）       | 把你电脑上的存档上传到 GitHub                                     |
 | Pull Request（PR） | 向团队申请"把我分支上的修改合并进 main"，队友检查通过后才真正合入 |
 
 ## 一条铁规则
@@ -37,10 +37,9 @@ cd <仓库目录>             # 进入刚克隆下来的文件夹
 
 ```bash
 corepack enable          # 让电脑自动使用项目指定的pnpm版本，不用自己装
-pnpm install             # 安装项目依赖，所有人装出来的完全一样
 cp .env.example .env     # 复制配置模板，然后打开.env填入自己的API Key
-docker compose up -d     # 启动本地数据库（在Docker里，不用自己装数据库）
-pnpm dev                 # 启动项目，浏览器打开提示的地址就能看到页面
+make setup               # 安装依赖、启动数据库并执行迁移
+make dev                 # 加载.env并启动项目，浏览器打开提示的地址
 ```
 
 为什么不用大家手动统一版本？因为环境都写在仓库文件里了（Node 版本、依赖版本、数据库版本），照上面命令执行，每个人得到的环境天然一致。
@@ -114,14 +113,14 @@ git branch -d 你的分支名                   # 删掉已合并的本地分支
 
 ### 六种类型
 
-| 类型 | 什么时候用 | 分支名示例 | 提交说明 / PR 标题示例 |
-|---|---|---|---|
-| `feat` | 新功能 | `feat/20260713-lesson-canvas` | `feat: add lesson canvas` |
-| `fix` | 修 bug | `fix/20260713-chat-stream-timeout` | `fix: prevent quiz double submit` |
-| `docs` | 只改文档 | `docs/20260713-update-roadmap` | `docs: update roadmap for phase 2` |
-| `refactor` | 重构（行为不变） | `refactor/20260713-canvas-events` | `refactor: extract event emitter` |
-| `test` | 增改测试 | `test/20260713-quiz-grading` | `test: cover quiz grading edge cases` |
-| `chore` | 依赖、配置、杂项 | `chore/20260713-upgrade-gsap` | `chore: upgrade gsap to 3.14` |
+| 类型       | 什么时候用       | 分支名示例                         | 提交说明 / PR 标题示例                |
+| ---------- | ---------------- | ---------------------------------- | ------------------------------------- |
+| `feat`     | 新功能           | `feat/20260713-lesson-canvas`      | `feat: add lesson canvas`             |
+| `fix`      | 修 bug           | `fix/20260713-chat-stream-timeout` | `fix: prevent quiz double submit`     |
+| `docs`     | 只改文档         | `docs/20260713-update-roadmap`     | `docs: update roadmap for phase 2`    |
+| `refactor` | 重构（行为不变） | `refactor/20260713-canvas-events`  | `refactor: extract event emitter`     |
+| `test`     | 增改测试         | `test/20260713-quiz-grading`       | `test: cover quiz grading edge cases` |
+| `chore`    | 依赖、配置、杂项 | `chore/20260713-upgrade-gsap`      | `chore: upgrade gsap to 3.14`         |
 
 ### 三条格式规则
 
@@ -190,7 +189,7 @@ git worktree add ../EduCanvas-review --detach origin/main
 # 每次审计一个PR（以5号PR为例）
 cd ../EduCanvas-review
 gh pr checkout 5          # 检出这个PR的分支
-pnpm install && pnpm dev  # 跑起来实际验证
+make setup && make dev    # 准备依赖并跑起来实际验证
 ```
 
 验证通过就在 GitHub 上批准合并。工作台不删，下个 PR 直接再 `gh pr checkout`。负责人自己的开发文件夹全程不受影响。
@@ -221,4 +220,4 @@ pnpm install && pnpm dev  # 跑起来实际验证
 
 ---
 
-本指南以本文件（`协作.md`）为唯一事实源，不在仓库里保存 PDF 副本——需要 PDF 时从本文件现场导出即可。
+本指南以本文件（`docs/08-collaboration/team-guide.md`）为唯一事实源，不在仓库里保存 PDF 副本——需要 PDF 时从本文件现场导出即可。

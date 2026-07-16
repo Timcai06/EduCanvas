@@ -63,10 +63,11 @@ async function seedOwnedTurn(input: {
   subjectId: string;
   lastActivityAt: Date;
   suffix: string;
-}): Promise<{ sessionId: string; turnId: string }> {
+}): Promise<{ sessionId: string; turnId: string; studentMessageId: string }> {
   const db = getDatabase();
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const studentMessageId = randomUUID();
   await db.insert(schema.lessonSessions).values({
     id: sessionId,
     studentId: input.subjectId,
@@ -81,7 +82,7 @@ async function seedOwnedTurn(input: {
   const completedAt = new Date(input.lastActivityAt.getTime() + 1_000);
   await db.insert(schema.chatMessages).values([
     {
-      id: randomUUID(),
+      id: studentMessageId,
       sessionId,
       turnId,
       clientMessageId: `client-${input.suffix}`,
@@ -103,7 +104,7 @@ async function seedOwnedTurn(input: {
       completedAt,
     },
   ]);
-  return { sessionId, turnId };
+  return { sessionId, turnId, studentMessageId };
 }
 
 async function seedOwnedGraph(input: {
@@ -112,7 +113,62 @@ async function seedOwnedGraph(input: {
   suffix: string;
 }): Promise<SeededGraph> {
   const db = getDatabase();
-  const { sessionId, turnId } = await seedOwnedTurn(input);
+  const { sessionId, turnId, studentMessageId } = await seedOwnedTurn(input);
+  const [asset] = await db
+    .insert(schema.assets)
+    .values({
+      ownerSubjectId: input.subjectId,
+      spaceId: sessionId,
+      scope: 'space',
+      kind: 'document',
+      origin: 'upload',
+      displayName: '测试资料.pdf',
+      mimeType: 'application/pdf',
+      status: 'processing',
+      createdAt: input.lastActivityAt,
+      updatedAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.assets.id });
+  if (!asset) throw new Error('测试Asset创建失败');
+  const [version] = await db
+    .insert(schema.assetVersions)
+    .values({
+      assetId: asset.id,
+      kind: 'document',
+      mimeType: 'application/pdf',
+      byteSize: 128,
+      contentHash: 'd'.repeat(64),
+      status: 'ready',
+      storageKey: `fixture/${input.suffix}.pdf`,
+      extractedText: '测试资料正文',
+      createdAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.assetVersions.id });
+  if (!version) throw new Error('测试Asset版本创建失败');
+  await db
+    .update(schema.assets)
+    .set({
+      status: 'ready',
+      currentVersionId: version.id,
+      updatedAt: input.lastActivityAt,
+    })
+    .where(eq(schema.assets.id, asset.id));
+  await db.insert(schema.agentMessageParts).values([
+    {
+      messageId: studentMessageId,
+      partIndex: 0,
+      partType: 'text',
+      textContent: '测试问题',
+    },
+    {
+      messageId: studentMessageId,
+      partIndex: 1,
+      partType: 'asset_ref',
+      assetId: asset.id,
+      assetVersionId: version.id,
+      assetUsage: 'attachment',
+    },
+  ]);
   const [assistant] = await db
     .select({ id: schema.chatMessages.id })
     .from(schema.chatMessages)
@@ -238,6 +294,9 @@ async function countGraphRows(graphs: readonly SeededGraph[]) {
     safetyCount,
     gradingKeyCount,
     artifactCount,
+    messagePartCount,
+    assetVersionCount,
+    assetCount,
     chatCount,
     eventCount,
     sessionCount,
@@ -264,6 +323,27 @@ async function countGraphRows(graphs: readonly SeededGraph[]) {
       inArray(schema.canvasArtifacts.sessionId, sessionIds),
     ),
     db.$count(
+      schema.agentMessageParts,
+      inArray(
+        schema.agentMessageParts.messageId,
+        db
+          .select({ id: schema.chatMessages.id })
+          .from(schema.chatMessages)
+          .where(inArray(schema.chatMessages.sessionId, sessionIds)),
+      ),
+    ),
+    db.$count(
+      schema.assetVersions,
+      inArray(
+        schema.assetVersions.assetId,
+        db
+          .select({ id: schema.assets.id })
+          .from(schema.assets)
+          .where(eq(schema.assets.ownerSubjectId, subjectId)),
+      ),
+    ),
+    db.$count(schema.assets, eq(schema.assets.ownerSubjectId, subjectId)),
+    db.$count(
       schema.chatMessages,
       inArray(schema.chatMessages.sessionId, sessionIds),
     ),
@@ -286,6 +366,9 @@ async function countGraphRows(graphs: readonly SeededGraph[]) {
     turn_safety_decisions: safetyCount,
     canvas_artifact_grading_keys: gradingKeyCount,
     canvas_artifacts: artifactCount,
+    agent_message_parts: messagePartCount,
+    asset_versions: assetVersionCount,
+    assets: assetCount,
     chat_messages: chatCount,
     learning_events: eventCount,
     lesson_sessions: sessionCount,
@@ -312,7 +395,10 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
         turn_safety_decisions,
         tool_calls,
         model_runs,
+        agent_message_parts,
         chat_messages,
+        asset_versions,
+        assets,
         canvas_artifact_grading_keys,
         canvas_artifacts,
         learning_events,
@@ -514,6 +600,9 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
         turn_safety_decisions: 2,
         canvas_artifact_grading_keys: 2,
         canvas_artifacts: 2,
+        agent_message_parts: 4,
+        asset_versions: 2,
+        assets: 2,
         chat_messages: 4,
         learning_events: 2,
         lesson_sessions: 2,
@@ -526,6 +615,9 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
       turn_safety_decisions: 0,
       canvas_artifact_grading_keys: 0,
       canvas_artifacts: 0,
+      agent_message_parts: 0,
+      asset_versions: 0,
+      assets: 0,
       chat_messages: 0,
       learning_events: 0,
       lesson_sessions: 0,
@@ -585,6 +677,9 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
       turn_safety_decisions: 1,
       canvas_artifact_grading_keys: 1,
       canvas_artifacts: 1,
+      agent_message_parts: 2,
+      asset_versions: 1,
+      assets: 1,
       chat_messages: 2,
       learning_events: 1,
       lesson_sessions: 1,
@@ -603,6 +698,9 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
       turn_safety_decisions: 0,
       canvas_artifact_grading_keys: 0,
       canvas_artifacts: 0,
+      agent_message_parts: 0,
+      asset_versions: 0,
+      assets: 0,
       chat_messages: 0,
       learning_events: 0,
       lesson_sessions: 0,

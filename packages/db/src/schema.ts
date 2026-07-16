@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   check,
   customType,
@@ -87,6 +88,123 @@ export const lessonSessions = pgTable(
 );
 
 /**
+ * 平台通用 Asset。ownerSubjectId 与 spaceId 都是可信服务端解析出的不透明标识，
+ * 因而不依赖 K12 用户、课程或学习状态表。对象存储地址只存在于不可变版本表。
+ */
+export const assets = pgTable(
+  'assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerSubjectId: text('owner_subject_id').notNull(),
+    spaceId: uuid('space_id').notNull(),
+    scope: text('scope').notNull(),
+    kind: text('kind').notNull(),
+    origin: text('origin').notNull(),
+    displayName: text('display_name').notNull(),
+    mimeType: text('mime_type'),
+    status: text('status').notNull().default('pending'),
+    currentVersionId: uuid('current_version_id').references(
+      (): AnyPgColumn => assetVersions.id,
+      { onDelete: 'set null' },
+    ),
+    tombstonedAt: timestamp('tombstoned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('assets_owner_space_status_idx').on(
+      table.ownerSubjectId,
+      table.spaceId,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    check('assets_scope_check', sql`${table.scope} in ('turn', 'space')`),
+    check(
+      'assets_kind_check',
+      sql`${table.kind} in ('image', 'audio', 'video', 'document', 'data', 'link', 'other')`,
+    ),
+    check(
+      'assets_origin_check',
+      sql`${table.origin} in ('upload', 'url_import', 'generated', 'library')`,
+    ),
+    check(
+      'assets_status_check',
+      sql`${table.status} in ('pending', 'processing', 'ready', 'failed', 'tombstoned')`,
+    ),
+    check(
+      'assets_status_shape_check',
+      sql`(${table.status} = 'ready' and ${table.currentVersionId} is not null and ${table.tombstonedAt} is null) or (${table.status} in ('pending', 'processing', 'failed') and ${table.currentVersionId} is null and ${table.tombstonedAt} is null) or (${table.status} = 'tombstoned' and ${table.tombstonedAt} is not null)`,
+    ),
+    check(
+      'assets_text_shape_check',
+      sql`char_length(${table.ownerSubjectId}) between 1 and 160 and char_length(${table.displayName}) between 1 and 300 and (${table.mimeType} is null or char_length(${table.mimeType}) between 1 and 255)`,
+    ),
+  ],
+);
+
+/** 每次上传、解析、转码或重新生成都创建不可变版本。 */
+export const assetVersions = pgTable(
+  'asset_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    mimeType: text('mime_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    contentHash: text('content_hash').notNull(),
+    status: text('status').notNull(),
+    storageKey: text('storage_key').notNull(),
+    extractedText: text('extracted_text'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_versions_asset_hash_unique').on(
+      table.assetId,
+      table.contentHash,
+    ),
+    index('asset_versions_asset_created_idx').on(
+      table.assetId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'asset_versions_kind_check',
+      sql`${table.kind} in ('image', 'audio', 'video', 'document', 'data', 'link', 'other')`,
+    ),
+    check(
+      'asset_versions_status_check',
+      sql`${table.status} in ('processing', 'ready', 'failed', 'tombstoned')`,
+    ),
+    check(
+      'asset_versions_size_check',
+      sql`${table.byteSize} >= 0 and ${table.byteSize} <= 52428800`,
+    ),
+    check(
+      'asset_versions_hash_check',
+      sql`${table.contentHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'asset_versions_storage_key_check',
+      sql`char_length(${table.storageKey}) between 1 and 1024 and ${table.storageKey} !~* '^https?://'`,
+    ),
+    check(
+      'asset_versions_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/**
  * 用户可见的文本消息账本。学生消息保存发送幂等证据，老师消息保存可恢复的生命周期；
  * Provider trace 和内部工具结果不写入该表。
  */
@@ -159,6 +277,44 @@ export const chatMessages = pgTable(
     check(
       'chat_messages_lease_shape_check',
       sql`(${table.role} = 'student' and ${table.leaseId} is null and ${table.leaseExpiresAt} is null and ${table.heartbeatAt} is null) or (${table.role} = 'assistant' and ${table.status} in ('pending', 'streaming') and ${table.leaseId} is not null and ${table.leaseExpiresAt} is not null and ${table.heartbeatAt} is not null) or (${table.role} = 'assistant' and ${table.status} in ('completed', 'cancelled', 'interrupted', 'failed') and ${table.leaseId} is null and ${table.leaseExpiresAt} is null)`,
+    ),
+  ],
+);
+
+/**
+ * 消息的结构化 Part。chat_messages.content 保留为文本投影和历史兼容层；
+ * Asset/Artifact 引用只保存不可变版本标识，不保存对象存储 URL。
+ */
+export const agentMessageParts = pgTable(
+  'agent_message_parts',
+  {
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    partIndex: integer('part_index').notNull(),
+    partType: text('part_type').notNull(),
+    textContent: text('text_content'),
+    assetId: uuid('asset_id').references(() => assets.id),
+    assetVersionId: uuid('asset_version_id').references(() => assetVersions.id),
+    assetUsage: text('asset_usage'),
+    artifactId: text('artifact_id'),
+    artifactVersionId: text('artifact_version_id'),
+    artifactKind: text('artifact_kind'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.partIndex] }),
+    index('agent_message_parts_asset_version_idx').on(table.assetVersionId),
+    check(
+      'agent_message_parts_index_check',
+      sql`${table.partIndex} >= 0 and ${table.partIndex} < 32`,
+    ),
+    check(
+      'agent_message_parts_type_check',
+      sql`${table.partType} in ('text', 'asset_ref', 'artifact_ref')`,
+    ),
+    check(
+      'agent_message_parts_shape_check',
+      sql`(${table.partType} = 'text' and ${table.textContent} is not null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'asset_ref' and ${table.textContent} is null and ${table.assetId} is not null and ${table.assetVersionId} is not null and ${table.assetUsage} in ('attachment', 'context') and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'artifact_ref' and ${table.textContent} is null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is not null and ${table.artifactVersionId} is not null and ${table.artifactKind} in ('image', 'audio', 'video', 'slide', 'interactive', 'document'))`,
     ),
   ],
 );

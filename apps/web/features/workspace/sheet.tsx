@@ -99,7 +99,7 @@ export function Sheet({
         type="button"
         aria-label="关闭面板"
         onClick={onClose}
-        className="absolute inset-0 size-full cursor-default bg-ink/20"
+        className="absolute inset-0 size-full cursor-default bg-black/60 backdrop-blur-[2px]"
       />
       <div
         ref={panelRef}
@@ -107,7 +107,7 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="absolute inset-x-0 bottom-0 flex max-h-[78dvh] flex-col overscroll-contain rounded-t-3xl bg-canvas shadow-[var(--shadow-sheet)] outline-none lg:inset-x-auto lg:inset-y-0 lg:right-0 lg:max-h-none lg:w-96 lg:rounded-none"
+        className="absolute inset-x-0 bottom-0 flex max-h-[78dvh] flex-col overscroll-contain rounded-t-3xl border border-line/80 bg-canvas/98 shadow-[var(--shadow-sheet)] outline-none lg:inset-x-auto lg:inset-y-0 lg:right-0 lg:max-h-none lg:w-96 lg:rounded-none lg:border-y-0 lg:border-r-0"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <h2 className="font-display text-lg font-semibold text-ink">

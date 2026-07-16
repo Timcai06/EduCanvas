@@ -1,0 +1,141 @@
+'use client';
+
+import { useGSAP } from '@gsap/react';
+import {
+  FilePdf,
+  Image as ImageIcon,
+  UploadSimple,
+} from '@phosphor-icons/react';
+import gsap from 'gsap';
+import { useRef, useState } from 'react';
+import { uploadAsset } from './asset-client';
+import type { AssetItem } from './assets-drawer';
+
+gsap.registerPlugin(useGSAP);
+
+export function AssetUploadPanel({
+  kind,
+  onUploaded,
+}: {
+  kind: AssetItem['kind'];
+  onUploaded: (asset: AssetItem) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [scope, setScope] = useState<AssetItem['scope']>('turn');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const accept =
+    kind === 'image' ? 'image/png,image/jpeg,image/webp' : 'application/pdf';
+
+  useGSAP(
+    () => {
+      const root = rootRef.current;
+      if (!root) return;
+      const sections = root.querySelectorAll('[data-upload-section]');
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        gsap.fromTo(
+          sections,
+          { autoAlpha: 0, y: 10 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.38,
+            stagger: 0.055,
+            ease: 'power2.out',
+          },
+        );
+      });
+      media.add('(prefers-reduced-motion: reduce)', () => {
+        gsap.set(sections, { autoAlpha: 1, y: 0 });
+      });
+      return () => media.revert();
+    },
+    { scope: rootRef },
+  );
+
+  return (
+    <div ref={rootRef} className="space-y-6">
+      <div
+        data-upload-section
+        className="relative overflow-hidden rounded-3xl border border-line bg-[linear-gradient(145deg,rgb(37_41_51_/_0.96),rgb(25_27_33_/_0.96))] p-5 shadow-[0_16px_50px_rgb(0_0_0_/_0.18)]"
+      >
+        <span
+          aria-hidden="true"
+          className="absolute -top-16 -right-16 size-44 rounded-full bg-accent/10 blur-3xl"
+        />
+        <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent">
+          {kind === 'image' ? <ImageIcon size={23} /> : <FilePdf size={23} />}
+        </span>
+        <h3 className="mt-4 font-display text-lg font-semibold text-ink">
+          {kind === 'image' ? '添加图片' : '添加PDF资料'}
+        </h3>
+        <p className="mt-1 text-sm leading-6 text-ink-muted">
+          {kind === 'image'
+            ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
+            : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
+        </p>
+      </div>
+
+      <fieldset data-upload-section>
+        <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
+          {(['turn', 'space'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={scope === value}
+              onClick={() => setScope(value)}
+              className={`min-h-11 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                scope === value
+                  ? 'bg-canvas text-ink shadow-[0_1px_8px_rgb(0_0_0_/_0.18)]'
+                  : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              {value === 'turn' ? '仅用于本轮' : '保存到空间'}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (!file || busy) return;
+          setBusy(true);
+          setError(null);
+          void uploadAsset({ file, scope })
+            .then(onUploaded)
+            .catch((reason: unknown) => {
+              setError(
+                reason instanceof Error ? reason.message : '文件上传失败。',
+              );
+            })
+            .finally(() => setBusy(false));
+        }}
+      />
+      <button
+        data-upload-section
+        type="button"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+      >
+        <UploadSimple size={20} />
+        {busy ? '正在安全处理…' : '选择文件'}
+      </button>
+      <p
+        data-upload-section
+        className={`min-h-5 text-sm ${error ? 'text-bad' : 'text-ink-faint'}`}
+      >
+        {error ?? '对象存储地址和模型密钥不会发送到浏览器。'}
+      </p>
+    </div>
+  );
+}

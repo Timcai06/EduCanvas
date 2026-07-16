@@ -18,9 +18,21 @@ export interface InitialChatMessageDTO {
   role: 'student' | 'assistant';
   status: ChatMessageStatus;
   content: string;
+  parts?: readonly AgentMessagePart[];
+  citations?: readonly MessageCitationDTO[];
   failureCode: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface MessageCitationDTO {
+  id: string;
+  sourceId: string;
+  documentId: string;
+  chunkId: string;
+  label: string;
+  pageStart: number | null;
+  pageEnd: number | null;
 }
 
 interface ChatMessageBase {
@@ -29,6 +41,11 @@ interface ChatMessageBase {
   clientMessageId: string;
   status: ChatMessageStatus;
   text: string;
+  attachments: readonly {
+    id: string;
+    label: string;
+    kind: 'image' | 'document';
+  }[];
 }
 
 /** A student message is complete as soon as its turn is accepted locally. */
@@ -48,6 +65,7 @@ export interface AssistantMessage extends ChatMessageBase {
   retryable?: boolean;
   retryText?: string;
   cite?: string;
+  citations?: readonly MessageCitationDTO[];
   suggestsCanvas?: boolean;
   outputCard?: boolean;
 }
@@ -63,3 +81,4 @@ export interface TeacherMessage {
   suggestsCanvas?: boolean;
   outputCard?: boolean;
 }
+import type { AgentMessagePart } from '@educanvas/agent-core';

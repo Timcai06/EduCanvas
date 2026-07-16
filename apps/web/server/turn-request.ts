@@ -1,6 +1,13 @@
 import 'server-only';
 
-const MAX_TURN_REQUEST_BYTES = 16_384;
+import {
+  agentMessageInputSchema,
+  extractAgentMessageText,
+  normalizeAgentMessageParts,
+  type AgentMessagePart,
+} from '@educanvas/agent-core';
+
+const MAX_TURN_REQUEST_BYTES = 64 * 1024;
 const MAX_STUDENT_MESSAGE_CHARACTERS = 4_000;
 const CLIENT_MESSAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
@@ -21,6 +28,7 @@ export class TurnRequestValidationError extends Error {
 export interface TeachingTurnRequestBody {
   clientMessageId: string;
   text: string;
+  parts: readonly AgentMessagePart[];
 }
 
 async function readLimitedUtf8(request: Request): Promise<string> {
@@ -86,24 +94,43 @@ export async function parseTeachingTurnRequest(
   if (
     typeof value !== 'object' ||
     value === null ||
-    Array.isArray(value) ||
-    Object.keys(value).sort().join(',') !== 'clientMessageId,text'
+    Array.isArray(value)
   ) {
     throw new TurnRequestValidationError('invalid_request');
   }
   const record = value as Record<string, unknown>;
   if (
     typeof record.clientMessageId !== 'string' ||
-    !CLIENT_MESSAGE_ID.test(record.clientMessageId) ||
-    typeof record.text !== 'string' ||
-    record.text.trim().length === 0 ||
-    record.text.normalize('NFC').replace(/\r\n?/g, '\n').trim().length >
-      MAX_STUDENT_MESSAGE_CHARACTERS
+    !CLIENT_MESSAGE_ID.test(record.clientMessageId)
   ) {
     throw new TurnRequestValidationError('invalid_request');
   }
+
+  const keys = Object.keys(record).sort().join(',');
+  const candidate =
+    keys === 'clientMessageId,text' && typeof record.text === 'string'
+      ? {
+          clientMessageId: record.clientMessageId,
+          parts: [{ type: 'text' as const, text: record.text }],
+        }
+      : keys === 'clientMessageId,parts'
+        ? {
+            clientMessageId: record.clientMessageId,
+            parts: record.parts,
+          }
+        : null;
+  const parsed = agentMessageInputSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
+  const parts = normalizeAgentMessageParts(parsed.data.parts);
+  const text = extractAgentMessageText(parts);
+  if (text.length > MAX_STUDENT_MESSAGE_CHARACTERS) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
   return {
-    clientMessageId: record.clientMessageId,
-    text: record.text,
+    clientMessageId: parsed.data.clientMessageId,
+    text,
+    parts,
   };
 }

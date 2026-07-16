@@ -78,11 +78,15 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'turn_safety_decisions', 'knowledge_sources',
             'knowledge_documents', 'knowledge_chunks',
             'session_source_bindings', 'turn_source_snapshots', 'turn_source_versions',
-            'retrieval_candidates', 'message_citations'
+            'retrieval_candidates', 'message_citations',
+            'assets', 'asset_versions', 'agent_message_parts'
           )
         order by table_name
       `;
       expect(tables.map((table) => table.table_name)).toEqual([
+        'agent_message_parts',
+        'asset_versions',
+        'assets',
         'chat_messages',
         'knowledge_chunks',
         'knowledge_documents',

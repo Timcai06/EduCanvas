@@ -1,7 +1,11 @@
 'use client';
 
+import { useGSAP } from '@gsap/react';
 import { Plus } from '@phosphor-icons/react';
+import gsap from 'gsap';
 import { useEffect, useId, useRef, useState } from 'react';
+
+gsap.registerPlugin(useGSAP);
 
 export type PlusMenuActionId =
   | 'upload_file'
@@ -21,25 +25,24 @@ interface PlusMenuItem {
 }
 
 /**
- * 菜单保留目标能力信息架构，但只有已经存在的本课预置互动可执行；其余项明确
- * disabled，也不会进入 roving focus，避免把路线图伪装成当前产品能力。
+ * 菜单只开放真实纵切：图片/PDF上传和本课受控互动。未接入能力保持disabled。
  */
 const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
   [
     {
-      title: '添加学习材料',
+      title: '添加上下文',
       items: [
         {
           id: 'upload_file',
           label: '上传文件',
-          hint: '即将开放',
-          available: false,
+          hint: 'PDF · 10MB',
+          available: true,
         },
         {
           id: 'upload_image',
           label: '上传图片',
-          hint: '即将开放',
-          available: false,
+          hint: 'PNG/JPEG/WebP',
+          available: true,
         },
         {
           id: 'pick_course_material',
@@ -56,12 +59,12 @@ const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
       ],
     },
     {
-      title: '请老师创建',
+      title: '创建与工具',
       items: [
         {
           id: 'create_demo',
-          label: '打开本课互动演示',
-          hint: '课程预置',
+          label: '打开互动演示',
+          hint: '受控模板',
           available: true,
         },
         {
@@ -78,7 +81,7 @@ const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
         },
         {
           id: 'more_tools',
-          label: '更多教学工具',
+          label: '更多工具',
           hint: '即将开放',
           available: false,
         },
@@ -105,12 +108,13 @@ export function PlusMenu({
   const [activeIndex, setActiveIndex] = useState(firstEnabledIndex);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
 
   useEffect(() => {
     if (!open) return;
-    itemRefs.current[activeIndex]?.focus();
+    rootRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"][tabindex="0"]')
+      ?.focus();
   }, [open, activeIndex]);
 
   useEffect(() => {
@@ -121,6 +125,48 @@ export function PlusMenu({
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [open]);
+
+  useGSAP(
+    () => {
+      if (!open) return;
+      const menu = rootRef.current?.querySelector('[data-plus-menu]');
+      if (!menu) return;
+      const items = menu.querySelectorAll('[role="menuitem"]');
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        const timeline = gsap.timeline();
+        timeline.fromTo(
+          menu,
+          { opacity: 0, y: 6, scale: 0.985 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.2,
+            ease: 'power2.out',
+          },
+        );
+        timeline.fromTo(
+          items,
+          { opacity: 0, y: 3 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.16,
+            stagger: 0.018,
+            ease: 'power1.out',
+          },
+          0.035,
+        );
+        return () => timeline.kill();
+      });
+      media.add('(prefers-reduced-motion: reduce)', () => {
+        gsap.set([menu, ...items], { opacity: 1, y: 0, scale: 1 });
+      });
+      return () => media.revert();
+    },
+    { dependencies: [open], scope: rootRef, revertOnUpdate: true },
+  );
 
   const close = (refocus: boolean) => {
     setOpen(false);
@@ -154,7 +200,7 @@ export function PlusMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label="添加材料或请老师创建"
+        aria-label="添加上下文或创建内容"
         onClick={() => {
           setActiveIndex(firstEnabledIndex);
           setOpen((value) => !value);
@@ -165,11 +211,12 @@ export function PlusMenu({
       </button>
       {open ? (
         <div
+          data-plus-menu
           id={menuId}
           role="menu"
-          aria-label="添加材料或请老师创建"
+          aria-label="添加上下文或创建内容"
           onKeyDown={handleMenuKeyDown}
-          className="absolute bottom-12 left-0 z-50 w-64 rounded-2xl border border-line bg-canvas p-2 shadow-[var(--shadow-sheet)]"
+          className="absolute bottom-12 left-0 z-50 max-h-[min(70dvh,22rem)] w-64 origin-bottom-left overflow-y-auto rounded-2xl border border-line/90 bg-canvas/95 p-2 shadow-[var(--shadow-sheet)] backdrop-blur-xl sm:grid sm:w-[32rem] sm:grid-cols-2 sm:gap-2 sm:overflow-visible"
         >
           {menuGroups.map((group) => (
             <div key={group.title} role="group" aria-label={group.title}>
@@ -181,11 +228,9 @@ export function PlusMenu({
                 return (
                   <button
                     key={item.id}
-                    ref={(node) => {
-                      itemRefs.current[index] = node;
-                    }}
                     type="button"
                     role="menuitem"
+                    autoFocus={index === firstEnabledIndex}
                     disabled={!item.available}
                     aria-disabled={!item.available}
                     tabIndex={item.available && index === activeIndex ? 0 : -1}

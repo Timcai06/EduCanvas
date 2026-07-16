@@ -20,12 +20,12 @@
 
 当前处于“本地真实 Agent 纵切收口”阶段，不再是 G0/UI 骨架阶段，也尚未达到 shared dev 完整纵切：
 
-| 状态     | 能力                                                                                     | 当前证据                                                                                                                                                                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 已实现   | G0、UX1/UX2、A1、D1、A2/A3/A4、UX3/UX4、S1 基线；K1 数据层；T1 Core/Runtime；C2 受控模板 | 真实 Turn/Cancel Route、Provider 与两阶段工具循环、可审计账本与安全 Gate；审核资料不可变版本、FTS、Turn 快照完成标记、候选与防伪引用仓储；可信学习投影/确定性回放/下一节点推荐；严格 `pipeline_flow` Schema、静态 Renderer 与 AnimationShell |
-| 已验证   | 单元、生产构建、PostgreSQL 集成、无 Provider 诚实失败、浏览器交互与视觉基线              | 257 项单元测试、39 项 PostgreSQL integration、23 项 Chromium E2E；K1 fresh/0007→0008 迁移、空快照冻结、跨课程隔离、换版冻结、复合外键与引用防伪通过；正式 live smoke 仍未执行                                                                |
-| 待完成   | K1/T1 应用层接线、C1、整节课 E2E 与受控 live smoke                                       | 把检索/引用仓储接入 Turn 工具和引用 UI，把状态推进服务接入判分后的应用流程；完成 Artifact 提议/确认/生成/Studio 真实列表；随后验证整节课 Trace 与轮换后 Provider Key 的合成数据真实调用                                                      |
-| 后续计划 | production hardening                                                                     | 正式认证、多租户、法务/DPA、备份恢复、分布式限流、生产 SLO 与灰度                                                                                                                                                                            |
+| 状态     | 能力                                                                                                    | 当前证据                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 已实现   | G0、UX1/UX2、A1、D1、A2/A3/A4、UX3/UX4、S1 基线；通用Asset纵切；K1 Web接线；T1 `ASSESS`接线；C2受控模板 | 真实Turn/Cancel Route、Provider与两阶段工具循环、可审计账本与安全Gate；PDF/图片上传、不可变Asset版本和消息Part；FTS检索、候选白名单、引用SSE/UI；可信ASSESS推进；严格`pipeline_flow` Schema、静态Renderer与AnimationShell |
+| 已验证   | 单元、生产构建、PostgreSQL集成、无Provider诚实失败、浏览器交互与视觉基线                                | 280项单元测试、42项PostgreSQL integration、23项Chromium E2E；Asset所有权/恢复、K1迁移与引用防伪、桌面/移动深色基线、reduced-motion与菜单键盘焦点通过；正式live smoke仍未执行                                              |
+| 待完成   | C1、完整状态事件、整节课E2E与受控live smoke                                                             | 完成Artifact提议/确认/生成/Studio真实列表；补齐非`ASSESS`状态事件接线；随后验证整节课Trace与轮换后Provider Key的合成数据真实调用                                                                                          |
+| 后续计划 | production hardening                                                                                    | 正式认证、多租户、法务/DPA、备份恢复、分布式限流、生产 SLO 与灰度                                                                                                                                                         |
 
 从工程协作上可以立即开启独立 Backend 工作流：`teaching-core`、`teaching-runtime`、`model-gateway`、`db` 与 Web BFF 已有稳定边界，前后端通过 EduCanvas SSE v1、Artifact Schema 和 Server Action DTO 对齐。但当前继续保持模块化单体部署；只有出现独立扩缩容、长任务、故障隔离或多客户端复用的真实需求后，才评估拆出独立 API/Worker 服务。
 
@@ -346,7 +346,7 @@ flowchart TD
 
 **工作：**
 
-1. Route 首版只接受 `{ clientMessageId, text }`；服务端恢复身份和 lesson session，不能接受客户端声明的 `sessionId`。附件引用在 PR-K1 形成真实资产契约后再扩展。
+1. Route兼容纯文本请求，并支持严格的`{ clientMessageId, parts }`多Part请求；服务端恢复身份和lesson session，逐个验证Asset归属与版本，不能接受客户端声明的`sessionId`或私有存储键。
 2. Route 必须调用 `TeachingTurnOrchestrator.streamTurn()`，不能从 Web 层绕过 Orchestrator 直接调用 Provider；直接回答只产生一次 `taskAlias=teaching.turn, modelAlias=primary, phase=answer` 模型运行。
 3. 短事务先写学生消息、pending assistant message 与 pending model run，再调用供应商；不得在流式期间持有数据库事务。
 4. Provider delta 映射为 EduCanvas 事件；完成、失败、取消均通过条件更新收敛消息和 model run 状态。
@@ -396,7 +396,7 @@ flowchart TD
 
 **工作：**
 
-- 首批只接 `getStudentState` 只读 Handler；`retrieveKnowledge` 在 PR-K1 接入。
+- 生产组合已接`getStudentState`与`retrieveKnowledge`只读Handler；后续工具仍必须按真实纵切逐项注册。
 - 第一次 `phase=answer` Provider 运行提出 tool call 后，不输出最终老师文本；runtime 预检和授权 → 执行 → 持久化脱敏审计 → tool result 回注 Provider → 唯一一次 `phase=synthesis` 运行流式生成最终老师回答。
 - 到功能出现时才新增 `tool_calls`；一对一结果先保存在同一记录的严格、脱敏结果摘要，不提前建空 `tool_results` 表。
 - 持久唯一键覆盖 runtime execution ID 与 `(model_run_id, provider_tool_call_id)`；写工具将来必须先取得数据库幂等记录。
@@ -668,13 +668,13 @@ flowchart TD
 - 关键 SLO、成本预算、告警负责人和回滚手册已签字；
 - 完整课程 E2E、模型回归、检索基线和可访问性验收全部有可复现证据。
 
-生产推进由证据门槛决定，不由日期决定。当前已完成 K1 数据层、T1 Core/Runtime 与 C2 受控模板，但 K1/T1 尚未接入 Web 应用纵切，C1 尚未开始，live smoke 与整节课证据也未完成；本 active plan 不授予进入 staging 或 production 的结论。
+生产推进由证据门槛决定，不由日期决定。当前已完成通用Asset首条纵切、K1 Web检索引用、T1 `ASSESS`推进与C2受控模板，但C1、完整状态事件、live smoke与整节课证据仍未完成；本active plan不授予进入staging或production的结论。
 
 ## 生产强化的后续计划边界
 
 以下内容在真实纵切验收后另建 active plan，不继续扩张本文件：
 
-- 学生文件/图片/链接上传、OCR、恶意文件检测和完整删除链路；
+- 对象存储、链接/音频/视频导入、OCR、恶意文件检测和完整文件删除链路（本地PDF/图片Asset首条纵切已实现）；
 - 正式用户、教师、班级、学校与多租户，以及认证、授权、会话吊销和 CSRF；
 - 未成年人法务/DPA、隐私告知/同意、导出/删除、危机升级流程和正式 Provider 审批；
 - 分布式分层限流、正式账号/上传资产的法务保留/导出/删除编排、备份/PITR、灾难恢复、生产 SLO/告警责任和灰度回滚；
@@ -716,22 +716,22 @@ flowchart TD
 
 ## 验证证据
 
-2026-07-16 在当前主线复跑的自动化基线为：257 项单元测试、39 项 PostgreSQL integration、23 项 Chromium E2E 全部通过，TypeScript typecheck 与 Next.js production build 通过。该基线证明已合并能力没有回归，但不能替代真实 Provider、尚未接线的应用纵切或整节课闭环证据。
+2026-07-16 在当前分支复跑的自动化基线为：280项单元测试、42项PostgreSQL integration、23项Chromium E2E全部通过，TypeScript typecheck与Next.js production build通过。该基线证明当前Asset/K1/T1首条接线和UI改造没有回归，但不能替代真实Provider、C1、完整状态事件或整节课闭环证据。
 
 | 验收项             | 已取得证据                                                                 | 尚缺证据或工作                                                   | 结果       |
 | ------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
-| 主线自动化基线     | 257 unit、39 PostgreSQL integration、23 Chromium E2E；typecheck/build 通过 | 无                                                               | `verified` |
+| 当前自动化基线     | 280 unit、42 PostgreSQL integration、23 Chromium E2E；typecheck/build通过  | 无                                                               | `verified` |
 | G0 基线收口        | 诚实失败、Demo 生产隔离、桌面/移动与视觉回归已纳入上述测试                 | 无                                                               | `verified` |
 | 真实 Provider 直答 | Provider Adapter、SSE Contract、失败归一与 Web Turn 纵切已有自动化覆盖     | 使用轮换后 Key 的 controlled live smoke                          | `partial`  |
 | 两阶段工具         | Orchestrator/Tool Executor、工具审计和 Trace 路径已有单元与集成覆盖        | 与 K1/C1 新工具接线后的回归证据                                  | `verified` |
 | 刷新/取消          | 消息恢复、停止、lease 与终态收敛已有 PostgreSQL integration 和 E2E 覆盖    | 无                                                               | `verified` |
-| RAG 与引用         | K1 数据层、FTS、Turn 快照、跨课程隔离、换版冻结和引用防伪通过集成测试      | 检索/引用接入 Turn 工具和引用 UI                                 | `partial`  |
+| RAG 与引用         | K1数据层、FTS、Turn快照、候选白名单、引用持久化/SSE/UI已接通并通过集成测试 | 冻结中文检索评测集与真实Provider引用smoke                        | `partial`  |
 | 受控 Artifact      | 现有 Artifact Schema、服务端判分、`pipeline_flow` 与 AnimationShell 已覆盖 | C1 提议/确认/生成、Studio 真实列表及其 E2E                       | `partial`  |
-| 状态与回放         | T1 Core/Runtime 的 guard、可信投影、确定性回放与下一节点已有自动化覆盖     | 判分后状态推进接入 Web 应用流程                                  | `partial`  |
+| 状态与回放         | T1 Core/Runtime及Canvas判分后的可信`ASSESS`推进已有自动化覆盖              | 非`ASSESS`节点事件接线与整课回放证据                             | `partial`  |
 | Halo/无障碍        | 桌面/移动、Canvas 交互、reduced-motion 与视觉基线已有 Chromium E2E         | 最终 Performance trace 与人工键盘/缩放验收记录                   | `partial`  |
 | 整节课闭环         | 分段能力由当前自动化基线保护                                               | 问答→引用→Artifact→判分→状态推进→刷新恢复的统一 Trace 与完整 E2E | `pending`  |
 
-计划继续保持 `active`：controlled live Provider smoke、K1/T1 Web 接线、C1 和整节课 E2E 均完成并满足 shared dev 门槛后，才允许执行收尾检查和归档。
+计划继续保持`active`：controlled live Provider smoke、C1、完整状态事件和整节课E2E均完成并满足shared dev门槛后，才允许执行收尾检查和归档。
 
 不得在此表或任何仓库文档记录 API Key、学生真实数据、供应商原始推理或无法复现的口头结论。
 

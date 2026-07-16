@@ -1,6 +1,6 @@
 # EduCanvas — Agent 工作规则
 
-多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `协作.md`。
+多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `docs/08-collaboration/team-guide.md`。
 
 ## Git 规则（GitHub 分支保护已强制执行）
 

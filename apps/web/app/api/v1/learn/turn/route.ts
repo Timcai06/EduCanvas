@@ -1,12 +1,15 @@
 import {
+  AssetAccessError,
   ChatMessageIdConflictError,
   LearningSessionOwnershipError,
+  MessagePartValidationError,
   TurnInProgressError,
   TurnRateLimitError,
 } from '@educanvas/db';
 import { ModelGatewayConfigurationError } from '@educanvas/model-gateway';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import { readAnonymousIdentity } from '@/server/anonymous-identity';
+import { UnsupportedAssetModalityError } from '@/server/asset-materialization';
 import { beginOwnedTeachingTurn } from '@/server/learning-turn';
 import {
   isTrustedSameOriginWrite,
@@ -90,6 +93,19 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (error instanceof LearningSessionOwnershipError) {
       return jsonError(404, error.code, '当前学习会话不存在。');
+    }
+    if (
+      error instanceof AssetAccessError ||
+      error instanceof MessagePartValidationError
+    ) {
+      return jsonError(422, 'asset_not_available', '附件不存在、未就绪或不属于当前对话。');
+    }
+    if (error instanceof UnsupportedAssetModalityError) {
+      return jsonError(
+        422,
+        error.code,
+        '文件已保存，但当前模型暂时不能理解图片；PDF文字资料可以直接用于对话。',
+      );
     }
     if (error instanceof ModelGatewayConfigurationError) {
       return jsonError(

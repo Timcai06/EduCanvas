@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { AgentMessagePart } from '@educanvas/agent-core';
 import {
   and,
   asc,
@@ -12,6 +13,12 @@ import {
 } from 'drizzle-orm';
 import { getDb } from './client';
 import { chatMessages, lessonSessions, modelRuns } from './schema';
+import {
+  assertOwnedReadyAssetParts,
+  insertMessageParts,
+  loadMessageParts,
+  prepareStudentMessage,
+} from './message-parts';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -40,6 +47,7 @@ export interface ChatMessageSnapshot {
   role: ChatMessageRole;
   status: ChatMessageStatus;
   content: string;
+  parts: readonly AgentMessagePart[];
   failureCode: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -60,7 +68,8 @@ export interface CreateTeachingTurnInput {
   sessionId: string;
   trustedStudentId: string;
   clientMessageId: string;
-  text: string;
+  text?: string;
+  parts?: readonly AgentMessagePart[];
   leaseDurationMs?: number;
   now?: Date;
 }
@@ -168,7 +177,13 @@ function isUuid(value: string): boolean {
 
 function toSnapshot(
   row: typeof chatMessages.$inferSelect,
+  parts?: readonly AgentMessagePart[],
 ): ChatMessageSnapshot {
+  const projectedParts =
+    parts ??
+    (row.content.trim()
+      ? ([{ type: 'text', text: row.content }] satisfies AgentMessagePart[])
+      : []);
   return {
     id: row.id,
     sessionId: row.sessionId,
@@ -177,6 +192,7 @@ function toSnapshot(
     role: row.role as ChatMessageRole,
     status: row.status as ChatMessageStatus,
     content: row.content,
+    parts: projectedParts,
     failureCode: row.failureCode,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
@@ -232,10 +248,17 @@ async function loadTurn(
   if (!studentMessage || !assistantMessage) {
     throw new ChatLifecycleError('教学 Turn 的学生/老师消息不完整');
   }
+  const parts = await loadMessageParts(
+    executor,
+    rows.map((row) => row.id),
+  );
   return {
     turnId,
-    studentMessage: toSnapshot(studentMessage),
-    assistantMessage: toSnapshot(assistantMessage),
+    studentMessage: toSnapshot(studentMessage, parts.get(studentMessage.id)),
+    assistantMessage: toSnapshot(
+      assistantMessage,
+      parts.get(assistantMessage.id),
+    ),
   };
 }
 
@@ -253,12 +276,13 @@ export class DrizzleChatRepository {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientMessageId)) {
       throw new ChatLifecycleError('clientMessageId 格式或长度无效');
     }
-    const content = normalizeStudentMessageContent(input.text);
-    if (!content) throw new ChatLifecycleError('学生消息不能为空');
-    if (content.length > 4_000) {
-      throw new ChatLifecycleError('学生消息不能超过 4000 字符');
-    }
-    const requestHash = hashStudentMessageContent(content);
+    const prepared = prepareStudentMessage({
+      clientMessageId: input.clientMessageId,
+      text: input.text,
+      parts: input.parts,
+    });
+    const content = prepared.content;
+    const requestHash = prepared.requestHash;
     const now = input.now ?? new Date();
     const leaseDurationMs = validateAssistantLeaseDuration(
       input.leaseDurationMs ?? DEFAULT_ASSISTANT_LEASE_MS,
@@ -314,37 +338,49 @@ export class DrizzleChatRepository {
         throw new TurnInProgressError(activeAssistant.turnId);
       }
 
+      await assertOwnedReadyAssetParts(transaction, {
+        ownerSubjectId: input.trustedStudentId,
+        spaceId: input.sessionId,
+        parts: prepared.parts,
+      });
+
       const turnId = randomUUID();
       const leaseId = randomUUID();
       const leaseExpiresAt = new Date(now.getTime() + leaseDurationMs);
-      await transaction.insert(chatMessages).values([
-        {
-          sessionId: input.sessionId,
-          turnId,
-          clientMessageId: input.clientMessageId,
-          requestHash,
-          role: 'student',
-          status: 'completed',
-          content,
-          createdAt: now,
-          completedAt: now,
-        },
-        {
-          sessionId: input.sessionId,
-          turnId,
-          role: 'assistant',
-          status: 'pending',
-          content: '',
-          leaseId,
-          leaseExpiresAt,
-          heartbeatAt: now,
-          createdAt: now,
-        },
-      ]);
+      const insertedMessages = await transaction
+        .insert(chatMessages)
+        .values([
+          {
+            sessionId: input.sessionId,
+            turnId,
+            clientMessageId: input.clientMessageId,
+            requestHash,
+            role: 'student',
+            status: 'completed',
+            content,
+            createdAt: now,
+            completedAt: now,
+          },
+          {
+            sessionId: input.sessionId,
+            turnId,
+            role: 'assistant',
+            status: 'pending',
+            content: '',
+            leaseId,
+            leaseExpiresAt,
+            heartbeatAt: now,
+            createdAt: now,
+          },
+        ])
+        .returning();
+      const student = insertedMessages.find((row) => row.role === 'student');
+      if (!student) throw new ChatLifecycleError('学生消息写入失败');
+      await insertMessageParts(transaction, student.id, prepared.parts);
       await transaction
         .update(lessonSessions)
         .set({
-          title: sql`coalesce(${lessonSessions.title}, ${deterministicSessionTitle(session.courseSlug, content)})`,
+          title: sql`coalesce(${lessonSessions.title}, ${deterministicSessionTitle(session.courseSlug, content || '附件消息')})`,
           lastActivityAt: now,
           updatedAt: now,
         })
@@ -732,9 +768,13 @@ export class DrizzleChatRepository {
       .limit(limit + 1);
     const hasNext = rows.length > limit;
     const pageRows = rows.slice(0, limit);
+    const parts = await loadMessageParts(
+      this.database,
+      pageRows.map((row) => row.id),
+    );
     const last = pageRows.at(-1);
     return {
-      messages: pageRows.map(toSnapshot),
+      messages: pageRows.map((row) => toSnapshot(row, parts.get(row.id))),
       nextCursor:
         hasNext && last
           ? { createdAt: last.createdAt.toISOString(), id: last.id }

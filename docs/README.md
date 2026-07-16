@@ -42,9 +42,9 @@
 
 - 已实现：通用`agent-core`模型/流事件/Gateway契约基座、模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、EduCanvas SSE对话UI、消息/模型/工具/安全账本、两阶段Tool Loop、取消与刷新恢复、状态感知Tool Executor，以及可配置的原生OpenAI-compatible SSE Provider Adapter；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
-- 数据基础已实现但尚未接入应用纵切：审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选和只接受本轮candidate的防伪引用；
-- 尚未实现：K1检索/引用和T1状态推进的Web应用层接线、受控Artifact提议/确认/生成与真实Studio列表、正式用户认证、真实Provider live smoke及完整整节课E2E；
-- 当前证据只支持本地开发基线；在K1/T1应用接线、C1、受控live smoke和整节课E2E完成前，不宣称已进入shared dev、staging或production；
+- 已接通：通用PDF/图片Asset上传、不可变版本和消息Part；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
+- 尚未实现：受控Artifact提议/确认/独立生成与真实Studio列表、完整教学状态事件接线、正式用户认证、真实Provider live smoke及完整整节课E2E；
+- 当前证据只支持本地开发基线；在C1、完整状态事件、受控live smoke和整节课E2E完成前，不宣称已进入shared dev、staging或production；
 - `draft`文档中的独立服务和生产基础设施是演进目标，不能作为当前部署事实。
 
 ## 文档状态
@@ -75,3 +75,5 @@
 - 计划中的临时任务拆分、排查过程和候选方案不是长期事实源，过期内容应在归档时删除或压缩。
 
 计划目录的命名、状态和归档流程见[`plan/README.md`](plan/README.md)。
+
+首次参与开发请先阅读[`08-collaboration/team-guide.md`](08-collaboration/team-guide.md)；本地启动优先使用仓库根目录`Makefile`提供的`make setup`、`make dev`和`make check`入口。

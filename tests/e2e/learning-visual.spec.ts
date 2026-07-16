@@ -7,7 +7,7 @@ test.describe('学习页视觉基线', () => {
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '你好，今天想学点什么？' }),
+      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
     ).toBeVisible();
     await expect(page.locator('.ambient-halo__layer')).toHaveCount(3);
     await expect(page).toHaveScreenshot('chat-empty-desktop-dark.png', {
@@ -22,7 +22,7 @@ test.describe('学习页视觉基线', () => {
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '你好，今天想学点什么？' }),
+      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
     ).toBeVisible();
     await expect(page.locator('.ambient-halo__bloom')).toBeHidden();
     await expect(page).toHaveScreenshot('chat-empty-mobile-dark.png', {
@@ -36,7 +36,7 @@ test.describe('学习页视觉基线', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/learn');
     await expect(
-      page.getByRole('heading', { name: '你好，今天想学点什么？' }),
+      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
     ).toBeVisible();
 
     const first = await page.screenshot({ animations: 'disabled' });
@@ -50,11 +50,13 @@ test.describe('学习页视觉基线', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/learn');
 
-    const composer = page.getByRole('textbox', { name: '向 AI 老师提问' });
+    const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
     await composer.fill('为什么计算机能认出图片？');
     await composer.press('Enter');
 
-    await expect(page.getByText('EduCanvas', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('banner').getByText('EduCanvas', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByText('为什么计算机能认出图片？')).toBeVisible();
     await expect(composer).toBeVisible();
     await expect(
