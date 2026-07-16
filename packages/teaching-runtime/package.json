@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/agent-core": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/teaching-core": "workspace:*",
     "zod": "^4.4.3"

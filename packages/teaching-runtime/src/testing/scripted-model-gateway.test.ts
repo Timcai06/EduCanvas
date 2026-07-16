@@ -2,7 +2,7 @@ import type {
   StreamTurnTextRequest,
   StructuredModelRequest,
   TurnModelEvent,
-} from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {

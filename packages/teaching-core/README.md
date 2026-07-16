@@ -11,7 +11,7 @@
 - `src/domain-events.ts`：服务端可信领域事件的版本化strict Schema；
 - `src/learning-projection.ts`：从可信事件回放学习投影，并按课程配置推荐下一知识节点；
 - `src/tools.ts`：受控教学工具名称和状态白名单；
-- `src/model-contracts.ts`：供应商无关的模型别名、消息、流式事件、usage与错误归一契约；
+- `src/model-contracts.ts`：迁移期兼容出口；通用模型、流式事件与Gateway契约已归属`@educanvas/agent-core`；
 - `src/safety-policy.ts`：K12输入/输出安全策略、稳定分类和公开拦截响应；
 - `src/ports.ts`：会话、事件、掌握度、模型和检索的依赖倒置接口；
 - `src/index.ts`：包的唯一公共出口。
@@ -19,7 +19,7 @@
 ## 当前实现边界
 
 - 状态机、ASSESS出口、掌握度、误区、可信事件、回放和下一节点推荐已经实现为纯领域逻辑；
-- `KnowledgeRetriever`、`TurnModelGateway`、`TeachingUnitOfWork` 等只是 Port，具体 Drizzle、Provider 和检索实现位于外层包；
+- `KnowledgeRetriever`与`TeachingUnitOfWork`是K12 Port；`TurnModelGateway`来自`@educanvas/agent-core`并由本包兼容导出；具体Drizzle、Provider和检索实现位于外层包；
 - T1 状态推进应用服务已在 `@educanvas/teaching-runtime` 实现，但尚未由 Web 在 Canvas 判分后调用；
 - K1 PostgreSQL FTS 仓储已在 `@educanvas/db` 实现，但尚未注入 Web 生产工具；
 - 本包不会自动运行 Agent、写数据库、发送 SSE 或渲染 Canvas，也不允许模型文本直接成为可信状态事实。
@@ -28,7 +28,8 @@
 
 ```text
 apps/web或未来core-api
-→ teaching-core
+→ agent-core
+→ teaching-core（K12垂直领域）
 → Port接口
 ← Drizzle / 模型供应商 / RAG适配器
 ```

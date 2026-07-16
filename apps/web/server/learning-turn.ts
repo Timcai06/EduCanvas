@@ -18,8 +18,8 @@ import {
 import {
   evaluateTeachingInput,
   type TeachingSafetyDecision,
-  type TurnModelEvent,
 } from '@educanvas/teaching-core';
+import type { TurnModelEvent } from '@educanvas/agent-core';
 import {
   TeachingOutputSafetyGate,
   TeachingTurnOrchestrator,
@@ -85,7 +85,10 @@ const failurePresentation = (
     case 'turn_rate_limited':
       return { message: '现在提问的人有点多，请稍后再试。', retryable: true };
     case 'timeout':
-      return { message: 'AI 老师这次思考超时了，请再试一次。', retryable: true };
+      return {
+        message: 'AI 老师这次思考超时了，请再试一次。',
+        retryable: true,
+      };
     case 'content_filtered':
       return {
         message: '这个问题暂时不能这样回答，我们可以换一种安全的问法。',
@@ -104,7 +107,9 @@ const failurePresentation = (
   }
 };
 
-function acceptedEvent(snapshot: TeachingTurnLedgerSnapshot): TeachingTurnEvent {
+function acceptedEvent(
+  snapshot: TeachingTurnLedgerSnapshot,
+): TeachingTurnEvent {
   return {
     type: 'turn.accepted',
     schemaVersion: '1',

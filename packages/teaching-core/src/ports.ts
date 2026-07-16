@@ -1,16 +1,14 @@
-import type { z } from 'zod';
 import type { DomainLearningEvent } from './domain-events';
 import type { MisconceptionTag } from './mastery';
-import type {
-  ModelAlias,
-  ModelAbortSignal,
-  ModelMessage,
-  ProviderCallMetadata,
-  StreamTurnTextRequest,
-  StructuredTaskAlias,
-  TurnModelEvent,
-} from './model-contracts';
 import type { TeachingState } from './state-machine';
+
+export type {
+  ModelGateway,
+  StructuredModelGateway,
+  StructuredModelRequest,
+  StructuredModelResult,
+  TurnModelGateway,
+} from '@educanvas/agent-core';
 
 /** 教学核心读取的最小会话投影，不暴露Drizzle行对象。 */
 export interface LessonSessionSnapshot {
@@ -96,40 +94,6 @@ export interface TeachingUnitOfWork {
     operation: (transaction: TeachingTransaction) => Promise<Result>,
   ): Promise<Result>;
 }
-
-/** 结构化模型调用请求；teaching.turn 被类型系统排除，只能走流式 Turn。 */
-export interface StructuredModelRequest<Output> {
-  taskAlias: StructuredTaskAlias;
-  modelAlias: ModelAlias;
-  messages: readonly ModelMessage[];
-  schema: z.ZodType<Output>;
-  promptVersion: string;
-  traceId: string;
-  operationId: string;
-  signal?: ModelAbortSignal;
-}
-
-/** 结构化模型调用结果及审计所需元数据。 */
-export interface StructuredModelResult<Output> {
-  output: Output;
-  metadata: ProviderCallMetadata;
-}
-
-/** 正常教学 Turn 使用的最小 Port；Orchestrator 不依赖结构化生成。 */
-export interface TurnModelGateway {
-  streamTurnText(request: StreamTurnTextRequest): AsyncIterable<TurnModelEvent>;
-}
-
-/** Artifact 与离线结构化任务使用的独立 Port。 */
-export interface StructuredModelGateway {
-  generateStructured<Output>(
-    request: StructuredModelRequest<Output>,
-  ): Promise<StructuredModelResult<Output>>;
-}
-
-/** 组合根可提供的完整模型网关；供应商 SDK 类型不得越过实现层。 */
-export interface ModelGateway
-  extends TurnModelGateway, StructuredModelGateway {}
 
 /** 与pgvector和具体Reranker无关的检索请求。 */
 export interface KnowledgeRetrievalRequest {

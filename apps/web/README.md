@@ -2,7 +2,7 @@
 
 ## 这个包是什么
 
-这是 EduCanvas 当前唯一的 Web 应用。它使用 Next.js App Router 同时承载学生端 Chat-first 学习体验和阶段一 BFF/组合根，负责把 `@educanvas/teaching-core`、`@educanvas/teaching-runtime`、`@educanvas/model-gateway`、`@educanvas/canvas-protocol` 与 `@educanvas/db` 组装成可运行纵切。
+这是 EduCanvas 当前唯一的 Web 应用。它使用 Next.js App Router 同时承载 Chat-first 体验和阶段一 BFF/组合根，负责把通用 `@educanvas/agent-core`、Provider、Artifact、数据能力与 K12 `@educanvas/teaching-core` / `@educanvas/teaching-runtime` 组装成当前首个可运行纵切。
 
 共享协议、领域规则、应用用例和数据库定义不得复制到应用私有目录；阶段一保持模块化单体部署，边界依据 [ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)。当前身份仍是匿名演示身份，不是正式用户认证。
 

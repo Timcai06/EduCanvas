@@ -4,7 +4,7 @@ import {
   type StreamTurnTextRequest,
   type TurnModelEvent,
   type TurnModelGateway,
-} from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ScriptedModelGateway } from './testing/scripted-model-gateway';

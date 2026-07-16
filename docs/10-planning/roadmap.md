@@ -43,8 +43,8 @@ K1的数据层已经实现审核资料不可变版本、PostgreSQL FTS、Turn资
 
 阶段一剩余工作按平台与垂直纵切拆分：
 
-1. 抽取通用`agent-core`契约，先迁移供应商无关的消息、模型事件、Gateway Port和运行元数据；教学包通过兼容导出平滑迁移；
-2. 形成通用Asset与Artifact术语和生命周期，课程资料、教学Canvas继续作为K12适配；
+1. 为已经抽取的通用`agent-core`补齐Asset所有权、持久化、处理任务和供应商输入物化；现有契约已覆盖全模态类型、不可变版本引用、多Part消息、模型事件、Gateway Port和运行元数据；
+2. 形成通用Artifact术语和生命周期，课程资料、教学Canvas继续作为K12适配；
 3. 完成K1应用接线：把受控教材摄取结果、Turn快照、FTS候选和引用防伪仓储组合进K12 Agent工具与引用UI；
 4. 完成T1应用接线：让Canvas判分和受控runtime决策真正推进可信状态、误区/掌握度投影与下一节点；
 5. 完成C1：实现平台级Artifact提议/确认/生成/Studio生命周期，并由K12 Agent注册首批教学Artifact；

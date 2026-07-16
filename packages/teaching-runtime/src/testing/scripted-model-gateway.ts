@@ -6,8 +6,8 @@ import type {
   StructuredModelRequest,
   StructuredModelResult,
   TurnModelEvent,
-} from '@educanvas/teaching-core';
-import { providerCallMetadataSchema } from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
+import { providerCallMetadataSchema } from '@educanvas/agent-core';
 
 /** 测试替身自身的稳定失败码，不模拟任何模型供应商语义。 */
 export const scriptedModelGatewayErrorCodes = [

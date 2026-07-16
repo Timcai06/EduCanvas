@@ -1,6 +1,5 @@
 import {
   normalizeModelGatewayError,
-  teachingStateSchema,
   turnModelEventSchema,
   type ModelAbortSignal,
   type ModelMessage,
@@ -9,10 +8,13 @@ import {
   type NormalizedModelError,
   type ProviderCallMetadata,
   type StreamTurnTextRequest,
-  type TeachingState,
   type TurnModelEvent,
   type TurnModelGateway,
   type TurnModelPhase,
+} from '@educanvas/agent-core';
+import {
+  teachingStateSchema,
+  type TeachingState,
 } from '@educanvas/teaching-core';
 import { z } from 'zod';
 import {

@@ -11,10 +11,10 @@ import {
   ModelGatewayInvocationError,
   turnModelEventSchema,
   type ProviderCallMetadata,
-  type StreamTurnTextRequest,
+  type StreamAgentTextRequest,
   type TurnModelEvent,
   type TurnModelGateway,
-} from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
 import { hashPromptMaterial } from './prompt-hash';
 
 export interface AuditedTeachingTurnContext {
@@ -27,7 +27,7 @@ export interface AuditedTeachingTurnContext {
   answerRun: ModelRunSnapshot;
 }
 
-const promptMaterialForRequest = (request: StreamTurnTextRequest) => ({
+const promptMaterialForRequest = (request: StreamAgentTextRequest) => ({
   taskAlias: request.taskAlias,
   modelAlias: request.modelAlias,
   phase: request.phase,
@@ -67,14 +67,14 @@ const toProviderResult = (
 export class AuditedTurnModelGateway implements TurnModelGateway {
   private readonly runs = new DrizzleModelRunRepository();
   private readonly chat = new DrizzleChatRepository();
-  private readonly startedPhases = new Set<StreamTurnTextRequest['phase']>();
+  private readonly startedPhases = new Set<StreamAgentTextRequest['phase']>();
 
   constructor(
     private readonly delegate: TurnModelGateway,
     private readonly context: AuditedTeachingTurnContext,
   ) {}
 
-  private assertRequestContext(request: StreamTurnTextRequest): void {
+  private assertRequestContext(request: StreamAgentTextRequest): void {
     if (
       request.turnId !== this.context.turnId ||
       request.traceId !== this.context.traceId ||
@@ -95,7 +95,7 @@ export class AuditedTurnModelGateway implements TurnModelGateway {
   }
 
   private async prepareRun(
-    request: StreamTurnTextRequest,
+    request: StreamAgentTextRequest,
   ): Promise<ModelRunSnapshot> {
     const promptHash = hashPromptMaterial(promptMaterialForRequest(request));
     let run: ModelRunSnapshot;
@@ -161,16 +161,17 @@ export class AuditedTurnModelGateway implements TurnModelGateway {
   }
 
   async *streamTurnText(
-    request: StreamTurnTextRequest,
+    request: StreamAgentTextRequest,
   ): AsyncIterable<TurnModelEvent> {
     this.assertRequestContext(request);
     let run: ModelRunSnapshot | null = null;
     let terminalPersisted = false;
     try {
       run = await this.prepareRun(request);
-      let terminal:
-        | Extract<TurnModelEvent, { type: 'completed' | 'failed' }>
-        | null = null;
+      let terminal: Extract<
+        TurnModelEvent,
+        { type: 'completed' | 'failed' }
+      > | null = null;
       for await (const rawEvent of this.delegate.streamTurnText(request)) {
         const parsed = turnModelEventSchema.safeParse(rawEvent);
         if (!parsed.success || terminal !== null) {

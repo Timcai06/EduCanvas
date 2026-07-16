@@ -3,10 +3,10 @@ import type {
   ModelUsage,
   NormalizedModelError,
   ProviderCallMetadata,
-  StreamTurnTextRequest,
+  StreamAgentTextRequest,
   TurnModelEvent,
   TurnModelGateway,
-} from '@educanvas/teaching-core';
+} from '@educanvas/agent-core';
 import {
   parseModelGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
@@ -115,7 +115,7 @@ const errorForHttpResponse = (
 };
 
 const failedEvent = (
-  phase: StreamTurnTextRequest['phase'],
+  phase: StreamAgentTextRequest['phase'],
   error: NormalizedModelError,
   metadata?: ProviderCallMetadata,
 ): TurnModelEvent => ({
@@ -151,7 +151,7 @@ const mapFinishReason = (
   }
 };
 
-const buildProviderMessages = (request: StreamTurnTextRequest): unknown[] => {
+const buildProviderMessages = (request: StreamAgentTextRequest): unknown[] => {
   const messages: unknown[] = request.messages.map((message) => ({
     role: message.role,
     content: message.content,
@@ -182,7 +182,7 @@ const buildProviderMessages = (request: StreamTurnTextRequest): unknown[] => {
 };
 
 const buildRequestBody = (
-  request: StreamTurnTextRequest,
+  request: StreamAgentTextRequest,
   config: EnabledModelGatewayConfiguration,
   modelId: string,
 ): JsonRecord => ({
@@ -222,7 +222,7 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
   }
 
   async *streamTurnText(
-    request: StreamTurnTextRequest,
+    request: StreamAgentTextRequest,
   ): AsyncIterable<TurnModelEvent> {
     const modelId = this.config.modelIds[request.modelAlias];
     if (modelId === undefined) {

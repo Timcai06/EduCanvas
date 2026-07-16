@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   },
   // 内部包直接发布TypeScript源码且不单独产出构建目录，因此交给Next.js一并转译。
   transpilePackages: [
+    '@educanvas/agent-core',
     '@educanvas/canvas-protocol',
     '@educanvas/db',
     '@educanvas/teaching-core',
