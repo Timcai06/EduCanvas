@@ -31,7 +31,10 @@ export const turnModelPhases = ['answer', 'synthesis'] as const;
 export const turnModelPhaseSchema = z.enum(turnModelPhases);
 export type TurnModelPhase = z.infer<typeof turnModelPhaseSchema>;
 
-/** 与供应商无关的文本模型消息；多模态part将在Asset契约落地后增量扩展。 */
+/**
+ * 供应商调用前的文本模型消息。通用全模态输入先使用AgentMessagePart表示，
+ * 经资产权限、版本和处理状态校验后，再由运行时物化为供应商支持的输入。
+ */
 export const modelMessageSchema = z
   .object({
     role: z.enum(['system', 'user', 'assistant']),

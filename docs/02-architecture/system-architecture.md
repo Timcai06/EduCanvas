@@ -38,7 +38,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     student[学生浏览器] --> web["apps/web<br/>页面 / 服务端组合根"]
-    web --> agent["packages/agent-core<br/>通用模型 / 流事件 / Gateway Port"]
+    web --> agent["packages/agent-core<br/>全模态Asset / 消息Part / 模型 / Gateway Port"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
     web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
     web --> gateway["packages/model-gateway<br/>Provider配置 / OpenAI-compatible SSE"]
@@ -50,9 +50,9 @@ flowchart LR
     db --> teaching
 ```
 
-当前代码已经拆出通用`agent-core`契约、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的消息、流式事件、运行元数据和Gateway Port；`model-gateway`已经只依赖该通用包。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复。知识资料的不可变版本、FTS、Turn快照、候选和引用仓储已经落地，但尚未组合进Turn工具与引用UI；可信状态推进也尚未接入Web判分后的应用流程。
+当前代码已经拆出通用`agent-core`契约、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的全模态Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`model-gateway`已经只依赖该通用包。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复。知识资料的不可变版本、FTS、Turn快照、候选和引用仓储已经落地，但尚未组合进Turn工具与引用UI；可信状态推进也尚未接入Web判分后的应用流程。
 
-当前Web Turn编排仍位于`teaching-runtime`，`teaching-core`也暂时兼容导出通用模型类型。下一步按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)继续抽取通用Tool/Turn编排和多模态Asset契约；不以一次性重命名或微服务拆分制造高风险重写。
+当前Web Turn编排仍位于`teaching-runtime`，`teaching-core`也暂时兼容导出通用模型类型。下一步按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)为通用Asset补齐所有权、持久化、处理任务和供应商输入物化，再抽取通用Tool/Turn编排；不以一次性重命名或微服务拆分制造高风险重写。
 
 ## 目标服务形态
 

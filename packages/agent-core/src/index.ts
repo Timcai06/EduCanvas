@@ -4,6 +4,48 @@
  */
 
 export {
+  assetDescriptorSchema,
+  assetKindSchema,
+  assetKinds,
+  assetOriginSchema,
+  assetOrigins,
+  assetScopeSchema,
+  assetScopes,
+  assetStatusSchema,
+  assetStatuses,
+  assetVersionDescriptorSchema,
+  assetVersionReferenceSchema,
+  canTransitionAssetStatus,
+  type AssetDescriptor,
+  type AssetKind,
+  type AssetOrigin,
+  type AssetScope,
+  type AssetStatus,
+  type AssetVersionDescriptor,
+  type AssetVersionReference,
+} from './asset-contracts';
+
+export {
+  agentArtifactPartSchema,
+  agentAssetPartSchema,
+  agentMessageInputSchema,
+  agentMessagePartSchema,
+  agentMessageRoleSchema,
+  agentMessageRoles,
+  agentTextPartSchema,
+  extractAgentMessageText,
+  normalizeAgentMessageParts,
+  referencedAssetKinds,
+  referencedAssetVersions,
+  type AgentArtifactPart,
+  type AgentAssetPart,
+  type AgentMessageInput,
+  type AgentMessagePart,
+  type AgentMessageRole,
+  type AgentTextPart,
+} from './message-contracts';
+
+export {
   ModelGatewayInvocationError,
   modelAliasSchema,
   modelAliases,
