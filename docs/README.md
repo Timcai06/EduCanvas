@@ -75,3 +75,5 @@
 - 计划中的临时任务拆分、排查过程和候选方案不是长期事实源，过期内容应在归档时删除或压缩。
 
 计划目录的命名、状态和归档流程见[`plan/README.md`](plan/README.md)。
+
+首次参与开发请先阅读[`08-collaboration/team-guide.md`](08-collaboration/team-guide.md)；本地启动优先使用仓库根目录`Makefile`提供的`make setup`、`make dev`和`make check`入口。
