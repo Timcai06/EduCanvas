@@ -15,6 +15,12 @@ export {
 } from './asset-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
+  DrizzlePlatformConversationRepository,
+  PlatformConversationOwnershipError,
+  type PlatformConversationSnapshot,
+  type PlatformMessageSnapshot,
+} from './conversation-platform-repository';
+export {
   DrizzleArtifactRepository,
   type SavedArtifactReference,
 } from './artifact-repository';

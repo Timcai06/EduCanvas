@@ -25,7 +25,7 @@
 | 状态     | 能力                                                                                                    | 当前证据                                                                                                                                                                                                                  |
 | -------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 已实现   | G0、UX1/UX2、A1、D1、A2/A3/A4、UX3/UX4、S1 基线；通用Asset纵切；K1 Web接线；T1 `ASSESS`接线；C2受控模板 | 真实Turn/Cancel Route、Provider与两阶段工具循环、可审计账本与安全Gate；PDF/图片上传、不可变Asset版本和消息Part；FTS检索、候选白名单、引用SSE/UI；可信ASSESS推进；严格`pipeline_flow` Schema、静态Renderer与AnimationShell |
-| 已验证   | 单元、生产构建、PostgreSQL集成、无Provider诚实失败、浏览器交互与视觉基线                                | 289项单元测试、43项PostgreSQL integration、23项Chromium E2E；Asset所有权/恢复、K1迁移与引用防伪、桌面/移动深色基线、reduced-motion与菜单键盘焦点通过；正式live smoke仍未执行                                              |
+| 已验证   | 单元、生产构建、PostgreSQL集成、无Provider诚实失败、浏览器交互与视觉基线                                | 289项单元测试、46项PostgreSQL integration、23项Chromium E2E；Asset所有权/恢复、K1迁移与引用防伪、桌面/移动深色基线、reduced-motion与菜单键盘焦点通过；正式live smoke仍未执行                                              |
 | 待完成   | C1、完整状态事件、整节课E2E与受控live smoke                                                             | 完成Artifact提议/确认/生成/Studio真实列表；补齐非`ASSESS`状态事件接线；随后验证整节课Trace与轮换后Provider Key的合成数据真实调用                                                                                          |
 | 后续计划 | production hardening                                                                                    | 正式认证、多租户、法务/DPA、备份恢复、分布式限流、生产 SLO 与灰度                                                                                                                                                         |
 
@@ -718,11 +718,11 @@ flowchart TD
 
 ## 验证证据
 
-2026-07-16 在当前分支复跑的自动化基线为：289项单元测试、43项PostgreSQL integration、23项Chromium E2E全部通过，TypeScript typecheck与Next.js production build通过。该基线证明当前Asset/K1/T1、首个跨轮Context Snapshot和UI改造没有回归，但不能替代真实Provider、C1、完整状态事件或整节课闭环证据。
+2026-07-16 在当前分支复跑的自动化基线为：289项单元测试、46项PostgreSQL integration、23项Chromium E2E全部通过，TypeScript typecheck与Next.js production build通过。该基线证明当前Asset/K1/T1、首个跨轮Context Snapshot、通用Space/Conversation骨架和UI改造没有回归，但不能替代真实Provider、C1、完整状态事件或整节课闭环证据。
 
 | 验收项             | 已取得证据                                                                 | 尚缺证据或工作                                                   | 结果       |
 | ------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
-| 当前自动化基线     | 289 unit、43 PostgreSQL integration、23 Chromium E2E；typecheck/build通过  | 无                                                               | `verified` |
+| 当前自动化基线     | 289 unit、46 PostgreSQL integration、23 Chromium E2E；typecheck/build通过  | 无                                                               | `verified` |
 | G0 基线收口        | 诚实失败、Demo 生产隔离、桌面/移动与视觉回归已纳入上述测试                 | 无                                                               | `verified` |
 | 真实 Provider 直答 | Provider Adapter、SSE Contract、失败归一与 Web Turn 纵切已有自动化覆盖     | 使用轮换后 Key 的 controlled live smoke                          | `partial`  |
 | 两阶段工具         | Orchestrator/Tool Executor、工具审计和 Trace 路径已有单元与集成覆盖        | 与 K1/C1 新工具接线后的回归证据                                  | `verified` |

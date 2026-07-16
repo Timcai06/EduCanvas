@@ -60,7 +60,7 @@ flowchart LR
 
 - `agent-runtime`已负责Asset与Conversation Context装配，但通用Turn/Tool编排仍位于`teaching-runtime`；
 - 模型输入契约仍是纯文本`ModelMessage.content`，原生图片、音频和视频引用尚不能进入Provider；
-- Chat、Model Run与Asset的Space语义仍以`lesson_sessions`为临时父实体，尚无一等Space/Conversation；
+- 一等Space/Conversation与通用Message骨架已落地并回填K12 Session，但生产Turn/Model Run仍走`lesson_sessions + chat_messages`兼容链路；
 - 用户上传Asset与可检索Source/Chunk仍是两条链路；
 - Artifact协议和Renderer是安全的编译期闭集，但尚无提议、确认、生成、版本与Studio生命周期；
 - `learning-turn.ts`仍是Next.js中的K12大型组合根，传输、应用服务和基础设施装配尚待拆分。

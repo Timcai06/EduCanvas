@@ -25,6 +25,187 @@ const tsvector = customType<{ data: string; driverData: string }>({
 // 阶段一模块化单体的现行表集。它同时包含通用 Agent/Asset/RAG 账本和 K12 纵切，
 // 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/data-design.md。
 
+/** 通用资产、会话和产物的长期容器；不包含课程或教学状态。 */
+export const spaces = pgTable(
+  'spaces',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerSubjectId: text('owner_subject_id').notNull(),
+    kind: text('kind').notNull().default('personal'),
+    title: text('title').notNull(),
+    status: text('status').notNull().default('active'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('spaces_owner_status_updated_idx').on(
+      table.ownerSubjectId,
+      table.status,
+      table.updatedAt,
+      table.id,
+    ),
+    check(
+      'spaces_kind_check',
+      sql`${table.kind} in ('personal', 'notebook', 'course')`,
+    ),
+    check(
+      'spaces_status_check',
+      sql`${table.status} in ('active', 'archived')`,
+    ),
+    check(
+      'spaces_text_check',
+      sql`char_length(${table.ownerSubjectId}) between 1 and 160 and char_length(${table.title}) between 1 and 300`,
+    ),
+    check(
+      'spaces_archive_shape_check',
+      sql`(${table.status} = 'active' and ${table.archivedAt} is null) or (${table.status} = 'archived' and ${table.archivedAt} is not null)`,
+    ),
+  ],
+);
+
+/** Chat 主叙事线程；agentProfileId 选择能力组合，但不把垂直领域字段写入平台表。 */
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    ownerSubjectId: text('owner_subject_id').notNull(),
+    agentProfileId: text('agent_profile_id').notNull().default('general'),
+    title: text('title'),
+    status: text('status').notNull().default('active'),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('conversations_owner_recent_idx').on(
+      table.ownerSubjectId,
+      table.status,
+      table.lastActivityAt,
+      table.id,
+    ),
+    index('conversations_space_recent_idx').on(
+      table.spaceId,
+      table.lastActivityAt,
+      table.id,
+    ),
+    check(
+      'conversations_status_check',
+      sql`${table.status} in ('active', 'archived')`,
+    ),
+    check(
+      'conversations_archive_shape_check',
+      sql`(${table.status} = 'active' and ${table.archivedAt} is null) or (${table.status} = 'archived' and ${table.archivedAt} is not null)`,
+    ),
+    check(
+      'conversations_text_check',
+      sql`char_length(${table.ownerSubjectId}) between 1 and 160 and ${table.agentProfileId} ~ '^[a-z][a-z0-9._-]{0,127}$' and (${table.title} is null or char_length(${table.title}) between 1 and 300)`,
+    ),
+  ],
+);
+
+/** 通用 Agent/Artifact 操作信封；具体 Model Run 和 Tool Call 在后续迁移关联。 */
+export const agentOperations = pgTable(
+  'agent_operations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    traceId: text('trace_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('agent_operations_conversation_idempotency_unique').on(
+      table.conversationId,
+      table.idempotencyKey,
+    ),
+    index('agent_operations_conversation_created_idx').on(
+      table.conversationId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'agent_operations_kind_check',
+      sql`${table.kind} in ('turn', 'artifact_generation')`,
+    ),
+    check(
+      'agent_operations_status_check',
+      sql`${table.status} in ('pending', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`,
+    ),
+    check(
+      'agent_operations_text_check',
+      sql`char_length(${table.idempotencyKey}) between 1 and 128 and char_length(${table.traceId}) between 1 and 128`,
+    ),
+  ],
+);
+
+/** 与K12 chat_messages并行的通用消息骨架；P1先支持持久化/恢复，后续再双写迁移。 */
+export const conversationMessages = pgTable(
+  'conversation_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    operationId: uuid('operation_id').references(() => agentOperations.id, {
+      onDelete: 'set null',
+    }),
+    role: text('role').notNull(),
+    status: text('status').notNull(),
+    content: text('content').notNull().default(''),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('conversation_messages_history_idx').on(
+      table.conversationId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'conversation_messages_role_check',
+      sql`${table.role} in ('system', 'user', 'assistant', 'tool')`,
+    ),
+    check(
+      'conversation_messages_status_check',
+      sql`${table.status} in ('pending', 'streaming', 'completed', 'failed', 'cancelled', 'interrupted')`,
+    ),
+    check(
+      'conversation_messages_content_check',
+      sql`char_length(${table.content}) <= 64000`,
+    ),
+    check(
+      'conversation_messages_terminal_check',
+      sql`(${table.status} in ('completed', 'failed', 'cancelled', 'interrupted') and ${table.completedAt} is not null) or (${table.status} in ('pending', 'streaming') and ${table.completedAt} is null)`,
+    ),
+  ],
+);
+
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
  * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 docs/04-data/data-design.md。
@@ -33,6 +214,9 @@ export const lessonSessions = pgTable(
   'lesson_sessions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'restrict',
+    }),
     studentId: text('student_id').notNull(),
     // 年级段和课程目录尚在迭代，阶段一用 text 接受稳定外部标识，待正式实体表落地后再加外键。
     gradeBand: text('grade_band').notNull(),
