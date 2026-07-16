@@ -16,9 +16,11 @@ gsap.registerPlugin(useGSAP);
 export function AssetUploadPanel({
   kind,
   onUploaded,
+  endpoint,
 }: {
   kind: AssetItem['kind'];
   onUploaded: (asset: AssetItem) => void;
+  endpoint?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -110,7 +112,7 @@ export function AssetUploadPanel({
           if (!file || busy) return;
           setBusy(true);
           setError(null);
-          void uploadAsset({ file, scope })
+          void uploadAsset({ file, scope, endpoint })
             .then(onUploaded)
             .catch((reason: unknown) => {
               setError(

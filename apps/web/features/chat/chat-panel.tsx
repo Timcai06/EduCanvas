@@ -61,6 +61,7 @@ export function ChatPanel({
   onOpenCanvas,
   onContinueText,
   onRetry,
+  assistantLabel = 'AI 老师',
 }: {
   messages: readonly ChatMessage[];
   canvasOpen: boolean;
@@ -68,6 +69,7 @@ export function ChatPanel({
   onOpenCanvas: () => void;
   onContinueText: () => void;
   onRetry: (assistantMessageId: string) => void;
+  assistantLabel?: string;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 pt-6 pb-4">
@@ -115,7 +117,9 @@ export function ChatPanel({
             </span>
             <div className="min-w-0 flex-1 space-y-2">
               {message.status === 'pending' ? (
-                <p className="leading-7 text-ink-muted">正在连接 AI 老师…</p>
+                <p className="leading-7 text-ink-muted">
+                  正在连接{assistantLabel}…
+                </p>
               ) : null}
               {message.text ? (
                 <p className="whitespace-pre-wrap leading-7 text-ink">
@@ -133,7 +137,7 @@ export function ChatPanel({
                       : (message.failureMessage ??
                         (message.status === 'interrupted'
                           ? '回答意外中断了，你可以重新发送这条问题。'
-                          : 'AI 老师暂时无法连接，请稍后重试。'))}
+                          : `${assistantLabel}暂时无法连接，请稍后重试。`))}
                   </p>
                   {(message.retryable || message.status === 'cancelled') &&
                   (message.retryText ||

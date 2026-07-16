@@ -1,16 +1,13 @@
 import {
   AssetAccessError,
-  ChatMessageIdConflictError,
-  LearningSessionOwnershipError,
   MessagePartValidationError,
-  TurnInProgressError,
-  TurnRateLimitError,
+  PlatformMessageIdConflictError,
+  PlatformTurnInProgressError,
+  PlatformTurnOwnershipError,
 } from '@educanvas/db';
-import { ModelGatewayConfigurationError } from '@educanvas/model-gateway';
-import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import { readAnonymousIdentity } from '@/server/anonymous-identity';
 import { UnsupportedAssetModalityError } from '@/server/asset-materialization';
-import { beginOwnedTeachingTurn } from '@/server/learning-turn';
+import { beginOwnedGeneralTurn } from '@/server/general-turn';
 import { isTrustedSameOriginWrite, jsonError } from '@/server/request-security';
 import { createSseEventStream, sseResponse } from '@/server/sse';
 import {
@@ -20,16 +17,6 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-/**
- * 断开浏览器连接只停止写入响应，不把网络断开误当成学生点击“停止”。
- * 后台生成仍会完成持久化；显式停止必须调用 turn/:id/cancel。
- */
-export function createTeachingTurnEventStream(
-  events: AsyncIterable<TeachingTurnEvent>,
-): ReadableStream<Uint8Array> {
-  return createSseEventStream(events);
-}
 
 function validationErrorResponse(error: TurnRequestValidationError): Response {
   if (error.code === 'invalid_content_type') {
@@ -45,33 +32,25 @@ export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
   }
-
   const identity = await readAnonymousIdentity();
-  if (!identity) {
-    return jsonError(401, 'unauthorized', '请先开始学习。');
-  }
+  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
 
   try {
     const body = await parseTeachingTurnRequest(request);
-    const turn = await beginOwnedTeachingTurn(identity, body);
-    return sseResponse(createTeachingTurnEventStream(turn.events));
+    const turn = await beginOwnedGeneralTurn(identity, body);
+    return sseResponse(createSseEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {
       return validationErrorResponse(error);
     }
-    if (error instanceof ChatMessageIdConflictError) {
+    if (error instanceof PlatformMessageIdConflictError) {
       return jsonError(409, error.code, '这条消息标识已被其他内容使用。');
     }
-    if (error instanceof TurnInProgressError) {
-      return jsonError(409, error.code, 'AI 老师仍在回答上一条消息。');
+    if (error instanceof PlatformTurnInProgressError) {
+      return jsonError(409, error.code, 'AI 仍在回答上一条消息。');
     }
-    if (error instanceof TurnRateLimitError) {
-      return jsonError(429, error.code, '提问太频繁，请稍后再试。', {
-        retryAfterMs: error.retryAfterMs,
-      });
-    }
-    if (error instanceof LearningSessionOwnershipError) {
-      return jsonError(404, error.code, '当前学习会话不存在。');
+    if (error instanceof PlatformTurnOwnershipError) {
+      return jsonError(404, error.code, '当前对话不存在。');
     }
     if (
       error instanceof AssetAccessError ||
@@ -87,20 +66,9 @@ export async function POST(request: Request): Promise<Response> {
       return jsonError(
         422,
         error.code,
-        '文件已保存，但当前模型暂时不能理解图片；PDF文字资料可以直接用于对话。',
+        '文件已保存，但当前模型还不能可靠理解这种内容；PDF文字资料可以直接用于对话。',
       );
     }
-    if (error instanceof ModelGatewayConfigurationError) {
-      return jsonError(
-        503,
-        'model_configuration_invalid',
-        'AI 老师暂时无法连接，请稍后重试。',
-      );
-    }
-    return jsonError(
-      503,
-      'turn_unavailable',
-      'AI 老师暂时无法回答，请稍后重试。',
-    );
+    return jsonError(503, 'turn_unavailable', 'AI 暂时无法回答，请稍后重试。');
   }
 }

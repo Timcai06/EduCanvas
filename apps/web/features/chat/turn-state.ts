@@ -16,6 +16,7 @@ export interface ActiveTeachingTurn {
   turnId: string | null;
   assistantMessageId: string | null;
   status: 'pending' | 'streaming';
+  assistantLabel: string;
 }
 
 export interface TurnAnnouncement {
@@ -42,6 +43,7 @@ export type TeachingTurnAction =
         label: string;
         kind: 'image' | 'document';
       }[];
+      assistantLabel?: string;
     }
   | { type: 'stream.event'; event: TeachingTurnEvent }
   | {
@@ -166,6 +168,7 @@ export function teachingTurnReducer(
 ): TeachingTurnState {
   if (action.type === 'send.started') {
     if (state.active) return state;
+    const assistantLabel = action.assistantLabel ?? 'AI 老师';
     const localStudentId = `local-student:${action.clientMessageId}`;
     const localAssistantId = `local-assistant:${action.clientMessageId}`;
     const student: StudentMessage = {
@@ -200,9 +203,10 @@ export function teachingTurnReducer(
         turnId: null,
         assistantMessageId: null,
         status: 'pending',
+        assistantLabel,
       },
       activeToolLabel: null,
-      ...announce(state, 'AI 老师开始回答'),
+      ...announce(state, `${assistantLabel}开始回答`),
     };
   }
 
@@ -239,7 +243,7 @@ export function teachingTurnReducer(
       ),
       active: null,
       activeToolLabel: null,
-      ...announce(state, 'AI 老师回答失败'),
+      ...announce(state, `${active.assistantLabel}回答失败`),
     };
   }
 
@@ -337,7 +341,7 @@ export function teachingTurnReducer(
       })),
       active: null,
       activeToolLabel: null,
-      ...announce(state, 'AI 老师回答完成'),
+      ...announce(state, `${active.assistantLabel}回答完成`),
     };
   }
   if (event.type === 'turn.cancelled') {
@@ -367,7 +371,9 @@ export function teachingTurnReducer(
     activeToolLabel: null,
     ...announce(
       state,
-      event.code.startsWith('k12_') ? event.message : 'AI 老师回答失败',
+      event.code.startsWith('k12_')
+        ? event.message
+        : `${active.assistantLabel}回答失败`,
     ),
   };
 }

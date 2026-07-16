@@ -10,7 +10,9 @@ export function encodeSseEvent<T extends object & { type: string }>(
   if (!SSE_EVENT_NAME.test(event.type)) {
     throw new Error('invalid_sse_event_name');
   }
-  return encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  return encoder.encode(
+    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+  );
 }
 
 export function sseResponse(stream: ReadableStream<Uint8Array>): Response {
@@ -19,6 +21,30 @@ export function sseResponse(stream: ReadableStream<Uint8Array>): Response {
       'cache-control': 'no-cache, no-store, no-transform',
       'content-type': 'text/event-stream; charset=utf-8',
       'x-accel-buffering': 'no',
+    },
+  });
+}
+
+/** 客户端断开只停止写响应；业务生成与持久化继续由服务端完成。 */
+export function createSseEventStream<T extends object & { type: string }>(
+  events: AsyncIterable<T>,
+): ReadableStream<Uint8Array> {
+  let clientOpen = true;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      void (async () => {
+        try {
+          for await (const event of events) {
+            if (clientOpen) controller.enqueue(encodeSseEvent(event));
+          }
+          if (clientOpen) controller.close();
+        } catch (error) {
+          if (clientOpen) controller.error(error);
+        }
+      })();
+    },
+    cancel() {
+      clientOpen = false;
     },
   });
 }

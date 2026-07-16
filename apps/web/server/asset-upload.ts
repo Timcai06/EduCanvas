@@ -108,6 +108,16 @@ export async function uploadOwnedAsset(input: {
 }): Promise<AssetSnapshot> {
   const session = await loadOwnedTeachingSession(input.identity);
   if (!session) throw new AssetUploadError('session_not_found', 404);
+  return uploadOwnedAssetToSpace({ ...input, spaceId: session.id });
+}
+
+/** 平台级上传边界：调用方先完成Conversation/Space所有权校验，再传入可信spaceId。 */
+export async function uploadOwnedAssetToSpace(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  file: File;
+  scope: 'turn' | 'space';
+}): Promise<AssetSnapshot> {
   if (
     !Number.isSafeInteger(input.file.size) ||
     input.file.size <= 0 ||
@@ -139,7 +149,7 @@ export async function uploadOwnedAsset(input: {
         detected.kind === 'document' ? await extractPdfText(bytes) : null;
       return await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
-        spaceId: session.id,
+        spaceId: input.spaceId,
         scope: input.scope,
         kind: detected.kind,
         displayName: safeDisplayName(input.file.name),
@@ -154,7 +164,7 @@ export async function uploadOwnedAsset(input: {
       if (!(error instanceof AssetUploadError)) throw error;
       await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
-        spaceId: session.id,
+        spaceId: input.spaceId,
         scope: input.scope,
         kind: detected.kind,
         displayName: safeDisplayName(input.file.name),
@@ -180,8 +190,15 @@ export async function listOwnedAssets(
 ): Promise<readonly AssetSnapshot[]> {
   const session = await loadOwnedTeachingSession(identity);
   if (!session) throw new AssetUploadError('session_not_found', 404);
+  return listOwnedSpaceAssets(identity, session.id);
+}
+
+export async function listOwnedSpaceAssets(
+  identity: AnonymousIdentity,
+  spaceId: string,
+): Promise<readonly AssetSnapshot[]> {
   return assets.listOwnedSpace({
     ownerSubjectId: identity.studentId,
-    spaceId: session.id,
+    spaceId,
   });
 }

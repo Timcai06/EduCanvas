@@ -17,6 +17,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { AgentMessagePart } from '@educanvas/agent-core';
 
 const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => 'tsvector',
@@ -175,6 +176,7 @@ export const conversationMessages = pgTable(
     role: text('role').notNull(),
     status: text('status').notNull(),
     content: text('content').notNull().default(''),
+    parts: jsonb('parts').$type<AgentMessagePart[]>().notNull().default([]),
     failureCode: text('failure_code'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

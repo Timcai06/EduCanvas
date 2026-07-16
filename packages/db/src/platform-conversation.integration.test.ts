@@ -8,6 +8,10 @@ import {
   DrizzlePlatformConversationRepository,
   PlatformConversationOwnershipError,
 } from './conversation-platform-repository';
+import {
+  DrizzlePlatformTurnRepository,
+  PlatformMessageIdConflictError,
+} from './platform-turn-repository';
 import * as schema from './schema';
 
 function resolveTestDatabaseUrl() {
@@ -113,5 +117,78 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         trustedSubjectId: 'owner-b',
       }),
     ).rejects.toBeInstanceOf(PlatformConversationOwnershipError);
+  });
+
+  it('通用Turn幂等持久化并在终态后恢复，不创建教学Session', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'general-turn-user',
+      spaceKind: 'personal',
+      spaceTitle: '通用对话',
+    });
+    const started = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'general-turn-user',
+      clientMessageId: 'message-1',
+      text: '帮我分析一个想法',
+      now: new Date('2026-07-16T07:00:00.000Z'),
+    });
+    expect(started.replayed).toBe(false);
+    expect(started.assistantMessage.status).toBe('streaming');
+
+    await turns.settleTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'general-turn-user',
+      turnId: started.turnId,
+      status: 'completed',
+      content: '当然，我们先明确目标。',
+      now: new Date('2026-07-16T07:00:01.000Z'),
+    });
+    const replayed = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'general-turn-user',
+      clientMessageId: 'message-1',
+      text: '帮我分析一个想法',
+    });
+    expect(replayed).toMatchObject({
+      turnId: started.turnId,
+      replayed: true,
+      assistantMessage: {
+        status: 'completed',
+        content: '当然，我们先明确目标。',
+      },
+    });
+    expect(await getDatabase().select().from(schema.lessonSessions)).toEqual(
+      [],
+    );
+  });
+
+  it('拒绝相同clientMessageId绑定不同通用消息内容', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'idempotency-user',
+      spaceKind: 'personal',
+      spaceTitle: '通用对话',
+    });
+    await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'idempotency-user',
+      clientMessageId: 'stable-id',
+      text: '第一条内容',
+    });
+    await expect(
+      turns.createOrGetTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'idempotency-user',
+        clientMessageId: 'stable-id',
+        text: '不同内容',
+      }),
+    ).rejects.toBeInstanceOf(PlatformMessageIdConflictError);
   });
 });
