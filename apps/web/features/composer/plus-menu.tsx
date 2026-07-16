@@ -1,7 +1,14 @@
 'use client';
 
 import { useGSAP } from '@gsap/react';
-import { Plus } from '@phosphor-icons/react';
+import {
+  BookOpen,
+  FileArrowUp,
+  ImageSquare,
+  Plus,
+  PresentationChart,
+} from '@phosphor-icons/react';
+import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
@@ -19,75 +26,36 @@ export type PlusMenuActionId =
 
 interface PlusMenuItem {
   id: PlusMenuActionId;
+  icon: Icon;
   label: string;
-  hint: string;
   available: boolean;
 }
 
 /**
- * 菜单只开放真实纵切：图片/PDF上传和本课受控互动。未接入能力保持disabled。
+ * Gemini 式紧凑菜单:单列图标行,只渲染真实接通的能力。
+ * 未接入的动作不再以 disabled 行占位——不展示就是最诚实的"未开放"。
  */
-const menuGroups: readonly { title: string; items: readonly PlusMenuItem[] }[] =
-  [
-    {
-      title: '添加上下文',
-      items: [
-        {
-          id: 'upload_file',
-          label: '上传文件',
-          hint: 'PDF · 10MB',
-          available: true,
-        },
-        {
-          id: 'upload_image',
-          label: '上传图片',
-          hint: 'PNG/JPEG/WebP',
-          available: true,
-        },
-        {
-          id: 'pick_course_material',
-          label: '选择课程资料',
-          hint: '即将开放',
-          available: false,
-        },
-        {
-          id: 'add_link',
-          label: '添加链接',
-          hint: '即将开放',
-          available: false,
-        },
-      ],
-    },
-    {
-      title: '创建与工具',
-      items: [
-        {
-          id: 'create_demo',
-          label: '打开互动演示',
-          hint: '受控模板',
-          available: true,
-        },
-        {
-          id: 'create_slides',
-          label: '生成 Slide',
-          hint: '即将开放',
-          available: false,
-        },
-        {
-          id: 'create_quiz',
-          label: '生成测验',
-          hint: '即将开放',
-          available: false,
-        },
-        {
-          id: 'more_tools',
-          label: '更多工具',
-          hint: '即将开放',
-          available: false,
-        },
-      ],
-    },
-  ];
+const menuItems: readonly PlusMenuItem[] = [
+  { id: 'upload_file', icon: FileArrowUp, label: '上传文件', available: true },
+  {
+    id: 'upload_image',
+    icon: ImageSquare,
+    label: '上传图片',
+    available: true,
+  },
+  {
+    id: 'pick_course_material',
+    icon: BookOpen,
+    label: '选择课程资料',
+    available: false,
+  },
+  {
+    id: 'create_demo',
+    icon: PresentationChart,
+    label: '打开互动演示',
+    available: true,
+  },
+];
 
 /**
  * 「+」菜单自管开合与键盘漫游（↑↓/Enter/Esc），动作语义交给上层：
@@ -100,31 +68,18 @@ export function PlusMenu({
   onAction: (action: PlusMenuActionId) => void;
   availableActions?: readonly PlusMenuActionId[];
 }) {
-  const renderedGroups = useMemo(
+  const items = useMemo(
     () =>
-      menuGroups.map((group) => ({
-        ...group,
-        items: group.items.map((item) => ({
-          ...item,
-          available:
-            item.available &&
-            (availableActions === undefined ||
-              availableActions.includes(item.id)),
-        })),
-      })),
+      menuItems.filter(
+        (item) =>
+          item.available &&
+          (availableActions === undefined ||
+            availableActions.includes(item.id)),
+      ),
     [availableActions],
   );
-  const allItems = useMemo(
-    () => renderedGroups.flatMap((group) => group.items),
-    [renderedGroups],
-  );
-  const enabledIndexes = useMemo(
-    () => allItems.flatMap((item, index) => (item.available ? [index] : [])),
-    [allItems],
-  );
-  const firstEnabledIndex = enabledIndexes[0] ?? 0;
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(firstEnabledIndex);
+  const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
@@ -150,37 +105,31 @@ export function PlusMenu({
       if (!open) return;
       const menu = rootRef.current?.querySelector('[data-plus-menu]');
       if (!menu) return;
-      const items = menu.querySelectorAll('[role="menuitem"]');
+      const rows = menu.querySelectorAll('[role="menuitem"]');
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: no-preference)', () => {
         const timeline = gsap.timeline();
         timeline.fromTo(
           menu,
-          { opacity: 0, y: 6, scale: 0.985 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.2,
-            ease: 'power2.out',
-          },
+          { opacity: 0, y: 8, scale: 0.97 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power3.out' },
         );
         timeline.fromTo(
-          items,
-          { opacity: 0, y: 3 },
+          rows,
+          { opacity: 0, y: 4 },
           {
             opacity: 1,
             y: 0,
-            duration: 0.16,
-            stagger: 0.018,
+            duration: 0.18,
+            stagger: 0.025,
             ease: 'power1.out',
           },
-          0.035,
+          0.04,
         );
         return () => timeline.kill();
       });
       media.add('(prefers-reduced-motion: reduce)', () => {
-        gsap.set([menu, ...items], { opacity: 1, y: 0, scale: 1 });
+        gsap.set([menu, ...rows], { opacity: 1, y: 0, scale: 1 });
       });
       return () => media.revert();
     },
@@ -201,13 +150,9 @@ export function PlusMenu({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const delta = event.key === 'ArrowDown' ? 1 : -1;
-      setActiveIndex((current) => {
-        const enabledPosition = enabledIndexes.indexOf(current);
-        const nextPosition =
-          (enabledPosition + delta + enabledIndexes.length) %
-          enabledIndexes.length;
-        return enabledIndexes[nextPosition] ?? firstEnabledIndex;
-      });
+      setActiveIndex(
+        (current) => (current + delta + items.length) % items.length,
+      );
     }
   };
 
@@ -221,7 +166,7 @@ export function PlusMenu({
         aria-controls={open ? menuId : undefined}
         aria-label="添加上下文或创建内容"
         onClick={() => {
-          setActiveIndex(firstEnabledIndex);
+          setActiveIndex(0);
           setOpen((value) => !value);
         }}
         className="grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -235,36 +180,28 @@ export function PlusMenu({
           role="menu"
           aria-label="添加上下文或创建内容"
           onKeyDown={handleMenuKeyDown}
-          className="absolute bottom-12 left-0 z-50 max-h-[min(70dvh,22rem)] w-64 origin-bottom-left overflow-y-auto rounded-2xl border border-line/90 bg-canvas/95 p-2 shadow-[var(--shadow-sheet)] backdrop-blur-xl sm:grid sm:w-[32rem] sm:grid-cols-2 sm:gap-2 sm:overflow-visible"
+          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line/80 bg-surface/98 py-1.5 shadow-[var(--shadow-sheet)] backdrop-blur-xl"
         >
-          {renderedGroups.map((group) => (
-            <div key={group.title} role="group" aria-label={group.title}>
-              <p className="px-3 pt-2 pb-1 text-xs font-semibold text-ink-faint">
-                {group.title}
-              </p>
-              {group.items.map((item) => {
-                const index = allItems.indexOf(item);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="menuitem"
-                    autoFocus={index === firstEnabledIndex}
-                    disabled={!item.available}
-                    aria-disabled={!item.available}
-                    tabIndex={item.available && index === activeIndex ? 0 : -1}
-                    onClick={() => {
-                      close(true);
-                      onAction(item.id);
-                    }}
-                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink transition-colors enabled:hover:bg-surface enabled:focus-visible:bg-surface enabled:focus-visible:outline-none disabled:cursor-not-allowed disabled:text-ink-faint disabled:opacity-65"
-                  >
-                    <span className="font-medium">{item.label}</span>
-                    <span className="text-xs text-ink-faint">{item.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
+          {items.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitem"
+              autoFocus={index === 0}
+              tabIndex={index === activeIndex ? 0 : -1}
+              onClick={() => {
+                close(true);
+                onAction(item.id);
+              }}
+              className="flex min-h-11 w-full items-center gap-3 px-4 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-strong focus-visible:bg-surface-strong focus-visible:outline-none"
+            >
+              <item.icon
+                aria-hidden="true"
+                size={19}
+                className="shrink-0 text-ink-muted"
+              />
+              <span>{item.label}</span>
+            </button>
           ))}
         </div>
       ) : null}

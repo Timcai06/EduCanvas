@@ -21,8 +21,9 @@ describe('workspace truth and motion boundaries', () => {
     expect(assets).not.toContain('勾选的资料会成为老师讲解和出题的依据');
     expect(studio).not.toContain('老师为你生成过的演示');
     expect(menu).toContain("label: '打开互动演示'");
-    expect(menu).toContain("hint: '受控模板'");
-    expect(menu).toContain('disabled={!item.available}');
+    /* 未接入的能力不渲染,而不是以"即将开放"占位伪装 */
+    expect(menu).toContain('item.available &&');
+    expect(menu).not.toContain('即将开放');
   });
 
   it('keeps Halo animation on compositor properties and pauses while hidden', () => {
