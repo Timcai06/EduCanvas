@@ -88,6 +88,7 @@ make setup
 make dev
 ```
 
+- `make dev` 会再次确认数据库已启动并执行尚未应用的迁移，避免拉取新代码后本地 Schema 落后；
 - Web：<http://localhost:3101>
 - PostgreSQL：`localhost:5432`
 - 停止数据库并保留数据：`make stop`
