@@ -32,8 +32,10 @@ export const turnModelPhaseSchema = z.enum(turnModelPhases);
 export type TurnModelPhase = z.infer<typeof turnModelPhaseSchema>;
 
 /**
- * 供应商调用前的文本模型消息。通用全模态输入先使用AgentMessagePart表示，
- * 经资产权限、版本和处理状态校验后，再由运行时物化为供应商支持的输入。
+ * 阶段一供应商调用前的文本兼容消息。通用全模态输入虽然先使用
+ * AgentMessagePart 表示，但本契约尚不能携带已验证的原生图片、音频或视频引用；
+ * 当前运行时只能把可提取文本的 Asset 物化到 content。后续必须通过独立的
+ * ModelInputPart/ProviderCapability 契约扩展，不能把私有 storage key 塞进字符串。
  */
 export const modelMessageSchema = z
   .object({

@@ -38,21 +38,48 @@ flowchart TB
 ```mermaid
 flowchart LR
     student[学生浏览器] --> web["apps/web<br/>页面 / 服务端组合根"]
-    web --> agent["packages/agent-core<br/>全模态Asset / 消息Part / 模型 / Gateway Port"]
+    web --> agent["packages/agent-core<br/>Asset / 消息Part / 模型 / Gateway Port"]
+    web --> agentRuntime["packages/agent-runtime<br/>当前仅Asset上下文物化"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
     web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
     web --> gateway["packages/model-gateway<br/>Provider配置 / OpenAI-compatible SSE"]
+    web --> db["packages/db<br/>Drizzle适配器 / PostgreSQL"]
+    agentRuntime --> agent
     gateway --> agent
     runtime --> agent
+    runtime --> canvas
     runtime --> teaching["packages/teaching-core<br/>状态机 / 掌握度 / 领域事件 / Port"]
-    runtime --> db["packages/db<br/>Drizzle适配器 / PostgreSQL"]
-    gateway --> runtime
     db --> teaching
+    db --> agent
+    db --> canvas
 ```
 
-当前代码已经拆出通用`agent-core`契约、`agent-runtime`上下文物化、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的全模态Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`agent-runtime`在不暴露私有存储地址的前提下物化已验证Asset；`model-gateway`只依赖通用契约。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、Asset上传、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复；K1的FTS检索、候选白名单、引用持久化/SSE/UI已经进入Turn纵切；Canvas判分后只在可信`ASSESS`状态触发受控状态推进。
+当前代码已经拆出通用`agent-core`契约、`agent-runtime`上下文物化、Canvas协议、教学核心、教学应用运行时、模型网关与数据库适配器。`agent-core`定义供应商无关的Asset、不可变版本引用、多Part消息、流式事件、运行元数据和Gateway Port；`model-gateway`已只依赖通用契约。`teaching-core`保持K12纯领域逻辑；`teaching-runtime`包含可信判分、两阶段Turn Orchestrator、状态感知Tool Executor、可信状态推进与事件回放。Next.js组合根已接通匿名身份、Asset上传、EduCanvas SSE、消息/模型/工具/安全账本、取消和刷新恢复；K1的FTS检索、候选白名单、引用持久化/SSE/UI已经进入Turn纵切；Canvas判分后只在可信`ASSESS`状态触发受控状态推进。
 
-当前Web Turn编排仍位于`teaching-runtime`，`teaching-core`也暂时兼容导出通用模型类型。通用Asset已经补齐匿名所有权、持久化、不可变版本、PDF解析和供应商上下文物化的首条纵切；下一步按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)补对象存储/异步处理与原生视觉Provider，再增量抽取通用Tool/Turn编排，不以一次性重命名或微服务拆分制造高风险重写。
+### 已确认的迁移缺口
+
+- `agent-runtime`当前只负责Asset文本上下文物化，通用Turn/Tool/Context编排仍位于`teaching-runtime`；
+- 模型输入契约仍是纯文本`ModelMessage.content`，原生图片、音频和视频引用尚不能进入Provider；
+- Chat、Model Run与Asset的Space语义仍以`lesson_sessions`为临时父实体，尚无一等Space/Conversation；
+- 用户上传Asset与可检索Source/Chunk仍是两条链路；
+- Artifact协议和Renderer是安全的编译期闭集，但尚无提议、确认、生成、版本与Studio生命周期；
+- `learning-turn.ts`仍是Next.js中的K12大型组合根，传输、应用服务和基础设施装配尚待拆分。
+
+迁移按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)与[通用平台解耦计划](../plan/active/2026-07-platform-decoupling-runtime-hardening.md)小步进行：先建立通用数据骨架和Runtime Port，再接原生全模态、Artifact Runtime与Platform Shell；不以一次性重命名或提前拆微服务制造高风险重写。
+
+## 目标模块依赖
+
+```mermaid
+flowchart TB
+    core["agent/workspace/artifact/knowledge core"] --> runtime2["agent-runtime<br/>Turn / Context / Tool / Policy"]
+    k12["vertical-k12<br/>教学状态 / 判分 / Progress"] --> runtime2
+    providers["provider adapters<br/>Gemini / OpenAI-compatible"] --> runtime2
+    persistence["persistence-postgres"] --> runtime2
+    processors["asset processors / retrieval"] --> runtime2
+    web2["apps/web<br/>Platform Shell / BFF"] --> runtime2
+```
+
+K12贡献Agent Profile、Policy、Tools、Progress和专用Artifact；Space、Conversation、Message、Asset、Artifact与Model Run属于平台层。
 
 ## 目标服务形态
 

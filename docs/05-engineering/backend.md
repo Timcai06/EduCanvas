@@ -24,7 +24,7 @@
 - `GradeCanvasSubmissionService`在事务内再次校验可信学生对session的归属，再判分、追加可信事件并更新掌握度投影；
 - 页面读取只返回公共Artifact和Progress DTO，私有判分键不进入浏览器。
 
-## 真实教学Turn已实现边界
+## 真实 Agent Turn 已实现边界
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
 - Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
@@ -33,6 +33,19 @@
 - 学生消息、老师消息、Model Run、Tool Call和安全决策分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
+
+这里的执行链目前仍由 `teaching-runtime` 与 Web BFF 共同承载，能够服务
+K12 纵切，但尚不能据此宣称已经形成通用 Agent Runtime。当前已确认的
+平台化缺口包括：
+
+- Answer 上下文只含当前消息与物化后的 Asset 文本，不含持久化会话历史、摘要或 Artifact 状态；
+- Web BFF 同时承担 lease、replay、安全、审计、引用和 SSE 映射，应用服务边界过宽；
+- Tool Registry、Provider Registry 与 Artifact Plugin 仍是编译期闭集，缺少能力元数据和统一扩展契约；
+- 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；
+- Asset、KnowledgeSource 与课程 Session 仍有垂直耦合，尚未建立正式的 Space/Conversation 主干。
+
+上述事实以 [平台解耦与运行时强化计划](../plan/active/2026-07-platform-decoupling-runtime-hardening.md)
+为实施入口。
 
 ## 当前后端接线状态
 

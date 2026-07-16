@@ -75,7 +75,11 @@ async function readLimitedUtf8(request: Request): Promise<string> {
   }
 }
 
-/** Route 只接受 clientMessageId + text；身份、session、附件和模型选择均不能由浏览器声明。 */
+/**
+ * Route 只接受 clientMessageId 加 text，或 clientMessageId 加受 Schema
+ * 约束的 message parts。浏览器可以引用已经过服务端归属校验的 Asset，
+ * 但不能声明可信身份、session、私有存储键或模型选择。
+ */
 export async function parseTeachingTurnRequest(
   request: Request,
 ): Promise<TeachingTurnRequestBody> {

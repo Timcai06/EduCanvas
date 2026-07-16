@@ -1,338 +1,269 @@
-# EduCanvas：对话式全模态 AI 平台
+# EduCanvas
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-React_+_TS-black?logo=nextdotjs" alt="Next.js">
-  <img src="https://img.shields.io/badge/PostgreSQL-pgvector-336791?logo=postgresql&logoColor=white" alt="PostgreSQL">
-  <img src="https://img.shields.io/badge/动画-GSAP-88CE02?logo=greensock&logoColor=black" alt="GSAP">
-  <img src="https://img.shields.io/badge/monorepo-pnpm_+_Turbo-F69220?logo=pnpm&logoColor=white" alt="pnpm">
-  <img src="https://img.shields.io/badge/赛题-JBGS--2026--02-blue" alt="赛题">
+  <strong>Chat-first · Multimodal Assets · Governed Agents · Safe Artifacts</strong>
 </p>
 
-EduCanvas 的产品本体是一个以对话为核心、能够理解和生成文本、图片、音频、视频、Slide、文档与可交互内容的全模态 AI。文件与媒体是可复用资产，Canvas 与 Studio 承载生成产物，专业 Agent 以可插拔垂直能力接入平台。
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs" alt="Next.js 16">
+  <img src="https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white" alt="React 19">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 16">
+  <img src="https://img.shields.io/badge/GSAP-3-88CE02?logo=greensock&logoColor=black" alt="GSAP 3">
+  <img src="https://img.shields.io/badge/pnpm-Turborepo-F69220?logo=pnpm&logoColor=white" alt="pnpm and Turborepo">
+  <a href="https://github.com/Timcai06/EduCanvas/actions/workflows/ci.yml"><img src="https://github.com/Timcai06/EduCanvas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
-本仓库同时交付浙江省大学生人工智能竞赛赛题 **JBGS-2026-02：多模态K12人工智能通识课教学助手对话智能体**。K12 AI 教师是平台的首个专业 Agent 和当前验证纵切，不是平台全部产品边界。
+EduCanvas 是一个以持续对话为核心的全模态 AI 工作空间。Chat 负责表达意图与维持上下文，文件和媒体沉淀为可复用资产，受控 Agent 使用工具完成任务，Canvas 与 Studio 承载可交互、可版本化的数字产物。
 
-> **北极星目标**：用户通过一个持续、可信、可恢复的对话入口组织多模态上下文，并让 AI 使用受控工具生成可继续编辑、交互和复用的数字产物。
+仓库同时交付浙江省大学生人工智能竞赛 **JBGS-2026-02：多模态 K12 人工智能通识课教学助手对话智能体**。K12 AI 教师是第一个垂直 Agent 和当前工程验证纵切，不是平台全部边界。
 
-## 从哪里开始
+> **北极星目标**：用户通过一个可信、可恢复的对话入口组织多模态上下文，让 AI 使用受控工具生成能够继续编辑、交互和复用的产物。
 
-| 你想了解             | 入口                                                                                                      |
-| -------------------- | --------------------------------------------------------------------------------------------------------- |
-| 产品、架构和研发文档 | [docs/README.md](docs/README.md)                                                                          |
-| 团队协作方法         | [团队协作指南](docs/08-collaboration/team-guide.md)                                                       |
-| 官方赛题             | [第二届浙江省大学生人工智能竞赛赛题细则](docs/00-overview/references/jbgs-2026-02-competition-rules.docx) |
+## 当前状态
 
-## 平台闭环
+当前是一个可本地运行的模块化单体，已经越过静态原型阶段，但尚未进入 production。
 
-```mermaid
-flowchart LR
-    A[对话表达意图] --> B[选择多模态上下文]
-    B --> C[Agent规划与受控工具]
-    C --> D[文本或Artifact输出]
-    D --> E[用户确认、编辑与交互]
-    E --> F[持久化资产、产物与运行Trace]
-    F -.-> A
-```
+| 已落地 | 部分落地 | 尚未完成 |
+| --- | --- | --- |
+| 真实 Provider SSE 与诚实失败 | PDF/图片 Asset 已持久化 | 原生图片、音频、视频模型输入 |
+| Answer → Tools → Synthesis | 消息已持久化但每轮只装配当前消息 | 跨轮 Context Snapshot 与摘要 |
+| 消息、模型、工具、安全账本 | PostgreSQL FTS 与引用候选白名单 | Asset/Source/Chunk 统一模型 |
+| 取消、租约、幂等与刷新恢复 | K12 只接通首条可信状态推进 | 一等 Space/Conversation/Operation |
+| Schema-first Canvas 与服务端判分 | Studio 当前只展示预置产物 | Artifact 提议、生成、版本与真实 Studio |
+| 深色 Chat-first UI 与 GSAP 动效 | Registry 仍是编译期闭集 | 通用 Agent/Tool/Provider 插件装配 |
 
-## 首个垂直产品：K12 AI 教师
+完整的代码、数据和架构解析见 [项目技术与架构报告](PROJECT_TECHNICAL_REPORT.md)。
 
-系统必须形成完整的教学闭环（详见 [docs/00-overview/project-brief.md](docs/00-overview/project-brief.md)）：
-
-```mermaid
-flowchart LR
-    A[选择学段或课程] --> B[判断当前水平]
-    B --> C[对话讲解与主动引导]
-    C --> D[Canvas互动学习]
-    D --> E[练习或编程实践]
-    E --> F[自动评价与反馈]
-    F --> G[更新学生掌握度]
-    G --> H[推荐下一步内容]
-    H -.-> B
-```
-
-示范主题为**"AI如何识别猫和狗"**：同一知识点分别用绘本、分类游戏、特征可视化和Python实验适配不同学段。
-
-## 系统架构
-
-> [!NOTE]
-> 架构全貌见 [docs/02-architecture/system-architecture.md](docs/02-architecture/system-architecture.md)（`draft`）。本节为速览，冲突时以 docs 为准。
-
-### 设计原则
-
-- Chat是平台核心交互；Assets、Canvas、Studio和专业Agent按意图出现；
-- 通用Agent协议、模型网关、资产与Artifact运行时不能依赖K12教学状态机；
-- Next.js只负责Web与BFF，不承载全部后端；核心API无状态化、可水平扩展；
-- K12 Agent内部的教学正确性由确定性状态机和规则保证，大模型只负责自然语言表达、内容组织和受控工具调用；
-- **Canvas是受控组件运行时**：模型输出结构化Artifact，经白名单Schema校验后由预注册React组件渲染；
-- PostgreSQL是业务事实源，Redis只放短期状态，长任务可重试可恢复；
-- 所有模型调用和教学决策可追踪、可审计。
-
-### 服务拆解（目标形态）
-
-当前阶段一仍是 `apps/web + packages/*` 的模块化单体；下图是阶段二以后按负载和职责逐步拆分的目标形态，不代表这些服务已经实现。阶段一先用独立 workspace 包守住领域、协议和数据边界。
-
-```mermaid
-flowchart TB
-    subgraph 客户端
-        student[学生浏览器]
-    end
-
-    subgraph 应用层
-        web["web<br/>Next.js页面 / SSR / BFF / 流式UI"]
-        rtgw["realtime-gateway<br/>SSE / WebSocket / 语音信令"]
-    end
-
-    subgraph 领域服务
-        coreapi["core-api<br/>用户 / 课程 / 会话 / 权限"]
-        teaching["teaching-runtime<br/>教学状态机 / 工具调用 / 学生状态"]
-        retrieval["retrieval-service<br/>混合检索 / 重排 / 证据组装"]
-    end
-
-    subgraph 异步处理
-        aiworker["ai-worker<br/>OCR / 切块 / Embedding / 批处理"]
-        wfworker["workflow-worker<br/>教材处理 / 报告 / 再索引"]
-    end
-
-    subgraph 基础设施
-        pg[("PostgreSQL<br/>+ pgvector")]
-        redis[("Redis<br/>短期状态")]
-        oss[("对象存储")]
-        temporal["Temporal<br/>长流程编排"]
-    end
-
-    student --> web
-    student --> rtgw
-    web --> coreapi
-    rtgw --> teaching
-    coreapi --> pg
-    teaching --> retrieval
-    teaching --> pg
-    teaching --> redis
-    retrieval --> pg
-    aiworker --> pg
-    aiworker --> oss
-    wfworker --> temporal
-    temporal --> aiworker
-```
-
-### 教学状态机
-
-教学流程由确定性状态机约束（[docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md)），模型在状态机内通过受控工具工作：
-
-```mermaid
-stateDiagram-v2
-    [*] --> DIAGNOSE: 开始课程
-    DIAGNOSE --> EXPLAIN: 判定当前水平
-    EXPLAIN --> DEMONSTRATE: 讲解完成
-    DEMONSTRATE --> PRACTICE: 演示完成
-    PRACTICE --> ASSESS: 练习完成
-    ASSESS --> EXPLAIN: REMEDIATE / 针对误区重讲
-    ASSESS --> PRACTICE: REMEDIATE / 补充针对性练习
-    ASSESS --> [*]: ADVANCE / 推荐下一知识点
-```
-
-`REMEDIATE`和`ADVANCE`是 `ASSESS` 的出口决策，不是持久化状态；状态转移权属于教学运行时，不属于模型。
-
-受控工具闭集、“状态 × 工具”白名单、参数Schema、权限执行器、超时、幂等、调用上限与审计已经落地；`retrieveKnowledge` 已与 PostgreSQL FTS、候选白名单、引用持久化和 Web 引用呈现接通。Canvas 服务端判分会在可信状态确实处于 `ASSESS` 时调用状态推进服务；其余状态仍不会由模型或浏览器越权推进。LangChain不作为核心依赖，领域状态保存在自己的数据库中，不放在Agent框架内部。
-
-## 技术拆解
-
-### 前端（apps/web）
-
-- **技术栈**：Next.js + React + TypeScript，Headless组件 + 自有设计系统（[ADR-0001](docs/09-decisions/0001-core-stack.md)，`accepted`）；
-- **Chat-first学习页**：默认是深色的S0空对话入口；首条消息后进入S1对话态，当前Canvas可由「+」菜单或Studio产物入口按需进入S2协作态，未来真实Agent可以提供受控建议卡；Assets / Studio / Progress使用互斥抽屉承载；
-- **已接通首条浏览器纵切**：匿名学习会话、受控Canvas提交、服务端判分、PostgreSQL掌握度持久化与进度回显已经连通；正常学习页不再导入确定性老师话术，无真实Provider时会明确显示服务未接入，而不是伪造AI回答；
-- **通用资产纵切**：`+` 菜单可上传 PDF、PNG、JPEG 与 WebP，服务端校验魔数和大小、使用私有存储键保存不可变版本；PDF 可解析文本进入受限上下文，当前文本 Provider 无法消费图片时返回明确的模态不支持错误，不静默丢图；
-- **GSAP已接入UI与受控教学动画**：空对话光场、消息、上传面板、菜单和Canvas使用`useGSAP()`、独立scope及`prefers-reduced-motion`降级；动效只改变 `transform` / `opacity`，菜单不使用会阻断焦点的 `visibility` 动画。首个 render-only `pipeline_flow` 已通过严格语义Schema、静态React Renderer和统一 `AnimationShell` 实现，模型不能提交选择器、时长、任意属性或GSAP代码（[docs/02-architecture/canvas-and-gsap.md](docs/02-architecture/canvas-and-gsap.md)，`accepted`）。
-
-### 受控Canvas协议（packages/canvas-protocol）
-
-> [!IMPORTANT]
-> 项目核心安全设计（[ADR-0002](docs/09-decisions/0002-controlled-canvas.md)，`accepted`）：**绝不执行模型生成的任意HTML/JS/GSAP源码**。模型生成的是教学语义和参数，不是代码。
+## 产品交互模型
 
 ```mermaid
 flowchart LR
-    llm["模型输出<br/>结构化Artifact JSON"] --> validate{"白名单Zod校验<br/>strict判别联合"}
-    validate -- 通过 --> split["服务端拆分<br/>公开投影 / 私有判分键"]
-    split --> registry["预注册React组件<br/>按type分派渲染"]
-    split --> grading[("私有判分键")]
-    validate -- 拒绝 --> reject["返回错误路径<br/>记录审计"]
-    registry --> canvas["教学Canvas"]
-    canvas -- 不可信交互 --> runtime["teaching-runtime<br/>确定性判分"]
-    grading --> runtime
-    runtime -- 可信事件 --> events[("learning_events")]
+    Chat[Chat\n主要交互] --> Context[Assets / Sources\n上下文与知识]
+    Context --> Agent[Agent Runtime\n模型、策略、工具]
+    Agent --> Answer[流式回答]
+    Agent --> Proposal[Artifact Proposal]
+    Proposal --> Canvas[Canvas\n受控交互]
+    Canvas --> Studio[Studio\n版本与复用]
+    Answer -.持续对话.-> Chat
+    Studio -.继续编辑.-> Chat
 ```
 
-- 协议规划9种基础Artifact类型（`story_book`、`concept_card`、`classification_game`、`sorting_game`、`quiz`、`code_lab`、`image_observation`、`project_task`、`learning_summary`）和一组教学动画模板；当前已实现可判分的 `classification_game`、`quiz`，以及只渲染、不生成判分键的 `pipeline_flow`；
-- 阶段一使用编译期静态注册表，确保每种Artifact都有经过审核的Schema和Renderer；阶段二再增加版本兼容与平台化管理能力；
-- 当前只实现协议版本 `1`；版本随Artifact持久化，后续新增版本时必须同时注册对应Validator和Renderer，才能回放旧会话。
+- Chat 始终是主叙事，Canvas 不在首屏默认展开；
+- 用户可以通过输入栏 `+` 添加本轮附件、长期资产或显式创建产物；
+- Agent 只能调用 Runtime 暴露并授权的工具；
+- Artifact 通过严格 Schema 和可信 Renderer 渲染，不执行模型生成的任意 HTML、JavaScript 或 GSAP；
+- K12 状态、掌握度和判分只由可信服务端事件更新。
 
-### AI层（真实纵切收口中）
+## 快速开始
 
-当前已落地供应商无关的流式模型契约、原生OpenAI-compatible SSE Adapter、两阶段 `answer → tools → synthesis` Orchestrator、浏览器到Web BFF的EduCanvas SSE、消息/模型/工具/安全账本、取消与刷新恢复，以及K12输入/流式输出安全Gate。`ScriptedModelGateway`和前端Demo Script仍只用于确定性测试，生产组合根有依赖边界测试防止误用。
+### 环境要求
 
-知识侧已将审核资料的不可变版本、PostgreSQL FTS、Turn资料快照、检索候选、防伪引用仓储、`retrieveKnowledge` 工具、引用 SSE 与引用 UI 接成一条生产纵切。教学侧已在服务端判分后接入受控状态推进，但当前仅在可信状态为 `ASSESS` 时提交 `ASSESSMENT_COMPLETED`，其余教学节点仍待逐事件接线。Artifact提议/确认/独立生成链路仍未实现，因此当前不能宣称整节课Agent闭环完成。
+- Node.js 22；
+- pnpm 10；
+- Docker Desktop 或兼容 Docker Runtime。
 
-**模型路由**（[docs/03-ai/model-routing.md](docs/03-ai/model-routing.md)）：不用一个最强模型处理所有请求，按任务质量/延迟/成本/模态路由，统一经Model Gateway（别名、重试、熔断、配额、Fallback、Trace），业务代码不写死模型ID。
+### 1. 准备环境
 
-| 任务                     | 主选方向          |
-| ------------------------ | ----------------- |
-| 意图识别、查询改写       | Flash级模型       |
-| 日常教学和Canvas结构生成 | Plus级模型        |
-| 高价值课程离线生成与审核 | Max级模型         |
-| 实时语音和视觉           | Omni Realtime     |
-| 跨供应商文本容灾         | 第二供应商Flash级 |
+```bash
+git clone https://github.com/Timcai06/EduCanvas.git
+cd EduCanvas
+cp .env.example .env
+```
 
-**RAG检索**（[docs/03-ai/rag-embedding.md](docs/03-ai/rag-embedding.md)）：
+`.env.example` 已包含本地 PostgreSQL 默认值。若要启用真实模型，在 `.env` 中填写服务端变量；不要使用 `NEXT_PUBLIC_*`，不要提交真实 Key。
+
+```dotenv
+EDUCANVAS_DEPLOYMENT_ENV=local
+MODEL_GATEWAY_PROVIDER=deepseek
+MODEL_GATEWAY_ALLOW_DEEPSEEK=true
+MODEL_GATEWAY_BASE_URL=https://api.deepseek.com
+MODEL_GATEWAY_API_KEY=<your-key>
+MODEL_GATEWAY_PRIMARY_MODEL=<explicit-model-id>
+```
+
+### 2. 安装、迁移和启动
+
+```bash
+make setup
+make dev
+```
+
+- Web：<http://localhost:3101>
+- PostgreSQL：`localhost:5432`
+- 停止数据库并保留数据：`make stop`
+- 查看全部命令：`make help`
+
+如果启动失败，先运行：
+
+```bash
+make doctor
+```
+
+## 常用验证
+
+```bash
+make check        # lint + typecheck + unit tests
+make integration  # 隔离 PostgreSQL 集成测试
+make e2e          # production build + Playwright E2E
+make build        # Next.js production build
+```
+
+集成测试和 E2E 使用独立数据库，不能指向开发库。CI 分为三层：
+
+1. lint、typecheck、unit、build；
+2. PostgreSQL integration；
+3. Chromium E2E 与失败诊断上传。
+
+最近核对的本地基线为 280 项单元测试、42 项 PostgreSQL integration、23 项 Chromium E2E、TypeScript typecheck 与 production build 通过。该证据证明当前纵切可回归，不代表 production 就绪。
+
+## 当前架构
 
 ```mermaid
 flowchart LR
-    q[问题分类] --> f[学段/教材/知识点过滤]
-    f --> rw[查询改写]
-    rw --> fts[全文召回]
-    rw --> vec[pgvector向量召回]
-    fts --> rrf[RRF融合]
-    vec --> rrf
-    rrf --> rerank[Reranker]
-    rerank --> out[证据 + 页码 + 置信度]
+    Browser[Browser] --> Web[apps/web\nNext.js UI + BFF]
+    Web --> AgentCore[agent-core\n通用契约]
+    Web --> AgentRuntime[agent-runtime\n当前为 Asset Context]
+    Web --> TeachingRuntime[teaching-runtime\nK12 Turn / Tool / 判分]
+    Web --> Gateway[model-gateway\nProvider Adapter]
+    Web --> Canvas[canvas-protocol\n受控 Artifact]
+    Web --> DB[db\nDrizzle Adapters]
+    AgentRuntime --> AgentCore
+    Gateway --> AgentCore
+    TeachingRuntime --> AgentCore
+    TeachingRuntime --> TeachingCore[teaching-core\n状态机 / 事件 / 掌握度]
+    TeachingRuntime --> Canvas
+    DB --> PG[(PostgreSQL)]
 ```
 
-**Embedding治理**：每个向量空间必须记录模型、版本、维度、指令和切块版本，不同模型即使维度相同也不混用同一空间；模型迁移走双写 → 回填 → Shadow → 灰度 → 保留回滚窗口的流程。教材切块保留教材/年级/章节/知识点结构，采用父子块策略，公式代码表格不被无意义截断。
+当前采用模块化单体：Next.js 是 Web/BFF 与部署组合根，核心规则和适配器位于独立 Workspace Package。只有连接规模、长任务、团队发布边界或故障隔离产生可测需求后，才沿现有 Port 抽出独立服务。
 
-### 数据层（packages/db）
-
-PostgreSQL + Drizzle ORM 是当前业务数据底座；pgvector是已选定但尚未接入表结构与检索适配器的向量检索方向（[docs/04-data/data-design.md](docs/04-data/data-design.md)，`draft`）。原则：Redis丢失不能导致学习历史丢失；掌握度用结构化字段计算，不让大模型凭感觉决定；未成年人数据最小化收集。
-
-阶段一最小表集的概念关系如下（不是完整物理Schema；字段与索引以 [`packages/db/src/schema.ts`](packages/db/src/schema.ts) 和[数据设计](docs/04-data/data-design.md)为准）：
+### 一次 Agent Turn
 
 ```mermaid
-erDiagram
-    lesson_sessions ||--o{ canvas_artifacts : "产生"
-    canvas_artifacts ||--|| canvas_artifact_grading_keys : "私有判分"
-    lesson_sessions ||--o{ learning_events : "记录"
-    learning_events }o--|| mastery_states : "重算依据"
+sequenceDiagram
+    participant U as Browser
+    participant W as Web BFF
+    participant O as Orchestrator
+    participant M as Model Gateway
+    participant T as Tool Runtime
+    participant D as PostgreSQL
 
-    lesson_sessions {
-        uuid id PK
-        text student_id
-        text grade_band
-        text course_slug
-        text state "状态机当前状态"
-    }
-    canvas_artifacts {
-        uuid id PK
-        uuid session_id FK
-        text type
-        text schema_version "协议版本随快照持久化"
-        jsonb params "仅浏览器安全公开投影"
-    }
-    canvas_artifact_grading_keys {
-        uuid artifact_record_id PK
-        jsonb grading_key "仅服务端判分器读取"
-    }
-    learning_events {
-        uuid id PK
-        uuid session_id FK
-        text event_type
-        text idempotency_key
-        integer sequence "会话内单调递增"
-        jsonb payload
-        timestamp occurred_at "只追加,不改写历史"
-    }
-    mastery_states {
-        text student_id PK
-        text knowledge_node_id PK
-        real mastery_score
-        jsonb misconception_tags
-        integer version "乐观锁"
-    }
+    U->>W: message + validated asset parts
+    W->>D: identity, ownership, begin-or-replay
+    W->>O: trusted session + current context
+    O->>M: answer stream
+    alt model requests tools
+        O->>T: schema + policy + state + timeout
+        T-->>O: verified results
+        O->>M: synthesis stream
+    end
+    W->>D: message, model run, tool call, citations
+    W-->>U: EduCanvas SSE v1
 ```
 
-`users`、`courses`、`knowledge_nodes`、`embedding_spaces`等完整实体在阶段二引入。
+当前 SSE 事件为 `turn.accepted`、`message.delta`、`message.citation`、`tool.*` 与 `turn.completed/failed/cancelled`。Artifact 生命周期事件尚未进入当前协议。
 
-## 仓库结构
-
-pnpm workspace + Turborepo monorepo：
+## Workspace 结构
 
 ```text
 EduCanvas/
 ├── apps/
-│   └── web/                  # Next.js学生端应用；开发页面、对话区或教学Canvas前先读这里的README。
+│   └── web/                  # Next.js Chat、Assets、Canvas、BFF
 ├── packages/
-│   ├── agent-core/           # 全模态Asset、消息Part、模型事件、Gateway Port与运行元数据；不依赖K12领域。
-│   ├── canvas-protocol/      # Canvas Artifact与客户端交互协议；新增教学组件或交互前必须先看。
-│   ├── model-gateway/        # OpenAI-compatible Provider适配器；只依赖通用Agent契约。
-│   ├── teaching-core/        # 状态机、掌握度、可信领域事件与Port；新增教学规则前必须先看。
-│   ├── teaching-runtime/     # 服务端判分与教学事务编排；新增应用用例前必须先看。
-│   └── db/                   # Drizzle表结构、数据库连接和迁移；涉及持久化数据时必须先看。
-├── docs/                     # 保留00到10编号的共同事实源；方案、原始赛题和跨模块约定从其README进入。
-├── CLAUDE.md                 # AI agent的工作规则入口；让agent改仓库前必须先读。
-├── Makefile                   # 本地开发统一入口；包装pnpm与Docker命令，不替代package.json。
-├── docker-compose.yml        # 本地PostgreSQL与pgvector环境；启动或排查数据库时使用。
-├── package.json              # 仓库统一命令和Node/pnpm约束；不知道命令从哪里跑时查看。
-├── pnpm-workspace.yaml       # pnpm工作区范围；新增应用或共享包时需要更新。
-├── turbo.json                # Turborepo任务依赖与缓存规则；调整build、lint或typecheck流程时查看。
-└── tsconfig.base.json        # 全仓库TypeScript基础约束；修改编译规则时查看。
+│   ├── agent-core/           # 通用 Asset、Message、Model、Gateway 契约
+│   ├── agent-runtime/        # 当前 Asset Context；目标承载通用 Turn/Tool/Policy
+│   ├── model-gateway/        # OpenAI-compatible 原生 SSE Provider Adapter
+│   ├── canvas-protocol/      # Artifact Schema、交互事件与服务端判分
+│   ├── teaching-core/        # K12 状态机、可信事件、掌握度与领域 Port
+│   ├── teaching-runtime/     # K12 Turn、Tool、判分和状态推进应用服务
+│   └── db/                   # Drizzle Schema、Repositories 与迁移
+├── docs/                     # canonical 产品、架构、数据、工程、质量和 ADR
+├── tests/e2e/                # 学习流、视觉和 Canvas Playwright 测试
+├── Makefile                  # 本地统一开发入口
+└── PROJECT_TECHNICAL_REPORT.md
 ```
 
-<details>
-<summary>其余根目录配置文件说明（普通功能开发通常不用动）</summary>
+| Package | 可以依赖 | 不应依赖 |
+| --- | --- | --- |
+| `agent-core` | Zod | Web、K12、数据库、供应商 SDK |
+| `agent-runtime` | `agent-core` | K12 教学状态 |
+| `model-gateway` | `agent-core` | Web、K12 领域 |
+| `canvas-protocol` | Zod | React 页面、模型供应商 |
+| `teaching-core` | `agent-core`、Zod | Next.js、Drizzle、具体 Provider |
+| `teaching-runtime` | Agent/Canvas/Teaching Core | React、具体 Provider SDK |
+| `db` | Core 协议与 Drizzle | UI、Prompt、供应商事件 |
 
-| 文件             | 用途                                         |
-| ---------------- | -------------------------------------------- |
-| `.editorconfig`  | 编辑器通用格式约定；出现缩进或换行差异时查看 |
-| `.env.example`   | 环境变量模板；首次启动时复制为不提交的`.env` |
-| `.gitattributes` | Git文本规范；排查跨系统换行问题时查看        |
-| `.github/`       | CI、PR模板和Code Owner规则                   |
-| `.gitignore`     | Git忽略规则；新增构建产物或缓存类型时查看    |
-| `.nvmrc`         | 项目Node.js版本；本地或CI版本不一致时查看    |
-| `.prettierrc`    | 代码格式化规则                               |
-| `pnpm-lock.yaml` | 精确依赖版本锁；由pnpm更新，不要手工编辑     |
+## 关键安全设计
 
-</details>
+### 受控 Canvas
 
-## 快速开始
+模型输出结构化 Artifact JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染。公开题面与私有判分键物理分离；浏览器交互必须通过服务端验证，才能提升为可信学习事件。
 
-```bash
-# 环境要求：Node >= 22（见 .nvmrc）、pnpm 10、Docker
-cp .env.example .env        # 首次使用时复制；真实 .env 绝不提交
-make setup                  # 安装依赖、启动PostgreSQL并执行迁移
-make dev                    # 加载.env并在localhost:3101启动开发服务
-```
+已实现：
 
-基础验证命令：
+- `classification_game`：可判分；
+- `quiz`：可判分；
+- `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-```bash
-make check
-make integration
-make e2e
-```
+详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0002](docs/09-decisions/0002-controlled-canvas.md)。
 
-`package.json`脚本仍是CI和各workspace的命令事实源；`Makefile`只提供本地统一入口。运行`make help`查看完整命令，验证结束后用`make stop`停止数据库并保留数据。
-
-集成测试和E2E必须使用独立测试数据库：集成库名以`_integration`或`_test`结尾，E2E库名以`_e2e`或`_test`结尾。`pnpm test:e2e`会先执行生产构建；其他常用命令包括`pnpm build`和`pnpm db:generate`（生成迁移）。
-
-## 当前进度
-
-按[路线图](docs/10-planning/roadmap.md)分四个阶段：
+### 可信 K12 状态
 
 ```mermaid
-timeline
-    title 项目路线图
-    阶段一 产品纵切 : monorepo骨架 ✅ : 通用Asset纵切 ✅ : 受控Canvas与教学动画 ✅ : 匿名会话与归属校验 ✅ : Chat-first学生端基线 ✅ : 消息与模型账本 ✅ : 真实Provider与SSE契约 ✅ : 两阶段工具循环 ✅ : K1检索引用接线 ✅ : T1 ASSESS推进接线 ✅ : Artifact提议确认 : 整节课E2E
-    阶段二 平台化 : Artifact版本与管理 : 教材上传审核 : 多供应商路由治理 : Embedding版本管理 : 教师端
-    阶段三 生产强化 : 容量测试 : 横向扩容 : 模型容灾 : 隐私流程 : 多租户
-    阶段四 竞赛交付 : 演示路径 : 项目报告 : 评测结果 : 答辩材料
+stateDiagram-v2
+    [*] --> DIAGNOSE
+    DIAGNOSE --> EXPLAIN
+    EXPLAIN --> DEMONSTRATE
+    DEMONSTRATE --> PRACTICE
+    PRACTICE --> ASSESS
+    ASSESS --> EXPLAIN: REMEDIATE
+    ASSESS --> PRACTICE: REMEDIATE
+    ASSESS --> [*]: ADVANCE
 ```
 
-当前处于**阶段一（产品纵切）的本地真实Agent收口阶段**：匿名身份、学习会话、通用Asset与消息Part、消息/模型运行账本、EduCanvas SSE、真实OpenAI-compatible Provider适配器、两阶段工具循环、取消与刷新恢复、安全Gate、K1检索引用、服务端判分、受控ASSESS状态推进和Progress持久化已经连通。Provider未配置时页面会进入明确的不可用状态，不会回退到确定性脚本伪造老师回答。当前分支已通过280项单元测试、42项PostgreSQL集成测试、23项Chromium E2E、类型检查和生产构建；CI仍按基础检查、PostgreSQL集成测试、浏览器E2E三个job执行。
+模型和浏览器不能直接修改状态或掌握度。Runtime 只接受封闭候选信号，并结合服务端判分、历史事件和课程策略执行确定性 Guard。
 
-这仍是匿名演示纵切，不等同于正式用户认证或可供未成年人使用的生产环境。下一步是实现受控Artifact的提议、学生确认、独立生成和真实Studio列表，补齐非ASSESS节点的可信状态事件接线，并用轮换后的本地Provider Key完成合成数据live smoke与整节课E2E。正式认证、完整资产删除/对象存储治理、备份恢复、生产SLO与运维门禁仍属于后续production-hardening计划。
+### Provider 与 Secret
 
-## 最简单的团队协作规则
+- Provider Key 只存在服务端 `.env`；
+- 生产代码无 Provider 时返回诚实失败，不回退到脚本老师；
+- DeepSeek 默认关闭，并禁止在 staging/production 解析；
+- Provider 原始异常、供应商推理内容和 Secret 不进入浏览器；
+- Scripted Gateway 只允许用于测试和明确标记的离线 Demo。
 
-1. `main`是稳定分支，不直接修改。
-2. 每项工作先创建自己的分支。
-3. 完成后推送分支并创建Pull Request。
-4. 至少让一位队友检查后再合并。
-5. 产品、接口或技术决策发生变化时，同时更新`docs/`。
+## 下一阶段
+
+按 [平台解耦与运行时强化计划](docs/plan/active/2026-07-platform-decoupling-runtime-hardening.md) 执行：
+
+1. **P0 对话完整性**：历史 Context Snapshot、完整 Parts 重试、终态与实际引用子集；
+2. **P1 数据主干**：一等 Space、Conversation、Message、Operation，K12 Session 降为 Vertical Context；
+3. **P2 Agent Runtime**：抽取通用 Turn、Tool Registry、Policy、Trace Port 与 Agent Profile；
+4. **P3 全模态资产**：统一 Asset/Source/Representation/Chunk，接原生图片、音频和视频 Provider；
+5. **P4 Artifact Runtime**：Proposal、确认、生成任务、版本、恢复与真实 Studio；
+6. **P5 Platform Shell**：Gemini 式主对话、NotebookLM 式资产管理、按需 Canvas，K12 通过 Vertical Slot 注入。
+
+## 文档入口
+
+| 内容 | 入口 |
+| --- | --- |
+| 完整技术解析 | [PROJECT_TECHNICAL_REPORT.md](PROJECT_TECHNICAL_REPORT.md) |
+| 文档索引 | [docs/README.md](docs/README.md) |
+| 产品定义 | [docs/01-product/product-definition.md](docs/01-product/product-definition.md) |
+| 学生 UI 规范 | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md) |
+| 系统架构 | [docs/02-architecture/system-architecture.md](docs/02-architecture/system-architecture.md) |
+| Agent 编排 | [docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md) |
+| 数据设计 | [docs/04-data/data-design.md](docs/04-data/data-design.md) |
+| API/SSE | [docs/05-engineering/api-conventions.md](docs/05-engineering/api-conventions.md) |
+| 测试与安全 | [docs/06-quality/testing-and-evaluation.md](docs/06-quality/testing-and-evaluation.md) |
+| ADR | [docs/09-decisions/README.md](docs/09-decisions/README.md) |
+| 路线图 | [docs/10-planning/roadmap.md](docs/10-planning/roadmap.md) |
+
+## 协作规则
+
+1. 不直接修改 `main`；每项工作使用独立分支和 Pull Request；
+2. 行为、协议、数据或架构发生变化时，同步更新 canonical 文档；
+3. 不提交 `.env`、API Key、个人信息、上传数据或生成报告；
+4. PR 必须记录真实验证命令和结果；
+5. 新能力不能用 Fixture 或 UI 文案伪装为已经接通。
+
+首次参与开发请阅读 [团队协作指南](docs/08-collaboration/team-guide.md)。

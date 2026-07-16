@@ -11,6 +11,7 @@ export const deploymentEnvironments = [
 
 export type DeploymentEnvironment = (typeof deploymentEnvironments)[number];
 
+/** 当前 OpenAI-compatible Adapter 家族的配置闭集，不是平台级 Provider Registry。 */
 export const openAICompatibleProviders = [
   'deepseek',
   'openai-compatible',

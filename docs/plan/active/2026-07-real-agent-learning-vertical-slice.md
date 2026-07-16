@@ -8,6 +8,8 @@
 
 > 范围声明：本文是 K12 AI 教师这一首个垂直 Agent 的交付计划，不是 EduCanvas 平台总产品定义。通用 Chat、Assets、Agent Runtime、Artifact Runtime 与 Studio 的边界由[产品定义](../../01-product/product-definition.md)和[ADR-0009](../../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)约束；教学状态机、掌握度和可信判分不得反向成为通用平台依赖。
 
+> 治理说明：平台解耦、连续对话、Space/Conversation、原生全模态和Artifact Runtime的后续实施以[通用平台解耦计划](./2026-07-platform-decoupling-runtime-hardening.md)为准。本文“研究边界与初始仓库基线”保留的是计划启动时的历史差距，不是当前代码事实；开发不得从该历史表复制已过期路径或结论。
+
 ## 目标
 
 在不削弱现有状态机、受控 Canvas、可信学习事件和服务端判分边界的前提下，完成“AI 如何识别猫和狗”的真实 Agent 教学纵切：学生提出一个未预设的问题，服务端调用真实模型并流式回答；消息和模型运行可审计、刷新后可恢复；模型只能调用当前状态允许的工具；课程资料回答具有服务端可验证引用；学生确认后才能创建受控 Artifact；练习结果继续由服务端判分并驱动掌握度、教学状态和下一步推荐。
@@ -232,7 +234,7 @@ flowchart TD
 - 新建 `apps/web/features/workspace/ambient-halo.tsx`
 - `apps/web/app/globals.css`
 - `tests/e2e/learning-visual.spec.ts`
-- `design-qa.md`
+- `docs/06-quality/visual-regression.md`
 
 **工作：**
 
@@ -271,7 +273,7 @@ flowchart TD
 - `TurnModelEvent`：`text_delta / tool_call / usage / completed / failed`；
 - `ProviderCallMetadata`：provider response ID、provider、model alias、resolved model ID/revision、fingerprint、finish reason、usage、latency、trace ID；
 - `NormalizedModelError`：timeout、rate limit、content filtered、invalid response、aborted、unavailable、unknown；
-- EduCanvas Web 事件：`turn.accepted / message.delta / tool.* / citation.added / artifact.proposed / turn.completed / turn.failed / turn.cancelled`。
+- 当前 EduCanvas Web 事件：`turn.accepted / message.delta / message.citation / tool.* / turn.completed / turn.failed / turn.cancelled`；Artifact 生命周期事件在 C1 实现时 additive 增加。
 
 **验收：**
 

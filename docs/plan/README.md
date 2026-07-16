@@ -18,9 +18,12 @@
 
 ## 当前计划
 
-当前计划：[`active/2026-07-real-agent-learning-vertical-slice.md`](active/2026-07-real-agent-learning-vertical-slice.md)。该计划把深入调研结果与真实仓库核验合并为“真实对话 → 可恢复消息 → 两阶段工具 → 可验证教材引用 → 受控产物 → 教学闭环”，并加入 K12 安全与可观测性门禁；完成终点是受控 shared dev，staging/production 另走 production-hardening 计划。
+当前有两条边界不同、相互依赖的执行线：
 
-当前证据状态（2026-07-16）：当前分支自动化基线已通过280 unit、42 PostgreSQL integration、23 Chromium E2E、typecheck和production build；K1检索引用与T1的`ASSESS`推进已接线，计划尚缺live Provider smoke、C1、完整状态事件与整节课E2E，因此不得归档或宣称进入staging。
+1. **平台主线**：[`active/2026-07-platform-decoupling-runtime-hardening.md`](active/2026-07-platform-decoupling-runtime-hardening.md)，负责连续对话、通用Space/Conversation、Agent Runtime、全模态Asset/Source、Artifact Runtime与Platform Shell；
+2. **K12垂直线**：[`active/2026-07-real-agent-learning-vertical-slice.md`](active/2026-07-real-agent-learning-vertical-slice.md)，负责教学状态、可信判分、课程纵切和竞赛闭环，不得反向定义平台基础对象。
+
+当前证据状态（2026-07-16）：自动化基线已通过280 unit、42 PostgreSQL integration、23 Chromium E2E、typecheck和production build；真实Provider/SSE、K1检索引用与T1的`ASSESS`推进已接线。架构健康检查同时确认跨轮上下文、原生多模态、通用Space/Conversation、Asset/Source统一、真实Artifact生命周期和生产数据治理仍未完成，因此不得宣称进入staging或production。
 
 最近完成：[`completed/2026-07-pre-research-safe-development.md`](completed/2026-07-pre-research-safe-development.md)。
 

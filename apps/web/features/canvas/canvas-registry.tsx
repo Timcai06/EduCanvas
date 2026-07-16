@@ -356,6 +356,9 @@ export function PipelineFlowRenderer({
 /**
  * Canvas静态注册表：每新增一种协议类型，TypeScript都会要求同时注册人工审核的Renderer。
  * 注册值只能是本地React组件，模型输出无法提供组件、源码或GSAP指令。
+ * 这是阶段一为了安全采用的编译期闭集，不等同于可插拔 Artifact Runtime；后续应由
+ * 受信 ArtifactPlugin 同时注册 Schema、公开投影、Renderer 和可选 Grader，但仍禁止
+ * 从模型输出或远程内容动态加载可执行代码。
  */
 export const canvasArtifactRegistry = {
   classification_game: ClassificationGameRenderer,

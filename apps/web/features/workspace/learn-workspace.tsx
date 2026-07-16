@@ -73,10 +73,14 @@ const CHAT_PCT_MIN = 28;
 const CHAT_PCT_MAX = 62;
 
 /**
- * 学习页大脑：持有布局状态机（Chat-only / Chat+Canvas / 抽屉互斥）、可信判分
+ * K12 垂直学习页的大脑：持有布局状态机（Chat-only / Chat+Canvas / 抽屉互斥）、可信判分
  * 提交状态（幂等指纹重试，自旧 CanvasProgressWorkspace 迁移）与消息展示。
  * 布局状态机是纯 UI 状态，与教学脊柱状态机无关；可信判分和掌握度仍全部来自
  * Server Action，见 docs/01-product/student-ui-spec.md。
+ *
+ * 该组件不是平台级 PlatformShell。通用 Chat、Space、Studio 与 Agent 切换应在独立
+ * Shell 中组合，K12 Progress、课程标题和判分通过 Vertical Agent slot 注入，避免
+ * 继续把新模态和新 Agent 状态堆到本组件。
  */
 interface LearnWorkspaceProps {
   initialData: LearningPageDTO;
