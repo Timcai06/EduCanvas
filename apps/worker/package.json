@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
     "graphile-worker": "^0.16.6",
     "zod": "^4.4.3"
@@ -19,8 +20,10 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/pg": "^8.11.10",
+    "drizzle-orm": "^0.45.2",
     "esbuild": "^0.27.3",
     "pg": "^8.13.1",
+    "postgres": "^3.4.9",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

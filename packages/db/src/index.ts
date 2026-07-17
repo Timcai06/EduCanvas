@@ -31,6 +31,7 @@ export {
   type PlatformTurnTerminalStatus,
 } from './platform-turn-repository';
 export {
+  ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
   ArtifactVersionConflictError,

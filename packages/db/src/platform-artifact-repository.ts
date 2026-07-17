@@ -39,6 +39,9 @@ export class ArtifactJobLifecycleError extends Error {
   }
 }
 
+/** 产物生成任务在 graphile 队列中的标识;web 入队与 worker 注册共用,防止拼写漂移。 */
+export const ARTIFACT_GENERATE_TASK = 'artifact:generate' as const;
+
 export type ArtifactTrustTier = 'tier1' | 'tier2';
 export type ArtifactStatus = 'proposed' | 'active' | 'archived';
 export type ArtifactJobStatus =
@@ -320,6 +323,105 @@ export class DrizzlePlatformArtifactRepository {
         .returning();
       return toJob(updated!);
     });
+  }
+
+  /**
+   * 提议产物并原子入队生成任务(ADR-0012 的核心承诺):产物行、任务账本行与
+   * graphile 队列行在同一事务提交,回滚则三者俱无。依赖 `graphile_worker`
+   * schema 已由 worker 首次启动时自迁移建立;worker 从未启动过的环境会以
+   * storage 异常诚实失败,不做静默降级。
+   */
+  async createArtifactWithGenerationJob(input: {
+    spaceId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+    kind: string;
+    trustTier: ArtifactTrustTier;
+    title: string;
+    taskIdentifier: string;
+    params?: Record<string, unknown>;
+    maxAttempts?: number;
+  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
+    return await this.database.transaction(async (tx) => {
+      const [space] = await tx
+        .select({ ownerSubjectId: spaces.ownerSubjectId })
+        .from(spaces)
+        .where(eq(spaces.id, input.spaceId))
+        .limit(1);
+      if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
+        throw new ArtifactOwnershipError();
+      }
+
+      const [artifactRow] = await tx
+        .insert(artifacts)
+        .values({
+          spaceId: input.spaceId,
+          conversationId: input.conversationId,
+          ownerSubjectId: input.trustedSubjectId,
+          kind: input.kind,
+          trustTier: input.trustTier,
+          title: input.title,
+          status: 'proposed',
+        })
+        .returning();
+      const artifact = toArtifact(artifactRow!);
+
+      const queueJobKey = `artifact-generate:${artifact.id}`;
+      const [jobRow] = await tx
+        .insert(artifactGenerationJobs)
+        .values({
+          artifactId: artifact.id,
+          params: input.params ?? {},
+          queueJobKey,
+        })
+        .returning();
+      const job = toJob(jobRow!);
+
+      const payload = JSON.stringify({
+        jobId: job.id,
+        artifactId: artifact.id,
+        subjectId: input.trustedSubjectId,
+      });
+      await tx.execute(sql`
+        select graphile_worker.add_job(
+          ${input.taskIdentifier},
+          payload := ${payload}::json,
+          job_key := ${queueJobKey},
+          max_attempts := ${input.maxAttempts ?? 3}
+        )
+      `);
+
+      return { artifact, job };
+    });
+  }
+
+  /** 产物详情:最新版本内容与最近一次生成任务,供轮询与 Canvas 打开使用。 */
+  async getArtifactDetail(input: {
+    artifactId: string;
+    trustedSubjectId: string;
+  }): Promise<{
+    artifact: PlatformArtifact;
+    latestVersion: PlatformArtifactVersion | null;
+    latestJob: PlatformArtifactJob | null;
+  }> {
+    const artifact = await this.getArtifact(input);
+    const [versionRow] = await this.database
+      .select()
+      .from(artifactVersions)
+      .where(eq(artifactVersions.artifactId, artifact.id))
+      .orderBy(desc(artifactVersions.version))
+      .limit(1);
+    const [jobRow] = await this.database
+      .select()
+      .from(artifactGenerationJobs)
+      .where(eq(artifactGenerationJobs.artifactId, artifact.id))
+      .orderBy(desc(artifactGenerationJobs.createdAt))
+      .limit(1);
+    return {
+      artifact,
+      latestVersion: versionRow ? toVersion(versionRow) : null,
+      latestJob: jobRow ? toJob(jobRow) : null,
+    };
   }
 }
 
