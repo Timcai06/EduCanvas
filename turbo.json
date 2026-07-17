@@ -7,7 +7,15 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "PORT",
+        "DATABASE_URL",
+        "ASSET_STORAGE_ROOT",
+        "OBJECT_STORAGE_ROOT",
+        "EDUCANVAS_*",
+        "MODEL_GATEWAY_*"
+      ]
     },
     "lint": {},
     "test": {
