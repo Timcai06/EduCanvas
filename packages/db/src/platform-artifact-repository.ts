@@ -68,6 +68,7 @@ export interface PlatformArtifactVersion {
   content: unknown;
   objectKey: string | null;
   checksum: string | null;
+  generatedBy: string | null;
   createdAt: string;
 }
 
@@ -190,6 +191,7 @@ export class DrizzlePlatformArtifactRepository {
     content?: unknown;
     objectKey?: string;
     checksum?: string;
+    generatedBy?: string | null;
     createdByOperationId?: string | null;
     generationJobId?: string | null;
   }): Promise<PlatformArtifactVersion> {
@@ -218,6 +220,7 @@ export class DrizzlePlatformArtifactRepository {
             content: input.content ?? null,
             objectKey: input.objectKey ?? null,
             checksum: input.checksum ?? null,
+            generatedBy: input.generatedBy ?? null,
             createdByOperationId: input.createdByOperationId ?? null,
             generationJobId: input.generationJobId ?? null,
           })
@@ -450,6 +453,7 @@ const toVersion = (row: VersionRow): PlatformArtifactVersion => ({
   content: row.content,
   objectKey: row.objectKey,
   checksum: row.checksum,
+  generatedBy: row.generatedBy,
   createdAt: row.createdAt.toISOString(),
 });
 

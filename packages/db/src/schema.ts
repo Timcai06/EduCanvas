@@ -1395,6 +1395,10 @@ export const artifactVersions = pgTable(
       () => agentOperations.id,
       { onDelete: 'set null' },
     ),
+    /* 生成器溯源(如 rule:outline-v1 / model:artifact.generate:v1);完整
+       模型运行账本待平台 Operation 迁移(M3 承接债务)后关联,此列先保证
+       "这版内容怎么来的"可审计。 */
+    generatedBy: text('generated_by'),
     generationJobId: uuid('generation_job_id').references(
       () => artifactGenerationJobs.id,
       { onDelete: 'set null' },
@@ -1412,6 +1416,10 @@ export const artifactVersions = pgTable(
     check(
       'artifact_versions_content_shape_check',
       sql`(${table.content} is not null and ${table.objectKey} is null and ${table.checksum} is null) or (${table.content} is null and ${table.objectKey} is not null and ${table.checksum} is not null)`,
+    ),
+    check(
+      'artifact_versions_generated_by_check',
+      sql`${table.generatedBy} is null or char_length(${table.generatedBy}) between 1 and 128`,
     ),
     check(
       'artifact_versions_object_key_check',

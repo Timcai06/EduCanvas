@@ -8,7 +8,8 @@ describe('model-gateway dependency boundary', () => {
     ) as { dependencies?: Record<string, string> };
     const dependencies = Object.keys(packageJson.dependencies ?? {});
 
-    expect(dependencies).toEqual(['@educanvas/agent-core']);
+    /* zod 是全仓基础校验库(agent-core 契约同源);禁的是 K12 与供应商 SDK */
+    expect(dependencies).toEqual(['@educanvas/agent-core', 'zod']);
     expect(dependencies.some((name) => name.includes('teaching'))).toBe(false);
   });
 });
