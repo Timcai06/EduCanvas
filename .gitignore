@@ -52,4 +52,5 @@ temp/
 # TypeScript incremental build info
 *.tsbuildinfo
 
-
+# 个人学习笔记
+notes/
