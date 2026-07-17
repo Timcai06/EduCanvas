@@ -48,6 +48,14 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   await expect(
     page.getByText('我们先明确目标，再选择最合适的实现路径。'),
   ).toBeVisible();
+  /* U1 侧栏:当前会话出现在历史列表(本 spec 的 turn 被 mock,服务端不落
+     消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
+  await expect(
+    page
+      .getByRole('navigation', { name: '历史对话' })
+      .getByText('未命名对话'),
+  ).toBeVisible();
+
   const cookieNames = (await context.cookies())
     .filter((cookie) => cookie.httpOnly && cookie.path === '/')
     .map((cookie) => cookie.name);
