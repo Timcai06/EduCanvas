@@ -2,7 +2,7 @@
 
 此目录只保存经过收尾重构的阶段记录，不保存仍在执行的任务清单。
 
-部分里程碑或自动化基线通过不构成归档条件。当前真实Agent学习纵切虽已完成K1检索引用与T1的`ASSESS`推进接线，仍有live Provider smoke、C1、完整状态事件与整节课E2E未完成，因此继续保留在`../active/`，不进入本目录。
+部分里程碑或自动化基线通过不构成归档条件。归档必须记录实际交付范围与未完成项去向。
 
 归档文件应保留：目标、实际交付范围、关键偏差、验收证据、未完成项去向，以及已经回写的canonical文档或ADR链接。逐日记录、失效候选方案和重复架构说明应在移入本目录前删除。
 
@@ -11,3 +11,5 @@
 | 完成时间   | 计划                                                                                   | 结果                                              |
 | ---------- | -------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | 2026-07-15 | [`2026-07-pre-research-safe-development.md`](2026-07-pre-research-safe-development.md) | Chat-first收口、诚实AI边界、UX/文档治理与视觉基线 |
+| 2026-07-17 | [`2026-07-real-agent-learning-vertical-slice.md`](2026-07-real-agent-learning-vertical-slice.md) | 真实Provider流式Turn、账本/取消/恢复、工具循环、检索引用、可信ASSESS推进与受控动画模板 |
+| 2026-07-17 | [`2026-07-platform-decoupling-runtime-hardening.md`](2026-07-platform-decoupling-runtime-hardening.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划 |

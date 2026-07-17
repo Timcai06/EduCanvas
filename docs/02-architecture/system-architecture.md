@@ -65,7 +65,7 @@ flowchart LR
 - Artifact协议和Renderer是安全的编译期闭集，但尚无提议、确认、生成、版本与Studio生命周期；
 - `learning-turn.ts`仍是Next.js中的K12大型组合根，传输、应用服务和基础设施装配尚待拆分。
 
-迁移按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)与[通用平台解耦计划](../plan/active/2026-07-platform-decoupling-runtime-hardening.md)小步进行：先建立通用数据骨架和Runtime Port，再接原生全模态、Artifact Runtime与Platform Shell；不以一次性重命名或提前拆微服务制造高风险重写。
+迁移按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)与[Gemini + NotebookLM 产品复刻计划](../plan/active/2026-07-gemini-notebooklm-replica.md)小步进行：先建立通用数据骨架和Runtime Port，再接原生全模态、Artifact Runtime与Platform Shell；不以一次性重命名或提前拆微服务制造高风险重写。
 
 ## 目标模块依赖
 

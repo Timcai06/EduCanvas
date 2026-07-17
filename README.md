@@ -236,14 +236,13 @@ stateDiagram-v2
 
 ## 下一阶段
 
-按 [平台解耦与运行时强化计划](docs/plan/active/2026-07-platform-decoupling-runtime-hardening.md) 执行：
+按 [Gemini + NotebookLM 产品复刻计划](docs/plan/active/2026-07-gemini-notebooklm-replica.md) 执行（阶段目标：复刻 Gemini + NotebookLM 的产品体验，Agent 编排优化与创新属于下一阶段）：
 
-1. **P0 对话完整性**：历史 Context Snapshot、完整 Parts 重试、终态与实际引用子集；
-2. **P1 数据主干（默认入口已接通）**：一等 Space、Conversation、Message、Operation，K12 Session 降为 Vertical Context；
-3. **P2 Agent Runtime（下一主阶段）**：补齐通用 Turn 租约与后台恢复、Model Run/Trace、Tool Registry、Policy 与 Agent Profile；
-4. **P3 全模态资产**：统一 Asset/Source/Representation/Chunk，接原生图片、音频和视频 Provider；
-5. **P4 Artifact Runtime**：Proposal、确认、生成任务、版本、恢复与真实 Studio；
-6. **P5 Platform Shell**：Gemini 式主对话、NotebookLM 式资产管理、按需 Canvas，K12 通过 Vertical Slot 注入。
+1. **M1 产物主干**：PostgreSQL 持久任务队列 + worker、Artifact/版本/生成任务一等公民、SSE 产物事件、对象存储 Port（[ADR-0012](docs/09-decisions/0012-artifact-runtime-durable-jobs.md)）；
+2. **M2 轻产物**：思维导图、Slides、泛化测验/闪卡；
+3. **M3 来源统一与网页搜索**：Asset/Source/Chunk 单链路、搜索 Provider、最小 Agent Runtime（maxToolRounds 策略 + Tool Registry）；
+4. **M4 音频概览**、**M5 视频概览**；
+5. **UI 蓝图线（并行）**：侧栏历史对话、来源常驻面板、行内引用、Canvas 工具芯片与共创化、`/learn` 并入统一界面。
 
 ## 文档入口
 

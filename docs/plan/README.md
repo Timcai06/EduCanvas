@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-16
+- 最后验证时间：2026-07-17
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -18,14 +18,13 @@
 
 ## 当前计划
 
-当前有两条边界不同、相互依赖的执行线：
+当前只有一条执行线：
 
-1. **平台主线**：[`active/2026-07-platform-decoupling-runtime-hardening.md`](active/2026-07-platform-decoupling-runtime-hardening.md)，负责连续对话、通用Space/Conversation、Agent Runtime、全模态Asset/Source、Artifact Runtime与Platform Shell；
-2. **K12垂直线**：[`active/2026-07-real-agent-learning-vertical-slice.md`](active/2026-07-real-agent-learning-vertical-slice.md)，负责教学状态、可信判分、课程纵切和竞赛闭环，不得反向定义平台基础对象。
+- **产品复刻主线**：[`active/2026-07-gemini-notebooklm-replica.md`](active/2026-07-gemini-notebooklm-replica.md)，目标是复刻 Gemini + NotebookLM 的产品体验（产物主干 → 轻产物 → 来源与网页搜索 → 音频 → 视频，UI 蓝图线并行）；Agent 编排优化与创新属于下一阶段。
 
-当前证据状态（2026-07-16）：自动化基线已通过289 unit、46 PostgreSQL integration、23 Chromium E2E、typecheck和production build；真实Provider/SSE、K1检索引用、T1的`ASSESS`推进、有界跨轮Context Snapshot及通用Space/Conversation骨架已接线。架构健康检查同时确认生产Turn向通用Operation迁移、摘要/Artifact上下文、原生多模态、Asset/Source统一、真实Artifact生命周期和生产数据治理仍未完成，因此不得宣称进入staging或production。
+前两条执行线（平台主线与 K12 垂直线）已于 2026-07-17 结档，交付与未完成项去向见 [`completed/`](completed/README.md)；K12 教学边界的约束（教学状态、可信判分不得反向定义平台对象）继续有效。
 
-最近完成：[`completed/2026-07-pre-research-safe-development.md`](completed/2026-07-pre-research-safe-development.md)。
+最近完成：[`completed/2026-07-real-agent-learning-vertical-slice.md`](completed/2026-07-real-agent-learning-vertical-slice.md)、[`completed/2026-07-platform-decoupling-runtime-hardening.md`](completed/2026-07-platform-decoupling-runtime-hardening.md)。
 
 ## 命名规则
 
