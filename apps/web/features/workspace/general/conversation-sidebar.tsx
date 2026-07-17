@@ -34,9 +34,12 @@ const formatWhen = (iso: string): string => {
 export function ConversationSidebar({
   activeConversationId,
   onNewChat,
+  children,
 }: {
   activeConversationId: string | null;
   onNewChat: () => void;
+  /** 侧栏底部扩展区(来源面板等常驻区块)。 */
+  children?: React.ReactNode;
 }) {
   const rootRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<readonly ConversationListItem[]>([]);
@@ -134,6 +137,7 @@ export function ConversationSidebar({
           <li className="px-3 py-2 text-xs text-ink-faint">还没有历史对话</li>
         ) : null}
       </ul>
+      {children}
     </nav>
   );
 }

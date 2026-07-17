@@ -35,6 +35,7 @@ import {
   PENDING_GENERAL_PROMPT_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
+import { SourcesPanel } from './sources-panel';
 import { HeroGreeting } from '../shared/hero-greeting';
 import { LogoMark } from '../shared/logo-mark';
 import { PromptSuggestions } from './prompt-suggestions';
@@ -250,7 +251,7 @@ export function GeneralChatWorkspace({
         <button
           type="button"
           onClick={() => setAssetPanel('assets')}
-          className="hidden rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:block"
+          className="hidden rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:block lg:hidden"
         >
           资产
         </button>
@@ -270,7 +271,13 @@ export function GeneralChatWorkspace({
         <ConversationSidebar
           activeConversationId={conversationId}
           onNewChat={() => void startNewGeneralChatAction()}
-        />
+        >
+          <SourcesPanel
+            assets={assets}
+            onToggle={toggleAsset}
+            onUpload={(kind) => setAssetPanel(kind)}
+          />
+        </ConversationSidebar>
       <main
         ref={mainRef}
         className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
