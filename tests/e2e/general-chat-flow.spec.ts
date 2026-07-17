@@ -56,6 +56,16 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
       .getByText('未命名对话'),
   ).toBeVisible();
 
+  /* U2 v1:来源常驻区在侧栏可见 */
+  await expect(
+    page
+      .getByRole('navigation', { name: '历史对话' })
+      .getByText('来源', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '上传 PDF 来源' }),
+  ).toBeVisible();
+
   const cookieNames = (await context.cookies())
     .filter((cookie) => cookie.httpOnly && cookie.path === '/')
     .map((cookie) => cookie.name);
