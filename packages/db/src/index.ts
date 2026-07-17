@@ -31,6 +31,18 @@ export {
   type PlatformTurnTerminalStatus,
 } from './platform-turn-repository';
 export {
+  ArtifactJobLifecycleError,
+  ArtifactOwnershipError,
+  ArtifactVersionConflictError,
+  DrizzlePlatformArtifactRepository,
+  type ArtifactJobStatus,
+  type ArtifactStatus,
+  type ArtifactTrustTier,
+  type PlatformArtifact,
+  type PlatformArtifactJob,
+  type PlatformArtifactVersion,
+} from './platform-artifact-repository';
+export {
   DrizzleArtifactRepository,
   type SavedArtifactReference,
 } from './artifact-repository';
