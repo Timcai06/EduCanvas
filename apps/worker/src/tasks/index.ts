@@ -1,4 +1,6 @@
+import { ARTIFACT_GENERATE_TASK } from '@educanvas/db';
 import type { TaskList } from 'graphile-worker';
+import { generateArtifact } from './generate-artifact.js';
 import { ingestKnowledgeDocument } from './ingest-knowledge-document.js';
 import { purgeAnonymousSubjects } from './purge-anonymous-subjects.js';
 import { systemHeartbeat } from './system-heartbeat.js';
@@ -9,6 +11,7 @@ import { systemHeartbeat } from './system-heartbeat.js';
  * 不做运行时动态注册。
  */
 export const taskList: TaskList = {
+  [ARTIFACT_GENERATE_TASK]: generateArtifact,
   'knowledge:ingest_document': ingestKnowledgeDocument,
   'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
   'system.heartbeat': systemHeartbeat,
