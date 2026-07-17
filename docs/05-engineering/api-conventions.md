@@ -24,9 +24,18 @@ Web Route 只把受控 Runtime 事件映射为 EduCanvas SSE，不能透传 AI S
 - `message.citation`；
 - `turn.completed / turn.failed / turn.cancelled`。
 
-Artifact 事件仍处于设计阶段。后续应以 additive 方式增加
-`artifact.proposed / artifact.generating / artifact.ready / artifact.failed`，
-在对应 Schema、持久化和浏览器恢复能力合并前，不能把它们描述为现有协议。
+Artifact 生命周期事件已以 additive 方式定义（`schemaVersion=1`，旧浏览器按
+未知事件忽略，不需要整体协议升版；ADR-0012）：
+
+- `artifact.proposed / artifact.created`：`{type,schemaVersion,turnId,artifactId,kind,trustTier,title}`；
+- `artifact.version_added`：`{type,schemaVersion,turnId,artifactId,version}`；
+- `artifact.generation_progress`：`{type,schemaVersion,turnId,artifactId,jobId,progress}`；
+- `artifact.failed`：`{type,schemaVersion,turnId,artifactId,jobId?,code}`。
+
+断连恢复不依赖流：`GET /api/v1/chat/artifacts` 返回当前 Conversation 的产物
+公开投影（id/kind/trustTier/title/status/latestVersion）。事件生产者随 M1
+PR-J5（提议→确认→生成）接线；在此之前协议已定义、恢复端点已可用，但不得
+把生成能力描述为已接通。
 
 约束：
 

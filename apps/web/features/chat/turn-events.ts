@@ -64,7 +64,47 @@ export interface ToolLifecycleEvent extends TurnEventBase {
   code?: string;
 }
 
+/**
+ * Artifact 生命周期事件(ADR-0012)。additive 加入 schemaVersion=1:
+ * 旧浏览器按未知事件忽略,不需要整体协议升版。生产者随 M1 PR-J5 接线,
+ * 断连恢复走 GET /api/v1/chat/artifacts,不依赖流的连续性。
+ */
+export interface ArtifactProposedEvent extends TurnEventBase {
+  type: 'artifact.proposed' | 'artifact.created';
+  artifactId: string;
+  kind: string;
+  trustTier: 'tier1' | 'tier2';
+  title: string;
+}
+
+export interface ArtifactVersionAddedEvent extends TurnEventBase {
+  type: 'artifact.version_added';
+  artifactId: string;
+  version: number;
+}
+
+export interface ArtifactGenerationProgressEvent extends TurnEventBase {
+  type: 'artifact.generation_progress';
+  artifactId: string;
+  jobId: string;
+  progress: number;
+}
+
+export interface ArtifactFailedEvent extends TurnEventBase {
+  type: 'artifact.failed';
+  artifactId: string;
+  jobId?: string;
+  code: string;
+}
+
+export type ArtifactLifecycleEvent =
+  | ArtifactProposedEvent
+  | ArtifactVersionAddedEvent
+  | ArtifactGenerationProgressEvent
+  | ArtifactFailedEvent;
+
 export type TeachingTurnEvent =
+  | ArtifactLifecycleEvent
   | TurnAcceptedEvent
   | MessageDeltaEvent
   | MessageCitationEvent
@@ -145,6 +185,11 @@ export function parseTeachingTurnEvent(
     'tool.started',
     'tool.completed',
     'tool.failed',
+    'artifact.proposed',
+    'artifact.created',
+    'artifact.version_added',
+    'artifact.generation_progress',
+    'artifact.failed',
   ]);
   if (!knownEvents.has(eventName)) return null;
 
@@ -228,6 +273,71 @@ export function parseTeachingTurnEvent(
       schemaVersion: TURN_EVENT_SCHEMA_VERSION,
       turnId,
       messageId: readString(parsed, 'messageId', eventName),
+    };
+  }
+
+  if (eventName === 'artifact.proposed' || eventName === 'artifact.created') {
+    const trustTier = readString(parsed, 'trustTier', eventName, 8);
+    if (trustTier !== 'tier1' && trustTier !== 'tier2') {
+      throw new TurnStreamProtocolError(`${eventName}.trustTier is invalid`);
+    }
+    const kind = readString(parsed, 'kind', eventName, 64);
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(kind)) {
+      throw new TurnStreamProtocolError(`${eventName}.kind is invalid`);
+    }
+    return {
+      type: eventName,
+      schemaVersion: TURN_EVENT_SCHEMA_VERSION,
+      turnId,
+      artifactId: readString(parsed, 'artifactId', eventName),
+      kind,
+      trustTier,
+      title: readString(parsed, 'title', eventName, 300),
+    };
+  }
+  if (eventName === 'artifact.version_added') {
+    const version = parsed.version;
+    if (!Number.isInteger(version) || (version as number) < 1) {
+      throw new TurnStreamProtocolError(`${eventName}.version is invalid`);
+    }
+    return {
+      type: eventName,
+      schemaVersion: TURN_EVENT_SCHEMA_VERSION,
+      turnId,
+      artifactId: readString(parsed, 'artifactId', eventName),
+      version: version as number,
+    };
+  }
+  if (eventName === 'artifact.generation_progress') {
+    const progress = parsed.progress;
+    if (
+      !Number.isInteger(progress) ||
+      (progress as number) < 0 ||
+      (progress as number) > 100
+    ) {
+      throw new TurnStreamProtocolError(`${eventName}.progress is invalid`);
+    }
+    return {
+      type: eventName,
+      schemaVersion: TURN_EVENT_SCHEMA_VERSION,
+      turnId,
+      artifactId: readString(parsed, 'artifactId', eventName),
+      jobId: readString(parsed, 'jobId', eventName),
+      progress: progress as number,
+    };
+  }
+  if (eventName === 'artifact.failed') {
+    const jobId =
+      parsed.jobId === undefined
+        ? undefined
+        : readString(parsed, 'jobId', eventName);
+    return {
+      type: eventName,
+      schemaVersion: TURN_EVENT_SCHEMA_VERSION,
+      turnId,
+      artifactId: readString(parsed, 'artifactId', eventName),
+      ...(jobId ? { jobId } : {}),
+      code: readString(parsed, 'code', eventName, MAX_CODE_LENGTH),
     };
   }
 
