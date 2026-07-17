@@ -7,6 +7,7 @@ import {
   ImageSquare,
   Plus,
   PresentationChart,
+  TreeStructure,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -17,6 +18,7 @@ gsap.registerPlugin(useGSAP);
 export type PlusMenuActionId =
   | 'upload_file'
   | 'upload_image'
+  | 'create_mind_map'
   | 'pick_course_material'
   | 'add_link'
   | 'create_demo'
@@ -48,6 +50,12 @@ const menuItems: readonly PlusMenuItem[] = [
     icon: BookOpen,
     label: '选择课程资料',
     available: false,
+  },
+  {
+    id: 'create_mind_map',
+    icon: TreeStructure,
+    label: '生成思维导图',
+    available: true,
   },
   {
     id: 'create_demo',

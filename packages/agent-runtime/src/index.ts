@@ -13,3 +13,4 @@ export {
   type ConversationContextOptions,
   type ConversationContextSnapshot,
 } from './conversation-context';
+export { LocalObjectStorage } from './local-object-storage';

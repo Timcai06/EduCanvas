@@ -1,10 +1,10 @@
 import { ChatLifecycleError, DrizzleChatRepository } from '@educanvas/db';
-import { readAnonymousIdentity } from '@/server/anonymous-identity';
+import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   isTrustedSameOriginWrite,
   jsonError,
-} from '@/server/request-security';
-import { abortRegisteredTurn } from '@/server/turn-abort-registry';
+} from '@/server/http/request-security';
+import { abortRegisteredTurn } from '@/server/http/turn-abort-registry';
 
 export const runtime = 'nodejs';
 

@@ -10,7 +10,7 @@ import {
   createAnonymousIdentity,
   readAnonymousIdentity,
   writeAnonymousIdentityCookie,
-} from '@/server/anonymous-identity';
+} from '@/server/identity/anonymous-identity';
 import {
   bootstrapAnonymousLesson,
   hasActiveAnonymousLesson,
@@ -18,7 +18,7 @@ import {
   resumeOwnedAnonymousLesson,
   startNewAnonymousLesson,
   submitOwnedCanvas,
-} from '@/server/learning-session';
+} from '@/server/teaching/learning-session';
 
 /** 明确的用户动作负责创建Cookie；Server Component渲染绝不写Cookie。 */
 export async function startAnonymousLessonAction(): Promise<void> {

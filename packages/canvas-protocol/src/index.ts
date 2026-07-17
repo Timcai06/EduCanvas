@@ -25,3 +25,9 @@ export {
   type PipelineFlowParams,
   type PipelineFlowSlot,
 } from './artifacts/pipeline-flow';
+export {
+  MIND_MAP_CONTENT_VERSION,
+  mindMapContentSchema,
+  type MindMapContent,
+  type MindMapNode,
+} from './artifacts/mind-map';

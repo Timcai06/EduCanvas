@@ -1,22 +1,18 @@
-import {
-  artifactGradingKeySchema,
-  prepareArtifact,
-  type ArtifactGradingKey,
-} from '@educanvas/canvas-protocol/server';
+import { prepareArtifact } from '@educanvas/canvas-protocol/server';
 import {
   publicArtifactSchema,
   type PublicArtifact,
 } from '@educanvas/canvas-protocol';
 import { selectInitialState } from '@educanvas/teaching-core';
 import { and, desc, eq, gt, gte, lt, or, sql } from 'drizzle-orm';
-import { isDeepStrictEqual } from 'node:util';
 import {
   anonymousSubjectLockKey,
   isAnonymousSyntheticSubjectId,
 } from './anonymous-data-lifecycle';
+import { ensurePreparedArtifact } from './artifact-repository';
 import { getDb } from './client';
+import { isUuid } from './internal/identifiers';
 import {
-  canvasArtifactGradingKeys,
   canvasArtifacts,
   chatMessages,
   conversations,
@@ -105,14 +101,6 @@ export interface LearningPageSnapshot extends OwnedLearningSession {
   } | null;
 }
 
-/** 同一Artifact ID出现不同公开内容或判分键时拒绝静默覆盖。 */
-export class ArtifactContentConflictError extends Error {
-  constructor(artifactId: string) {
-    super(`Canvas Artifact ${artifactId}已存在但内容不一致`);
-    this.name = 'ArtifactContentConflictError';
-  }
-}
-
 /** 恢复/归档不可见的会话时统一返回，避免泄露其他学生的 session ID。 */
 export class LearningSessionNotFoundError extends Error {
   readonly code = 'session_not_found';
@@ -121,86 +109,6 @@ export class LearningSessionNotFoundError extends Error {
     super('学习会话不存在或不属于当前学生');
     this.name = 'LearningSessionNotFoundError';
   }
-}
-
-function toJsonValue<T>(value: T): unknown {
-  return JSON.parse(JSON.stringify(value)) as unknown;
-}
-
-async function ensurePreparedArtifact(
-  transaction: DatabaseTransaction,
-  sessionId: string,
-  prepared: {
-    publicArtifact: PublicArtifact;
-    gradingKey: ArtifactGradingKey;
-  },
-): Promise<void> {
-  const [existing] = await transaction
-    .select({
-      publicArtifact: {
-        schemaVersion: canvasArtifacts.schemaVersion,
-        artifactId: canvasArtifacts.artifactId,
-        type: canvasArtifacts.type,
-        title: canvasArtifacts.title,
-        params: canvasArtifacts.params,
-      },
-      gradingKey: canvasArtifactGradingKeys.gradingKey,
-    })
-    .from(canvasArtifacts)
-    .leftJoin(
-      canvasArtifactGradingKeys,
-      eq(canvasArtifactGradingKeys.artifactRecordId, canvasArtifacts.id),
-    )
-    .where(
-      and(
-        eq(canvasArtifacts.sessionId, sessionId),
-        eq(canvasArtifacts.artifactId, prepared.publicArtifact.artifactId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) {
-    if (existing.gradingKey === null) {
-      throw new ArtifactContentConflictError(
-        prepared.publicArtifact.artifactId,
-      );
-    }
-    const publicArtifact = publicArtifactSchema.parse(existing.publicArtifact);
-    const gradingKey = artifactGradingKeySchema.parse(existing.gradingKey);
-    if (
-      !isDeepStrictEqual(
-        toJsonValue(publicArtifact),
-        toJsonValue(prepared.publicArtifact),
-      ) ||
-      !isDeepStrictEqual(
-        toJsonValue(gradingKey),
-        toJsonValue(prepared.gradingKey),
-      )
-    ) {
-      throw new ArtifactContentConflictError(
-        prepared.publicArtifact.artifactId,
-      );
-    }
-    return;
-  }
-
-  const [artifactRow] = await transaction
-    .insert(canvasArtifacts)
-    .values({
-      sessionId,
-      artifactId: prepared.publicArtifact.artifactId,
-      type: prepared.publicArtifact.type,
-      schemaVersion: prepared.publicArtifact.schemaVersion,
-      title: prepared.publicArtifact.title,
-      params: prepared.publicArtifact.params,
-    })
-    .returning({ id: canvasArtifacts.id });
-  if (!artifactRow) throw new Error('Canvas Artifact写入失败');
-
-  await transaction.insert(canvasArtifactGradingKeys).values({
-    artifactRecordId: artifactRow.id,
-    gradingKey: prepared.gradingKey,
-  });
 }
 
 function scopeLockKey(scope: LearningSessionScope): string {
@@ -227,12 +135,6 @@ function courseScopeCondition(scope: LearningSessionCourseScope) {
     eq(lessonSessions.studentId, scope.studentId),
     eq(lessonSessions.gradeBand, scope.gradeBand),
     eq(lessonSessions.courseSlug, scope.courseSlug),
-  );
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
   );
 }
 

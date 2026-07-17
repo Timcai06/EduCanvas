@@ -7,17 +7,13 @@ import {
   referencedAssetVersions,
   type AgentMessagePart,
 } from '@educanvas/agent-core';
-import { and, asc, eq, inArray } from 'drizzle-orm';
-import { getDb } from './client';
-import { agentMessageParts, assets, assetVersions } from './schema';
-
-type Database = ReturnType<typeof getDb>;
-type DatabaseTransaction = Parameters<
-  Parameters<Database['transaction']>[0]
->[0];
-export type DatabaseExecutor = Database | DatabaseTransaction;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { asc, eq, inArray } from 'drizzle-orm';
+import type { DatabaseExecutor } from './internal/database-types';
+import {
+  loadOwnedReadyAssetVersions,
+  OwnedAssetVersionError,
+} from './internal/owned-asset-versions';
+import { agentMessageParts, assetVersions } from './schema';
 
 export class MessagePartValidationError extends Error {
   readonly code = 'invalid_message_parts';
@@ -70,45 +66,21 @@ export async function assertOwnedReadyAssetParts(
 ): Promise<void> {
   const references = referencedAssetVersions(input.parts);
   if (references.length === 0) return;
-  if (
-    !UUID.test(input.spaceId) ||
-    references.some(
-      (reference) =>
-        !UUID.test(reference.assetId) || !UUID.test(reference.versionId),
-    )
-  ) {
-    throw new MessagePartValidationError('Asset引用格式无效');
-  }
-  const rows = await executor
-    .select({ asset: assets, version: assetVersions })
-    .from(assetVersions)
-    .innerJoin(assets, eq(assets.id, assetVersions.assetId))
-    .where(
-      and(
-        eq(assets.ownerSubjectId, input.ownerSubjectId),
-        eq(assets.spaceId, input.spaceId),
-        eq(assets.status, 'ready'),
-        eq(assetVersions.status, 'ready'),
-        inArray(
-          assetVersions.id,
-          references.map((reference) => reference.versionId),
-        ),
-      ),
-    );
-  const byVersion = new Map(rows.map((row) => [row.version.id, row]));
-  for (const reference of references) {
-    const row = byVersion.get(reference.versionId);
-    if (
-      !row ||
-      row.asset.id !== reference.assetId ||
-      row.asset.currentVersionId !== reference.versionId ||
-      row.asset.kind !== reference.kind ||
-      row.version.kind !== reference.kind
-    ) {
+  try {
+    await loadOwnedReadyAssetVersions(executor, {
+      ownerSubjectId: input.ownerSubjectId,
+      spaceId: input.spaceId,
+      references,
+    });
+  } catch (error) {
+    if (error instanceof OwnedAssetVersionError) {
       throw new MessagePartValidationError(
-        'Asset不存在、未就绪或不属于当前空间',
+        error.reason === 'invalid_reference'
+          ? 'Asset引用格式无效'
+          : 'Asset不存在、未就绪或不属于当前空间',
       );
     }
+    throw error;
   }
 }
 

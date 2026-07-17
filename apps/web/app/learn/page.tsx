@@ -1,6 +1,6 @@
-import { LearnWorkspace } from '@/features/workspace/learn-workspace';
-import { LessonEntry } from '@/features/workspace/lesson-entry';
-import { loadLearningPageData } from '@/server/learning-session';
+import { LearnWorkspace } from '@/features/workspace/learning/learn-workspace';
+import { LessonEntry } from '@/features/workspace/learning/lesson-entry';
+import { loadLearningPageData } from '@/server/teaching/learning-session';
 import {
   resumeAnonymousLessonAction,
   startNewAnonymousLessonAction,

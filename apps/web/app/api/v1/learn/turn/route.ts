@@ -8,15 +8,15 @@ import {
 } from '@educanvas/db';
 import { ModelGatewayConfigurationError } from '@educanvas/model-gateway';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
-import { readAnonymousIdentity } from '@/server/anonymous-identity';
-import { UnsupportedAssetModalityError } from '@/server/asset-materialization';
-import { beginOwnedTeachingTurn } from '@/server/learning-turn';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/request-security';
-import { createSseEventStream, sseResponse } from '@/server/sse';
+import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
+import { beginOwnedTeachingTurn } from '@/server/teaching/learning-turn';
+import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import { createSseEventStream, sseResponse } from '@/server/http/sse';
 import {
   parseTeachingTurnRequest,
   TurnRequestValidationError,
-} from '@/server/turn-request';
+} from '@/server/http/turn-request';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

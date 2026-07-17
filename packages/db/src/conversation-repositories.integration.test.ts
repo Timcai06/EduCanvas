@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ChatLifecycleError,
-  ChatMessageIdConflictError,
   DrizzleChatRepository,
   LearningSessionOwnershipError,
 } from './chat-repository';
@@ -18,8 +17,8 @@ import {
   DrizzleModelRunRepository,
   ModelRunLifecycleError,
 } from './model-run-repository';
-import { MessagePartValidationError } from './message-parts';
 import * as schema from './schema';
+import { DrizzleTeachingTurnLedger } from './turn-ledger-repository';
 
 function resolveTestDatabaseUrl() {
   const value = process.env.TEST_DATABASE_URL;
@@ -102,13 +101,25 @@ async function createTurn(
   text = '猫和狗的图像特征有什么不同？',
   now = new Date('2026-07-15T02:01:00.000Z'),
 ) {
-  return new DrizzleChatRepository(getDatabase()).createOrGetTurn({
+  const ledger = await new DrizzleTeachingTurnLedger(
+    getDatabase(),
+  ).beginOrReplay({
     sessionId,
     trustedStudentId: studentId,
     clientMessageId,
     text,
+    traceId: `trace-${clientMessageId}`,
+    modelAlias: 'primary',
+    promptVersion: 'turn-v1',
+    promptHash: 'a'.repeat(64),
+    provider: 'fixture',
     now,
   });
+  return {
+    ...ledger.turn,
+    replayed: ledger.replayed,
+    answerRun: ledger.answerRun,
+  };
 }
 
 function modelRunInput(
@@ -122,7 +133,10 @@ function modelRunInput(
     assistantMessageId: turn.assistantMessage.id,
     turnId: turn.turnId,
     phase,
-    traceId: `trace-${turn.turnId}-${phase}`,
+    traceId:
+      phase === 'answer'
+        ? turn.answerRun.traceId
+        : `trace-${turn.turnId}-${phase}`,
     taskAlias: 'teaching.turn' as const,
     modelAlias: 'primary',
     promptVersion: 'turn-v1',
@@ -154,75 +168,6 @@ describeWithDatabase('对话与Model Run账本', () => {
 
   afterAll(async () => {
     await connection?.end({ timeout: 5 });
-  });
-
-  it('同一clientMessageId和等价正文并发重试只创建一个Turn和Model Run', async () => {
-    await seedSession();
-    const chat = new DrizzleChatRepository(getDatabase());
-    const command = {
-      sessionId,
-      trustedStudentId: studentId,
-      clientMessageId: 'client-message-idempotent',
-      text: '  Cafe\u0301\r\n问题  ',
-    };
-    const turns = await Promise.all([
-      chat.createOrGetTurn(command),
-      chat.createOrGetTurn({ ...command, text: 'Café\n问题' }),
-    ]);
-
-    expect(turns.map((turn) => turn.replayed).sort()).toEqual([false, true]);
-    expect(turns[0]?.turnId).toBe(turns[1]?.turnId);
-    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
-      2,
-    );
-
-    const modelRuns = new DrizzleModelRunRepository(getDatabase());
-    const runInput = modelRunInput(turns[0]!);
-    const runs = await Promise.all([
-      modelRuns.createOrGetTeachingRun(runInput),
-      modelRuns.createOrGetTeachingRun(runInput),
-    ]);
-    expect(runs.map((run) => run.replayed).sort()).toEqual([false, true]);
-    expect(await getDatabase().select().from(schema.modelRuns)).toHaveLength(1);
-
-    await expect(
-      chat.createOrGetTurn({ ...command, text: '不同正文' }),
-    ).rejects.toBeInstanceOf(ChatMessageIdConflictError);
-    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
-      2,
-    );
-  });
-
-  it('在仓储边界拒绝过长正文和不安全clientMessageId', async () => {
-    await seedSession();
-    const chat = new DrizzleChatRepository(getDatabase());
-    await expect(
-      chat.createOrGetTurn({
-        sessionId,
-        trustedStudentId: studentId,
-        clientMessageId: 'bad id',
-        text: '问题',
-      }),
-    ).rejects.toBeInstanceOf(ChatLifecycleError);
-    await expect(
-      chat.createOrGetTurn({
-        sessionId,
-        trustedStudentId: studentId,
-        clientMessageId: 'x'.repeat(129),
-        text: '问题',
-      }),
-    ).rejects.toBeInstanceOf(ChatLifecycleError);
-    await expect(
-      chat.createOrGetTurn({
-        sessionId,
-        trustedStudentId: studentId,
-        clientMessageId: 'valid-id',
-        text: 'x'.repeat(4_001),
-      }),
-    ).rejects.toBeInstanceOf(MessagePartValidationError);
-    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
-      0,
-    );
   });
 
   it('只有完成最终模型阶段且具有正文时才能完成老师消息', async () => {

@@ -5,7 +5,7 @@ EduCanvas 的持久任务 worker 进程（[ADR-0012](../../docs/09-decisions/001
 ## 包职责
 
 - 运行 graphile-worker，消费 `graphile_worker` 队列中的任务；
-- 注册并执行任务处理器（`src/tasks/`，命名约定 `域.动作`，编译期显式白名单）；
+- 注册并执行任务处理器（`src/tasks/`，周期任务使用crontab兼容的`域:动作`命名，编译期显式白名单）；
 - 不定义业务表结构（唯一入口仍是 `packages/db`），不直接暴露任何 HTTP 接口。
 
 ## 核心文件
@@ -13,13 +13,17 @@ EduCanvas 的持久任务 worker 进程（[ADR-0012](../../docs/09-decisions/001
 - `src/index.ts`：进程入口，读取 `DATABASE_URL`、注册任务、优雅停机；
 - `src/tasks/index.ts`：任务注册表；
 - `src/tasks/system-heartbeat.ts`：冒烟任务，验证入队→消费回路；
+- `src/tasks/purge-anonymous-subjects.ts`：每日03:15 UTC清理超过保留窗口的匿名数据库主体；
+- `src/tasks/ingest-knowledge-document.ts`：受控创建/复用Source并写入已解析资料版本；
 - `src/worker.integration.test.ts`：队列回路与 SQL 事务性入队的集成测试。
 
 ## 常用命令
 
 ```bash
 make dev                 # 仓库根:同时启动 Web 与 worker
-pnpm --filter @educanvas/worker dev    # 只启动 worker(需 DATABASE_URL)
+pnpm dev                 # 亦可:worker 会自行加载根 .env/.env.local(不覆盖已有环境)
+pnpm --filter @educanvas/worker dev    # 只启动 worker
+pnpm --filter @educanvas/worker build  # esbuild打包内部workspace源码
 make integration         # 含本包的 PostgreSQL 集成测试
 ```
 

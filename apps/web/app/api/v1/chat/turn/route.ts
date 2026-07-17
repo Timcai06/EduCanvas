@@ -5,15 +5,15 @@ import {
   PlatformTurnInProgressError,
   PlatformTurnOwnershipError,
 } from '@educanvas/db';
-import { readAnonymousIdentity } from '@/server/anonymous-identity';
-import { UnsupportedAssetModalityError } from '@/server/asset-materialization';
-import { beginOwnedGeneralTurn } from '@/server/general-turn';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/request-security';
-import { createSseEventStream, sseResponse } from '@/server/sse';
+import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
+import { beginOwnedGeneralTurn } from '@/server/platform/general-turn';
+import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import { createSseEventStream, sseResponse } from '@/server/http/sse';
 import {
   parseTeachingTurnRequest,
   TurnRequestValidationError,
-} from '@/server/turn-request';
+} from '@/server/http/turn-request';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

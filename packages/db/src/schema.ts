@@ -278,9 +278,9 @@ export const lessonSessions = pgTable(
 
 /**
  * 平台通用 Asset。ownerSubjectId 与 spaceId 都是可信服务端解析出的不透明标识，
- * 对象存储地址只存在于不可变版本表。当前 K12 纵切尚无一等 Space 表，组合根会
- * 暂用 lessonSession.id 作为 spaceId，因此这里还不能提供 Workspace 级参照完整性；
- * 新增 spaces/conversations 后必须通过回填与双读迁移解除该临时绑定。
+ * 对象存储地址只存在于不可变版本表。通用路径已有一等 Space；K12 迁移期仍以
+ * lessonSession.id 映射 spaceId。assets 早于 spaces 创建，当前不加外键以兼容双轨，
+ * 待K12完成回填与双读迁移后再收紧Workspace级参照完整性。
  */
 export const assets = pgTable(
   'assets',
