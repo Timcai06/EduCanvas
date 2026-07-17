@@ -12,6 +12,7 @@ import {
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
 import { MindMapRenderer } from './mind-map-renderer';
+import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
@@ -27,6 +28,7 @@ export interface GenerationState {
 export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
+  flashcards: '闪卡',
 };
 
 /**
@@ -230,6 +232,8 @@ export function ArtifactCanvas({
           <MindMapRenderer content={detail.latestVersion.content} />
         ) : detail.artifact.kind === 'slides' && detail.latestVersion ? (
           <SlidesRenderer content={detail.latestVersion.content} />
+        ) : detail.artifact.kind === 'flashcards' && detail.latestVersion ? (
+          <FlashcardsRenderer content={detail.latestVersion.content} />
         ) : (
           <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
         )}

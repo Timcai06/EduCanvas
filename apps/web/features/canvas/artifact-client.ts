@@ -32,7 +32,7 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export type CreatableArtifactKind = 'mind_map' | 'slides';
+export type CreatableArtifactKind = 'mind_map' | 'slides' | 'flashcards';
 
 export async function createArtifact(
   kind: CreatableArtifactKind,

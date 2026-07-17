@@ -7,6 +7,7 @@ import {
   ImageSquare,
   Plus,
   PresentationChart,
+  Cards,
   Slideshow,
   TreeStructure,
 } from '@phosphor-icons/react';
@@ -20,6 +21,7 @@ export type PlusMenuActionId =
   | 'upload_file'
   | 'upload_image'
   | 'create_mind_map'
+  | 'create_flashcards'
   | 'pick_course_material'
   | 'add_link'
   | 'create_demo'
@@ -62,6 +64,12 @@ const menuItems: readonly PlusMenuItem[] = [
     id: 'create_slides',
     icon: Slideshow,
     label: '生成 Slides',
+    available: true,
+  },
+  {
+    id: 'create_flashcards',
+    icon: Cards,
+    label: '生成闪卡',
     available: true,
   },
   {

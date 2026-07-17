@@ -54,6 +54,7 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_image',
   'create_mind_map',
   'create_slides',
+  'create_flashcards',
 ];
 
 export function GeneralChatWorkspace({
@@ -171,6 +172,8 @@ export function GeneralChatWorkspace({
         artifactFlow.beginConfirm('mind_map', '对话思维导图');
       } else if (action === 'create_slides') {
         artifactFlow.beginConfirm('slides', '对话小结 Slides');
+      } else if (action === 'create_flashcards') {
+        artifactFlow.beginConfirm('flashcards', '复习闪卡');
       }
     },
     [artifactFlow],

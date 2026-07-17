@@ -8,6 +8,7 @@ import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import { resolveStructuredModelGateway } from '../model-runtime.js';
 import { generateMindMapContent } from './mind-map-generation.js';
+import { generateFlashcardsContent } from './flashcards-generation.js';
 import { generateSlidesContent } from './slides-generation.js';
 
 const payloadSchema = z
@@ -60,7 +61,8 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
     });
-    if (artifact.kind !== 'mind_map' && artifact.kind !== 'slides') {
+    const supportedKinds = ['mind_map', 'slides', 'flashcards'] as const;
+    if (!(supportedKinds as readonly string[]).includes(artifact.kind)) {
       await failJob('unsupported_kind');
       return;
     }
@@ -88,7 +90,9 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     const { content, generatedBy } =
       artifact.kind === 'mind_map'
         ? await generateMindMapContent(generatorInput)
-        : await generateSlidesContent(generatorInput);
+        : artifact.kind === 'slides'
+          ? await generateSlidesContent(generatorInput)
+          : await generateFlashcardsContent(generatorInput);
 
     const version = await artifacts.appendVersion({
       artifactId: payload.artifactId,
