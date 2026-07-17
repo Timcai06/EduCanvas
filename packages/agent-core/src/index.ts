@@ -92,3 +92,10 @@ export type {
   StructuredModelResult,
   TurnModelGateway,
 } from './model-gateway';
+
+export {
+  ObjectStorageError,
+  isValidObjectKey,
+  type ObjectStoragePort,
+  type StoredObject,
+} from './object-storage-contracts';
