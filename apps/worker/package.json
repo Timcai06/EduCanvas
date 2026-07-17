@@ -12,8 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/agent-core": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
+    "@educanvas/model-gateway": "workspace:*",
     "graphile-worker": "^0.16.6",
     "zod": "^4.4.3"
   },

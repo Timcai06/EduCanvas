@@ -1,3 +1,4 @@
+import { ModelGatewayInvocationError } from '@educanvas/agent-core';
 import {
   ArtifactJobLifecycleError,
   DrizzlePlatformArtifactRepository,
@@ -5,7 +6,8 @@ import {
 } from '@educanvas/db';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
-import { buildConversationOutline } from './mind-map-outline.js';
+import { resolveStructuredModelGateway } from '../model-runtime.js';
+import { generateMindMapContent } from './mind-map-generation.js';
 
 const payloadSchema = z
   .object({
@@ -71,18 +73,22 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       trustedSubjectId: payload.subjectId,
       limit: 40,
     });
-    const content = buildConversationOutline(
-      artifact.title,
-      messages.map((message) => ({
-        role: message.role === 'user' ? 'user' : 'assistant',
+    const { content, generatedBy } = await generateMindMapContent({
+      title: artifact.title,
+      messages: messages.map((message) => ({
+        role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
         content: message.content,
       })),
-    );
+      gateway: resolveStructuredModelGateway(),
+      traceId: `artifact:${payload.artifactId}`,
+      operationId: payload.jobId,
+    });
 
     const version = await artifacts.appendVersion({
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
       content,
+      generatedBy,
       generationJobId: payload.jobId,
     });
     await artifacts.transitionGenerationJob({
@@ -98,6 +104,11 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     helpers.logger.error(
       `产物 ${payload.artifactId} 生成失败: ${(error as Error).message}`,
     );
-    await failJob('generation_failed');
+    /* 已配置模型但调用失败:以稳定模型错误码记账,不静默回退规则大纲 */
+    const code =
+      error instanceof ModelGatewayInvocationError
+        ? `model_${error.normalized.code}`
+        : 'generation_failed';
+    await failJob(code);
   }
 };

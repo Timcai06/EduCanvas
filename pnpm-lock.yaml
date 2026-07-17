@@ -105,12 +105,18 @@ importers:
 
   apps/worker:
     dependencies:
+      '@educanvas/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       '@educanvas/canvas-protocol':
         specifier: workspace:*
         version: link:../../packages/canvas-protocol
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@educanvas/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
       graphile-worker:
         specifier: ^0.16.6
         version: 0.16.6(typescript@5.9.3)
@@ -230,6 +236,9 @@ importers:
       '@educanvas/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
