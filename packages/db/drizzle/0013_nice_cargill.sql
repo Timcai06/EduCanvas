@@ -1,0 +1,1 @@
+ALTER TABLE "conversation_messages" ADD COLUMN "parts" jsonb DEFAULT '[]'::jsonb NOT NULL;

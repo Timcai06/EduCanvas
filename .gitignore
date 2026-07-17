@@ -16,6 +16,7 @@ build/
 coverage/
 .turbo/
 .pnpm-store/
+/output/playwright/
 
 # Python
 __pycache__/
@@ -26,12 +27,24 @@ __pycache__/
 .venv/
 venv/
 
-# Editors
+# Editors（.vscode 里共享的两个配置文件例外，用于统一团队编辑器行为）
 .idea/
-.vscode/
-.claude/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 *.swp
 *.swo
+
+# Claude Code — 共享团队配置，保留个人覆盖
+# .claude/ 下默认全部忽略，仅白名单共享 settings.json、commands/、rules/、skills/、agents/
+.claude/*
+!.claude/settings.json
+!.claude/commands/
+!.claude/rules/
+!.claude/skills/
+!.claude/agents/
+.claude/settings.local.json
+CLAUDE.local.md
 
 # Logs and temporary files
 *.log
@@ -40,9 +53,13 @@ tmp/
 temp/
 
 # Local runtime data and large generated artifacts
-uploads/
-models/
-checkpoints/
-artifacts/
+# 注意：只匹配仓库根目录，避免误伤 packages/canvas-protocol/src/artifacts/ 等源码目录
+/uploads/
+/models/
+/checkpoints/
+/artifacts/
+
+# TypeScript incremental build info
+*.tsbuildinfo
 
 

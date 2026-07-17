@@ -1,0 +1,157 @@
+import { describe, expect, it } from 'vitest';
+import { validateArtifact } from './artifact';
+
+const validClassificationGame = {
+  schemaVersion: '1',
+  artifactId: 'classification-1',
+  type: 'classification_game',
+  title: '猫狗分类',
+  params: {
+    prompt: '请完成分类',
+    categories: [
+      { id: 'cat', label: '猫' },
+      { id: 'dog', label: '狗' },
+    ],
+    items: [
+      { id: 'cat-1', label: '橘猫', emoji: '🐱', correctCategoryId: 'cat' },
+      { id: 'dog-1', label: '柴犬', emoji: '🐶', correctCategoryId: 'dog' },
+    ],
+  },
+} as const;
+
+const validQuiz = {
+  schemaVersion: '1',
+  artifactId: 'quiz-1',
+  type: 'quiz',
+  title: '特征测验',
+  params: {
+    questions: [
+      {
+        id: 'question-1',
+        question: '分类模型主要根据什么判断？',
+        options: [
+          { id: 'a', text: '输入特征' },
+          { id: 'b', text: '随机猜测' },
+        ],
+        correctOptionId: 'a',
+      },
+    ],
+  },
+} as const;
+
+const validPipelineFlow = {
+  schemaVersion: '1',
+  artifactId: 'pipeline-1',
+  type: 'pipeline_flow',
+  title: '图像分类流程',
+  params: {
+    templateKey: 'pipeline_flow',
+    objective: '观察一张图片如何变成分类结果',
+    steps: [
+      { slot: 'input', label: '输入图片', narration: '把图片交给模型。' },
+      {
+        slot: 'feature_extraction',
+        label: '提取特征',
+        narration: '寻找颜色、轮廓和纹理。',
+      },
+      {
+        slot: 'classification',
+        label: '分类判断',
+        narration: '比较特征并选择类别。',
+      },
+      { slot: 'output', label: '输出结果', narration: '给出预测类别。' },
+    ],
+    highlightOrder: [
+      'input',
+      'feature_extraction',
+      'classification',
+      'output',
+    ],
+    pausePoints: ['feature_extraction', 'classification'],
+    completionMessage: '流程完成。',
+  },
+} as const;
+
+describe('validateArtifact', () => {
+  it('接受阶段一合法Artifact', () => {
+    expect(validateArtifact(validClassificationGame).ok).toBe(true);
+    expect(validateArtifact(validQuiz).ok).toBe(true);
+    expect(validateArtifact(validPipelineFlow).ok).toBe(true);
+  });
+
+  it.each([
+    ['未知槽位', { ...validPipelineFlow.params, highlightOrder: ['input', 'feature_extraction', 'classification', 'unknown'] }],
+    ['任意选择器', { ...validPipelineFlow.params, selector: '.model-output' }],
+    ['模型时长', { ...validPipelineFlow.params, durationMs: 900 }],
+    ['GSAP指令', { ...validPipelineFlow.params, gsap: { x: 100 } }],
+    ['逆序高亮', { ...validPipelineFlow.params, highlightOrder: ['output', 'classification', 'feature_extraction', 'input'] }],
+    ['非法暂停点', { ...validPipelineFlow.params, pausePoints: ['quiz'] }],
+  ])('pipeline_flow拒绝%s', (_label, params) => {
+    expect(validateArtifact({ ...validPipelineFlow, params }).ok).toBe(false);
+  });
+
+  it('拒绝未知字段', () => {
+    expect(validateArtifact({ ...validQuiz, html: '<script />' }).ok).toBe(
+      false,
+    );
+  });
+
+  it('拒绝不存在的正确答案引用', () => {
+    const artifact = {
+      ...validQuiz,
+      params: {
+        questions: [
+          {
+            ...validQuiz.params.questions[0],
+            correctOptionId: 'missing',
+          },
+        ],
+      },
+    };
+
+    expect(validateArtifact(artifact).ok).toBe(false);
+  });
+
+  it('拒绝重复的类别、项目、题目和选项标识', () => {
+    const classification = {
+      ...validClassificationGame,
+      params: {
+        ...validClassificationGame.params,
+        categories: [
+          validClassificationGame.params.categories[0],
+          { ...validClassificationGame.params.categories[1], id: 'cat' },
+        ],
+        items: [
+          validClassificationGame.params.items[0],
+          { ...validClassificationGame.params.items[1], id: 'cat-1' },
+        ],
+      },
+    };
+
+    const duplicatedQuestion = {
+      ...validQuiz.params.questions[0],
+      options: [
+        validQuiz.params.questions[0].options[0],
+        { ...validQuiz.params.questions[0].options[1], id: 'a' },
+      ],
+    };
+    const quiz = {
+      ...validQuiz,
+      params: {
+        questions: [duplicatedQuestion, duplicatedQuestion],
+      },
+    };
+
+    expect(validateArtifact(classification).ok).toBe(false);
+    expect(validateArtifact(quiz).ok).toBe(false);
+  });
+
+  it('拒绝未知类型和协议版本', () => {
+    expect(validateArtifact({ ...validQuiz, type: 'step_animation' }).ok).toBe(
+      false,
+    );
+    expect(validateArtifact({ ...validQuiz, schemaVersion: '2' }).ok).toBe(
+      false,
+    );
+  });
+});

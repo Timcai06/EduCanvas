@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: educanvas-db
+    environment:
+      POSTGRES_USER: educanvas
+      POSTGRES_PASSWORD: educanvas
+      POSTGRES_DB: educanvas
+    ports:
+      - '5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U educanvas']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
