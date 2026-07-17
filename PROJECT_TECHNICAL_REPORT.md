@@ -813,5 +813,5 @@ EduCanvas 当前已经具备一个可靠的真实 Agent 垂直纵切和正确的
 - [测试与评测](docs/06-quality/testing-and-evaluation.md)
 - [ADR 索引](docs/09-decisions/README.md)
 - [路线图](docs/10-planning/roadmap.md)
-- [平台解耦 active plan](docs/plan/active/2026-07-platform-decoupling-runtime-hardening.md)
-- [K12 纵切 active plan](docs/plan/active/2026-07-real-agent-learning-vertical-slice.md)
+- [Gemini + NotebookLM 产品复刻计划](docs/plan/active/2026-07-gemini-notebooklm-replica.md)
+- [K12 纵切结档记录](docs/plan/completed/2026-07-real-agent-learning-vertical-slice.md)
