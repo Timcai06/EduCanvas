@@ -32,13 +32,16 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function createMindMapArtifact(
+export type CreatableArtifactKind = 'mind_map' | 'slides';
+
+export async function createArtifact(
+  kind: CreatableArtifactKind,
   title: string,
 ): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(ARTIFACTS_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'mind_map', title }),
+    body: JSON.stringify({ kind, title }),
   });
   return parseJsonOrThrow(response);
 }

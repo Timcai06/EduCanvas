@@ -43,3 +43,27 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
   await expect(studio.getByText('对话思维导图')).toBeVisible();
   await expect(studio.getByText('v1')).toBeVisible();
 });
+
+test('生成 Slides 全链路并可分页浏览', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: /生成 Slides/ }).click();
+
+  const confirmSheet = page.getByRole('dialog', { name: '生成Slides' });
+  await expect(confirmSheet).toBeVisible();
+  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
+
+  await expect(page.getByText('Slides已生成')).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await expect(canvas).toBeVisible();
+  /* 规则版空对话 = 仅封面页(按 heading 级别定位,避开宿主标题重名) */
+  await expect(
+    canvas.getByRole('heading', { level: 3, name: '对话小结 Slides' }),
+  ).toBeVisible();
+  await expect(canvas.getByText('1 / 1')).toBeVisible();
+});

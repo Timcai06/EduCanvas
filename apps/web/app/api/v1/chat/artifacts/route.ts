@@ -46,10 +46,10 @@ export async function GET(): Promise<Response> {
   }
 }
 
-/** 首个开放的产物类型;M2 扩展 slides/quiz 时改为 Registry 提供。 */
+/** 已开放的产物类型;quiz 泛化后加入,更长期由 Registry 提供。 */
 const createArtifactSchema = z
   .object({
-    kind: z.literal('mind_map'),
+    kind: z.enum(['mind_map', 'slides']),
     title: z.string().trim().min(1).max(120),
   })
   .strict();
