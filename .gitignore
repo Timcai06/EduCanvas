@@ -32,9 +32,19 @@ venv/
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-.claude/
 *.swp
 *.swo
+
+# Claude Code — 共享团队配置，保留个人覆盖
+# .claude/ 下默认全部忽略，仅白名单共享 settings.json、commands/、rules/、skills/、agents/
+.claude/*
+!.claude/settings.json
+!.claude/commands/
+!.claude/rules/
+!.claude/skills/
+!.claude/agents/
+.claude/settings.local.json
+CLAUDE.local.md
 
 # Logs and temporary files
 *.log
