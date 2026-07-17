@@ -37,3 +37,9 @@ export {
   type Slide,
   type SlidesContent,
 } from './artifacts/slides';
+export {
+  FLASHCARDS_CONTENT_VERSION,
+  flashcardsContentSchema,
+  type Flashcard,
+  type FlashcardsContent,
+} from './artifacts/flashcards';

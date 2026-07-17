@@ -14,6 +14,7 @@ const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_image',
   'create_mind_map',
   'create_slides',
+  'create_flashcards',
 ];
 
 export function GeneralChatEntry() {

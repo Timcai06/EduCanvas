@@ -67,3 +67,23 @@ test('生成 Slides 全链路并可分页浏览', async ({ page }) => {
   ).toBeVisible();
   await expect(canvas.getByText('1 / 1')).toBeVisible();
 });
+
+test('生成闪卡全链路:翻面自评且自评不上行', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: /生成闪卡/ }).click();
+  const confirmSheet = page.getByRole('dialog', { name: '生成闪卡' });
+  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
+  await expect(page.getByText('闪卡已生成')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  /* 空对话规则版 = 占位说明卡 */
+  await expect(canvas.getByText('这次对话还没有可整理的问答')).toBeVisible();
+  await canvas.getByRole('button', { name: '显示答案' }).click();
+  await expect(canvas.getByText('先和 AI 聊几轮')).toBeVisible();
+  await canvas.getByRole('button', { name: '记住了' }).click();
+  await expect(canvas.getByText('本轮完成:记住 1 / 1')).toBeVisible();
+  await expect(canvas.getByText('不影响学习进度记录')).toBeVisible();
+});

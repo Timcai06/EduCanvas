@@ -49,7 +49,7 @@ export async function GET(): Promise<Response> {
 /** 已开放的产物类型;quiz 泛化后加入,更长期由 Registry 提供。 */
 const createArtifactSchema = z
   .object({
-    kind: z.enum(['mind_map', 'slides']),
+    kind: z.enum(['mind_map', 'slides', 'flashcards']),
     title: z.string().trim().min(1).max(120),
   })
   .strict();
