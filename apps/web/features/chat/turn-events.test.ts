@@ -155,6 +155,72 @@ describe('teaching turn SSE protocol', () => {
     ).toThrow(TurnStreamProtocolError);
   });
 
+  it('解析全部 artifact 生命周期事件并拒绝畸形字段', () => {
+    const base = { schemaVersion: '1', turnId: 'turn-1' };
+    expect(
+      parseTeachingTurnEvent(
+        'artifact.proposed',
+        JSON.stringify({
+          ...base,
+          type: 'artifact.proposed',
+          artifactId: 'artifact-1',
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '思维导图',
+        }),
+      ),
+    ).toMatchObject({ type: 'artifact.proposed', kind: 'mind_map' });
+
+    expect(
+      parseTeachingTurnEvent(
+        'artifact.version_added',
+        JSON.stringify({
+          ...base,
+          type: 'artifact.version_added',
+          artifactId: 'artifact-1',
+          version: 3,
+        }),
+      ),
+    ).toMatchObject({ version: 3 });
+
+    expect(
+      parseTeachingTurnEvent(
+        'artifact.generation_progress',
+        JSON.stringify({
+          ...base,
+          type: 'artifact.generation_progress',
+          artifactId: 'artifact-1',
+          jobId: 'job-1',
+          progress: 55,
+        }),
+      ),
+    ).toMatchObject({ progress: 55 });
+
+    expect(
+      parseTeachingTurnEvent(
+        'artifact.failed',
+        JSON.stringify({
+          ...base,
+          type: 'artifact.failed',
+          artifactId: 'artifact-1',
+          code: 'provider_timeout',
+        }),
+      ),
+    ).toMatchObject({ code: 'provider_timeout' });
+
+    for (const bad of [
+      { type: 'artifact.proposed', artifactId: 'a', kind: 'Bad-Kind', trustTier: 'tier1', title: 't' },
+      { type: 'artifact.proposed', artifactId: 'a', kind: 'mind_map', trustTier: 'tier3', title: 't' },
+      { type: 'artifact.version_added', artifactId: 'a', version: 0 },
+      { type: 'artifact.generation_progress', artifactId: 'a', jobId: 'j', progress: 101 },
+      { type: 'artifact.failed', artifactId: 'a' },
+    ]) {
+      expect(() =>
+        parseTeachingTurnEvent(bad.type, JSON.stringify({ ...base, ...bad })),
+      ).toThrow(TurnStreamProtocolError);
+    }
+  });
+
   it('bounds a frame without a delimiter and releases the reader', async () => {
     const { response, stream } = responseFromChunks(['x'.repeat(131_073)]);
 
