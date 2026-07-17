@@ -29,11 +29,13 @@ function AssistantAvatar({ active }: { active: boolean }) {
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: no-preference)', () => {
         if (!active) {
-          gsap.set(root, { scale: 1, rotate: 0 });
+          gsap.set(root, { scaleX: 1, scaleY: 1, rotate: 0 });
           return;
         }
+        /* revertOnUpdate 会重置动画属性;GSAP 无法重置 scale 简写,必须用独立属性 */
         gsap.to(root, {
-          scale: 1.12,
+          scaleX: 1.12,
+          scaleY: 1.12,
           rotate: 12,
           duration: 0.9,
           ease: 'sine.inOut',
