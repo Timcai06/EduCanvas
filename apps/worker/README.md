@@ -21,7 +21,8 @@ EduCanvas 的持久任务 worker 进程（[ADR-0012](../../docs/09-decisions/001
 
 ```bash
 make dev                 # 仓库根:同时启动 Web 与 worker
-pnpm --filter @educanvas/worker dev    # 只启动 worker(需 DATABASE_URL)
+pnpm dev                 # 亦可:worker 会自行加载根 .env/.env.local(不覆盖已有环境)
+pnpm --filter @educanvas/worker dev    # 只启动 worker
 pnpm --filter @educanvas/worker build  # esbuild打包内部workspace源码
 make integration         # 含本包的 PostgreSQL 集成测试
 ```
