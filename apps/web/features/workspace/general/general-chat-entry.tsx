@@ -5,7 +5,7 @@ import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import Link from 'next/link';
 import { useCallback, useTransition } from 'react';
-import { EmptyChatHero } from './empty-chat-hero';
+import { EmptyChatHero } from '../learning/empty-chat-hero';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =

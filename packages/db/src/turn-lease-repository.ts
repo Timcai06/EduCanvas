@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, inArray, lte } from 'drizzle-orm';
 import { getDb } from './client';
+import { isUuid } from './internal/identifiers';
 import {
   ChatLifecycleError,
   validateAssistantLeaseDuration,
@@ -13,12 +14,6 @@ export interface ExpiredTurnConvergence {
   sessionId: string;
   turnId: string;
   interruptedModelRuns: number;
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }
 
 /** streaming lease 只保证死记录收敛，不伪装成可重放的 token stream。 */

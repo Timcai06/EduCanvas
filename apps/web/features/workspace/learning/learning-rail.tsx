@@ -13,7 +13,7 @@ import {
   buildLearningSessionRailRows,
   getLearningRailCapabilities,
 } from './learning-rail-model';
-import { Sheet } from './sheet';
+import { Sheet } from '../shared/sheet';
 
 interface LearningRailProps {
   sessions: readonly LearningSessionSummaryDTO[];

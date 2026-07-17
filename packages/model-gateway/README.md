@@ -36,7 +36,7 @@ const gateway = createTurnModelGatewayFromEnvironment(environment);
 
 ## 当前接线状态
 
-`apps/web/server/model-runtime.ts` 已通过该包创建真实 Gateway，`apps/web/server/learning-turn.ts` 再把它交给两阶段 Orchestrator，并在外层完成 SSE 与账本审计。这里的“真实”表示生产代码使用网络 Provider Adapter，而不是 Demo Script；是否能实际回答仍取决于部署环境、Endpoint、Key 和模型配置，仓库内协议 Fixture 不能替代 live smoke。
+`apps/web/server/model/model-runtime.ts` 已通过该包创建真实 Gateway，`apps/web/server/teaching/learning-turn.ts` 再把它交给两阶段 Orchestrator，并在外层完成 SSE 与账本审计。这里的“真实”表示生产代码使用网络 Provider Adapter，而不是测试Gateway；是否能实际回答仍取决于部署环境、Endpoint、Key 和模型配置，仓库内协议 Fixture 不能替代 live smoke。
 
 ## 验证
 

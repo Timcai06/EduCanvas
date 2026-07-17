@@ -7,12 +7,12 @@ import {
   type PlatformTurnSnapshot,
 } from '@educanvas/db';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
-import type { AnonymousIdentity } from './anonymous-identity';
-import { materializeAssetContext } from './asset-materialization';
+import { materializeAssetContext } from '../assets/asset-materialization';
+import { registerTurnAbortController } from '../http/turn-abort-registry';
+import type { TeachingTurnRequestBody } from '../http/turn-request';
+import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { resolveTurnModelRuntime } from '../model/model-runtime';
 import { loadOwnedGeneralConversation } from './general-conversation';
-import { resolveTurnModelRuntime } from './model-runtime';
-import { registerTurnAbortController } from './turn-abort-registry';
-import type { TeachingTurnRequestBody } from './turn-request';
 
 const turns = new DrizzlePlatformTurnRepository();
 const PROMPT_VERSION = 'general-chat-v1';

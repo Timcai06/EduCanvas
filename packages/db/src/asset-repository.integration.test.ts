@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AssetAccessError, DrizzleAssetRepository } from './asset-repository';
 import { DrizzleChatRepository } from './chat-repository';
 import * as schema from './schema';
+import { DrizzleTeachingTurnLedger } from './turn-ledger-repository';
 
 function resolveTestDatabaseUrl() {
   const value = process.env.TEST_DATABASE_URL;
@@ -175,13 +176,21 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         usage: 'attachment' as const,
       },
     ];
-    const chat = new DrizzleChatRepository(getDatabase());
-    const turn = await chat.createOrGetTurn({
+    const ledger = await new DrizzleTeachingTurnLedger(
+      getDatabase(),
+    ).beginOrReplay({
       sessionId: spaceId,
       trustedStudentId: ownerSubjectId,
       clientMessageId: 'asset-message-1',
       parts,
+      traceId: 'trace-asset-message-1',
+      modelAlias: 'primary',
+      promptVersion: 'turn-v1',
+      promptHash: 'a'.repeat(64),
+      provider: 'fixture',
     });
+    const turn = ledger.turn;
+    const chat = new DrizzleChatRepository(getDatabase());
     expect(turn.studentMessage.parts).toEqual(parts);
     const history = await chat.listHistory({
       sessionId: spaceId,

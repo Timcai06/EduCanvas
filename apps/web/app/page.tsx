@@ -1,6 +1,6 @@
-import { GeneralChatEntry } from '@/features/workspace/general-chat-entry';
-import { GeneralChatWorkspace } from '@/features/workspace/general-chat-workspace';
-import { loadGeneralChatPageData } from '@/server/general-conversation';
+import { GeneralChatEntry } from '@/features/workspace/general/general-chat-entry';
+import { GeneralChatWorkspace } from '@/features/workspace/general/general-chat-workspace';
+import { loadGeneralChatPageData } from '@/server/platform/general-conversation';
 
 /**
  * 保持首页为低认知负担的单入口，让首次使用的学生直接进入学习主流程。

@@ -3,8 +3,8 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
-import type { AnonymousIdentity } from './anonymous-identity';
-import { loadOwnedTeachingSession } from './learning-session';
+import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { loadOwnedTeachingSession } from '../teaching/learning-session';
 import {
   removeStoredAsset,
   storeAssetBytes,

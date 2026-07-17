@@ -1,13 +1,13 @@
 # EduCanvas 项目技术与架构报告
 
-- 报告状态：`current snapshot`
+- 报告状态：`archived snapshot`（停止维护）
 - 最后核对日期：2026-07-16
 - 核对分支：`feat/20260716-multimodal-platform`
 - 仓库形态：pnpm + Turborepo 模块化单体
 - 当前产品阶段：本地可运行的真实 Agent/K12 垂直纵切，正在进入通用平台解耦阶段
 - 事实来源：当前仓库代码、Package Manifest、Drizzle Schema、已接受 ADR 与 active plan
 
-> 本报告解释“当前代码已经实现什么、各目录和关键文件负责什么、架构如何运行、还缺什么”。目标架构会单独标注，不把规划中的能力描述成已落地事实。
+> 本报告只保存2026-07-16当日视图，路径、测试数和实现边界可能已经过时。当前事实请查阅[`docs/README.md`](../../README.md)、已接受ADR与`packages/db/src/schema.ts`。
 
 ## 1. 项目结论
 
@@ -803,15 +803,16 @@ EduCanvas 当前已经具备一个可靠的真实 Agent 垂直纵切和正确的
 
 ## 20. 相关 canonical 文档
 
-- [文档总入口](docs/README.md)
-- [产品定义](docs/01-product/product-definition.md)
-- [学生 UI 规格](docs/01-product/student-ui-spec.md)
-- [系统架构](docs/02-architecture/system-architecture.md)
-- [Agent 编排](docs/03-ai/agent-orchestration.md)
-- [数据设计](docs/04-data/data-design.md)
-- [API 约定](docs/05-engineering/api-conventions.md)
-- [测试与评测](docs/06-quality/testing-and-evaluation.md)
-- [ADR 索引](docs/09-decisions/README.md)
-- [路线图](docs/10-planning/roadmap.md)
-- [Gemini + NotebookLM 产品复刻计划](docs/plan/active/2026-07-gemini-notebooklm-replica.md)
-- [K12 纵切结档记录](docs/plan/completed/2026-07-real-agent-learning-vertical-slice.md)
+- [文档总入口](../../README.md)
+- [产品定义](../../01-product/product-definition.md)
+- [学生 UI 规格](../../01-product/student-ui-spec.md)
+- [系统架构](../../02-architecture/system-architecture.md)
+- [Agent 编排](../../03-ai/agent-orchestration.md)
+- [数据设计](../../04-data/data-design.md)
+- [API 约定](../../05-engineering/api-conventions.md)
+- [测试与评测](../../06-quality/testing-and-evaluation.md)
+- [ADR 索引](../../09-decisions/README.md)
+- [路线图](../../10-planning/roadmap.md)
+- [Gemini + NotebookLM 产品复刻计划](../../plan/active/2026-07-gemini-notebooklm-replica.md)
+- [K12 纵切结档记录](../../plan/completed/2026-07-real-agent-learning-vertical-slice.md)
+

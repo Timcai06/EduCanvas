@@ -5,11 +5,11 @@ import {
   createAnonymousIdentity,
   readAnonymousIdentity,
   writeAnonymousIdentityCookie,
-} from '@/server/anonymous-identity';
+} from '@/server/identity/anonymous-identity';
 import {
   createGeneralConversation,
   writeActiveConversationCookie,
-} from '@/server/general-conversation';
+} from '@/server/platform/general-conversation';
 
 /** 默认入口只创建通用Agent Conversation，不隐式创建课程、掌握度或教学Session。 */
 export async function startGeneralChatAction(): Promise<void> {

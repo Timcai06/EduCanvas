@@ -43,8 +43,8 @@ export {
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';
 export {
+  ArtifactContentConflictError,
   DrizzleArtifactRepository,
-  type SavedArtifactReference,
 } from './artifact-repository';
 export {
   DrizzleEventStore,
@@ -56,7 +56,6 @@ export {
 } from './teaching-adapters';
 export {
   ANONYMOUS_LEARNING_SESSION_TTL_MS,
-  ArtifactContentConflictError,
   DrizzleLearningSessionRepository,
   LearningSessionNotFoundError,
   type BootstrappedLearningSession,
@@ -78,7 +77,6 @@ export {
   MAX_ASSISTANT_LEASE_MS,
   MIN_ASSISTANT_LEASE_MS,
   TurnInProgressError,
-  hashStudentMessageContent,
   normalizeStudentMessageContent,
   teachingTurnSessionLockKey,
   validateAssistantLeaseDuration,
@@ -88,8 +86,6 @@ export {
   type ChatMessageRole,
   type ChatMessageSnapshot,
   type ChatMessageStatus,
-  type CreateTeachingTurnInput,
-  type CreateTeachingTurnResult,
   type TeachingTurnSnapshot,
 } from './chat-repository';
 export {
@@ -117,14 +113,11 @@ export {
   type ExpiredTurnConvergence,
 } from './turn-lease-repository';
 export {
-  DrizzleTurnContextRepository,
   TurnContextConflictError,
   prepareTurnContextMaterial,
-  type RecordTurnContextInput,
   type PreparedTurnContextMaterial,
   type TurnContextMaterial,
-  type TurnContextSnapshot,
-} from './turn-context-repository';
+} from './turn-context';
 export {
   DrizzleToolCallRepository,
   MAX_TOOL_AUDIT_VALUE_BYTES,

@@ -12,7 +12,7 @@ function read(relativePath: string): string {
 
 describe('workspace truth and motion boundaries', () => {
   it('does not describe planned assets or preset artifacts as active AI output', () => {
-    const workspace = read('features/workspace/learn-workspace.tsx');
+    const workspace = read('features/workspace/learning/learn-workspace.tsx');
     const assets = read('features/assets/assets-drawer.tsx');
     const studio = read('features/studio/studio-drawer.tsx');
     const menu = read('features/composer/plus-menu.tsx');
@@ -27,7 +27,7 @@ describe('workspace truth and motion boundaries', () => {
   });
 
   it('keeps Halo animation on compositor properties and pauses while hidden', () => {
-    const halo = read('features/workspace/ambient-halo.tsx');
+    const halo = read('features/workspace/shared/ambient-halo.tsx');
 
     expect(halo).toContain("document.addEventListener('visibilitychange'");
     expect(halo).toContain('animation.paused(document.hidden)');

@@ -10,14 +10,18 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from './client';
+import { isUuid } from './internal/identifiers';
+import {
+  loadOwnedReadyAssetVersions,
+  OwnedAssetVersionError,
+} from './internal/owned-asset-versions';
 import { assets, assetVersions } from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
 const OWNER_ID = /^.{1,160}$/u;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export interface AssetSnapshot {
@@ -74,7 +78,7 @@ function requireOwner(value: string): string {
 }
 
 function requireUuid(value: string): string {
-  if (!UUID.test(value)) throw new AssetAccessError();
+  if (!isUuid(value)) throw new AssetAccessError();
   return value;
 }
 
@@ -248,39 +252,25 @@ export class DrizzleAssetRepository {
     );
     if (references.length === 0) return [];
 
-    const versionIds = references.map((reference) => reference.versionId);
-    const rows = await this.database
-      .select({ asset: assets, version: assetVersions })
-      .from(assetVersions)
-      .innerJoin(assets, eq(assets.id, assetVersions.assetId))
-      .where(
-        and(
-          eq(assets.ownerSubjectId, ownerSubjectId),
-          eq(assets.spaceId, spaceId),
-          eq(assets.status, 'ready'),
-          eq(assetVersions.status, 'ready'),
-          inArray(assetVersions.id, versionIds),
-        ),
-      );
-    const byVersion = new Map(rows.map((row) => [row.version.id, row]));
-    return references.map((reference) => {
-      const row = byVersion.get(reference.versionId);
-      if (
-        !row ||
-        row.asset.id !== reference.assetId ||
-        row.asset.currentVersionId !== reference.versionId ||
-        row.asset.kind !== reference.kind ||
-        row.version.kind !== reference.kind
-      ) {
-        throw new AssetAccessError();
-      }
-      return {
-        reference,
-        displayName: row.asset.displayName,
-        mimeType: row.version.mimeType,
-        byteSize: row.version.byteSize,
-        extractedText: row.version.extractedText,
-      };
-    });
+    try {
+      const rows = await loadOwnedReadyAssetVersions(this.database, {
+        ownerSubjectId,
+        spaceId,
+        references,
+      });
+      return rows.map((row, index) => {
+        const reference = references[index]!;
+        return {
+          reference,
+          displayName: row.asset.displayName,
+          mimeType: row.version.mimeType,
+          byteSize: row.version.byteSize,
+          extractedText: row.version.extractedText,
+        };
+      });
+    } catch (error) {
+      if (error instanceof OwnedAssetVersionError) throw new AssetAccessError();
+      throw error;
+    }
   }
 }

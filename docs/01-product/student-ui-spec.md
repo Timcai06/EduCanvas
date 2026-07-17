@@ -69,7 +69,7 @@
 
 ## 阶段一实现边界
 
-- 正常学习页已经切断`features/chat/demo-teacher-script.ts`依赖；浏览器通过固定 Route 消费供应商无关 SSE，消息和终态由服务端账本恢复；无可用 Provider 时显示明确的不可用状态，不返回关键词规则或固定老师话术；
+- 旧脚本教师替身已删除；浏览器通过固定 Route 消费供应商无关 SSE，消息和终态由服务端账本恢复；无可用 Provider 时显示明确的不可用状态，不返回关键词规则或固定老师话术；
 - 浏览器状态机覆盖`pending / streaming / completed / failed / cancelled / interrupted`，刷新恢复服务端持久化消息；首版不承诺逐 token 断点续传。确定性脚本只允许留在单元测试、E2E Fixture或明确标识的离线Demo模式；
 - PDF/图片上传、不可变Asset版本、消息Part、课程资料FTS、Turn快照、候选白名单和引用SSE/UI已经接通；用户上传Asset尚未统一进入可检索Source/Chunk链路，当前文本Provider也不能原生理解图片；
 - 判分、掌握度、进度全部走既有 Server Action 可信链路，客户端不自算；

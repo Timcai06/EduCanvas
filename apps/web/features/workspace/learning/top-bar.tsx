@@ -5,7 +5,7 @@ import {
   ClockCounterClockwise,
   SquaresFour,
 } from '@phosphor-icons/react';
-import { LogoMark } from './logo-mark';
+import { LogoMark } from '../shared/logo-mark';
 
 /**
  * 顶栏只保留必要上下文。quiet 空态严格只显示品牌；阶段徽章只有服务端传入

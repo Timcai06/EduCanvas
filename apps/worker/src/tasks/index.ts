@@ -1,11 +1,15 @@
 import type { TaskList } from 'graphile-worker';
+import { ingestKnowledgeDocument } from './ingest-knowledge-document.js';
+import { purgeAnonymousSubjects } from './purge-anonymous-subjects.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 
 /**
- * worker 的任务注册表。命名约定 `域.动作`(如后续的 artifact.generate);
+ * worker 的任务注册表。周期任务使用Graphile crontab兼容的 `域:动作` 命名;
  * 任务只能通过本注册表暴露,与 Tool Registry 同样是编译期显式白名单,
  * 不做运行时动态注册。
  */
 export const taskList: TaskList = {
+  'knowledge:ingest_document': ingestKnowledgeDocument,
+  'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
   'system.heartbeat': systemHeartbeat,
 };

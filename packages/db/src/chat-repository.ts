@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
 import {
   and,
@@ -13,13 +12,9 @@ import {
   sql,
 } from 'drizzle-orm';
 import { getDb } from './client';
+import { isUuid } from './internal/identifiers';
 import { chatMessages, lessonSessions, modelRuns } from './schema';
-import {
-  assertOwnedReadyAssetParts,
-  insertMessageParts,
-  loadMessageParts,
-  prepareStudentMessage,
-} from './message-parts';
+import { loadMessageParts } from './message-parts';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -63,20 +58,6 @@ export interface TeachingTurnSnapshot {
   turnId: string;
   studentMessage: ChatMessageSnapshot;
   assistantMessage: ChatMessageSnapshot;
-}
-
-export interface CreateTeachingTurnInput {
-  sessionId: string;
-  trustedStudentId: string;
-  clientMessageId: string;
-  text?: string;
-  parts?: readonly AgentMessagePart[];
-  leaseDurationMs?: number;
-  now?: Date;
-}
-
-export interface CreateTeachingTurnResult extends TeachingTurnSnapshot {
-  replayed: boolean;
 }
 
 export interface ChatHistoryCursor {
@@ -153,27 +134,6 @@ export function teachingTurnSessionLockKey(sessionId: string): string {
  */
 export function normalizeStudentMessageContent(value: string): string {
   return value.normalize('NFC').replace(/\r\n?/g, '\n').trim();
-}
-
-export function hashStudentMessageContent(value: string): string {
-  return createHash('sha256')
-    .update(normalizeStudentMessageContent(value), 'utf8')
-    .digest('hex');
-}
-
-function deterministicSessionTitle(
-  courseSlug: string,
-  content: string,
-): string {
-  const preview = normalizeStudentMessageContent(content).replace(/\s+/g, ' ');
-  const title = `${courseSlug} · ${preview}`;
-  return [...title].slice(0, 64).join('');
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }
 
 function toSnapshot(
@@ -269,128 +229,6 @@ export class DrizzleChatRepository {
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
-  }
-
-  async createOrGetTurn(
-    input: CreateTeachingTurnInput,
-  ): Promise<CreateTeachingTurnResult> {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientMessageId)) {
-      throw new ChatLifecycleError('clientMessageId 格式或长度无效');
-    }
-    const prepared = prepareStudentMessage({
-      clientMessageId: input.clientMessageId,
-      text: input.text,
-      parts: input.parts,
-    });
-    const content = prepared.content;
-    const requestHash = prepared.requestHash;
-    const now = input.now ?? new Date();
-    const leaseDurationMs = validateAssistantLeaseDuration(
-      input.leaseDurationMs ?? DEFAULT_ASSISTANT_LEASE_MS,
-    );
-    const lockKey = teachingTurnSessionLockKey(input.sessionId);
-
-    return this.database.transaction(async (transaction) => {
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
-      );
-      const session = await requireOwnedSession(
-        transaction,
-        input.sessionId,
-        input.trustedStudentId,
-        { requireActive: true },
-      );
-      const [existing] = await transaction
-        .select({
-          turnId: chatMessages.turnId,
-          requestHash: chatMessages.requestHash,
-        })
-        .from(chatMessages)
-        .where(
-          and(
-            eq(chatMessages.sessionId, input.sessionId),
-            eq(chatMessages.clientMessageId, input.clientMessageId),
-            eq(chatMessages.role, 'student'),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        if (existing.requestHash !== requestHash) {
-          throw new ChatMessageIdConflictError(input.clientMessageId);
-        }
-        return {
-          ...(await loadTurn(transaction, input.sessionId, existing.turnId)),
-          replayed: true,
-        };
-      }
-
-      const [activeAssistant] = await transaction
-        .select({ turnId: chatMessages.turnId })
-        .from(chatMessages)
-        .where(
-          and(
-            eq(chatMessages.sessionId, input.sessionId),
-            eq(chatMessages.role, 'assistant'),
-            inArray(chatMessages.status, ['pending', 'streaming']),
-          ),
-        )
-        .limit(1);
-      if (activeAssistant) {
-        throw new TurnInProgressError(activeAssistant.turnId);
-      }
-
-      await assertOwnedReadyAssetParts(transaction, {
-        ownerSubjectId: input.trustedStudentId,
-        spaceId: input.sessionId,
-        parts: prepared.parts,
-      });
-
-      const turnId = randomUUID();
-      const leaseId = randomUUID();
-      const leaseExpiresAt = new Date(now.getTime() + leaseDurationMs);
-      const insertedMessages = await transaction
-        .insert(chatMessages)
-        .values([
-          {
-            sessionId: input.sessionId,
-            turnId,
-            clientMessageId: input.clientMessageId,
-            requestHash,
-            role: 'student',
-            status: 'completed',
-            content,
-            createdAt: now,
-            completedAt: now,
-          },
-          {
-            sessionId: input.sessionId,
-            turnId,
-            role: 'assistant',
-            status: 'pending',
-            content: '',
-            leaseId,
-            leaseExpiresAt,
-            heartbeatAt: now,
-            createdAt: now,
-          },
-        ])
-        .returning();
-      const student = insertedMessages.find((row) => row.role === 'student');
-      if (!student) throw new ChatLifecycleError('学生消息写入失败');
-      await insertMessageParts(transaction, student.id, prepared.parts);
-      await transaction
-        .update(lessonSessions)
-        .set({
-          title: sql`coalesce(${lessonSessions.title}, ${deterministicSessionTitle(session.courseSlug, content || '附件消息')})`,
-          lastActivityAt: now,
-          updatedAt: now,
-        })
-        .where(eq(lessonSessions.id, input.sessionId));
-      return {
-        ...(await loadTurn(transaction, input.sessionId, turnId)),
-        replayed: false,
-      };
-    });
   }
 
   async getTurnByClientMessageId(input: {
