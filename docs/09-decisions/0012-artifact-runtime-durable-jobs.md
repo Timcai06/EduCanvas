@@ -35,6 +35,19 @@
 - Canvas 共创（跨轮迭代同一产物）与 Studio 输出（一键生成多形态产物）在数据模型上是同一个东西，一次建设两处受益；
 - 运维增量最小：不引入新存储系统，worker 与 web 共享全部 workspace 包和迁移流程。
 
+## 选型结论（2026-07-17，随 PR-J1 回写）
+
+对比后选择 **graphile-worker**：
+
+| 维度 | graphile-worker | pg-boss |
+| --- | --- | --- |
+| 事务性入队 | `graphile_worker.add_job()` 是普通 SQL 函数，可在任意 Drizzle 事务内与业务写入**原子提交**（决定性理由） | 入队走自身连接池，与业务事务的原子性需要绕行 |
+| 任务拾取延迟 | LISTEN/NOTIFY 即时唤醒 + 轮询兜底 | 纯轮询 |
+| 定时任务 | 内置 crontab | 内置 cron |
+| 生命周期电池 | 归档/保留策略较少，按需自补 | 归档、过期、死信等更齐全 |
+
+取舍：接受 graphile-worker 较少的"生命周期电池"，换取入队原子性与低延迟；归档策略等真实需求出现再补。集成测试以"事务回滚则任务消失、提交则被消费"作为选型承诺的守护用例（`apps/worker/src/worker.integration.test.ts`）。
+
 ## 后果
 
 - 部署形态变化：本地 `make dev` 与生产都需要拉起 worker 进程；CI 增加 worker 冒烟；

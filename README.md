@@ -171,7 +171,8 @@ sequenceDiagram
 ```text
 EduCanvas/
 ├── apps/
-│   └── web/                  # Next.js Chat、Assets、Canvas、BFF
+│   ├── web/                  # Next.js Chat、Assets、Canvas、BFF
+│   └── worker/               # 持久任务 worker(graphile-worker,ADR-0012)
 ├── packages/
 │   ├── agent-core/           # 通用 Asset、Message、Model、Gateway 契约
 │   ├── agent-runtime/        # Asset/Conversation Context；目标承载通用 Turn/Tool/Policy
