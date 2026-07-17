@@ -1,6 +1,6 @@
-import { readAnonymousIdentity } from '@/server/anonymous-identity';
-import { loadOwnedGeneralConversation } from '@/server/general-conversation';
-import { jsonError } from '@/server/request-security';
+import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import { jsonError } from '@/server/http/request-security';
 import { DrizzlePlatformArtifactRepository } from '@educanvas/db';
 
 export const runtime = 'nodejs';

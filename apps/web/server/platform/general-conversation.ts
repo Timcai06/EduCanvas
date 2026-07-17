@@ -10,7 +10,7 @@ import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import {
   readAnonymousIdentity,
   type AnonymousIdentity,
-} from './anonymous-identity';
+} from '../identity/anonymous-identity';
 
 const ACTIVE_CONVERSATION_COOKIE =
   process.env.NODE_ENV === 'production'

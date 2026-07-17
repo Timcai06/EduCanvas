@@ -19,15 +19,15 @@ import { Plus } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AmbientHalo } from './ambient-halo';
+import { AmbientHalo } from '../shared/ambient-halo';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
 } from './general-chat-entry';
-import { HeroGreeting } from './hero-greeting';
-import { LogoMark } from './logo-mark';
+import { HeroGreeting } from '../shared/hero-greeting';
+import { LogoMark } from '../shared/logo-mark';
 import { PromptSuggestions } from './prompt-suggestions';
-import { Sheet } from './sheet';
+import { Sheet } from '../shared/sheet';
 
 gsap.registerPlugin(useGSAP, Flip);
 

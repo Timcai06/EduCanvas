@@ -9,7 +9,7 @@ import {
   UnsupportedAgentInputModalityError,
 } from '@educanvas/agent-runtime';
 import { DrizzleAssetRepository } from '@educanvas/db';
-import type { AnonymousIdentity } from './anonymous-identity';
+import type { AnonymousIdentity } from '../identity/anonymous-identity';
 
 const assets = new DrizzleAssetRepository();
 

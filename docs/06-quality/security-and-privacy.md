@@ -21,7 +21,7 @@
 - 教学运行时在事务内再次校验session属于可信学生，归属失败统一返回会话不存在；
 - 浏览器只接收公开Artifact、判分反馈和Progress DTO，不接收私有判分键或内部学习事件。
 
-Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie轮换和篡改Cookie后无法读取原会话；真实PostgreSQL集成测试覆盖错误归属不写事件/掌握度。当前token仍是bearer凭证，匿名机制没有账号恢复、主动撤销、角色授权或跨设备登录；正式用户认证、CSRF专项验证、匿名bootstrap限流/配额、过期数据清理和隐私生命周期仍是生产上线门禁。
+Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie轮换和篡改Cookie后无法读取原会话；真实PostgreSQL集成测试覆盖错误归属不写事件/掌握度。worker 已调度7天窗口外的匿名数据库主体清理，但对象存储删除Outbox尚未接通。当前token仍是bearer凭证，匿名机制没有账号恢复、主动撤销、角色授权或跨设备登录；正式用户认证、CSRF专项验证、匿名bootstrap限流/配额和完整隐私生命周期仍是生产上线门禁。
 
 ## 模型安全
 

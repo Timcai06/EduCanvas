@@ -6,12 +6,12 @@ import {
   StopCircle,
   X,
 } from '@phosphor-icons/react';
-import { LogoMark } from '@/features/workspace/logo-mark';
+import { LogoMark } from '@/features/workspace/shared/logo-mark';
 import { useRef, useState } from 'react';
 import {
   COMPOSER_FOCUS_EVENT,
   COMPOSER_SEND_EVENT,
-} from '@/features/workspace/ambient-halo';
+} from '@/features/workspace/shared/ambient-halo';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
 
 /** 光场对输入行为的呼应是纯装饰,事件失败不影响输入,故直接触发不做防御。 */

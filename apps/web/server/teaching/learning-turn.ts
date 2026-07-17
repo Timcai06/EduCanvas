@@ -38,15 +38,15 @@ import {
   type TeachingTurnToolFailure,
 } from '@educanvas/teaching-runtime';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
-import type { AnonymousIdentity } from './anonymous-identity';
-import { AuditedTurnModelGateway } from './audited-model-gateway';
-import { materializeAssetContext } from './asset-materialization';
+import { materializeAssetContext } from '../assets/asset-materialization';
+import { registerTurnAbortController } from '../http/turn-abort-registry';
+import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { AuditedTurnModelGateway } from '../model/audited-model-gateway';
+import { resolveTurnModelRuntime } from '../model/model-runtime';
+import { hashPromptMaterial } from '../model/prompt-hash';
 import { loadOwnedTeachingSession } from './learning-session';
-import { resolveTurnModelRuntime } from './model-runtime';
-import { hashPromptMaterial } from './prompt-hash';
 import { createTeachingToolExecutor } from './teaching-tools';
 import { webTeachingObservability } from './teaching-observability';
-import { registerTurnAbortController } from './turn-abort-registry';
 
 const ledger = new DrizzleTeachingTurnLedger();
 const chat = new DrizzleChatRepository();

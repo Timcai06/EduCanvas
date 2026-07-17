@@ -2,15 +2,15 @@ import { TurnRateLimitError } from '@educanvas/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/server/anonymous-identity', () => ({
+vi.mock('@/server/identity/anonymous-identity', () => ({
   readAnonymousIdentity: vi.fn(),
 }));
-vi.mock('@/server/learning-turn', () => ({
+vi.mock('@/server/teaching/learning-turn', () => ({
   beginOwnedTeachingTurn: vi.fn(),
 }));
 
-import { readAnonymousIdentity } from '@/server/anonymous-identity';
-import { beginOwnedTeachingTurn } from '@/server/learning-turn';
+import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { beginOwnedTeachingTurn } from '@/server/teaching/learning-turn';
 import { createTeachingTurnEventStream, POST } from './route';
 
 const identity = {

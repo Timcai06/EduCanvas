@@ -24,7 +24,6 @@ describe('production AI dependency boundary', () => {
     const violations = SOURCE_ROOTS.flatMap((root) =>
       collectSourceFiles(join(WEB_ROOT, root)),
     ).filter((path) => {
-      if (path.endsWith('demo-teacher-script.ts')) return false;
       const source = readFileSync(path, 'utf8');
       return (
         source.includes('demo-teacher-script') ||

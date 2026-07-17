@@ -46,10 +46,10 @@
 
 ### 通用Asset
 
-- `assets`：所有者、临时Space标识、Turn/Space范围、类型、来源和生命周期；
+- `assets`：所有者、Space标识、Turn/Space范围、类型、来源和生命周期；
 - `asset_versions`：不可变内容版本、hash、私有storage key、解析文本和处理终态。
 
-当前限制：尚无一等`spaces`表，K12组合根暂用`lessonSession.id`作为`spaceId`；`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权；匿名清理尚未调度，也未通过对象删除Outbox删除磁盘/对象存储内容。
+当前限制：通用路径已有一等`spaces`/`conversations`，但K12组合根在迁移期仍以`lessonSession.id`映射`spaceId`；`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权。worker 已每日 03:15 UTC 调度匿名数据库主体清理，但仍未通过对象删除Outbox删除磁盘/对象存储内容。
 
 ### 知识与引用
 
@@ -60,6 +60,8 @@
 - `message_citations`：用户可见引用投影。
 
 当前限制：用户上传Asset不会自动进入该Source/Chunk链路；中文检索使用PostgreSQL`simple`配置，需用冻结中文评测验证并升级；当前引用会把候选集合视为回答引用，尚未绑定最终回答实际使用的candidate/claim/span。
+
+受控资料版本可由worker任务`knowledge:ingest_document`写入；该入口只接受显式Source元数据、私有`objectKey`、parser版本、内容hash和已解析Chunk，不抓取任意URL，也不等同于用户上传自动摄取。
 
 ### Artifact
 

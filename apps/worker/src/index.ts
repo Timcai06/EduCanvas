@@ -1,5 +1,6 @@
 import { run } from 'graphile-worker';
 import { taskList } from './tasks/index.js';
+import { workerCrontab } from './worker-config.js';
 
 /**
  * EduCanvas worker 进程入口(ADR-0012)。
@@ -17,13 +18,12 @@ async function main() {
     connectionString,
     /* 单机起步的保守并发;真实拥塞出现前不做配额设计(ADR-0012 开放问题) */
     concurrency: 2,
+    crontab: workerCrontab,
     noHandleSignals: false,
     pollInterval: 2_000,
     taskList,
   });
-  console.log(
-    `[worker] 已启动,注册任务: ${Object.keys(taskList).join(', ')}`,
-  );
+  console.log(`[worker] 已启动,注册任务: ${Object.keys(taskList).join(', ')}`);
   await runner.promise;
 }
 

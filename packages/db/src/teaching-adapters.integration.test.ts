@@ -7,10 +7,13 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { DrizzleArtifactRepository } from './artifact-repository';
+import {
+  ArtifactContentConflictError,
+  DrizzleArtifactRepository,
+  ensurePreparedArtifact,
+} from './artifact-repository';
 import {
   ANONYMOUS_LEARNING_SESSION_TTL_MS,
-  ArtifactContentConflictError,
   DrizzleLearningSessionRepository,
 } from './learning-session-repository';
 import * as schema from './schema';
@@ -91,7 +94,13 @@ async function seedSessionAndArtifact() {
     state: 'PRACTICE',
   });
   const artifacts = new DrizzleArtifactRepository(db);
-  await artifacts.save(sessionId, completeArtifact);
+  await db.transaction((transaction) =>
+    ensurePreparedArtifact(
+      transaction,
+      sessionId,
+      prepareArtifact(completeArtifact),
+    ),
+  );
   return artifacts;
 }
 

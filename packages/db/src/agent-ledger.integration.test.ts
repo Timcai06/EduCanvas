@@ -5,11 +5,14 @@ import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  ChatLifecycleError,
+  ChatMessageIdConflictError,
   DrizzleChatRepository,
   LearningSessionOwnershipError,
   TurnInProgressError,
 } from './chat-repository';
 import { DrizzleLearningSessionRepository } from './learning-session-repository';
+import { MessagePartValidationError } from './message-parts';
 import { DrizzleModelRunRepository } from './model-run-repository';
 import * as schema from './schema';
 import {
@@ -205,6 +208,41 @@ describeWithDatabase('A2/A3/A4 持久账本', () => {
     expect(await getDatabase().select().from(schema.modelRuns)).toHaveLength(1);
     expect(results[0]?.turn.assistantMessage.status).toBe('pending');
     expect(results[0]?.leaseId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('同一clientMessageId不能绑定不同消息内容', async () => {
+    await seedSession();
+    const ledger = new DrizzleTeachingTurnLedger(getDatabase());
+    const input = beginInput('conflicting-client-message');
+    await ledger.beginOrReplay(input);
+
+    await expect(
+      ledger.beginOrReplay({ ...input, text: '不同正文' }),
+    ).rejects.toBeInstanceOf(ChatMessageIdConflictError);
+    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
+      2,
+    );
+  });
+
+  it('在Ledger边界拒绝不安全clientMessageId和过长正文', async () => {
+    await seedSession();
+    const ledger = new DrizzleTeachingTurnLedger(getDatabase());
+
+    await expect(
+      ledger.beginOrReplay(beginInput('bad id')),
+    ).rejects.toBeInstanceOf(ChatLifecycleError);
+    await expect(
+      ledger.beginOrReplay(beginInput('x'.repeat(129))),
+    ).rejects.toBeInstanceOf(ChatLifecycleError);
+    await expect(
+      ledger.beginOrReplay({
+        ...beginInput('valid-id'),
+        text: 'x'.repeat(4_001),
+      }),
+    ).rejects.toBeInstanceOf(MessagePartValidationError);
+    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
+      0,
+    );
   });
 
   it('同一active session的不同clientMessageId并发时稳定拒绝第二个Turn', async () => {

@@ -24,7 +24,7 @@ import {
   prepareTurnContextMaterial,
   type PreparedTurnContextMaterial,
   type TurnContextMaterial,
-} from './turn-context-repository';
+} from './turn-context';
 import {
   assertOwnedReadyAssetParts,
   insertMessageParts,

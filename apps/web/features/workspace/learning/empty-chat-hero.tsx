@@ -4,8 +4,8 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { AmbientHalo } from './ambient-halo';
-import { HeroGreeting } from './hero-greeting';
+import { AmbientHalo } from '../shared/ambient-halo';
+import { HeroGreeting } from '../shared/hero-greeting';
 
 gsap.registerPlugin(useGSAP);
 

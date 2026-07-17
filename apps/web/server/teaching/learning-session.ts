@@ -18,7 +18,7 @@ import type {
 import {
   readAnonymousIdentity,
   type AnonymousIdentity,
-} from './anonymous-identity';
+} from '../identity/anonymous-identity';
 import { demoLesson } from './demo-lesson';
 import {
   gradeCanvasSubmissionService,

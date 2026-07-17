@@ -45,8 +45,9 @@
 
 ### 学生端功能
 
-- `features/workspace/learn-workspace.tsx`：Chat、Canvas、Rail 与抽屉的客户端总编排。
-- `features/workspace/empty-chat-hero.tsx` 与 `ambient-halo.tsx`：S0 首屏和可降级光场。
+- `features/workspace/general/`：通用Chat入口、工作区和建议提示。
+- `features/workspace/learning/`：K12 Chat、Canvas、Rail与抽屉编排。
+- `features/workspace/shared/`：两条工作区复用的品牌、Halo、Sheet和焦点管理。
 - `features/chat/chat-panel.tsx`：消息、流式状态、停止和重试界面。
 - `features/chat/use-teaching-turn.ts`：发送请求、消费 SSE、取消与重试状态管理。
 - `features/chat/turn-events.ts` 与 `turn-state.ts`：浏览器 SSE 协议解析和 Turn 状态机。
@@ -60,16 +61,12 @@
 
 ### 服务端组合根
 
-- `server/anonymous-identity.ts`：匿名 Token 校验、哈希学生标识与 HttpOnly Cookie。
-- `server/learning-session.ts`：课程启动/恢复、页面快照、聊天历史和 Canvas 判分编排。
-- `server/learning-turn.ts`：Turn ledger、lease、模型/工具运行、安全 Gate、持久化与公开事件的总编排。
-- `server/model-runtime.ts`：读取白名单环境变量并创建真实 `TurnModelGateway`。
-- `server/audited-model-gateway.ts`：在 Provider 事件流外增加 Model Run 与 usage 审计。
-- `server/teaching-tools.ts`：生产`getStudentState`与`retrieveKnowledge`工具注册。
-- `server/asset-upload.ts`、`asset-storage.ts`与`asset-materialization.ts`：文件魔数/大小校验、私有本地存储、PDF解析与Provider上下文物化。
-- `server/teaching-runtime.ts`：向 Canvas 判分服务注入 Drizzle 适配器。
-- `server/turn-abort-registry.ts`：当前进程内的显式取消注册表。
-- `server/request-security.ts`、`turn-request.ts`、`sse.ts`：同源写保护、请求边界与 SSE 编码。
+- `server/identity/`：匿名 Token 校验、哈希学生标识与 HttpOnly Cookie。
+- `server/http/`：同源写保护、请求/SSE边界和进程内取消注册表。
+- `server/assets/`：上传解析、私有存储、PDF解析与Provider上下文物化。
+- `server/model/`：Provider Runtime、审计Gateway与Prompt hash。
+- `server/platform/`：通用Conversation与Turn组合根。
+- `server/teaching/`：K12 Session、Turn、Tool、判分服务与可观测性组合根。
 
 ## 常用命令
 

@@ -8,7 +8,7 @@ function source(path: string) {
 
 describe('默认通用Chat产品边界', () => {
   it('根入口组合通用Chat而不是K12课程页', () => {
-    const page = source('../app/page.tsx');
+    const page = source('../../app/page.tsx');
     expect(page).toContain('GeneralChatWorkspace');
     expect(page).not.toContain('demoLesson');
     expect(page).not.toContain('bootstrapAnonymousLesson');
