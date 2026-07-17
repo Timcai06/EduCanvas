@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('根入口默认创建通用Chat，并将K12保留为显式模式', async ({
+test('根入口默认创建通用Chat，界面上不存在K12模式入口', async ({
   context,
   page,
 }) => {
@@ -36,7 +36,8 @@ test('根入口默认创建通用Chat，并将K12保留为显式模式', async (
   await expect(
     page.getByRole('heading', { name: '你好，今天想探索什么？' }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'K12 学习模式' })).toBeVisible();
+  /* 产品决策:多模态 Agent 是第一身份,不存在"K12 模式"入口(student-ui-spec) */
+  await expect(page.getByRole('link', { name: 'K12 学习模式' })).toHaveCount(0);
   await expect(page.getByText(/猫狗|学习进度|开始学习/)).toHaveCount(0);
 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });

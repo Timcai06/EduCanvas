@@ -5,6 +5,16 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
+import {
+  ArtifactCanvas,
+  ArtifactConfirmSheet,
+  ArtifactStatusCard,
+  useArtifactGeneration,
+} from '@/features/canvas/artifact-generation-flow';
+import {
+  fetchConversationArtifacts,
+  type ArtifactSummary,
+} from '@/features/canvas/artifact-client';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
@@ -41,6 +51,7 @@ const GENERAL_TURN_OPTIONS: AgentTurnClientOptions = {
 const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
+  'create_mind_map',
 ];
 
 export function GeneralChatWorkspace({
@@ -55,6 +66,11 @@ export function GeneralChatWorkspace({
   >(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
+    [],
+  );
+  const artifactFlow = useArtifactGeneration();
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -143,10 +159,16 @@ export function GeneralChatWorkspace({
     queueMicrotask(() => send(prompt));
   }, [send]);
 
-  const handleMenuAction = useCallback((action: PlusMenuActionId) => {
-    if (action === 'upload_file') setAssetPanel('document');
-    else if (action === 'upload_image') setAssetPanel('image');
-  }, []);
+  const handleMenuAction = useCallback(
+    (action: PlusMenuActionId) => {
+      if (action === 'upload_file') setAssetPanel('document');
+      else if (action === 'upload_image') setAssetPanel('image');
+      else if (action === 'create_mind_map') {
+        artifactFlow.beginConfirm('对话思维导图');
+      }
+    },
+    [artifactFlow],
+  );
 
   useEffect(() => {
     if (pendingMenuConsumed.current) return;
@@ -206,6 +228,18 @@ export function GeneralChatWorkspace({
         <span className="flex-1" />
         <button
           type="button"
+          onClick={() => {
+            setStudioOpen(true);
+            void fetchConversationArtifacts()
+              .then(setStudioItems)
+              .catch(() => setStudioItems([]));
+          }}
+          className="rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+        >
+          产物
+        </button>
+        <button
+          type="button"
           onClick={() => setAssetPanel('assets')}
           className="hidden rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:block"
         >
@@ -240,6 +274,20 @@ export function GeneralChatWorkspace({
           <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
             <HeroGreeting />
             <div ref={composerDockRef} className="w-full">
+              {artifactFlow.generation &&
+              artifactFlow.generation.phase !== 'confirm' ? (
+                <div className="px-4">
+                  <ArtifactStatusCard
+                    generation={artifactFlow.generation}
+                    onOpen={() => {
+                      const artifactId = artifactFlow.generation?.artifactId;
+                      if (artifactId)
+                        void artifactFlow.openArtifact(artifactId);
+                    }}
+                    onDismiss={artifactFlow.dismiss}
+                  />
+                </div>
+              ) : null}
               <Composer
                 chips={selectedAssets.map((asset) => ({
                   id: asset.id,
@@ -282,7 +330,18 @@ export function GeneralChatWorkspace({
                 assistantLabel="AI"
               />
             </div>
-            <div ref={composerDockRef} className="relative z-10">
+            <div ref={composerDockRef} className="relative z-10 px-4">
+              {artifactFlow.generation &&
+              artifactFlow.generation.phase !== 'confirm' ? (
+                <ArtifactStatusCard
+                  generation={artifactFlow.generation}
+                  onOpen={() => {
+                    const artifactId = artifactFlow.generation?.artifactId;
+                    if (artifactId) void artifactFlow.openArtifact(artifactId);
+                  }}
+                  onDismiss={artifactFlow.dismiss}
+                />
+              ) : null}
               <Composer
                 chips={selectedAssets.map((asset) => ({
                   id: asset.id,
@@ -298,7 +357,16 @@ export function GeneralChatWorkspace({
               />
             </div>
             </div>
-            {previewHtml !== null ? (
+            {artifactFlow.openDetail ? (
+              <ArtifactCanvas
+                detail={artifactFlow.openDetail}
+                isFull={artifactFlow.canvasFull}
+                onToggleFull={() =>
+                  artifactFlow.setCanvasFull((value) => !value)
+                }
+                onClose={artifactFlow.closeCanvas}
+              />
+            ) : previewHtml !== null ? (
               <HtmlPreviewPanel
                 source={previewHtml}
                 isFull={previewFull}
@@ -312,10 +380,64 @@ export function GeneralChatWorkspace({
           </div>
         )}
       </main>
+      {isLanding && artifactFlow.openDetail ? (
+        /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
+           否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */
+        <ArtifactCanvas
+          detail={artifactFlow.openDetail}
+          isFull
+          onToggleFull={() => undefined}
+          onClose={artifactFlow.closeCanvas}
+        />
+      ) : null}
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {turn.announcement?.text ?? ''}
       </p>
+      {artifactFlow.generation?.phase === 'confirm' ? (
+        <ArtifactConfirmSheet
+          defaultTitle={artifactFlow.generation.title}
+          onConfirm={(title) => void artifactFlow.confirm(title)}
+          onClose={artifactFlow.dismiss}
+        />
+      ) : null}
+      {studioOpen ? (
+        <Sheet label="本次对话的产物" onClose={() => setStudioOpen(false)}>
+          {studioItems.length === 0 ? (
+            <p className="text-sm text-ink-muted">
+              还没有产物。在输入框的「+」菜单里试试「生成思维导图」。
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {studioItems.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudioOpen(false);
+                      void artifactFlow.openArtifact(item.id);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface/70 p-3 text-left transition-colors hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        {item.title}
+                      </span>
+                      <span className="block text-xs text-ink-muted">
+                        {item.latestVersion > 0
+                          ? `v${item.latestVersion}`
+                          : item.status === 'proposed'
+                            ? '生成中或未完成'
+                            : item.status}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Sheet>
+      ) : null}
       {assetPanel === 'assets' ? (
         <Sheet label="知识与媒体资产" onClose={() => setAssetPanel(null)}>
           <AssetsDrawer assets={assets} onToggle={toggleAsset} />
