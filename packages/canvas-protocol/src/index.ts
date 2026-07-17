@@ -31,3 +31,9 @@ export {
   type MindMapContent,
   type MindMapNode,
 } from './artifacts/mind-map';
+export {
+  SLIDES_CONTENT_VERSION,
+  slidesContentSchema,
+  type Slide,
+  type SlidesContent,
+} from './artifacts/slides';

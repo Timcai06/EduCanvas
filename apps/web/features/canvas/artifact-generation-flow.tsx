@@ -4,22 +4,30 @@ import { CircleNotch, TreeStructure, Warning } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from '@/features/workspace/shared/sheet';
 import {
-  createMindMapArtifact,
+  createArtifact,
   fetchArtifactDetail,
   pollArtifactUntilSettled,
   type ArtifactDetail,
+  type CreatableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
 import { MindMapRenderer } from './mind-map-renderer';
+import { SlidesRenderer } from './slides-renderer';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
 export interface GenerationState {
   phase: GenerationPhase;
+  kind: CreatableArtifactKind;
   artifactId?: string;
   title: string;
   detail?: ArtifactDetail;
 }
+
+export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
+  mind_map: '思维导图',
+  slides: 'Slides',
+};
 
 /**
  * 「生成思维导图」的确认 → 轮询 → 打开回路(M1 PR-J5b)。
@@ -34,14 +42,17 @@ export function useArtifactGeneration() {
 
   useEffect(() => () => pollAbort.current?.abort(), []);
 
-  const beginConfirm = useCallback((defaultTitle: string) => {
-    setGeneration({ phase: 'confirm', title: defaultTitle });
-  }, []);
+  const beginConfirm = useCallback(
+    (kind: CreatableArtifactKind, defaultTitle: string) => {
+      setGeneration({ phase: 'confirm', kind, title: defaultTitle });
+    },
+    [],
+  );
 
-  const confirm = useCallback(async (title: string) => {
-    setGeneration({ phase: 'generating', title });
+  const confirm = useCallback(async (kind: CreatableArtifactKind, title: string) => {
+    setGeneration({ phase: 'generating', kind, title });
     try {
-      const created = await createMindMapArtifact(title);
+      const created = await createArtifact(kind, title);
       pollAbort.current = new AbortController();
       const detail = await pollArtifactUntilSettled(created.artifact.id, {
         signal: pollAbort.current.signal,
@@ -51,12 +62,13 @@ export function useArtifactGeneration() {
         detail.latestJob?.status !== 'failed';
       setGeneration({
         phase: succeeded ? 'ready' : 'failed',
+        kind,
         artifactId: created.artifact.id,
         title: detail.artifact.title,
         detail,
       });
     } catch {
-      setGeneration({ phase: 'failed', title });
+      setGeneration({ phase: 'failed', kind, title });
     }
   }, []);
 
@@ -91,21 +103,24 @@ export function useArtifactGeneration() {
 
 /** 确认卡:标题可改,显式点击才创建。 */
 export function ArtifactConfirmSheet({
+  kind,
   defaultTitle,
   onConfirm,
   onClose,
 }: {
+  kind: CreatableArtifactKind;
   defaultTitle: string;
   onConfirm: (title: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(defaultTitle);
   const trimmed = title.trim();
+  const kindLabel = ARTIFACT_KIND_LABELS[kind];
   return (
-    <Sheet label="生成思维导图" onClose={onClose}>
+    <Sheet label={`生成${kindLabel}`} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm leading-6 text-ink-muted">
-          将根据当前对话生成一份思维导图，由后台任务完成——关闭页面也不会中断。
+          将根据当前对话生成一份{kindLabel}，由后台任务完成——关闭页面也不会中断。
         </p>
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-ink-faint">产物标题</span>
@@ -164,7 +179,7 @@ export function ArtifactStatusCard({
           {generation.phase === 'generating'
             ? '后台生成中…关闭页面也不会中断'
             : generation.phase === 'ready'
-              ? '思维导图已生成'
+              ? `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
               : '生成失败，可稍后从产物列表重试'}
         </span>
       </span>
@@ -213,6 +228,8 @@ export function ArtifactCanvas({
       <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
         {detail.artifact.kind === 'mind_map' && detail.latestVersion ? (
           <MindMapRenderer content={detail.latestVersion.content} />
+        ) : detail.artifact.kind === 'slides' && detail.latestVersion ? (
+          <SlidesRenderer content={detail.latestVersion.content} />
         ) : (
           <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
         )}

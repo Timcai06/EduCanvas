@@ -53,6 +53,7 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
   'create_mind_map',
+  'create_slides',
 ];
 
 export function GeneralChatWorkspace({
@@ -167,7 +168,9 @@ export function GeneralChatWorkspace({
       if (action === 'upload_file') setAssetPanel('document');
       else if (action === 'upload_image') setAssetPanel('image');
       else if (action === 'create_mind_map') {
-        artifactFlow.beginConfirm('对话思维导图');
+        artifactFlow.beginConfirm('mind_map', '对话思维导图');
+      } else if (action === 'create_slides') {
+        artifactFlow.beginConfirm('slides', '对话小结 Slides');
       }
     },
     [artifactFlow],
@@ -405,8 +408,11 @@ export function GeneralChatWorkspace({
       </p>
       {artifactFlow.generation?.phase === 'confirm' ? (
         <ArtifactConfirmSheet
+          kind={artifactFlow.generation.kind}
           defaultTitle={artifactFlow.generation.title}
-          onConfirm={(title) => void artifactFlow.confirm(title)}
+          onConfirm={(title) =>
+            void artifactFlow.confirm(artifactFlow.generation!.kind, title)
+          }
           onClose={artifactFlow.dismiss}
         />
       ) : null}

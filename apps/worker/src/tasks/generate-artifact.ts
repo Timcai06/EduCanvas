@@ -8,6 +8,7 @@ import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import { resolveStructuredModelGateway } from '../model-runtime.js';
 import { generateMindMapContent } from './mind-map-generation.js';
+import { generateSlidesContent } from './slides-generation.js';
 
 const payloadSchema = z
   .object({
@@ -59,7 +60,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
     });
-    if (artifact.kind !== 'mind_map') {
+    if (artifact.kind !== 'mind_map' && artifact.kind !== 'slides') {
       await failJob('unsupported_kind');
       return;
     }
@@ -73,16 +74,21 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       trustedSubjectId: payload.subjectId,
       limit: 40,
     });
-    const { content, generatedBy } = await generateMindMapContent({
+    const generatorInput = {
       title: artifact.title,
       messages: messages.map((message) => ({
-        role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
+        role:
+          message.role === 'user' ? ('user' as const) : ('assistant' as const),
         content: message.content,
       })),
       gateway: resolveStructuredModelGateway(),
       traceId: `artifact:${payload.artifactId}`,
       operationId: payload.jobId,
-    });
+    };
+    const { content, generatedBy } =
+      artifact.kind === 'mind_map'
+        ? await generateMindMapContent(generatorInput)
+        : await generateSlidesContent(generatorInput);
 
     const version = await artifacts.appendVersion({
       artifactId: payload.artifactId,
