@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from './client';
 import { conversationMessages, conversations, spaces } from './schema';
 
@@ -91,6 +91,25 @@ export class DrizzlePlatformConversationRepository {
       )
       .limit(1);
     return conversation ? toConversation(conversation) : null;
+  }
+
+  /** 侧栏历史列表:按最近活动排序,只返回本主体的 active 会话公开投影。 */
+  async listOwnedRecent(input: {
+    trustedSubjectId: string;
+    limit?: number;
+  }): Promise<readonly PlatformConversationSnapshot[]> {
+    const rows = await this.database
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          eq(conversations.status, 'active'),
+        ),
+      )
+      .orderBy(desc(conversations.lastActivityAt), desc(conversations.id))
+      .limit(Math.min(input.limit ?? 30, 100));
+    return rows.map(toConversation);
   }
 
   async create(input: {

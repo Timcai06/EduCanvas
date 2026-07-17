@@ -13,7 +13,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     'pnpm',
     ['--filter', '@educanvas/worker', 'exec', 'tsx', 'src/index.ts'],
     {
-      env: { ...process.env, DATABASE_URL: databaseUrl },
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl,
+        /* E2E 必须与真实 Provider 隔离:空串经 trimmed() 收敛为 not_configured,
+           覆盖 worker 对根 .env 的自加载,生成走确定性规则大纲 */
+        MODEL_GATEWAY_PROVIDER: '',
+        MODEL_GATEWAY_API_KEY: '',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );

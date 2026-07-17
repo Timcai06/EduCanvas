@@ -34,6 +34,7 @@ import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
 } from './general-chat-entry';
+import { ConversationSidebar } from './conversation-sidebar';
 import { HeroGreeting } from '../shared/hero-greeting';
 import { LogoMark } from '../shared/logo-mark';
 import { PromptSuggestions } from './prompt-suggestions';
@@ -56,8 +57,10 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
 
 export function GeneralChatWorkspace({
   initialMessages,
+  conversationId,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
+  conversationId: string;
 }) {
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
@@ -250,13 +253,18 @@ export function GeneralChatWorkspace({
             type="submit"
             aria-label="新对话"
             title="新对话"
-            className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+            className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink lg:hidden"
           >
             <Plus size={19} />
           </button>
         </form>
       </header>
 
+      <div className="flex min-h-0 flex-1">
+        <ConversationSidebar
+          activeConversationId={conversationId}
+          onNewChat={() => void startNewGeneralChatAction()}
+        />
       <main
         ref={mainRef}
         className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -380,6 +388,7 @@ export function GeneralChatWorkspace({
           </div>
         )}
       </main>
+      </div>
       {isLanding && artifactFlow.openDetail ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
            否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */
