@@ -15,7 +15,7 @@ help:
 		'EduCanvas 本地开发命令' \
 		'' \
 		'  make setup        安装依赖、启动数据库并执行迁移' \
-		'  make dev          启动数据库、执行迁移并在 PORT（默认 3101）启动开发服务' \
+		'  make dev          启动数据库、执行迁移并同时启动 Web（PORT，默认 3101）与任务 worker' \
 		'  make stop         停止本地数据库容器并保留数据卷' \
 		'  make doctor       检查 Node、pnpm、Docker 与本地环境文件' \
 		'  make check        运行 lint、类型检查和单元测试' \
@@ -45,7 +45,7 @@ setup: deps db-up db-migrate
 
 dev: db-migrate
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; pnpm --filter @educanvas/web exec next dev --port $(PORT)
+	@set -a; . ./.env; set +a; PORT=$(PORT) pnpm dev
 
 stop:
 	@docker compose stop

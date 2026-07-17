@@ -1,0 +1,35 @@
+# @educanvas/worker
+
+EduCanvas 的持久任务 worker 进程（[ADR-0012](../../docs/09-decisions/0012-artifact-runtime-durable-jobs.md)）。与 Web 共享同一个 PostgreSQL 与全部 workspace 包，但独立进程运行——分钟级产物生成（导图/Slides/音频等）不能占用 HTTP 请求生命周期。
+
+## 包职责
+
+- 运行 graphile-worker，消费 `graphile_worker` 队列中的任务；
+- 注册并执行任务处理器（`src/tasks/`，命名约定 `域.动作`，编译期显式白名单）；
+- 不定义业务表结构（唯一入口仍是 `packages/db`），不直接暴露任何 HTTP 接口。
+
+## 核心文件
+
+- `src/index.ts`：进程入口，读取 `DATABASE_URL`、注册任务、优雅停机；
+- `src/tasks/index.ts`：任务注册表；
+- `src/tasks/system-heartbeat.ts`：冒烟任务，验证入队→消费回路；
+- `src/worker.integration.test.ts`：队列回路与 SQL 事务性入队的集成测试。
+
+## 常用命令
+
+```bash
+make dev                 # 仓库根:同时启动 Web 与 worker
+pnpm --filter @educanvas/worker dev    # 只启动 worker(需 DATABASE_URL)
+make integration         # 含本包的 PostgreSQL 集成测试
+```
+
+## 入队方式
+
+- 业务代码内(推荐):在 Drizzle 事务里执行 `select graphile_worker.add_job('任务名', payload)`,与业务写入原子提交;
+- 任务 payload 是不可信输入,处理器内必须先过 Zod 校验。
+
+## 改动前必读
+
+- [ADR-0012 Artifact Runtime 与持久任务](../../docs/09-decisions/0012-artifact-runtime-durable-jobs.md)：部署形态、表职责与信任分层；
+- [产品复刻计划](../../docs/plan/active/2026-07-gemini-notebooklm-replica.md)：M1 里程碑与 PR 拆分；
+- [后端工程约定](../../docs/05-engineering/backend.md)。

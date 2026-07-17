@@ -11,7 +11,7 @@
     "lint": "turbo lint",
     "test": "pnpm test:unit",
     "test:unit": "turbo test",
-    "test:integration": "turbo test:integration --filter=@educanvas/db",
+    "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker",
     "pretest:e2e": "pnpm build",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
