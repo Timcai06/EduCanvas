@@ -3,7 +3,6 @@
 import { startGeneralChatAction } from '@/app/actions';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import Link from 'next/link';
 import { useCallback, useTransition } from 'react';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
 
@@ -13,6 +12,7 @@ export const PENDING_GENERAL_MENU_ACTION_KEY =
 const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
+  'create_mind_map',
 ];
 
 export function GeneralChatEntry() {
@@ -40,12 +40,6 @@ export function GeneralChatEntry() {
           EduCanvas
         </span>
         <span className="flex-1" />
-        <Link
-          href="/learn"
-          className="rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-        >
-          K12 学习模式
-        </Link>
       </header>
       <EmptyChatHero>
         <Composer
