@@ -4,7 +4,7 @@ import { switchConversationAction } from '@/app/actions';
 import { useGSAP } from '@gsap/react';
 import { ChatCircle, Plus } from '@phosphor-icons/react';
 import gsap from 'gsap';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 gsap.registerPlugin(useGSAP);
 
@@ -44,12 +44,17 @@ export function ConversationSidebar({
   const rootRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<readonly ConversationListItem[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [isSwitchPending, startSwitchTransition] = useTransition();
 
   useEffect(() => {
     let active = true;
     void fetch('/api/v1/chat/conversations')
       .then(async (response) =>
-        response.ok ? ((await response.json()) as { conversations: ConversationListItem[] }) : { conversations: [] },
+        response.ok
+          ? ((await response.json()) as {
+              conversations: ConversationListItem[];
+            })
+          : { conversations: [] },
       )
       .then((data) => {
         if (active) setItems(data.conversations);
@@ -62,10 +67,18 @@ export function ConversationSidebar({
 
   useGSAP(
     () => {
+      const sidebarItems = rootRef.current
+        ? Array.from(
+            rootRef.current.querySelectorAll<HTMLElement>(
+              '[data-sidebar-item]',
+            ),
+          )
+        : [];
+      if (sidebarItems.length === 0) return;
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: no-preference)', () => {
         gsap.fromTo(
-          '[data-sidebar-item]',
+          sidebarItems,
           { autoAlpha: 0, x: -6 },
           {
             autoAlpha: 1,
@@ -78,7 +91,7 @@ export function ConversationSidebar({
       });
       return () => media.revert();
     },
-    { scope: rootRef, dependencies: [items.length > 0], revertOnUpdate: true },
+    { scope: rootRef, dependencies: [items.length], revertOnUpdate: true },
   );
 
   return (
@@ -106,11 +119,17 @@ export function ConversationSidebar({
               <button
                 type="button"
                 aria-current={isActive ? 'true' : undefined}
-                disabled={pendingId !== null}
+                disabled={isSwitchPending}
                 onClick={() => {
                   if (isActive) return;
                   setPendingId(item.id);
-                  void switchConversationAction(item.id);
+                  startSwitchTransition(async () => {
+                    try {
+                      await switchConversationAction(item.id);
+                    } finally {
+                      setPendingId(null);
+                    }
+                  });
                 }}
                 className={`flex min-h-9 w-full items-center gap-2.5 rounded-full px-3 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   isActive

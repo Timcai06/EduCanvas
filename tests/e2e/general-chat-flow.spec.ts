@@ -51,9 +51,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   /* U1 侧栏:当前会话出现在历史列表(本 spec 的 turn 被 mock,服务端不落
      消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
   await expect(
-    page
-      .getByRole('navigation', { name: '历史对话' })
-      .getByText('未命名对话'),
+    page.getByRole('navigation', { name: '历史对话' }).getByText('未命名对话'),
   ).toBeVisible();
 
   /* U2 v1:来源常驻区在侧栏可见 */
@@ -71,4 +69,45 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
     .map((cookie) => cookie.name);
   expect(cookieNames).toContain('__Host-educanvas_anonymous_identity');
   expect(cookieNames).toContain('__Host-educanvas_active_conversation');
+});
+
+test('历史对话可反复切换，并按Conversation重新水合消息', async ({ page }) => {
+  const firstPrompt = '第一段历史对话：分析太阳能小车';
+  const secondPrompt = '第二段历史对话：设计校园雨水花园';
+
+  await page.goto('/');
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill(firstPrompt);
+  await composer.press('Enter');
+  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
+
+  const history = page.getByRole('navigation', { name: '历史对话' });
+  await history.getByRole('button', { name: '新对话' }).click();
+  await expect(
+    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+  ).toBeVisible();
+
+  await page
+    .getByRole('textbox', { name: '向 EduCanvas 提问' })
+    .fill(secondPrompt);
+  await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
+  await expect(page.getByText(secondPrompt, { exact: true })).toBeVisible();
+  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
+
+  await page
+    .getByRole('navigation', { name: '历史对话' })
+    .getByRole('button', { name: new RegExp(firstPrompt) })
+    .click();
+  let chat = page.getByRole('region', { name: 'AI 对话' });
+  await expect(chat.getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(chat.getByText(secondPrompt, { exact: true })).toHaveCount(0);
+
+  await page
+    .getByRole('navigation', { name: '历史对话' })
+    .getByRole('button', { name: new RegExp(secondPrompt) })
+    .click();
+  chat = page.getByRole('region', { name: 'AI 对话' });
+  await expect(chat.getByText(secondPrompt, { exact: true })).toBeVisible();
+  await expect(chat.getByText(firstPrompt, { exact: true })).toHaveCount(0);
 });

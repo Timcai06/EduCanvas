@@ -52,6 +52,8 @@ export default defineConfig({
       ...process.env,
       DATABASE_URL: databaseUrl,
       EDUCANVAS_ENABLE_DESIGN_QA: 'true',
+      MODEL_GATEWAY_PROVIDER: '',
+      MODEL_GATEWAY_API_KEY: '',
     },
     reuseExistingServer: false,
     timeout: 120_000,
