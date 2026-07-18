@@ -10,6 +10,7 @@ export default async function HomePage() {
   const data = await loadGeneralChatPageData();
   return data ? (
     <GeneralChatWorkspace
+      key={data.conversation.id}
       initialMessages={data.initialMessages}
       conversationId={data.conversation.id}
     />
