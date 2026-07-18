@@ -241,9 +241,9 @@ stateDiagram-v2
 1. **M1 产物主干**：PostgreSQL 持久任务队列 + worker、Artifact/版本/生成任务一等公民、SSE 产物事件、对象存储 Port（[ADR-0012](docs/09-decisions/0012-artifact-runtime-durable-jobs.md)）；
 2. **M2 轻产物**：思维导图、Slides、泛化测验/闪卡；
 3. **M3 来源统一与网页搜索**：Asset/Source/Chunk 单链路、搜索 Provider、最小 Agent Runtime（maxToolRounds 策略 + Tool Registry）；
-4. **M4 音频概览已完成**：勾选来源→脚本→TTS→可恢复音频Artifact；下一闸门为
-   **M5 视频概览**；
-5. **UI 蓝图线（并行）**：侧栏历史对话、来源常驻面板、行内引用、Canvas 工具芯片与共创化、`/learn` 并入统一界面。
+4. **M4 音频概览已完成**：勾选来源→脚本→TTS→可恢复音频Artifact；
+   **M5视频成本闸门已评估并顺延**（[ADR-0013](docs/09-decisions/0013-video-overview-cost-gate.md)），当前不接入外部生成式视频Provider；
+5. **下一开发项是UI蓝图PR-U3**：输入框工具芯片（Canvas/来源），随后推进Canvas共创化与`/learn`并入统一界面。
 
 ## 文档入口
 
