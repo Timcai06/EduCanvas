@@ -296,6 +296,32 @@ export function teachingTurnReducer(
   const assistantId = active.assistantMessageId ?? active.localAssistantId;
   if (event.type === 'message.citation') {
     if (event.messageId !== assistantId) return state;
+    const citation =
+      event.kind === 'web'
+        ? {
+            id: event.citationId,
+            ...(event.marker === undefined ? {} : { marker: event.marker }),
+            kind: 'web' as const,
+            assetId: event.assetId,
+            assetVersionId: event.assetVersionId,
+            label: event.label,
+            url: event.url,
+            pageStart: event.pageStart,
+            pageEnd: event.pageEnd,
+          }
+        : {
+            id: event.citationId,
+            ...(event.marker === undefined ? {} : { marker: event.marker }),
+            ...(event.kind === 'knowledge'
+              ? { kind: 'knowledge' as const }
+              : {}),
+            sourceId: event.sourceId,
+            documentId: event.documentId,
+            chunkId: event.chunkId,
+            label: event.label,
+            pageStart: event.pageStart,
+            pageEnd: event.pageEnd,
+          };
     return {
       ...state,
       messages: updateAssistant(state.messages, assistantId, (message) => ({
@@ -304,16 +330,7 @@ export function teachingTurnReducer(
           ...(message.citations ?? []).filter(
             (citation) => citation.id !== event.citationId,
           ),
-          {
-            id: event.citationId,
-            ...(event.marker === undefined ? {} : { marker: event.marker }),
-            sourceId: event.sourceId,
-            documentId: event.documentId,
-            chunkId: event.chunkId,
-            label: event.label,
-            pageStart: event.pageStart,
-            pageEnd: event.pageEnd,
-          },
+          citation,
         ],
       })),
     };

@@ -138,12 +138,18 @@ export async function fetchReadableWebPage(
     }
     if (!response || !response.ok) throw new WebPageFetchError('fetch_failed');
 
-    const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+    const contentType =
+      response.headers.get('content-type')?.toLowerCase() ?? '';
+    if (
+      !contentType.includes('text/html') &&
+      !contentType.includes('text/plain')
+    ) {
       await response.body?.cancel().catch(() => undefined);
       throw new WebPageFetchError('unsupported_content');
     }
-    const declaredLength = Number(response.headers.get('content-length') ?? '0');
+    const declaredLength = Number(
+      response.headers.get('content-length') ?? '0',
+    );
     if (declaredLength > MAX_PAGE_BYTES) {
       await response.body?.cancel().catch(() => undefined);
       throw new WebPageFetchError('too_large');
@@ -172,12 +178,19 @@ const fetchPageOutputSchema = z
     url: z.string().max(1024),
     title: z.string().max(300).nullable(),
     content: z.string().max(8_000),
+    /** 组合根持久化成功后分配；模型必须用对应 [n] 标记引用。 */
+    citationMarker: z.number().int().min(1).max(99).optional(),
   })
   .strict();
+
+export type WebPageFetchedHook = (
+  page: FetchedWebPage,
+) => Promise<{ citationMarker: number } | undefined>;
 
 /** 读网页工具:无外部 Key 依赖,恒可注册;in-turn 内容截断以护上下文预算。 */
 export function createFetchWebPageTool(
   fetchImpl: typeof fetch = fetch,
+  onFetched?: WebPageFetchedHook,
 ): AgentTool<
   z.infer<typeof fetchPageInputSchema>,
   z.infer<typeof fetchPageOutputSchema>
@@ -185,16 +198,18 @@ export function createFetchWebPageTool(
   return {
     name: 'fetchWebPage',
     description:
-      '读取一个公开网页并返回其正文文本(截断至8000字符)。用于查看搜索结果或用户给出的链接。',
+      '读取一个公开网页并返回其正文文本(截断至8000字符)。用于查看搜索结果或用户给出的链接；若返回 citationMarker，引用该网页时必须在正文使用对应的 [n]。',
     inputSchema: fetchPageInputSchema,
     outputSchema: fetchPageOutputSchema,
     timeoutMs: 12_000,
     handler: async (input) => {
       const page = await fetchReadableWebPage(input.url, fetchImpl);
+      const persisted = await onFetched?.(page);
       return {
         url: page.url,
         title: page.title,
         content: [...page.text].slice(0, 8_000).join(''),
+        ...persisted,
       };
     },
   };

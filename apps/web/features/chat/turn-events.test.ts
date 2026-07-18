@@ -118,6 +118,38 @@ describe('teaching turn SSE protocol', () => {
     });
   });
 
+  it('解析通用网页引用并拒绝不安全的原文定位', () => {
+    const payload = {
+      type: 'message.citation',
+      schemaVersion: '1',
+      turnId: 'turn-1',
+      messageId: 'assistant-1',
+      citationId: 'citation-web-1',
+      marker: 2,
+      kind: 'web',
+      assetId: 'asset-1',
+      assetVersionId: 'version-1',
+      label: '原始研究网页',
+      url: 'https://example.com/research',
+      pageStart: null,
+      pageEnd: null,
+    };
+    expect(
+      parseTeachingTurnEvent('message.citation', JSON.stringify(payload)),
+    ).toMatchObject({
+      kind: 'web',
+      marker: 2,
+      assetId: 'asset-1',
+      url: 'https://example.com/research',
+    });
+    expect(() =>
+      parseTeachingTurnEvent(
+        'message.citation',
+        JSON.stringify({ ...payload, url: 'javascript:alert(1)' }),
+      ),
+    ).toThrow(TurnStreamProtocolError);
+  });
+
   it.each([0, 100, 1.5])('拒绝非法引用标记 %s', (marker) => {
     expect(() =>
       parseTeachingTurnEvent(
@@ -233,10 +265,27 @@ describe('teaching turn SSE protocol', () => {
     ).toMatchObject({ code: 'provider_timeout' });
 
     for (const bad of [
-      { type: 'artifact.proposed', artifactId: 'a', kind: 'Bad-Kind', trustTier: 'tier1', title: 't' },
-      { type: 'artifact.proposed', artifactId: 'a', kind: 'mind_map', trustTier: 'tier3', title: 't' },
+      {
+        type: 'artifact.proposed',
+        artifactId: 'a',
+        kind: 'Bad-Kind',
+        trustTier: 'tier1',
+        title: 't',
+      },
+      {
+        type: 'artifact.proposed',
+        artifactId: 'a',
+        kind: 'mind_map',
+        trustTier: 'tier3',
+        title: 't',
+      },
       { type: 'artifact.version_added', artifactId: 'a', version: 0 },
-      { type: 'artifact.generation_progress', artifactId: 'a', jobId: 'j', progress: 101 },
+      {
+        type: 'artifact.generation_progress',
+        artifactId: 'a',
+        jobId: 'j',
+        progress: 101,
+      },
       { type: 'artifact.failed', artifactId: 'a' },
     ]) {
       expect(() =>

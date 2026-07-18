@@ -120,6 +120,13 @@
       "when": 1784295053302,
       "tag": "0016_daffy_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784371846231,
+      "tag": "0017_new_scourge",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@
 import { useGSAP } from '@gsap/react';
 import {
   ArrowRight,
+  ArrowSquareOut,
   FilePdf,
   Image as ImageIcon,
   PresentationChart,
@@ -220,28 +221,55 @@ export function ChatPanel({
                   className="flex flex-wrap gap-2 pt-1"
                   aria-label="回答引用"
                 >
-                  {message.citations.map((citation) => (
-                    <span
-                      key={citation.id}
-                      {...(citation.marker !== undefined
-                        ? { id: `cite-${message.id}-${citation.marker}` }
-                        : {})}
-                      title="来自本轮冻结的课程资料版本"
-                      className="inline-flex scroll-mt-24 items-center gap-1.5 rounded-full border border-line/80 bg-surface/75 px-3 py-1 text-xs font-medium text-ink-muted"
-                    >
-                      {citation.marker !== undefined ? (
-                        <span className="font-semibold text-accent">
-                          {citation.marker}
+                  {message.citations.map((citation) => {
+                    const content = (
+                      <>
+                        {citation.marker !== undefined ? (
+                          <span className="font-semibold text-accent">
+                            {citation.marker}
+                          </span>
+                        ) : (
+                          <span
+                            aria-hidden="true"
+                            className="size-1.5 rounded-full bg-accent"
+                          />
+                        )}
+                        <span className="max-w-72 truncate">
+                          {citation.label}
                         </span>
-                      ) : (
-                        <span
-                          aria-hidden="true"
-                          className="size-1.5 rounded-full bg-accent"
-                        />
-                      )}
-                      {citation.label}
-                    </span>
-                  ))}
+                        {citation.kind === 'web' ? (
+                          <ArrowSquareOut aria-hidden="true" size={13} />
+                        ) : null}
+                      </>
+                    );
+                    const shared = {
+                      ...(citation.marker !== undefined
+                        ? { id: `cite-${message.id}-${citation.marker}` }
+                        : {}),
+                      className:
+                        'inline-flex scroll-mt-24 items-center gap-1.5 rounded-full border border-line/80 bg-surface/75 px-3 py-1 text-xs font-medium text-ink-muted',
+                    };
+                    return citation.kind === 'web' ? (
+                      <a
+                        key={citation.id}
+                        {...shared}
+                        href={citation.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="打开原网页"
+                      >
+                        {content}
+                      </a>
+                    ) : (
+                      <span
+                        key={citation.id}
+                        {...shared}
+                        title="来自本轮冻结的课程资料版本"
+                      >
+                        {content}
+                      </span>
+                    );
+                  })}
                 </div>
               ) : null}
               {message.suggestsCanvas && !canvasOpen ? (

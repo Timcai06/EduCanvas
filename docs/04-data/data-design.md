@@ -58,8 +58,10 @@
 - `turn_source_snapshots`、`turn_source_versions`：本轮冻结的Source集合与版本；
 - `retrieval_candidates`：本轮实际检索候选白名单；
 - `message_citations`：用户可见引用投影。
+- `operation_sources`：通用Operation实际读取的来源白名单；当前`kind=web`，绑定不可变AssetVersion、稳定ordinal和公开原文定位；
+- `conversation_message_citations`：通用assistant消息实际引用的`operation_sources`子集。
 
-当前限制：用户上传Asset不会自动进入该Source/Chunk链路；中文检索使用PostgreSQL`simple`配置，需用冻结中文评测验证并升级。K12 synthesis 已按最终安全回答中的`[n]`保存实际candidate子集和原始稀疏编号；模型未输出合法编号时为避免丢失来源仍回退候选全集。通用Conversation尚未接入这条引用投影，引用也尚未绑定claim/span或来源原文定位。
+当前限制：用户上传Asset不会自动进入K12 Source/Chunk链路；中文检索使用PostgreSQL`simple`配置，需用冻结中文评测验证并升级。K12 synthesis 已按最终安全回答中的`[n]`保存实际candidate子集和原始稀疏编号；模型未输出合法编号时为避免丢失来源仍回退候选全集。通用网页路径只提升`fetchWebPage`实际读取并持久化的页面，搜索摘要不能成为引用；正文无合法`[n]`时不伪造引用。两条路径都尚未绑定claim/span或页内字符Anchor。
 
 受控资料版本可由worker任务`knowledge:ingest_document`写入；该入口只接受显式Source元数据、私有`objectKey`、parser版本、内容hash和已解析Chunk，不抓取任意URL，也不等同于用户上传自动摄取。
 
@@ -142,6 +144,8 @@ provider_file
 - 数据库删除采用tombstone+outbox，两阶段幂等删除对象，再确认完成；
 - 匿名保留策略必须有定时调度、重试、残留扫描和指标；
 - 日志不得保存Secret、完整未成年人资料、Provider原始请求或私有storage key。
+
+匿名保留任务以`lesson_sessions.last_activity_at`与`conversations.last_activity_at`的主体级最大值共同判定；general-only主体也进入候选扫描。通用Citation/Source/Artifact/Message/Operation/Conversation/Space与K12账本、Asset均在同一可回滚逐表删除闭包中，任一表失败则整个主体不产生部分删除。
 
 ## K12可信学习事实
 

@@ -1,19 +1,28 @@
 import { eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
+  agentOperations,
   agentMessageParts,
+  artifactGenerationJobs,
+  artifacts,
+  artifactVersions,
   assets,
   assetVersions,
   canvasArtifactGradingKeys,
   canvasArtifacts,
   chatMessages,
+  conversationMessageCitations,
+  conversationMessages,
+  conversations,
   learningEvents,
   lessonSessions,
   masteryStates,
   messageCitations,
   modelRuns,
+  operationSources,
   retrievalCandidates,
   sessionSourceBindings,
+  spaces,
   toolCalls,
   turnSafetyDecisions,
   turnSourceSnapshots,
@@ -44,6 +53,10 @@ export type AnonymousDataOwnershipPath =
   | 'session_id'
   | 'message_id -> chat_messages.session_id'
   | 'artifact_record_id -> canvas_artifacts.session_id'
+  | 'message_id -> conversation_messages.conversation_id'
+  | 'operation_id -> agent_operations.conversation_id'
+  | 'artifact_id -> artifacts.owner_subject_id'
+  | 'conversation_id -> conversations.owner_subject_id'
   | 'asset_id -> assets.owner_subject_id'
   | 'owner_subject_id'
   | 'student_id';
@@ -53,12 +66,137 @@ interface AnonymousLifecycleDeletionContext {
   subjectId: string;
   sessionIds: readonly string[];
   artifactRecordIds: readonly string[];
+  conversationIds: readonly string[];
+  operationIds: readonly string[];
+  conversationMessageIds: readonly string[];
+  platformArtifactIds: readonly string[];
 }
 
 interface AnonymousLifecycleDefinition {
   tableName: string;
   ownershipPath: AnonymousDataOwnershipPath;
   deleteRows(context: AnonymousLifecycleDeletionContext): Promise<number>;
+}
+
+async function deleteConversationMessageCitations(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.conversationMessageIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(conversationMessageCitations)
+      .where(
+        inArray(conversationMessageCitations.assistantMessageId, [
+          ...context.conversationMessageIds,
+        ]),
+      )
+      .returning({ id: conversationMessageCitations.id })
+  ).length;
+}
+
+async function deleteOperationSources(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.operationIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(operationSources)
+      .where(inArray(operationSources.operationId, [...context.operationIds]))
+      .returning({ id: operationSources.id })
+  ).length;
+}
+
+async function deleteArtifactGenerationJobs(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.platformArtifactIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(artifactGenerationJobs)
+      .where(
+        inArray(artifactGenerationJobs.artifactId, [
+          ...context.platformArtifactIds,
+        ]),
+      )
+      .returning({ id: artifactGenerationJobs.id })
+  ).length;
+}
+
+async function deleteArtifactVersions(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.platformArtifactIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(artifactVersions)
+      .where(
+        inArray(artifactVersions.artifactId, [...context.platformArtifactIds]),
+      )
+      .returning({ id: artifactVersions.id })
+  ).length;
+}
+
+async function deletePlatformArtifacts(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(artifacts)
+      .where(eq(artifacts.ownerSubjectId, context.subjectId))
+      .returning({ id: artifacts.id })
+  ).length;
+}
+
+async function deleteConversationMessages(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.conversationIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(conversationMessages)
+      .where(
+        inArray(conversationMessages.conversationId, [
+          ...context.conversationIds,
+        ]),
+      )
+      .returning({ id: conversationMessages.id })
+  ).length;
+}
+
+async function deleteAgentOperations(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.conversationIds.length === 0) return 0;
+  return (
+    await context.transaction
+      .delete(agentOperations)
+      .where(
+        inArray(agentOperations.conversationId, [...context.conversationIds]),
+      )
+      .returning({ id: agentOperations.id })
+  ).length;
+}
+
+async function deleteConversations(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(conversations)
+      .where(eq(conversations.ownerSubjectId, context.subjectId))
+      .returning({ id: conversations.id })
+  ).length;
+}
+
+async function deleteSpaces(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(spaces)
+      .where(eq(spaces.ownerSubjectId, context.subjectId))
+      .returning({ id: spaces.id })
+  ).length;
 }
 
 async function deleteToolCalls(
@@ -290,6 +428,51 @@ async function deleteMasteryStates(
  */
 const lifecycleDefinitions = [
   {
+    tableName: 'conversation_message_citations',
+    ownershipPath: 'message_id -> conversation_messages.conversation_id',
+    deleteRows: deleteConversationMessageCitations,
+  },
+  {
+    tableName: 'operation_sources',
+    ownershipPath: 'operation_id -> agent_operations.conversation_id',
+    deleteRows: deleteOperationSources,
+  },
+  {
+    tableName: 'artifact_generation_jobs',
+    ownershipPath: 'artifact_id -> artifacts.owner_subject_id',
+    deleteRows: deleteArtifactGenerationJobs,
+  },
+  {
+    tableName: 'artifact_versions',
+    ownershipPath: 'artifact_id -> artifacts.owner_subject_id',
+    deleteRows: deleteArtifactVersions,
+  },
+  {
+    tableName: 'artifacts',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deletePlatformArtifacts,
+  },
+  {
+    tableName: 'conversation_messages',
+    ownershipPath: 'conversation_id -> conversations.owner_subject_id',
+    deleteRows: deleteConversationMessages,
+  },
+  {
+    tableName: 'agent_operations',
+    ownershipPath: 'conversation_id -> conversations.owner_subject_id',
+    deleteRows: deleteAgentOperations,
+  },
+  {
+    tableName: 'conversations',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteConversations,
+  },
+  {
+    tableName: 'spaces',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteSpaces,
+  },
+  {
     tableName: 'message_citations',
     ownershipPath: 'session_id',
     deleteRows: deleteMessageCitations,
@@ -471,18 +654,25 @@ export class DrizzleAnonymousDataLifecycleService {
       throw new TypeError('limit必须是1-1000的整数');
     }
     const cutoff = new Date(now.getTime() - ANONYMOUS_SUBJECT_RETENTION_MS);
-    const candidates = await this.database
-      .select({ subjectId: lessonSessions.studentId })
-      .from(lessonSessions)
-      .where(
-        sql`${lessonSessions.studentId} ~ ${ANONYMOUS_SUBJECT_SQL_PATTERN}`,
+    const candidates = await this.database.execute<{ subjectId: string }>(sql`
+      with subject_activity as (
+        select ${lessonSessions.studentId} as subject_id,
+               ${lessonSessions.lastActivityAt} as activity_at
+        from ${lessonSessions}
+        where ${lessonSessions.studentId} ~ ${ANONYMOUS_SUBJECT_SQL_PATTERN}
+        union all
+        select ${conversations.ownerSubjectId} as subject_id,
+               ${conversations.lastActivityAt} as activity_at
+        from ${conversations}
+        where ${conversations.ownerSubjectId} ~ ${ANONYMOUS_SUBJECT_SQL_PATTERN}
       )
-      .groupBy(lessonSessions.studentId)
-      .having(
-        sql`max(${lessonSessions.lastActivityAt}) < ${cutoff.toISOString()}::timestamptz`,
-      )
-      .orderBy(lessonSessions.studentId)
-      .limit(limit);
+      select subject_id as "subjectId"
+      from subject_activity
+      group by subject_id
+      having max(activity_at) < ${cutoff.toISOString()}::timestamptz
+      order by subject_id
+      limit ${limit}
+    `);
 
     const deletedRows = emptyDeleteCounts();
     let deletedSubjects = 0;
@@ -549,23 +739,68 @@ export class DrizzleAnonymousDataLifecycleService {
           .from(lessonSessions)
           .where(eq(lessonSessions.studentId, subjectId))
           .for('update');
+        const ownedConversations = await transaction
+          .select({
+            id: conversations.id,
+            lastActivityAt: conversations.lastActivityAt,
+          })
+          .from(conversations)
+          .where(eq(conversations.ownerSubjectId, subjectId))
+          .for('update');
         if (
-          sessions.length === 0 ||
-          sessions.some((session) => session.lastActivityAt >= cutoff)
+          (sessions.length === 0 && ownedConversations.length === 0) ||
+          sessions.some((session) => session.lastActivityAt >= cutoff) ||
+          ownedConversations.some(
+            (conversation) => conversation.lastActivityAt >= cutoff,
+          )
         ) {
           return null;
         }
 
         const sessionIds = sessions.map((session) => session.id);
-        const artifacts = await transaction
-          .select({ id: canvasArtifacts.id })
-          .from(canvasArtifacts)
-          .where(inArray(canvasArtifacts.sessionId, sessionIds));
+        const lessonArtifacts =
+          sessionIds.length === 0
+            ? []
+            : await transaction
+                .select({ id: canvasArtifacts.id })
+                .from(canvasArtifacts)
+                .where(inArray(canvasArtifacts.sessionId, sessionIds));
+        const conversationIds = ownedConversations.map(
+          (conversation) => conversation.id,
+        );
+        const ownedOperations =
+          conversationIds.length === 0
+            ? []
+            : await transaction
+                .select({ id: agentOperations.id })
+                .from(agentOperations)
+                .where(
+                  inArray(agentOperations.conversationId, conversationIds),
+                );
+        const ownedMessages =
+          conversationIds.length === 0
+            ? []
+            : await transaction
+                .select({ id: conversationMessages.id })
+                .from(conversationMessages)
+                .where(
+                  inArray(conversationMessages.conversationId, conversationIds),
+                );
+        const ownedPlatformArtifacts = await transaction
+          .select({ id: artifacts.id })
+          .from(artifacts)
+          .where(eq(artifacts.ownerSubjectId, subjectId));
         const context: AnonymousLifecycleDeletionContext = {
           transaction,
           subjectId,
           sessionIds,
-          artifactRecordIds: artifacts.map((artifact) => artifact.id),
+          artifactRecordIds: lessonArtifacts.map((artifact) => artifact.id),
+          conversationIds,
+          operationIds: ownedOperations.map((operation) => operation.id),
+          conversationMessageIds: ownedMessages.map((message) => message.id),
+          platformArtifactIds: ownedPlatformArtifacts.map(
+            (artifact) => artifact.id,
+          ),
         };
         const deletedRows = emptyDeleteCounts();
         for (const definition of lifecycleDefinitions) {
@@ -579,8 +814,15 @@ export class DrizzleAnonymousDataLifecycleService {
           .from(lessonSessions)
           .where(eq(lessonSessions.studentId, subjectId))
           .limit(1);
-        if (remainingSessions.length > 0) {
-          throw new Error('匿名主体清理期间出现未纳入锁定快照的新Session');
+        const remainingConversations = await transaction
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(eq(conversations.ownerSubjectId, subjectId))
+          .limit(1);
+        if (remainingSessions.length > 0 || remainingConversations.length > 0) {
+          throw new Error(
+            '匿名主体清理期间出现未纳入锁定快照的新Session或Conversation',
+          );
         }
         return deletedRows;
       },

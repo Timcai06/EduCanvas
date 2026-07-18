@@ -396,6 +396,88 @@ export const assetVersions = pgTable(
 );
 
 /**
+ * 通用 Agent Operation 本轮实际读取的来源白名单。网页正文先落为不可变
+ * AssetVersion，再由这里冻结本轮编号和公开定位；搜索摘要不能直接进入该表。
+ */
+export const operationSources = pgTable(
+  'operation_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    operationId: uuid('operation_id').notNull(),
+    assetVersionId: uuid('asset_version_id').notNull(),
+    kind: text('kind').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    label: text('label').notNull(),
+    locatorUrl: text('locator_url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.operationId],
+      foreignColumns: [agentOperations.id],
+      name: 'operation_sources_operation_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.assetVersionId],
+      foreignColumns: [assetVersions.id],
+      name: 'operation_sources_asset_version_fk',
+    }).onDelete('restrict'),
+    uniqueIndex('operation_sources_operation_ordinal_unique').on(
+      table.operationId,
+      table.ordinal,
+    ),
+    uniqueIndex('operation_sources_operation_url_unique').on(
+      table.operationId,
+      table.locatorUrl,
+    ),
+    index('operation_sources_asset_version_idx').on(table.assetVersionId),
+    check('operation_sources_kind_check', sql`${table.kind} = 'web'`),
+    check(
+      'operation_sources_ordinal_check',
+      sql`${table.ordinal} between 1 and 99`,
+    ),
+    check(
+      'operation_sources_public_shape_check',
+      sql`char_length(${table.label}) between 1 and 400 and char_length(${table.locatorUrl}) between 8 and 2048 and ${table.locatorUrl} ~* '^https?://'`,
+    ),
+  ],
+);
+
+/** 通用消息只引用同一 Operation 已冻结的来源，不接受浏览器直写 URL/Asset。 */
+export const conversationMessageCitations = pgTable(
+  'conversation_message_citations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assistantMessageId: uuid('assistant_message_id').notNull(),
+    operationSourceId: uuid('operation_source_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.assistantMessageId],
+      foreignColumns: [conversationMessages.id],
+      name: 'conversation_citations_message_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.operationSourceId],
+      foreignColumns: [operationSources.id],
+      name: 'conversation_citations_source_fk',
+    }).onDelete('cascade'),
+    uniqueIndex('conversation_message_citations_message_source_unique').on(
+      table.assistantMessageId,
+      table.operationSourceId,
+    ),
+    index('conversation_message_citations_message_idx').on(
+      table.assistantMessageId,
+    ),
+  ],
+);
+
+/**
  * K12 v1 用户可见消息账本。学生消息保存发送幂等证据，老师消息保存可恢复的生命周期；
  * Provider trace 和内部工具结果不写入该表。当前外键仍指向 lesson_sessions、角色仍是
  * student/assistant，不能被当作平台通用 Conversation 模型；通用数据骨架落地后迁移。

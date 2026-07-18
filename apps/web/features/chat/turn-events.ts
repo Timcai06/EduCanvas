@@ -27,19 +27,33 @@ export interface MessageDeltaEvent extends TurnEventBase {
   delta: string;
 }
 
-export interface MessageCitationEvent extends TurnEventBase {
+interface MessageCitationEventBase extends TurnEventBase {
   type: 'message.citation';
   messageId: string;
   citationId: string;
   /** 文中标记号(即 [n]);旧流可能缺省,缺省时 UI 退化为无编号来源徽章。 */
   marker?: number;
-  sourceId: string;
-  documentId: string;
-  chunkId: string;
   label: string;
   pageStart: number | null;
   pageEnd: number | null;
 }
+
+export interface KnowledgeMessageCitationEvent extends MessageCitationEventBase {
+  kind?: 'knowledge';
+  sourceId: string;
+  documentId: string;
+  chunkId: string;
+}
+
+export interface WebMessageCitationEvent extends MessageCitationEventBase {
+  kind: 'web';
+  assetId: string;
+  assetVersionId: string;
+  url: string;
+}
+
+export type MessageCitationEvent =
+  KnowledgeMessageCitationEvent | WebMessageCitationEvent;
 
 export interface TurnCompletedEvent extends TurnEventBase {
   type: 'turn.completed';
@@ -155,6 +169,27 @@ function readBoolean(
   return value;
 }
 
+function readPublicHttpUrl(
+  data: Record<string, unknown>,
+  key: string,
+  eventName: string,
+): string {
+  const value = readString(data, key, eventName, 2_048);
+  try {
+    const url = new URL(value);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password
+    ) {
+      throw new Error('invalid');
+    }
+    return url.toString();
+  } catch {
+    throw new TurnStreamProtocolError(`${eventName}.${key} is invalid`);
+  }
+}
+
 function readNullablePositiveInteger(
   data: Record<string, unknown>,
   key: string,
@@ -241,8 +276,8 @@ export function parseTeachingTurnEvent(
     };
   }
   if (eventName === 'message.citation') {
-    return {
-      type: eventName,
+    const common = {
+      type: 'message.citation' as const,
       schemaVersion: TURN_EVENT_SCHEMA_VERSION,
       turnId,
       messageId: readString(parsed, 'messageId', eventName),
@@ -254,12 +289,33 @@ export function parseTeachingTurnEvent(
               readNullablePositiveInteger(parsed, 'marker', eventName, 99) ??
               undefined,
           }),
-      sourceId: readString(parsed, 'sourceId', eventName),
-      documentId: readString(parsed, 'documentId', eventName),
-      chunkId: readString(parsed, 'chunkId', eventName),
       label: readString(parsed, 'label', eventName, 400),
       pageStart: readNullablePositiveInteger(parsed, 'pageStart', eventName),
       pageEnd: readNullablePositiveInteger(parsed, 'pageEnd', eventName),
+    };
+    if (parsed.kind === 'web') {
+      if (common.pageStart !== null || common.pageEnd !== null) {
+        throw new TurnStreamProtocolError(
+          `${eventName} web page fields are invalid`,
+        );
+      }
+      return {
+        ...common,
+        kind: 'web',
+        assetId: readString(parsed, 'assetId', eventName),
+        assetVersionId: readString(parsed, 'assetVersionId', eventName),
+        url: readPublicHttpUrl(parsed, 'url', eventName),
+      };
+    }
+    if (parsed.kind !== undefined && parsed.kind !== 'knowledge') {
+      throw new TurnStreamProtocolError(`${eventName}.kind is invalid`);
+    }
+    return {
+      ...common,
+      ...(parsed.kind === 'knowledge' ? { kind: 'knowledge' as const } : {}),
+      sourceId: readString(parsed, 'sourceId', eventName),
+      documentId: readString(parsed, 'documentId', eventName),
+      chunkId: readString(parsed, 'chunkId', eventName),
     };
   }
   if (eventName === 'turn.completed') {

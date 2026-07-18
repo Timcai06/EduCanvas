@@ -31,6 +31,12 @@ export {
   type PlatformTurnTerminalStatus,
 } from './platform-turn-repository';
 export {
+  DrizzlePlatformSourceRepository,
+  PlatformSourceOwnershipError,
+  type PlatformMessageCitationSnapshot,
+  type PlatformOperationSourceSnapshot,
+} from './platform-source-repository';
+export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,

@@ -8,6 +8,8 @@ import {
   DrizzlePlatformConversationRepository,
   PlatformConversationOwnershipError,
 } from './conversation-platform-repository';
+import { DrizzleAssetRepository } from './asset-repository';
+import { DrizzlePlatformSourceRepository } from './platform-source-repository';
 import {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,
@@ -48,7 +50,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table lesson_sessions, conversation_messages, agent_operations, conversations, spaces
+      truncate table lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
       restart identity cascade
     `);
   });
@@ -164,6 +166,117 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     expect(await getDatabase().select().from(schema.lessonSessions)).toEqual(
       [],
     );
+  });
+
+  it('网页来源按多轮读取顺序冻结编号，消息只持久化正文实际引用子集', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const assets = new DrizzleAssetRepository(getDatabase());
+    const sources = new DrizzlePlatformSourceRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'web-source-user',
+      spaceKind: 'personal',
+      spaceTitle: '网页研究',
+    });
+    const started = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      clientMessageId: 'web-research-1',
+      text: '比较两个网页的结论',
+    });
+    const firstAsset = await assets.createUploaded({
+      ownerSubjectId: 'web-source-user',
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: '网页甲',
+      mimeType: 'text/plain',
+      byteSize: 6,
+      contentHash: 'a'.repeat(64),
+      storageKey: 'tests/web-source-a.txt',
+      extractedText: '甲正文',
+      outcome: { status: 'ready' },
+    });
+    const secondAsset = await assets.createUploaded({
+      ownerSubjectId: 'web-source-user',
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: '网页乙',
+      mimeType: 'text/plain',
+      byteSize: 6,
+      contentHash: 'b'.repeat(64),
+      storageKey: 'tests/web-source-b.txt',
+      extractedText: '乙正文',
+      outcome: { status: 'ready' },
+    });
+    if (!firstAsset.version || !secondAsset.version) {
+      throw new Error('测试网页Asset版本创建失败');
+    }
+    const first = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: firstAsset.descriptor.assetId,
+      assetVersionId: firstAsset.version.versionId,
+      label: '网页甲',
+      url: 'https://example.com/a#section',
+    });
+    const second = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: secondAsset.descriptor.assetId,
+      assetVersionId: secondAsset.version.versionId,
+      label: '网页乙',
+      url: 'https://example.com/b',
+    });
+    const replayedFirst = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: firstAsset.descriptor.assetId,
+      assetVersionId: firstAsset.version.versionId,
+      label: '网页甲',
+      url: 'https://example.com/a',
+    });
+    expect([first.ordinal, second.ordinal, replayedFirst.ordinal]).toEqual([
+      1, 2, 1,
+    ]);
+
+    await turns.settleTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      turnId: started.turnId,
+      status: 'completed',
+      content: '最终只采用网页乙的结论 [2]。',
+      sourceMarkers: [2],
+    });
+    expect(
+      await sources.listOwnedConversationCitations({
+        conversationId: conversation.id,
+        trustedSubjectId: 'web-source-user',
+      }),
+    ).toMatchObject([
+      {
+        assistantMessageId: started.assistantMessage.id,
+        ordinal: 2,
+        assetId: secondAsset.descriptor.assetId,
+        assetVersionId: secondAsset.version.versionId,
+        label: '网页乙',
+        url: 'https://example.com/b',
+      },
+    ]);
+    expect(
+      await assets.listOwnedSpace({
+        ownerSubjectId: 'web-source-user',
+        spaceId: conversation.spaceId,
+      }),
+    ).toHaveLength(2);
   });
 
   it('拒绝相同clientMessageId绑定不同通用消息内容', async () => {
