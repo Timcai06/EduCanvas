@@ -6,8 +6,10 @@ describe('agent-runtime dependency boundary', () => {
     const packageJson = JSON.parse(
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
     ) as { dependencies?: Record<string, string> };
+    /* zod 是全仓基础校验库(契约同源);禁的是 K12/Web/db/供应商 SDK */
     expect(Object.keys(packageJson.dependencies ?? {})).toEqual([
       '@educanvas/agent-core',
+      'zod',
     ]);
   });
 });

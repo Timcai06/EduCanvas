@@ -173,6 +173,9 @@ importers:
       '@educanvas/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
