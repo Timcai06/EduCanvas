@@ -25,3 +25,10 @@ export {
   type ModelRunSuccess,
   type ParsedToolCall,
 } from './turn-engine';
+export {
+  AgentToolRegistry,
+  type AgentTool,
+  type AgentToolContext,
+  type AgentToolExecution,
+  type AgentToolFailureCode,
+} from './agent-tools';

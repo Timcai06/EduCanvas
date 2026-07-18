@@ -35,6 +35,8 @@
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
+通用对话 Turn 已接入受验证的工具循环(M3):`agent-runtime` 的 `validateModelRun` 引擎 + `AgentToolRegistry`(编译期清单、双向 Zod、超时硬边界),圈数配额 3;首个通用工具为 `webSearch`(Tavily 适配器在 Web 组合根,`SEARCH_API_KEY` 未配置即不注册,诚实降级)。通用工具调用与模型运行的账本化仍属 P1 Operation 迁移承接债务。
+
 这里的执行链目前仍由 `teaching-runtime` 与 Web BFF 共同承载，能够服务
 K12 纵切，但尚不能据此宣称已经形成通用 Agent Runtime。当前已确认的
 平台化缺口包括：
