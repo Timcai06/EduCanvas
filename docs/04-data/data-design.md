@@ -59,7 +59,7 @@
 - `retrieval_candidates`：本轮实际检索候选白名单；
 - `message_citations`：用户可见引用投影。
 
-当前限制：用户上传Asset不会自动进入该Source/Chunk链路；中文检索使用PostgreSQL`simple`配置，需用冻结中文评测验证并升级；当前引用会把候选集合视为回答引用，尚未绑定最终回答实际使用的candidate/claim/span。
+当前限制：用户上传Asset不会自动进入该Source/Chunk链路；中文检索使用PostgreSQL`simple`配置，需用冻结中文评测验证并升级。K12 synthesis 已按最终安全回答中的`[n]`保存实际candidate子集和原始稀疏编号；模型未输出合法编号时为避免丢失来源仍回退候选全集。通用Conversation尚未接入这条引用投影，引用也尚未绑定claim/span或来源原文定位。
 
 受控资料版本可由worker任务`knowledge:ingest_document`写入；该入口只接受显式Source元数据、私有`objectKey`、parser版本、内容hash和已解析Chunk，不抓取任意URL，也不等同于用户上传自动摄取。
 
@@ -128,7 +128,7 @@ provider_file
 
 ## 引用可信度
 
-- Retrieval Candidate只是本轮允许引用的白名单，不等于最终回答实际引用；
+- Retrieval Candidate只是本轮允许引用的白名单；K12最终回答只把实际出现的合法`[n]`提升为Message Citation，缺少标记时走显式全集降级；
 - Synthesis必须显式选择候选子集，Runtime拒绝白名单外ID；
 - Citation至少绑定`sourceVersionId/chunkId/anchor`，并逐步增加message part或claim/span；
 - Source换版后旧消息继续指向旧不可变版本；新Turn默认只使用当前ready版本；

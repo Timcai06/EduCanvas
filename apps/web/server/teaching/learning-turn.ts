@@ -44,6 +44,7 @@ import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { AuditedTurnModelGateway } from '../model/audited-model-gateway';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
 import { hashPromptMaterial } from '../model/prompt-hash';
+import { extractCitationMarkers } from './citation-markers';
 import { loadOwnedTeachingSession } from './learning-session';
 import { createTeachingToolExecutor } from './teaching-tools';
 import { webTeachingObservability } from './teaching-observability';
@@ -292,6 +293,7 @@ function citationEvent(
     turnId,
     messageId: citation.assistantMessageId,
     citationId: citation.id,
+    marker: citation.ordinal,
     sourceId: citation.sourceId,
     documentId: citation.documentId,
     chunkId: citation.chunkId,
@@ -505,6 +507,8 @@ async function* runFreshTurn(
   );
   const outputSafety = new TeachingOutputSafetyGate();
   const retrievalCandidateIds: string[] = [];
+  /* 最终回答全文(仅安全门放行的部分),完成时解析 [n] 标记得到实际引用子集 */
+  let answerText = '';
   let assistantStreaming = false;
 
   try {
@@ -607,6 +611,7 @@ async function* runFreshTurn(
             assistantStreaming = true;
           }
           for (const safeDelta of safetyResult.safeDeltas) {
+            answerText += safeDelta;
             await chat.appendAssistantDelta({
               sessionId: assistant.sessionId,
               trustedStudentId: prepared.identity.studentId,
@@ -777,6 +782,7 @@ async function* runFreshTurn(
           throw new Error('output_safety_gate_incomplete');
         }
         for (const safeDelta of safetyResult.safeDeltas) {
+          answerText += safeDelta;
           if (!assistantStreaming) {
             await chat.markAssistantStreaming({
               sessionId: assistant.sessionId,
@@ -807,6 +813,12 @@ async function* runFreshTurn(
           turnId: snapshot.turn.turnId,
           decision: safetyResult.decision,
         });
+        /* M3c:标记号按"本轮证据出现顺序"映射候选;模型未标注时回退全量引用,
+           引用宁多勿丢。多次检索调用的跨调用编号漂移是已知边界(K12 默认单轮检索)。 */
+        const citationMarkers = extractCitationMarkers(
+          answerText,
+          retrievalCandidateIds.length,
+        );
         const citationResult =
           retrievalCandidateIds.length > 0
             ? await knowledgeRetrieval.persistMessageCitations({
@@ -814,7 +826,14 @@ async function* runFreshTurn(
                 sessionId: assistant.sessionId,
                 turnId: snapshot.turn.turnId,
                 assistantMessageId: assistant.id,
-                candidateIds: retrievalCandidateIds,
+                ...(citationMarkers.length > 0
+                  ? {
+                      candidateIds: citationMarkers.map(
+                        (marker) => retrievalCandidateIds[marker - 1]!,
+                      ),
+                      markers: citationMarkers,
+                    }
+                  : { candidateIds: retrievalCandidateIds }),
               })
             : null;
         const settled = await chat.settleAssistantMessage({
