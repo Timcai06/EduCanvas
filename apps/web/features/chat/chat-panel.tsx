@@ -172,6 +172,10 @@ export function ChatPanel({
                 <MessageMarkdown
                   text={message.text}
                   onPreviewHtml={onPreviewHtml}
+                  citationMarkers={message.citations
+                    ?.map((citation) => citation.marker)
+                    .filter((marker): marker is number => marker !== undefined)}
+                  citationAnchorPrefix={message.id}
                 />
               ) : null}
               {!isPersistedSafetyResponse &&
@@ -219,13 +223,22 @@ export function ChatPanel({
                   {message.citations.map((citation) => (
                     <span
                       key={citation.id}
+                      {...(citation.marker !== undefined
+                        ? { id: `cite-${message.id}-${citation.marker}` }
+                        : {})}
                       title="来自本轮冻结的课程资料版本"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line/80 bg-surface/75 px-3 py-1 text-xs font-medium text-ink-muted"
+                      className="inline-flex scroll-mt-24 items-center gap-1.5 rounded-full border border-line/80 bg-surface/75 px-3 py-1 text-xs font-medium text-ink-muted"
                     >
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 rounded-full bg-accent"
-                      />
+                      {citation.marker !== undefined ? (
+                        <span className="font-semibold text-accent">
+                          {citation.marker}
+                        </span>
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="size-1.5 rounded-full bg-accent"
+                        />
+                      )}
                       {citation.label}
                     </span>
                   ))}

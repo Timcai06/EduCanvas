@@ -29,6 +29,8 @@ export interface InitialChatMessageDTO {
 
 export interface MessageCitationDTO {
   id: string;
+  /** 正文 [n] 标记号,来自服务端持久化的 ordinal;历史消息恒有,SSE 旧流可缺省 */
+  marker?: number;
   sourceId: string;
   documentId: string;
   chunkId: string;

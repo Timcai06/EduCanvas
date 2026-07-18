@@ -55,6 +55,7 @@ describe('teaching turn browser state machine', () => {
         turnId: 'turn-1',
         messageId: 'assistant-1',
         citationId: 'citation-1',
+        marker: 3,
         sourceId: 'source-1',
         documentId: 'document-1',
         chunkId: 'chunk-1',
@@ -64,7 +65,9 @@ describe('teaching turn browser state machine', () => {
       },
     });
     expect(state.messages.at(-1)).toMatchObject({
-      citations: [{ id: 'citation-1', label: '课程讲义 · 第3页' }],
+      citations: [
+        { id: 'citation-1', marker: 3, label: '课程讲义 · 第3页' },
+      ],
     });
 
     state = teachingTurnReducer(state, {

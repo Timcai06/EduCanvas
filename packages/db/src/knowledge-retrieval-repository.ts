@@ -583,6 +583,9 @@ export class DrizzleKnowledgeRetrievalRepository {
     turnId: string;
     assistantMessageId: string;
     candidateIds: readonly string[];
+    /** 文中标记号(与 candidateIds 对齐、升序、1..99);缺省退化为 1..N 顺号。
+        提供时 ordinal 语义 = 模型在正文中实际标注的 [n],驱动行内引用。 */
+    markers?: readonly number[];
     now?: Date;
   }): Promise<{
     replayed: boolean;
@@ -595,6 +598,19 @@ export class DrizzleKnowledgeRetrievalRepository {
     ) {
       throw new CitationCandidateInvalidError();
     }
+    if (input.markers !== undefined) {
+      const markers = input.markers;
+      const ascendingUnique = markers.every(
+        (marker, index) =>
+          Number.isInteger(marker) &&
+          marker >= 1 &&
+          marker <= 99 &&
+          (index === 0 || marker > markers[index - 1]!),
+      );
+      if (markers.length !== input.candidateIds.length || !ascendingUnique) {
+        throw new CitationCandidateInvalidError();
+      }
+    }
     const lockKey = `message-citations-v1:${input.assistantMessageId}`;
     return this.database.transaction(async (transaction) => {
       await transaction.execute(
@@ -602,7 +618,10 @@ export class DrizzleKnowledgeRetrievalRepository {
       );
       await assertOwnedAssistantMessage(transaction, input);
       const existing = await transaction
-        .select({ candidateId: messageCitations.retrievalCandidateId })
+        .select({
+          candidateId: messageCitations.retrievalCandidateId,
+          ordinal: messageCitations.ordinal,
+        })
         .from(messageCitations)
         .where(
           eq(messageCitations.assistantMessageId, input.assistantMessageId),
@@ -613,7 +632,8 @@ export class DrizzleKnowledgeRetrievalRepository {
           existing.length !== input.candidateIds.length ||
           existing.some(
             (citation, index) =>
-              citation.candidateId !== input.candidateIds[index],
+              citation.candidateId !== input.candidateIds[index] ||
+              citation.ordinal !== (input.markers?.[index] ?? index + 1),
           )
         ) {
           throw new CitationConflictError();
@@ -684,7 +704,7 @@ export class DrizzleKnowledgeRetrievalRepository {
           turnId: input.turnId,
           assistantMessageId: input.assistantMessageId,
           retrievalCandidateId: candidateId,
-          ordinal: index + 1,
+          ordinal: input.markers?.[index] ?? index + 1,
           createdAt: input.now,
         })),
       );

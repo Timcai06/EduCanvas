@@ -286,6 +286,27 @@ html {
   font-size: 0.875em;
 }
 
+/* 行内引用标记 [n]:小圆片样式,点击滚动到消息下方对应引用徽章 */
+.chat-prose__citation {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25em;
+  height: 1.25em;
+  margin-inline: 0.1em;
+  border-radius: 9999px;
+  background: var(--color-accent-soft);
+  padding-inline: 0.3em;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.chat-prose__citation:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-canvas));
+}
+
 .chat-prose__code-block {
   position: relative;
   margin-block: 0.8em;

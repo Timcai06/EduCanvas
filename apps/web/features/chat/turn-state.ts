@@ -306,6 +306,7 @@ export function teachingTurnReducer(
           ),
           {
             id: event.citationId,
+            ...(event.marker === undefined ? {} : { marker: event.marker }),
             sourceId: event.sourceId,
             documentId: event.documentId,
             chunkId: event.chunkId,

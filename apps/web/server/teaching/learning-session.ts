@@ -161,6 +161,7 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
                 : '';
               return {
                 id: citation.id,
+                marker: citation.ordinal,
                 sourceId: citation.sourceId,
                 documentId: citation.documentId,
                 chunkId: citation.chunkId,

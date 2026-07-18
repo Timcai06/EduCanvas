@@ -101,6 +101,7 @@ describe('teaching turn SSE protocol', () => {
           turnId: 'turn-1',
           messageId: 'assistant-1',
           citationId: 'citation-1',
+          marker: 3,
           sourceId: 'source-1',
           documentId: 'document-1',
           chunkId: 'chunk-1',
@@ -112,8 +113,31 @@ describe('teaching turn SSE protocol', () => {
     ).toMatchObject({
       type: 'message.citation',
       citationId: 'citation-1',
+      marker: 3,
       pageStart: 3,
     });
+  });
+
+  it.each([0, 100, 1.5])('拒绝非法引用标记 %s', (marker) => {
+    expect(() =>
+      parseTeachingTurnEvent(
+        'message.citation',
+        JSON.stringify({
+          type: 'message.citation',
+          schemaVersion: '1',
+          turnId: 'turn-1',
+          messageId: 'assistant-1',
+          citationId: 'citation-1',
+          marker,
+          sourceId: 'source-1',
+          documentId: 'document-1',
+          chunkId: 'chunk-1',
+          label: '课程讲义',
+          pageStart: null,
+          pageEnd: null,
+        }),
+      ),
+    ).toThrow(TurnStreamProtocolError);
   });
 
   it.each([

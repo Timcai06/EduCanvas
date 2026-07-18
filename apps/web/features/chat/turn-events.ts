@@ -31,6 +31,8 @@ export interface MessageCitationEvent extends TurnEventBase {
   type: 'message.citation';
   messageId: string;
   citationId: string;
+  /** 文中标记号(即 [n]);旧流可能缺省,缺省时 UI 退化为无编号来源徽章。 */
+  marker?: number;
   sourceId: string;
   documentId: string;
   chunkId: string;
@@ -157,10 +159,15 @@ function readNullablePositiveInteger(
   data: Record<string, unknown>,
   key: string,
   eventName: string,
+  maxValue = Number.MAX_SAFE_INTEGER,
 ): number | null {
   const value = data[key];
   if (value === null) return null;
-  if (!Number.isInteger(value) || (value as number) < 1) {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > maxValue
+  ) {
     throw new TurnStreamProtocolError(`${eventName}.${key} is invalid`);
   }
   return value as number;
@@ -240,6 +247,13 @@ export function parseTeachingTurnEvent(
       turnId,
       messageId: readString(parsed, 'messageId', eventName),
       citationId: readString(parsed, 'citationId', eventName),
+      ...(parsed.marker === undefined
+        ? {}
+        : {
+            marker:
+              readNullablePositiveInteger(parsed, 'marker', eventName, 99) ??
+              undefined,
+          }),
       sourceId: readString(parsed, 'sourceId', eventName),
       documentId: readString(parsed, 'documentId', eventName),
       chunkId: readString(parsed, 'chunkId', eventName),

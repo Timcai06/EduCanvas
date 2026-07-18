@@ -220,10 +220,26 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               frame('message.delta', {
                 turnId,
                 messageId: assistantMessageId,
-                delta: '再比较胡须。',
+                delta: '再比较胡须 [1]。',
               }),
             );
           }, 220);
+          window.setTimeout(() => {
+            controller.enqueue(
+              frame('message.citation', {
+                turnId,
+                messageId: assistantMessageId,
+                citationId: 'citation-fixture-1',
+                marker: 1,
+                sourceId: 'source-fixture-1',
+                documentId: 'document-fixture-1',
+                chunkId: 'chunk-fixture-1',
+                label: '课程讲义 · 第3页',
+                pageStart: 3,
+                pageEnd: 3,
+              }),
+            );
+          }, 280);
           window.setTimeout(() => {
             controller.enqueue(
               frame('turn.completed', {
@@ -232,7 +248,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               }),
             );
             controller.close();
-          }, 320);
+          }, 380);
         },
       });
       return new Response(stream, {
@@ -250,8 +266,19 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
   const lifecycleAnnouncement = page.locator('p[aria-live="polite"]');
   await expect(lifecycleAnnouncement).not.toContainText('先观察耳朵');
   await expect(
-    page.getByText('先观察耳朵，再比较胡须。', { exact: true }),
+    page.getByText('先观察耳朵，再比较胡须 ', { exact: false }),
   ).toBeVisible();
+  const citationLink = page.getByRole('link', { name: '1' });
+  await expect(citationLink).toHaveAttribute(
+    'href',
+    '#cite-assistant-fixture-complete-1',
+  );
+  const citationBadge = page.locator(
+    '[id="cite-assistant-fixture-complete-1"]',
+  );
+  await expect(citationBadge).toContainText('课程讲义 · 第3页');
+  await citationLink.click();
+  await expect(citationBadge).toBeInViewport();
   await expect(lifecycleAnnouncement).toHaveText('AI 老师回答完成');
 
   const bodies = await page.evaluate(

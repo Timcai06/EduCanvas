@@ -60,6 +60,20 @@ describe('POST /api/v1/learn/turn', () => {
           delta: '你好',
         };
         yield {
+          type: 'message.citation' as const,
+          schemaVersion: '1' as const,
+          turnId: 'turn-1',
+          messageId: 'assistant-1',
+          citationId: 'citation-1',
+          marker: 2,
+          sourceId: 'source-1',
+          documentId: 'document-1',
+          chunkId: 'chunk-1',
+          label: '课程讲义 · 第2页',
+          pageStart: 2,
+          pageEnd: 2,
+        };
+        yield {
           type: 'turn.completed' as const,
           schemaVersion: '1' as const,
           turnId: 'turn-1',
@@ -78,6 +92,8 @@ describe('POST /api/v1/learn/turn', () => {
     expect(text).toContain('event: turn.accepted');
     expect(text).toContain('event: message.delta');
     expect(text).toContain('"delta":"你好"');
+    expect(text).toContain('event: message.citation');
+    expect(text).toContain('"marker":2');
     expect(text).toContain('event: turn.completed');
   });
 
