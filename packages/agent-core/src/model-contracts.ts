@@ -13,16 +13,22 @@ export const structuredTaskAliases = [
 export const structuredTaskAliasSchema = z.enum(structuredTaskAliases);
 export type StructuredTaskAlias = z.infer<typeof structuredTaskAliasSchema>;
 
+/** 二进制语音合成走独立 Port，不混入文本流或结构化 JSON 入口。 */
+export const speechTaskAliases = ['speech.generate'] as const;
+export const speechTaskAliasSchema = z.enum(speechTaskAliases);
+export type SpeechTaskAlias = z.infer<typeof speechTaskAliasSchema>;
+
 /** 平台已注册的任务别名；供应商模型ID不得作为任务别名进入业务代码。 */
 export const taskAliases = [
   ...streamingTaskAliases,
   ...structuredTaskAliases,
+  ...speechTaskAliases,
 ] as const;
 export const taskAliasSchema = z.enum(taskAliases);
 export type TaskAlias = z.infer<typeof taskAliasSchema>;
 
 /** 路由档位而非供应商模型名。具体模型只允许由服务端适配器解析。 */
-export const modelAliases = ['primary', 'fast', 'structured'] as const;
+export const modelAliases = ['primary', 'fast', 'structured', 'speech'] as const;
 export const modelAliasSchema = z.enum(modelAliases);
 export type ModelAlias = z.infer<typeof modelAliasSchema>;
 

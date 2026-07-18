@@ -15,6 +15,9 @@ EduCanvas 的持久任务 worker 进程（[ADR-0012](../../docs/09-decisions/001
 - `src/tasks/system-heartbeat.ts`：冒烟任务，验证入队→消费回路；
 - `src/tasks/purge-anonymous-subjects.ts`：每日03:15 UTC清理超过保留窗口的匿名数据库主体；
 - `src/tasks/ingest-knowledge-document.ts`：受控创建/复用Source并写入已解析资料版本；
+- `src/tasks/generate-artifact.ts`：结构化产物与音频概览生成；音频在对象写入后
+  先保存checkpoint，重投时校验已有对象并继续提交版本，不重复调用TTS；
+- `src/tasks/audio-overview-generation.ts`：把1–8项已验证来源压成受限脚本；
 - `src/worker.integration.test.ts`：队列回路与 SQL 事务性入队的集成测试。
 
 ## 常用命令

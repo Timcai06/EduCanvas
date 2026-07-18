@@ -1,7 +1,7 @@
 # 数据设计
 
 - 状态：`draft`
-- 最后验证时间：2026-07-16
+- 最后验证时间：2026-07-18
 
 ## 数据原则
 
@@ -67,11 +67,19 @@
 
 ### Artifact
 
-- `canvas_artifacts`：当前K12公开Artifact投影和版本；
-- `canvas_artifact_grading_keys`：可判分Artifact的私有答案；
-- `agent_message_parts.artifact_*`：为通用Artifact引用预留的消息Part字段。
+- `artifacts`：平台Artifact身份、Space/Conversation归属、kind、trust tier与当前版本计数；
+- `artifact_versions`：不可变版本。结构化产物存`content`；媒体产物只存私有
+  `object_key + checksum`，可另存浏览器安全metadata（音频文字稿、模型/voice/用量）；
+- `artifact_generation_jobs`：队列外的长期事实源，保存状态、进度、稳定失败码、
+  冻结输入`params`与可恢复`checkpoint`；一个job由唯一索引约束最多提交一个版本；
+- `canvas_artifacts / canvas_artifact_grading_keys`：K12可判分题面与私有答案，
+  与平台Tier 2音频/闪卡不共享可信学习事件；
+- `agent_message_parts.artifact_*`：通用消息中的不可变Artifact引用。
 
-当前限制：尚无通用`artifact_proposals`、`artifact_versions`和`generation_jobs`生命周期；当前Studio只能展示预置K12 Artifact。
+当前已实现思维导图、Slides、闪卡和音频概览的提议→确认→持久任务→版本→
+Studio恢复。音频二进制不进PostgreSQL；Worker写对象后先保存key/checksum/metadata
+checkpoint，crash重投校验对象后继续append version。仍缺跨轮迭代同一Artifact、
+正式对象删除Outbox与S3兼容生产适配器。
 
 ## 目标通用对象模型
 

@@ -5,9 +5,12 @@ import {
   jsonError,
 } from '@/server/http/request-security';
 import {
+  AssetAccessError,
   ARTIFACT_GENERATE_TASK,
+  DrizzleAssetRepository,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
+import { assetVersionReferenceSchema } from '@educanvas/agent-core';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -47,12 +50,22 @@ export async function GET(): Promise<Response> {
 }
 
 /** 已开放的产物类型;quiz 泛化后加入,更长期由 Registry 提供。 */
-const createArtifactSchema = z
-  .object({
-    kind: z.enum(['mind_map', 'slides', 'flashcards']),
-    title: z.string().trim().min(1).max(120),
-  })
-  .strict();
+const titleSchema = z.string().trim().min(1).max(120);
+const createArtifactSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.enum(['mind_map', 'slides', 'flashcards']),
+      title: titleSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('audio_overview'),
+      title: titleSchema,
+      sources: z.array(assetVersionReferenceSchema).min(1).max(8),
+    })
+    .strict(),
+]);
 
 /**
  * 产物提议 + 用户确认后的创建入口:产物行、任务账本与队列行同事务原子提交
@@ -80,15 +93,52 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    let params: Record<string, unknown> = {};
+    if (parsed.data.kind === 'audio_overview') {
+      let materialized;
+      try {
+        materialized = await new DrizzleAssetRepository().materializeOwnedReferences(
+          {
+            ownerSubjectId: identity.studentId,
+            spaceId: conversation.spaceId,
+            references: parsed.data.sources,
+          },
+        );
+      } catch (error) {
+        if (error instanceof AssetAccessError) {
+          return jsonError(
+            400,
+            'audio_sources_unavailable',
+            '部分来源已不可用，请重新选择。',
+          );
+        }
+        throw error;
+      }
+      if (
+        materialized.some(
+          (source) =>
+            !['document', 'link'].includes(source.reference.kind) ||
+            !source.extractedText?.trim(),
+        )
+      ) {
+        return jsonError(
+          400,
+          'audio_source_not_supported',
+          '音频概览目前只支持已解析的 PDF 或网页来源。',
+        );
+      }
+      params = { selectedSources: parsed.data.sources };
+    }
     const repository = new DrizzlePlatformArtifactRepository();
     const created = await repository.createArtifactWithGenerationJob({
       spaceId: conversation.spaceId,
       conversationId: conversation.id,
       trustedSubjectId: identity.studentId,
       kind: parsed.data.kind,
-      trustTier: 'tier1',
+      trustTier: parsed.data.kind === 'audio_overview' ? 'tier2' : 'tier1',
       title: parsed.data.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params,
     });
     return Response.json(
       {

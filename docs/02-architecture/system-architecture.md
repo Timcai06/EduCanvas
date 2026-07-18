@@ -42,7 +42,9 @@ flowchart LR
     web --> agentRuntime["packages/agent-runtime<br/>Asset / Conversation Context"]
     web --> canvas["packages/canvas-protocol<br/>公开Artifact与客户端交互协议"]
     web --> runtime["packages/teaching-runtime<br/>判分 / Agent轮次 / 工具执行"]
-    web --> gateway["packages/model-gateway<br/>Provider配置 / OpenAI-compatible SSE"]
+    web --> gateway["packages/model-gateway<br/>Provider配置 / 文本、结构化与TTS Adapter"]
+    worker["apps/worker<br/>持久Artifact任务"] --> gateway
+    worker --> db
     web --> db["packages/db<br/>Drizzle适配器 / PostgreSQL"]
     agentRuntime --> agent
     gateway --> agent
@@ -62,7 +64,8 @@ flowchart LR
 - 模型输入契约仍是纯文本`ModelMessage.content`，原生图片、音频和视频引用尚不能进入Provider；
 - 一等Space/Conversation与通用Message骨架已落地并回填K12 Session，但生产Turn/Model Run仍走`lesson_sessions + chat_messages`兼容链路；
 - 用户上传Asset与可检索Source/Chunk仍是两条链路；
-- Artifact协议和Renderer是安全的编译期闭集，但尚无提议、确认、生成、版本与Studio生命周期；
+- Artifact已具备提议、确认、异步生成、不可变版本、Studio恢复和音频私有读取；
+  尚缺跨轮迭代同一Artifact与插件化Renderer Registry；
 - `learning-turn.ts`仍是Next.js中的K12大型组合根，传输、应用服务和基础设施装配尚待拆分。
 
 迁移按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)与[Gemini + NotebookLM 产品复刻计划](../plan/active/2026-07-gemini-notebooklm-replica.md)小步进行：先建立通用数据骨架和Runtime Port，再接原生全模态、Artifact Runtime与Platform Shell；不以一次性重命名或提前拆微服务制造高风险重写。

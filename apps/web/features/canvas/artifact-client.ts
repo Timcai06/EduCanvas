@@ -14,13 +14,41 @@ export interface ArtifactSummary {
 
 export interface ArtifactDetail {
   artifact: ArtifactSummary;
-  latestVersion: { version: number; content: unknown } | null;
+  latestVersion: {
+    version: number;
+    content: unknown;
+    media: AudioOverviewMedia | null;
+  } | null;
   latestJob: {
     id: string;
     status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     progress: number | null;
     failureCode: string | null;
   } | null;
+}
+
+export interface AudioOverviewMedia {
+  url: string;
+  contentVersion: 1;
+  contentType: 'audio/mpeg';
+  byteSize: number;
+  transcript: string;
+  sourceCount: number;
+  script: {
+    generator: string;
+    provider: string | null;
+    resolvedModelId: string | null;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+  };
+  speech: {
+    provider: string;
+    resolvedModelId: string;
+    voice: string;
+    inputCharacters: number;
+    latencyMs: number;
+  };
 }
 
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
@@ -32,16 +60,29 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export type CreatableArtifactKind = 'mind_map' | 'slides' | 'flashcards';
+export type CreatableArtifactKind =
+  | 'mind_map'
+  | 'slides'
+  | 'flashcards'
+  | 'audio_overview';
+
+export interface ArtifactSourceReference {
+  assetId: string;
+  versionId: string;
+  kind: 'document' | 'link';
+}
 
 export async function createArtifact(
   kind: CreatableArtifactKind,
   title: string,
+  sources: readonly ArtifactSourceReference[] = [],
 ): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(ARTIFACTS_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind, title }),
+    body: JSON.stringify(
+      kind === 'audio_overview' ? { kind, title, sources } : { kind, title },
+    ),
   });
   return parseJsonOrThrow(response);
 }

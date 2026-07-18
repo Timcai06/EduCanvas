@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@educanvas/agent-core": "workspace:*",
+    "@educanvas/agent-runtime": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
     "@educanvas/model-gateway": "workspace:*",

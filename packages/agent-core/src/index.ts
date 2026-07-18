@@ -58,6 +58,8 @@ export {
   normalizedModelErrorCodes,
   normalizedModelErrorSchema,
   providerCallMetadataSchema,
+  speechTaskAliasSchema,
+  speechTaskAliases,
   streamingTaskAliasSchema,
   streamingTaskAliases,
   structuredTaskAliasSchema,
@@ -76,6 +78,7 @@ export {
   type ModelUsage,
   type NormalizedModelError,
   type ProviderCallMetadata,
+  type SpeechTaskAlias,
   type StreamAgentTextRequest,
   type StreamingTaskAlias,
   type StreamTurnTextRequest,
@@ -87,6 +90,10 @@ export {
 
 export type {
   ModelGateway,
+  SpeechAudioFormat,
+  SpeechModelGateway,
+  SpeechSynthesisRequest,
+  SpeechSynthesisResult,
   StructuredModelGateway,
   StructuredModelRequest,
   StructuredModelResult,

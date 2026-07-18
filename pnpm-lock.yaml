@@ -108,6 +108,9 @@ importers:
       '@educanvas/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
+      '@educanvas/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@educanvas/canvas-protocol':
         specifier: workspace:*
         version: link:../../packages/canvas-protocol

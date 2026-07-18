@@ -56,6 +56,7 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'create_mind_map',
   'create_slides',
   'create_flashcards',
+  'create_audio_overview',
 ];
 
 export function GeneralChatWorkspace({
@@ -189,6 +190,8 @@ export function GeneralChatWorkspace({
         artifactFlow.beginConfirm('slides', '对话小结 Slides');
       } else if (action === 'create_flashcards') {
         artifactFlow.beginConfirm('flashcards', '复习闪卡');
+      } else if (action === 'create_audio_overview') {
+        artifactFlow.beginConfirm('audio_overview', '来源音频概览');
       }
     },
     [artifactFlow],
@@ -207,6 +210,19 @@ export function GeneralChatWorkspace({
 
   const isLanding = turn.messages.length === 0;
   const selectedAssets = assets.filter((asset) => asset.enabled);
+  const selectedAudioSources = assets.flatMap((asset) =>
+    asset.enabled &&
+    asset.versionId &&
+    (asset.kind === 'document' || asset.kind === 'link')
+      ? [
+          {
+            assetId: asset.id,
+            versionId: asset.versionId,
+            kind: asset.kind,
+          } as const,
+        ]
+      : [],
+  );
 
   /* 落地 → 对话:输入坞 Flip 位移,光场沉降为环境底光;reduced-motion 直接跳变。 */
   useGSAP(
@@ -442,8 +458,13 @@ export function GeneralChatWorkspace({
         <ArtifactConfirmSheet
           kind={artifactFlow.generation.kind}
           defaultTitle={artifactFlow.generation.title}
+          sourceCount={selectedAudioSources.length}
           onConfirm={(title) =>
-            void artifactFlow.confirm(artifactFlow.generation!.kind, title)
+            void artifactFlow.confirm(
+              artifactFlow.generation!.kind,
+              title,
+              selectedAudioSources,
+            )
           }
           onClose={artifactFlow.dismiss}
         />

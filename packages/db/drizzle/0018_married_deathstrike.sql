@@ -1,0 +1,5 @@
+ALTER TABLE "artifact_generation_jobs" ADD COLUMN "checkpoint" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "artifact_versions" ADD COLUMN "metadata" jsonb;--> statement-breakpoint
+CREATE UNIQUE INDEX "artifact_versions_generation_job_unique" ON "artifact_versions" USING btree ("generation_job_id") WHERE "artifact_versions"."generation_job_id" is not null;--> statement-breakpoint
+ALTER TABLE "artifact_generation_jobs" ADD CONSTRAINT "artifact_generation_jobs_json_shape_check" CHECK (jsonb_typeof("artifact_generation_jobs"."params") = 'object' and jsonb_typeof("artifact_generation_jobs"."checkpoint") = 'object');--> statement-breakpoint
+ALTER TABLE "artifact_versions" ADD CONSTRAINT "artifact_versions_metadata_shape_check" CHECK ("artifact_versions"."metadata" is null or jsonb_typeof("artifact_versions"."metadata") = 'object');

@@ -1,6 +1,11 @@
 'use client';
 
-import { CircleNotch, TreeStructure, Warning } from '@phosphor-icons/react';
+import {
+  CircleNotch,
+  Headphones,
+  TreeStructure,
+  Warning,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from '@/features/workspace/shared/sheet';
 import {
@@ -8,12 +13,14 @@ import {
   fetchArtifactDetail,
   pollArtifactUntilSettled,
   type ArtifactDetail,
+  type ArtifactSourceReference,
   type CreatableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
 import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
+import { AudioOverviewPlayer } from './audio-overview-player';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -29,6 +36,7 @@ export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
   flashcards: '闪卡',
+  audio_overview: '音频概览',
 };
 
 /**
@@ -51,10 +59,14 @@ export function useArtifactGeneration() {
     [],
   );
 
-  const confirm = useCallback(async (kind: CreatableArtifactKind, title: string) => {
+  const confirm = useCallback(async (
+    kind: CreatableArtifactKind,
+    title: string,
+    sources: readonly ArtifactSourceReference[] = [],
+  ) => {
     setGeneration({ phase: 'generating', kind, title });
     try {
-      const created = await createArtifact(kind, title);
+      const created = await createArtifact(kind, title, sources);
       pollAbort.current = new AbortController();
       const detail = await pollArtifactUntilSettled(created.artifact.id, {
         signal: pollAbort.current.signal,
@@ -107,11 +119,13 @@ export function useArtifactGeneration() {
 export function ArtifactConfirmSheet({
   kind,
   defaultTitle,
+  sourceCount = 0,
   onConfirm,
   onClose,
 }: {
   kind: CreatableArtifactKind;
   defaultTitle: string;
+  sourceCount?: number;
   onConfirm: (title: string) => void;
   onClose: () => void;
 }) {
@@ -122,8 +136,15 @@ export function ArtifactConfirmSheet({
     <Sheet label={`生成${kindLabel}`} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm leading-6 text-ink-muted">
-          将根据当前对话生成一份{kindLabel}，由后台任务完成——关闭页面也不会中断。
+          {kind === 'audio_overview'
+            ? `将根据当前勾选的 ${sourceCount} 项 PDF / 网页来源生成脚本与语音。关闭页面不会中断。`
+            : `将根据当前对话生成一份${kindLabel}，由后台任务完成——关闭页面也不会中断。`}
         </p>
+        {kind === 'audio_overview' && sourceCount === 0 ? (
+          <p role="alert" className="text-sm text-danger">
+            请先在来源面板勾选至少一项已解析的 PDF 或网页。
+          </p>
+        ) : null}
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-ink-faint">产物标题</span>
           <input
@@ -135,7 +156,10 @@ export function ArtifactConfirmSheet({
         </label>
         <button
           type="button"
-          disabled={trimmed.length === 0}
+          disabled={
+            trimmed.length === 0 ||
+            (kind === 'audio_overview' && sourceCount === 0)
+          }
           onClick={() => onConfirm(trimmed)}
           className="min-h-10 w-full rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
         >
@@ -169,6 +193,8 @@ export function ArtifactStatusCard({
           <CircleNotch size={18} className="animate-spin motion-reduce:animate-none" />
         ) : generation.phase === 'failed' ? (
           <Warning size={18} />
+        ) : generation.kind === 'audio_overview' ? (
+          <Headphones size={18} />
         ) : (
           <TreeStructure size={18} />
         )}
@@ -234,6 +260,9 @@ export function ArtifactCanvas({
           <SlidesRenderer content={detail.latestVersion.content} />
         ) : detail.artifact.kind === 'flashcards' && detail.latestVersion ? (
           <FlashcardsRenderer content={detail.latestVersion.content} />
+        ) : detail.artifact.kind === 'audio_overview' &&
+          detail.latestVersion?.media ? (
+          <AudioOverviewPlayer media={detail.latestVersion.media} />
         ) : (
           <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
         )}
