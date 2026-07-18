@@ -55,6 +55,23 @@
 - SSE 协议、`docs/05-engineering/api-conventions.md` 与数据设计文档需同步更新；
 - 引入的任务队列库成为核心依赖，选型结论在实现 PR 中以对比记录补充到本 ADR。
 
+## M4语音适配结论（2026-07-18）
+
+- 采用独立`SpeechModelGateway`与`taskAlias=speech.generate`，首个实现为
+  OpenAI-compatible `POST /audio/speech`，固定非流式MP3；不把二进制塞进
+  StructuredModelGateway/base64 JSON；
+- `MODEL_GATEWAY_SPEECH_MODEL`显式解析到`speech`档位，voice显式配置；
+  DeepSeek路由不声明语音能力，误配直接拒绝；协议依据
+  [OpenAI Audio API](https://platform.openai.com/docs/api-reference/audio/createSpeech)；
+- 成本上限：一次任务最多8项来源、脚本最多3500字符、恰好一次TTS调用、响应
+  最大20 MiB；Adapter不自动重试。限流/超时/Provider失败进入稳定失败终态，
+  后续用户显式重试必须创建新任务；
+- 音频写入对象存储后，Worker先把`objectKey/checksum`与安全metadata写入job
+  checkpoint，再append不可变版本。进程在两步间中断时，队列重投会重新校验
+  完整对象并继续提交，不重复调用TTS；若版本已提交但job未终态，则只补终态；
+- PostgreSQL不存音频二进制；版本metadata保存不可复现的文字稿，以及脚本模型
+  token/耗时、TTS模型/voice/字符数/耗时，浏览器只得到受所有权保护的媒体URL。
+
 ## 开放问题
 
 - 任务优先级与并发配额策略（先到先得起步，配额等真实拥塞出现再设计）；

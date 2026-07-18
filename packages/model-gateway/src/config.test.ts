@@ -153,10 +153,31 @@ describe('parseModelGatewayConfiguration', () => {
         MODEL_GATEWAY_API_KEY: 'fixture',
         MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
         MODEL_GATEWAY_FAST_MODEL: 'fast-explicit',
+        MODEL_GATEWAY_SPEECH_MODEL: 'speech-explicit',
+        MODEL_GATEWAY_SPEECH_VOICE: 'coral',
       }),
     ).toMatchObject({
       enabled: true,
-      modelIds: { primary: 'primary-explicit', fast: 'fast-explicit' },
+      modelIds: {
+        primary: 'primary-explicit',
+        fast: 'fast-explicit',
+        speech: 'speech-explicit',
+      },
+      speechVoice: 'coral',
+      speechTimeoutMs: 60_000,
+      speechMaxInputChars: 3_500,
     });
+  });
+
+  it('DeepSeek 不接受 speech alias，避免把不支持的端点当可用', () => {
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({ MODEL_GATEWAY_SPEECH_MODEL: 'tts-model' }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'SPEECH_UNSUPPORTED_PROVIDER',
+      }),
+    );
   });
 });

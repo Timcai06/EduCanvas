@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'node:path';
 
 const databaseUrl = process.env.E2E_DATABASE_URL;
 if (!databaseUrl) {
@@ -16,6 +17,7 @@ if (!databaseName.endsWith('_e2e') && !databaseName.endsWith('_test')) {
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? '3100');
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`;
+const objectStorageRoot = path.resolve('output/playwright/object-storage');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -54,6 +56,7 @@ export default defineConfig({
       EDUCANVAS_ENABLE_DESIGN_QA: 'true',
       MODEL_GATEWAY_PROVIDER: '',
       MODEL_GATEWAY_API_KEY: '',
+      OBJECT_STORAGE_ROOT: objectStorageRoot,
     },
     reuseExistingServer: false,
     timeout: 120_000,

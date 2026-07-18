@@ -2,7 +2,7 @@
 
 ## 这个包是什么
 
-`model-gateway` 是 `TurnModelGateway` 的供应商适配层。它把 OpenAI-compatible Chat Completions + SSE 协议映射为 `@educanvas/agent-core` 的稳定事件，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
+`model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON与`/audio/speech`映射为 `@educanvas/agent-core` 的稳定Port，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
 实现使用原生 `fetch` + WHATWG Stream，不把供应商 SDK 类型带入领域层。
 
@@ -13,6 +13,8 @@
 - 不输出供应商原始 chunk、错误正文、API Key 或 `reasoning_content`；
 - synthesis 根据显式 `toolResults` 重建 `assistant.tool_calls` 和 `role=tool` 消息，不依赖 Gateway 进程内记忆；
 - 通过 `AbortSignal` 和内部 deadline 取消 fetch，异常响应会主动释放 body。
+- `SpeechModelGateway`只返回`audio/mpeg`字节与安全审计metadata；最多3500字符、
+  20 MiB，且不在Adapter内自动重试。
 
 ## 配置闸门
 
@@ -21,6 +23,8 @@
 - 未配置 `MODEL_GATEWAY_PROVIDER` 时返回 disabled，不静默回退脚本回答；
 - 一旦启用真实 Provider，必须显式声明 `EDUCANVAS_DEPLOYMENT_ENV`；
 - 模型 ID 必须由环境变量显式给出，代码没有供应商型号默认值；
+- TTS需显式配置`MODEL_GATEWAY_SPEECH_MODEL`；voice缺省`alloy`且可由
+  `MODEL_GATEWAY_SPEECH_VOICE`覆盖；DeepSeek配置禁止声明speech alias；
 - 当前支持 `openai-compatible` 和受部署策略约束的 `deepseek`；
 - DeepSeek 默认关闭，必须显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true`，且 staging/production 无条件拒绝；
 - staging/production 的通用 OpenAI-compatible endpoint 必须使用 HTTPS；DeepSeek endpoint 还必须匹配代码允许的官方主机；

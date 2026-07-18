@@ -1417,6 +1417,7 @@ export const artifactGenerationJobs = pgTable(
     progress: integer('progress'),
     failureCode: text('failure_code'),
     params: jsonb('params').notNull().default({}),
+    checkpoint: jsonb('checkpoint').notNull().default({}),
     queueJobKey: text('queue_job_key'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -1454,6 +1455,10 @@ export const artifactGenerationJobs = pgTable(
       'artifact_generation_jobs_queue_key_check',
       sql`${table.queueJobKey} is null or char_length(${table.queueJobKey}) between 1 and 512`,
     ),
+    check(
+      'artifact_generation_jobs_json_shape_check',
+      sql`jsonb_typeof(${table.params}) = 'object' and jsonb_typeof(${table.checkpoint}) = 'object'`,
+    ),
   ],
 );
 
@@ -1471,6 +1476,7 @@ export const artifactVersions = pgTable(
       .references(() => artifacts.id, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
     content: jsonb('content'),
+    metadata: jsonb('metadata'),
     objectKey: text('object_key'),
     checksum: text('checksum'),
     createdByOperationId: uuid('created_by_operation_id').references(
@@ -1494,6 +1500,9 @@ export const artifactVersions = pgTable(
       table.artifactId,
       table.version,
     ),
+    uniqueIndex('artifact_versions_generation_job_unique')
+      .on(table.generationJobId)
+      .where(sql`${table.generationJobId} is not null`),
     check('artifact_versions_version_check', sql`${table.version} >= 1`),
     check(
       'artifact_versions_content_shape_check',
@@ -1506,6 +1515,10 @@ export const artifactVersions = pgTable(
     check(
       'artifact_versions_object_key_check',
       sql`${table.objectKey} is null or (char_length(${table.objectKey}) between 1 and 1024 and ${table.checksum} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      'artifact_versions_metadata_shape_check',
+      sql`${table.metadata} is null or jsonb_typeof(${table.metadata}) = 'object'`,
     ),
   ],
 );

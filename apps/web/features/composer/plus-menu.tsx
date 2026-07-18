@@ -10,6 +10,7 @@ import {
   Cards,
   Slideshow,
   TreeStructure,
+  Headphones,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -22,6 +23,7 @@ export type PlusMenuActionId =
   | 'upload_image'
   | 'create_mind_map'
   | 'create_flashcards'
+  | 'create_audio_overview'
   | 'pick_course_material'
   | 'add_link'
   | 'create_demo'
@@ -70,6 +72,12 @@ const menuItems: readonly PlusMenuItem[] = [
     id: 'create_flashcards',
     icon: Cards,
     label: '生成闪卡',
+    available: true,
+  },
+  {
+    id: 'create_audio_overview',
+    icon: Headphones,
+    label: '生成音频概览',
     available: true,
   },
   {

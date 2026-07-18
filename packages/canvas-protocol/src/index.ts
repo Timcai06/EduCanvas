@@ -43,3 +43,8 @@ export {
   type Flashcard,
   type FlashcardsContent,
 } from './artifacts/flashcards';
+export {
+  AUDIO_OVERVIEW_CONTENT_VERSION,
+  audioOverviewMetadataSchema,
+  type AudioOverviewMetadata,
+} from './artifacts/audio-overview';

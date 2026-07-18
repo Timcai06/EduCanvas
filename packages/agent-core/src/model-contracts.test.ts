@@ -6,6 +6,7 @@ import {
   normalizeModelGatewayError,
   providerCallMetadataSchema,
   streamingTaskAliasSchema,
+  speechTaskAliasSchema,
   structuredTaskAliasSchema,
   taskAliasSchema,
   turnModelEventSchema,
@@ -40,6 +41,10 @@ describe('agent model contracts', () => {
     );
     expect(taskAliasSchema.parse('artifact.generate')).toBe(
       'artifact.generate',
+    );
+    expect(taskAliasSchema.parse('speech.generate')).toBe('speech.generate');
+    expect(speechTaskAliasSchema.parse('speech.generate')).toBe(
+      'speech.generate',
     );
     expect(modelAliasSchema.parse('primary')).toBe('primary');
     expect(structuredTaskAliasSchema.safeParse('agent.turn').success).toBe(

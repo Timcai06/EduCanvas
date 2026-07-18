@@ -24,6 +24,9 @@ const config: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'explicitly-configured-model' },
   timeoutMs: 1_000,
   maxOutputTokens: 2_048,
+  speechVoice: 'alloy',
+  speechTimeoutMs: 60_000,
+  speechMaxInputChars: 3_500,
 };
 
 const answerRequest: StreamAgentTextRequest = {

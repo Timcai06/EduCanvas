@@ -23,3 +23,7 @@ export {
   OpenAICompatibleStructuredModelGateway,
   type OpenAICompatibleStructuredModelGatewayOptions,
 } from './openai-compatible-structured-model-gateway';
+export {
+  OpenAICompatibleSpeechModelGateway,
+  type OpenAICompatibleSpeechModelGatewayOptions,
+} from './openai-compatible-speech-model-gateway';

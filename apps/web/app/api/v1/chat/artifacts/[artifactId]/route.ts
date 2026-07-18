@@ -5,6 +5,7 @@ import {
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
+import { audioOverviewMetadataSchema } from '@educanvas/canvas-protocol';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,9 +14,8 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * 产物详情:最新版本内容(结构化 JSONB 直接返回;媒体版本只返回引用与
- * 校验和,二进制走后续的媒体读取端点)+ 最近生成任务状态,供轮询与
- * Canvas 打开使用。越权与不存在同错(404),不暴露产物是否存在。
+ * 产物详情:结构化 JSONB 直接返回；媒体版本只返回受控读取 URL 与公开
+ * metadata，绝不返回私有 objectKey/checksum。越权与不存在同错(404)。
  */
 export async function GET(
   _request: Request,
@@ -36,6 +36,10 @@ export async function GET(
       artifactId,
       trustedSubjectId: identity.studentId,
     });
+    const audioMetadata =
+      detail.artifact.kind === 'audio_overview' && detail.latestVersion
+        ? audioOverviewMetadataSchema.safeParse(detail.latestVersion.metadata)
+        : null;
     return Response.json({
       artifact: {
         id: detail.artifact.id,
@@ -50,8 +54,13 @@ export async function GET(
         ? {
             version: detail.latestVersion.version,
             content: detail.latestVersion.content,
-            objectKey: detail.latestVersion.objectKey,
-            checksum: detail.latestVersion.checksum,
+            media:
+              audioMetadata?.success === true
+                ? {
+                    url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
+                    ...audioMetadata.data,
+                  }
+                : null,
           }
         : null,
       latestJob: detail.latestJob

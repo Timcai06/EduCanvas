@@ -66,6 +66,7 @@ export interface PlatformArtifactVersion {
   artifactId: string;
   version: number;
   content: unknown;
+  metadata: unknown;
   objectKey: string | null;
   checksum: string | null;
   generatedBy: string | null;
@@ -78,6 +79,8 @@ export interface PlatformArtifactJob {
   status: ArtifactJobStatus;
   progress: number | null;
   failureCode: string | null;
+  params: Record<string, unknown>;
+  checkpoint: Record<string, unknown>;
   queueJobKey: string | null;
 }
 
@@ -85,7 +88,7 @@ export interface PlatformArtifactJob {
 const JOB_TRANSITIONS: Record<ArtifactJobStatus, readonly ArtifactJobStatus[]> =
   {
     queued: ['running', 'cancelled'],
-    running: ['succeeded', 'failed', 'cancelled'],
+    running: ['running', 'succeeded', 'failed', 'cancelled'],
     succeeded: [],
     failed: [],
     cancelled: [],
@@ -189,6 +192,7 @@ export class DrizzlePlatformArtifactRepository {
     artifactId: string;
     trustedSubjectId: string;
     content?: unknown;
+    metadata?: Record<string, unknown> | null;
     objectKey?: string;
     checksum?: string;
     generatedBy?: string | null;
@@ -218,6 +222,7 @@ export class DrizzlePlatformArtifactRepository {
             artifactId: input.artifactId,
             version: nextVersion,
             content: input.content ?? null,
+            metadata: input.metadata ?? null,
             objectKey: input.objectKey ?? null,
             checksum: input.checksum ?? null,
             generatedBy: input.generatedBy ?? null,
@@ -319,13 +324,87 @@ export class DrizzlePlatformArtifactRepository {
           failureCode:
             input.to === 'failed' ? (input.failureCode ?? null) : null,
           startedAt:
-            input.to === 'running' ? sql`now()` : (row.startedAt ?? null),
+            input.to === 'running'
+              ? (row.startedAt ?? sql`now()`)
+              : (row.startedAt ?? null),
           completedAt: isTerminal ? sql`now()` : null,
         })
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .returning();
       return toJob(updated!);
     });
+  }
+
+  /** 队列重投时按 jobId 读取权威参数与 checkpoint，并再次校验主体。 */
+  async getGenerationJob(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactJob> {
+    const [row] = await this.database
+      .select({ job: artifactGenerationJobs })
+      .from(artifactGenerationJobs)
+      .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
+      .where(
+        and(
+          eq(artifactGenerationJobs.id, input.jobId),
+          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new ArtifactOwnershipError();
+    return toJob(row.job);
+  }
+
+  /**
+   * 只允许 running 任务写入可恢复 checkpoint。音频先落对象存储、再写此记录，
+   * 重投时可校验并继续 append version，而无需再次调用计费 Provider。
+   */
+  async updateGenerationJobCheckpoint(input: {
+    jobId: string;
+    trustedSubjectId: string;
+    checkpoint: Record<string, unknown>;
+  }): Promise<PlatformArtifactJob> {
+    return await this.database.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          job: artifactGenerationJobs,
+          owner: artifacts.ownerSubjectId,
+        })
+        .from(artifactGenerationJobs)
+        .innerJoin(
+          artifacts,
+          eq(artifactGenerationJobs.artifactId, artifacts.id),
+        )
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .for('update', { of: artifactGenerationJobs })
+        .limit(1);
+      if (!row || row.owner !== input.trustedSubjectId) {
+        throw new ArtifactOwnershipError();
+      }
+      if (row.job.status !== 'running') {
+        throw new ArtifactJobLifecycleError(row.job.status, 'running');
+      }
+      const [updated] = await tx
+        .update(artifactGenerationJobs)
+        .set({ checkpoint: input.checkpoint })
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .returning();
+      return toJob(updated!);
+    });
+  }
+
+  /** generationJobId 唯一对应一次版本提交；用于 crash 后识别“已写版本未终态”。 */
+  async findVersionByGenerationJob(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactVersion | null> {
+    await this.getGenerationJob(input);
+    const [row] = await this.database
+      .select()
+      .from(artifactVersions)
+      .where(eq(artifactVersions.generationJobId, input.jobId))
+      .limit(1);
+    return row ? toVersion(row) : null;
   }
 
   /**
@@ -451,6 +530,7 @@ const toVersion = (row: VersionRow): PlatformArtifactVersion => ({
   artifactId: row.artifactId,
   version: row.version,
   content: row.content,
+  metadata: row.metadata,
   objectKey: row.objectKey,
   checksum: row.checksum,
   generatedBy: row.generatedBy,
@@ -463,5 +543,7 @@ const toJob = (row: JobRow): PlatformArtifactJob => ({
   status: row.status as ArtifactJobStatus,
   progress: row.progress,
   failureCode: row.failureCode,
+  params: row.params as Record<string, unknown>,
+  checkpoint: row.checkpoint as Record<string, unknown>,
   queueJobKey: row.queueJobKey,
 });

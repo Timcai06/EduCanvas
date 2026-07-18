@@ -216,6 +216,28 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     });
     expect(running.status).toBe('running');
 
+    const resumed = await repository.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 15,
+    });
+    expect(resumed).toMatchObject({ status: 'running', progress: 15 });
+    await repository.updateGenerationJobCheckpoint({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      checkpoint: { stage: 'object_stored' },
+    });
+    await expect(
+      repository.getGenerationJob({
+        jobId: job.id,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toMatchObject({
+      params: { kind: 'mind_map' },
+      checkpoint: { stage: 'object_stored' },
+    });
+
     const done = await repository.transitionGenerationJob({
       jobId: job.id,
       trustedSubjectId: owner,
