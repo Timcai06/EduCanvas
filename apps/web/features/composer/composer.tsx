@@ -2,7 +2,9 @@
 
 import {
   ArrowUp,
+  BookOpen,
   Microphone,
+  SidebarSimple,
   StopCircle,
   X,
 } from '@phosphor-icons/react';
@@ -24,6 +26,13 @@ export interface ContextChip {
   label: string;
 }
 
+export interface ComposerToolChip {
+  id: 'canvas' | 'sources';
+  label: string;
+  selected: boolean;
+  detail?: string;
+}
+
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
  * 它不持有对话状态；文本提交、菜单动作全部上抛给 LearnWorkspace。
@@ -41,6 +50,8 @@ export function Composer({
   variant = 'conversation',
   statusTone = 'info',
   availableMenuActions,
+  toolChips = [],
+  onToolAction,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -54,6 +65,8 @@ export function Composer({
   variant?: 'landing' | 'conversation';
   statusTone?: 'info' | 'error';
   availableMenuActions?: readonly PlusMenuActionId[];
+  toolChips?: readonly ComposerToolChip[];
+  onToolAction?: (id: ComposerToolChip['id']) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -177,6 +190,35 @@ export function Composer({
           </button>
         )}
       </div>
+      {toolChips.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+          {toolChips.map((tool) => {
+            const Icon = tool.id === 'canvas' ? SidebarSimple : BookOpen;
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                aria-label={tool.label}
+                aria-pressed={tool.selected}
+                onClick={() => onToolAction?.(tool.id)}
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
+                  tool.selected
+                    ? 'border-accent/55 bg-accent-soft text-ink'
+                    : 'border-line/80 bg-surface/75 text-ink-muted hover:bg-surface hover:text-ink'
+                }`}
+              >
+                <Icon aria-hidden="true" size={15} />
+                <span>{tool.label}</span>
+                {tool.detail ? (
+                  <span className="text-[11px] text-ink-faint">
+                    {tool.detail}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       {!isLanding || statusText ? (
         <p
           className={`mt-2 min-h-4 text-center text-xs ${

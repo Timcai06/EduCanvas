@@ -3,12 +3,15 @@
 import { startGeneralChatAction } from '@/app/actions';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import { useCallback, useTransition } from 'react';
+import { useCallback, useState, useTransition } from 'react';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
   'educanvas.pending-general-menu-action.v1';
+export const PENDING_GENERAL_CANVAS_KEY = 'educanvas.pending-general-canvas.v1';
+export const PENDING_GENERAL_SOURCES_KEY =
+  'educanvas.pending-general-sources.v1';
 const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
@@ -20,6 +23,7 @@ const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
 
 export function GeneralChatEntry() {
   const [isPending, startTransition] = useTransition();
+  const [canvasSelected, setCanvasSelected] = useState(false);
   const begin = useCallback((prompt: string) => {
     sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
     sessionStorage.setItem(PENDING_GENERAL_PROMPT_KEY, prompt);
@@ -31,6 +35,21 @@ export function GeneralChatEntry() {
   const beginWithMenuAction = useCallback((action: PlusMenuActionId) => {
     sessionStorage.removeItem(PENDING_GENERAL_PROMPT_KEY);
     sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, action);
+    startTransition(async () => {
+      await startGeneralChatAction();
+    });
+  }, []);
+
+  const handleToolAction = useCallback((tool: 'canvas' | 'sources') => {
+    if (tool === 'canvas') {
+      setCanvasSelected((selected) => {
+        if (selected) sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
+        else sessionStorage.setItem(PENDING_GENERAL_CANVAS_KEY, '1');
+        return !selected;
+      });
+      return;
+    }
+    sessionStorage.setItem(PENDING_GENERAL_SOURCES_KEY, '1');
     startTransition(async () => {
       await startGeneralChatAction();
     });
@@ -53,6 +72,11 @@ export function GeneralChatEntry() {
           onRemoveChip={() => undefined}
           onMenuAction={beginWithMenuAction}
           availableMenuActions={ENTRY_MENU_ACTIONS}
+          toolChips={[
+            { id: 'canvas', label: 'Canvas', selected: canvasSelected },
+            { id: 'sources', label: '来源', selected: false },
+          ]}
+          onToolAction={handleToolAction}
           variant="landing"
         />
       </EmptyChatHero>
