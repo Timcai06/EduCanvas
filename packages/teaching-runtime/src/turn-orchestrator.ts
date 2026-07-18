@@ -113,7 +113,8 @@ export type TeachingTurnRejectionCode =
 export type TeachingTurnStreamEvent =
   | {
       type: 'model';
-      run: 1 | 2;
+      /* 第 N 次模型运行;K12 默认策略(maxToolRounds=1)下仍恒为 1/2 */
+      run: number;
       event: TurnModelEvent;
     }
   | {
@@ -125,7 +126,7 @@ export type TeachingTurnStreamEvent =
       type: 'completed';
       traceId: string;
       turnId: string;
-      modelRunCount: 1 | 2;
+      modelRunCount: number;
       stateDecision: TeachingTurnStayDecision;
     }
   | {
@@ -375,7 +376,8 @@ async function* validateModelRun(
         continue;
       }
       if (event.type === 'tool_call') {
-        if (request.phase !== 'answer') return invalidModelStream();
+        /* 工具许可由请求的 tools 列表决定,不由 phase 决定(多圈循环,M3) */
+        if (request.tools.length === 0) return invalidModelStream();
         /*
          * ADR-0011:允许"文本 → 工具调用"(前导文本保留为回答第一段);
          * 反向的"工具调用 → 文本"仍在上方 text_delta 分支判死——工具结果
@@ -449,7 +451,7 @@ async function* validateModelRun(
 
   const hasTools = toolCallBuffers.size > 0;
   if (!hasText && !hasTools) return invalidModelStream();
-  if (request.phase === 'synthesis' && hasTools) return invalidModelStream();
+  if (request.tools.length === 0 && hasTools) return invalidModelStream();
   if (hasTools && terminalMetadata.finishReason !== 'tool_calls') {
     return invalidModelStream();
   }
@@ -491,16 +493,22 @@ async function* validateModelRun(
 }
 
 /**
- * 正常教学 Turn 的唯一 Orchestrator：
- * - 直答：一次 answer 模型运行；
- * - 工具：一次 answer → 工具批次 → 一次 synthesis；
- * - 无论任何模型输出都不会出现第三次模型运行。
+ * 正常教学 Turn 的唯一 Orchestrator。圈数由策略而非拓扑决定(M3):
+ * - 每圈 = 一次 answer 运行,模型可请求工具;无工具请求则该圈文本即最终回答;
+ * - 圈数耗尽仍在请求工具时,强制一次无工具 synthesis 收束;
+ * - K12 默认 maxToolRounds=1,行为与原两跑拓扑一致;
+ * - 上限硬夹 4:多圈是预算问题不是能力问题,更大配额需随 Agent Profile 论证。
  */
 export class TeachingTurnOrchestrator {
+  private readonly maxToolRounds: number;
+
   constructor(
     private readonly modelGateway: TurnModelGateway,
     private readonly toolExecutor: TeachingToolExecutor,
-  ) {}
+    options: { maxToolRounds?: number } = {},
+  ) {
+    this.maxToolRounds = Math.min(4, Math.max(1, options.maxToolRounds ?? 1));
+  }
 
   async *streamTurn(
     trustedStudentId: string,
@@ -523,154 +531,174 @@ export class TeachingTurnOrchestrator {
       command,
       this.toolExecutor.listModelTools(command.session.state),
     );
-    const answerRequest: StreamTurnTextRequest = {
-      ...answerPromptMaterial,
-      toolResults: [],
-      traceId: command.traceId,
-      turnId: command.turnId,
-      signal: options.signal,
-    };
-    const answerIterator = validateModelRun(this.modelGateway, answerRequest)[
-      Symbol.asyncIterator
-    ]();
-    let answer: ModelRunResult;
-    while (true) {
-      const step = await answerIterator.next();
-      if (step.done === true) {
-        answer = step.value;
-        break;
-      }
-      yield { type: 'model', run: 1, event: step.value };
-    }
-    if (!answer.ok) {
-      yield {
-        type: 'failed',
-        code: answer.code,
-        error: answer.error,
-      };
-      return;
-    }
 
-    if (answer.toolCalls.length === 0) {
-      yield {
-        type: 'completed',
+    const accumulatedResults: ModelToolResult[] = [];
+    let textCharacters = 0;
+    let hadAnyText = false;
+    let run = 0;
+
+    for (let round = 1; round <= this.maxToolRounds; round += 1) {
+      run += 1;
+      const roundRequest: StreamTurnTextRequest = {
+        ...answerPromptMaterial,
+        toolResults: accumulatedResults,
         traceId: command.traceId,
         turnId: command.turnId,
-        modelRunCount: 1,
-        stateDecision: {
-          kind: 'STAY',
-          from: command.session.state,
-          to: command.session.state,
-          reason: 'DIRECT_RESPONSE',
-        },
+        signal: options.signal,
       };
-      return;
-    }
+      const iterator = validateModelRun(
+        this.modelGateway,
+        roundRequest,
+        textCharacters,
+      )[Symbol.asyncIterator]();
+      let outcome: ModelRunResult;
+      /* 跨圈文本以空行衔接(ADR-0011 的推广:每圈前导文本都是回答的一段) */
+      let roundSeparatorPending = hadAnyText;
+      while (true) {
+        const step = await iterator.next();
+        if (step.done === true) {
+          outcome = step.value;
+          break;
+        }
+        if (roundSeparatorPending && step.value.type === 'text_delta') {
+          roundSeparatorPending = false;
+          yield {
+            type: 'model',
+            run,
+            event: { type: 'text_delta', phase: 'answer', delta: '\n\n' },
+          };
+        }
+        yield { type: 'model', run, event: step.value };
+      }
+      if (!outcome.ok) {
+        yield { type: 'failed', code: outcome.code, error: outcome.error };
+        return;
+      }
+      hadAnyText = hadAnyText || outcome.hadText;
+      textCharacters = outcome.textCharacters;
 
-    if (isAborted(options.signal)) {
-      yield {
-        type: 'failed',
-        code: 'MODEL_ABORTED',
-        error: { code: 'aborted', retryable: false },
-      };
-      return;
-    }
-
-    let batch;
-    try {
-      batch = await this.toolExecutor.executeBatch(
-        answer.toolCalls.map((call) => ({
-          rawCall: { tool: call.tool, arguments: call.arguments },
-          context: {
-            traceId: command.traceId,
-            turnId: command.turnId,
-            executionId: `${command.session.id}:${command.turnId}:${call.callId}`,
-            studentId: command.session.studentId,
-            sessionId: command.session.id,
-            knowledgeNodeId: command.session.knowledgeNodeId,
-            state: command.session.state,
-            invoker: 'model' as const,
-          },
-        })),
-      );
-    } catch {
-      yield {
-        type: 'failed',
-        code: 'TOOL_EXECUTION_FAILED',
-        failures: [],
-      };
-      return;
-    }
-
-    if (!batch.accepted) {
-      yield {
-        type: 'failed',
-        code: 'TOOL_CALL_REJECTED',
-        failures: batch.rejections.map(summarizeFailure),
-      };
-      return;
-    }
-
-    for (const [index, result] of batch.results.entries()) {
-      const call = answer.toolCalls[index];
-      if (call === undefined) {
+      if (outcome.toolCalls.length === 0) {
         yield {
-          type: 'failed',
-          code: 'INVALID_MODEL_STREAM',
-          error: { code: 'invalid_response', retryable: false },
+          type: 'completed',
+          traceId: command.traceId,
+          turnId: command.turnId,
+          modelRunCount: run,
+          stateDecision: {
+            kind: 'STAY',
+            from: command.session.state,
+            to: command.session.state,
+            reason:
+              run === 1 ? 'DIRECT_RESPONSE' : 'NO_TRUSTED_TRANSITION_SIGNAL',
+          },
         };
         return;
       }
-      yield { type: 'tool_result', callId: call.callId, result };
+
+      if (isAborted(options.signal)) {
+        yield {
+          type: 'failed',
+          code: 'MODEL_ABORTED',
+          error: { code: 'aborted', retryable: false },
+        };
+        return;
+      }
+
+      let batch;
+      try {
+        batch = await this.toolExecutor.executeBatch(
+          outcome.toolCalls.map((call) => ({
+            rawCall: { tool: call.tool, arguments: call.arguments },
+            context: {
+              traceId: command.traceId,
+              turnId: command.turnId,
+              /* 圈号进入 executionId 防跨圈 callId 复用;首圈保持历史格式 */
+              executionId:
+                round === 1
+                  ? `${command.session.id}:${command.turnId}:${call.callId}`
+                  : `${command.session.id}:${command.turnId}:r${round}:${call.callId}`,
+              studentId: command.session.studentId,
+              sessionId: command.session.id,
+              knowledgeNodeId: command.session.knowledgeNodeId,
+              state: command.session.state,
+              invoker: 'model' as const,
+            },
+          })),
+        );
+      } catch {
+        yield { type: 'failed', code: 'TOOL_EXECUTION_FAILED', failures: [] };
+        return;
+      }
+
+      if (!batch.accepted) {
+        yield {
+          type: 'failed',
+          code: 'TOOL_CALL_REJECTED',
+          failures: batch.rejections.map(summarizeFailure),
+        };
+        return;
+      }
+
+      for (const [index, result] of batch.results.entries()) {
+        const call = outcome.toolCalls[index];
+        if (call === undefined) {
+          yield {
+            type: 'failed',
+            code: 'INVALID_MODEL_STREAM',
+            error: { code: 'invalid_response', retryable: false },
+          };
+          return;
+        }
+        yield { type: 'tool_result', callId: call.callId, result };
+      }
+
+      const failures = batch.results.filter(
+        (result): result is ToolExecutionFailure => !result.ok,
+      );
+      if (failures.length > 0) {
+        yield {
+          type: 'failed',
+          code: 'TOOL_EXECUTION_FAILED',
+          failures: failures.map(summarizeFailure),
+        };
+        return;
+      }
+
+      if (isAborted(options.signal)) {
+        yield {
+          type: 'failed',
+          code: 'MODEL_ABORTED',
+          error: { code: 'aborted', retryable: false },
+        };
+        return;
+      }
+
+      const successes = batch.results.filter(
+        (result): result is ToolExecutionSuccess => result.ok,
+      );
+      if (successes.length !== outcome.toolCalls.length) {
+        yield { type: 'failed', code: 'TOOL_EXECUTION_FAILED', failures: [] };
+        return;
+      }
+      const roundCalls = outcome.toolCalls;
+      accumulatedResults.push(
+        ...successes.map((result, index) => ({
+          callId: roundCalls[index]?.callId ?? 'invalid-call',
+          tool: result.tool,
+          arguments: roundCalls[index]?.arguments ?? null,
+          output: result.output,
+        })),
+      );
     }
 
-    const failures = batch.results.filter(
-      (result): result is ToolExecutionFailure => !result.ok,
-    );
-    if (failures.length > 0) {
-      yield {
-        type: 'failed',
-        code: 'TOOL_EXECUTION_FAILED',
-        failures: failures.map(summarizeFailure),
-      };
-      return;
-    }
-
-    if (isAborted(options.signal)) {
-      yield {
-        type: 'failed',
-        code: 'MODEL_ABORTED',
-        error: { code: 'aborted', retryable: false },
-      };
-      return;
-    }
-
-    const successes = batch.results.filter(
-      (result): result is ToolExecutionSuccess => result.ok,
-    );
-    if (successes.length !== answer.toolCalls.length) {
-      yield {
-        type: 'failed',
-        code: 'TOOL_EXECUTION_FAILED',
-        failures: [],
-      };
-      return;
-    }
-    const toolResults: readonly ModelToolResult[] = successes.map(
-      (result, index) => ({
-        callId: answer.toolCalls[index]?.callId ?? 'invalid-call',
-        tool: result.tool,
-        arguments: answer.toolCalls[index]?.arguments ?? null,
-        output: result.output,
-      }),
-    );
+    /* 圈数耗尽:强制无工具 synthesis 收束 */
+    run += 1;
     const synthesisRequest: StreamTurnTextRequest = {
       taskAlias: TEACHING_TURN_TASK_ALIAS,
       modelAlias: TEACHING_TURN_MODEL_ALIAS,
       phase: 'synthesis',
       messages: buildSynthesisMessages(command),
       tools: [],
-      toolResults,
+      toolResults: accumulatedResults,
       promptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
       traceId: command.traceId,
       turnId: command.turnId,
@@ -679,11 +707,10 @@ export class TeachingTurnOrchestrator {
     const synthesisIterator = validateModelRun(
       this.modelGateway,
       synthesisRequest,
-      answer.textCharacters,
+      textCharacters,
     )[Symbol.asyncIterator]();
     let synthesis: ModelRunResult;
-    /* ADR-0011:answer 前导文本与 synthesis 正文之间补一个空行衔接。 */
-    let separatorPending = answer.hadText;
+    let separatorPending = hadAnyText;
     while (true) {
       const step = await synthesisIterator.next();
       if (step.done === true) {
@@ -694,18 +721,14 @@ export class TeachingTurnOrchestrator {
         separatorPending = false;
         yield {
           type: 'model',
-          run: 2,
+          run,
           event: { type: 'text_delta', phase: 'synthesis', delta: '\n\n' },
         };
       }
-      yield { type: 'model', run: 2, event: step.value };
+      yield { type: 'model', run, event: step.value };
     }
     if (!synthesis.ok) {
-      yield {
-        type: 'failed',
-        code: synthesis.code,
-        error: synthesis.error,
-      };
+      yield { type: 'failed', code: synthesis.code, error: synthesis.error };
       return;
     }
     if (synthesis.toolCalls.length > 0) {
@@ -720,7 +743,7 @@ export class TeachingTurnOrchestrator {
       type: 'completed',
       traceId: command.traceId,
       turnId: command.turnId,
-      modelRunCount: 2,
+      modelRunCount: run,
       stateDecision: {
         kind: 'STAY',
         from: command.session.state,
