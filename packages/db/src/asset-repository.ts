@@ -6,6 +6,7 @@ import {
   canTransitionAssetStatus,
   type AssetDescriptor,
   type AssetKind,
+  type AssetOrigin,
   type AssetScope,
   type AssetVersionDescriptor,
   type AssetVersionReference,
@@ -43,7 +44,9 @@ export interface CreateUploadedAssetInput {
   ownerSubjectId: string;
   spaceId: string;
   scope: AssetScope;
-  kind: Extract<AssetKind, 'image' | 'document'>;
+  kind: Extract<AssetKind, 'image' | 'document' | 'link'>;
+  /** 缺省 upload;链接导入传 url_import,溯源与上传物理区分。 */
+  origin?: Extract<AssetOrigin, 'upload' | 'url_import'>;
   displayName: string;
   mimeType: string;
   byteSize: number;
@@ -168,7 +171,7 @@ export class DrizzleAssetRepository {
           spaceId,
           scope: input.scope,
           kind: input.kind,
-          origin: 'upload',
+          origin: input.origin ?? 'upload',
           displayName,
           mimeType,
           status: 'processing',

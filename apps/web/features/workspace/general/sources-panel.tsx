@@ -1,7 +1,14 @@
 'use client';
 
 import type { AssetItem } from '@/features/assets/assets-drawer';
-import { FileArrowUp, FilePdf, Image as ImageIcon } from '@phosphor-icons/react';
+import { importLinkAsset } from '@/features/assets/asset-client';
+import {
+  FileArrowUp,
+  FilePdf,
+  Image as ImageIcon,
+  LinkSimple,
+} from '@phosphor-icons/react';
+import { useState } from 'react';
 
 /**
  * 侧栏来源区(NotebookLM 式常驻,U2 v1):逐条勾选决定进入下一轮上下文,
@@ -12,11 +19,37 @@ export function SourcesPanel({
   assets,
   onToggle,
   onUpload,
+  onImported,
 }: {
   assets: readonly AssetItem[];
   onToggle: (id: string) => void;
   onUpload: (kind: 'document' | 'image') => void;
+  onImported: (asset: AssetItem) => void;
 }) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  const submitLink = () => {
+    const url = linkValue.trim();
+    if (!url || linkBusy) return;
+    setLinkBusy(true);
+    setLinkError(null);
+    importLinkAsset({ url })
+      .then((asset) => {
+        onImported(asset);
+        setLinkValue('');
+        setLinkOpen(false);
+      })
+      .catch((reason: unknown) => {
+        setLinkError(
+          reason instanceof Error ? reason.message : '暂时无法导入链接。',
+        );
+      })
+      .finally(() => setLinkBusy(false));
+  };
+
   return (
     <div className="flex min-h-0 flex-col border-t border-line/60">
       <div className="flex items-center justify-between px-5 pt-3 pb-1">
@@ -40,8 +73,45 @@ export function SourcesPanel({
           >
             <ImageIcon aria-hidden="true" size={14} />
           </button>
+          <button
+            type="button"
+            aria-label="添加网页链接来源"
+            title="添加链接"
+            onClick={() => setLinkOpen((value) => !value)}
+            className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <LinkSimple aria-hidden="true" size={14} />
+          </button>
         </div>
       </div>
+      {linkOpen ? (
+        <div className="px-4 pb-2">
+          <div className="flex gap-1.5">
+            <input
+              value={linkValue}
+              placeholder="https://…"
+              disabled={linkBusy}
+              onChange={(event) => setLinkValue(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitLink();
+              }}
+              aria-label="网页链接"
+              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink outline-none focus-visible:border-accent/55"
+            />
+            <button
+              type="button"
+              onClick={submitLink}
+              disabled={linkBusy || linkValue.trim().length === 0}
+              className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong disabled:bg-surface-strong disabled:text-ink-faint"
+            >
+              {linkBusy ? '导入中…' : '导入'}
+            </button>
+          </div>
+          {linkError ? (
+            <p className="mt-1 px-1 text-xs text-bad">{linkError}</p>
+          ) : null}
+        </div>
+      ) : null}
       <ul className="max-h-56 space-y-0.5 overflow-y-auto px-2 pb-3">
         {assets.map((asset) => (
           <li key={asset.id}>
@@ -57,7 +127,13 @@ export function SourcesPanel({
                 onChange={() => onToggle(asset.id)}
                 className="size-3.5 shrink-0 accent-[var(--color-accent)]"
               />
-              {asset.kind === 'image' ? (
+              {asset.kind === 'link' ? (
+                <LinkSimple
+                  aria-hidden="true"
+                  size={14}
+                  className="shrink-0 text-ink-faint"
+                />
+              ) : asset.kind === 'image' ? (
                 <ImageIcon aria-hidden="true" size={14} className="shrink-0 text-ink-faint" />
               ) : (
                 <FilePdf aria-hidden="true" size={14} className="shrink-0 text-ink-faint" />

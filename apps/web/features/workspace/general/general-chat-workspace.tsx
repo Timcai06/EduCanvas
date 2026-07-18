@@ -276,6 +276,12 @@ export function GeneralChatWorkspace({
             assets={assets}
             onToggle={toggleAsset}
             onUpload={(kind) => setAssetPanel(kind)}
+            onImported={(asset) =>
+              setAssets((current) => [
+                { ...asset, enabled: asset.selectable },
+                ...current.filter((item) => item.id !== asset.id),
+              ])
+            }
           />
         </ConversationSidebar>
       <main
