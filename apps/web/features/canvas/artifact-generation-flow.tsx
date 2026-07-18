@@ -32,6 +32,10 @@ export interface GenerationState {
   detail?: ArtifactDetail;
 }
 
+export interface ConfirmArtifactOptions {
+  openWhenReady?: boolean;
+}
+
 export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
@@ -63,6 +67,7 @@ export function useArtifactGeneration() {
     kind: CreatableArtifactKind,
     title: string,
     sources: readonly ArtifactSourceReference[] = [],
+    options: ConfirmArtifactOptions = {},
   ) => {
     setGeneration({ phase: 'generating', kind, title });
     try {
@@ -81,6 +86,10 @@ export function useArtifactGeneration() {
         title: detail.artifact.title,
         detail,
       });
+      if (succeeded && options.openWhenReady) {
+        setOpenDetail(detail);
+        setCanvasFull(false);
+      }
     } catch {
       setGeneration({ phase: 'failed', kind, title });
     }

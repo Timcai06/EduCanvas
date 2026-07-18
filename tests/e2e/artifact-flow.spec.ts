@@ -44,6 +44,40 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
   await expect(studio.getByText('v1')).toBeVisible();
 });
 
+test('Canvas 工具芯片随入口意图进入会话并自动打开本轮产物', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  const canvasTool = page.getByRole('button', { name: 'Canvas', exact: true });
+  await expect(canvasTool).toHaveAttribute('aria-pressed', 'false');
+  await canvasTool.click();
+  await expect(canvasTool).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
+  const confirmSheet = page.getByRole('dialog', { name: '生成思维导图' });
+  await expect(confirmSheet).toBeVisible();
+  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
+
+  await expect(canvasTool).toHaveAttribute('aria-pressed', 'false');
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+  await expect(
+    canvas.locator('[data-mind-map]').getByText('对话思维导图'),
+  ).toBeVisible();
+});
+
+test('来源工具芯片从空白入口打开真实来源选择器', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.getByRole('button', { name: '来源', exact: true }).click();
+  await expect(
+    page.getByRole('dialog', { name: '知识与媒体资产' }),
+  ).toBeVisible();
+});
+
 test('生成 Slides 全链路并可分页浏览', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');

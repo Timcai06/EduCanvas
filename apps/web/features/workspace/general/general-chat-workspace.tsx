@@ -33,6 +33,8 @@ import { AmbientHalo } from '../shared/ambient-halo';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
+  PENDING_GENERAL_CANVAS_KEY,
+  PENDING_GENERAL_SOURCES_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
 import { SourcesPanel } from './sources-panel';
@@ -78,6 +80,7 @@ export function GeneralChatWorkspace({
     [],
   );
   const artifactFlow = useArtifactGeneration();
+  const [canvasSelected, setCanvasSelected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,6 +90,7 @@ export function GeneralChatWorkspace({
   const nearBottom = useRef(true);
   const pendingConsumed = useRef(false);
   const pendingMenuConsumed = useRef(false);
+  const pendingToolsConsumed = useRef(false);
 
   const refreshAssets = useCallback(async () => {
     const items = await loadAssets(ASSET_ENDPOINT);
@@ -208,8 +212,39 @@ export function GeneralChatWorkspace({
     queueMicrotask(() => handleMenuAction(action));
   }, [handleMenuAction]);
 
+  useEffect(() => {
+    if (pendingToolsConsumed.current) return;
+    pendingToolsConsumed.current = true;
+    const restoreCanvas = Boolean(
+      sessionStorage.getItem(PENDING_GENERAL_CANVAS_KEY),
+    );
+    const restoreSources = Boolean(
+      sessionStorage.getItem(PENDING_GENERAL_SOURCES_KEY),
+    );
+    sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
+    sessionStorage.removeItem(PENDING_GENERAL_SOURCES_KEY);
+    queueMicrotask(() => {
+      if (restoreCanvas) setCanvasSelected(true);
+      if (restoreSources) setAssetPanel('assets');
+    });
+  }, []);
+
   const isLanding = turn.messages.length === 0;
   const selectedAssets = assets.filter((asset) => asset.enabled);
+  const composerTools = [
+    { id: 'canvas' as const, label: 'Canvas', selected: canvasSelected },
+    {
+      id: 'sources' as const,
+      label: '来源',
+      selected: selectedAssets.length > 0,
+      detail:
+        selectedAssets.length > 0 ? String(selectedAssets.length) : undefined,
+    },
+  ];
+  const handleToolAction = useCallback((tool: 'canvas' | 'sources') => {
+    if (tool === 'canvas') setCanvasSelected((selected) => !selected);
+    else setAssetPanel('assets');
+  }, []);
   const selectedAudioSources = assets.flatMap((asset) =>
     asset.enabled &&
     asset.versionId &&
@@ -357,6 +392,8 @@ export function GeneralChatWorkspace({
                   onRemoveChip={toggleAsset}
                   onMenuAction={handleMenuAction}
                   availableMenuActions={GENERAL_MENU_ACTIONS}
+                  toolChips={composerTools}
+                  onToolAction={handleToolAction}
                   variant="landing"
                 />
               </div>
@@ -413,6 +450,8 @@ export function GeneralChatWorkspace({
                     onRemoveChip={toggleAsset}
                     onMenuAction={handleMenuAction}
                     availableMenuActions={GENERAL_MENU_ACTIONS}
+                    toolChips={composerTools}
+                    onToolAction={handleToolAction}
                   />
                 </div>
               </div>
@@ -459,13 +498,16 @@ export function GeneralChatWorkspace({
           kind={artifactFlow.generation.kind}
           defaultTitle={artifactFlow.generation.title}
           sourceCount={selectedAudioSources.length}
-          onConfirm={(title) =>
+          onConfirm={(title) => {
+            const openWhenReady = canvasSelected;
+            setCanvasSelected(false);
             void artifactFlow.confirm(
               artifactFlow.generation!.kind,
               title,
               selectedAudioSources,
-            )
-          }
+              { openWhenReady },
+            );
+          }}
           onClose={artifactFlow.dismiss}
         />
       ) : null}
