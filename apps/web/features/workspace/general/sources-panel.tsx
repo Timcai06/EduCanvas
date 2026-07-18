@@ -134,9 +134,17 @@ export function SourcesPanel({
                   className="shrink-0 text-ink-faint"
                 />
               ) : asset.kind === 'image' ? (
-                <ImageIcon aria-hidden="true" size={14} className="shrink-0 text-ink-faint" />
+                <ImageIcon
+                  aria-hidden="true"
+                  size={14}
+                  className="shrink-0 text-ink-faint"
+                />
               ) : (
-                <FilePdf aria-hidden="true" size={14} className="shrink-0 text-ink-faint" />
+                <FilePdf
+                  aria-hidden="true"
+                  size={14}
+                  className="shrink-0 text-ink-faint"
+                />
               )}
               <span className="min-w-0 flex-1 truncate">{asset.label}</span>
             </label>
@@ -144,7 +152,7 @@ export function SourcesPanel({
         ))}
         {assets.length === 0 ? (
           <li className="px-3 py-2 text-xs text-ink-faint">
-            还没有来源。上传 PDF 或图片,回答会基于它们。
+            还没有来源。上传 PDF、图片或网页链接，回答会基于它们。
           </li>
         ) : null}
       </ul>

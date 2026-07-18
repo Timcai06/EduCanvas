@@ -5,7 +5,11 @@ import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingSession } from '../teaching/learning-session';
-import { WebPageFetchError, fetchReadableWebPage } from '../tools/web-page';
+import {
+  WebPageFetchError,
+  fetchReadableWebPage,
+  type FetchedWebPage,
+} from '../tools/web-page';
 import {
   removeStoredAsset,
   storeAssetBytes,
@@ -205,6 +209,23 @@ export async function importOwnedLinkAsset(input: {
       error instanceof WebPageFetchError ? error.code : 'fetch_failed';
     throw new AssetUploadError(`link_${code}`, 422);
   }
+  return persistFetchedWebPageAsset({
+    identity: input.identity,
+    spaceId: input.spaceId,
+    page,
+  });
+}
+
+/**
+ * 将已经通过 fetchReadableWebPage 安全边界取得的完整正文保存为 Link Asset。
+ * Tool 路径复用此函数，避免为了持久化再次请求同一 URL，确保引用对应本次读取快照。
+ */
+export async function persistFetchedWebPageAsset(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  page: FetchedWebPage;
+}): Promise<AssetSnapshot> {
+  const page = input.page;
   const text = [...page.text].slice(0, MAX_EXTRACTED_TEXT).join('');
   const bytes = new TextEncoder().encode(text);
   const stored = await storeAssetBytes({

@@ -6,7 +6,13 @@ import {
   assertOwnedReadyAssetParts,
   prepareStudentMessage,
 } from './message-parts';
-import { agentOperations, conversationMessages, conversations } from './schema';
+import {
+  agentOperations,
+  conversationMessageCitations,
+  conversationMessages,
+  conversations,
+  operationSources,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -310,8 +316,24 @@ export class DrizzlePlatformTurnRepository {
     status: PlatformTurnTerminalStatus;
     content: string;
     failureCode?: string | null;
+    /** 最终正文实际出现的本轮来源编号；与消息终态在同一事务落账。 */
+    sourceMarkers?: readonly number[];
     now?: Date;
   }): Promise<PlatformTurnSnapshot> {
+    const sourceMarkers = input.sourceMarkers ?? [];
+    const validMarkers = sourceMarkers.every(
+      (marker, index) =>
+        Number.isInteger(marker) &&
+        marker >= 1 &&
+        marker <= 99 &&
+        (index === 0 || marker > sourceMarkers[index - 1]!),
+    );
+    if (
+      !validMarkers ||
+      (input.status !== 'completed' && sourceMarkers.length > 0)
+    ) {
+      throw new PlatformTurnLifecycleError('通用Turn引用编号无效');
+    }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
       await requireOwnedConversation(
@@ -355,6 +377,51 @@ export class DrizzlePlatformTurnRepository {
         )
         .returning({ id: agentOperations.id });
       if (updated) {
+        const [assistant] = await transaction
+          .select({ id: conversationMessages.id })
+          .from(conversationMessages)
+          .where(
+            and(
+              eq(conversationMessages.operationId, input.turnId),
+              eq(conversationMessages.role, 'assistant'),
+            ),
+          )
+          .limit(1);
+        if (!assistant) {
+          throw new PlatformTurnLifecycleError('通用Turn缺少assistant消息');
+        }
+        if (sourceMarkers.length > 0) {
+          const citedSources = await transaction
+            .select({
+              id: operationSources.id,
+              ordinal: operationSources.ordinal,
+            })
+            .from(operationSources)
+            .where(
+              and(
+                eq(operationSources.operationId, input.turnId),
+                inArray(operationSources.ordinal, [...sourceMarkers]),
+              ),
+            )
+            .orderBy(asc(operationSources.ordinal));
+          if (
+            citedSources.length !== sourceMarkers.length ||
+            citedSources.some(
+              (source, index) => source.ordinal !== sourceMarkers[index],
+            )
+          ) {
+            throw new PlatformTurnLifecycleError(
+              '通用Turn引用不属于本轮来源白名单',
+            );
+          }
+          await transaction.insert(conversationMessageCitations).values(
+            citedSources.map((source) => ({
+              assistantMessageId: assistant.id,
+              operationSourceId: source.id,
+              createdAt: now,
+            })),
+          );
+        }
         await transaction
           .update(conversationMessages)
           .set({

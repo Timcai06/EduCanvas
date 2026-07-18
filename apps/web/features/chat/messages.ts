@@ -27,17 +27,33 @@ export interface InitialChatMessageDTO {
   completedAt: string | null;
 }
 
-export interface MessageCitationDTO {
+interface MessageCitationBase {
   id: string;
   /** 正文 [n] 标记号,来自服务端持久化的 ordinal;历史消息恒有,SSE 旧流可缺省 */
   marker?: number;
-  sourceId: string;
-  documentId: string;
-  chunkId: string;
   label: string;
   pageStart: number | null;
   pageEnd: number | null;
 }
+
+export interface KnowledgeMessageCitationDTO extends MessageCitationBase {
+  /** 旧 schemaVersion=1 事件缺省 kind 时按 knowledge 解析。 */
+  kind?: 'knowledge';
+  sourceId: string;
+  documentId: string;
+  chunkId: string;
+}
+
+export interface WebMessageCitationDTO extends MessageCitationBase {
+  kind: 'web';
+  assetId: string;
+  assetVersionId: string;
+  /** 仅允许服务端验证过的公开 http(s) 原文定位。 */
+  url: string;
+}
+
+export type MessageCitationDTO =
+  KnowledgeMessageCitationDTO | WebMessageCitationDTO;
 
 interface ChatMessageBase {
   id: string;

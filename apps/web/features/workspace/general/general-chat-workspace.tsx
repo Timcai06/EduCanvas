@@ -87,6 +87,19 @@ export function GeneralChatWorkspace({
   const pendingConsumed = useRef(false);
   const pendingMenuConsumed = useRef(false);
 
+  const refreshAssets = useCallback(async () => {
+    const items = await loadAssets(ASSET_ENDPOINT);
+    setAssets((current) => {
+      const enabledById = new Map(
+        current.map((asset) => [asset.id, asset.enabled] as const),
+      );
+      return items.map((asset) => ({
+        ...asset,
+        enabled: enabledById.get(asset.id) ?? asset.enabled,
+      }));
+    });
+  }, []);
+
   useEffect(() => {
     let active = true;
     void loadAssets(ASSET_ENDPOINT)
@@ -151,9 +164,10 @@ export function GeneralChatWorkspace({
             asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
           ),
         );
+        void refreshAssets().catch(() => undefined);
       });
     },
-    [assets, turn],
+    [assets, refreshAssets, turn],
   );
 
   useEffect(() => {
@@ -284,129 +298,131 @@ export function GeneralChatWorkspace({
             }
           />
         </ConversationSidebar>
-      <main
-        ref={mainRef}
-        className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
-      >
-        {/* 光场常驻:落地态满亮,对话态沉降为环境底光,避免转场时硬切。 */}
-        <div
-          ref={haloWrapRef}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
+        <main
+          ref={mainRef}
+          className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <AmbientHalo />
-        </div>
+          {/* 光场常驻:落地态满亮,对话态沉降为环境底光,避免转场时硬切。 */}
+          <div
+            ref={haloWrapRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+          >
+            <AmbientHalo />
+          </div>
 
-        {isLanding ? (
-          <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
-            <HeroGreeting />
-            <div ref={composerDockRef} className="w-full">
-              {artifactFlow.generation &&
-              artifactFlow.generation.phase !== 'confirm' ? (
-                <div className="px-4">
-                  <ArtifactStatusCard
-                    generation={artifactFlow.generation}
-                    onOpen={() => {
-                      const artifactId = artifactFlow.generation?.artifactId;
-                      if (artifactId)
-                        void artifactFlow.openArtifact(artifactId);
-                    }}
-                    onDismiss={artifactFlow.dismiss}
+          {isLanding ? (
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
+              <HeroGreeting />
+              <div ref={composerDockRef} className="w-full">
+                {artifactFlow.generation &&
+                artifactFlow.generation.phase !== 'confirm' ? (
+                  <div className="px-4">
+                    <ArtifactStatusCard
+                      generation={artifactFlow.generation}
+                      onOpen={() => {
+                        const artifactId = artifactFlow.generation?.artifactId;
+                        if (artifactId)
+                          void artifactFlow.openArtifact(artifactId);
+                      }}
+                      onDismiss={artifactFlow.dismiss}
+                    />
+                  </div>
+                ) : null}
+                <Composer
+                  chips={selectedAssets.map((asset) => ({
+                    id: asset.id,
+                    label: asset.label,
+                  }))}
+                  busy={turn.busy}
+                  statusText={turn.statusText ?? error}
+                  statusTone={error && !turn.busy ? 'error' : 'info'}
+                  onSend={send}
+                  onRemoveChip={toggleAsset}
+                  onMenuAction={handleMenuAction}
+                  availableMenuActions={GENERAL_MENU_ACTIONS}
+                  variant="landing"
+                />
+              </div>
+              <PromptSuggestions onPick={send} disabled={turn.busy} />
+            </div>
+          ) : (
+            <div className="relative z-10 flex min-h-0 flex-1">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                  ref={scrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto"
+                  role="region"
+                  aria-label="AI 对话"
+                  onScroll={(event) => {
+                    const node = event.currentTarget;
+                    nearBottom.current =
+                      node.scrollHeight - node.scrollTop - node.clientHeight <=
+                      96;
+                  }}
+                >
+                  <ChatPanel
+                    messages={turn.messages}
+                    canvasOpen={false}
+                    artifactTitle=""
+                    onOpenCanvas={() => undefined}
+                    onContinueText={() => undefined}
+                    onRetry={(messageId) => turn.retry(messageId)}
+                    onPreviewHtml={({ source }) => setPreviewHtml(source)}
+                    assistantLabel="AI"
                   />
                 </div>
-              ) : null}
-              <Composer
-                chips={selectedAssets.map((asset) => ({
-                  id: asset.id,
-                  label: asset.label,
-                }))}
-                busy={turn.busy}
-                statusText={turn.statusText ?? error}
-                statusTone={error && !turn.busy ? 'error' : 'info'}
-                onSend={send}
-                onRemoveChip={toggleAsset}
-                onMenuAction={handleMenuAction}
-                availableMenuActions={GENERAL_MENU_ACTIONS}
-                variant="landing"
-              />
-            </div>
-            <PromptSuggestions onPick={send} disabled={turn.busy} />
-          </div>
-        ) : (
-          <div className="relative z-10 flex min-h-0 flex-1">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div
-              ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto"
-              role="region"
-              aria-label="AI 对话"
-              onScroll={(event) => {
-                const node = event.currentTarget;
-                nearBottom.current =
-                  node.scrollHeight - node.scrollTop - node.clientHeight <= 96;
-              }}
-            >
-              <ChatPanel
-                messages={turn.messages}
-                canvasOpen={false}
-                artifactTitle=""
-                onOpenCanvas={() => undefined}
-                onContinueText={() => undefined}
-                onRetry={(messageId) => turn.retry(messageId)}
-                onPreviewHtml={({ source }) => setPreviewHtml(source)}
-                assistantLabel="AI"
-              />
-            </div>
-            <div ref={composerDockRef} className="relative z-10 px-4">
-              {artifactFlow.generation &&
-              artifactFlow.generation.phase !== 'confirm' ? (
-                <ArtifactStatusCard
-                  generation={artifactFlow.generation}
-                  onOpen={() => {
-                    const artifactId = artifactFlow.generation?.artifactId;
-                    if (artifactId) void artifactFlow.openArtifact(artifactId);
+                <div ref={composerDockRef} className="relative z-10 px-4">
+                  {artifactFlow.generation &&
+                  artifactFlow.generation.phase !== 'confirm' ? (
+                    <ArtifactStatusCard
+                      generation={artifactFlow.generation}
+                      onOpen={() => {
+                        const artifactId = artifactFlow.generation?.artifactId;
+                        if (artifactId)
+                          void artifactFlow.openArtifact(artifactId);
+                      }}
+                      onDismiss={artifactFlow.dismiss}
+                    />
+                  ) : null}
+                  <Composer
+                    chips={selectedAssets.map((asset) => ({
+                      id: asset.id,
+                      label: asset.label,
+                    }))}
+                    busy={turn.busy}
+                    statusText={turn.statusText ?? error}
+                    statusTone={error && !turn.busy ? 'error' : 'info'}
+                    onSend={send}
+                    onRemoveChip={toggleAsset}
+                    onMenuAction={handleMenuAction}
+                    availableMenuActions={GENERAL_MENU_ACTIONS}
+                  />
+                </div>
+              </div>
+              {artifactFlow.openDetail ? (
+                <ArtifactCanvas
+                  detail={artifactFlow.openDetail}
+                  isFull={artifactFlow.canvasFull}
+                  onToggleFull={() =>
+                    artifactFlow.setCanvasFull((value) => !value)
+                  }
+                  onClose={artifactFlow.closeCanvas}
+                />
+              ) : previewHtml !== null ? (
+                <HtmlPreviewPanel
+                  source={previewHtml}
+                  isFull={previewFull}
+                  onToggleFull={() => setPreviewFull((value) => !value)}
+                  onClose={() => {
+                    setPreviewHtml(null);
+                    setPreviewFull(false);
                   }}
-                  onDismiss={artifactFlow.dismiss}
                 />
               ) : null}
-              <Composer
-                chips={selectedAssets.map((asset) => ({
-                  id: asset.id,
-                  label: asset.label,
-                }))}
-                busy={turn.busy}
-                statusText={turn.statusText ?? error}
-                statusTone={error && !turn.busy ? 'error' : 'info'}
-                onSend={send}
-                onRemoveChip={toggleAsset}
-                onMenuAction={handleMenuAction}
-                availableMenuActions={GENERAL_MENU_ACTIONS}
-              />
             </div>
-            </div>
-            {artifactFlow.openDetail ? (
-              <ArtifactCanvas
-                detail={artifactFlow.openDetail}
-                isFull={artifactFlow.canvasFull}
-                onToggleFull={() =>
-                  artifactFlow.setCanvasFull((value) => !value)
-                }
-                onClose={artifactFlow.closeCanvas}
-              />
-            ) : previewHtml !== null ? (
-              <HtmlPreviewPanel
-                source={previewHtml}
-                isFull={previewFull}
-                onToggleFull={() => setPreviewFull((value) => !value)}
-                onClose={() => {
-                  setPreviewHtml(null);
-                  setPreviewFull(false);
-                }}
-              />
-            ) : null}
-          </div>
-        )}
-      </main>
+          )}
+        </main>
       </div>
       {isLanding && artifactFlow.openDetail ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,

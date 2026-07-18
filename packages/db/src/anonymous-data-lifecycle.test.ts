@@ -6,6 +6,15 @@ import {
 } from './anonymous-data-lifecycle';
 
 const currentSubjectOwnedTables = [
+  'conversation_message_citations',
+  'operation_sources',
+  'artifact_generation_jobs',
+  'artifact_versions',
+  'artifacts',
+  'conversation_messages',
+  'agent_operations',
+  'conversations',
+  'spaces',
   'message_citations',
   'tool_calls',
   'model_runs',
@@ -32,7 +41,7 @@ describe('匿名数据生命周期注册表', () => {
     ).toEqual(currentSubjectOwnedTables);
     expect(
       ANONYMOUS_DATA_LIFECYCLE_REGISTRY.map((entry) => entry.deletionOrder),
-    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+    ).toEqual(Array.from({ length: 26 }, (_, index) => index + 1));
     expect(() =>
       assertAnonymousDataLifecycleRegistryCoverage(currentSubjectOwnedTables),
     ).not.toThrow();

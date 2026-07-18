@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-const { WebPageFetchError, extractReadableText, fetchReadableWebPage } =
-  await import('./web-page');
+const {
+  WebPageFetchError,
+  createFetchWebPageTool,
+  extractReadableText,
+  fetchReadableWebPage,
+} = await import('./web-page');
 
 const htmlResponse = (html: string, headers: Record<string, string> = {}) =>
   new Response(html, {
@@ -89,5 +93,37 @@ describe('fetchReadableWebPage', () => {
     await expect(
       fetchReadableWebPage('https://example.com/c', hugeStub),
     ).rejects.toMatchObject({ code: 'too_large' });
+  });
+
+  it('工具先把完整网页交给持久化钩子，再向模型返回稳定引用号与有界正文', async () => {
+    const longText = '甲'.repeat(9_000);
+    const fetchStub = (async () =>
+      htmlResponse(
+        `<html><head><title>研究页</title></head><body><p>${longText}</p></body></html>`,
+      )) as unknown as typeof fetch;
+    const onFetched = vi.fn(async (page: { text: string }) => {
+      expect(page.text.length).toBeGreaterThan(8_000);
+      return { citationMarker: 2 };
+    });
+    const tool = createFetchWebPageTool(fetchStub, onFetched);
+
+    const result = await tool.handler(
+      { url: 'https://example.com/research' },
+      {
+        traceId: 'trace-1',
+        turnId: 'turn-1',
+        subjectId: 'subject-1',
+        conversationId: 'conversation-1',
+      },
+    );
+    expect(result).toMatchObject({
+      url: 'https://example.com/research',
+      title: '研究页',
+      citationMarker: 2,
+    });
+    expect(result.content).toHaveLength(8_000);
+    const persistedPage = onFetched.mock.calls[0]?.[0];
+    expect(persistedPage?.text.length).toBeGreaterThan(8_000);
+    expect(persistedPage?.text.endsWith('甲'.repeat(100))).toBe(true);
   });
 });

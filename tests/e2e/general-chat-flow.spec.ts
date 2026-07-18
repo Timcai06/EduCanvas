@@ -111,3 +111,91 @@ test('历史对话可反复切换，并按Conversation重新水合消息', async
   await expect(chat.getByText(secondPrompt, { exact: true })).toBeVisible();
   await expect(chat.getByText(firstPrompt, { exact: true })).toHaveCount(0);
 });
+
+test('Scripted：搜索并读取多个网页后，以稳定编号展示可打开的原文引用', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/chat/turn', async (route) => {
+    const encoder = new TextEncoder();
+    const turnId = 'web-research-turn-e2e';
+    const messageId = 'web-research-assistant-e2e';
+    const frame = (type: string, data: Record<string, unknown>) =>
+      encoder.encode(
+        `event: ${type}\ndata: ${JSON.stringify({ type, schemaVersion: '1', turnId, ...data })}\n\n`,
+      );
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      body: Buffer.concat([
+        frame('turn.accepted', {
+          studentMessageId: 'web-research-student-e2e',
+          assistantMessageId: messageId,
+          replayed: false,
+        }),
+        frame('tool.started', {
+          toolCallId: 'search-1',
+          label: '正在搜索网页',
+        }),
+        frame('tool.completed', { toolCallId: 'search-1' }),
+        frame('tool.started', {
+          toolCallId: 'page-1',
+          label: '正在读取网页',
+        }),
+        frame('tool.completed', { toolCallId: 'page-1' }),
+        frame('tool.started', {
+          toolCallId: 'page-2',
+          label: '正在读取网页',
+        }),
+        frame('tool.completed', { toolCallId: 'page-2' }),
+        frame('message.delta', {
+          messageId,
+          delta:
+            '第一份资料说明方案重视可达性 [1]；第二份资料给出了学习收益证据 [2]。',
+        }),
+        frame('message.citation', {
+          messageId,
+          citationId: 'web-citation-1',
+          marker: 1,
+          kind: 'web',
+          assetId: 'asset-web-1',
+          assetVersionId: 'asset-version-web-1',
+          label: '可达性设计指南',
+          url: 'https://example.com/accessibility',
+          pageStart: null,
+          pageEnd: null,
+        }),
+        frame('message.citation', {
+          messageId,
+          citationId: 'web-citation-2',
+          marker: 2,
+          kind: 'web',
+          assetId: 'asset-web-2',
+          assetVersionId: 'asset-version-web-2',
+          label: '学习收益研究',
+          url: 'https://example.org/learning-study',
+          pageStart: null,
+          pageEnd: null,
+        }),
+        frame('turn.completed', { messageId }),
+      ]).toString(),
+    });
+  });
+
+  await page.goto('/');
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill('搜索网页并比较两份资料');
+  await composer.press('Enter');
+
+  await expect(page.getByText(/第一份资料说明方案重视可达性/)).toBeVisible();
+  const firstSource = page.getByRole('link', { name: /1 可达性设计指南/ });
+  const secondSource = page.getByRole('link', { name: /2 学习收益研究/ });
+  await expect(firstSource).toHaveAttribute(
+    'href',
+    'https://example.com/accessibility',
+  );
+  await expect(secondSource).toHaveAttribute(
+    'href',
+    'https://example.org/learning-study',
+  );
+  await expect(firstSource).toHaveAttribute('target', '_blank');
+});
