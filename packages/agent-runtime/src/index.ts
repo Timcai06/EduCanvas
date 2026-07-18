@@ -14,3 +14,14 @@ export {
   type ConversationContextSnapshot,
 } from './conversation-context';
 export { LocalObjectStorage } from './local-object-storage';
+export {
+  MAX_RESPONSE_CHARACTERS,
+  MAX_TOOL_ARGUMENT_BYTES,
+  MAX_TOOL_CALLS_PER_TURN,
+  validateModelRun,
+  isAborted,
+  type ModelRunFailure,
+  type ModelRunResult,
+  type ModelRunSuccess,
+  type ParsedToolCall,
+} from './turn-engine';
