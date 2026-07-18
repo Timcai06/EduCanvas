@@ -97,6 +97,7 @@ const directStep = (
 const toolStep = (
   fragments: readonly string[] = ['{', '}'],
   callId = 'state-1',
+  tool = 'getStudentState',
 ) => ({
   kind: 'stream' as const,
   expectedTaskAlias: TEACHING_TURN_TASK_ALIAS,
@@ -108,7 +109,7 @@ const toolStep = (
       type: 'tool_call',
       phase: 'answer',
       callId,
-      tool: 'getStudentState',
+      tool,
       argumentsDelta,
       done: index === fragments.length - 1,
     })),
@@ -627,18 +628,37 @@ describe('TeachingTurnOrchestrator.streamTurn', () => {
     },
   ])('拒绝畸形流：$label', async ({ step, code }) => {
     const gateway = new ScriptedModelGateway([step]);
+    /* 注册工具使 tools 非空:流层校验(重复 callId 等)在提供工具时仍可达 */
     const events = await collect(
-      new TeachingTurnOrchestrator(gateway, new TeachingToolExecutor([])),
+      new TeachingTurnOrchestrator(
+        gateway,
+        new TeachingToolExecutor([createStudentStateTool()]),
+      ),
     );
     expect(events.at(-1)).toMatchObject({ type: 'failed', code });
     expect(gateway.getCapturedStreamRequests()).toHaveLength(1);
   });
 
-  it('工具未授权时停止且不进入synthesis', async () => {
+  it('未提供任何工具时,模型发起 tool_call 即协议违规', async () => {
     const gateway = new ScriptedModelGateway([toolStep()]);
+    const events = await collect(
+      new TeachingTurnOrchestrator(gateway, new TeachingToolExecutor([])),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      code: 'INVALID_MODEL_STREAM',
+    });
+  });
+
+  it('工具未授权时停止且不进入synthesis', async () => {
+    /* 提供了 getStudentState(tools 非空,流层放行),模型却调用未授权名字:
+       执行层以 TOOL_NOT_AVAILABLE 拒绝 */
+    const gateway = new ScriptedModelGateway([
+      toolStep(['{', '}'], 'call-1', 'recommendNextNode'),
+    ]);
     const orchestrator = new TeachingTurnOrchestrator(
       gateway,
-      new TeachingToolExecutor([]),
+      new TeachingToolExecutor([createStudentStateTool()]),
     );
 
     const events = await collect(orchestrator);
@@ -646,7 +666,7 @@ describe('TeachingTurnOrchestrator.streamTurn', () => {
     expect(events.at(-1)).toMatchObject({
       type: 'failed',
       code: 'TOOL_CALL_REJECTED',
-      failures: [{ code: 'TOOL_NOT_AVAILABLE' }],
+      failures: [{ code: 'TOOL_NOT_ALLOWED' }],
     });
     expect(gateway.getCapturedStreamRequests()).toHaveLength(1);
   });
@@ -776,5 +796,59 @@ describe('TeachingTurnOrchestrator.streamTurn', () => {
       },
     ]);
     expect(JSON.stringify(events)).not.toContain('provider-aborted-secret');
+  });
+});
+
+describe('TeachingTurnOrchestrator 多圈工具循环(M3)', () => {
+  it('maxToolRounds=2:两圈工具后强制 synthesis,结果跨圈累积', async () => {
+    const handler = vi.fn(async () => ({ state: 'EXPLAIN' as const }));
+    const gateway = new ScriptedModelGateway([
+      toolStep(['{', '}'], 'call-1'),
+      toolStep(['{}'], 'call-2'),
+      directStep('synthesis', ['综合两次查询的最终回答。']),
+    ]);
+    const orchestrator = new TeachingTurnOrchestrator(
+      gateway,
+      new TeachingToolExecutor([createStudentStateTool(handler)]),
+      { maxToolRounds: 2 },
+    );
+
+    const events = await collect(orchestrator);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      modelRunCount: 3,
+    });
+    const requests = gateway.getCapturedStreamRequests();
+    expect(requests).toHaveLength(3);
+    /* 第二圈携带首圈已验证结果;synthesis 携带两圈累积且不再获得工具 */
+    expect(requests[1]?.toolResults).toHaveLength(1);
+    expect(requests[2]?.toolResults).toHaveLength(2);
+    expect(requests[2]?.tools).toHaveLength(0);
+    const runs = events.flatMap((event) =>
+      event.type === 'model' ? [event.run] : [],
+    );
+    expect(new Set(runs)).toEqual(new Set([1, 2, 3]));
+  });
+
+  it('中间圈直接给出文本时提前完成,不再强制 synthesis', async () => {
+    const gateway = new ScriptedModelGateway([
+      toolStep(),
+      directStep('answer', ['查询后直接作答。']),
+    ]);
+    const orchestrator = new TeachingTurnOrchestrator(
+      gateway,
+      new TeachingToolExecutor([createStudentStateTool()]),
+      { maxToolRounds: 3 },
+    );
+
+    const events = await collect(orchestrator);
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      modelRunCount: 2,
+      stateDecision: { reason: 'NO_TRUSTED_TRANSITION_SIGNAL' },
+    });
+    expect(gateway.getCapturedStreamRequests()).toHaveLength(2);
   });
 });

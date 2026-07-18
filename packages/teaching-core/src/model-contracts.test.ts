@@ -78,17 +78,6 @@ describe('model contracts', () => {
       event: { type: 'provider.delta', phase: 'answer', delta: 'x' },
     },
     {
-      label: 'synthesis工具调用',
-      event: {
-        type: 'tool_call',
-        phase: 'synthesis',
-        callId: 'call-1',
-        tool: 'getStudentState',
-        argumentsDelta: '{}',
-        done: true,
-      },
-    },
-    {
       label: '供应商私有字段',
       event: {
         type: 'completed',

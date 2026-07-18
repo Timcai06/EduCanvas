@@ -202,7 +202,9 @@ export const turnModelEventSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('tool_call'),
-      phase: z.literal('answer'),
+      /* 多圈工具循环(M3):中间轮次均为 answer,但契约不再把 phase 写死——
+         工具是否允许由请求的 tools 列表决定,不由 phase 决定 */
+      phase: turnModelPhaseSchema,
       callId: z
         .string()
         .min(1)

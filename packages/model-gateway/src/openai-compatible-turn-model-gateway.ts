@@ -163,8 +163,11 @@ const buildProviderMessages = (request: StreamAgentTextRequest): unknown[] => {
     role: message.role,
     content: message.content,
   }));
-  if (request.phase !== 'synthesis') return messages;
-  if (request.toolResults.length === 0) throw new SseProtocolError();
+  /* synthesis 必须携带已验证工具交换;answer 轮次可携带(多圈循环的前序轮) */
+  if (request.phase === 'synthesis' && request.toolResults.length === 0) {
+    throw new SseProtocolError();
+  }
+  if (request.toolResults.length === 0) return messages;
 
   messages.push({
     role: 'assistant',
