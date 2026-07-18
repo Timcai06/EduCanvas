@@ -72,3 +72,20 @@ export async function uploadAsset(input: {
   if (!body.asset) throw new Error('上传响应格式不正确。');
   return toItem(body.asset);
 }
+
+export async function importLinkAsset(input: {
+  url: string;
+  endpoint?: string;
+}): Promise<AssetItem> {
+  const response = await fetch(input.endpoint ?? '/api/v1/chat/assets/link', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: input.url }),
+  });
+  if (!response.ok) {
+    throw new Error(await publicError(response, '暂时无法导入链接。'));
+  }
+  const body = (await response.json()) as { asset?: AssetResponseItem };
+  if (!body.asset) throw new Error('导入响应格式不正确。');
+  return toItem(body.asset);
+}

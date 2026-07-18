@@ -1,12 +1,17 @@
 'use client';
 
-import { FilePdf, Image as ImageIcon, SpinnerGap } from '@phosphor-icons/react';
+import {
+  FilePdf,
+  Image as ImageIcon,
+  LinkSimple,
+  SpinnerGap,
+} from '@phosphor-icons/react';
 
 export interface AssetItem {
   id: string;
   versionId: string | null;
   label: string;
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'link';
   scope: 'turn' | 'space';
   status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
   enabled: boolean;
@@ -58,6 +63,8 @@ export function AssetsDrawer({
                   {asset.status === 'processing' ||
                   asset.status === 'pending' ? (
                     <SpinnerGap className="animate-spin" size={18} />
+                  ) : asset.kind === 'link' ? (
+                    <LinkSimple size={18} />
                   ) : asset.kind === 'image' ? (
                     <ImageIcon size={18} />
                   ) : (

@@ -5,6 +5,7 @@ import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingSession } from '../teaching/learning-session';
+import { WebPageFetchError, fetchReadableWebPage } from '../tools/web-page';
 import {
   removeStoredAsset,
   storeAssetBytes,
@@ -23,7 +24,8 @@ export class AssetUploadError extends Error {
       | 'unsupported_file_type'
       | 'file_too_large'
       | 'session_not_found'
-      | 'pdf_text_unavailable',
+      | 'pdf_text_unavailable'
+      | `link_${string}`,
     readonly status: number,
   ) {
     super(code);
@@ -181,6 +183,53 @@ export async function uploadOwnedAssetToSpace(input: {
     if (stored && !(error instanceof AssetUploadError)) {
       await removeStoredAsset(stored).catch(() => undefined);
     }
+    throw error;
+  }
+}
+
+/**
+ * 链接导入为来源(M3b-C):抓取公开网页 → 抽取正文 → 以 kind=link、
+ * origin=url_import 落为不可变资产版本;正文文本即物化内容,直接进入
+ * 既有的资产上下文链路(可勾选、随轮携带)。
+ */
+export async function importOwnedLinkAsset(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  url: string;
+}): Promise<AssetSnapshot> {
+  let page;
+  try {
+    page = await fetchReadableWebPage(input.url);
+  } catch (error) {
+    const code =
+      error instanceof WebPageFetchError ? error.code : 'fetch_failed';
+    throw new AssetUploadError(`link_${code}`, 422);
+  }
+  const text = [...page.text].slice(0, MAX_EXTRACTED_TEXT).join('');
+  const bytes = new TextEncoder().encode(text);
+  const stored = await storeAssetBytes({
+    ownerSubjectId: input.identity.studentId,
+    bytes,
+    extension: 'txt',
+  });
+  try {
+    const host = new URL(page.url).hostname;
+    return await assets.createUploaded({
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: safeDisplayName(page.title?.trim() || host),
+      mimeType: 'text/plain',
+      byteSize: bytes.byteLength,
+      contentHash: createHash('sha256').update(bytes).digest('hex'),
+      storageKey: stored.storageKey,
+      extractedText: text,
+      outcome: { status: 'ready' },
+    });
+  } catch (error) {
+    await removeStoredAsset(stored).catch(() => undefined);
     throw error;
   }
 }
