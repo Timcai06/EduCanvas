@@ -1,10 +1,11 @@
 import type {
-  ModelGateway,
   ModelMessage,
   ProviderCallMetadata,
   StreamTurnTextRequest,
+  StructuredModelGateway,
   StructuredModelRequest,
   StructuredModelResult,
+  TurnModelGateway,
   TurnModelEvent,
 } from '@educanvas/agent-core';
 import { providerCallMetadataSchema } from '@educanvas/agent-core';
@@ -206,10 +207,12 @@ function assertExpectations(
 }
 
 /**
- * `ModelGateway` 的确定性测试替身。该类只位于 `src/testing`，不从包入口导出，
- * 不具备模型推理、路由或供应商行为，不得注册到生产组合根。
+ * 对话流式与结构化 Port 的确定性测试替身。该类只位于 `src/testing`，不从包入口导出，
+ * 不实现语音 Port，也不具备模型推理、路由或供应商行为，不得注册到生产组合根。
  */
-export class ScriptedModelGateway implements ModelGateway {
+export class ScriptedModelGateway
+  implements TurnModelGateway, StructuredModelGateway
+{
   private readonly steps: ScriptedModelStep[];
   private readonly structuredRequests: ScriptedStructuredRequestCapture[] = [];
   private readonly streamRequests: ScriptedStreamRequestCapture[] = [];
