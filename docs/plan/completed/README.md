@@ -8,8 +8,10 @@
 
 ## 索引
 
-| 完成时间   | 计划                                                                                   | 结果                                              |
-| ---------- | -------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| 2026-07-15 | [`2026-07-pre-research-safe-development.md`](2026-07-pre-research-safe-development.md) | Chat-first收口、诚实AI边界、UX/文档治理与视觉基线 |
-| 2026-07-17 | [`2026-07-real-agent-learning-vertical-slice.md`](2026-07-real-agent-learning-vertical-slice.md) | 真实Provider流式Turn、账本/取消/恢复、工具循环、检索引用、可信ASSESS推进与受控动画模板 |
-| 2026-07-17 | [`2026-07-platform-decoupling-runtime-hardening.md`](2026-07-platform-decoupling-runtime-hardening.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划 |
+| 完成时间   | 计划                                                                                                   | 结果                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 2026-07-15 | [`2026-07-pre-research-safe-development.md`](2026-07-pre-research-safe-development.md)                 | Chat-first收口、诚实AI边界、UX/文档治理与视觉基线                                      |
+| 2026-07-17 | [`2026-07-real-agent-learning-vertical-slice.md`](2026-07-real-agent-learning-vertical-slice.md)       | 真实Provider流式Turn、账本/取消/恢复、工具循环、检索引用、可信ASSESS推进与受控动画模板 |
+| 2026-07-17 | [`2026-07-platform-decoupling-runtime-hardening.md`](2026-07-platform-decoupling-runtime-hardening.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划                               |
+| 2026-07-19 | [`2026-07-gemini-notebooklm-replica.md`](2026-07-gemini-notebooklm-replica.md)                         | 持久Artifact、轻产物、Notebook来源/引用、音频与Canvas共创交付；Runtime收口移交新计划   |
+| 2026-07-19 | [`2026-07-gateway-first-personal-agent.md`](2026-07-gateway-first-personal-agent.md)                   | Gateway协议/运行时、共享Notebook、Web、唯一Loop、TUI、Telegram与安全Node全部收口       |

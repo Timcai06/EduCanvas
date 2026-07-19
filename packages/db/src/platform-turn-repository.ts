@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import {
+  notebookRoleAllows,
+  type NotebookPermission,
+} from '@educanvas/gateway-core';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   assertOwnedReadyAssetParts,
@@ -11,6 +15,7 @@ import {
   conversationMessageCitations,
   conversationMessages,
   conversations,
+  notebookMemberships,
   operationSources,
   spaces,
 } from './schema';
@@ -111,26 +116,47 @@ function toMessage(
   };
 }
 
-async function requireOwnedConversation(
+async function requireConversationAccess(
   executor: DatabaseExecutor,
   conversationId: string,
   trustedSubjectId: string,
+  permission: NotebookPermission = 'conversation.reply',
 ) {
   const [conversation] = await executor
     .select({
       id: conversations.id,
       spaceId: conversations.spaceId,
       status: conversations.status,
+      ownerSubjectId: conversations.ownerSubjectId,
+      membershipRole: notebookMemberships.role,
+      membershipExpiresAt: notebookMemberships.expiresAt,
+      membershipRevokedAt: notebookMemberships.revokedAt,
     })
     .from(conversations)
-    .where(
+    .leftJoin(
+      notebookMemberships,
       and(
-        eq(conversations.id, conversationId),
-        eq(conversations.ownerSubjectId, trustedSubjectId),
+        eq(notebookMemberships.notebookId, conversations.spaceId),
+        eq(notebookMemberships.userId, trustedSubjectId),
       ),
     )
+    .where(eq(conversations.id, conversationId))
     .limit(1);
-  if (!conversation || conversation.status !== 'active') {
+  if (
+    !conversation ||
+    conversation.status !== 'active' ||
+    (conversation.ownerSubjectId !== trustedSubjectId &&
+      (conversation.membershipRole === null ||
+        conversation.membershipRevokedAt !== null ||
+        (conversation.membershipExpiresAt !== null &&
+          conversation.membershipExpiresAt <= new Date()) ||
+        !notebookRoleAllows(
+          conversation.membershipRole as Parameters<
+            typeof notebookRoleAllows
+          >[0],
+          permission,
+        )))
+  ) {
     throw new PlatformTurnOwnershipError();
   }
   return conversation;
@@ -221,7 +247,7 @@ export class DrizzlePlatformTurnRepository {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`platform-turn-v1:${input.conversationId}`}, 0))`,
       );
-      const conversation = await requireOwnedConversation(
+      const conversation = await requireConversationAccess(
         transaction,
         input.conversationId,
         input.trustedSubjectId,
@@ -317,6 +343,134 @@ export class DrizzlePlatformTurnRepository {
     });
   }
 
+  /**
+   * 将 Gateway 已建立的 operation 接到现有消息账本。Gateway 负责身份、路由、
+   * 幂等和事件恢复；本方法只在同一个 operation 下创建 user/assistant 消息，
+   * 避免迁移期出现第二条 Turn 记录。
+   */
+  async attachGatewayTurn(input: {
+    operationId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+    clientMessageId: string;
+    text?: string;
+    parts?: readonly AgentMessagePart[];
+    now?: Date;
+  }): Promise<PlatformTurnSnapshot> {
+    const prepared = prepareStudentMessage(input);
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`platform-turn-v1:${input.conversationId}`}, 0))`,
+      );
+      const conversation = await requireConversationAccess(
+        transaction,
+        input.conversationId,
+        input.trustedSubjectId,
+      );
+      const [operation] = await transaction
+        .select({
+          id: agentOperations.id,
+          actorUserId: agentOperations.actorUserId,
+          conversationId: agentOperations.conversationId,
+          gatewayEnvelopeId: agentOperations.gatewayEnvelopeId,
+          idempotencyKey: agentOperations.idempotencyKey,
+          kind: agentOperations.kind,
+          status: agentOperations.status,
+        })
+        .from(agentOperations)
+        .where(eq(agentOperations.id, input.operationId))
+        .limit(1);
+      if (
+        !operation ||
+        operation.kind !== 'turn' ||
+        operation.gatewayEnvelopeId === null ||
+        operation.actorUserId !== input.trustedSubjectId ||
+        operation.conversationId !== input.conversationId ||
+        operation.idempotencyKey !== input.clientMessageId
+      ) {
+        throw new PlatformTurnOwnershipError();
+      }
+
+      const [existingMessage] = await transaction
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.operationId, input.operationId))
+        .limit(1);
+      if (existingMessage) {
+        const turn = await loadTurn(transaction, input.operationId, true);
+        if (!sameParts(turn.studentMessage.parts, prepared.parts)) {
+          throw new PlatformMessageIdConflictError();
+        }
+        return turn;
+      }
+      if (operation.status !== 'running') {
+        throw new PlatformTurnLifecycleError(
+          '只有运行中的 Gateway operation 可以创建消息',
+        );
+      }
+
+      const [otherActive] = await transaction
+        .select({ id: agentOperations.id })
+        .from(agentOperations)
+        .where(
+          and(
+            eq(agentOperations.conversationId, input.conversationId),
+            eq(agentOperations.kind, 'turn'),
+            inArray(agentOperations.status, ['pending', 'running']),
+            sql`${agentOperations.id} <> ${input.operationId}`,
+          ),
+        )
+        .limit(1);
+      if (otherActive) throw new PlatformTurnInProgressError(otherActive.id);
+
+      await assertOwnedReadyAssetParts(transaction, {
+        ownerSubjectId: input.trustedSubjectId,
+        spaceId: conversation.spaceId,
+        parts: prepared.parts,
+      });
+      await transaction.insert(conversationMessages).values([
+        {
+          conversationId: input.conversationId,
+          operationId: input.operationId,
+          role: 'user',
+          status: 'completed',
+          content: prepared.content,
+          parts: [...prepared.parts],
+          createdAt: now,
+          completedAt: now,
+        },
+        {
+          conversationId: input.conversationId,
+          operationId: input.operationId,
+          role: 'assistant',
+          status: 'streaming',
+          content: '',
+          parts: [],
+          createdAt: now,
+        },
+      ]);
+      const titleSource = prepared.content || '附件对话';
+      const title = [...titleSource.replace(/\s+/g, ' ')].slice(0, 64).join('');
+      await transaction
+        .update(conversations)
+        .set({
+          title: sql`coalesce(${conversations.title}, ${title})`,
+          lastActivityAt: now,
+          updatedAt: now,
+        })
+        .where(eq(conversations.id, input.conversationId));
+      await transaction
+        .update(spaces)
+        .set({
+          title: sql`case when ${spaces.title} in ('我的空间', '未命名笔记本') then ${title} else ${spaces.title} end`,
+          updatedAt: now,
+        })
+        .where(eq(spaces.id, conversation.spaceId));
+      return loadTurn(transaction, input.operationId, false);
+    });
+  }
+
   async settleTurn(input: {
     conversationId: string;
     trustedSubjectId: string;
@@ -344,7 +498,7 @@ export class DrizzlePlatformTurnRepository {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
-      await requireOwnedConversation(
+      await requireConversationAccess(
         transaction,
         input.conversationId,
         input.trustedSubjectId,
@@ -360,6 +514,10 @@ export class DrizzlePlatformTurnRepository {
             eq(agentOperations.id, input.turnId),
             eq(agentOperations.conversationId, input.conversationId),
             eq(agentOperations.kind, 'turn'),
+            or(
+              eq(agentOperations.actorUserId, input.trustedSubjectId),
+              isNull(agentOperations.actorUserId),
+            ),
           ),
         )
         .limit(1);
@@ -479,7 +637,13 @@ export class DrizzlePlatformTurnRepository {
           and(
             eq(agentOperations.id, input.turnId),
             eq(agentOperations.kind, 'turn'),
-            eq(conversations.ownerSubjectId, input.trustedSubjectId),
+            or(
+              eq(agentOperations.actorUserId, input.trustedSubjectId),
+              and(
+                isNull(agentOperations.actorUserId),
+                eq(conversations.ownerSubjectId, input.trustedSubjectId),
+              ),
+            ),
           ),
         )
         .limit(1);
@@ -520,7 +684,13 @@ export class DrizzlePlatformTurnRepository {
         and(
           eq(agentOperations.id, input.turnId),
           eq(agentOperations.kind, 'turn'),
-          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          or(
+            eq(agentOperations.actorUserId, input.trustedSubjectId),
+            and(
+              isNull(agentOperations.actorUserId),
+              eq(conversations.ownerSubjectId, input.trustedSubjectId),
+            ),
+          ),
         ),
       )
       .limit(1);
@@ -532,10 +702,11 @@ export class DrizzlePlatformTurnRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformTurnMessageSnapshot[]> {
-    await requireOwnedConversation(
+    await requireConversationAccess(
       this.database,
       input.conversationId,
       input.trustedSubjectId,
+      'notebook.read',
     );
     const rows = await this.database
       .select({ message: conversationMessages, operation: agentOperations })

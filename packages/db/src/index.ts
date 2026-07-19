@@ -37,6 +37,23 @@ export {
   type PlatformOperationSourceSnapshot,
 } from './platform-source-repository';
 export {
+  DrizzleGatewayIdentityRepository,
+  DrizzleGatewayDirectoryRepository,
+  DrizzleGatewayChannelBindingRepository,
+  DrizzleGatewayDeliveryRepository,
+  DrizzleGatewayNodeRepository,
+  DrizzleGatewayApprovalRepository,
+  DrizzleGatewayOperationStore,
+  DrizzleGatewayRouteResolver,
+  GatewayPersistenceError,
+  ensurePersonalIdentity,
+  type GatewayIdentitySnapshot,
+  type GatewayConversationDirectoryEntry,
+  type GatewayChannelPrivateRoute,
+  type GatewayPendingApprovalSnapshot,
+  type GatewayStoredOperationSnapshot,
+} from './gateway-repository';
+export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
@@ -75,6 +92,7 @@ export {
   type LearningSessionScope,
   type LearningSessionSummary,
   type OwnedLearningSession,
+  type OwnedLearningGatewayTarget,
 } from './learning-session-repository';
 export {
   ChatLifecycleError,

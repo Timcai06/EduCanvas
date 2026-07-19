@@ -936,10 +936,14 @@ export async function beginOwnedTeachingTurn(
     text: string;
     parts: readonly AgentMessagePart[];
   },
+  gateway?: { operationId: string; expectedSessionId: string },
 ): Promise<StartedOwnedTeachingTurn> {
   await leases.convergeExpired({ limit: 25 });
   const session = await loadOwnedTeachingSession(identity);
   if (!session) throw new LearningSessionOwnershipError();
+  if (gateway && session.id !== gateway.expectedSessionId) {
+    throw new LearningSessionOwnershipError();
+  }
   const studentMessage = normalizeStudentMessageContent(input.text);
   const assetContext = await materializeAssetContext({
     identity,
@@ -997,6 +1001,7 @@ export async function beginOwnedTeachingTurn(
     text: studentMessage,
     parts: input.parts,
     traceId,
+    ...(gateway ? { turnId: gateway.operationId } : {}),
     modelAlias: promptMaterial.modelAlias,
     promptVersion: promptMaterial.promptVersion,
     promptHash: hashPromptMaterial(promptMaterial),
@@ -1029,4 +1034,20 @@ export async function beginOwnedTeachingTurn(
       ? replayTurn(identity, turnLedger)
       : runFreshTurn(prepared),
   };
+}
+
+export async function beginGatewayTeachingTurn(input: {
+  operationId: string;
+  expectedSessionId: string;
+  identity: AnonymousIdentity;
+  request: {
+    clientMessageId: string;
+    text: string;
+    parts: readonly AgentMessagePart[];
+  };
+}): Promise<StartedOwnedTeachingTurn> {
+  return beginOwnedTeachingTurn(input.identity, input.request, {
+    operationId: input.operationId,
+    expectedSessionId: input.expectedSessionId,
+  });
 }

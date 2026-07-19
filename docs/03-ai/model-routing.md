@@ -1,7 +1,7 @@
 # 模型路由
 
 - 状态：`accepted`
-- 相关决策：[ADR-0007](../09-decisions/0007-real-turn-and-provider-governance.md)
+- 相关决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)
 - 最后验证：2026-07-18
 
 ## 当前实现边界
@@ -16,7 +16,7 @@
 - `TurnModelEvent`：`text_delta / tool_call / usage / completed / failed`；
 - `ProviderCallMetadata` 与 `NormalizedModelError`：用于稳定审计和错误收敛。
 
-`packages/teaching-runtime` 的 `TeachingTurnOrchestrator.streamTurn()` 已实现直答一次 `answer`，或 `answer → tools → synthesis` 两次模型运行的硬边界。`createTeachingTurnAnswerPromptMaterial()` 是 answer Prompt 的唯一纯构建入口，供 Orchestrator 与组合根在生成 `turnId` 前计算同一份 `promptHash`，材料明确排除 Trace、运行期 signal 与 secret。
+当前 `packages/teaching-runtime` 的 `TeachingTurnOrchestrator.streamTurn()` 实现直答一次 `answer`，或 `answer → tools → synthesis` 两次模型运行的兼容边界。它是现状而不是长期架构；统一 Runtime 将以 `TurnBudget` 约束模型运行、工具圈、耗时和资源。`createTeachingTurnAnswerPromptMaterial()` 仍是当前 answer Prompt 的唯一纯构建入口，材料明确排除 Trace、运行期 signal 与 secret。
 
 `packages/model-gateway` 已实现 OpenAI-compatible Turn、结构化 JSON 与`/audio/speech`三个Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取 `process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式 Fallback和nightly live smoke；测试替身不能注册到生产组合根。
 
@@ -24,11 +24,11 @@
 
 `taskAlias` 表示业务目的，`modelAlias` 表示路由档位，二者不能混用：
 
-| taskAlias                 | 允许调用方式                 | 默认 modelAlias |
-| ------------------------- | ---------------------------- | --------------- |
-| `teaching.turn`           | 仅 `streamTurnText()`        | `primary`       |
-| `artifact.generate`       | 仅受确认后的结构化 operation | `structured`    |
-| `retrieval.query_rewrite` | 非 Turn 结构化辅助任务       | `fast`          |
+| taskAlias                 | 允许调用方式                   | 默认 modelAlias |
+| ------------------------- | ------------------------------ | --------------- |
+| `teaching.turn`           | 仅 `streamTurnText()`          | `primary`       |
+| `artifact.generate`       | 仅受确认后的结构化 operation   | `structured`    |
+| `retrieval.query_rewrite` | 非 Turn 结构化辅助任务         | `fast`          |
 | `speech.generate`         | 仅`generateSpeech()`二进制输出 | `speech`        |
 
 供应商模型 ID、版本和区域只能出现在服务端路由配置、Provider Adapter 与审计结果中，不能进入教学 runtime、Web 组件、Prompt 业务分支或客户端请求。
@@ -40,7 +40,7 @@
 3. 工具参数允许以 JSON 字符串分片传输，runtime 在 `done=true` 后统一解析并执行 Schema、状态和 exposure 校验；
 4. 工具路径必须把 `callId / tool / 已验证 arguments / 已验证 output` 组成自包含交换传入 `synthesis`，Provider Adapter 不得依赖上一请求的进程内记忆；
 5. `synthesis` 不再暴露工具，只生成最终学生可见文本；
-6. 单个 `teaching.turn` 最多两次模型运行，不允许隐藏重试成为第三次业务调用。供应商级网络重试必须在同一个 model run/attempt 策略内显式审计。
+6. 当前 `teaching.turn` 最多两次模型运行；迁入统一 Runtime 后由显式 `TurnBudget` 取代固定次数。任何供应商级网络重试仍必须在同一个 model run/attempt 策略内显式审计。
 
 ## Provider Adapter 实现选择
 

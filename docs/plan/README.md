@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-17
+- 最后验证时间：2026-07-19
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -18,13 +18,7 @@
 
 ## 当前计划
 
-当前只有一条执行线：
-
-- **产品复刻主线**：[`active/2026-07-gemini-notebooklm-replica.md`](active/2026-07-gemini-notebooklm-replica.md)，目标是复刻 Gemini + NotebookLM 的产品体验（产物主干 → 轻产物 → 来源与网页搜索 → 音频 → 视频，UI 蓝图线并行）；Agent 编排优化与创新属于下一阶段。
-
-前两条执行线（平台主线与 K12 垂直线）已于 2026-07-17 结档，交付与未完成项去向见 [`completed/`](completed/README.md)；K12 教学边界的约束（教学状态、可信判分不得反向定义平台对象）继续有效。
-
-最近完成：[`completed/2026-07-real-agent-learning-vertical-slice.md`](completed/2026-07-real-agent-learning-vertical-slice.md)、[`completed/2026-07-platform-decoupling-runtime-hardening.md`](completed/2026-07-platform-decoupling-runtime-hardening.md)。
+当前没有active执行线。Gateway-first主线已于2026-07-19结档，Gateway、Web接入、唯一Runtime、TUI、Telegram和安全Node均已交付；正式认证、Context/记忆、原生多模态与production治理保留在[路线图](../10-planning/roadmap.md)，需要开始时再建立独立active计划。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 

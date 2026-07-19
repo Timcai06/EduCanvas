@@ -51,6 +51,7 @@ CLAUDE.local.md
 logs/
 tmp/
 temp/
+.omx/
 
 # Local runtime data and large generated artifacts
 # 注意：只匹配仓库根目录，避免误伤 packages/canvas-protocol/src/artifacts/ 等源码目录

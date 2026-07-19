@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 来源：官方赛题细则与团队讨论
 
-> 本文只定义 EduCanvas 的首个 K12 垂直产品和竞赛交付范围。平台级产品北星与通用能力边界以[产品定义](../01-product/product-definition.md)和[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)为准；不能用本文把整个 EduCanvas 等同于教学产品。
+> 本文只定义 EduCanvas 的首个 K12 竞赛交付范围。平台级产品北星与通用能力边界以[产品定义](../01-product/product-definition.md)和 [ADR-0015](../09-decisions/0015-education-centered-personal-agent-platform.md)为准；教育是平台核心能力，但竞赛功能清单不能反向定义整个个人 Agent 平台。
 
 ## 赛题
 

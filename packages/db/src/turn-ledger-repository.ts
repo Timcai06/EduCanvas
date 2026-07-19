@@ -44,6 +44,8 @@ export interface BeginTeachingTurnInput {
   text?: string;
   parts?: readonly AgentMessagePart[];
   traceId: string;
+  /** Gateway 已建立 operation 时复用其 UUID，确保全链路只有一个 Turn ID。 */
+  turnId?: string;
   modelAlias: string;
   promptVersion: string;
   promptHash: string;
@@ -178,6 +180,14 @@ function validateInput(input: BeginTeachingTurnInput): {
   const content = message.content;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.traceId)) {
     throw new ChatLifecycleError('traceId 格式或长度无效');
+  }
+  if (
+    input.turnId !== undefined &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      input.turnId,
+    )
+  ) {
+    throw new ChatLifecycleError('Gateway turnId 必须是 UUID');
   }
   if (!/^[a-z][a-z0-9._-]{0,63}$/.test(input.modelAlias)) {
     throw new ChatLifecycleError('modelAlias 格式或长度无效');
@@ -314,6 +324,12 @@ export class DrizzleTeachingTurnLedger {
         if (existingStudent.requestHash !== prepared.requestHash) {
           throw new ChatMessageIdConflictError(input.clientMessageId);
         }
+        if (
+          input.turnId !== undefined &&
+          existingStudent.turnId !== input.turnId
+        ) {
+          throw new ChatMessageIdConflictError(input.clientMessageId);
+        }
         return loadLedgerSnapshot(
           transaction,
           input.sessionId,
@@ -369,7 +385,7 @@ export class DrizzleTeachingTurnLedger {
         throw new TurnRateLimitError(retryAfterMs);
       }
 
-      const turnId = randomUUID();
+      const turnId = input.turnId ?? randomUUID();
       const leaseId = randomUUID();
       const leaseExpiresAt = new Date(now.getTime() + prepared.leaseDurationMs);
       const insertedMessages = await transaction

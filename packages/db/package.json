@@ -16,6 +16,7 @@
   "dependencies": {
     "@educanvas/agent-core": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
+    "@educanvas/gateway-core": "workspace:*",
     "@educanvas/teaching-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"

@@ -1,16 +1,7 @@
 import 'server-only';
 
-import type {
-  ModelMessage,
-  ModelToolResult,
-  NormalizedModelError,
-  StreamTurnTextRequest,
-} from '@educanvas/agent-core';
-import {
-  AgentToolRegistry,
-  validateModelRun,
-  type ModelRunResult,
-} from '@educanvas/agent-runtime';
+import type { ModelMessage, NormalizedModelError } from '@educanvas/agent-core';
+import { AgentLoopEngine, AgentToolRegistry } from '@educanvas/agent-runtime';
 import {
   DrizzlePlatformTurnRepository,
   DrizzlePlatformSourceRepository,
@@ -269,137 +260,126 @@ async function* runGeneralTurn(input: {
 
     let terminal: 'completed' | 'failed' | null = null;
     let failure: NormalizedModelError | null = null;
-    const accumulatedResults: ModelToolResult[] = [];
-    let textCharacters = 0;
-    let hadAnyText = false;
     let toolCallSequence = 0;
-
-    const streamValidatedRun = async function* (
-      request: StreamTurnTextRequest,
-    ): AsyncGenerator<TeachingTurnEvent, ModelRunResult> {
-      const iterator = validateModelRun(
-        runtime.gateway,
-        request,
-        textCharacters,
-      )[Symbol.asyncIterator]();
-      let separatorPending = hadAnyText;
-      while (true) {
-        const step = await iterator.next();
-        if (step.done === true) return step.value;
-        if (step.value.type === 'text_delta') {
-          if (separatorPending) {
-            separatorPending = false;
-            answer += '\n\n';
-            yield {
-              ...eventBase(turn.turnId),
-              type: 'message.delta',
-              messageId: turn.assistantMessage.id,
-              delta: '\n\n',
-            };
-          }
-          answer += step.value.delta;
-          yield {
-            ...eventBase(turn.turnId),
-            type: 'message.delta',
-            messageId: turn.assistantMessage.id,
-            delta: step.value.delta,
-          };
-        }
-      }
+    const toolCallIds = new Map<string, string>();
+    type ToolDetail = { toolCallId: string };
+    type ToolFailure = {
+      toolCallId: string;
+      code: string;
+      retryable: boolean;
     };
-
-    rounds: for (let round = 1; round <= GENERAL_MAX_TOOL_ROUNDS; round += 1) {
-      const outcome = yield* streamValidatedRun({
+    const loop = new AgentLoopEngine(runtime.gateway);
+    for await (const event of loop.stream<ToolDetail, ToolFailure>({
+      traceId: turn.traceId,
+      turnId: turn.turnId,
+      answer: {
         taskAlias: 'agent.turn',
         modelAlias: 'primary',
-        phase: 'answer',
+        promptVersion: PROMPT_VERSION,
         messages,
         tools: toolDefinitions,
-        toolResults: accumulatedResults,
+      },
+      synthesis: {
+        taskAlias: 'agent.turn',
+        modelAlias: 'primary',
         promptVersion: PROMPT_VERSION,
-        traceId: turn.traceId,
-        turnId: turn.turnId,
-        signal: controller.signal,
-      });
-      if (!outcome.ok) {
-        terminal = 'failed';
-        failure = outcome.error;
-        break rounds;
-      }
-      hadAnyText = hadAnyText || outcome.hadText;
-      textCharacters = outcome.textCharacters;
-      if (outcome.toolCalls.length === 0) {
-        terminal = 'completed';
-        break rounds;
-      }
-
-      for (const call of outcome.toolCalls) {
+        messages,
+      },
+      maxToolRounds: GENERAL_MAX_TOOL_ROUNDS,
+      signal: controller.signal,
+      async executeTools(calls, context) {
+        const results = [];
+        for (const call of calls) {
+          const toolCallId = toolCallIds.get(`${context.round}:${call.callId}`);
+          if (!toolCallId) {
+            return {
+              ok: false as const,
+              failure: {
+                toolCallId: turn.turnId,
+                code: 'tool_call_not_started',
+                retryable: false,
+              },
+            };
+          }
+          const execution = await registry.execute(
+            { tool: call.tool, arguments: call.arguments },
+            {
+              traceId: turn.traceId,
+              turnId: turn.turnId,
+              subjectId: input.identity.studentId,
+              conversationId: input.conversationId,
+            },
+          );
+          if (!execution.ok) {
+            return {
+              ok: false as const,
+              failure: {
+                toolCallId,
+                code: execution.code,
+                retryable: execution.retryable,
+              },
+            };
+          }
+          results.push({
+            call,
+            modelResult: {
+              callId: call.callId,
+              tool: call.tool,
+              arguments: call.arguments,
+              output: execution.output,
+            },
+            detail: { toolCallId },
+          });
+        }
+        return { ok: true as const, results };
+      },
+    })) {
+      if (event.type === 'model' && event.event.type === 'text_delta') {
+        answer += event.event.delta;
+        yield {
+          ...eventBase(turn.turnId),
+          type: 'message.delta',
+          messageId: turn.assistantMessage.id,
+          delta: event.event.delta,
+        };
+      } else if (event.type === 'tool.started') {
         toolCallSequence += 1;
         const toolCallId = `${turn.turnId}-t${toolCallSequence}`;
+        toolCallIds.set(`${event.run}:${event.call.callId}`, toolCallId);
         yield {
           ...eventBase(turn.turnId),
           type: 'tool.started',
           toolCallId,
           label:
-            call.tool === 'webSearch'
+            event.call.tool === 'webSearch'
               ? '正在搜索网页'
-              : call.tool === 'fetchWebPage'
+              : event.call.tool === 'fetchWebPage'
                 ? '正在读取网页'
-                : call.tool,
+                : event.call.tool,
         };
-        const execution = await registry.execute(
-          { tool: call.tool, arguments: call.arguments },
-          {
-            traceId: turn.traceId,
-            turnId: turn.turnId,
-            subjectId: input.identity.studentId,
-            conversationId: input.conversationId,
-          },
-        );
-        if (!execution.ok) {
-          yield {
-            ...eventBase(turn.turnId),
-            type: 'tool.failed',
-            toolCallId,
-            code: execution.code,
-          };
-          terminal = 'failed';
-          failure = { code: 'unavailable', retryable: execution.retryable };
-          break rounds;
-        }
+      } else if (event.type === 'tool.result') {
         yield {
           ...eventBase(turn.turnId),
           type: 'tool.completed',
-          toolCallId,
+          toolCallId: event.result.detail.toolCallId,
         };
-        accumulatedResults.push({
-          callId: call.callId,
-          tool: call.tool,
-          arguments: call.arguments,
-          output: execution.output,
-        });
-      }
-    }
-
-    /* 圈数耗尽仍在请求工具:强制无工具收束 */
-    if (terminal === null) {
-      const outcome = yield* streamValidatedRun({
-        taskAlias: 'agent.turn',
-        modelAlias: 'primary',
-        phase: 'synthesis',
-        messages,
-        tools: [],
-        toolResults: accumulatedResults,
-        promptVersion: PROMPT_VERSION,
-        traceId: turn.traceId,
-        turnId: turn.turnId,
-        signal: controller.signal,
-      });
-      if (outcome.ok) {
-        terminal = 'completed';
-      } else {
+      } else if (event.type === 'tool.failed') {
+        yield {
+          ...eventBase(turn.turnId),
+          type: 'tool.failed',
+          toolCallId: event.failure.toolCallId,
+          code: event.failure.code,
+        };
         terminal = 'failed';
-        failure = outcome.error;
+        failure = {
+          code: 'unavailable',
+          retryable: event.failure.retryable,
+        };
+      } else if (event.type === 'failed') {
+        terminal = 'failed';
+        failure = event.error;
+      } else if (event.type === 'completed') {
+        terminal = 'completed';
       }
     }
 
@@ -550,4 +530,45 @@ export async function beginOwnedGeneralTurn(
       assetContext,
     }),
   };
+}
+
+/** Gateway 迁移入口：复用 Gateway 已创建的 operation，不再建立第二条 Turn。 */
+export async function beginGatewayGeneralTurn(input: {
+  operationId: string;
+  identity: AnonymousIdentity;
+  conversationId: string;
+  spaceId: string;
+  request: TeachingTurnRequestBody;
+  assetContext: string;
+}): Promise<{ events: AsyncIterable<TeachingTurnEvent> }> {
+  const turn = await turns.attachGatewayTurn({
+    operationId: input.operationId,
+    conversationId: input.conversationId,
+    trustedSubjectId: input.identity.studentId,
+    clientMessageId: input.request.clientMessageId,
+    text: input.request.text,
+    parts: input.request.parts,
+  });
+  return {
+    events: runGeneralTurn({
+      identity: input.identity,
+      conversationId: input.conversationId,
+      spaceId: input.spaceId,
+      request: input.request,
+      turn,
+      assetContext: input.assetContext,
+    }),
+  };
+}
+
+export async function prepareGatewayGeneralTurnContext(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  request: TeachingTurnRequestBody;
+}): Promise<string> {
+  return materializeAssetContext({
+    identity: input.identity,
+    spaceId: input.spaceId,
+    parts: input.request.parts,
+  });
 }

@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@educanvas/web --filter=@educanvas/worker --filter=@educanvas/gateway",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "pnpm test:unit",
@@ -26,6 +26,9 @@
     "turbo": "^2.10.4"
   },
   "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.10"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp",

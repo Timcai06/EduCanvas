@@ -5,12 +5,12 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/server/identity/anonymous-identity', () => ({
   readAnonymousIdentity: vi.fn(),
 }));
-vi.mock('@/server/teaching/learning-turn', () => ({
-  beginOwnedTeachingTurn: vi.fn(),
+vi.mock('@/server/gateway/teaching-turn', () => ({
+  beginTeachingGatewayTurn: vi.fn(),
 }));
 
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { beginOwnedTeachingTurn } from '@/server/teaching/learning-turn';
+import { beginTeachingGatewayTurn } from '@/server/gateway/teaching-turn';
 import { createTeachingTurnEventStream, POST } from './route';
 
 const identity = {
@@ -40,9 +40,7 @@ describe('POST /api/v1/learn/turn', () => {
   });
 
   it('streams accepted, delta and terminal events as named SSE frames', async () => {
-    vi.mocked(beginOwnedTeachingTurn).mockResolvedValue({
-      turnId: 'turn-1',
-      replayed: false,
+    vi.mocked(beginTeachingGatewayTurn).mockResolvedValue({
       events: (async function* () {
         yield {
           type: 'turn.accepted' as const,
@@ -83,7 +81,9 @@ describe('POST /api/v1/learn/turn', () => {
     });
 
     const response = await POST(
-      turnRequest(JSON.stringify({ clientMessageId: 'client-1', text: '你好' })),
+      turnRequest(
+        JSON.stringify({ clientMessageId: 'client-1', text: '你好' }),
+      ),
     );
 
     expect(response.status).toBe(200);
@@ -100,7 +100,9 @@ describe('POST /api/v1/learn/turn', () => {
   it('rejects requests without an owned anonymous identity', async () => {
     vi.mocked(readAnonymousIdentity).mockResolvedValue(null);
     const response = await POST(
-      turnRequest(JSON.stringify({ clientMessageId: 'client-1', text: '你好' })),
+      turnRequest(
+        JSON.stringify({ clientMessageId: 'client-1', text: '你好' }),
+      ),
     );
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
@@ -109,11 +111,13 @@ describe('POST /api/v1/learn/turn', () => {
   });
 
   it('maps durable rate limiting to 429 with retry metadata', async () => {
-    vi.mocked(beginOwnedTeachingTurn).mockRejectedValue(
+    vi.mocked(beginTeachingGatewayTurn).mockRejectedValue(
       new TurnRateLimitError(1_250),
     );
     const response = await POST(
-      turnRequest(JSON.stringify({ clientMessageId: 'client-1', text: '你好' })),
+      turnRequest(
+        JSON.stringify({ clientMessageId: 'client-1', text: '你好' }),
+      ),
     );
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('2');
@@ -130,15 +134,17 @@ describe('POST /api/v1/learn/turn', () => {
       ),
     );
     expect(response.status).toBe(403);
-    expect(beginOwnedTeachingTurn).not.toHaveBeenCalled();
+    expect(beginTeachingGatewayTurn).not.toHaveBeenCalled();
   });
 
   it('does not expose unexpected server errors', async () => {
-    vi.mocked(beginOwnedTeachingTurn).mockRejectedValue(
+    vi.mocked(beginTeachingGatewayTurn).mockRejectedValue(
       new Error('DATABASE_URL=postgres://secret'),
     );
     const response = await POST(
-      turnRequest(JSON.stringify({ clientMessageId: 'client-1', text: '你好' })),
+      turnRequest(
+        JSON.stringify({ clientMessageId: 'client-1', text: '你好' }),
+      ),
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('postgres://secret');

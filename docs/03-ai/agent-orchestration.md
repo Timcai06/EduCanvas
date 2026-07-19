@@ -1,84 +1,111 @@
-# 智能体编排
+# Agent 编排
 
 - 状态：`accepted`
-- 相关决策：[ADR-0004](../09-decisions/0004-state-machine-runtime.md)
+- 最后验证时间：2026-07-19
+- 关键决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
-## 原则
+## 核心原则
 
-不让框架替代领域设计。教学正确性由显式状态和规则保证，大模型负责自然语言、内容组织和受控工具选择。
+EduCanvas 只有一个生产 Agent Loop：`packages/agent-runtime/src/agent-loop.ts` 中的 `AgentLoopEngine`。Gateway 先完成身份、Notebook 路由与能力协商；模型负责理解、表达和提出工具调用；Runtime 负责上下文、预算、工具授权、取消、终态和 Trace；可信领域服务负责判分、权限和状态写入。任何入口或 Profile 都不能绕过这些边界。
 
-## 三层结构
+## 能力组合模型
 
-### 教学状态机（设计定稿见 ADR-0004）
+| 层             | 作用                                           | 示例                                      |
+| -------------- | ---------------------------------------------- | ----------------------------------------- |
+| Agent Profile  | 常驻身份、目标、模型策略、预算、安全与默认工具 | K12 AI 教师                               |
+| Skill          | 按需加载的指导、模板或有限工作流               | 结构化课程、苏格拉底追问、来源综述        |
+| Tool           | 带双向 Schema、权限、超时和审计的动作          | 搜索、读网页、生成 Artifact、读取学习状态 |
+| Domain Service | 产生或校验可信领域事实                         | 服务端判分、掌握度更新、未成年人策略      |
 
-**脊柱状态**只有五个，管理课程推进：
+Profile 不拥有自己的模型循环；Skill 不直接写数据库；Tool 获准不意味着结果自动可信；Domain Service 不依赖模型自述。
+
+## 统一 Agent Loop
 
 ```text
-DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS
+validate request
+  -> build budgeted context snapshot
+  -> run model
+  -> if tool calls: authorize, validate, execute, record, continue
+  -> if answer: safety gate, persist terminal state, stream completion
 ```
 
-- REMEDIATE 和 ADVANCE 不是状态，是 ASSESS 的出口决策：REMEDIATE 带着误区标签转回 EXPLAIN 或 PRACTICE；ADVANCE 结束当前知识点并推荐下一个；
-- **自由问答是横切能力**：任何状态内学生提问，模型直接回答，脊柱状态不变；学生跳题使用深度为 1 的中断栈，处理完恢复原状态；
-- **转移权在 runtime**：模型只能请求转移或由工具结果触发，runtime 用 guard 校验（练习量、掌握度阈值等）；
-- **初始状态由 runtime 显式决定**：新学生进 DIAGNOSE，有掌握记录的学生可直接进 EXPLAIN，数据库不设默认值；
-- 每次转移写入 `learning_events`（`event_type: state_transition`），可回放可审计。
+循环必须有显式预算：最大模型运行数、最大工具圈数、每工具超时、总时长、输入/输出规模和持久任务提交上限。达到预算后返回稳定、诚实的终态，不让模型决定继续无限运行。
 
-### Agent Tool Loop
+每一圈写入可恢复账本：Context Snapshot、Model Run、Tool Call、引用候选/实际子集、安全决策和终态。SSE 只是该运行事实的实时投影，不是事实源。
 
-#### 当前实现状态
+## 工具策略
 
-| 能力                                      | 状态           | 当前边界                                                                                                  |
-| ----------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------- |
-| 五态教学状态机、guard与中断恢复纯函数     | 已实现         | `packages/teaching-core/src/state-machine.ts`                                                             |
-| 工具名称闭集与“状态 × 工具”白名单         | 已实现         | `packages/teaching-core/src/tools.ts`；只判断已解析工具是否获准                                           |
-| 模型与知识检索Port                        | 部分实现       | 正常Turn使用供应商无关流事件；OpenAI-compatible真实Adapter已实现；审核资料FTS/快照/候选/引用仓储已落地，Turn工具接线仍待实现 |
-| Turn Orchestrator与状态感知Prompt         | 已实现运行骨架 | 支持一次直答或`answer → tools → synthesis`硬上限两次运行；answer可哈希Prompt材料由唯一纯函数构建          |
-| 工具参数Schema注册表与白名单Tool Executor | 已实现基础层   | 已覆盖未知工具、参数/输出Schema、权限交集、整批预检和执行隔离                                             |
-| 工具超时、重试、幂等、限流与审计          | 部分实现       | 已有读超时取消、写超时结果未知、持久工具幂等、Turn限流、脱敏工具账本与租约恢复；分布式配额和自动重试策略待实现 |
-| Prompt/Trace持久化与Agent评测             | 部分实现       | 消息、模型运行、工具调用、安全决策和Prompt hash已持久化；真实课程质量、RAG和Agent教学效果评测仍待建立       |
-| 可信状态推进、投影与回放                   | Core/Runtime已实现 | 状态应用服务使用guard、UoW、乐观锁与幂等事实；尚未接入Web判分后的应用组合根                                |
+模型可见工具集合由 Runtime 计算：
 
-runtime可识别的初始教学操作：
+```text
+Profile allowlist
+∩ subject permissions
+∩ Notebook ownership
+∩ environment/provider capabilities
+∩ safety policy
+∩ optional workflow state policy
+```
 
-- `retrieveKnowledge`
-- `getStudentState`
-- `renderCanvas`
-- `generateQuiz`
-- `gradeAnswer`
-- `requestHint`
-- `updateMisconception`
-- `recommendNextNode`
+工具注册必须包含稳定名称、用途、输入/输出 Schema、副作用等级、幂等策略、超时、暴露方式和审计字段。写工具不能在结果未知时自动重试；一批工具包含写操作时，不允许在部分执行后假装整批原子成功。
 
-这些名称不等于全部向模型开放。模型每轮实际可见集合是“权威状态白名单 ∩ 已注册Handler ∩ `exposure=model`”；`gradeAnswer`等可信操作应由Canvas事件或runtime触发，不能仅因名称在闭集中就暴露。执行器会在启动Handler前完成整批预检；运行期失败后立即停止，含写工具的多调用批次直接拒绝。写工具软超时只表示结果未知，不能自动重试。阶段一已把工具结果、稳定错误和幂等事实写入脱敏账本；生产强化仍需分布式分层配额、正式告警和经批准的重试策略。
+服务端判分、掌握度写入和状态转移属于 Runtime/事件触发的可信能力，默认不向模型直接暴露。模型可以建议“进行测验”，但不能提交“学生已掌握”作为事实。
 
-阶段一白名单由`packages/teaching-core/src/tools.ts`维护：
+## Context Engine
 
-| 状态          | 允许工具                                                                                                                    |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `DIAGNOSE`    | `retrieveKnowledge`、`getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`                 |
-| `EXPLAIN`     | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint`                                                       |
-| `DEMONSTRATE` | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`requestHint`                                                       |
-| `PRACTICE`    | `retrieveKnowledge`、`getStudentState`、`renderCanvas`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception` |
-| `ASSESS`      | `getStudentState`、`generateQuiz`、`gradeAnswer`、`requestHint`、`updateMisconception`、`recommendNextNode`                 |
+Context 不是把所有 Notebook 数据拼成一个字符串。Runtime 从以下 Segment 中按预算选择：
 
-工具获准不等于结果自动可信：`gradeAnswer`仍需服务端答案判定，状态转移仍需guard，掌握度仍只消费可信领域事件。
+- Profile/System；
+- Notebook 摘要；
+- 最近完整消息；
+- 所选或检索命中的 Sources；
+- 当前 Artifact 版本；
+- 与问题相关的学习者记忆；
+- 本轮文本、图片、音频、视频或文件 Part。
 
-当前`TeachingTurnOrchestrator.streamTurn()`是正常教学轮次唯一入口：直接回答只运行`phase=answer`；出现受控工具调用时，runtime执行整批预检与工具Handler，再把自包含的工具调用/结果交换交给唯一一次`phase=synthesis`。正常轮次不再使用结构化`TeachingTurnPlan`，也不会调用`generateStructured()`。两个路径都刻意只返回`STAY`：直接回答不改变脊柱状态；工具执行结果也不会自动触发状态转移。
+选择结果必须固化到 Context Snapshot。历史消息不能注入 `system` 角色；来源必须经过所有权和候选白名单；媒体不应在 Provider 支持时先降级为文本描述。
 
-可信状态推进由独立应用服务完成：`state_transition`冻结当时的策略版本、最少练习量与实践证据；`assessment_graded`冻结掌握度算法参数和先修快照；ASSESS 的 `ADVANCE` 不伪装成脊柱状态，而写入 `assessment_exit_decided` 决策事实。同一causation重放原决定，投影器优先使用事件内快照，避免策略升级改写历史。在线事件还校验生产者、闭集reason及from/to语义；只有显式`migration`通道兼容旧事实。
+## K12 AI 教师
 
-### 持久工作流
+K12 Profile 的默认工作是像一位能使用工具的通用老师：理解问题、结合资料讲解、追问理解、生成合适的多模态示例与练习，并根据学生反馈调整。它不需要为了回答一个问题先创建课程 Session，也不自动推进五阶段状态。
 
-Temporal负责教材处理、批量生成、学习报告、定时任务和Embedding迁移等长流程。按 ADR-0003，阶段一不引入。
+K12 Profile 可以注册：
+
+- 经审核的教材与 Notebook 来源检索；
+- 学习者相关记忆与已有可信掌握度读取；
+- Quiz、分类实验、流程动画、Slides 等受控 Artifact；
+- 年龄适配与未成年人安全策略；
+- 服务端判分和学习事件领域服务；
+- 显式 `structured-course` Skill/Workflow。
+
+## 可选结构化课程
+
+只有用户选择课程、教师布置任务或产品明确进入结构化学习流程时，才启用：
+
+```text
+DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
+```
+
+此时使用教育领域中的状态、guard、掌握度和可信学习事件。REMEDIATE 和 ADVANCE 仍是 ASSESS 的出口决策。自由问答可以横切课程流程，但不会仅因模型回答而改变状态；完整信任边界见 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。
+
+普通 K12 对话没有 `lessonState` 是合法状态；它不得写入虚假课程进度。结构化课程和自由教学共用同一 Agent Loop，只额外加载 Workflow 状态与领域策略。
+
+## 持久任务
+
+Artifact 生成、文档摄取、OCR、音频和未来视频渲染由 Worker 处理。Agent Loop 可以提交任务、向用户报告状态并在后续 Turn 观察结果，但不能在 HTTP 请求内等待分钟级流程或无限轮询。
+
+## 当前实现
+
+- `AgentLoopEngine` 唯一拥有多圈模型/工具执行、跨圈文本预算、取消、强制 synthesis 和单终态；
+- Web 通用 Chat、`TeachingTurnOrchestrator` 与独立 `GatewayAgentTurnRunner` 都实例化该 Engine，只注入不同 Prompt、工具执行和领域回调；
+- `turn-engine.ts` 负责每次模型运行的严格事件验证，不构成第二个编排循环；
+- General 默认最多三圈工具，K12 当前 Profile 默认一圈并可在预算内配置；
+- 教育判分、掌握度、课程状态和可信学习事件仍由确定性领域服务维护，不因循环统一而降级为模型输出。
+
+Gateway-first 迁移证据见[已完成计划](../plan/completed/2026-07-gateway-first-personal-agent.md)。Context 摘要、长期记忆、Artifact Context 和原生多模态仍是下一阶段能力，不应与“循环已经统一”混为一谈。
 
 ## 框架边界
 
-- LangChain不作为核心依赖；
-- LangGraph只在复杂内容生产、人工审核或多分支工作流中按需使用；
-- AI SDK可用于Web流式消息和类型化工具；
-- 领域状态保存在自己的数据库和代码中，不保存在第三方Agent框架内部。
-
-## 开放问题
-
-- PRACTICE进入ASSESS所需的最少练习证据量由课程配置提供，待猫狗课程规格确定；
-- 深度为1的中断状态当前使用 `lesson_sessions.interrupted_state` 持久化；若未来支持嵌套中断，需要新ADR决定是否改为独立栈结构。
+- 不以 LangChain、LangGraph、AI SDK 或 Provider SDK 作为领域事实源；
+- 可以使用框架做流式适配、有限工作流或 UI，但核心契约归 EduCanvas；
+- 第一阶段不开放宿主机 Shell、任意文件系统、无约束代码执行或多 Agent 编队；
+- 所有安全、预算和权限判断必须在模型之外可测试、可审计。
