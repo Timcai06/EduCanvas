@@ -10,8 +10,6 @@ export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
   'educanvas.pending-general-menu-action.v1';
 export const PENDING_GENERAL_CANVAS_KEY = 'educanvas.pending-general-canvas.v1';
-export const PENDING_GENERAL_SOURCES_KEY =
-  'educanvas.pending-general-sources.v1';
 const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
@@ -40,18 +38,11 @@ export function GeneralChatEntry() {
     });
   }, []);
 
-  const handleToolAction = useCallback((tool: 'canvas' | 'sources') => {
-    if (tool === 'canvas') {
-      setCanvasSelected((selected) => {
-        if (selected) sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
-        else sessionStorage.setItem(PENDING_GENERAL_CANVAS_KEY, '1');
-        return !selected;
-      });
-      return;
-    }
-    sessionStorage.setItem(PENDING_GENERAL_SOURCES_KEY, '1');
-    startTransition(async () => {
-      await startGeneralChatAction();
+  const handleToolAction = useCallback(() => {
+    setCanvasSelected((selected) => {
+      if (selected) sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
+      else sessionStorage.setItem(PENDING_GENERAL_CANVAS_KEY, '1');
+      return !selected;
     });
   }, []);
 
@@ -74,7 +65,6 @@ export function GeneralChatEntry() {
           availableMenuActions={ENTRY_MENU_ACTIONS}
           toolChips={[
             { id: 'canvas', label: 'Canvas', selected: canvasSelected },
-            { id: 'sources', label: '来源', selected: false },
           ]}
           onToolAction={handleToolAction}
           variant="landing"

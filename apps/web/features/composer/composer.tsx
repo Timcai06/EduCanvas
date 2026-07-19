@@ -2,7 +2,6 @@
 
 import {
   ArrowUp,
-  BookOpen,
   Microphone,
   SidebarSimple,
   StopCircle,
@@ -27,7 +26,7 @@ export interface ContextChip {
 }
 
 export interface ComposerToolChip {
-  id: 'canvas' | 'sources';
+  id: 'canvas';
   label: string;
   selected: boolean;
   detail?: string;
@@ -193,7 +192,6 @@ export function Composer({
       {toolChips.length > 0 ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
           {toolChips.map((tool) => {
-            const Icon = tool.id === 'canvas' ? SidebarSimple : BookOpen;
             return (
               <button
                 key={tool.id}
@@ -207,7 +205,7 @@ export function Composer({
                     : 'border-line/80 bg-surface/75 text-ink-muted hover:bg-surface hover:text-ink'
                 }`}
               >
-                <Icon aria-hidden="true" size={15} />
+                <SidebarSimple aria-hidden="true" size={15} />
                 <span>{tool.label}</span>
                 {tool.detail ? (
                   <span className="text-[11px] text-ink-faint">

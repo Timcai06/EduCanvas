@@ -53,8 +53,8 @@ export async function createGeneralConversation(
 ): Promise<PlatformConversationSnapshot> {
   return conversations.create({
     ownerSubjectId: identity.studentId,
-    spaceKind: 'personal',
-    spaceTitle: '我的空间',
+    spaceKind: 'notebook',
+    spaceTitle: '未命名笔记本',
     agentProfileId: 'general',
   });
 }

@@ -87,7 +87,7 @@ export async function createArtifact(
   return parseJsonOrThrow(response);
 }
 
-export async function fetchConversationArtifacts(): Promise<
+export async function fetchNotebookArtifacts(): Promise<
   readonly ArtifactSummary[]
 > {
   const response = await fetch(ARTIFACTS_ENDPOINT);

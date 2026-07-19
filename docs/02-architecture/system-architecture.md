@@ -84,6 +84,8 @@ flowchart TB
 
 K12贡献Agent Profile、Policy、Tools、Progress和专用Artifact；Space、Conversation、Message、Asset、Artifact与Model Run属于平台层。
 
+通用学生端将`Space + 主Conversation`投影为一个Notebook：Space是Sources与Studio Artifact的聚合根，Conversation是Notebook内的消息账本。当前保持一对一关系以降低迁移风险；Web不得把Space级来源降级为Composer附件，也不得按Conversation过滤掉仍属于该Space的Studio产物。
+
 ## 目标服务形态
 
 | 服务                | 职责                                 |

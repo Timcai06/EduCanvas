@@ -12,7 +12,7 @@ import {
 } from '@/server/platform/general-conversation';
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 
-/** 默认入口只创建通用Agent Conversation，不隐式创建课程、掌握度或教学Session。 */
+/** 默认入口创建一个Notebook Space及其主Conversation，不隐式创建教学Session。 */
 export async function startGeneralChatAction(): Promise<void> {
   const identity = (await readAnonymousIdentity()) ?? createAnonymousIdentity();
   const conversation = await createGeneralConversation(identity);
@@ -29,7 +29,7 @@ export async function startNewGeneralChatAction(): Promise<void> {
   redirect('/');
 }
 
-/** 切换历史对话:仅当目标会话归属当前主体时写入游标,越权静默忽略并回到当前页。 */
+/** 切换笔记本:当前一对一投影以主Conversation为游标，越权静默忽略。 */
 export async function switchConversationAction(
   conversationId: string,
 ): Promise<void> {

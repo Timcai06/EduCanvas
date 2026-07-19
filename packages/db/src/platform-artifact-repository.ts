@@ -184,6 +184,26 @@ export class DrizzlePlatformArtifactRepository {
     return rows.map(toArtifact);
   }
 
+  /** Notebook/Space 是 Studio 的聚合根；Conversation 只记录产物产生时的聊天上下文。 */
+  async listSpaceArtifacts(input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    limit?: number;
+  }): Promise<readonly PlatformArtifact[]> {
+    const rows = await this.database
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.spaceId, input.spaceId),
+          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
+      .limit(Math.min(input.limit ?? 50, 100));
+    return rows.map(toArtifact);
+  }
+
   /**
    * 追加不可变版本。事务内 `for update` 锁产物行保证版本单调;
    * 结构化内容与对象存储引用二选一由数据库形状约束兜底。

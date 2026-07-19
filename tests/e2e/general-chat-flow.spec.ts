@@ -48,16 +48,16 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   await expect(
     page.getByText('我们先明确目标，再选择最合适的实现路径。'),
   ).toBeVisible();
-  /* U1 侧栏:当前会话出现在历史列表(本 spec 的 turn 被 mock,服务端不落
+  /* 当前Notebook出现在列表(本 spec 的 turn 被 mock,服务端不落
      消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
   await expect(
-    page.getByRole('navigation', { name: '历史对话' }).getByText('未命名对话'),
+    page.getByRole('navigation', { name: '笔记本' }).getByText('未命名笔记本'),
   ).toBeVisible();
 
   /* U2 v1:来源常驻区在侧栏可见 */
   await expect(
     page
-      .getByRole('navigation', { name: '历史对话' })
+      .getByRole('navigation', { name: '笔记本' })
       .getByText('来源', { exact: true }),
   ).toBeVisible();
   await expect(
@@ -71,9 +71,9 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   expect(cookieNames).toContain('__Host-educanvas_active_conversation');
 });
 
-test('历史对话可反复切换，并按Conversation重新水合消息', async ({ page }) => {
-  const firstPrompt = '第一段历史对话：分析太阳能小车';
-  const secondPrompt = '第二段历史对话：设计校园雨水花园';
+test('笔记本可反复切换，并整体恢复各自的消息', async ({ page }) => {
+  const firstPrompt = '太阳能小车研究笔记本';
+  const secondPrompt = '校园雨水花园笔记本';
 
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
@@ -82,8 +82,8 @@ test('历史对话可反复切换，并按Conversation重新水合消息', async
   await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
-  const history = page.getByRole('navigation', { name: '历史对话' });
-  await history.getByRole('button', { name: '新对话' }).click();
+  const notebooks = page.getByRole('navigation', { name: '笔记本' });
+  await notebooks.getByRole('button', { name: '新建笔记本' }).click();
   await expect(
     page.getByRole('heading', { name: '你好，今天想探索什么？' }),
   ).toBeVisible();
@@ -96,7 +96,7 @@ test('历史对话可反复切换，并按Conversation重新水合消息', async
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
   await page
-    .getByRole('navigation', { name: '历史对话' })
+    .getByRole('navigation', { name: '笔记本' })
     .getByRole('button', { name: new RegExp(firstPrompt) })
     .click();
   let chat = page.getByRole('region', { name: 'AI 对话' });
@@ -104,12 +104,96 @@ test('历史对话可反复切换，并按Conversation重新水合消息', async
   await expect(chat.getByText(secondPrompt, { exact: true })).toHaveCount(0);
 
   await page
-    .getByRole('navigation', { name: '历史对话' })
+    .getByRole('navigation', { name: '笔记本' })
     .getByRole('button', { name: new RegExp(secondPrompt) })
     .click();
   chat = page.getByRole('region', { name: 'AI 对话' });
   await expect(chat.getByText(secondPrompt, { exact: true })).toBeVisible();
   await expect(chat.getByText(firstPrompt, { exact: true })).toHaveCount(0);
+});
+
+test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }) => {
+  const firstPrompt = '第一本：机器视觉资料';
+  await page.goto('/');
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill(firstPrompt);
+  await composer.press('Enter');
+  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
+
+  const firstConversationId = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/chat/conversations');
+    const payload = (await response.json()) as {
+      conversations: Array<{ id: string; title: string | null }>;
+    };
+    const current = payload.conversations.find(
+      (conversation) => conversation.title === '第一本：机器视觉资料',
+    );
+    if (!current) throw new Error('第一本笔记本不存在');
+    return current.id;
+  });
+
+  process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
+  const [dbModule, drizzleModule] = await Promise.all([
+    import('../../packages/db/src/index.ts'),
+    import('../../packages/db/node_modules/drizzle-orm/index.js'),
+  ]);
+  const [conversation] = await dbModule
+    .getDb()
+    .select()
+    .from(dbModule.conversations)
+    .where(drizzleModule.eq(dbModule.conversations.id, firstConversationId))
+    .limit(1);
+  if (!conversation) throw new Error('第一本笔记本行不存在');
+
+  await new dbModule.DrizzleAssetRepository().createUploaded({
+    ownerSubjectId: conversation.ownerSubjectId,
+    spaceId: conversation.spaceId,
+    scope: 'space',
+    kind: 'document',
+    displayName: '第一本视觉讲义.pdf',
+    mimeType: 'application/pdf',
+    byteSize: 128,
+    contentHash: 'c'.repeat(64),
+    storageKey: `e2e/${conversation.id}/notebook-source.pdf`,
+    extractedText: '卷积神经网络可以提取图像特征。',
+    outcome: { status: 'ready' },
+  });
+  await new dbModule.DrizzlePlatformArtifactRepository().createArtifact({
+    spaceId: conversation.spaceId,
+    trustedSubjectId: conversation.ownerSubjectId,
+    kind: 'mind_map',
+    trustTier: 'tier1',
+    title: '第一本视觉导图',
+  });
+
+  await page.reload();
+  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  let studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  await expect(studio.getByText('第一本视觉导图')).toBeVisible();
+  await studio.getByRole('button', { name: '关闭' }).click();
+
+  await page
+    .getByRole('navigation', { name: '笔记本' })
+    .getByRole('button', { name: '新建笔记本' })
+    .click();
+  await expect(page.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  await expect(studio.getByText('第一本视觉导图')).toHaveCount(0);
+  await studio.getByRole('button', { name: '关闭' }).click();
+
+  await page
+    .getByRole('navigation', { name: '笔记本' })
+    .getByRole('button', { name: /第一本：机器视觉资料/ })
+    .click();
+  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: '当前笔记本的 Studio' })
+      .getByText('第一本视觉导图'),
+  ).toBeVisible();
 });
 
 test('Scripted：搜索并读取多个网页后，以稳定编号展示可打开的原文引用', async ({

@@ -106,6 +106,35 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
+  it('Studio 按 Notebook Space 聚合，不依赖产物是否挂接 Conversation', async () => {
+    const first = await createArtifact();
+    const [otherSpace] = await database!
+      .insert(schema.spaces)
+      .values({ ownerSubjectId: owner, title: '另一本笔记本' })
+      .returning();
+    if (!otherSpace) throw new Error('第二个Space创建失败');
+    await repository.createArtifact({
+      spaceId: otherSpace.id,
+      trustedSubjectId: owner,
+      kind: 'slides',
+      trustTier: 'tier1',
+      title: '另一本的 Slides',
+    });
+
+    await expect(
+      repository.listSpaceArtifacts({
+        spaceId,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toMatchObject([{ id: first.id, title: '思维导图' }]);
+    await expect(
+      repository.listSpaceArtifacts({
+        spaceId,
+        trustedSubjectId: stranger,
+      }),
+    ).resolves.toEqual([]);
+  });
+
   it('版本单调递增,首个版本使产物转为 active,版本列表按新到旧', async () => {
     const artifact = await createArtifact();
     const v1 = await repository.appendVersion({

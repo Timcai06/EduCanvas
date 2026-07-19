@@ -90,7 +90,7 @@ const menuItems: readonly PlusMenuItem[] = [
 
 /**
  * 「+」菜单自管开合与键盘漫游（↑↓/Enter/Esc），动作语义交给上层：
- * 「添加材料」进入上下文标签，「请老师创建」必须先产生参数确认卡，绝不静默生成。
+ * 通用笔记本中的上传会沉淀为来源；「请老师创建」必须先产生参数确认卡，绝不静默生成。
  */
 export function PlusMenu({
   onAction,

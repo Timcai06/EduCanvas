@@ -17,14 +17,16 @@ export function AssetUploadPanel({
   kind,
   onUploaded,
   endpoint,
+  fixedScope,
 }: {
   kind: AssetItem['kind'];
   onUploaded: (asset: AssetItem) => void;
   endpoint?: string;
+  fixedScope?: AssetItem['scope'];
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [scope, setScope] = useState<AssetItem['scope']>('turn');
+  const [scope, setScope] = useState<AssetItem['scope']>(fixedScope ?? 'turn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accept =
@@ -75,31 +77,44 @@ export function AssetUploadPanel({
         </h3>
         <p className="mt-1 text-sm leading-6 text-ink-muted">
           {kind === 'image'
-            ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
-            : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
+            ? fixedScope === 'space'
+              ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为当前笔记本来源；当前模型暂不读取图片像素。'
+              : '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
+            : fixedScope === 'space'
+              ? '支持带可复制文字的PDF，最大10MB。文字会在服务端解析并成为当前笔记本的长期来源。'
+              : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
         </p>
       </div>
 
-      <fieldset data-upload-section>
-        <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
-          {(['turn', 'space'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={scope === value}
-              onClick={() => setScope(value)}
-              className={`min-h-11 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                scope === value
-                  ? 'bg-canvas text-ink shadow-[0_1px_8px_rgb(0_0_0_/_0.18)]'
-                  : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              {value === 'turn' ? '仅用于本轮' : '保存到空间'}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      {fixedScope ? (
+        <p
+          data-upload-section
+          className="rounded-2xl bg-surface px-4 py-3 text-sm text-ink-muted"
+        >
+          文件会保存到当前笔记本的来源中，切换笔记本不会带走。
+        </p>
+      ) : (
+        <fieldset data-upload-section>
+          <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
+            {(['turn', 'space'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => setScope(value)}
+                className={`min-h-11 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  scope === value
+                    ? 'bg-canvas text-ink shadow-[0_1px_8px_rgb(0_0_0_/_0.18)]'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {value === 'turn' ? '仅用于本轮' : '保存到空间'}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <input
         ref={inputRef}

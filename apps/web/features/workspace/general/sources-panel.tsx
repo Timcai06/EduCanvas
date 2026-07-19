@@ -11,8 +11,8 @@ import {
 import { useState } from 'react';
 
 /**
- * 侧栏来源区(NotebookLM 式常驻,U2 v1):逐条勾选决定进入下一轮上下文,
- * 与既有 Sheet 抽屉共享同一份 assets 状态——这里只是常驻投影,不新增数据路径。
+ * 当前笔记本的来源区:Asset 归属由服务端 Space 决定，逐条勾选只决定
+ * 下一轮使用哪些来源，不改变资料归属，也不把长期来源降级为本轮附件。
  * 网页链接与搜索结果来源随 M3 加入同一列表。
  */
 export function SourcesPanel({
@@ -152,7 +152,7 @@ export function SourcesPanel({
         ))}
         {assets.length === 0 ? (
           <li className="px-3 py-2 text-xs text-ink-faint">
-            还没有来源。上传 PDF、图片或网页链接，回答会基于它们。
+            当前笔记本还没有来源。上传 PDF、图片或网页链接后，后续回答都能使用它们。
           </li>
         ) : null}
       </ul>
