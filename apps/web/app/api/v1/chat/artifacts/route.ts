@@ -29,8 +29,8 @@ export async function GET(): Promise<Response> {
 
   try {
     const repository = new DrizzlePlatformArtifactRepository();
-    const artifacts = await repository.listConversationArtifacts({
-      conversationId: conversation.id,
+    const artifacts = await repository.listSpaceArtifacts({
+      spaceId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
     });
     return Response.json({

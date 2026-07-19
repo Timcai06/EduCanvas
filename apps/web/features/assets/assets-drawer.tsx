@@ -19,7 +19,7 @@ export interface AssetItem {
 }
 
 /**
- * 只展示服务端持久化的真实Asset；选择状态决定下一轮消息引用，不伪造来源或处理状态。
+ * 只展示当前工作区持久化的真实Asset；选择状态决定下一轮消息引用，不改变Asset归属。
  */
 export function AssetsDrawer({
   assets,
@@ -31,13 +31,13 @@ export function AssetsDrawer({
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        选择已就绪的资料加入下一轮对话。PDF会提取文字；当前模型暂不读取图片像素。
+        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF会提取文字，当前模型暂不读取图片像素。
       </p>
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
           <p className="text-sm font-medium text-ink">还没有资料</p>
           <p className="mt-1 text-xs text-ink-faint">
-            使用输入栏左侧的“+”上传图片或PDF。
+            上传图片、PDF或网页链接，建立这个笔记本自己的来源集合。
           </p>
         </div>
       ) : (
@@ -76,8 +76,12 @@ export function AssetsDrawer({
                     {asset.label}
                   </span>
                   <span className="block text-xs text-ink-faint">
-                    {asset.kind === 'image' ? '图片' : 'PDF'} ·{' '}
-                    {asset.scope === 'space' ? '长期资料' : '仅本轮'} ·{' '}
+                    {asset.kind === 'image'
+                      ? '图片'
+                      : asset.kind === 'link'
+                        ? '网页'
+                        : 'PDF'}{' '}
+                    · {asset.scope === 'space' ? '笔记本来源' : '仅本轮'} ·{' '}
                     {asset.status === 'ready'
                       ? '已就绪'
                       : asset.status === 'failed'

@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -128,8 +128,8 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     const turns = new DrizzlePlatformTurnRepository(getDatabase());
     const conversation = await conversations.create({
       ownerSubjectId: 'general-turn-user',
-      spaceKind: 'personal',
-      spaceTitle: '通用对话',
+      spaceKind: 'notebook',
+      spaceTitle: '未命名笔记本',
     });
     const started = await turns.createOrGetTurn({
       conversationId: conversation.id,
@@ -162,6 +162,15 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         status: 'completed',
         content: '当然，我们先明确目标。',
       },
+    });
+    const [notebook] = await getDatabase()
+      .select({ title: schema.spaces.title, kind: schema.spaces.kind })
+      .from(schema.spaces)
+      .where(eq(schema.spaces.id, conversation.spaceId))
+      .limit(1);
+    expect(notebook).toEqual({
+      title: '帮我分析一个想法',
+      kind: 'notebook',
     });
     expect(await getDatabase().select().from(schema.lessonSessions)).toEqual(
       [],

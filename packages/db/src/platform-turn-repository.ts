@@ -12,6 +12,7 @@ import {
   conversationMessages,
   conversations,
   operationSources,
+  spaces,
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
@@ -305,6 +306,13 @@ export class DrizzlePlatformTurnRepository {
           updatedAt: now,
         })
         .where(eq(conversations.id, input.conversationId));
+      await transaction
+        .update(spaces)
+        .set({
+          title: sql`case when ${spaces.title} in ('我的空间', '未命名笔记本') then ${title} else ${spaces.title} end`,
+          updatedAt: now,
+        })
+        .where(eq(spaces.id, conversation.spaceId));
       return loadTurn(transaction, operationId, false);
     });
   }

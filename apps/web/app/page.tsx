@@ -13,6 +13,7 @@ export default async function HomePage() {
       key={data.conversation.id}
       initialMessages={data.initialMessages}
       conversationId={data.conversation.id}
+      notebookTitle={data.conversation.title}
     />
   ) : (
     <GeneralChatEntry />

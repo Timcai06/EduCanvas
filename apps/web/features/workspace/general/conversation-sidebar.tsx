@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 
 gsap.registerPlugin(useGSAP);
 
-interface ConversationListItem {
+interface NotebookListItem {
   id: string;
   title: string | null;
   lastActivityAt: string;
@@ -28,21 +28,21 @@ const formatWhen = (iso: string): string => {
 };
 
 /**
- * Gemini 式侧栏:历史对话 + 新对话。桌面端常驻(lg+),窄屏由头部入口承担。
+ * Notebook 侧栏:笔记本列表 + 当前笔记本来源。桌面端常驻(lg+),窄屏由头部入口承担。
  * 只消费公开投影;切换经 Server Action 校验归属后写游标,浏览器不持有会话密钥。
  */
 export function ConversationSidebar({
   activeConversationId,
-  onNewChat,
+  onNewNotebook,
   children,
 }: {
   activeConversationId: string | null;
-  onNewChat: () => void;
+  onNewNotebook: () => void;
   /** 侧栏底部扩展区(来源面板等常驻区块)。 */
   children?: React.ReactNode;
 }) {
   const rootRef = useRef<HTMLElement>(null);
-  const [items, setItems] = useState<readonly ConversationListItem[]>([]);
+  const [items, setItems] = useState<readonly NotebookListItem[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [isSwitchPending, startSwitchTransition] = useTransition();
 
@@ -52,7 +52,7 @@ export function ConversationSidebar({
       .then(async (response) =>
         response.ok
           ? ((await response.json()) as {
-              conversations: ConversationListItem[];
+              conversations: NotebookListItem[];
             })
           : { conversations: [] },
       )
@@ -97,20 +97,20 @@ export function ConversationSidebar({
   return (
     <nav
       ref={rootRef}
-      aria-label="历史对话"
+      aria-label="笔记本"
       className="hidden w-60 shrink-0 flex-col border-r border-line/60 bg-canvas/60 lg:flex"
     >
       <div className="px-3 pt-3 pb-1.5">
         <button
           type="button"
-          onClick={onNewChat}
+          onClick={onNewNotebook}
           className="flex min-h-10 w-full items-center gap-2.5 rounded-full bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <Plus aria-hidden="true" size={16} weight="bold" />
-          新对话
+          新建笔记本
         </button>
       </div>
-      <p className="px-5 pt-3 pb-1 text-xs font-medium text-ink-faint">近期</p>
+      <p className="px-5 pt-3 pb-1 text-xs font-medium text-ink-faint">笔记本</p>
       <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
         {items.map((item) => {
           const isActive = item.id === activeConversationId;
@@ -143,7 +143,7 @@ export function ConversationSidebar({
                   className="shrink-0 text-ink-faint"
                 />
                 <span className="min-w-0 flex-1 truncate">
-                  {item.title ?? '未命名对话'}
+                  {item.title ?? '未命名笔记本'}
                 </span>
                 <span className="shrink-0 text-[11px] text-ink-faint">
                   {formatWhen(item.lastActivityAt)}
@@ -153,7 +153,7 @@ export function ConversationSidebar({
           );
         })}
         {items.length === 0 ? (
-          <li className="px-3 py-2 text-xs text-ink-faint">还没有历史对话</li>
+          <li className="px-3 py-2 text-xs text-ink-faint">还没有笔记本</li>
         ) : null}
       </ul>
       {children}

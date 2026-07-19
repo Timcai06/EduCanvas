@@ -12,7 +12,7 @@ import {
   useArtifactGeneration,
 } from '@/features/canvas/artifact-generation-flow';
 import {
-  fetchConversationArtifacts,
+  fetchNotebookArtifacts,
   type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
@@ -34,7 +34,6 @@ import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
   PENDING_GENERAL_CANVAS_KEY,
-  PENDING_GENERAL_SOURCES_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
 import { SourcesPanel } from './sources-panel';
@@ -64,9 +63,11 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
 export function GeneralChatWorkspace({
   initialMessages,
   conversationId,
+  notebookTitle,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
+  notebookTitle: string | null;
 }) {
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
@@ -93,7 +94,9 @@ export function GeneralChatWorkspace({
   const pendingToolsConsumed = useRef(false);
 
   const refreshAssets = useCallback(async () => {
-    const items = await loadAssets(ASSET_ENDPOINT);
+    const items = await loadAssets(ASSET_ENDPOINT, {
+      enableSpaceByDefault: true,
+    });
     setAssets((current) => {
       const enabledById = new Map(
         current.map((asset) => [asset.id, asset.enabled] as const),
@@ -107,7 +110,7 @@ export function GeneralChatWorkspace({
 
   useEffect(() => {
     let active = true;
-    void loadAssets(ASSET_ENDPOINT)
+    void loadAssets(ASSET_ENDPOINT, { enableSpaceByDefault: true })
       .then((items) => {
         if (active) setAssets(items);
       })
@@ -156,7 +159,7 @@ export function GeneralChatWorkspace({
                   versionId: asset.versionId,
                   kind: asset.kind,
                 },
-                usage: 'attachment' as const,
+                usage: 'context' as const,
                 label: asset.label,
               },
             ]
@@ -218,34 +221,21 @@ export function GeneralChatWorkspace({
     const restoreCanvas = Boolean(
       sessionStorage.getItem(PENDING_GENERAL_CANVAS_KEY),
     );
-    const restoreSources = Boolean(
-      sessionStorage.getItem(PENDING_GENERAL_SOURCES_KEY),
-    );
     sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
-    sessionStorage.removeItem(PENDING_GENERAL_SOURCES_KEY);
     queueMicrotask(() => {
       if (restoreCanvas) setCanvasSelected(true);
-      if (restoreSources) setAssetPanel('assets');
     });
   }, []);
 
   const isLanding = turn.messages.length === 0;
-  const selectedAssets = assets.filter((asset) => asset.enabled);
+  const notebookSources = assets.filter((asset) => asset.scope === 'space');
   const composerTools = [
     { id: 'canvas' as const, label: 'Canvas', selected: canvasSelected },
-    {
-      id: 'sources' as const,
-      label: '来源',
-      selected: selectedAssets.length > 0,
-      detail:
-        selectedAssets.length > 0 ? String(selectedAssets.length) : undefined,
-    },
   ];
-  const handleToolAction = useCallback((tool: 'canvas' | 'sources') => {
-    if (tool === 'canvas') setCanvasSelected((selected) => !selected);
-    else setAssetPanel('assets');
+  const handleToolAction = useCallback(() => {
+    setCanvasSelected((selected) => !selected);
   }, []);
-  const selectedAudioSources = assets.flatMap((asset) =>
+  const selectedAudioSources = notebookSources.flatMap((asset) =>
     asset.enabled &&
     asset.versionId &&
     (asset.kind === 'document' || asset.kind === 'link')
@@ -300,31 +290,35 @@ export function GeneralChatWorkspace({
           </span>
           EduCanvas
         </span>
+        <span aria-hidden="true" className="h-5 w-px bg-line/80" />
+        <span className="max-w-64 truncate text-sm font-medium text-ink-muted">
+          {notebookTitle ?? '未命名笔记本'}
+        </span>
         <span className="flex-1" />
         <button
           type="button"
           onClick={() => {
             setStudioOpen(true);
-            void fetchConversationArtifacts()
+            void fetchNotebookArtifacts()
               .then(setStudioItems)
               .catch(() => setStudioItems([]));
           }}
           className="rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
         >
-          产物
+          Studio
         </button>
         <button
           type="button"
           onClick={() => setAssetPanel('assets')}
           className="hidden rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:block lg:hidden"
         >
-          资产
+          来源
         </button>
         <form action={startNewGeneralChatAction}>
           <button
             type="submit"
-            aria-label="新对话"
-            title="新对话"
+            aria-label="新建笔记本"
+            title="新建笔记本"
             className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink lg:hidden"
           >
             <Plus size={19} />
@@ -335,10 +329,10 @@ export function GeneralChatWorkspace({
       <div className="flex min-h-0 flex-1">
         <ConversationSidebar
           activeConversationId={conversationId}
-          onNewChat={() => void startNewGeneralChatAction()}
+          onNewNotebook={() => void startNewGeneralChatAction()}
         >
           <SourcesPanel
-            assets={assets}
+            assets={notebookSources}
             onToggle={toggleAsset}
             onUpload={(kind) => setAssetPanel(kind)}
             onImported={(asset) =>
@@ -381,15 +375,12 @@ export function GeneralChatWorkspace({
                   </div>
                 ) : null}
                 <Composer
-                  chips={selectedAssets.map((asset) => ({
-                    id: asset.id,
-                    label: asset.label,
-                  }))}
+                  chips={[]}
                   busy={turn.busy}
                   statusText={turn.statusText ?? error}
                   statusTone={error && !turn.busy ? 'error' : 'info'}
                   onSend={send}
-                  onRemoveChip={toggleAsset}
+                  onRemoveChip={() => undefined}
                   onMenuAction={handleMenuAction}
                   availableMenuActions={GENERAL_MENU_ACTIONS}
                   toolChips={composerTools}
@@ -439,15 +430,12 @@ export function GeneralChatWorkspace({
                     />
                   ) : null}
                   <Composer
-                    chips={selectedAssets.map((asset) => ({
-                      id: asset.id,
-                      label: asset.label,
-                    }))}
+                    chips={[]}
                     busy={turn.busy}
                     statusText={turn.statusText ?? error}
                     statusTone={error && !turn.busy ? 'error' : 'info'}
                     onSend={send}
-                    onRemoveChip={toggleAsset}
+                    onRemoveChip={() => undefined}
                     onMenuAction={handleMenuAction}
                     availableMenuActions={GENERAL_MENU_ACTIONS}
                     toolChips={composerTools}
@@ -512,7 +500,7 @@ export function GeneralChatWorkspace({
         />
       ) : null}
       {studioOpen ? (
-        <Sheet label="本次对话的产物" onClose={() => setStudioOpen(false)}>
+        <Sheet label="当前笔记本的 Studio" onClose={() => setStudioOpen(false)}>
           {studioItems.length === 0 ? (
             <p className="text-sm text-ink-muted">
               还没有产物。在输入框的「+」菜单里试试「生成思维导图」。
@@ -549,8 +537,8 @@ export function GeneralChatWorkspace({
         </Sheet>
       ) : null}
       {assetPanel === 'assets' ? (
-        <Sheet label="知识与媒体资产" onClose={() => setAssetPanel(null)}>
-          <AssetsDrawer assets={assets} onToggle={toggleAsset} />
+        <Sheet label="笔记本来源" onClose={() => setAssetPanel(null)}>
+          <AssetsDrawer assets={notebookSources} onToggle={toggleAsset} />
         </Sheet>
       ) : null}
       {assetPanel === 'image' || assetPanel === 'document' ? (
@@ -561,6 +549,7 @@ export function GeneralChatWorkspace({
           <AssetUploadPanel
             kind={assetPanel}
             endpoint={ASSET_ENDPOINT}
+            fixedScope="space"
             onUploaded={(asset) => {
               setAssets((current) => [
                 { ...asset, enabled: asset.selectable },

@@ -35,11 +35,11 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
     canvas.locator('[data-mind-map]').getByText('对话思维导图'),
   ).toBeVisible();
 
-  /* 断连恢复读取面:刷新后产物仍在「产物」列表中 */
+  /* 断连恢复读取面:刷新后产物仍在当前笔记本的 Studio 中 */
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: '产物', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '本次对话的产物' });
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
   await expect(studio.getByText('对话思维导图')).toBeVisible();
   await expect(studio.getByText('v1')).toBeVisible();
 });
@@ -69,13 +69,23 @@ test('Canvas 工具芯片随入口意图进入会话并自动打开本轮产物'
   ).toBeVisible();
 });
 
-test('来源工具芯片从空白入口打开真实来源选择器', async ({ page }) => {
+test('上传从空白入口建立笔记本来源，不把来源伪装成 Composer 工具', async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.getByRole('button', { name: '来源', exact: true }).click();
   await expect(
-    page.getByRole('dialog', { name: '知识与媒体资产' }),
+    page.getByRole('button', { name: '来源', exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: '上传文件' }).click();
+  await expect(
+    page.getByRole('dialog', { name: '添加 PDF' }),
   ).toBeVisible();
+  await expect(
+    page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
+  ).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '笔记本' })).toBeVisible();
 });
 
 test('生成 Slides 全链路并可分页浏览', async ({ page }) => {
@@ -212,8 +222,8 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
 
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: '产物', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '本次对话的产物' });
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
   await studio.getByText('来源音频概览').click();
   await expect(
     page
