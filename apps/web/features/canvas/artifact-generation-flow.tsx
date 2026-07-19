@@ -231,7 +231,7 @@ export function ArtifactConfirmSheet({
             (kind === 'audio_overview' && sourceCount === 0)
           }
           onClick={() => onConfirm(trimmed)}
-          className="min-h-10 w-full rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
+          className="min-h-10 w-full rounded-full bg-accent px-5 py-2 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
         >
           开始生成
         </button>
@@ -255,7 +255,7 @@ export function ArtifactStatusCard({
   return (
     <div
       role="status"
-      className="mx-auto mb-2 flex w-full max-w-3xl items-center gap-3 rounded-2xl border border-line bg-surface/90 px-4 py-3 shadow-[var(--shadow-float)] backdrop-blur"
+      className="mx-auto mb-2 flex w-full max-w-3xl items-center gap-3 rounded-2xl border border-line bg-card/95 px-4 py-3 shadow-[var(--shadow-float)] backdrop-blur"
     >
       <span
         aria-hidden="true"
@@ -293,7 +293,7 @@ export function ArtifactStatusCard({
         <button
           type="button"
           onClick={onOpen}
-          className="min-h-9 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="min-h-9 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           打开
         </button>
@@ -425,7 +425,7 @@ export function ArtifactCanvas({
               <button
                 type="submit"
                 disabled={!instruction.trim() || !isLatest || revising}
-                className="min-h-10 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:bg-surface-strong disabled:text-ink-faint"
+                className="min-h-10 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:bg-surface-strong disabled:text-ink-faint"
               >
                 {revising ? '生成中…' : '生成新版本'}
               </button>

@@ -9,16 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { LogoMark } from '@/features/workspace/shared/logo-mark';
 import { useRef, useState } from 'react';
-import {
-  COMPOSER_FOCUS_EVENT,
-  COMPOSER_SEND_EVENT,
-} from '@/features/workspace/shared/ambient-halo';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
-
-/** 光场对输入行为的呼应是纯装饰,事件失败不影响输入,故直接触发不做防御。 */
-const notifyHalo = (event: string, detail?: unknown) => {
-  window.dispatchEvent(new CustomEvent(event, { detail }));
-};
 
 export interface ContextChip {
   id: string;
@@ -34,7 +25,8 @@ export interface ComposerToolChip {
 
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
- * 它不持有对话状态；文本提交、菜单动作全部上抛给 LearnWorkspace。
+ * 视觉上它是桌面上「刚铺开的一页纸」（card 层），聚焦时黛青描边——
+ * 不用光晕做反馈。它不持有对话状态；文本提交、菜单动作全部上抛。
  * Enter 发送、Shift+Enter 换行（触屏窄屏由发送按钮承担发送）。
  */
 export function Composer({
@@ -80,7 +72,6 @@ export function Composer({
     if (!hasPayload || busy) return;
     setValue('');
     textarea.style.height = 'auto';
-    notifyHalo(COMPOSER_SEND_EVENT);
     onSend(text);
   };
 
@@ -95,7 +86,7 @@ export function Composer({
           {chips.map((chip) => (
             <span
               key={chip.id}
-              className="inline-flex items-center gap-1 rounded-full border border-line/80 bg-surface/90 px-3 py-1 text-xs font-medium text-ink-muted shadow-[0_6px_20px_rgb(0_0_0_/_0.14)]"
+              className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted"
             >
               {chip.label}
               <button
@@ -111,10 +102,10 @@ export function Composer({
         </div>
       ) : null}
       <div
-        className={`flex items-end gap-1 border border-line/80 bg-surface/95 p-2 backdrop-blur-xl transition-[border-color,box-shadow,background-color] focus-within:border-accent/55 focus-within:bg-surface focus-within:shadow-[var(--shadow-float),0_0_0_1px_rgb(124_141_255_/_0.16)] ${
+        className={`flex items-end gap-1 border border-line bg-card p-2 transition-[border-color,box-shadow] focus-within:border-accent/60 focus-within:shadow-[var(--shadow-float)] ${
           isLanding
-            ? 'min-h-16 rounded-[2rem] shadow-[0_14px_44px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.035)]'
-            : 'rounded-[var(--radius-pill)]'
+            ? 'min-h-16 rounded-[1.75rem] shadow-[var(--shadow-float)]'
+            : 'rounded-[1.375rem] shadow-[0_1px_2px_rgb(72_60_34_/_0.05)]'
         }`}
       >
         <PlusMenu
@@ -129,8 +120,6 @@ export function Composer({
           aria-label="向 EduCanvas 提问"
           placeholder={isLanding ? '向 EduCanvas 提问' : '继续对话…'}
           onChange={(event) => setValue(event.currentTarget.value)}
-          onFocus={() => notifyHalo(COMPOSER_FOCUS_EVENT, { focused: true })}
-          onBlur={() => notifyHalo(COMPOSER_FOCUS_EVENT, { focused: false })}
           onInput={(event) => {
             const textarea = event.currentTarget;
             textarea.style.height = 'auto';
@@ -152,7 +141,7 @@ export function Composer({
           }`}
         />
         {isLanding ? (
-          <span className="hidden shrink-0 items-center gap-1.5 px-2 text-sm font-medium text-ink-muted sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-1.5 px-2 font-display text-sm text-ink-muted sm:inline-flex">
             <LogoMark size={15} />
             EduCanvas
           </span>
@@ -173,7 +162,7 @@ export function Composer({
             onClick={submit}
             disabled={busy}
             aria-label="发送"
-            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
           >
             <ArrowUp aria-hidden="true" size={20} weight="bold" />
           </button>
@@ -202,7 +191,7 @@ export function Composer({
                 className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
                   tool.selected
                     ? 'border-accent/55 bg-accent-soft text-ink'
-                    : 'border-line/80 bg-surface/75 text-ink-muted hover:bg-surface hover:text-ink'
+                    : 'border-line bg-surface/75 text-ink-muted hover:bg-surface hover:text-ink'
                 }`}
               >
                 <SidebarSimple aria-hidden="true" size={15} />

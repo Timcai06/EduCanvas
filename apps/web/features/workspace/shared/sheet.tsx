@@ -99,7 +99,7 @@ export function Sheet({
         type="button"
         aria-label="关闭面板"
         onClick={onClose}
-        className="absolute inset-0 size-full cursor-default bg-black/60 backdrop-blur-[2px]"
+        className="absolute inset-0 size-full cursor-default bg-black/40 backdrop-blur-[2px]"
       />
       <div
         ref={panelRef}

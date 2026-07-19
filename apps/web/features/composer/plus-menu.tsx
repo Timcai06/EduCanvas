@@ -211,7 +211,7 @@ export function PlusMenu({
           role="menu"
           aria-label="添加上下文或创建内容"
           onKeyDown={handleMenuKeyDown}
-          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line/80 bg-surface/98 py-1.5 shadow-[var(--shadow-sheet)] backdrop-blur-xl"
+          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line bg-card py-1.5 shadow-[var(--shadow-sheet)]"
         >
           {items.map((item, index) => (
             <button

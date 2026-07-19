@@ -1,6 +1,10 @@
 'use client';
 
 import type { ProgressDTO } from '@/features/learning/learning-contracts';
+import { SealStamp } from '@/features/workspace/shared/two-pen-marks';
+
+/** 印章只在服务端投影表明高掌握时出现;阈值只影响展示,不参与任何判定。 */
+const SEAL_MASTERY_PERCENT = 80;
 
 const shanghaiDateFormatter = new Intl.DateTimeFormat('zh-CN', {
   dateStyle: 'medium',
@@ -23,8 +27,14 @@ export function ProgressDrawer({ progress }: { progress: ProgressDTO | null }) {
     <section aria-label="学习进度" className="space-y-6">
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">
-          <span id="mastery-progress-label" className="font-medium text-ink">
+          <span
+            id="mastery-progress-label"
+            className="inline-flex items-center gap-2.5 font-medium text-ink"
+          >
             当前掌握度
+            {masteryPercent >= SEAL_MASTERY_PERCENT ? (
+              <SealStamp char="掌" label="已达到牢固掌握" />
+            ) : null}
           </span>
           <span className="font-semibold text-accent-strong">
             {masteryPercent}%

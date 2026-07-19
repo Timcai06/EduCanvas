@@ -102,7 +102,7 @@ export function SourcesPanel({
               type="button"
               onClick={submitLink}
               disabled={linkBusy || linkValue.trim().length === 0}
-              className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong disabled:bg-surface-strong disabled:text-ink-faint"
+              className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-card transition-colors hover:bg-accent-strong disabled:bg-surface-strong disabled:text-ink-faint"
             >
               {linkBusy ? '导入中…' : '导入'}
             </button>

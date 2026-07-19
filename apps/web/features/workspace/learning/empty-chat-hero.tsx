@@ -4,7 +4,6 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { AmbientHalo } from '../shared/ambient-halo';
 import { HeroGreeting } from '../shared/hero-greeting';
 
 gsap.registerPlugin(useGSAP);
@@ -45,7 +44,6 @@ export function EmptyChatHero({ children }: { children: ReactNode }) {
       ref={rootRef}
       className="relative isolate flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-16 sm:pb-20"
     >
-      <AmbientHalo />
       <section className="relative z-10 w-full -translate-y-6 text-center sm:-translate-y-8">
         <HeroGreeting />
         <div ref={contentRef}>{children}</div>
