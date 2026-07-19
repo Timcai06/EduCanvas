@@ -6,7 +6,7 @@
 
 ## 当前部署事实
 
-- 本地`make dev`运行 `apps/web`、`apps/gateway`、`apps/worker`和PostgreSQL；TUI、Telegram和Node必须按需单独运行；
+- 本地 `make all` 运行 PostgreSQL、迁移、`apps/web`、`apps/gateway`、`apps/worker`和显式启用的非交互 Channel Adapter；`make dev`进入 Web 验证，`make tui`进入交互式 TUI；实验性 Telegram、交互 Client 和外部 Node 不属于默认 all profile；
 - Web、Gateway与Worker共享Monorepo包和数据库，但分别是独立进程组合根；
 - Artifact 二进制通过对象存储 Port 保存；
 - `apps/gateway`已实现HTTP/NDJSON、Client/Node session、路由、恢复、审批和内部指标；尚未部署到共享云环境；

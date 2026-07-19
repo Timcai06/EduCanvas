@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { GatewayObservability, gatewayRouteLabel } from './observability';
 
 describe('GatewayObservability', () => {
+  it('uses a stable low-cardinality label for local onboarding', () => {
+    expect(gatewayRouteLabel('POST', '/v1/local/onboard')).toBe(
+      'local.onboard',
+    );
+  });
+
   it('uses bounded route labels and records no request content', () => {
     const records: unknown[] = [];
     let now = 10;

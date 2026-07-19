@@ -9,6 +9,7 @@ import {
   DrizzleGatewayApprovalRepository,
   DrizzleGatewayChannelBindingRepository,
   DrizzleGatewayDeliveryRepository,
+  DrizzleGatewayDirectoryRepository,
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
@@ -110,6 +111,23 @@ describeWithDatabase(
           grantedByUserId: 'user:owner',
         },
       ]);
+    });
+
+    it('idempotently ensures one default personal workspace under concurrent onboarding', async () => {
+      const directory = new DrizzleGatewayDirectoryRepository(getDatabase());
+      const [left, right] = await Promise.all([
+        directory.ensurePersonalWorkspace({ userId: 'local:owner', now }),
+        directory.ensurePersonalWorkspace({ userId: 'local:owner', now }),
+      ]);
+      expect(left).toEqual(right);
+      expect(await directory.listConversations('local:owner', now)).toEqual([
+        left,
+      ]);
+      expect(left).toMatchObject({
+        title: '我的学习笔记本',
+        agentProfileId: 'general',
+        membershipRole: 'owner',
+      });
     });
 
     it('allows a contributor to use a shared Notebook without sharing Agent identity', async () => {

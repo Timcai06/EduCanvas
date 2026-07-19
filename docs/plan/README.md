@@ -18,7 +18,7 @@
 
 ## 当前计划
 
-当前没有active执行线。Gateway-first主线已于2026-07-19结档，Gateway、Web接入、唯一Runtime、TUI、Telegram和安全Node均已交付；正式认证、Context/记忆、原生多模态与production治理保留在[路线图](../10-planning/roadmap.md)，需要开始时再建立独立active计划。历史交付与去向见[`completed/`](completed/README.md)。
+当前 active 执行线是 [Web-first 入口、TUI 与连接控制面](active/2026-07-web-first-entrypoints-and-handoff.md)。Gateway-first 主线已于 2026-07-19 结档；本阶段收敛 `make all/dev/tui`、统一 Web/TUI local identity、双向 handoff 和 GUI/TUI 渠道设置。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 

@@ -4,6 +4,8 @@ export interface GatewayConfig {
   internalToken: string | null;
   bootstrapToken: string | null;
   sessionSecret: string | null;
+  localOnboardingEnabled: boolean;
+  localUserId: string;
 }
 
 export function readGatewayConfig(
@@ -33,11 +35,21 @@ export function readGatewayConfig(
       '公开 Client transport 必须同时配置 bootstrap token 与 session secret',
     );
   }
+  const localUserId = env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner';
+  if (localUserId.length > 160) {
+    throw new Error('EDUCANVAS_LOCAL_USER_ID 最多 160 字符');
+  }
   return {
     host: env.EDUCANVAS_GATEWAY_HOST?.trim() || '127.0.0.1',
     port,
     internalToken,
     bootstrapToken,
     sessionSecret,
+    localOnboardingEnabled:
+      env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
+      ['127.0.0.1', 'localhost', '::1'].includes(
+        env.EDUCANVAS_GATEWAY_HOST?.trim() || '127.0.0.1',
+      ),
+    localUserId,
   };
 }

@@ -118,6 +118,14 @@ export class GatewayBootstrapClient {
     if (!response.ok) throw await parseError(response);
     return bootstrapResponseSchema.parse(await response.json());
   }
+
+  async onboardLocal(): Promise<GatewayBootstrapSession> {
+    const response = await this.fetcher(`${this.baseUrl}/v1/local/onboard`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw await parseError(response);
+    return bootstrapResponseSchema.parse(await response.json());
+  }
 }
 
 export class GatewayClient {

@@ -9,7 +9,26 @@ describe('Gateway config', () => {
       internalToken: null,
       bootstrapToken: null,
       sessionSecret: null,
+      localOnboardingEnabled: false,
+      localUserId: 'local:owner',
     });
+  });
+
+  it('disables local onboarding outside local loopback deployments', () => {
+    expect(
+      readGatewayConfig({ EDUCANVAS_DEPLOYMENT_ENV: 'production' })
+        .localOnboardingEnabled,
+    ).toBe(false);
+    expect(
+      readGatewayConfig({
+        EDUCANVAS_DEPLOYMENT_ENV: 'local',
+        EDUCANVAS_GATEWAY_HOST: '0.0.0.0',
+      }).localOnboardingEnabled,
+    ).toBe(false);
+    expect(
+      readGatewayConfig({ EDUCANVAS_DEPLOYMENT_ENV: 'local' })
+        .localOnboardingEnabled,
+    ).toBe(true);
   });
 
   it('rejects short internal credentials', () => {

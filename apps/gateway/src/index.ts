@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -44,6 +45,14 @@ function loadWorkspaceEnvFiles(): void {
 loadWorkspaceEnvFiles();
 const config = readGatewayConfig();
 const operationStore = new DrizzleGatewayOperationStore();
+const identities = new DrizzleGatewayIdentityRepository();
+const directory = new DrizzleGatewayDirectoryRepository();
+const clientSessionSecret =
+  config.sessionSecret ??
+  (config.localOnboardingEnabled ? randomBytes(32).toString('hex') : null);
+const clientSessionAuth = clientSessionSecret
+  ? new GatewayClientSessionAuth(clientSessionSecret)
+  : null;
 const observability = new GatewayObservability((record) => {
   process.stdout.write(`${JSON.stringify(record)}\n`);
 });
@@ -57,17 +66,23 @@ const server = createServer(
   createGatewayHttpHandler({
     service,
     internalToken: config.internalToken,
-    clientTransport:
-      config.bootstrapToken && config.sessionSecret
-        ? {
-            bootstrapToken: config.bootstrapToken,
-            sessionAuth: new GatewayClientSessionAuth(config.sessionSecret),
-            identities: new DrizzleGatewayIdentityRepository(),
-            directory: new DrizzleGatewayDirectoryRepository(),
-            approvals: new DrizzleGatewayApprovalRepository(),
-            operations: operationStore,
-          }
-        : null,
+    clientTransport: clientSessionAuth
+      ? {
+          bootstrapToken: config.bootstrapToken,
+          sessionAuth: clientSessionAuth,
+          identities,
+          directory,
+          localOnboarding: config.localOnboardingEnabled
+            ? {
+                userId: config.localUserId,
+                ensureWorkspace: (userId) =>
+                  directory.ensurePersonalWorkspace({ userId }),
+              }
+            : null,
+          approvals: new DrizzleGatewayApprovalRepository(),
+          operations: operationStore,
+        }
+      : null,
     nodeTransport:
       config.bootstrapToken && config.sessionSecret
         ? {
@@ -87,8 +102,8 @@ server.listen(config.port, config.host, () => {
       host: config.host,
       port: config.port,
       internalTransportEnabled: config.internalToken !== null,
-      clientTransportEnabled:
-        config.bootstrapToken !== null && config.sessionSecret !== null,
+      clientTransportEnabled: clientSessionAuth !== null,
+      localOnboardingEnabled: config.localOnboardingEnabled,
     })}\n`,
   );
 });

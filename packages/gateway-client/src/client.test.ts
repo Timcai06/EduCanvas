@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { GatewayBootstrapClient, GatewayClient } from './client';
 
 describe('GatewayClient', () => {
+  it('uses the loopback onboarding endpoint without sending a user id', async () => {
+    let seenBody: BodyInit | null | undefined;
+    const session = await new GatewayBootstrapClient(
+      'http://127.0.0.1:3200',
+      async (_url, init) => {
+        seenBody = init?.body;
+        return Response.json({
+          userId: 'local:owner',
+          agentId: 'agent:local',
+          token: 't'.repeat(32),
+          expiresAt: '2026-07-20T04:00:00.000Z',
+        });
+      },
+    ).onboardLocal();
+    expect(session.userId).toBe('local:owner');
+    expect(seenBody).toBeUndefined();
+  });
+
   it('bootstraps without placing credentials in the URL', async () => {
     let seen = '';
     const fetcher: typeof fetch = async (input, init) => {

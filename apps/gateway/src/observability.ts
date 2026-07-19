@@ -108,6 +108,7 @@ export function gatewayRouteLabel(method: string, pathname: string): string {
     return 'internal.node.invocations';
   }
   if (pathname === '/v1/client/bootstrap') return 'client.bootstrap';
+  if (pathname === '/v1/local/onboard') return 'local.onboard';
   if (pathname === '/v1/client/conversations') return 'client.conversations';
   if (pathname === '/v1/client/turns') return 'client.turns';
   if (pathname === '/v1/client/approvals') return 'client.approvals';

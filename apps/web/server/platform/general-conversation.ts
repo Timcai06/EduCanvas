@@ -64,7 +64,19 @@ export async function loadOwnedGeneralConversation(
   identity: AnonymousIdentity,
 ): Promise<PlatformConversationSnapshot | null> {
   const conversationId = await readActiveConversationId();
-  if (!conversationId) return null;
+  if (!conversationId) {
+    if (!identity.studentId.startsWith('anon:')) {
+      return (
+        (
+          await conversations.listOwnedRecent({
+            trustedSubjectId: identity.studentId,
+            limit: 1,
+          })
+        )[0] ?? null
+      );
+    }
+    return null;
+  }
   return conversations.getOwned({
     conversationId,
     trustedSubjectId: identity.studentId,

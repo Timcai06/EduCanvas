@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import process from 'node:process';
+import { createInterface } from 'node:readline/promises';
 import {
   GatewayBootstrapClient,
-  GatewayClient,
   type GatewayConversationEntry,
 } from '@educanvas/gateway-client';
 import type { GatewayOperationEvent } from '@educanvas/gateway-core';
-import { loadConfig, saveConfig } from './config';
+import { saveConfig } from './config';
+import { establishGatewaySession } from './session';
 
 function usage(): never {
   process.stderr.write(`EduCanvas TUI\n\n`);
@@ -20,6 +22,20 @@ function usage(): never {
   process.stderr.write(`  educanvas approve <approval-id> [reason]\n`);
   process.stderr.write(`  educanvas deny <approval-id> [reason]\n`);
   process.exit(2);
+}
+
+function openWeb(url: string): void {
+  const invocation =
+    process.platform === 'darwin'
+      ? (['open', [url]] as const)
+      : process.platform === 'win32'
+        ? (['cmd', ['/c', 'start', '', url]] as const)
+        : (['xdg-open', [url]] as const);
+  const child = spawn(invocation[0], [...invocation[1]], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
 }
 
 function renderEvent(event: GatewayOperationEvent): void {
@@ -51,7 +67,6 @@ function findConversation(
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (!command) usage();
   if (command === 'login') {
     const [baseUrl, userId] = args;
     const bootstrapToken = process.env.EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN;
@@ -76,10 +91,85 @@ async function main(): Promise<void> {
     return;
   }
 
-  const config = await loadConfig();
-  const client = new GatewayClient(config.baseUrl, config.token);
+  const baseUrl =
+    process.env.EDUCANVAS_GATEWAY_URL?.trim() || 'http://127.0.0.1:3200';
+  const { client, conversations: initialConversations } =
+    await establishGatewaySession(baseUrl);
+  if (!command) {
+    const readline = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const conversations = [...initialConversations];
+    let current = conversations[0];
+    if (!current) throw new Error('当前账户没有可访问的 Notebook');
+    process.stdout.write(
+      `EduCanvas TUI · ${current.title ?? '未命名笔记本'}\n` +
+        '输入消息开始对话；/notebooks 查看笔记本，/use <id> 切换，/web 打开 Web，/help 查看命令。\n\n',
+    );
+    try {
+      while (true) {
+        const line = (await readline.question('educanvas> ')).trim();
+        if (!line) continue;
+        if (line === '/quit' || line === '/exit') break;
+        if (line === '/help') {
+          process.stdout.write(
+            '/notebooks · /use <id> · /approvals · /web · /quit\n',
+          );
+          continue;
+        }
+        if (line === '/notebooks') {
+          for (const conversation of conversations) {
+            const active =
+              conversation.conversationId === current.conversationId
+                ? '*'
+                : ' ';
+            process.stdout.write(
+              `${active} ${conversation.conversationId}\t${conversation.title ?? '未命名笔记本'}\n`,
+            );
+          }
+          continue;
+        }
+        if (line.startsWith('/use ')) {
+          current = findConversation(conversations, line.slice(5).trim());
+          process.stdout.write(
+            `已切换到 ${current.title ?? current.conversationId}\n`,
+          );
+          continue;
+        }
+        if (line === '/approvals') {
+          const approvals = await client.listApprovals();
+          if (approvals.length === 0)
+            process.stdout.write('没有待处理审批。\n');
+          for (const approval of approvals) {
+            process.stdout.write(
+              `${approval.approvalId}\t${approval.risk}\t${approval.summary}\n`,
+            );
+          }
+          continue;
+        }
+        if (line === '/web') {
+          const webUrl =
+            process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101';
+          openWeb(webUrl);
+          process.stdout.write(`已打开 ${webUrl}\n`);
+          continue;
+        }
+        for await (const event of client.streamTurn({
+          clientMessageId: `tui:${randomUUID()}`,
+          notebookId: current.notebookId,
+          conversationId: current.conversationId,
+          parts: [{ type: 'text', text: line }],
+        }))
+          renderEvent(event);
+      }
+    } finally {
+      readline.close();
+    }
+    return;
+  }
   if (command === 'conversations') {
-    for (const conversation of await client.listConversations()) {
+    for (const conversation of initialConversations) {
       process.stdout.write(
         `${conversation.conversationId}\t${conversation.membershipRole}\t${conversation.title ?? 'Untitled'}\n`,
       );
@@ -90,10 +180,7 @@ async function main(): Promise<void> {
     const [conversationId, ...messageParts] = args;
     const message = messageParts.join(' ').trim();
     if (!conversationId || !message) usage();
-    const conversation = findConversation(
-      await client.listConversations(),
-      conversationId,
-    );
+    const conversation = findConversation(initialConversations, conversationId);
     for await (const event of client.streamTurn({
       clientMessageId: `tui:${randomUUID()}`,
       notebookId: conversation.notebookId,
