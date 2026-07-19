@@ -158,13 +158,14 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     extractedText: '卷积神经网络可以提取图像特征。',
     outcome: { status: 'ready' },
   });
-  await new dbModule.DrizzlePlatformArtifactRepository().createArtifact({
-    spaceId: conversation.spaceId,
-    trustedSubjectId: conversation.ownerSubjectId,
-    kind: 'mind_map',
-    trustTier: 'tier1',
-    title: '第一本视觉导图',
-  });
+  const firstArtifact =
+    await new dbModule.DrizzlePlatformArtifactRepository().createArtifact({
+      spaceId: conversation.spaceId,
+      trustedSubjectId: conversation.ownerSubjectId,
+      kind: 'mind_map',
+      trustTier: 'tier1',
+      title: '第一本视觉导图',
+    });
 
   await page.reload();
   await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
@@ -182,6 +183,12 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
   studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
   await expect(studio.getByText('第一本视觉导图')).toHaveCount(0);
   await studio.getByRole('button', { name: '关闭' }).click();
+  await expect(
+    page.evaluate(async (artifactId) => {
+      const response = await fetch(`/api/v1/chat/artifacts/${artifactId}`);
+      return response.status;
+    }, firstArtifact.id),
+  ).resolves.toBe(404);
 
   await page
     .getByRole('navigation', { name: '笔记本' })

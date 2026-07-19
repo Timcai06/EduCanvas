@@ -243,7 +243,7 @@ stateDiagram-v2
 3. **M3 来源统一与网页搜索**：Asset/Source/Chunk 单链路、搜索 Provider、最小 Agent Runtime（maxToolRounds 策略 + Tool Registry）；
 4. **M4 音频概览已完成**：勾选来源→脚本→TTS→可恢复音频Artifact；
    **M5视频成本闸门已评估并顺延**（[ADR-0013](docs/09-decisions/0013-video-overview-cost-gate.md)），当前不接入外部生成式视频Provider；
-5. **Notebook聚合纠偏已完成**：一对一`Space + Conversation`对外作为笔记本，Sources与Studio随笔记本整体切换；下一开发项是PR-U4 Canvas共创化，随后推进`/learn`并入统一界面。
+5. **Notebook聚合与Canvas共创已完成**：一对一`Space + Conversation`对外作为笔记本，Sources与Studio整体切换；结构化Canvas可在同一Artifact上追加版本并恢复历史。下一开发项是PR-U5，将`/learn`并入统一界面。
 
 ## 文档入口
 

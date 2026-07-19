@@ -39,6 +39,17 @@ const audioJobParamsSchema = z
   })
   .strict();
 
+const revisionJobParamsSchema = z
+  .object({
+    revision: z
+      .object({
+        baseVersion: z.number().int().min(1),
+        instruction: z.string().trim().min(1).max(2_000),
+      })
+      .strict(),
+  })
+  .strict();
+
 const audioCheckpointSchema = z
   .object({
     kind: z.literal('audio_overview'),
@@ -51,7 +62,10 @@ const audioCheckpointSchema = z
 const AUDIO_GENERATOR = 'model:speech.generate:audio-overview-v1';
 
 class ArtifactGenerationFailure extends Error {
-  constructor(readonly code: string, options?: { cause?: unknown }) {
+  constructor(
+    readonly code: string,
+    options?: { cause?: unknown },
+  ) {
     super(code, options);
     this.name = 'ArtifactGenerationFailure';
   }
@@ -97,13 +111,12 @@ async function appendAudioOverviewVersion(input: {
   }
   let materialized;
   try {
-    materialized = await new DrizzleAssetRepository().materializeOwnedReferences(
-      {
+    materialized =
+      await new DrizzleAssetRepository().materializeOwnedReferences({
         ownerSubjectId: input.subjectId,
         spaceId: input.artifact.spaceId,
         references: params.data.selectedSources,
-      },
-    );
+      });
   } catch (error) {
     if (error instanceof AssetAccessError) {
       throw new ArtifactGenerationFailure('audio_sources_unavailable', {
@@ -148,10 +161,9 @@ async function appendAudioOverviewVersion(input: {
     });
   } catch (error) {
     if (error instanceof ModelGatewayInvocationError) {
-      throw new ArtifactGenerationFailure(
-        `speech_${error.normalized.code}`,
-        { cause: error },
-      );
+      throw new ArtifactGenerationFailure(`speech_${error.normalized.code}`, {
+        cause: error,
+      });
     }
     throw error;
   }
@@ -311,6 +323,22 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       return;
     }
 
+    const revision =
+      Object.keys(job.params).length === 0
+        ? null
+        : revisionJobParamsSchema.safeParse(job.params);
+    if (revision && !revision.success) {
+      await failJob('revision_params_invalid');
+      return;
+    }
+    const baseVersion = revision
+      ? await artifacts.getVersion({
+          artifactId: artifact.id,
+          version: revision.data.revision.baseVersion,
+          trustedSubjectId: payload.subjectId,
+        })
+      : null;
+
     const messages = await turns.listMessages({
       conversationId: artifact.conversationId,
       trustedSubjectId: payload.subjectId,
@@ -326,6 +354,13 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       gateway: resolveStructuredModelGateway(),
       traceId: `artifact:${payload.artifactId}`,
       operationId: payload.jobId,
+      revision:
+        revision && baseVersion
+          ? {
+              instruction: revision.data.revision.instruction,
+              baseContent: baseVersion.content,
+            }
+          : undefined,
     };
     const { content, generatedBy } =
       artifact.kind === 'mind_map'
@@ -340,6 +375,9 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       content,
       generatedBy,
       generationJobId: payload.jobId,
+      expectedLatestVersion: revision
+        ? revision.data.revision.baseVersion
+        : undefined,
     });
     await artifacts.transitionGenerationJob({
       jobId: payload.jobId,

@@ -78,8 +78,9 @@
 
 当前已实现思维导图、Slides、闪卡和音频概览的提议→确认→持久任务→版本→
 Studio恢复。音频二进制不进PostgreSQL；Worker写对象后先保存key/checksum/metadata
-checkpoint，crash重投校验对象后继续append version。仍缺跨轮迭代同一Artifact、
-正式对象删除Outbox与S3兼容生产适配器。
+checkpoint，crash重投校验对象后继续append version。结构化Canvas修改会冻结
+`baseVersion + instruction`到新任务，Worker读取基线版本与Notebook对话后追加不可变版本；
+并发任务或过期基线以冲突拒绝。仍缺正式对象删除Outbox与S3兼容生产适配器。
 
 ## 目标通用对象模型
 

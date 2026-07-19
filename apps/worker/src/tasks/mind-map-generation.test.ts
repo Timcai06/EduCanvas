@@ -6,7 +6,9 @@ import { mindMapContentSchema } from '@educanvas/canvas-protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   MODEL_GENERATOR,
+  MODEL_REVISION_GENERATOR,
   RULE_GENERATOR,
+  RULE_REVISION_GENERATOR,
   generateMindMapContent,
 } from './mind-map-generation';
 
@@ -78,5 +80,63 @@ describe('generateMindMapContent', () => {
         operationId: 'job-1',
       }),
     ).rejects.toThrow('provider down');
+  });
+
+  it('修改轮次把基线内容和修改要求交给模型并标记新版本溯源', async () => {
+    const baseContent = mindMapContentSchema.parse({
+      contentVersion: 1,
+      root: { id: 'root', label: '原导图' },
+    });
+    const generateStructured = vi.fn(
+      async (request: StructuredModelRequest<unknown>) => ({
+        output: request.schema.parse({
+          contentVersion: 1,
+          root: {
+            id: 'root',
+            label: '原导图',
+            children: [{ id: 'cnn', label: '卷积层' }],
+          },
+        }),
+        metadata: {} as never,
+      }),
+    );
+    const result = await generateMindMapContent({
+      title: '原导图',
+      messages,
+      gateway: { generateStructured } as StructuredModelGateway,
+      traceId: 'trace-revision',
+      operationId: 'job-revision',
+      revision: {
+        instruction: '增加卷积层分支',
+        baseContent,
+      },
+    });
+
+    expect(result.generatedBy).toBe(MODEL_REVISION_GENERATOR);
+    const request = generateStructured.mock
+      .calls[0]![0] as StructuredModelRequest<unknown>;
+    expect(request.messages.at(-1)?.content).toContain('增加卷积层分支');
+    expect(request.messages.at(-1)?.content).toContain('当前版本');
+  });
+
+  it('无模型的测试环境也以明确规则溯源追加修改版本', async () => {
+    const result = await generateMindMapContent({
+      title: '原导图',
+      messages,
+      gateway: null,
+      traceId: 'trace-rule-revision',
+      operationId: 'job-rule-revision',
+      revision: {
+        instruction: '增加卷积层分支',
+        baseContent: {
+          contentVersion: 1,
+          root: { id: 'root', label: '原导图' },
+        },
+      },
+    });
+    expect(result.generatedBy).toBe(RULE_REVISION_GENERATOR);
+    expect(result.content.root.children?.[0]?.label).toBe(
+      '修改：增加卷积层分支',
+    );
   });
 });

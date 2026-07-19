@@ -69,6 +69,54 @@ test('Canvas 工具芯片随入口意图进入会话并自动打开本轮产物'
   ).toBeVisible();
 });
 
+test('Canvas 可在同一产物上跨轮生成新版本并查看历史', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
+  await page
+    .getByRole('dialog', { name: '生成思维导图' })
+    .getByRole('button', { name: '开始生成' })
+    .click();
+  await expect(page.getByText('思维导图已生成')).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const versionSelect = canvas.getByRole('combobox', { name: 'Canvas版本' });
+  await expect(versionSelect).toHaveValue('1');
+  await canvas
+    .getByRole('textbox', { name: '告诉 AI 如何修改' })
+    .fill('增加一个关于卷积层的分支');
+  await canvas.getByRole('button', { name: '生成新版本' }).click();
+
+  await expect(versionSelect).toHaveValue('2', { timeout: 30_000 });
+  await expect(
+    canvas
+      .locator('[data-mind-map]')
+      .getByText('修改：增加一个关于卷积层的分支'),
+  ).toBeVisible();
+  await versionSelect.selectOption('1');
+  await expect(canvas.getByText('历史只读版本')).toBeVisible();
+  await expect(
+    canvas.getByRole('textbox', { name: '告诉 AI 如何修改' }),
+  ).toBeDisabled();
+  await expect(
+    canvas
+      .locator('[data-mind-map]')
+      .getByText('修改：增加一个关于卷积层的分支'),
+  ).toHaveCount(0);
+
+  await versionSelect.selectOption('2');
+  await expect(canvas.getByText('当前版本')).toBeVisible();
+  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  await expect(studio.getByText('v2')).toBeVisible();
+});
+
 test('上传从空白入口建立笔记本来源，不把来源伪装成 Composer 工具', async ({
   page,
 }) => {
@@ -79,9 +127,7 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   ).toHaveCount(0);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
-  await expect(
-    page.getByRole('dialog', { name: '添加 PDF' }),
-  ).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '添加 PDF' })).toBeVisible();
   await expect(
     page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
   ).toBeVisible();
@@ -183,9 +229,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   });
 
   await page.reload();
-  await page
-    .getByRole('checkbox', { name: '音频来源讲义.pdf' })
-    .check();
+  await page.getByRole('checkbox', { name: '音频来源讲义.pdf' }).check();
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
   const confirm = page.getByRole('dialog', { name: '生成音频概览' });

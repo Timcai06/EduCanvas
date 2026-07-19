@@ -9,7 +9,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function structuredFixture(schemaPrompt: string): unknown {
+function structuredFixture(schemaPrompt: string, prompt: string): unknown {
   if (schemaPrompt.includes('"script"')) {
     return {
       script:
@@ -34,9 +34,25 @@ function structuredFixture(schemaPrompt: string): unknown {
       ],
     };
   }
+  const revisionInstruction = /修改要求:\s*([\s\S]*?)\n\nNotebook对话记录:/
+    .exec(prompt)?.[1]
+    ?.trim();
   return {
     contentVersion: 1,
-    root: { id: 'root', label: '对话思维导图' },
+    root: {
+      id: 'root',
+      label: '对话思维导图',
+      ...(revisionInstruction
+        ? {
+            children: [
+              {
+                id: 'revision-1',
+                label: `修改：${revisionInstruction.slice(0, 110)}`,
+              },
+            ],
+          }
+        : {}),
+    },
   };
 }
 
@@ -63,6 +79,10 @@ async function startFixtureProvider(): Promise<{
         messages?: Array<{ content?: string }>;
       };
       const schemaPrompt = payload.messages?.at(-1)?.content ?? '';
+      const prompt =
+        payload.messages
+          ?.map((message) => message.content ?? '')
+          .join('\n\n') ?? '';
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(
         JSON.stringify({
@@ -72,7 +92,9 @@ async function startFixtureProvider(): Promise<{
             {
               finish_reason: 'stop',
               message: {
-                content: JSON.stringify(structuredFixture(schemaPrompt)),
+                content: JSON.stringify(
+                  structuredFixture(schemaPrompt, prompt),
+                ),
               },
             },
           ],
