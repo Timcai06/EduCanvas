@@ -7,7 +7,6 @@ import {
   StopCircle,
   X,
 } from '@phosphor-icons/react';
-import { LogoMark } from '@/features/workspace/shared/logo-mark';
 import { useRef, useState } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
 
@@ -141,8 +140,7 @@ export function Composer({
           }`}
         />
         {isLanding ? (
-          <span className="hidden shrink-0 items-center gap-1.5 px-2 font-display text-sm text-ink-muted sm:inline-flex">
-            <LogoMark size={15} />
+          <span className="hidden shrink-0 items-center px-2 font-display text-sm text-ink-muted sm:inline-flex">
             EduCanvas
           </span>
         ) : null}

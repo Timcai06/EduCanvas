@@ -44,7 +44,7 @@ features/chat/               两条产品线共享的对话协议与视图
 features/canvas/             Artifact运行时
 features/workspace/general/  通用Chat工作区
 features/workspace/learning/ K12学习工作区
-features/workspace/shared/   工作区共享品牌、Halo、Sheet与焦点工具
+features/workspace/shared/   工作区共享品牌（印章/墨滴/批改笔迹）、问候、Sheet与焦点工具
 server/gateway/              Web Request 与 gateway.v1/SSE 的兼容投影
 server/identity/             匿名身份边界
 server/http/                 请求、SSE与取消边界

@@ -34,7 +34,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
 
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   /* 产品决策:多模态 Agent 是第一身份,不存在"K12 模式"入口(student-ui-spec) */
   await expect(page.getByRole('link', { name: 'K12 学习模式' })).toHaveCount(0);
@@ -85,7 +85,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   const notebooks = page.getByRole('navigation', { name: '笔记本' });
   await notebooks.getByRole('button', { name: '新建笔记本' }).click();
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
 
   await page
