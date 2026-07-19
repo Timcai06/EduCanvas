@@ -62,13 +62,16 @@
 - 界面零技术术语（不出现 Artifact、Schema、受控组件等字样），老师也不得对学生自称"受控教学智能体"这类内部术语；
 - 表达温度规范：UI 界面元素一律使用 SVG 图标（Phosphor），不用 emoji；老师消息文本不使用 emoji，需要表达情绪时使用轻量颜文字（如 (＾▽＾)、(・ω・)），每条消息至多一处，不堆叠。该约束进入教学系统提示词（turn-answer prompt v4 起）。
 
-## 当前视觉基线（深色 Halo v2）
+## 当前视觉基线（两支笔 v1）
 
-- token 定义在 `apps/web/app/globals.css` 的 `@theme`：深色 `--color-canvas`、分层的 `--color-surface` / `--color-surface-strong`、靛蓝强调色与独立的 good/warn/bad 语义色；
-- `html`声明`color-scheme: dark`，Chat、Canvas与抽屉共用同一套深色语义token；正文和展示字体当前都使用Inter/PingFang等系统无衬线回退；
-- 消息直接落底、输入栏为深灰胶囊、Canvas为深色浮层；组件必须通过token取色，禁止散写色值；
-- S0 使用近黑背景、三层错位低透明度蓝/紫光场与暗部 vignette。渐变和 blur 固定在静态子层，GSAP 只动画 wrapper 的 `transform`/`opacity`；页面 hidden 时暂停、visible 时恢复；`prefers-reduced-motion` 不创建无限 Timeline；移动端隐藏紫色 bloom，只保留静态 haze 与单个动画 core；
-- Halo 是 EduCanvas 自己的视觉实现，只参考“输入优先、暗部包围、无硬边”的质感原则，不复制 Gemini 品牌色值或精确几何参数。自动化快照、动效性能边界与人工复核清单统一维护在[视觉回归与动效验收](../06-quality/visual-regression.md)。
+自有视觉身份「两支笔」取代此前对 Gemini 的视觉模仿（2026-07-19 起，交互结构不变）。核心隐喻是老师批改作业时手边的两支笔，全部色彩取自传统颜料谱系：
+
+- **颜色语义**：黛青（`--color-accent`）是讲课的笔——Agent 标识、链接、常规交互；朱砂（`--color-cinnabar`）是批改的笔——判分笔迹、审批、错误与重点，除品牌印章外不得脱离批改语义使用。good/warn/bad 分别对应松绿、藤黄与朱砂深色；
+- **纸与墨双主题**：亮色是默认的暖纸白（canvas/card/surface 三层纸面 + 低于 5% 的纸纹肌理），深色是「晚自习砚墨」的暖墨黑；`html` 声明 `color-scheme: light dark`，深色只覆写 CSS 变量。组件必须通过 token 取色，禁止散写色值，禁止 `text-white` 这类不随主题走的字色；
+- **排版即品牌**：标题、问候语、品牌与产物标题使用衬线显示字体（`--font-display`，Noto Serif SC），正文保持无衬线；中文行高 1.8，引用以旁注（marginalia：黛青点线 + 衬线小字）形式挂在回答末尾，与行内衬线注号 [n] 对应；
+- **签名元素**：品牌标记是一枚含批改对勾的朱砂印章（`LogoMark`）；助手消息以黛青墨滴（`InkDot`）标识；判分反馈用朱砂笔迹（`GradeMark`，对勾/圈点按笔顺画出）；高掌握度盖朱砂印章（`SealStamp`）。对错含义由字形与文案承载，颜色只做冗余强调；
+- **动效身份「落笔」**：扉页问候逐字落下后朱砂笔触划过（SplitText + DrawSVG）；所有动效走 GSAP 独立 scope、只动 transform/opacity、尊重 `prefers-reduced-motion`。光场（Halo）已移除，不再回归。自动化快照与人工复核清单统一维护在[视觉回归与动效验收](../06-quality/visual-regression.md)；
+- **跨端一致**：TUI 共享同一套语义（黛青/朱砂 ANSI 色、印章扉页、旁注引用、朱砂审批卡），见 `apps/tui/README.md`。
 
 ## 阶段一实现边界
 

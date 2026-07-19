@@ -41,13 +41,13 @@
 - `app/api/v1/assets/route.ts`：校验同源请求和匿名身份，上传或列出当前主体拥有的Asset。
 - `app/api/v1/learn/turn/[turnId]/cancel/route.ts`：学生显式停止当前回答的接口。
 - `app/design-qa/`：受环境闸门保护的设计验收页面，不是生产课程入口。
-- `app/globals.css`：设计 Token、深色主题、Halo、工作区和 Canvas 样式。
+- `app/globals.css`：「两支笔」设计 Token（黛青/朱砂、纸/砚墨双主题）、排版与 Canvas 样式。
 
 ### 学生端功能
 
 - `features/workspace/general/`：通用Chat入口、工作区和建议提示。
 - `features/workspace/learning/`：K12 Chat、Canvas、Rail与抽屉编排。
-- `features/workspace/shared/`：两条工作区复用的品牌、Halo、Sheet和焦点管理。
+- `features/workspace/shared/`：两条工作区复用的品牌印章、批改笔迹、问候、Sheet和焦点管理。
 - `features/chat/chat-panel.tsx`：消息、流式状态、停止和重试界面。
 - `features/chat/use-teaching-turn.ts`：发送请求、消费 SSE、取消与重试状态管理。
 - `features/chat/turn-events.ts` 与 `turn-state.ts`：浏览器 SSE 协议解析和 Turn 状态机。

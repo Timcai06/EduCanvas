@@ -67,7 +67,7 @@ export function FlashcardsRenderer({ content }: { content: unknown }) {
             setFlipped(false);
             setMarks({});
           }}
-          className="inline-flex min-h-10 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex min-h-10 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ArrowCounterClockwise aria-hidden="true" size={16} />
           再来一轮

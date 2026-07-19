@@ -418,7 +418,7 @@ export function AnimationShell({
             type="button"
             onClick={isPlaying ? pause : play}
             aria-label={isPlaying ? '暂停流程' : '播放流程'}
-            className="grid size-11 place-items-center rounded-full bg-accent text-white hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            className="grid size-11 place-items-center rounded-full bg-accent text-card hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           >
             {isPlaying ? (
               <Pause aria-hidden="true" size={20} weight="fill" />

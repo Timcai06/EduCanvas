@@ -5,6 +5,7 @@ import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useCallback, useState, useTransition } from 'react';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
+import { LogoMark } from '../shared/logo-mark';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
@@ -49,7 +50,8 @@ export function GeneralChatEntry() {
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
       <header className="flex h-16 shrink-0 items-center px-4 sm:px-6">
-        <span className="font-display text-base font-semibold tracking-[-0.02em]">
+        <span className="inline-flex items-center gap-2.5 font-display text-base font-semibold">
+          <LogoMark size={20} />
           EduCanvas
         </span>
         <span className="flex-1" />

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -26,15 +26,19 @@ describe('workspace truth and motion boundaries', () => {
     expect(menu).not.toContain('即将开放');
   });
 
-  it('keeps Halo animation on compositor properties and pauses while hidden', () => {
-    const halo = read('features/workspace/shared/ambient-halo.tsx');
+  it('keeps the two-pen identity free of generic AI glow decoration', () => {
+    const globals = read('app/globals.css');
+    const hero = read('features/workspace/shared/hero-greeting.tsx');
 
-    expect(halo).toContain("document.addEventListener('visibilitychange'");
-    expect(halo).toContain('animation.paused(document.hidden)');
-    expect(halo).toContain("'(prefers-reduced-motion: reduce)'");
-    expect(halo).not.toMatch(
-      /^\s+(?:filter|background|backgroundPosition)\s*:\s*['"`]/m,
-    );
-    expect(halo).not.toMatch(/^\s+(?:width|height|top|left)\s*:\s*-?\d/m);
+    /* 「两支笔」身份的硬边界:朱砂/黛青语义 token 存在,光晕与渐变文字不回归 */
+    expect(globals).toContain('--color-cinnabar');
+    expect(globals).toContain('--color-accent');
+    expect(globals).not.toContain('ambient-halo');
+    expect(globals).not.toContain('hero-gradient-text');
+    expect(existsSync(join(WEB_ROOT, 'features/workspace/shared/ambient-halo.tsx'))).toBe(false);
+
+    /* 扉页动效必须尊重 reduced-motion,朱砂笔触只能来自语义 token */
+    expect(hero).toContain("'(prefers-reduced-motion: reduce)'");
+    expect(hero).toContain('var(--color-cinnabar)');
   });
 });

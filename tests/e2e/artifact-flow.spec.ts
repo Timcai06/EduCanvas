@@ -12,7 +12,7 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
 
   /* 入口页经 pending 菜单动作创建对话,工作台挂载后自动打开确认卡 */

@@ -29,7 +29,6 @@ import { Plus } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AmbientHalo } from '../shared/ambient-halo';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
@@ -85,7 +84,6 @@ export function GeneralChatWorkspace({
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const haloWrapRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const flipStateRef = useRef<Flip.FlipState | null>(null);
   const nearBottom = useRef(true);
@@ -258,19 +256,11 @@ export function GeneralChatWorkspace({
       )),
   );
 
-  /* 落地 → 对话:输入坞 Flip 位移,光场沉降为环境底光;reduced-motion 直接跳变。 */
+  /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
     () => {
-      const haloWrap = haloWrapRef.current;
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: no-preference)', () => {
-        if (haloWrap) {
-          gsap.to(haloWrap, {
-            autoAlpha: isLanding ? 1 : 0.24,
-            duration: 0.9,
-            ease: 'power2.inOut',
-          });
-        }
         const flipState = flipStateRef.current;
         if (flipState && !isLanding) {
           flipStateRef.current = null;
@@ -283,7 +273,6 @@ export function GeneralChatWorkspace({
       });
       media.add('(prefers-reduced-motion: reduce)', () => {
         flipStateRef.current = null;
-        if (haloWrap) gsap.set(haloWrap, { autoAlpha: isLanding ? 1 : 0.24 });
       });
       return () => media.revert();
     },
@@ -293,10 +282,8 @@ export function GeneralChatWorkspace({
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
       <header className="z-20 flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
-        <span className="inline-flex items-center gap-2 font-display text-base font-semibold tracking-[-0.02em]">
-          <span className="grid size-8 place-items-center rounded-full bg-accent-soft">
-            <LogoMark size={17} />
-          </span>
+        <span className="inline-flex items-center gap-2.5 font-display text-base font-semibold">
+          <LogoMark size={20} />
           EduCanvas
         </span>
         <span aria-hidden="true" className="h-5 w-px bg-line/80" />
@@ -356,15 +343,6 @@ export function GeneralChatWorkspace({
           ref={mainRef}
           className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          {/* 光场常驻:落地态满亮,对话态沉降为环境底光,避免转场时硬切。 */}
-          <div
-            ref={haloWrapRef}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-          >
-            <AmbientHalo />
-          </div>
-
           {isLanding ? (
             <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
               <HeroGreeting />
