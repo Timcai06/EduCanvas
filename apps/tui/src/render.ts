@@ -19,8 +19,9 @@ export function toolLabel(tool: string): string {
   return TOOL_LABELS[tool] ?? tool;
 }
 
+/* 工具行使用树形连接线：把 Agent 行为挂在回答的页边，与引用旁注(┊)同列。 */
 export function renderToolStarted(theme: TuiTheme, tool: string): string {
-  return theme.dim(`  ⚙ ${toolLabel(tool)}…`);
+  return theme.dim('  ├─ ') + theme.dai('⚙') + theme.dim(` ${toolLabel(tool)}…`);
 }
 
 export function renderToolCompleted(
@@ -29,7 +30,13 @@ export function renderToolCompleted(
   seconds: number | null,
 ): string {
   const elapsed = seconds !== null ? ` · ${seconds.toFixed(1)}s` : '';
-  return theme.dim(`  ⚙ ${toolLabel(tool)} `) + theme.good('✓') + theme.dim(elapsed);
+  return (
+    theme.dim('  ├─ ') +
+    theme.dai('⚙') +
+    theme.dim(` ${toolLabel(tool)} `) +
+    theme.good('✓') +
+    theme.dim(elapsed)
+  );
 }
 
 export function renderToolFailed(
@@ -39,8 +46,26 @@ export function renderToolFailed(
 ): string {
   const hint = retryable ? '（会自动重试）' : '';
   return (
-    theme.dim(`  ⚙ ${toolLabel(tool)} `) + theme.zhusha(`✗ 失败${hint}`)
+    theme.dim('  ├─ ') +
+    theme.dai('⚙') +
+    theme.dim(` ${toolLabel(tool)} `) +
+    theme.zhusha(`✗ 失败${hint}`)
   );
+}
+
+/** 产物生成进度：▰▰▰▱▱ 条 + 百分比，用于 artifact.generation_progress。 */
+export function renderProgressBar(
+  theme: TuiTheme,
+  ratio: number,
+  label: string,
+  width = 14,
+): string {
+  const clamped = Math.min(1, Math.max(0, ratio));
+  const filled = Math.round(clamped * width);
+  const bar =
+    theme.dai('▰'.repeat(filled)) + theme.dim('▱'.repeat(width - filled));
+  const percent = `${Math.round(clamped * 100)}%`.padStart(4);
+  return theme.dim('  ├─ ') + theme.dai('▣') + theme.dim(` ${label} `) + bar + theme.dim(percent);
 }
 
 /** 引用旁注：与 Web 端 marginalia 同语义；有注号时与正文 [n] 对应。 */
@@ -111,7 +136,8 @@ export interface ApprovalCardInfo {
 }
 
 /**
- * 朱砂审批卡：对话流里唯一使用框线的对象——框线本身就是「请停下来看」。
+ * 朱砂审批卡：对话流里唯一使用框线的对象——重线框（┏━┓）本身就是
+ * 「请停下来看」。标题落在反白朱砂块上，操作行有明确按键提示。
  * 宽度自适应终端并按显示宽度对齐，CJK 混排不会画歪。
  */
 export function renderApprovalCard(
@@ -122,9 +148,16 @@ export function renderApprovalCard(
   const cardWidth = Math.max(30, Math.min(width - 2, 62));
   const innerWidth = cardWidth - 4;
   const border = (value: string) => theme.zhusha(value);
-  const head = ' 朱砂 · 需要你确认 ';
-  /* 头行总宽 = ╭(1) + 标题 + 填充 + ╮(1)，与 body 行的 cardWidth 对齐 */
-  const headTail = Math.max(2, cardWidth - stringWidth(head) - 2);
+  const headLabel = '需要你确认';
+  const head = theme.enabled
+    ? theme.seal(headLabel)
+    : `【${headLabel}】`;
+  /* 头行总宽 = ┏(1) + ━(1) + 章面 + 填充 + ┓(1)，与 body 行的 cardWidth 对齐；
+     反白章面两侧各垫 1 空格(宽 2)，无色降级的全角【】共宽 4 */
+  const headTail = Math.max(
+    2,
+    cardWidth - stringWidth(headLabel) - (theme.enabled ? 2 : 4) - 3,
+  );
   const expires = new Date(approval.expiresAt);
   const expiresLabel = Number.isNaN(expires.getTime())
     ? approval.expiresAt
@@ -139,11 +172,11 @@ export function renderApprovalCard(
   const rows = bodyLines.flatMap((line) => wrapToWidth(line, innerWidth));
 
   return [
-    border(`╭${head}${'─'.repeat(headTail)}╮`),
+    border(`┏━`) + head + border(`${'━'.repeat(headTail)}┓`),
     ...rows.map(
-      (line) => `${border('│')} ${padToWidth(line, innerWidth)} ${border('│')}`,
+      (line) => `${border('┃')} ${padToWidth(line, innerWidth)} ${border('┃')}`,
     ),
-    border(`╰${'─'.repeat(cardWidth - 2)}╯`),
+    border(`┗${'━'.repeat(cardWidth - 2)}┛`),
   ].join('\n');
 }
 

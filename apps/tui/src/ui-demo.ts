@@ -6,6 +6,7 @@ import {
   renderCitation,
   renderCompletion,
   renderFailure,
+  renderProgressBar,
   renderToolCompleted,
   renderToolFailed,
   renderToolStarted,
@@ -14,36 +15,38 @@ import type { TuiTheme } from './theme';
 
 /**
  * `educanvas ui-demo`：不连 Gateway 的界面全状态走查，供设计 QA 与
- * 终端兼容性检查（宽窄终端、NO_COLOR、不同主题）使用。
- * 数据全部是显式虚构的示例，不代表任何真实会话。
+ * 终端兼容性检查使用。可用 EDUCANVAS_FORCE_COLOR=truecolor|ansi256|ansi16|none
+ * 强制色深，检查渐变与无色降级；数据全部是显式虚构的示例。
  */
 export function runUiDemo(theme: TuiTheme, width: number): void {
   const write = (value = '') => process.stdout.write(`${value}\n`);
+  const section = (label: string) =>
+    write(`\n${theme.dim('──')} ${theme.bold(label)} ${theme.dim('──')}\n`);
 
   write(
     renderBanner(theme, width, {
       title: '分数运算（示例）',
-      detailLines: ['直接输入问题开始对话', '/help 查看命令 · /web 打开网页端'],
+      detailLines: ['12 条来源 · 3 件产物 · 上次学到「通分」', '直接输入问题开始对话 · /help 查看命令'],
     }),
   );
 
+  section('问答与引用');
   write(`${theme.dai('✎')} 什么是分数的通分？`);
   write();
   write('通分就是把两个分母不同的分数，改写成分母相同的分数，');
   write('这样才能直接比较大小或相加减。关键是先找到两个分母的');
   write('最小公倍数 [1]。');
   write(renderCitation(theme, '《分数》第 2 节', 1));
-  write();
+  write(renderCompletion(theme, width, 3.2));
 
-  write(theme.dim('工具活动（进行中 → 完成 → 失败）：'));
+  section('Agent 行为（工具 / 产物进度）');
   write(renderToolStarted(theme, 'web_search'));
   write(renderToolCompleted(theme, 'web_search', 1.2));
   write(renderToolFailed(theme, 'web_page', true));
-  write();
+  write(renderProgressBar(theme, 0.35, '生成产物'));
+  write(renderProgressBar(theme, 1, '生成产物') + ` ${theme.good('✓')}`);
 
-  write(renderCompletion(theme, width, 3.2));
-  write();
-
+  section('朱砂审批');
   write(
     renderApprovalCard(theme, width, {
       approvalId: 'approval-demo-1',
@@ -63,14 +66,17 @@ export function runUiDemo(theme: TuiTheme, width: number): void {
       expiresAt: new Date().toISOString(),
     }),
   );
-  write();
 
-  write(theme.dim('失败与恢复：'));
+  section('失败与恢复');
   write(renderFailure(theme, 'RATE_LIMITED'));
   write(renderFailure(theme, 'UNAUTHENTICATED'));
-  write();
-  write(`${theme.good('✓')} 「分数通分」已掌握 ${theme.seal('通')}`);
-  write();
+
+  section('掌握时刻');
+  write(`  ${theme.good('✓')} 「分数通分」已掌握 ${theme.seal('通')}`);
+
+  section('窄终端扉页（40 列降级）');
+  write(renderBanner(theme, 40, { title: '分数运算（示例）' }));
+
   write(renderRule(theme, width - 1));
   write(theme.dim('以上为 ui-demo 示例输出，未连接 Gateway。'));
 }

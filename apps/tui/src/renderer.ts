@@ -4,6 +4,7 @@ import {
   renderCitation,
   renderCompletion,
   renderFailure,
+  renderProgressBar,
   renderToolCompleted,
   renderToolFailed,
   renderToolStarted,
@@ -31,6 +32,8 @@ export class TurnRenderer {
   private toolStartedAt = new Map<string, number>();
   private activeToolCallId: string | null = null;
   private activeTool: string | null = null;
+  private progressActive = false;
+  private lastProgress = 0;
   private startedAt: number | null = null;
   /** 本轮出现过的审批请求，供 REPL 在回合结束后接手处理。 */
   readonly pendingApprovals: GatewayOperationEvent[] = [];
@@ -49,12 +52,17 @@ export class TurnRenderer {
     }
   }
 
-  /** 工具行还在 spinner 状态时，先把它固化成「进行中」的静态行。 */
+  /** 工具/进度行还在 spinner 状态时，先把它固化成静态行再输出后续内容。 */
   private settleActiveTool(): void {
     if (this.activeTool !== null) {
       this.spinner.stop(renderToolStarted(this.theme, this.activeTool));
       this.activeTool = null;
       this.activeToolCallId = null;
+    } else if (this.progressActive) {
+      this.spinner.stop(
+        renderProgressBar(this.theme, this.lastProgress, '生成产物'),
+      );
+      this.progressActive = false;
     } else {
       this.spinner.stop(null);
     }
@@ -174,8 +182,50 @@ export class TurnRenderer {
         );
         break;
       }
+      case 'artifact.proposed': {
+        this.settleActiveTool();
+        this.breakTextLine();
+        this.io.err.write(
+          `${this.theme.dim('  ├─ ')}${this.theme.dai('▣')}${this.theme.dim(` 产物提案 · ${event.title}`)}\n`,
+        );
+        break;
+      }
+      case 'artifact.generation_progress': {
+        if (!this.progressActive) {
+          this.settleActiveTool();
+          this.breakTextLine();
+        }
+        this.lastProgress = event.progress;
+        this.spinner.start(
+          renderProgressBar(this.theme, event.progress, '生成产物'),
+        );
+        this.progressActive = true;
+        break;
+      }
+      case 'artifact.version_added': {
+        if (this.progressActive) {
+          this.spinner.stop(
+            renderProgressBar(this.theme, 1, '生成产物') +
+              ` ${this.theme.good('✓')}`,
+          );
+          this.progressActive = false;
+        }
+        break;
+      }
+      case 'artifact.failed': {
+        this.settleActiveTool();
+        if (this.progressActive) {
+          this.spinner.stop(null);
+          this.progressActive = false;
+        }
+        this.breakTextLine();
+        this.io.err.write(
+          `${this.theme.dim('  ├─ ')}${this.theme.zhusha('✗ 产物生成失败，可稍后从产物列表重试')}\n`,
+        );
+        break;
+      }
       default:
-        /* artifact.* 等事件当前在 TUI 无对应 UI，静默即可（不伪装成完成）。 */
+        /* message.started 等事件当前在 TUI 无对应 UI，静默即可（不伪装成完成）。 */
         break;
     }
   }

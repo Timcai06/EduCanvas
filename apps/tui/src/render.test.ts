@@ -10,8 +10,27 @@ import {
 import { stringWidth, stripAnsi } from './text';
 import { createTheme } from './theme';
 
-const color = createTheme({ isTTY: true, noColor: false, term: 'xterm' });
-const plain = createTheme({ isTTY: false, noColor: true, term: undefined });
+const color = createTheme({
+  isTTY: true,
+  noColor: false,
+  term: 'xterm',
+  colorterm: undefined,
+  forceDepth: undefined,
+});
+const truecolor = createTheme({
+  isTTY: true,
+  noColor: false,
+  term: 'xterm-256color',
+  colorterm: 'truecolor',
+  forceDepth: undefined,
+});
+const plain = createTheme({
+  isTTY: false,
+  noColor: true,
+  term: undefined,
+  colorterm: undefined,
+  forceDepth: undefined,
+});
 
 describe('theme degradation', () => {
   it('emits no escape codes when colors are unavailable', () => {
@@ -44,9 +63,14 @@ describe('approval card', () => {
 
   it('adapts to narrow terminals without breaking the frame', () => {
     const lines = stripAnsi(renderApprovalCard(plain, 34, approval)).split('\n');
-    expect(lines[0]!.startsWith('╭')).toBe(true);
-    expect(lines.at(-1)!.startsWith('╰')).toBe(true);
+    expect(lines[0]!.startsWith('┏')).toBe(true);
+    expect(lines.at(-1)!.startsWith('┗')).toBe(true);
     expect(Math.max(...lines.map(stringWidth))).toBeLessThanOrEqual(34);
+  });
+
+  it('keeps colored card rows aligned with the reverse-video header', () => {
+    const lines = stripAnsi(renderApprovalCard(color, 80, approval)).split('\n');
+    expect(new Set(lines.map(stringWidth)).size).toBe(1);
   });
 
   it('tells the user how to respond', () => {
@@ -57,22 +81,37 @@ describe('approval card', () => {
 });
 
 describe('banner', () => {
-  it('renders the seal banner on wide terminals', () => {
+  it('renders the block wordmark with solid seal on wide terminals', () => {
     const banner = stripAnsi(
-      renderBanner(color, 90, { title: '分数运算', detailLines: ['提示'] }),
+      renderBanner(truecolor, 90, { title: '分数运算', detailLines: ['提示'] }),
     );
-    expect(banner).toContain('EduCanvas');
+    /* 块体字标存在(E 的顶行)且标题、详情齐全 */
+    expect(banner).toContain('█▀▀▀');
     expect(banner).toContain('分数运算');
+    expect(banner).toContain('提示');
+  });
+
+  it('falls back to the outline seal at medium widths', () => {
+    const banner = stripAnsi(renderBanner(plain, 54, { title: '分数运算' }));
     expect(banner).toContain('▛▀▀▀▜');
+    expect(banner).toContain('EduCanvas');
+    expect(banner).not.toContain('█▀▀▀');
   });
 
   it('drops decoration before information on narrow terminals', () => {
     const banner = stripAnsi(renderBanner(color, 40, { title: '分数运算' }));
     expect(banner).not.toContain('▛');
+    expect(banner).not.toContain('█▀▀▀');
     expect(banner).toContain('EduCanvas');
     for (const line of banner.split('\n')) {
       expect(stringWidth(line)).toBeLessThanOrEqual(40);
     }
+  });
+
+  it('keeps gradient sequences out of low-depth terminals', () => {
+    expect(color.daiGradient('x', 0.5)).not.toContain('38;2;');
+    expect(truecolor.daiGradient('x', 0.5)).toContain('38;2;');
+    expect(plain.daiGradient('x', 0.5)).toBe('x');
   });
 });
 
