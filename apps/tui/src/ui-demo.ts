@@ -1,5 +1,7 @@
 import process from 'node:process';
 import { renderBanner, renderRule } from './banner';
+import { renderHome } from './home';
+import { renderInputFrame, SLASH_COMMANDS } from './input-model';
 import {
   renderApprovalCard,
   renderApprovalListItem,
@@ -23,6 +25,39 @@ export function runUiDemo(theme: TuiTheme, width: number): void {
   const section = (label: string) =>
     write(`\n${theme.dim('──')} ${theme.bold(label)} ${theme.dim('──')}\n`);
 
+  section('产品首页');
+  write(
+    renderHome(theme, width, {
+      gatewayUrl: 'http://127.0.0.1:3200',
+      connected: true,
+      notebooks: [
+        { conversationId: 'demo-1', title: '分数运算（示例）' },
+        { conversationId: 'demo-2', title: '光合作用（示例）' },
+      ],
+      activeConversationId: 'demo-1',
+      pendingApprovals: 1,
+    }),
+  );
+
+  section('输入框（空 / 输入中 / 斜杠补全）');
+  const inputStates = [
+    { value: '', cursor: 0, suggestions: [] as typeof SLASH_COMMANDS },
+    { value: '为什么天空是蓝色的？', cursor: 10, suggestions: [] as typeof SLASH_COMMANDS },
+    { value: '/app', cursor: 4, suggestions: SLASH_COMMANDS.filter((c) => c.name.startsWith('/app')) },
+  ];
+  for (const state of inputStates) {
+    const frame = renderInputFrame(theme, width, {
+      value: state.value,
+      cursor: state.cursor,
+      placeholder: '输入问题，/ 呼出命令',
+      statusLine: '分数运算（示例） · ● 已连接 · 1 项待审批',
+      suggestions: state.suggestions,
+    });
+    for (const line of frame.lines) write(line);
+    write();
+  }
+
+  section('切换笔记本扉页');
   write(
     renderBanner(theme, width, {
       title: '分数运算（示例）',
