@@ -134,6 +134,27 @@
       "when": 1784374519264,
       "tag": "0018_married_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784435237489,
+      "tag": "0019_good_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784438201375,
+      "tag": "0020_giant_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784438507375,
+      "tag": "0021_brief_red_wolf",
+      "breakpoints": true
     }
   ]
 }

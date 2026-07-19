@@ -10,8 +10,11 @@ import { ModelGatewayConfigurationError } from '@educanvas/model-gateway';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
-import { beginOwnedTeachingTurn } from '@/server/teaching/learning-turn';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import { beginTeachingGatewayTurn } from '@/server/gateway/teaching-turn';
+import {
+  isTrustedSameOriginWrite,
+  jsonError,
+} from '@/server/http/request-security';
 import { createSseEventStream, sseResponse } from '@/server/http/sse';
 import {
   parseTeachingTurnRequest,
@@ -53,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const body = await parseTeachingTurnRequest(request);
-    const turn = await beginOwnedTeachingTurn(identity, body);
+    const turn = await beginTeachingGatewayTurn(identity, body);
     return sseResponse(createTeachingTurnEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {

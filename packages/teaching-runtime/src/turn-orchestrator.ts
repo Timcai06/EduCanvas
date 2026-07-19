@@ -3,18 +3,12 @@ import {
   type ModelAbortSignal,
   type ModelMessage,
   type ModelToolDefinition,
-  type ModelToolResult,
   type NormalizedModelError,
   type ProviderCallMetadata,
-  type StreamTurnTextRequest,
   type TurnModelEvent,
   type TurnModelGateway,
 } from '@educanvas/agent-core';
-import {
-  isAborted,
-  validateModelRun,
-  type ModelRunResult,
-} from '@educanvas/agent-runtime';
+import { AgentLoopEngine } from '@educanvas/agent-runtime';
 import {
   teachingStateSchema,
   type TeachingState,
@@ -42,7 +36,6 @@ export const TEACHING_TURN_SYNTHESIS_PROMPT_VERSION =
 
 /** @deprecated 使用 TEACHING_TURN_ANSWER_PROMPT_VERSION。 */
 export const TEACHING_TURN_PROMPT_VERSION = TEACHING_TURN_ANSWER_PROMPT_VERSION;
-
 
 const trustedSessionSnapshotSchema = z
   .object({
@@ -175,7 +168,6 @@ export interface TeachingTurnAnswerPromptInput {
   studentMessage: string;
 }
 
-
 const summarizeFailure = (
   failure: ToolExecutionFailure,
 ): TeachingTurnToolFailure => ({
@@ -184,7 +176,6 @@ const summarizeFailure = (
   code: failure.code,
   retryable: failure.retryable,
 });
-
 
 /**
  * 学生文本始终使用独立 user 消息，不能改变 system 约束。
@@ -273,7 +264,6 @@ export function createTeachingTurnAnswerPromptMaterial(
   };
 }
 
-
 /**
  * 正常教学 Turn 的唯一 Orchestrator。圈数由策略而非拓扑决定(M3):
  * - 每圈 = 一次 answer 运行,模型可请求工具;无工具请求则该圈文本即最终回答;
@@ -314,225 +304,127 @@ export class TeachingTurnOrchestrator {
       this.toolExecutor.listModelTools(command.session.state),
     );
 
-    const accumulatedResults: ModelToolResult[] = [];
-    let textCharacters = 0;
-    let hadAnyText = false;
-    let run = 0;
-
-    for (let round = 1; round <= this.maxToolRounds; round += 1) {
-      run += 1;
-      const roundRequest: StreamTurnTextRequest = {
-        ...answerPromptMaterial,
-        toolResults: accumulatedResults,
-        traceId: command.traceId,
-        turnId: command.turnId,
-        signal: options.signal,
-      };
-      const iterator = validateModelRun(
-        this.modelGateway,
-        roundRequest,
-        textCharacters,
-      )[Symbol.asyncIterator]();
-      let outcome: ModelRunResult;
-      /* 跨圈文本以空行衔接(ADR-0011 的推广:每圈前导文本都是回答的一段) */
-      let roundSeparatorPending = hadAnyText;
-      while (true) {
-        const step = await iterator.next();
-        if (step.done === true) {
-          outcome = step.value;
-          break;
-        }
-        if (roundSeparatorPending && step.value.type === 'text_delta') {
-          roundSeparatorPending = false;
-          yield {
-            type: 'model',
-            run,
-            event: { type: 'text_delta', phase: 'answer', delta: '\n\n' },
+    type ToolFailure = {
+      code: 'TOOL_CALL_REJECTED' | 'TOOL_EXECUTION_FAILED';
+      failures: readonly TeachingTurnToolFailure[];
+    };
+    const loop = new AgentLoopEngine(this.modelGateway);
+    const toolExecutor = this.toolExecutor;
+    for await (const event of loop.stream<ToolExecutionSuccess, ToolFailure>({
+      traceId: command.traceId,
+      turnId: command.turnId,
+      answer: answerPromptMaterial,
+      synthesis: {
+        taskAlias: TEACHING_TURN_TASK_ALIAS,
+        modelAlias: TEACHING_TURN_MODEL_ALIAS,
+        promptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
+        messages: buildSynthesisMessages(command),
+      },
+      maxToolRounds: this.maxToolRounds,
+      signal: options.signal,
+      async executeTools(calls, context) {
+        let batch;
+        try {
+          batch = await toolExecutor.executeBatch(
+            calls.map((call) => ({
+              rawCall: { tool: call.tool, arguments: call.arguments },
+              context: {
+                traceId: command.traceId,
+                turnId: command.turnId,
+                executionId:
+                  context.round === 1
+                    ? `${command.session.id}:${command.turnId}:${call.callId}`
+                    : `${command.session.id}:${command.turnId}:r${context.round}:${call.callId}`,
+                studentId: command.session.studentId,
+                sessionId: command.session.id,
+                knowledgeNodeId: command.session.knowledgeNodeId,
+                state: command.session.state,
+                invoker: 'model' as const,
+              },
+            })),
+          );
+        } catch {
+          return {
+            ok: false as const,
+            failure: { code: 'TOOL_EXECUTION_FAILED' as const, failures: [] },
           };
         }
-        yield { type: 'model', run, event: step.value };
-      }
-      if (!outcome.ok) {
-        yield { type: 'failed', code: outcome.code, error: outcome.error };
-        return;
-      }
-      hadAnyText = hadAnyText || outcome.hadText;
-      textCharacters = outcome.textCharacters;
-
-      if (outcome.toolCalls.length === 0) {
+        if (!batch.accepted) {
+          return {
+            ok: false as const,
+            failure: {
+              code: 'TOOL_CALL_REJECTED' as const,
+              failures: batch.rejections.map(summarizeFailure),
+            },
+          };
+        }
+        const failures = batch.results.filter(
+          (result): result is ToolExecutionFailure => !result.ok,
+        );
+        if (failures.length > 0) {
+          return {
+            ok: false as const,
+            failure: {
+              code: 'TOOL_EXECUTION_FAILED' as const,
+              failures: failures.map(summarizeFailure),
+            },
+          };
+        }
+        const successes = batch.results.filter(
+          (result): result is ToolExecutionSuccess => result.ok,
+        );
+        return {
+          ok: true as const,
+          results: successes.map((result, index) => {
+            const call = calls[index]!;
+            return {
+              call,
+              modelResult: {
+                callId: call.callId,
+                tool: result.tool,
+                arguments: call.arguments,
+                output: result.output,
+              },
+              detail: result,
+            };
+          }),
+        };
+      },
+    })) {
+      if (event.type === 'model') {
+        yield { type: 'model', run: event.run, event: event.event };
+      } else if (event.type === 'tool.result') {
+        yield {
+          type: 'tool_result',
+          callId: event.result.call.callId,
+          result: event.result.detail,
+        };
+      } else if (event.type === 'completed') {
         yield {
           type: 'completed',
           traceId: command.traceId,
           turnId: command.turnId,
-          modelRunCount: run,
+          modelRunCount: event.modelRunCount,
           stateDecision: {
             kind: 'STAY',
             from: command.session.state,
             to: command.session.state,
             reason:
-              run === 1 ? 'DIRECT_RESPONSE' : 'NO_TRUSTED_TRANSITION_SIGNAL',
+              event.modelRunCount === 1
+                ? 'DIRECT_RESPONSE'
+                : 'NO_TRUSTED_TRANSITION_SIGNAL',
           },
         };
-        return;
-      }
-
-      if (isAborted(options.signal)) {
+      } else if (event.type === 'failed') {
+        yield { type: 'failed', code: event.code, error: event.error };
+      } else if (event.type === 'tool.failed') {
         yield {
           type: 'failed',
-          code: 'MODEL_ABORTED',
-          error: { code: 'aborted', retryable: false },
+          code: event.failure.code,
+          failures: event.failure.failures,
         };
-        return;
       }
-
-      let batch;
-      try {
-        batch = await this.toolExecutor.executeBatch(
-          outcome.toolCalls.map((call) => ({
-            rawCall: { tool: call.tool, arguments: call.arguments },
-            context: {
-              traceId: command.traceId,
-              turnId: command.turnId,
-              /* 圈号进入 executionId 防跨圈 callId 复用;首圈保持历史格式 */
-              executionId:
-                round === 1
-                  ? `${command.session.id}:${command.turnId}:${call.callId}`
-                  : `${command.session.id}:${command.turnId}:r${round}:${call.callId}`,
-              studentId: command.session.studentId,
-              sessionId: command.session.id,
-              knowledgeNodeId: command.session.knowledgeNodeId,
-              state: command.session.state,
-              invoker: 'model' as const,
-            },
-          })),
-        );
-      } catch {
-        yield { type: 'failed', code: 'TOOL_EXECUTION_FAILED', failures: [] };
-        return;
-      }
-
-      if (!batch.accepted) {
-        yield {
-          type: 'failed',
-          code: 'TOOL_CALL_REJECTED',
-          failures: batch.rejections.map(summarizeFailure),
-        };
-        return;
-      }
-
-      for (const [index, result] of batch.results.entries()) {
-        const call = outcome.toolCalls[index];
-        if (call === undefined) {
-          yield {
-            type: 'failed',
-            code: 'INVALID_MODEL_STREAM',
-            error: { code: 'invalid_response', retryable: false },
-          };
-          return;
-        }
-        yield { type: 'tool_result', callId: call.callId, result };
-      }
-
-      const failures = batch.results.filter(
-        (result): result is ToolExecutionFailure => !result.ok,
-      );
-      if (failures.length > 0) {
-        yield {
-          type: 'failed',
-          code: 'TOOL_EXECUTION_FAILED',
-          failures: failures.map(summarizeFailure),
-        };
-        return;
-      }
-
-      if (isAborted(options.signal)) {
-        yield {
-          type: 'failed',
-          code: 'MODEL_ABORTED',
-          error: { code: 'aborted', retryable: false },
-        };
-        return;
-      }
-
-      const successes = batch.results.filter(
-        (result): result is ToolExecutionSuccess => result.ok,
-      );
-      if (successes.length !== outcome.toolCalls.length) {
-        yield { type: 'failed', code: 'TOOL_EXECUTION_FAILED', failures: [] };
-        return;
-      }
-      const roundCalls = outcome.toolCalls;
-      accumulatedResults.push(
-        ...successes.map((result, index) => ({
-          callId: roundCalls[index]?.callId ?? 'invalid-call',
-          tool: result.tool,
-          arguments: roundCalls[index]?.arguments ?? null,
-          output: result.output,
-        })),
-      );
     }
-
-    /* 圈数耗尽:强制无工具 synthesis 收束 */
-    run += 1;
-    const synthesisRequest: StreamTurnTextRequest = {
-      taskAlias: TEACHING_TURN_TASK_ALIAS,
-      modelAlias: TEACHING_TURN_MODEL_ALIAS,
-      phase: 'synthesis',
-      messages: buildSynthesisMessages(command),
-      tools: [],
-      toolResults: accumulatedResults,
-      promptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
-      traceId: command.traceId,
-      turnId: command.turnId,
-      signal: options.signal,
-    };
-    const synthesisIterator = validateModelRun(
-      this.modelGateway,
-      synthesisRequest,
-      textCharacters,
-    )[Symbol.asyncIterator]();
-    let synthesis: ModelRunResult;
-    let separatorPending = hadAnyText;
-    while (true) {
-      const step = await synthesisIterator.next();
-      if (step.done === true) {
-        synthesis = step.value;
-        break;
-      }
-      if (separatorPending && step.value.type === 'text_delta') {
-        separatorPending = false;
-        yield {
-          type: 'model',
-          run,
-          event: { type: 'text_delta', phase: 'synthesis', delta: '\n\n' },
-        };
-      }
-      yield { type: 'model', run, event: step.value };
-    }
-    if (!synthesis.ok) {
-      yield { type: 'failed', code: synthesis.code, error: synthesis.error };
-      return;
-    }
-    if (synthesis.toolCalls.length > 0) {
-      yield {
-        type: 'failed',
-        code: 'INVALID_MODEL_STREAM',
-        error: { code: 'invalid_response', retryable: false },
-      };
-      return;
-    }
-    yield {
-      type: 'completed',
-      traceId: command.traceId,
-      turnId: command.turnId,
-      modelRunCount: run,
-      stateDecision: {
-        kind: 'STAY',
-        from: command.session.state,
-        to: command.session.state,
-        reason: 'NO_TRUSTED_TRANSITION_SIGNAL',
-      },
-    };
   }
 
   /**

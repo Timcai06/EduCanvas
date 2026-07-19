@@ -18,13 +18,18 @@
 
 ### 通用平台主干
 
+- `platform_users / personal_agents`：正式/匿名兼容主体与当前一人一Agent映射；
 - `spaces`：Assets、Conversations与未来Artifacts的所有权和生命周期容器；
 - `conversations`：Chat主叙事线程与Agent Profile选择，不包含课程或掌握度字段；
-- `agent_operations`：通用Turn/Artifact Generation操作信封；
+- `notebook_memberships / delegated_grants`：私人/共享Notebook角色及可到期、撤销的委托授权；
+- `agent_operations`：通用Turn/Artifact Generation/Gateway操作信封，保存Actor、Agent、Notebook、Conversation、请求指纹和终态；
+- `gateway_operation_events / gateway_approvals`：可按sequence恢复的标准事件与主体范围审批；
+- `gateway_channel_* / gateway_deliveries`：渠道账号/线程绑定和出站投递回执；
+- `gateway_node_pairings / gateway_node_invocations`：Node配对、心跳、撤销、调用和结果；
 - `conversation_messages`：可脱离K12持久化和恢复的通用消息骨架；
 - `lesson_sessions.conversation_id`：K12 Vertical Context到通用Conversation的关联。0011迁移为旧会话回填同ID Space/Conversation，新会话在同一事务双写。
 
-当前仍处additive migration：生产K12 Turn继续使用`chat_messages/model_runs`，通用消息尚未承载SSE、工具、Message Parts与Model Run。不得删除旧表或宣称迁移完成。
+Gateway Operation 与通用/K12 Turn 复用同一个operation/turn ID，不创建平行运行账本。K12仍使用`chat_messages/model_runs`保存教育纵切的详细模型与工具事实，这是兼容领域投影；在删除旧表前仍须保持additive migration和回放等价。
 
 ### K12垂直领域
 
@@ -82,14 +87,20 @@ checkpoint，crash重投校验对象后继续append version。结构化Canvas修
 `baseVersion + instruction`到新任务，Worker读取基线版本与Notebook对话后追加不可变版本；
 并发任务或过期基线以冲突拒绝。仍缺正式对象删除Outbox与S3兼容生产适配器。
 
-## 目标通用对象模型
+## 当前通用对象模型
 
 ```text
-Space / Notebook
+User ── owns ── Personal Agent
+  ├── Private Memory / Credentials / Node Grants
+  └── Notebook Memberships
+
+Space / Notebook (private or shared)
+├── Owner / Memberships / Role Grants
 ├── Conversations
 │   ├── Messages
 │   │   └── MessageParts
 │   └── Operations
+│       ├── Actor User / Personal Agent
 │       ├── ModelRuns
 │       └── ToolCalls
 ├── Assets
@@ -103,15 +114,15 @@ Space / Notebook
     └── K12 LessonSession / Mastery / TrustedEvents
 ```
 
-### 迁移原则
+### 已完成的迁移与后续原则
 
-1. 新增`spaces`与`conversations`，为现有lesson session回填默认Space和Conversation；
-2. 新旧外键采用additive migration和兼容读，验证完成后再收紧约束；
-3. `lesson_sessions`改为K12 Vertical Context，关联Conversation但不再拥有通用消息；
-4. 消息角色迁移为`user/assistant/tool/system`，展示层由Vertical Agent决定“学生/老师”等名称；
-5. `model_runs.operation_kind/phase`允许通用Turn、Artifact Generation和后续任务，但仍用严格业务枚举/Schema；
-6. AssetVersion成为Source、Representation、Chunk和Provider文件引用的统一根，不维护平行内容副本；
-7. Artifact Proposal、确认、生成和版本分别持久化，不把额外模型调用塞进原Teaching Turn。
+1. 已新增`spaces/conversations`并为现有lesson session回填默认Space/Conversation；
+2. 已新增 User、Personal Agent、Notebook Membership、Delegated Grant 与Gateway账本；共享Operation保存Actor User与Agent；
+3. 已用additive迁移保持K12账本、通用消息和Gateway事件兼容；收紧或删除旧表前必须继续做回放/归属验证；
+4. `lesson_sessions`继续作为K12 Vertical Context并关联Conversation，不成为通用Gateway的父实体；
+5. 私人Memory、Credential与Node Pairing以个人Agent/User为父实体，不因Notebook Membership自动共享；
+6. 后续让AssetVersion成为Source、Representation、Chunk和Provider文件引用的统一根，不维护平行内容副本；
+7. Artifact Proposal、确认、生成和版本继续分别持久化，不把额外模型调用塞进Teaching Turn。
 
 ## 内容与检索
 
@@ -166,7 +177,7 @@ provider_file
 - 状态、答案和归属由服务端验证后才产生可信事件；
 - 完整回放后必须与在线投影一致。
 
-事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)、[ADR-0004](../09-decisions/0004-state-machine-runtime.md)、[ADR-0005](../09-decisions/0005-mastery-modeling.md)和[ADR-0006](../09-decisions/0006-trusted-learning-events.md)。
+事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)和 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。五阶段课程与现有掌握度公式属于教育领域当前实现，不是通用 Agent 数据前置条件。
 
 ## 生产门禁
 

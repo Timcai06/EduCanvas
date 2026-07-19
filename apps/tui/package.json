@@ -1,0 +1,24 @@
+{
+  "name": "@educanvas/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "educanvas": "./dist/index.js" },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/index.js",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@educanvas/gateway-client": "workspace:*",
+    "@educanvas/gateway-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.27.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

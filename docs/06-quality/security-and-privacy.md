@@ -23,6 +23,27 @@
 
 Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie轮换和篡改Cookie后无法读取原会话；真实PostgreSQL集成测试覆盖错误归属不写事件/掌握度。worker 已调度7天窗口外的匿名数据库主体清理，但对象存储删除Outbox尚未接通。当前token仍是bearer凭证，匿名机制没有账号恢复、主动撤销、角色授权或跨设备登录；正式用户认证、CSRF专项验证、匿名bootstrap限流/配额和完整隐私生命周期仍是生产上线门禁。
 
+该匿名 Cookie 机制只适用于当前 Web兼容主体。TUI、消息渠道和设备Node使用各自的Gateway session/绑定，不能复用或提交匿名Cookie主体。
+
+## Gateway、Channel 与 Node 安全
+
+- Gateway已实现云端控制平面边界与每用户逻辑隔离；一个自然人拥有自己的个人Agent，家庭与班级只共享显式授权的Notebook/资源，不共享Agent身份；
+- Public Client Schema不接受principal；Web从HttpOnly Cookie、TUI从HMAC session、Telegram从数据库绑定建立主体。内部Envelope只接受至少32字节的server bearer入口；
+- PostgreSQL集成测试证明共享Notebook保存真实Actor与其个人Agent，contributor可回复，viewer与无Membership主体被拒绝；Membership不传播私人Memory、Credential、Node Pairing或默认工具权限；
+- Telegram未知私信、群聊、bot消息和媒体默认拒绝；新设备必须用bootstrap凭据配对并获得可撤销Node session；
+- 渠道账号映射到平台主体后仍需 Notebook 和角色授权；
+- 教师、家长和管理员只能使用显式、可撤销、可审计的委托权限，不能冒充学生主体；
+- 配对只确认身份，不自动授予工具、设备或主机权限；
+- Channel/Node 声明的能力必须与主体权限、Profile策略和环境策略取交集；
+- `gateway_approvals`保存L2/L3审批请求与actor范围决策，TUI/Web可处理，Telegram只提示升级；当前没有开放审批后执行高风险动作的产品路径；
+- 学生默认只开放低风险内容/检索和经审核的教育连接器，不开放Shell、任意文件系统或设备控制；
+- 本地Node只使用可撤销的出站配对连接，不持有Provider Secret；执行器只实现状态与allowlisted read，拒绝Shell、写入、绝对路径、遍历、symlink escape、过期、重放和撤销请求；
+- 所有入站消息、文件、语音、链接和设备结果都视为不可信输入并记录来源。
+
+当前`EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN`是管理员/本地建联密钥，持有者可以为指定user建立Client或Node session。它至少32字节、只放Authorization header且公共transport默认关闭，但不能替代正式IdP或面向最终用户分发；生产部署前必须接入真实认证、密钥轮换、速率限制和会话撤销。
+
+Gateway结构化日志只包含固定路由标签、状态、时延、Operation ID和事件类型；不会记录URL动态ID、正文、token、Provider Key、私有对象key或未清洗异常。内部指标端点受internal bearer保护。
+
 ## 模型安全
 
 - `packages/teaching-core` 已固定 `k12-safety-v1` 决策契约与

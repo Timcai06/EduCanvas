@@ -1,6 +1,12 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from './client';
-import { conversationMessages, conversations, spaces } from './schema';
+import { ensurePersonalIdentity } from './gateway-repository';
+import {
+  conversationMessages,
+  conversations,
+  notebookMemberships,
+  spaces,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -132,6 +138,13 @@ export class DrizzlePlatformConversationRepository {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
+      await ensurePersonalIdentity(transaction, {
+        userId: input.ownerSubjectId,
+        kind: input.ownerSubjectId.startsWith('anon:')
+          ? 'anonymous_compat'
+          : 'registered',
+        now,
+      });
       const [space] = await transaction
         .insert(spaces)
         .values({
@@ -143,6 +156,13 @@ export class DrizzlePlatformConversationRepository {
         })
         .returning({ id: spaces.id });
       if (!space) throw new Error('Space写入失败');
+      await transaction.insert(notebookMemberships).values({
+        notebookId: space.id,
+        userId: input.ownerSubjectId,
+        role: 'owner',
+        grantedByUserId: input.ownerSubjectId,
+        grantedAt: now,
+      });
       const [conversation] = await transaction
         .insert(conversations)
         .values({

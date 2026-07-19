@@ -1,7 +1,7 @@
 # 教学Canvas与GSAP
 
 - 状态：`accepted`
-- 相关决策：[ADR-0010](../09-decisions/0010-canvas-trust-tiers.md)（取代 [ADR-0002](../09-decisions/0002-controlled-canvas.md)）
+- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
 ## 核心决定
 
@@ -81,7 +81,7 @@ classification_submitted
 
 模型生成的是教学语义和模板参数，不是任意GSAP源码。可操作目标只能引用模板注册的语义槽位；实际DOM、可动画属性和持续时间由人工Renderer决定。
 
-**信任分界线**：Canvas产生的交互事件只表示客户端发生了什么，不能直接证明学生答对或掌握。服务端必须依据保存的答案、当前会话与状态机规则完成验证，再生成可信领域事件；只有可信领域事件可以进入掌握度计算。详细契约见[学习事件契约](../04-data/learning-event-contract.md)与[ADR-0006](../09-decisions/0006-trusted-learning-events.md)。
+**信任分界线**：Canvas产生的交互事件只表示客户端发生了什么，不能直接证明学生答对或掌握。服务端必须依据保存的答案、当前会话与结构化课程规则完成验证，再生成可信领域事件；只有可信领域事件可以进入掌握度计算。详细契约见[学习事件契约](../04-data/learning-event-contract.md)与 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。
 
 ## 开放问题
 

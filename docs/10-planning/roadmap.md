@@ -1,84 +1,69 @@
 # 项目路线图
 
-- 状态：`draft`
+- 状态：`accepted`
+- 负责人：项目负责人
+- 最后验证时间：2026-07-19
 
-本文件维护跨阶段目标和长期交付边界，不维护某个PR或短周期阶段的任务清单。当前执行计划及验收证据见[`../plan/README.md`](../plan/README.md)；计划完成后，稳定事实应回写到对应canonical文档或ADR，本路线图只更新阶段级进度与范围变化。
+EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平台**。Gateway-first 基础架构已完成，当前路线图从“建边界”转为“补真实生产能力与教育质量”。完成证据见 [Gateway-first 计划](../plan/completed/2026-07-gateway-first-personal-agent.md)。
 
-产品主线是Chat-first全模态AI平台；K12 AI教师是首个垂直Agent与当前竞赛验证场景。平台能力与教学能力按[ADR-0009](../09-decisions/0009-general-multimodal-platform-and-k12-vertical.md)分层演进。
+## 已完成：产品与 Gateway 边界
 
-## 阶段一：通用Agent基座与首个K12纵切
+- 确定一人一Personal Agent、家庭/班级共享Notebook而不共享Agent身份；
+- 冻结Client/Channel/Node/Operator、Envelope、Event、能力、审批、投递和恢复协议；
+- 建立User/Agent、Membership、Delegated Grant和Actor审计数据边界；
+- 落地`apps/gateway`、持久Operation Event、幂等、恢复、审批、Client/Node session；
+- 保留`apps/ + packages/`宏观结构并增加真实组合根/协议包，没有创建空占位模块。
 
-目标：在不重写现有真实Turn纵切的前提下，将通用模型、消息、工具和Artifact契约从教学领域增量解耦，同时完成“AI如何识别猫和狗”的跨学段K12 Agent闭环。
+## 已完成：Web 与唯一 Runtime
 
-平台基座：
+- Web Chat/Learn Route通过Gateway兼容层进入可信Envelope；
+- 通用、K12和独立Gateway Runner共用唯一`AgentLoopEngine`；
+- 保持历史切换、Sources/Studio隔离、引用、Artifact、可信判分、取消、幂等和刷新恢复；
+- Web继续输出兼容SSE，但不再定义跨客户端永久协议；
+- PostgreSQL迁移全部additive，保留旧教育账本用于领域事实和回放。
 
-- Chat-first通用对话入口；
-- 供应商无关的消息、模型运行和流式事件契约；
-- 多模态附件与长期Asset的通用语义；
-- 通用Artifact提议、确认、生成和Studio生命周期；
-- 可注册的垂直Agent与工具能力；
-- K12、研究、创作等垂直能力不得复制平台基础设施。
+## 已完成：第二客户端、渠道与安全 Node
 
-K12垂直纵切：
+- TUI支持认证bootstrap、会话选择、流式Chat、status、resume和审批；
+- Telegram私聊文本Adapter支持账号/线程绑定、Update去重、Delivery回执和官方形状离线Fixture；
+- Capability Node支持出站配对、心跳、撤销、状态与白名单只读文件；
+- Traversal、symlink escape、绝对路径、Shell/写入、过期与重放请求均被拒绝；
+- Web/TUI同路由、共享Notebook隐私、审批、Channel投递和Node生命周期都有自动化证据。
 
-- 学段选择；
-- AI教师对话；
-- 教材RAG；
-- 一个GSAP动画；
-- 一个互动分类实验；
-- 一个测验；
-- 一个Python实验；
-- 编译期静态Artifact注册表；
-- 版本化学习事件契约与核心协议测试；
-- 掌握度更新；
-- 下一步推荐。
+## 当前 P0：正式身份与生产运维
 
-已完成的产品与运行时基线：编译期静态Artifact注册表、公开题面/私有判分键分离、匿名高熵HttpOnly Cookie与数据库哈希身份、Session/Artifact原子bootstrap、Server Action提交、运行时归属校验、确定性服务端判分、可信测评事件事务写入、Canvas/Progress持久化回显与Drizzle Port适配；Chat-first深色学生端、无Provider诚实错误态、Canvas协作区、资产/进度/产物抽屉与基础UI GSAP动效。
+- 接入正式IdP、账号恢复、session撤销和密钥轮换，移除最终用户对共享bootstrap token的依赖；
+- 增加Gateway/模型/工具限流、并发舱壁和成本配额；
+- 把现有安全结构化日志/指标接入外部Trace、SLO和告警；
+- 完成备份/PITR、恢复演练、对象删除Outbox和隐私导出/更正/删除流程；
+- 用户提供Telegram测试凭据后执行受控live smoke，再决定long polling或Webhook生产拓扑。
 
-真实Agent基础设施已经完成A2/A3/A4与S1基线：固定Turn/Cancel Route和版本化EduCanvas SSE、可配置的原生OpenAI-compatible Provider Adapter、`answer → tools → synthesis`两阶段编排、首个只读`getStudentState`工具、消息/Model Run/Tool Call/安全决策账本、发送幂等、单会话活动Turn限制、PostgreSQL窗口限流、租约/heartbeat、显式取消和刷新恢复。`ScriptedModelGateway`仅保留在确定性测试边界，未配置Provider时不会生成伪回答。
+## 当前 P1：Context、多模态与教育质量
 
-通用Asset首条纵切已经实现匿名所有权、不可变版本、PDF/图片上传、PDF文本解析、消息Part和刷新恢复；当前文本Provider不支持图片时会明确失败。K1的数据层与Web纵切已经接通审核资料不可变版本、PostgreSQL FTS、Turn资料快照、检索候选、防伪引用、引用SSE和UI。T1的Core/Runtime已经实现可信状态推进、事件回放、掌握度更新与下一节点推荐，Web在Canvas判分后仅对可信`ASSESS`状态完成了首条推进接线。C1的Artifact提议、学生确认、独立生成和真实Studio列表尚未实现。
+- Notebook摘要、长期学习者记忆、Artifact Context和统一检索预算；
+- 上传Asset统一进入Source/Representation/Chunk链路；
+- 原生图片、语音和后续视频输入输出；
+- 建立年龄、学科、任务分层的教学评测集，评测讲解、追问、证据、误区、练习适配和安全；
+- 完成结构化课程从诊断、练习到评价/补救的证据，并提供教师资料审核与学习证据视图。
 
-已完成的验证基线覆盖单元测试、真实PostgreSQL集成测试和Playwright E2E；CI拆分为基础检查、集成测试和浏览器E2E三个job，具体数量和通过状态以当前分支CI为准。
+## 后续 P2：受控能力扩展
 
-阶段一剩余工作按平台与垂直纵切拆分：
+- Profile/Skill/Tool/Channel注册、版本和兼容治理；
+- 多供应商显式路由、Fallback、成本和质量评测；
+- 只有成年/管理员场景、安全评审和可恢复审批续跑完成后才增加L2/L3 Node能力；
+- 只有真实连接规模、隔离或发布压力出现时才拆分Gateway、Runtime或Worker服务。
 
-1. 修复连续对话和诚实终态：历史Context Snapshot、完整Parts重试、输出截断状态和实际引用子集；
-2. 建立通用Space/Conversation/Message/Operation数据骨架，把`lesson_sessions`迁移为K12 Vertical Context；
-3. 将通用Turn、Context、Tool Registry、Policy和Trace Port迁入`agent-runtime`，K12作为首个Agent Profile注册；
-4. 统一Asset/Source/Representation/Chunk/Citation链路，加入异步解析、恶意文件扫描、对象删除和原生多模态Provider；
-5. 为中文检索建立冻结评测集，并按指标引入关键词/n-gram、Embedding和Rerank；
-6. 实现平台级Artifact提议/确认/生成/版本/Studio生命周期，并由K12 Agent注册首批受控Artifact；
-7. 补齐T1非`ASSESS`节点的可信事件接线，并验证完整状态回放与下一节点推荐；
-8. 将通用对话、长期Sources、受控Artifact、教学判分、状态推进和刷新恢复串成完整E2E，再执行受控Provider live smoke。
+## 竞赛交付线
 
-## 阶段二：平台化
+- K12演示路径、课程内容和可信判分；
+- 当前Gateway/Runtime架构图、测试与安全证据；
+- 部署说明、演示视频和答辩材料；
+- 明确区分已实现的离线Telegram/Node纵切与仍缺凭据/云部署的production证据。
 
-- 多模态Asset上传、解析、版本和权限；
-- Artifact版本兼容、组合、编辑和管理能力；
-- 可插拔Agent能力注册与Workspace模板；
-- K12课程组合、教材审核与教师端；
-- 多供应商路由、Fallback、熔断、配额与成本治理；
-- Embedding版本管理；
-- 教师端基础能力；
-- 完整监控和评测集。
+## 长期非目标
 
-## 阶段三：生产强化
-
-- 并发与容量测试；
-- 服务横向扩容；
-- 跨供应商模型容灾；
-- 数据备份与恢复演练；
-- 未成年人隐私流程；
-- 灰度发布和回滚；
-- 班级与学校多租户能力。
-
-## 阶段四：竞赛交付
-
-- 演示路径；
-- 项目报告；
-- 系统架构图；
-- 技术路线；
-- 测试和评测结果；
-- 部署说明；
-- 演示视频与答辩材料。
+- 复制OpenClaw的全部渠道、插件市场和单用户信任模型；
+- 用多Agent数量、工作流复杂度或长视频衡量教育价值；
+- 默认向未成年人开放Shell、任意文件系统或设备控制；
+- 在没有负载和隔离证据时提前拆微服务；
+- 让模型自述替代身份、权限、判分或掌握度事实。

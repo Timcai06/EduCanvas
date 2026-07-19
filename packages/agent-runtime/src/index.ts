@@ -32,3 +32,11 @@ export {
   type AgentToolExecution,
   type AgentToolFailureCode,
 } from './agent-tools';
+export {
+  AgentLoopEngine,
+  type AgentLoopCommand,
+  type AgentLoopEvent,
+  type AgentLoopPrompt,
+  type AgentLoopToolBatch,
+  type AgentLoopToolSuccess,
+} from './agent-loop';

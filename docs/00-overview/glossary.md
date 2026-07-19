@@ -1,14 +1,21 @@
 # 项目术语
 
-- **AI教师**：与学生对话并编排教学活动的主智能体。
+- **个人Agent**：用户长期拥有、跨客户端和渠道持续工作的Agent主体，能够积累Notebook上下文并使用受控工具完成任务。
+- **AI教师**：个人Agent的默认教育能力，通过Profile、Skills、Tools、记忆和可信领域服务提供教学。
+- **EduCanvas Gateway**：连接Web、TUI、消息渠道和设备Node的交互控制平面，负责身份、路由、审批和事件；不同于Model Gateway。
+- **Model Gateway**：把统一模型/媒体请求适配到具体Provider的边界，不负责用户身份和Notebook路由。
+- **Channel**：微信、QQ、飞书、Telegram、短信或语音等外部通信协议的适配器。
+- **Node**：经Gateway配对后声明本地设备能力的宿主。
+- **Notebook**：Sources、Conversations、Artifacts、Memory和Profile Context的长期归属单位。
+- **Agent Profile**：常驻角色、目标、模型/预算、安全策略和默认能力的配置，不拥有独立Agent循环。
+- **Skill**：按任务加载的指导或有限工作流，不直接获得可信领域写权限。
 - **教学Canvas**：承载绘本、动画、实验、代码和测验的动态区域。
-- **Artifact**：Canvas中一次可保存、可交互的教学产物。
+- **Artifact**：Agent生成或修改的可保存、可版本化产物；可以在Canvas中交互并在Studio中恢复。
 - **知识节点**：课程图谱中的最小可学习单元。
 - **掌握度**：学生对某个知识节点的结构化学习状态。
-- **教学状态机**：约束诊断、讲解、示范、练习、评价和补救顺序的规则系统。
+- **结构化课程状态机**：只在显式课程Workflow中约束诊断、讲解、示范、练习、评价和补救顺序的规则系统。
 - **RAG**：先从审核知识库检索证据，再让模型基于证据生成回答。
 - **Embedding空间**：由固定模型、版本、维度、指令和归一化方式定义的向量集合。
 - **Reranker**：对初步召回结果进行精细重排序的模型。
 - **ADR**：Architecture Decision Record，记录重大技术决策及原因。
 - **BFF**：Backend for Frontend，专门为Web前端聚合数据的服务层。
-

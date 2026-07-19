@@ -1,0 +1,26 @@
+{
+  "name": "@educanvas/telegram",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts run",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --external:drizzle-orm --external:drizzle-orm/* --external:postgres --external:zod --outfile=dist/index.js",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@educanvas/channel-telegram": "workspace:*",
+    "@educanvas/db": "workspace:*",
+    "@educanvas/gateway-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "drizzle-orm": "^0.45.2",
+    "esbuild": "^0.27.3",
+    "postgres": "^3.4.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
