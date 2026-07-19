@@ -3,26 +3,63 @@ import type { TuiTheme } from './theme';
 
 /**
  * 扉页：进入 TUI 或切换笔记本时的「翻开笔记本」时刻。
- * 视觉主体是一枚朱砂印章（品牌标记，与 Web 的 LogoMark 同源）+ 笔记本信息。
- * 窄终端（< 46 列）自动降级为单行标题，装饰永远先于信息退场。
+ * 宽终端（≥62 列）是完整仪式：实心朱砂印章 + 墨色渐变块体字标；
+ * 中等宽度退到框线印章 + 粗体字；窄终端（<46 列）只剩单行标题——
+ * 装饰永远先于信息退场，无色环境自动回落为纯文本。
  */
 
 export interface BannerInfo {
   /** 笔记本标题；null 显示为未命名。 */
   title: string | null;
-  /** 印章右侧的补充行（如会话状态、可用命令提示），最多两行。 */
+  /** 标题下的补充行（会话状态、可用命令提示），最多两行。 */
   detailLines?: readonly string[];
 }
 
+const FULL_WIDTH = 62;
 const COMPACT_WIDTH = 46;
 
-/** 朱砂印章的三行块字。宽度 5 列，无色环境仍是可辨认的方章。 */
+/**
+ * 自绘 3 行块体字（宽 4 列 + 1 列间距）。只覆盖字标用到的字母，
+ * 不引入 figlet 依赖，也避免外部字体在不同终端的渲染歧义。
+ */
+const BLOCK_LETTERS: Record<string, readonly [string, string, string]> = {
+  E: ['█▀▀▀', '█▀▀ ', '▀▀▀▀'],
+  D: ['█▀▀▄', '█  █', '▀▀▀▀'],
+  U: ['█  █', '█  █', '▀▀▀▀'],
+  C: ['█▀▀▀', '█   ', '▀▀▀▀'],
+  A: ['█▀▀█', '█▀▀█', '▀  ▀'],
+  N: ['█▀▀█', '█  █', '▀  ▀'],
+  V: ['█  █', '█  █', ' ▀▀ '],
+  S: ['█▀▀▀', '▀▀▀█', '▀▀▀▀'],
+};
+
+const WORDMARK = 'EDUCANVAS';
+
+/** 逐字上渐变色的块体字标，返回 3 行。 */
+function wordmarkLines(theme: TuiTheme): readonly string[] {
+  const letters = [...WORDMARK];
+  return [0, 1, 2].map((row) =>
+    letters
+      .map((letter, index) =>
+        theme.daiGradient(
+          BLOCK_LETTERS[letter]![row]!,
+          letters.length > 1 ? index / (letters.length - 1) : 0,
+        ),
+      )
+      .join(' '),
+  );
+}
+
+/** 实心朱砂印章（5×3 色块 + 白色对勾）；无色环境回落为框线章。 */
 function sealLines(theme: TuiTheme): readonly string[] {
-  return [
-    theme.zhusha('▛▀▀▀▜'),
-    theme.zhusha('▌ ') + theme.zhusha('✓') + theme.zhusha(' ▐'),
-    theme.zhusha('▙▄▄▄▟'),
-  ];
+  if (theme.enabled) {
+    return [
+      theme.sealBlock('     '),
+      theme.sealBlock('  ✓  '),
+      theme.sealBlock('     '),
+    ];
+  }
+  return ['▛▀▀▀▜', '▌ ✓ ▐', '▙▄▄▄▟'];
 }
 
 /** `── ✎ ──…` 分隔线：落笔符号偏左，其余延展到给定宽度。 */
@@ -48,12 +85,27 @@ export function renderBanner(
   }
 
   const seal = sealLines(theme);
-  const textWidth = width - 8;
+  const textWidth = width - 10;
+  const detailLines = (info.detailLines ?? []).map((line) =>
+    theme.dim(truncateToWidth(line, textWidth)),
+  );
+
+  if (width >= FULL_WIDTH) {
+    const mark = wordmarkLines(theme);
+    return [
+      renderRule(theme, width - 1),
+      ...[0, 1, 2].map((row) => ` ${seal[row]!}   ${mark[row]!}`),
+      '',
+      ` ${theme.zhusha('▍')} ${theme.bold(truncateToWidth(title, textWidth))}`,
+      ...detailLines.map((line) => `   ${line}`),
+      renderRule(theme, width - 1),
+      '',
+    ].join('\n');
+  }
+
   const textLines = [
     `${theme.bold('EduCanvas')} ${theme.dim('·')} ${truncateToWidth(title, Math.max(8, textWidth - 12))}`,
-    ...(info.detailLines ?? []).map((line) =>
-      theme.dim(truncateToWidth(line, textWidth)),
-    ),
+    ...detailLines,
   ];
   const rows = Math.max(seal.length, textLines.length);
   const body = Array.from({ length: rows }, (_, index) => {

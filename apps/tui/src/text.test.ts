@@ -13,7 +13,7 @@ describe('stringWidth', () => {
     expect(stringWidth('abc')).toBe(3);
     expect(stringWidth('分数')).toBe(4);
     expect(stringWidth('a分b数')).toBe(6);
-    const theme = createTheme({ isTTY: true, noColor: false, term: 'xterm' });
+    const theme = createTheme({ isTTY: true, noColor: false, term: 'xterm', colorterm: undefined, forceDepth: undefined });
     expect(stringWidth(theme.zhusha('朱砂'))).toBe(4);
   });
 
@@ -24,7 +24,7 @@ describe('stringWidth', () => {
 
 describe('stripAnsi', () => {
   it('removes SGR sequences only', () => {
-    const theme = createTheme({ isTTY: true, noColor: false, term: 'xterm' });
+    const theme = createTheme({ isTTY: true, noColor: false, term: 'xterm', colorterm: undefined, forceDepth: undefined });
     expect(stripAnsi(theme.bold('x[1m'))).toBe('x[1m');
   });
 });

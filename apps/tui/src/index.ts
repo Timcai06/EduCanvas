@@ -9,6 +9,8 @@ import {
 } from '@educanvas/gateway-client';
 import { renderBanner, renderRule } from './banner';
 import { saveConfig } from './config';
+import { renderHome } from './home';
+import { InputBox } from './input-box';
 import {
   renderApprovalCard,
   renderApprovalListItem,
@@ -64,13 +66,13 @@ function findConversation(
   return conversation;
 }
 
-/** /help：命令说明按「学习 / 笔记本 / 审批 / 其他」分组，可发现性优先。 */
+/** /help：命令说明按用途分组，可发现性优先。 */
 function renderHelp(theme: TuiTheme): string {
   const row = (command: string, description: string) =>
     `  ${theme.dai(command.padEnd(18))}${theme.dim(description)}`;
   return [
     '',
-    `${theme.bold('直接输入问题即可对话')}${theme.dim('，以下命令随时可用：')}`,
+    `${theme.bold('直接输入问题即可对话')}${theme.dim('，以下命令随时可用（Tab 可补全）：')}`,
     '',
     row('/notebooks', '列出全部笔记本'),
     row('/use <编号|id>', '切换笔记本'),
@@ -137,36 +139,62 @@ async function main(): Promise<void> {
     await establishGatewaySession(baseUrl);
 
   if (!command) {
-    const readline = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
     const conversations = [...initialConversations];
     let current = conversations[0];
     if (!current) throw new Error('当前账户没有可访问的笔记本');
     let lastApprovalId: string | null = null;
+    let approvalsCount = 0;
+    try {
+      approvalsCount = (await client.listApprovals()).length;
+    } catch {
+      /* 首页的待审批数是提示性信息，取不到不阻塞进入 */
+    }
 
-    const showBanner = () => {
-      process.stderr.write(
-        renderBanner(theme, terminalWidth(), {
-          title: current!.title,
-          detailLines: [
-            '直接输入问题开始对话',
-            '/help 查看命令 · /web 打开网页端',
-          ],
-        }) + '\n',
-      );
+    process.stdout.write(
+      renderHome(theme, terminalWidth(), {
+        gatewayUrl: baseUrl,
+        connected: true,
+        notebooks: conversations,
+        activeConversationId: current.conversationId,
+        pendingApprovals: approvalsCount,
+      }),
+    );
+
+    const statusText = () =>
+      `${current!.title ?? '未命名笔记本'} · ● 已连接${
+        approvalsCount > 0 ? ` · ${approvalsCount} 项待审批` : ''
+      }`;
+
+    const interactiveTTY =
+      process.stdin.isTTY === true && process.stdout.isTTY === true;
+    const inputBox = interactiveTTY
+      ? new InputBox(theme, process.stdin, process.stdout)
+      : null;
+    const fallbackReadline = interactiveTTY
+      ? null
+      : createInterface({ input: process.stdin, output: process.stdout });
+
+    const readLine = async (): Promise<string | null> => {
+      if (inputBox) {
+        return inputBox.read({
+          placeholder: '输入问题，/ 呼出命令',
+          statusLine: statusText(),
+        });
+      }
+      try {
+        return (await fallbackReadline!.question('✎ ')).trim();
+      } catch {
+        return null;
+      }
     };
-    showBanner();
 
     const resolveApprovalTarget = (argument: string | undefined): string | null =>
       argument?.trim() || lastApprovalId;
 
     try {
       while (true) {
-        const line = (
-          await readline.question(`${theme.dai('✎')} `)
-        ).trim();
+        const line = await readLine();
+        if (line === null) break;
         if (!line) continue;
         if (line === '/quit' || line === '/exit') break;
         if (line === '/help') {
@@ -192,7 +220,12 @@ async function main(): Promise<void> {
             : undefined;
           try {
             current = byIndex ?? findConversation(conversations, target);
-            showBanner();
+            process.stdout.write(
+              renderBanner(theme, terminalWidth(), {
+                title: current.title,
+                detailLines: ['已切换，直接输入问题继续'],
+              }) + '\n',
+            );
           } catch (error) {
             process.stderr.write(
               `${theme.zhusha('✗')} ${error instanceof Error ? error.message : '切换失败'}\n`,
@@ -202,8 +235,9 @@ async function main(): Promise<void> {
         }
         if (line === '/approvals') {
           const approvals = await client.listApprovals();
+          approvalsCount = approvals.length;
           if (approvals.length === 0) {
-            process.stdout.write(`${theme.dim('没有待处理的审批。')}\n`);
+            process.stdout.write(`${theme.dim('没有待处理的审批。')}\n\n`);
             continue;
           }
           process.stdout.write('\n');
@@ -237,10 +271,11 @@ async function main(): Promise<void> {
             );
             process.stdout.write(
               isApprove
-                ? `${theme.good('✓')} 已同意 ${theme.dim(target)}\n`
-                : `${theme.zhusha('✗')} 已拒绝 ${theme.dim(target)}\n`,
+                ? `${theme.good('✓')} 已同意 ${theme.dim(target)}\n\n`
+                : `${theme.zhusha('✗')} 已拒绝 ${theme.dim(target)}\n\n`,
             );
             if (lastApprovalId === target) lastApprovalId = null;
+            approvalsCount = Math.max(0, approvalsCount - 1);
           } catch (error) {
             process.stderr.write(
               `${theme.zhusha('✗')} 处理失败：${error instanceof Error ? error.message : '未知错误'}\n`,
@@ -252,7 +287,7 @@ async function main(): Promise<void> {
           const webUrl =
             process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101';
           openWeb(webUrl);
-          process.stdout.write(`${theme.dim(`已在浏览器打开 ${webUrl}`)}\n`);
+          process.stdout.write(`${theme.dim(`已在浏览器打开 ${webUrl}`)}\n\n`);
           continue;
         }
         if (line.startsWith('/')) {
@@ -263,7 +298,6 @@ async function main(): Promise<void> {
         }
 
         const turnRenderer = new TurnRenderer(theme, makeIO());
-        process.stdout.write('\n');
         try {
           for await (const event of client.streamTurn({
             clientMessageId: `tui:${randomUUID()}`,
@@ -280,12 +314,14 @@ async function main(): Promise<void> {
         for (const approvalEvent of turnRenderer.pendingApprovals) {
           if (approvalEvent.type === 'approval.required') {
             lastApprovalId = approvalEvent.approval.approvalId;
+            approvalsCount += 1;
           }
         }
         process.stdout.write('\n');
       }
     } finally {
-      readline.close();
+      fallbackReadline?.close();
+      process.stdout.write(`${theme.dim('下次见。')}\n`);
     }
     return;
   }
