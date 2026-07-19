@@ -248,6 +248,15 @@ export function GeneralChatWorkspace({
         ]
       : [],
   );
+  const revisingOpenArtifact = Boolean(
+    artifactFlow.openDetail &&
+    ((artifactFlow.generation?.phase === 'generating' &&
+      artifactFlow.generation.artifactId ===
+        artifactFlow.openDetail.artifact.id) ||
+      ['queued', 'running'].includes(
+        artifactFlow.openDetail.latestJob?.status ?? '',
+      )),
+  );
 
   /* 落地 → 对话:输入坞 Flip 位移,光场沉降为环境底光;reduced-motion 直接跳变。 */
   useGSAP(
@@ -371,6 +380,7 @@ export function GeneralChatWorkspace({
                           void artifactFlow.openArtifact(artifactId);
                       }}
                       onDismiss={artifactFlow.dismiss}
+                      dismissable={!revisingOpenArtifact}
                     />
                   </div>
                 ) : null}
@@ -427,6 +437,7 @@ export function GeneralChatWorkspace({
                           void artifactFlow.openArtifact(artifactId);
                       }}
                       onDismiss={artifactFlow.dismiss}
+                      dismissable={!revisingOpenArtifact}
                     />
                   ) : null}
                   <Composer
@@ -451,6 +462,19 @@ export function GeneralChatWorkspace({
                     artifactFlow.setCanvasFull((value) => !value)
                   }
                   onClose={artifactFlow.closeCanvas}
+                  onSelectVersion={(version) =>
+                    void artifactFlow.openArtifactVersion(
+                      artifactFlow.openDetail!.artifact.id,
+                      version,
+                    )
+                  }
+                  onRevise={(instruction) =>
+                    void artifactFlow.revise(
+                      artifactFlow.openDetail!,
+                      instruction,
+                    )
+                  }
+                  revising={revisingOpenArtifact}
                 />
               ) : previewHtml !== null ? (
                 <HtmlPreviewPanel
@@ -475,6 +499,16 @@ export function GeneralChatWorkspace({
           isFull
           onToggleFull={() => undefined}
           onClose={artifactFlow.closeCanvas}
+          onSelectVersion={(version) =>
+            void artifactFlow.openArtifactVersion(
+              artifactFlow.openDetail!.artifact.id,
+              version,
+            )
+          }
+          onRevise={(instruction) =>
+            void artifactFlow.revise(artifactFlow.openDetail!, instruction)
+          }
+          revising={revisingOpenArtifact}
         />
       ) : null}
 

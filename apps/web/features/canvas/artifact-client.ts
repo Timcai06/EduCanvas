@@ -14,11 +14,16 @@ export interface ArtifactSummary {
 
 export interface ArtifactDetail {
   artifact: ArtifactSummary;
-  latestVersion: {
+  version: {
     version: number;
     content: unknown;
     media: AudioOverviewMedia | null;
   } | null;
+  versions: readonly {
+    version: number;
+    generatedBy: string | null;
+    createdAt: string;
+  }[];
   latestJob: {
     id: string;
     status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
@@ -61,10 +66,7 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
 }
 
 export type CreatableArtifactKind =
-  | 'mind_map'
-  | 'slides'
-  | 'flashcards'
-  | 'audio_overview';
+  'mind_map' | 'slides' | 'flashcards' | 'audio_overview';
 
 export interface ArtifactSourceReference {
   assetId: string;
@@ -99,9 +101,27 @@ export async function fetchNotebookArtifacts(): Promise<
 
 export async function fetchArtifactDetail(
   artifactId: string,
+  version?: number,
 ): Promise<ArtifactDetail> {
+  const query = version === undefined ? '' : `?version=${version}`;
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}${query}`,
+  );
+  return parseJsonOrThrow(response);
+}
+
+export async function reviseArtifact(
+  artifactId: string,
+  baseVersion: number,
+  instruction: string,
+): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(
     `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseVersion, instruction }),
+    },
   );
   return parseJsonOrThrow(response);
 }
@@ -112,18 +132,25 @@ export async function fetchArtifactDetail(
  */
 export async function pollArtifactUntilSettled(
   artifactId: string,
-  options: { intervalMs?: number; timeoutMs?: number; signal?: AbortSignal } = {},
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    minimumVersion?: number;
+  } = {},
 ): Promise<ArtifactDetail> {
   const interval = options.intervalMs ?? 1_500;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
   let detail = await fetchArtifactDetail(artifactId);
   while (Date.now() < deadline && !options.signal?.aborted) {
     const jobStatus = detail.latestJob?.status;
+    const minimumVersion = options.minimumVersion ?? 1;
+    if (jobStatus === 'failed' || jobStatus === 'cancelled') {
+      return detail;
+    }
     if (
-      detail.artifact.latestVersion > 0 ||
-      jobStatus === 'succeeded' ||
-      jobStatus === 'failed' ||
-      jobStatus === 'cancelled'
+      detail.artifact.latestVersion >= minimumVersion &&
+      (jobStatus === 'succeeded' || jobStatus === undefined)
     ) {
       return detail;
     }

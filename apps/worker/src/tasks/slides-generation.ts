@@ -5,10 +5,15 @@ import {
   type SlidesContent,
 } from '@educanvas/canvas-protocol';
 import type { OutlineSourceMessage } from './mind-map-outline.js';
+import type { ArtifactRevisionContext } from './mind-map-generation.js';
 
 export const SLIDES_PROMPT_VERSION = 'artifact-slides-v1';
+export const SLIDES_REVISION_PROMPT_VERSION = 'artifact-slides-revision-v1';
 export const SLIDES_RULE_GENERATOR = 'rule:slides-v1';
 export const SLIDES_MODEL_GENERATOR = 'model:artifact.generate:slides-v1';
+export const SLIDES_RULE_REVISION_GENERATOR = 'rule:slides-revision-v1';
+export const SLIDES_MODEL_REVISION_GENERATOR =
+  'model:artifact.generate:slides-revision-v1';
 
 const MAX_TRANSCRIPT_CHARS = 12_000;
 const clip = (text: string, max: number): string => {
@@ -54,8 +59,26 @@ export async function generateSlidesContent(input: {
   gateway: StructuredModelGateway | null;
   traceId: string;
   operationId: string;
+  revision?: ArtifactRevisionContext;
 }): Promise<{ content: SlidesContent; generatedBy: string }> {
   if (!input.gateway) {
+    if (input.revision) {
+      const base = slidesContentSchema.parse(input.revision.baseContent);
+      const slides = [...base.slides];
+      if (slides.length >= 20) slides.pop();
+      const usedIds = new Set(slides.map((slide) => slide.id));
+      let revisionIndex = 1;
+      while (usedIds.has(`revision-${revisionIndex}`)) revisionIndex += 1;
+      slides.push({
+        id: `revision-${revisionIndex}`,
+        title: '本轮修改',
+        bullets: [clip(input.revision.instruction, 160)],
+      });
+      return {
+        content: slidesContentSchema.parse({ ...base, slides }),
+        generatedBy: SLIDES_RULE_REVISION_GENERATOR,
+      };
+    }
     return {
       content: buildRuleSlides(input.title, input.messages),
       generatedBy: SLIDES_RULE_GENERATOR,
@@ -71,25 +94,39 @@ export async function generateSlidesContent(input: {
     taskAlias: 'artifact.generate',
     modelAlias: 'structured',
     schema: slidesContentSchema,
-    promptVersion: SLIDES_PROMPT_VERSION,
+    promptVersion: input.revision
+      ? SLIDES_REVISION_PROMPT_VERSION
+      : SLIDES_PROMPT_VERSION,
     traceId: input.traceId,
     operationId: input.operationId,
     messages: [
       {
         role: 'system',
         content: [
-          '你是演示文稿撰写助手。根据对话记录产出一份中文 Slides。',
+          input.revision
+            ? '你是演示文稿撰写助手。请在当前 Slides 基础上按用户要求修改，并返回完整的新版本。'
+            : '你是演示文稿撰写助手。根据对话记录产出一份中文 Slides。',
           '第一页为封面(title=给定标题,bullets 为 2-3 条内容概览);',
           '其后每页聚焦一个主题:title 简洁(≤30字),bullets 3-6 条、每条一句话;',
           'id 用小写字母数字连字符;contentVersion 固定 1;总页数≤12;',
-          '只概括对话中出现的内容,不要编造。',
+          '只使用对话与修改要求中的内容,不要编造。',
+          input.revision
+            ? '保留未被要求改变的页面；不要只返回差异或解释。'
+            : '',
         ].join('\n'),
       },
       {
         role: 'user',
-        content: `标题:${input.title}\n\n对话记录:\n${transcript}`,
+        content: input.revision
+          ? `标题:${input.title}\n\n当前版本:\n${JSON.stringify(input.revision.baseContent)}\n\n修改要求:\n${input.revision.instruction}\n\nNotebook对话记录:\n${transcript}`
+          : `标题:${input.title}\n\n对话记录:\n${transcript}`,
       },
     ],
   });
-  return { content: result.output, generatedBy: SLIDES_MODEL_GENERATOR };
+  return {
+    content: result.output,
+    generatedBy: input.revision
+      ? SLIDES_MODEL_REVISION_GENERATOR
+      : SLIDES_MODEL_GENERATOR,
+  };
 }

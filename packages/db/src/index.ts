@@ -40,6 +40,7 @@ export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
+  ArtifactRevisionConflictError,
   ArtifactVersionConflictError,
   DrizzlePlatformArtifactRepository,
   type ArtifactJobStatus,

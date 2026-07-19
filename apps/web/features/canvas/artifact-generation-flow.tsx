@@ -12,6 +12,7 @@ import {
   createArtifact,
   fetchArtifactDetail,
   pollArtifactUntilSettled,
+  reviseArtifact,
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
@@ -63,37 +64,40 @@ export function useArtifactGeneration() {
     [],
   );
 
-  const confirm = useCallback(async (
-    kind: CreatableArtifactKind,
-    title: string,
-    sources: readonly ArtifactSourceReference[] = [],
-    options: ConfirmArtifactOptions = {},
-  ) => {
-    setGeneration({ phase: 'generating', kind, title });
-    try {
-      const created = await createArtifact(kind, title, sources);
-      pollAbort.current = new AbortController();
-      const detail = await pollArtifactUntilSettled(created.artifact.id, {
-        signal: pollAbort.current.signal,
-      });
-      const succeeded =
-        detail.artifact.latestVersion > 0 &&
-        detail.latestJob?.status !== 'failed';
-      setGeneration({
-        phase: succeeded ? 'ready' : 'failed',
-        kind,
-        artifactId: created.artifact.id,
-        title: detail.artifact.title,
-        detail,
-      });
-      if (succeeded && options.openWhenReady) {
-        setOpenDetail(detail);
-        setCanvasFull(false);
+  const confirm = useCallback(
+    async (
+      kind: CreatableArtifactKind,
+      title: string,
+      sources: readonly ArtifactSourceReference[] = [],
+      options: ConfirmArtifactOptions = {},
+    ) => {
+      setGeneration({ phase: 'generating', kind, title });
+      try {
+        const created = await createArtifact(kind, title, sources);
+        pollAbort.current = new AbortController();
+        const detail = await pollArtifactUntilSettled(created.artifact.id, {
+          signal: pollAbort.current.signal,
+        });
+        const succeeded =
+          detail.artifact.latestVersion > 0 &&
+          detail.latestJob?.status !== 'failed';
+        setGeneration({
+          phase: succeeded ? 'ready' : 'failed',
+          kind,
+          artifactId: created.artifact.id,
+          title: detail.artifact.title,
+          detail,
+        });
+        if (succeeded && options.openWhenReady) {
+          setOpenDetail(detail);
+          setCanvasFull(false);
+        }
+      } catch {
+        setGeneration({ phase: 'failed', kind, title });
       }
-    } catch {
-      setGeneration({ phase: 'failed', kind, title });
-    }
-  }, []);
+    },
+    [],
+  );
 
   const openArtifact = useCallback(async (artifactId: string) => {
     try {
@@ -102,6 +106,61 @@ export function useArtifactGeneration() {
       setOpenDetail(null);
     }
   }, []);
+
+  const openArtifactVersion = useCallback(
+    async (artifactId: string, version: number) => {
+      try {
+        setOpenDetail(await fetchArtifactDetail(artifactId, version));
+      } catch {
+        setOpenDetail(null);
+      }
+    },
+    [],
+  );
+
+  const revise = useCallback(
+    async (detail: ArtifactDetail, instruction: string) => {
+      const baseVersion = detail.artifact.latestVersion;
+      setGeneration({
+        phase: 'generating',
+        kind: detail.artifact.kind as CreatableArtifactKind,
+        artifactId: detail.artifact.id,
+        title: detail.artifact.title,
+      });
+      try {
+        await reviseArtifact(detail.artifact.id, baseVersion, instruction);
+        pollAbort.current?.abort();
+        pollAbort.current = new AbortController();
+        const updated = await pollArtifactUntilSettled(detail.artifact.id, {
+          signal: pollAbort.current.signal,
+          minimumVersion: baseVersion + 1,
+        });
+        const succeeded =
+          updated.artifact.latestVersion >= baseVersion + 1 &&
+          updated.latestJob?.status !== 'failed';
+        setGeneration({
+          phase: succeeded ? 'ready' : 'failed',
+          kind: detail.artifact.kind as CreatableArtifactKind,
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+          detail: updated,
+        });
+        if (succeeded) {
+          setOpenDetail((current) =>
+            current?.artifact.id === detail.artifact.id ? updated : current,
+          );
+        }
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          kind: detail.artifact.kind as CreatableArtifactKind,
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+        });
+      }
+    },
+    [],
+  );
 
   const dismiss = useCallback(() => {
     pollAbort.current?.abort();
@@ -115,7 +174,9 @@ export function useArtifactGeneration() {
     setCanvasFull,
     beginConfirm,
     confirm,
+    revise,
     openArtifact,
+    openArtifactVersion,
     closeCanvas: () => {
       setOpenDetail(null);
       setCanvasFull(false);
@@ -184,10 +245,12 @@ export function ArtifactStatusCard({
   generation,
   onOpen,
   onDismiss,
+  dismissable = true,
 }: {
   generation: GenerationState;
   onOpen: () => void;
   onDismiss: () => void;
+  dismissable?: boolean;
 }) {
   return (
     <div
@@ -199,7 +262,10 @@ export function ArtifactStatusCard({
         className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
       >
         {generation.phase === 'generating' ? (
-          <CircleNotch size={18} className="animate-spin motion-reduce:animate-none" />
+          <CircleNotch
+            size={18}
+            className="animate-spin motion-reduce:animate-none"
+          />
         ) : generation.phase === 'failed' ? (
           <Warning size={18} />
         ) : generation.kind === 'audio_overview' ? (
@@ -216,7 +282,10 @@ export function ArtifactStatusCard({
           {generation.phase === 'generating'
             ? '后台生成中…关闭页面也不会中断'
             : generation.phase === 'ready'
-              ? `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
+              ? generation.detail &&
+                generation.detail.artifact.latestVersion > 1
+                ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
+                : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
               : '生成失败，可稍后从产物列表重试'}
         </span>
       </span>
@@ -229,30 +298,44 @@ export function ArtifactStatusCard({
           打开
         </button>
       ) : null}
-      <button
-        type="button"
-        aria-label="关闭生成提示"
-        onClick={onDismiss}
-        className="min-h-9 shrink-0 rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        关闭
-      </button>
+      {dismissable ? (
+        <button
+          type="button"
+          aria-label="关闭生成提示"
+          onClick={onDismiss}
+          className="min-h-9 shrink-0 rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          关闭
+        </button>
+      ) : null}
     </div>
   );
 }
 
-/** 产物 Canvas:与判分/沙箱同一宿主形态,当前注册 mind_map 渲染。 */
+/** 产物 Canvas：统一承载结构化产物、只读历史与基于最新版本的共创入口。 */
 export function ArtifactCanvas({
   detail,
   isFull,
   onToggleFull,
   onClose,
+  onSelectVersion,
+  onRevise,
+  revising = false,
 }: {
   detail: ArtifactDetail;
   isFull: boolean;
   onToggleFull: () => void;
   onClose: () => void;
+  onSelectVersion: (version: number) => void;
+  onRevise: (instruction: string) => void;
+  revising?: boolean;
 }) {
+  const [instruction, setInstruction] = useState('');
+  const displayedVersion = detail.version?.version ?? 0;
+  const isLatest = displayedVersion === detail.artifact.latestVersion;
+  const canRevise = ['mind_map', 'slides', 'flashcards'].includes(
+    detail.artifact.kind,
+  );
   return (
     <CanvasHost
       ariaLabel="产物Canvas"
@@ -262,19 +345,97 @@ export function ArtifactCanvas({
       isFull={isFull}
       onToggleFull={onToggleFull}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
-        {detail.artifact.kind === 'mind_map' && detail.latestVersion ? (
-          <MindMapRenderer content={detail.latestVersion.content} />
-        ) : detail.artifact.kind === 'slides' && detail.latestVersion ? (
-          <SlidesRenderer content={detail.latestVersion.content} />
-        ) : detail.artifact.kind === 'flashcards' && detail.latestVersion ? (
-          <FlashcardsRenderer content={detail.latestVersion.content} />
-        ) : detail.artifact.kind === 'audio_overview' &&
-          detail.latestVersion?.media ? (
-          <AudioOverviewPlayer media={detail.latestVersion.media} />
-        ) : (
-          <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
-        )}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2.5">
+          <label className="flex items-center gap-2 text-xs text-ink-muted">
+            <span>版本</span>
+            <select
+              aria-label="Canvas版本"
+              value={displayedVersion || ''}
+              onChange={(event) => onSelectVersion(Number(event.target.value))}
+              className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {detail.versions.map((version) => (
+                <option key={version.version} value={version.version}>
+                  v{version.version}
+                  {version.version === detail.artifact.latestVersion
+                    ? ' · 最新'
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-xs text-ink-faint">
+            {isLatest ? '当前版本' : '历史只读版本'}
+          </span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+          {detail.artifact.kind === 'mind_map' && detail.version ? (
+            <MindMapRenderer
+              key={displayedVersion}
+              content={detail.version.content}
+            />
+          ) : detail.artifact.kind === 'slides' && detail.version ? (
+            <SlidesRenderer
+              key={displayedVersion}
+              content={detail.version.content}
+            />
+          ) : detail.artifact.kind === 'flashcards' && detail.version ? (
+            <FlashcardsRenderer
+              key={displayedVersion}
+              content={detail.version.content}
+            />
+          ) : detail.artifact.kind === 'audio_overview' &&
+            detail.version?.media ? (
+            <AudioOverviewPlayer media={detail.version.media} />
+          ) : (
+            <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
+          )}
+        </div>
+        {canRevise ? (
+          <form
+            className="shrink-0 border-t border-line bg-canvas/90 p-3 backdrop-blur"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const trimmed = instruction.trim();
+              if (!trimmed || !isLatest || revising) return;
+              onRevise(trimmed);
+              setInstruction('');
+            }}
+          >
+            <label className="sr-only" htmlFor={`revise-${detail.artifact.id}`}>
+              告诉 AI 如何修改
+            </label>
+            <div className="flex items-end gap-2">
+              <textarea
+                id={`revise-${detail.artifact.id}`}
+                aria-label="告诉 AI 如何修改"
+                value={instruction}
+                maxLength={2_000}
+                rows={2}
+                disabled={!isLatest || revising}
+                placeholder={
+                  isLatest
+                    ? '告诉 AI 如何修改这个 Canvas…'
+                    : '请先切回最新版本再继续修改'
+                }
+                onChange={(event) => setInstruction(event.target.value)}
+                className="min-h-12 flex-1 resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:text-ink-faint"
+              />
+              <button
+                type="submit"
+                disabled={!instruction.trim() || !isLatest || revising}
+                className="min-h-10 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:bg-surface-strong disabled:text-ink-faint"
+              >
+                {revising ? '生成中…' : '生成新版本'}
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-ink-faint">
+              修改会基于 v{detail.artifact.latestVersion}、当前 Notebook
+              对话和这条要求生成完整新版本。
+            </p>
+          </form>
+        ) : null}
       </div>
     </CanvasHost>
   );
