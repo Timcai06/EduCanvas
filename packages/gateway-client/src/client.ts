@@ -182,14 +182,20 @@ export class GatewayClient {
     await response.body?.cancel();
   }
 
+  /**
+   * 流式发起一轮对话。`options.signal` 只中止本地读流（离开实时视图），
+   * 不取消服务端操作——Gateway 尚无取消端点，操作照常完成并可 resume。
+   */
   async *streamTurn(
     request: GatewayClientTurnRequest,
+    options: { signal?: AbortSignal } = {},
   ): AsyncIterable<GatewayOperationEvent> {
     const body = gatewayClientTurnRequestSchema.parse(request);
     const response = await this.fetcher(`${this.baseUrl}/v1/client/turns`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      ...(options.signal ? { signal: options.signal } : {}),
     });
     if (!response.ok) throw await parseError(response);
     if (!response.body) throw new GatewayClientError(502, 'EMPTY_STREAM');

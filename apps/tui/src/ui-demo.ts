@@ -2,6 +2,7 @@ import process from 'node:process';
 import { renderBanner, renderRule } from './banner';
 import { renderHome } from './home';
 import { renderInputFrame, SLASH_COMMANDS } from './input-model';
+import { MarkdownStream } from './markdown-stream';
 import {
   renderApprovalCard,
   renderApprovalListItem,
@@ -65,12 +66,29 @@ export function runUiDemo(theme: TuiTheme, width: number): void {
     }),
   );
 
-  section('问答与引用');
+  section('问答与引用（流式 Markdown 着色）');
   write(`${theme.dai('✎')} 什么是分数的通分？`);
   write();
-  write('通分就是把两个分母不同的分数，改写成分母相同的分数，');
-  write('这样才能直接比较大小或相加减。关键是先找到两个分母的');
-  write('最小公倍数 [1]。');
+  const markdown = new MarkdownStream(theme);
+  write(
+    markdown.push(
+      [
+        '## 什么是通分',
+        '',
+        '通分就是把**分母不同**的分数，改写成分母相同的分数 [1]。',
+        '',
+        '- 先找两个分母的`最小公倍数`',
+        '- 再把分子按同样倍数放大',
+        '',
+        '> 分母不同的分数不能直接相加减。',
+        '',
+        '```python',
+        'from math import lcm',
+        'lcm(4, 6)  # 12',
+        '```',
+      ].join('\n'),
+    ) + markdown.flush(),
+  );
   write(renderCitation(theme, '《分数》第 2 节', 1));
   write(renderCompletion(theme, width, 3.2));
 
