@@ -164,6 +164,73 @@ describe('Gateway HTTP composition root', () => {
     expect(response.status).toBe(401);
   });
 
+  it('onboards a fixed local user without accepting a user id from the client', async () => {
+    const sessionAuth = new GatewayClientSessionAuth(
+      'l'.repeat(32),
+      60,
+      () => now,
+    );
+    const onboarded: string[] = [];
+    const base = await start(null, {
+      bootstrapToken: null,
+      sessionAuth,
+      identities: {
+        async ensureRegistered(input) {
+          onboarded.push(input.trustedSubjectId);
+          return {
+            userId: input.trustedSubjectId,
+            agentId: 'agent:local',
+            kind: 'registered',
+          };
+        },
+        async getActive(userId) {
+          return { userId, agentId: 'agent:local', kind: 'registered' };
+        },
+      },
+      directory: {
+        async listConversations() {
+          return [];
+        },
+      },
+      localOnboarding: {
+        userId: 'local:owner',
+        async ensureWorkspace(userId) {
+          onboarded.push(`workspace:${userId}`);
+        },
+      },
+      approvals: {
+        async listPending() {
+          return [];
+        },
+        async resolve() {
+          throw new Error('not used');
+        },
+      },
+      operations: {
+        async append() {
+          throw new Error('not used');
+        },
+      },
+    });
+    const response = await fetch(`${base}/v1/local/onboard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: 'attacker:chosen' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      userId: 'local:owner',
+      agentId: 'agent:local',
+    });
+    expect(onboarded).toEqual(['local:owner', 'workspace:local:owner']);
+
+    const adminBootstrap = await fetch(`${base}/v1/client/bootstrap`, {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'attacker:chosen' }),
+    });
+    expect(adminBootstrap.status).toBe(503);
+  });
+
   it('streams canonical NDJSON events and resumes by actor', async () => {
     const base = await start(token);
     const response = await fetch(`${base}/v1/internal/envelopes`, {

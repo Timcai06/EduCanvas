@@ -6,7 +6,7 @@ PLAYWRIGHT_PORT ?= 3100
 TEST_DATABASE_URL ?= postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
 E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e
 
-.PHONY: help doctor deps setup dev stop check lint typecheck test build \
+.PHONY: help doctor deps setup all dev tui status stop check lint typecheck test build \
 	db-up db-migrate db-logs db-integration-prepare db-e2e-prepare \
 	integration e2e
 
@@ -15,7 +15,10 @@ help:
 		'EduCanvas 本地开发命令' \
 		'' \
 		'  make setup        安装依赖、启动数据库并执行迁移' \
-		'  make dev          启动数据库、迁移、Web、Gateway 与任务 worker（PORT 默认 3101）' \
+		'  make all          启动全部已启用的非交互服务' \
+		'  make dev          启动 Web 验证环境并打开浏览器（PORT 默认 3101）' \
+		'  make tui          启动所需服务并进入交互式 TUI' \
+		'  make status       查看本地 Web、Gateway 与数据库状态' \
 		'  make stop         停止本地数据库容器并保留数据卷' \
 		'  make doctor       检查 Node、pnpm、Docker 与本地环境文件' \
 		'  make check        运行 lint、类型检查和单元测试' \
@@ -43,9 +46,20 @@ deps:
 setup: deps db-up db-migrate
 	@printf '%s\n' 'EduCanvas 本地依赖已准备完成'
 
+all: db-migrate
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs all
+
 dev: db-migrate
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; PORT=$(PORT) pnpm dev
+	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs web
+
+tui: db-migrate
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs tui
+
+status:
+	@PORT=$(PORT) node tooling/local-orchestrator.mjs status
 
 stop:
 	@docker compose stop

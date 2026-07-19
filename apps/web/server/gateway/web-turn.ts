@@ -361,9 +361,13 @@ export async function beginWebGatewayTurn(
     spaceId: conversation.spaceId,
     request,
   });
-  const principal = await identities.ensureAnonymousCompatibility({
-    trustedSubjectId: identity.studentId,
-  });
+  const principal = identity.studentId.startsWith('anon:')
+    ? await identities.ensureAnonymousCompatibility({
+        trustedSubjectId: identity.studentId,
+      })
+    : await identities.ensureRegistered({
+        trustedSubjectId: identity.studentId,
+      });
   const now = new Date().toISOString();
   const connectionId = `web:${randomUUID()}`;
   const envelope: GatewayInboundEnvelope = {
@@ -381,7 +385,7 @@ export async function beginWebGatewayTurn(
       subjectId: identity.studentId,
       userId: principal.userId,
       agentId: principal.agentId,
-      kind: 'anonymous_compat',
+      kind: principal.kind === 'registered' ? 'user' : 'anonymous_compat',
       authenticationMethod: 'session_cookie',
       authenticatedAt: now,
     },

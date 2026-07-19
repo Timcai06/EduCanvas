@@ -16,7 +16,9 @@ import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 export async function startGeneralChatAction(): Promise<void> {
   const identity = (await readAnonymousIdentity()) ?? createAnonymousIdentity();
   const conversation = await createGeneralConversation(identity);
-  await writeAnonymousIdentityCookie(identity.token);
+  if (identity.studentId.startsWith('anon:')) {
+    await writeAnonymousIdentityCookie(identity.token);
+  }
   await writeActiveConversationCookie(conversation.id);
   redirect('/');
 }
@@ -24,7 +26,9 @@ export async function startGeneralChatAction(): Promise<void> {
 export async function startNewGeneralChatAction(): Promise<void> {
   const identity = (await readAnonymousIdentity()) ?? createAnonymousIdentity();
   const conversation = await createGeneralConversation(identity);
-  await writeAnonymousIdentityCookie(identity.token);
+  if (identity.studentId.startsWith('anon:')) {
+    await writeAnonymousIdentityCookie(identity.token);
+  }
   await writeActiveConversationCookie(conversation.id);
   redirect('/');
 }

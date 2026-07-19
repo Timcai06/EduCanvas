@@ -63,9 +63,13 @@ export async function beginTeachingGatewayTurn(
 ): Promise<{ events: AsyncIterable<TeachingTurnEvent> }> {
   const target = await loadOwnedTeachingGatewayTarget(identity);
   if (!target) throw new LearningSessionOwnershipError();
-  const principal = await identities.ensureAnonymousCompatibility({
-    trustedSubjectId: identity.studentId,
-  });
+  const principal = identity.studentId.startsWith('anon:')
+    ? await identities.ensureAnonymousCompatibility({
+        trustedSubjectId: identity.studentId,
+      })
+    : await identities.ensureRegistered({
+        trustedSubjectId: identity.studentId,
+      });
   const now = new Date().toISOString();
   const connectionId = `web:${randomUUID()}`;
   const envelope: GatewayInboundEnvelope = {
@@ -83,7 +87,7 @@ export async function beginTeachingGatewayTurn(
       subjectId: identity.studentId,
       userId: principal.userId,
       agentId: principal.agentId,
-      kind: 'anonymous_compat',
+      kind: principal.kind === 'registered' ? 'user' : 'anonymous_compat',
       authenticationMethod: 'session_cookie',
       authenticatedAt: now,
     },

@@ -44,6 +44,15 @@ export function createAnonymousIdentity(): AnonymousIdentity {
 
 /** Server Component只能调用读取函数；缺失或畸形Cookie不会被静默替换。 */
 export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
+  if (
+    process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
+    (process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner')
+  ) {
+    return {
+      token: '',
+      studentId: process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner',
+    };
+  }
   const value = (await cookies()).get(ANONYMOUS_IDENTITY_COOKIE)?.value;
   if (!value) return null;
   const token = parseAnonymousToken(value);

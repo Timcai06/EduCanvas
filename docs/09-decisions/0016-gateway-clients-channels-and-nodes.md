@@ -15,7 +15,7 @@
 3. 所有入口只连接 Gateway，不直接调用 Agent Runtime、领域服务或数据库。
 4. Gateway 负责身份与配对、消息标准化、Notebook/Conversation 路由、能力协商、幂等、速率限制、审批、事件分发、断线恢复和渠道投递。
 5. Gateway 不负责模型循环、Prompt/Context 构造、Provider 路由、判分、掌握度或 Artifact 生成；这些职责分别属于 Agent Runtime、Model Gateway、可信领域服务和 Worker。
-6. Web 提供 Chat、Sources、Studio、Canvas 和复杂授权；TUI 提供聊天、任务、状态、日志与审批；能力较弱的渠道返回文本、媒体、卡片或 Web 深链接，不要求功能表现完全相同。
+6. Web 是 K12 学生主客户端，提供 Chat、Sources、Studio、Canvas、渠道连接和复杂授权；TUI 是高级第一方客户端，提供聊天、任务、状态、日志、渠道连接与审批；能力较弱的渠道返回文本、媒体、卡片或 Web 深链接，不要求功能表现完全相同。
 7. Channel 与 Node 采用声明式能力清单。Gateway 根据客户端/渠道能力决定输入输出形态，不把不支持的多模态静默降级为虚假成功。
 8. Gateway 采用**云端控制平面 + 每用户逻辑隔离 + 可选本地设备 Node**的物理拓扑：
    - 云端 Gateway 承接第一方客户端和第三方渠道连接，并持有身份、路由、审批与投递的权威状态；
@@ -26,7 +26,8 @@
 
 ## 实施选择与仍开放事项
 
-- 第一条受控消息渠道已选择Telegram私聊文本，以数据库账号/线程Binding映射到User和Conversation；群聊与媒体不在首个纵切；
+- Telegram私聊文本作为协议纵切已经完成，以数据库账号/线程Binding映射到User和Conversation；它当前降为实验性、非默认启动，不再决定正式渠道优先级；
+- 用户选择和管理通信方式必须通过 Web GUI 或 TUI 控制面完成；来源消息的回复仍由 Gateway 确定性回到来源，主动跨渠道投递是独立显式动作；
 - 第一方第二客户端为TUI；首个Node只提供状态与白名单只读文件，不提供Shell/写入；
 - 实时电话、语音消息、群聊和面向终端用户的渠道自助绑定仍未决定，不影响本ADR的控制平面边界。
 

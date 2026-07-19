@@ -121,13 +121,17 @@ export function createGatewayHttpHandler(input: {
   service: GatewayService;
   internalToken: string | null;
   clientTransport?: {
-    bootstrapToken: string;
+    bootstrapToken: string | null;
     sessionAuth: GatewayClientSessionAuth;
     identities: Pick<
       DrizzleGatewayIdentityRepository,
       'ensureRegistered' | 'getActive'
     >;
     directory: Pick<DrizzleGatewayDirectoryRepository, 'listConversations'>;
+    localOnboarding?: {
+      userId: string;
+      ensureWorkspace: (userId: string) => Promise<unknown>;
+    } | null;
     approvals: Pick<
       DrizzleGatewayApprovalRepository,
       'listPending' | 'resolve'
@@ -182,6 +186,28 @@ export function createGatewayHttpHandler(input: {
     }
 
     try {
+      if (request.method === 'POST' && url.pathname === '/v1/local/onboard') {
+        const client = input.clientTransport ?? null;
+        const remoteAddress = request.socket.remoteAddress ?? '';
+        const isLoopback =
+          remoteAddress === '127.0.0.1' ||
+          remoteAddress === '::1' ||
+          remoteAddress === '::ffff:127.0.0.1';
+        if (!client?.localOnboarding || !isLoopback) {
+          writeJson(response, 404, { error: { code: 'NOT_FOUND' } });
+          return;
+        }
+        const identity = await client.identities.ensureRegistered({
+          trustedSubjectId: client.localOnboarding.userId,
+        });
+        await client.localOnboarding.ensureWorkspace(identity.userId);
+        writeJson(response, 200, {
+          userId: identity.userId,
+          agentId: identity.agentId,
+          ...client.sessionAuth.issue(identity.userId),
+        });
+        return;
+      }
       if (request.method === 'GET' && url.pathname === '/v1/internal/metrics') {
         writeJson(response, 200, input.observability?.snapshot() ?? {});
         return;
@@ -268,7 +294,7 @@ export function createGatewayHttpHandler(input: {
         url.pathname === '/v1/client/bootstrap'
       ) {
         const client = input.clientTransport ?? null;
-        if (!client) {
+        if (!client || !client.bootstrapToken) {
           writeJson(response, 503, {
             error: { code: 'CLIENT_TRANSPORT_DISABLED' },
           });

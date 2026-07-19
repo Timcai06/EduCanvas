@@ -28,7 +28,9 @@ export async function startAnonymousLessonAction(): Promise<void> {
       ? existingIdentity
       : createAnonymousIdentity();
   await bootstrapAnonymousLesson(identity);
-  await writeAnonymousIdentityCookie(identity.token);
+  if (identity.studentId.startsWith('anon:')) {
+    await writeAnonymousIdentityCookie(identity.token);
+  }
   redirect('/learn');
 }
 
