@@ -4,6 +4,7 @@ import {
   type GatewayInboundEnvelope,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
+import { GatewayCancellationRegistry } from './cancellation';
 import { GatewayRuntimeError } from './errors';
 import type {
   GatewayEventPayload,
@@ -28,6 +29,7 @@ export class GatewayService {
     private readonly turnRunner: GatewayTurnRunnerPort,
     private readonly fingerprint: GatewayRequestFingerprintPort,
     private readonly now: () => Date = () => new Date(),
+    private readonly cancellation: GatewayCancellationRegistry = new GatewayCancellationRegistry(),
   ) {}
 
   async *handle(rawEnvelope: unknown): AsyncIterable<GatewayOperationEvent> {
@@ -75,17 +77,43 @@ export class GatewayService {
       this.now(),
     );
 
+    /* 登记中止信号，使 requestCancel 能打断本循环。abort 与 runner 事件竞速：
+       慢 Provider 阻塞在 next() 时也能即时取消，而不必等下一个 token。 */
+    const signal = this.cancellation.register(operation.operationId);
+    const abortSignal: Promise<'aborted'> = new Promise((resolve) => {
+      if (signal.aborted) resolve('aborted');
+      else signal.addEventListener('abort', () => resolve('aborted'), {
+        once: true,
+      });
+    });
+
     let terminalSeen = false;
     let approvalPending = false;
+    const iterator = this.turnRunner
+      .run({ operationId: operation.operationId, envelope, route })
+      [Symbol.asyncIterator]();
     try {
-      for await (const payload of this.turnRunner.run({
-        operationId: operation.operationId,
-        envelope,
-        route,
-      })) {
+      while (true) {
+        const step = await Promise.race([iterator.next(), abortSignal]);
+        if (step === 'aborted') {
+          /* 不 await runner 清理：它可能正阻塞在自己的 await（慢 Provider），
+             async generator 的方法调用是串行的，await return 会一直挂到那个
+             await 完成，形成死锁。fire-and-forget 让它自行收尾。 */
+          void iterator.return?.(undefined)?.catch(() => undefined);
+          if (!terminalSeen) {
+            terminalSeen = true;
+            yield await this.operationStore.append(
+              operation.operationId,
+              { type: 'operation.cancelled' },
+              this.now(),
+            );
+          }
+          break;
+        }
+        if (step.done) break;
         const event = await this.operationStore.append(
           operation.operationId,
-          payload,
+          step.value,
           this.now(),
         );
         yield event;
@@ -104,6 +132,8 @@ export class GatewayService {
           this.now(),
         );
       }
+    } finally {
+      this.cancellation.release(operation.operationId);
     }
 
     if (!terminalSeen && !approvalPending) {
@@ -113,6 +143,36 @@ export class GatewayService {
         this.now(),
       );
     }
+  }
+
+  /**
+   * 请求取消一个运行中操作。鉴权后触发中止信号；实际的
+   * `operation.cancelled` 事件由该操作自己的 handle 循环追加，
+   * 通过既有事件流回到客户端——取消不另开一条终态写入路径。
+   *
+   * 幂等：已终态返回其状态；未在本进程运行（可能刚结束或跨进程）返回
+   * `not_running`，调用方据此用 resume 回看，不伪造取消成功。
+   */
+  async requestCancel(input: {
+    operationId: string;
+    principalUserId: string;
+  }): Promise<{ status: 'cancelling' | 'not_running' | 'completed' | 'failed' | 'cancelled' }> {
+    const descriptor = await this.operationStore.describe(input.operationId);
+    if (!descriptor) {
+      throw new GatewayRuntimeError(
+        'OPERATION_NOT_FOUND',
+        'Operation not found',
+      );
+    }
+    if (descriptor.actorUserId !== input.principalUserId) {
+      throw new GatewayRuntimeError('FORBIDDEN', 'Operation access denied');
+    }
+    if (descriptor.status !== 'running') return { status: descriptor.status };
+    return {
+      status: this.cancellation.cancel(input.operationId)
+        ? 'cancelling'
+        : 'not_running',
+    };
   }
 
   async resume(input: {

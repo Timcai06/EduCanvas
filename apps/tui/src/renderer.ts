@@ -79,7 +79,7 @@ export class TurnRenderer {
       case 'operation.accepted':
         this.startedAt = Date.parse(event.occurredAt);
         /* 首个 token 到达前的等待感：墨点研磨。任何后续事件都会 settle 掉它 */
-        this.spinner.start(this.theme.dim('思考中… (esc 离开实时视图)'));
+        this.spinner.start(this.theme.dim('思考中… (esc 停止)'));
         break;
       case 'message.delta': {
         this.settleActiveTool();

@@ -2,6 +2,8 @@ import { emitKeypressEvents, type Key } from 'node:readline';
 import { stringWidth } from './text';
 import {
   completeSlashCommand,
+  cursorToLineCol,
+  lineColToCursor,
   matchSlashCommands,
   renderInputFrame,
 } from './input-model';
@@ -92,7 +94,16 @@ export class InputBox {
         this.stdin.pause();
         clearFrame();
         if (result !== null && result.length > 0) {
-          this.out.write(`${this.theme.dai('✎')} ${result}\n\n`);
+          /* 提交后折叠为对话流中的 ✎ 行；多行续行缩进对齐笔标之后 */
+          const echoed = result
+            .split('\n')
+            .map((textLine, index) =>
+              index === 0
+                ? `${this.theme.dai('✎')} ${textLine}`
+                : `  ${textLine}`,
+            )
+            .join('\n');
+          this.out.write(`${echoed}\n\n`);
           this.history.push(result);
         }
         resolve(result);
@@ -104,6 +115,13 @@ export class InputBox {
         chars.splice(cursor, 0, ...sanitized);
         value = chars.join('');
         cursor += [...sanitized].length;
+      };
+
+      const insertNewline = () => {
+        const chars = [...value];
+        chars.splice(cursor, 0, '\n');
+        value = chars.join('');
+        cursor += 1;
       };
 
       const onKeypress = (_input: string | undefined, key: Key | undefined) => {
@@ -122,6 +140,28 @@ export class InputBox {
           return;
         }
         if (name === 'return' || name === 'enter') {
+          /* 换行 vs 提交的跨终端判定：
+             - Alt/Meta+Enter 或 Ctrl+J（sequence 为 \n）→ 插入换行；
+             - 行尾反斜杠 + Enter → 反斜杠续行（每个终端都支持的兜底）；
+             - 其余 Enter → 提交。 */
+          const isNewlineKey =
+            event.key?.meta === true || event.sequence === '\n';
+          const chars = [...value];
+          const backslashContinuation =
+            cursor > 0 && chars[cursor - 1] === '\\';
+          if (isNewlineKey) {
+            insertNewline();
+            draw();
+            return;
+          }
+          if (backslashContinuation) {
+            chars.splice(cursor - 1, 1); /* 去掉续行反斜杠 */
+            value = chars.join('');
+            cursor -= 1;
+            insertNewline();
+            draw();
+            return;
+          }
           const trimmed = value.trim();
           if (trimmed.length === 0) return;
           finish(trimmed);
@@ -166,12 +206,17 @@ export class InputBox {
           return;
         }
         if ((ctrl && name === 'a') || name === 'home') {
-          cursor = 0;
+          /* 行首（多行时为当前逻辑行首） */
+          const position = cursorToLineCol(value, cursor);
+          cursor = lineColToCursor(value, position.lineIndex, 0);
           draw();
           return;
         }
         if ((ctrl && name === 'e') || name === 'end') {
-          cursor = [...value].length;
+          const position = cursorToLineCol(value, cursor);
+          const lineLength = [...(value.split('\n')[position.lineIndex] ?? '')]
+            .length;
+          cursor = lineColToCursor(value, position.lineIndex, lineLength);
           draw();
           return;
         }
@@ -188,6 +233,17 @@ export class InputBox {
           return;
         }
         if (name === 'up') {
+          const position = cursorToLineCol(value, cursor);
+          if (position.lineIndex > 0) {
+            /* 多行内向上移动，保持列位 */
+            cursor = lineColToCursor(
+              value,
+              position.lineIndex - 1,
+              position.charOffset,
+            );
+            draw();
+            return;
+          }
           if (historyIndex > 0) {
             historyIndex -= 1;
             value = this.history[historyIndex] ?? '';
@@ -197,6 +253,17 @@ export class InputBox {
           return;
         }
         if (name === 'down') {
+          const position = cursorToLineCol(value, cursor);
+          const lastLine = value.split('\n').length - 1;
+          if (position.lineIndex < lastLine) {
+            cursor = lineColToCursor(
+              value,
+              position.lineIndex + 1,
+              position.charOffset,
+            );
+            draw();
+            return;
+          }
           if (historyIndex < this.history.length) {
             historyIndex += 1;
             value = this.history[historyIndex] ?? '';

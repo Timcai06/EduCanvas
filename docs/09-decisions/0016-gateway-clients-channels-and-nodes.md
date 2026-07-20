@@ -13,7 +13,7 @@
 1. 新增逻辑上的 **EduCanvas Gateway**，作为常驻交互控制平面。它与连接模型供应商的 `model-gateway` 是两个不同概念。
 2. Web 与 TUI 是第一方客户端；微信、QQ、飞书、Telegram、Discord、短信和语音等通过 Channel Adapter 接入；手机、电脑或其他设备能力通过受配对的 Node 接入。
 3. 所有入口只连接 Gateway，不直接调用 Agent Runtime、领域服务或数据库。
-4. Gateway 负责身份与配对、消息标准化、Notebook/Conversation 路由、能力协商、幂等、速率限制、审批、事件分发、断线恢复和渠道投递。
+4. Gateway 负责身份与配对、消息标准化、Notebook/Conversation 路由、能力协商、幂等、速率限制、审批、事件分发、断线恢复、操作取消和渠道投递。取消是协作式的：客户端请求后，运行中操作在下一个事件边界（或竞速打断正在 await 的 runner）追加 `operation.cancelled`，经既有事件流回到客户端，不另开终态写入路径，也不伪造已取消。
 5. Gateway 不负责模型循环、Prompt/Context 构造、Provider 路由、判分、掌握度或 Artifact 生成；这些职责分别属于 Agent Runtime、Model Gateway、可信领域服务和 Worker。
 6. Web 是 K12 学生主客户端，提供 Chat、Sources、Studio、Canvas、渠道连接和复杂授权；TUI 是高级第一方客户端，提供聊天、任务、状态、日志、渠道连接与审批；能力较弱的渠道返回文本、媒体、卡片或 Web 深链接，不要求功能表现完全相同。
 7. Channel 与 Node 采用声明式能力清单。Gateway 根据客户端/渠道能力决定输入输出形态，不把不支持的多模态静默降级为虚假成功。
@@ -52,3 +52,5 @@
 ## 实施状态（2026-07-19）
 
 `gateway-core`、`gateway-runtime`、`apps/gateway`、TUI、Telegram私聊Adapter和Capability Node已按本ADR落地。Web/TUI同路由、跨租户隐藏、共享Notebook Actor、Delivery去重和Node撤销/重放均有自动化证据。Telegram live账号和L2/L3设备能力仍不属于已完成声明。
+
+**2026-07-20 补充**：操作取消（`POST /v1/client/operations/:id/cancel`）与近期操作列表（`GET /v1/client/operations`）落地。取消经进程内 `GatewayCancellationRegistry` 触发协作式中止，鉴权后由操作自身的 handle 循环追加 `operation.cancelled`；跨用户取消拒绝、已终态幂等回报、慢 Provider 竞速打断均有单测。TUI 侧 Esc 触发服务端取消并渲染回流的取消事件，首页与 `/resume` 列出可回看的历史操作。

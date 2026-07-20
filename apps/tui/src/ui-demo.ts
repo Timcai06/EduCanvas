@@ -37,13 +37,32 @@ export function runUiDemo(theme: TuiTheme, width: number): void {
       ],
       activeConversationId: 'demo-1',
       pendingApprovals: 1,
+      recentOperations: [
+        {
+          operationId: 'op-1',
+          conversationTitle: '分数运算（示例）',
+          status: 'completed',
+          createdAt: new Date(Date.now() - 3600_000).toISOString(),
+        },
+        {
+          operationId: 'op-2',
+          conversationTitle: '光合作用（示例）',
+          status: 'cancelled',
+          createdAt: new Date(Date.now() - 7200_000).toISOString(),
+        },
+      ],
     }),
   );
 
-  section('输入框（空 / 输入中 / 斜杠补全）');
+  section('输入框（空 / 输入中 / 多行 / 斜杠补全）');
   const inputStates = [
     { value: '', cursor: 0, suggestions: [] as typeof SLASH_COMMANDS },
     { value: '为什么天空是蓝色的？', cursor: 10, suggestions: [] as typeof SLASH_COMMANDS },
+    {
+      value: '帮我把这段话改写得更通俗：\n光的散射让短波长的蓝光更容易被大气散开。',
+      cursor: 20,
+      suggestions: [] as typeof SLASH_COMMANDS,
+    },
     { value: '/app', cursor: 4, suggestions: SLASH_COMMANDS.filter((c) => c.name.startsWith('/app')) },
   ];
   for (const state of inputStates) {

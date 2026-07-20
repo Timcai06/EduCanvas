@@ -210,6 +210,9 @@ describe('Gateway HTTP composition root', () => {
         async append() {
           throw new Error('not used');
         },
+        async listRecent() {
+          return [];
+        },
       },
     });
     const response = await fetch(`${base}/v1/local/onboard`, {
@@ -336,6 +339,9 @@ describe('Gateway HTTP composition root', () => {
         operations: {
           async append() {
             throw new Error('not used');
+          },
+          async listRecent() {
+            return [];
           },
         },
       },

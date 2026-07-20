@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   completeSlashCommand,
   computeInputWindow,
+  cursorToLineCol,
+  lineColToCursor,
   matchSlashCommands,
   renderInputFrame,
   SLASH_COMMANDS,
@@ -122,5 +124,68 @@ describe('renderInputFrame', () => {
     /* │ + 空格 + ✎ + 空格 = 4 列，「分」占 2 列 → 光标列 6 */
     expect(frame.cursorCol).toBe(6);
     expect(frame.cursorRow).toBe(1);
+  });
+});
+
+describe('multi-line cursor mapping', () => {
+  it('round-trips cursor between flat index and line/col', () => {
+    const value = '第一行\n第二行的内容\n第三';
+    /* 光标在第二行第 3 个码点后：3(行一) + 1(\n) + 3 = 7 */
+    expect(cursorToLineCol(value, 7)).toEqual({ lineIndex: 1, charOffset: 3 });
+    expect(lineColToCursor(value, 1, 3)).toBe(7);
+  });
+
+  it('clamps column when the target line is shorter', () => {
+    const value = '很长的一行\n短';
+    const down = lineColToCursor(value, 1, 4);
+    expect(cursorToLineCol(value, down)).toEqual({ lineIndex: 1, charOffset: 1 });
+  });
+});
+
+describe('renderInputFrame multi-line', () => {
+  const baseState = {
+    value: '',
+    cursor: 0,
+    placeholder: '输入问题',
+    statusLine: '状态',
+    suggestions: [],
+  };
+
+  it('renders one body row per logical line, all border-aligned', () => {
+    const frame = renderInputFrame(plain, 60, {
+      ...baseState,
+      value: '第一行\n第二行更长一些',
+      cursor: 4,
+    });
+    /* 顶/底边框 + 2 正文行 + footer = 5 行 */
+    expect(frame.lines).toHaveLength(5);
+    const widths = frame.lines.slice(0, 4).map((line) => stringWidth(line));
+    expect(new Set(widths).size).toBe(1);
+    /* 光标在第二行 → 正文第二行 = cursorRow 2 */
+    expect(frame.cursorRow).toBe(2);
+  });
+
+  it('only the first body row carries the pen glyph', () => {
+    const frame = renderInputFrame(plain, 60, {
+      ...baseState,
+      value: 'a\nb',
+      cursor: 3,
+    });
+    expect(stripAnsi(frame.lines[1]!)).toContain('✎');
+    expect(stripAnsi(frame.lines[2]!)).not.toContain('✎');
+  });
+
+  it('windows vertically around the cursor beyond six lines', () => {
+    const value = Array.from({ length: 10 }, (_, i) => `行${i}`).join('\n');
+    const frame = renderInputFrame(plain, 60, {
+      ...baseState,
+      value,
+      cursor: lineColToCursor(value, 9, 0),
+    });
+    /* 边框 2 + 最多 6 正文 + footer = 9 行 */
+    expect(frame.lines).toHaveLength(9);
+    /* 光标在最后一行，仍落在可见窗口内 */
+    expect(frame.cursorRow).toBeGreaterThanOrEqual(1);
+    expect(frame.cursorRow).toBeLessThanOrEqual(6);
   });
 });

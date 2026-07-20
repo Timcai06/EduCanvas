@@ -16,6 +16,7 @@ export interface SlashCommand {
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: '/notebooks', description: '列出笔记本' },
   { name: '/use', description: '切换笔记本' },
+  { name: '/resume', description: '回看历史回答' },
   { name: '/approvals', description: '待审批事项' },
   { name: '/approve', description: '同意审批' },
   { name: '/deny', description: '拒绝审批' },
@@ -89,6 +90,43 @@ export function computeInputWindow(
   };
 }
 
+/** 光标（码点下标）落在第几条逻辑行、行内第几个码点。 */
+export interface LineCol {
+  lineIndex: number;
+  charOffset: number;
+}
+
+export function cursorToLineCol(value: string, cursor: number): LineCol {
+  const chars = [...value];
+  const clamped = Math.min(Math.max(cursor, 0), chars.length);
+  let lineIndex = 0;
+  let charOffset = 0;
+  for (let index = 0; index < clamped; index += 1) {
+    if (chars[index] === '\n') {
+      lineIndex += 1;
+      charOffset = 0;
+    } else {
+      charOffset += 1;
+    }
+  }
+  return { lineIndex, charOffset };
+}
+
+export function lineColToCursor(
+  value: string,
+  lineIndex: number,
+  charOffset: number,
+): number {
+  const lines = value.split('\n');
+  const clampedLine = Math.min(Math.max(lineIndex, 0), lines.length - 1);
+  let cursor = 0;
+  for (let index = 0; index < clampedLine; index += 1) {
+    cursor += [...lines[index]!].length + 1; /* +1 为换行符本身 */
+  }
+  const lineLength = [...lines[clampedLine]!].length;
+  return cursor + Math.min(Math.max(charOffset, 0), lineLength);
+}
+
 export interface InputFrameState {
   value: string;
   cursor: number;
@@ -106,9 +144,54 @@ export interface InputFrame {
   cursorCol: number;
 }
 
+/** 多行输入框体最多显示的正文行数；超出按光标所在行开窗滚动。 */
+const MAX_BODY_ROWS = 6;
+
+interface BodyLayout {
+  rows: readonly string[];
+  cursorBodyRow: number;
+  cursorCol: number;
+}
+
+/**
+ * 计算多行正文的可见窗口与光标位置。逻辑行按 \n 切分；光标所在行用水平
+ * 滚动窗口保证可见，其余行按显示宽度截断；逻辑行数超过上限时以光标行为中心
+ * 纵向开窗。返回的 cursorCol 已含 4 列前缀（边框 + ✎/缩进）。
+ */
+function layoutBody(
+  value: string,
+  cursor: number,
+  innerWidth: number,
+): BodyLayout {
+  const logicalLines = value.split('\n');
+  const { lineIndex, charOffset } = cursorToLineCol(value, cursor);
+
+  let windowStart = 0;
+  if (logicalLines.length > MAX_BODY_ROWS) {
+    windowStart = Math.min(
+      Math.max(lineIndex - Math.floor(MAX_BODY_ROWS / 2), 0),
+      logicalLines.length - MAX_BODY_ROWS,
+    );
+  }
+  const visible = logicalLines.slice(windowStart, windowStart + MAX_BODY_ROWS);
+
+  let cursorCol = 4;
+  const rows = visible.map((lineText, offset) => {
+    const absoluteIndex = windowStart + offset;
+    if (absoluteIndex === lineIndex) {
+      const window = computeInputWindow(lineText, charOffset, innerWidth);
+      cursorCol = 4 + window.cursorCol;
+      return window.text;
+    }
+    return truncateToWidth(lineText, innerWidth);
+  });
+  return { rows, cursorBodyRow: lineIndex - windowStart, cursorCol };
+}
+
 /**
  * 渲染 Claude Code 式输入框：圆角细线框 + ✎ 笔标 + 底部状态/补全行。
- * 返回行数组与光标坐标，由 input-box.ts 负责贴到终端上。
+ * 支持多行输入（Shift+Enter/Alt+Enter/反斜杠续行）。返回行数组与光标坐标，
+ * 由 input-box.ts 负责贴到终端上。
  */
 export function renderInputFrame(
   theme: TuiTheme,
@@ -120,11 +203,23 @@ export function renderInputFrame(
   const border = (value: string) => theme.dim(value);
 
   const empty = state.value.length === 0;
-  const window = computeInputWindow(state.value, state.cursor, innerWidth);
-  const body = empty
-    ? theme.dim(truncateToWidth(state.placeholder, innerWidth))
-    : window.text;
-  const bodyPadded = padToWidth(body, innerWidth);
+  const layout = empty
+    ? {
+        rows: [theme.dim(truncateToWidth(state.placeholder, innerWidth))],
+        cursorBodyRow: 0,
+        cursorCol: 4,
+      }
+    : layoutBody(state.value, state.cursor, innerWidth);
+
+  const bodyLines = layout.rows.map((rowText, index) => {
+    /* 首行挂 ✎ 笔标，续行留 3 空格缩进使正文对齐在同一列 */
+    const prefix = index === 0 ? `${theme.dai('✎')} ` : '  ';
+    const padded =
+      empty && index === 0
+        ? rowText + ' '.repeat(Math.max(0, innerWidth - stringWidth(state.placeholder)))
+        : padToWidth(rowText, innerWidth);
+    return `${border('│')} ${prefix}${padded} ${border('│')}`;
+  });
 
   const footer =
     state.suggestions.length > 0
@@ -134,18 +229,17 @@ export function renderInputFrame(
             (command) =>
               `${theme.dai(command.name)} ${theme.dim(command.description)}`,
           )
-          .join(theme.dim(' · '))}${theme.dim(' — Tab 补全')}`
+          .join(theme.dim(' · '))}${theme.dim(' — Tab 补全 · Shift+Enter 换行')}`
       : `  ${theme.dim(truncateToWidth(state.statusLine, frameWidth - 2))}`;
 
   return {
     lines: [
       border(`╭${'─'.repeat(frameWidth - 2)}╮`),
-      `${border('│')} ${theme.dai('✎')} ${bodyPadded} ${border('│')}`,
+      ...bodyLines,
       border(`╰${'─'.repeat(frameWidth - 2)}╯`),
       footer,
     ],
-    cursorRow: 1,
-    /* │(1) + 空格(1) + ✎(1) + 空格(1) = 4 列后进入正文 */
-    cursorCol: 4 + (empty ? 0 : window.cursorCol),
+    cursorRow: 1 + layout.cursorBodyRow,
+    cursorCol: layout.cursorCol,
   };
 }

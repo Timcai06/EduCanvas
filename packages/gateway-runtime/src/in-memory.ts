@@ -14,8 +14,10 @@ import { GatewayRuntimeError } from './errors';
 import type {
   GatewayEventPayload,
   GatewayIdFactoryPort,
+  GatewayOperationDescriptor,
   GatewayOperationSnapshot,
   GatewayOperationStorePort,
+  GatewayRecentOperation,
   GatewayRouteResolverPort,
 } from './ports';
 
@@ -60,6 +62,7 @@ export class InMemoryGatewayRouteResolver implements GatewayRouteResolverPort {
 
 interface StoredOperation extends GatewayOperationSnapshot {
   events: GatewayOperationEvent[];
+  createdAt: string;
 }
 
 function toOperationSnapshot(
@@ -118,6 +121,7 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
       status: 'running',
       replayed: false,
       events: [],
+      createdAt: input.now.toISOString(),
     };
     this.operations.set(operationId, operation);
     this.idempotency.set(key, operationId);
@@ -178,6 +182,35 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
       throw new GatewayRuntimeError('FORBIDDEN', 'Operation access denied');
     }
     return operation.events.filter((event) => event.sequence > afterSequence);
+  }
+
+  async describe(
+    operationId: string,
+  ): Promise<GatewayOperationDescriptor | null> {
+    const operation = this.operations.get(operationId);
+    if (!operation) return null;
+    return {
+      operationId,
+      actorUserId: operation.route.actorUserId,
+      status: operation.status,
+    };
+  }
+
+  async listRecent(
+    actorUserId: string,
+    limit = 20,
+  ): Promise<readonly GatewayRecentOperation[]> {
+    return [...this.operations.values()]
+      .filter((operation) => operation.route.actorUserId === actorUserId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, Math.min(Math.max(limit, 1), 50))
+      .map((operation) => ({
+        operationId: operation.operationId,
+        conversationId: operation.route.conversationId,
+        conversationTitle: null,
+        status: operation.status,
+        createdAt: operation.createdAt,
+      }));
   }
 }
 
