@@ -34,6 +34,22 @@ export interface GatewayOperationSnapshot {
   replayed: boolean;
 }
 
+/** 取消鉴权所需的最小操作描述：归属与当前终态，绝不泄露事件内容。 */
+export interface GatewayOperationDescriptor {
+  operationId: string;
+  actorUserId: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+}
+
+/** 会话恢复入口用的近期操作摘要：定位它属于哪个笔记本、当前状态与时间。 */
+export interface GatewayRecentOperation {
+  operationId: string;
+  conversationId: string;
+  conversationTitle: string | null;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  createdAt: string;
+}
+
 export interface GatewayOperationStorePort {
   begin(input: {
     envelopeId: string;
@@ -52,6 +68,8 @@ export interface GatewayOperationStorePort {
     afterSequence: number,
     actorUserId: string,
   ): Promise<readonly GatewayOperationEvent[]>;
+  /** 取消鉴权用：返回归属与终态；操作不存在返回 null。 */
+  describe(operationId: string): Promise<GatewayOperationDescriptor | null>;
 }
 
 export interface GatewayTurnRunnerPort {

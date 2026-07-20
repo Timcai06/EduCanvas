@@ -90,8 +90,32 @@ export interface GatewayBootstrapSession {
   expiresAt: string;
 }
 
+const recentOperationSchema = z
+  .object({
+    operationId: z.string().min(1),
+    conversationId: z.string().min(1),
+    conversationTitle: z.string().nullable(),
+    status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+const cancelResultSchema = z
+  .object({
+    status: z.enum([
+      'cancelling',
+      'not_running',
+      'completed',
+      'failed',
+      'cancelled',
+    ]),
+  })
+  .strict();
+
 export type GatewayConversationEntry = z.infer<typeof conversationSchema>;
 export type GatewayPendingApproval = z.infer<typeof pendingApprovalSchema>;
+export type GatewayRecentOperation = z.infer<typeof recentOperationSchema>;
+export type GatewayCancelResult = z.infer<typeof cancelResultSchema>;
 
 export class GatewayBootstrapClient {
   private readonly baseUrl: string;
@@ -183,8 +207,9 @@ export class GatewayClient {
   }
 
   /**
-   * 流式发起一轮对话。`options.signal` 只中止本地读流（离开实时视图），
-   * 不取消服务端操作——Gateway 尚无取消端点，操作照常完成并可 resume。
+   * 流式发起一轮对话。`options.signal` 中止本地读流（离开实时视图）；
+   * 真正取消服务端操作请用 `cancelOperation`，其 `operation.cancelled`
+   * 会经本流回来。二者独立：signal 只影响本地，不触达服务端。
    */
   async *streamTurn(
     request: GatewayClientTurnRequest,
@@ -225,6 +250,32 @@ export class GatewayClient {
     } finally {
       reader.releaseLock();
     }
+  }
+
+  /** 近期回合操作，供会话恢复入口列出可 resume 的历史。 */
+  async listOperations(): Promise<readonly GatewayRecentOperation[]> {
+    const response = await this.fetcher(`${this.baseUrl}/v1/client/operations`, {
+      headers: this.headers(),
+    });
+    if (!response.ok) throw await parseError(response);
+    return z
+      .object({ operations: z.array(recentOperationSchema) })
+      .strict()
+      .parse(await response.json()).operations;
+  }
+
+  /**
+   * 请求取消一个运行中操作。服务端追加 `operation.cancelled` 并经既有事件流
+   * 回到正在读流的客户端；本方法只返回请求受理结果，不代表终态已写入。
+   */
+  async cancelOperation(operationId: string): Promise<GatewayCancelResult> {
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/operations/${encodeURIComponent(operationId)}/cancel`,
+      { method: 'POST', headers: this.headers() },
+    );
+    if (!response.ok) throw await parseError(response);
+    /* response.json() 已读尽并锁定 body，不能再 cancel()（否则 ERR_INVALID_STATE）。 */
+    return cancelResultSchema.parse(await response.json());
   }
 
   async resume(

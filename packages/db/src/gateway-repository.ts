@@ -1266,6 +1266,82 @@ export class DrizzleGatewayOperationStore {
     });
   }
 
+  /** 取消鉴权用的最小描述：归属与规范化终态。操作不存在或无归属返回 null。 */
+  async describe(operationId: string): Promise<{
+    operationId: string;
+    actorUserId: string;
+    status: 'running' | 'completed' | 'failed' | 'cancelled';
+  } | null> {
+    const [row] = await this.database
+      .select({
+        actorUserId: agentOperations.actorUserId,
+        status: agentOperations.status,
+      })
+      .from(agentOperations)
+      .where(eq(agentOperations.id, operationId))
+      .limit(1);
+    if (!row || row.actorUserId === null) return null;
+    const normalized = normalizeOperationStatus(row.status);
+    return {
+      operationId,
+      actorUserId: row.actorUserId,
+      /* pending 尚未进入运行循环，对外按 running 呈现（可取消/可等待） */
+      status:
+        row.status === 'running' || row.status === 'pending'
+          ? 'running'
+          : normalized,
+    };
+  }
+
+  /**
+   * 近期回合操作，供 TUI/客户端的会话恢复入口使用。只返回归属当前用户的
+   * `turn` 操作，附会话标题；产物生成等其他 kind 不在此列。
+   */
+  async listRecent(
+    actorUserId: string,
+    limit = 20,
+  ): Promise<
+    readonly {
+      operationId: string;
+      conversationId: string;
+      conversationTitle: string | null;
+      status: 'running' | 'completed' | 'failed' | 'cancelled';
+      createdAt: string;
+    }[]
+  > {
+    const rows = await this.database
+      .select({
+        operationId: agentOperations.id,
+        conversationId: agentOperations.conversationId,
+        title: conversations.title,
+        status: agentOperations.status,
+        createdAt: agentOperations.createdAt,
+      })
+      .from(agentOperations)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, agentOperations.conversationId),
+      )
+      .where(
+        and(
+          eq(agentOperations.actorUserId, actorUserId),
+          eq(agentOperations.kind, 'turn'),
+        ),
+      )
+      .orderBy(desc(agentOperations.createdAt), desc(agentOperations.id))
+      .limit(Math.min(Math.max(limit, 1), 50));
+    return rows.map((row) => ({
+      operationId: row.operationId,
+      conversationId: row.conversationId,
+      conversationTitle: row.title,
+      status:
+        row.status === 'running' || row.status === 'pending'
+          ? 'running'
+          : normalizeOperationStatus(row.status),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
   async listEvents(
     operationId: string,
     afterSequence: number,

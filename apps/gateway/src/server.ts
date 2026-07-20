@@ -136,7 +136,10 @@ export function createGatewayHttpHandler(input: {
       DrizzleGatewayApprovalRepository,
       'listPending' | 'resolve'
     >;
-    operations: Pick<DrizzleGatewayOperationStore, 'append'>;
+    operations: Pick<
+      DrizzleGatewayOperationStore,
+      'append' | 'listRecent'
+    >;
   } | null;
   nodeTransport?: {
     bootstrapToken: string;
@@ -359,6 +362,31 @@ export function createGatewayHttpHandler(input: {
           writeJson(response, 200, {
             approvals: await client.approvals.listPending(identity.userId),
           });
+          return;
+        }
+
+        if (
+          request.method === 'GET' &&
+          url.pathname === '/v1/client/operations'
+        ) {
+          writeJson(response, 200, {
+            operations: await client.operations.listRecent(identity.userId),
+          });
+          return;
+        }
+
+        const cancelMatch =
+          request.method === 'POST'
+            ? url.pathname.match(
+                /^\/v1\/client\/operations\/([A-Za-z0-9._:-]+)\/cancel$/,
+              )
+            : null;
+        if (cancelMatch) {
+          const result = await input.service.requestCancel({
+            operationId: cancelMatch[1]!,
+            principalUserId: identity.userId,
+          });
+          writeJson(response, 200, result);
           return;
         }
 

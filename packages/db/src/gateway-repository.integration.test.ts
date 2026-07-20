@@ -381,6 +381,27 @@ describeWithDatabase(
       await expect(
         store.append(started.operationId, { type: 'operation.cancelled' }, now),
       ).rejects.toMatchObject({ code: 'invalid_event_sequence' });
+
+      /* describe：取消鉴权用的归属+终态；未知 id 返回 null */
+      expect(await store.describe(started.operationId)).toMatchObject({
+        actorUserId: owner.userId,
+        status: 'completed',
+      });
+      expect(
+        await store.describe('00000000-0000-0000-0000-000000000000'),
+      ).toBeNull();
+
+      /* listRecent：只返回本人的回合操作。本 fixture 只给 Space 命名、
+         未给 Conversation 命名，故 conversationTitle 为 null——如实反映。 */
+      const recent = await store.listRecent(owner.userId);
+      expect(recent).toHaveLength(1);
+      expect(recent[0]).toMatchObject({
+        operationId: started.operationId,
+        conversationId: conversation.id,
+        conversationTitle: null,
+        status: 'completed',
+      });
+      expect(await store.listRecent('user:other')).toHaveLength(0);
     });
 
     it('persists actor-scoped approvals and records an explicit denial terminal', async () => {

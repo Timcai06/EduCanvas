@@ -77,6 +77,7 @@ function renderHelp(theme: TuiTheme): string {
     '',
     row('/notebooks', '列出全部笔记本'),
     row('/use <编号|id>', '切换笔记本'),
+    row('/resume [编号]', '回看历史回答的完整过程'),
     row('/approvals', '查看待审批事项'),
     row('/approve [id]', '同意最近（或指定）的审批'),
     row('/deny [id]', '拒绝最近（或指定）的审批'),
@@ -145,10 +146,14 @@ async function main(): Promise<void> {
     if (!current) throw new Error('当前账户没有可访问的笔记本');
     let lastApprovalId: string | null = null;
     let approvalsCount = 0;
+    let recentOperations: Awaited<ReturnType<typeof client.listOperations>> = [];
     try {
-      approvalsCount = (await client.listApprovals()).length;
+      [approvalsCount, recentOperations] = await Promise.all([
+        client.listApprovals().then((list) => list.length),
+        client.listOperations(),
+      ]);
     } catch {
-      /* 首页的待审批数是提示性信息，取不到不阻塞进入 */
+      /* 首页的待审批数与历史是提示性信息，取不到不阻塞进入 */
     }
 
     process.stdout.write(
@@ -158,6 +163,7 @@ async function main(): Promise<void> {
         notebooks: conversations,
         activeConversationId: current.conversationId,
         pendingApprovals: approvalsCount,
+        recentOperations,
       }),
     );
 
@@ -234,6 +240,48 @@ async function main(): Promise<void> {
           }
           continue;
         }
+        if (line === '/resume' || line.startsWith('/resume ')) {
+          const target = line.slice('/resume'.length).trim();
+          if (!target) {
+            recentOperations = await client.listOperations();
+            if (recentOperations.length === 0) {
+              process.stdout.write(`${theme.dim('还没有历史回答。')}\n\n`);
+              continue;
+            }
+            process.stdout.write('\n');
+            recentOperations.slice(0, 8).forEach((operation, index) => {
+              process.stdout.write(
+                `  ${theme.dim(`r${index + 1}.`)} ${operation.conversationTitle ?? '未命名笔记本'} ${theme.dim(`· ${operation.status} · ${operation.operationId}`)}\n`,
+              );
+            });
+            process.stdout.write(
+              `${theme.dim('  /resume <编号或 operationId> 回看完整过程')}\n\n`,
+            );
+            continue;
+          }
+          const byIndex = /^r?\d+$/.test(target)
+            ? recentOperations[Number(target.replace(/^r/, '')) - 1]
+            : undefined;
+          const operationId = byIndex?.operationId ?? target;
+          try {
+            const events = await client.resume(operationId, -1);
+            if (events.length === 0) {
+              process.stdout.write(`${theme.dim('这条回答没有可回看的记录。')}\n\n`);
+              continue;
+            }
+            process.stderr.write(
+              `${renderRule(theme, terminalWidth() - 1)}\n`,
+            );
+            const replayRenderer = new TurnRenderer(theme, makeIO());
+            for (const event of events) replayRenderer.render(event);
+            process.stdout.write('\n');
+          } catch (error) {
+            process.stderr.write(
+              `${theme.zhusha('✗')} 回看失败：${error instanceof Error ? error.message : '未知错误'}\n`,
+            );
+          }
+          continue;
+        }
         if (line === '/approvals') {
           const approvals = await client.listApprovals();
           approvalsCount = approvals.length;
@@ -298,14 +346,27 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const turnRenderer = new TurnRenderer(theme, makeIO());
-        /* Esc 只离开实时视图：Gateway 没有取消端点，操作会在后台完成，
-           这里绝不把"不看了"伪装成"已停止"。 */
-        const abort = new AbortController();
+        const turnRenderer = new TurnRenderer(theme, makeIO(), true);
+        /* Esc 真正取消服务端操作：POST 取消端点，服务端追加 operation.cancelled
+           并经同一条事件流回来——所以不中断本地读流，让 renderer 自然渲染取消。
+           localAbort 只作为兜底（取消端点不可用时离开实时视图）。 */
+        const localAbort = new AbortController();
         const rawCapable = process.stdin.isTTY === true;
+        let cancelRequested = false;
         const onStreamKey = (_input: string | undefined, key: Key | undefined) => {
           if (key?.name === 'escape' || (key?.ctrl === true && key.name === 'c')) {
-            abort.abort();
+            if (cancelRequested) return;
+            cancelRequested = true;
+            const operationId = turnRenderer.operationId;
+            if (operationId) {
+              process.stderr.write(`${theme.dim('  正在停止…')}\n`);
+              void client.cancelOperation(operationId).catch(() => {
+                /* 取消端点失败：退回本地离开实时视图 */
+                localAbort.abort();
+              });
+            } else {
+              localAbort.abort();
+            }
           }
         };
         if (rawCapable) {
@@ -322,11 +383,11 @@ async function main(): Promise<void> {
               conversationId: current.conversationId,
               parts: [{ type: 'text', text: line }],
             },
-            { signal: abort.signal },
+            { signal: localAbort.signal },
           ))
             turnRenderer.render(event);
         } catch (error) {
-          if (abort.signal.aborted) {
+          if (localAbort.signal.aborted) {
             const resumeHint = turnRenderer.operationId
               ? ` · educanvas resume ${turnRenderer.operationId} 可回看`
               : '';

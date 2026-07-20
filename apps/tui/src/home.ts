@@ -13,12 +13,36 @@ export interface HomeNotebook {
   title: string | null;
 }
 
+export interface HomeRecentOperation {
+  operationId: string;
+  conversationTitle: string | null;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  createdAt: string;
+}
+
 export interface HomeInfo {
   gatewayUrl: string;
   connected: boolean;
   notebooks: readonly HomeNotebook[];
   activeConversationId: string | null;
   pendingApprovals: number;
+  recentOperations: readonly HomeRecentOperation[];
+}
+
+const STATUS_LABEL: Record<HomeRecentOperation['status'], string> = {
+  running: '进行中',
+  completed: '已完成',
+  failed: '失败',
+  cancelled: '已停止',
+};
+
+function formatWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return sameDay
+    ? `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    : `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 export function renderHome(
@@ -70,10 +94,34 @@ export function renderHome(
   }
   lines.push('');
 
+  if (info.recentOperations.length > 0) {
+    lines.push(sectionMark('最近的回答'));
+    info.recentOperations.slice(0, 4).forEach((operation, index) => {
+      const status = operation.status;
+      const dot =
+        status === 'running'
+          ? theme.dai('◐')
+          : status === 'completed'
+            ? theme.good('✓')
+            : status === 'cancelled'
+              ? theme.dim('◌')
+              : theme.zhusha('✗');
+      const title = truncateToWidth(
+        operation.conversationTitle ?? '未命名笔记本',
+        Math.max(10, width - 28),
+      );
+      lines.push(
+        `   ${dot} ${theme.dim(`r${index + 1}.`)} ${title} ${theme.dim(`· ${STATUS_LABEL[status]} · ${formatWhen(operation.createdAt)}`)}`,
+      );
+    });
+    lines.push(`   ${theme.dim('/resume 编号 回看某条回答的完整过程')}`);
+    lines.push('');
+  }
+
   lines.push(sectionMark('开始'));
   lines.push(`   ${theme.dim('直接输入问题，就会问当前笔记本的 AI 老师')}`);
   lines.push(
-    `   ${theme.dim('输入 / 呼出命令 · Tab 补全 · /use 编号 切换笔记本 · /web 打开网页端')}`,
+    `   ${theme.dim('输入 / 呼出命令 · Tab 补全 · /use 编号 切换 · /resume 回看 · /web 网页端')}`,
   );
   lines.push('');
   return lines.join('\n');

@@ -4,6 +4,7 @@ import {
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import { describe, expect, it } from 'vitest';
+import { GatewayCancellationRegistry } from './cancellation';
 import { GatewayRuntimeError } from './errors';
 import { Sha256GatewayRequestFingerprint } from './fingerprint';
 import { GatewayService } from './gateway-service';
@@ -61,7 +62,9 @@ function envelope(text = '解释光合作用'): GatewayInboundEnvelope {
   };
 }
 
-function buildService(runner?: GatewayTurnRunnerPort) {
+function buildService(runner?: GatewayTurnRunnerPort): GatewayService & {
+  store: InMemoryGatewayOperationStore;
+} {
   const route = {
     actorUserId: 'user:1',
     agentId: 'agent:1',
@@ -92,13 +95,16 @@ function buildService(runner?: GatewayTurnRunnerPort) {
       yield { type: 'operation.completed', messageId: 'message:assistant:1' };
     },
   };
-  return new GatewayService(
+  const cancellation = new GatewayCancellationRegistry();
+  const service = new GatewayService(
     resolver,
     store,
     runner ?? defaultRunner,
     new Sha256GatewayRequestFingerprint(),
     () => now,
+    cancellation,
   );
+  return Object.assign(service, { store });
 }
 
 async function collect(iterable: AsyncIterable<GatewayOperationEvent>) {
@@ -196,5 +202,74 @@ describe('GatewayService', () => {
         principalUserId: 'user:2',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('cancels a running operation mid-stream and persists the terminal event', async () => {
+    /* runner 发一个 delta 后无限阻塞，模拟慢 Provider；取消必须打断 await */
+    let release = () => undefined as void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const service = buildService({
+      async *run() {
+        yield { type: 'message.delta', delta: '正在思考…' };
+        await blocked;
+        yield { type: 'operation.completed', messageId: 'never' };
+      },
+    });
+    const iterator = service.handle(envelope())[Symbol.asyncIterator]();
+    const accepted = await iterator.next();
+    const delta = await iterator.next();
+    expect(accepted.value?.type).toBe('operation.accepted');
+    expect(delta.value?.type).toBe('message.delta');
+
+    const cancelResult = await service.requestCancel({
+      operationId: accepted.value!.operationId,
+      principalUserId: 'user:1',
+    });
+    expect(cancelResult.status).toBe('cancelling');
+
+    const cancelled = await iterator.next();
+    expect(cancelled.value).toMatchObject({ type: 'operation.cancelled' });
+    expect((await iterator.next()).done).toBe(true);
+    release();
+
+    /* 终态已落库：resume 能读回 cancelled，且不再 append */
+    const replayed = await service.resume({
+      operationId: accepted.value!.operationId,
+      afterSequence: -1,
+      principalUserId: 'user:1',
+    });
+    expect(replayed.at(-1)).toMatchObject({ type: 'operation.cancelled' });
+  });
+
+  it('refuses to cancel another user operation and reports terminal state idempotently', async () => {
+    const service = buildService();
+    const events = await collect(service.handle(envelope()));
+    const operationId = events[0]!.operationId;
+
+    await expect(
+      service.requestCancel({ operationId, principalUserId: 'user:2' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    /* 已完成的操作取消是幂等 no-op，回报其终态而非伪造 cancelling */
+    const result = await service.requestCancel({
+      operationId,
+      principalUserId: 'user:1',
+    });
+    expect(result.status).toBe('completed');
+  });
+
+  it('lists a user recent operations without leaking others', async () => {
+    const service = buildService();
+    await collect(service.handle(envelope()));
+    const mine = await service.store.listRecent('user:1');
+    const theirs = await service.store.listRecent('user:2');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      conversationId: 'conversation:1',
+      status: 'completed',
+    });
+    expect(theirs).toHaveLength(0);
   });
 });
