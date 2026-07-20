@@ -10,6 +10,7 @@ import {
   renderToolStarted,
 } from './render';
 import { InkSpinner } from './spinner';
+import { MarkdownStream } from './markdown-stream';
 import type { TuiTheme } from './theme';
 
 export interface RendererIO {
@@ -35,6 +36,9 @@ export class TurnRenderer {
   private progressActive = false;
   private lastProgress = 0;
   private startedAt: number | null = null;
+  private markdown: MarkdownStream;
+  /** 本轮的 operationId（首个事件携带），供中断后提示 resume。 */
+  operationId: string | null = null;
   /** 本轮出现过的审批请求，供 REPL 在回合结束后接手处理。 */
   readonly pendingApprovals: GatewayOperationEvent[] = [];
 
@@ -43,6 +47,7 @@ export class TurnRenderer {
     private readonly io: RendererIO,
   ) {
     this.spinner = new InkSpinner(io.err);
+    this.markdown = new MarkdownStream(theme);
   }
 
   private breakTextLine(): void {
@@ -69,15 +74,16 @@ export class TurnRenderer {
   }
 
   render(event: GatewayOperationEvent): void {
+    this.operationId ??= event.operationId;
     switch (event.type) {
       case 'operation.accepted':
         this.startedAt = Date.parse(event.occurredAt);
         /* 首个 token 到达前的等待感：墨点研磨。任何后续事件都会 settle 掉它 */
-        this.spinner.start(this.theme.dim('思考中…'));
+        this.spinner.start(this.theme.dim('思考中… (esc 离开实时视图)'));
         break;
       case 'message.delta': {
         this.settleActiveTool();
-        this.io.out.write(event.delta);
+        this.io.out.write(this.markdown.push(event.delta));
         this.needsNewline = !event.delta.endsWith('\n');
         break;
       }
@@ -160,6 +166,7 @@ export class TurnRenderer {
       }
       case 'operation.completed': {
         this.settleActiveTool();
+        this.io.out.write(this.markdown.flush());
         this.breakTextLine();
         const seconds =
           this.startedAt !== null
@@ -172,12 +179,14 @@ export class TurnRenderer {
       }
       case 'operation.failed': {
         this.settleActiveTool();
+        this.io.out.write(this.markdown.flush());
         this.breakTextLine();
         this.io.err.write(`${renderFailure(this.theme, event.code)}\n`);
         break;
       }
       case 'operation.cancelled': {
         this.settleActiveTool();
+        this.io.out.write(this.markdown.flush());
         this.breakTextLine();
         this.io.err.write(
           `${this.theme.dim('── 已停止这轮回答 ──')}\n`,

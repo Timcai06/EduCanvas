@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
+import { emitKeypressEvents, type Key } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import {
   GatewayBootstrapClient,
@@ -298,18 +299,51 @@ async function main(): Promise<void> {
         }
 
         const turnRenderer = new TurnRenderer(theme, makeIO());
+        /* Esc 只离开实时视图：Gateway 没有取消端点，操作会在后台完成，
+           这里绝不把"不看了"伪装成"已停止"。 */
+        const abort = new AbortController();
+        const rawCapable = process.stdin.isTTY === true;
+        const onStreamKey = (_input: string | undefined, key: Key | undefined) => {
+          if (key?.name === 'escape' || (key?.ctrl === true && key.name === 'c')) {
+            abort.abort();
+          }
+        };
+        if (rawCapable) {
+          emitKeypressEvents(process.stdin);
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+          process.stdin.on('keypress', onStreamKey);
+        }
         try {
-          for await (const event of client.streamTurn({
-            clientMessageId: `tui:${randomUUID()}`,
-            notebookId: current.notebookId,
-            conversationId: current.conversationId,
-            parts: [{ type: 'text', text: line }],
-          }))
+          for await (const event of client.streamTurn(
+            {
+              clientMessageId: `tui:${randomUUID()}`,
+              notebookId: current.notebookId,
+              conversationId: current.conversationId,
+              parts: [{ type: 'text', text: line }],
+            },
+            { signal: abort.signal },
+          ))
             turnRenderer.render(event);
         } catch (error) {
-          process.stderr.write(
-            `\n${theme.zhusha('✗')} 连接中断：${error instanceof Error ? error.message : '未知错误'}${theme.dim('（消息未丢失，可用 educanvas resume 恢复）')}\n`,
-          );
+          if (abort.signal.aborted) {
+            const resumeHint = turnRenderer.operationId
+              ? ` · educanvas resume ${turnRenderer.operationId} 可回看`
+              : '';
+            process.stderr.write(
+              `\n${theme.dim(`── 已离开这轮回答的实时视图，AI 老师仍在后台完成它${resumeHint} ──`)}\n`,
+            );
+          } else {
+            process.stderr.write(
+              `\n${theme.zhusha('✗')} 连接中断：${error instanceof Error ? error.message : '未知错误'}${theme.dim('（消息未丢失，可用 educanvas resume 恢复）')}\n`,
+            );
+          }
+        } finally {
+          if (rawCapable) {
+            process.stdin.off('keypress', onStreamKey);
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+          }
         }
         for (const approvalEvent of turnRenderer.pendingApprovals) {
           if (approvalEvent.type === 'approval.required') {
