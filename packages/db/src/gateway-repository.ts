@@ -1286,9 +1286,10 @@ export class DrizzleGatewayOperationStore {
       operationId,
       actorUserId: row.actorUserId,
       /* pending 尚未进入运行循环，对外按 running 呈现（可取消/可等待） */
-      status: row.status === 'running' || row.status === 'pending'
-        ? 'running'
-        : normalized,
+      status:
+        row.status === 'running' || row.status === 'pending'
+          ? 'running'
+          : normalized,
     };
   }
 
