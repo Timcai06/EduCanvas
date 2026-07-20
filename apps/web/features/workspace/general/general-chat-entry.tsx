@@ -4,6 +4,8 @@ import { startGeneralChatAction } from '@/app/actions';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useCallback, useState, useTransition } from 'react';
+import { OfflineBanner } from '@/features/chat/offline-banner';
+import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
 import { LogoMark } from '../shared/logo-mark';
 
@@ -21,6 +23,7 @@ const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
 ];
 
 export function GeneralChatEntry() {
+  const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
   const [canvasSelected, setCanvasSelected] = useState(false);
   const begin = useCallback((prompt: string) => {
@@ -56,6 +59,11 @@ export function GeneralChatEntry() {
         </span>
         <span className="flex-1" />
       </header>
+      {!online ? (
+        <div className="shrink-0 pt-1">
+          <OfflineBanner />
+        </div>
+      ) : null}
       <EmptyChatHero>
         <Composer
           chips={[]}
