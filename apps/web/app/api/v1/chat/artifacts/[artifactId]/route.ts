@@ -66,7 +66,7 @@ export async function GET(
           trustedSubjectId: identity.studentId,
         })
       : detail.latestVersion;
-    const versions = await repository.listVersions({
+    const versions = await repository.listVersionProvenance({
       artifactId,
       trustedSubjectId: identity.studentId,
     });
@@ -82,7 +82,11 @@ export async function GET(
         title: detail.artifact.title,
         status: detail.artifact.status,
         latestVersion: detail.artifact.latestVersion,
+        createdAt: detail.artifact.createdAt,
         updatedAt: detail.artifact.updatedAt,
+        /* 溯源:产物确由本笔记本对话生成时为 true。不泄露 conversationId 本身，
+           只给 UI 一个可信的"从对话生长出来"标记。 */
+        fromConversation: detail.artifact.conversationId !== null,
       },
       version: selectedVersion
         ? {
@@ -100,6 +104,7 @@ export async function GET(
       versions: versions.map((version) => ({
         version: version.version,
         generatedBy: version.generatedBy,
+        revisionInstruction: version.revisionInstruction,
         createdAt: version.createdAt,
       })),
       latestJob: detail.latestJob
