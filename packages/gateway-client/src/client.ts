@@ -207,8 +207,9 @@ export class GatewayClient {
   }
 
   /**
-   * 流式发起一轮对话。`options.signal` 只中止本地读流（离开实时视图），
-   * 不取消服务端操作——Gateway 尚无取消端点，操作照常完成并可 resume。
+   * 流式发起一轮对话。`options.signal` 中止本地读流（离开实时视图）；
+   * 真正取消服务端操作请用 `cancelOperation`，其 `operation.cancelled`
+   * 会经本流回来。二者独立：signal 只影响本地，不触达服务端。
    */
   async *streamTurn(
     request: GatewayClientTurnRequest,
@@ -273,9 +274,8 @@ export class GatewayClient {
       { method: 'POST', headers: this.headers() },
     );
     if (!response.ok) throw await parseError(response);
-    const result = cancelResultSchema.parse(await response.json());
-    await response.body?.cancel();
-    return result;
+    /* response.json() 已读尽并锁定 body，不能再 cancel()（否则 ERR_INVALID_STATE）。 */
+    return cancelResultSchema.parse(await response.json());
   }
 
   async resume(

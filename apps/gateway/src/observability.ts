@@ -115,8 +115,12 @@ export function gatewayRouteLabel(method: string, pathname: string): string {
   if (/^\/v1\/client\/approvals\/[^/]+\/decision$/.test(pathname)) {
     return 'client.approval.decision';
   }
+  if (pathname === '/v1/client/operations') return 'client.operations';
   if (/^\/v1\/client\/operations\/[^/]+\/events$/.test(pathname)) {
     return 'client.operation.events';
+  }
+  if (/^\/v1\/client\/operations\/[^/]+\/cancel$/.test(pathname)) {
+    return 'client.operation.cancel';
   }
   if (pathname === '/v1/node/pair') return 'node.pair';
   if (pathname === '/v1/node/heartbeat') return 'node.heartbeat';

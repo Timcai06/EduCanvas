@@ -42,9 +42,15 @@ export class TurnRenderer {
   /** 本轮出现过的审批请求，供 REPL 在回合结束后接手处理。 */
   readonly pendingApprovals: GatewayOperationEvent[] = [];
 
+  /**
+   * @param interruptible 仅交互式 REPL 传 true——它才处理 esc 取消；
+   *   `chat`/`resume`/`ui-demo` 等非交互路径不显示"esc 停止"，避免承诺
+   *   一个当前上下文做不到的操作。
+   */
   constructor(
     private readonly theme: TuiTheme,
     private readonly io: RendererIO,
+    private readonly interruptible = false,
   ) {
     this.spinner = new InkSpinner(io.err);
     this.markdown = new MarkdownStream(theme);
@@ -79,7 +85,11 @@ export class TurnRenderer {
       case 'operation.accepted':
         this.startedAt = Date.parse(event.occurredAt);
         /* 首个 token 到达前的等待感：墨点研磨。任何后续事件都会 settle 掉它 */
-        this.spinner.start(this.theme.dim('思考中… (esc 停止)'));
+        this.spinner.start(
+          this.theme.dim(
+            this.interruptible ? '思考中… (esc 停止)' : '思考中…',
+          ),
+        );
         break;
       case 'message.delta': {
         this.settleActiveTool();

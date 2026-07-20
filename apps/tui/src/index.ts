@@ -346,7 +346,7 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const turnRenderer = new TurnRenderer(theme, makeIO());
+        const turnRenderer = new TurnRenderer(theme, makeIO(), true);
         /* Esc 真正取消服务端操作：POST 取消端点，服务端追加 operation.cancelled
            并经同一条事件流回来——所以不中断本地读流，让 renderer 自然渲染取消。
            localAbort 只作为兜底（取消端点不可用时离开实时视图）。 */
