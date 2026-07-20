@@ -62,6 +62,14 @@
 - **版本即来历**：版本选择器逐项讲清每版怎么来的——`v1 · 初始生成`、`v2 · 你的修改：…`（修改要求来自服务端 `revisionInstruction`，即用户当时写下的共创指令）；
 - **不泄露**：溯源投影绝不包含判分键、私有 objectKey/checksum、conversationId 原值或模型内部账本。
 
+## 跨客户端交接
+
+TUI 与 Web 是操作同一个笔记本的两种窗口，不是两套数据。
+
+- **TUI → Web**：TUI `/web` 打开 Web `/open?conversation=<id>` 落点，浏览器切到同一个笔记本。落点必须先按当前浏览器身份 `getOwned` 校验所有权，只有拥有才写当前对话游标；不拥有或参数非法时静默回到默认笔记本，绝不因 URL 参数串用他人对话（信任边界见 `app/open/route.ts` 与其 boundary 测试）。
+- **Web → TUI**：本地模式下 Web 与 TUI 同为 `local:owner`、共享同一批 Conversation，TUI 直接运行即见同一批笔记本，无需在 K12 主界面塞入终端入口（终端是高级用户入口，不打扰学生）。
+- 深链只用 Conversation ID，与 BFF/Gateway 架构无关；Web 迁移到 Gateway 后交接机制不变。
+
 ## AI 老师对话体验
 
 - 老师消息不用气泡（头像 + 正文直接落在页面上），学生消息是页面唯一气泡；

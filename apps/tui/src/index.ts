@@ -81,7 +81,7 @@ function renderHelp(theme: TuiTheme): string {
     row('/approvals', '查看待审批事项'),
     row('/approve [id]', '同意最近（或指定）的审批'),
     row('/deny [id]', '拒绝最近（或指定）的审批'),
-    row('/web', '在浏览器打开 Web 端'),
+    row('/web', '在浏览器打开当前笔记本'),
     row('/help', '显示本说明'),
     row('/quit', '退出'),
     '',
@@ -333,10 +333,15 @@ async function main(): Promise<void> {
           continue;
         }
         if (line === '/web') {
-          const webUrl =
+          const webBase =
             process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101';
-          openWeb(webUrl);
-          process.stdout.write(`${theme.dim(`已在浏览器打开 ${webUrl}`)}\n\n`);
+          /* 带上当前 Conversation：Web 的 /open 落点会在浏览器身份拥有它时
+             切到同一个笔记本（本地模式下 Web/TUI 同为 local:owner、共享对话）。 */
+          const handoffUrl = `${webBase.replace(/\/$/, '')}/open?conversation=${encodeURIComponent(current.conversationId)}`;
+          openWeb(handoffUrl);
+          process.stdout.write(
+            `${theme.dim(`已在浏览器打开当前笔记本 · ${webBase}`)}\n\n`,
+          );
           continue;
         }
         if (line.startsWith('/')) {

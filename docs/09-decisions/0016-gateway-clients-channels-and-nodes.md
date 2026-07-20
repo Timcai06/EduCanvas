@@ -54,3 +54,5 @@
 `gateway-core`、`gateway-runtime`、`apps/gateway`、TUI、Telegram私聊Adapter和Capability Node已按本ADR落地。Web/TUI同路由、跨租户隐藏、共享Notebook Actor、Delivery去重和Node撤销/重放均有自动化证据。Telegram live账号和L2/L3设备能力仍不属于已完成声明。
 
 **2026-07-20 补充**：操作取消（`POST /v1/client/operations/:id/cancel`）与近期操作列表（`GET /v1/client/operations`）落地。取消经进程内 `GatewayCancellationRegistry` 触发协作式中止，鉴权后由操作自身的 handle 循环追加 `operation.cancelled`；跨用户取消拒绝、已终态幂等回报、慢 Provider 竞速打断均有单测。TUI 侧 Esc 触发服务端取消并渲染回流的取消事件，首页与 `/resume` 列出可回看的历史操作。
+
+**跨客户端交接（2026-07-20）**：TUI `/web` 带 `?conversation=<id>` 打开 Web 的 `/open` 落点，把浏览器切到同一个笔记本。本地模式下 Web 与 TUI 同为 `local:owner`、共享同一批 Conversation，交接是真实的（同一 Conversation ID 在两端都被拥有）；云端匿名身份不拥有对方对话，`/open` 经服务端 `getOwned` 校验后静默回落默认笔记本，绝不因 URL 参数串用他人对话。`?conversation=<id>` 深链与架构无关（BFF 与迁移后的 Gateway 同样以 Conversation ID 定位），不是一次性方案。反向（Web→TUI）在本地模式下天然成立——TUI 直接 `educanvas` 即见同一批笔记本，无需在 K12 主界面塞终端入口。
