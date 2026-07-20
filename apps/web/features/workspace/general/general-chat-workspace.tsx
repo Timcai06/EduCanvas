@@ -17,6 +17,8 @@ import {
 } from '@/features/canvas/artifact-client';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
+import { OfflineBanner } from '@/features/chat/offline-banner';
+import { useOnlineStatus } from '@/features/chat/use-online-status';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import {
   useAgentTurn,
@@ -225,6 +227,7 @@ export function GeneralChatWorkspace({
     });
   }, []);
 
+  const online = useOnlineStatus();
   const isLanding = turn.messages.length === 0;
   const notebookSources = assets.filter((asset) => asset.scope === 'space');
   const composerTools = [
@@ -343,6 +346,11 @@ export function GeneralChatWorkspace({
           ref={mainRef}
           className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
         >
+          {!online ? (
+            <div className="relative z-10 shrink-0 pt-1">
+              <OfflineBanner />
+            </div>
+          ) : null}
           {isLanding ? (
             <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
               <HeroGreeting />
