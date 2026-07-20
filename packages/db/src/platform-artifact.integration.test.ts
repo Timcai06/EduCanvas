@@ -163,6 +163,47 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     expect(versions.map((version) => version.version)).toEqual([2, 1]);
   });
 
+  it('版本溯源还原每版来历:初始生成与共创修改要求', async () => {
+    const artifact = await createArtifact();
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { nodes: [{ id: 'root', label: 'AI' }] },
+      generatedBy: 'rule:outline-v1',
+    });
+    const reviseJob = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { revision: { baseVersion: 1, instruction: '把根节点改成蓝色' } },
+    });
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { nodes: [{ id: 'root', label: 'AI（蓝）' }] },
+      generatedBy: 'model:artifact.revise:v1',
+      generationJobId: reviseJob.id,
+    });
+
+    const provenance = await repository.listVersionProvenance({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(provenance).toEqual([
+      {
+        version: 2,
+        generatedBy: 'model:artifact.revise:v1',
+        revisionInstruction: '把根节点改成蓝色',
+        createdAt: expect.any(String),
+      },
+      {
+        version: 1,
+        generatedBy: 'rule:outline-v1',
+        revisionInstruction: null,
+        createdAt: expect.any(String),
+      },
+    ]);
+  });
+
   it('数据库形状约束拒绝\"内容与对象引用同时缺失或同时存在\"', async () => {
     const artifact = await createArtifact();
     await expectConstraint(

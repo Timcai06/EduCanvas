@@ -18,6 +18,11 @@ import {
   type CreatableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
+import {
+  ArtifactGeneratingSkeleton,
+  ArtifactProvenanceStrip,
+  isArtifactGenerating,
+} from './artifact-provenance';
 import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
@@ -336,6 +341,23 @@ export function ArtifactCanvas({
   const canRevise = ['mind_map', 'slides', 'flashcards'].includes(
     detail.artifact.kind,
   );
+  const generating = isArtifactGenerating(detail, revising);
+  /* 生成中且当前展示的最新版还没有内容:显示骨架而非空态文案 */
+  const showSkeleton = generating && isLatest && !detail.version;
+  const versionLabel = (version: {
+    version: number;
+    revisionInstruction: string | null;
+  }): string => {
+    const latest =
+      version.version === detail.artifact.latestVersion ? ' · 最新' : '';
+    const origin =
+      version.version === 1
+        ? '初始生成'
+        : version.revisionInstruction
+          ? `你的修改：${version.revisionInstruction.slice(0, 24)}`
+          : '共创修改';
+    return `v${version.version}${latest} · ${origin}`;
+  };
   return (
     <CanvasHost
       ariaLabel="产物Canvas"
@@ -346,6 +368,7 @@ export function ArtifactCanvas({
       onToggleFull={onToggleFull}
     >
       <div className="flex min-h-0 flex-1 flex-col">
+        <ArtifactProvenanceStrip detail={detail} revising={revising} />
         <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2.5">
           <label className="flex items-center gap-2 text-xs text-ink-muted">
             <span>版本</span>
@@ -353,14 +376,11 @@ export function ArtifactCanvas({
               aria-label="Canvas版本"
               value={displayedVersion || ''}
               onChange={(event) => onSelectVersion(Number(event.target.value))}
-              className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {detail.versions.map((version) => (
                 <option key={version.version} value={version.version}>
-                  v{version.version}
-                  {version.version === detail.artifact.latestVersion
-                    ? ' · 最新'
-                    : ''}
+                  {versionLabel(version)}
                 </option>
               ))}
             </select>
@@ -370,7 +390,9 @@ export function ArtifactCanvas({
           </span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
-          {detail.artifact.kind === 'mind_map' && detail.version ? (
+          {showSkeleton ? (
+            <ArtifactGeneratingSkeleton />
+          ) : detail.artifact.kind === 'mind_map' && detail.version ? (
             <MindMapRenderer
               key={displayedVersion}
               content={detail.version.content}

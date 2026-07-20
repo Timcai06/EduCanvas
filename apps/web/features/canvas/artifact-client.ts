@@ -12,8 +12,15 @@ export interface ArtifactSummary {
   latestVersion: number;
 }
 
+/** 产物详情里附带的溯源信息:产物是否由本对话生成、创建/更新时间。 */
+export interface ArtifactProvenance {
+  fromConversation: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ArtifactDetail {
-  artifact: ArtifactSummary;
+  artifact: ArtifactSummary & ArtifactProvenance;
   version: {
     version: number;
     content: unknown;
@@ -22,6 +29,8 @@ export interface ArtifactDetail {
   versions: readonly {
     version: number;
     generatedBy: string | null;
+    /** 该版本由用户的哪条修改要求生成;初始生成为 null。 */
+    revisionInstruction: string | null;
     createdAt: string;
   }[];
   latestJob: {

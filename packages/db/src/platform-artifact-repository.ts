@@ -301,6 +301,47 @@ export class DrizzlePlatformArtifactRepository {
     return rows.map(toVersion);
   }
 
+  /**
+   * 版本溯源清单：每版怎么来的。用生成任务 params 里的 revision.instruction
+   * 还原"你当时的修改要求"，供 Canvas 版本历史讲清初始生成 vs 逐轮共创。
+   * 只投影用户自己写下的指令与生成器标识，不含判分键或模型内部账本。
+   */
+  async listVersionProvenance(input: {
+    artifactId: string;
+    trustedSubjectId: string;
+  }): Promise<
+    readonly {
+      version: number;
+      generatedBy: string | null;
+      revisionInstruction: string | null;
+      createdAt: string;
+    }[]
+  > {
+    await this.getArtifact(input);
+    const rows = await this.database
+      .select({
+        version: artifactVersions.version,
+        generatedBy: artifactVersions.generatedBy,
+        createdAt: artifactVersions.createdAt,
+        instruction: sql<
+          string | null
+        >`${artifactGenerationJobs.params} #>> '{revision,instruction}'`,
+      })
+      .from(artifactVersions)
+      .leftJoin(
+        artifactGenerationJobs,
+        eq(artifactVersions.generationJobId, artifactGenerationJobs.id),
+      )
+      .where(eq(artifactVersions.artifactId, input.artifactId))
+      .orderBy(desc(artifactVersions.version));
+    return rows.map((row) => ({
+      version: row.version,
+      generatedBy: row.generatedBy,
+      revisionInstruction: row.instruction,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
   async getVersion(input: {
     artifactId: string;
     version: number;
