@@ -55,4 +55,4 @@
 
 **2026-07-20 补充**：操作取消（`POST /v1/client/operations/:id/cancel`）与近期操作列表（`GET /v1/client/operations`）落地。取消经进程内 `GatewayCancellationRegistry` 触发协作式中止，鉴权后由操作自身的 handle 循环追加 `operation.cancelled`；跨用户取消拒绝、已终态幂等回报、慢 Provider 竞速打断均有单测。TUI 侧 Esc 触发服务端取消并渲染回流的取消事件，首页与 `/resume` 列出可回看的历史操作。
 
-**跨客户端交接（2026-07-20）**：TUI `/web` 带 `?conversation=<id>` 打开 Web 的 `/open` 落点，把浏览器切到同一个笔记本。本地模式下 Web 与 TUI 同为 `local:owner`、共享同一批 Conversation，交接是真实的（同一 Conversation ID 在两端都被拥有）；云端匿名身份不拥有对方对话，`/open` 经服务端 `getOwned` 校验后静默回落默认笔记本，绝不因 URL 参数串用他人对话。`?conversation=<id>` 深链与架构无关（BFF 与迁移后的 Gateway 同样以 Conversation ID 定位），不是一次性方案。反向（Web→TUI）在本地模式下天然成立——TUI 直接 `educanvas` 即见同一批笔记本，无需在 K12 主界面塞终端入口。
+**跨客户端交接（2026-07-21）**：TUI `/web` 通过 Client session 向 Gateway 请求两分钟有效的 32-byte opaque token，再以 `/open?token=<token>` 打开 Web。PostgreSQL 只保存 SHA-256 摘要、签发主体、Conversation、到期与消费时间；Web 必须以当前可信主体原子消费，成功后才写 Conversation 游标。重放、过期、跨主体与非法 token 均不写游标并静默回默认笔记本，拒绝原因不返回浏览器。反向（Web→TUI）继续依靠两端统一主体与 Gateway Notebook 目录：启动 TUI 即看到同一批笔记本，不在 K12 主界面暴露终端入口。该实现使用既有 PostgreSQL 事实源，不引入 Redis 或进程内一次性状态。

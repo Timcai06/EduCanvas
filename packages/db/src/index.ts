@@ -54,6 +54,11 @@ export {
   type GatewayStoredOperationSnapshot,
 } from './gateway-repository';
 export {
+  DrizzleGatewayHandoffRepository,
+  type GatewayHandoffConsumeResult,
+  type GatewayHandoffRejectionReason,
+} from './gateway-handoff-repository';
+export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,

@@ -288,6 +288,44 @@ export const gatewayChannelThreadBindings = pgTable(
   ],
 );
 
+/**
+ * 跨客户端交接的短期授权账本。只保存 SHA-256 摘要而不保存 URL 中的原始凭证；
+ * PostgreSQL 负责原子消费和到期判断，避免多进程下依赖内存锁或新增 Redis。
+ */
+export const gatewayHandoffTokens = pgTable(
+  'gateway_handoff_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tokenDigest: text('token_digest').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => platformUsers.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references((): AnyPgColumn => conversations.id, {
+        onDelete: 'cascade',
+      }),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('gateway_handoff_tokens_digest_unique').on(table.tokenDigest),
+    index('gateway_handoff_tokens_user_expiry_idx').on(
+      table.userId,
+      table.expiresAt,
+    ),
+    check(
+      'gateway_handoff_tokens_digest_check',
+      sql`${table.tokenDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'gateway_handoff_tokens_time_check',
+      sql`${table.expiresAt} > ${table.issuedAt} and (${table.consumedAt} is null or ${table.consumedAt} >= ${table.issuedAt})`,
+    ),
+  ],
+);
+
 export const gatewayNodePairings = pgTable(
   'gateway_node_pairings',
   {

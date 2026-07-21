@@ -335,13 +335,18 @@ async function main(): Promise<void> {
         if (line === '/web') {
           const webBase =
             process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101';
-          /* 带上当前 Conversation：Web 的 /open 落点会在浏览器身份拥有它时
-             切到同一个笔记本（本地模式下 Web/TUI 同为 local:owner、共享对话）。 */
-          const handoffUrl = `${webBase.replace(/\/$/, '')}/open?conversation=${encodeURIComponent(current.conversationId)}`;
-          openWeb(handoffUrl);
-          process.stdout.write(
-            `${theme.dim(`已在浏览器打开当前笔记本 · ${webBase}`)}\n\n`,
-          );
+          try {
+            const handoff = await client.createHandoff(current.conversationId);
+            const handoffUrl = `${webBase.replace(/\/$/, '')}/open?token=${encodeURIComponent(handoff.token)}`;
+            openWeb(handoffUrl);
+            process.stdout.write(
+              `${theme.dim(`已在浏览器打开当前笔记本 · ${webBase}`)}\n\n`,
+            );
+          } catch (error) {
+            process.stderr.write(
+              `${theme.zhusha('✗')} 打开失败：${error instanceof Error ? error.message : '未知错误'}\n`,
+            );
+          }
           continue;
         }
         if (line.startsWith('/')) {

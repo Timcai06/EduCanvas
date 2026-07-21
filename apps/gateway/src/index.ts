@@ -7,6 +7,7 @@ import {
   DrizzleGatewayDirectoryRepository,
   DrizzleGatewayApprovalRepository,
   DrizzleGatewayIdentityRepository,
+  DrizzleGatewayHandoffRepository,
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
@@ -81,6 +82,7 @@ const server = createServer(
             : null,
           approvals: new DrizzleGatewayApprovalRepository(),
           operations: operationStore,
+          handoffs: new DrizzleGatewayHandoffRepository(),
         }
       : null,
     nodeTransport:

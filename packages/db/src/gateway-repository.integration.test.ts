@@ -15,6 +15,7 @@ import {
   DrizzleGatewayRouteResolver,
   GatewayPersistenceError,
 } from './gateway-repository';
+import { DrizzleGatewayHandoffRepository } from './gateway-handoff-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 import { notebookMemberships } from './schema';
@@ -59,6 +60,7 @@ describeWithDatabase(
     beforeEach(async () => {
       await getDatabase().execute(sql`
       truncate table
+        gateway_handoff_tokens,
         gateway_approvals,
         gateway_operation_events,
         gateway_deliveries,
@@ -128,6 +130,65 @@ describeWithDatabase(
         agentProfileId: 'general',
         membershipRole: 'owner',
       });
+    });
+
+    it('atomically rejects handoff replay, expiry and a different subject', async () => {
+      const conversations = new DrizzlePlatformConversationRepository(
+        getDatabase(),
+      );
+      const handoffs = new DrizzleGatewayHandoffRepository(getDatabase());
+      const conversation = await conversations.create({
+        ownerSubjectId: 'user:owner',
+        spaceKind: 'notebook',
+        spaceTitle: '交接测试',
+        now,
+      });
+      const validDigest = 'a'.repeat(64);
+      await handoffs.issue({
+        tokenDigest: validDigest,
+        userId: 'user:owner',
+        conversationId: conversation.id,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 120_000),
+      });
+
+      expect(
+        await handoffs.consume({
+          tokenDigest: validDigest,
+          trustedSubjectId: 'user:other',
+          now: new Date(now.getTime() + 1_000),
+        }),
+      ).toEqual({ status: 'rejected', reason: 'forbidden' });
+      expect(
+        await handoffs.consume({
+          tokenDigest: validDigest,
+          trustedSubjectId: 'user:owner',
+          now: new Date(now.getTime() + 2_000),
+        }),
+      ).toEqual({ status: 'consumed', conversationId: conversation.id });
+      expect(
+        await handoffs.consume({
+          tokenDigest: validDigest,
+          trustedSubjectId: 'user:owner',
+          now: new Date(now.getTime() + 3_000),
+        }),
+      ).toEqual({ status: 'rejected', reason: 'replayed' });
+
+      const expiredDigest = 'b'.repeat(64);
+      await handoffs.issue({
+        tokenDigest: expiredDigest,
+        userId: 'user:owner',
+        conversationId: conversation.id,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 1_000),
+      });
+      expect(
+        await handoffs.consume({
+          tokenDigest: expiredDigest,
+          trustedSubjectId: 'user:owner',
+          now: new Date(now.getTime() + 1_001),
+        }),
+      ).toEqual({ status: 'rejected', reason: 'expired' });
     });
 
     it('allows a contributor to use a shared Notebook without sharing Agent identity', async () => {

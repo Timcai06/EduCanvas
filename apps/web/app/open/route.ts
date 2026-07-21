@@ -1,34 +1,37 @@
+import { createHash } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { writeActiveConversationCookie } from '@/server/platform/general-conversation';
-import { DrizzlePlatformConversationRepository } from '@educanvas/db';
+import { DrizzleGatewayHandoffRepository } from '@educanvas/db';
+import { gatewayHandoffTokenSchema } from '@educanvas/gateway-core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
- * 跨客户端交接落点：TUI 的 `/web` 带 `?conversation=<id>` 打开这里，把浏览器
- * 切到同一个笔记本，让"换了个窗口"成立。
+ * 跨客户端交接落点：TUI 的 `/web` 带短期一次性凭证打开这里，把浏览器切到
+ * 同一个笔记本，让"换了个窗口"成立。
  *
- * 边界：只有当前浏览器身份**确实拥有**该 Conversation 时才切换游标（本地
- * 模式下 Web 与 TUI 同为 local:owner、共享同一批对话；云端匿名身份则不拥有
- * 对方的对话）。不拥有或参数非法时静默回到 `/` 加载默认笔记本——绝不因 URL
- * 参数泄露或串用他人对话。这是导航副作用而非破坏性操作，故用 GET。
+ * 边界：PostgreSQL 只允许凭证归属主体在到期前原子消费一次；原始凭证不落库，
+ * Conversation ID 也不再出现在 URL。非法、过期、重放或跨主体请求统一静默回到
+ * `/`，既不泄露拒绝原因，也不写当前对话游标。这是导航副作用，故入口仍为 GET。
  */
 export async function GET(request: Request): Promise<Response> {
-  const conversationId = new URL(request.url).searchParams.get('conversation');
-  if (conversationId && UUID_PATTERN.test(conversationId)) {
+  const token = new URL(request.url).searchParams.get('token');
+  const parsed = gatewayHandoffTokenSchema.safeParse(token);
+  if (parsed.success) {
     const identity = await readAnonymousIdentity();
     if (identity) {
-      const conversations = new DrizzlePlatformConversationRepository();
-      const owned = await conversations.getOwned({
-        conversationId,
+      const handoffs = new DrizzleGatewayHandoffRepository();
+      const result = await handoffs.consume({
+        tokenDigest: createHash('sha256')
+          .update(parsed.data, 'utf8')
+          .digest('hex'),
         trustedSubjectId: identity.studentId,
       });
-      if (owned) await writeActiveConversationCookie(owned.id);
+      if (result.status === 'consumed') {
+        await writeActiveConversationCookie(result.conversationId);
+      }
     }
   }
   redirect('/');

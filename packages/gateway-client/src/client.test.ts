@@ -88,6 +88,37 @@ describe('GatewayClient', () => {
     });
   });
 
+  it('creates a handoff without putting the conversation or session in the URL', async () => {
+    let seenUrl = '';
+    let seenBody = '';
+    const fetcher: typeof fetch = async (input, init) => {
+      seenUrl = String(input);
+      seenBody = String(init?.body ?? '');
+      expect(init?.headers).toMatchObject({
+        authorization: `Bearer ${'t'.repeat(32)}`,
+      });
+      return Response.json(
+        {
+          token: 'h'.repeat(43),
+          expiresAt: '2026-07-21T08:02:00.000Z',
+        },
+        { status: 201 },
+      );
+    };
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      fetcher,
+    );
+    expect(await client.createHandoff('conversation:1')).toMatchObject({
+      token: 'h'.repeat(43),
+    });
+    expect(seenUrl).toBe('http://127.0.0.1:3200/v1/client/handoffs');
+    expect(seenUrl).not.toContain('conversation:1');
+    expect(seenUrl).not.toContain('t'.repeat(32));
+    expect(JSON.parse(seenBody)).toEqual({ conversationId: 'conversation:1' });
+  });
+
   it('parses arbitrarily chunked NDJSON events', async () => {
     const event = JSON.stringify({
       protocol: 'gateway.v1',
