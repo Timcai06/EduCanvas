@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -119,6 +119,76 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       `;
       expect(statusDefault[0]).toMatchObject({ is_nullable: 'NO' });
       expect(statusDefault[0]?.column_default).toContain('now()');
+    });
+  });
+
+  it('从0023升级时保留旧教学Model Run并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0024_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '76000000-0000-4000-8000-000000000001';
+      const assistantMessageId = '76000000-0000-4000-8000-000000000002';
+      const turnId = '76000000-0000-4000-8000-000000000003';
+      const runId = '76000000-0000-4000-8000-000000000004';
+      const leaseId = '76000000-0000-4000-8000-000000000005';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-model-run-student', 'middle_school',
+          'migration-model-run-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, role, status, lease_id,
+          lease_expires_at, heartbeat_at
+        ) values (
+          ${assistantMessageId}, ${sessionId}, ${turnId}, 'assistant',
+          'pending', ${leaseId}, now() + interval '5 minutes', now()
+        )
+      `;
+      await connection`
+        insert into model_runs (
+          id, session_id, operation_id, operation_kind,
+          assistant_message_id, turn_id, phase, attempt, trace_id,
+          task_alias, model_alias, prompt_version, prompt_hash, status
+        ) values (
+          ${runId}, ${sessionId}, ${turnId}, 'teaching_turn',
+          ${assistantMessageId}, ${turnId}, 'answer', 1, 'trace:migration',
+          'teaching.turn', 'primary', 'teaching-v1', ${'a'.repeat(64)},
+          'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0024_light_viper.sql');
+      expect(
+        await connection`
+          select session_id, operation_kind, agent_operation_id,
+            assistant_message_id, conversation_message_id
+          from model_runs where id = ${runId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          operation_kind: 'teaching_turn',
+          agent_operation_id: null,
+          assistant_message_id: assistantMessageId,
+          conversation_message_id: null,
+        },
+      ]);
+      const sessionColumn = await connection<{ is_nullable: string }[]>`
+        select is_nullable
+        from information_schema.columns
+        where table_schema = 'public' and table_name = 'model_runs'
+          and column_name = 'session_id'
+      `;
+      expect(sessionColumn).toEqual([{ is_nullable: 'YES' }]);
     });
   });
 
