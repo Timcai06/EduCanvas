@@ -1376,6 +1376,89 @@ export const toolEffects = pgTable(
 );
 
 /**
+ * 高风险工具/外部等待的耐久执行游标。只保存稳定业务引用与lease，
+ * 不保存Prompt、消息正文、工具参数、Credential、Secret或副作用结果。
+ */
+export const operationContinuations = pgTable(
+  'operation_continuations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    operationId: uuid('operation_id')
+      .notNull()
+      .references(() => agentOperations.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    protocolVersion: text('protocol_version').notNull(),
+    kind: text('kind').notNull(),
+    step: text('step').notNull(),
+    approvalId: text('approval_id').notNull(),
+    toolCallId: uuid('tool_call_id')
+      .notNull()
+      .references(() => toolCalls.id, { onDelete: 'cascade' }),
+    adapterSource: text('adapter_source').notNull(),
+    resumeRef: text('resume_ref').notNull(),
+    status: text('status').notNull().default('waiting_approval'),
+    leaseGeneration: integer('lease_generation').notNull().default(0),
+    leaseOwnerId: text('lease_owner_id'),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('operation_continuations_operation_sequence_unique').on(
+      table.operationId,
+      table.sequence,
+    ),
+    uniqueIndex('operation_continuations_active_operation_unique')
+      .on(table.operationId)
+      .where(sql`${table.status} in ('waiting_approval', 'ready', 'running')`),
+    uniqueIndex('operation_continuations_approval_unique').on(table.approvalId),
+    uniqueIndex('operation_continuations_tool_call_unique').on(
+      table.toolCallId,
+    ),
+    uniqueIndex('operation_continuations_adapter_resume_unique').on(
+      table.adapterSource,
+      table.resumeRef,
+    ),
+    index('operation_continuations_claim_idx').on(
+      table.status,
+      table.leaseExpiresAt,
+      table.updatedAt,
+    ),
+    check(
+      'operation_continuations_kind_check',
+      sql`${table.sequence} between 1 and 1000 and ${table.kind} = 'tool_approval' and ${table.step} = 'tool.invoke'`,
+    ),
+    check(
+      'operation_continuations_status_check',
+      sql`${table.status} in ('waiting_approval', 'ready', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
+    check(
+      'operation_continuations_text_check',
+      sql`${table.protocolVersion} = 'educanvas.operation-continuation.v1' and char_length(${table.approvalId}) between 1 and 256 and ${table.approvalId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and ${table.adapterSource} in ('local', 'teaching', 'mcp', 'node') and char_length(${table.resumeRef}) between 1 and 256 and ${table.resumeRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and (${table.leaseOwnerId} is null or (char_length(${table.leaseOwnerId}) between 1 and 256 and ${table.leaseOwnerId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$')) and (${table.failureCode} is null or ${table.failureCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
+    ),
+    check(
+      'operation_continuations_lease_check',
+      sql`${table.leaseGeneration} between 0 and 1000000 and ((${table.status} = 'running' and ${table.leaseGeneration} >= 1 and ${table.leaseOwnerId} is not null and ${table.leaseExpiresAt} is not null and ${table.heartbeatAt} is not null) or (${table.status} <> 'running' and ${table.leaseOwnerId} is null and ${table.leaseExpiresAt} is null and ${table.heartbeatAt} is null))`,
+    ),
+    check(
+      'operation_continuations_terminal_check',
+      sql`((${table.status} in ('completed', 'failed', 'cancelled')) = (${table.completedAt} is not null)) and ((${table.status} = 'failed') = (${table.failureCode} is not null))`,
+    ),
+    check(
+      'operation_continuations_time_check',
+      sql`${table.updatedAt} >= ${table.createdAt} and (${table.completedAt} is null or ${table.completedAt} >= ${table.createdAt})`,
+    ),
+  ],
+);
+
+/**
  * Turn 输入/输出的安全决策审计。该表刻意不提供正文、Prompt、推理或 detector payload 字段，
  * 只保存可关联、可版本化的稳定分类结果。
  */

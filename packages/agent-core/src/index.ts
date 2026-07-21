@@ -124,6 +124,26 @@ export {
   type TurnApplicationFailureCode,
 } from './turn-application-contracts';
 
+export {
+  MAX_OPERATION_CONTINUATION_LEASE_MS,
+  MIN_OPERATION_CONTINUATION_LEASE_MS,
+  createOperationContinuationInputSchema,
+  operationContinuationAdapterSourceSchema,
+  operationContinuationAdapterSources,
+  operationContinuationProtocolVersion,
+  operationContinuationSnapshotSchema,
+  operationContinuationStatusSchema,
+  operationContinuationStatuses,
+  operationContinuationWorkSchema,
+  type CreateOperationContinuationInput,
+  type OperationContinuationAdapterSource,
+  type OperationContinuationPort,
+  type OperationContinuationSnapshot,
+  type OperationContinuationStatus,
+  type OperationContinuationTerminalStatus,
+  type OperationContinuationWork,
+} from './operation-continuation';
+
 export type {
   AgentTurnContextLedgerPort,
   AgentTurnContextMaterial,

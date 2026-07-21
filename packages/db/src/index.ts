@@ -192,6 +192,12 @@ export {
   ToolEffectOwnershipError,
 } from './tool-effect-repository';
 export {
+  DrizzleOperationContinuationRepository,
+  OperationContinuationConflictError,
+  OperationContinuationLifecycleError,
+  OperationContinuationOwnershipError,
+} from './operation-continuation-repository';
+export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,
   SafetyDecisionOwnershipError,
