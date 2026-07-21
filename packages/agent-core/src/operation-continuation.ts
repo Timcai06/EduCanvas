@@ -4,6 +4,9 @@ import { z } from 'zod';
 export const operationContinuationProtocolVersion =
   'educanvas.operation-continuation.v1' as const;
 
+/** Graphile Worker注册与Gateway原子入队共用的任务名，禁止调用方散写。 */
+export const OPERATION_CONTINUATION_TASK = 'operation:continue' as const;
+
 /** 允许持久化的continuation生命周期状态。 */
 export const operationContinuationStatuses = [
   'waiting_approval',

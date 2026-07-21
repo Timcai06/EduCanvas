@@ -17,6 +17,8 @@ EduCanvas 的持久任务 worker 进程（[ADR-0019](../../docs/09-decisions/001
 - `src/tasks/ingest-knowledge-document.ts`：受控创建/复用Source并写入已解析资料版本；
 - `src/tasks/generate-artifact.ts`：结构化产物与音频概览生成；音频在对象写入后
   先保存checkpoint，重投时校验已有对象并继续提交版本，不重复调用TTS；
+- `src/tasks/continue-operation.ts`：消费只含continuation UUID的审批续跑任务，重算当前Agent/Notebook/approval范围、维护generation lease，并要求Adapter先结算业务账本再原子提交continuation与Operation终态；
+- `src/approval-continuation.integration.test.ts`：覆盖批准原子入队、队列隐私、Worker跨进程领取、终态原子性与Membership撤销后fail closed；
 - `src/tasks/audio-overview-generation.ts`：把1–8项已验证来源压成受限脚本；
 - `src/worker.integration.test.ts`：队列回路与 SQL 事务性入队的集成测试。
 
@@ -34,6 +36,7 @@ make integration         # 含本包的 PostgreSQL 集成测试
 
 - 业务代码内(推荐):在 Drizzle 事务里执行 `select graphile_worker.add_job('任务名', payload)`,与业务写入原子提交;
 - 任务 payload 是不可信输入,处理器内必须先过 Zod 校验。
+- continuation任务不得携带正文、Prompt、工具参数、Credential、Secret或effect结果；真实恢复内容只允许由Adapter通过`resumeRef`读取自己拥有的耐久业务意图。
 
 ## 改动前必读
 

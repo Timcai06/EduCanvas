@@ -112,6 +112,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 - `envelopeId` 标识原生输入，`idempotencyKey + requestFingerprint` 决定replay或409冲突；
 - `operationId + sequence` 是持久事件cursor，`after=-1`读取全部，断线后按序恢复；
 - `operation.accepted` 后可有message/tool/artifact/approval事件，并且只能出现一个operation终态；
+- 审批decision端点只调用Operation Store的原子决策方法：denied与失败终态同事务，approved与`approval.resolved + continuation ready + graphile job`同事务；HTTP层不得拆成多次append；
 - 恢复接口必须重新验证actor，越权与不存在不泄露目标内容；
 - Event和错误只使用稳定码，不返回Provider异常、Secret或消息正文；
 - Web兼容层把`message.started`映射为`turn.accepted`，确保Gateway Operation与既有Turn复用同一ID。
