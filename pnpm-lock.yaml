@@ -459,6 +459,9 @@ importers:
 
   packages/gateway-runtime:
     dependencies:
+      '@educanvas/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
       '@educanvas/gateway-core':
         specifier: workspace:*
         version: link:../gateway-core

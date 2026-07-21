@@ -22,7 +22,8 @@ import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { beginGatewayTeachingTurn } from '../teaching/learning-turn';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
-import { gatewayToLegacy, legacyToGateway } from './web-turn';
+import { gatewayToLegacy } from './turn-application-projection';
+import { legacyToGateway } from './web-turn';
 
 const identities = new DrizzleGatewayIdentityRepository();
 const routes = new DrizzleGatewayRouteResolver();
