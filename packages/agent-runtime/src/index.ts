@@ -13,6 +13,15 @@ export {
   type ConversationContextOptions,
   type ConversationContextSnapshot,
 } from './conversation-context';
+export {
+  CONTEXT_ENGINE_VERSION,
+  ContextEngineInputError,
+  buildAgentContext,
+  type BuiltAgentContext,
+  type ContextMemoryInput,
+  type ContextSegment,
+  type ContextSegmentKind,
+} from './context-engine';
 export { LocalObjectStorage } from './local-object-storage';
 export {
   MAX_RESPONSE_CHARACTERS,
