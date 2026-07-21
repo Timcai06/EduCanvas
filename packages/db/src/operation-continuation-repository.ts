@@ -85,7 +85,13 @@ export type OperationContinuationExecutionClaim =
       status: 'reauthorization_failed';
       operationId: string;
       actorId: string;
-    };
+    }
+  | {
+      status: 'cancellation_requested';
+      operationId: string;
+      actorId: string;
+    }
+  | { status: 'lease_held'; retryAt: string };
 
 function isSafeOpaqueId(value: string, max = 256): boolean {
   return (
@@ -483,6 +489,8 @@ export class DrizzleOperationContinuationRepository implements OperationContinua
           actorId: agentOperations.actorUserId,
           operationStatus: agentOperations.status,
           cancelRequestedAt: agentOperations.cancelRequestedAt,
+          continuationStatus: operationContinuations.status,
+          leaseExpiresAt: operationContinuations.leaseExpiresAt,
         })
         .from(operationContinuations)
         .innerJoin(
@@ -491,12 +499,25 @@ export class DrizzleOperationContinuationRepository implements OperationContinua
         )
         .where(eq(operationContinuations.id, input.continuationId))
         .limit(1);
-      if (
-        !base?.actorId ||
-        base.operationStatus !== 'running' ||
-        base.cancelRequestedAt
-      ) {
+      if (!base?.actorId || base.operationStatus !== 'running') {
         return { status: 'not_claimed' };
+      }
+      if (base.cancelRequestedAt) {
+        return {
+          status: 'cancellation_requested',
+          operationId: base.operationId,
+          actorId: base.actorId,
+        };
+      }
+      if (
+        base.continuationStatus === 'running' &&
+        base.leaseExpiresAt &&
+        base.leaseExpiresAt > now
+      ) {
+        return {
+          status: 'lease_held',
+          retryAt: base.leaseExpiresAt.toISOString(),
+        };
       }
       const [scope] = await transaction
         .select({
@@ -602,7 +623,27 @@ export class DrizzleOperationContinuationRepository implements OperationContinua
           ),
         )
         .returning();
-      if (!claimed) return { status: 'not_claimed' };
+      if (!claimed) {
+        const [current] = await transaction
+          .select({
+            status: operationContinuations.status,
+            leaseExpiresAt: operationContinuations.leaseExpiresAt,
+          })
+          .from(operationContinuations)
+          .where(eq(operationContinuations.id, input.continuationId))
+          .limit(1);
+        if (
+          current?.status === 'running' &&
+          current.leaseExpiresAt &&
+          current.leaseExpiresAt > now
+        ) {
+          return {
+            status: 'lease_held',
+            retryAt: current.leaseExpiresAt.toISOString(),
+          };
+        }
+        return { status: 'not_claimed' };
+      }
       return {
         status: 'claimed',
         continuation: toSnapshot(claimed),

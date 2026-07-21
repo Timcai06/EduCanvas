@@ -520,21 +520,21 @@ describeWithDatabase(
           actorUserId: 'user:other',
           now,
         }),
-      ).resolves.toBe(false);
+      ).resolves.toEqual({ recorded: false, continuation: 'none' });
       await expect(
         store.requestCancellation({
           operationId: operation.operationId,
           actorUserId: owner.userId,
           now: new Date(now.getTime() + 1_000),
         }),
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ recorded: true, continuation: 'none' });
       await expect(
         store.requestCancellation({
           operationId: operation.operationId,
           actorUserId: owner.userId,
           now: new Date(now.getTime() + 2_000),
         }),
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ recorded: true, continuation: 'none' });
       await expect(
         turns.isTurnCancellationRequested({
           trustedSubjectId: owner.userId,
@@ -552,7 +552,7 @@ describeWithDatabase(
           actorUserId: owner.userId,
           now: new Date(now.getTime() + 4_000),
         }),
-      ).resolves.toBe(false);
+      ).resolves.toEqual({ recorded: false, continuation: 'none' });
     });
 
     it('persists actor-scoped approvals and records an explicit denial terminal', async () => {

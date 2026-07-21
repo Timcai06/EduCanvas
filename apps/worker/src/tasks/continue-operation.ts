@@ -51,6 +51,9 @@ interface ContinuationRepositoryPort {
 }
 
 interface OperationStorePort {
+  cancelContinuation(
+    input: Parameters<DrizzleGatewayOperationStore['cancelContinuation']>[0],
+  ): ReturnType<DrizzleGatewayOperationStore['cancelContinuation']>;
   rejectContinuationAuthorization(
     input: Parameters<
       DrizzleGatewayOperationStore['rejectContinuationAuthorization']
@@ -61,6 +64,14 @@ interface OperationStorePort {
   settleContinuation(
     input: Parameters<DrizzleGatewayOperationStore['settleContinuation']>[0],
   ): ReturnType<DrizzleGatewayOperationStore['settleContinuation']>;
+}
+
+/** Graphile必须重试仍由存活/未过期generation持有的任务，不能把它误报成功。 */
+export class OperationContinuationLeaseHeldError extends Error {
+  constructor(readonly retryAt: string) {
+    super('continuation_lease_held');
+    this.name = 'OperationContinuationLeaseHeldError';
+  }
 }
 
 /**
@@ -94,7 +105,7 @@ export function createContinueOperationTask(input: {
     }
   }
 
-  return async (rawPayload) => {
+  return async (rawPayload, helpers) => {
     const payload = payloadSchema.parse(rawPayload);
     const ownerId = `worker:${process.pid}:${randomUUID()}`;
     const claimed = await continuations.claimForExecution({
@@ -103,6 +114,17 @@ export function createContinueOperationTask(input: {
       leaseDurationMs,
     });
     if (claimed.status === 'not_claimed') return;
+    if (claimed.status === 'lease_held') {
+      throw new OperationContinuationLeaseHeldError(claimed.retryAt);
+    }
+    if (claimed.status === 'cancellation_requested') {
+      await operations.cancelContinuation({
+        continuationId: payload.continuationId,
+        operationId: claimed.operationId,
+        actorUserId: claimed.actorId,
+      });
+      return;
+    }
     if (claimed.status === 'reauthorization_failed') {
       await operations.rejectContinuationAuthorization({
         continuationId: payload.continuationId,
@@ -117,7 +139,18 @@ export function createContinueOperationTask(input: {
       `${continuation.work.adapterSource}:${scope.capability}`,
     );
     const controller = new AbortController();
-    const heartbeatEveryMs = Math.max(5_000, Math.floor(leaseDurationMs / 3));
+    const workerSignal = helpers?.abortSignal;
+    const abortForWorkerShutdown = () =>
+      controller.abort('graphile_worker_shutdown');
+    if (workerSignal?.aborted) abortForWorkerShutdown();
+    else
+      workerSignal?.addEventListener('abort', abortForWorkerShutdown, {
+        once: true,
+      });
+    const heartbeatEveryMs = Math.max(
+      1_000,
+      Math.min(5_000, Math.floor(leaseDurationMs / 3)),
+    );
     const timer = setInterval(() => {
       void continuations
         .heartbeat({
@@ -174,6 +207,7 @@ export function createContinueOperationTask(input: {
       throw error;
     } finally {
       clearInterval(timer);
+      workerSignal?.removeEventListener('abort', abortForWorkerShutdown);
       controller.abort('continuation_finished');
     }
   };

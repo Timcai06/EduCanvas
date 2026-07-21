@@ -1417,12 +1417,13 @@ export class DrizzleGatewayOperationStore {
       }
       const queueJobKey = `operation-continuation:${continuation.id}`;
       const payload = JSON.stringify({ continuationId: continuation.id });
+      /* 25次覆盖最长15分钟业务lease及Graphile指数退避，避免恢复任务在可重领前永久失败。 */
       await transaction.execute(sql`
         select graphile_worker.add_job(
           ${OPERATION_CONTINUATION_TASK},
           payload := ${payload}::json,
           job_key := ${queueJobKey},
-          max_attempts := 10
+          max_attempts := 25
         )
       `);
       return {
@@ -1524,6 +1525,42 @@ export class DrizzleGatewayOperationStore {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
       );
+      const [operation] = await transaction
+        .select({
+          status: agentOperations.status,
+          actorUserId: agentOperations.actorUserId,
+          cancelRequestedAt: agentOperations.cancelRequestedAt,
+        })
+        .from(agentOperations)
+        .where(eq(agentOperations.id, input.operationId))
+        .limit(1);
+      if (!operation?.actorUserId || operation.status !== 'running') {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Operation is no longer running for continuation settlement',
+        );
+      }
+      if (operation.cancelRequestedAt) {
+        const cancelled = await this.cancelContinuationWithinTransaction(
+          transaction,
+          {
+            continuationId: input.continuationId,
+            operationId: input.operationId,
+            actorUserId: operation.actorUserId,
+            statuses: ['running'],
+            ownerId: input.ownerId,
+            leaseGeneration: input.leaseGeneration,
+            now,
+          },
+        );
+        if (!cancelled) {
+          throw new GatewayPersistenceError(
+            'invalid_event_sequence',
+            'Continuation lease is stale during cancellation',
+          );
+        }
+        return cancelled;
+      }
       if (input.result.status === 'completed') {
         const [platformMessage] = await transaction
           .select({ id: conversationMessages.id })
@@ -1604,6 +1641,121 @@ export class DrizzleGatewayOperationStore {
     });
   }
 
+  private async cancelContinuationWithinTransaction(
+    transaction: DatabaseTransaction,
+    input: {
+      continuationId?: string;
+      operationId: string;
+      actorUserId: string;
+      statuses: readonly ('waiting_approval' | 'ready' | 'running')[];
+      ownerId?: string;
+      leaseGeneration?: number;
+      now: Date;
+    },
+  ): Promise<GatewayOperationEvent | null> {
+    const conditions = [
+      eq(operationContinuations.operationId, input.operationId),
+      inArray(operationContinuations.status, input.statuses),
+    ];
+    if (input.continuationId) {
+      conditions.push(eq(operationContinuations.id, input.continuationId));
+    }
+    if (input.ownerId) {
+      conditions.push(eq(operationContinuations.leaseOwnerId, input.ownerId));
+    }
+    if (input.leaseGeneration !== undefined) {
+      conditions.push(
+        eq(operationContinuations.leaseGeneration, input.leaseGeneration),
+      );
+    }
+    const [cancelled] = await transaction
+      .update(operationContinuations)
+      .set({
+        status: 'cancelled',
+        leaseOwnerId: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        failureCode: null,
+        updatedAt: input.now,
+        completedAt: input.now,
+      })
+      .where(and(...conditions))
+      .returning({ approvalId: operationContinuations.approvalId });
+    if (!cancelled) return null;
+    await transaction
+      .update(gatewayApprovals)
+      .set({
+        status: 'revoked',
+        decidedByUserId: input.actorUserId,
+        decidedAt: input.now,
+        reason: 'operation_cancelled',
+      })
+      .where(
+        and(
+          eq(gatewayApprovals.id, cancelled.approvalId),
+          eq(gatewayApprovals.operationId, input.operationId),
+          eq(gatewayApprovals.actorUserId, input.actorUserId),
+          eq(gatewayApprovals.status, 'pending'),
+        ),
+      );
+    return this.appendWithinTransaction(
+      transaction,
+      input.operationId,
+      { type: 'operation.cancelled' },
+      input.now,
+    );
+  }
+
+  /** Worker观察到持久取消请求后，原子废止lease并写入唯一Operation取消终态。 */
+  async cancelContinuation(input: {
+    continuationId: string;
+    operationId: string;
+    actorUserId: string;
+    now?: Date;
+  }): Promise<GatewayOperationEvent> {
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
+      );
+      const [operation] = await transaction
+        .select({ id: agentOperations.id })
+        .from(agentOperations)
+        .where(
+          and(
+            eq(agentOperations.id, input.operationId),
+            eq(agentOperations.actorUserId, input.actorUserId),
+            eq(agentOperations.status, 'running'),
+            sql`${agentOperations.cancelRequestedAt} is not null`,
+          ),
+        )
+        .limit(1);
+      if (!operation) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Operation has no active cancellation request',
+        );
+      }
+      const cancelled = await this.cancelContinuationWithinTransaction(
+        transaction,
+        {
+          continuationId: input.continuationId,
+          operationId: input.operationId,
+          actorUserId: input.actorUserId,
+          statuses: ['waiting_approval', 'ready', 'running'],
+          now,
+        },
+      );
+      if (!cancelled) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Operation has no active continuation to cancel',
+        );
+      }
+      return cancelled;
+    });
+  }
+
   /** 取消鉴权用的最小描述：归属与规范化终态。操作不存在或无归属返回 null。 */
   async describe(operationId: string): Promise<{
     operationId: string;
@@ -1636,38 +1788,75 @@ export class DrizzleGatewayOperationStore {
     operationId: string;
     actorUserId: string;
     now: Date;
-  }): Promise<boolean> {
-    const [updated] = await this.database
-      .update(agentOperations)
-      .set({ cancelRequestedAt: input.now })
-      .where(
-        and(
-          eq(agentOperations.id, input.operationId),
-          eq(agentOperations.actorUserId, input.actorUserId),
-          inArray(agentOperations.status, ['pending', 'running']),
-          isNull(agentOperations.cancelRequestedAt),
-        ),
-      )
-      .returning({ id: agentOperations.id });
-    if (updated) return true;
-    const [existing] = await this.database
-      .select({
-        status: agentOperations.status,
-        cancelRequestedAt: agentOperations.cancelRequestedAt,
-      })
-      .from(agentOperations)
-      .where(
-        and(
-          eq(agentOperations.id, input.operationId),
-          eq(agentOperations.actorUserId, input.actorUserId),
-        ),
-      )
-      .limit(1);
-    return Boolean(
-      existing &&
-      ['pending', 'running'].includes(existing.status) &&
-      existing.cancelRequestedAt,
-    );
+  }): Promise<{
+    recorded: boolean;
+    continuation: 'none' | 'running' | 'cancelled';
+  }> {
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
+      );
+      const [operation] = await transaction
+        .select({ status: agentOperations.status })
+        .from(agentOperations)
+        .where(
+          and(
+            eq(agentOperations.id, input.operationId),
+            eq(agentOperations.actorUserId, input.actorUserId),
+            inArray(agentOperations.status, ['pending', 'running']),
+          ),
+        )
+        .limit(1);
+      if (!operation) return { recorded: false, continuation: 'none' };
+      await transaction
+        .update(agentOperations)
+        .set({ cancelRequestedAt: input.now })
+        .where(
+          and(
+            eq(agentOperations.id, input.operationId),
+            isNull(agentOperations.cancelRequestedAt),
+          ),
+        );
+      const [continuation] = await transaction
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(
+          and(
+            eq(operationContinuations.operationId, input.operationId),
+            inArray(operationContinuations.status, [
+              'waiting_approval',
+              'ready',
+              'running',
+            ]),
+          ),
+        )
+        .limit(1);
+      if (
+        continuation?.status === 'waiting_approval' ||
+        continuation?.status === 'ready'
+      ) {
+        const cancelled = await this.cancelContinuationWithinTransaction(
+          transaction,
+          {
+            operationId: input.operationId,
+            actorUserId: input.actorUserId,
+            statuses: ['waiting_approval', 'ready'],
+            now: input.now,
+          },
+        );
+        if (!cancelled) {
+          throw new GatewayPersistenceError(
+            'invalid_event_sequence',
+            'Continuation changed during cancellation',
+          );
+        }
+        return { recorded: true, continuation: 'cancelled' };
+      }
+      return {
+        recorded: true,
+        continuation: continuation?.status === 'running' ? 'running' : 'none',
+      };
+    });
   }
 
   /**

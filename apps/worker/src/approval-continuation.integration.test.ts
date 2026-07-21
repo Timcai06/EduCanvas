@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createContinueOperationTask,
+  OperationContinuationLeaseHeldError,
   type OperationContinuationResumeAdapter,
 } from './tasks/continue-operation.js';
 
@@ -340,6 +341,39 @@ describe('Gateway approval到continuation队列的原子边界', () => {
     });
   });
 
+  it('取消waiting_approval时撤销待审批项并原子终结Operation', async () => {
+    const fixture = await createWaitingApproval();
+    await expect(
+      fixture.operations.requestCancellation({
+        operationId: fixture.operationId,
+        actorUserId: fixture.actorId,
+        now: new Date(now.getTime() + 1_000),
+      }),
+    ).resolves.toEqual({ recorded: true, continuation: 'cancelled' });
+    expect(
+      await database
+        .select({
+          status: gatewayApprovals.status,
+          reason: gatewayApprovals.reason,
+        })
+        .from(gatewayApprovals)
+        .where(eq(gatewayApprovals.id, fixture.approvalId)),
+    ).toEqual([{ status: 'revoked', reason: 'operation_cancelled' }]);
+    await expect(
+      fixture.operations.resolveApproval({
+        approvalId: fixture.approvalId,
+        actorUserId: fixture.actorId,
+        status: 'approved',
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'operation.cancelled' });
+  });
+
   it('Worker恢复前重新鉴权并在Membership撤销后拒绝调用Adapter', async () => {
     const fixture = await createWaitingApproval();
     await fixture.operations.resolveApproval({
@@ -396,6 +430,222 @@ describe('Gateway approval到continuation队列的原子边界', () => {
     });
   });
 
+  it('取消ready等待点时立即原子写入唯一cancelled终态', async () => {
+    const fixture = await createWaitingApproval();
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    await expect(
+      fixture.operations.requestCancellation({
+        operationId: fixture.operationId,
+        actorUserId: fixture.actorId,
+        now: new Date(now.getTime() + 2_000),
+      }),
+    ).resolves.toEqual({ recorded: true, continuation: 'cancelled' });
+    const resumed = vi.fn();
+    await runOnce({
+      connectionString,
+      taskList: {
+        [OPERATION_CONTINUATION_TASK]: createContinueOperationTask({
+          adapters: [
+            {
+              source: 'node',
+              capabilities: ['filesystem.read_allowlisted'],
+              async resume() {
+                resumed();
+                return {
+                  status: 'completed',
+                  messageId: fixture.assistantMessageId,
+                };
+              },
+            },
+          ],
+        }),
+      },
+    });
+    expect(resumed).not.toHaveBeenCalled();
+    expect(
+      await database
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'cancelled' }]);
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(
+      events.filter((event) => event.type === 'operation.cancelled'),
+    ).toHaveLength(1);
+  });
+
+  it('取消与Adapter完成竞速时由持久请求赢得唯一终态', async () => {
+    const fixture = await createWaitingApproval();
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    let reportStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      reportStarted = resolve;
+    });
+    let allowAdapterToFinish: () => void = () => undefined;
+    const mayFinish = new Promise<void>((resolve) => {
+      allowAdapterToFinish = resolve;
+    });
+    const task = createContinueOperationTask({
+      adapters: [
+        {
+          source: 'node',
+          capabilities: ['filesystem.read_allowlisted'],
+          async resume(input) {
+            reportStarted();
+            await mayFinish;
+            const calls = new DrizzleAgentToolCallRepository(database);
+            await calls.markRunning({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+            });
+            await calls.settle({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+              status: 'succeeded',
+              durationMs: 1,
+              result: { status: 'read' },
+            });
+            await new DrizzlePlatformTurnRepository(database).settleTurn({
+              conversationId: input.scope.conversationId,
+              trustedSubjectId: input.scope.actorId,
+              turnId: input.scope.operationId,
+              status: 'completed',
+              content: '业务已完成，但取消请求先于Operation终态。',
+              operationTerminalWriter: 'gateway',
+            });
+            return {
+              status: 'completed',
+              messageId: fixture.assistantMessageId,
+            };
+          },
+        },
+      ],
+    });
+    const workerRun = runOnce({
+      connectionString,
+      taskList: { [OPERATION_CONTINUATION_TASK]: task },
+    });
+    await started;
+    await expect(
+      fixture.operations.requestCancellation({
+        operationId: fixture.operationId,
+        actorUserId: fixture.actorId,
+        now: new Date(),
+      }),
+    ).resolves.toEqual({
+      recorded: true,
+      continuation: 'running',
+    });
+    allowAdapterToFinish();
+    await workerRun;
+    expect(
+      await database
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'cancelled' }]);
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'operation.cancelled' });
+    expect(events.some((event) => event.type === 'operation.completed')).toBe(
+      false,
+    );
+  });
+
+  it('未过期lease必须让Graphile重试，过期后以新generation恢复', async () => {
+    const fixture = await createWaitingApproval();
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    const continuations = new DrizzleOperationContinuationRepository(database);
+    const claimed = await continuations.claimForExecution({
+      continuationId: fixture.continuationId,
+      ownerId: 'worker:dead-process',
+      leaseDurationMs: 60_000,
+      now: new Date(),
+    });
+    expect(claimed).toMatchObject({ status: 'claimed' });
+    const resumed = vi.fn();
+    const task = createContinueOperationTask({
+      adapters: [
+        {
+          source: 'node',
+          capabilities: ['filesystem.read_allowlisted'],
+          async resume(input) {
+            resumed();
+            const calls = new DrizzleAgentToolCallRepository(database);
+            await calls.markRunning({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+            });
+            await calls.settle({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+              status: 'succeeded',
+              durationMs: 1,
+              result: { status: 'read' },
+            });
+            await new DrizzlePlatformTurnRepository(database).settleTurn({
+              conversationId: input.scope.conversationId,
+              trustedSubjectId: input.scope.actorId,
+              turnId: input.scope.operationId,
+              status: 'completed',
+              content: 'lease过期后恢复完成。',
+              operationTerminalWriter: 'gateway',
+            });
+            return {
+              status: 'completed',
+              messageId: fixture.assistantMessageId,
+            };
+          },
+        },
+      ],
+    });
+    await expect(
+      task({ continuationId: fixture.continuationId }, {} as never),
+    ).rejects.toBeInstanceOf(OperationContinuationLeaseHeldError);
+    expect(resumed).not.toHaveBeenCalled();
+    await database
+      .update(operationContinuations)
+      .set({ leaseExpiresAt: new Date(Date.now() - 1) })
+      .where(eq(operationContinuations.id, fixture.continuationId));
+    await task({ continuationId: fixture.continuationId }, {} as never);
+    expect(resumed).toHaveBeenCalledTimes(1);
+    expect(
+      await database
+        .select({
+          status: operationContinuations.status,
+          leaseGeneration: operationContinuations.leaseGeneration,
+        })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'completed', leaseGeneration: 2 }]);
+  });
+
   it('Adapter提交业务结果后崩溃可换代恢复且不重复副作用', async () => {
     const fixture = await createWaitingApproval();
     await fixture.operations.resolveApproval({
@@ -450,6 +700,8 @@ describe('Gateway approval到continuation队列的原子边界', () => {
     const task = createContinueOperationTask({
       adapters: [adapter],
       operations: {
+        cancelContinuation: (input) =>
+          fixture.operations.cancelContinuation(input),
         rejectContinuationAuthorization: (input) =>
           fixture.operations.rejectContinuationAuthorization(input),
         async settleContinuation(input) {

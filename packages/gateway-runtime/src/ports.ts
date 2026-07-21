@@ -44,6 +44,15 @@ export interface GatewayOperationDescriptor {
   status: 'running' | 'completed' | 'failed' | 'cancelled';
 }
 
+/**
+ * 取消请求的持久化结果。continuation 表示 PostgreSQL 中是否有跨进程工作：
+ * running 由 Worker 协作终结，cancelled 表示等待中的工作已在本事务终结。
+ */
+export interface GatewayCancellationPersistenceResult {
+  recorded: boolean;
+  continuation: 'none' | 'running' | 'cancelled';
+}
+
 /** 会话恢复入口用的近期操作摘要：定位它属于哪个笔记本、当前状态与时间。 */
 export interface GatewayRecentOperation {
   operationId: string;
@@ -78,7 +87,7 @@ export interface GatewayOperationStorePort {
     operationId: string;
     actorUserId: string;
     now: Date;
-  }): Promise<boolean>;
+  }): Promise<GatewayCancellationPersistenceResult>;
 }
 
 export interface GatewayTurnRunnerPort {

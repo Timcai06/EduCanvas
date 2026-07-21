@@ -37,6 +37,7 @@ make integration         # 含本包的 PostgreSQL 集成测试
 - 业务代码内(推荐):在 Drizzle 事务里执行 `select graphile_worker.add_job('任务名', payload)`,与业务写入原子提交;
 - 任务 payload 是不可信输入,处理器内必须先过 Zod 校验。
 - continuation任务不得携带正文、Prompt、工具参数、Credential、Secret或effect结果；真实恢复内容只允许由Adapter通过`resumeRef`读取自己拥有的耐久业务意图。
+- continuation task遇到未过期lease必须抛出稳定重试错误，不能把Graphile job标成成功；取消请求由PostgreSQL传播，等待点立即取消，运行点在heartbeat或终态结算边界收敛为唯一`operation.cancelled`。
 
 ## 改动前必读
 
