@@ -122,7 +122,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 
 `educanvas.turn.v2` 是第二代 Runtime 的 transport-neutral 边界：入口只能提交服务端已解析的 Actor、Agent、Notebook、Conversation、Profile 与有效能力交集；Web SSE 与 Gateway Event 只能投影其输出，不能自行产生另一套运行终态。已知事件严格校验，单个 Turn 必须以唯一 `turn.started` 开始并最多出现一个终态；工具完成事件只允许安全摘要，不允许透传原始工具输出。`POLICY_BLOCKED` 表示确定性Profile策略已阻止当前输入或输出，默认不可自动重试；具体安全分类只进入受控审计，不进入公共协议。
 
-迁移期由 `gateway-runtime` 维护 Turn Application 到 Gateway payload 的唯一失败码与审批映射，Web 只维护兼容 SSE 展示投影。Gateway与Web General已从同一服务投影；scripted golden fixture证明两条投影对文本、引用、工具、失败、取消和终态语义等价。生产构造点扫描测试继续冻结尚未迁移的Web Teaching组合根，禁止重新出现通用私有Loop或第三套Tool Runtime。
+迁移期由 `gateway-runtime` 维护 Turn Application 到 Gateway payload 的唯一失败码与审批映射，Web 只维护兼容 SSE 展示投影。Gateway、Web General与Web Teaching均从同一服务投影；scripted golden fixture证明投影对文本、引用、工具、失败、取消和终态语义等价。生产构造点扫描测试禁止重新出现入口私有Loop或第三套Tool Runtime，遗留无调用教学实现将在清理纵切删除。
 
 ## 错误结构
 

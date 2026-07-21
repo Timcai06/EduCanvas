@@ -8,6 +8,7 @@ import type {
 } from '@/features/learning/learning-contracts';
 import {
   createAnonymousIdentity,
+  isEphemeralAnonymousIdentity,
   readAnonymousIdentity,
   writeAnonymousIdentityCookie,
 } from '@/server/identity/anonymous-identity';
@@ -24,7 +25,9 @@ import {
 export async function startAnonymousLessonAction(): Promise<void> {
   const existingIdentity = await readAnonymousIdentity();
   const identity =
-    existingIdentity && (await hasActiveAnonymousLesson(existingIdentity))
+    existingIdentity &&
+    (!isEphemeralAnonymousIdentity(existingIdentity) ||
+      (await hasActiveAnonymousLesson(existingIdentity)))
       ? existingIdentity
       : createAnonymousIdentity();
   await bootstrapAnonymousLesson(identity);

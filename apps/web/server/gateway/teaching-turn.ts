@@ -14,47 +14,74 @@ import {
 } from '@educanvas/db';
 import {
   GatewayService,
+  projectTurnApplicationEventToGateway,
   Sha256GatewayRequestFingerprint,
   type GatewayTurnRunnerPort,
 } from '@educanvas/gateway-runtime';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { beginGatewayTeachingTurn } from '../teaching/learning-turn';
-import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
+import {
+  beginGatewayTeachingTurnApplication,
+  prepareGatewayTeachingTurnContext,
+} from '../teaching/learning-turn';
+import {
+  loadOwnedTeachingGatewayTarget,
+  loadOwnedTeachingSession,
+} from '../teaching/learning-session';
+import { teachingToolCapabilitiesForState } from '../teaching/teaching-tools';
 import { gatewayToLegacy } from './turn-application-projection';
-import { legacyToGateway } from './web-turn';
 
 const identities = new DrizzleGatewayIdentityRepository();
 const routes = new DrizzleGatewayRouteResolver();
 const operations = new DrizzleGatewayOperationStore();
 const fingerprints = new Sha256GatewayRequestFingerprint();
 
-class TeachingCompatibilityRunner implements GatewayTurnRunnerPort {
+class TeachingTurnApplicationRunner implements GatewayTurnRunnerPort {
   preparationError: unknown = null;
 
   constructor(
     private readonly input: {
       identity: AnonymousIdentity;
       request: TeachingTurnRequestBody;
-      sessionId: string;
+      session: NonNullable<
+        Awaited<ReturnType<typeof loadOwnedTeachingSession>>
+      >;
+      assetContext: Awaited<
+        ReturnType<typeof prepareGatewayTeachingTurnContext>
+      >;
     },
   ) {}
 
   async *run(input: Parameters<GatewayTurnRunnerPort['run']>[0]) {
     let turn;
     try {
-      turn = await beginGatewayTeachingTurn({
+      turn = beginGatewayTeachingTurnApplication({
         operationId: input.operationId,
-        expectedSessionId: this.input.sessionId,
+        traceId: input.traceId,
+        actorId: input.route.actorUserId,
+        agentId: input.route.agentId,
         identity: this.input.identity,
+        session: this.input.session,
+        conversationId: input.route.conversationId,
+        notebookId: input.route.notebookId,
         request: this.input.request,
+        assetContext: this.input.assetContext,
+        signal: input.signal,
+        capabilities: input.envelope.capabilities.capabilities.map(
+          (capability) => capability.name,
+        ),
       });
     } catch (error) {
       this.preparationError = error;
       throw error;
     }
-    yield* legacyToGateway(turn.events);
+    for await (const event of turn.events) {
+      yield projectTurnApplicationEventToGateway(event, {
+        actorUserId: input.route.actorUserId,
+        occurredAt: new Date().toISOString(),
+      });
+    }
   }
 }
 
@@ -64,6 +91,15 @@ export async function beginTeachingGatewayTurn(
 ): Promise<{ events: AsyncIterable<TeachingTurnEvent> }> {
   const target = await loadOwnedTeachingGatewayTarget(identity);
   if (!target) throw new LearningSessionOwnershipError();
+  const session = await loadOwnedTeachingSession(identity);
+  if (!session || session.id !== target.sessionId) {
+    throw new LearningSessionOwnershipError();
+  }
+  const assetContext = await prepareGatewayTeachingTurnContext({
+    identity,
+    notebookId: target.notebookId,
+    request,
+  });
   const principal = identity.studentId.startsWith('anon:')
     ? await identities.ensureAnonymousCompatibility({
         trustedSubjectId: identity.studentId,
@@ -106,14 +142,21 @@ export async function beginTeachingGatewayTurn(
         { name: 'output.markdown', risk: 'l0', version: '1', constraints: {} },
         { name: 'output.stream', risk: 'l0', version: '1', constraints: {} },
         { name: 'artifact.native', risk: 'l1', version: '1', constraints: {} },
+        ...teachingToolCapabilitiesForState(session.state).map((name) => ({
+          name,
+          risk: 'l0' as const,
+          version: '1',
+          constraints: {},
+        })),
       ],
     },
     replyTarget: { kind: 'connection', connectionId },
   };
-  const runner = new TeachingCompatibilityRunner({
+  const runner = new TeachingTurnApplicationRunner({
     identity,
     request,
-    sessionId: target.sessionId,
+    session,
+    assetContext,
   });
   const service = new GatewayService(routes, operations, runner, fingerprints);
   const iterator = service.handle(envelope)[Symbol.asyncIterator]();

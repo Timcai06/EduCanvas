@@ -211,7 +211,7 @@ function buildAnswerMessages(
 }
 
 function buildSynthesisMessages(
-  command: TeachingTurnCommand,
+  command: TeachingTurnAnswerPromptInput,
 ): readonly ModelMessage[] {
   const systemPrompt = [
     '你是EduCanvas的AI老师。对学生只自称"AI老师"，绝不使用"受控教学智能体"、"Artifact"、"Schema"等内部术语。',
@@ -230,6 +230,24 @@ function buildSynthesisMessages(
     ...(command.conversationMessages ?? []),
     { role: 'user', content: command.studentMessage },
   ];
+}
+
+export interface TeachingTurnPromptMessages {
+  answer: readonly ModelMessage[];
+  synthesis: readonly ModelMessage[];
+}
+
+/**
+ * 为统一 Turn Application 提供教学 Profile 的纯 Prompt 候选。
+ * 该函数不创建模型循环，也不读取环境、身份或持久状态。
+ */
+export function createTeachingTurnPromptMessages(
+  command: TeachingTurnAnswerPromptInput,
+): TeachingTurnPromptMessages {
+  return {
+    answer: buildAnswerMessages(command),
+    synthesis: buildSynthesisMessages(command),
+  };
 }
 
 function buildToolDefinitions(
@@ -259,7 +277,7 @@ export function createTeachingTurnAnswerPromptMaterial(
     modelAlias: TEACHING_TURN_MODEL_ALIAS,
     phase: 'answer',
     promptVersion: TEACHING_TURN_ANSWER_PROMPT_VERSION,
-    messages: buildAnswerMessages(command),
+    messages: createTeachingTurnPromptMessages(command).answer,
     tools: buildToolDefinitions(modelTools),
   };
 }

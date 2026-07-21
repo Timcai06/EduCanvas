@@ -145,7 +145,9 @@ export {
   DrizzleTeachingTurnLedger,
   TurnLedgerInvariantError,
   TurnRateLimitError,
+  type BeginTeachingApplicationTurnInput,
   type BeginTeachingTurnInput,
+  type TeachingApplicationTurnLedgerSnapshot,
   type TeachingTurnLedgerSnapshot,
 } from './turn-ledger-repository';
 export {

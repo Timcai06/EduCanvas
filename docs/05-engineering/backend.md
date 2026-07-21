@@ -17,6 +17,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 ## 阶段一已实现边界
 
 - 匿名身份使用32-byte随机base64url bearer，仅保存在HttpOnly、SameSite=Lax Cookie中；数据库只保存`anon:v1:<sha256>`派生标识；
+- `local`模式的Web首次课程必须复用固定registered identity，只有带有效bearer的匿名身份可在没有活动课程时轮换，避免Web与TUI落入不同Notebook；
 - 课程bootstrap在一个PostgreSQL事务内创建或复用Session，并保存公开Artifact与私有判分键；并发请求通过事务级advisory lock收敛到同一会话；
 - Server Action不接受客户端session或student字段，而是从Cookie和固定课程范围恢复归属；
 - `GradeCanvasSubmissionService`在事务内再次校验可信学生对session的归属，再判分、追加可信事件并更新掌握度投影；
@@ -26,20 +27,20 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
 - Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
-- `TeachingTurnOrchestrator`把K12 Prompt、工具和领域回调注入唯一`AgentLoopEngine`；当前生产组合注册只读`getStudentState`与`retrieveKnowledge`，工具可见性仍由可信教学状态、注册Handler和exposure共同收敛；
+- Web Teaching Profile把K12 Prompt、安全、教学状态与领域回调注入唯一`TurnApplicationService`；当前生产组合通过统一Tool Kernel注册只读`getStudentState`与`retrieveKnowledge`，工具可见性由可信教学状态、Actor/Agent/Notebook/Profile/入口/环境能力交集和Adapter共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
-- 学生消息、老师消息、Model Run、Tool Call、安全决策和Turn Context Snapshot分别持久化；同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到成功Model Run；
+- 学生消息、老师消息和安全决策继续保留K12领域形状；Model Run、Tool Call与Turn Context Snapshot改为统一`agent_operation`账本归属，同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到同一Operation的成功Model Run；
 - `agent-runtime`按消息数/字符预算选择最新完整历史，Web在创建Turn时把选择的消息ID、AssetVersion ID、builder版本和计数与消息/Model Run原子落账；历史不能注入`system`角色；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
-通用对话 Turn 同样使用`AgentLoopEngine + AgentToolRegistry`，圈数配额3；`webSearch`负责发现候选，只有`fetchWebPage`实际读取成功的网页才会落为不可变Link AssetVersion并进入`operation_sources`白名单。最终正文只把真实出现的合法`[n]`提升为Citation。Gateway Operation与通用/K12 Turn复用同一ID并记录Actor、Agent、Notebook和标准事件；模型/工具详细Trace继续写现有领域账本。
+通用与K12对话 Turn 都由`TurnApplicationService + AgentLoopEngine + ToolKernel`执行，圈数配额3；`webSearch`负责发现候选，只有`fetchWebPage`实际读取成功的网页才会落为不可变Link AssetVersion并进入`operation_sources`白名单。最终正文只把真实出现的合法`[n]`提升为Citation。Gateway Operation与通用/K12 Turn复用同一ID并记录Actor、Agent、Notebook和标准事件；模型、工具与上下文详细审计写统一Turn Ledger，学习安全和掌握度仍写教育领域账本。
 
 当前已确认的平台化剩余缺口包括：
 
 - Answer 已包含有界的持久化会话历史与本轮物化 Asset 文本，但尚不包含摘要或 Artifact 状态；
 - Web BFF仍承担lease、取消、安全、引用与SSE兼容投影，后续可继续削薄，但已不拥有通用身份/路由或第二套循环；
-- Tool Registry、Provider Registry 与 Artifact Plugin 仍是编译期闭集，缺少能力元数据和统一扩展契约；
+- Node、MCP与AI SDK Provider Adapter尚未完成生产接线；MCP Credential和恶意输出边界仍需M5验收；
 - 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；
 - Asset、KnowledgeSource与课程Session仍有垂直耦合，虽然Space/Conversation/Gateway主干已建立，统一摄取仍未完成。
 

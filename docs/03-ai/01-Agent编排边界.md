@@ -24,13 +24,13 @@
 | 主题             | 当前事实                                                   | 目标不变量                                |
 | ---------------- | ---------------------------------------------------------- | ----------------------------------------- |
 | Agent Loop       | 统一服务与旧Teaching各构造同一`AgentLoopEngine`类          | 最终只有统一服务一个生产构造位置          |
-| Turn Application | Gateway与Web General已迁唯一服务，Web Teaching仍为旧路径   | 收敛为一个 Turn Application Service       |
+| Turn Application | Gateway、Web General与Web Teaching均调用唯一服务           | 删除无调用的旧教学实现并补齐continuation  |
 | Tool Runtime     | Web General走Tool Kernel，Teaching仍走专用Executor         | 一个 Tool Kernel 统一策略与执行语义       |
 | Context          | Gateway与Web General已统一并写Snapshot，Teaching仍单独装配 | 预算选择后固化可审计 Context Snapshot     |
 | Audit            | Gateway/Web General已写通用Ledger，Teaching仍待单写迁移    | ID 对齐、职责唯一，不建立第二事实源       |
 | Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                 | 以 Operation 为业务游标，副作用可幂等续跑 |
 
-Profile 的确定性策略位于唯一服务的两个显式边界：`preflight` 在 Context、Model Run 和 Tool 副作用前拒绝不允许的输入；`OutputGuard` 位于 Provider delta 与公开事件之间，只能释放已放行片段，并在命中策略时中止当前模型运行、写入固定公开回应和 `POLICY_BLOCKED` 终态。闸门实现必须有界缓存，安全审计失败不能被伪装成成功回答。该契约为 Web Teaching 迁移准备，通用 Profile 不默认启用 K12 策略。
+Profile 的确定性策略位于唯一服务的两个显式边界：`preflight` 在 Context、Model Run 和 Tool 副作用前拒绝不允许的输入；`OutputGuard` 位于 Provider delta 与公开事件之间，只能释放已放行片段，并在命中策略时中止当前模型运行、写入固定公开回应和 `POLICY_BLOCKED` 终态。闸门实现必须有界缓存，安全审计失败不能被伪装成成功回答。Web Teaching 已使用这两个边界；通用 Profile 不默认启用 K12 策略。
 
 ## 三、统一 Agent Loop
 
@@ -110,4 +110,4 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - 第一阶段不开放宿主机 Shell、任意文件系统、无约束代码执行或多 Agent 编队；
 - 安全、预算、权限、判分和学习状态必须在模型之外可测试、可审计。
 
-当前统一通用路径、旧教学路径和审计双轨的代码证据见[系统架构现状](../02-architecture/01-系统架构现状.md)，收敛顺序见[第二代架构升级计划](../plan/active/2026-07-第二代架构升级.md)。
+当前三入口统一路径、遗留代码清理边界和审计事实见[系统架构现状](../02-architecture/01-系统架构现状.md)，后续continuation与Adapter收口见[第二代架构升级计划](../plan/active/2026-07-第二代架构升级.md)。

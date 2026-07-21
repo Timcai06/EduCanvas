@@ -16,6 +16,8 @@ import {
 import type { ModelRunSnapshot } from './model-run-repository';
 import {
   chatMessages,
+  agentOperations,
+  conversations,
   lessonSessions,
   modelRuns,
   turnContextSnapshots,
@@ -57,6 +59,18 @@ export interface BeginTeachingTurnInput {
     windowMs: number;
   };
   now?: Date;
+}
+
+/** Teaching Profile 接入统一 Turn Application 时只创建K12可见消息，不预写第二套审计。 */
+export type BeginTeachingApplicationTurnInput = Omit<
+  BeginTeachingTurnInput,
+  'modelAlias' | 'promptVersion' | 'promptHash' | 'provider' | 'contextSnapshot'
+> & { turnId: string };
+
+export interface TeachingApplicationTurnLedgerSnapshot {
+  replayed: boolean;
+  turn: TeachingTurnSnapshot;
+  leaseId: string | null;
 }
 
 export interface TeachingTurnLedgerSnapshot {
@@ -161,14 +175,17 @@ function makeTitle(courseSlug: string, content: string): string {
   return [...`${courseSlug} · ${preview}`].slice(0, 64).join('');
 }
 
-function validateInput(input: BeginTeachingTurnInput): {
+interface PreparedTeachingMessageTurn {
   content: string;
   parts: readonly AgentMessagePart[];
   requestHash: string;
   leaseDurationMs: number;
   rateLimit: { maxTurns: number; windowMs: number };
-  contextSnapshot: PreparedTurnContextMaterial | null;
-} {
+}
+
+function validateMessageInput(
+  input: BeginTeachingApplicationTurnInput | BeginTeachingTurnInput,
+): PreparedTeachingMessageTurn {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.clientMessageId)) {
     throw new ChatLifecycleError('clientMessageId 格式或长度无效');
   }
@@ -177,7 +194,6 @@ function validateInput(input: BeginTeachingTurnInput): {
     text: input.text,
     parts: input.parts,
   });
-  const content = message.content;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.traceId)) {
     throw new ChatLifecycleError('traceId 格式或长度无效');
   }
@@ -188,15 +204,6 @@ function validateInput(input: BeginTeachingTurnInput): {
     )
   ) {
     throw new ChatLifecycleError('Gateway turnId 必须是 UUID');
-  }
-  if (!/^[a-z][a-z0-9._-]{0,63}$/.test(input.modelAlias)) {
-    throw new ChatLifecycleError('modelAlias 格式或长度无效');
-  }
-  if (!input.promptVersion || input.promptVersion.length > 128) {
-    throw new ChatLifecycleError('promptVersion 格式或长度无效');
-  }
-  if (!/^[0-9a-f]{64}$/i.test(input.promptHash)) {
-    throw new ChatLifecycleError('promptHash 必须是SHA-256');
   }
   const rateLimit = input.rateLimit ?? DEFAULT_TURN_RATE_LIMIT;
   if (
@@ -212,13 +219,33 @@ function validateInput(input: BeginTeachingTurnInput): {
     );
   }
   return {
-    content,
+    content: message.content,
     parts: message.parts,
     requestHash: message.requestHash,
     leaseDurationMs: validateAssistantLeaseDuration(
       input.leaseDurationMs ?? DEFAULT_ASSISTANT_LEASE_MS,
     ),
     rateLimit,
+  };
+}
+
+function validateInput(
+  input: BeginTeachingTurnInput,
+): PreparedTeachingMessageTurn & {
+  contextSnapshot: PreparedTurnContextMaterial | null;
+} {
+  const message = validateMessageInput(input);
+  if (!/^[a-z][a-z0-9._-]{0,63}$/.test(input.modelAlias)) {
+    throw new ChatLifecycleError('modelAlias 格式或长度无效');
+  }
+  if (!input.promptVersion || input.promptVersion.length > 128) {
+    throw new ChatLifecycleError('promptVersion 格式或长度无效');
+  }
+  if (!/^[0-9a-f]{64}$/i.test(input.promptHash)) {
+    throw new ChatLifecycleError('promptHash 必须是SHA-256');
+  }
+  return {
+    ...message,
     contextSnapshot: input.contextSnapshot
       ? prepareTurnContextMaterial(input.contextSnapshot)
       : null,
@@ -272,6 +299,228 @@ async function loadLedgerSnapshot(
   };
 }
 
+async function loadApplicationSnapshot(
+  transaction: DatabaseTransaction,
+  sessionId: string,
+  turnId: string,
+  replayed: boolean,
+): Promise<TeachingApplicationTurnLedgerSnapshot> {
+  const messages = await transaction
+    .select()
+    .from(chatMessages)
+    .where(
+      and(
+        eq(chatMessages.sessionId, sessionId),
+        eq(chatMessages.turnId, turnId),
+      ),
+    );
+  const student = messages.find((message) => message.role === 'student');
+  const assistant = messages.find((message) => message.role === 'assistant');
+  if (!student || !assistant) {
+    throw new TurnLedgerInvariantError('教学 Turn 缺少学生消息或老师消息');
+  }
+  const parts = await loadMessageParts(transaction, [student.id, assistant.id]);
+  return {
+    replayed,
+    turn: {
+      turnId,
+      studentMessage: toMessageSnapshot(student, parts.get(student.id)),
+      assistantMessage: toMessageSnapshot(assistant, parts.get(assistant.id)),
+    },
+    leaseId: assistant.leaseId,
+  };
+}
+
+async function beginTeachingMessages(
+  transaction: DatabaseTransaction,
+  input: BeginTeachingApplicationTurnInput | BeginTeachingTurnInput,
+  prepared: PreparedTeachingMessageTurn,
+  now: Date,
+): Promise<{ turnId: string; replayed: boolean }> {
+  const [session] = await transaction
+    .select({
+      id: lessonSessions.id,
+      courseSlug: lessonSessions.courseSlug,
+      conversationId: lessonSessions.conversationId,
+      notebookId: conversations.spaceId,
+    })
+    .from(lessonSessions)
+    .leftJoin(
+      conversations,
+      eq(conversations.id, lessonSessions.conversationId),
+    )
+    .where(
+      and(
+        eq(lessonSessions.id, input.sessionId),
+        eq(lessonSessions.studentId, input.trustedStudentId),
+        eq(lessonSessions.status, 'active'),
+      ),
+    )
+    .limit(1);
+  if (!session) throw new LearningSessionOwnershipError();
+
+  let gatewayOperationStatus: string | null = null;
+  if (input.turnId !== undefined) {
+    if (!session.conversationId || !session.notebookId) {
+      throw new LearningSessionOwnershipError();
+    }
+    const conversationId = session.conversationId;
+    const notebookId = session.notebookId;
+    const [operation] = await transaction
+      .select({
+        id: agentOperations.id,
+        gatewayEnvelopeId: agentOperations.gatewayEnvelopeId,
+        idempotencyKey: agentOperations.idempotencyKey,
+        status: agentOperations.status,
+      })
+      .from(agentOperations)
+      .where(
+        and(
+          eq(agentOperations.id, input.turnId),
+          eq(agentOperations.actorUserId, input.trustedStudentId),
+          eq(agentOperations.notebookId, notebookId),
+          eq(agentOperations.conversationId, conversationId),
+          eq(agentOperations.traceId, input.traceId),
+          eq(agentOperations.kind, 'turn'),
+        ),
+      )
+      .limit(1);
+    if (
+      !operation ||
+      operation.gatewayEnvelopeId === null ||
+      operation.idempotencyKey !== input.clientMessageId
+    ) {
+      throw new LearningSessionOwnershipError();
+    }
+    gatewayOperationStatus = operation.status;
+  }
+
+  const [existingStudent] = await transaction
+    .select({
+      turnId: chatMessages.turnId,
+      requestHash: chatMessages.requestHash,
+    })
+    .from(chatMessages)
+    .where(
+      and(
+        eq(chatMessages.sessionId, input.sessionId),
+        eq(chatMessages.role, 'student'),
+        eq(chatMessages.clientMessageId, input.clientMessageId),
+      ),
+    )
+    .limit(1);
+  if (existingStudent) {
+    if (
+      existingStudent.requestHash !== prepared.requestHash ||
+      (input.turnId !== undefined && existingStudent.turnId !== input.turnId)
+    ) {
+      throw new ChatMessageIdConflictError(input.clientMessageId);
+    }
+    return { turnId: existingStudent.turnId, replayed: true };
+  }
+
+  if (input.turnId !== undefined && gatewayOperationStatus !== 'running') {
+    throw new ChatLifecycleError(
+      '只有运行中的 Gateway operation 可以创建教学消息',
+    );
+  }
+
+  const [activeAssistant] = await transaction
+    .select({ turnId: chatMessages.turnId })
+    .from(chatMessages)
+    .where(
+      and(
+        eq(chatMessages.sessionId, input.sessionId),
+        eq(chatMessages.role, 'assistant'),
+        inArray(chatMessages.status, ['pending', 'streaming']),
+      ),
+    )
+    .limit(1);
+  if (activeAssistant) throw new TurnInProgressError(activeAssistant.turnId);
+
+  await assertOwnedReadyAssetParts(transaction, {
+    ownerSubjectId: input.trustedStudentId,
+    spaceId: session.notebookId ?? input.sessionId,
+    parts: prepared.parts,
+  });
+
+  const windowStart = new Date(now.getTime() - prepared.rateLimit.windowMs);
+  const recentTurns = await transaction
+    .select({ createdAt: chatMessages.createdAt })
+    .from(chatMessages)
+    .where(
+      and(
+        eq(chatMessages.sessionId, input.sessionId),
+        eq(chatMessages.role, 'student'),
+        gte(chatMessages.createdAt, windowStart),
+      ),
+    )
+    .orderBy(asc(chatMessages.createdAt))
+    .limit(prepared.rateLimit.maxTurns);
+  if (recentTurns.length >= prepared.rateLimit.maxTurns) {
+    const oldest = recentTurns[0];
+    const retryAfterMs = oldest
+      ? Math.max(
+          1,
+          oldest.createdAt.getTime() +
+            prepared.rateLimit.windowMs -
+            now.getTime(),
+        )
+      : prepared.rateLimit.windowMs;
+    throw new TurnRateLimitError(retryAfterMs);
+  }
+
+  const turnId = input.turnId ?? randomUUID();
+  const leaseId = randomUUID();
+  const leaseExpiresAt = new Date(now.getTime() + prepared.leaseDurationMs);
+  const insertedMessages = await transaction
+    .insert(chatMessages)
+    .values([
+      {
+        sessionId: input.sessionId,
+        turnId,
+        clientMessageId: input.clientMessageId,
+        requestHash: prepared.requestHash,
+        role: 'student',
+        status: 'completed',
+        content: prepared.content,
+        createdAt: now,
+        completedAt: now,
+      },
+      {
+        sessionId: input.sessionId,
+        turnId,
+        role: 'assistant',
+        status: 'pending',
+        content: '',
+        leaseId,
+        leaseExpiresAt,
+        heartbeatAt: now,
+        createdAt: now,
+      },
+    ])
+    .returning();
+  const student = insertedMessages.find(
+    (message) => message.role === 'student',
+  );
+  if (
+    !student ||
+    !insertedMessages.some((message) => message.role === 'assistant')
+  ) {
+    throw new TurnLedgerInvariantError('学生或老师消息写入失败');
+  }
+  await insertMessageParts(transaction, student.id, prepared.parts);
+  await transaction
+    .update(lessonSessions)
+    .set({
+      title: sql`coalesce(${lessonSessions.title}, ${makeTitle(session.courseSlug, prepared.content || '附件消息')})`,
+      lastActivityAt: now,
+      updatedAt: now,
+    })
+    .where(eq(lessonSessions.id, input.sessionId));
+  return { turnId, replayed: false };
+}
+
 /** 在一个短事务内写入学生消息、pending 老师消息和 pending answer run。 */
 export class DrizzleTeachingTurnLedger {
   constructor(private readonly providedDatabase?: Database) {}
@@ -290,181 +539,86 @@ export class DrizzleTeachingTurnLedger {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
       );
-      const [session] = await transaction
-        .select({
-          id: lessonSessions.id,
-          courseSlug: lessonSessions.courseSlug,
-        })
-        .from(lessonSessions)
-        .where(
-          and(
-            eq(lessonSessions.id, input.sessionId),
-            eq(lessonSessions.studentId, input.trustedStudentId),
-            eq(lessonSessions.status, 'active'),
-          ),
-        )
-        .limit(1);
-      if (!session) throw new LearningSessionOwnershipError();
-
-      const [existingStudent] = await transaction
-        .select({
-          turnId: chatMessages.turnId,
-          requestHash: chatMessages.requestHash,
-        })
-        .from(chatMessages)
-        .where(
-          and(
-            eq(chatMessages.sessionId, input.sessionId),
-            eq(chatMessages.role, 'student'),
-            eq(chatMessages.clientMessageId, input.clientMessageId),
-          ),
-        )
-        .limit(1);
-      if (existingStudent) {
-        if (existingStudent.requestHash !== prepared.requestHash) {
-          throw new ChatMessageIdConflictError(input.clientMessageId);
-        }
-        if (
-          input.turnId !== undefined &&
-          existingStudent.turnId !== input.turnId
-        ) {
-          throw new ChatMessageIdConflictError(input.clientMessageId);
-        }
-        return loadLedgerSnapshot(
+      const begun = await beginTeachingMessages(
+        transaction,
+        input,
+        prepared,
+        now,
+      );
+      if (!begun.replayed) {
+        const snapshot = await loadApplicationSnapshot(
           transaction,
           input.sessionId,
-          existingStudent.turnId,
-          true,
+          begun.turnId,
+          false,
         );
-      }
-
-      const [activeAssistant] = await transaction
-        .select({ turnId: chatMessages.turnId })
-        .from(chatMessages)
-        .where(
-          and(
-            eq(chatMessages.sessionId, input.sessionId),
-            eq(chatMessages.role, 'assistant'),
-            inArray(chatMessages.status, ['pending', 'streaming']),
-          ),
-        )
-        .limit(1);
-      if (activeAssistant) {
-        throw new TurnInProgressError(activeAssistant.turnId);
-      }
-
-      await assertOwnedReadyAssetParts(transaction, {
-        ownerSubjectId: input.trustedStudentId,
-        spaceId: input.sessionId,
-        parts: prepared.parts,
-      });
-
-      const windowStart = new Date(now.getTime() - prepared.rateLimit.windowMs);
-      const recentTurns = await transaction
-        .select({ createdAt: chatMessages.createdAt })
-        .from(chatMessages)
-        .where(
-          and(
-            eq(chatMessages.sessionId, input.sessionId),
-            eq(chatMessages.role, 'student'),
-            gte(chatMessages.createdAt, windowStart),
-          ),
-        )
-        .orderBy(asc(chatMessages.createdAt))
-        .limit(prepared.rateLimit.maxTurns);
-      if (recentTurns.length >= prepared.rateLimit.maxTurns) {
-        const oldest = recentTurns[0];
-        const retryAfterMs = oldest
-          ? Math.max(
-              1,
-              oldest.createdAt.getTime() +
-                prepared.rateLimit.windowMs -
-                now.getTime(),
-            )
-          : prepared.rateLimit.windowMs;
-        throw new TurnRateLimitError(retryAfterMs);
-      }
-
-      const turnId = input.turnId ?? randomUUID();
-      const leaseId = randomUUID();
-      const leaseExpiresAt = new Date(now.getTime() + prepared.leaseDurationMs);
-      const insertedMessages = await transaction
-        .insert(chatMessages)
-        .values([
-          {
-            sessionId: input.sessionId,
-            turnId,
-            clientMessageId: input.clientMessageId,
-            requestHash: prepared.requestHash,
-            role: 'student',
-            status: 'completed',
-            content: prepared.content,
-            createdAt: now,
-            completedAt: now,
-          },
-          {
-            sessionId: input.sessionId,
-            turnId,
-            role: 'assistant',
-            status: 'pending',
-            content: '',
-            leaseId,
-            leaseExpiresAt,
-            heartbeatAt: now,
-            createdAt: now,
-          },
-        ])
-        .returning();
-      const assistant = insertedMessages.find(
-        (message) => message.role === 'assistant',
-      );
-      const student = insertedMessages.find(
-        (message) => message.role === 'student',
-      );
-      if (!assistant || !student) {
-        throw new TurnLedgerInvariantError('学生或老师消息写入失败');
-      }
-      await insertMessageParts(transaction, student.id, prepared.parts);
-      await transaction.insert(modelRuns).values({
-        sessionId: input.sessionId,
-        operationId: turnId,
-        operationKind: 'teaching_turn',
-        assistantMessageId: assistant.id,
-        turnId,
-        phase: 'answer',
-        attempt: 1,
-        traceId: input.traceId,
-        taskAlias: 'teaching.turn',
-        modelAlias: input.modelAlias,
-        promptVersion: input.promptVersion,
-        promptHash: input.promptHash.toLowerCase(),
-        provider: input.provider ?? null,
-        status: 'pending',
-        createdAt: now,
-      });
-      if (prepared.contextSnapshot) {
-        await transaction.insert(turnContextSnapshots).values({
+        await transaction.insert(modelRuns).values({
           sessionId: input.sessionId,
-          turnId,
-          builderVersion: prepared.contextSnapshot.builderVersion,
-          includedMessageIds: prepared.contextSnapshot.includedMessageIds,
-          selectedAssetVersionIds:
-            prepared.contextSnapshot.selectedAssetVersionIds,
-          omittedMessageCount: prepared.contextSnapshot.omittedMessageCount,
-          characterCount: prepared.contextSnapshot.characterCount,
-          contextHash: prepared.contextSnapshot.contextHash,
+          operationId: begun.turnId,
+          operationKind: 'teaching_turn',
+          assistantMessageId: snapshot.turn.assistantMessage.id,
+          turnId: begun.turnId,
+          phase: 'answer',
+          attempt: 1,
+          traceId: input.traceId,
+          taskAlias: 'teaching.turn',
+          modelAlias: input.modelAlias,
+          promptVersion: input.promptVersion,
+          promptHash: input.promptHash.toLowerCase(),
+          provider: input.provider ?? null,
+          status: 'pending',
           createdAt: now,
         });
+        if (prepared.contextSnapshot) {
+          await transaction.insert(turnContextSnapshots).values({
+            sessionId: input.sessionId,
+            turnId: begun.turnId,
+            builderVersion: prepared.contextSnapshot.builderVersion,
+            includedMessageIds: prepared.contextSnapshot.includedMessageIds,
+            selectedAssetVersionIds:
+              prepared.contextSnapshot.selectedAssetVersionIds,
+            omittedMessageCount: prepared.contextSnapshot.omittedMessageCount,
+            characterCount: prepared.contextSnapshot.characterCount,
+            contextHash: prepared.contextSnapshot.contextHash,
+            createdAt: now,
+          });
+        }
       }
-      await transaction
-        .update(lessonSessions)
-        .set({
-          title: sql`coalesce(${lessonSessions.title}, ${makeTitle(session.courseSlug, prepared.content || '附件消息')})`,
-          lastActivityAt: now,
-          updatedAt: now,
-        })
-        .where(eq(lessonSessions.id, input.sessionId));
-      return loadLedgerSnapshot(transaction, input.sessionId, turnId, false);
+      return loadLedgerSnapshot(
+        transaction,
+        input.sessionId,
+        begun.turnId,
+        begun.replayed,
+      );
+    });
+  }
+
+  /**
+   * Gateway 已建立唯一 Operation 后，仅附着教学 UI 所需的消息与租约。
+   * 通用 Context/Model/Tool/Effect 审计由 Turn Application 写入，禁止在这里复制。
+   */
+  async beginApplicationTurn(
+    input: BeginTeachingApplicationTurnInput,
+  ): Promise<TeachingApplicationTurnLedgerSnapshot> {
+    const prepared = validateMessageInput(input);
+    const now = input.now ?? new Date();
+    const lockKey = teachingTurnSessionLockKey(input.sessionId);
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
+      );
+      const begun = await beginTeachingMessages(
+        transaction,
+        input,
+        prepared,
+        now,
+      );
+      return loadApplicationSnapshot(
+        transaction,
+        input.sessionId,
+        begun.turnId,
+        begun.replayed,
+      );
     });
   }
 }

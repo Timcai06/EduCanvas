@@ -1,180 +1,111 @@
 import 'server-only';
 
-/**
- * K12 v1 Turn 的 Next.js/BFF 组合根。该模块暂时汇集租约、回放、安全、模型审计、
- * 工具审计、引用和 SSE 投影，以保持现有真实纵切可运行；它不是通用 Agent Runtime
- * 的目标边界。平台化迁移应把 Start/Run/Replay 用例与传输契约抽到独立应用层，
- * 这里只保留身份恢复、HTTP/SSE 映射和适配器装配。
- */
-
-import { randomUUID } from 'node:crypto';
-import { buildConversationContext } from '@educanvas/agent-runtime';
+import {
+  extractAgentMessageText,
+  type ModelAbortSignal,
+  type TurnApplicationCommand,
+  type TurnApplicationEvent,
+  type TurnModelGateway,
+} from '@educanvas/agent-core';
+import {
+  ToolKernel,
+  TurnApplicationService,
+  type BuiltAssetContext,
+  type TurnApplicationCancellationPort,
+  type TurnApplicationLifecyclePort,
+  type TurnApplicationLifecycleSnapshot,
+  type TurnApplicationOutputGuardPort,
+  type TurnApplicationProfileEvent,
+  type TurnApplicationProfilePort,
+} from '@educanvas/agent-runtime';
 import {
   DEFAULT_ASSISTANT_LEASE_MS,
+  DrizzleAgentModelRunRepository,
+  DrizzleAgentToolCallRepository,
+  DrizzleAgentTurnContextRepository,
   DrizzleChatRepository,
   DrizzleKnowledgeRetrievalRepository,
-  DrizzleModelRunRepository,
   DrizzleTeachingTurnLedger,
-  DrizzleToolCallRepository,
-  DrizzleTurnSafetyDecisionRepository,
+  DrizzleToolEffectRepository,
   DrizzleTurnLeaseRepository,
-  LearningSessionOwnershipError,
-  normalizeStudentMessageContent,
+  DrizzleTurnSafetyDecisionRepository,
   type ChatMessageSnapshot,
-  type TeachingTurnLedgerSnapshot,
-  type ToolCallSnapshot,
+  type MessageCitationSnapshot,
+  type TeachingApplicationTurnLedgerSnapshot,
 } from '@educanvas/db';
 import {
   evaluateTeachingInput,
+  type LessonSessionSnapshot,
   type TeachingSafetyDecision,
 } from '@educanvas/teaching-core';
-import type { AgentMessagePart, TurnModelEvent } from '@educanvas/agent-core';
 import {
+  TEACHING_TURN_ANSWER_PROMPT_VERSION,
+  TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
   TeachingOutputSafetyGate,
-  TeachingTurnOrchestrator,
-  createTeachingTurnAnswerPromptMaterial,
+  createTeachingTurnPromptMessages,
   recordTeachingMetric,
-  type TeachingTurnRejectionCode,
-  type TeachingTurnToolFailure,
 } from '@educanvas/teaching-runtime';
-import type { TeachingTurnEvent } from '@/features/chat/turn-events';
-import { materializeAssetContext } from '../assets/asset-materialization';
-import { registerTurnAbortController } from '../http/turn-abort-registry';
+import { materializeAssetContextPlan } from '../assets/asset-materialization';
+import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { AuditedTurnModelGateway } from '../model/audited-model-gateway';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
-import { hashPromptMaterial } from '../model/prompt-hash';
 import { extractCitationMarkers } from './citation-markers';
-import { loadOwnedTeachingSession } from './learning-session';
-import { createTeachingToolExecutor } from './teaching-tools';
+import {
+  createTeachingToolKernelAdapters,
+  teachingToolCapabilitiesForState,
+} from './teaching-tools';
 import { webTeachingObservability } from './teaching-observability';
+
+const HEARTBEAT_INTERVAL_MS = 10_000;
+const CANCELLATION_POLL_MS = 250;
+const CONTEXT_PROFILE_VERSION = 'web-teaching-v2';
 
 const ledger = new DrizzleTeachingTurnLedger();
 const chat = new DrizzleChatRepository();
-const modelRuns = new DrizzleModelRunRepository();
 const leases = new DrizzleTurnLeaseRepository();
-const toolCalls = new DrizzleToolCallRepository();
 const safetyDecisions = new DrizzleTurnSafetyDecisionRepository();
-const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
+const knowledge = new DrizzleKnowledgeRetrievalRepository();
 
-const HEARTBEAT_INTERVAL_MS = 10_000;
-const CANCELLATION_POLL_MS = 500;
-const REPLAY_POLL_MS = 150;
-
-export interface StartedOwnedTeachingTurn {
-  turnId: string;
-  replayed: boolean;
-  events: AsyncIterable<TeachingTurnEvent>;
-}
-
-interface PreparedTurn {
-  identity: AnonymousIdentity;
-  ledger: TeachingTurnLedgerSnapshot;
-  session: NonNullable<Awaited<ReturnType<typeof loadOwnedTeachingSession>>>;
-  studentMessage: string;
-  modelStudentMessage: string;
-  conversationMessages: ReturnType<typeof buildConversationContext>['messages'];
-  toolExecutor: ReturnType<typeof createTeachingToolExecutor>;
-  modelRuntime: ReturnType<typeof resolveTurnModelRuntime>;
-}
-
-interface ToolAuditState {
-  providerCallId: string;
-  tool: string;
-  argumentsJson: string;
-  finalized: boolean;
-  canRun: boolean;
-  record: ToolCallSnapshot | null;
-  startedAt: number | null;
-}
-
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
-
-const failurePresentation = (
-  code: string,
-): { message: string; retryable: boolean } => {
-  switch (code) {
-    case 'rate_limit':
-    case 'turn_rate_limited':
-      return { message: '现在提问的人有点多，请稍后再试。', retryable: true };
-    case 'timeout':
-      return {
-        message: 'AI 老师这次思考超时了，请再试一次。',
-        retryable: true,
-      };
-    case 'output_limit':
-      return {
-        message: '这次回答达到长度上限，已保留当前内容，可以继续提问或重试。',
-        retryable: true,
-      };
-    case 'content_filtered':
-      return {
-        message: '这个问题暂时不能这样回答，我们可以换一种安全的问法。',
-        retryable: false,
-      };
-    case 'interrupted':
-    case 'lease_expired':
-    case 'stream_interrupted':
-      return { message: '回答已中断，可以重新发送。', retryable: true };
-    case 'model_not_configured':
-      return { message: 'AI 老师暂时无法连接，请稍后重试。', retryable: true };
-    case 'aborted':
-      return { message: '回答已停止。', retryable: false };
-    default:
-      return { message: 'AI 老师暂时无法回答，请稍后重试。', retryable: true };
-  }
+const unavailableModelGateway: TurnModelGateway = {
+  async *streamTurnText(request) {
+    yield {
+      type: 'failed',
+      phase: request.phase,
+      error: { code: 'unavailable', retryable: true },
+    };
+  },
 };
 
-function acceptedEvent(
-  snapshot: TeachingTurnLedgerSnapshot,
-): TeachingTurnEvent {
-  return {
-    type: 'turn.accepted',
-    schemaVersion: '1',
-    turnId: snapshot.turn.turnId,
-    studentMessageId: snapshot.turn.studentMessage.id,
-    assistantMessageId: snapshot.turn.assistantMessage.id,
-    replayed: snapshot.replayed,
-  };
-}
+type BlockedTeachingSafetyDecision = TeachingSafetyDecision & {
+  action: 'block' | 'escalate';
+  policyCode: Exclude<TeachingSafetyDecision['policyCode'], 'k12_allowed'>;
+};
 
-function terminalEventForMessage(
-  message: ChatMessageSnapshot,
-  fallbackCode = 'model_gateway_failed',
-): TeachingTurnEvent {
-  if (message.status === 'completed') {
-    return {
-      type: 'turn.completed',
-      schemaVersion: '1',
-      turnId: message.turnId,
-      messageId: message.id,
-    };
-  }
-  if (message.status === 'cancelled') {
-    return {
-      type: 'turn.cancelled',
-      schemaVersion: '1',
-      turnId: message.turnId,
-      messageId: message.id,
-    };
-  }
-  const code =
-    message.status === 'interrupted'
-      ? 'interrupted'
-      : (message.failureCode ?? fallbackCode);
-  const presentation =
-    code.startsWith('k12_') && message.content.trim()
-      ? { message: message.content, retryable: false }
-      : failurePresentation(code);
+function citationEvent(
+  operationId: string,
+  citation: MessageCitationSnapshot,
+): TurnApplicationProfileEvent {
+  const pageLabel = citation.pageStart
+    ? citation.pageEnd && citation.pageEnd !== citation.pageStart
+      ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
+      : ` · 第${citation.pageStart}页`
+    : '';
   return {
-    type: 'turn.failed',
-    schemaVersion: '1',
-    turnId: message.turnId,
-    messageId: message.id,
-    code,
-    message: presentation.message,
-    retryable: presentation.retryable,
+    protocol: 'educanvas.turn.v2',
+    operationId,
+    type: 'message.citation',
+    messageId: citation.assistantMessageId,
+    citationId: citation.id,
+    marker: citation.ordinal,
+    label: [...`${citation.sourceTitle}${pageLabel}`].slice(0, 160).join(''),
+    target: {
+      kind: 'knowledge',
+      sourceId: citation.sourceId,
+      documentId: citation.documentId,
+      chunkId: citation.chunkId,
+      pageStart: citation.pageStart,
+      pageEnd: citation.pageEnd,
+    },
   };
 }
 
@@ -196,858 +127,572 @@ async function recordSafetyDecision(input: {
   });
 }
 
-async function* replayTurn(
-  identity: AnonymousIdentity,
-  snapshot: TeachingTurnLedgerSnapshot,
-): AsyncIterable<TeachingTurnEvent> {
-  yield acceptedEvent(snapshot);
-  let current = snapshot.turn.assistantMessage;
-  let emittedText = '';
-  let lastConvergence = 0;
-
-  while (true) {
-    if (!current.content.startsWith(emittedText)) {
-      yield terminalEventForMessage(current, 'invalid_persisted_stream');
-      return;
-    }
-    const delta = current.content.slice(emittedText.length);
-    if (delta) {
-      emittedText = current.content;
-      yield {
-        type: 'message.delta',
-        schemaVersion: '1',
-        turnId: current.turnId,
-        messageId: current.id,
-        delta,
-      };
-    }
-    if (!['pending', 'streaming'].includes(current.status)) {
-      if (current.status === 'completed') {
-        const citations = await knowledgeRetrieval.listOwnedMessageCitations({
-          trustedStudentId: identity.studentId,
-          sessionId: current.sessionId,
-          turnId: current.turnId,
-          assistantMessageId: current.id,
-        });
-        for (const citation of citations) {
-          yield citationEvent(current.turnId, citation);
-        }
-      }
-      yield terminalEventForMessage(current);
-      return;
-    }
-
-    await delay(REPLAY_POLL_MS);
-    if (Date.now() - lastConvergence >= 2_000) {
-      lastConvergence = Date.now();
-      await leases.convergeExpired({ limit: 25 }).catch(() => undefined);
-    }
-    const refreshed = await chat.getOwnedTurnByTurnId({
-      trustedStudentId: identity.studentId,
-      turnId: snapshot.turn.turnId,
-    });
-    if (!refreshed) {
-      yield {
-        type: 'turn.failed',
-        schemaVersion: '1',
-        turnId: current.turnId,
-        messageId: current.id,
-        code: 'turn_not_found',
-        message: '这次回答已经不可用，请重新发送。',
-        retryable: true,
-      };
-      return;
-    }
-    current = refreshed.assistantMessage;
-  }
-}
-
-function stableToolExecutionId(input: {
-  sessionId: string;
-  turnId: string;
-  providerCallId: string;
-}): string {
-  return `${input.sessionId}:${input.turnId}:${input.providerCallId}`;
-}
-
-function toolLabel(tool: string): string | undefined {
-  if (tool === 'getStudentState') return '正在查看学习进度';
-  if (tool === 'retrieveKnowledge') return '正在检索课程资料';
-  return undefined;
-}
-
-function citationEvent(
-  turnId: string,
-  citation: Awaited<
-    ReturnType<DrizzleKnowledgeRetrievalRepository['listOwnedMessageCitations']>
-  >[number],
-): TeachingTurnEvent {
-  const pageLabel = citation.pageStart
-    ? citation.pageEnd && citation.pageEnd !== citation.pageStart
-      ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
-      : ` · 第${citation.pageStart}页`
-    : '';
-  return {
-    type: 'message.citation',
-    schemaVersion: '1',
-    turnId,
-    messageId: citation.assistantMessageId,
-    citationId: citation.id,
-    marker: citation.ordinal,
-    sourceId: citation.sourceId,
-    documentId: citation.documentId,
-    chunkId: citation.chunkId,
-    label: `${citation.sourceTitle}${pageLabel}`,
-    pageStart: citation.pageStart,
-    pageEnd: citation.pageEnd,
-  };
-}
-
-async function settleUnfinishedToolAudits(
-  identity: AnonymousIdentity,
-  audits: Map<string, ToolAuditState>,
-  failures: readonly TeachingTurnToolFailure[] | undefined,
-  fallbackCode: TeachingTurnRejectionCode,
-): Promise<void> {
-  const failureByExecution = new Map(
-    (failures ?? []).map((failure) => [failure.executionId, failure]),
-  );
-  for (const audit of audits.values()) {
-    if (
-      !audit.record ||
-      !['pending', 'running'].includes(audit.record.status)
-    ) {
-      continue;
-    }
-    const failure = failureByExecution.get(audit.record.executionId);
-    await toolCalls
-      .settle({
-        trustedStudentId: identity.studentId,
-        toolCallId: audit.record.id,
-        status: audit.record.status === 'running' ? 'failed' : 'rejected',
-        code: failure?.code ?? fallbackCode,
-        retryable: failure?.retryable ?? false,
-        durationMs: Math.max(0, Date.now() - (audit.startedAt ?? Date.now())),
-      })
-      .catch(() => undefined);
-  }
-}
-
-function startKeepAlive(input: {
-  identity: AnonymousIdentity;
-  turnId: string;
-  leaseId: string;
-  controller: AbortController;
-}): () => void {
-  let heartbeatRunning = false;
-  let cancellationRunning = false;
-  const heartbeat = setInterval(() => {
-    if (heartbeatRunning || input.controller.signal.aborted) return;
-    heartbeatRunning = true;
-    void leases
-      .heartbeat({
-        trustedStudentId: input.identity.studentId,
-        turnId: input.turnId,
-        leaseId: input.leaseId,
-        leaseDurationMs: DEFAULT_ASSISTANT_LEASE_MS,
-      })
-      .then((renewed) => {
-        if (!renewed && !input.controller.signal.aborted) {
-          input.controller.abort('lease_lost');
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        heartbeatRunning = false;
-      });
-  }, HEARTBEAT_INTERVAL_MS);
-  const cancellation = setInterval(() => {
-    if (cancellationRunning || input.controller.signal.aborted) return;
-    cancellationRunning = true;
-    void chat
-      .isTurnCancellationRequested({
-        trustedStudentId: input.identity.studentId,
-        turnId: input.turnId,
-      })
-      .then((requested) => {
-        if (requested && !input.controller.signal.aborted) {
-          input.controller.abort('explicit_student_stop');
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        cancellationRunning = false;
-      });
-  }, CANCELLATION_POLL_MS);
-  return () => {
-    clearInterval(heartbeat);
-    clearInterval(cancellation);
-  };
-}
-
-async function* runFreshTurn(
-  prepared: PreparedTurn,
-): AsyncIterable<TeachingTurnEvent> {
-  const snapshot = prepared.ledger;
-  const assistant = snapshot.turn.assistantMessage;
-  const leaseId = snapshot.leaseId;
-  if (!leaseId) throw new Error('fresh_turn_missing_lease');
-  yield acceptedEvent(snapshot);
-
-  const inputSafety = evaluateTeachingInput(prepared.studentMessage);
-  await recordSafetyDecision({
-    identity: prepared.identity,
-    sessionId: assistant.sessionId,
-    turnId: snapshot.turn.turnId,
-    decision: inputSafety.decision,
-  });
-  if (!inputSafety.allowed) {
-    if (inputSafety.decision.policyCode !== 'k12_allowed') {
-      recordTeachingMetric(webTeachingObservability, {
-        name: 'policy_blocks',
-        value: 1,
-        phase: inputSafety.decision.phase,
-        category: inputSafety.decision.category,
-        action: inputSafety.decision.action,
-        policyCode: inputSafety.decision.policyCode,
-      });
-    }
-    await modelRuns.settle({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      runId: snapshot.answerRun.id,
-      status: 'failed',
-      errorCode: inputSafety.decision.policyCode,
-    });
-    await chat.markAssistantStreaming({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      assistantMessageId: assistant.id,
-      leaseId,
-    });
-    await chat.appendAssistantDelta({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      assistantMessageId: assistant.id,
-      leaseId,
-      delta: inputSafety.publicResponse.text,
-    });
-    const settled = await chat.settleAssistantMessage({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      assistantMessageId: assistant.id,
-      leaseId,
-      status: 'failed',
-      failureCode: inputSafety.decision.policyCode,
-    });
-    yield {
-      type: 'message.delta',
-      schemaVersion: '1',
-      turnId: snapshot.turn.turnId,
-      messageId: assistant.id,
-      delta: inputSafety.publicResponse.text,
+function terminalReplayEvent(
+  operationId: string,
+  message: ChatMessageSnapshot,
+): TurnApplicationEvent {
+  if (message.status === 'completed') {
+    return {
+      protocol: 'educanvas.turn.v2',
+      operationId,
+      type: 'turn.completed',
+      messageId: message.id,
     };
-    yield terminalEventForMessage(
-      settled.message,
-      inputSafety.decision.policyCode,
-    );
-    return;
+  }
+  if (message.status === 'cancelled') {
+    return {
+      protocol: 'educanvas.turn.v2',
+      operationId,
+      type: 'turn.cancelled',
+      messageId: message.id,
+    };
+  }
+  return {
+    protocol: 'educanvas.turn.v2',
+    operationId,
+    type: 'turn.failed',
+    messageId: message.id,
+    code:
+      message.failureCode === 'POLICY_BLOCKED'
+        ? 'POLICY_BLOCKED'
+        : 'RUNTIME_FAILED',
+    retryable: message.failureCode !== 'POLICY_BLOCKED',
+  };
+}
+
+class WebTeachingLifecycle implements TurnApplicationLifecyclePort {
+  private snapshot: TeachingApplicationTurnLedgerSnapshot | null = null;
+
+  constructor(
+    private readonly identity: AnonymousIdentity,
+    private readonly sessionId: string,
+  ) {}
+
+  async begin(
+    command: TurnApplicationCommand,
+  ): Promise<TurnApplicationLifecycleSnapshot> {
+    const snapshot = await ledger.beginApplicationTurn({
+      sessionId: this.sessionId,
+      trustedStudentId: this.identity.studentId,
+      clientMessageId: command.input.clientMessageId,
+      parts: command.input.parts,
+      traceId: command.traceId,
+      turnId: command.operationId,
+      leaseDurationMs: DEFAULT_ASSISTANT_LEASE_MS,
+    });
+    this.snapshot = snapshot;
+    return {
+      operationId: snapshot.turn.turnId,
+      traceId: command.traceId,
+      userMessageId: snapshot.turn.studentMessage.id,
+      assistantMessageId: snapshot.turn.assistantMessage.id,
+      replayed: snapshot.replayed,
+    };
   }
 
-  if (!prepared.modelRuntime) {
-    await modelRuns.settle({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      runId: snapshot.answerRun.id,
-      status: 'failed',
-      errorCode: 'model_not_configured',
-    });
-    const settled = await chat.settleAssistantMessage({
-      sessionId: assistant.sessionId,
-      trustedStudentId: prepared.identity.studentId,
-      assistantMessageId: assistant.id,
-      leaseId,
-      status: 'failed',
-      failureCode: 'model_not_configured',
-    });
-    yield terminalEventForMessage(settled.message, 'model_not_configured');
-    return;
-  }
-
-  const controller = new AbortController();
-  const unregisterAbort = registerTurnAbortController(
-    snapshot.turn.turnId,
-    controller,
-  );
-  const stopKeepAlive = startKeepAlive({
-    identity: prepared.identity,
-    turnId: snapshot.turn.turnId,
-    leaseId,
-    controller,
-  });
-  const gateway = new AuditedTurnModelGateway(prepared.modelRuntime.gateway, {
-    trustedStudentId: prepared.identity.studentId,
-    sessionId: assistant.sessionId,
-    turnId: snapshot.turn.turnId,
-    assistantMessageId: assistant.id,
-    traceId: snapshot.answerRun.traceId,
-    provider: prepared.modelRuntime.provider,
-    answerRun: snapshot.answerRun,
-  });
-  const orchestrator = new TeachingTurnOrchestrator(
-    gateway,
-    prepared.toolExecutor,
-  );
-  const toolAudits = new Map<string, ToolAuditState>();
-  const modelTools = prepared.toolExecutor.listModelTools(
-    prepared.session.state,
-  );
-  const descriptors = new Map<string, (typeof modelTools)[number]>(
-    modelTools.map((descriptor) => [descriptor.name, descriptor]),
-  );
-  const outputSafety = new TeachingOutputSafetyGate();
-  const retrievalCandidateIds: string[] = [];
-  /* 最终回答全文(仅安全门放行的部分),完成时解析 [n] 标记得到实际引用子集 */
-  let answerText = '';
-  let assistantStreaming = false;
-
-  try {
-    for await (const event of orchestrator.streamTurn(
-      prepared.identity.studentId,
-      {
-        traceId: snapshot.answerRun.traceId,
-        turnId: snapshot.turn.turnId,
-        session: prepared.session,
-        conversationMessages: prepared.conversationMessages,
-        studentMessage: prepared.modelStudentMessage,
-      },
-      { signal: controller.signal },
-    )) {
-      if (event.type === 'model') {
-        const modelEvent: TurnModelEvent = event.event;
-        if (modelEvent.type === 'text_delta') {
-          const safetyResult = outputSafety.push(modelEvent.delta);
-          if (safetyResult.kind === 'hold') continue;
-          if (safetyResult.kind === 'closed') {
-            throw new Error('output_safety_gate_closed');
-          }
-          if (safetyResult.kind === 'blocked') {
-            if (safetyResult.decision.policyCode !== 'k12_allowed') {
-              recordTeachingMetric(webTeachingObservability, {
-                name: 'policy_blocks',
-                value: 1,
-                phase: safetyResult.decision.phase,
-                category: safetyResult.decision.category,
-                action: safetyResult.decision.action,
-                policyCode: safetyResult.decision.policyCode,
-              });
-            }
-            await recordSafetyDecision({
-              identity: prepared.identity,
-              sessionId: assistant.sessionId,
-              turnId: snapshot.turn.turnId,
-              decision: safetyResult.decision,
-            });
-            const hadVisibleContent = assistantStreaming;
-            if (!hadVisibleContent) {
-              await chat.markAssistantStreaming({
-                sessionId: assistant.sessionId,
-                trustedStudentId: prepared.identity.studentId,
-                assistantMessageId: assistant.id,
-                leaseId,
-              });
-              assistantStreaming = true;
-            }
-            const prefix = hadVisibleContent ? '\n\n' : '';
-            const publicDelta = `${prefix}${safetyResult.publicResponse.text}`;
-            await chat.appendAssistantDelta({
-              sessionId: assistant.sessionId,
-              trustedStudentId: prepared.identity.studentId,
-              assistantMessageId: assistant.id,
-              leaseId,
-              delta: publicDelta,
-            });
-            controller.abort('safety_output_blocked');
-            await modelRuns
-              .settle({
-                sessionId: assistant.sessionId,
-                trustedStudentId: prepared.identity.studentId,
-                runId: snapshot.answerRun.id,
-                status: 'failed',
-                errorCode: safetyResult.decision.policyCode,
-              })
-              .catch(() => undefined);
-            const settled = await chat.settleAssistantMessage({
-              sessionId: assistant.sessionId,
-              trustedStudentId: prepared.identity.studentId,
-              assistantMessageId: assistant.id,
-              leaseId,
-              status: 'failed',
-              failureCode: safetyResult.decision.policyCode,
-            });
-            yield {
-              type: 'message.delta',
-              schemaVersion: '1',
-              turnId: snapshot.turn.turnId,
-              messageId: assistant.id,
-              delta: publicDelta,
-            };
-            yield terminalEventForMessage(
-              settled.message,
-              safetyResult.decision.policyCode,
-            );
-            return;
-          }
-          if (!assistantStreaming) {
-            const marked = await chat.markAssistantStreaming({
-              sessionId: assistant.sessionId,
-              trustedStudentId: prepared.identity.studentId,
-              assistantMessageId: assistant.id,
-              leaseId,
-            });
-            if (!['streaming'].includes(marked.message.status)) {
-              throw new Error('assistant_stream_not_available');
-            }
-            assistantStreaming = true;
-          }
-          for (const safeDelta of safetyResult.safeDeltas) {
-            answerText += safeDelta;
-            await chat.appendAssistantDelta({
-              sessionId: assistant.sessionId,
-              trustedStudentId: prepared.identity.studentId,
-              assistantMessageId: assistant.id,
-              leaseId,
-              delta: safeDelta,
-            });
-            yield {
-              type: 'message.delta',
-              schemaVersion: '1',
-              turnId: snapshot.turn.turnId,
-              messageId: assistant.id,
-              delta: safeDelta,
-            };
-          }
-          continue;
-        }
-
-        if (modelEvent.type === 'tool_call') {
-          const existing = toolAudits.get(modelEvent.callId) ?? {
-            providerCallId: modelEvent.callId,
-            tool: modelEvent.tool,
-            argumentsJson: '',
-            finalized: false,
-            canRun: false,
-            record: null,
-            startedAt: null,
-          };
-          if (existing.tool !== modelEvent.tool || existing.finalized) {
-            throw new Error('invalid_tool_fragment_order');
-          }
-          existing.argumentsJson += modelEvent.argumentsDelta;
-          toolAudits.set(modelEvent.callId, existing);
-          if (modelEvent.done) {
-            existing.finalized = true;
-            let parsedArguments: unknown = existing.argumentsJson;
-            try {
-              parsedArguments = JSON.parse(existing.argumentsJson) as unknown;
-            } catch {
-              // 原始字符串也只会进入不可逆结构摘要，不会持久化正文。
-            }
-            const descriptor = descriptors.get(modelEvent.tool);
-            existing.canRun = Boolean(
-              descriptor?.inputSchema.safeParse(parsedArguments).success,
-            );
-            const created = await toolCalls.createOrGet({
-              trustedStudentId: prepared.identity.studentId,
-              answerModelRunId: snapshot.answerRun.id,
-              providerToolCallId: modelEvent.callId,
-              executionId: stableToolExecutionId({
-                sessionId: assistant.sessionId,
-                turnId: snapshot.turn.turnId,
-                providerCallId: modelEvent.callId,
-              }),
-              toolName: modelEvent.tool,
-              teachingState: prepared.session.state,
-              exposure: descriptor ? 'model' : null,
-              effect: descriptor ? 'read' : null,
-              arguments: parsedArguments,
-            });
-            existing.record = created.call;
-          }
-          continue;
-        }
-
-        if (
-          modelEvent.type === 'completed' &&
-          modelEvent.phase === 'answer' &&
-          toolAudits.size > 0
-        ) {
-          const audits = [...toolAudits.values()];
-          if (audits.every((audit) => audit.finalized && audit.canRun)) {
-            for (const audit of audits) {
-              if (!audit.record) throw new Error('tool_audit_missing');
-              const running = await toolCalls.markRunning({
-                trustedStudentId: prepared.identity.studentId,
-                toolCallId: audit.record.id,
-              });
-              audit.record = running.call;
-              audit.startedAt = Date.now();
-              yield {
-                type: 'tool.started',
-                schemaVersion: '1',
-                turnId: snapshot.turn.turnId,
-                toolCallId: running.call.id,
-                ...(toolLabel(audit.tool)
-                  ? { label: toolLabel(audit.tool) }
-                  : {}),
-              };
-            }
-          }
-        }
-        continue;
-      }
-
-      if (event.type === 'tool_result') {
-        const audit = toolAudits.get(event.callId);
-        if (!audit?.record) throw new Error('tool_result_without_audit');
-        const durationMs = Math.max(
-          0,
-          Math.round(event.result.audit.durationMs),
-        );
-        if (event.result.ok) {
-          if (
-            audit.tool === 'retrieveKnowledge' &&
-            typeof event.result.output === 'object' &&
-            event.result.output !== null &&
-            'evidence' in event.result.output &&
-            Array.isArray(event.result.output.evidence)
-          ) {
-            for (const candidate of event.result.output.evidence) {
-              if (
-                typeof candidate === 'object' &&
-                candidate !== null &&
-                'candidateId' in candidate &&
-                typeof candidate.candidateId === 'string' &&
-                !retrievalCandidateIds.includes(candidate.candidateId)
-              ) {
-                retrievalCandidateIds.push(candidate.candidateId);
-              }
-            }
-          }
-          const settled = await toolCalls.settle({
-            trustedStudentId: prepared.identity.studentId,
-            toolCallId: audit.record.id,
-            status: 'succeeded',
-            durationMs,
-            result: event.result.output,
-          });
-          audit.record = settled.call;
-          yield {
-            type: 'tool.completed',
-            schemaVersion: '1',
-            turnId: snapshot.turn.turnId,
-            toolCallId: audit.record.id,
-            ...(toolLabel(audit.tool) ? { label: toolLabel(audit.tool) } : {}),
-          };
-        } else {
-          const status =
-            event.result.code === 'WRITE_TIMEOUT_OUTCOME_UNKNOWN'
-              ? 'outcome_unknown'
-              : event.result.audit.status === 'rejected'
-                ? 'rejected'
-                : 'failed';
-          const settled = await toolCalls.settle({
-            trustedStudentId: prepared.identity.studentId,
-            toolCallId: audit.record.id,
-            status,
-            code: event.result.code,
-            retryable: event.result.retryable,
-            durationMs,
-          });
-          audit.record = settled.call;
-          yield {
-            type: 'tool.failed',
-            schemaVersion: '1',
-            turnId: snapshot.turn.turnId,
-            toolCallId: audit.record.id,
-            code: event.result.code,
-          };
-        }
-        continue;
-      }
-
-      if (event.type === 'completed') {
-        const safetyResult = outputSafety.finish();
-        if (safetyResult.kind !== 'complete') {
-          throw new Error('output_safety_gate_incomplete');
-        }
-        for (const safeDelta of safetyResult.safeDeltas) {
-          answerText += safeDelta;
-          if (!assistantStreaming) {
-            await chat.markAssistantStreaming({
-              sessionId: assistant.sessionId,
-              trustedStudentId: prepared.identity.studentId,
-              assistantMessageId: assistant.id,
-              leaseId,
-            });
-            assistantStreaming = true;
-          }
-          await chat.appendAssistantDelta({
-            sessionId: assistant.sessionId,
-            trustedStudentId: prepared.identity.studentId,
-            assistantMessageId: assistant.id,
-            leaseId,
-            delta: safeDelta,
-          });
-          yield {
-            type: 'message.delta',
-            schemaVersion: '1',
-            turnId: snapshot.turn.turnId,
-            messageId: assistant.id,
-            delta: safeDelta,
-          };
-        }
-        await recordSafetyDecision({
-          identity: prepared.identity,
-          sessionId: assistant.sessionId,
-          turnId: snapshot.turn.turnId,
-          decision: safetyResult.decision,
-        });
-        /* M3c:标记号按"本轮证据出现顺序"映射候选;模型未标注时回退全量引用,
-           引用宁多勿丢。多次检索调用的跨调用编号漂移是已知边界(K12 默认单轮检索)。 */
-        const citationMarkers = extractCitationMarkers(
-          answerText,
-          retrievalCandidateIds.length,
-        );
-        const citationResult =
-          retrievalCandidateIds.length > 0
-            ? await knowledgeRetrieval.persistMessageCitations({
-                trustedStudentId: prepared.identity.studentId,
-                sessionId: assistant.sessionId,
-                turnId: snapshot.turn.turnId,
-                assistantMessageId: assistant.id,
-                ...(citationMarkers.length > 0
-                  ? {
-                      candidateIds: citationMarkers.map(
-                        (marker) => retrievalCandidateIds[marker - 1]!,
-                      ),
-                      markers: citationMarkers,
-                    }
-                  : { candidateIds: retrievalCandidateIds }),
-              })
-            : null;
-        const settled = await chat.settleAssistantMessage({
-          sessionId: assistant.sessionId,
-          trustedStudentId: prepared.identity.studentId,
-          assistantMessageId: assistant.id,
-          leaseId,
-          status: 'completed',
-        });
-        recordTeachingMetric(webTeachingObservability, {
-          name: 'provider_calls_per_completed_turn',
-          value: event.modelRunCount,
-          taskAlias: 'teaching.turn',
-          modelAlias: 'primary',
-        });
-        for (const citation of citationResult?.citations ?? []) {
-          yield citationEvent(snapshot.turn.turnId, citation);
-        }
-        yield terminalEventForMessage(settled.message);
-        return;
-      }
-
-      const cancellationRequested =
-        event.code === 'MODEL_ABORTED' &&
-        (await chat.isTurnCancellationRequested({
-          trustedStudentId: prepared.identity.studentId,
-          turnId: snapshot.turn.turnId,
-        }));
-      const status = cancellationRequested
-        ? 'cancelled'
-        : event.code === 'MODEL_ABORTED'
-          ? 'interrupted'
-          : 'failed';
-      const failureCode = event.error?.code ?? event.code.toLowerCase();
-      await settleUnfinishedToolAudits(
-        prepared.identity,
-        toolAudits,
-        event.failures,
-        event.code,
-      );
-      const settled = await chat.settleAssistantMessage({
-        sessionId: assistant.sessionId,
-        trustedStudentId: prepared.identity.studentId,
-        assistantMessageId: assistant.id,
-        leaseId,
-        status,
-        failureCode,
-      });
-      yield terminalEventForMessage(settled.message, failureCode);
-      return;
+  async replay(): Promise<readonly TurnApplicationEvent[]> {
+    const snapshot = this.snapshot;
+    if (!snapshot) throw new Error('web_teaching_turn_snapshot_missing');
+    const assistant = snapshot.turn.assistantMessage;
+    if (['pending', 'streaming'].includes(assistant.status)) {
+      throw new Error('teaching_replay_requires_gateway_event_resume');
     }
-  } catch {
-    const cancellationRequested = await chat
-      .isTurnCancellationRequested({
-        trustedStudentId: prepared.identity.studentId,
+    const events: TurnApplicationEvent[] = [];
+    if (assistant.content) {
+      events.push({
+        protocol: 'educanvas.turn.v2',
+        operationId: snapshot.turn.turnId,
+        type: 'message.delta',
+        messageId: assistant.id,
+        delta: assistant.content,
+      });
+    }
+    if (assistant.status === 'completed') {
+      const citations = await knowledge.listOwnedMessageCitations({
+        trustedStudentId: this.identity.studentId,
+        sessionId: this.sessionId,
         turnId: snapshot.turn.turnId,
-      })
-      .catch(() => false);
-    const status = cancellationRequested
-      ? 'cancelled'
-      : controller.signal.aborted
-        ? 'interrupted'
-        : 'failed';
-    const failureCode =
-      status === 'cancelled'
-        ? 'aborted'
-        : status === 'interrupted'
-          ? 'stream_interrupted'
-          : 'turn_runtime_failed';
-    await modelRuns
-      .settle({
-        sessionId: assistant.sessionId,
-        trustedStudentId: prepared.identity.studentId,
-        runId: snapshot.answerRun.id,
-        status,
-        errorCode: failureCode,
-      })
-      .catch(() => undefined);
-    const settled = await chat
-      .settleAssistantMessage({
-        sessionId: assistant.sessionId,
-        trustedStudentId: prepared.identity.studentId,
         assistantMessageId: assistant.id,
+      });
+      events.push(
+        ...citations.map((citation) =>
+          citationEvent(snapshot.turn.turnId, citation),
+        ),
+      );
+    }
+    events.push(terminalReplayEvent(snapshot.turn.turnId, assistant));
+    return events;
+  }
+
+  async settle(
+    input: Parameters<TurnApplicationLifecyclePort['settle']>[0],
+  ): ReturnType<TurnApplicationLifecyclePort['settle']> {
+    const snapshot = this.snapshot;
+    const leaseId = snapshot?.leaseId;
+    if (!snapshot || !leaseId) {
+      throw new Error('web_teaching_turn_lease_missing');
+    }
+    if (input.content) {
+      await chat.markAssistantStreaming({
+        sessionId: this.sessionId,
+        trustedStudentId: this.identity.studentId,
+        assistantMessageId: input.turn.assistantMessageId,
         leaseId,
-        status,
-        failureCode,
-      })
-      .catch(() => null);
-    yield terminalEventForMessage(settled?.message ?? assistant, failureCode);
-  } finally {
-    stopKeepAlive();
-    unregisterAbort();
+      });
+      await chat.appendAssistantDelta({
+        sessionId: this.sessionId,
+        trustedStudentId: this.identity.studentId,
+        assistantMessageId: input.turn.assistantMessageId,
+        leaseId,
+        delta: input.content,
+      });
+    }
+    await chat.settleAssistantMessage({
+      sessionId: this.sessionId,
+      trustedStudentId: this.identity.studentId,
+      assistantMessageId: input.turn.assistantMessageId,
+      leaseId,
+      status: input.status,
+      failureCode: input.failureCode,
+    });
+    return [];
   }
 }
 
-export async function beginOwnedTeachingTurn(
-  identity: AnonymousIdentity,
-  input: {
-    clientMessageId: string;
-    text: string;
-    parts: readonly AgentMessagePart[];
-  },
-  gateway?: { operationId: string; expectedSessionId: string },
-): Promise<StartedOwnedTeachingTurn> {
-  await leases.convergeExpired({ limit: 25 });
-  const session = await loadOwnedTeachingSession(identity);
-  if (!session) throw new LearningSessionOwnershipError();
-  if (gateway && session.id !== gateway.expectedSessionId) {
-    throw new LearningSessionOwnershipError();
+class WebTeachingOutputGuard implements TurnApplicationOutputGuardPort {
+  private readonly gate = new TeachingOutputSafetyGate();
+
+  constructor(
+    private readonly identity: AnonymousIdentity,
+    private readonly sessionId: string,
+    private readonly turnId: string,
+  ) {}
+
+  async push(delta: string) {
+    const result = this.gate.push(delta);
+    if (result.kind === 'blocked') {
+      await this.record(result.decision);
+      return {
+        kind: 'block' as const,
+        publicContent: result.publicResponse.text,
+        failureCode: 'POLICY_BLOCKED' as const,
+      };
+    }
+    if (result.kind === 'closed')
+      throw new Error('teaching_output_gate_closed');
+    return result;
   }
-  const studentMessage = normalizeStudentMessageContent(input.text);
-  const assetContext = await materializeAssetContext({
-    identity,
-    spaceId: session.id,
-    parts: input.parts,
-  });
-  const modelStudentMessage = [
-    studentMessage || '请分析我提供的资料。',
-    assetContext,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-  const recentHistory = await chat.listRecentHistory({
-    sessionId: session.id,
-    trustedStudentId: identity.studentId,
-    limit: 24,
-  });
-  const completedTurnIds = new Set(
-    recentHistory
+
+  async finish() {
+    const result = this.gate.finish();
+    if (result.kind === 'blocked') {
+      await this.record(result.decision);
+      return {
+        kind: 'block' as const,
+        publicContent: result.publicResponse.text,
+        failureCode: 'POLICY_BLOCKED' as const,
+      };
+    }
+    if (result.kind === 'closed')
+      throw new Error('teaching_output_gate_closed');
+    await recordSafetyDecision({
+      identity: this.identity,
+      sessionId: this.sessionId,
+      turnId: this.turnId,
+      decision: result.decision,
+    });
+    return { kind: 'emit' as const, safeDeltas: result.safeDeltas };
+  }
+
+  private async record(decision: TeachingSafetyDecision): Promise<void> {
+    if (decision.action === 'allow' || decision.policyCode === 'k12_allowed') {
+      throw new Error('teaching_block_decision_invalid');
+    }
+    const blockedDecision: BlockedTeachingSafetyDecision = {
+      ...decision,
+      action: decision.action,
+      policyCode: decision.policyCode,
+    };
+    recordTeachingMetric(webTeachingObservability, {
+      name: 'policy_blocks',
+      value: 1,
+      phase: blockedDecision.phase,
+      category: blockedDecision.category,
+      action: blockedDecision.action,
+      policyCode: blockedDecision.policyCode,
+    });
+    await recordSafetyDecision({
+      identity: this.identity,
+      sessionId: this.sessionId,
+      turnId: this.turnId,
+      decision,
+    });
+  }
+}
+
+class WebTeachingProfile implements TurnApplicationProfilePort {
+  private readonly retrievalCandidateIds: string[] = [];
+
+  constructor(
+    private readonly identity: AnonymousIdentity,
+    private readonly session: LessonSessionSnapshot,
+    private readonly assetContext: BuiltAssetContext,
+  ) {}
+
+  collectKnowledgeEvidence(candidateIds: readonly string[]): void {
+    for (const candidateId of candidateIds) {
+      if (!this.retrievalCandidateIds.includes(candidateId)) {
+        this.retrievalCandidateIds.push(candidateId);
+      }
+    }
+  }
+
+  async preflight(
+    input: Parameters<NonNullable<TurnApplicationProfilePort['preflight']>>[0],
+  ) {
+    const evaluation = evaluateTeachingInput(
+      extractAgentMessageText(input.command.input.parts),
+    );
+    await recordSafetyDecision({
+      identity: this.identity,
+      sessionId: this.session.id,
+      turnId: input.command.operationId,
+      decision: evaluation.decision,
+    });
+    if (evaluation.allowed) return { kind: 'allow' as const };
+    const blockedDecision: BlockedTeachingSafetyDecision = {
+      ...evaluation.decision,
+      policyCode: evaluation.decision.policyCode as Exclude<
+        TeachingSafetyDecision['policyCode'],
+        'k12_allowed'
+      >,
+    };
+    recordTeachingMetric(webTeachingObservability, {
+      name: 'policy_blocks',
+      value: 1,
+      phase: blockedDecision.phase,
+      category: blockedDecision.category,
+      action: blockedDecision.action,
+      policyCode: blockedDecision.policyCode,
+    });
+    return {
+      kind: 'reject' as const,
+      publicContent: evaluation.publicResponse.text,
+      failureCode: 'POLICY_BLOCKED' as const,
+    };
+  }
+
+  async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
+    const history = await chat.listRecentHistory({
+      sessionId: this.session.id,
+      trustedStudentId: this.identity.studentId,
+      limit: 40,
+    });
+    const completedTurnIds = new Set(
+      history
+        .filter(
+          (message) =>
+            message.role === 'assistant' && message.status === 'completed',
+        )
+        .map((message) => message.turnId),
+    );
+    const selected = history
       .filter(
         (message) =>
-          message.role === 'assistant' && message.status === 'completed',
+          message.id === input.turn.userMessageId ||
+          completedTurnIds.has(message.turnId),
       )
-      .map((message) => message.turnId),
-  );
-  const conversationContext = buildConversationContext(
-    recentHistory
-      // 失败/取消/中断轮次可能只有半段输出；整轮排除，避免把悬空问题当作已完成历史。
-      .filter((message) => completedTurnIds.has(message.turnId))
-      .map((message) => ({
-        id: message.id,
-        role:
-          message.role === 'student'
-            ? ('user' as const)
-            : ('assistant' as const),
-        content: message.content,
-      })),
-    { maxMessages: 20, maxCharacters: 24_000 },
-  );
-  const toolExecutor = createTeachingToolExecutor();
-  const promptMaterial = createTeachingTurnAnswerPromptMaterial(
-    {
-      session,
-      conversationMessages: conversationContext.messages,
-      studentMessage: modelStudentMessage,
-    },
-    toolExecutor.listModelTools(session.state),
-  );
-  const modelRuntime = resolveTurnModelRuntime();
-  const traceId = randomUUID();
-  const turnLedger = await ledger.beginOrReplay({
-    sessionId: session.id,
-    trustedStudentId: identity.studentId,
-    clientMessageId: input.clientMessageId,
-    text: studentMessage,
-    parts: input.parts,
-    traceId,
-    ...(gateway ? { turnId: gateway.operationId } : {}),
-    modelAlias: promptMaterial.modelAlias,
-    promptVersion: promptMaterial.promptVersion,
-    promptHash: hashPromptMaterial(promptMaterial),
-    provider: modelRuntime?.provider ?? null,
-    contextSnapshot: {
-      builderVersion: conversationContext.version,
-      includedMessageIds: conversationContext.includedMessageIds,
-      selectedAssetVersionIds: input.parts.flatMap((part) =>
-        part.type === 'asset_ref' ? [part.reference.versionId] : [],
+      .slice(-24);
+    const currentText =
+      extractAgentMessageText(input.command.input.parts).trim() ||
+      '请分析我提供的资料。';
+    const prompts = createTeachingTurnPromptMessages({
+      session: this.session,
+      studentMessage: currentText,
+    });
+    const answerSystem = prompts.answer[0];
+    const synthesisSystem = prompts.synthesis[0];
+    if (answerSystem?.role !== 'system' || synthesisSystem?.role !== 'system') {
+      throw new Error('teaching_system_prompt_missing');
+    }
+    const grantedTools = teachingToolCapabilitiesForState(
+      this.session.state,
+    ).filter((capability) => input.command.capabilities.includes(capability));
+    const capabilities = {
+      actor: grantedTools,
+      notebook: grantedTools,
+      profile: grantedTools,
+      channel: grantedTools,
+      environment: grantedTools,
+    };
+    return {
+      context: {
+        profileVersion: CONTEXT_PROFILE_VERSION,
+        profile: [
+          {
+            segment: {
+              id: `profile:${CONTEXT_PROFILE_VERSION}`,
+              kind: 'profile' as const,
+              content: answerSystem.content,
+              priority: 100,
+              required: true,
+            },
+            message: answerSystem,
+            synthesisMessage: synthesisSystem,
+          },
+        ],
+        conversation: selected.map((message, index) => {
+          const content =
+            message.id === input.turn.userMessageId
+              ? currentText
+              : message.content;
+          return {
+            segment: {
+              id: `message:${message.id}`,
+              kind: 'conversation' as const,
+              content,
+              priority:
+                message.id === input.turn.userMessageId ? 100 : 50 + index,
+              required: message.id === input.turn.userMessageId,
+              messageId: message.id,
+            },
+            message: {
+              role:
+                message.role === 'student'
+                  ? ('user' as const)
+                  : ('assistant' as const),
+              content,
+            },
+          };
+        }),
+        sourcesAndAssets: this.assetContext.textSegments.map(
+          (segment, index) => {
+            const content = `<untrusted_user_material>\n${segment.text}\n</untrusted_user_material>`;
+            return {
+              segment: {
+                id: `asset:${segment.reference.versionId}`,
+                kind: 'asset' as const,
+                content,
+                priority: 90 - index,
+                required: true,
+                assetVersionId: segment.reference.versionId,
+              },
+              message: { role: 'user' as const, content },
+            };
+          },
+        ),
+        memory: {
+          status: 'unavailable' as const,
+          reason: 'not_implemented' as const,
+        },
+        maxSegments: 100,
+        maxCharacters: 128_000,
+      },
+      model: {
+        taskAlias: 'teaching.turn' as const,
+        modelAlias: 'primary' as const,
+        promptVersion: TEACHING_TURN_ANSWER_PROMPT_VERSION,
+        synthesisPromptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
+        maxToolRounds: 1,
+      },
+      toolPolicy: {
+        capabilities,
+        approvedCapabilities: [],
+        channel: 'web',
+        environment:
+          process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
+        profileContext: {
+          studentId: this.identity.studentId,
+          sessionId: this.session.id,
+          knowledgeNodeId: this.session.knowledgeNodeId,
+          state: this.session.state,
+        },
+      },
+    };
+  }
+
+  createOutputGuard(
+    input: Parameters<
+      NonNullable<TurnApplicationProfilePort['createOutputGuard']>
+    >[0],
+  ): TurnApplicationOutputGuardPort {
+    return new WebTeachingOutputGuard(
+      this.identity,
+      this.session.id,
+      input.command.operationId,
+    );
+  }
+
+  async finalize(
+    input: Parameters<NonNullable<TurnApplicationProfilePort['finalize']>>[0],
+  ) {
+    if (this.retrievalCandidateIds.length === 0) return {};
+    const markers = extractCitationMarkers(
+      input.content,
+      this.retrievalCandidateIds.length,
+    );
+    const result = await knowledge.persistMessageCitations({
+      trustedStudentId: this.identity.studentId,
+      sessionId: this.session.id,
+      turnId: input.command.operationId,
+      assistantMessageId: input.turn.assistantMessageId,
+      ...(markers.length > 0
+        ? {
+            candidateIds: markers.map(
+              (marker) => this.retrievalCandidateIds[marker - 1]!,
+            ),
+            markers,
+          }
+        : { candidateIds: this.retrievalCandidateIds }),
+    });
+    return {
+      events: result.citations.map((citation) =>
+        citationEvent(input.command.operationId, citation),
       ),
-      omittedMessageCount: conversationContext.omittedMessageCount,
-      characterCount: conversationContext.characterCount,
-    },
-    leaseDurationMs: DEFAULT_ASSISTANT_LEASE_MS,
-  });
-  const prepared: PreparedTurn = {
-    identity,
-    ledger: turnLedger,
-    session,
-    studentMessage,
-    modelStudentMessage,
-    conversationMessages: conversationContext.messages,
-    toolExecutor,
-    modelRuntime,
-  };
-  return {
-    turnId: turnLedger.turn.turnId,
-    replayed: turnLedger.replayed,
-    events: turnLedger.replayed
-      ? replayTurn(identity, turnLedger)
-      : runFreshTurn(prepared),
-  };
+    };
+  }
 }
 
-export async function beginGatewayTeachingTurn(input: {
+class WebTeachingCancellation implements TurnApplicationCancellationPort {
+  constructor(private readonly upstream: ModelAbortSignal) {}
+
+  async open(input: { operationId: string; actorId: string }) {
+    const snapshot = await chat.getOwnedTurnByTurnId({
+      trustedStudentId: input.actorId,
+      turnId: input.operationId,
+    });
+    const leaseId = snapshot?.assistantMessage.leaseId;
+    if (!snapshot || !leaseId) throw new Error('teaching_turn_lease_missing');
+    const controller = new AbortController();
+    let heartbeatRunning = false;
+    let cancellationRunning = false;
+    const abort = () => {
+      if (!controller.signal.aborted) controller.abort('turn_cancelled');
+    };
+    if (this.upstream.aborted) abort();
+    else this.upstream.addEventListener('abort', abort, { once: true });
+    const heartbeat = setInterval(() => {
+      if (heartbeatRunning || controller.signal.aborted) return;
+      heartbeatRunning = true;
+      void leases
+        .heartbeat({
+          trustedStudentId: input.actorId,
+          turnId: input.operationId,
+          leaseId,
+          leaseDurationMs: DEFAULT_ASSISTANT_LEASE_MS,
+        })
+        .then((renewed) => {
+          if (!renewed) abort();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          heartbeatRunning = false;
+        });
+    }, HEARTBEAT_INTERVAL_MS);
+    const cancellation = setInterval(() => {
+      if (cancellationRunning || controller.signal.aborted) return;
+      cancellationRunning = true;
+      void chat
+        .isTurnCancellationRequested({
+          trustedStudentId: input.actorId,
+          turnId: input.operationId,
+        })
+        .then((requested) => {
+          if (requested) abort();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          cancellationRunning = false;
+        });
+    }, CANCELLATION_POLL_MS);
+    return {
+      signal: controller.signal,
+      isCancellationRequested: async () =>
+        (await chat.isTurnCancellationRequested({
+          trustedStudentId: input.actorId,
+          turnId: input.operationId,
+        })) || this.upstream.aborted,
+      close: () => {
+        clearInterval(heartbeat);
+        clearInterval(cancellation);
+        this.upstream.removeEventListener('abort', abort);
+      },
+    };
+  }
+}
+
+/** Web 教学入口的统一 Turn Application 组合根；教学 Profile 不再创建私有模型循环。 */
+export function beginGatewayTeachingTurnApplication(input: {
   operationId: string;
-  expectedSessionId: string;
+  traceId: string;
+  actorId: string;
+  agentId: string;
   identity: AnonymousIdentity;
-  request: {
-    clientMessageId: string;
-    text: string;
-    parts: readonly AgentMessagePart[];
-  };
-}): Promise<StartedOwnedTeachingTurn> {
-  return beginOwnedTeachingTurn(input.identity, input.request, {
+  session: LessonSessionSnapshot;
+  conversationId: string;
+  notebookId: string;
+  request: TeachingTurnRequestBody;
+  assetContext: BuiltAssetContext;
+  signal: ModelAbortSignal;
+  capabilities: readonly string[];
+}): { events: AsyncIterable<TurnApplicationEvent> } {
+  if (
+    input.actorId !== input.identity.studentId ||
+    input.session.studentId !== input.actorId
+  ) {
+    throw new Error('web_teaching_actor_scope_mismatch');
+  }
+  const profile = new WebTeachingProfile(
+    input.identity,
+    input.session,
+    input.assetContext,
+  );
+  const adapters = createTeachingToolKernelAdapters((candidateIds) =>
+    profile.collectKnowledgeEvidence(candidateIds),
+  );
+  const runtime = resolveTurnModelRuntime();
+  const service = new TurnApplicationService({
+    lifecycle: new WebTeachingLifecycle(input.identity, input.session.id),
+    profile,
+    contextLedger: new DrizzleAgentTurnContextRepository(),
+    modelRunLedger: new DrizzleAgentModelRunRepository(),
+    modelGateway: runtime?.gateway ?? unavailableModelGateway,
+    toolKernel: new ToolKernel(
+      adapters,
+      new DrizzleAgentToolCallRepository(),
+      new DrizzleToolEffectRepository(),
+    ),
+    cancellation: new WebTeachingCancellation(input.signal),
+  });
+  const command: TurnApplicationCommand = {
+    protocol: 'educanvas.turn.v2',
     operationId: input.operationId,
-    expectedSessionId: input.expectedSessionId,
+    traceId: input.traceId,
+    actor: { actorId: input.actorId, agentId: input.agentId },
+    notebook: {
+      notebookId: input.notebookId,
+      conversationId: input.conversationId,
+    },
+    profile: { profileId: 'k12.teacher' },
+    entrypoint: 'web',
+    input: {
+      clientMessageId: input.request.clientMessageId,
+      parts: [...input.request.parts],
+    },
+    capabilities: [...new Set(input.capabilities)],
+  };
+  return { events: service.run(command) };
+}
+
+/** 在创建 Gateway Operation 前完成资产归属与模态验证，错误仍由 Web 路由清晰呈现。 */
+export async function prepareGatewayTeachingTurnContext(input: {
+  identity: AnonymousIdentity;
+  notebookId: string;
+  request: TeachingTurnRequestBody;
+}): Promise<BuiltAssetContext> {
+  return materializeAssetContextPlan({
+    identity: input.identity,
+    spaceId: input.notebookId,
+    parts: input.request.parts,
   });
 }

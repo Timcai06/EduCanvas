@@ -40,8 +40,6 @@ describe('Turn composition production boundary', () => {
 
   it('does not allow a third tool runtime or new entrypoint-local construction', () => {
     assert.deepEqual(constructionFiles('AgentToolRegistry'), []);
-    assert.deepEqual(constructionFiles('TeachingToolExecutor'), [
-      'apps/web/server/teaching/teaching-tools.ts',
-    ]);
+    assert.deepEqual(constructionFiles('TeachingToolExecutor'), []);
   });
 });
