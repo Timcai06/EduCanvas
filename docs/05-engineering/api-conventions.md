@@ -16,7 +16,7 @@
 
 ## Agent Turn SSE
 
-当前 Web API/SSE 是 `gateway.v1` 的兼容投影。跨客户端协议由 [Gateway 与多入口架构](../02-architecture/gateway-and-channels.md)定义；TUI、Channel 和 Node 不调用 Next.js Route Handler。
+当前 Web API/SSE 是 `gateway.v1` 的兼容投影。跨客户端协议由 [Gateway 与多入口架构](../02-architecture/02-Gateway与多入口.md)定义；TUI、Channel 和 Node 不调用 Next.js Route Handler。
 
 Web Route 只把受控 Runtime 事件映射为 EduCanvas SSE，不能透传 AI SDK、DeepSeek 或其他供应商原始事件。当前浏览器已实现的 `schemaVersion=1` 事件为：
 
@@ -106,7 +106,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 - Event和错误只使用稳定码，不返回Provider异常、Secret或消息正文；
 - Web兼容层把`message.started`映射为`turn.accepted`，确保Gateway Operation与既有Turn复用同一ID。
 
-完整HTTP入口、认证和能力边界见[Gateway 与多入口架构](../02-architecture/gateway-and-channels.md)。
+完整HTTP入口、认证和能力边界见[Gateway 与多入口架构](../02-architecture/02-Gateway与多入口.md)。
 
 ## 错误结构
 

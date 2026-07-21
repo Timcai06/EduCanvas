@@ -263,7 +263,7 @@ stateDiagram-v2
 
 ## 下一阶段
 
-[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)和[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)已经完成。当前架构线先进入[第二代研究与决策](docs/plan/active/2026-07-second-generation-architecture-research.md)，不直接改写生产架构。后续产品与运维优先级是：
+[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)和[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)已经完成。当前架构线先进入[第二代研究与决策](docs/plan/active/2026-07-第二代架构研究.md)，不直接改写生产架构。后续产品与运维优先级是：
 
 1. 接入正式 IdP，替换仅供管理员/本地 bootstrap 使用的共享令牌；
 2. 完成统一 Context Engine：Notebook 摘要、长期学习者记忆、Artifact 上下文和原生多模态；
@@ -281,9 +281,11 @@ stateDiagram-v2
 | 历史技术报告（2026-07-16 快照） | [docs/00-overview/snapshots/2026-07-16-project-technical-report.md](docs/00-overview/snapshots/2026-07-16-project-technical-report.md) |
 | 产品定义                        | [docs/01-product/product-definition.md](docs/01-product/product-definition.md)                                                         |
 | 学生 UI 规范                    | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md)                                                               |
-| 系统架构                        | [docs/02-architecture/system-architecture.md](docs/02-architecture/system-architecture.md)                                             |
-| Gateway 与多入口                | [docs/02-architecture/gateway-and-channels.md](docs/02-architecture/gateway-and-channels.md)                                           |
-| Agent 编排                      | [docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md)                                                                 |
+| 系统架构现状                    | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md)                                                     |
+| Gateway 与多入口                | [docs/02-architecture/02-Gateway与多入口.md](docs/02-architecture/02-Gateway与多入口.md)                                               |
+| 第二代架构提案                  | [docs/02-architecture/03-第二代架构提案.md](docs/02-architecture/03-第二代架构提案.md)                                                 |
+| Agent 编排边界                  | [docs/03-ai/01-Agent编排边界.md](docs/03-ai/01-Agent编排边界.md)                                                                       |
+| 架构研究索引                    | [docs/research/00-研究说明.md](docs/research/00-研究说明.md)                                                                           |
 | 数据设计                        | [docs/04-data/data-design.md](docs/04-data/data-design.md)                                                                             |
 | API/SSE                         | [docs/05-engineering/api-conventions.md](docs/05-engineering/api-conventions.md)                                                       |
 | 测试与安全                      | [docs/06-quality/testing-and-evaluation.md](docs/06-quality/testing-and-evaluation.md)                                                 |

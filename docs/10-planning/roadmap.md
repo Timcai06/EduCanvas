@@ -6,7 +6,7 @@
 
 EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平台**。Gateway-first 基础架构已完成，当前路线图从“建边界”转为“补真实生产能力与教育质量”。完成证据见 [Gateway-first 计划](../plan/completed/2026-07-gateway-first-personal-agent.md)。
 
-第二代架构当前处于[研究与决策阶段](../plan/active/2026-07-second-generation-architecture-research.md)：先完成源码研究、能力映射、对照实验和 ADR，不以更换框架或目录重排冒充升级。
+第二代架构当前处于[研究与决策阶段](../plan/active/2026-07-第二代架构研究.md)：先完成源码研究、能力映射、对照实验和 ADR，不以更换框架或目录重排冒充升级。
 
 ## 已完成：产品与 Gateway 边界
 

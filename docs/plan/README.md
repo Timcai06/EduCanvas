@@ -18,11 +18,11 @@
 
 ## 当前计划
 
-当前 active 执行线是[第二代架构研究与决策](active/2026-07-second-generation-architecture-research.md)。本阶段不改生产架构，只做源码研究、能力映射、对照实验和 ADR 决策；Web-first 入口、TUI、handoff 与 Connections 已于 2026-07-21 结档。历史交付与去向见[`completed/`](completed/README.md)。
+当前 active 执行线是[第二代架构研究与决策](active/2026-07-第二代架构研究.md)。本阶段不改生产架构，只做源码研究、能力映射、对照实验和 ADR 决策；Web-first 入口、TUI、handoff 与 Connections 已于 2026-07-21 结档。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 
-- 文件名使用`YYYY-MM-短横线英文主题.md`，例如`2026-07-real-model-vertical-slice.md`；
+- 新计划文件使用`YYYY-MM-中文主题.md`，例如`2026-07-第二代架构研究.md`；已有 completed 记录不为统一外观而批量重命名；
 - 一个文件只描述一个可独立验收的阶段目标；
 - 状态只使用`draft`、`active`、`blocked`、`completed`、`cancelled`；
 - `active`计划必须有负责人和最后验证时间；
