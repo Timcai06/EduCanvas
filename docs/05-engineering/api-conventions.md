@@ -16,6 +16,14 @@
 
 ## Agent Turn SSE
 
+### 内部 Turn Application v2
+
+第二代运行内核先定义 `educanvas.turn.v2` 的 transport-neutral 命令与事件。命令只接受服务端解析后的 Actor/Agent、Notebook/Conversation、Profile、入口、消息 Parts 和有效能力清单；浏览器、TUI、Channel、模型或 Provider 不能提交可信主体。ID 采用非空、最多 256 字符的 opaque ID，能力名最多 64 字符，消息复用 `agentMessageInputSchema` 的 32 Parts/64000 文本总长边界，能力清单最多 128 项且不得重复。
+
+应用事件包含 `turn.started`、消息 delta/引用、Tool 生命周期、approval、Artifact 生命周期和 `turn.completed/failed/cancelled`。已知事件使用 strict Schema；Tool 完成事件只允许最多 1000 字符的安全摘要，不接受原始参数、输出、异常或 Secret。一个事件前缀必须以唯一 `turn.started` 开始、全部属于同一 Operation，终态出现后不得再有事件。
+
+该契约位于 `@educanvas/agent-core`，唯一调用边界 `TurnApplicationPort` 位于 `@educanvas/agent-runtime`。Web SSE 和 Gateway NDJSON 仍保持各自对外版本，只能投影内部事件，不能把传输字段或供应商类型反向写入应用契约。
+
 当前 Web API/SSE 是 `gateway.v1` 的兼容投影。跨客户端协议由 [Gateway 与多入口架构](../02-architecture/02-Gateway与多入口.md)定义；TUI、Channel 和 Node 不调用 Next.js Route Handler。
 
 Web Route 只把受控 Runtime 事件映射为 EduCanvas SSE，不能透传 AI SDK、DeepSeek 或其他供应商原始事件。当前浏览器已实现的 `schemaVersion=1` 事件为：
