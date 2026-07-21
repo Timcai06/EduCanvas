@@ -18,7 +18,18 @@ import {
   type GatewayResolvedRoute,
   type NotebookPermission,
 } from '@educanvas/gateway-core';
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { getDb } from './client';
 import {
   agentOperations,
@@ -85,6 +96,7 @@ export interface GatewayIdentitySnapshot {
 
 export interface GatewayStoredOperationSnapshot {
   operationId: string;
+  traceId: string;
   envelopeId: string;
   idempotencyKey: string;
   requestFingerprint: string;
@@ -1143,6 +1155,7 @@ export class DrizzleGatewayOperationStore {
         }
         return {
           operationId: existing.id,
+          traceId: existing.traceId,
           envelopeId: existing.gatewayEnvelopeId,
           idempotencyKey: existing.idempotencyKey,
           requestFingerprint: existing.requestFingerprint,
@@ -1172,7 +1185,10 @@ export class DrizzleGatewayOperationStore {
           status: 'running',
           createdAt: input.now,
         })
-        .returning({ id: agentOperations.id });
+        .returning({
+          id: agentOperations.id,
+          traceId: agentOperations.traceId,
+        });
       if (!created) {
         throw new GatewayPersistenceError(
           'operation_not_found',
@@ -1181,6 +1197,7 @@ export class DrizzleGatewayOperationStore {
       }
       return {
         operationId: created.id,
+        traceId: created.traceId,
         envelopeId: input.envelopeId,
         idempotencyKey: input.idempotencyKey,
         requestFingerprint: input.requestFingerprint,
@@ -1341,6 +1358,45 @@ export class DrizzleGatewayOperationStore {
           ? 'running'
           : normalized,
     };
+  }
+
+  /** 写入跨进程可见的取消请求；终态仍只能由运行该Operation的控制循环追加。 */
+  async requestCancellation(input: {
+    operationId: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<boolean> {
+    const [updated] = await this.database
+      .update(agentOperations)
+      .set({ cancelRequestedAt: input.now })
+      .where(
+        and(
+          eq(agentOperations.id, input.operationId),
+          eq(agentOperations.actorUserId, input.actorUserId),
+          inArray(agentOperations.status, ['pending', 'running']),
+          isNull(agentOperations.cancelRequestedAt),
+        ),
+      )
+      .returning({ id: agentOperations.id });
+    if (updated) return true;
+    const [existing] = await this.database
+      .select({
+        status: agentOperations.status,
+        cancelRequestedAt: agentOperations.cancelRequestedAt,
+      })
+      .from(agentOperations)
+      .where(
+        and(
+          eq(agentOperations.id, input.operationId),
+          eq(agentOperations.actorUserId, input.actorUserId),
+        ),
+      )
+      .limit(1);
+    return Boolean(
+      existing &&
+      ['pending', 'running'].includes(existing.status) &&
+      existing.cancelRequestedAt,
+    );
   }
 
   /**

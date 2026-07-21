@@ -283,7 +283,11 @@ describeWithDatabase(
         turnId: operation.operationId,
         status: 'completed',
         content: '回答',
+        operationTerminalWriter: 'gateway',
         now,
+      });
+      expect(await store.describe(operation.operationId)).toMatchObject({
+        status: 'running',
       });
       await store.append(
         operation.operationId,
@@ -396,6 +400,20 @@ describeWithDatabase(
         route,
         now,
       });
+      expect(started.traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(
+        (
+          await store.begin({
+            envelopeId: 'envelope:1',
+            idempotencyKey: 'message:1',
+            requestFingerprint: 'a'.repeat(64),
+            route,
+            now,
+          })
+        ).traceId,
+      ).toBe(started.traceId);
       await store.append(
         started.operationId,
         { type: 'operation.accepted' },
@@ -465,6 +483,76 @@ describeWithDatabase(
         status: 'completed',
       });
       expect(await store.listRecent('user:other')).toHaveLength(0);
+    });
+
+    it('persists actor-scoped cancellation before the Gateway terminal event', async () => {
+      const conversations = new DrizzlePlatformConversationRepository(
+        getDatabase(),
+      );
+      const identities = new DrizzleGatewayIdentityRepository(getDatabase());
+      const store = new DrizzleGatewayOperationStore(getDatabase());
+      const turns = new DrizzlePlatformTurnRepository(getDatabase());
+      const conversation = await conversations.create({
+        ownerSubjectId: 'user:owner',
+        spaceKind: 'notebook',
+        spaceTitle: 'Gateway取消',
+        now,
+      });
+      const owner = await identities.getActive('user:owner');
+      if (!owner) throw new Error('Owner identity missing');
+      const operation = await store.begin({
+        envelopeId: 'cancel:envelope',
+        idempotencyKey: 'cancel:message',
+        requestFingerprint: '9'.repeat(64),
+        route: {
+          actorUserId: owner.userId,
+          agentId: owner.agentId,
+          notebookId: conversation.spaceId,
+          conversationId: conversation.id,
+          membershipRole: 'owner',
+        },
+        now,
+      });
+
+      await expect(
+        store.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: 'user:other',
+          now,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        store.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 1_000),
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        store.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 2_000),
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        turns.isTurnCancellationRequested({
+          trustedSubjectId: owner.userId,
+          turnId: operation.operationId,
+        }),
+      ).resolves.toBe(true);
+      await store.append(
+        operation.operationId,
+        { type: 'operation.cancelled' },
+        new Date(now.getTime() + 3_000),
+      );
+      await expect(
+        store.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 4_000),
+        }),
+      ).resolves.toBe(false);
     });
 
     it('persists actor-scoped approvals and records an explicit denial terminal', async () => {

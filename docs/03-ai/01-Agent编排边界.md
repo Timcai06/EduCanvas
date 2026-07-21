@@ -24,10 +24,10 @@
 | 主题             | 当前事实                                                    | 目标不变量                                |
 | ---------------- | ----------------------------------------------------------- | ----------------------------------------- |
 | Agent Loop       | 只有一个 `AgentLoopEngine`                                  | 继续只有一个生产模型/工具循环             |
-| Turn Application | Gateway、Web General、Web Teaching 三条组合路径             | 收敛为一个 Turn Application Service       |
+| Turn Application | Gateway已迁唯一服务，Web General/Web Teaching仍为旧组合路径 | 收敛为一个 Turn Application Service       |
 | Tool Runtime     | `AgentToolRegistry` 与 `TeachingToolExecutor` 并存          | 一个 Tool Kernel 统一策略与执行语义       |
-| Context          | 三条路径分别装配，尚无完整 Snapshot                         | 预算选择后固化可审计 Context Snapshot     |
-| Audit            | Gateway Operation、Web Turn/Message、教学 `model_runs` 双轨 | ID 对齐、职责唯一，不建立第二事实源       |
+| Context          | Gateway已统一并写Snapshot，两个Web入口仍分别装配            | 预算选择后固化可审计 Context Snapshot     |
+| Audit            | 通用Ledger已落地，Gateway已接入；两个Web旧入口仍待单写迁移  | ID 对齐、职责唯一，不建立第二事实源       |
 | Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                  | 以 Operation 为业务游标，副作用可幂等续跑 |
 
 ## 三、统一 Agent Loop
@@ -41,7 +41,7 @@ validate request
   -> if answer: emit terminal result
 ```
 
-循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。三条应用路径实例化同一 Engine 并注入不同依赖；这说明“Loop 已统一”，不说明“Turn Application 已统一”。
+循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。只有`TurnApplicationService`实例化目标Engine；两个Web旧入口仍在迁移期直接实例化，因此当前是“Gateway已收敛、Web双轨待收敛”，不能提前声称应用层统一完成。
 
 当前 Web General 默认最多三圈工具；K12 Profile 默认一圈并可在预算内配置。具体数值属于组合根策略，不应写死为 Engine 的永久协议。
 
