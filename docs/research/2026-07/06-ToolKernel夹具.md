@@ -49,4 +49,4 @@ pnpm test:tooling
 
 实验支持一个统一 Tool Kernel 加四类 Adapter 的方向，也证明 Teaching Tool 不需要保留第二套执行内核；教学状态白名单应成为能力策略输入，而不是独立超时、幂等和审计实现。
 
-它还没有授权生产迁移。真实实现前仍需 proposed ADR 明确：持久 effect ledger 的唯一写者、Gateway approval continuation、远端 MCP/Node 生命周期、Credential Broker，以及从两套现有 Runtime 逐步迁移和回滚的路径。
+该实验在当时尚未授权生产迁移；随后已由接受的ADR-0020明确唯一写者与迁移边界，并落地生产Tool Kernel契约和持久effect ledger。Gateway approval continuation、远端MCP/Node生命周期、Credential Broker以及两套旧Runtime的逐入口迁移仍按active计划推进，不能因Kernel类已经存在而宣称完成。

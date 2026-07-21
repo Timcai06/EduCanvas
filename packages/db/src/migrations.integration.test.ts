@@ -81,7 +81,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'retrieval_candidates', 'message_citations',
             'assets', 'asset_versions', 'agent_message_parts',
             'turn_context_snapshots', 'spaces', 'conversations',
-            'agent_operations', 'conversation_messages'
+            'agent_operations', 'conversation_messages', 'tool_effects'
           )
         order by table_name
       `;
@@ -103,6 +103,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'session_source_bindings',
         'spaces',
         'tool_calls',
+        'tool_effects',
         'turn_context_snapshots',
         'turn_safety_decisions',
         'turn_source_snapshots',

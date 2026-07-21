@@ -1326,6 +1326,56 @@ export const toolCalls = pgTable(
 );
 
 /**
+ * write工具的持久副作用意图与提交证据。只保存稳定key/hash和终态；
+ * 原始参数、输出、Credential、外部异常与回执正文禁止进入本表。
+ */
+export const toolEffects = pgTable(
+  'tool_effects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentOperationId: uuid('agent_operation_id')
+      .notNull()
+      .references(() => agentOperations.id, { onDelete: 'cascade' }),
+    toolCallId: uuid('tool_call_id')
+      .notNull()
+      .references(() => toolCalls.id, { onDelete: 'cascade' }),
+    effectKey: text('effect_key').notNull(),
+    semanticsHash: text('semantics_hash').notNull(),
+    status: text('status').notNull().default('intended'),
+    code: text('code'),
+    receiptHash: text('receipt_hash'),
+    intendedAt: timestamp('intended_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('tool_effects_operation_key_unique').on(
+      table.agentOperationId,
+      table.effectKey,
+    ),
+    uniqueIndex('tool_effects_tool_call_unique').on(table.toolCallId),
+    index('tool_effects_status_idx').on(
+      table.status,
+      table.intendedAt,
+      table.id,
+    ),
+    check(
+      'tool_effects_text_check',
+      sql`${table.effectKey} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$' and ${table.semanticsHash} ~ '^[a-f0-9]{64}$' and (${table.code} is null or ${table.code} ~ '^[a-z][a-z0-9._:-]{0,127}$') and (${table.receiptHash} is null or ${table.receiptHash} ~ '^[a-f0-9]{64}$')`,
+    ),
+    check(
+      'tool_effects_status_check',
+      sql`${table.status} in ('intended', 'committed', 'failed', 'outcome_unknown')`,
+    ),
+    check(
+      'tool_effects_lifecycle_check',
+      sql`(${table.status} = 'intended' and ${table.code} is null and ${table.receiptHash} is null and ${table.settledAt} is null) or (${table.status} = 'committed' and ${table.code} is null and ${table.settledAt} is not null) or (${table.status} in ('failed', 'outcome_unknown') and ${table.code} is not null and ${table.receiptHash} is null and ${table.settledAt} is not null)`,
+    ),
+  ],
+);
+
+/**
  * Turn 输入/输出的安全决策审计。该表刻意不提供正文、Prompt、推理或 detector payload 字段，
  * 只保存可关联、可版本化的稳定分类结果。
  */
