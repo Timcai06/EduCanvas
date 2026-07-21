@@ -45,6 +45,7 @@ export interface ToolKernelTrustedContext {
 
 export interface ToolAdapterInvocationContext {
   operationId: string;
+  executionId: string;
   conversationId: string;
   traceId: string;
   actorId: string;
@@ -437,6 +438,7 @@ export class ToolKernel {
       const output = await Promise.race([
         adapter.invoke(parsedInput, {
           operationId: request.context.operationId,
+          executionId: request.context.executionId,
           conversationId: request.context.conversationId,
           traceId: request.context.traceId,
           actorId: request.context.actorId,
