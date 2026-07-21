@@ -1251,10 +1251,14 @@ export const toolCalls = pgTable(
   'tool_calls',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => lessonSessions.id, { onDelete: 'cascade' }),
-    turnId: uuid('turn_id').notNull(),
+    sessionId: uuid('session_id').references(() => lessonSessions.id, {
+      onDelete: 'cascade',
+    }),
+    turnId: uuid('turn_id'),
+    agentOperationId: uuid('agent_operation_id').references(
+      () => agentOperations.id,
+      { onDelete: 'cascade' },
+    ),
     answerModelRunId: uuid('answer_model_run_id')
       .notNull()
       .references(() => modelRuns.id, { onDelete: 'cascade' }),
@@ -1263,7 +1267,7 @@ export const toolCalls = pgTable(
     requestHash: text('request_hash').notNull(),
     traceId: text('trace_id').notNull(),
     toolName: text('tool_name'),
-    teachingState: text('teaching_state').notNull(),
+    teachingState: text('teaching_state'),
     exposure: text('exposure'),
     effect: text('effect'),
     argumentSummary: jsonb('argument_summary').notNull(),
@@ -1285,6 +1289,15 @@ export const toolCalls = pgTable(
       table.providerToolCallId,
     ),
     index('tool_calls_session_turn_idx').on(table.sessionId, table.turnId),
+    index('tool_calls_agent_operation_idx').on(
+      table.agentOperationId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'tool_calls_scope_check',
+      sql`(${table.sessionId} is not null and ${table.turnId} is not null and ${table.teachingState} is not null and ${table.agentOperationId} is null) or (${table.sessionId} is null and ${table.turnId} is null and ${table.teachingState} is null and ${table.agentOperationId} is not null)`,
+    ),
     check(
       'tool_calls_status_check',
       sql`${table.status} in ('pending', 'running', 'succeeded', 'rejected', 'failed', 'outcome_unknown')`,

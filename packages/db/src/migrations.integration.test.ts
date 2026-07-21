@@ -255,6 +255,87 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
     });
   });
 
+  it('从0025升级时保留旧教学Tool Call并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0026_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '78000000-0000-4000-8000-000000000001';
+      const assistantMessageId = '78000000-0000-4000-8000-000000000002';
+      const turnId = '78000000-0000-4000-8000-000000000003';
+      const runId = '78000000-0000-4000-8000-000000000004';
+      const callId = '78000000-0000-4000-8000-000000000005';
+      const leaseId = '78000000-0000-4000-8000-000000000006';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-tool-student', 'middle_school',
+          'migration-tool-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, role, status, lease_id,
+          lease_expires_at, heartbeat_at
+        ) values (
+          ${assistantMessageId}, ${sessionId}, ${turnId}, 'assistant',
+          'pending', ${leaseId}, now() + interval '5 minutes', now()
+        )
+      `;
+      await connection`
+        insert into model_runs (
+          id, session_id, operation_id, operation_kind,
+          assistant_message_id, turn_id, phase, attempt, trace_id,
+          task_alias, model_alias, prompt_version, prompt_hash, status
+        ) values (
+          ${runId}, ${sessionId}, ${turnId}, 'teaching_turn',
+          ${assistantMessageId}, ${turnId}, 'answer', 1, 'trace:migration-tool',
+          'teaching.turn', 'primary', 'teaching-v1', ${'c'.repeat(64)},
+          'pending'
+        )
+      `;
+      await connection`
+        insert into tool_calls (
+          id, session_id, turn_id, answer_model_run_id,
+          provider_tool_call_id, execution_id, request_hash, trace_id,
+          tool_name, teaching_state, exposure, effect, argument_summary,
+          status
+        ) values (
+          ${callId}, ${sessionId}, ${turnId}, ${runId},
+          'call_migration', 'execution-migration', ${'d'.repeat(64)},
+          'trace:migration-tool', 'getStudentState', 'EXPLAIN', 'model',
+          'read', ${JSON.stringify({
+            schemaVersion: '1',
+            kind: 'object',
+            byteLength: 2,
+            itemCount: 0,
+            sha256: 'e'.repeat(64),
+          })}::jsonb, 'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0026_furry_the_call.sql');
+      expect(
+        await connection`
+          select session_id, turn_id, teaching_state, agent_operation_id
+          from tool_calls where id = ${callId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          turn_id: turnId,
+          teaching_state: 'EXPLAIN',
+          agent_operation_id: null,
+        },
+      ]);
+    });
+  });
+
   it('从0003升级时按scope收敛旧重复行并保留原活动时间', async () => {
     await withTemporaryDatabase(async (connection) => {
       for (const migration of [

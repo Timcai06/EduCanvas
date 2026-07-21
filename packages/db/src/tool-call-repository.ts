@@ -158,6 +158,9 @@ function isSafeId(value: string): boolean {
 }
 
 function toSnapshot(row: typeof toolCalls.$inferSelect): ToolCallSnapshot {
+  if (!row.sessionId || !row.turnId || !row.teachingState) {
+    throw new ToolCallLifecycleError('Tool Call不是有效teaching_turn形状');
+  }
   return {
     id: row.id,
     sessionId: row.sessionId,
