@@ -61,7 +61,7 @@ Gateway文本Turn已迁入统一`TurnApplicationService`：Operation创建时生
 
 能力按 `l0..l3` 风险分层，并带版本、约束、签发/到期/撤销信息。有效能力必须同时满足主体权限、Notebook Membership、Profile、部署策略以及 Client/Channel/Node 声明。模型输出不能创建 grant 或改变风险等级。
 
-Gateway 已持久化 `approval.required/resolved`，Web/TUI 可列出并批准或拒绝；拒绝会形成 `APPROVAL_DENIED` 终态。当前交付能力只有 L0/L1，因此没有暴露“批准后执行 L2/L3 动作”的产品路径；增加这类动作前必须单独实现可恢复续跑和安全评审，不能把现有审批记录机制描述成已开放高风险执行。
+Gateway 已持久化 `approval.required/resolved`，Web/TUI 可列出并批准或拒绝；拒绝决策、`approval.resolved`与`APPROVAL_DENIED`终态现在由Operation Store在同一事务写入。批准路径要求已有`operation_continuations`等待点，并把决策事件、`ready`游标与只含`continuationId`的Graphile任务原子提交；缺少等待点会整笔回滚。Worker领取后重新验证Personal Agent、Notebook Membership、Conversation与approved事实，Adapter返回后再把continuation与Operation终态原子提交。当前生产Tool仍只有L0/L1，Node/MCP耐久Adapter和Turn Application等待点生产者尚未接线，因此这套基础设施不能被描述成已向用户开放L2/L3动作。
 
 ## 当前入口
 

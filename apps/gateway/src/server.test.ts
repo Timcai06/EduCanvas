@@ -202,12 +202,9 @@ describe('Gateway HTTP composition root', () => {
         async listPending() {
           return [];
         },
-        async resolve() {
-          throw new Error('not used');
-        },
       },
       operations: {
-        async append() {
+        async resolveApproval() {
           throw new Error('not used');
         },
         async listRecent() {
@@ -248,6 +245,96 @@ describe('Gateway HTTP composition root', () => {
       body: JSON.stringify({ userId: 'attacker:chosen' }),
     });
     expect(adminBootstrap.status).toBe(503);
+  });
+
+  it('delegates approval decisions to the atomic Operation control-plane method', async () => {
+    const sessionAuth = new GatewayClientSessionAuth(
+      'a'.repeat(32),
+      60,
+      () => now,
+    );
+    const decisions: unknown[] = [];
+    const base = await start(null, {
+      bootstrapToken: null,
+      sessionAuth,
+      identities: {
+        async ensureRegistered() {
+          return { userId: 'user:1', agentId: 'agent:1', kind: 'registered' };
+        },
+        async getActive() {
+          return { userId: 'user:1', agentId: 'agent:1', kind: 'registered' };
+        },
+      },
+      directory: {
+        async listConversations() {
+          return [];
+        },
+      },
+      approvals: {
+        async listPending() {
+          return [];
+        },
+      },
+      operations: {
+        async listRecent() {
+          return [];
+        },
+        async resolveApproval(input) {
+          decisions.push(input);
+          return {
+            operationId: 'operation:1',
+            continuationId: '00000000-0000-4000-8000-000000000001',
+            decision: {
+              approvalId: input.approvalId,
+              status: input.status,
+              decidedByUserId: input.actorUserId,
+              decidedAt: now.toISOString(),
+            },
+          };
+        },
+      },
+      handoffs: {
+        async issue(input) {
+          return { expiresAt: input.expiresAt.toISOString() };
+        },
+      },
+      connections: {
+        async list() {
+          return { providers: [], connections: [] };
+        },
+        async connect() {
+          throw new Error('not used');
+        },
+        async revoke() {
+          throw new Error('not used');
+        },
+      },
+    });
+    const session = sessionAuth.issue('user:1');
+    const response = await fetch(
+      `${base}/v1/client/approvals/approval:1/decision`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${session.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'approved' }),
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      operationId: 'operation:1',
+      continuationId: '00000000-0000-4000-8000-000000000001',
+      decision: { status: 'approved' },
+    });
+    expect(decisions).toEqual([
+      {
+        approvalId: 'approval:1',
+        actorUserId: 'user:1',
+        status: 'approved',
+      },
+    ]);
   });
 
   it('streams canonical NDJSON events and resumes by actor', async () => {
@@ -363,12 +450,9 @@ describe('Gateway HTTP composition root', () => {
           async listPending() {
             return [];
           },
-          async resolve() {
-            throw new Error('not used');
-          },
         },
         operations: {
-          async append() {
+          async resolveApproval() {
             throw new Error('not used');
           },
           async listRecent() {

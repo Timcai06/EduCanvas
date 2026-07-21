@@ -607,38 +607,34 @@ describeWithDatabase(
       );
       expect(await approvals.listPending(owner.userId, now)).toHaveLength(1);
       await expect(
-        approvals.resolve({
+        store.resolveApproval({
           approvalId: 'approval:1',
           actorUserId: 'user:other',
           status: 'denied',
           now,
         }),
       ).rejects.toMatchObject({ code: 'forbidden' });
-      const resolved = await approvals.resolve({
+      const resolved = await store.resolveApproval({
         approvalId: 'approval:1',
         actorUserId: owner.userId,
         status: 'denied',
         reason: '不允许',
         now,
       });
-      await store.append(
-        operation.operationId,
-        {
-          type: 'approval.resolved',
-          decision: resolved.decision,
-        },
-        now,
-      );
-      await store.append(
-        operation.operationId,
-        {
-          type: 'operation.failed',
-          code: 'APPROVAL_DENIED',
-          retryable: false,
-        },
-        now,
-      );
+      expect(resolved).toMatchObject({
+        operationId: operation.operationId,
+        continuationId: null,
+        decision: { status: 'denied', reason: '不允许' },
+      });
       expect(await approvals.listPending(owner.userId, now)).toHaveLength(0);
+      expect(
+        await store.listEvents(operation.operationId, -1, owner.userId),
+      ).toMatchObject([
+        { type: 'operation.accepted' },
+        { type: 'approval.required' },
+        { type: 'approval.resolved' },
+        { type: 'operation.failed', code: 'APPROVAL_DENIED' },
+      ]);
     });
 
     it('deduplicates acknowledged channel delivery and enforces paired private routing', async () => {

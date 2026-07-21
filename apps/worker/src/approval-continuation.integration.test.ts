@@ -1,0 +1,499 @@
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+
+import { OPERATION_CONTINUATION_TASK } from '@educanvas/agent-core';
+import {
+  DrizzleAgentModelRunRepository,
+  DrizzleAgentToolCallRepository,
+  DrizzleGatewayIdentityRepository,
+  DrizzleGatewayOperationStore,
+  DrizzleOperationContinuationRepository,
+  DrizzlePlatformConversationRepository,
+  DrizzlePlatformTurnRepository,
+  GatewayPersistenceError,
+  gatewayApprovals,
+  gatewayOperationEvents,
+  getDb,
+  notebookMemberships,
+  operationContinuations,
+} from '@educanvas/db';
+import { eq, sql } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { runOnce } from 'graphile-worker';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createContinueOperationTask,
+  type OperationContinuationResumeAdapter,
+} from './tasks/continue-operation.js';
+
+const connectionString = process.env.TEST_DATABASE_URL!;
+const now = new Date('2026-07-21T15:00:00.000Z');
+
+async function createWaitingApproval() {
+  const database = getDb();
+  const actorId = 'user:approval-continuation';
+  const conversations = new DrizzlePlatformConversationRepository(database);
+  const identities = new DrizzleGatewayIdentityRepository(database);
+  const operations = new DrizzleGatewayOperationStore(database);
+  const turns = new DrizzlePlatformTurnRepository(database);
+  const conversation = await conversations.create({
+    ownerSubjectId: actorId,
+    spaceKind: 'notebook',
+    spaceTitle: '审批续跑测试',
+    now,
+  });
+  const identity = await identities.getActive(actorId);
+  if (!identity) throw new Error('测试身份创建失败');
+  const operation = await operations.begin({
+    envelopeId: `envelope:${actorId}`,
+    idempotencyKey: 'approval-continuation-message',
+    requestFingerprint: 'a'.repeat(64),
+    route: {
+      actorUserId: actorId,
+      agentId: identity.agentId,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      membershipRole: 'owner',
+    },
+    now,
+  });
+  await operations.append(
+    operation.operationId,
+    { type: 'operation.accepted' },
+    now,
+  );
+  const turn = await turns.attachGatewayTurn({
+    operationId: operation.operationId,
+    conversationId: conversation.id,
+    trustedSubjectId: actorId,
+    clientMessageId: 'approval-continuation-message',
+    parts: [{ type: 'text', text: '读取受控设备资料' }],
+    now,
+  });
+  const modelRun = await new DrizzleAgentModelRunRepository(
+    database,
+  ).createOrGet({
+    operationId: operation.operationId,
+    actorId,
+    assistantMessageId: turn.assistantMessage.id,
+    phase: 'answer',
+    taskAlias: 'agent.turn',
+    modelAlias: 'primary',
+    promptVersion: 'approval-continuation-v1',
+    promptHash: 'b'.repeat(64),
+    now,
+  });
+  const toolCall = await new DrizzleAgentToolCallRepository(
+    database,
+  ).createOrGet({
+    operationId: operation.operationId,
+    actorId,
+    answerModelRunId: modelRun.run.id,
+    providerToolCallId: 'provider-call:approval-continuation',
+    executionId: `execution:${operation.operationId}`,
+    toolName: 'readAllowlistedFile',
+    exposure: 'model',
+    effect: 'read',
+    arguments: { path: 'notes/algebra.md' },
+    now,
+  });
+  const approvalId = `approval:${operation.operationId}`;
+  await operations.append(
+    operation.operationId,
+    {
+      type: 'approval.required',
+      approval: {
+        approvalId,
+        operationId: operation.operationId,
+        actorUserId: actorId,
+        capability: 'filesystem.read_allowlisted',
+        risk: 'l2',
+        summary: '读取白名单内的学习资料',
+        requestedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+      },
+    },
+    now,
+  );
+  const waiting = await new DrizzleOperationContinuationRepository(
+    database,
+  ).createWaiting({
+    operationId: operation.operationId,
+    actorId,
+    approvalId,
+    work: {
+      kind: 'tool_invocation',
+      step: 'tool.invoke',
+      toolCallId: toolCall.call.id,
+      adapterSource: 'node',
+      resumeRef: `node-invocation:${operation.operationId}`,
+    },
+    now,
+  });
+  return {
+    actorId,
+    approvalId,
+    assistantMessageId: turn.assistantMessage.id,
+    conversationId: conversation.id,
+    operationId: operation.operationId,
+    continuationId: waiting.continuation.continuationId,
+    notebookId: conversation.spaceId,
+    operations,
+  };
+}
+
+describe('Gateway approval到continuation队列的原子边界', () => {
+  const database = getDb();
+
+  beforeAll(async () => {
+    await migrate(database, {
+      migrationsFolder: fileURLToPath(
+        new URL('../../../packages/db/drizzle', import.meta.url),
+      ),
+    });
+    await runOnce({ connectionString, taskList: { noop: async () => {} } });
+  });
+
+  beforeEach(async () => {
+    await database.execute(sql`
+      truncate table operation_continuations, gateway_approvals,
+        gateway_operation_events, tool_effects, tool_calls, model_runs,
+        conversation_messages, agent_operations, conversations, spaces,
+        personal_agents, platform_users
+      restart identity cascade
+    `);
+    await database.execute(sql`delete from graphile_worker._private_jobs`);
+  });
+
+  it('把approved事件、ready游标与最小队列payload原子提交且拒绝重放', async () => {
+    const fixture = await createWaitingApproval();
+    const resolved = await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    expect(resolved).toMatchObject({
+      operationId: fixture.operationId,
+      continuationId: fixture.continuationId,
+      decision: { status: 'approved' },
+    });
+    expect(
+      await database
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'ready' }]);
+    const jobs = await database.execute<{
+      task_identifier: string;
+      payload: unknown;
+    }>(sql`
+      select task.identifier as task_identifier, job.payload
+      from graphile_worker._private_jobs job
+      join graphile_worker._private_tasks task on task.id = job.task_id
+      where task.identifier = ${OPERATION_CONTINUATION_TASK}
+    `);
+    expect(jobs).toEqual([
+      {
+        task_identifier: OPERATION_CONTINUATION_TASK,
+        payload: { continuationId: fixture.continuationId },
+      },
+    ]);
+    expect(JSON.stringify(jobs)).not.toContain('algebra.md');
+    const resumed = vi.fn();
+    const task = createContinueOperationTask({
+      adapters: [
+        {
+          source: 'node',
+          capabilities: ['filesystem.read_allowlisted'],
+          async resume(input) {
+            resumed(input.scope);
+            const calls = new DrizzleAgentToolCallRepository(database);
+            await calls.markRunning({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+            });
+            await calls.settle({
+              operationId: input.scope.operationId,
+              actorId: input.scope.actorId,
+              toolCallId: input.continuation.work.toolCallId,
+              status: 'succeeded',
+              durationMs: 1,
+              result: { status: 'read' },
+            });
+            await new DrizzlePlatformTurnRepository(database).settleTurn({
+              conversationId: input.scope.conversationId,
+              trustedSubjectId: input.scope.actorId,
+              turnId: input.scope.operationId,
+              status: 'completed',
+              content: '已读取受控学习资料。',
+              operationTerminalWriter: 'gateway',
+            });
+            return {
+              status: 'completed',
+              messageId: fixture.assistantMessageId,
+            };
+          },
+        },
+      ],
+    });
+    await runOnce({
+      connectionString,
+      taskList: { [OPERATION_CONTINUATION_TASK]: task },
+    });
+    expect(resumed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: fixture.operationId,
+        actorId: fixture.actorId,
+        conversationId: fixture.conversationId,
+        capability: 'filesystem.read_allowlisted',
+      }),
+    );
+    expect(
+      await database
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'completed' }]);
+    await expect(
+      fixture.operations.resolveApproval({
+        approvalId: fixture.approvalId,
+        actorUserId: fixture.actorId,
+        status: 'approved',
+        now: new Date(now.getTime() + 2_000),
+      }),
+    ).rejects.toBeInstanceOf(GatewayPersistenceError);
+    expect(
+      await database
+        .select()
+        .from(gatewayOperationEvents)
+        .where(eq(gatewayOperationEvents.operationId, fixture.operationId)),
+    ).toHaveLength(4);
+  });
+
+  it('approved缺少等待点时回滚决策事件并保持pending', async () => {
+    const fixture = await createWaitingApproval();
+    await database
+      .delete(operationContinuations)
+      .where(eq(operationContinuations.id, fixture.continuationId));
+    await expect(
+      fixture.operations.resolveApproval({
+        approvalId: fixture.approvalId,
+        actorUserId: fixture.actorId,
+        status: 'approved',
+        now: new Date(now.getTime() + 1_000),
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_event_sequence' });
+    expect(
+      await database
+        .select({ status: gatewayApprovals.status })
+        .from(gatewayApprovals)
+        .where(eq(gatewayApprovals.id, fixture.approvalId)),
+    ).toEqual([{ status: 'pending' }]);
+    expect(
+      await database
+        .select()
+        .from(gatewayOperationEvents)
+        .where(eq(gatewayOperationEvents.operationId, fixture.operationId)),
+    ).toHaveLength(2);
+  });
+
+  it('denied原子终结等待点且不创建恢复任务', async () => {
+    const fixture = await createWaitingApproval();
+    const resolved = await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'denied',
+      reason: '本次不允许读取',
+      now: new Date(now.getTime() + 1_000),
+    });
+    expect(resolved).toMatchObject({
+      operationId: fixture.operationId,
+      continuationId: null,
+      decision: { status: 'denied' },
+    });
+    expect(
+      await database
+        .select({
+          status: operationContinuations.status,
+          failureCode: operationContinuations.failureCode,
+        })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'failed', failureCode: 'approval_denied' }]);
+    const jobs = await database.execute(sql`
+      select job.id
+      from graphile_worker._private_jobs job
+      join graphile_worker._private_tasks task on task.id = job.task_id
+      where task.identifier = ${OPERATION_CONTINUATION_TASK}
+    `);
+    expect(jobs).toHaveLength(0);
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: 'operation.failed',
+      code: 'APPROVAL_DENIED',
+    });
+  });
+
+  it('Worker恢复前重新鉴权并在Membership撤销后拒绝调用Adapter', async () => {
+    const fixture = await createWaitingApproval();
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    await database
+      .update(notebookMemberships)
+      .set({ revokedAt: new Date(now.getTime() + 2_000) })
+      .where(
+        sql`${notebookMemberships.notebookId} = ${fixture.notebookId} and ${notebookMemberships.userId} = ${fixture.actorId}`,
+      );
+    const resumed = vi.fn();
+    const task = createContinueOperationTask({
+      adapters: [
+        {
+          source: 'node',
+          capabilities: ['filesystem.read_allowlisted'],
+          async resume() {
+            resumed();
+            return {
+              status: 'completed',
+              messageId: fixture.assistantMessageId,
+            };
+          },
+        },
+      ],
+    });
+    await runOnce({
+      connectionString,
+      taskList: { [OPERATION_CONTINUATION_TASK]: task },
+    });
+    expect(resumed).not.toHaveBeenCalled();
+    expect(
+      await database
+        .select({
+          status: operationContinuations.status,
+          failureCode: operationContinuations.failureCode,
+        })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'failed', failureCode: 'reauthorization_failed' }]);
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: 'operation.failed',
+      code: 'FORBIDDEN',
+      retryable: false,
+    });
+  });
+
+  it('Adapter提交业务结果后崩溃可换代恢复且不重复副作用', async () => {
+    const fixture = await createWaitingApproval();
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    const businessEffect = vi.fn();
+    const resumed = vi.fn();
+    const adapter: OperationContinuationResumeAdapter = {
+      source: 'node',
+      capabilities: ['filesystem.read_allowlisted'],
+      async resume(input) {
+        resumed();
+        const calls = new DrizzleAgentToolCallRepository(database);
+        const [current] = await calls.listByOperation({
+          operationId: input.scope.operationId,
+          actorId: input.scope.actorId,
+        });
+        if (current?.status !== 'succeeded') {
+          businessEffect();
+          await calls.markRunning({
+            operationId: input.scope.operationId,
+            actorId: input.scope.actorId,
+            toolCallId: input.continuation.work.toolCallId,
+          });
+          await calls.settle({
+            operationId: input.scope.operationId,
+            actorId: input.scope.actorId,
+            toolCallId: input.continuation.work.toolCallId,
+            status: 'succeeded',
+            durationMs: 1,
+            result: { status: 'read' },
+          });
+          await new DrizzlePlatformTurnRepository(database).settleTurn({
+            conversationId: input.scope.conversationId,
+            trustedSubjectId: input.scope.actorId,
+            turnId: input.scope.operationId,
+            status: 'completed',
+            content: '已读取受控学习资料。',
+            operationTerminalWriter: 'gateway',
+          });
+        }
+        return {
+          status: 'completed',
+          messageId: fixture.assistantMessageId,
+        };
+      },
+    };
+    let injectCrash = true;
+    const task = createContinueOperationTask({
+      adapters: [adapter],
+      operations: {
+        rejectContinuationAuthorization: (input) =>
+          fixture.operations.rejectContinuationAuthorization(input),
+        async settleContinuation(input) {
+          if (injectCrash) {
+            injectCrash = false;
+            throw new Error('injected_after_adapter_commit');
+          }
+          return fixture.operations.settleContinuation(input);
+        },
+      },
+    });
+
+    await expect(
+      task({ continuationId: fixture.continuationId }, {} as never),
+    ).rejects.toThrow('injected_after_adapter_commit');
+    expect(
+      await database
+        .select({
+          status: operationContinuations.status,
+          leaseGeneration: operationContinuations.leaseGeneration,
+        })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'ready', leaseGeneration: 1 }]);
+
+    await task({ continuationId: fixture.continuationId }, {} as never);
+    expect(businessEffect).toHaveBeenCalledTimes(1);
+    expect(resumed).toHaveBeenCalledTimes(2);
+    expect(
+      await database
+        .select({
+          status: operationContinuations.status,
+          leaseGeneration: operationContinuations.leaseGeneration,
+        })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'completed', leaseGeneration: 2 }]);
+    const events = await fixture.operations.listEvents(
+      fixture.operationId,
+      -1,
+      fixture.actorId,
+    );
+    expect(
+      events.filter((event) => event.type === 'operation.completed'),
+    ).toHaveLength(1);
+  });
+});

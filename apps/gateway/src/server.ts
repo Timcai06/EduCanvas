@@ -98,6 +98,9 @@ function mapError(error: unknown): {
     if (error.code === 'idempotency_conflict') {
       return { status: 409, code: 'IDEMPOTENCY_CONFLICT' };
     }
+    if (error.code === 'invalid_event_sequence') {
+      return { status: 409, code: 'INVALID_STATE' };
+    }
     if (
       error.code === 'route_not_found' ||
       error.code === 'operation_not_found'
@@ -151,13 +154,10 @@ export function createGatewayHttpHandler(input: {
       userId: string;
       ensureWorkspace: (userId: string) => Promise<unknown>;
     } | null;
-    approvals: Pick<
-      DrizzleGatewayApprovalRepository,
-      'listPending' | 'resolve'
-    >;
+    approvals: Pick<DrizzleGatewayApprovalRepository, 'listPending'>;
     operations: Pick<
       DrizzleGatewayOperationStore,
-      'append' | 'listRecent'
+      'listRecent' | 'resolveApproval'
     >;
     handoffs: Pick<DrizzleGatewayHandoffRepository, 'issue'>;
     connections: Pick<GatewayConnectionService, 'list' | 'connect' | 'revoke'>;
@@ -503,27 +503,11 @@ export function createGatewayHttpHandler(input: {
             })
             .strict()
             .parse(await readJsonBody(request));
-          const resolved = await client.approvals.resolve({
+          const resolved = await client.operations.resolveApproval({
             approvalId: approvalMatch[1]!,
             actorUserId: identity.userId,
             ...body,
           });
-          await client.operations.append(
-            resolved.operationId,
-            { type: 'approval.resolved', decision: resolved.decision },
-            new Date(),
-          );
-          if (body.status === 'denied') {
-            await client.operations.append(
-              resolved.operationId,
-              {
-                type: 'operation.failed',
-                code: 'APPROVAL_DENIED',
-                retryable: false,
-              },
-              new Date(),
-            );
-          }
           writeJson(response, 200, resolved);
           return;
         }

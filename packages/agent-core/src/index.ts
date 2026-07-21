@@ -127,6 +127,7 @@ export {
 export {
   MAX_OPERATION_CONTINUATION_LEASE_MS,
   MIN_OPERATION_CONTINUATION_LEASE_MS,
+  OPERATION_CONTINUATION_TASK,
   createOperationContinuationInputSchema,
   operationContinuationAdapterSourceSchema,
   operationContinuationAdapterSources,

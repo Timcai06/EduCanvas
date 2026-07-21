@@ -196,6 +196,8 @@ export {
   OperationContinuationConflictError,
   OperationContinuationLifecycleError,
   OperationContinuationOwnershipError,
+  type OperationContinuationExecutionClaim,
+  type OperationContinuationExecutionScope,
 } from './operation-continuation-repository';
 export {
   DrizzleTurnSafetyDecisionRepository,

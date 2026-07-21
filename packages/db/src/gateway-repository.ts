@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { OPERATION_CONTINUATION_TASK } from '@educanvas/agent-core';
 import {
   gatewayOperationEventSchema,
   gatewayNodeHeartbeatSchema,
@@ -33,7 +34,9 @@ import {
 import { getDb } from './client';
 import {
   agentOperations,
+  chatMessages,
   conversations,
+  conversationMessages,
   gatewayOperationEvents,
   gatewayChannelAccountBindings,
   gatewayChannelThreadBindings,
@@ -42,6 +45,7 @@ import {
   gatewayNodePairings,
   gatewayApprovals,
   notebookMemberships,
+  operationContinuations,
   personalAgents,
   platformUsers,
   spaces,
@@ -1070,44 +1074,6 @@ export class DrizzleGatewayApprovalRepository {
       expiresAt: row.expiresAt.toISOString(),
     }));
   }
-
-  async resolve(input: {
-    approvalId: string;
-    actorUserId: string;
-    status: 'approved' | 'denied';
-    reason?: string;
-    now?: Date;
-  }): Promise<{ operationId: string; decision: GatewayApprovalDecision }> {
-    const now = input.now ?? new Date();
-    const [approval] = await this.database
-      .select()
-      .from(gatewayApprovals)
-      .where(
-        and(
-          eq(gatewayApprovals.id, input.approvalId),
-          eq(gatewayApprovals.actorUserId, input.actorUserId),
-          eq(gatewayApprovals.status, 'pending'),
-          gt(gatewayApprovals.expiresAt, now),
-        ),
-      )
-      .limit(1);
-    if (!approval) {
-      throw new GatewayPersistenceError(
-        'forbidden',
-        'Approval is unavailable or expired',
-      );
-    }
-    return {
-      operationId: approval.operationId,
-      decision: {
-        approvalId: approval.id,
-        status: input.status,
-        decidedByUserId: input.actorUserId,
-        decidedAt: now.toISOString(),
-        ...(input.reason ? { reason: input.reason } : {}),
-      },
-    };
-  }
 }
 
 export class DrizzleGatewayOperationStore {
@@ -1208,6 +1174,127 @@ export class DrizzleGatewayOperationStore {
     });
   }
 
+  private async appendWithinTransaction(
+    transaction: DatabaseTransaction,
+    operationId: string,
+    payload: GatewayEventPayload,
+    now: Date,
+  ): Promise<GatewayOperationEvent> {
+    const [operation] = await transaction
+      .select({
+        status: agentOperations.status,
+        actorUserId: agentOperations.actorUserId,
+      })
+      .from(agentOperations)
+      .where(eq(agentOperations.id, operationId))
+      .limit(1);
+    if (!operation) {
+      throw new GatewayPersistenceError(
+        'operation_not_found',
+        'Operation not found',
+      );
+    }
+    const terminalStatus =
+      payload.type === 'operation.completed'
+        ? 'completed'
+        : payload.type === 'operation.cancelled'
+          ? 'cancelled'
+          : payload.type === 'operation.failed'
+            ? 'failed'
+            : null;
+    const normalizedStatus = normalizeOperationStatus(operation.status);
+    if (
+      operation.status !== 'running' &&
+      (terminalStatus === null || terminalStatus !== normalizedStatus)
+    ) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Cannot append after operation terminal state',
+      );
+    }
+    const [sequenceRow] = await transaction
+      .select({
+        next: sql<number>`coalesce(max(${gatewayOperationEvents.sequence}), -1) + 1`,
+      })
+      .from(gatewayOperationEvents)
+      .where(eq(gatewayOperationEvents.operationId, operationId));
+    const sequence = Number(sequenceRow?.next ?? 0);
+    const event = gatewayOperationEventSchema.parse({
+      ...payload,
+      protocol: gatewayProtocolVersion,
+      eventId: randomUUID(),
+      operationId,
+      sequence,
+      occurredAt: now.toISOString(),
+    });
+    await transaction.insert(gatewayOperationEvents).values({
+      id: event.eventId,
+      operationId,
+      sequence,
+      type: event.type,
+      payload: event,
+      occurredAt: now,
+    });
+    if (event.type === 'approval.required') {
+      if (event.approval.actorUserId !== operation.actorUserId) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Approval actor does not own operation',
+        );
+      }
+      await transaction.insert(gatewayApprovals).values({
+        id: event.approval.approvalId,
+        operationId,
+        actorUserId: event.approval.actorUserId,
+        capability: event.approval.capability,
+        risk: event.approval.risk,
+        summary: event.approval.summary,
+        status: 'pending',
+        requestedAt: new Date(event.approval.requestedAt),
+        expiresAt: new Date(event.approval.expiresAt),
+      });
+    } else if (event.type === 'approval.resolved') {
+      const [approval] = await transaction
+        .update(gatewayApprovals)
+        .set({
+          status: event.decision.status,
+          decidedByUserId: event.decision.decidedByUserId,
+          decidedAt: new Date(event.decision.decidedAt),
+          reason: event.decision.reason ?? null,
+        })
+        .where(
+          and(
+            eq(gatewayApprovals.id, event.decision.approvalId),
+            eq(gatewayApprovals.operationId, operationId),
+            eq(gatewayApprovals.status, 'pending'),
+          ),
+        )
+        .returning({ id: gatewayApprovals.id });
+      if (!approval) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Approval is unknown or already resolved',
+        );
+      }
+    }
+    if (isGatewayTerminalEvent(event)) {
+      await transaction
+        .update(agentOperations)
+        .set({
+          status:
+            event.type === 'operation.completed'
+              ? 'completed'
+              : event.type === 'operation.cancelled'
+                ? 'cancelled'
+                : 'failed',
+          failureCode: event.type === 'operation.failed' ? event.code : null,
+          completedAt: now,
+        })
+        .where(eq(agentOperations.id, operationId));
+    }
+    return event;
+  }
+
   async append(
     operationId: string,
     payload: GatewayEventPayload,
@@ -1217,119 +1304,303 @@ export class DrizzleGatewayOperationStore {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
       );
-      const [operation] = await transaction
-        .select({
-          status: agentOperations.status,
-          actorUserId: agentOperations.actorUserId,
-        })
-        .from(agentOperations)
-        .where(eq(agentOperations.id, operationId))
+      return this.appendWithinTransaction(
+        transaction,
+        operationId,
+        payload,
+        now,
+      );
+    });
+  }
+
+  /**
+   * 审批决策、Gateway事件、continuation就绪与Graphile任务原子提交。
+   * approved没有对应等待点时整笔回滚，避免记录“已批准”却永远无法恢复。
+   */
+  async resolveApproval(input: {
+    approvalId: string;
+    actorUserId: string;
+    status: 'approved' | 'denied';
+    reason?: string;
+    now?: Date;
+  }): Promise<{
+    operationId: string;
+    decision: GatewayApprovalDecision;
+    continuationId: string | null;
+  }> {
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [candidate] = await transaction
+        .select({ operationId: gatewayApprovals.operationId })
+        .from(gatewayApprovals)
+        .where(
+          and(
+            eq(gatewayApprovals.id, input.approvalId),
+            eq(gatewayApprovals.actorUserId, input.actorUserId),
+            eq(gatewayApprovals.status, 'pending'),
+            gt(gatewayApprovals.expiresAt, now),
+          ),
+        )
         .limit(1);
-      if (!operation) {
+      if (!candidate) {
         throw new GatewayPersistenceError(
-          'operation_not_found',
-          'Operation not found',
+          'forbidden',
+          'Approval is unavailable or expired',
         );
       }
-      const terminalStatus =
-        payload.type === 'operation.completed'
-          ? 'completed'
-          : payload.type === 'operation.cancelled'
-            ? 'cancelled'
-            : payload.type === 'operation.failed'
-              ? 'failed'
-              : null;
-      const normalizedStatus = normalizeOperationStatus(operation.status);
-      if (
-        operation.status !== 'running' &&
-        (terminalStatus === null || terminalStatus !== normalizedStatus)
-      ) {
-        throw new GatewayPersistenceError(
-          'invalid_event_sequence',
-          'Cannot append after operation terminal state',
-        );
-      }
-      const [sequenceRow] = await transaction
-        .select({
-          next: sql<number>`coalesce(max(${gatewayOperationEvents.sequence}), -1) + 1`,
-        })
-        .from(gatewayOperationEvents)
-        .where(eq(gatewayOperationEvents.operationId, operationId));
-      const sequence = Number(sequenceRow?.next ?? 0);
-      const event = gatewayOperationEventSchema.parse({
-        ...payload,
-        protocol: gatewayProtocolVersion,
-        eventId: randomUUID(),
-        operationId,
-        sequence,
-        occurredAt: now.toISOString(),
-      });
-      await transaction.insert(gatewayOperationEvents).values({
-        id: event.eventId,
-        operationId,
-        sequence,
-        type: event.type,
-        payload: event,
-        occurredAt: now,
-      });
-      if (event.type === 'approval.required') {
-        if (event.approval.actorUserId !== operation.actorUserId) {
-          throw new GatewayPersistenceError(
-            'invalid_event_sequence',
-            'Approval actor does not own operation',
-          );
-        }
-        await transaction.insert(gatewayApprovals).values({
-          id: event.approval.approvalId,
-          operationId,
-          actorUserId: event.approval.actorUserId,
-          capability: event.approval.capability,
-          risk: event.approval.risk,
-          summary: event.approval.summary,
-          status: 'pending',
-          requestedAt: new Date(event.approval.requestedAt),
-          expiresAt: new Date(event.approval.expiresAt),
-        });
-      } else if (event.type === 'approval.resolved') {
-        const [approval] = await transaction
-          .update(gatewayApprovals)
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${candidate.operationId}`}, 0))`,
+      );
+      const decision: GatewayApprovalDecision = {
+        approvalId: input.approvalId,
+        status: input.status,
+        decidedByUserId: input.actorUserId,
+        decidedAt: now.toISOString(),
+        ...(input.reason ? { reason: input.reason } : {}),
+      };
+      await this.appendWithinTransaction(
+        transaction,
+        candidate.operationId,
+        { type: 'approval.resolved', decision },
+        now,
+      );
+
+      if (input.status === 'denied') {
+        await transaction
+          .update(operationContinuations)
           .set({
-            status: event.decision.status,
-            decidedByUserId: event.decision.decidedByUserId,
-            decidedAt: new Date(event.decision.decidedAt),
-            reason: event.decision.reason ?? null,
+            status: 'failed',
+            failureCode: 'approval_denied',
+            updatedAt: now,
+            completedAt: now,
           })
           .where(
             and(
-              eq(gatewayApprovals.id, event.decision.approvalId),
-              eq(gatewayApprovals.operationId, operationId),
-              eq(gatewayApprovals.status, 'pending'),
+              eq(operationContinuations.approvalId, input.approvalId),
+              eq(operationContinuations.operationId, candidate.operationId),
+              eq(operationContinuations.status, 'waiting_approval'),
+            ),
+          );
+        await this.appendWithinTransaction(
+          transaction,
+          candidate.operationId,
+          {
+            type: 'operation.failed',
+            code: 'APPROVAL_DENIED',
+            retryable: false,
+          },
+          now,
+        );
+        return {
+          operationId: candidate.operationId,
+          decision,
+          continuationId: null,
+        };
+      }
+
+      const [continuation] = await transaction
+        .update(operationContinuations)
+        .set({ status: 'ready', updatedAt: now })
+        .where(
+          and(
+            eq(operationContinuations.approvalId, input.approvalId),
+            eq(operationContinuations.operationId, candidate.operationId),
+            eq(operationContinuations.status, 'waiting_approval'),
+          ),
+        )
+        .returning({ id: operationContinuations.id });
+      if (!continuation) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Approved operation has no waiting continuation',
+        );
+      }
+      const queueJobKey = `operation-continuation:${continuation.id}`;
+      const payload = JSON.stringify({ continuationId: continuation.id });
+      await transaction.execute(sql`
+        select graphile_worker.add_job(
+          ${OPERATION_CONTINUATION_TASK},
+          payload := ${payload}::json,
+          job_key := ${queueJobKey},
+          max_attempts := 10
+        )
+      `);
+      return {
+        operationId: candidate.operationId,
+        decision,
+        continuationId: continuation.id,
+      };
+    });
+  }
+
+  /** 恢复前重新鉴权失败时，continuation与Operation失败终态在同一事务提交。 */
+  async rejectContinuationAuthorization(input: {
+    continuationId: string;
+    operationId: string;
+    actorUserId: string;
+    now?: Date;
+  }): Promise<GatewayOperationEvent> {
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
+      );
+      const [failed] = await transaction
+        .update(operationContinuations)
+        .set({
+          status: 'failed',
+          leaseOwnerId: null,
+          leaseExpiresAt: null,
+          heartbeatAt: null,
+          failureCode: 'reauthorization_failed',
+          updatedAt: now,
+          completedAt: now,
+        })
+        .where(
+          and(
+            eq(operationContinuations.id, input.continuationId),
+            eq(operationContinuations.operationId, input.operationId),
+            or(
+              eq(operationContinuations.status, 'ready'),
+              and(
+                eq(operationContinuations.status, 'running'),
+                lte(operationContinuations.leaseExpiresAt, now),
+              ),
+            ),
+          ),
+        )
+        .returning({ id: operationContinuations.id });
+      if (!failed) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Continuation is no longer ready for authorization rejection',
+        );
+      }
+      const [operation] = await transaction
+        .select({ actorUserId: agentOperations.actorUserId })
+        .from(agentOperations)
+        .where(
+          and(
+            eq(agentOperations.id, input.operationId),
+            eq(agentOperations.actorUserId, input.actorUserId),
+            eq(agentOperations.status, 'running'),
+          ),
+        )
+        .limit(1);
+      if (!operation) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Operation is no longer running for authorization rejection',
+        );
+      }
+      return this.appendWithinTransaction(
+        transaction,
+        input.operationId,
+        { type: 'operation.failed', code: 'FORBIDDEN', retryable: false },
+        now,
+      );
+    });
+  }
+
+  /** Worker lease终态与Gateway Operation唯一终态原子提交，避免任一侧单独成功。 */
+  async settleContinuation(input: {
+    continuationId: string;
+    operationId: string;
+    ownerId: string;
+    leaseGeneration: number;
+    result:
+      | { status: 'completed'; messageId: string }
+      | {
+          status: 'failed';
+          continuationFailureCode: string;
+          operationFailureCode:
+            'CAPABILITY_UNAVAILABLE' | 'FORBIDDEN' | 'RUNTIME_FAILED';
+          retryable: boolean;
+        };
+    now?: Date;
+  }): Promise<GatewayOperationEvent> {
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
+      );
+      if (input.result.status === 'completed') {
+        const [platformMessage] = await transaction
+          .select({ id: conversationMessages.id })
+          .from(conversationMessages)
+          .where(
+            and(
+              eq(conversationMessages.id, input.result.messageId),
+              eq(conversationMessages.operationId, input.operationId),
+              eq(conversationMessages.role, 'assistant'),
+              eq(conversationMessages.status, 'completed'),
             ),
           )
-          .returning({ id: gatewayApprovals.id });
-        if (!approval) {
+          .limit(1);
+        const [teachingMessage] = platformMessage
+          ? []
+          : await transaction
+              .select({ id: chatMessages.id })
+              .from(chatMessages)
+              .where(
+                and(
+                  eq(chatMessages.id, input.result.messageId),
+                  eq(chatMessages.turnId, input.operationId),
+                  eq(chatMessages.role, 'assistant'),
+                  eq(chatMessages.status, 'completed'),
+                ),
+              )
+              .limit(1);
+        if (!platformMessage && !teachingMessage) {
           throw new GatewayPersistenceError(
             'invalid_event_sequence',
-            'Approval is unknown or already resolved',
+            'Completed continuation requires its completed assistant message',
           );
         }
       }
-      if (isGatewayTerminalEvent(event)) {
-        await transaction
-          .update(agentOperations)
-          .set({
-            status:
-              event.type === 'operation.completed'
-                ? 'completed'
-                : event.type === 'operation.cancelled'
-                  ? 'cancelled'
-                  : 'failed',
-            failureCode: event.type === 'operation.failed' ? event.code : null,
-            completedAt: now,
-          })
-          .where(eq(agentOperations.id, operationId));
+      const [settled] = await transaction
+        .update(operationContinuations)
+        .set({
+          status: input.result.status,
+          leaseOwnerId: null,
+          leaseExpiresAt: null,
+          heartbeatAt: null,
+          failureCode:
+            input.result.status === 'failed'
+              ? input.result.continuationFailureCode
+              : null,
+          updatedAt: now,
+          completedAt: now,
+        })
+        .where(
+          and(
+            eq(operationContinuations.id, input.continuationId),
+            eq(operationContinuations.operationId, input.operationId),
+            eq(operationContinuations.status, 'running'),
+            eq(operationContinuations.leaseOwnerId, input.ownerId),
+            eq(operationContinuations.leaseGeneration, input.leaseGeneration),
+            gt(operationContinuations.leaseExpiresAt, now),
+          ),
+        )
+        .returning({ id: operationContinuations.id });
+      if (!settled) {
+        throw new GatewayPersistenceError(
+          'invalid_event_sequence',
+          'Continuation lease is stale or expired',
+        );
       }
-      return event;
+      return this.appendWithinTransaction(
+        transaction,
+        input.operationId,
+        input.result.status === 'completed'
+          ? { type: 'operation.completed', messageId: input.result.messageId }
+          : {
+              type: 'operation.failed',
+              code: input.result.operationFailureCode,
+              retryable: input.result.retryable,
+            },
+        now,
+      );
     });
   }
 

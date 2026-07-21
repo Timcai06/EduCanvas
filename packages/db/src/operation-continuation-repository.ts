@@ -16,8 +16,11 @@ import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
   agentOperations,
+  conversations,
   gatewayApprovals,
+  notebookMemberships,
   operationContinuations,
+  personalAgents,
   toolCalls,
 } from './schema';
 
@@ -56,6 +59,33 @@ export class OperationContinuationLifecycleError extends Error {
     this.name = 'OperationContinuationLifecycleError';
   }
 }
+
+/** Worker恢复前从当前Operation、Agent、Notebook、Conversation与approval重算的范围。 */
+export interface OperationContinuationExecutionScope {
+  operationId: string;
+  actorId: string;
+  agentId: string;
+  notebookId: string;
+  conversationId: string;
+  profileId: string;
+  traceId: string;
+  capability: string;
+  risk: 'l2' | 'l3';
+}
+
+/** claimForExecution不会把未通过当前授权检查的工作交给Adapter。 */
+export type OperationContinuationExecutionClaim =
+  | {
+      status: 'claimed';
+      continuation: OperationContinuationSnapshot;
+      scope: OperationContinuationExecutionScope;
+    }
+  | { status: 'not_claimed' }
+  | {
+      status: 'reauthorization_failed';
+      operationId: string;
+      actorId: string;
+    };
 
 function isSafeOpaqueId(value: string, max = 256): boolean {
   return (
@@ -425,6 +455,169 @@ export class DrizzleOperationContinuationRepository implements OperationContinua
         )
         .returning();
       return updated ? toSnapshot(updated) : null;
+    });
+  }
+
+  /**
+   * Worker专用领取入口。队列只提供continuationId；Actor与全部执行范围从数据库
+   * 权威事实重建。Membership或Personal Agent失效时原子记为稳定失败，绝不调用Adapter。
+   */
+  async claimForExecution(input: {
+    continuationId: string;
+    ownerId: string;
+    leaseDurationMs: number;
+    now?: Date;
+  }): Promise<OperationContinuationExecutionClaim> {
+    const duration = validateLeaseDuration(input.leaseDurationMs);
+    if (!isUuid(input.continuationId) || !isSafeOpaqueId(input.ownerId)) {
+      throw new OperationContinuationLifecycleError(
+        'continuation worker claim无效',
+      );
+    }
+    const now = input.now ?? new Date();
+    const expiresAt = new Date(now.getTime() + duration);
+    return this.database.transaction(async (transaction) => {
+      const [base] = await transaction
+        .select({
+          operationId: operationContinuations.operationId,
+          actorId: agentOperations.actorUserId,
+          operationStatus: agentOperations.status,
+          cancelRequestedAt: agentOperations.cancelRequestedAt,
+        })
+        .from(operationContinuations)
+        .innerJoin(
+          agentOperations,
+          eq(agentOperations.id, operationContinuations.operationId),
+        )
+        .where(eq(operationContinuations.id, input.continuationId))
+        .limit(1);
+      if (
+        !base?.actorId ||
+        base.operationStatus !== 'running' ||
+        base.cancelRequestedAt
+      ) {
+        return { status: 'not_claimed' };
+      }
+      const [scope] = await transaction
+        .select({
+          operationId: agentOperations.id,
+          actorId: agentOperations.actorUserId,
+          agentId: agentOperations.agentId,
+          notebookId: agentOperations.notebookId,
+          conversationId: agentOperations.conversationId,
+          profileId: conversations.agentProfileId,
+          traceId: agentOperations.traceId,
+          capability: gatewayApprovals.capability,
+          risk: gatewayApprovals.risk,
+        })
+        .from(operationContinuations)
+        .innerJoin(
+          agentOperations,
+          eq(agentOperations.id, operationContinuations.operationId),
+        )
+        .innerJoin(
+          personalAgents,
+          and(
+            eq(personalAgents.id, agentOperations.agentId),
+            eq(personalAgents.userId, agentOperations.actorUserId),
+            eq(personalAgents.status, 'active'),
+          ),
+        )
+        .innerJoin(
+          conversations,
+          and(
+            eq(conversations.id, agentOperations.conversationId),
+            eq(conversations.spaceId, agentOperations.notebookId),
+            eq(conversations.status, 'active'),
+          ),
+        )
+        .innerJoin(
+          notebookMemberships,
+          and(
+            eq(notebookMemberships.notebookId, agentOperations.notebookId),
+            eq(notebookMemberships.userId, agentOperations.actorUserId),
+            inArray(notebookMemberships.role, [
+              'owner',
+              'editor',
+              'contributor',
+            ]),
+            sql`${notebookMemberships.revokedAt} is null`,
+            or(
+              sql`${notebookMemberships.expiresAt} is null`,
+              gt(notebookMemberships.expiresAt, now),
+            ),
+          ),
+        )
+        .innerJoin(
+          gatewayApprovals,
+          and(
+            eq(gatewayApprovals.id, operationContinuations.approvalId),
+            eq(gatewayApprovals.operationId, agentOperations.id),
+            eq(gatewayApprovals.actorUserId, agentOperations.actorUserId),
+            eq(gatewayApprovals.status, 'approved'),
+            eq(gatewayApprovals.decidedByUserId, agentOperations.actorUserId),
+          ),
+        )
+        .innerJoin(
+          toolCalls,
+          and(
+            eq(toolCalls.id, operationContinuations.toolCallId),
+            eq(toolCalls.agentOperationId, agentOperations.id),
+          ),
+        )
+        .where(eq(operationContinuations.id, input.continuationId))
+        .limit(1);
+      if (
+        !scope?.actorId ||
+        !scope.agentId ||
+        !scope.notebookId ||
+        (scope.risk !== 'l2' && scope.risk !== 'l3')
+      ) {
+        return {
+          status: 'reauthorization_failed',
+          operationId: base.operationId,
+          actorId: base.actorId,
+        };
+      }
+      const [claimed] = await transaction
+        .update(operationContinuations)
+        .set({
+          status: 'running',
+          leaseGeneration: sql`${operationContinuations.leaseGeneration} + 1`,
+          leaseOwnerId: input.ownerId,
+          leaseExpiresAt: expiresAt,
+          heartbeatAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(operationContinuations.id, input.continuationId),
+            or(
+              eq(operationContinuations.status, 'ready'),
+              and(
+                eq(operationContinuations.status, 'running'),
+                lte(operationContinuations.leaseExpiresAt, now),
+              ),
+            ),
+          ),
+        )
+        .returning();
+      if (!claimed) return { status: 'not_claimed' };
+      return {
+        status: 'claimed',
+        continuation: toSnapshot(claimed),
+        scope: {
+          operationId: scope.operationId,
+          actorId: scope.actorId,
+          agentId: scope.agentId,
+          notebookId: scope.notebookId,
+          conversationId: scope.conversationId,
+          profileId: scope.profileId,
+          traceId: scope.traceId,
+          capability: scope.capability,
+          risk: scope.risk,
+        },
+      };
     });
   }
 
