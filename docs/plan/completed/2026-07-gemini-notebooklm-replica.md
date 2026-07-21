@@ -50,7 +50,7 @@
 ## 已回写事实
 
 - [产品定义](../../01-product/product-definition.md)
-- [系统架构](../../02-architecture/system-architecture.md)
-- [Agent 编排](../../03-ai/agent-orchestration.md)
+- [系统架构现状](../../02-architecture/01-系统架构现状.md)
+- [Agent 编排边界](../../03-ai/01-Agent编排边界.md)
 - [当前架构决策](../../09-decisions/README.md)
 - [关键决策历史](../../09-decisions/decision-history.md)

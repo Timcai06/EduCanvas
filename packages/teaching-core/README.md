@@ -49,7 +49,7 @@ pnpm typecheck
 
 ## 改动前必读
 
-- [智能体编排](../../docs/03-ai/agent-orchestration.md)
+- [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)
 - [掌握度与误区规格](../../docs/03-ai/mastery-and-misconceptions.md)
 - [学习事件契约](../../docs/04-data/learning-event-contract.md)
 - [ADR-0017：统一 Agent Runtime 与 Notebook 上下文](../../docs/09-decisions/0017-unified-runtime-and-notebook-context.md)

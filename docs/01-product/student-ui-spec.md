@@ -1,7 +1,7 @@
 # 学生端核心 UI/UX 规格
 
 - 状态：`accepted`
-- 相关文档：[产品定义](./product-definition.md)、[Canvas与GSAP](../02-architecture/canvas-and-gsap.md)、[智能体编排](../03-ai/agent-orchestration.md)
+- 相关文档：[产品定义](./product-definition.md)、[Canvas与GSAP](../02-architecture/canvas-and-gsap.md)、[Agent编排边界](../03-ai/01-Agent编排边界.md)
 
 ## Web 学生客户端方向
 
