@@ -3,6 +3,7 @@ import type {
   ModelAlias,
   ModelFinishReason,
   ModelUsage,
+  StreamingTaskAlias,
   TurnModelPhase,
 } from './model-contracts';
 
@@ -40,7 +41,7 @@ export interface AgentModelRunSnapshot {
   phase: TurnModelPhase;
   attempt: number;
   traceId: string;
-  taskAlias: 'agent.turn';
+  taskAlias: StreamingTaskAlias;
   modelAlias: ModelAlias;
   promptVersion: string;
   promptHash: string;
@@ -69,6 +70,8 @@ export interface CreateAgentModelRunInput {
   assistantMessageId: string;
   phase: TurnModelPhase;
   attempt?: number;
+  /** 业务Profile的稳定任务别名；不得填写供应商模型ID。 */
+  taskAlias: StreamingTaskAlias;
   modelAlias: ModelAlias;
   promptVersion: string;
   /** Prompt 的不可逆 SHA-256；Port 不接受 Prompt 正文。 */

@@ -11,6 +11,7 @@ import {
   type ModelToolDefinition,
   type NormalizedModelError,
   type StreamTurnTextRequest,
+  type StreamingTaskAlias,
   type TurnApplicationCommand,
   type TurnApplicationEvent,
   type TurnApplicationFailureCode,
@@ -109,6 +110,7 @@ export interface TurnApplicationToolPolicy extends ToolKernelPolicyContext {
 export interface TurnApplicationProfilePlan {
   context: TurnApplicationContextPlan;
   model: {
+    taskAlias: StreamingTaskAlias;
     modelAlias: 'primary' | 'fast';
     promptVersion: string;
     synthesisPromptVersion?: string;
@@ -330,6 +332,7 @@ class AuditedModelRunLifecycle {
       assistantMessageId: this.input.turn.assistantMessageId,
       phase: input.request.phase,
       attempt,
+      taskAlias: input.request.taskAlias,
       modelAlias: input.request.modelAlias,
       promptVersion: input.request.promptVersion,
       promptHash: promptHash(input.request),
@@ -726,14 +729,14 @@ export class TurnApplicationService implements TurnApplicationPort {
         traceId: command.traceId,
         turnId: command.operationId,
         answer: {
-          taskAlias: 'agent.turn',
+          taskAlias: plan.model.taskAlias,
           modelAlias: plan.model.modelAlias,
           promptVersion: plan.model.promptVersion,
           messages: answerMessages,
           tools: toolDefinitions,
         },
         synthesis: {
-          taskAlias: 'agent.turn',
+          taskAlias: plan.model.taskAlias,
           modelAlias: plan.model.modelAlias,
           promptVersion:
             plan.model.synthesisPromptVersion ?? plan.model.promptVersion,

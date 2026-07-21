@@ -314,6 +314,7 @@ class WebGeneralProfile implements TurnApplicationProfilePort {
         maxCharacters: 128_000,
       },
       model: {
+        taskAlias: 'agent.turn' as const,
         modelAlias: 'primary' as const,
         promptVersion: PROMPT_VERSION,
         maxToolRounds: GENERAL_MAX_TOOL_ROUNDS,

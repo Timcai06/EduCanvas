@@ -97,6 +97,7 @@ async function createFixture() {
     actorId,
     assistantMessageId,
     phase: 'answer',
+    taskAlias: 'agent.turn',
     modelAlias: 'primary',
     promptVersion: 'agent-v2',
     promptHash: 'b'.repeat(64),
