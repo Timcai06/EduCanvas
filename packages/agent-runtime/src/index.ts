@@ -40,3 +40,4 @@ export {
   type AgentLoopToolBatch,
   type AgentLoopToolSuccess,
 } from './agent-loop';
+export { type TurnApplicationPort } from './turn-application';
