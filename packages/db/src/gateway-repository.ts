@@ -584,6 +584,28 @@ export class DrizzleGatewayChannelBindingRepository {
           'Cannot bind channel to inaccessible conversation',
         );
       }
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-channel-bind-v1:${input.adapterId}:${input.externalUserId}`}, 0))`,
+      );
+      const [existingAccount] = await transaction
+        .select({ userId: gatewayChannelAccountBindings.userId })
+        .from(gatewayChannelAccountBindings)
+        .where(
+          and(
+            eq(gatewayChannelAccountBindings.adapterId, input.adapterId),
+            eq(
+              gatewayChannelAccountBindings.externalAccountId,
+              input.externalUserId,
+            ),
+          ),
+        )
+        .limit(1);
+      if (existingAccount && existingAccount.userId !== identity.userId) {
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'External channel account already belongs to another user',
+        );
+      }
       const [account] = await transaction
         .insert(gatewayChannelAccountBindings)
         .values({
@@ -600,9 +622,8 @@ export class DrizzleGatewayChannelBindingRepository {
             gatewayChannelAccountBindings.externalAccountId,
           ],
           set: {
-            userId: identity.userId,
-            agentId: identity.agentId,
             status: 'active',
+            activationExpiresAt: null,
             revokedAt: null,
           },
         })

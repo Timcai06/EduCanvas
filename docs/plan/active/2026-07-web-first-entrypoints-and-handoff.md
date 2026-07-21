@@ -15,9 +15,11 @@
 - [x] TUI 持续交互基础与自动本地登录；
 - [x] Web local identity 与 TUI registered identity 对齐；
 - [x] Web/TUI 一次性双向 handoff：TUI→Web 使用两分钟 opaque token，Web→TUI 复用同一主体与 Notebook 目录；
-- [ ] provider-neutral Connections API、Web 设置页与 TUI `/channels`；
+- [x] provider-neutral Connections API、Web 设置页与 TUI `/channels`；Telegram 使用一次性 `/start` 确认，微信/QQ 明确 disabled；
 - [ ] enabled Channel Adapter 生命周期和 degraded health；
-- [ ] PTY、E2E、安全复核和文档收口。
+- [x] PTY、E2E、安全复核和文档收口（A/B 纵切）。
+
+2026-07-21 验证证据：`make check`、`make integration`、`make build`、`make e2e` 全部通过；真实 PTY 验证 `/channels` 与 disabled 连接提示；独立 Gateway HTTP dogfood 验证 Telegram `available → pending → revoked`；数据库集成覆盖跨用户读取/撤销拒绝、过期、重放与并发消费；Web `/settings` 亮暗主题完成浏览器目检且 console 0 error/0 warning。真实 Telegram 账号发送仍待平台凭据，不计为已验证。
 
 ## 边界
 

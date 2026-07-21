@@ -7,6 +7,8 @@ import {
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   gatewayClientTurnRequestSchema,
+  gatewayConnectionConnectRequestSchema,
+  gatewayConnectionRevokeRequestSchema,
   gatewayHandoffCredentialSchema,
   gatewayHandoffIssueRequestSchema,
   gatewayOpaqueIdSchema,
@@ -15,7 +17,9 @@ import {
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import {
+  GatewayConnectionRuntimeError,
   GatewayRuntimeError,
+  type GatewayConnectionService,
   type GatewayService,
 } from '@educanvas/gateway-runtime';
 import {
@@ -113,6 +117,12 @@ function mapError(error: unknown): {
       return { status: 404, code: 'NOT_FOUND' };
     }
   }
+  if (error instanceof GatewayConnectionRuntimeError) {
+    return {
+      status: 409,
+      code: error.code,
+    };
+  }
   if (
     error instanceof SyntaxError ||
     (error instanceof Error &&
@@ -150,6 +160,7 @@ export function createGatewayHttpHandler(input: {
       'append' | 'listRecent'
     >;
     handoffs: Pick<DrizzleGatewayHandoffRepository, 'issue'>;
+    connections: Pick<GatewayConnectionService, 'list' | 'connect' | 'revoke'>;
   } | null;
   nodeTransport?: {
     bootstrapToken: string;
@@ -382,6 +393,54 @@ export function createGatewayHttpHandler(input: {
           writeJson(response, 200, {
             operations: await client.operations.listRecent(identity.userId),
           });
+          return;
+        }
+
+        if (
+          request.method === 'GET' &&
+          url.pathname === '/v1/client/connections'
+        ) {
+          writeJson(
+            response,
+            200,
+            await client.connections.list(identity.userId),
+          );
+          return;
+        }
+
+        if (
+          request.method === 'POST' &&
+          url.pathname === '/v1/client/connections/connect'
+        ) {
+          const requestBody = gatewayConnectionConnectRequestSchema.parse(
+            await readJsonBody(request),
+          );
+          writeJson(
+            response,
+            201,
+            await client.connections.connect({
+              userId: identity.userId,
+              request: requestBody,
+            }),
+          );
+          return;
+        }
+
+        if (
+          request.method === 'POST' &&
+          url.pathname === '/v1/client/connections/revoke'
+        ) {
+          const requestBody = gatewayConnectionRevokeRequestSchema.parse(
+            await readJsonBody(request),
+          );
+          writeJson(
+            response,
+            200,
+            await client.connections.revoke({
+              userId: identity.userId,
+              connectionId: requestBody.connectionId,
+            }),
+          );
           return;
         }
 

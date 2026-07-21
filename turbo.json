@@ -2,14 +2,8 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "dist/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
       "cache": false,
@@ -21,21 +15,18 @@
         "MODEL_GATEWAY_*",
         "OBJECT_STORAGE_ROOT",
         "PORT",
-        "SEARCH_*"
+        "SEARCH_*",
+        "TELEGRAM_*"
       ]
     },
     "lint": {},
     "test": {
-      "dependsOn": [
-        "^test"
-      ],
+      "dependsOn": ["^test"],
       "outputs": []
     },
     "test:integration": {
       "cache": false,
-      "env": [
-        "TEST_DATABASE_URL"
-      ],
+      "env": ["TEST_DATABASE_URL"],
       "outputs": []
     },
     "typecheck": {}

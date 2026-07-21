@@ -110,6 +110,13 @@ export function gatewayRouteLabel(method: string, pathname: string): string {
   if (pathname === '/v1/client/bootstrap') return 'client.bootstrap';
   if (pathname === '/v1/local/onboard') return 'local.onboard';
   if (pathname === '/v1/client/conversations') return 'client.conversations';
+  if (pathname === '/v1/client/connections') return 'client.connections';
+  if (pathname === '/v1/client/connections/connect') {
+    return 'client.connection.connect';
+  }
+  if (pathname === '/v1/client/connections/revoke') {
+    return 'client.connection.revoke';
+  }
   if (pathname === '/v1/client/turns') return 'client.turns';
   if (pathname === '/v1/client/approvals') return 'client.approvals';
   if (/^\/v1\/client\/approvals\/[^/]+\/decision$/.test(pathname)) {

@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import {
   normalizeTelegramUpdate,
+  readTelegramConnectionActivation,
   sendTelegramText,
   telegramTextChunks,
   type TelegramPrivateBinding,
 } from '@educanvas/channel-telegram';
 import {
   DrizzleGatewayChannelBindingRepository,
+  DrizzleGatewayConnectionRepository,
   DrizzleGatewayDeliveryRepository,
 } from '@educanvas/db';
 import {
@@ -17,6 +19,7 @@ import {
 } from '@educanvas/gateway-core';
 
 const bindings = new DrizzleGatewayChannelBindingRepository();
+const connections = new DrizzleGatewayConnectionRepository();
 const deliveries = new DrizzleGatewayDeliveryRepository();
 
 function required(name: string): string {
@@ -76,6 +79,28 @@ async function processUpdate(input: {
   gatewayUrl: string;
   gatewayToken: string;
 }): Promise<void> {
+  const activation = readTelegramConnectionActivation(input.raw);
+  if (activation) {
+    try {
+      await connections.activatePending({
+        provider: 'telegram',
+        ...activation,
+      });
+    } catch {
+      await sendTelegramText({
+        botToken: input.botToken,
+        chatId: activation.externalThreadId,
+        text: '这个连接链接无效或已过期，请回到 EduCanvas 重新发起连接。',
+      });
+      return;
+    }
+    await sendTelegramText({
+      botToken: input.botToken,
+      chatId: activation.externalThreadId,
+      text: 'EduCanvas 已连接。之后在这里发送的私聊会进入你选择的笔记本。',
+    });
+    return;
+  }
   const ids = telegramIds(input.raw);
   const binding = ids
     ? await bindings.resolvePrivate({

@@ -219,6 +219,17 @@ describe('Gateway HTTP composition root', () => {
           return { expiresAt: input.expiresAt.toISOString() };
         },
       },
+      connections: {
+        async list() {
+          return { providers: [], connections: [] };
+        },
+        async connect() {
+          throw new Error('not used');
+        },
+        async revoke() {
+          throw new Error('not used');
+        },
+      },
     });
     const response = await fetch(`${base}/v1/local/onboard`, {
       method: 'POST',
@@ -312,6 +323,16 @@ describe('Gateway HTTP composition root', () => {
       conversationId: string;
       tokenDigest: string;
     }> = [];
+    const connectionActors: string[] = [];
+    const connection = {
+      connectionId: 'connection:telegram:1',
+      provider: 'telegram' as const,
+      status: 'pending' as const,
+      conversationId: 'conversation:1',
+      createdAt: '2026-07-21T08:00:00.000Z',
+      activationExpiresAt: '2026-07-21T08:10:00.000Z',
+      revokedAt: null,
+    };
     const base = await start(
       token,
       {
@@ -360,6 +381,45 @@ describe('Gateway HTTP composition root', () => {
             return { expiresAt: input.expiresAt.toISOString() };
           },
         },
+        connections: {
+          async list(userId) {
+            connectionActors.push(`list:${userId}`);
+            return {
+              providers: [
+                {
+                  provider: 'telegram',
+                  label: 'Telegram',
+                  availability: 'available',
+                  disabledReason: null,
+                  experimental: true,
+                },
+              ],
+              connections: [],
+            };
+          },
+          async connect(input) {
+            connectionActors.push(`connect:${input.userId}`);
+            return {
+              connection,
+              authorization: {
+                kind: 'external_url',
+                url: 'https://t.me/EduCanvasTutorBot?start=educanvas_connection',
+                expiresAt: connection.activationExpiresAt,
+              },
+            };
+          },
+          async revoke(input) {
+            connectionActors.push(`revoke:${input.userId}`);
+            return {
+              connection: {
+                ...connection,
+                status: 'revoked',
+                activationExpiresAt: null,
+                revokedAt: '2026-07-21T08:01:00.000Z',
+              },
+            };
+          },
+        },
       },
       (input) => runs.push(input),
     );
@@ -406,6 +466,36 @@ describe('Gateway HTTP composition root', () => {
         conversationId: 'conversation:1',
         tokenDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
+    ]);
+    const listedConnections = await fetch(`${base}/v1/client/connections`, {
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(listedConnections.status).toBe(200);
+    const connected = await fetch(`${base}/v1/client/connections/connect`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider: 'telegram',
+        conversationId: 'conversation:1',
+      }),
+    });
+    expect(connected.status).toBe(201);
+    const revoked = await fetch(`${base}/v1/client/connections/revoke`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ connectionId: connection.connectionId }),
+    });
+    expect(revoked.status).toBe(200);
+    expect(connectionActors).toEqual([
+      'list:user:1',
+      'connect:user:1',
+      'revoke:user:1',
     ]);
     const turn = await fetch(`${base}/v1/client/turns`, {
       method: 'POST',

@@ -109,7 +109,7 @@ make doctor
 make tui
 ```
 
-Web 是 K12 学生的主入口；TUI 是共享同一 Agent、Notebook 与 Conversation 的高级第一方客户端。渠道的连接、停用和默认 Notebook 将由 Web 设置页与 TUI 共同管理。Telegram 仅保留为实验性 Adapter，不默认启动；真实微信/QQ 接入不得用假二维码或手工数据库绑定冒充完成。
+Web 是 K12 学生的主入口；TUI 是共享同一 Agent、Notebook 与 Conversation 的高级第一方客户端。渠道连接和停用已由 Web `/settings` 与 TUI `/channels` 共同管理同一份 Gateway 状态。Telegram 保留为实验性 Adapter，不默认启动；真实微信/QQ 因平台资格与凭据未就绪而明确 disabled，不用假二维码或手工数据库绑定冒充完成。
 
 bootstrap token是管理员建联密钥，不是最终用户密码；不要放入命令历史或分发给学生。loopback local onboarding 只用于本地开发，生产仍需正式 IdP。
 
@@ -267,7 +267,7 @@ stateDiagram-v2
 
 1. 接入正式 IdP，替换仅供管理员/本地 bootstrap 使用的共享令牌；
 2. 完成统一 Context Engine：Notebook 摘要、长期学习者记忆、Artifact 上下文和原生多模态；
-3. 把 Telegram 官方协议 Fixture 扩展为用户提供凭据后的 live smoke，并补齐可靠部署与告警；
+3. 为 Telegram 一次性自助绑定纵切补 live 账号 smoke、Adapter 健康、可靠部署与告警；
 4. 完成对象删除 Outbox、外部指标/Trace 后端、SLO 与恢复演练；
 5. 只有明确的成年/管理员场景通过安全评审后，才增加 L2/L3 Node 能力。
 

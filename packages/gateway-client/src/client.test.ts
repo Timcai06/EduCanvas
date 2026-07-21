@@ -119,6 +119,71 @@ describe('GatewayClient', () => {
     expect(JSON.parse(seenBody)).toEqual({ conversationId: 'conversation:1' });
   });
 
+  it('manages provider-neutral connections through authenticated client routes', async () => {
+    const seen: string[] = [];
+    const connection = {
+      connectionId: 'connection:1',
+      provider: 'telegram',
+      status: 'pending',
+      conversationId: 'conversation:1',
+      createdAt: '2026-07-21T08:00:00.000Z',
+      activationExpiresAt: '2026-07-21T08:10:00.000Z',
+      revokedAt: null,
+    };
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = String(input);
+      seen.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url.endsWith('/connections')) {
+        return Response.json({ providers: [], connections: [connection] });
+      }
+      if (url.endsWith('/connect')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          provider: 'telegram',
+          conversationId: 'conversation:1',
+        });
+        return Response.json(
+          {
+            connection,
+            authorization: {
+              kind: 'external_url',
+              url: 'https://t.me/EduCanvasTutorBot?start=educanvas_connection',
+              expiresAt: '2026-07-21T08:10:00.000Z',
+            },
+          },
+          { status: 201 },
+        );
+      }
+      expect(JSON.parse(String(init?.body))).toEqual({
+        connectionId: 'connection:1',
+      });
+      return Response.json({
+        connection: {
+          ...connection,
+          status: 'revoked',
+          activationExpiresAt: null,
+          revokedAt: '2026-07-21T08:01:00.000Z',
+        },
+      });
+    };
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      fetcher,
+    );
+    expect((await client.listConnections()).connections).toHaveLength(1);
+    expect(await client.connect('telegram', 'conversation:1')).toMatchObject({
+      connection: { status: 'pending' },
+    });
+    expect(await client.revokeConnection('connection:1')).toMatchObject({
+      connection: { status: 'revoked' },
+    });
+    expect(seen.map((entry) => entry.split(' ')[0])).toEqual([
+      'GET',
+      'POST',
+      'POST',
+    ]);
+  });
+
   it('parses arbitrarily chunked NDJSON events', async () => {
     const event = JSON.stringify({
       protocol: 'gateway.v1',

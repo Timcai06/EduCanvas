@@ -14,8 +14,10 @@ import {
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
   GatewayPersistenceError,
+  type GatewayChannelPrivateRoute,
 } from './gateway-repository';
 import { DrizzleGatewayHandoffRepository } from './gateway-handoff-repository';
+import { DrizzleGatewayConnectionRepository } from './gateway-connection-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 import { notebookMemberships } from './schema';
@@ -625,6 +627,165 @@ describeWithDatabase(
         deliveryId: first.deliveryId,
         replayed: true,
       });
+    });
+
+    it('keeps connection pending, activation, listing and revoke consistent across users', async () => {
+      const conversations = new DrizzlePlatformConversationRepository(
+        getDatabase(),
+      );
+      const connections = new DrizzleGatewayConnectionRepository(getDatabase());
+      const bindings = new DrizzleGatewayChannelBindingRepository(
+        getDatabase(),
+      );
+      const ownerConversation = await conversations.create({
+        ownerSubjectId: 'user:owner',
+        spaceKind: 'notebook',
+        spaceTitle: '连接控制面',
+        now,
+      });
+      const otherConversation = await conversations.create({
+        ownerSubjectId: 'user:other',
+        spaceKind: 'notebook',
+        spaceTitle: '其他用户',
+        now,
+      });
+      const pending = await connections.begin({
+        provider: 'telegram',
+        userId: 'user:owner',
+        conversationId: ownerConversation.id,
+        now,
+        activationExpiresAt: new Date(now.getTime() + 600_000),
+      });
+      expect(pending).toMatchObject({
+        provider: 'telegram',
+        status: 'pending',
+        conversationId: ownerConversation.id,
+      });
+      await expect(
+        connections.begin({
+          provider: 'telegram',
+          userId: 'user:owner',
+          conversationId: ownerConversation.id,
+          now: new Date(now.getTime() + 1),
+          activationExpiresAt: new Date(now.getTime() + 600_001),
+        }),
+      ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+      expect(await connections.list('user:other')).toEqual([]);
+
+      const concurrentActivation = await Promise.allSettled([
+        connections.activatePending({
+          provider: 'telegram',
+          connectionId: pending.connectionId,
+          externalAccountId: '42',
+          externalThreadId: '42',
+          now: new Date(now.getTime() + 1_000),
+        }),
+        connections.activatePending({
+          provider: 'telegram',
+          connectionId: pending.connectionId,
+          externalAccountId: '43',
+          externalThreadId: '43',
+          now: new Date(now.getTime() + 1_000),
+        }),
+      ]);
+      expect(
+        concurrentActivation.map((result) => result.status).sort(),
+      ).toEqual(['fulfilled', 'rejected']);
+      const activatedResult = concurrentActivation.find(
+        (
+          result,
+        ): result is PromiseFulfilledResult<GatewayChannelPrivateRoute> =>
+          result.status === 'fulfilled',
+      );
+      if (!activatedResult) throw new Error('Connection activation missing');
+      const activated = activatedResult.value;
+      const activatedExternalId = activated.externalUserId;
+      expect(activated).toMatchObject({
+        userId: 'user:owner',
+        conversationId: ownerConversation.id,
+      });
+      expect(await connections.list('user:owner')).toMatchObject([
+        {
+          connectionId: pending.connectionId,
+          status: 'active',
+          activationExpiresAt: null,
+        },
+      ]);
+      await expect(
+        connections.activatePending({
+          provider: 'telegram',
+          connectionId: pending.connectionId,
+          externalAccountId: activatedExternalId,
+          externalThreadId: activatedExternalId,
+          now: new Date(now.getTime() + 2_000),
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+      await expect(
+        connections.revoke({
+          connectionId: pending.connectionId,
+          userId: 'user:other',
+          now: new Date(now.getTime() + 3_000),
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+      expect(
+        await connections.revoke({
+          connectionId: pending.connectionId,
+          userId: 'user:owner',
+          now: new Date(now.getTime() + 4_000),
+        }),
+      ).toMatchObject({ status: 'revoked' });
+      expect(
+        await bindings.resolvePrivate({
+          adapterId: 'telegram.bot',
+          externalUserId: activatedExternalId,
+          externalThreadId: activatedExternalId,
+        }),
+      ).toBeNull();
+      await expect(
+        bindings.bindPrivate({
+          adapterId: 'telegram.bot',
+          externalUserId: activatedExternalId,
+          externalThreadId: activatedExternalId,
+          userId: 'user:other',
+          conversationId: otherConversation.id,
+          now: new Date(now.getTime() + 5_000),
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+
+      const expired = await connections.begin({
+        provider: 'telegram',
+        userId: 'user:owner',
+        conversationId: ownerConversation.id,
+        now,
+        activationExpiresAt: new Date(now.getTime() + 1_000),
+      });
+      await expect(
+        connections.activatePending({
+          provider: 'telegram',
+          connectionId: expired.connectionId,
+          externalAccountId: '84',
+          externalThreadId: '84',
+          now: new Date(now.getTime() + 1_001),
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+      const replacement = await connections.begin({
+        provider: 'telegram',
+        userId: 'user:owner',
+        conversationId: ownerConversation.id,
+        now: new Date(now.getTime() + 2_000),
+        activationExpiresAt: new Date(now.getTime() + 602_000),
+      });
+      expect(replacement).toMatchObject({ status: 'pending' });
+      expect(replacement.connectionId).not.toBe(expired.connectionId);
+      await expect(
+        connections.activatePending({
+          provider: 'telegram',
+          connectionId: replacement.connectionId,
+          externalAccountId: activatedExternalId,
+          externalThreadId: activatedExternalId,
+          now: new Date(now.getTime() + 3_000),
+        }),
+      ).resolves.toMatchObject({ userId: 'user:owner' });
     });
 
     it('pairs, heartbeats, invokes and revokes a capability-scoped Node', async () => {

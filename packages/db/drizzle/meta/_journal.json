@@ -162,6 +162,13 @@
       "when": 1784597763966,
       "tag": "0022_red_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784599238745,
+      "tag": "0023_furry_microbe",
+      "breakpoints": true
     }
   ]
 }

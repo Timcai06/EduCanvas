@@ -8,6 +8,7 @@ import {
   GatewayBootstrapClient,
   type GatewayConversationEntry,
 } from '@educanvas/gateway-client';
+import { gatewayConnectionProviderSchema } from '@educanvas/gateway-core';
 import { renderBanner, renderRule } from './banner';
 import { saveConfig } from './config';
 import { renderHome } from './home';
@@ -20,6 +21,7 @@ import { TurnRenderer, type RendererIO } from './renderer';
 import { runUiDemo } from './ui-demo';
 import { establishGatewaySession } from './session';
 import { createTheme, detectThemeEnvironment, type TuiTheme } from './theme';
+import { renderChannels, resolveConnectionTarget } from './channels';
 
 function usage(): never {
   process.stderr.write(`EduCanvas TUI\n\n`);
@@ -81,6 +83,7 @@ function renderHelp(theme: TuiTheme): string {
     row('/approvals', '查看待审批事项'),
     row('/approve [id]', '同意最近（或指定）的审批'),
     row('/deny [id]', '拒绝最近（或指定）的审批'),
+    row('/channels', '列出、连接或撤销通信方式'),
     row('/web', '在浏览器打开当前笔记本'),
     row('/help', '显示本说明'),
     row('/quit', '退出'),
@@ -147,6 +150,7 @@ async function main(): Promise<void> {
     let lastApprovalId: string | null = null;
     let approvalsCount = 0;
     let recentOperations: Awaited<ReturnType<typeof client.listOperations>> = [];
+    let recentConnections: Awaited<ReturnType<typeof client.listConnections>>['connections'] = [];
     try {
       [approvalsCount, recentOperations] = await Promise.all([
         client.listApprovals().then((list) => list.length),
@@ -328,6 +332,91 @@ async function main(): Promise<void> {
           } catch (error) {
             process.stderr.write(
               `${theme.zhusha('✗')} 处理失败：${error instanceof Error ? error.message : '未知错误'}\n`,
+            );
+          }
+          continue;
+        }
+        if (line === '/channels') {
+          try {
+            const snapshot = await client.listConnections();
+            recentConnections = snapshot.connections;
+            process.stdout.write(renderChannels(theme, snapshot));
+          } catch (error) {
+            process.stderr.write(
+              `${theme.zhusha('✗')} 读取通信方式失败：${error instanceof Error ? error.message : '未知错误'}\n`,
+            );
+          }
+          continue;
+        }
+        if (line.startsWith('/channels connect ')) {
+          const rawProvider = line.split(/\s+/)[2];
+          const parsedProvider = gatewayConnectionProviderSchema.safeParse(rawProvider);
+          if (!parsedProvider.success) {
+            process.stderr.write(
+              `${theme.warn('!')} 不支持这个通信方式。用 /channels 查看可用选项。\n`,
+            );
+            continue;
+          }
+          try {
+            const snapshot = await client.listConnections();
+            const descriptor = snapshot.providers.find(
+              (provider) => provider.provider === parsedProvider.data,
+            );
+            if (!descriptor || descriptor.availability === 'disabled') {
+              process.stderr.write(
+                `${theme.warn('!')} ${descriptor?.disabledReason ?? '这个通信方式暂不可用。'}\n`,
+              );
+              continue;
+            }
+            const result = await client.connect(
+              parsedProvider.data,
+              current.conversationId,
+            );
+            recentConnections = [
+              result.connection,
+              ...snapshot.connections.filter(
+                (connection) =>
+                  connection.connectionId !== result.connection.connectionId,
+              ),
+            ];
+            openWeb(result.authorization.url);
+            process.stdout.write(
+              `${theme.dai('●')} 已打开 ${descriptor.label} 授权页面；请在十分钟内完成确认。\n\n`,
+            );
+          } catch (error) {
+            process.stderr.write(
+              `${theme.zhusha('✗')} 发起连接失败：${error instanceof Error ? error.message : '未知错误'}\n`,
+            );
+          }
+          continue;
+        }
+        if (line.startsWith('/channels revoke')) {
+          try {
+            if (recentConnections.length === 0) {
+              recentConnections = (await client.listConnections()).connections;
+            }
+            const target = resolveConnectionTarget(
+              recentConnections,
+              line.split(/\s+/)[2],
+            );
+            if (!target) {
+              process.stderr.write(
+                `${theme.warn('!')} 请先用 /channels 查看并指定要撤销的编号。\n`,
+              );
+              continue;
+            }
+            const result = await client.revokeConnection(target.connectionId);
+            recentConnections = recentConnections.map((connection) =>
+              connection.connectionId === result.connection.connectionId
+                ? result.connection
+                : connection,
+            );
+            process.stdout.write(
+              `${theme.zhusha('×')} 已撤销 ${target.provider} 连接。\n\n`,
+            );
+          } catch (error) {
+            process.stderr.write(
+              `${theme.zhusha('✗')} 撤销连接失败：${error instanceof Error ? error.message : '未知错误'}\n`,
             );
           }
           continue;

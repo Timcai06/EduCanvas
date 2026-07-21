@@ -121,7 +121,7 @@ export function renderHome(
   lines.push(sectionMark('开始'));
   lines.push(`   ${theme.dim('直接输入问题，就会问当前笔记本的 AI 老师')}`);
   lines.push(
-    `   ${theme.dim('输入 / 呼出命令 · Tab 补全 · /use 编号 切换 · /resume 回看 · /web 网页端')}`,
+    `   ${theme.dim('输入 / 呼出命令 · Tab 补全 · /use 切换 · /channels 通信方式 · /web 网页端')}`,
   );
   lines.push('');
   return lines.join('\n');

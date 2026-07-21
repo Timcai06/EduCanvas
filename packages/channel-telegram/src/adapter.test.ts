@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   normalizeTelegramUpdate,
+  readTelegramConnectionActivation,
   sendTelegramText,
   telegramTextChunks,
   type TelegramPrivateBinding,
@@ -72,6 +73,29 @@ describe('Telegram channel adapter', () => {
         binding,
       ),
     ).toMatchObject({ code: 'UNSUPPORTED_CONTENT' });
+  });
+
+  it('extracts a private start code but leaves authorization to server state', () => {
+    const connectionId = '9e4251d2-e87b-4a5b-8d25-59cae5a21539';
+    expect(
+      readTelegramConnectionActivation({
+        ...update,
+        message: {
+          ...update.message,
+          text: `/start educanvas_${connectionId}`,
+        },
+      }),
+    ).toEqual({
+      connectionId,
+      externalAccountId: '42',
+      externalThreadId: '42',
+    });
+    expect(
+      readTelegramConnectionActivation({
+        ...update,
+        message: { ...update.message, text: '/start attacker-chosen' },
+      }),
+    ).toBeNull();
   });
 
   it('chunks output at Telegram sendMessage limits and never sets parse_mode', async () => {
