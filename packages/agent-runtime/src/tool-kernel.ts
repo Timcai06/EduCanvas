@@ -65,6 +65,18 @@ export interface ToolAdapterInvocationContext {
   signal: AbortSignal;
 }
 
+/** L2/L3 Adapter写入自身耐久意图后返回的最小公开审批描述。 */
+export interface ToolAdapterApprovalPreparation {
+  approvalId: string;
+  summary: string;
+  expiresAt: string;
+}
+
+export interface ToolAdapterApprovalContext extends ToolAdapterInvocationContext {
+  /** 已持久化且仍为pending的Tool Call；Adapter用它绑定自己的耐久意图。 */
+  toolCallId: string;
+}
+
 /** Adapter只声明能力和执行，不拥有身份、授权、审批、幂等或终态判定权。 */
 export interface ToolKernelAdapter<Input = unknown, Output = unknown> {
   name: string;
@@ -77,6 +89,14 @@ export interface ToolKernelAdapter<Input = unknown, Output = unknown> {
   timeoutMs: number;
   inputSchema: z.ZodType<Input>;
   outputSchema: z.ZodType<Output>;
+  /**
+   * L2/L3未获批准时只准备耐久意图，不得执行副作用。实现必须按
+   * operationId + toolCallId幂等，且不得把原始参数塞入返回值。
+   */
+  prepareApproval?(
+    input: Input,
+    context: ToolAdapterApprovalContext,
+  ): Promise<ToolAdapterApprovalPreparation> | ToolAdapterApprovalPreparation;
   /**
    * reject表示Adapter能证明副作用未提交；若write结果无法确认，必须抛ToolOutcomeUnknownError。
    */
@@ -97,6 +117,10 @@ interface AnyToolKernelAdapter {
   timeoutMs: number;
   inputSchema: z.ZodType<unknown>;
   outputSchema: z.ZodType<unknown>;
+  prepareApproval?(
+    input: never,
+    context: ToolAdapterApprovalContext,
+  ): Promise<ToolAdapterApprovalPreparation> | ToolAdapterApprovalPreparation;
   invoke(
     input: never,
     context: ToolAdapterInvocationContext,
@@ -107,6 +131,7 @@ export type ToolKernelFailureCode =
   | 'tool_not_available'
   | `capability_denied:${ToolPolicyDimension}`
   | 'approval_required'
+  | 'approval_preparation_failed'
   | 'invalid_arguments'
   | 'idempotency_conflict'
   | 'execution_cache_capacity'
@@ -129,13 +154,25 @@ export type ToolKernelResult =
     }
   | {
       ok: false;
+      status: 'approval_required';
+      tool: string;
+      code: 'approval_required';
+      retryable: false;
+      replayed: boolean;
+      approval: {
+        approvalId: string;
+        toolCallId: string;
+        capability: string;
+        risk: 'l2' | 'l3';
+        adapterSource: ToolSource;
+        summary: string;
+        expiresAt: string;
+      };
+    }
+  | {
+      ok: false;
       status:
-        | 'denied'
-        | 'approval_required'
-        | 'timed_out'
-        | 'cancelled'
-        | 'failed'
-        | 'outcome_unknown';
+        'denied' | 'timed_out' | 'cancelled' | 'failed' | 'outcome_unknown';
       tool: string;
       code: ToolKernelFailureCode;
       retryable: boolean;
@@ -182,14 +219,17 @@ function canonicalize(value: unknown, seen = new WeakSet<object>()): string {
 
 function failure(
   tool: string,
-  status: Exclude<ToolKernelResult['status'], 'succeeded'>,
-  code: ToolKernelFailureCode,
+  status: Exclude<
+    ToolKernelResult['status'],
+    'succeeded' | 'approval_required'
+  >,
+  code: Exclude<ToolKernelFailureCode, 'approval_required'>,
   retryable: boolean,
 ): ToolKernelResult {
   return { ok: false, status, tool, code, retryable, replayed: false };
 }
 
-function policyDenial(
+function policyDimensionDenial(
   adapter: AnyToolKernelAdapter,
   context: ToolKernelPolicyContext,
 ): ToolKernelResult | null {
@@ -205,19 +245,20 @@ function policyDenial(
       false,
     );
   }
-  if (
-    ['l2', 'l3'].includes(adapter.risk) &&
-    !context.approvedCapabilities.includes(adapter.capability)
-  ) {
-    return failure(
-      adapter.name,
-      'approval_required',
-      'approval_required',
-      false,
-    );
-  }
   return null;
 }
+
+const approvalPreparationSchema = z
+  .object({
+    approvalId: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+    summary: z.string().trim().min(1).max(500),
+    expiresAt: z.iso.datetime({ offset: true }),
+  })
+  .strict();
 
 /**
  * 四类Tool Adapter的唯一执行内核。原始值只在内存中流经Schema与Adapter；
@@ -232,6 +273,7 @@ export class ToolKernel {
     private readonly callLedger: AgentToolCallLedgerPort,
     private readonly effectLedger: ToolEffectLedgerPort,
     private readonly maxCachedExecutions = 1_024,
+    private readonly now: () => Date = () => new Date(),
   ) {
     if (
       !Number.isSafeInteger(maxCachedExecutions) ||
@@ -298,7 +340,7 @@ export class ToolKernel {
     if (!adapter) {
       return failure(input.tool, 'denied', 'tool_not_available', false);
     }
-    const denied = policyDenial(adapter, input.context);
+    const denied = policyDimensionDenial(adapter, input.context);
     if (denied) return denied;
     const parsedInput = adapter.inputSchema.safeParse(input.arguments);
     if (!parsedInput.success) {
@@ -398,7 +440,19 @@ export class ToolKernel {
       effect: adapter.effect,
       arguments: request.arguments,
     });
-    if (created.replayed) {
+    const approvalRisk =
+      adapter.risk === 'l2' || adapter.risk === 'l3' ? adapter.risk : null;
+    const requiresApproval =
+      approvalRisk !== null &&
+      !request.context.approvedCapabilities.includes(adapter.capability);
+    /*
+     * 进程可能在Tool Call落账后、approval.required持久化前崩溃。
+     * 未审批且仍pending时允许再次调用幂等prepareApproval；其他状态绝不重放执行。
+     */
+    if (
+      created.replayed &&
+      (!requiresApproval || created.call.status !== 'pending')
+    ) {
       return failure(
         adapter.name,
         'failed',
@@ -407,6 +461,131 @@ export class ToolKernel {
           : 'result_replay_required',
         false,
       );
+    }
+    const invocationContext: ToolAdapterInvocationContext = {
+      operationId: request.context.operationId,
+      executionId: request.context.executionId,
+      conversationId: request.context.conversationId,
+      traceId: request.context.traceId,
+      actorId: request.context.actorId,
+      agentId: request.context.agentId,
+      notebookId: request.context.notebookId,
+      profileId: request.context.profileId,
+      channel: request.context.channel,
+      environment: request.context.environment,
+      credentialHandle: request.context.credentialHandle ?? null,
+      profileContext: request.context.profileContext ?? {},
+      signal: new AbortController().signal,
+    };
+    if (requiresApproval && approvalRisk) {
+      if (!adapter.prepareApproval) {
+        await this.callLedger.settle({
+          ...common,
+          toolCallId: created.call.id,
+          status: 'failed',
+          code: 'approval_preparation_failed',
+          durationMs: 0,
+        });
+        return failure(
+          adapter.name,
+          'failed',
+          'approval_preparation_failed',
+          false,
+        );
+      }
+      if (request.signal?.aborted) {
+        await this.callLedger.settle({
+          ...common,
+          toolCallId: created.call.id,
+          status: 'failed',
+          code: 'tool_cancelled',
+          retryable: false,
+          durationMs: 0,
+        });
+        return failure(adapter.name, 'cancelled', 'tool_cancelled', false);
+      }
+      const preparationController = new AbortController();
+      let preparationTimer: ReturnType<typeof setTimeout> | undefined;
+      let rejectPreparationCancellation: (error: Error) => void = () =>
+        undefined;
+      const preparationCancellation = new Promise<never>((_, reject) => {
+        rejectPreparationCancellation = reject;
+      });
+      const cancelPreparation = () => {
+        preparationController.abort('cancelled');
+        rejectPreparationCancellation(new ToolCancelledError());
+      };
+      request.signal?.addEventListener('abort', cancelPreparation, {
+        once: true,
+      });
+      const preparationTimeout = new Promise<never>((_, reject) => {
+        preparationTimer = setTimeout(
+          () => {
+            preparationController.abort('timeout');
+            reject(new ToolTimeoutError());
+          },
+          Math.min(adapter.timeoutMs, 30_000),
+        );
+      });
+      try {
+        const prepared = approvalPreparationSchema.parse(
+          await Promise.race([
+            adapter.prepareApproval(parsedInput, {
+              ...invocationContext,
+              signal: preparationController.signal,
+              toolCallId: created.call.id,
+            }),
+            preparationTimeout,
+            preparationCancellation,
+          ]),
+        );
+        const expiresAt = new Date(prepared.expiresAt).getTime();
+        const currentTime = this.now().getTime();
+        /* 审批最长24小时，避免离线客户端把旧意图长期保留为可执行授权。 */
+        if (
+          expiresAt <= currentTime ||
+          expiresAt > currentTime + 24 * 60 * 60_000
+        ) {
+          throw new Error('approval_expiry_out_of_range');
+        }
+        return {
+          ok: false,
+          status: 'approval_required',
+          tool: adapter.name,
+          code: 'approval_required',
+          retryable: false,
+          replayed: created.replayed,
+          approval: {
+            approvalId: prepared.approvalId,
+            toolCallId: created.call.id,
+            capability: adapter.capability,
+            risk: approvalRisk,
+            adapterSource: adapter.source,
+            summary: prepared.summary,
+            expiresAt: prepared.expiresAt,
+          },
+        };
+      } catch (error) {
+        const cancelled = error instanceof ToolCancelledError;
+        await this.callLedger.settle({
+          ...common,
+          toolCallId: created.call.id,
+          status: 'failed',
+          code: cancelled ? 'tool_cancelled' : 'approval_preparation_failed',
+          retryable: !cancelled,
+          durationMs: 0,
+        });
+        return failure(
+          adapter.name,
+          cancelled ? 'cancelled' : 'failed',
+          cancelled ? 'tool_cancelled' : 'approval_preparation_failed',
+          !cancelled,
+        );
+      } finally {
+        if (preparationTimer) clearTimeout(preparationTimer);
+        request.signal?.removeEventListener('abort', cancelPreparation);
+        preparationController.abort('approval_preparation_finished');
+      }
     }
     await this.callLedger.markRunning({
       ...common,
@@ -448,18 +627,7 @@ export class ToolKernel {
     try {
       const output = await Promise.race([
         adapter.invoke(parsedInput, {
-          operationId: request.context.operationId,
-          executionId: request.context.executionId,
-          conversationId: request.context.conversationId,
-          traceId: request.context.traceId,
-          actorId: request.context.actorId,
-          agentId: request.context.agentId,
-          notebookId: request.context.notebookId,
-          profileId: request.context.profileId,
-          channel: request.context.channel,
-          environment: request.context.environment,
-          credentialHandle: request.context.credentialHandle ?? null,
-          profileContext: request.context.profileContext ?? {},
+          ...invocationContext,
           signal: controller.signal,
         }),
         timeout,

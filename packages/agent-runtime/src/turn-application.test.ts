@@ -11,7 +11,7 @@ import type {
   TurnModelGateway,
 } from '@educanvas/agent-core';
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   TurnApplicationService,
   type TurnApplicationLifecyclePort,
@@ -580,6 +580,120 @@ describe('TurnApplicationService', () => {
     );
     expect(calls.calls[0]?.answerModelRunId).toBe(models.runs[0]?.id);
     expect(calls.calls[0]?.status).toBe('succeeded');
+  });
+
+  it('L2工具准备耐久意图后发出approval.required且不写失败终态', async () => {
+    const lifecycle = new MemoryLifecycle();
+    const calls = new MemoryCallLedger();
+    const traceStatuses: string[] = [];
+    const prepareApproval = vi.fn(async () => ({
+      approvalId: 'approval:turn-application',
+      summary: '读取已配对设备中的白名单学习资料',
+      expiresAt: '2026-07-21T01:00:00.000Z',
+    }));
+    const adapter: ToolKernelAdapter<
+      { relativePath: string },
+      { content: string }
+    > = {
+      name: 'readNodeFile',
+      description: '读取已配对设备中的白名单文件',
+      source: 'node',
+      capability: 'filesystem.read_allowlisted',
+      risk: 'l2',
+      exposure: 'model',
+      effect: 'read',
+      timeoutMs: 100,
+      inputSchema: z.object({ relativePath: z.string().max(1_024) }).strict(),
+      outputSchema: z.object({ content: z.string() }).strict(),
+      prepareApproval,
+      async invoke() {
+        throw new Error('批准前不得执行');
+      },
+    };
+    const approvalProfile: TurnApplicationProfilePort = {
+      ...profile(),
+      async prepare(input) {
+        const base = await profile().prepare(input);
+        const capability = 'filesystem.read_allowlisted';
+        return {
+          ...base,
+          toolPolicy: {
+            channel: 'tui',
+            environment: 'test',
+            capabilities: {
+              actor: [capability],
+              notebook: [capability],
+              profile: [capability],
+              channel: [capability],
+              environment: [capability],
+            },
+            approvedCapabilities: [],
+          },
+        };
+      },
+    };
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        yield {
+          type: 'tool_call',
+          phase: request.phase,
+          callId: 'call_node_file',
+          tool: 'readNodeFile',
+          argumentsDelta: '{"relativePath":"algebra.md"}',
+          done: true,
+        };
+        yield {
+          type: 'completed',
+          phase: request.phase,
+          metadata: metadata(request, 'tool_calls'),
+        };
+      },
+    };
+    const events = await collect(
+      new TurnApplicationService({
+        lifecycle,
+        profile: approvalProfile,
+        contextLedger: new MemoryContextLedger(),
+        modelRunLedger: new MemoryModelRunLedger(),
+        modelGateway: gateway,
+        toolKernel: new ToolKernel(
+          [adapter],
+          calls,
+          new MemoryEffectLedger(),
+          1_024,
+          () => new Date('2026-07-21T00:00:00.000Z'),
+        ),
+        trace: {
+          start() {
+            return {
+              event() {},
+              end(status) {
+                traceStatuses.push(status);
+              },
+            };
+          },
+        },
+      }),
+    );
+
+    expect(events).toMatchObject([
+      { type: 'turn.started' },
+      { type: 'tool.started', tool: 'filesystem.read_allowlisted' },
+      {
+        type: 'approval.required',
+        approvalId: 'approval:turn-application',
+        capability: 'filesystem.read_allowlisted',
+        risk: 'l2',
+      },
+    ]);
+    expect(lifecycle.settlements).toHaveLength(0);
+    expect(traceStatuses).toEqual(['suspended']);
+    expect(JSON.stringify(events)).not.toContain('algebra.md');
+    expect(calls.calls[0]).toMatchObject({ status: 'pending' });
+    expect(prepareApproval).toHaveBeenCalledWith(
+      { relativePath: 'algebra.md' },
+      expect.objectContaining({ toolCallId: calls.calls[0]!.id }),
+    );
   });
 
   it('只在服务端取消已落账时收敛为cancelled', async () => {

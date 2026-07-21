@@ -199,7 +199,7 @@ export interface TurnApplicationCancellationPort {
 
 export interface TurnApplicationTraceSpan {
   event(name: string, attributes?: Readonly<Record<string, string>>): void;
-  end(status: 'completed' | 'failed' | 'cancelled'): void;
+  end(status: 'completed' | 'failed' | 'cancelled' | 'suspended'): void;
 }
 
 /** Trace 只接受白名单标识与阶段，不接受正文、Prompt、Tool 参数或 Secret。 */
@@ -715,6 +715,13 @@ export class TurnApplicationService implements TurnApplicationPort {
         tool: string;
         code: TurnApplicationFailureCode;
         retryable: boolean;
+        approval?: {
+          approvalId: string;
+          capability: string;
+          risk: 'l2' | 'l3';
+          summary: string;
+          expiresAt: string;
+        };
       };
       const callIds = new Map<string, string>();
       let completed = false;
@@ -806,6 +813,17 @@ export class TurnApplicationService implements TurnApplicationPort {
                   tool: call.tool,
                   code: mapToolFailure(executed.code),
                   retryable: executed.retryable,
+                  ...(executed.status === 'approval_required'
+                    ? {
+                        approval: {
+                          approvalId: executed.approval.approvalId,
+                          capability: executed.approval.capability,
+                          risk: executed.approval.risk,
+                          summary: executed.approval.summary,
+                          expiresAt: executed.approval.expiresAt,
+                        },
+                      }
+                    : {}),
                 },
               };
             }
@@ -904,6 +922,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         } else if (event.type === 'tool.failed') {
           if (outputBlocked || outputGuardFailed) continue;
           toolFailure = event.failure;
+          if (event.failure.approval) continue;
           yield {
             protocol: turnApplicationProtocolVersion,
             operationId: command.operationId,
@@ -1022,6 +1041,24 @@ export class TurnApplicationService implements TurnApplicationPort {
         (await cancellation.isCancellationRequested().catch(() => false))
       ) {
         yield await emitFailure('CANCELLED', false);
+        return;
+      }
+      if (toolFailure?.approval) {
+        trace.event('approval.required', {
+          capability: toolFailure.approval.capability,
+          risk: toolFailure.approval.risk,
+        });
+        trace.end('suspended');
+        yield {
+          protocol: turnApplicationProtocolVersion,
+          operationId: command.operationId,
+          type: 'approval.required',
+          approvalId: toolFailure.approval.approvalId,
+          capability: toolFailure.approval.capability,
+          risk: toolFailure.approval.risk,
+          summary: toolFailure.approval.summary,
+          expiresAt: toolFailure.approval.expiresAt,
+        };
         return;
       }
       if (toolFailure) {

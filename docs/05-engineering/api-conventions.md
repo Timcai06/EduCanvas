@@ -113,6 +113,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 - `operationId + sequence` 是持久事件cursor，`after=-1`读取全部，断线后按序恢复；
 - `operation.accepted` 后可有message/tool/artifact/approval事件，并且只能出现一个operation终态；
 - 审批decision端点只调用Operation Store的原子决策方法：denied与失败终态同事务，approved与`approval.resolved + continuation ready + graphile job`同事务；HTTP层不得拆成多次append；
+- Turn遇到L2/L3时，`approval.required`必须位于已验证参数和Adapter耐久准备之后，且该轮暂时没有`turn.failed/completed/cancelled`；客户端应显示等待审批，不能把无终态当作网络失败；
 - 取消端点先持久化`cancelRequestedAt`；响应`cancelling`表示本进程或跨进程Worker已收到可收敛请求，`cancelled`表示等待中的continuation与Operation已原子终结，`not_running`不得伪装已取消；
 - 恢复接口必须重新验证actor，越权与不存在不泄露目标内容；
 - Event和错误只使用稳定码，不返回Provider异常、Secret或消息正文；

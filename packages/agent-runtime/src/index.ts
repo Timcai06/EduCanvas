@@ -75,6 +75,8 @@ export {
   toolPolicyDimensions,
   toolRiskLevels,
   toolSources,
+  type ToolAdapterApprovalContext,
+  type ToolAdapterApprovalPreparation,
   type ToolAdapterInvocationContext,
   type ToolKernelAdapter,
   type ToolKernelFailureCode,
