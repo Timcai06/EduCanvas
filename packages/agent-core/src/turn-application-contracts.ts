@@ -20,9 +20,7 @@ const publicHttpUrlSchema = z
   .max(2_048)
   .refine((value) => {
     const schemeSeparator = value.indexOf('://');
-    const authority = value
-      .slice(schemeSeparator + 3)
-      .split(/[/?#]/, 1)[0];
+    const authority = value.slice(schemeSeparator + 3).split(/[/?#]/, 1)[0];
     return /^https?:\/\//i.test(value) && !authority?.includes('@');
   }, '引用URL必须是不含凭据的HTTP(S)地址');
 
@@ -88,6 +86,9 @@ export const turnApplicationFailureCodes = [
 export const turnApplicationFailureCodeSchema = z.enum(
   turnApplicationFailureCodes,
 );
+export type TurnApplicationFailureCode = z.infer<
+  typeof turnApplicationFailureCodeSchema
+>;
 
 const eventBase = {
   protocol: z.literal(turnApplicationProtocolVersion),

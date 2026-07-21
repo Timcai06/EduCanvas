@@ -416,7 +416,16 @@ export class TeachingTurnOrchestrator {
           },
         };
       } else if (event.type === 'failed') {
-        yield { type: 'failed', code: event.code, error: event.error };
+        yield {
+          type: 'failed',
+          // 旧Teaching兼容路径未注入Model Run lifecycle，正常不会产生此码；
+          // 若未来误注入且审计失败，仍按供应商运行失败安全收敛。
+          code:
+            event.code === 'RUNTIME_FAILED'
+              ? 'MODEL_GATEWAY_FAILED'
+              : event.code,
+          error: event.error,
+        };
       } else if (event.type === 'tool.failed') {
         yield {
           type: 'failed',

@@ -46,11 +46,25 @@ export {
   AgentLoopEngine,
   type AgentLoopCommand,
   type AgentLoopEvent,
+  type AgentLoopModelRunLifecycle,
   type AgentLoopPrompt,
   type AgentLoopToolBatch,
   type AgentLoopToolSuccess,
 } from './agent-loop';
-export { type TurnApplicationPort } from './turn-application';
+export {
+  TurnApplicationService,
+  type TurnApplicationCancellationPort,
+  type TurnApplicationContextCandidate,
+  type TurnApplicationContextPlan,
+  type TurnApplicationLifecyclePort,
+  type TurnApplicationLifecycleSnapshot,
+  type TurnApplicationPort,
+  type TurnApplicationProfileEvent,
+  type TurnApplicationProfilePlan,
+  type TurnApplicationProfilePort,
+  type TurnApplicationTracePort,
+  type TurnApplicationTraceSpan,
+} from './turn-application';
 export {
   ToolKernel,
   ToolOutcomeUnknownError,
@@ -60,6 +74,7 @@ export {
   type ToolAdapterInvocationContext,
   type ToolKernelAdapter,
   type ToolKernelFailureCode,
+  type ToolKernelPolicyContext,
   type ToolKernelResult,
   type ToolKernelTrustedContext,
   type ToolPolicyDimension,
