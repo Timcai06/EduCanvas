@@ -118,7 +118,45 @@ export interface TurnApplicationProfilePlan {
   toolPolicy?: TurnApplicationToolPolicy;
 }
 
+export type TurnApplicationPreflightDecision =
+  | { kind: 'allow' }
+  | {
+      kind: 'reject';
+      /** 面向当前用户的固定安全回应；不得包含 detector payload 或内部规则。 */
+      publicContent: string;
+      failureCode: TurnApplicationFailureCode;
+    };
+
+export type TurnApplicationOutputGuardPushResult =
+  | { kind: 'hold' }
+  | { kind: 'emit'; safeDeltas: readonly string[] }
+  | {
+      kind: 'block';
+      /** 替代被拦截正文的固定安全回应。 */
+      publicContent: string;
+      failureCode: TurnApplicationFailureCode;
+    };
+
+export type TurnApplicationOutputGuardFinishResult = Exclude<
+  TurnApplicationOutputGuardPushResult,
+  { kind: 'hold' }
+>;
+
+/**
+ * Provider delta 与公开事件之间的 Profile 安全闸门。实现必须有界缓存；一旦
+ * 返回 block，后续正文不会再公开，Turn Application 会中止当前模型运行。
+ */
+export interface TurnApplicationOutputGuardPort {
+  push(delta: string): Promise<TurnApplicationOutputGuardPushResult>;
+  finish(): Promise<TurnApplicationOutputGuardFinishResult>;
+}
+
 export interface TurnApplicationProfilePort {
+  /** 在任何 Context、Model Run 或 Tool 副作用前执行确定性输入策略。 */
+  preflight?(input: {
+    command: TurnApplicationCommand;
+    turn: TurnApplicationLifecycleSnapshot;
+  }): Promise<TurnApplicationPreflightDecision>;
   /** Profile 只装配 Context/Prompt/Policy，不得创建第二个模型循环。 */
   prepare(input: {
     command: TurnApplicationCommand;
@@ -136,6 +174,11 @@ export interface TurnApplicationProfilePort {
     citationMarkers?: readonly number[];
     events?: readonly TurnApplicationProfileEvent[];
   }>;
+  /** 每个新 Turn 返回独立的有状态输出闸门；replay 不会重新执行。 */
+  createOutputGuard?(input: {
+    command: TurnApplicationCommand;
+    turn: TurnApplicationLifecycleSnapshot;
+  }): TurnApplicationOutputGuardPort;
 }
 
 export interface TurnApplicationCancellationHandle {
@@ -379,6 +422,17 @@ function validCitationMarkers(markers: readonly number[]): boolean {
   );
 }
 
+function validPublicDelta(value: string): boolean {
+  return value.length >= 1 && value.length <= 16_000;
+}
+
+function validGuardDeltas(
+  values: readonly string[],
+  allowEmpty = false,
+): boolean {
+  return (allowEmpty || values.length > 0) && values.every(validPublicDelta);
+}
+
 function mapModelFailure(error: NormalizedModelError): {
   code: TurnApplicationFailureCode;
   retryable: boolean;
@@ -514,6 +568,17 @@ export class TurnApplicationService implements TurnApplicationPort {
     }
     let answer = '';
     let terminalEmitted = false;
+    const executionController = new AbortController();
+    const forwardCancellation = () => {
+      if (!executionController.signal.aborted) {
+        executionController.abort(cancellation.signal?.reason);
+      }
+    };
+    if (cancellation.signal?.aborted) forwardCancellation();
+    else
+      cancellation.signal?.addEventListener('abort', forwardCancellation, {
+        once: true,
+      });
     const emitFailure = async (
       code: TurnApplicationFailureCode,
       retryable: boolean,
@@ -548,6 +613,31 @@ export class TurnApplicationService implements TurnApplicationPort {
     };
 
     try {
+      const preflight = await this.dependencies.profile.preflight?.({
+        command,
+        turn,
+      });
+      if (preflight?.kind === 'reject') {
+        if (!validPublicDelta(preflight.publicContent)) {
+          throw new Error('invalid_profile_preflight_response');
+        }
+        answer = preflight.publicContent;
+        yield {
+          protocol: turnApplicationProtocolVersion,
+          operationId: command.operationId,
+          type: 'message.delta',
+          messageId: turn.assistantMessageId,
+          delta: preflight.publicContent,
+        };
+        yield await emitFailure(preflight.failureCode, false);
+        return;
+      }
+      const outputGuard = this.dependencies.profile.createOutputGuard?.({
+        command,
+        turn,
+      });
+      let outputBlocked: TurnApplicationFailureCode | null = null;
+      let outputGuardFailed = false;
       trace.event('context.prepare');
       const plan = await this.dependencies.profile.prepare({ command, turn });
       const allCandidates = candidates(plan.context);
@@ -650,7 +740,7 @@ export class TurnApplicationService implements TurnApplicationPort {
           messages: synthesisMessages,
         },
         maxToolRounds: plan.model.maxToolRounds,
-        signal: cancellation.signal,
+        signal: executionController.signal,
         modelRunLifecycle: modelLifecycle,
         async executeTools(calls, context) {
           if (!context.modelRun || !policy || !toolKernel) {
@@ -703,7 +793,7 @@ export class TurnApplicationService implements TurnApplicationPort {
               tool: call.tool,
               arguments: call.arguments,
               context: trusted,
-              signal: cancellation.signal,
+              signal: executionController.signal,
             });
             if (!executed.ok) {
               return {
@@ -731,15 +821,62 @@ export class TurnApplicationService implements TurnApplicationPort {
         },
       })) {
         if (event.type === 'model' && event.event.type === 'text_delta') {
-          answer += event.event.delta;
-          yield {
-            protocol: turnApplicationProtocolVersion,
-            operationId: command.operationId,
-            type: 'message.delta',
-            messageId: turn.assistantMessageId,
-            delta: event.event.delta,
-          };
+          if (outputBlocked || outputGuardFailed) continue;
+          let guarded: TurnApplicationOutputGuardPushResult;
+          try {
+            guarded = outputGuard
+              ? await outputGuard.push(event.event.delta)
+              : {
+                  kind: 'emit',
+                  safeDeltas: [event.event.delta],
+                };
+          } catch {
+            outputGuardFailed = true;
+            executionController.abort('profile_output_guard_failed');
+            continue;
+          }
+          if (guarded.kind === 'hold') continue;
+          if (guarded.kind === 'block') {
+            if (!validPublicDelta(guarded.publicContent)) {
+              outputGuardFailed = true;
+              executionController.abort('profile_output_guard_failed');
+              continue;
+            }
+            const publicDelta = `${answer ? '\n\n' : ''}${guarded.publicContent}`;
+            if (!validPublicDelta(publicDelta)) {
+              outputGuardFailed = true;
+              executionController.abort('profile_output_guard_failed');
+              continue;
+            }
+            answer += publicDelta;
+            outputBlocked = guarded.failureCode;
+            executionController.abort('profile_output_blocked');
+            yield {
+              protocol: turnApplicationProtocolVersion,
+              operationId: command.operationId,
+              type: 'message.delta',
+              messageId: turn.assistantMessageId,
+              delta: publicDelta,
+            };
+            continue;
+          }
+          if (!validGuardDeltas(guarded.safeDeltas)) {
+            outputGuardFailed = true;
+            executionController.abort('profile_output_guard_failed');
+            continue;
+          }
+          for (const delta of guarded.safeDeltas) {
+            answer += delta;
+            yield {
+              protocol: turnApplicationProtocolVersion,
+              operationId: command.operationId,
+              type: 'message.delta',
+              messageId: turn.assistantMessageId,
+              delta,
+            };
+          }
         } else if (event.type === 'tool.started') {
+          if (outputBlocked || outputGuardFailed) continue;
           const id = executionId(
             command.operationId,
             event.run,
@@ -754,6 +891,7 @@ export class TurnApplicationService implements TurnApplicationPort {
             tool: toolKernel?.capabilityFor(event.call.tool) ?? 'tool.unknown',
           };
         } else if (event.type === 'tool.result') {
+          if (outputBlocked || outputGuardFailed) continue;
           yield {
             protocol: turnApplicationProtocolVersion,
             operationId: command.operationId,
@@ -761,6 +899,7 @@ export class TurnApplicationService implements TurnApplicationPort {
             toolCallId: event.result.detail.executionId,
           };
         } else if (event.type === 'tool.failed') {
+          if (outputBlocked || outputGuardFailed) continue;
           toolFailure = event.failure;
           yield {
             protocol: turnApplicationProtocolVersion,
@@ -777,7 +916,52 @@ export class TurnApplicationService implements TurnApplicationPort {
         }
       }
 
-      if (completed && answer.trim()) {
+      if (outputBlocked) {
+        yield await emitFailure(outputBlocked, false);
+        return;
+      }
+      if (outputGuardFailed) {
+        yield await emitFailure('RUNTIME_FAILED', true);
+        return;
+      }
+
+      if (completed) {
+        if (outputGuard) {
+          const guarded = await outputGuard.finish();
+          if (guarded.kind === 'block') {
+            if (!validPublicDelta(guarded.publicContent)) {
+              throw new Error('invalid_profile_output_block_response');
+            }
+            const publicDelta = `${answer ? '\n\n' : ''}${guarded.publicContent}`;
+            if (!validPublicDelta(publicDelta)) {
+              throw new Error('invalid_profile_output_block_response');
+            }
+            answer += publicDelta;
+            yield {
+              protocol: turnApplicationProtocolVersion,
+              operationId: command.operationId,
+              type: 'message.delta',
+              messageId: turn.assistantMessageId,
+              delta: publicDelta,
+            };
+            yield await emitFailure(guarded.failureCode, false);
+            return;
+          }
+          if (!validGuardDeltas(guarded.safeDeltas, true)) {
+            throw new Error('invalid_profile_output_deltas');
+          }
+          for (const delta of guarded.safeDeltas) {
+            answer += delta;
+            yield {
+              protocol: turnApplicationProtocolVersion,
+              operationId: command.operationId,
+              type: 'message.delta',
+              messageId: turn.assistantMessageId,
+              delta,
+            };
+          }
+        }
+        if (!answer.trim()) throw new Error('profile_removed_entire_answer');
         const finalized = await this.dependencies.profile.finalize?.({
           command,
           turn,
@@ -850,6 +1034,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         yield await emitFailure('RUNTIME_FAILED', true);
       }
     } finally {
+      cancellation.signal?.removeEventListener('abort', forwardCancellation);
       try {
         await cancellation.close();
       } catch {
