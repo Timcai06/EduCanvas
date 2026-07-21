@@ -81,7 +81,8 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'retrieval_candidates', 'message_citations',
             'assets', 'asset_versions', 'agent_message_parts',
             'turn_context_snapshots', 'spaces', 'conversations',
-            'agent_operations', 'conversation_messages', 'tool_effects'
+            'agent_operations', 'conversation_messages', 'tool_effects',
+            'operation_continuations'
           )
         order by table_name
       `;
@@ -99,6 +100,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'lesson_sessions',
         'message_citations',
         'model_runs',
+        'operation_continuations',
         'retrieval_candidates',
         'session_source_bindings',
         'spaces',
@@ -334,6 +336,70 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
           agent_operation_id: null,
         },
       ]);
+    });
+  });
+
+  it('从0028升级时保留平台事实并新增最小化continuation账本', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0029_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const actorId = 'user:migration-continuation';
+      await connection`
+        insert into platform_users (id, kind)
+        values (${actorId}, 'registered')
+      `;
+
+      await applyMigrationFile(connection, '0029_aspiring_ezekiel_stane.sql');
+
+      expect(
+        await connection`
+          select id, kind from platform_users where id = ${actorId}
+        `,
+      ).toEqual([{ id: actorId, kind: 'registered' }]);
+      const columns = await connection<
+        { column_name: string; data_type: string }[]
+      >`
+        select column_name, data_type
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'operation_continuations'
+        order by ordinal_position
+      `;
+      expect(columns.map((column) => column.column_name)).toEqual([
+        'id',
+        'operation_id',
+        'sequence',
+        'protocol_version',
+        'kind',
+        'step',
+        'approval_id',
+        'tool_call_id',
+        'adapter_source',
+        'resume_ref',
+        'status',
+        'lease_generation',
+        'lease_owner_id',
+        'lease_expires_at',
+        'heartbeat_at',
+        'failure_code',
+        'created_at',
+        'updated_at',
+        'completed_at',
+      ]);
+      expect(
+        columns.some((column) => ['json', 'jsonb'].includes(column.data_type)),
+      ).toBe(false);
+      expect(
+        await connection`
+          select indexname from pg_indexes
+          where schemaname = 'public'
+            and indexname = 'operation_continuations_active_operation_unique'
+        `,
+      ).toHaveLength(1);
     });
   });
 

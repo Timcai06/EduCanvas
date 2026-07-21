@@ -204,6 +204,13 @@
       "when": 1784636138243,
       "tag": "0028_glamorous_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784645223977,
+      "tag": "0029_aspiring_ezekiel_stane",
+      "breakpoints": true
     }
   ]
 }
