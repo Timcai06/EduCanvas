@@ -21,6 +21,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@langchain/langgraph": "1.4.8",
+    "@langchain/langgraph-checkpoint-postgres": "1.0.4",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.11.10",
     "drizzle-orm": "^0.45.2",
