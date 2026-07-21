@@ -41,3 +41,18 @@ export {
   type AgentLoopToolSuccess,
 } from './agent-loop';
 export { type TurnApplicationPort } from './turn-application';
+export {
+  ToolKernel,
+  ToolOutcomeUnknownError,
+  toolPolicyDimensions,
+  toolRiskLevels,
+  toolSources,
+  type ToolAdapterInvocationContext,
+  type ToolKernelAdapter,
+  type ToolKernelFailureCode,
+  type ToolKernelResult,
+  type ToolKernelTrustedContext,
+  type ToolPolicyDimension,
+  type ToolRiskLevel,
+  type ToolSource,
+} from './tool-kernel';

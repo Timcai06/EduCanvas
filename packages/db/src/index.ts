@@ -182,6 +182,12 @@ export {
   DrizzleAgentToolCallRepository,
 } from './agent-tool-call-repository';
 export {
+  DrizzleToolEffectRepository,
+  ToolEffectConflictError,
+  ToolEffectLifecycleError,
+  ToolEffectOwnershipError,
+} from './tool-effect-repository';
+export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,
   SafetyDecisionOwnershipError,
