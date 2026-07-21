@@ -21,18 +21,18 @@
 
 ## 二、当前事实与目标不变量
 
-| 主题             | 当前事实                                                    | 目标不变量                                |
-| ---------------- | ----------------------------------------------------------- | ----------------------------------------- |
-| Agent Loop       | 只有一个 `AgentLoopEngine`                                  | 继续只有一个生产模型/工具循环             |
-| Turn Application | Gateway已迁唯一服务，Web General/Web Teaching仍为旧组合路径 | 收敛为一个 Turn Application Service       |
-| Tool Runtime     | `AgentToolRegistry` 与 `TeachingToolExecutor` 并存          | 一个 Tool Kernel 统一策略与执行语义       |
-| Context          | Gateway已统一并写Snapshot，两个Web入口仍分别装配            | 预算选择后固化可审计 Context Snapshot     |
-| Audit            | 通用Ledger已落地，Gateway已接入；两个Web旧入口仍待单写迁移  | ID 对齐、职责唯一，不建立第二事实源       |
-| Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                  | 以 Operation 为业务游标，副作用可幂等续跑 |
+| 主题             | 当前事实                                                   | 目标不变量                                |
+| ---------------- | ---------------------------------------------------------- | ----------------------------------------- |
+| Agent Loop       | 统一服务与旧Teaching各构造同一`AgentLoopEngine`类          | 最终只有统一服务一个生产构造位置          |
+| Turn Application | Gateway与Web General已迁唯一服务，Web Teaching仍为旧路径   | 收敛为一个 Turn Application Service       |
+| Tool Runtime     | Web General走Tool Kernel，Teaching仍走专用Executor         | 一个 Tool Kernel 统一策略与执行语义       |
+| Context          | Gateway与Web General已统一并写Snapshot，Teaching仍单独装配 | 预算选择后固化可审计 Context Snapshot     |
+| Audit            | Gateway/Web General已写通用Ledger，Teaching仍待单写迁移    | ID 对齐、职责唯一，不建立第二事实源       |
+| Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                 | 以 Operation 为业务游标，副作用可幂等续跑 |
 
 ## 三、统一 Agent Loop
 
-`packages/agent-runtime/src/agent-loop.ts` 中的 `AgentLoopEngine` 是唯一生产循环：
+`packages/agent-runtime/src/agent-loop.ts` 中的 `AgentLoopEngine` 是唯一循环实现：
 
 ```text
 validate request
@@ -41,7 +41,7 @@ validate request
   -> if answer: emit terminal result
 ```
 
-循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。只有`TurnApplicationService`实例化目标Engine；两个Web旧入口仍在迁移期直接实例化，因此当前是“Gateway已收敛、Web双轨待收敛”，不能提前声称应用层统一完成。
+循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。Gateway与Web General只通过`TurnApplicationService`调用该循环；旧Teaching Orchestrator仍直接实例化，迁移完成前不能声称生产构造点唯一。
 
 当前 Web General 默认最多三圈工具；K12 Profile 默认一圈并可在预算内配置。具体数值属于组合根策略，不应写死为 Engine 的永久协议。
 
@@ -74,7 +74,7 @@ Profile allowlist
 
 Context 不是把 Notebook 全部数据拼成字符串。应用层应从 Profile/System、Notebook 摘要、最近完整消息、选中或检索命中的 Sources、Artifact 版本、相关学习者记忆和本轮多模态 Part 中按预算选择。
 
-历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。当前已有若干独立装配路径，但统一预算和持久 Context Snapshot 尚未实现。
+历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。Gateway与Web General已使用统一预算和持久Context Snapshot；Web资产文本按不可变AssetVersion分段记录并保持不可信资料边界，Teaching装配仍待迁移。历史窗口必须取最新N条后恢复正序，不能让长会话把当前消息挤出Context。
 
 ## 六、教育能力与可信事实
 
@@ -108,4 +108,4 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - 第一阶段不开放宿主机 Shell、任意文件系统、无约束代码执行或多 Agent 编队；
 - 安全、预算、权限、判分和学习状态必须在模型之外可测试、可审计。
 
-当前三条应用路径、两套工具执行和教学专用审计的代码证据见[系统架构现状](../02-architecture/01-系统架构现状.md)，收敛顺序见[第二代架构升级计划](../plan/active/2026-07-第二代架构升级.md)。
+当前统一通用路径、旧教学路径和审计双轨的代码证据见[系统架构现状](../02-architecture/01-系统架构现状.md)，收敛顺序见[第二代架构升级计划](../plan/active/2026-07-第二代架构升级.md)。

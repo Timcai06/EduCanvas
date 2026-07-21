@@ -283,6 +283,11 @@ export class ToolKernel {
       }));
   }
 
+  /** Provider函数名只在模型边界使用；公共事件必须投影稳定的小写能力名。 */
+  capabilityFor(tool: string): string | null {
+    return this.adapters.get(tool)?.capability ?? null;
+  }
+
   async execute(input: {
     tool: string;
     arguments: unknown;

@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TurnApplicationService,
   type TurnApplicationLifecyclePort,
+  type TurnApplicationProfileEvent,
   type TurnApplicationProfilePort,
 } from './turn-application';
 import { ToolKernel, type ToolKernelAdapter } from './tool-kernel';
@@ -52,6 +53,7 @@ class MemoryLifecycle implements TurnApplicationLifecyclePort {
   constructor(
     private readonly replayed = false,
     private readonly replayEvents: readonly TurnApplicationEvent[] = [],
+    private readonly settlementEvents: readonly TurnApplicationProfileEvent[] = [],
   ) {}
 
   async begin() {
@@ -70,6 +72,7 @@ class MemoryLifecycle implements TurnApplicationLifecyclePort {
 
   async settle(input: Parameters<TurnApplicationLifecyclePort['settle']>[0]) {
     this.settlements.push(input);
+    return this.settlementEvents;
   }
 }
 
@@ -393,6 +396,55 @@ describe('TurnApplicationService', () => {
     });
   });
 
+  it('在结算成功后投影同一Lifecycle事务返回的引用事件', async () => {
+    const lifecycle = new MemoryLifecycle(
+      false,
+      [],
+      [
+        {
+          protocol: 'educanvas.turn.v2',
+          operationId: OPERATION_ID,
+          type: 'message.citation',
+          messageId: ASSISTANT_MESSAGE_ID,
+          citationId: 'citation:1',
+          marker: 1,
+          label: '网页来源',
+          target: {
+            kind: 'web',
+            assetId: 'asset:1',
+            assetVersionId: 'asset-version:1',
+            url: 'https://example.com/source',
+          },
+        },
+      ],
+    );
+    const events = await collect(
+      new TurnApplicationService({
+        lifecycle,
+        profile: profile(),
+        contextLedger: new MemoryContextLedger(),
+        modelRunLedger: new MemoryModelRunLedger(),
+        modelGateway: {
+          async *streamTurnText(request) {
+            yield { type: 'text_delta', phase: request.phase, delta: '结论。' };
+            yield {
+              type: 'completed',
+              phase: request.phase,
+              metadata: metadata(request, 'stop'),
+            };
+          },
+        },
+      }),
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      'turn.started',
+      'message.delta',
+      'message.citation',
+      'turn.completed',
+    ]);
+  });
+
   it('让模型工具调用经过同一个Tool Kernel并绑定answer Model Run', async () => {
     const lifecycle = new MemoryLifecycle();
     const models = new MemoryModelRunLedger();
@@ -478,6 +530,11 @@ describe('TurnApplicationService', () => {
       'turn.completed',
     ]);
     expect(models.runs).toHaveLength(2);
+    expect(events.find((event) => event.type === 'tool.started')).toMatchObject(
+      {
+        tool: 'tool.execute',
+      },
+    );
     expect(calls.calls[0]?.answerModelRunId).toBe(models.runs[0]?.id);
     expect(calls.calls[0]?.status).toBe('succeeded');
   });

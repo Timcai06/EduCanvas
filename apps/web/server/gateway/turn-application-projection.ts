@@ -18,8 +18,12 @@ function safeFailureMessage(
 }
 
 function displayToolLabel(tool: string): string {
-  if (tool === 'web.search') return '正在搜索网页';
-  if (tool === 'web.fetch') return '正在读取网页';
+  if (['web_search', 'web.search', 'webSearch'].includes(tool)) {
+    return '正在搜索网页';
+  }
+  if (['web_fetch', 'web.fetch', 'fetchWebPage'].includes(tool)) {
+    return '正在读取网页';
+  }
   return tool;
 }
 

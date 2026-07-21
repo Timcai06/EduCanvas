@@ -146,7 +146,7 @@ class GatewayTurnLifecycle implements TurnApplicationLifecyclePort {
 
   async settle(
     input: Parameters<TurnApplicationLifecyclePort['settle']>[0],
-  ): Promise<void> {
+  ): ReturnType<TurnApplicationLifecyclePort['settle']> {
     await this.turns.settleTurn({
       conversationId: input.command.notebook.conversationId,
       trustedSubjectId: input.command.actor.actorId,
@@ -157,6 +157,7 @@ class GatewayTurnLifecycle implements TurnApplicationLifecyclePort {
       sourceMarkers: input.citationMarkers,
       operationTerminalWriter: 'gateway',
     });
+    return [];
   }
 }
 

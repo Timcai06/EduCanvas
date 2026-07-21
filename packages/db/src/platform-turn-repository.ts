@@ -4,7 +4,7 @@ import {
   notebookRoleAllows,
   type NotebookPermission,
 } from '@educanvas/gateway-core';
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   assertOwnedReadyAssetParts,
@@ -17,6 +17,7 @@ import {
   conversations,
   notebookMemberships,
   operationSources,
+  assetVersions,
   spaces,
 } from './schema';
 
@@ -56,6 +57,21 @@ export interface PlatformTurnSnapshot {
   replayed: boolean;
   studentMessage: PlatformTurnMessageSnapshot;
   assistantMessage: PlatformTurnMessageSnapshot;
+}
+
+/** 与Message终态在同一事务插入的网页引用，避免提交后再查询制造伪失败。 */
+export interface PlatformSettledCitationSnapshot {
+  citationId: string;
+  assistantMessageId: string;
+  ordinal: number;
+  assetId: string;
+  assetVersionId: string;
+  label: string;
+  url: string;
+}
+
+export interface PlatformTurnSettlementSnapshot extends PlatformTurnSnapshot {
+  settledCitations: readonly PlatformSettledCitationSnapshot[];
 }
 
 export class PlatformTurnOwnershipError extends Error {
@@ -483,7 +499,7 @@ export class DrizzlePlatformTurnRepository {
     /** Gateway入口由Gateway Event循环独占Operation终态；本仓储只结算消息。 */
     operationTerminalWriter?: 'turn_application' | 'gateway';
     now?: Date;
-  }): Promise<PlatformTurnSnapshot> {
+  }): Promise<PlatformTurnSettlementSnapshot> {
     const sourceMarkers = input.sourceMarkers ?? [];
     const validMarkers = sourceMarkers.every(
       (marker, index) =>
@@ -538,6 +554,7 @@ export class DrizzlePlatformTurnRepository {
         );
       }
       let settleMessage = false;
+      const settledCitations: PlatformSettledCitationSnapshot[] = [];
       if (gatewayOwnsTerminal) {
         const normalizedOperationStatus =
           operation.status === 'interrupted' ? 'failed' : operation.status;
@@ -580,8 +597,16 @@ export class DrizzlePlatformTurnRepository {
             .select({
               id: operationSources.id,
               ordinal: operationSources.ordinal,
+              assetId: assetVersions.assetId,
+              assetVersionId: operationSources.assetVersionId,
+              label: operationSources.label,
+              url: operationSources.locatorUrl,
             })
             .from(operationSources)
+            .innerJoin(
+              assetVersions,
+              eq(assetVersions.id, operationSources.assetVersionId),
+            )
             .where(
               and(
                 eq(operationSources.operationId, input.turnId),
@@ -599,12 +624,43 @@ export class DrizzlePlatformTurnRepository {
               '通用Turn引用不属于本轮来源白名单',
             );
           }
-          await transaction.insert(conversationMessageCitations).values(
-            citedSources.map((source) => ({
-              assistantMessageId: assistant.id,
-              operationSourceId: source.id,
-              createdAt: now,
-            })),
+          const inserted = await transaction
+            .insert(conversationMessageCitations)
+            .values(
+              citedSources.map((source) => ({
+                assistantMessageId: assistant.id,
+                operationSourceId: source.id,
+                createdAt: now,
+              })),
+            )
+            .returning({
+              citationId: conversationMessageCitations.id,
+              operationSourceId: conversationMessageCitations.operationSourceId,
+            });
+          const citationIds = new Map(
+            inserted.map((citation) => [
+              citation.operationSourceId,
+              citation.citationId,
+            ]),
+          );
+          settledCitations.push(
+            ...citedSources.map((source) => {
+              const citationId = citationIds.get(source.id);
+              if (!citationId) {
+                throw new PlatformTurnLifecycleError(
+                  '通用Turn引用写入结果不完整',
+                );
+              }
+              return {
+                citationId,
+                assistantMessageId: assistant.id,
+                ordinal: source.ordinal,
+                assetId: source.assetId,
+                assetVersionId: source.assetVersionId,
+                label: source.label,
+                url: source.url,
+              };
+            }),
           );
         }
         await transaction
@@ -627,7 +683,10 @@ export class DrizzlePlatformTurnRepository {
           .set({ lastActivityAt: now, updatedAt: now })
           .where(eq(conversations.id, input.conversationId));
       }
-      return loadTurn(transaction, input.turnId, false);
+      return {
+        ...(await loadTurn(transaction, input.turnId, false)),
+        settledCitations,
+      };
     });
   }
 
@@ -736,11 +795,15 @@ export class DrizzlePlatformTurnRepository {
       )
       .where(eq(conversationMessages.conversationId, input.conversationId))
       .orderBy(
-        asc(conversationMessages.createdAt),
-        asc(conversationMessages.id),
+        desc(conversationMessages.createdAt),
+        asc(
+          sql`case when ${conversationMessages.role} = 'assistant' then 0 else 1 end`,
+        ),
+        desc(conversationMessages.id),
       )
       .limit(Math.max(1, Math.min(input.limit ?? 100, 100)));
     return rows
+      .reverse()
       .filter(
         (row) =>
           row.message.role === 'user' || row.message.role === 'assistant',
