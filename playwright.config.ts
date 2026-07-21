@@ -26,6 +26,15 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   outputDir: 'output/playwright/test-results',
+  /*
+   * 视觉快照容许极小的跨环境抗锯齿差异。本地基线用容器/darwin 生成，CI 跑在
+   * GitHub x64 runner——中文字形的次像素渲染会有几十像素级别的差别（实测
+   * chat-unavailable 仅 18px 不同），并非布局或内容回归。给一个小额度让 CI
+   * 稳定，同时仍能拦下真实改动（真实变化是上千像素级）。
+   */
+  expect: {
+    toHaveScreenshot: { maxDiffPixels: 200 },
+  },
   reporter: [
     ['line'],
     [
