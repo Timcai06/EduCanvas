@@ -1,13 +1,8 @@
 import { createHash } from 'node:crypto';
+import type { AgentTurnContextMaterial } from '@educanvas/agent-core';
 import { isUuid } from './internal/identifiers';
 
-export interface TurnContextMaterial {
-  builderVersion: string;
-  includedMessageIds: readonly string[];
-  selectedAssetVersionIds: readonly string[];
-  omittedMessageCount: number;
-  characterCount: number;
-}
+export type TurnContextMaterial = AgentTurnContextMaterial;
 
 export interface PreparedTurnContextMaterial extends TurnContextMaterial {
   includedMessageIds: string[];
@@ -25,7 +20,11 @@ export class TurnContextConflictError extends Error {
 }
 
 function validateIds(values: readonly string[]): string[] {
-  if (values.length > 100 || values.some((value) => !isUuid(value))) {
+  if (
+    values.length > 100 ||
+    new Set(values).size !== values.length ||
+    values.some((value) => !isUuid(value))
+  ) {
     throw new TurnContextConflictError();
   }
   return [...values];

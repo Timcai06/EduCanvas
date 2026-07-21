@@ -1099,10 +1099,14 @@ export const turnContextSnapshots = pgTable(
   'turn_context_snapshots',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => lessonSessions.id, { onDelete: 'cascade' }),
-    turnId: uuid('turn_id').notNull(),
+    sessionId: uuid('session_id').references(() => lessonSessions.id, {
+      onDelete: 'cascade',
+    }),
+    turnId: uuid('turn_id'),
+    agentOperationId: uuid('agent_operation_id').references(
+      () => agentOperations.id,
+      { onDelete: 'cascade' },
+    ),
     builderVersion: text('builder_version').notNull(),
     includedMessageIds: jsonb('included_message_ids')
       .$type<string[]>()
@@ -1122,6 +1126,9 @@ export const turnContextSnapshots = pgTable(
       table.sessionId,
       table.turnId,
     ),
+    uniqueIndex('turn_context_snapshots_agent_operation_unique')
+      .on(table.agentOperationId)
+      .where(sql`${table.agentOperationId} is not null`),
     index('turn_context_snapshots_session_created_idx').on(
       table.sessionId,
       table.createdAt,
@@ -1138,6 +1145,10 @@ export const turnContextSnapshots = pgTable(
     check(
       'turn_context_snapshots_version_check',
       sql`char_length(${table.builderVersion}) between 1 and 128`,
+    ),
+    check(
+      'turn_context_snapshots_scope_check',
+      sql`(${table.sessionId} is not null and ${table.turnId} is not null and ${table.agentOperationId} is null) or (${table.sessionId} is null and ${table.turnId} is null and ${table.agentOperationId} is not null)`,
     ),
   ],
 );
