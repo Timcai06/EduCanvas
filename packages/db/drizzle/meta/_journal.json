@@ -183,6 +183,13 @@
       "when": 1784625913995,
       "tag": "0025_perfect_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784626959598,
+      "tag": "0026_furry_the_call",
+      "breakpoints": true
     }
   ]
 }

@@ -176,6 +176,12 @@ export {
   type ToolExposure,
 } from './tool-call-repository';
 export {
+  AgentToolCallConflictError,
+  AgentToolCallLifecycleError,
+  AgentToolCallOwnershipError,
+  DrizzleAgentToolCallRepository,
+} from './agent-tool-call-repository';
+export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,
   SafetyDecisionOwnershipError,

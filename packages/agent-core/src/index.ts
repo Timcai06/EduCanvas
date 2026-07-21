@@ -130,6 +130,21 @@ export type {
 } from './turn-context-ledger';
 
 export {
+  agentToolCallStatusSchema,
+  agentToolCallStatuses,
+  agentToolEffectSchema,
+  agentToolExposureSchema,
+  type AgentToolAuditValueSummary,
+  type AgentToolCallLedgerPort,
+  type AgentToolCallSnapshot,
+  type AgentToolCallStatus,
+  type AgentToolCallTerminalStatus,
+  type AgentToolEffect,
+  type AgentToolExposure,
+  type CreateAgentToolCallInput,
+} from './tool-call-ledger';
+
+export {
   ObjectStorageError,
   isValidObjectKey,
   type ObjectStoragePort,
