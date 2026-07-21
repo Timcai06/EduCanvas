@@ -28,6 +28,8 @@ export {
   PlatformTurnOwnershipError,
   type PlatformTurnMessageSnapshot,
   type PlatformTurnSnapshot,
+  type PlatformSettledCitationSnapshot,
+  type PlatformTurnSettlementSnapshot,
   type PlatformTurnTerminalStatus,
 } from './platform-turn-repository';
 export {

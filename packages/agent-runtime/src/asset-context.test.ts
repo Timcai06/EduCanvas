@@ -26,6 +26,12 @@ describe('通用Asset输入物化', () => {
       }),
     ).toEqual({
       text: expect.stringContaining('可信引用'),
+      textSegments: [
+        {
+          reference: document.reference,
+          text: expect.stringContaining('可信引用'),
+        },
+      ],
       nativeReferences: [],
     });
   });
@@ -60,6 +66,10 @@ describe('通用Asset输入物化', () => {
         assets: [image],
         capabilities: { nativeAssetKinds: ['image'] },
       }),
-    ).toEqual({ text: '', nativeReferences: [image.reference] });
+    ).toEqual({
+      text: '',
+      textSegments: [],
+      nativeReferences: [image.reference],
+    });
   });
 });

@@ -98,6 +98,46 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     );
   });
 
+  it('历史消息limit返回最新窗口且保持正序，当前Turn不会被长会话挤出', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'latest-window-user',
+      spaceKind: 'notebook',
+      spaceTitle: '长会话',
+    });
+    for (let index = 1; index <= 4; index += 1) {
+      const turn = await turns.createOrGetTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        clientMessageId: `latest-${index}`,
+        text: `消息${index}`,
+        now: new Date(`2026-07-16T06:0${index}:00.000Z`),
+      });
+      await turns.settleTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        turnId: turn.turnId,
+        status: 'completed',
+        content: `回答${index}`,
+        now: new Date(`2026-07-16T06:0${index}:01.000Z`),
+      });
+    }
+
+    expect(
+      await turns.listMessages({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        limit: 2,
+      }),
+    ).toMatchObject([
+      { role: 'user', content: '消息4' },
+      { role: 'assistant', content: '回答4' },
+    ]);
+  });
+
   it('拒绝跨主体写入和读取', async () => {
     const repository = new DrizzlePlatformConversationRepository(getDatabase());
     const conversation = await repository.create({
@@ -257,7 +297,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       1, 2, 1,
     ]);
 
-    await turns.settleTurn({
+    const settledWithCitations = await turns.settleTurn({
       conversationId: conversation.id,
       trustedSubjectId: 'web-source-user',
       turnId: started.turnId,
@@ -265,6 +305,16 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       content: '最终只采用网页乙的结论 [2]。',
       sourceMarkers: [2],
     });
+    expect(settledWithCitations.settledCitations).toMatchObject([
+      {
+        assistantMessageId: started.assistantMessage.id,
+        ordinal: 2,
+        assetId: secondAsset.descriptor.assetId,
+        assetVersionId: secondAsset.version.versionId,
+        label: '网页乙',
+        url: 'https://example.com/b',
+      },
+    ]);
     expect(
       await sources.listOwnedConversationCitations({
         conversationId: conversation.id,

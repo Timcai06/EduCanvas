@@ -38,6 +38,18 @@ export interface TurnApplicationLifecycleSnapshot {
   replayed: boolean;
 }
 
+export type TurnApplicationProfileEvent = Extract<
+  TurnApplicationEvent,
+  {
+    type:
+      | 'message.citation'
+      | 'artifact.proposed'
+      | 'artifact.version_added'
+      | 'artifact.generation_progress'
+      | 'artifact.failed';
+  }
+>;
+
 /**
  * Operation/Message 的唯一写入边界。实现必须重新验证 Actor、Notebook 与
  * Conversation；Gateway 已存在的 Operation 只能 attach，其他入口只能 create。
@@ -57,7 +69,7 @@ export interface TurnApplicationLifecyclePort {
     content: string;
     failureCode?: TurnApplicationFailureCode | null;
     citationMarkers?: readonly number[];
-  }): Promise<void>;
+  }): Promise<readonly TurnApplicationProfileEvent[]>;
 }
 
 /** Segment 与实际 Prompt 消息绑定，防止 Snapshot 选中内容和 Provider 内容漂移。 */
@@ -105,18 +117,6 @@ export interface TurnApplicationProfilePlan {
   /** 省略表示该 Profile 此轮不暴露任何 Tool。 */
   toolPolicy?: TurnApplicationToolPolicy;
 }
-
-export type TurnApplicationProfileEvent = Extract<
-  TurnApplicationEvent,
-  {
-    type:
-      | 'message.citation'
-      | 'artifact.proposed'
-      | 'artifact.version_added'
-      | 'artifact.generation_progress'
-      | 'artifact.failed';
-  }
->;
 
 export interface TurnApplicationProfilePort {
   /** Profile 只装配 Context/Prompt/Policy，不得创建第二个模型循环。 */
@@ -751,7 +751,7 @@ export class TurnApplicationService implements TurnApplicationPort {
             operationId: command.operationId,
             type: 'tool.started',
             toolCallId: id,
-            tool: event.call.tool,
+            tool: toolKernel?.capabilityFor(event.call.tool) ?? 'tool.unknown',
           };
         } else if (event.type === 'tool.result') {
           yield {
@@ -799,15 +799,26 @@ export class TurnApplicationService implements TurnApplicationPort {
         ) {
           throw new Error('profile_event_scope_mismatch');
         }
-        await this.dependencies.lifecycle.settle({
+        const settlementEvents = await this.dependencies.lifecycle.settle({
           command,
           turn,
           status: 'completed',
           content: answer,
           citationMarkers: markers,
         });
-        for (const event of profileEvents) yield event;
         terminalEmitted = true;
+        for (const event of profileEvents) yield event;
+        for (const event of settlementEvents) {
+          const parsed = turnApplicationEventSchema.safeParse(event);
+          if (
+            parsed.success &&
+            parsed.data.operationId === command.operationId
+          ) {
+            yield parsed.data;
+          } else {
+            trace.event('lifecycle.event.invalid');
+          }
+        }
         trace.end('completed');
         yield {
           protocol: turnApplicationProtocolVersion,

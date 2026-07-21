@@ -14,6 +14,7 @@ import {
 } from '@educanvas/db';
 import {
   GatewayService,
+  projectTurnApplicationEventToGateway,
   Sha256GatewayRequestFingerprint,
   type GatewayEventPayload,
   type GatewayTurnRunnerPort,
@@ -22,7 +23,7 @@ import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import {
-  beginGatewayGeneralTurn,
+  beginGatewayGeneralTurnApplication,
   prepareGatewayGeneralTurnContext,
 } from '../platform/general-turn';
 import { loadOwnedGeneralConversation } from '../platform/general-conversation';
@@ -168,26 +169,40 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
     private readonly input: {
       identity: AnonymousIdentity;
       request: TeachingTurnRequestBody;
-      assetContext: string;
+      assetContext: Awaited<
+        ReturnType<typeof prepareGatewayGeneralTurnContext>
+      >;
     },
   ) {}
 
   async *run(input: Parameters<GatewayTurnRunnerPort['run']>[0]) {
     let turn;
     try {
-      turn = await beginGatewayGeneralTurn({
+      turn = beginGatewayGeneralTurnApplication({
         operationId: input.operationId,
+        traceId: input.traceId,
+        actorId: input.route.actorUserId,
+        agentId: input.route.agentId,
         identity: this.input.identity,
         conversationId: input.route.conversationId,
         spaceId: input.route.notebookId,
         request: this.input.request,
         assetContext: this.input.assetContext,
+        signal: input.signal,
+        capabilities: input.envelope.capabilities.capabilities.map(
+          (capability) => capability.name,
+        ),
       });
     } catch (error) {
       this.preparationError = error;
       throw error;
     }
-    yield* legacyToGateway(turn.events);
+    for await (const event of turn.events) {
+      yield projectTurnApplicationEventToGateway(event, {
+        actorUserId: input.route.actorUserId,
+        occurredAt: new Date().toISOString(),
+      });
+    }
   }
 }
 
