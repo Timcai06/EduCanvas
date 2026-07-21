@@ -43,6 +43,12 @@ export interface ToolKernelTrustedContext {
   credentialHandle?: string | null;
 }
 
+/** Tool 暴露阶段只需要授权交集；运行身份与调用 ID 必须等到实际执行时再注入。 */
+export type ToolKernelPolicyContext = Pick<
+  ToolKernelTrustedContext,
+  'capabilities' | 'approvedCapabilities'
+>;
+
 export interface ToolAdapterInvocationContext {
   operationId: string;
   executionId: string;
@@ -185,7 +191,7 @@ function failure(
 
 function policyDenial(
   adapter: AnyToolKernelAdapter,
-  context: ToolKernelTrustedContext,
+  context: ToolKernelPolicyContext,
 ): ToolKernelResult | null {
   const denied = toolPolicyDimensions.find(
     (dimension) =>
@@ -255,7 +261,7 @@ export class ToolKernel {
 
   /** 只投影五维权限交集内、允许模型调用的工具；L2/L3仍在执行前要求可信审批。 */
   listDefinitions(
-    context: ToolKernelTrustedContext,
+    context: ToolKernelPolicyContext,
   ): readonly ModelToolDefinition[] {
     return [...this.adapters.values()]
       .filter(

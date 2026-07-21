@@ -121,6 +121,7 @@ export {
   validateTurnApplicationEventSequence,
   type TurnApplicationCommand,
   type TurnApplicationEvent,
+  type TurnApplicationFailureCode,
 } from './turn-application-contracts';
 
 export type {

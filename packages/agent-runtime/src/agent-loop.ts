@@ -11,6 +11,7 @@ import type {
 import {
   isAborted,
   validateModelRun,
+  type ModelRunResult,
   type ParsedToolCall,
 } from './turn-engine';
 
@@ -32,16 +33,37 @@ export type AgentLoopToolBatch<TDetail, TFailure> =
   | { ok: true; results: readonly AgentLoopToolSuccess<TDetail>[] }
   | { ok: false; failure: TFailure };
 
-export interface AgentLoopCommand<TDetail, TFailure> {
+export interface AgentLoopModelRunLifecycle<TContext> {
+  /** 在供应商调用前建立脱敏 Model Run；正文只能用于本进程哈希，不能越过实现边界。 */
+  start(input: {
+    run: number;
+    request: StreamTurnTextRequest;
+  }): Promise<TContext>;
+  /** 只在 Runtime 完成协议校验后结算，避免把非法供应商流记成成功。 */
+  settle(input: {
+    run: number;
+    request: StreamTurnTextRequest;
+    context: TContext;
+    outcome: ModelRunResult;
+  }): Promise<void>;
+}
+
+export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
   traceId: string;
   turnId: string;
   answer: AgentLoopPrompt;
   synthesis: Omit<AgentLoopPrompt, 'tools'>;
   maxToolRounds: number;
   signal?: ModelAbortSignal;
+  modelRunLifecycle?: AgentLoopModelRunLifecycle<TModelRunContext>;
   executeTools(
     calls: readonly ParsedToolCall[],
-    context: { round: number; traceId: string; turnId: string },
+    context: {
+      round: number;
+      traceId: string;
+      turnId: string;
+      modelRun: TModelRunContext | undefined;
+    },
   ): Promise<AgentLoopToolBatch<TDetail, TFailure>>;
 }
 
@@ -56,7 +78,8 @@ export type AgentLoopEvent<TDetail, TFailure> =
         | 'MODEL_GATEWAY_FAILED'
         | 'MODEL_ABORTED'
         | 'INVALID_MODEL_STREAM'
-        | 'DUPLICATE_TOOL_CALL_ID';
+        | 'DUPLICATE_TOOL_CALL_ID'
+        | 'RUNTIME_FAILED';
       error: NormalizedModelError;
     }
   | { type: 'tool.failed'; failure: TFailure };
@@ -68,8 +91,8 @@ export type AgentLoopEvent<TDetail, TFailure> =
 export class AgentLoopEngine {
   constructor(private readonly modelGateway: TurnModelGateway) {}
 
-  async *stream<TDetail, TFailure>(
-    command: AgentLoopCommand<TDetail, TFailure>,
+  async *stream<TDetail, TFailure, TModelRunContext = never>(
+    command: AgentLoopCommand<TDetail, TFailure, TModelRunContext>,
   ): AsyncGenerator<AgentLoopEvent<TDetail, TFailure>> {
     const maxToolRounds = Math.min(
       4,
@@ -90,6 +113,17 @@ export class AgentLoopEngine {
         turnId: command.turnId,
         signal: command.signal,
       };
+      let modelRun: TModelRunContext | undefined;
+      try {
+        modelRun = await command.modelRunLifecycle?.start({ run, request });
+      } catch {
+        yield {
+          type: 'failed',
+          code: 'RUNTIME_FAILED',
+          error: { code: 'unknown', retryable: true },
+        };
+        return;
+      }
       const iterator = validateModelRun(
         this.modelGateway,
         request,
@@ -112,6 +146,23 @@ export class AgentLoopEngine {
           };
         }
         yield { type: 'model', run, event: step.value };
+      }
+      try {
+        if (modelRun !== undefined) {
+          await command.modelRunLifecycle?.settle({
+            run,
+            request,
+            context: modelRun,
+            outcome,
+          });
+        }
+      } catch {
+        yield {
+          type: 'failed',
+          code: 'RUNTIME_FAILED',
+          error: { code: 'unknown', retryable: true },
+        };
+        return;
       }
       if (!outcome.ok) {
         yield { type: 'failed', code: outcome.code, error: outcome.error };
@@ -138,6 +189,7 @@ export class AgentLoopEngine {
         round,
         traceId: command.traceId,
         turnId: command.turnId,
+        modelRun,
       });
       if (!executed.ok) {
         yield { type: 'tool.failed', failure: executed.failure };
@@ -180,6 +232,20 @@ export class AgentLoopEngine {
       turnId: command.turnId,
       signal: command.signal,
     };
+    let synthesisModelRun: TModelRunContext | undefined;
+    try {
+      synthesisModelRun = await command.modelRunLifecycle?.start({
+        run,
+        request: synthesisRequest,
+      });
+    } catch {
+      yield {
+        type: 'failed',
+        code: 'RUNTIME_FAILED',
+        error: { code: 'unknown', retryable: true },
+      };
+      return;
+    }
     const iterator = validateModelRun(
       this.modelGateway,
       synthesisRequest,
@@ -189,6 +255,23 @@ export class AgentLoopEngine {
     while (true) {
       const step = await iterator.next();
       if (step.done) {
+        try {
+          if (synthesisModelRun !== undefined) {
+            await command.modelRunLifecycle?.settle({
+              run,
+              request: synthesisRequest,
+              context: synthesisModelRun,
+              outcome: step.value,
+            });
+          }
+        } catch {
+          yield {
+            type: 'failed',
+            code: 'RUNTIME_FAILED',
+            error: { code: 'unknown', retryable: true },
+          };
+          return;
+        }
         if (!step.value.ok) {
           yield {
             type: 'failed',
