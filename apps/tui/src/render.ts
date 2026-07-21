@@ -98,6 +98,8 @@ export function failureMessage(code: GatewayFailureCode): {
   switch (code) {
     case 'RATE_LIMITED':
       return { text: '请求太频繁了，稍等片刻再发。', recoverable: true };
+    case 'POLICY_BLOCKED':
+      return { text: '这轮内容已由安全规则停止。', recoverable: true };
     case 'RUNTIME_FAILED':
       return { text: '这轮回答失败了，可以重新发送。', recoverable: true };
     case 'DELIVERY_FAILED':

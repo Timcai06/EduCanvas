@@ -30,6 +30,8 @@
 | Audit            | Gateway/Web General已写通用Ledger，Teaching仍待单写迁移    | ID 对齐、职责唯一，不建立第二事实源       |
 | Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                 | 以 Operation 为业务游标，副作用可幂等续跑 |
 
+Profile 的确定性策略位于唯一服务的两个显式边界：`preflight` 在 Context、Model Run 和 Tool 副作用前拒绝不允许的输入；`OutputGuard` 位于 Provider delta 与公开事件之间，只能释放已放行片段，并在命中策略时中止当前模型运行、写入固定公开回应和 `POLICY_BLOCKED` 终态。闸门实现必须有界缓存，安全审计失败不能被伪装成成功回答。该契约为 Web Teaching 迁移准备，通用 Profile 不默认启用 K12 策略。
+
 ## 三、统一 Agent Loop
 
 `packages/agent-runtime/src/agent-loop.ts` 中的 `AgentLoopEngine` 是唯一循环实现：
@@ -41,7 +43,7 @@ validate request
   -> if answer: emit terminal result
 ```
 
-循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。Gateway与Web General只通过`TurnApplicationService`调用该循环；旧Teaching Orchestrator仍直接实例化，迁移完成前不能声称生产构造点唯一。
+循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。`TurnApplicationService` 在循环外统一执行输入 preflight 和流式 OutputGuard；Gateway与Web General只通过该服务调用循环，旧Teaching Orchestrator仍直接实例化，迁移完成前不能声称生产构造点唯一。
 
 当前 Web General 默认最多三圈工具；K12 Profile 默认一圈并可在预算内配置。具体数值属于组合根策略，不应写死为 Engine 的永久协议。
 

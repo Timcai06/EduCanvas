@@ -10,6 +10,7 @@ function safeFailureMessage(
   audience: 'general' | 'teaching',
 ): string {
   if (code === 'RATE_LIMITED') return '请求较多，请稍后重试。';
+  if (code === 'POLICY_BLOCKED') return '这轮内容已由安全规则停止。';
   if (code === 'CAPABILITY_UNAVAILABLE') return '当前能力暂时不可用。';
   if (audience === 'teaching') {
     return 'AI 老师暂时无法连接，请稍后重试。';
