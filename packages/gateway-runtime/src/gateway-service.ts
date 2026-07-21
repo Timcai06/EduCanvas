@@ -157,8 +157,8 @@ export class GatewayService {
    * `operation.cancelled` 事件由该操作自己的 handle 循环追加，
    * 通过既有事件流回到客户端——取消不另开一条终态写入路径。
    *
-   * 幂等：已终态返回其状态；未在本进程运行（可能刚结束或跨进程）返回
-   * `not_running`，调用方据此用 resume 回看，不伪造取消成功。
+   * 幂等：已终态返回其状态；continuation由PostgreSQL/Worker跨进程终结，
+   * 普通Turn仍由本进程AbortSignal终结。两边都不存在活动执行者时返回not_running。
    */
   async requestCancel(input: {
     operationId: string;
@@ -177,17 +177,20 @@ export class GatewayService {
       throw new GatewayRuntimeError('FORBIDDEN', 'Operation access denied');
     }
     if (descriptor.status !== 'running') return { status: descriptor.status };
-    const recorded = await this.operationStore.requestCancellation({
+    const persisted = await this.operationStore.requestCancellation({
       operationId: input.operationId,
       actorUserId: input.principalUserId,
       now: this.now(),
     });
-    if (!recorded) return { status: 'not_running' };
-    return {
-      status: this.cancellation.cancel(input.operationId)
-        ? 'cancelling'
-        : 'not_running',
-    };
+    if (!persisted.recorded) return { status: 'not_running' };
+    const interruptedLocally = this.cancellation.cancel(input.operationId);
+    if (persisted.continuation === 'cancelled') {
+      return { status: 'cancelled' };
+    }
+    if (interruptedLocally || persisted.continuation === 'running') {
+      return { status: 'cancelling' };
+    }
+    return { status: 'not_running' };
   }
 
   async resume(input: {

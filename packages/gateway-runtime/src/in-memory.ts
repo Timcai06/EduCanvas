@@ -204,17 +204,20 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
     operationId: string;
     actorUserId: string;
     now: Date;
-  }): Promise<boolean> {
+  }): Promise<{
+    recorded: boolean;
+    continuation: 'none' | 'running' | 'cancelled';
+  }> {
     const operation = this.operations.get(input.operationId);
     if (
       !operation ||
       operation.route.actorUserId !== input.actorUserId ||
       operation.status !== 'running'
     ) {
-      return false;
+      return { recorded: false, continuation: 'none' };
     }
     operation.cancelRequestedAt ??= input.now.toISOString();
-    return true;
+    return { recorded: true, continuation: 'none' };
   }
 
   async listRecent(

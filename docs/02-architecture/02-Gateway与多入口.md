@@ -30,7 +30,7 @@ EduCanvas Gateway 是长期个人 Agent 的云端控制平面。`packages/gatewa
 
 每个事件持久化 `operationId/eventId/sequence/occurredAt`。同一 Operation 只能有一个终态；重复幂等键与相同请求返回 replay，不同请求指纹返回冲突；Client 可使用 `afterSequence` 恢复。Gateway 的 `message.started` 让 Web 兼容层继续复用同一个 Turn/Message ID，而不是创建平行账本。
 
-Gateway文本Turn已迁入统一`TurnApplicationService`：Operation创建时生成并持久化的同一个`traceId`进入Context、Model Run与Tool链路；Turn Application结算消息，Gateway事件循环是Operation终态唯一写者。取消先把`cancelRequestedAt`写入PostgreSQL，再触发当前进程信号，因此Model Run与消息可以验证取消事实；跨进程lease回收与重领仍属于第二代M4，不能把这一纵切描述为完整durable continuation。
+Gateway文本Turn已迁入统一`TurnApplicationService`：Operation创建时生成并持久化的同一个`traceId`进入Context、Model Run与Tool链路；Turn Application结算消息，Gateway事件循环是Operation终态唯一写者。取消先把`cancelRequestedAt`写入PostgreSQL：普通Turn再触发当前进程信号，continuation等待态由同一事务立即取消，运行态由Worker heartbeat或结算事务观察并写唯一`operation.cancelled`。未过期lease会让Graphile任务明确失败重试，过期后以递增generation重领；这解决了控制平面跨进程取消与lease恢复，但真实Node/MCP Adapter仍未接线。
 
 ## HTTP 入口
 

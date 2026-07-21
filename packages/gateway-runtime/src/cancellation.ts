@@ -4,10 +4,8 @@
  * 消费循环在下一个事件边界（或正在 await 的 runner 被打断时）观察到中止，
  * 追加 `operation.cancelled` 并停止。
  *
- * 之所以放在内存而非数据库：取消是"打断正在本进程运行的循环"这一实时动作，
- * 只对当前持有该操作循环的进程有意义（模块化单体单进程，每用户逻辑隔离，
- * 符合 ADR-0016 的控制平面边界）。跨进程/已落库的历史操作用 resume 回看，
- * 不通过取消登记表。
+ * 本表只负责低延迟打断当前进程；取消事实始终先写PostgreSQL。跨进程
+ * continuation由Worker heartbeat/结算读取持久请求，本登记表不承担事实源职责。
  */
 export class GatewayCancellationRegistry {
   private readonly controllers = new Map<string, AbortController>();

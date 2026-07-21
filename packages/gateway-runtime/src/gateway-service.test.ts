@@ -243,6 +243,48 @@ describe('GatewayService', () => {
     expect(replayed.at(-1)).toMatchObject({ type: 'operation.cancelled' });
   });
 
+  it('reports cross-process continuation cancellation from persistence truth', async () => {
+    const service = buildService({
+      async *run(input) {
+        yield {
+          type: 'approval.required',
+          approval: {
+            approvalId: 'approval:cross-process',
+            operationId: input.operationId,
+            actorUserId: input.route.actorUserId,
+            capability: 'filesystem.read_allowlisted',
+            risk: 'l2',
+            summary: '跨进程读取',
+            requestedAt: now.toISOString(),
+            expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+          },
+        };
+      },
+    });
+    const events = await collect(service.handle(envelope()));
+    service.store.requestCancellation = async () => ({
+      recorded: true,
+      continuation: 'running',
+    });
+    await expect(
+      service.requestCancel({
+        operationId: events[0]!.operationId,
+        principalUserId: 'user:1',
+      }),
+    ).resolves.toEqual({ status: 'cancelling' });
+
+    service.store.requestCancellation = async () => ({
+      recorded: true,
+      continuation: 'cancelled',
+    });
+    await expect(
+      service.requestCancel({
+        operationId: events[0]!.operationId,
+        principalUserId: 'user:1',
+      }),
+    ).resolves.toEqual({ status: 'cancelled' });
+  });
+
   it('refuses to cancel another user operation and reports terminal state idempotently', async () => {
     const service = buildService();
     const events = await collect(service.handle(envelope()));
