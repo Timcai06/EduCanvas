@@ -71,7 +71,7 @@
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区。当前只有Gateway-first个人Agent主线，统一Runtime与教育能力在同一计划中验收。两类文档不能互相替代：
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区。Gateway-first 与 Web-first 产品入口已经结档；当前 active 计划只研究第二代架构、能力映射和 ADR 决策，不授权生产架构迁移。两类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；

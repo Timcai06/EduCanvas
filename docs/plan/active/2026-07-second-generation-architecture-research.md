@@ -1,0 +1,89 @@
+# 第二代架构研究与决策
+
+- 状态：`active`
+- 负责人：项目负责人
+- 最后验证时间：2026-07-21
+- 上层路线图：[项目路线图](../../10-planning/roadmap.md)
+
+## 目标
+
+在不改写生产代码的前提下，基于当前实现、成熟 Agent 产品源码与可复现实验，决定 EduCanvas 第二代架构哪些能力继续自研、哪些在稳定 Port 后采用成熟技术、哪些延后或拒绝。研究结论必须服务于“以教育能力为核心的通用个人 Agent 平台”，不能让框架接管身份、Notebook、权限、学习事实或 Artifact 信任边界。
+
+本阶段只授权研究、能力映射、对照实验和 proposed ADR；不授权生产源码、数据库 Schema 或 accepted ADR 的架构迁移。
+
+## 不变边界
+
+1. 一个自然人拥有一个长期 Personal Agent；协作通过 Notebook 与 Membership 表达，见 [ADR-0015](../../09-decisions/0015-education-centered-personal-agent-platform.md)。
+2. Gateway 继续拥有身份、路由、审批、Operation 与投递控制面，见 [ADR-0016](../../09-decisions/0016-gateway-clients-channels-and-nodes.md)。
+3. 正常 Turn 只有一个生产 `AgentLoopEngine`；Notebook 是 Sources、Conversation、Artifact、Memory 与运行记录的上下文根，见 [ADR-0017](../../09-decisions/0017-unified-runtime-and-notebook-context.md)。
+4. 工具能力是主体、Notebook、Profile、入口、环境与安全策略的交集；模型和客户端不能生成可信学习事实，见 [ADR-0018](../../09-decisions/0018-capability-trust-and-learning-evidence.md)。
+5. PostgreSQL 是业务事实源，持久任务由 PostgreSQL 背书，见 [ADR-0019](../../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)。
+6. Provider、框架和协议的原始类型停留在 Adapter；业务只消费 EduCanvas 稳定契约。
+
+## 第一轮结论：待验证的 Hybrid Ports 假设
+
+第一轮源码审计和隔离实验支持“保留产品内核，在 Port 后采用成熟能力”，反对 framework-first 重写。它仍是研究假设，不是 accepted 决策。
+
+| 分类      | 当前判断                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 保留/自研 | Gateway 权威协议与 Operation；Actor/Notebook/Membership；Context Snapshot；统一能力解析和工具执行内核；教育安全、判分与学习事实；Artifact 信任与业务账本 |
+| 候选采用  | AI SDK Provider Adapter；MCP v1 External Tool Adapter；服务端 OpenTelemetry Adapter；正式 IdP；生产对象存储；继续使用 graphile-worker                    |
+| 限定适配  | OpenClaw 的 Gateway/session/steer/compaction 模式；Codex 的 Thread/Turn/Item、sandbox 与 approval 模式；LangGraph 只用于边界清晰的结构化 Workflow        |
+| 延后      | Temporal；Mastra 全栈；LangGraph Agent Server/LangSmith；框架 Memory/Session；MCP v2 Tasks；A2A                                                          |
+| 拒绝      | framework-first 重写；框架 Session/Checkpoint 成为 Notebook 或业务事实源；MCP 作为内部总线；每个 Turn 进入耐久工作流；多套 Memory/Session 并存           |
+
+`apps/ + packages/` 顶层结构目前不需要重排。第二代的核心问题是收敛组合根、Context、Tool、Operation 与 Trace 语义，而不是更换 Monorepo 目录名。
+
+## 已核验的产品源码启发
+
+- **OpenClaw**：采用单一 Gateway 控制平面、服务端权限校验、能力握手、send/steer/abort、持久 compaction、工具调用与结果配对；不照搬其 session/workspace 和单用户信任模型。
+- **Codex**：采用 Thread/Turn/Item 分层、稳定 app-server 协议、明确 interrupt 终态、sandbox/approval 独立于 UI、实验能力显式协商；不把 cwd/worktree 语义当作教育 Notebook。
+- **Hermes Agent**：采用一个 core 服务多协议客户端以及集中式压缩、记忆和工具 harness；其 single-tenant 安全模型不足以承担多用户 K12 隔离。
+- **Claude Code**：官方公开仓库不含完整 Runtime；本地第三方源码只作为非权威线索，不作为 ADR 事实依据。
+
+## 当前架构缺口
+
+- 唯一 `AgentLoopEngine` 已成立，但独立 Gateway、Web 通用 Chat、Web Teaching 仍有不同的 Turn 组合路径；Prompt、Context、Tool、取消、账本与 Trace 尚未完全统一。
+- 独立 Gateway runner 尚无完整 Tool/Asset 能力；Web 与 TUI 共享 Notebook 不等于能力完全等价。
+- `AgentToolRegistry` 与 `TeachingToolExecutor` 尚未收敛为统一 Tool Kernel。
+- Context 有多种装配路径；Notebook 摘要、长期私人 Memory、Artifact Context、统一预算与 Context Snapshot 尚未完成。
+- 审批通过后的 continuation、运行中 Operation 崩溃恢复和统一权限交集仍未闭环。
+- 私人 Memory、Credential、Node 与默认 Tool Grant 的跨 Actor 隔离尚无完整 Schema/Port/fixture 证据。
+- 通用 Turn、模型、工具、Worker 尚未形成一条经过脱敏的端到端 Trace。
+
+## 第一轮隔离实验
+
+临时实验目录不作为长期证据，以下结论必须在仓库自有 harness 中复现后才能进入 ADR。
+
+| 实验                 | 结果                   | 约束                                                                                               |
+| -------------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
+| Native loop baseline | 通过                   | Loop 很小且可测，主要复杂度不在循环本身                                                            |
+| AI SDK 7.0.31        | 有条件通过             | 原始错误可能泄密，abort/终态和强制 synthesis 仍需 EduCanvas 控制；只允许位于 `TurnModelGateway` 后 |
+| MCP SDK 1.29.0       | 有条件通过             | annotations 不是授权，幂等、审批、恶意输出和远端生命周期必须由 Host 负责                           |
+| LangGraph 1.4.8      | 有条件通过             | checkpoint 后副作用可重跑，必须依赖外层幂等和 Actor 授权；只评估有界 Workflow                      |
+| Notebook privacy     | 失败                   | 当前无法证明私人 Memory/Credential/Node/default grant 永不跨 Actor，属于 ADR 前硬阻塞              |
+| Trace/OTel           | 可行性通过、端到端失败 | OTel 可用于脱敏因果链，但 `operationId` 仍是持久业务键，真实队列继承尚未证明                       |
+
+## 对照实验与决策门
+
+- [ ] 建立当前能力清单：每项包含实现符号、事实表、调用者、测试证据、重复职责与可替换 Port。
+- [ ] 用同一组 golden fixtures 对比 native 与 AI SDK Adapter：流事件、工具圈、强制 synthesis、取消、唯一终态、用量与 secret 零外泄。
+- [ ] 设计统一 Tool Kernel fixture：本地 Tool、Teaching Tool、MCP Tool 与 Node Tool 共享权限交集、审批、effect ledger、timeout 与结果未知语义。
+- [ ] 对比 PostgreSQL LangGraph Saver 与原生 graphile-worker continuation：五个 kill point、N-1/N-2 数据、滚动升级、回滚、LOC 与运维成本。
+- [ ] 建立 Notebook Privacy fixture：共享 Notebook 可见，但个人 Memory、Credential、Node 与 default grant 对其他 Actor fail closed。
+- [ ] 建立真实队列 Trace fixture：`operationId + traceparent` 串联 client、gateway、model、tool 与 worker，默认不记录学生正文、Prompt、判分键、Token、Secret 或对象 key。
+- [ ] 明确 Operation Event、Turn Ledger、Workflow Checkpoint 与 Worker Job 的唯一写者和故障恢复职责。
+- [ ] 对 Hybrid Ports 做 strongest-counterargument 评审；若单一候选在相同硬约束下让实现、测试和运维总成本降低至少 30%，重新比较 framework-first。
+- [ ] 只使用候选的官方文档、官方源码、许可证与发布记录作为能力事实，并记录验证版本和日期。
+
+## 产出与验收
+
+完成时必须交付：
+
+1. 一份可追溯的能力矩阵，明确区分事实、推断、实验结果和待验证假设；
+2. 可在仓库内复现的五类 fixture 与故障注入命令；
+3. `build / adopt / adapt / defer / reject` 决策及每项退出路径；
+4. strongest counterargument、迁移/回滚、数据兼容、隐私影响与采用阈值；
+5. 经负责人确认的 proposed ADR；确认前不创建第二代生产实施计划。
+
+任何候选若产生第二身份源、第二 Notebook/Session 事实源、第二 Operation 终态源或第二学习事实源，直接淘汰，不能用 Prompt 或文档约定补偿。

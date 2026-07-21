@@ -58,3 +58,5 @@
 **跨客户端交接（2026-07-21）**：TUI `/web` 通过 Client session 向 Gateway 请求两分钟有效的 32-byte opaque token，再以 `/open?token=<token>` 打开 Web。PostgreSQL 只保存 SHA-256 摘要、签发主体、Conversation、到期与消费时间；Web 必须以当前可信主体原子消费，成功后才写 Conversation 游标。重放、过期、跨主体与非法 token 均不写游标并静默回默认笔记本，拒绝原因不返回浏览器。反向（Web→TUI）继续依靠两端统一主体与 Gateway Notebook 目录：启动 TUI 即看到同一批笔记本，不在 K12 主界面暴露终端入口。该实现使用既有 PostgreSQL 事实源，不引入 Redis 或进程内一次性状态。
 
 **Connections 控制面（2026-07-21）**：`gateway-core` 只公开 `telegram/wechat/qq` 产品级 provider、`pending/active/revoked` 状态与 external URL 授权，不公开 Adapter ID 或外部账号 ID。Gateway Client API、Web `/settings` BFF 与 TUI `/channels` 复用同一个 `GatewayConnectionService` 和 PostgreSQL Repository。Telegram 发起后创建十分钟 pending，官方 Bot 私聊只有携正确 `/start educanvas_<connectionId>` 才可原子激活；过期、重放、已被其他主体绑定均拒绝。微信/QQ 在正式资格和凭据缺失时为 disabled。撤销同时终止账号/线程 Binding 并保留 `revokedAt`，列表和撤销查询始终带可信 userId。
+
+**兼容投影边界（2026-07-21）**：浏览器继续通过 Next.js BFF 和既有 SSE 使用统一 Runtime，这是第一方 Web 的有意兼容投影，不要求为了形式统一迁移到 Gateway 持久传输。独立 Gateway runner 与 Web 当前仍有不同的 Turn 组合路径和能力集合；“同一 Gateway 协议/Notebook 路由”不等于 Tool、Asset、Context 与 Trace 已经能力等价。后续收敛的是应用语义和可验证能力，不把替换浏览器传输本身列为架构债务。
