@@ -480,6 +480,8 @@ export class DrizzlePlatformTurnRepository {
     failureCode?: string | null;
     /** 最终正文实际出现的本轮来源编号；与消息终态在同一事务落账。 */
     sourceMarkers?: readonly number[];
+    /** Gateway入口由Gateway Event循环独占Operation终态；本仓储只结算消息。 */
+    operationTerminalWriter?: 'turn_application' | 'gateway';
     now?: Date;
   }): Promise<PlatformTurnSnapshot> {
     const sourceMarkers = input.sourceMarkers ?? [];
@@ -507,6 +509,8 @@ export class DrizzlePlatformTurnRepository {
         .select({
           id: agentOperations.id,
           cancelRequestedAt: agentOperations.cancelRequestedAt,
+          gatewayEnvelopeId: agentOperations.gatewayEnvelopeId,
+          status: agentOperations.status,
         })
         .from(agentOperations)
         .where(
@@ -527,22 +531,37 @@ export class DrizzlePlatformTurnRepository {
           '只有已请求取消的通用Turn才能进入cancelled终态',
         );
       }
-
-      const [updated] = await transaction
-        .update(agentOperations)
-        .set({
-          status: input.status,
-          failureCode: input.failureCode ?? null,
-          completedAt: now,
-        })
-        .where(
-          and(
-            eq(agentOperations.id, input.turnId),
-            inArray(agentOperations.status, ['pending', 'running']),
-          ),
-        )
-        .returning({ id: agentOperations.id });
-      if (updated) {
+      const gatewayOwnsTerminal = input.operationTerminalWriter === 'gateway';
+      if (gatewayOwnsTerminal && operation.gatewayEnvelopeId === null) {
+        throw new PlatformTurnLifecycleError(
+          '只有Gateway附着Turn可以把Operation终态交给Gateway',
+        );
+      }
+      let settleMessage = false;
+      if (gatewayOwnsTerminal) {
+        const normalizedOperationStatus =
+          operation.status === 'interrupted' ? 'failed' : operation.status;
+        settleMessage =
+          ['pending', 'running'].includes(operation.status) ||
+          normalizedOperationStatus === input.status;
+      } else {
+        const [updated] = await transaction
+          .update(agentOperations)
+          .set({
+            status: input.status,
+            failureCode: input.failureCode ?? null,
+            completedAt: now,
+          })
+          .where(
+            and(
+              eq(agentOperations.id, input.turnId),
+              inArray(agentOperations.status, ['pending', 'running']),
+            ),
+          )
+          .returning({ id: agentOperations.id });
+        settleMessage = Boolean(updated);
+      }
+      if (settleMessage) {
         const [assistant] = await transaction
           .select({ id: conversationMessages.id })
           .from(conversationMessages)

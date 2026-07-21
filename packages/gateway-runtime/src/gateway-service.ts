@@ -82,15 +82,22 @@ export class GatewayService {
     const signal = this.cancellation.register(operation.operationId);
     const abortSignal: Promise<'aborted'> = new Promise((resolve) => {
       if (signal.aborted) resolve('aborted');
-      else signal.addEventListener('abort', () => resolve('aborted'), {
-        once: true,
-      });
+      else
+        signal.addEventListener('abort', () => resolve('aborted'), {
+          once: true,
+        });
     });
 
     let terminalSeen = false;
     let approvalPending = false;
     const iterator = this.turnRunner
-      .run({ operationId: operation.operationId, envelope, route })
+      .run({
+        operationId: operation.operationId,
+        traceId: operation.traceId,
+        envelope,
+        route,
+        signal,
+      })
       [Symbol.asyncIterator]();
     try {
       while (true) {
@@ -156,7 +163,9 @@ export class GatewayService {
   async requestCancel(input: {
     operationId: string;
     principalUserId: string;
-  }): Promise<{ status: 'cancelling' | 'not_running' | 'completed' | 'failed' | 'cancelled' }> {
+  }): Promise<{
+    status: 'cancelling' | 'not_running' | 'completed' | 'failed' | 'cancelled';
+  }> {
     const descriptor = await this.operationStore.describe(input.operationId);
     if (!descriptor) {
       throw new GatewayRuntimeError(
@@ -168,6 +177,12 @@ export class GatewayService {
       throw new GatewayRuntimeError('FORBIDDEN', 'Operation access denied');
     }
     if (descriptor.status !== 'running') return { status: descriptor.status };
+    const recorded = await this.operationStore.requestCancellation({
+      operationId: input.operationId,
+      actorUserId: input.principalUserId,
+      now: this.now(),
+    });
+    if (!recorded) return { status: 'not_running' };
     return {
       status: this.cancellation.cancel(input.operationId)
         ? 'cancelling'

@@ -63,6 +63,7 @@ export class InMemoryGatewayRouteResolver implements GatewayRouteResolverPort {
 interface StoredOperation extends GatewayOperationSnapshot {
   events: GatewayOperationEvent[];
   createdAt: string;
+  cancelRequestedAt: string | null;
 }
 
 function toOperationSnapshot(
@@ -71,6 +72,7 @@ function toOperationSnapshot(
 ): GatewayOperationSnapshot {
   return {
     operationId: operation.operationId,
+    traceId: operation.traceId,
     envelopeId: operation.envelopeId,
     idempotencyKey: operation.idempotencyKey,
     requestFingerprint: operation.requestFingerprint,
@@ -114,6 +116,7 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
     const operationId = this.idFactory.createId('operation');
     const operation: StoredOperation = {
       operationId,
+      traceId: `trace:${operationId}`,
       envelopeId: input.envelopeId,
       idempotencyKey: input.idempotencyKey,
       requestFingerprint: input.requestFingerprint,
@@ -122,6 +125,7 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
       replayed: false,
       events: [],
       createdAt: input.now.toISOString(),
+      cancelRequestedAt: null,
     };
     this.operations.set(operationId, operation);
     this.idempotency.set(key, operationId);
@@ -194,6 +198,23 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
       actorUserId: operation.route.actorUserId,
       status: operation.status,
     };
+  }
+
+  async requestCancellation(input: {
+    operationId: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<boolean> {
+    const operation = this.operations.get(input.operationId);
+    if (
+      !operation ||
+      operation.route.actorUserId !== input.actorUserId ||
+      operation.status !== 'running'
+    ) {
+      return false;
+    }
+    operation.cancelRequestedAt ??= input.now.toISOString();
+    return true;
   }
 
   async listRecent(

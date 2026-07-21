@@ -5,6 +5,7 @@ import type {
   GatewayResolvedRoute,
   NotebookPermission,
 } from '@educanvas/gateway-core';
+import type { ModelAbortSignal } from '@educanvas/agent-core';
 
 type GatewayEventBaseKeys =
   'protocol' | 'eventId' | 'operationId' | 'sequence' | 'occurredAt';
@@ -26,6 +27,8 @@ export interface GatewayRouteResolverPort {
 
 export interface GatewayOperationSnapshot {
   operationId: string;
+  /** Gateway 创建并持久化的 Trace 根；下游不得另造。 */
+  traceId: string;
   envelopeId: string;
   idempotencyKey: string;
   requestFingerprint: string;
@@ -70,13 +73,21 @@ export interface GatewayOperationStorePort {
   ): Promise<readonly GatewayOperationEvent[]>;
   /** 取消鉴权用：返回归属与终态；操作不存在返回 null。 */
   describe(operationId: string): Promise<GatewayOperationDescriptor | null>;
+  /** 跨进程可见的取消请求；只写请求事实，不直接伪造 Operation 终态。 */
+  requestCancellation(input: {
+    operationId: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<boolean>;
 }
 
 export interface GatewayTurnRunnerPort {
   run(input: {
     operationId: string;
+    traceId: string;
     envelope: GatewayInboundEnvelope;
     route: GatewayResolvedRoute;
+    signal: ModelAbortSignal;
   }): AsyncIterable<GatewayEventPayload>;
 }
 
