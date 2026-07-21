@@ -1,0 +1,153 @@
+# 第二代架构能力盘点快照
+
+- 状态：`research snapshot`
+- 核验日期：2026-07-21
+- 适用提交：`761fa0b`
+- 研究计划：[第二代架构研究与决策](../../plan/active/2026-07-second-generation-architecture-research.md)
+
+本文只记录当前源码事实、证据和由此产生的研究问题，不是 ADR，也不授权生产架构迁移。后续实现变化后不原地维护本快照；稳定结论应进入 canonical 文档或新的 ADR。
+
+## 结论摘要
+
+1. `apps/ + packages/` 顶层结构仍适合当前模块化单体。核心协议、Runtime、Provider、教育领域、数据库和入口已经有真实实现与依赖边界测试，不需要为“第二代”重排目录。
+2. `AgentLoopEngine` 已是唯一生产模型/工具循环，但 Turn 应用层并未统一。独立 Gateway、Web 通用 Chat、Web Teaching 各自装配 Prompt、Context、工具、账本、取消和 Trace。
+3. Gateway 的身份、Notebook 路由、Operation 单终态、事件恢复和 Connections 控制面已经具备可信基础；审批通过后 continuation、跨进程取消和 crash 后继续执行尚未闭环。
+4. 当前最大的硬阻塞不是框架能力，而是私人上下文隔离：Node invocation 没有在入队事务中证明 Operation Actor/Agent 与 Node owner 相同，私人 Memory、Credential 和默认 Tool Grant 也尚无统一事实模型。
+5. PostgreSQL + graphile-worker 已经证明事务入队、业务账本和特定 Artifact checkpoint 恢复；没有证据支持把所有 Turn 迁入 LangGraph、Temporal 或其他耐久工作流。
+6. 第二代应优先收敛 Turn Application Service、Context Engine、Tool Kernel、Operation continuation 和审计语义，再在稳定 Port 后比较 AI SDK、MCP、OpenTelemetry 或限定 Workflow Adapter。
+
+## 盘点方法
+
+- 以仓库源码和测试为当前事实，不把路线图目标当作实现；
+- 每项能力记录权威模块、持久事实、调用入口、自动化证据和重复职责；
+- `事实`表示源码可以直接证明，`推断`表示基于多个事实得出的架构判断，`待实验`表示必须用对照 fixture 才能决定；
+- 本快照没有调用真实模型，也没有改动生产源码、Schema 或 accepted ADR。
+
+## 进程与包边界
+
+| 区域                                   | 当前职责                                                                  | 依赖边界判断                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `apps/gateway`                         | Gateway HTTP/NDJSON、Client/Node session、控制面路由、独立 Agent runner   | 真实组合根；runner 能力少于 Web，但不是占位模块                   |
+| `apps/web`                             | K12 主客户端、BFF/兼容 SSE、通用与 Teaching 组合根、Sources/Canvas/Studio | 真实产品主入口；当前承担两个 Turn 应用路径                        |
+| `apps/tui`                             | Gateway 第一方客户端、聊天、恢复、审批、handoff、Connections              | 只依赖 `gateway-client/core`，入口边界清楚                        |
+| `apps/worker`                          | graphile-worker、Artifact/摄取/维护任务、结构化与语音模型调用             | 与 HTTP 生命周期分离，业务状态仍由 PostgreSQL 账本持有            |
+| `apps/telegram` / `apps/node`          | 可选 Channel 与设备 Node 进程                                             | 依赖协议/Adapter，不导入 Agent Runtime                            |
+| `packages/agent-core`                  | 模型、消息、Asset、对象存储稳定契约                                       | 通用 Core，无 Web/DB/Provider 依赖                                |
+| `packages/agent-runtime`               | 唯一 Agent loop、通用工具注册表、会话/Asset Context 纯逻辑                | 通用 Runtime，但尚未拥有完整 Turn Application Service             |
+| `packages/gateway-core/runtime/client` | 稳定 Gateway 契约、控制面用例、第一方客户端 SDK                           | 分层成立，数据库实现位于外层 `db`                                 |
+| `packages/model-gateway`               | OpenAI-compatible text/structured/speech Adapter 与错误归一化             | Provider 类型没有泄漏到业务契约                                   |
+| `packages/teaching-core/runtime`       | 教学状态机、掌握度、可信事件、判分、安全和可选课程 Workflow               | 教育确定性逻辑边界成立；Teaching Runtime 仍拥有独立 Turn 应用编排 |
+| `packages/db`                          | PostgreSQL Schema、仓储和各 Port 的 Drizzle Adapter                       | 当前业务事实源；也暴露出迁移期双轨数据模型                        |
+
+依赖证据来自各 `package.json` 与 dependency-boundary 测试。宏观目录无需重排；应减少的是组合根和运行语义重复，而不是包名数量。
+
+## 能力矩阵
+
+| 能力                 | 当前权威实现与事实                                                                                                                                                                   | 自动化证据                                                          | 重复/缺口                                                                                        | 二代研究方向                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Gateway 协议         | [`gateway-core`](../../../packages/gateway-core/src/index.ts) 定义 Envelope、Event、能力、路由、Channel、Node 与 handoff                                                             | `contracts.test.ts`、`connections.test.ts`、`handoffs.test.ts`      | 能力 Manifest 有形状，但尚无统一 Effective Capability Resolver                                   | 保留协议；补统一权限交集 fixture                                    |
+| 身份与 Notebook 路由 | [`DrizzleGatewayRouteResolver`](../../../packages/db/src/gateway-repository.ts) 同时校验 User/Agent、Membership、Conversation 与 permission                                          | `gateway-repository.integration.test.ts`                            | 正式 IdP 未接；Web 仍保留匿名兼容身份                                                            | 保留 PostgreSQL 权威关系；IdP 仅提供认证事实                        |
+| Operation 与事件恢复 | [`GatewayService`](../../../packages/gateway-runtime/src/gateway-service.ts) + `agent_operations/gateway_operation_events`                                                           | `gateway-service.test.ts`、`gateway-repository.integration.test.ts` | running crash 后只能 replay 已有事件；无自动 continuation                                        | 保留业务 Operation；比较原生 continuation 与限定 checkpoint Adapter |
+| 取消                 | 运行进程内 `GatewayCancellationRegistry` 竞速中止 runner，由原 handle 追加唯一 cancelled 终态                                                                                        | `gateway-service.test.ts`、`server.test.ts`                         | 跨进程或重启后的 running Operation 不能主动中止原执行                                            | 先定义单写者和 lease/ownership，再评估 durable executor             |
+| 审批                 | `gateway_approvals` 与 `approval.required/resolved` 事件由 Operation Store 原子维护                                                                                                  | Gateway/DB 集成测试                                                 | 决策写回事件后不会自动恢复暂停的 runner                                                          | 把 continuation 作为 Operation 能力，不让框架审批表成为第二事实源   |
+| Connections          | provider-neutral Core/Runtime/DB，Gateway Client、Web `/settings` 与 TUI `/channels` 共用                                                                                            | Connections 单测、DB 集成、Web boundary、TUI command 测试           | enabled Adapter 生命周期、重连与 degraded health 未实现                                          | 保留控制面；单独定义 Adapter supervisor/health Port                 |
+| Channel              | Telegram Adapter 归一化官方 Update，Binding 与 Delivery 在 Gateway/DB                                                                                                                | Adapter fixture、Delivery/Binding 集成                              | 真实账号 live smoke 缺失；目前只有 Telegram                                                      | 保留 Adapter 模式，不把 provider 细节放入通用契约                   |
+| Node                 | Pairing 记录 `userId + agentId`，Node Host 只开放状态和 allowlisted read                                                                                                             | Node/Core/DB/Host 测试                                              | invocation 只有 `operationId + nodeId`；`enqueue()` 未验证 Operation Actor/Agent 等于 Node owner | 隐私 hard gate；先补 Actor-bound NodeInvocationPort 与失败 fixture  |
+| Agent loop           | [`AgentLoopEngine`](../../../packages/agent-runtime/src/agent-loop.ts) 唯一负责多圈、预算、取消、强制 synthesis 和终态                                                               | `agent-loop.test.ts`、依赖扫描                                      | Loop 本身不是主要复杂度来源                                                                      | 保留 Loop；AI SDK 只能在 `TurnModelGateway` 后做 parity 对照        |
+| Gateway Turn 应用    | [`GatewayAgentTurnRunner`](../../../apps/gateway/src/agent-runner.ts) 装配独立 Prompt/历史/Provider                                                                                  | Gateway server/runtime 测试                                         | `tools: []`，无 Asset、Model Run/Tool Call 审计和完整 Context                                    | 与 Web 两条路径共同收敛到 Turn Application Port                     |
+| Web 通用 Turn        | [`general-turn.ts`](../../../apps/web/server/platform/general-turn.ts) 自行装配历史、Asset、网页工具、账本、取消与 SSE                                                               | `general-chat-boundary.test.ts`、平台 DB 集成                       | 未复用 `buildConversationContext`；无通用 `model_runs/tool_calls`                                | 迁入统一 Turn Application Service，保留 Web SSE 投影                |
+| Web Teaching Turn    | [`learning-turn.ts`](../../../apps/web/server/teaching/learning-turn.ts) + [`TeachingTurnOrchestrator`](../../../packages/teaching-runtime/src/turn-orchestrator.ts)                 | Teaching Runtime、route、DB、E2E                                    | 拥有最完整 Context/审计/安全，但组合路径独立                                                     | 将教育能力变成 Profile/领域回调，不削弱可信判分边界                 |
+| Context              | `buildConversationContext`、`buildAssetContext` 与 Teaching `turn_context_snapshots` 已存在                                                                                          | Agent Runtime 与 DB Context 测试                                    | Gateway、General、Teaching 装配方式不同；摘要、长期 Memory、Artifact Context、统一预算缺失       | 定义唯一 ContextAssemblerPort 与可解释 Snapshot                     |
+| Tool 执行            | [`AgentToolRegistry`](../../../packages/agent-runtime/src/agent-tools.ts) 与 [`TeachingToolExecutor`](../../../packages/teaching-runtime/src/tool-executor.ts) 分别处理通用/教学工具 | 两包工具测试与 Web 工具测试                                         | 风险、审批、幂等、effect ledger、timeout、结果未知没有统一内核                                   | 建立 Tool Kernel fixture；MCP 只作为 ExternalToolAdapter            |
+| Model Provider       | `TurnModelGateway`/`StructuredModelGateway`/`SpeechModelGateway` + OpenAI-compatible Adapter                                                                                         | Provider fixture 覆盖 stream、错误、timeout、secret                 | 组合根分别创建 Adapter；Web Teaching 另包 `AuditedTurnModelGateway`                              | 保留稳定 Port；AI SDK 需证明多 Provider parity 与净复杂度收益       |
+| 模型/工具审计        | `model_runs` 和 `tool_calls` 记录 provider、usage、摘要和终态                                                                                                                        | Model/Tool repository 与安全生命周期测试                            | Schema 强制 `model_runs.operation_kind = teaching_turn`；通用/Gateway Turn 无等价审计            | 先扩展统一审计契约，再接 OTel；不能让 Trace 取代业务账本            |
+| Artifact/Worker      | `artifact_generation_jobs` 是业务账本，graphile-worker 只调度；音频 checkpoint 避免重复 TTS                                                                                          | Worker PostgreSQL 集成与 kill/retry 场景                            | checkpoint 是 Artifact 特例，不是通用 Workflow 引擎                                              | 保留；用同一故障题对比原生 continuation 与 LangGraph Saver          |
+| 教育可信事实         | Teaching Core 持有状态机、掌握度、事件回放、安全与服务端判分                                                                                                                         | Core 纯逻辑单测和 DB 事务集成                                       | 部分非 ASSESS 事件接线仍不完整                                                                   | 必须保留确定性领域边界，不交给 Agent 框架或 Prompt                  |
+| Trace/观测           | Gateway 有结构化安全日志；Teaching 有 Model/Tool 审计；Worker 使用业务 ID                                                                                                            | 各模块 observability 测试                                           | 无统一 W3C trace；Worker 自造 `artifact:*` trace，原始 error 路径不一致                          | OTel 仅作脱敏可丢弃因果链，`operationId` 继续是业务键               |
+
+## 五个需要先解决的结构问题
+
+### 1. 一个 Loop，三套 Turn Application
+
+以下三个入口都实例化同一个 `AgentLoopEngine`，但各自决定 Prompt、消息历史、工具、取消、事件映射和账本：
+
+- `apps/gateway/src/agent-runner.ts`；
+- `apps/web/server/platform/general-turn.ts`；
+- `apps/web/server/teaching/learning-turn.ts` 经 `TeachingTurnOrchestrator`。
+
+这是源码事实，不是“存在三个 Agent Loop”。二代目标应是统一 Turn Application Service 和扩展点，而不是替换已经唯一的底层 Loop。
+
+### 2. 迁移期双轨账本仍影响能力一致性
+
+通用路径使用 `spaces/conversations/conversation_messages/agent_operations`；Teaching 路径仍使用 `lesson_sessions/chat_messages/model_runs/tool_calls/turn_context_snapshots`。其中 `model_runs` 的数据库约束只接受 `teaching_turn`，因此“统一 Trace/审计”目前不能覆盖通用和独立 Gateway Turn。
+
+应先定义统一 Operation、Message、Model Run、Tool Call 与 Context Snapshot 关系，再决定 additive 迁移；不能用框架 Session 或 Trace backend 绕过数据归属。
+
+### 3. Tool Registry 不等于 Tool Policy
+
+当前两套 Executor 都能验证 Schema 并执行工具，但没有一个统一内核同时处理：
+
+- Actor/Profile/Notebook/Channel/Node/环境/安全策略交集；
+- L2/L3 审批及审批参数绑定；
+- 外部副作用幂等、timeout、取消和 `outcome_unknown`；
+- 本地、Teaching、MCP 与 Node Tool 的同一审计口径。
+
+MCP 可以统一外部互操作，不能自行补齐这些业务语义。
+
+### 4. Notebook Privacy 当前不通过
+
+Node Pairing 的 owner 关系是可信的，但 Node invocation 请求没有 Actor/Agent 字段；数据库 `enqueue()` 只校验 Node active 和 capability，不在同一事务读取 Operation owner。现有数据模型因此可以表达“用户 B 的 Operation 调用用户 A 的私人 Node”。
+
+在私人 Memory、Credential、Node 与 default grant 形成统一 Actor-bound Port 和 fail-closed fixture 前，不能接受任何第二代 ADR。
+
+### 5. Operation 耐久性需要业务定义，不是框架开关
+
+Gateway Event Store 是对外恢复事实，Turn/Model/Tool 账本记录业务执行，Worker Job 记录长任务，未来 checkpoint 只能记录可替换执行游标。必须先明确每个状态的唯一写者和恢复责任，再比较：
+
+- PostgreSQL lease + graphile-worker continuation；
+- LangGraph PostgreSQL Saver；
+- 只有出现跨天 timer/saga 后才评估 Temporal。
+
+## 可保留与待新增的 Port
+
+### 已存在并应保留
+
+- `TurnModelGateway`、`StructuredModelGateway`、`SpeechModelGateway`；
+- `GatewayRouteResolverPort`、`GatewayOperationStorePort`、`GatewayTurnRunnerPort`；
+- `ObjectStoragePort`；
+- Teaching `SessionRepository`、`MasteryRepository`、`EventStore`、`TeachingUnitOfWork`、`KnowledgeRetriever`。
+
+### 需要先用 fixture 证明再定型
+
+- `TurnApplicationPort`：统一入口到 Context、Loop、Tool、账本与事件映射；
+- `ContextAssemblerPort`：输出版本化、可解释、按 Actor/Notebook 过滤的 Context Snapshot；
+- `EffectiveToolPolicyPort` 与 `ToolExecutionKernelPort`；
+- `PrivateAgentContextRepositoryPort`、`CredentialBrokerPort`；
+- Actor-bound `NodeInvocationPort`；
+- `OperationContinuationPort`；
+- `TraceEmitterPort`：只接收脱敏 allowlist 属性，不拥有业务状态。
+
+这些名称是研究用候选，不是新增包或公共 API 决定。
+
+## 风险优先级
+
+| 优先级 | 风险                                     | 原因                                                       |
+| ------ | ---------------------------------------- | ---------------------------------------------------------- |
+| P0     | Notebook 私人上下文/Node 跨 Actor        | 直接破坏多租户和未成年人隐私硬约束                         |
+| P0     | Operation/审批 continuation 单写者不明确 | 会造成重复副作用、假恢复或多终态                           |
+| P1     | 三套 Turn Application 漂移               | 同一 Notebook 在不同入口能力不一致，测试与修复成本持续增加 |
+| P1     | 模型/工具审计只覆盖 Teaching             | 无法统一解释通用 Agent 的成本、错误和工具行为              |
+| P1     | 两套 Tool Runtime                        | MCP、Node 和高风险能力接入后策略会继续分叉                 |
+| P2     | Provider/Trace/Workflow 技术选型         | 只有前述业务契约稳定后才有可比基线                         |
+
+## 下一份证据
+
+下一步不是写实施 ADR，而是建立仓库内可复现的 **Notebook Privacy fixture**。它应证明：
+
+1. 共享 Notebook 的 Sources/Conversation/Artifact 按 Membership 可见；
+2. 私人 Memory、Credential、Node 和 default Tool Grant 对其他 Actor 不可见；
+3. 错误归属不是“过滤后继续”，而是整个 Turn 或 invocation fail closed；
+4. Operation、审批和 Node invocation 的 Actor/Agent/Notebook 在同一事务中一致；
+5. fixture 只构造测试数据，不引入新的生产架构。
+
+该 hard gate 通过前，AI SDK、MCP、LangGraph 和 OTel 的对照实验都只能提供局部信息，不能形成第二代 accepted ADR。
