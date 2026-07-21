@@ -38,6 +38,7 @@ export {
   type ToolExposure,
   type TrustedToolExecutionContext,
 } from './tool-executor';
+export { adaptTeachingTool } from './tool-kernel-adapter';
 export {
   TEACHING_TURN_ANSWER_PROMPT_VERSION,
   TEACHING_TURN_MODEL_ALIAS,

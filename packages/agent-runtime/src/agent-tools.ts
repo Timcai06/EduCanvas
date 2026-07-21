@@ -13,6 +13,8 @@ export interface AgentToolContext {
   turnId: string;
   subjectId: string;
   conversationId: string;
+  /** 兼容旧调用者可选；经Tool Kernel执行时始终注入。 */
+  signal?: AbortSignal;
 }
 
 export interface AgentTool<Input = unknown, Output = unknown> {
