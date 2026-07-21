@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@educanvas/teaching-runtime": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
     "@types/node": "^26.1.1",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.9.3",
