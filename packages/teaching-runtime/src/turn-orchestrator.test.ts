@@ -22,6 +22,7 @@ import {
   TEACHING_TURN_TASK_ALIAS,
   TeachingTurnOrchestrator,
   createTeachingTurnAnswerPromptMaterial,
+  createTeachingTurnPromptMessages,
   type TeachingTurnCommand,
   type TeachingTurnStreamEvent,
 } from './turn-orchestrator';
@@ -172,6 +173,26 @@ function createRecommendTool() {
 }
 
 describe('createTeachingTurnAnswerPromptMaterial', () => {
+  it('向统一Turn Application暴露独立answer与synthesis系统约束', () => {
+    const prompts = createTeachingTurnPromptMessages({
+      session: command.session,
+      studentMessage: command.studentMessage,
+    });
+
+    expect(prompts.answer[0]).toMatchObject({ role: 'system' });
+    expect(prompts.synthesis[0]).toMatchObject({ role: 'system' });
+    expect(prompts.answer[0]?.content).toContain('当前教学状态：EXPLAIN');
+    expect(prompts.synthesis[0]?.content).toContain('已验证工具结果');
+    expect(prompts.answer.at(-1)).toEqual({
+      role: 'user',
+      content: command.studentMessage,
+    });
+    expect(prompts.synthesis.at(-1)).toEqual({
+      role: 'user',
+      content: command.studentMessage,
+    });
+  });
+
   it('相同输入生成稳定材料且精确模板变更会被测试暴露', () => {
     const executor = new TeachingToolExecutor([createStudentStateTool()]);
     const modelTools = executor.listModelTools(command.session.state);
@@ -515,7 +536,11 @@ describe('TeachingTurnOrchestrator.streamTurn', () => {
       {
         ...mixedStep,
         events: [
-          { type: 'text_delta', phase: 'answer', delta: '我先看看你的学习状态。' },
+          {
+            type: 'text_delta',
+            phase: 'answer',
+            delta: '我先看看你的学习状态。',
+          },
           ...(mixedStep.events ?? []),
         ],
       },

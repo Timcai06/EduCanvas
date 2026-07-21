@@ -119,6 +119,8 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
   await composer.fill(firstPrompt);
   await composer.press('Enter');
   await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
+  /* 学生消息先乐观渲染；等服务端终态后再读取权威Conversation标题，避免与POST并发。 */
+  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
   const firstConversationId = await page.evaluate(async () => {
     const response = await fetch('/api/v1/chat/conversations');

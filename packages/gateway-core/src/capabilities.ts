@@ -22,6 +22,8 @@ export const gatewayCapabilityNames = [
   'output.action',
   'output.stream',
   'artifact.native',
+  'education.student_state.read',
+  'education.knowledge.retrieve',
   'approval.interactive',
   'device.status',
   'filesystem.read_allowlisted',

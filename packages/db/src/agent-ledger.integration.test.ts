@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -12,6 +13,7 @@ import {
   TurnInProgressError,
 } from './chat-repository';
 import { DrizzleLearningSessionRepository } from './learning-session-repository';
+import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { MessagePartValidationError } from './message-parts';
 import { DrizzleModelRunRepository } from './model-run-repository';
 import * as schema from './schema';
@@ -162,11 +164,16 @@ describeWithDatabase('A2/A3/A4 持久账本', () => {
         turn_context_snapshots,
         model_runs,
         chat_messages,
+        agent_operations,
         canvas_artifact_grading_keys,
         canvas_artifacts,
         learning_events,
         mastery_states,
-        lesson_sessions
+        lesson_sessions,
+        conversations,
+        spaces,
+        personal_agents,
+        platform_users
       restart identity cascade
     `);
   });
@@ -208,6 +215,91 @@ describeWithDatabase('A2/A3/A4 持久账本', () => {
     expect(await getDatabase().select().from(schema.modelRuns)).toHaveLength(1);
     expect(results[0]?.turn.assistantMessage.status).toBe('pending');
     expect(results[0]?.leaseId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('Gateway教学Turn只附着K12消息并把通用审计留给Turn Application', async () => {
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values({ id: studentId, kind: 'registered' });
+    const [agent] = await getDatabase()
+      .insert(schema.personalAgents)
+      .values({ userId: studentId })
+      .returning();
+    if (!agent) throw new Error('测试Agent创建失败');
+    const conversation = await new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    ).create({
+      ownerSubjectId: studentId,
+      spaceKind: 'course',
+      spaceTitle: '统一教学Turn测试',
+    });
+    const gatewaySessionId = randomUUID();
+    await getDatabase()
+      .insert(schema.lessonSessions)
+      .values({
+        id: gatewaySessionId,
+        conversationId: conversation.id,
+        ...scope,
+        state: 'EXPLAIN',
+        status: 'active',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+        lastActivityAt: baseTime,
+      });
+    const operationId = randomUUID();
+    const traceId = `trace:${operationId}`;
+    const clientMessageId = `client:${operationId}`;
+    await getDatabase()
+      .insert(schema.agentOperations)
+      .values({
+        id: operationId,
+        gatewayEnvelopeId: `envelope:${operationId}`,
+        requestFingerprint: 'f'.repeat(64),
+        actorUserId: studentId,
+        agentId: agent.id,
+        notebookId: conversation.spaceId,
+        conversationId: conversation.id,
+        kind: 'turn',
+        idempotencyKey: clientMessageId,
+        traceId,
+        status: 'running',
+        createdAt: baseTime,
+      });
+    const input = {
+      sessionId: gatewaySessionId,
+      trustedStudentId: studentId,
+      clientMessageId,
+      text: '请解释勾股定理',
+      traceId,
+      turnId: operationId,
+      leaseDurationMs: 5_000,
+      now: baseTime,
+    };
+    const ledger = new DrizzleTeachingTurnLedger(getDatabase());
+    const first = await ledger.beginApplicationTurn(input);
+    const replay = await ledger.beginApplicationTurn(input);
+
+    expect(first).toMatchObject({
+      replayed: false,
+      turn: { turnId: operationId },
+    });
+    expect(replay).toMatchObject({
+      replayed: true,
+      turn: { turnId: operationId },
+    });
+    expect(await getDatabase().select().from(schema.chatMessages)).toHaveLength(
+      2,
+    );
+    expect(await getDatabase().select().from(schema.modelRuns)).toHaveLength(0);
+    expect(
+      await getDatabase().select().from(schema.turnContextSnapshots),
+    ).toHaveLength(0);
+    await expect(
+      ledger.beginApplicationTurn({
+        ...input,
+        trustedStudentId: 'forged-student',
+      }),
+    ).rejects.toBeInstanceOf(LearningSessionOwnershipError);
   });
 
   it('同一clientMessageId不能绑定不同消息内容', async () => {
