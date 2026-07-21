@@ -104,6 +104,7 @@ async function createAgentToolFixture(): Promise<AgentToolFixture> {
     actorId,
     assistantMessageId,
     phase: 'answer',
+    taskAlias: 'agent.turn',
     modelAlias: 'primary',
     promptVersion: 'agent-general-v2',
     promptHash: 'b'.repeat(64),

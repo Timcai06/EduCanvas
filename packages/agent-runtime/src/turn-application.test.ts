@@ -118,7 +118,7 @@ class MemoryModelRunLedger implements AgentModelRunLedgerPort {
       phase: input.phase,
       attempt: input.attempt ?? 1,
       traceId: command.traceId,
-      taskAlias: 'agent.turn',
+      taskAlias: input.taskAlias,
       modelAlias: input.modelAlias,
       promptVersion: input.promptVersion,
       promptHash: input.promptHash,
@@ -207,6 +207,7 @@ function profile(): TurnApplicationProfilePort {
           },
         },
         model: {
+          taskAlias: 'agent.turn' as const,
           modelAlias: 'primary' as const,
           promptVersion: 'education-v1',
           maxToolRounds: 2,
@@ -394,6 +395,48 @@ describe('TurnApplicationService', () => {
       status: 'completed',
       content: '你好，我来帮你。',
     });
+  });
+
+  it('由Profile选择稳定taskAlias并贯穿Provider与统一Model Run账本', async () => {
+    const models = new MemoryModelRunLedger();
+    const teachingProfile: TurnApplicationProfilePort = {
+      ...profile(),
+      async prepare(input) {
+        const plan = await profile().prepare(input);
+        return {
+          ...plan,
+          model: { ...plan.model, taskAlias: 'teaching.turn' as const },
+        };
+      },
+    };
+    const requests: string[] = [];
+    await collect(
+      new TurnApplicationService({
+        lifecycle: new MemoryLifecycle(),
+        profile: teachingProfile,
+        contextLedger: new MemoryContextLedger(),
+        modelRunLedger: models,
+        modelGateway: {
+          async *streamTurnText(request) {
+            requests.push(request.taskAlias);
+            yield {
+              type: 'text_delta',
+              phase: request.phase,
+              delta: '教学回答。',
+            };
+            yield {
+              type: 'completed',
+              phase: request.phase,
+              metadata: metadata(request, 'stop'),
+            };
+          },
+        },
+      }),
+    );
+
+    expect(requests).toEqual(['teaching.turn']);
+    expect(models.createInputs[0]?.taskAlias).toBe('teaching.turn');
+    expect(models.runs[0]?.taskAlias).toBe('teaching.turn');
   });
 
   it('在结算成功后投影同一Lifecycle事务返回的引用事件', async () => {
@@ -655,7 +698,11 @@ describe('TurnApplicationService', () => {
         modelRunLedger: new MemoryModelRunLedger(),
         modelGateway: {
           async *streamTurnText(request) {
-            yield { type: 'text_delta', phase: request.phase, delta: '安全回答' };
+            yield {
+              type: 'text_delta',
+              phase: request.phase,
+              delta: '安全回答',
+            };
             yield {
               type: 'completed',
               phase: request.phase,
@@ -707,8 +754,16 @@ describe('TurnApplicationService', () => {
         modelRunLedger: models,
         modelGateway: {
           async *streamTurnText(request) {
-            yield { type: 'text_delta', phase: request.phase, delta: '安全句。' };
-            yield { type: 'text_delta', phase: request.phase, delta: '危险内容' };
+            yield {
+              type: 'text_delta',
+              phase: request.phase,
+              delta: '安全句。',
+            };
+            yield {
+              type: 'text_delta',
+              phase: request.phase,
+              delta: '危险内容',
+            };
             expect(request.signal?.aborted).toBe(true);
             yield {
               type: 'failed',

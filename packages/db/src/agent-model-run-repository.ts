@@ -6,11 +6,18 @@ import type {
   AgentModelRunTerminalStatus,
   CreateAgentModelRunInput,
   ModelAlias,
+  StreamingTaskAlias,
   TurnModelPhase,
 } from '@educanvas/agent-core';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
-import { agentOperations, conversationMessages, modelRuns } from './schema';
+import {
+  agentOperations,
+  chatMessages,
+  conversationMessages,
+  lessonSessions,
+  modelRuns,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -53,18 +60,28 @@ function toSnapshot(row: typeof modelRuns.$inferSelect): AgentModelRunSnapshot {
   if (
     row.operationKind !== 'agent_turn' ||
     !row.agentOperationId ||
-    !row.conversationMessageId
+    (row.taskAlias === 'agent.turn' &&
+      (row.sessionId !== null ||
+        row.assistantMessageId !== null ||
+        row.turnId !== null ||
+        row.conversationMessageId === null)) ||
+    (row.taskAlias === 'teaching.turn' &&
+      (row.sessionId === null ||
+        row.assistantMessageId === null ||
+        row.turnId !== row.agentOperationId ||
+        row.conversationMessageId !== null)) ||
+    !['agent.turn', 'teaching.turn'].includes(row.taskAlias)
   ) {
     throw new AgentModelRunLifecycleError('Model Run不是有效agent_turn形状');
   }
   return {
     id: row.id,
     operationId: row.agentOperationId,
-    assistantMessageId: row.conversationMessageId,
+    assistantMessageId: row.conversationMessageId ?? row.assistantMessageId!,
     phase: row.phase as TurnModelPhase,
     attempt: row.attempt,
     traceId: row.traceId,
-    taskAlias: 'agent.turn',
+    taskAlias: row.taskAlias as StreamingTaskAlias,
     modelAlias: row.modelAlias as ModelAlias,
     promptVersion: row.promptVersion,
     promptHash: row.promptHash,
@@ -98,6 +115,7 @@ function validateCreateInput(input: ConcreteCreateInput): number {
     input.actorId.length < 1 ||
     input.actorId.length > 160 ||
     !['answer', 'synthesis'].includes(input.phase) ||
+    !['agent.turn', 'teaching.turn'].includes(input.taskAlias) ||
     !['primary', 'fast', 'structured', 'speech'].includes(input.modelAlias) ||
     input.promptVersion.length < 1 ||
     input.promptVersion.length > 128 ||
@@ -121,11 +139,19 @@ function immutableFieldsMatch(
     row.operationKind === 'agent_turn' &&
     row.agentOperationId === input.operationId &&
     row.operationId === input.operationId &&
-    row.conversationMessageId === input.assistantMessageId &&
+    (input.taskAlias === 'teaching.turn'
+      ? row.sessionId !== null &&
+        row.assistantMessageId === input.assistantMessageId &&
+        row.turnId === input.operationId &&
+        row.conversationMessageId === null
+      : row.sessionId === null &&
+        row.assistantMessageId === null &&
+        row.turnId === null &&
+        row.conversationMessageId === input.assistantMessageId) &&
     row.phase === input.phase &&
     row.attempt === attempt &&
     row.traceId === traceId &&
-    row.taskAlias === 'agent.turn' &&
+    row.taskAlias === input.taskAlias &&
     row.modelAlias === input.modelAlias &&
     row.promptVersion === input.promptVersion &&
     row.promptHash === input.promptHash &&
@@ -226,30 +252,59 @@ export class DrizzleAgentModelRunRepository implements AgentModelRunLedgerPort {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
       );
-      const [scope] = await transaction
-        .select({ operation: agentOperations, message: conversationMessages })
+      const [operation] = await transaction
+        .select()
         .from(agentOperations)
-        .innerJoin(
-          conversationMessages,
-          and(
-            eq(conversationMessages.id, input.assistantMessageId),
-            eq(conversationMessages.operationId, agentOperations.id),
-            eq(
-              conversationMessages.conversationId,
-              agentOperations.conversationId,
-            ),
-          ),
-        )
         .where(
           and(
             eq(agentOperations.id, input.operationId),
             eq(agentOperations.actorUserId, input.actorId),
             eq(agentOperations.kind, 'turn'),
+          ),
+        )
+        .limit(1);
+      if (!operation) throw new AgentModelRunOwnershipError();
+      const [conversationMessage] = await transaction
+        .select({
+          id: conversationMessages.id,
+          status: conversationMessages.status,
+        })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.id, input.assistantMessageId),
+            eq(conversationMessages.operationId, input.operationId),
+            eq(conversationMessages.conversationId, operation.conversationId),
             eq(conversationMessages.role, 'assistant'),
           ),
         )
         .limit(1);
-      if (!scope) throw new AgentModelRunOwnershipError();
+      const [teachingMessage] = await transaction
+        .select({
+          id: chatMessages.id,
+          sessionId: chatMessages.sessionId,
+          status: chatMessages.status,
+        })
+        .from(chatMessages)
+        .innerJoin(
+          lessonSessions,
+          eq(lessonSessions.id, chatMessages.sessionId),
+        )
+        .where(
+          and(
+            eq(chatMessages.id, input.assistantMessageId),
+            eq(chatMessages.turnId, input.operationId),
+            eq(chatMessages.role, 'assistant'),
+            eq(lessonSessions.studentId, input.actorId),
+            eq(lessonSessions.conversationId, operation.conversationId),
+          ),
+        )
+        .limit(1);
+      const message =
+        input.taskAlias === 'teaching.turn'
+          ? teachingMessage
+          : conversationMessage;
+      if (!message) throw new AgentModelRunOwnershipError();
 
       const [existing] = await transaction
         .select()
@@ -265,20 +320,15 @@ export class DrizzleAgentModelRunRepository implements AgentModelRunLedgerPort {
         .limit(1);
       if (existing) {
         if (
-          !immutableFieldsMatch(
-            existing,
-            input,
-            attempt,
-            scope.operation.traceId,
-          )
+          !immutableFieldsMatch(existing, input, attempt, operation.traceId)
         ) {
           throw new AgentModelRunConflictError();
         }
         return { run: toSnapshot(existing), replayed: true };
       }
       if (
-        !['pending', 'running'].includes(scope.operation.status) ||
-        !['pending', 'streaming'].includes(scope.message.status)
+        !['pending', 'running'].includes(operation.status) ||
+        !['pending', 'streaming'].includes(message.status)
       ) {
         throw new AgentModelRunLifecycleError(
           'Operation或assistant消息已进入终态，不能创建Model Run',
@@ -290,11 +340,17 @@ export class DrizzleAgentModelRunRepository implements AgentModelRunLedgerPort {
           operationId: input.operationId,
           operationKind: 'agent_turn',
           agentOperationId: input.operationId,
-          conversationMessageId: input.assistantMessageId,
+          ...(input.taskAlias === 'teaching.turn'
+            ? {
+                sessionId: teachingMessage!.sessionId,
+                assistantMessageId: input.assistantMessageId,
+                turnId: input.operationId,
+              }
+            : { conversationMessageId: input.assistantMessageId }),
           phase: input.phase,
           attempt,
-          traceId: scope.operation.traceId,
-          taskAlias: 'agent.turn',
+          traceId: operation.traceId,
+          taskAlias: input.taskAlias,
           modelAlias: input.modelAlias,
           promptVersion: input.promptVersion,
           promptHash: input.promptHash,

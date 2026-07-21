@@ -43,6 +43,8 @@ interface ContextFixture {
   actorId: string;
   otherActorId: string;
   operationId: string;
+  conversationId: string;
+  otherConversationId: string;
   includedMessageIds: string[];
   selectedAssetVersionIds: string[];
   otherConversationMessageId: string;
@@ -189,6 +191,8 @@ async function createContextFixture(
     actorId,
     otherActorId,
     operationId,
+    conversationId: conversation.id,
+    otherConversationId: otherConversation.id,
     includedMessageIds,
     selectedAssetVersionIds,
     otherConversationMessageId,
@@ -263,6 +267,116 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
     });
     expect(JSON.stringify(stored)).not.toContain('历史问题');
     expect(JSON.stringify(stored)).not.toContain('正文:selected');
+  });
+
+  it('允许Teaching Profile引用同Conversation的K12消息并拒绝跨Conversation消息', async () => {
+    const fixture = await createContextFixture('teaching');
+    const [session, foreignSession] = await getDatabase()
+      .insert(schema.lessonSessions)
+      .values([
+        {
+          conversationId: fixture.conversationId,
+          studentId: fixture.actorId,
+          gradeBand: 'grade-7',
+          courseSlug: 'math',
+          knowledgeNodeId: 'pythagorean-theorem',
+          state: 'EXPLAIN',
+          status: 'active',
+        },
+        {
+          conversationId: fixture.otherConversationId,
+          studentId: fixture.actorId,
+          gradeBand: 'grade-7',
+          courseSlug: 'science',
+          knowledgeNodeId: 'force',
+          state: 'DIAGNOSE',
+          status: 'archived',
+          archivedAt: new Date('2026-07-21T10:00:00.000Z'),
+        },
+      ])
+      .returning({ id: schema.lessonSessions.id });
+    if (!session || !foreignSession) throw new Error('测试教学Session创建失败');
+    const teachingMessageId = randomUUID();
+    const foreignMessageId = randomUUID();
+    await getDatabase()
+      .insert(schema.chatMessages)
+      .values([
+        {
+          id: teachingMessageId,
+          sessionId: session.id,
+          turnId: fixture.operationId,
+          clientMessageId: 'client:teaching-context',
+          requestHash: 'a'.repeat(64),
+          role: 'student',
+          status: 'completed',
+          content: '教学本轮问题',
+          completedAt: new Date('2026-07-21T10:00:00.000Z'),
+        },
+        {
+          id: foreignMessageId,
+          sessionId: foreignSession.id,
+          turnId: randomUUID(),
+          clientMessageId: 'client:foreign-teaching-context',
+          requestHash: 'b'.repeat(64),
+          role: 'student',
+          status: 'completed',
+          content: '另一个课程的问题',
+          completedAt: new Date('2026-07-21T10:00:00.000Z'),
+        },
+      ]);
+    const repository = new DrizzleAgentTurnContextRepository(getDatabase());
+    const material = {
+      builderVersion: 'teaching-context-v2',
+      includedMessageIds: [teachingMessageId],
+      selectedAssetVersionIds: [],
+      omittedMessageCount: 0,
+      characterCount: 6,
+    };
+    const created = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material,
+    });
+    expect(created.snapshot.includedMessageIds).toEqual([teachingMessageId]);
+
+    const second = await createContextFixture('teaching-cross');
+    const [secondForeignSession] = await getDatabase()
+      .insert(schema.lessonSessions)
+      .values({
+        conversationId: second.otherConversationId,
+        studentId: second.actorId,
+        gradeBand: 'grade-7',
+        courseSlug: 'foreign-course',
+        knowledgeNodeId: 'foreign-node',
+        state: 'DIAGNOSE',
+        status: 'active',
+      })
+      .returning({ id: schema.lessonSessions.id });
+    if (!secondForeignSession) throw new Error('测试跨课程Session创建失败');
+    const secondForeignMessageId = randomUUID();
+    await getDatabase()
+      .insert(schema.chatMessages)
+      .values({
+        id: secondForeignMessageId,
+        sessionId: secondForeignSession.id,
+        turnId: randomUUID(),
+        clientMessageId: 'client:second-foreign-context',
+        requestHash: 'c'.repeat(64),
+        role: 'student',
+        status: 'completed',
+        content: '不能跨课程读取',
+        completedAt: new Date('2026-07-21T10:00:00.000Z'),
+      });
+    await expect(
+      repository.createOrGet({
+        operationId: second.operationId,
+        actorId: second.actorId,
+        material: {
+          ...material,
+          includedMessageIds: [secondForeignMessageId],
+        },
+      }),
+    ).rejects.toBeInstanceOf(AgentTurnContextOwnershipError);
   });
 
   it('拒绝上下文漂移、重复ID和终态后补写', async () => {

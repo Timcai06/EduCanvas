@@ -9,7 +9,9 @@ import {
   agentOperations,
   assets,
   assetVersions,
+  chatMessages,
   conversationMessages,
+  lessonSessions,
   turnContextSnapshots,
 } from './schema';
 import {
@@ -100,21 +102,42 @@ async function validateContextReferences(
   input: {
     conversationId: string;
     notebookId: string;
+    actorId: string;
     includedMessageIds: readonly string[];
     selectedAssetVersionIds: readonly string[];
   },
 ): Promise<void> {
   if (input.includedMessageIds.length > 0) {
-    const messages = await executor
-      .select({ id: conversationMessages.id })
-      .from(conversationMessages)
-      .where(
-        and(
-          eq(conversationMessages.conversationId, input.conversationId),
-          inArray(conversationMessages.id, [...input.includedMessageIds]),
+    const [messages, teachingMessages] = await Promise.all([
+      executor
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, input.conversationId),
+            inArray(conversationMessages.id, [...input.includedMessageIds]),
+          ),
         ),
-      );
-    if (messages.length !== input.includedMessageIds.length) {
+      executor
+        .select({ id: chatMessages.id })
+        .from(chatMessages)
+        .innerJoin(
+          lessonSessions,
+          eq(lessonSessions.id, chatMessages.sessionId),
+        )
+        .where(
+          and(
+            eq(lessonSessions.conversationId, input.conversationId),
+            eq(lessonSessions.studentId, input.actorId),
+            inArray(chatMessages.id, [...input.includedMessageIds]),
+          ),
+        ),
+    ]);
+    const visibleIds = new Set([
+      ...messages.map((message) => message.id),
+      ...teachingMessages.map((message) => message.id),
+    ]);
+    if (visibleIds.size !== input.includedMessageIds.length) {
       throw new AgentTurnContextOwnershipError();
     }
   }
@@ -191,6 +214,7 @@ export class DrizzleAgentTurnContextRepository implements AgentTurnContextLedger
       await validateContextReferences(transaction, {
         conversationId: operation.conversationId,
         notebookId: operation.notebookId,
+        actorId: input.actorId,
         includedMessageIds: prepared.includedMessageIds,
         selectedAssetVersionIds: prepared.selectedAssetVersionIds,
       });

@@ -212,6 +212,7 @@ class GatewayGeneralProfile implements TurnApplicationProfilePort {
         maxCharacters: 128_000,
       },
       model: {
+        taskAlias: 'agent.turn' as const,
         modelAlias: 'primary' as const,
         promptVersion: 'gateway-general-v2',
         maxToolRounds: 1,

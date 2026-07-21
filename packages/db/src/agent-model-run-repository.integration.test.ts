@@ -114,6 +114,89 @@ async function createAgentTurnFixture(): Promise<AgentTurnFixture> {
   return { actorId, otherActorId, operationId, assistantMessageId };
 }
 
+async function createTeachingAgentTurnFixture(): Promise<AgentTurnFixture> {
+  const actorId = 'user:model-run-teaching-owner';
+  const otherActorId = 'user:model-run-teaching-other';
+  await getDatabase()
+    .insert(schema.platformUsers)
+    .values([
+      { id: actorId, kind: 'registered' },
+      { id: otherActorId, kind: 'registered' },
+    ]);
+  const [agent] = await getDatabase()
+    .insert(schema.personalAgents)
+    .values({ userId: actorId })
+    .returning();
+  if (!agent) throw new Error('测试教学Agent创建失败');
+  const conversation = await new DrizzlePlatformConversationRepository(
+    getDatabase(),
+  ).create({
+    ownerSubjectId: actorId,
+    spaceKind: 'course',
+    spaceTitle: '教学模型账本测试',
+  });
+  const [session] = await getDatabase()
+    .insert(schema.lessonSessions)
+    .values({
+      conversationId: conversation.id,
+      studentId: actorId,
+      gradeBand: 'grade-7',
+      courseSlug: 'math',
+      knowledgeNodeId: 'pythagorean-theorem',
+      state: 'EXPLAIN',
+      status: 'active',
+    })
+    .returning({ id: schema.lessonSessions.id });
+  if (!session) throw new Error('测试教学Session创建失败');
+  const operationId = randomUUID();
+  const assistantMessageId = randomUUID();
+  const now = new Date('2026-07-21T09:10:00.000Z');
+  await getDatabase()
+    .insert(schema.agentOperations)
+    .values({
+      id: operationId,
+      gatewayEnvelopeId: `envelope:${operationId}`,
+      requestFingerprint: 'a'.repeat(64),
+      actorUserId: actorId,
+      agentId: agent.id,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      kind: 'turn',
+      idempotencyKey: `idempotency:${operationId}`,
+      traceId: `trace:${operationId}`,
+      status: 'running',
+      createdAt: now,
+    });
+  await getDatabase()
+    .insert(schema.chatMessages)
+    .values([
+      {
+        sessionId: session.id,
+        turnId: operationId,
+        clientMessageId: `client:${operationId}`,
+        requestHash: 'b'.repeat(64),
+        role: 'student',
+        status: 'completed',
+        content: '请解释勾股定理',
+        createdAt: now,
+        completedAt: now,
+      },
+      {
+        id: assistantMessageId,
+        sessionId: session.id,
+        turnId: operationId,
+        role: 'assistant',
+        status: 'pending',
+        content: '',
+        leaseId: randomUUID(),
+        leaseExpiresAt: new Date('2026-07-21T09:11:00.000Z'),
+        heartbeatAt: now,
+        createdAt: now,
+      },
+    ]);
+  return { actorId, otherActorId, operationId, assistantMessageId };
+}
+
 describeWithDatabase('统一Agent Model Run账本', () => {
   beforeAll(async () => {
     await migrate(getDatabase(), {
@@ -142,6 +225,7 @@ describeWithDatabase('统一Agent Model Run账本', () => {
       actorId: fixture.actorId,
       assistantMessageId: fixture.assistantMessageId,
       phase: 'answer',
+      taskAlias: 'agent.turn',
       modelAlias: 'primary',
       promptVersion: 'agent-general-v2',
       promptHash,
@@ -163,6 +247,7 @@ describeWithDatabase('统一Agent Model Run账本', () => {
       actorId: fixture.actorId,
       assistantMessageId: fixture.assistantMessageId,
       phase: 'answer',
+      taskAlias: 'agent.turn',
       modelAlias: 'primary',
       promptVersion: 'agent-general-v2',
       promptHash,
@@ -178,6 +263,7 @@ describeWithDatabase('统一Agent Model Run账本', () => {
         actorId: fixture.actorId,
         assistantMessageId: fixture.assistantMessageId,
         phase: 'answer',
+        taskAlias: 'agent.turn',
         modelAlias: 'primary',
         promptVersion: 'agent-general-v2',
         promptHash: 'c'.repeat(64),
@@ -202,6 +288,56 @@ describeWithDatabase('统一Agent Model Run账本', () => {
     );
   });
 
+  it('让Teaching Profile复用同一Operation账本而不复制可见消息', async () => {
+    const fixture = await createTeachingAgentTurnFixture();
+    const repository = new DrizzleAgentModelRunRepository(getDatabase());
+    const created = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      assistantMessageId: fixture.assistantMessageId,
+      phase: 'answer',
+      taskAlias: 'teaching.turn',
+      modelAlias: 'primary',
+      promptVersion: 'turn-answer-v5',
+      promptHash: 'c'.repeat(64),
+    });
+
+    expect(created.run).toMatchObject({
+      operationId: fixture.operationId,
+      assistantMessageId: fixture.assistantMessageId,
+      taskAlias: 'teaching.turn',
+      status: 'pending',
+    });
+    const [stored] = await getDatabase()
+      .select()
+      .from(schema.modelRuns)
+      .where(eq(schema.modelRuns.id, created.run.id));
+    expect(stored).toMatchObject({
+      operationKind: 'agent_turn',
+      agentOperationId: fixture.operationId,
+      operationId: fixture.operationId,
+      turnId: fixture.operationId,
+      assistantMessageId: fixture.assistantMessageId,
+      conversationMessageId: null,
+      taskAlias: 'teaching.turn',
+    });
+    expect(
+      await getDatabase().select().from(schema.conversationMessages),
+    ).toEqual([]);
+    await expect(
+      repository.createOrGet({
+        operationId: fixture.operationId,
+        actorId: fixture.otherActorId,
+        assistantMessageId: fixture.assistantMessageId,
+        phase: 'synthesis',
+        taskAlias: 'teaching.turn',
+        modelAlias: 'primary',
+        promptVersion: 'turn-synthesis-v5',
+        promptHash: 'd'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(AgentModelRunOwnershipError);
+  });
+
   it('每次生命周期操作重新验证Actor并保持唯一终态', async () => {
     const fixture = await createAgentTurnFixture();
     const repository = new DrizzleAgentModelRunRepository(getDatabase());
@@ -210,6 +346,7 @@ describeWithDatabase('统一Agent Model Run账本', () => {
       actorId: fixture.actorId,
       assistantMessageId: fixture.assistantMessageId,
       phase: 'answer',
+      taskAlias: 'agent.turn',
       modelAlias: 'primary',
       promptVersion: 'agent-general-v2',
       promptHash: 'd'.repeat(64),
@@ -287,6 +424,7 @@ describeWithDatabase('统一Agent Model Run账本', () => {
       actorId: fixture.actorId,
       assistantMessageId: fixture.assistantMessageId,
       phase: 'answer',
+      taskAlias: 'agent.turn',
       modelAlias: 'primary',
       promptVersion: 'agent-general-v2',
       promptHash: 'e'.repeat(64),

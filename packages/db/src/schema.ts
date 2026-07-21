@@ -1217,7 +1217,7 @@ export const modelRuns = pgTable(
     ),
     check(
       'model_runs_operation_shape_check',
-      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.taskAlias} = 'teaching.turn') or (${table.operationKind} = 'agent_turn' and ${table.sessionId} is null and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null)`,
+      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.taskAlias} = 'teaching.turn') or (${table.operationKind} = 'agent_turn' and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ((${table.taskAlias} = 'agent.turn' and ${table.sessionId} is null and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null) or (${table.taskAlias} = 'teaching.turn' and ${table.sessionId} is not null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} = ${table.agentOperationId})))`,
     ),
     check(
       'model_runs_phase_check',
