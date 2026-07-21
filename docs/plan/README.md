@@ -18,7 +18,7 @@
 
 ## 当前计划
 
-当前 active 执行线是[第二代架构研究与决策](active/2026-07-第二代架构研究.md)。本阶段不改生产架构，只做源码研究、能力映射、对照实验和 ADR 决策；Web-first 入口、TUI、handoff 与 Connections 已于 2026-07-21 结档。历史交付与去向见[`completed/`](completed/README.md)。
+当前 active 执行线是[第二代 Hybrid Ports 架构升级](active/2026-07-第二代架构升级.md)。前置源码研究、能力映射、五类对照 fixture 和 ADR-0020 已于 2026-07-21 完成并获项目负责人接受；实施按独立纵切迁移统一 Turn、Context、Tool、Ledger、Continuation 与 Trace。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 
