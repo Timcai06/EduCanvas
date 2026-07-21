@@ -19,6 +19,7 @@ import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
+import { useSidebarState } from './use-sidebar-state';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import {
   useAgentTurn,
@@ -27,7 +28,7 @@ import {
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useGSAP } from '@gsap/react';
-import { Plus } from '@phosphor-icons/react';
+import { List, NotePencil } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -228,6 +229,7 @@ export function GeneralChatWorkspace({
   }, []);
 
   const online = useOnlineStatus();
+  const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
   const isLanding = turn.messages.length === 0;
   const notebookSources = assets.filter((asset) => asset.scope === 'space');
   const composerTools = [
@@ -284,13 +286,36 @@ export function GeneralChatWorkspace({
 
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
-      <header className="z-20 flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
-        <span className="inline-flex items-center gap-2.5 font-display text-base font-semibold">
+      <header className="z-20 flex h-16 shrink-0 items-center gap-1.5 px-3 sm:px-4">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="笔记本列表"
+          aria-expanded={sidebarOpen}
+          title="笔记本列表"
+          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <List size={19} weight="bold" />
+        </button>
+        {/* 始终可见的"新建"：无论侧栏收起与否，一键回到大搜索框首页开新会话 */}
+        <button
+          type="button"
+          onClick={() => void startNewGeneralChatAction()}
+          aria-label="新建笔记本"
+          title="新建笔记本"
+          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <NotePencil size={19} />
+        </button>
+        <span className="ml-1 inline-flex items-center gap-2.5 font-display text-base font-semibold">
           <LogoMark size={20} />
-          EduCanvas
+          <span className="hidden sm:inline">EduCanvas</span>
         </span>
-        <span aria-hidden="true" className="h-5 w-px bg-line/80" />
-        <span className="max-w-64 truncate text-sm font-medium text-ink-muted">
+        <span
+          aria-hidden="true"
+          className="hidden h-5 w-px bg-line/80 sm:block"
+        />
+        <span className="max-w-40 truncate text-sm font-medium text-ink-muted sm:max-w-64">
           {notebookTitle ?? '未命名笔记本'}
         </span>
         <span className="flex-1" />
@@ -306,27 +331,12 @@ export function GeneralChatWorkspace({
         >
           Studio
         </button>
-        <button
-          type="button"
-          onClick={() => setAssetPanel('assets')}
-          className="hidden rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:block lg:hidden"
-        >
-          来源
-        </button>
-        <form action={startNewGeneralChatAction}>
-          <button
-            type="submit"
-            aria-label="新建笔记本"
-            title="新建笔记本"
-            className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink lg:hidden"
-          >
-            <Plus size={19} />
-          </button>
-        </form>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <ConversationSidebar
+          open={sidebarOpen}
+          onClose={toggleSidebar}
           activeConversationId={conversationId}
           onNewNotebook={() => void startNewGeneralChatAction()}
         >
