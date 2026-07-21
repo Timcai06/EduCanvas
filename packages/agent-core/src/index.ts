@@ -123,6 +123,12 @@ export {
   type TurnApplicationEvent,
 } from './turn-application-contracts';
 
+export type {
+  AgentTurnContextLedgerPort,
+  AgentTurnContextMaterial,
+  AgentTurnContextSnapshot,
+} from './turn-context-ledger';
+
 export {
   ObjectStorageError,
   isValidObjectKey,

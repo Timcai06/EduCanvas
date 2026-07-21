@@ -192,6 +192,69 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
     });
   });
 
+  it('从0024升级时保留旧教学Context Snapshot并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0025_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '77000000-0000-4000-8000-000000000001';
+      const turnId = '77000000-0000-4000-8000-000000000002';
+      const snapshotId = '77000000-0000-4000-8000-000000000003';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-context-student', 'middle_school',
+          'migration-context-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into turn_context_snapshots (
+          id, session_id, turn_id, builder_version,
+          included_message_ids, selected_asset_version_ids,
+          omitted_message_count, character_count, context_hash
+        ) values (
+          ${snapshotId}, ${sessionId}, ${turnId}, 'teaching-context-v1',
+          '[]'::jsonb, '[]'::jsonb, 0, 42, ${'b'.repeat(64)}
+        )
+      `;
+
+      await applyMigrationFile(connection, '0025_perfect_zemo.sql');
+      expect(
+        await connection`
+          select session_id, turn_id, agent_operation_id, builder_version
+          from turn_context_snapshots where id = ${snapshotId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          turn_id: turnId,
+          agent_operation_id: null,
+          builder_version: 'teaching-context-v1',
+        },
+      ]);
+      const nullableColumns = await connection<
+        { column_name: string; is_nullable: string }[]
+      >`
+        select column_name, is_nullable
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'turn_context_snapshots'
+          and column_name in ('session_id', 'turn_id', 'agent_operation_id')
+        order by column_name
+      `;
+      expect(nullableColumns).toEqual([
+        { column_name: 'agent_operation_id', is_nullable: 'YES' },
+        { column_name: 'session_id', is_nullable: 'YES' },
+        { column_name: 'turn_id', is_nullable: 'YES' },
+      ]);
+    });
+  });
+
   it('从0003升级时按scope收敛旧重复行并保留原活动时间', async () => {
     await withTemporaryDatabase(async (connection) => {
       for (const migration of [

@@ -157,6 +157,11 @@ export {
   type TurnContextMaterial,
 } from './turn-context';
 export {
+  AgentTurnContextLifecycleError,
+  AgentTurnContextOwnershipError,
+  DrizzleAgentTurnContextRepository,
+} from './agent-turn-context-repository';
+export {
   DrizzleToolCallRepository,
   MAX_TOOL_AUDIT_VALUE_BYTES,
   ToolCallConflictError,
