@@ -885,29 +885,58 @@ export class DrizzleGatewayNodeRepository {
       .where(eq(gatewayNodePairings.nodeId, heartbeat.nodeId));
   }
 
+  /**
+   * 只允许 Operation 的真实 Actor/Personal Agent 调用其自有 Node。
+   * 调用方不能补传主体字段；归属必须从 PostgreSQL 的 Operation 与 Pairing 事实中同事务解析。
+   */
   async enqueue(raw: unknown): Promise<GatewayNodeInvocationRequest> {
     const request = gatewayNodeInvocationRequestSchema.parse(raw);
-    const pairing = await this.getActive(request.nodeId);
-    if (
-      !pairing ||
-      !pairing.approvedCapabilities.capabilities.some(
-        (capability) => capability.name === request.capability,
-      )
-    ) {
-      throw new GatewayPersistenceError('forbidden', 'Node capability denied');
-    }
-    await this.database.insert(gatewayNodeInvocations).values({
-      requestId: request.requestId,
-      operationId: request.operationId,
-      nodeId: request.nodeId,
-      capability: request.capability,
-      parameters: request.parameters,
-      nonce: request.nonce,
-      status: 'pending',
-      issuedAt: new Date(request.issuedAt),
-      expiresAt: new Date(request.expiresAt),
+    return this.database.transaction(async (transaction) => {
+      const [ownership] = await transaction
+        .select({
+          nodeUserId: gatewayNodePairings.userId,
+          nodeAgentId: gatewayNodePairings.agentId,
+          nodeStatus: gatewayNodePairings.status,
+          nodeRevokedAt: gatewayNodePairings.revokedAt,
+          approvedCapabilities: gatewayNodePairings.approvedCapabilities,
+          operationActorUserId: agentOperations.actorUserId,
+          operationAgentId: agentOperations.agentId,
+        })
+        .from(gatewayNodePairings)
+        .innerJoin(agentOperations, eq(agentOperations.id, request.operationId))
+        .where(eq(gatewayNodePairings.nodeId, request.nodeId))
+        .limit(1)
+        .for('update', { of: gatewayNodePairings });
+
+      if (
+        !ownership ||
+        ownership.nodeStatus !== 'active' ||
+        ownership.nodeRevokedAt !== null ||
+        ownership.operationActorUserId !== ownership.nodeUserId ||
+        ownership.operationAgentId !== ownership.nodeAgentId ||
+        !ownership.approvedCapabilities.capabilities.some(
+          (capability) => capability.name === request.capability,
+        )
+      ) {
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'Node invocation ownership or capability denied',
+        );
+      }
+
+      await transaction.insert(gatewayNodeInvocations).values({
+        requestId: request.requestId,
+        operationId: request.operationId,
+        nodeId: request.nodeId,
+        capability: request.capability,
+        parameters: request.parameters,
+        nonce: request.nonce,
+        status: 'pending',
+        issuedAt: new Date(request.issuedAt),
+        expiresAt: new Date(request.expiresAt),
+      });
+      return request;
     });
-    return request;
   }
 
   async poll(
