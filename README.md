@@ -263,11 +263,11 @@ stateDiagram-v2
 
 ## 下一阶段
 
-[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)已经完成。后续优先级是：
+[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)和[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)已经完成。当前架构线先进入[第二代研究与决策](docs/plan/active/2026-07-second-generation-architecture-research.md)，不直接改写生产架构。后续产品与运维优先级是：
 
 1. 接入正式 IdP，替换仅供管理员/本地 bootstrap 使用的共享令牌；
 2. 完成统一 Context Engine：Notebook 摘要、长期学习者记忆、Artifact 上下文和原生多模态；
-3. 为 Telegram 一次性自助绑定纵切补 live 账号 smoke、Adapter 健康、可靠部署与告警；
+3. 为 Telegram 一次性自助绑定纵切补 live 账号 smoke，并完成 enabled Adapter 生命周期、degraded health、可靠部署与告警；
 4. 完成对象删除 Outbox、外部指标/Trace 后端、SLO 与恢复演练；
 5. 只有明确的成年/管理员场景通过安全评审后，才增加 L2/L3 Node 能力。
 

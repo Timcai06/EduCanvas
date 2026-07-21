@@ -15,3 +15,4 @@
 | 2026-07-17 | [`2026-07-platform-decoupling-runtime-hardening.md`](2026-07-platform-decoupling-runtime-hardening.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划                               |
 | 2026-07-19 | [`2026-07-gemini-notebooklm-replica.md`](2026-07-gemini-notebooklm-replica.md)                         | 持久Artifact、轻产物、Notebook来源/引用、音频与Canvas共创交付；Runtime收口移交新计划   |
 | 2026-07-19 | [`2026-07-gateway-first-personal-agent.md`](2026-07-gateway-first-personal-agent.md)                   | Gateway协议/运行时、共享Notebook、Web、唯一Loop、TUI、Telegram与安全Node全部收口       |
+| 2026-07-21 | [`2026-07-web-first-entrypoints-and-handoff.md`](2026-07-web-first-entrypoints-and-handoff.md)         | Make入口、统一身份、一次性handoff、Connections、Web设置与TUI渠道管理收口               |

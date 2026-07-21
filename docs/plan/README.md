@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-19
+- 最后验证时间：2026-07-21
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -18,7 +18,7 @@
 
 ## 当前计划
 
-当前 active 执行线是 [Web-first 入口、TUI 与连接控制面](active/2026-07-web-first-entrypoints-and-handoff.md)。Gateway-first 主线已于 2026-07-19 结档；本阶段收敛 `make all/dev/tui`、统一 Web/TUI local identity、双向 handoff 和 GUI/TUI 渠道设置。历史交付与去向见[`completed/`](completed/README.md)。
+当前 active 执行线是[第二代架构研究与决策](active/2026-07-second-generation-architecture-research.md)。本阶段不改生产架构，只做源码研究、能力映射、对照实验和 ADR 决策；Web-first 入口、TUI、handoff 与 Connections 已于 2026-07-21 结档。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 

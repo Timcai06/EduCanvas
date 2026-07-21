@@ -4,7 +4,7 @@
 
 这是 EduCanvas 当前唯一的 Web 应用。它使用 Next.js App Router 同时承载 Chat-first 体验和阶段一 BFF/组合根，负责把通用 `@educanvas/agent-core`、Provider、Artifact、数据能力与 K12 `@educanvas/teaching-core` / `@educanvas/teaching-runtime` 组装成当前首个可运行纵切。
 
-共享协议、领域规则、应用用例和数据库定义不得复制到应用私有目录；阶段一保持模块化单体部署，边界依据 [ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)。当前身份仍是匿名演示身份，不是正式用户认证。
+共享协议、领域规则、应用用例和数据库定义不得复制到应用私有目录；项目继续采用模块化单体，边界依据 [ADR-0019](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)。local deployment 下 Web 与 TUI 使用同一个 `local:owner` 主体；其他未接正式 IdP 的环境仍使用受限匿名兼容身份，不能冒充正式用户认证。
 
 ## 当前实现边界
 
@@ -25,7 +25,7 @@
 
 - 当前OpenAI-compatible文本Provider不能原生理解图片；图片Asset会保留不可变引用并返回明确的模态不支持错误，不静默降级；
 - T1非`ASSESS`节点的可信事件接线仍未完成，当前不会形成完整状态推进闭环；
-- Studio 当前只展示本课预置产物状态；Artifact 的 Agent 提议、学生确认、独立生成和持久化列表尚未实现；
+- 原生图片、音频和视频模型输入、统一 Context Engine 与正式 IdP 尚未接通；
 - `ScriptedModelGateway` 与 Demo Teacher Script 只用于测试，不属于生产回答路径。
 
 因此，“Provider Adapter、SSE、账本、Asset/K1/T1首条纵切存在”不等于“真实Provider已完成线上验证”或“整节课Agent闭环已完成”。
@@ -76,22 +76,19 @@
 以下命令都从仓库根目录执行：
 
 ```bash
-pnpm --filter @educanvas/web dev
-pnpm --filter @educanvas/web test
-pnpm --filter @educanvas/web typecheck
-pnpm --filter @educanvas/web lint
-pnpm --filter @educanvas/web build
+make dev          # Web + worker，本地产品验证
+make check        # lint、typecheck 与单元测试
+make build        # 生产构建
+make e2e          # 隔离数据库上的浏览器回归
 ```
 
 本地纵切需要 PostgreSQL 和根目录 `.env`：
 
 ```bash
-pnpm db:up
-pnpm db:migrate
-pnpm --filter @educanvas/web dev
+make dev
 ```
 
-浏览器验证从仓库根目录执行 `pnpm test:e2e`。Playwright 配置要求 `E2E_DATABASE_URL` 指向数据库名以 `_e2e` 或 `_test` 结尾的隔离实例，并会先构建生产应用；不要指向共享开发库或生产库。
+`make e2e` 要求 `E2E_DATABASE_URL` 指向数据库名以 `_e2e` 或 `_test` 结尾的隔离实例，并会先构建生产应用；不要指向共享开发库或生产库。
 
 ## 改动前必读
 
@@ -101,4 +98,4 @@ pnpm --filter @educanvas/web dev
 - [智能体编排](../../docs/03-ai/agent-orchestration.md)
 - [前端工程](../../docs/05-engineering/frontend.md)
 - [API 约定](../../docs/05-engineering/api-conventions.md)
-- [ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)
+- [ADR-0019：模块化单体、Artifact 与持久任务](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)

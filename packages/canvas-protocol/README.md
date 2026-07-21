@@ -22,7 +22,7 @@
 - 协议版本当前只有 `1`；白名单联合已注册 `classification_game`、`quiz` 和 `pipeline_flow`；
 - `classification_game` 与 `quiz` 可拆分公开投影/私有判分键，并由服务端确定性判分；
 - `pipeline_flow` 只渲染教学流程动画，不生成判分键，也不接受模型提供选择器、时长、任意动画属性或 GSAP 代码；
-- `apps/web` 已为三种协议注册静态 React Renderer，但当前课程 Artifact 来自服务端预置数据；Agent 提议、学生确认、独立生成和 Studio 持久化列表仍未实现；
+- `apps/web` 已为协议注册静态 React Renderer；Artifact 提议、确认、持久生成和 Studio 恢复由外层 Runtime/Worker/数据库负责，本包不持有其生命周期；
 - 本包只定义和校验协议，不负责数据库存储、Renderer 生命周期、模型调用或教学状态推进。
 
 ## 常用命令
@@ -45,4 +45,5 @@ pnpm lint                                            # 运行仓库现有lint任
 - [智能体编排](../../docs/03-ai/agent-orchestration.md)：模型通过哪些受控工具生成Canvas。
 - [数据设计](../../docs/04-data/data-design.md)：学习事件和Artifact如何持久化。
 - [安全与隐私](../../docs/06-quality/security-and-privacy.md)：为什么协议必须使用白名单和沙箱。
-- [ADR-0010](../../docs/09-decisions/0010-canvas-trust-tiers.md)：Canvas 分层信任模型的正式架构决定（本包契约对应 Tier 1，取代 [ADR-0002](../../docs/09-decisions/0002-controlled-canvas.md)）。
+- [ADR-0018](../../docs/09-decisions/0018-capability-trust-and-learning-evidence.md)：Canvas/Artifact 信任分层与可信学习证据边界。
+- [关键决策历史](../../docs/09-decisions/decision-history.md)：早期受控 Canvas 决策的压缩记录。
