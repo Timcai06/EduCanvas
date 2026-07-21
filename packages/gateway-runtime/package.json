@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/agent-core": "workspace:*",
     "@educanvas/gateway-core": "workspace:*"
   },
   "devDependencies": {

@@ -5,3 +5,4 @@ export * from './fingerprint';
 export * from './gateway-service';
 export * from './in-memory';
 export * from './ports';
+export * from './turn-application-projection';
