@@ -66,7 +66,7 @@
 
 ## 对照实验与决策门
 
-- [ ] 建立当前能力清单：每项包含实现符号、事实表、调用者、测试证据、重复职责与可替换 Port。
+- [x] 建立当前能力清单：每项包含实现符号、事实表、调用者、测试证据、重复职责与可替换 Port。证据见[2026-07-21 能力盘点快照](../../00-overview/snapshots/2026-07-21-second-generation-capability-inventory.md)。
 - [ ] 用同一组 golden fixtures 对比 native 与 AI SDK Adapter：流事件、工具圈、强制 synthesis、取消、唯一终态、用量与 secret 零外泄。
 - [ ] 设计统一 Tool Kernel fixture：本地 Tool、Teaching Tool、MCP Tool 与 Node Tool 共享权限交集、审批、effect ledger、timeout 与结果未知语义。
 - [ ] 对比 PostgreSQL LangGraph Saver 与原生 graphile-worker continuation：五个 kill point、N-1/N-2 数据、滚动升级、回滚、LOC 与运维成本。
