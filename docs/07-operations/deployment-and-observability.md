@@ -2,7 +2,7 @@
 
 - 状态：`draft`
 - 负责人：待认领
-- 最后验证时间：2026-07-19
+- 最后验证时间：2026-07-21
 
 ## 当前部署事实
 
@@ -20,6 +20,10 @@
 - `production`：未来正式环境。
 
 环境之间必须隔离数据库、对象存储和密钥。未实际存在的环境不能在文档中写成已部署。
+
+### 实验性 Telegram 纵切
+
+Telegram 不属于默认 `make all` profile。只有同时配置 `TELEGRAM_BOT_TOKEN` 与公开的 `TELEGRAM_BOT_USERNAME` 后，才单独运行 `pnpm --filter @educanvas/telegram dev`；Gateway/Web 只读取 username 来生成官方 deep link，Bot Token 只进入 Adapter 进程。用户从 Web `/settings` 或 TUI `/channels connect telegram` 发起，十分钟内在 Bot 私聊确认。仓库没有 live 账号证据，因此这仍是实验性能力，不可写成生产可用。
 
 ## 部署原则
 

@@ -58,6 +58,7 @@ export {
   type GatewayHandoffConsumeResult,
   type GatewayHandoffRejectionReason,
 } from './gateway-handoff-repository';
+export { DrizzleGatewayConnectionRepository } from './gateway-connection-repository';
 export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,

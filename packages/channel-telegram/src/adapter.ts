@@ -50,6 +50,44 @@ export type TelegramNormalizationResult =
         | 'UNSUPPORTED_CONTENT';
     };
 
+export interface TelegramConnectionActivation {
+  connectionId: string;
+  externalAccountId: string;
+  externalThreadId: string;
+}
+
+/**
+ * 只从 Telegram 私聊 `/start educanvas_<uuid>` 提取一次性连接确认。
+ * 返回值仍不是授权结论；Adapter 必须交给服务端 pending 仓储校验到期、重放与归属。
+ */
+export function readTelegramConnectionActivation(
+  raw: unknown,
+): TelegramConnectionActivation | null {
+  const parsed = telegramUpdateSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const message = parsed.data.message;
+  if (
+    !message?.from ||
+    message.from.is_bot ||
+    message.chat.type !== 'private' ||
+    !message.text
+  ) {
+    return null;
+  }
+  const match = message.text
+    .trim()
+    .match(
+      /^\/start(?:@[A-Za-z0-9_]+)?\s+educanvas_([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i,
+    );
+  return match?.[1]
+    ? {
+        connectionId: match[1],
+        externalAccountId: String(message.from.id),
+        externalThreadId: String(message.chat.id),
+      }
+    : null;
+}
+
 export function normalizeTelegramUpdate(
   raw: unknown,
   binding: TelegramPrivateBinding | null,

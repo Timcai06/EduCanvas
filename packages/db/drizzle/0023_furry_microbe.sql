@@ -1,0 +1,2 @@
+ALTER TABLE "gateway_channel_account_bindings" ADD COLUMN "activation_expires_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "gateway_channel_account_bindings" ADD CONSTRAINT "gateway_channel_account_activation_check" CHECK ("gateway_channel_account_bindings"."activation_expires_at" is null or ("gateway_channel_account_bindings"."status" = 'pending' and "gateway_channel_account_bindings"."activation_expires_at" > "gateway_channel_account_bindings"."created_at"));

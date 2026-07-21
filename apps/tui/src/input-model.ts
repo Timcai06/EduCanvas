@@ -20,6 +20,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: '/approvals', description: '待审批事项' },
   { name: '/approve', description: '同意审批' },
   { name: '/deny', description: '拒绝审批' },
+  { name: '/channels', description: '管理通信方式' },
   { name: '/web', description: '在浏览器打开当前笔记本' },
   { name: '/help', description: '命令说明' },
   { name: '/quit', description: '退出' },

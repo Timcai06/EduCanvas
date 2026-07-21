@@ -228,6 +228,9 @@ export const gatewayChannelAccountBindings = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    activationExpiresAt: timestamp('activation_expires_at', {
+      withTimezone: true,
+    }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
@@ -242,6 +245,10 @@ export const gatewayChannelAccountBindings = pgTable(
     check(
       'gateway_channel_account_text_check',
       sql`char_length(${table.adapterId}) between 1 and 160 and char_length(${table.externalAccountId}) between 1 and 160`,
+    ),
+    check(
+      'gateway_channel_account_activation_check',
+      sql`${table.activationExpiresAt} is null or (${table.status} = 'pending' and ${table.activationExpiresAt} > ${table.createdAt})`,
     ),
   ],
 );

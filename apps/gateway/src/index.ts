@@ -6,6 +6,7 @@ import { parseEnv } from 'node:util';
 import {
   DrizzleGatewayDirectoryRepository,
   DrizzleGatewayApprovalRepository,
+  DrizzleGatewayConnectionRepository,
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayHandoffRepository,
   DrizzleGatewayNodeRepository,
@@ -13,6 +14,8 @@ import {
   DrizzleGatewayRouteResolver,
 } from '@educanvas/db';
 import {
+  createDefaultGatewayConnectionProviders,
+  GatewayConnectionService,
   GatewayService,
   Sha256GatewayRequestFingerprint,
 } from '@educanvas/gateway-runtime';
@@ -48,6 +51,12 @@ const config = readGatewayConfig();
 const operationStore = new DrizzleGatewayOperationStore();
 const identities = new DrizzleGatewayIdentityRepository();
 const directory = new DrizzleGatewayDirectoryRepository();
+const connections = new GatewayConnectionService(
+  new DrizzleGatewayConnectionRepository(),
+  createDefaultGatewayConnectionProviders({
+    telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME,
+  }),
+);
 const clientSessionSecret =
   config.sessionSecret ??
   (config.localOnboardingEnabled ? randomBytes(32).toString('hex') : null);
@@ -83,6 +92,7 @@ const server = createServer(
           approvals: new DrizzleGatewayApprovalRepository(),
           operations: operationStore,
           handoffs: new DrizzleGatewayHandoffRepository(),
+          connections,
         }
       : null,
     nodeTransport:

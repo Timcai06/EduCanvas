@@ -74,6 +74,13 @@ TUI 与 Web 是操作同一个笔记本的两种窗口，不是两套数据。
 - **Web → TUI**：本地模式下 Web 与 TUI 同为 `local:owner`、共享同一批 Conversation，TUI 直接运行即见同一批笔记本，无需在 K12 主界面塞入终端入口（终端是高级用户入口，不打扰学生）。
 - token 只是短期导航授权，不是身份、Notebook 分享链接或可恢复的长期深链；Conversation ID 不再出现在交接 URL 中。
 
+## 通信方式设置
+
+- Web `/settings` 是 K12 用户的主要设置入口，页头齿轮一跳可达；TUI 用 `/channels` 管理同一份服务端状态。两个客户端都只显示 provider、状态与目标笔记本，不显示外部账号 ID、Adapter ID、Bot Token 或数据库绑定键。
+- 发起连接必须绑定当前可信主体可回复的 Conversation。Telegram 返回十分钟有效的官方 Bot `/start` 链接，只有对应私聊携正确一次性 connection ID 时才把 pending 原子提升为 active；普通 bot update 绝不能自建绑定。
+- 微信与 QQ 在平台资格、正式凭据和 Adapter 未完成前显示“暂不可用”及真实原因；禁止用假二维码、假成功或手工填外部账号 ID 冒充连接。
+- pending、active、revoked 都必须可见；撤销使用朱砂语义并保留 `revokedAt` 审计。跨用户列表为空、撤销拒绝，来源消息仍确定性回复到来源渠道。
+
 ## AI 老师对话体验
 
 - 老师消息不用气泡（头像 + 正文直接落在页面上），学生消息是页面唯一气泡；

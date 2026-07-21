@@ -1,9 +1,18 @@
 import {
   gatewayClientTurnRequestSchema,
+  gatewayConnectionConnectRequestSchema,
+  gatewayConnectionConnectResultSchema,
+  gatewayConnectionListSchema,
+  gatewayConnectionRevokeRequestSchema,
+  gatewayConnectionRevokeResultSchema,
   gatewayHandoffCredentialSchema,
   gatewayHandoffIssueRequestSchema,
   gatewayOperationEventSchema,
   type GatewayClientTurnRequest,
+  type GatewayConnectionConnectResult,
+  type GatewayConnectionList,
+  type GatewayConnectionProvider,
+  type GatewayConnectionRevokeResult,
   type GatewayHandoffCredential,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
@@ -198,6 +207,54 @@ export class GatewayClient {
     return gatewayHandoffCredentialSchema.parse(await response.json());
   }
 
+  /** 列出服务端 Provider 能力目录与当前主体自己的连接，不接受客户端 userId。 */
+  async listConnections(): Promise<GatewayConnectionList> {
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/connections`,
+      { headers: this.headers() },
+    );
+    if (!response.ok) throw await parseError(response);
+    return gatewayConnectionListSchema.parse(await response.json());
+  }
+
+  /** 为一个已拥有的 Conversation 发起外部渠道授权，不直接提交外部账号 ID。 */
+  async connect(
+    provider: GatewayConnectionProvider,
+    conversationId: string,
+  ): Promise<GatewayConnectionConnectResult> {
+    const body = gatewayConnectionConnectRequestSchema.parse({
+      provider,
+      conversationId,
+    });
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/connections/connect`,
+      {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw await parseError(response);
+    return gatewayConnectionConnectResultSchema.parse(await response.json());
+  }
+
+  /** 撤销当前主体自己的连接；服务端再次做租户校验并保留 revokedAt 审计。 */
+  async revokeConnection(
+    connectionId: string,
+  ): Promise<GatewayConnectionRevokeResult> {
+    const body = gatewayConnectionRevokeRequestSchema.parse({ connectionId });
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/connections/revoke`,
+      {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw await parseError(response);
+    return gatewayConnectionRevokeResultSchema.parse(await response.json());
+  }
+
   async listApprovals(): Promise<readonly GatewayPendingApproval[]> {
     const response = await this.fetcher(`${this.baseUrl}/v1/client/approvals`, {
       headers: this.headers(),
@@ -274,9 +331,12 @@ export class GatewayClient {
 
   /** 近期回合操作，供会话恢复入口列出可 resume 的历史。 */
   async listOperations(): Promise<readonly GatewayRecentOperation[]> {
-    const response = await this.fetcher(`${this.baseUrl}/v1/client/operations`, {
-      headers: this.headers(),
-    });
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/operations`,
+      {
+        headers: this.headers(),
+      },
+    );
     if (!response.ok) throw await parseError(response);
     return z
       .object({ operations: z.array(recentOperationSchema) })

@@ -29,7 +29,9 @@ import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useGSAP } from '@gsap/react';
 import { List, NotePencil } from '@phosphor-icons/react';
+import { Gear } from '@phosphor-icons/react';
 import gsap from 'gsap';
+import Link from 'next/link';
 import { Flip } from 'gsap/Flip';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -319,6 +321,14 @@ export function GeneralChatWorkspace({
           {notebookTitle ?? '未命名笔记本'}
         </span>
         <span className="flex-1" />
+        <Link
+          href="/settings"
+          aria-label="通信方式设置"
+          title="通信方式设置"
+          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Gear aria-hidden="true" size={19} />
+        </Link>
         <button
           type="button"
           onClick={() => {
