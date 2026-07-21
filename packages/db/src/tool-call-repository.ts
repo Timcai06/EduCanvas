@@ -296,6 +296,7 @@ export class DrizzleToolCallRepository {
       if (
         answerRun.run.operationKind !== 'teaching_turn' ||
         answerRun.run.phase !== 'answer' ||
+        !answerRun.run.sessionId ||
         !answerRun.run.turnId
       ) {
         throw new ToolCallLifecycleError(

@@ -118,9 +118,9 @@ function toMessageSnapshot(
 }
 
 function toRunSnapshot(row: typeof modelRuns.$inferSelect): ModelRunSnapshot {
-  if (!row.assistantMessageId || !row.turnId) {
+  if (!row.sessionId || !row.assistantMessageId || !row.turnId) {
     throw new TurnLedgerInvariantError(
-      'teaching_turn model run 缺少 assistantMessageId/turnId',
+      'teaching_turn model run 缺少 sessionId/assistantMessageId/turnId',
     );
   }
   return {

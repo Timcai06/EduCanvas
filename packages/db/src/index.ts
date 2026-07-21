@@ -121,6 +121,12 @@ export {
   type TeachingTurnSnapshot,
 } from './chat-repository';
 export {
+  AgentModelRunConflictError,
+  AgentModelRunLifecycleError,
+  AgentModelRunOwnershipError,
+  DrizzleAgentModelRunRepository,
+} from './agent-model-run-repository';
+export {
   DrizzleModelRunRepository,
   ModelRunConflictError,
   ModelRunLifecycleError,

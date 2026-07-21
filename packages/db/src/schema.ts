@@ -1142,18 +1142,26 @@ export const turnContextSnapshots = pgTable(
   ],
 );
 
-/** 模型运行是与可见消息分层的审计记录；D1 只允许 teaching_turn operation。 */
+/** 模型运行是与可见消息分层的审计记录；兼容旧教学账本并接入统一 Agent Operation。 */
 export const modelRuns = pgTable(
   'model_runs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => lessonSessions.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => lessonSessions.id, {
+      onDelete: 'cascade',
+    }),
     operationId: uuid('operation_id').notNull(),
     operationKind: text('operation_kind').notNull(),
+    agentOperationId: uuid('agent_operation_id').references(
+      () => agentOperations.id,
+      { onDelete: 'cascade' },
+    ),
     assistantMessageId: uuid('assistant_message_id').references(
       () => chatMessages.id,
+      { onDelete: 'cascade' },
+    ),
+    conversationMessageId: uuid('conversation_message_id').references(
+      () => conversationMessages.id,
       { onDelete: 'cascade' },
     ),
     turnId: uuid('turn_id'),
@@ -1191,15 +1199,28 @@ export const modelRuns = pgTable(
       table.attempt,
     ),
     index('model_runs_session_turn_idx').on(table.sessionId, table.turnId),
+    index('model_runs_agent_operation_idx').on(
+      table.agentOperationId,
+      table.createdAt,
+      table.id,
+    ),
     check(
-      'model_runs_teaching_turn_shape_check',
-      sql`${table.operationKind} = 'teaching_turn' and ${table.assistantMessageId} is not null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.phase} in ('answer', 'synthesis')`,
+      'model_runs_operation_shape_check',
+      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.taskAlias} = 'teaching.turn') or (${table.operationKind} = 'agent_turn' and ${table.sessionId} is null and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null)`,
+    ),
+    check(
+      'model_runs_phase_check',
+      sql`${table.phase} in ('answer', 'synthesis')`,
     ),
     check(
       'model_runs_status_check',
       sql`${table.status} in ('pending', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')`,
     ),
-    check('model_runs_attempt_check', sql`${table.attempt} >= 1`),
+    check('model_runs_attempt_check', sql`${table.attempt} between 1 and 100`),
+    check(
+      'model_runs_text_check',
+      sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} in ('agent.turn', 'teaching.turn') and ${table.modelAlias} in ('primary', 'fast', 'structured', 'speech') and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
+    ),
     check(
       'model_runs_usage_check',
       sql`coalesce(${table.inputTokens}, 0) >= 0 and coalesce(${table.outputTokens}, 0) >= 0 and coalesce(${table.cacheHitTokens}, 0) >= 0 and coalesce(${table.reasoningTokens}, 0) >= 0 and coalesce(${table.latencyMs}, 0) >= 0`,

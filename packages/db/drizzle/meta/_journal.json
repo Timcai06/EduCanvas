@@ -169,6 +169,13 @@
       "when": 1784599238745,
       "tag": "0023_furry_microbe",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784624695041,
+      "tag": "0024_light_viper",
+      "breakpoints": true
     }
   ]
 }
