@@ -1,7 +1,14 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   gatewayClientTurnRequestSchema,
+  gatewayHandoffCredentialSchema,
+  gatewayHandoffIssueRequestSchema,
   gatewayOpaqueIdSchema,
   gatewayProtocolVersion,
   type GatewayInboundEnvelope,
@@ -15,6 +22,7 @@ import {
   GatewayPersistenceError,
   type DrizzleGatewayDirectoryRepository,
   type DrizzleGatewayIdentityRepository,
+  type DrizzleGatewayHandoffRepository,
   type DrizzleGatewayNodeRepository,
   type DrizzleGatewayApprovalRepository,
   type DrizzleGatewayOperationStore,
@@ -28,6 +36,7 @@ import {
 import { GatewayObservability, gatewayRouteLabel } from './observability';
 
 const MAX_BODY_BYTES = 1_000_000;
+const HANDOFF_TTL_MS = 2 * 60 * 1_000;
 
 function writeJson(
   response: ServerResponse,
@@ -140,6 +149,7 @@ export function createGatewayHttpHandler(input: {
       DrizzleGatewayOperationStore,
       'append' | 'listRecent'
     >;
+    handoffs: Pick<DrizzleGatewayHandoffRepository, 'issue'>;
   } | null;
   nodeTransport?: {
     bootstrapToken: string;
@@ -372,6 +382,36 @@ export function createGatewayHttpHandler(input: {
           writeJson(response, 200, {
             operations: await client.operations.listRecent(identity.userId),
           });
+          return;
+        }
+
+        if (
+          request.method === 'POST' &&
+          url.pathname === '/v1/client/handoffs'
+        ) {
+          const body = gatewayHandoffIssueRequestSchema.parse(
+            await readJsonBody(request),
+          );
+          const token = randomBytes(32).toString('base64url');
+          const issuedAt = new Date();
+          const expiresAt = new Date(issuedAt.getTime() + HANDOFF_TTL_MS);
+          await client.handoffs.issue({
+            tokenDigest: createHash('sha256')
+              .update(token, 'utf8')
+              .digest('hex'),
+            userId: identity.userId,
+            conversationId: body.conversationId,
+            issuedAt,
+            expiresAt,
+          });
+          writeJson(
+            response,
+            201,
+            gatewayHandoffCredentialSchema.parse({
+              token,
+              expiresAt: expiresAt.toISOString(),
+            }),
+          );
           return;
         }
 

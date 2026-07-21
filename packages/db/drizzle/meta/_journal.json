@@ -155,6 +155,13 @@
       "when": 1784438507375,
       "tag": "0021_brief_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784597763966,
+      "tag": "0022_red_tusk",
+      "breakpoints": true
     }
   ]
 }

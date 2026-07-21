@@ -1,7 +1,10 @@
 import {
   gatewayClientTurnRequestSchema,
+  gatewayHandoffCredentialSchema,
+  gatewayHandoffIssueRequestSchema,
   gatewayOperationEventSchema,
   type GatewayClientTurnRequest,
+  type GatewayHandoffCredential,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import { z } from 'zod';
@@ -176,6 +179,23 @@ export class GatewayClient {
     );
     if (!response.ok) throw await parseError(response);
     return directorySchema.parse(await response.json()).conversations;
+  }
+
+  /**
+   * 为当前主体拥有的 Conversation 请求短期一次性 Web 交接凭证。
+   * 返回值只能立即用于 `/open?token=...`，不得缓存为身份或长期深链。
+   */
+  async createHandoff(
+    conversationId: string,
+  ): Promise<GatewayHandoffCredential> {
+    const body = gatewayHandoffIssueRequestSchema.parse({ conversationId });
+    const response = await this.fetcher(`${this.baseUrl}/v1/client/handoffs`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw await parseError(response);
+    return gatewayHandoffCredentialSchema.parse(await response.json());
   }
 
   async listApprovals(): Promise<readonly GatewayPendingApproval[]> {

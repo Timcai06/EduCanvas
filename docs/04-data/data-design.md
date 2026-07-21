@@ -26,6 +26,7 @@
 - `gateway_operation_events / gateway_approvals`：可按sequence恢复的标准事件与主体范围审批；
 - `gateway_channel_* / gateway_deliveries`：渠道账号/线程绑定和出站投递回执；
 - `gateway_node_pairings / gateway_node_invocations`：Node配对、心跳、撤销、调用和结果；
+- `gateway_handoff_tokens`：跨客户端短期交接授权，只保存原始 token 的 SHA-256 摘要、主体、Conversation、到期与消费时间；条件更新保证一次性消费；
 - `conversation_messages`：可脱离K12持久化和恢复的通用消息骨架；
 - `lesson_sessions.conversation_id`：K12 Vertical Context到通用Conversation的关联。0011迁移为旧会话回填同ID Space/Conversation，新会话在同一事务双写。
 

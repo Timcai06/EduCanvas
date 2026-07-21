@@ -2,7 +2,7 @@
 
 - 状态：`active`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-19
+- 最后验证时间：2026-07-21
 
 ## 目标
 
@@ -14,7 +14,7 @@
 - [x] loopback local onboarding、短期 Client session、默认 Personal Workspace 幂等创建；
 - [x] TUI 持续交互基础与自动本地登录；
 - [x] Web local identity 与 TUI registered identity 对齐；
-- [ ] Web/TUI 一次性双向 handoff；
+- [x] Web/TUI 一次性双向 handoff：TUI→Web 使用两分钟 opaque token，Web→TUI 复用同一主体与 Notebook 目录；
 - [ ] provider-neutral Connections API、Web 设置页与 TUI `/channels`；
 - [ ] enabled Channel Adapter 生命周期和 degraded health；
 - [ ] PTY、E2E、安全复核和文档收口。

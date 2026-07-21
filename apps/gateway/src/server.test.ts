@@ -214,6 +214,11 @@ describe('Gateway HTTP composition root', () => {
           return [];
         },
       },
+      handoffs: {
+        async issue(input) {
+          return { expiresAt: input.expiresAt.toISOString() };
+        },
+      },
     });
     const response = await fetch(`${base}/v1/local/onboard`, {
       method: 'POST',
@@ -302,6 +307,11 @@ describe('Gateway HTTP composition root', () => {
       () => now,
     );
     const runs: Parameters<GatewayTurnRunnerPort['run']>[0][] = [];
+    const issuedHandoffs: Array<{
+      userId: string;
+      conversationId: string;
+      tokenDigest: string;
+    }> = [];
     const base = await start(
       token,
       {
@@ -344,6 +354,12 @@ describe('Gateway HTTP composition root', () => {
             return [];
           },
         },
+        handoffs: {
+          async issue(input) {
+            issuedHandoffs.push(input);
+            return { expiresAt: input.expiresAt.toISOString() };
+          },
+        },
       },
       (input) => runs.push(input),
     );
@@ -371,6 +387,26 @@ describe('Gateway HTTP composition root', () => {
       headers: { authorization: `Bearer ${session.token}` },
     });
     expect(directory.status).toBe(200);
+    const handoff = await fetch(`${base}/v1/client/handoffs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ conversationId: 'conversation:1' }),
+    });
+    expect(handoff.status).toBe(201);
+    expect(await handoff.json()).toMatchObject({
+      token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expiresAt: expect.any(String),
+    });
+    expect(issuedHandoffs).toMatchObject([
+      {
+        userId: 'user:1',
+        conversationId: 'conversation:1',
+        tokenDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    ]);
     const turn = await fetch(`${base}/v1/client/turns`, {
       method: 'POST',
       headers: {
