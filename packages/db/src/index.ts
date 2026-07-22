@@ -54,6 +54,8 @@ export {
   type GatewayChannelPrivateRoute,
   type GatewayPendingApprovalSnapshot,
   type GatewayStoredOperationSnapshot,
+  type GatewayInvokableNodeCapability,
+  type GatewayNodeInvocationOutcome,
 } from './gateway-repository';
 export {
   DrizzleGatewayHandoffRepository,

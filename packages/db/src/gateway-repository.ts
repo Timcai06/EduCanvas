@@ -22,7 +22,11 @@ export {
   type GatewayChannelPrivateRoute,
 } from './gateway/channel-binding-repository';
 export { DrizzleGatewayDeliveryRepository } from './gateway/delivery-repository';
-export { DrizzleGatewayNodeRepository } from './gateway/node-repository';
+export {
+  DrizzleGatewayNodeRepository,
+  type GatewayInvokableNodeCapability,
+  type GatewayNodeInvocationOutcome,
+} from './gateway/node-repository';
 export {
   DrizzleGatewayApprovalRepository,
   type GatewayPendingApprovalSnapshot,
