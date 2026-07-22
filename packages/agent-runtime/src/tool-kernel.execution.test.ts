@@ -38,6 +38,38 @@ describe('Tool Kernel执行与副作用边界', () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
+  it('执行前已取消时不调用Adapter也不建立副作用意图', async () => {
+    const invoke = vi.fn(async () => ({ source: 'local' }));
+    const calls = new MemoryCallLedger();
+    const effects = new MemoryEffectLedger();
+    const controller = new AbortController();
+    controller.abort('user_cancelled');
+    const kernel = new ToolKernel(
+      [adapter({ effect: 'write', invoke })],
+      calls,
+      effects,
+    );
+
+    await expect(
+      kernel.execute({
+        tool: 'runLocal',
+        arguments: { value: 'do-not-write' },
+        context: context('cancel-before-dispatch'),
+        signal: controller.signal,
+      }),
+    ).resolves.toMatchObject({
+      status: 'cancelled',
+      code: 'tool_cancelled',
+      retryable: false,
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(effects.effects.size).toBe(0);
+    expect([...calls.calls.values()][0]).toMatchObject({
+      status: 'failed',
+      code: 'tool_cancelled',
+    });
+  });
+
   it('write超时先留intention并收敛为outcome_unknown', async () => {
     const calls = new MemoryCallLedger();
     const effects = new MemoryEffectLedger();
