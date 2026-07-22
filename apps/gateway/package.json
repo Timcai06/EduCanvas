@@ -17,6 +17,7 @@
     "@educanvas/gateway-core": "workspace:*",
     "@educanvas/gateway-runtime": "workspace:*",
     "@educanvas/model-gateway": "workspace:*",
+    "@educanvas/mcp-runtime": "workspace:*",
     "@educanvas/node-runtime": "workspace:*",
     "zod": "^4.4.3"
   },

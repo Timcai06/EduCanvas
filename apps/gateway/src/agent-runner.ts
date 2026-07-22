@@ -38,6 +38,10 @@ import {
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
 import {
+  createMcpRuntimeFromEnvironment,
+  type McpRuntime,
+} from '@educanvas/mcp-runtime';
+import {
   createNodeToolAdapters,
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
@@ -176,6 +180,7 @@ class GatewayGeneralProfile implements TurnApplicationProfilePort {
   constructor(
     private readonly turns: GatewayTurnRepositoryPort,
     private readonly nodeInvocations: NodeInvocationPersistencePort,
+    private readonly staticToolCapabilities: readonly string[],
   ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
@@ -198,12 +203,15 @@ class GatewayGeneralProfile implements TurnApplicationProfilePort {
         agentId: input.command.actor.agentId,
       },
     ).catch(() => []);
+    const grantedTools = [
+      ...new Set([...this.staticToolCapabilities, ...nodeCapabilities]),
+    ];
     const capabilities = {
-      actor: nodeCapabilities,
-      notebook: nodeCapabilities,
-      profile: nodeCapabilities,
-      channel: nodeCapabilities,
-      environment: nodeCapabilities,
+      actor: grantedTools,
+      notebook: grantedTools,
+      profile: grantedTools,
+      channel: grantedTools,
+      environment: grantedTools,
     };
     return {
       context: {
@@ -283,6 +291,7 @@ interface GatewayApplicationDependencies {
   toolCallLedger: AgentToolCallLedgerPort;
   toolEffectLedger: ToolEffectLedgerPort;
   nodeInvocations: NodeInvocationPersistencePort;
+  mcpRuntime: McpRuntime;
   modelGateway: TurnModelGateway;
 }
 
@@ -294,6 +303,7 @@ function productionDependencies(): GatewayApplicationDependencies {
     toolCallLedger: new DrizzleAgentToolCallRepository(),
     toolEffectLedger: new DrizzleToolEffectRepository(),
     nodeInvocations: new DrizzleGatewayNodeRepository(),
+    mcpRuntime: createMcpRuntimeFromEnvironment(),
     modelGateway:
       createTurnModelGatewayFromEnvironment(readModelEnvironment()) ??
       unavailableModelGateway,
@@ -320,17 +330,22 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
             const nodeAdapters = createNodeToolAdapters(
               dependenciesOrFactory.nodeInvocations,
             );
+            const toolAdapters = [
+              ...dependenciesOrFactory.mcpRuntime.adapters,
+              ...nodeAdapters,
+            ];
             return new TurnApplicationService({
               lifecycle: new GatewayTurnLifecycle(dependenciesOrFactory.turns),
               profile: new GatewayGeneralProfile(
                 dependenciesOrFactory.turns,
                 dependenciesOrFactory.nodeInvocations,
+                dependenciesOrFactory.mcpRuntime.capabilities,
               ),
               contextLedger: dependenciesOrFactory.contextLedger,
               modelRunLedger: dependenciesOrFactory.modelRunLedger,
               modelGateway: dependenciesOrFactory.modelGateway,
               toolKernel: new ToolKernel(
-                nodeAdapters,
+                toolAdapters,
                 dependenciesOrFactory.toolCallLedger,
                 dependenciesOrFactory.toolEffectLedger,
               ),

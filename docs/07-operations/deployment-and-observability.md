@@ -2,7 +2,7 @@
 
 - 状态：`draft`
 - 负责人：待认领
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-22
 
 ## 当前部署事实
 
@@ -24,6 +24,12 @@
 ### 实验性 Telegram 纵切
 
 Telegram 不属于默认 `make all` profile。只有同时配置 `TELEGRAM_BOT_TOKEN` 与公开的 `TELEGRAM_BOT_USERNAME` 后，才单独运行 `pnpm --filter @educanvas/telegram dev`；Gateway/Web 只读取 username 来生成官方 deep link，Bot Token 只进入 Adapter 进程。用户从 Web `/settings` 或 TUI `/channels connect telegram` 发起，十分钟内在 Bot 私聊确认。仓库没有 live 账号证据，因此这仍是实验性能力，不可写成生产可用。
+
+### MCP v1 外部工具
+
+`EDUCANVAS_MCP_TOOLS_JSON`是最多32项的服务端可信注册数组；默认`[]`即关闭。每项必须显式给出`serverId`、`endpoint`、`remoteToolName`、`modelToolName`、`description`、`capability`、`risk`、`effect`、`authentication`、`inputSchema`和`timeoutMs`。当前只允许L0/L1；生产端点强制HTTPS，本地HTTP只允许loopback。配置不应包含Token、Cookie或URL userinfo。
+
+Gateway与Web General在进程启动时读取同一配置。无鉴权工具进入统一Tool Kernel；Bearer工具只有组合根注入真实Credential Broker后才会暴露，当前默认组合保持disabled。状态使用`disabled/idle/ready/degraded`和`configuration/credential/transport/protocol`稳定码，不记录端点、参数、Credential或远端错误正文。MCP配置错误只禁用MCP，不拖垮普通聊天；协议或输出异常只让该次工具诚实失败。
 
 ## 部署原则
 
@@ -59,6 +65,7 @@ Telegram 不属于默认 `make all` profile。只有同时配置 `TELEGRAM_BOT_T
 - Turn 数、错误率、首 Token 和完整终态延迟；
 - 模型运行、Token、成本、工具圈和预算截停；
 - Tool 成功/失败/超时/结果未知；
+- MCP server disabled/idle/ready/degraded、稳定失败码与Schema漂移（外部指标导出待OTel纵切）；
 - Context Segment 数量、预算和来源；
 - PostgreSQL 连接、慢查询和锁竞争；
 - graphile-worker 队列积压、重试和任务年龄；
@@ -75,6 +82,7 @@ Telegram 不属于默认 `make all` profile。只有同时配置 `TELEGRAM_BOT_T
 - Channel 不可用：保留终态和待投递记录，不能伪装已送达；
 - 高级模型不可用：只有配置了正式 fallback 才切换，否则诚实失败；
 - 检索增强不可用：明确说明无法使用来源，不生成伪引用；
+- MCP不可用或Schema漂移：该工具fail closed并进入degraded，普通聊天与其他工具继续；
 - 图片/语音不可用：回退到受支持的文本表达并标明能力限制；
 - Worker 不可用：任务保持可恢复状态，不在 Web 请求中临时执行长任务；
 - 结构化课程推荐不可用：保留可信学习记录，不由模型猜测掌握度。

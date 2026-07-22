@@ -36,6 +36,7 @@ import {
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
+import { createMcpRuntimeFromEnvironment } from '@educanvas/mcp-runtime';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
@@ -56,6 +57,7 @@ const GENERAL_SYSTEM_PROMPT = `你是 EduCanvas，一个通用的对话式 AI �
 
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
+const mcpRuntime = createMcpRuntimeFromEnvironment();
 
 const unavailableModelGateway: TurnModelGateway = {
   async *streamTurnText(request) {
@@ -230,7 +232,7 @@ class WebGeneralProfile implements TurnApplicationProfilePort {
   constructor(
     private readonly assetContext: BuiltAssetContext,
     private readonly operationSources: WebOperationSources,
-    private readonly localToolCapabilities: readonly string[],
+    private readonly staticToolCapabilities: readonly string[],
     private readonly nodeInvocations: NodeInvocationPersistencePort,
   ) {}
 
@@ -260,7 +262,7 @@ class WebGeneralProfile implements TurnApplicationProfilePort {
       },
     ).catch(() => []);
     const grantedTools = [
-      ...new Set([...this.localToolCapabilities, ...nodeCapabilities]),
+      ...new Set([...this.staticToolCapabilities, ...nodeCapabilities]),
     ];
     const capabilities = {
       actor: grantedTools,
@@ -402,7 +404,7 @@ class WebGeneralCancellation implements TurnApplicationCancellationPort {
 
 function createToolKernel(operationSources: WebOperationSources): {
   kernel: ToolKernel;
-  localCapabilities: readonly string[];
+  staticCapabilities: readonly string[];
   nodeInvocations: NodeInvocationPersistencePort;
 } {
   const fetchTool = createFetchWebPageTool(undefined, (page) =>
@@ -428,6 +430,7 @@ function createToolKernel(operationSources: WebOperationSources): {
   const nodeInvocations = new DrizzleGatewayNodeRepository();
   const adapters = [
     ...localAdapters,
+    ...mcpRuntime.adapters,
     ...createNodeToolAdapters(nodeInvocations),
   ];
   return {
@@ -436,7 +439,10 @@ function createToolKernel(operationSources: WebOperationSources): {
       new DrizzleAgentToolCallRepository(),
       new DrizzleToolEffectRepository(),
     ),
-    localCapabilities: localAdapters.map((adapter) => adapter.capability),
+    staticCapabilities: [
+      ...localAdapters.map((adapter) => adapter.capability),
+      ...mcpRuntime.capabilities,
+    ],
     nodeInvocations,
   };
 }
@@ -471,7 +477,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     profile: new WebGeneralProfile(
       input.assetContext,
       operationSources,
-      tools.localCapabilities,
+      tools.staticCapabilities,
       tools.nodeInvocations,
     ),
     contextLedger: new DrizzleAgentTurnContextRepository(),
@@ -496,7 +502,7 @@ export function beginGatewayGeneralTurnApplication(input: {
       parts: [...input.request.parts],
     },
     capabilities: [
-      ...new Set([...input.capabilities, ...tools.localCapabilities]),
+      ...new Set([...input.capabilities, ...tools.staticCapabilities]),
     ],
   };
   return { events: service.run(command) };
