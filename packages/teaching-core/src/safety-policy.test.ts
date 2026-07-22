@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  K12_MAX_INPUT_CODE_POINTS,
   K12_SAFETY_DETECTOR_VERSION,
   K12_SAFETY_POLICY_VERSION,
   evaluateTeachingInput,
@@ -126,7 +127,9 @@ describe('evaluateTeachingOutputText', () => {
       allowed: true,
       decision: { phase: 'output', policyCode: 'k12_allowed' },
     });
-    expect(evaluateTeachingOutputText('a'.repeat(20_000))).toMatchObject({
+    expect(
+      evaluateTeachingOutputText('a'.repeat(K12_MAX_INPUT_CODE_POINTS + 1)),
+    ).toMatchObject({
       allowed: true,
       decision: { phase: 'output', policyCode: 'k12_allowed' },
     });
