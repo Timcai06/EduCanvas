@@ -198,7 +198,7 @@ EduCanvas/
 │   ├── gateway-client/       # TUI 等第一方客户端共享 HTTP/NDJSON Client
 │   ├── channel-telegram/     # Telegram 原生 Update/Delivery 映射
 │   ├── node-host/            # Node 只读能力安全执行器
-│   ├── model-gateway/        # OpenAI-compatible 原生 SSE Provider Adapter
+│   ├── model-gateway/        # 可回滚native/AI SDK Provider Adapters
 │   ├── canvas-protocol/      # Artifact Schema、交互事件与服务端判分
 │   ├── teaching-core/        # K12 状态机、可信事件、掌握度与领域 Port
 │   ├── teaching-runtime/     # 迁移期 K12 Loop/Tool；长期只保留 Profile/Workflow/领域适配
@@ -210,18 +210,18 @@ EduCanvas/
 
 `apps/ + packages/` 的 Monorepo 结构继续保留：`apps/*` 是可运行组合根，`packages/*` 是无界面协议、应用服务和领域能力。当前目录已经按这一规则落位，不需要重排顶层；下一步只继续削薄 Web 兼容 BFF 和完善生产认证/运维，不做全仓改名。
 
-| Package            | 可以依赖                   | 不应依赖                                    |
-| ------------------ | -------------------------- | ------------------------------------------- |
-| `agent-core`       | Zod                        | Web、K12、数据库、供应商 SDK                |
-| `gateway-core`     | Zod                        | Next.js、K12、Drizzle、渠道/供应商 SDK      |
-| `gateway-runtime`  | `gateway-core`             | Next.js、K12、具体渠道和 Provider SDK       |
-| `gateway-client`   | `gateway-core`             | 数据库、Agent Runtime、Provider SDK         |
-| `agent-runtime`    | `agent-core`               | K12 教学状态                                |
-| `model-gateway`    | `agent-core`               | Web、K12 领域                               |
-| `canvas-protocol`  | Zod                        | React 页面、模型供应商                      |
-| `teaching-core`    | `agent-core`、Zod          | Next.js、Drizzle、具体 Provider             |
-| `teaching-runtime` | Agent/Canvas/Teaching Core | 另一套 Agent Loop、React、具体 Provider SDK |
-| `db`               | Core 协议与 Drizzle        | UI、Prompt、供应商事件                      |
+| Package            | 可以依赖                                 | 不应依赖                                    |
+| ------------------ | ---------------------------------------- | ------------------------------------------- |
+| `agent-core`       | Zod                                      | Web、K12、数据库、供应商 SDK                |
+| `gateway-core`     | Zod                                      | Next.js、K12、Drizzle、渠道/供应商 SDK      |
+| `gateway-runtime`  | `gateway-core`                           | Next.js、K12、具体渠道和 Provider SDK       |
+| `gateway-client`   | `gateway-core`                           | 数据库、Agent Runtime、Provider SDK         |
+| `agent-runtime`    | `agent-core`                             | K12 教学状态                                |
+| `model-gateway`    | `agent-core`、隔离的Provider Adapter SDK | Web、K12 领域                               |
+| `canvas-protocol`  | Zod                                      | React 页面、模型供应商                      |
+| `teaching-core`    | `agent-core`、Zod                        | Next.js、Drizzle、具体 Provider             |
+| `teaching-runtime` | Agent/Canvas/Teaching Core               | 另一套 Agent Loop、React、具体 Provider SDK |
+| `db`               | Core 协议与 Drizzle                      | UI、Prompt、供应商事件                      |
 
 ## 关键安全设计
 

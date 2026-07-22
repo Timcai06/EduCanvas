@@ -20,9 +20,16 @@ export const openAICompatibleProviders = [
 export type OpenAICompatibleProvider =
   (typeof openAICompatibleProviders)[number];
 
+/** Turn Provider Adapter 的显式生产实现；native始终保留为默认回滚路径。 */
+export const turnModelGatewayRuntimes = ['native', 'ai-sdk'] as const;
+
+/** Turn Provider Adapter实现类型；只能由服务端组合根配置。 */
+export type TurnModelGatewayRuntime = (typeof turnModelGatewayRuntimes)[number];
+
 export const modelGatewayConfigurationErrorCodes = [
   'INVALID_ENVIRONMENT',
   'INVALID_PROVIDER',
+  'INVALID_RUNTIME',
   'DEEPSEEK_FORBIDDEN',
   'INVALID_BOOLEAN',
   'MISSING_BASE_URL',
@@ -61,6 +68,7 @@ export interface EnabledModelGatewayConfiguration {
   enabled: true;
   environment: DeploymentEnvironment;
   provider: OpenAICompatibleProvider;
+  runtime: TurnModelGatewayRuntime;
   baseUrl: string;
   apiKey: string;
   modelIds: Readonly<Partial<Record<ModelAlias, string>>> & {
@@ -207,6 +215,11 @@ export function parseModelGatewayConfiguration(
     throw new ModelGatewayConfigurationError('INVALID_ENVIRONMENT');
   }
   const provider = providerValue;
+  const runtimeValue =
+    trimmed(environmentValues.MODEL_GATEWAY_RUNTIME) ?? 'native';
+  if (!isOneOf(runtimeValue, turnModelGatewayRuntimes)) {
+    throw new ModelGatewayConfigurationError('INVALID_RUNTIME');
+  }
 
   if (
     provider === 'deepseek' &&
@@ -262,6 +275,7 @@ export function parseModelGatewayConfiguration(
     enabled: true,
     environment,
     provider,
+    runtime: runtimeValue,
     baseUrl: parseBaseUrl(
       environmentValues.MODEL_GATEWAY_BASE_URL,
       environment,

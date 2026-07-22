@@ -6,6 +6,7 @@ const configuration: EnabledModelGatewayConfiguration = {
   enabled: true,
   environment: 'test',
   provider: 'openai-compatible',
+  runtime: 'native',
   baseUrl: 'https://provider.invalid/v1',
   apiKey: 'fixture',
   modelIds: { primary: 'text-model', speech: 'speech-model' },

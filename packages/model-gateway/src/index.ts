@@ -6,6 +6,7 @@ export {
   modelGatewayConfigurationErrorCodes,
   openAICompatibleProviders,
   parseModelGatewayConfiguration,
+  turnModelGatewayRuntimes,
   type DeploymentEnvironment,
   type DisabledModelGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
@@ -13,6 +14,7 @@ export {
   type ModelGatewayConfigurationErrorCode,
   type ModelGatewayEnvironment,
   type OpenAICompatibleProvider,
+  type TurnModelGatewayRuntime,
 } from './config';
 export {
   OpenAICompatibleTurnModelGateway,

@@ -4,12 +4,15 @@
 
 `model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON与`/audio/speech`映射为 `@educanvas/agent-core` 的稳定Port，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
-默认实现使用原生 `fetch` + WHATWG Stream，不把供应商 SDK 类型带入领域层。
+Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter。两种实现都
+终止在同一个 `TurnModelGateway` Port，供应商 SDK 类型不会进入领域层。
 
 ## 模块边界
 
 - `openai-compatible-protocol.ts` 只负责未知供应商 JSON 的校验、请求投影、usage、错误与终止原因映射；
 - `openai-compatible-turn-model-gateway.ts` 只负责原生网络调用、SSE 生命周期、取消和稳定事件输出；
+- `ai-sdk-protocol.ts`、`ai-sdk-turn-model-gateway.ts` 与`ai-sdk-provider-factory.ts`
+  分别负责SDK消息/事件投影、流生命周期和Provider构造；
 - `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析和 Adapter 选择；
 - 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
 
@@ -32,6 +35,7 @@
 配置由组合根显式传给 `parseModelGatewayConfiguration(environment)`；包本身不读取 `process.env`。完整变量见仓库根目录 `.env.example`。
 
 - 未配置 `MODEL_GATEWAY_PROVIDER` 时返回 disabled，不静默回退脚本回答；
+- `MODEL_GATEWAY_RUNTIME`只接受`native | ai-sdk`，缺省为`native`；运行期不会在两者之间静默fallback；
 - 一旦启用真实 Provider，必须显式声明 `EDUCANVAS_DEPLOYMENT_ENV`；
 - 模型 ID 必须由环境变量显式给出，代码没有供应商型号默认值；
 - TTS需显式配置`MODEL_GATEWAY_SPEECH_MODEL`；voice缺省`alloy`且可由
@@ -51,7 +55,10 @@ const gateway = createTurnModelGatewayFromEnvironment(environment);
 
 ## 当前接线状态
 
-`apps/web/server/model/model-runtime.ts` 已通过该包创建真实 Gateway，`apps/web/server/teaching/learning-turn.ts` 再把它交给两阶段 Orchestrator，并在外层完成 SSE 与账本审计。这里的“真实”表示生产代码使用网络 Provider Adapter，而不是测试Gateway；是否能实际回答仍取决于部署环境、Endpoint、Key 和模型配置，仓库内协议 Fixture 不能替代 live smoke。
+Gateway与Web组合根都通过公共工厂选择Turn Adapter，再把稳定Port交给唯一
+`TurnApplicationService + AgentLoopEngine`；Worker的结构化与语音任务继续使用原生专用
+Adapter。这里的“真实”表示生产代码使用网络Provider，而不是测试Gateway；是否能实际回答
+仍取决于部署环境、Endpoint、Key和模型配置，仓库内协议Fixture不能替代live smoke。
 
 ## 验证
 
@@ -60,4 +67,6 @@ pnpm --filter @educanvas/model-gateway typecheck
 pnpm --filter @educanvas/model-gateway test
 ```
 
-Fixture 覆盖网络任意分片、首 delta、工具参数增量、usage 尾块、Abort、超时、429、内容过滤、畸形 SSE、响应 body 释放与 secret/CoT 不外泄。
+Fixture 覆盖网络任意分片、首delta、工具参数增量、usage尾块、Abort、超时、429、内容过滤、
+畸形SSE、响应body释放与secret/CoT不外泄；golden parity还覆盖native/AI SDK文本、工具圈、
+取消、错误、唯一终态、alias模型解析、最大输出和DeepSeek thinking闸门。

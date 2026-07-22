@@ -8,6 +8,7 @@ const config: EnabledModelGatewayConfiguration = {
   enabled: true,
   environment: 'test',
   provider: 'openai-compatible',
+  runtime: 'native',
   baseUrl: 'https://provider.example/v1',
   apiKey: 'test-key',
   modelIds: { primary: 'model-primary', structured: 'model-structured' },

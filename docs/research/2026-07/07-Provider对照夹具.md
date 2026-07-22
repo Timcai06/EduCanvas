@@ -1,23 +1,23 @@
 # Provider 对照夹具
 
 - 状态：`verified`
-- 适用范围：第二代架构研究，不是生产 Provider Adapter
-- 最后验证时间：2026-07-21
-- 固定版本：`ai@7.0.31`
+- 适用范围：第二代架构Provider选择与生产回归证据
+- 最后验证时间：2026-07-22
+- 固定版本：`ai@7.0.34`、`@ai-sdk/openai-compatible@3.0.14`
 - 复现入口：`pnpm --filter @educanvas/model-gateway test -- provider-parity.test.ts`
 
 ## 一、候选与来源
 
-候选只使用 Vercel 官方 [AI SDK 仓库](https://github.com/vercel/ai)、[streamText API](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text)、[Tool Calling 文档](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling)与[错误处理文档](https://ai-sdk.dev/docs/ai-sdk-core/error-handling)。`ai@7.0.31` 的 npm 元数据显示许可证为 Apache-2.0、Node 要求为 `>=22`；2026-07-21 的 `latest` 是 7.0.32，但本夹具固定 7.0.31，以复现第一轮隔离实验而不在对照中改变变量。
+候选只使用 Vercel 官方 [AI SDK 仓库](https://github.com/vercel/ai)、[streamText API](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text)、[Tool Calling 文档](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling)与[错误处理文档](https://ai-sdk.dev/docs/ai-sdk-core/error-handling)。生产版本固定在包清单与lockfile，任何升级都必须重跑本夹具和live smoke。
 
-该依赖只位于 `@educanvas/model-gateway` 的 `devDependencies`。候选 Adapter 位于 `src/testing/`，不从 package 公共入口导出，也没有生产调用者。
+依赖仅存在于`@educanvas/model-gateway`；生产Adapter按协议、流生命周期和Provider工厂拆分，框架导入由依赖边界测试限制在`ai-sdk-*`模块。Gateway与Web只能通过公共工厂得到稳定Port。
 
 ## 二、对照边界
 
 同一组 golden fixtures 分别驱动：
 
 1. 现有 `OpenAICompatibleTurnModelGateway`：原生 fetch + SSE；
-2. `AiSdkResearchTurnModelGateway`：AI SDK `streamText` + 官方 Mock Language Model。
+2. `AiSdkTurnModelGateway`：AI SDK `streamText` + 官方Mock Language Model，并通过OpenAI-compatible工厂做真实请求。
 
 对照的是 EduCanvas `TurnModelGateway` 的语义 transcript，而不是供应商分片的字节边界。两边必须得到相同的文本、完整工具调用、累计 usage 和唯一终态。
 
@@ -38,7 +38,7 @@
 
 实验支持把 AI SDK 作为 `TurnModelGateway` 后的候选 Provider Adapter，但不支持用它接管 Agent Loop、Tool Runtime、Notebook Session、审批或 Operation 终态。
 
-若后续采用，生产 Adapter 至少仍需：
+生产Adapter继续遵守：
 
 - 固定版本并保留 native Adapter 作为可回滚实现；
 - `maxRetries: 0`，重试与唯一终态由 EduCanvas 控制；
@@ -46,4 +46,6 @@
 - 显式过滤 reasoning、provider metadata 和原始错误；
 - 对 SDK major/patch 变更复跑本夹具，尤其是 `instructions`、abort 与 tool stream 语义。
 
-当前结论是 `adapt`，不是立即替换。是否进入生产迁移仍由 proposed ADR 与 Code Owner 决定。
+当前结论仍是`adapt`而不是替换：`MODEL_GATEWAY_RUNTIME=ai-sdk`才会启用SDK实现，缺省
+`native`，运行期不静默fallback。2026-07-22使用同一DeepSeek短请求真实对照，两边均输出
+`text_delta → usage → completed`、正文`4`和唯一成功终态；这项手工证据不替代nightly live smoke。

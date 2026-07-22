@@ -64,12 +64,30 @@ describe('parseModelGatewayConfiguration', () => {
       ).toMatchObject({
         enabled: true,
         provider: 'deepseek',
+        runtime: 'native',
         modelIds: { primary: 'explicitly-configured-model' },
         timeoutMs: 30_000,
         maxOutputTokens: 2_048,
       });
     },
   );
+
+  it('Turn Adapter默认native且只接受显式ai-sdk候选', () => {
+    expect(
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({ MODEL_GATEWAY_RUNTIME: 'ai-sdk' }),
+      ),
+    ).toMatchObject({ enabled: true, runtime: 'ai-sdk' });
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({ MODEL_GATEWAY_RUNTIME: 'automatic' }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'INVALID_RUNTIME',
+      }),
+    );
+  });
 
   it.each(['staging', 'production'] as const)(
     '在%s环境硬拒绝DeepSeek，即使显式启用',
