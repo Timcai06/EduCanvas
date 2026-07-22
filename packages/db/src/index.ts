@@ -200,12 +200,16 @@ export {
   ToolEffectReconciliationOwnershipError,
 } from './tool-effect-reconciliation-repository';
 export {
+  DrizzleOperationContinuationRecoveryRepository,
   DrizzleOperationContinuationRepository,
+  MAX_OPERATION_CONTINUATION_RECOVERY_BATCH,
   OperationContinuationConflictError,
   OperationContinuationLifecycleError,
   OperationContinuationOwnershipError,
+  OperationContinuationRecoveryError,
   type OperationContinuationExecutionClaim,
   type OperationContinuationExecutionScope,
+  type OperationContinuationRecoveryHealth,
 } from './operation-continuation-repository';
 export {
   DrizzleToolApprovalIntentRepository,

@@ -154,6 +154,15 @@ export {
   type ToolApprovalIntentStatus,
 } from './operation-continuation';
 
+export {
+  MAX_OPERATION_CONTINUATION_RECOVERY_BATCH,
+  operationContinuationRecoveryInputSchema,
+  operationContinuationRecoveryResultSchema,
+  type OperationContinuationRecoveryInput,
+  type OperationContinuationRecoveryPort,
+  type OperationContinuationRecoveryResult,
+} from './operation-continuation-recovery';
+
 export { w3cTraceCarrierSchema, type W3cTraceCarrier } from './trace-carrier';
 
 export type {

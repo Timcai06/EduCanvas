@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { workerCrontab } from '../worker-config.js';
 import { createIngestKnowledgeDocumentTask } from './ingest-knowledge-document.js';
 import { createPurgeAnonymousSubjectsTask } from './purge-anonymous-subjects.js';
+import { createRecoverOperationContinuationsTask } from './recover-operation-continuations.js';
 import { createReconcileToolApprovalIntentsTask } from './reconcile-tool-approval-intents.js';
 
 const helpers = {
@@ -12,9 +13,14 @@ const helpers = {
 describe('受控后台任务边界', () => {
   it('维护计划可被Graphile解析且任务身份与批次固定', () => {
     const items = parseCrontab(workerCrontab);
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(3);
     expect(items).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          task: 'maintenance:recover_operation_continuations',
+          identifier: 'operation-continuation-recovery',
+          payload: { limit: 100 },
+        }),
         expect.objectContaining({
           task: 'maintenance:reconcile_tool_approval_intents',
           identifier: 'tool-approval-intent-reconciliation',
@@ -27,6 +33,39 @@ describe('受控后台任务边界', () => {
         }),
       ]),
     );
+  });
+
+  it('continuation恢复只转发受控批次并记录低基数健康状态', async () => {
+    const requeueExpiredForExecution = vi.fn().mockResolvedValue({
+      examined: 2,
+      requeued: 2,
+      generationExhausted: 1,
+    });
+    const inspectRecoveryHealth = vi.fn().mockResolvedValue({
+      ready: 2,
+      runningActive: 1,
+      runningExpired: 0,
+      generationExhausted: 1,
+      terminalOperationStale: 0,
+      oldestExpiredAt: null,
+    });
+    const logger = { info: vi.fn() };
+    const task = createRecoverOperationContinuationsTask({
+      requeueExpiredForExecution,
+      inspectRecoveryHealth,
+    });
+
+    await task({ limit: 25 }, { logger } as never);
+
+    expect(requeueExpiredForExecution).toHaveBeenCalledWith({ limit: 25 });
+    expect(inspectRecoveryHealth).toHaveBeenCalledOnce();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('examined=2,requeued=2,generationExhausted=1'),
+    );
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.stringContaining('continuationId'),
+    );
+    await expect(task({ limit: 501 }, { logger } as never)).rejects.toThrow();
   });
 
   it('匿名清理只转发经过约束的批次大小', async () => {
