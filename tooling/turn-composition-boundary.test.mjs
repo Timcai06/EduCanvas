@@ -33,7 +33,7 @@ function constructionFiles(className) {
 describe('Turn composition production boundary', () => {
   it('allows exactly one AgentLoopEngine construction point', () => {
     assert.deepEqual(constructionFiles('AgentLoopEngine'), [
-      'packages/agent-runtime/src/turn-application/service.ts',
+      'packages/agent-runtime/src/turn-application/loop-runner.ts',
     ]);
   });
 
