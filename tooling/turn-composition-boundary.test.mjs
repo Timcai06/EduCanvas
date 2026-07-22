@@ -33,7 +33,7 @@ function constructionFiles(className) {
 describe('Turn composition production boundary', () => {
   it('freezes the target service and remaining legacy construction points', () => {
     assert.deepEqual(constructionFiles('AgentLoopEngine'), [
-      'packages/agent-runtime/src/turn-application.ts',
+      'packages/agent-runtime/src/turn-application/service.ts',
       'packages/teaching-runtime/src/turn-orchestrator.ts',
     ]);
   });
