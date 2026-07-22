@@ -47,10 +47,51 @@ export function ConversationSidebar({
   /** 侧栏底部扩展区（来源面板等）。 */
   children?: React.ReactNode;
 }) {
+  const firstActionRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const [items, setItems] = useState<readonly NotebookListItem[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [isSwitchPending, startSwitchTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+
+    const opener = document.querySelector<HTMLButtonElement>(
+      '[aria-controls="conversation-sidebar"]',
+    );
+    const openedFromTrigger = document.activeElement === opener;
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (openedFromTrigger) firstActionRef.current?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onClose();
+      window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLButtonElement>(
+            '[aria-controls="conversation-sidebar"]',
+          )
+          ?.focus();
+      });
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  const closeAndRestoreFocus = () => {
+    onClose();
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[aria-controls="conversation-sidebar"]',
+        )
+        ?.focus();
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -76,7 +117,9 @@ export function ConversationSidebar({
       if (!open) return;
       const rows = listRef.current
         ? Array.from(
-            listRef.current.querySelectorAll<HTMLElement>('[data-sidebar-item]'),
+            listRef.current.querySelectorAll<HTMLElement>(
+              '[data-sidebar-item]',
+            ),
           )
         : [];
       if (rows.length === 0) return;
@@ -96,7 +139,11 @@ export function ConversationSidebar({
       });
       return () => media.revert();
     },
-    { scope: listRef, dependencies: [items.length, open], revertOnUpdate: true },
+    {
+      scope: listRef,
+      dependencies: [items.length, open],
+      revertOnUpdate: true,
+    },
   );
 
   return (
@@ -106,7 +153,7 @@ export function ConversationSidebar({
         <button
           type="button"
           aria-label="关闭笔记本列表"
-          onClick={onClose}
+          onClick={closeAndRestoreFocus}
           className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] lg:hidden"
         />
       ) : null}
@@ -115,8 +162,10 @@ export function ConversationSidebar({
        * 内层固定 w-64 以免折叠动画时正文重排。
        */}
       <nav
+        id="conversation-sidebar"
         aria-label="笔记本"
         aria-hidden={!open}
+        inert={!open}
         className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas transition-[width,transform] duration-300 ease-out ${
           open
             ? 'w-72 translate-x-0 border-r lg:w-64'
@@ -126,6 +175,7 @@ export function ConversationSidebar({
         <div className="flex h-full w-72 flex-col lg:w-64">
           <div className="px-3 pt-3 pb-1.5">
             <button
+              ref={firstActionRef}
               type="button"
               onClick={onNewNotebook}
               className="flex min-h-10 w-full items-center gap-2.5 rounded-full bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"

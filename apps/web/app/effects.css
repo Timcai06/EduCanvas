@@ -1,0 +1,156 @@
+/*
+ * 墨色动效层：只定义视觉参数，不承担 Agent 或教学状态判断。
+ * 黛青/朱砂均来自 globals.css 的语义 Token；运行生命周期由对应组件负责。
+ */
+
+/* PixelBlast 不参与命中测试；页面级指针监听负责投影坐标，底层输入仍可操作。 */
+.pixel-blast-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 只有 WebGL 初始化失败时启用；正常设备仍完整渲染 PixelBlast。 */
+.pixel-blast-container[data-failed='true'] {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent) 52%, transparent) 0 1.5px,
+    transparent 1.75px
+  );
+  background-size: 24px 24px;
+}
+
+/*
+ * 扉页墨点场：铺满落地页背景，径向遮罩让中心（问候语/输入框所在）保持素净，
+ * 墨点向四周边缘渐显，绝不压过正文可读性。
+ */
+.hero-ink-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  -webkit-mask-image: radial-gradient(
+    125% 92% at 50% 46%,
+    transparent 18%,
+    black 78%
+  );
+  mask-image: radial-gradient(125% 92% at 50% 46%, transparent 18%, black 78%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .hero-ink-field {
+    opacity: 0.5;
+  }
+}
+
+/*
+ * Agent 工作态全屏氛围层：固定覆盖视口，仅边缘发光（PulsingBorder 自身中心透明）。
+ * z 处于侧栏(40)与抽屉(50)之间——抽屉打开时自然被盖住；纸纹层(60)仍在最上。
+ */
+.agent-busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 520ms ease;
+}
+
+.agent-busy-overlay[data-shown='true'] {
+  opacity: 1;
+}
+
+/* 减少动态兜底：不流动的静态柔光边，仅靠上面的 opacity 过渡淡入淡出。 */
+.agent-busy-fallback {
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    inset 0 0 90px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+/*
+ * 输入栏聚焦流动边框：一道墨线沿框边匀速环绕（conic-gradient + border-mask）。
+ * 用 @property 让角度可补间，纯 CSS 连续循环，不占 GSAP ticker；聚焦才跑，失焦即隐。
+ * 减少动态偏好下停转（见文件末 @media）。
+ */
+@property --ink-border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ink-border-spin {
+  to {
+    --ink-border-angle: 360deg;
+  }
+}
+
+.ink-flow-border {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  background: conic-gradient(
+    from var(--ink-border-angle),
+    transparent 0deg,
+    color-mix(in srgb, var(--color-accent) 70%, transparent) 70deg,
+    color-mix(in srgb, var(--color-cinnabar) 62%, transparent) 130deg,
+    transparent 200deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.ink-flow-shell:focus-within .ink-flow-border {
+  opacity: 1;
+  animation: ink-border-spin 4.5s linear infinite;
+}
+
+/*
+ * 持续问候动效：SplitText 落字完成后，逐字保留一层极缓的墨色起伏，
+ * 让扉页大字「活着」而不喧宾夺主。逐字延迟由 GSAP 写入 --hero-char-delay。
+ */
+@keyframes hero-char-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-0.045em);
+    opacity: 0.86;
+  }
+}
+
+.hero-ink-char {
+  display: inline-block;
+  animation: hero-char-breathe 4.8s ease-in-out infinite;
+  animation-delay: var(--hero-char-delay, 0s);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-busy-overlay {
+    transition: none;
+  }
+  .ink-flow-shell:focus-within .ink-flow-border {
+    animation: none;
+  }
+  .hero-ink-char {
+    animation: none;
+  }
+}

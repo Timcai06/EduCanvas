@@ -8,6 +8,10 @@ const TURN_APPLICATION_REVIEW_LIMIT = 300;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
+const WEB_VISUAL_REVIEW_LIMIT = 350;
+const WEB_SETTINGS_REVIEW_LIMIT = 300;
+const WEB_WORKSPACE_REVIEW_LIMIT = 600;
+const WEB_STYLES_REVIEW_LIMIT = 400;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -18,14 +22,17 @@ const TURN_APPLICATION_TEST_PATTERN =
   /^turn-application(?:\..+)?\.test(?:-support)?\.ts$/;
 const MODEL_GATEWAY_ROOT = 'packages/model-gateway/src';
 const TELEMETRY_ROOT = 'packages/telemetry/src';
-const CONTINUATION_REPOSITORY_ROOT =
-  'packages/db/src/operation-continuation';
+const CONTINUATION_REPOSITORY_ROOT = 'packages/db/src/operation-continuation';
 const CONTINUATION_REPOSITORY_ENTRY =
   'packages/db/src/operation-continuation-repository.ts';
 const CONTINUATION_DB_SUPPORT =
   'packages/db/src/operation-continuation-repository.integration.support.ts';
 const CONTINUATION_WORKER_SUPPORT =
   'apps/worker/src/approval-continuation.integration-support.ts';
+const WEB_SHARED_ROOT = 'apps/web/features/workspace/shared';
+const WEB_SETTINGS_ROOT = 'apps/web/features/settings';
+const WEB_GENERAL_WORKSPACE =
+  'apps/web/features/workspace/general/general-chat-workspace.tsx';
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -45,7 +52,7 @@ function typescriptFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return typescriptFiles(path);
-    return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
+    return entry.isFile() && /\.tsx?$/.test(entry.name) ? [path] : [];
   });
 }
 
@@ -121,7 +128,9 @@ describe('Runtime module size boundary', () => {
           entry.isFile() &&
           (/^operation-continuation-.+\.integration\.test\.ts$/.test(
             entry.name,
-          ) || entry.name === 'tool-approval-intent-repository.integration.test.ts'),
+          ) ||
+            entry.name ===
+              'tool-approval-intent-repository.integration.test.ts'),
       )
       .map((entry) => join('packages/db/src', entry.name));
     const workerTests = readdirSync('apps/worker/src', {
@@ -130,9 +139,7 @@ describe('Runtime module size boundary', () => {
       .filter(
         (entry) =>
           entry.isFile() &&
-          /^approval-continuation-.+\.integration\.test\.ts$/.test(
-            entry.name,
-          ),
+          /^approval-continuation-.+\.integration\.test\.ts$/.test(entry.name),
       )
       .map((entry) => join('apps/worker/src', entry.name));
     assertFilesWithinLimit(
@@ -143,6 +150,24 @@ describe('Runtime module size boundary', () => {
         ...workerTests,
       ],
       CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Web visual runtimes and settings views independently readable', () => {
+    const visualModules = typescriptFiles(WEB_SHARED_ROOT).filter((path) =>
+      /\/(?:pixel-blast(?:-.+)?|agent-busy-overlay|hero-ink-field|use-(?:css-var-color|reduced-motion))\.tsx?$/.test(
+        path,
+      ),
+    );
+    const settingsModules = typescriptFiles(WEB_SETTINGS_ROOT).filter((path) =>
+      /\/connection-settings(?:-.+)?\.tsx?$/.test(path),
+    );
+    assertFilesWithinLimit(visualModules, WEB_VISUAL_REVIEW_LIMIT);
+    assertFilesWithinLimit(settingsModules, WEB_SETTINGS_REVIEW_LIMIT);
+    assertFilesWithinLimit([WEB_GENERAL_WORKSPACE], WEB_WORKSPACE_REVIEW_LIMIT);
+    assertFilesWithinLimit(
+      ['apps/web/app/globals.css', 'apps/web/app/effects.css'],
+      WEB_STYLES_REVIEW_LIMIT,
     );
   });
 });

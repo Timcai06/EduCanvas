@@ -101,12 +101,14 @@ export function Composer({
         </div>
       ) : null}
       <div
-        className={`flex items-end gap-1 border border-line bg-card p-2 transition-[border-color,box-shadow] focus-within:border-accent/60 focus-within:shadow-[var(--shadow-float)] ${
+        className={`ink-flow-shell relative flex items-end gap-1 border border-line bg-card p-2 transition-[border-color,box-shadow] focus-within:border-accent/60 focus-within:shadow-[var(--shadow-float)] ${
           isLanding
             ? 'min-h-16 rounded-[1.75rem] shadow-[var(--shadow-float)]'
             : 'rounded-[1.375rem] shadow-[0_1px_2px_rgb(72_60_34_/_0.05)]'
         }`}
       >
+        {/* 聚焦时一道墨线沿框边环绕（纯 CSS，见 effects.css .ink-flow-border） */}
+        <span aria-hidden="true" className="ink-flow-border" />
         <PlusMenu
           onAction={onMenuAction}
           availableActions={availableMenuActions}

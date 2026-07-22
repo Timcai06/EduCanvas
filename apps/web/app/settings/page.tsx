@@ -16,43 +16,55 @@ export default async function SettingsPage() {
     ? await loadOwnedGeneralConversation(identity)
     : null;
   return (
-    <main className="min-h-dvh bg-canvas px-4 py-6 text-ink sm:px-8 sm:py-10">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-10 flex items-center gap-4">
+    <main className="min-h-dvh bg-canvas text-ink">
+      {/* 扉页式页眉：一条黛青细纹带 + 朱砂标记，和工作区同一「纸墨」身份 */}
+      <div className="border-b border-line/70 bg-card/50">
+        <div className="mx-auto max-w-4xl px-4 py-5 sm:px-8 sm:py-7">
           <Link
             href="/"
-            aria-label="返回对话"
-            className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group mb-6 inline-flex min-h-9 items-center gap-2 rounded-full pr-3 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <ArrowLeft aria-hidden="true" size={19} weight="bold" />
+            <span className="grid size-9 place-items-center rounded-full transition-colors group-hover:bg-surface">
+              <ArrowLeft aria-hidden="true" size={17} weight="bold" />
+            </span>
+            返回对话
           </Link>
-          <LogoMark size={24} />
-          <div>
-            <p className="text-xs font-medium tracking-wide text-ink-faint">
-              EDUCANVAS 设置
-            </p>
-            <h1 className="font-display text-2xl font-semibold sm:text-3xl">
-              通信方式
-            </h1>
+          <div className="flex items-center gap-4">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-strong shadow-float">
+              <LogoMark size={26} />
+            </span>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+                EduCanvas 设置
+              </p>
+              <h1 className="mt-0.5 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+                通信方式
+              </h1>
+            </div>
           </div>
-        </header>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-muted">
+            把这个笔记本接到你常用的聊天渠道，随时随地继续和 AI 老师的对话。
+          </p>
+        </div>
+      </div>
 
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-10">
         {conversation ? (
           <ConnectionSettings
             conversationId={conversation.id}
             notebookTitle={conversation.title}
           />
         ) : (
-          <section className="rounded-3xl border border-line bg-card p-8 text-center shadow-float">
+          <section className="rounded-3xl border border-line bg-card p-10 text-center shadow-float">
             <h2 className="font-display text-xl font-semibold">
               先创建一个笔记本
             </h2>
-            <p className="mt-2 text-sm leading-6 text-ink-muted">
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
               通信方式必须连接到一个明确的笔记本，避免消息进入错误的上下文。
             </p>
             <Link
               href="/"
-              className="mt-5 inline-flex min-h-10 items-center rounded-full bg-accent px-5 text-sm font-semibold text-card hover:bg-accent-strong"
+              className="mt-6 inline-flex min-h-10 items-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
               返回开始
             </Link>
