@@ -83,6 +83,7 @@ describe('Tool Kernel执行与副作用边界', () => {
       [
         adapter({
           effect: 'write',
+          reconciliationVerifierId: 'adapter:timeout-query',
           timeoutMs: 5,
           invoke: async () => new Promise(() => undefined),
         }),
@@ -102,7 +103,11 @@ describe('Tool Kernel执行与副作用边界', () => {
       retryable: false,
     });
     expect([...effects.effects.values()]).toMatchObject([
-      { status: 'outcome_unknown', code: 'write_outcome_unknown' },
+      {
+        status: 'outcome_unknown',
+        code: 'write_outcome_unknown',
+        reconciliationVerifierId: 'adapter:timeout-query',
+      },
     ]);
     expect([...calls.calls.values()]).toMatchObject([
       { status: 'outcome_unknown', code: 'write_outcome_unknown' },

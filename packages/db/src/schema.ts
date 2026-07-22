@@ -1341,6 +1341,8 @@ export const toolEffects = pgTable(
       .references(() => toolCalls.id, { onDelete: 'cascade' }),
     effectKey: text('effect_key').notNull(),
     semanticsHash: text('semantics_hash').notNull(),
+    // 可空text兼容旧行；只冻结安全稳定ID，不保存Adapter配置或凭据，且无批量查询无需索引。
+    reconciliationVerifierId: text('reconciliation_verifier_id'),
     status: text('status').notNull().default('intended'),
     code: text('code'),
     receiptHash: text('receipt_hash'),
@@ -1362,7 +1364,7 @@ export const toolEffects = pgTable(
     ),
     check(
       'tool_effects_text_check',
-      sql`${table.effectKey} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$' and ${table.semanticsHash} ~ '^[a-f0-9]{64}$' and (${table.code} is null or ${table.code} ~ '^[a-z][a-z0-9._:-]{0,127}$') and (${table.receiptHash} is null or ${table.receiptHash} ~ '^[a-f0-9]{64}$')`,
+      sql`${table.effectKey} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$' and ${table.semanticsHash} ~ '^[a-f0-9]{64}$' and (${table.reconciliationVerifierId} is null or ${table.reconciliationVerifierId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$') and (${table.code} is null or ${table.code} ~ '^[a-z][a-z0-9._:-]{0,127}$') and (${table.receiptHash} is null or ${table.receiptHash} ~ '^[a-f0-9]{64}$')`,
     ),
     check(
       'tool_effects_status_check',

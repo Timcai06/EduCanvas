@@ -103,6 +103,8 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - L2/L3 Tool必须先过五维权限与参数Schema，再写pending Tool Call并调用Adapter的幂等`prepareApproval`；成功后Turn只发`approval.required`、Trace以`suspended`结束并保持无业务终态挂起，准备失败或取消不得伪装成已创建审批，更不能提前执行副作用；
 - `prepareApproval`必须先写版本化最小意图；Gateway只消费同Operation、同Actor、同expiry的prepared意图，并在单事务创建公开审批与continuation，禁止事件存在而恢复游标缺失；
 - W3C carrier由服务端的真实Turn span显式导出，只经审批意图与PostgreSQL continuation传递给Worker；不接受浏览器/渠道carrier，不将业务`traceId`伪造成W3C Trace ID，不让Trace参与授权、幂等或学习事实；
+- write进入`outcome_unknown`后，原Effect、Tool Call与Operation终态保持不可变；后续确认只能追加独立reconciliation决议，不能把历史不确定性重写成当时已成功或已失败；
+- 自动reconciliation verifier只能查询Provider/Adapter提供的受信外部事实，并且必须匹配Effect intention中由服务端冻结的verifier身份；调用方不能临时选择其他核验器，禁止invoke或重放副作用。MCP v1当前没有可信查询契约，自动核验必须fail closed。人工决议只允许受信operator或service principal，学生与模型都不能提交自证；
 - 无论采用原生实现还是 LangGraph，Operation 仍是业务游标，权限与 effect ledger 仍由 EduCanvas 拥有。
 
 ## 八、框架边界

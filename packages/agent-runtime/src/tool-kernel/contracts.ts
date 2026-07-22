@@ -87,6 +87,8 @@ export interface ToolKernelAdapter<Input = unknown, Output = unknown> {
   risk: ToolRiskLevel;
   exposure: AgentToolExposure;
   effect: AgentToolEffect;
+  /** 仅write Adapter可声明的受信只读对账核验器；调用方不能覆盖。 */
+  reconciliationVerifierId?: string | null;
   timeoutMs: number;
   inputSchema: z.ZodType<Input>;
   modelInputSchema?: Readonly<Record<string, unknown>>;
@@ -110,6 +112,7 @@ export interface AnyToolKernelAdapter {
   risk: ToolRiskLevel;
   exposure: AgentToolExposure;
   effect: AgentToolEffect;
+  reconciliationVerifierId?: string | null;
   timeoutMs: number;
   inputSchema: z.ZodType<unknown>;
   modelInputSchema?: Readonly<Record<string, unknown>>;

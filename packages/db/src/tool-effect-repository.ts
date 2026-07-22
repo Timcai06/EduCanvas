@@ -1,126 +1,51 @@
 import type {
   ToolEffectLedgerPort,
   ToolEffectLedgerSnapshot,
-  ToolEffectLedgerStatus,
   ToolEffectLedgerTerminalStatus,
 } from '@educanvas/agent-core';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import { agentOperations, toolCalls, toolEffects } from './schema';
+import {
+  type IntendInput,
+  isSafeEffectCode,
+  isSafeEffectKey,
+  requireOwnedToolEffect,
+  ToolEffectConflictError,
+  type ToolEffectDatabase,
+  ToolEffectLifecycleError,
+  ToolEffectOwnershipError,
+  type ToolEffectSnapshot,
+  toToolEffectSnapshot,
+} from './tool-effect-persistence';
 
-type Database = ReturnType<typeof getDb>;
-type DatabaseTransaction = Parameters<
-  Parameters<Database['transaction']>[0]
->[0];
-type DatabaseExecutor = Database | DatabaseTransaction;
-
-export class ToolEffectOwnershipError extends Error {
-  readonly code = 'tool_effect_not_found';
-
-  constructor() {
-    super('Tool Effect不存在或不属于当前Actor');
-    this.name = 'ToolEffectOwnershipError';
-  }
-}
-
-export class ToolEffectConflictError extends Error {
-  readonly code = 'tool_effect_conflict';
-
-  constructor() {
-    super('effectKey或Tool Call已绑定不同副作用语义');
-    this.name = 'ToolEffectConflictError';
-  }
-}
-
-export class ToolEffectLifecycleError extends Error {
-  readonly code = 'invalid_tool_effect_transition';
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'ToolEffectLifecycleError';
-  }
-}
-
-function isSafeKey(value: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value);
-}
-
-function isSafeCode(value: string): boolean {
-  return /^[a-z][a-z0-9._:-]{0,127}$/.test(value);
-}
-
-function toSnapshot(
-  row: typeof toolEffects.$inferSelect,
-): ToolEffectLedgerSnapshot {
-  return {
-    id: row.id,
-    operationId: row.agentOperationId,
-    toolCallId: row.toolCallId,
-    effectKey: row.effectKey,
-    semanticsHash: row.semanticsHash,
-    status: row.status as ToolEffectLedgerStatus,
-    code: row.code,
-    receiptHash: row.receiptHash,
-    intendedAt: row.intendedAt.toISOString(),
-    settledAt: row.settledAt?.toISOString() ?? null,
-  };
-}
-
-async function requireOwnedEffect(
-  executor: DatabaseExecutor,
-  input: { operationId: string; actorId: string; effectId: string },
-) {
-  if (
-    !isUuid(input.operationId) ||
-    !isUuid(input.effectId) ||
-    input.actorId.length < 1 ||
-    input.actorId.length > 160
-  ) {
-    throw new ToolEffectOwnershipError();
-  }
-  const [row] = await executor
-    .select({ effect: toolEffects })
-    .from(toolEffects)
-    .innerJoin(
-      agentOperations,
-      eq(agentOperations.id, toolEffects.agentOperationId),
-    )
-    .where(
-      and(
-        eq(toolEffects.id, input.effectId),
-        eq(toolEffects.agentOperationId, input.operationId),
-        eq(agentOperations.actorUserId, input.actorId),
-      ),
-    )
-    .limit(1);
-  if (!row) throw new ToolEffectOwnershipError();
-  return row.effect;
-}
+export {
+  ToolEffectConflictError,
+  ToolEffectLifecycleError,
+  ToolEffectOwnershipError,
+} from './tool-effect-persistence';
 
 /** Tool Kernel的PostgreSQL effect ledger；write意图先落库，且不保存任何原始值。 */
 export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
-  constructor(private readonly providedDatabase?: Database) {}
+  constructor(private readonly providedDatabase?: ToolEffectDatabase) {}
 
-  private get database(): Database {
+  private get database(): ToolEffectDatabase {
     return this.providedDatabase ?? getDb();
   }
 
-  async intend(input: {
-    operationId: string;
-    actorId: string;
-    toolCallId: string;
-    effectKey: string;
-    semanticsHash: string;
-    now?: Date;
-  }): Promise<{ effect: ToolEffectLedgerSnapshot; replayed: boolean }> {
+  async intend(
+    input: IntendInput,
+  ): Promise<{ effect: ToolEffectSnapshot; replayed: boolean }> {
     if (
       !isUuid(input.operationId) ||
       !isUuid(input.toolCallId) ||
       input.actorId.length < 1 ||
       input.actorId.length > 160 ||
-      !isSafeKey(input.effectKey) ||
-      !/^[a-f0-9]{64}$/.test(input.semanticsHash)
+      !isSafeEffectKey(input.effectKey) ||
+      !/^[a-f0-9]{64}$/.test(input.semanticsHash) ||
+      (input.reconciliationVerifierId != null &&
+        !isSafeEffectKey(input.reconciliationVerifierId))
     ) {
       throw new ToolEffectLifecycleError('Tool Effect创建参数无效');
     }
@@ -166,10 +91,12 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
             row.agentOperationId === input.operationId &&
             row.toolCallId === input.toolCallId &&
             row.effectKey === input.effectKey &&
-            row.semanticsHash === input.semanticsHash,
+            row.semanticsHash === input.semanticsHash &&
+            row.reconciliationVerifierId ===
+              (input.reconciliationVerifierId ?? null),
         );
         if (!matching) throw new ToolEffectConflictError();
-        return { effect: toSnapshot(matching), replayed: true };
+        return { effect: toToolEffectSnapshot(matching), replayed: true };
       }
       const [created] = await transaction
         .insert(toolEffects)
@@ -178,11 +105,12 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
           toolCallId: input.toolCallId,
           effectKey: input.effectKey,
           semanticsHash: input.semanticsHash,
+          reconciliationVerifierId: input.reconciliationVerifierId ?? null,
           intendedAt: input.now ?? new Date(),
         })
         .returning();
       if (!created) throw new Error('Tool Effect记录写入失败');
-      return { effect: toSnapshot(created), replayed: false };
+      return { effect: toToolEffectSnapshot(created), replayed: false };
     });
   }
 
@@ -198,7 +126,7 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
     if (
       !['committed', 'failed', 'outcome_unknown'].includes(input.status) ||
       (input.status === 'committed' && input.code) ||
-      (input.status !== 'committed' && !isSafeCode(input.code ?? '')) ||
+      (input.status !== 'committed' && !isSafeEffectCode(input.code ?? '')) ||
       (input.status !== 'committed' && input.receiptHash) ||
       (input.receiptHash !== undefined &&
         input.receiptHash !== null &&
@@ -208,7 +136,7 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
-      const effect = await requireOwnedEffect(transaction, input);
+      const effect = await requireOwnedToolEffect(transaction, input);
       const [updated] = await transaction
         .update(toolEffects)
         .set({
@@ -225,8 +153,10 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
           ),
         )
         .returning();
-      if (updated) return { effect: toSnapshot(updated), transitioned: true };
-      const current = await requireOwnedEffect(transaction, input);
+      if (updated) {
+        return { effect: toToolEffectSnapshot(updated), transitioned: true };
+      }
+      const current = await requireOwnedToolEffect(transaction, input);
       if (
         current.status !== input.status ||
         current.code !==
@@ -236,7 +166,7 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
       ) {
         throw new ToolEffectConflictError();
       }
-      return { effect: toSnapshot(current), transitioned: false };
+      return { effect: toToolEffectSnapshot(current), transitioned: false };
     });
   }
 
@@ -249,7 +179,7 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
       !isUuid(input.operationId) ||
       input.actorId.length < 1 ||
       input.actorId.length > 160 ||
-      !isSafeKey(input.effectKey)
+      !isSafeEffectKey(input.effectKey)
     ) {
       throw new ToolEffectOwnershipError();
     }
@@ -274,6 +204,6 @@ export class DrizzleToolEffectRepository implements ToolEffectLedgerPort {
         ),
       )
       .limit(1);
-    return row ? toSnapshot(row) : null;
+    return row ? toToolEffectSnapshot(row) : null;
   }
 }

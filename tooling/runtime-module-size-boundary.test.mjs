@@ -29,10 +29,18 @@ const CONTINUATION_DB_SUPPORT =
   'packages/db/src/operation-continuation-repository.integration.support.ts';
 const CONTINUATION_WORKER_SUPPORT =
   'apps/worker/src/approval-continuation.integration-support.ts';
-const CONTINUATION_WORKER_TASK =
-  'apps/worker/src/tasks/continue-operation.ts';
+const CONTINUATION_WORKER_TASK = 'apps/worker/src/tasks/continue-operation.ts';
 const CONTINUATION_WORKER_TASK_TEST =
   'apps/worker/src/tasks/continue-operation.test.ts';
+const TOOL_EFFECT_RECONCILIATION_MODULES = [
+  'packages/agent-core/src/tool-effect-reconciliation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation-validation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation-verifier.ts',
+  'packages/db/src/schema/tool-effect-reconciliation.ts',
+  'packages/db/src/tool-effect-reconciliation-persistence.ts',
+  'packages/db/src/tool-effect-reconciliation-repository.ts',
+];
 const WORKER_BOOTSTRAP_MODULES = [
   'apps/worker/src/index.ts',
   'apps/worker/src/bootstrap.ts',
@@ -131,6 +139,10 @@ describe('Runtime module size boundary', () => {
       ],
       CONTINUATION_REVIEW_LIMIT,
     );
+  });
+
+  it('keeps Tool Effect reconciliation production responsibilities independently readable', () => {
+    assertFilesWithinLimit(TOOL_EFFECT_RECONCILIATION_MODULES, REVIEW_LIMIT);
   });
 
   it('keeps continuation integration fixtures independently readable', () => {

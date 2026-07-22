@@ -34,20 +34,22 @@ export function createToolSemanticsHash(
   adapter: AnyToolKernelAdapter,
   request: ToolKernelExecuteRequest,
 ): string {
-  return createHash('sha256')
-    .update(
-      canonicalize([
-        adapter.name,
-        request.arguments,
-        request.context.operationId,
-        request.context.conversationId,
-        request.context.traceId,
-        request.context.actorId,
-        request.context.agentId,
-        request.context.notebookId,
-        request.context.answerModelRunId,
-        request.context.providerToolCallId,
-      ]),
-    )
-    .digest('hex');
+  const semantics: unknown[] = [
+    adapter.name,
+    request.arguments,
+    request.context.operationId,
+    request.context.conversationId,
+    request.context.traceId,
+    request.context.actorId,
+    request.context.agentId,
+    request.context.notebookId,
+    request.context.answerModelRunId,
+    request.context.providerToolCallId,
+  ];
+  if (adapter.reconciliationVerifierId != null) {
+    semantics.push({
+      reconciliationVerifierId: adapter.reconciliationVerifierId,
+    });
+  }
+  return createHash('sha256').update(canonicalize(semantics)).digest('hex');
 }
