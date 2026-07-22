@@ -1,5 +1,4 @@
 import type {
-  ModelFinishReason,
   ModelUsage,
   NormalizedModelError,
   ProviderCallMetadata,
@@ -7,14 +6,19 @@ import type {
   TurnModelEvent,
   TurnModelGateway,
 } from '@educanvas/agent-core';
+import { type EnabledModelGatewayConfiguration } from './config';
 import {
-  parseModelGatewayConfiguration,
-  type EnabledModelGatewayConfiguration,
-  type ModelGatewayEnvironment,
-} from './config';
+  buildRequestBody,
+  errorForHttpResponse,
+  failedEvent,
+  isRecord,
+  mapFinishReason,
+  nonNegativeInteger,
+  optionalString,
+  parseUsage,
+  requiredString,
+} from './openai-compatible-protocol';
 import { readSseData, SseProtocolError } from './sse';
-
-type JsonRecord = Record<string, unknown>;
 
 interface ToolCallState {
   callId: string;
@@ -25,198 +29,6 @@ export interface OpenAICompatibleTurnModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
-
-const isRecord = (value: unknown): value is JsonRecord =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const requiredString = (value: unknown): string => {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new SseProtocolError();
-  }
-  return value;
-};
-
-const optionalString = (value: unknown): string | undefined => {
-  if (value === undefined || value === null) return undefined;
-  return requiredString(value);
-};
-
-const nonNegativeInteger = (value: unknown): number => {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new SseProtocolError();
-  }
-  return value as number;
-};
-
-const safeJsonStringify = (value: unknown): string => {
-  let serialized: string | undefined;
-  try {
-    serialized = JSON.stringify(value);
-  } catch {
-    throw new SseProtocolError();
-  }
-  if (serialized === undefined) throw new SseProtocolError();
-  return serialized;
-};
-
-const parseUsage = (value: unknown): ModelUsage => {
-  if (!isRecord(value)) throw new SseProtocolError();
-  const completionDetails = value.completion_tokens_details;
-  const reasoningTokens = isRecord(completionDetails)
-    ? nonNegativeInteger(completionDetails.reasoning_tokens ?? 0)
-    : 0;
-  return {
-    inputTokens: nonNegativeInteger(value.prompt_tokens),
-    outputTokens: nonNegativeInteger(value.completion_tokens),
-    cacheHitTokens: nonNegativeInteger(value.prompt_cache_hit_tokens ?? 0),
-    reasoningTokens,
-  };
-};
-
-const parseRetryAfterMs = (
-  value: string | null,
-  now: number,
-): number | undefined => {
-  if (value === null) return undefined;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.round(seconds * 1_000);
-  }
-  const date = Date.parse(value);
-  if (!Number.isFinite(date)) return undefined;
-  return Math.max(0, date - now);
-};
-
-const errorForHttpResponse = (
-  response: Response,
-  now: number,
-): NormalizedModelError => {
-  if (response.status === 429) {
-    const retryAfterMs = parseRetryAfterMs(
-      response.headers.get('retry-after'),
-      now,
-    );
-    return {
-      code: 'rate_limit',
-      retryable: true,
-      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-    };
-  }
-  if (response.status === 408 || response.status === 504) {
-    return { code: 'timeout', retryable: true };
-  }
-  if (response.status >= 500) {
-    return { code: 'unavailable', retryable: true };
-  }
-  if (response.status === 400 || response.status === 422) {
-    return { code: 'invalid_response', retryable: false };
-  }
-  return { code: 'unavailable', retryable: false };
-};
-
-const failedEvent = (
-  phase: StreamAgentTextRequest['phase'],
-  error: NormalizedModelError,
-  metadata?: ProviderCallMetadata,
-): TurnModelEvent => ({
-  type: 'failed',
-  phase,
-  error,
-  ...(metadata === undefined ? {} : { metadata }),
-});
-
-const mapFinishReason = (
-  providerReason: string,
-): {
-  finishReason: ModelFinishReason;
-  failure?: NormalizedModelError;
-} => {
-  switch (providerReason) {
-    case 'stop':
-    case 'tool_calls':
-      return { finishReason: providerReason };
-    case 'length':
-      return {
-        finishReason: 'length',
-        failure: { code: 'output_limit', retryable: true },
-      };
-    case 'content_filter':
-      return {
-        finishReason: 'content_filter',
-        failure: { code: 'content_filtered', retryable: false },
-      };
-    case 'insufficient_system_resource':
-      return {
-        finishReason: 'error',
-        failure: { code: 'unavailable', retryable: true },
-      };
-    default:
-      return {
-        finishReason: 'other',
-        failure: { code: 'invalid_response', retryable: false },
-      };
-  }
-};
-
-const buildProviderMessages = (request: StreamAgentTextRequest): unknown[] => {
-  const messages: unknown[] = request.messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-  }));
-  /* synthesis 必须携带已验证工具交换;answer 轮次可携带(多圈循环的前序轮) */
-  if (request.phase === 'synthesis' && request.toolResults.length === 0) {
-    throw new SseProtocolError();
-  }
-  if (request.toolResults.length === 0) return messages;
-
-  messages.push({
-    role: 'assistant',
-    content: null,
-    tool_calls: request.toolResults.map((result) => ({
-      id: result.callId,
-      type: 'function',
-      function: {
-        name: result.tool,
-        arguments: safeJsonStringify(result.arguments),
-      },
-    })),
-  });
-  for (const result of request.toolResults) {
-    messages.push({
-      role: 'tool',
-      tool_call_id: result.callId,
-      content: safeJsonStringify(result.output),
-    });
-  }
-  return messages;
-};
-
-const buildRequestBody = (
-  request: StreamAgentTextRequest,
-  config: EnabledModelGatewayConfiguration,
-  modelId: string,
-): JsonRecord => ({
-  model: modelId,
-  messages: buildProviderMessages(request),
-  stream: true,
-  stream_options: { include_usage: true },
-  max_tokens: config.maxOutputTokens,
-  tools:
-    request.tools.length === 0
-      ? undefined
-      : request.tools.map((tool) => ({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-          },
-        })),
-  tool_choice: request.tools.length === 0 ? 'none' : 'auto',
-  // DeepSeek thinking tool calls require replaying reasoning_content. EduCanvas
-  // deliberately never retains CoT, so the adapter forces non-thinking mode.
-  ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
-});
 
 /** 原生 fetch + SSE 的 OpenAI-compatible Turn Adapter。 */
 export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
@@ -518,14 +330,4 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
       if (!controller.signal.aborted) controller.abort();
     }
   }
-}
-
-export function createTurnModelGatewayFromEnvironment(
-  environment: ModelGatewayEnvironment,
-  options: OpenAICompatibleTurnModelGatewayOptions = {},
-): OpenAICompatibleTurnModelGateway | null {
-  const config = parseModelGatewayConfiguration(environment);
-  return config.enabled
-    ? new OpenAICompatibleTurnModelGateway(config, options)
-    : null;
 }

@@ -16,9 +16,9 @@ export {
 } from './config';
 export {
   OpenAICompatibleTurnModelGateway,
-  createTurnModelGatewayFromEnvironment,
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
+export { createTurnModelGatewayFromEnvironment } from './turn-model-gateway-factory';
 export {
   OpenAICompatibleStructuredModelGateway,
   type OpenAICompatibleStructuredModelGatewayOptions,
