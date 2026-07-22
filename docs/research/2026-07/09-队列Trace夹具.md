@@ -19,30 +19,34 @@
 5. span attributes 采用双字段白名单，event 为空，队列 payload 采用 Zod strict schema；
 6. 敏感标记和敏感字段名在导出的遥测边界与实际消费 payload 中均为零。
 
-这不是生产埋点迁移。它冻结的是 Port 必须满足的传播与隐私契约，未来可把 exporter 换成 OTLP，但不能扩宽默认数据面。
+该研究契约现已部分生产化：Turn Trace使用OTLP Adapter、比例采样、有界Batch和Exporter
+degraded状态；允许的span属性扩为`operation_id/stage/entrypoint`，静态事件只允许
+`context.prepare / approval.required / lifecycle.event.invalid`，其中审批事件最多记录`L0–L3`
+risk，不记录capability或参数。跨PostgreSQL continuation的W3C传播仍在独立纵切中，不能把
+queue fixture误写成已生产完成。
 
 ## 固定契约
 
-| 载体 | 允许字段 | 禁止字段 |
-| --- | --- | --- |
-| Queue payload | `operationId`、`traceparent` | 正文、Prompt、判分键、Token、Secret、对象 key、任意扩展字段 |
-| Span attributes | `educanvas.operation_id`、`educanvas.stage` | 请求/响应正文和任何 Credential |
-| Span events | 默认空 | 工具参数、模型输出、学生答案 |
-| Baggage | 默认不用 | 所有业务正文与身份凭据 |
+| 载体            | 允许字段                                                            | 禁止字段                                                    |
+| --------------- | ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Queue payload   | `operationId`、`traceparent`                                        | 正文、Prompt、判分键、Token、Secret、对象 key、任意扩展字段 |
+| Span attributes | `educanvas.operation_id`、`educanvas.stage`、`educanvas.entrypoint` | 请求/响应正文和任何 Credential                              |
+| Span events     | 三个静态名称；审批只允许`educanvas.risk=L0–L3`                      | capability、工具参数、模型输出、学生答案                    |
+| Baggage         | 默认不用                                                            | 所有业务正文与身份凭据                                      |
 
 生产 Adapter 若确需额外维度，必须先进入显式白名单并证明低基数、非个人信息、非秘密；不能把“方便搜索”当作记录正文的理由。
 
 ## 依赖事实
 
 - `@opentelemetry/api` 1.9.1，Apache-2.0；只依赖稳定 API。
-- `@opentelemetry/sdk-trace-node` 2.9.0，Apache-2.0；只作为 worker 集成夹具的开发依赖。
+- `@opentelemetry/sdk-trace-node` 2.10.0与OTLP HTTP Exporter 0.221.0，Apache-2.0；生产依赖只存在于`packages/telemetry`。
 - `graphile-worker` 0.16.6 继续承担真实 PostgreSQL 队列传播；本实验没有引入第二任务事实源。
 
 版本与许可证在 2026-07-21 由 npm 官方包元数据复核；能力语义以 OpenTelemetry 官方 Context Propagation 与 W3C Trace Context 文档为准。
 
 ## 决策影响
 
-- `adopt` OpenTelemetry API/SDK 作为候选 Trace Adapter，但只在稳定 Port 后接入生产组合根；
+- `adopt` OpenTelemetry API/SDK：Turn Adapter已接入生产组合根，跨进程carrier仍待完成；
 - `retain` `operationId` 作为业务审计和恢复键，不让 trace id 成为业务外键；
 - `reject` 全量 Prompt/Response capture、把秘密写入 baggage、让 exporter 成为业务事实源；
 - 生产接入前仍需定义采样、保留期、租户访问控制、Exporter degraded 行为与数据驻留策略。

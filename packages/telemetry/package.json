@@ -1,0 +1,28 @@
+{
+  "name": "@educanvas/telemetry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "prettier --check \"src/**/*.ts\"",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@educanvas/agent-runtime": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/resources": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/sdk-trace-node": "2.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "prettier": "^3.9.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

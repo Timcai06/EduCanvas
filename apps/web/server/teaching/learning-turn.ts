@@ -45,6 +45,7 @@ import {
   createTeachingTurnPromptMessages,
   recordTeachingMetric,
 } from '@educanvas/teaching-runtime';
+import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
@@ -663,6 +664,7 @@ export function beginGatewayTeachingTurnApplication(input: {
       new DrizzleToolEffectRepository(),
     ),
     cancellation: new WebTeachingCancellation(input.signal),
+    trace: getWebTelemetryRuntime().turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',

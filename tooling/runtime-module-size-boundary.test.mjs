@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
+const TELEMETRY_REVIEW_LIMIT = 300;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -15,6 +16,7 @@ const TURN_APPLICATION_ENTRY = 'packages/agent-runtime/src/turn-application.ts';
 const TURN_APPLICATION_TEST_PATTERN =
   /^turn-application(?:\..+)?\.test(?:-support)?\.ts$/;
 const MODEL_GATEWAY_ROOT = 'packages/model-gateway/src';
+const TELEMETRY_ROOT = 'packages/telemetry/src';
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -83,6 +85,13 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       typescriptFiles(MODEL_GATEWAY_ROOT),
       MODEL_GATEWAY_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Telemetry adapters and tests independently readable', () => {
+    assertFilesWithinLimit(
+      typescriptFiles(TELEMETRY_ROOT),
+      TELEMETRY_REVIEW_LIMIT,
     );
   });
 });

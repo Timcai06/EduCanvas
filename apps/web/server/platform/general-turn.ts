@@ -38,6 +38,7 @@ import {
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
+import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
 import { createMcpRuntimeFromEnvironment } from '@educanvas/mcp-runtime';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
@@ -490,6 +491,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     modelGateway: runtime?.gateway ?? unavailableModelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),
+    trace: getWebTelemetryRuntime().turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',

@@ -27,6 +27,7 @@ import {
   GatewayNodeSessionAuth,
 } from './client-auth';
 import { GatewayObservability } from './observability';
+import { getGatewayTelemetryRuntime } from './telemetry';
 
 function loadWorkspaceEnvFiles(): void {
   let current = process.cwd();
@@ -66,6 +67,7 @@ const clientSessionAuth = clientSessionSecret
 const observability = new GatewayObservability((record) => {
   process.stdout.write(`${JSON.stringify(record)}\n`);
 });
+const telemetry = getGatewayTelemetryRuntime();
 const service = new GatewayService(
   new DrizzleGatewayRouteResolver(),
   operationStore,
@@ -116,12 +118,15 @@ server.listen(config.port, config.host, () => {
       internalTransportEnabled: config.internalToken !== null,
       clientTransportEnabled: clientSessionAuth !== null,
       localOnboardingEnabled: config.localOnboardingEnabled,
+      telemetry: telemetry.health(),
     })}\n`,
   );
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void telemetry.shutdown().finally(() => process.exit(0));
+    });
   });
 }
