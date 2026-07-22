@@ -8,12 +8,15 @@ import {
   toolApprovalIntentProtocolVersion,
   toolApprovalIntentSnapshotSchema,
 } from '@educanvas/agent-core';
-import { and, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import { agentOperations, toolApprovalIntents, toolCalls } from './schema';
 
 type Database = ReturnType<typeof getDb>;
+
+/** 单次清理上限用于约束事务持锁规模；高水位由后续周期批次继续收敛。 */
+export const MAX_TOOL_APPROVAL_INTENT_RECONCILIATION_BATCH = 500;
 
 /** 对不存在与跨Actor访问使用同一错误，避免泄漏Operation或Tool Call身份。 */
 export class ToolApprovalIntentOwnershipError extends Error {
@@ -195,6 +198,66 @@ export class DrizzleToolApprovalIntentRepository implements ToolApprovalIntentPo
         .returning();
       if (!created) throw new ToolApprovalIntentConflictError();
       return { intent: toSnapshot(created), replayed: false };
+    });
+  }
+
+  /**
+   * 将已经过期且仍未被Gateway绑定的prepared意图收敛为abandoned。
+   * 采用有界批次和SKIP LOCKED，允许多个maintenance worker安全并发；bound事实永不回退。
+   */
+  async abandonExpiredPrepared(
+    input: {
+      now?: Date;
+      limit?: number;
+    } = {},
+  ): Promise<number> {
+    const now = input.now ?? new Date();
+    const limit = input.limit ?? 100;
+    if (
+      !Number.isFinite(now.getTime()) ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > MAX_TOOL_APPROVAL_INTENT_RECONCILIATION_BATCH
+    ) {
+      throw new ToolApprovalIntentLifecycleError(
+        `审批意图清理批次必须为1-${MAX_TOOL_APPROVAL_INTENT_RECONCILIATION_BATCH}`,
+      );
+    }
+
+    return this.database.transaction(async (transaction) => {
+      const candidates = await transaction
+        .select({ approvalId: toolApprovalIntents.approvalId })
+        .from(toolApprovalIntents)
+        .where(
+          and(
+            eq(toolApprovalIntents.status, 'prepared'),
+            lte(toolApprovalIntents.expiresAt, now),
+          ),
+        )
+        .orderBy(
+          asc(toolApprovalIntents.expiresAt),
+          asc(toolApprovalIntents.preparedAt),
+          asc(toolApprovalIntents.approvalId),
+        )
+        .limit(limit)
+        .for('update', { skipLocked: true });
+      if (candidates.length === 0) return 0;
+
+      const abandoned = await transaction
+        .update(toolApprovalIntents)
+        .set({ status: 'abandoned', abandonedAt: now })
+        .where(
+          and(
+            inArray(
+              toolApprovalIntents.approvalId,
+              candidates.map(({ approvalId }) => approvalId),
+            ),
+            eq(toolApprovalIntents.status, 'prepared'),
+            lte(toolApprovalIntents.expiresAt, now),
+          ),
+        )
+        .returning({ approvalId: toolApprovalIntents.approvalId });
+      return abandoned.length;
     });
   }
 }

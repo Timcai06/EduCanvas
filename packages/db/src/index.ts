@@ -201,6 +201,7 @@ export {
 } from './operation-continuation-repository';
 export {
   DrizzleToolApprovalIntentRepository,
+  MAX_TOOL_APPROVAL_INTENT_RECONCILIATION_BATCH,
   ToolApprovalIntentConflictError,
   ToolApprovalIntentLifecycleError,
   ToolApprovalIntentOwnershipError,

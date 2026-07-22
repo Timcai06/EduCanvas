@@ -244,6 +244,49 @@ describeWithDatabase('Operation continuation持久账本', () => {
     ).rejects.toBeInstanceOf(ToolApprovalIntentLifecycleError);
   });
 
+  it('以有界批次放弃过期prepared意图且不提前清理', async () => {
+    const fixture = await createFixture();
+    const repository = new DrizzleToolApprovalIntentRepository(getDatabase());
+    await repository.prepare(intentInput(fixture));
+
+    await expect(
+      repository.abandonExpiredPrepared({
+        now: new Date('2026-07-21T12:10:00.000Z'),
+        limit: 1,
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      repository.abandonExpiredPrepared({
+        now: new Date('2026-07-21T12:10:01.000Z'),
+        limit: 1,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      repository.abandonExpiredPrepared({
+        now: new Date('2026-07-21T12:11:00.000Z'),
+        limit: 1,
+      }),
+    ).resolves.toBe(0);
+    expect(
+      await getDatabase()
+        .select({
+          status: schema.toolApprovalIntents.status,
+          abandonedAt: schema.toolApprovalIntents.abandonedAt,
+          boundAt: schema.toolApprovalIntents.boundAt,
+        })
+        .from(schema.toolApprovalIntents),
+    ).toEqual([
+      {
+        status: 'abandoned',
+        abandonedAt: new Date('2026-07-21T12:10:01.000Z'),
+        boundAt: null,
+      },
+    ]);
+    await expect(
+      repository.abandonExpiredPrepared({ limit: 501 }),
+    ).rejects.toBeInstanceOf(ToolApprovalIntentLifecycleError);
+  });
+
   it('以Operation幂等创建等待态且只保存稳定引用', async () => {
     const fixture = await createFixture();
     const repository = new DrizzleOperationContinuationRepository(
