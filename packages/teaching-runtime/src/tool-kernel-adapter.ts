@@ -4,7 +4,7 @@ import {
 } from '@educanvas/agent-runtime';
 import { teachingStateSchema } from '@educanvas/teaching-core';
 import { z } from 'zod';
-import type { RegisteredTeachingTool } from './tool-executor';
+import type { RegisteredTeachingTool } from './teaching-tool';
 
 const teachingProfileContextSchema = z
   .object({

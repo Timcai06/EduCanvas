@@ -1,5 +1,5 @@
 import type { AgentToolEffect, AgentToolExposure } from '@educanvas/agent-core';
-import type { AgentTool } from './agent-tools';
+import type { AgentTool } from './local-tool';
 import type { ToolKernelAdapter, ToolRiskLevel } from './tool-kernel';
 
 /** 把现有Local AgentTool提升为Kernel Adapter；授权元数据必须由服务端静态注册。 */

@@ -6,7 +6,7 @@ import type {
   TeachingSafetyPolicyCode,
   TeachingTool,
 } from '@educanvas/teaching-core';
-import type { ToolExecutionRejectionCode } from './tool-executor';
+import type { ToolKernelFailureCode } from '@educanvas/agent-runtime';
 
 export const teachingMetricNames = Object.freeze([
   'provider_calls_per_completed_turn',
@@ -69,7 +69,7 @@ export type TeachingMetricEvent =
     })
   | (NumericMetric<'tool_rejections'> & {
       toolAlias: TeachingTool | 'unknown';
-      code: ToolExecutionRejectionCode;
+      code: ToolKernelFailureCode;
     })
   | (NumericMetric<'citation_invalid'> & {
       code:
