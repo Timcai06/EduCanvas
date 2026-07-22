@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 相关决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)
-- 最后验证：2026-07-21
+- 最后验证：2026-07-22
 
 ## 当前实现边界
 
@@ -16,7 +16,7 @@
 - `TurnModelEvent`：`text_delta / tool_call / usage / completed / failed`；
 - `ProviderCallMetadata` 与 `NormalizedModelError`：用于稳定审计和错误收敛。
 
-当前生产教学 Turn 由 `packages/agent-runtime` 的唯一 `TurnApplicationService` 与 `AgentLoopEngine` 执行；`packages/teaching-runtime` 只提供 `createTeachingTurnPromptMessages()`、确定性安全 Gate、状态机与教学 Tool Adapter。直答只产生一次 `answer` Model Run；请求工具时产生 `answer → Tool Kernel → synthesis` 两次 Model Run。遗留 `TeachingTurnOrchestrator` 仅为旧记录/契约兼容测试保留，Web、Gateway 与TUI生产入口均不再构造它。Prompt材料明确排除 Trace、运行期 signal 与 secret。
+当前生产教学 Turn 由 `packages/agent-runtime` 的唯一 `TurnApplicationService` 与 `AgentLoopEngine` 执行；`packages/teaching-runtime` 只提供纯 Prompt、确定性安全 Gate、状态机、教学 Tool 定义与 Adapter。直答只产生一次 `answer` Model Run；请求工具时产生 `answer → Tool Kernel → synthesis` 两次 Model Run。旧教学 Orchestrator 和 Tool Executor 已删除；Prompt材料明确排除 Trace、运行期 signal 与 secret。
 
 `packages/model-gateway` 已实现 OpenAI-compatible Turn、结构化 JSON 与`/audio/speech`三个Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取 `process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式 Fallback和nightly live smoke；测试替身不能注册到生产组合根。
 

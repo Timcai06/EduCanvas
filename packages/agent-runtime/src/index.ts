@@ -34,13 +34,7 @@ export {
   type ModelRunSuccess,
   type ParsedToolCall,
 } from './turn-engine';
-export {
-  AgentToolRegistry,
-  type AgentTool,
-  type AgentToolContext,
-  type AgentToolExecution,
-  type AgentToolFailureCode,
-} from './agent-tools';
+export { type AgentTool, type AgentToolContext } from './local-tool';
 export { adaptAgentTool } from './agent-tool-adapter';
 export {
   AgentLoopEngine,

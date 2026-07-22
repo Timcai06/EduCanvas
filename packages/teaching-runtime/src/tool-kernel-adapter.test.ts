@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import { defineTeachingTool } from './tool-executor';
+import { defineTeachingTool } from './teaching-tool';
 import { adaptTeachingTool } from './tool-kernel-adapter';
 
 describe('Teaching Tool兼容Adapter', () => {

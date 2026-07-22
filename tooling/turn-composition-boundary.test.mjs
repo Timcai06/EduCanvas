@@ -31,15 +31,15 @@ function constructionFiles(className) {
 }
 
 describe('Turn composition production boundary', () => {
-  it('freezes the target service and remaining legacy construction points', () => {
+  it('allows exactly one AgentLoopEngine construction point', () => {
     assert.deepEqual(constructionFiles('AgentLoopEngine'), [
       'packages/agent-runtime/src/turn-application/service.ts',
-      'packages/teaching-runtime/src/turn-orchestrator.ts',
     ]);
   });
 
-  it('does not allow a third tool runtime or new entrypoint-local construction', () => {
+  it('does not allow legacy tool runtimes to return', () => {
     assert.deepEqual(constructionFiles('AgentToolRegistry'), []);
     assert.deepEqual(constructionFiles('TeachingToolExecutor'), []);
+    assert.deepEqual(constructionFiles('TeachingTurnOrchestrator'), []);
   });
 });
