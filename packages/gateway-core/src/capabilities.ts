@@ -27,6 +27,7 @@ export const gatewayCapabilityNames = [
   'approval.interactive',
   'device.status',
   'filesystem.read_allowlisted',
+  'external.mcp.invoke',
 ] as const;
 export const gatewayCapabilityNameSchema = z.enum(gatewayCapabilityNames);
 export type GatewayCapabilityName = z.infer<typeof gatewayCapabilityNameSchema>;

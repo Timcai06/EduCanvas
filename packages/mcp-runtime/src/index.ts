@@ -4,11 +4,16 @@ export {
   type McpClientPort,
   type McpCredentialBrokerPort,
   type McpCredentialScope,
+  type McpDurableIntentSnapshot,
+  type McpDurableIntentStorePort,
+  type McpIntentCipherPort,
+  type McpIntentMetadata,
   type McpLifecycleStatus,
   type McpRuntime,
   type McpRuntimeEnvironment,
   type McpRuntimeOptions,
   type McpServerStatus,
+  type McpSealedIntentPayload,
   type McpToolRegistration,
 } from './contracts';
 export { LifecycleMcpClient } from './client-lifecycle';
@@ -26,5 +31,6 @@ export {
   type McpSafeToolOutput,
 } from './output-sanitizer';
 export { createMcpRuntimeFromEnvironment } from './runtime';
+export { AesGcmMcpIntentCipher, mcpIntentAssociatedData } from './intent-codec';
 export { McpStatusRegistry } from './status-registry';
 export { createMcpToolAdapters } from './tool-adapter';

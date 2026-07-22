@@ -23,8 +23,10 @@ import {
   DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
   DrizzleGatewayNodeRepository,
+  DrizzleMcpIntentRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleToolApprovalIntentRepository,
   DrizzleToolEffectRepository,
   type PlatformMessageCitationSnapshot,
   type PlatformOperationSourceSnapshot,
@@ -57,7 +59,10 @@ const GENERAL_SYSTEM_PROMPT = `你是 EduCanvas，一个通用的对话式 AI �
 
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
-const mcpRuntime = createMcpRuntimeFromEnvironment();
+const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
+  durableIntents: new DrizzleMcpIntentRepository(),
+  approvalIntents: new DrizzleToolApprovalIntentRepository(),
+});
 
 const unavailableModelGateway: TurnModelGateway = {
   async *streamTurnText(request) {

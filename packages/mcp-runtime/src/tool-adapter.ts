@@ -1,5 +1,9 @@
 import type { ToolKernelAdapter } from '@educanvas/agent-runtime';
 import type { McpClientPort, McpToolRegistration } from './contracts';
+import {
+  prepareMcpApproval,
+  type McpApprovalPreparationDependencies,
+} from './approval-preparation';
 import { McpInvocationError, McpRemoteToolError } from './errors';
 import {
   mcpSafeToolOutputSchema,
@@ -14,6 +18,7 @@ export function createMcpToolAdapters(
   registrations: readonly McpToolRegistration[],
   client: McpClientPort,
   statuses: McpStatusRegistry,
+  approval?: McpApprovalPreparationDependencies,
 ): readonly ToolKernelAdapter<
   Readonly<Record<string, unknown>>,
   McpSafeToolOutput
@@ -30,7 +35,30 @@ export function createMcpToolAdapters(
     inputSchema: createMcpArgumentSchema(registration.inputSchema),
     modelInputSchema: registration.inputSchema,
     outputSchema: mcpSafeToolOutputSchema,
+    ...((registration.risk === 'l2' || registration.risk === 'l3') && approval
+      ? {
+          prepareApproval: async (
+            argumentsValue: Readonly<Record<string, unknown>>,
+            context: Parameters<
+              NonNullable<ToolKernelAdapter['prepareApproval']>
+            >[1],
+          ) =>
+            prepareMcpApproval({
+              registration: registration as McpToolRegistration & {
+                capability: 'external.mcp.invoke';
+                risk: 'l2' | 'l3';
+                effect: 'write';
+              },
+              arguments: argumentsValue,
+              context,
+              dependencies: approval,
+            }),
+        }
+      : {}),
     async invoke(argumentsValue, context) {
+      if (registration.risk === 'l2' || registration.risk === 'l3') {
+        throw new McpInvocationError('durability');
+      }
       try {
         const result = await client.callTool({
           registration,

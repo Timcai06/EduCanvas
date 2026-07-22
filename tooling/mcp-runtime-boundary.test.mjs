@@ -12,6 +12,20 @@ const productionFiles = readdirSync(sourceRoot)
       name !== 'test-support.ts',
   )
   .map((name) => join(sourceRoot, name));
+const reviewableAdapterFiles = [
+  ...readdirSync('apps/worker/src/mcp')
+    .filter((name) => name.endsWith('.ts') && !name.includes('.test.'))
+    .map((name) => join('apps/worker/src/mcp', name)),
+  ...readdirSync('packages/db/src')
+    .filter(
+      (name) =>
+        name.startsWith('mcp-') &&
+        name.endsWith('.ts') &&
+        !name.includes('.test.'),
+    )
+    .map((name) => join('packages/db/src', name)),
+  'packages/db/src/schema/mcp-intent.ts',
+];
 
 describe('MCP Runtime architecture boundary', () => {
   it('keeps protocol SDK isolated from Hybrid Ports and forbidden hosts', () => {
@@ -22,7 +36,10 @@ describe('MCP Runtime architecture boundary', () => {
       ].map((match) => match[1]);
       assert.deepEqual(
         [...new Set(educanvasImports)].filter(
-          (specifier) => specifier !== '@educanvas/agent-runtime',
+          (specifier) =>
+            !['@educanvas/agent-core', '@educanvas/agent-runtime'].includes(
+              specifier,
+            ),
         ),
         [],
         path,
@@ -42,6 +59,10 @@ describe('MCP Runtime architecture boundary', () => {
     for (const path of productionFiles) {
       const lines = readFileSync(path, 'utf8').split('\n').length;
       assert.ok(lines <= 250, `${path} has ${lines} lines`);
+    }
+    for (const path of reviewableAdapterFiles) {
+      const lines = readFileSync(path, 'utf8').split('\n').length;
+      assert.ok(lines <= 400, `${path} has ${lines} lines`);
     }
   });
 });

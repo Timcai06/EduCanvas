@@ -6,18 +6,25 @@ import {
   DrizzleAgentToolCallRepository,
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayOperationStore,
+  DrizzleMcpIntentRepository,
   DrizzleOperationContinuationRepository,
   DrizzlePlatformConversationRepository,
   DrizzlePlatformTurnRepository,
   DrizzleToolApprovalIntentRepository,
+  DrizzleToolEffectRepository,
   GatewayPersistenceError,
   gatewayApprovals,
   gatewayOperationEvents,
   getDb,
+  mcpToolIntents,
   notebookMemberships,
   operationContinuations,
   toolApprovalIntents,
 } from '@educanvas/db';
+import {
+  AesGcmMcpIntentCipher,
+  type McpToolRegistration,
+} from '@educanvas/mcp-runtime';
 import { eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { runOnce } from 'graphile-worker';
@@ -28,11 +35,35 @@ import {
   OperationContinuationLeaseHeldError,
   type OperationContinuationResumeAdapter,
 } from './tasks/continue-operation.js';
+import { createMcpContinuationAdapter } from './mcp/continuation-adapter.js';
 
 const connectionString = process.env.TEST_DATABASE_URL!;
 const now = new Date('2026-07-21T15:00:00.000Z');
+const mcpKey = Buffer.alloc(32, 6).toString('base64');
+const mcpRegistration: McpToolRegistration & {
+  risk: 'l2';
+  effect: 'write';
+  capability: 'external.mcp.invoke';
+} = {
+  serverId: 'study-tools',
+  endpoint: 'http://127.0.0.1:4321/mcp',
+  remoteToolName: 'publish',
+  modelToolName: 'publishNotes',
+  description: '发布学习笔记',
+  capability: 'external.mcp.invoke',
+  risk: 'l2',
+  effect: 'write',
+  authentication: 'none',
+  inputSchema: {
+    type: 'object',
+    properties: { title: { type: 'string', maxLength: 100 } },
+    required: ['title'],
+    additionalProperties: false,
+  },
+  timeoutMs: 2_000,
+};
 
-async function createWaitingApproval() {
+async function createWaitingApproval(kind: 'node' | 'mcp' = 'node') {
   const database = getDb();
   const actorId = 'user:approval-continuation';
   const conversations = new DrizzlePlatformConversationRepository(database);
@@ -94,15 +125,51 @@ async function createWaitingApproval() {
     answerModelRunId: modelRun.run.id,
     providerToolCallId: 'provider-call:approval-continuation',
     executionId: `execution:${operation.operationId}`,
-    toolName: 'readAllowlistedFile',
+    toolName: kind === 'mcp' ? 'publishNotes' : 'readAllowlistedFile',
     exposure: 'model',
-    effect: 'read',
-    arguments: { path: 'notes/algebra.md' },
+    effect: kind === 'mcp' ? 'write' : 'read',
+    arguments:
+      kind === 'mcp' ? { title: '分数错题本' } : { path: 'notes/algebra.md' },
     now,
   });
   const approvalId = `approval:${operation.operationId}`;
   const expiresAt = new Date(now.getTime() + 10 * 60_000).toISOString();
   const continuations = new DrizzleOperationContinuationRepository(database);
+  const resumeRef =
+    kind === 'mcp'
+      ? `mcp.intent:${'c'.repeat(64)}`
+      : `node-invocation:${operation.operationId}`;
+  if (kind === 'mcp') {
+    const metadata = {
+      resumeRef,
+      operationId: operation.operationId,
+      toolCallId: toolCall.call.id,
+      actorId,
+      agentId: identity.agentId,
+      serverId: mcpRegistration.serverId,
+      remoteToolName: mcpRegistration.remoteToolName,
+      modelToolName: mcpRegistration.modelToolName,
+      capability: mcpRegistration.capability,
+      risk: mcpRegistration.risk,
+      effect: mcpRegistration.effect,
+      semanticsHash: AesGcmMcpIntentCipher.fromBase64(mcpKey).semanticsHash({
+        registration: mcpRegistration,
+        arguments: { title: '分数错题本' },
+      }),
+      expiresAt,
+    };
+    await new DrizzleMcpIntentRepository(database).prepare({
+      metadata,
+      sealedPayload: AesGcmMcpIntentCipher.fromBase64(mcpKey).seal({
+        metadata,
+        payload: {
+          arguments: { title: '分数错题本' },
+          credentialHandle: null,
+        },
+      }),
+      now,
+    });
+  }
   await new DrizzleToolApprovalIntentRepository(database).prepare({
     operationId: operation.operationId,
     actorId,
@@ -112,8 +179,8 @@ async function createWaitingApproval() {
       kind: 'tool_invocation',
       step: 'tool.invoke',
       toolCallId: toolCall.call.id,
-      adapterSource: 'node',
-      resumeRef: `node-invocation:${operation.operationId}`,
+      adapterSource: kind,
+      resumeRef,
     },
     now,
   });
@@ -125,9 +192,12 @@ async function createWaitingApproval() {
         approvalId,
         operationId: operation.operationId,
         actorUserId: actorId,
-        capability: 'filesystem.read_allowlisted',
+        capability:
+          kind === 'mcp'
+            ? mcpRegistration.capability
+            : 'filesystem.read_allowlisted',
         risk: 'l2',
-        summary: '读取白名单内的学习资料',
+        summary: kind === 'mcp' ? '发布学习笔记' : '读取白名单内的学习资料',
         requestedAt: now.toISOString(),
         expiresAt,
       },
@@ -147,6 +217,7 @@ async function createWaitingApproval() {
     operationId: operation.operationId,
     continuationId: waiting.continuationId,
     notebookId: conversation.spaceId,
+    toolCallId: toolCall.call.id,
     operations,
   };
 }
@@ -165,7 +236,7 @@ describe('Gateway approval到continuation队列的原子边界', () => {
 
   beforeEach(async () => {
     await database.execute(sql`
-      truncate table operation_continuations, tool_approval_intents, gateway_approvals,
+      truncate table mcp_tool_intents, operation_continuations, tool_approval_intents, gateway_approvals,
         gateway_operation_events, tool_effects, tool_calls, model_runs,
         conversation_messages, agent_operations, conversations, spaces,
         personal_agents, platform_users
@@ -285,6 +356,55 @@ describe('Gateway approval到continuation队列的原子边界', () => {
         .from(gatewayOperationEvents)
         .where(eq(gatewayOperationEvents.operationId, fixture.operationId)),
     ).toHaveLength(4);
+  });
+
+  it('MCP高风险审批后经同一continuation恢复并提交Effect，密文不进入队列或终态', async () => {
+    const fixture = await createWaitingApproval('mcp');
+    await fixture.operations.resolveApproval({
+      approvalId: fixture.approvalId,
+      actorUserId: fixture.actorId,
+      status: 'approved',
+      now: new Date(now.getTime() + 1_000),
+    });
+    const callTool = vi.fn(async () => ({
+      content: [{ type: 'text', text: 'published' }],
+    }));
+    const task = createContinueOperationTask({
+      adapters: [
+        createMcpContinuationAdapter({
+          registrations: [mcpRegistration],
+          encryptionKey: mcpKey,
+          client: { callTool },
+          now: () => new Date(now.getTime() + 2_000),
+          repositories: {
+            intents: new DrizzleMcpIntentRepository(database),
+            calls: new DrizzleAgentToolCallRepository(database),
+            effects: new DrizzleToolEffectRepository(database),
+            turns: new DrizzlePlatformTurnRepository(database),
+          },
+        }),
+      ],
+    });
+    await runOnce({
+      connectionString,
+      taskList: { [OPERATION_CONTINUATION_TASK]: task },
+    });
+
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(
+      await database
+        .select({
+          status: mcpToolIntents.status,
+          ciphertext: mcpToolIntents.ciphertext,
+        })
+        .from(mcpToolIntents),
+    ).toEqual([{ status: 'completed', ciphertext: null }]);
+    expect(
+      await database
+        .select({ status: operationContinuations.status })
+        .from(operationContinuations)
+        .where(eq(operationContinuations.id, fixture.continuationId)),
+    ).toEqual([{ status: 'completed' }]);
   });
 
   it('approved缺少等待点时回滚决策事件并保持pending', async () => {

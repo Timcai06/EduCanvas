@@ -45,13 +45,16 @@ describe('受控后台任务边界', () => {
 
   it('审批意图收敛只转发经过约束的批次大小', async () => {
     const abandonExpiredPrepared = vi.fn().mockResolvedValue(3);
-    const task = createReconcileToolApprovalIntentsTask({
-      abandonExpiredPrepared,
-    });
+    const abandonExpiredMcp = vi.fn().mockResolvedValue(2);
+    const task = createReconcileToolApprovalIntentsTask(
+      { abandonExpiredPrepared },
+      { abandonExpiredPrepared: abandonExpiredMcp },
+    );
 
     await task({ limit: 25 }, helpers);
 
     expect(abandonExpiredPrepared).toHaveBeenCalledWith({ limit: 25 });
+    expect(abandonExpiredMcp).toHaveBeenCalledWith({ limit: 25 });
     await expect(task({ limit: 501 }, helpers)).rejects.toThrow();
   });
 

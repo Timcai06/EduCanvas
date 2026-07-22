@@ -23,7 +23,9 @@ import {
   DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
   DrizzleGatewayNodeRepository,
+  DrizzleMcpIntentRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleToolApprovalIntentRepository,
   DrizzleToolEffectRepository,
   type PlatformTurnSnapshot,
 } from '@educanvas/db';
@@ -303,7 +305,10 @@ function productionDependencies(): GatewayApplicationDependencies {
     toolCallLedger: new DrizzleAgentToolCallRepository(),
     toolEffectLedger: new DrizzleToolEffectRepository(),
     nodeInvocations: new DrizzleGatewayNodeRepository(),
-    mcpRuntime: createMcpRuntimeFromEnvironment(),
+    mcpRuntime: createMcpRuntimeFromEnvironment(undefined, {
+      durableIntents: new DrizzleMcpIntentRepository(),
+      approvalIntents: new DrizzleToolApprovalIntentRepository(),
+    }),
     modelGateway:
       createTurnModelGatewayFromEnvironment(readModelEnvironment()) ??
       unavailableModelGateway,

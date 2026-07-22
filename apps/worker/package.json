@@ -17,6 +17,7 @@
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
     "@educanvas/model-gateway": "workspace:*",
+    "@educanvas/mcp-runtime": "workspace:*",
     "graphile-worker": "^0.16.6",
     "zod": "^4.4.3"
   },
