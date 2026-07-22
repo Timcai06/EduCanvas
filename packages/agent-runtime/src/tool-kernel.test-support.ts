@@ -85,6 +85,7 @@ export class MemoryEffectLedger implements ToolEffectLedgerPort {
       toolCallId: input.toolCallId,
       effectKey: input.effectKey,
       semanticsHash: input.semanticsHash,
+      reconciliationVerifierId: input.reconciliationVerifierId ?? null,
       status: 'intended',
       code: null,
       receiptHash: null,
@@ -142,6 +143,7 @@ export function adapter(
     source?: ToolSource;
     risk?: 'l0' | 'l2';
     effect?: 'read' | 'write';
+    reconciliationVerifierId?: string | null;
     timeoutMs?: number;
     modelInputSchema?: Readonly<Record<string, unknown>>;
     invoke?: ToolKernelAdapter<{ value: string }, { source: string }>['invoke'];
@@ -160,6 +162,7 @@ export function adapter(
     risk: input.risk ?? 'l0',
     exposure: 'model',
     effect: input.effect ?? 'read',
+    reconciliationVerifierId: input.reconciliationVerifierId ?? null,
     timeoutMs: input.timeoutMs ?? 100,
     inputSchema: z.object({ value: z.string().max(100) }).strict(),
     ...(input.modelInputSchema

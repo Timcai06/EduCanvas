@@ -194,6 +194,12 @@ export {
   ToolEffectOwnershipError,
 } from './tool-effect-repository';
 export {
+  DrizzleToolEffectReconciliationRepository,
+  ToolEffectReconciliationConflictError,
+  ToolEffectReconciliationLifecycleError,
+  ToolEffectReconciliationOwnershipError,
+} from './tool-effect-reconciliation-repository';
+export {
   DrizzleOperationContinuationRepository,
   OperationContinuationConflictError,
   OperationContinuationLifecycleError,
@@ -222,6 +228,7 @@ export {
   MAX_MCP_INTENT_RECONCILIATION_BATCH,
 } from './mcp-intent-reconciler';
 export { mcpToolIntents } from './schema/mcp-intent';
+export { toolEffectReconciliations } from './schema/tool-effect-reconciliation';
 export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,

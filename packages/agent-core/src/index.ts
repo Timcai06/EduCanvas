@@ -186,6 +186,15 @@ export {
 } from './tool-effect-ledger';
 
 export {
+  toolEffectReconciliationResolutions,
+  toolEffectReconciliationSources,
+  type ToolEffectReconciliationPort,
+  type ToolEffectReconciliationResolution,
+  type ToolEffectReconciliationSnapshot,
+  type ToolEffectReconciliationSource,
+} from './tool-effect-reconciliation';
+
+export {
   ObjectStorageError,
   isValidObjectKey,
   type ObjectStoragePort,

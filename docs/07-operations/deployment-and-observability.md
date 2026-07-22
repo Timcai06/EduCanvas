@@ -67,6 +67,7 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 - Turn 数、错误率、首 Token 和完整终态延迟；
 - 模型运行、Token、成本、工具圈和预算截停；
 - Tool 成功/失败/超时/结果未知；
+- 未决`outcome_unknown`数量与最老年龄、按低基数结论/原因code聚合的reconciliation决议数、自动核验失败数；
 - MCP server disabled/idle/ready/degraded、稳定失败码与Schema漂移（外部指标导出待OTel纵切）；
 - Context Segment 数量、预算和来源；
 - PostgreSQL 连接、慢查询和锁竞争；
@@ -86,6 +87,12 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 - `EDUCANVAS_OTEL_SAMPLE_RATIO`范围0–1，默认0.1；
 - `EDUCANVAS_OTEL_EXPORT_TIMEOUT_MS`范围100–30000，默认3000；
 - 配置或初始化失败返回安全`degraded` NOOP；运行期导出失败更新`export_failed`，业务继续运行。
+
+## Tool Effect 对账
+
+Effect reconciliation是追加审计，不是修改历史终态：原`outcome_unknown` Effect、Tool Call与Operation保持不变，受控读取投影再联合最新决议。自动核验只能查询Adapter提供的可信外部状态，且只能使用Effect intention中由服务端冻结的verifier；调用方选择、缺少绑定或绑定漂移都必须fail closed，禁止invoke或重放write。MCP v1当前没有可信查询契约，必须继续显示未决。人工处置只允许已鉴权operator或service principal，学生与模型不能自证。数据库、日志与指标只使用稳定身份、低基数code、证据/回执hash和时间，不记录参数、输出、证据正文、远端错误、Credential或Secret。
+
+当前只具备core/runtime/db决议边界，不应部署成无人值守对账任务。生产触发、各Adapter只查询verifier、未决积压告警，以及Graphile Worker异常退出长锁的指标、告警与受控解锁Runbook必须在后续独立PR完成；在此之前不得把“没有核验器”降级为默认成功或默认未提交。
 
 ## 故障降级
 

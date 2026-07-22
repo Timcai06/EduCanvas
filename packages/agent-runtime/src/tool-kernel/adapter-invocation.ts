@@ -39,6 +39,8 @@ export async function invokeToolAdapter(input: {
           toolCallId: input.call.id,
           effectKey: input.request.context.executionId,
           semanticsHash: input.semanticsHash,
+          reconciliationVerifierId:
+            input.adapter.reconciliationVerifierId ?? null,
         })
       : null;
   const control = createExecutionControl(

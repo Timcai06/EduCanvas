@@ -17,6 +17,8 @@ export interface ToolEffectLedgerSnapshot {
   toolCallId: string;
   effectKey: string;
   semanticsHash: string;
+  /** intention创建时由可信Adapter注册固化；旧记录与不可自动核验Effect为null。 */
+  reconciliationVerifierId: string | null;
   status: ToolEffectLedgerStatus;
   code: string | null;
   receiptHash: string | null;
@@ -32,6 +34,7 @@ export interface ToolEffectLedgerPort {
     toolCallId: string;
     effectKey: string;
     semanticsHash: string;
+    reconciliationVerifierId?: string | null;
   }): Promise<{ effect: ToolEffectLedgerSnapshot; replayed: boolean }>;
   settle(input: {
     operationId: string;
