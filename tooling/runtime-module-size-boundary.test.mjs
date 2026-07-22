@@ -7,6 +7,7 @@ const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
+const CONTINUATION_REVIEW_LIMIT = 300;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -17,6 +18,14 @@ const TURN_APPLICATION_TEST_PATTERN =
   /^turn-application(?:\..+)?\.test(?:-support)?\.ts$/;
 const MODEL_GATEWAY_ROOT = 'packages/model-gateway/src';
 const TELEMETRY_ROOT = 'packages/telemetry/src';
+const CONTINUATION_REPOSITORY_ROOT =
+  'packages/db/src/operation-continuation';
+const CONTINUATION_REPOSITORY_ENTRY =
+  'packages/db/src/operation-continuation-repository.ts';
+const CONTINUATION_DB_SUPPORT =
+  'packages/db/src/operation-continuation-repository.integration.support.ts';
+const CONTINUATION_WORKER_SUPPORT =
+  'apps/worker/src/approval-continuation.integration-support.ts';
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -92,6 +101,48 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       typescriptFiles(TELEMETRY_ROOT),
       TELEMETRY_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps continuation repository responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      [
+        CONTINUATION_REPOSITORY_ENTRY,
+        ...typescriptFiles(CONTINUATION_REPOSITORY_ROOT),
+      ],
+      CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps continuation integration fixtures independently readable', () => {
+    const dbTests = readdirSync('packages/db/src', { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          (/^operation-continuation-.+\.integration\.test\.ts$/.test(
+            entry.name,
+          ) || entry.name === 'tool-approval-intent-repository.integration.test.ts'),
+      )
+      .map((entry) => join('packages/db/src', entry.name));
+    const workerTests = readdirSync('apps/worker/src', {
+      withFileTypes: true,
+    })
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          /^approval-continuation-.+\.integration\.test\.ts$/.test(
+            entry.name,
+          ),
+      )
+      .map((entry) => join('apps/worker/src', entry.name));
+    assertFilesWithinLimit(
+      [
+        CONTINUATION_DB_SUPPORT,
+        ...dbTests,
+        CONTINUATION_WORKER_SUPPORT,
+        ...workerTests,
+      ],
+      CONTINUATION_REVIEW_LIMIT,
     );
   });
 });
