@@ -1,0 +1,190 @@
+import type {
+  NormalizedModelError,
+  TurnApplicationCommand,
+  TurnApplicationEvent,
+  TurnApplicationFailureCode,
+} from '@educanvas/agent-core';
+import { turnApplicationProtocolVersion } from '@educanvas/agent-core';
+import { AgentLoopEngine } from '../agent-loop';
+import type { TurnApplicationDependencies } from './dependencies';
+import { validGuardDeltas, validPublicDelta } from './helpers';
+import {
+  AuditedModelRunLifecycle,
+  type ModelRunContext,
+} from './model-run-lifecycle';
+import type {
+  TurnApplicationCancellationHandle,
+  TurnApplicationLifecycleSnapshot,
+  TurnApplicationOutputGuardPort,
+  TurnApplicationOutputGuardPushResult,
+} from './ports';
+import type { PreparedTurnApplication } from './preparation';
+import {
+  TurnToolExecutor,
+  type TurnToolDetail,
+  type TurnToolFailure,
+} from './tool-executor';
+
+/** @internal 模型/工具循环结束后的唯一决策材料，不含正文之外的敏感载荷。 */
+export interface TurnLoopOutcome {
+  answer: string;
+  completed: boolean;
+  modelFailure: NormalizedModelError | null;
+  toolFailure: TurnToolFailure | null;
+  outputBlocked: TurnApplicationFailureCode | null;
+  outputGuardFailed: boolean;
+}
+
+/** @internal 流式投影唯一Agent Loop；只产生非终态公开事件并返回收敛材料。 */
+export async function* runTurnLoop(input: {
+  dependencies: TurnApplicationDependencies;
+  command: TurnApplicationCommand;
+  turn: TurnApplicationLifecycleSnapshot;
+  prepared: PreparedTurnApplication;
+  cancellation: TurnApplicationCancellationHandle;
+  controller: AbortController;
+  outputGuard?: TurnApplicationOutputGuardPort;
+}): AsyncGenerator<TurnApplicationEvent, TurnLoopOutcome> {
+  const { dependencies, command, turn, prepared } = input;
+  const modelLifecycle = new AuditedModelRunLifecycle(
+    dependencies.modelRunLedger,
+    { command, turn, cancellation: input.cancellation },
+  );
+  const tools = new TurnToolExecutor(
+    command,
+    prepared.toolPolicy,
+    dependencies.toolKernel,
+    input.controller.signal,
+  );
+  let answer = '';
+  let completed = false;
+  let modelFailure: NormalizedModelError | null = null;
+  let toolFailure: TurnToolFailure | null = null;
+  let outputBlocked: TurnApplicationFailureCode | null = null;
+  let outputGuardFailed = false;
+  const loop = new AgentLoopEngine(dependencies.modelGateway);
+
+  for await (const event of loop.stream<
+    TurnToolDetail,
+    TurnToolFailure,
+    ModelRunContext
+  >({
+    traceId: command.traceId,
+    turnId: command.operationId,
+    answer: {
+      taskAlias: prepared.model.taskAlias,
+      modelAlias: prepared.model.modelAlias,
+      promptVersion: prepared.model.promptVersion,
+      messages: prepared.answerMessages,
+      tools: prepared.toolDefinitions,
+    },
+    synthesis: {
+      taskAlias: prepared.model.taskAlias,
+      modelAlias: prepared.model.modelAlias,
+      promptVersion:
+        prepared.model.synthesisPromptVersion ?? prepared.model.promptVersion,
+      messages: prepared.synthesisMessages,
+    },
+    maxToolRounds: prepared.model.maxToolRounds,
+    signal: input.controller.signal,
+    modelRunLifecycle: modelLifecycle,
+    executeTools: (calls, context) => tools.execute(calls, context),
+  })) {
+    if (event.type === 'model' && event.event.type === 'text_delta') {
+      if (outputBlocked || outputGuardFailed) continue;
+      let guarded: TurnApplicationOutputGuardPushResult;
+      try {
+        guarded = input.outputGuard
+          ? await input.outputGuard.push(event.event.delta)
+          : { kind: 'emit', safeDeltas: [event.event.delta] };
+      } catch {
+        outputGuardFailed = true;
+        input.controller.abort('profile_output_guard_failed');
+        continue;
+      }
+      if (guarded.kind === 'hold') continue;
+      if (guarded.kind === 'block') {
+        if (!validPublicDelta(guarded.publicContent)) {
+          outputGuardFailed = true;
+          input.controller.abort('profile_output_guard_failed');
+          continue;
+        }
+        const publicDelta = `${answer ? '\n\n' : ''}${guarded.publicContent}`;
+        if (!validPublicDelta(publicDelta)) {
+          outputGuardFailed = true;
+          input.controller.abort('profile_output_guard_failed');
+          continue;
+        }
+        answer += publicDelta;
+        outputBlocked = guarded.failureCode;
+        input.controller.abort('profile_output_blocked');
+        yield {
+          protocol: turnApplicationProtocolVersion,
+          operationId: command.operationId,
+          type: 'message.delta',
+          messageId: turn.assistantMessageId,
+          delta: publicDelta,
+        };
+        continue;
+      }
+      if (!validGuardDeltas(guarded.safeDeltas)) {
+        outputGuardFailed = true;
+        input.controller.abort('profile_output_guard_failed');
+        continue;
+      }
+      for (const delta of guarded.safeDeltas) {
+        answer += delta;
+        yield {
+          protocol: turnApplicationProtocolVersion,
+          operationId: command.operationId,
+          type: 'message.delta',
+          messageId: turn.assistantMessageId,
+          delta,
+        };
+      }
+    } else if (event.type === 'tool.started') {
+      if (outputBlocked || outputGuardFailed) continue;
+      const id = tools.register(event.run, event.call);
+      yield {
+        protocol: turnApplicationProtocolVersion,
+        operationId: command.operationId,
+        type: 'tool.started',
+        toolCallId: id,
+        tool: tools.capabilityFor(event.call.tool),
+      };
+    } else if (event.type === 'tool.result') {
+      if (outputBlocked || outputGuardFailed) continue;
+      yield {
+        protocol: turnApplicationProtocolVersion,
+        operationId: command.operationId,
+        type: 'tool.completed',
+        toolCallId: event.result.detail.executionId,
+      };
+    } else if (event.type === 'tool.failed') {
+      if (outputBlocked || outputGuardFailed) continue;
+      toolFailure = event.failure;
+      if (event.failure.approval) continue;
+      yield {
+        protocol: turnApplicationProtocolVersion,
+        operationId: command.operationId,
+        type: 'tool.failed',
+        toolCallId: event.failure.executionId,
+        code: event.failure.code,
+        retryable: event.failure.retryable,
+      };
+    } else if (event.type === 'failed') {
+      modelFailure = event.error;
+    } else if (event.type === 'completed') {
+      completed = true;
+    }
+  }
+
+  return {
+    answer,
+    completed,
+    modelFailure,
+    toolFailure,
+    outputBlocked,
+    outputGuardFailed,
+  };
+}
