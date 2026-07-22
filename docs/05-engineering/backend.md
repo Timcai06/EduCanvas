@@ -27,6 +27,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
 - Gateway与Web组合根通过`packages/model-gateway`公共工厂创建可配置的OpenAI-compatible Turn Adapter；`MODEL_GATEWAY_RUNTIME`显式选择`native | ai-sdk`且默认native，未配置或配置非法时写入诚实失败态，不回退到脚本回答或另一Adapter；
+- Gateway Route Resolver从`conversations.agent_profile_id`读取权威Profile并写入严格`GatewayResolvedRoute`；Runner不再硬编码Profile，也不接受入口覆盖。Operation `begin/replay`返回值只包含自身已持久事实，不回显或伪造未持久化的历史Membership/Profile路由。当前只支持`general`，其余Profile在进入模型或Tool前以`CAPABILITY_UNAVAILABLE`诚实失败，待共享K12组合边界接线；
 - Web Teaching Profile把K12 Prompt、安全、教学状态与领域回调注入唯一`TurnApplicationService`；当前生产组合通过统一Tool Kernel注册只读`getStudentState`与`retrieveKnowledge`，工具可见性由可信教学状态、Actor/Agent/Notebook/Profile/入口/环境能力交集和Adapter共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
 - 学生消息、老师消息和安全决策继续保留K12领域形状；Model Run、Tool Call与Turn Context Snapshot改为统一`agent_operation`账本归属，同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到同一Operation的成功Model Run；

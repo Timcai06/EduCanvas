@@ -129,6 +129,7 @@ describeWithDatabase(
           agentId: owner.agentId,
           notebookId: binding.notebookId,
           conversationId: binding.conversationId,
+          agentProfileId: 'general',
           membershipRole: 'owner',
         },
         now,

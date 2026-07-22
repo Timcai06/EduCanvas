@@ -77,6 +77,7 @@ export async function createWaitingApproval(kind: 'node' | 'mcp' = 'node') {
       agentId: identity.agentId,
       notebookId: conversation.spaceId,
       conversationId: conversation.id,
+      agentProfileId: conversation.agentProfileId,
       membershipRole: 'owner',
     },
     now,

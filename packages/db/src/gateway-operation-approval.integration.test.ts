@@ -48,6 +48,7 @@ describeWithDatabase(
         agentId: owner.agentId,
         notebookId: conversation.spaceId,
         conversationId: conversation.id,
+        agentProfileId: 'general',
         membershipRole: 'owner' as const,
       };
       const started = await store.begin({
@@ -103,7 +104,10 @@ describeWithDatabase(
           route,
           now,
         }),
-      ).toMatchObject({ operationId: started.operationId, replayed: true });
+      ).toMatchObject({
+        operationId: started.operationId,
+        replayed: true,
+      });
       await expect(
         store.begin({
           envelopeId: 'envelope:2',
@@ -166,6 +170,7 @@ describeWithDatabase(
           agentId: owner.agentId,
           notebookId: conversation.spaceId,
           conversationId: conversation.id,
+          agentProfileId: 'general',
           membershipRole: 'owner',
         },
         now,
@@ -236,6 +241,7 @@ describeWithDatabase(
           agentId: owner.agentId,
           notebookId: conversation.spaceId,
           conversationId: conversation.id,
+          agentProfileId: 'general',
           membershipRole: 'owner',
         },
         now,

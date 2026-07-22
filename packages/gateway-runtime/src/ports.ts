@@ -25,6 +25,7 @@ export interface GatewayRouteResolverPort {
   }): Promise<GatewayResolvedRoute>;
 }
 
+/** Operation创建/重放快照只返回自身持久事实；不得伪造未持久化的历史Route。 */
 export interface GatewayOperationSnapshot {
   operationId: string;
   /** Gateway 创建并持久化的 Trace 根；下游不得另造。 */
@@ -32,7 +33,6 @@ export interface GatewayOperationSnapshot {
   envelopeId: string;
   idempotencyKey: string;
   requestFingerprint: string;
-  route: GatewayResolvedRoute;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
   replayed: boolean;
 }

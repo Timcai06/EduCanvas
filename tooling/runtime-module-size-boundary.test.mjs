@@ -8,6 +8,8 @@ const TURN_APPLICATION_REVIEW_LIMIT = 300;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
+const GATEWAY_TURN_REVIEW_LIMIT = 300;
+const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
 const WEB_VISUAL_REVIEW_LIMIT = 350;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
 const WEB_WORKSPACE_REVIEW_LIMIT = 600;
@@ -50,6 +52,11 @@ const OPERATION_CONTINUATION_RECOVERY_MODULES = [
 const OPERATION_CONTINUATION_RECOVERY_FIXTURES = [
   'apps/worker/src/approval-continuation-sigkill.fixture.ts',
   'apps/worker/src/approval-continuation-sigkill.integration-support.ts',
+];
+const GATEWAY_TURN_MODULES = [
+  'apps/gateway/src/agent-runner.ts',
+  'apps/gateway/src/agent-runner.test.ts',
+  ...typescriptFiles('apps/gateway/src/turn-application'),
 ];
 const WORKER_BOOTSTRAP_MODULES = [
   'apps/worker/src/index.ts',
@@ -203,6 +210,17 @@ describe('Runtime module size boundary', () => {
         CONTINUATION_WORKER_TASK_TEST,
       ],
       CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Gateway Turn composition independently readable', () => {
+    assertFilesWithinLimit(GATEWAY_TURN_MODULES, GATEWAY_TURN_REVIEW_LIMIT);
+  });
+
+  it('keeps Gateway Runtime modules and tests independently readable', () => {
+    assertFilesWithinLimit(
+      typescriptFiles('packages/gateway-runtime/src'),
+      GATEWAY_RUNTIME_REVIEW_LIMIT,
     );
   });
 

@@ -50,6 +50,7 @@ const route: GatewayResolvedRoute = {
   agentId: 'agent:1',
   notebookId: 'notebook:1',
   conversationId: 'conversation:1',
+  agentProfileId: 'general',
   membershipRole: 'owner',
 };
 
@@ -120,7 +121,7 @@ describe('Gateway Turn Application adapter', () => {
         notebookId: 'notebook:1',
         conversationId: 'conversation:1',
       },
-      profile: { profileId: 'education.default' },
+      profile: { profileId: 'general' },
       entrypoint: 'web',
       capabilities: ['input.text', 'output.markdown'],
     });
@@ -160,6 +161,33 @@ describe('Gateway Turn Application adapter', () => {
         },
       ],
     });
+
+    expect(created).toBe(false);
+    expect(events).toEqual([
+      {
+        type: 'operation.failed',
+        code: 'CAPABILITY_UNAVAILABLE',
+        retryable: false,
+      },
+    ]);
+  });
+
+  it('对尚未接通的会话Profile明确失败且不静默降级', async () => {
+    let created = false;
+    const runner = new GatewayAgentTurnRunner(() => {
+      created = true;
+      throw new Error('should_not_create');
+    });
+    const events = [];
+    for await (const event of runner.run({
+      operationId: 'operation:1',
+      traceId: 'trace:gateway:1',
+      envelope,
+      route: { ...route, agentProfileId: 'k12.teacher' },
+      signal,
+    })) {
+      events.push(event);
+    }
 
     expect(created).toBe(false);
     expect(events).toEqual([

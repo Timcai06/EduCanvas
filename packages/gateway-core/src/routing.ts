@@ -166,12 +166,23 @@ export const gatewayRouteHintSchema = z
   })
   .strict();
 
+/** 服务端从 Conversation 真值解析出的 Agent Profile 标识；客户端不得覆盖。 */
+export const gatewayAgentProfileIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z][a-z0-9._-]*$/);
+
+/** Gateway 路由中经过严格校验的 Agent Profile 标识。 */
+export type GatewayAgentProfileId = z.infer<typeof gatewayAgentProfileIdSchema>;
+
 export const gatewayResolvedRouteSchema = z
   .object({
     actorUserId: gatewayOpaqueIdSchema,
     agentId: gatewayOpaqueIdSchema,
     notebookId: gatewayOpaqueIdSchema,
     conversationId: gatewayOpaqueIdSchema,
+    agentProfileId: gatewayAgentProfileIdSchema,
     membershipRole: notebookMembershipRoleSchema,
   })
   .strict();

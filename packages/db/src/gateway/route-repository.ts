@@ -69,6 +69,7 @@ export class DrizzleGatewayRouteResolver {
       .select({
         notebookId: conversations.spaceId,
         conversationId: conversations.id,
+        agentProfileId: conversations.agentProfileId,
         membershipRole: notebookMemberships.role,
         grantedByUserId: notebookMemberships.grantedByUserId,
         grantedAt: notebookMemberships.grantedAt,
@@ -112,6 +113,7 @@ export class DrizzleGatewayRouteResolver {
       agentId: input.principal.agentId,
       notebookId: resolved.notebookId,
       conversationId: resolved.conversationId,
+      agentProfileId: resolved.agentProfileId,
       membershipRole: membership.role,
     };
   }
