@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
+const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -13,6 +14,7 @@ const TURN_APPLICATION_ROOT = 'packages/agent-runtime/src/turn-application';
 const TURN_APPLICATION_ENTRY = 'packages/agent-runtime/src/turn-application.ts';
 const TURN_APPLICATION_TEST_PATTERN =
   /^turn-application(?:\..+)?\.test(?:-support)?\.ts$/;
+const MODEL_GATEWAY_ROOT = 'packages/model-gateway/src';
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -26,6 +28,14 @@ function assertFilesWithinLimit(paths, limit) {
     }))
     .filter(({ lines }) => lines > limit);
   assert.deepEqual(oversized, []);
+}
+
+function typescriptFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return typescriptFiles(path);
+    return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
+  });
 }
 
 describe('Runtime module size boundary', () => {
@@ -67,5 +77,12 @@ describe('Runtime module size boundary', () => {
       )
       .map((entry) => join('packages/agent-runtime/src', entry.name));
     assertFilesWithinLimit(tests, TURN_APPLICATION_REVIEW_LIMIT);
+  });
+
+  it('keeps Model Gateway adapters and tests independently readable', () => {
+    assertFilesWithinLimit(
+      typescriptFiles(MODEL_GATEWAY_ROOT),
+      MODEL_GATEWAY_REVIEW_LIMIT,
+    );
   });
 });

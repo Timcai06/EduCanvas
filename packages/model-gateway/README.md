@@ -4,7 +4,18 @@
 
 `model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON与`/audio/speech`映射为 `@educanvas/agent-core` 的稳定Port，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
-实现使用原生 `fetch` + WHATWG Stream，不把供应商 SDK 类型带入领域层。
+默认实现使用原生 `fetch` + WHATWG Stream，不把供应商 SDK 类型带入领域层。
+
+## 模块边界
+
+- `openai-compatible-protocol.ts` 只负责未知供应商 JSON 的校验、请求投影、usage、错误与终止原因映射；
+- `openai-compatible-turn-model-gateway.ts` 只负责原生网络调用、SSE 生命周期、取消和稳定事件输出；
+- `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析和 Adapter 选择；
+- 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
+
+`tooling/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行
+400 行可读性门禁。新增 Provider 或 SDK Adapter 必须新建独立模块，不得把协议、网络、
+配置选择和测试重新堆回同一文件。
 
 ## 协议边界
 
