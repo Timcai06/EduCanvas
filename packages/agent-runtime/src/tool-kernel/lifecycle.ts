@@ -57,6 +57,22 @@ export async function executeToolLifecycle(input: {
       false,
     );
   }
+  if (input.request.signal?.aborted) {
+    await input.callLedger.settle({
+      ...common,
+      toolCallId: created.call.id,
+      status: 'failed',
+      code: 'tool_cancelled',
+      retryable: false,
+      durationMs: 0,
+    });
+    return toolFailure(
+      input.adapter.name,
+      'cancelled',
+      'tool_cancelled',
+      false,
+    );
+  }
   if (requiresApproval && approvalRisk) {
     return prepareToolApproval({
       adapter: input.adapter,

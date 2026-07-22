@@ -57,23 +57,6 @@ export async function prepareToolApproval(input: {
       false,
     );
   }
-  if (input.request.signal?.aborted) {
-    await input.callLedger.settle({
-      ...common,
-      toolCallId: input.call.id,
-      status: 'failed',
-      code: 'tool_cancelled',
-      retryable: false,
-      durationMs: 0,
-    });
-    return toolFailure(
-      input.adapter.name,
-      'cancelled',
-      'tool_cancelled',
-      false,
-    );
-  }
-
   const control = createExecutionControl(
     Math.min(input.adapter.timeoutMs, 30_000),
     input.request.signal,
