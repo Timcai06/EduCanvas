@@ -5,6 +5,7 @@ import type { TaskList } from 'graphile-worker';
 import { generateArtifact } from './generate-artifact.js';
 import { ingestKnowledgeDocument } from './ingest-knowledge-document.js';
 import { purgeAnonymousSubjects } from './purge-anonymous-subjects.js';
+import { recoverOperationContinuations } from './recover-operation-continuations.js';
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
@@ -24,6 +25,8 @@ export function createTaskList(input: {
     ),
     'knowledge:ingest_document': ingestKnowledgeDocument,
     'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
+    'maintenance:recover_operation_continuations':
+      recoverOperationContinuations,
     'maintenance:reconcile_tool_approval_intents': reconcileToolApprovalIntents,
     'system.heartbeat': systemHeartbeat,
   };

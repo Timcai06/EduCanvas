@@ -72,6 +72,7 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 - Context Segment 数量、预算和来源；
 - PostgreSQL 连接、慢查询和锁竞争；
 - graphile-worker 队列积压、重试和任务年龄；
+- continuation恢复批次的`examined/requeued/generationExhausted`，以及恢复后`ready/runningActive/runningExpired/terminalOperationStale/oldestExpiredAt`；
 - Artifact 生成、对象校验和媒体读取；
 - 学习事件处理、判分和投影延迟。
 
@@ -92,7 +93,22 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 
 Effect reconciliation是追加审计，不是修改历史终态：原`outcome_unknown` Effect、Tool Call与Operation保持不变，受控读取投影再联合最新决议。自动核验只能查询Adapter提供的可信外部状态，且只能使用Effect intention中由服务端冻结的verifier；调用方选择、缺少绑定或绑定漂移都必须fail closed，禁止invoke或重放write。MCP v1当前没有可信查询契约，必须继续显示未决。人工处置只允许已鉴权operator或service principal，学生与模型不能自证。数据库、日志与指标只使用稳定身份、低基数code、证据/回执hash和时间，不记录参数、输出、证据正文、远端错误、Credential或Secret。
 
-当前只具备core/runtime/db决议边界，不应部署成无人值守对账任务。生产触发、各Adapter只查询verifier、未决积压告警，以及Graphile Worker异常退出长锁的指标、告警与受控解锁Runbook必须在后续独立PR完成；在此之前不得把“没有核验器”降级为默认成功或默认未提交。
+当前只具备core/runtime/db决议边界，不应部署成无人值守对账任务。生产触发、各Adapter只查询verifier和未决积压告警仍待后续独立PR；在此之前不得把“没有核验器”降级为默认成功或默认未提交。Graphile continuation恢复只解决任务长锁，不会也不得替代Effect reconciliation。
+
+## Continuation 异常恢复 Runbook
+
+`maintenance:recover_operation_continuations`每分钟运行一次，默认批次100、硬上限500。它只处理业务lease已过期且Operation仍为running的continuation；同一事务内使用Graphile官方`add_job`与原稳定job key创建可运行successor。恢复器不直接解锁私有表、不回写continuation生命周期、不重置attempt/generation，也不读取或记录Actor、Notebook、参数、正文、Credential、Secret或副作用结果。新Worker领取时仍执行generation fencing、取消检查与Agent/Membership/Conversation/approval全量重授权。
+
+固定恢复日志字段是当前低基数指标源。连续两轮出现`runningExpired > 0`或`oldestExpiredAt`早于当前时间三分钟应告警；`generationExhausted > 0`或`terminalOperationStale > 0`立即升级人工处理；`requeued`持续达到批次上限表示积压增长。正式OTel Metric exporter仍随可观测性纵切接入，但告警不得等待Exporter才生效。
+
+处置顺序：
+
+1. 先确认数据库、Worker进程和`maintenance:recover_operation_continuations`最近两轮日志；不要先改业务表或Graphile私有表。
+2. 若Worker已恢复但定时任务缺失，可通过`select graphile_worker.add_job('maintenance:recover_operation_continuations', '{"limit":100}'::json);`受控补投维护任务；它仍会走相同批次和事务边界。
+3. 若`runningExpired`不下降，检查数据库锁、Graphile schema版本与恢复任务错误；保留失败事务，修复依赖后让下一轮重试，禁止把continuation手工标成completed/failed。
+4. 若generation耗尽，停止对该积压的自动恢复并升级人工审计；不得把generation归零。先核对Operation事件、Tool Call、MCP intent与Effect账本，再决定独立修复方案。
+5. 若Effect或MCP intent已是`outcome_unknown`，保持未知并走追加式对账；禁止把continuation改回prepared、重放write或直接清除Graphile锁来试探结果。
+6. 回滚应用版本不会回滚数据Schema，因为本纵切无迁移；旧Worker会忽略新增维护任务，但已生成的successor仍只含`continuationId`并受既有claim边界保护。
 
 ## 故障降级
 

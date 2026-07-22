@@ -41,6 +41,16 @@ const TOOL_EFFECT_RECONCILIATION_MODULES = [
   'packages/db/src/tool-effect-reconciliation-persistence.ts',
   'packages/db/src/tool-effect-reconciliation-repository.ts',
 ];
+const OPERATION_CONTINUATION_RECOVERY_MODULES = [
+  'packages/agent-core/src/operation-continuation-recovery.ts',
+  'packages/db/src/operation-continuation/recovery-contracts.ts',
+  'packages/db/src/operation-continuation/recovery-repository.ts',
+  'apps/worker/src/tasks/recover-operation-continuations.ts',
+];
+const OPERATION_CONTINUATION_RECOVERY_FIXTURES = [
+  'apps/worker/src/approval-continuation-sigkill.fixture.ts',
+  'apps/worker/src/approval-continuation-sigkill.integration-support.ts',
+];
 const WORKER_BOOTSTRAP_MODULES = [
   'apps/worker/src/index.ts',
   'apps/worker/src/bootstrap.ts',
@@ -145,6 +155,13 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(TOOL_EFFECT_RECONCILIATION_MODULES, REVIEW_LIMIT);
   });
 
+  it('keeps continuation recovery contracts independently readable', () => {
+    assertFilesWithinLimit(
+      OPERATION_CONTINUATION_RECOVERY_MODULES,
+      REVIEW_LIMIT,
+    );
+  });
+
   it('keeps continuation integration fixtures independently readable', () => {
     const dbTests = readdirSync('packages/db/src', { withFileTypes: true })
       .filter(
@@ -171,6 +188,7 @@ describe('Runtime module size boundary', () => {
         CONTINUATION_DB_SUPPORT,
         ...dbTests,
         CONTINUATION_WORKER_SUPPORT,
+        ...OPERATION_CONTINUATION_RECOVERY_FIXTURES,
         ...workerTests,
       ],
       CONTINUATION_REVIEW_LIMIT,
