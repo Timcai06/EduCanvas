@@ -88,6 +88,11 @@ export interface ToolKernelAdapter<Input = unknown, Output = unknown> {
   effect: AgentToolEffect;
   timeoutMs: number;
   inputSchema: z.ZodType<Input>;
+  /**
+   * 仅用于模型工具定义的可信 JSON Schema 投影。远端协议 Adapter 必须先在服务端
+   * 完成大小、深度与关键字校验；实际执行仍以 inputSchema 为唯一入参验证器。
+   */
+  modelInputSchema?: Readonly<Record<string, unknown>>;
   outputSchema: z.ZodType<Output>;
   /**
    * L2/L3未获批准时只准备耐久意图，不得执行副作用。实现必须按
@@ -116,6 +121,7 @@ interface AnyToolKernelAdapter {
   effect: AgentToolEffect;
   timeoutMs: number;
   inputSchema: z.ZodType<unknown>;
+  modelInputSchema?: Readonly<Record<string, unknown>>;
   outputSchema: z.ZodType<unknown>;
   prepareApproval?(
     input: never,
@@ -318,10 +324,9 @@ export class ToolKernel {
       .map((adapter) => ({
         name: adapter.name,
         description: adapter.description,
-        inputSchema: z.toJSONSchema(adapter.inputSchema) as Record<
-          string,
-          unknown
-        >,
+        inputSchema:
+          adapter.modelInputSchema ??
+          (z.toJSONSchema(adapter.inputSchema) as Record<string, unknown>),
       }));
   }
 

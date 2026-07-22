@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-22
 - 内容边界：定义稳定术语、可信边界与当前实现；第二代收敛方案见[第二代架构提案](../02-architecture/03-第二代架构提案.md)
 - 关键决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
@@ -21,14 +21,14 @@
 
 ## 二、当前事实与目标不变量
 
-| 主题             | 当前事实                                                   | 目标不变量                                |
-| ---------------- | ---------------------------------------------------------- | ----------------------------------------- |
-| Agent Loop       | 统一服务与旧Teaching各构造同一`AgentLoopEngine`类          | 最终只有统一服务一个生产构造位置          |
-| Turn Application | Gateway、Web General与Web Teaching均调用唯一服务           | 删除无调用的旧教学实现并补齐continuation  |
-| Tool Runtime     | Web General走Tool Kernel，Teaching仍走专用Executor         | 一个 Tool Kernel 统一策略与执行语义       |
-| Context          | Gateway与Web General已统一并写Snapshot，Teaching仍单独装配 | 预算选择后固化可审计 Context Snapshot     |
-| Audit            | Gateway/Web General已写通用Ledger，Teaching仍待单写迁移    | ID 对齐、职责唯一，不建立第二事实源       |
-| Continuation     | 可恢复事件读取；审批通过后不会自动续接计算                 | 以 Operation 为业务游标，副作用可幂等续跑 |
+| 主题             | 当前事实                                               | 目标不变量                            |
+| ---------------- | ------------------------------------------------------ | ------------------------------------- |
+| Agent Loop       | 三条生产入口只由统一服务构造；旧Teaching类无生产调用   | 物理删除遗留构造点                    |
+| Turn Application | Gateway、Web General与Web Teaching均调用唯一服务       | 删除无调用实现并补齐高风险Adapter续跑 |
+| Tool Runtime     | Local、Teaching、Node、MCP均走Tool Kernel              | 物理删除两套无调用旧Runtime           |
+| Context          | 三条生产入口统一预算并写Context Snapshot               | 继续补Memory与原生多模态候选          |
+| Audit            | 三条生产入口写统一Context/Model/Tool Ledger            | 补齐N-2与最终回滚证据                 |
+| Continuation     | 审批、lease、取消和恢复账本已落地；无高风险生产Adapter | 以Operation为游标接通幂等副作用续跑   |
 
 Profile 的确定性策略位于唯一服务的两个显式边界：`preflight` 在 Context、Model Run 和 Tool 副作用前拒绝不允许的输入；`OutputGuard` 位于 Provider delta 与公开事件之间，只能释放已放行片段，并在命中策略时中止当前模型运行、写入固定公开回应和 `POLICY_BLOCKED` 终态。闸门实现必须有界缓存，安全审计失败不能被伪装成成功回答。Web Teaching 已使用这两个边界；通用 Profile 不默认启用 K12 策略。
 
@@ -43,7 +43,7 @@ validate request
   -> if answer: emit terminal result
 ```
 
-循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。`TurnApplicationService` 在循环外统一执行输入 preflight 和流式 OutputGuard；Gateway与Web General只通过该服务调用循环，旧Teaching Orchestrator仍直接实例化，迁移完成前不能声称生产构造点唯一。
+循环拥有模型轮数、工具圈数、跨圈文本、取消、强制 synthesis 和单终态纪律。它不拥有主体认证、Notebook Membership、Prompt/Context 装配、领域判分或持久 Operation。`TurnApplicationService` 在循环外统一执行输入 preflight 和流式 OutputGuard；Gateway、Web General与Web Teaching只通过该服务调用循环。旧Teaching Orchestrator仍保留兼容测试构造，但已无生产调用，清理后才能收紧为源码唯一构造位置。
 
 当前 Web General 默认最多三圈工具；K12 Profile 默认一圈并可在预算内配置。具体数值属于组合根策略，不应写死为 Engine 的永久协议。
 
@@ -76,7 +76,7 @@ Profile allowlist
 
 Context 不是把 Notebook 全部数据拼成字符串。应用层应从 Profile/System、Notebook 摘要、最近完整消息、选中或检索命中的 Sources、Artifact 版本、相关学习者记忆和本轮多模态 Part 中按预算选择。
 
-历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。Gateway与Web General已使用统一预算和持久Context Snapshot；Web资产文本按不可变AssetVersion分段记录并保持不可信资料边界，Teaching装配仍待迁移。历史窗口必须取最新N条后恢复正序，不能让长会话把当前消息挤出Context。
+历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。三条生产入口均使用统一预算和持久Context Snapshot；Web资产文本按不可变AssetVersion分段记录并保持不可信资料边界。历史窗口必须取最新N条后恢复正序，不能让长会话把当前消息挤出Context。
 
 ## 六、教育能力与可信事实
 
@@ -109,6 +109,7 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - 不以 LangChain、LangGraph、AI SDK、MCP 或 Provider SDK 作为领域事实源；
 - 可以在稳定 Port 后采用框架做 Provider 适配、外部工具协议、有限 Workflow 或可观测性；
 - 不把框架 Session/Thread 当 Notebook，不把 checkpoint 当授权，不把 trace 当业务账本；
+- MCP `annotations`、远端Schema和工具输出均视为不可信；只有服务端注册能声明capability、risk与effect，Credential只经Broker短暂进入传输头；
 - 第一阶段不开放宿主机 Shell、任意文件系统、无约束代码执行或多 Agent 编队；
 - 安全、预算、权限、判分和学习状态必须在模型之外可测试、可审计。
 

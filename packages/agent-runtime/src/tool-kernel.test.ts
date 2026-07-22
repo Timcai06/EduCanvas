@@ -146,6 +146,7 @@ function adapter(
     risk?: 'l0' | 'l2';
     effect?: 'read' | 'write';
     timeoutMs?: number;
+    modelInputSchema?: Readonly<Record<string, unknown>>;
     invoke?: ToolKernelAdapter<{ value: string }, { source: string }>['invoke'];
     prepareApproval?: ToolKernelAdapter<
       { value: string },
@@ -164,6 +165,9 @@ function adapter(
     effect: input.effect ?? 'read',
     timeoutMs: input.timeoutMs ?? 100,
     inputSchema: z.object({ value: z.string().max(100) }).strict(),
+    ...(input.modelInputSchema
+      ? { modelInputSchema: input.modelInputSchema }
+      : {}),
     outputSchema: z.object({ source: z.string() }).strict(),
     ...(input.prepareApproval
       ? { prepareApproval: input.prepareApproval }
@@ -177,6 +181,43 @@ function adapter(
 }
 
 describe('生产Tool Kernel', () => {
+  it('模型可见Schema可由可信Adapter投影且不替代本地执行校验', async () => {
+    const modelInputSchema = {
+      type: 'object',
+      properties: { query: { type: 'string', maxLength: 20 } },
+      required: ['query'],
+      additionalProperties: false,
+    } as const;
+    const kernel = new ToolKernel(
+      [adapter({ modelInputSchema })],
+      new MemoryCallLedger(),
+      new MemoryEffectLedger(),
+    );
+
+    expect(
+      kernel.listDefinitions({
+        capabilities: {
+          actor: ['tool.execute'],
+          notebook: ['tool.execute'],
+          profile: ['tool.execute'],
+          channel: ['tool.execute'],
+          environment: ['tool.execute'],
+        },
+        approvedCapabilities: [],
+      }),
+    ).toEqual([expect.objectContaining({ inputSchema: modelInputSchema })]);
+    await expect(
+      kernel.execute({
+        tool: 'runLocal',
+        arguments: { query: 'remote-only' },
+        context: context('local-validation'),
+      }),
+    ).resolves.toMatchObject({
+      status: 'denied',
+      code: 'invalid_arguments',
+    });
+  });
+
   it('四类Adapter共享同一权限、Schema和执行内核', async () => {
     const calls = new MemoryCallLedger();
     const effects = new MemoryEffectLedger();
