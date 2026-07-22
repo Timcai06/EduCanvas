@@ -82,6 +82,74 @@ describeWithDatabase('Gateway capability-scoped Node lifecycle', () => {
       },
       now,
     );
+    await expect(
+      nodes.listAvailableCapabilitiesForOperation({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        agentId: owner.agentId,
+        activeAfter: new Date(now.getTime() - 1_000),
+      }),
+    ).resolves.toEqual(['device.status']);
+    const toolInvocation = await nodes.enqueueForOperation({
+      requestId: 'node:tool:request:1',
+      operationId: operation.operationId,
+      actorId: owner.userId,
+      agentId: owner.agentId,
+      capability: 'device.status',
+      parameters: {},
+      nonce: 'node:tool:nonce:1',
+      issuedAt: now,
+      expiresAt: new Date(now.getTime() + 60_000),
+      activeAfter: new Date(now.getTime() - 1_000),
+    });
+    expect(toolInvocation.nodeId).toBe(pairing.nodeId);
+    await expect(
+      nodes.readInvocationOutcome({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        agentId: owner.agentId,
+        requestId: toolInvocation.requestId,
+        now,
+      }),
+    ).resolves.toEqual({ status: 'pending' });
+    await nodes.settle({
+      requestId: toolInvocation.requestId,
+      nodeId: pairing.nodeId,
+      status: 'completed',
+      completedAt: now.toISOString(),
+      output: {
+        platform: 'test',
+        architecture: 'fixture',
+        hostname: 'fixture-node',
+        uptimeSeconds: 1,
+      },
+    });
+    await expect(
+      nodes.readInvocationOutcome({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        agentId: owner.agentId,
+        requestId: toolInvocation.requestId,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      status: 'settled',
+      result: { status: 'completed', requestId: toolInvocation.requestId },
+    });
+    await expect(
+      nodes.enqueueForOperation({
+        requestId: toolInvocation.requestId,
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        agentId: owner.agentId,
+        capability: 'device.status',
+        parameters: {},
+        nonce: 'node:tool:nonce:1',
+        issuedAt: new Date(now.getTime() + 1_000),
+        expiresAt: new Date(now.getTime() + 61_000),
+        activeAfter: new Date(now.getTime() - 1_000),
+      }),
+    ).resolves.toEqual(toolInvocation);
     const invocation = {
       requestId: 'node:request:1',
       operationId: operation.operationId,

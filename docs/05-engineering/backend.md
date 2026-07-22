@@ -42,7 +42,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - Answer 已包含有界的持久化会话历史与本轮物化 Asset 文本，但尚不包含摘要或 Artifact 状态；
 - Web BFF仍承担lease、取消、安全、引用与SSE兼容投影，后续可继续削薄，但已不拥有通用身份/路由或第二套循环；
-- Node、MCP与AI SDK Provider Adapter尚未完成生产接线；MCP Credential和恶意输出边界仍需M5验收；
+- Node的L0/L1只读Adapter已通过统一Tool Kernel接入Web General与Gateway/TUI，并按Operation主体、新鲜心跳、Schema、timeout/cancel与幂等请求收敛；MCP与AI SDK Provider Adapter尚未完成生产接线，MCP Credential和恶意输出边界仍需M5验收；
 - 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；
 - Asset、KnowledgeSource与课程Session仍有垂直耦合，虽然Space/Conversation/Gateway主干已建立，统一摄取仍未完成。
 

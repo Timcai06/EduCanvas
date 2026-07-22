@@ -1,13 +1,16 @@
 import type {
   AgentMessagePart,
   AgentModelRunLedgerPort,
+  AgentToolCallLedgerPort,
   AgentTurnContextLedgerPort,
   ModelAbortSignal,
   TurnApplicationCommand,
   TurnApplicationEvent,
   TurnModelGateway,
+  ToolEffectLedgerPort,
 } from '@educanvas/agent-core';
 import {
+  ToolKernel,
   TurnApplicationService,
   type TurnApplicationCancellationPort,
   type TurnApplicationLifecyclePort,
@@ -17,8 +20,11 @@ import {
 } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
+  DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
+  DrizzleGatewayNodeRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleToolEffectRepository,
   type PlatformTurnSnapshot,
 } from '@educanvas/db';
 import type { GatewayInboundEnvelope } from '@educanvas/gateway-core';
@@ -31,6 +37,11 @@ import {
   createTurnModelGatewayFromEnvironment,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
+import {
+  createNodeToolAdapters,
+  resolveAvailableNodeToolCapabilities,
+  type NodeInvocationPersistencePort,
+} from '@educanvas/node-runtime';
 
 const SYSTEM_PROMPT = `你是 EduCanvas，一个以教育能力见长的通用个人 Agent。
 根据用户真实意图工作；学习任务中要循序解释、检查理解并尊重可信教学证据，通用任务中不要强行课程化。
@@ -162,7 +173,10 @@ class GatewayTurnLifecycle implements TurnApplicationLifecyclePort {
 }
 
 class GatewayGeneralProfile implements TurnApplicationProfilePort {
-  constructor(private readonly turns: GatewayTurnRepositoryPort) {}
+  constructor(
+    private readonly turns: GatewayTurnRepositoryPort,
+    private readonly nodeInvocations: NodeInvocationPersistencePort,
+  ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
     const history = await this.turns.listMessages({
@@ -176,6 +190,21 @@ class GatewayGeneralProfile implements TurnApplicationProfilePort {
           message.status === 'completed' && message.content.trim().length > 0,
       )
       .slice(-24);
+    const nodeCapabilities = await resolveAvailableNodeToolCapabilities(
+      this.nodeInvocations,
+      {
+        operationId: input.command.operationId,
+        actorId: input.command.actor.actorId,
+        agentId: input.command.actor.agentId,
+      },
+    ).catch(() => []);
+    const capabilities = {
+      actor: nodeCapabilities,
+      notebook: nodeCapabilities,
+      profile: nodeCapabilities,
+      channel: nodeCapabilities,
+      environment: nodeCapabilities,
+    };
     return {
       context: {
         profileVersion: 'gateway-profile-v1',
@@ -217,6 +246,13 @@ class GatewayGeneralProfile implements TurnApplicationProfilePort {
         promptVersion: 'gateway-general-v2',
         maxToolRounds: 1,
       },
+      toolPolicy: {
+        capabilities,
+        approvedCapabilities: [],
+        channel: input.command.entrypoint,
+        environment:
+          process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
+      },
     };
   }
 }
@@ -244,6 +280,9 @@ interface GatewayApplicationDependencies {
   turns: GatewayTurnRepositoryPort;
   contextLedger: AgentTurnContextLedgerPort;
   modelRunLedger: AgentModelRunLedgerPort;
+  toolCallLedger: AgentToolCallLedgerPort;
+  toolEffectLedger: ToolEffectLedgerPort;
+  nodeInvocations: NodeInvocationPersistencePort;
   modelGateway: TurnModelGateway;
 }
 
@@ -252,6 +291,9 @@ function productionDependencies(): GatewayApplicationDependencies {
     turns: new DrizzlePlatformTurnRepository(),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
+    toolCallLedger: new DrizzleAgentToolCallRepository(),
+    toolEffectLedger: new DrizzleToolEffectRepository(),
+    nodeInvocations: new DrizzleGatewayNodeRepository(),
     modelGateway:
       createTurnModelGatewayFromEnvironment(readModelEnvironment()) ??
       unavailableModelGateway,
@@ -274,18 +316,30 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
     this.createApplication =
       typeof dependenciesOrFactory === 'function'
         ? dependenciesOrFactory
-        : ({ signal }) =>
-            new TurnApplicationService({
+        : ({ signal }) => {
+            const nodeAdapters = createNodeToolAdapters(
+              dependenciesOrFactory.nodeInvocations,
+            );
+            return new TurnApplicationService({
               lifecycle: new GatewayTurnLifecycle(dependenciesOrFactory.turns),
-              profile: new GatewayGeneralProfile(dependenciesOrFactory.turns),
+              profile: new GatewayGeneralProfile(
+                dependenciesOrFactory.turns,
+                dependenciesOrFactory.nodeInvocations,
+              ),
               contextLedger: dependenciesOrFactory.contextLedger,
               modelRunLedger: dependenciesOrFactory.modelRunLedger,
               modelGateway: dependenciesOrFactory.modelGateway,
+              toolKernel: new ToolKernel(
+                nodeAdapters,
+                dependenciesOrFactory.toolCallLedger,
+                dependenciesOrFactory.toolEffectLedger,
+              ),
               cancellation: new GatewayBoundCancellation(
                 signal,
                 dependenciesOrFactory.turns,
               ),
             });
+          };
   }
 
   async *run(

@@ -204,6 +204,28 @@ describeWithDatabase('Notebook privacy research fixture', () => {
     expect(ownerNode.agentId).toBe(owner.agentId);
     expect(contributorRoute.agentId).not.toBe(ownerNode.agentId);
     await expect(
+      nodes.listAvailableCapabilitiesForOperation({
+        operationId: operation.operationId,
+        actorId: contributor.userId,
+        agentId: contributor.agentId,
+        activeAfter: new Date(now.getTime() - 1_000),
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      nodes.enqueueForOperation({
+        requestId: 'privacy:cross-actor:tool-request',
+        operationId: operation.operationId,
+        actorId: contributor.userId,
+        agentId: contributor.agentId,
+        capability: 'device.status',
+        parameters: {},
+        nonce: 'privacy:cross-actor:tool-nonce',
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 60_000),
+        activeAfter: new Date(now.getTime() - 1_000),
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(
       nodes.enqueue({
         requestId: 'privacy:cross-actor:request',
         operationId: operation.operationId,

@@ -22,6 +22,7 @@ import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
+  DrizzleGatewayNodeRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
   DrizzleToolEffectRepository,
@@ -30,6 +31,11 @@ import {
   type PlatformSettledCitationSnapshot,
   type PlatformTurnSnapshot,
 } from '@educanvas/db';
+import {
+  createNodeToolAdapters,
+  resolveAvailableNodeToolCapabilities,
+  type NodeInvocationPersistencePort,
+} from '@educanvas/node-runtime';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
@@ -224,7 +230,8 @@ class WebGeneralProfile implements TurnApplicationProfilePort {
   constructor(
     private readonly assetContext: BuiltAssetContext,
     private readonly operationSources: WebOperationSources,
-    private readonly enabledToolCapabilities: readonly string[],
+    private readonly localToolCapabilities: readonly string[],
+    private readonly nodeInvocations: NodeInvocationPersistencePort,
   ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
@@ -244,9 +251,17 @@ class WebGeneralProfile implements TurnApplicationProfilePort {
     const currentText =
       extractAgentMessageText(input.command.input.parts).trim() ||
       '请分析我提供的资料。';
-    const grantedTools = this.enabledToolCapabilities.filter((capability) =>
-      input.command.capabilities.includes(capability),
-    );
+    const nodeCapabilities = await resolveAvailableNodeToolCapabilities(
+      this.nodeInvocations,
+      {
+        operationId: input.command.operationId,
+        actorId: input.command.actor.actorId,
+        agentId: input.command.actor.agentId,
+      },
+    ).catch(() => []);
+    const grantedTools = [
+      ...new Set([...this.localToolCapabilities, ...nodeCapabilities]),
+    ];
     const capabilities = {
       actor: grantedTools,
       notebook: grantedTools,
@@ -387,13 +402,14 @@ class WebGeneralCancellation implements TurnApplicationCancellationPort {
 
 function createToolKernel(operationSources: WebOperationSources): {
   kernel: ToolKernel;
-  capabilities: readonly string[];
+  localCapabilities: readonly string[];
+  nodeInvocations: NodeInvocationPersistencePort;
 } {
   const fetchTool = createFetchWebPageTool(undefined, (page) =>
     operationSources.persist(page),
   );
   const searchTool = resolveWebSearchTool();
-  const adapters = [
+  const localAdapters = [
     adaptAgentTool(fetchTool, {
       capability: 'web.fetch',
       risk: 'l1',
@@ -409,13 +425,19 @@ function createToolKernel(operationSources: WebOperationSources): {
         ]
       : []),
   ];
+  const nodeInvocations = new DrizzleGatewayNodeRepository();
+  const adapters = [
+    ...localAdapters,
+    ...createNodeToolAdapters(nodeInvocations),
+  ];
   return {
     kernel: new ToolKernel(
       adapters,
       new DrizzleAgentToolCallRepository(),
       new DrizzleToolEffectRepository(),
     ),
-    capabilities: adapters.map((adapter) => adapter.capability),
+    localCapabilities: localAdapters.map((adapter) => adapter.capability),
+    nodeInvocations,
   };
 }
 
@@ -449,7 +471,8 @@ export function beginGatewayGeneralTurnApplication(input: {
     profile: new WebGeneralProfile(
       input.assetContext,
       operationSources,
-      tools.capabilities,
+      tools.localCapabilities,
+      tools.nodeInvocations,
     ),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
@@ -472,7 +495,9 @@ export function beginGatewayGeneralTurnApplication(input: {
       clientMessageId: input.request.clientMessageId,
       parts: [...input.request.parts],
     },
-    capabilities: [...new Set([...input.capabilities, ...tools.capabilities])],
+    capabilities: [
+      ...new Set([...input.capabilities, ...tools.localCapabilities]),
+    ],
   };
   return { events: service.run(command) };
 }
