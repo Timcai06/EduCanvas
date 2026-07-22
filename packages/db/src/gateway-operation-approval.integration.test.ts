@@ -19,6 +19,9 @@ import {
   truncateGatewayTables,
 } from './gateway-repository.integration-support';
 
+const approvalTraceParent =
+  '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+
 describeWithDatabase(
   'Gateway operation events, cancellation and approvals',
   () => {
@@ -310,6 +313,7 @@ describeWithDatabase(
         actorId: owner.userId,
         approvalId: 'approval:1',
         expiresAt,
+        traceCarrier: { traceparent: approvalTraceParent },
         work: {
           kind: 'tool_invocation',
           step: 'tool.invoke',
@@ -320,6 +324,25 @@ describeWithDatabase(
         now,
       });
       await store.append(operation.operationId, approvalRequired, now);
+      const [boundIntent] = await getDatabase()
+        .select({
+          status: schema.toolApprovalIntents.status,
+          traceParent: schema.toolApprovalIntents.traceParent,
+        })
+        .from(schema.toolApprovalIntents);
+      const [continuation] = await getDatabase()
+        .select({ traceParent: schema.operationContinuations.traceParent })
+        .from(schema.operationContinuations);
+      expect(boundIntent).toEqual({
+        status: 'bound',
+        traceParent: approvalTraceParent,
+      });
+      expect(continuation).toEqual({ traceParent: approvalTraceParent });
+      expect(
+        JSON.stringify(
+          await store.listEvents(operation.operationId, -1, owner.userId),
+        ),
+      ).not.toContain('traceparent');
       expect(await approvals.listPending(owner.userId, now)).toHaveLength(1);
       await expect(
         store.resolveApproval({

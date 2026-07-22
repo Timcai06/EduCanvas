@@ -9,6 +9,10 @@ export {
   type TelemetryEnvironment,
 } from './config';
 export type { TelemetryHealthSnapshot } from './health';
+export type {
+  ContinuationTraceInput,
+  ContinuationTracePort,
+} from './continuation-trace-adapter';
 export {
   createTelemetryRuntimeFromEnvironment,
   type TelemetryRuntime,

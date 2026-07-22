@@ -5,6 +5,9 @@ import { mcpRegistration } from './test-support';
 
 describe('MCP高风险审批准备', () => {
   it('只把密文交给Adapter仓储并把稳定引用交给公共Intent', async () => {
+    const traceCarrier = {
+      traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+    } as const;
     const durablePrepare = vi.fn(async (input: { metadata: object }) => ({
       intent: { ...input.metadata, status: 'prepared' },
       replayed: false,
@@ -37,6 +40,7 @@ describe('MCP高风险审批准备', () => {
         environment: 'test',
         credentialHandle: 'credential:opaque',
         profileContext: {},
+        traceCarrier,
         signal: new AbortController().signal,
       },
       dependencies: {
@@ -63,6 +67,7 @@ describe('MCP高风险审批准备', () => {
           adapterSource: 'mcp',
           resumeRef: expect.stringMatching(/^mcp\.intent:[a-f0-9]{64}$/),
         }),
+        traceCarrier,
       }),
     );
   });

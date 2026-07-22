@@ -121,6 +121,7 @@ export async function createWaitingContinuation(
         toolCallId: input.work.toolCallId,
         adapterSource: input.work.adapterSource,
         resumeRef: input.work.resumeRef,
+        traceParent: input.traceCarrier?.traceparent ?? null,
         status: 'waiting_approval',
         createdAt: now,
         updatedAt: now,

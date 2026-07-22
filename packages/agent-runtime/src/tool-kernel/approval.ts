@@ -67,6 +67,7 @@ export async function prepareToolApproval(input: {
         input.adapter.prepareApproval(input.parsedInput, {
           ...buildInvocationContext(input.request, control.signal),
           toolCallId: input.call.id,
+          traceCarrier: input.request.traceCarrier ?? null,
         }),
         control.timeout,
         control.cancellation,

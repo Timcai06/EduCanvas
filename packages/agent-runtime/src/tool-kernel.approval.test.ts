@@ -54,6 +54,9 @@ describe('Tool Kernel审批边界', () => {
         tool: 'runLocal',
         arguments: { value: 'ok' },
         context: context('approval'),
+        traceCarrier: {
+          traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+        },
       }),
     ).resolves.toMatchObject({
       status: 'approval_required',
@@ -71,6 +74,9 @@ describe('Tool Kernel审批边界', () => {
       expect.objectContaining({
         operationId: context('approval').operationId,
         toolCallId: expect.any(String),
+        traceCarrier: {
+          traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+        },
       }),
     );
     expect(calls.calls.size).toBe(1);

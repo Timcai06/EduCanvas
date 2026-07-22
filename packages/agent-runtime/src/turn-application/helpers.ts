@@ -4,6 +4,7 @@ import type {
   NormalizedModelError,
   TurnApplicationFailureCode,
 } from '@educanvas/agent-core';
+import { w3cTraceCarrierSchema } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
 import type {
   TurnApplicationCancellationPort,
@@ -21,7 +22,7 @@ import type {
 
 export const NOOP_TRACE: TurnApplicationTracePort = {
   start() {
-    return { event() {}, end() {} };
+    return { carrier: () => null, event() {}, end() {} };
   },
 };
 
@@ -36,6 +37,16 @@ export function startTraceSafely(
     return NOOP_TRACE.start(input);
   }
   return {
+    carrier() {
+      try {
+        const carrier = span.carrier();
+        if (carrier === null) return null;
+        const parsed = w3cTraceCarrierSchema.safeParse(carrier);
+        return parsed.success ? parsed.data : null;
+      } catch {
+        return null;
+      }
+    },
     event(name, attributes) {
       try {
         span.event(name, attributes);

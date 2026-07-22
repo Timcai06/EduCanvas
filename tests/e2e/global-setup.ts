@@ -128,7 +128,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   const worker: ChildProcess = spawn(
     'pnpm',
-    ['--filter', '@educanvas/worker', 'exec', 'tsx', 'src/index.ts'],
+    ['--filter', '@educanvas/worker', 'start'],
     {
       env: {
         ...process.env,
@@ -169,9 +169,27 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
 
   return async () => {
-    worker.kill('SIGTERM');
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    if (!worker.killed) worker.kill('SIGKILL');
+    if (worker.exitCode === null && worker.signalCode === null) {
+      const exited = new Promise<void>((resolve) =>
+        worker.once('exit', () => resolve()),
+      );
+      worker.kill('SIGTERM');
+      let forceKillTimer: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          exited,
+          new Promise<void>((resolve) => {
+            forceKillTimer = setTimeout(resolve, 5_000);
+          }),
+        ]);
+      } finally {
+        if (forceKillTimer) clearTimeout(forceKillTimer);
+      }
+      if (worker.exitCode === null && worker.signalCode === null) {
+        worker.kill('SIGKILL');
+        await exited;
+      }
+    }
     await new Promise<void>((resolve, reject) =>
       fixtureProvider.server.close((error) =>
         error ? reject(error) : resolve(),

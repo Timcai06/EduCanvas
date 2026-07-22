@@ -1,6 +1,7 @@
 import type {
   TurnApplicationCommand,
   TurnApplicationFailureCode,
+  W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import type { AgentLoopToolBatch, AgentLoopToolSuccess } from '../agent-loop';
 import type { ParsedToolCall } from '../turn-engine';
@@ -43,6 +44,7 @@ export class TurnToolExecutor {
     private readonly policy: TurnApplicationToolPolicy | undefined,
     private readonly toolKernel: ToolKernel | undefined,
     private readonly signal: AbortSignal,
+    private readonly traceCarrier: W3cTraceCarrier | null,
   ) {}
 
   register(run: number, call: ParsedToolCall): string {
@@ -109,6 +111,7 @@ export class TurnToolExecutor {
         tool: call.tool,
         arguments: call.arguments,
         context: trusted,
+        traceCarrier: this.traceCarrier,
         signal: this.signal,
       });
       if (!executed.ok) {

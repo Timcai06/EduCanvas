@@ -10,6 +10,7 @@ import {
   createFixture,
   describeWithDatabase,
   getDatabase,
+  initialTraceParent,
   intentInput,
   registerContinuationIntegrationHooks,
 } from './operation-continuation-repository.integration.support';
@@ -22,7 +23,12 @@ describeWithDatabase('Tool approval intent持久账本', () => {
     const fixture = await createFixture();
     const repository = new DrizzleToolApprovalIntentRepository(getDatabase());
     const first = await repository.prepare(intentInput(fixture));
-    const replayed = await repository.prepare(intentInput(fixture));
+    const replayed = await repository.prepare({
+      ...intentInput(fixture),
+      traceCarrier: {
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00',
+      },
+    });
 
     expect(first).toMatchObject({
       replayed: false,
@@ -30,6 +36,7 @@ describeWithDatabase('Tool approval intent持久账本', () => {
         protocol: 'educanvas.tool-approval-intent.v1',
         status: 'prepared',
         approvalId: fixture.approvalId,
+        traceCarrier: { traceparent: initialTraceParent },
         work: {
           toolCallId: fixture.toolCallId,
           adapterSource: 'node',
@@ -38,7 +45,10 @@ describeWithDatabase('Tool approval intent持久账本', () => {
     });
     expect(replayed).toMatchObject({
       replayed: true,
-      intent: { approvalId: fixture.approvalId },
+      intent: {
+        approvalId: fixture.approvalId,
+        traceCarrier: { traceparent: initialTraceParent },
+      },
     });
     expect(JSON.stringify(first)).not.toContain('不得进入continuation账本');
     await expect(

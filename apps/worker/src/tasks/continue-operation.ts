@@ -9,11 +9,18 @@ import {
   DrizzleOperationContinuationRepository,
   type OperationContinuationExecutionScope,
 } from '@educanvas/db';
+import type { ContinuationTracePort } from '@educanvas/telemetry';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import { createProductionMcpContinuationAdapters } from '../mcp/production-adapter';
 
 const payloadSchema = z.object({ continuationId: z.uuid() }).strict();
+
+const NOOP_CONTINUATION_TRACE: ContinuationTracePort = {
+  run(_input, callback) {
+    return callback();
+  },
+};
 
 /** Adapter完成自身耐久副作用后的受控结果；不得携带原始工具输出或凭据。 */
 export type OperationContinuationResumeResult =
@@ -83,12 +90,14 @@ export function createContinueOperationTask(input: {
   continuations?: ContinuationRepositoryPort;
   operations?: OperationStorePort;
   adapters: readonly OperationContinuationResumeAdapter[];
+  trace?: ContinuationTracePort;
   leaseDurationMs?: number;
 }): Task {
   const continuations =
     input.continuations ?? new DrizzleOperationContinuationRepository();
   const operations = input.operations ?? new DrizzleGatewayOperationStore();
   const leaseDurationMs = input.leaseDurationMs ?? 60_000;
+  const continuationTrace = input.trace ?? NOOP_CONTINUATION_TRACE;
   const adapters = new Map<string, OperationContinuationResumeAdapter>();
   for (const adapter of input.adapters) {
     if (adapter.capabilities.length === 0) {
@@ -136,87 +145,102 @@ export function createContinueOperationTask(input: {
     }
 
     const { continuation, scope } = claimed;
-    const adapter = adapters.get(
-      `${continuation.work.adapterSource}:${scope.capability}`,
-    );
-    const controller = new AbortController();
-    const workerSignal = helpers?.abortSignal;
-    const abortForWorkerShutdown = () =>
-      controller.abort('graphile_worker_shutdown');
-    if (workerSignal?.aborted) abortForWorkerShutdown();
-    else
-      workerSignal?.addEventListener('abort', abortForWorkerShutdown, {
-        once: true,
-      });
-    const heartbeatEveryMs = Math.max(
-      1_000,
-      Math.min(5_000, Math.floor(leaseDurationMs / 3)),
-    );
-    const timer = setInterval(() => {
-      void continuations
-        .heartbeat({
-          continuationId: continuation.continuationId,
-          actorId: scope.actorId,
-          ownerId,
-          leaseGeneration: continuation.leaseGeneration,
-          leaseDurationMs,
-        })
-        .then((renewed) => {
-          if (!renewed) controller.abort('continuation_lease_lost');
-        })
-        .catch(() => controller.abort('continuation_heartbeat_failed'));
-    }, heartbeatEveryMs);
-    timer.unref?.();
-    try {
-      if (!adapter) {
-        await operations.settleContinuation({
-          continuationId: continuation.continuationId,
-          operationId: continuation.operationId,
-          ownerId,
-          leaseGeneration: continuation.leaseGeneration,
-          result: {
-            status: 'failed',
-            continuationFailureCode: 'adapter_unavailable',
-            operationFailureCode: 'CAPABILITY_UNAVAILABLE',
-            retryable: false,
-          },
-        });
-        return;
-      }
-      const result = await adapter.resume({
-        continuation,
-        scope,
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) throw new Error('continuation_lease_lost');
-      await operations.settleContinuation({
-        continuationId: continuation.continuationId,
+    await continuationTrace.run(
+      {
         operationId: continuation.operationId,
-        ownerId,
-        leaseGeneration: continuation.leaseGeneration,
-        result,
-      });
-    } catch (error) {
-      await continuations
-        .release({
-          continuationId: continuation.continuationId,
-          actorId: scope.actorId,
-          ownerId,
-          leaseGeneration: continuation.leaseGeneration,
-        })
-        .catch(() => undefined);
-      throw error;
-    } finally {
-      clearInterval(timer);
-      workerSignal?.removeEventListener('abort', abortForWorkerShutdown);
-      controller.abort('continuation_finished');
-    }
+        carrier: continuation.traceCarrier,
+      },
+      async () => {
+        const adapter = adapters.get(
+          `${continuation.work.adapterSource}:${scope.capability}`,
+        );
+        const controller = new AbortController();
+        const workerSignal = helpers?.abortSignal;
+        const abortForWorkerShutdown = () =>
+          controller.abort('graphile_worker_shutdown');
+        if (workerSignal?.aborted) abortForWorkerShutdown();
+        else
+          workerSignal?.addEventListener('abort', abortForWorkerShutdown, {
+            once: true,
+          });
+        const heartbeatEveryMs = Math.max(
+          1_000,
+          Math.min(5_000, Math.floor(leaseDurationMs / 3)),
+        );
+        const timer = setInterval(() => {
+          void continuations
+            .heartbeat({
+              continuationId: continuation.continuationId,
+              actorId: scope.actorId,
+              ownerId,
+              leaseGeneration: continuation.leaseGeneration,
+              leaseDurationMs,
+            })
+            .then((renewed) => {
+              if (!renewed) controller.abort('continuation_lease_lost');
+            })
+            .catch(() => controller.abort('continuation_heartbeat_failed'));
+        }, heartbeatEveryMs);
+        timer.unref?.();
+        try {
+          if (!adapter) {
+            await operations.settleContinuation({
+              continuationId: continuation.continuationId,
+              operationId: continuation.operationId,
+              ownerId,
+              leaseGeneration: continuation.leaseGeneration,
+              result: {
+                status: 'failed',
+                continuationFailureCode: 'adapter_unavailable',
+                operationFailureCode: 'CAPABILITY_UNAVAILABLE',
+                retryable: false,
+              },
+            });
+            return;
+          }
+          const result = await adapter.resume({
+            continuation,
+            scope,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) {
+            throw new Error('continuation_lease_lost');
+          }
+          await operations.settleContinuation({
+            continuationId: continuation.continuationId,
+            operationId: continuation.operationId,
+            ownerId,
+            leaseGeneration: continuation.leaseGeneration,
+            result,
+          });
+        } catch (error) {
+          await continuations
+            .release({
+              continuationId: continuation.continuationId,
+              actorId: scope.actorId,
+              ownerId,
+              leaseGeneration: continuation.leaseGeneration,
+            })
+            .catch(() => undefined);
+          throw error;
+        } finally {
+          clearInterval(timer);
+          workerSignal?.removeEventListener('abort', abortForWorkerShutdown);
+          controller.abort('continuation_finished');
+        }
+      },
+    );
   };
 }
 
 /** 生产只注册配置完整的耐久Adapter；缺密钥/配置时仍以adapter_unavailable诚实失败。 */
-export const continueOperation = createContinueOperationTask({
-  adapters: createProductionMcpContinuationAdapters(),
-});
+export function createProductionContinueOperationTask(
+  trace: ContinuationTracePort,
+): Task {
+  return createContinueOperationTask({
+    adapters: createProductionMcpContinuationAdapters(),
+    trace,
+  });
+}
 
 export { OPERATION_CONTINUATION_TASK };

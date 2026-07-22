@@ -3,6 +3,7 @@ import type {
   TurnApplicationCommand,
   TurnApplicationEvent,
   TurnApplicationFailureCode,
+  W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import { turnApplicationProtocolVersion } from '@educanvas/agent-core';
 import { AgentLoopEngine } from '../agent-loop';
@@ -43,6 +44,7 @@ export async function* runTurnLoop(input: {
   prepared: PreparedTurnApplication;
   cancellation: TurnApplicationCancellationHandle;
   controller: AbortController;
+  traceCarrier: W3cTraceCarrier | null;
   outputGuard?: TurnApplicationOutputGuardPort;
 }): AsyncGenerator<TurnApplicationEvent, TurnLoopOutcome> {
   const { dependencies, command, turn, prepared } = input;
@@ -55,6 +57,7 @@ export async function* runTurnLoop(input: {
     prepared.toolPolicy,
     dependencies.toolKernel,
     input.controller.signal,
+    input.traceCarrier,
   );
   let answer = '';
   let completed = false;

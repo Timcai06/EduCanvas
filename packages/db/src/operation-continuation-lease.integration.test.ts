@@ -10,6 +10,7 @@ import {
   createFixture,
   describeWithDatabase,
   getDatabase,
+  initialTraceParent,
   registerContinuationIntegrationHooks,
   waitingInput,
 } from './operation-continuation-repository.integration.support';
@@ -40,6 +41,7 @@ describeWithDatabase('Operation continuation lease与取消', () => {
     });
     expect(first).toMatchObject({
       status: 'running',
+      traceCarrier: { traceparent: initialTraceParent },
       leaseOwnerId: 'worker:first',
       leaseGeneration: 1,
     });
@@ -71,6 +73,7 @@ describeWithDatabase('Operation continuation lease与取消', () => {
     });
     expect(reclaimed).toMatchObject({
       status: 'running',
+      traceCarrier: { traceparent: initialTraceParent },
       leaseOwnerId: 'worker:second',
       leaseGeneration: 2,
     });
@@ -105,7 +108,10 @@ describeWithDatabase('Operation continuation lease与取消', () => {
       }),
     ).toMatchObject({
       transitioned: true,
-      continuation: { status: 'completed' },
+      continuation: {
+        status: 'completed',
+        traceCarrier: { traceparent: initialTraceParent },
+      },
     });
   });
 
