@@ -1,3 +1,5 @@
+import type { TurnModelGateway } from '@educanvas/agent-core';
+import { createAiSdkTurnModelGateway } from './ai-sdk-provider-factory';
 import {
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
@@ -11,9 +13,10 @@ import {
 export function createTurnModelGatewayFromEnvironment(
   environment: ModelGatewayEnvironment,
   options: OpenAICompatibleTurnModelGatewayOptions = {},
-): OpenAICompatibleTurnModelGateway | null {
+): TurnModelGateway | null {
   const config = parseModelGatewayConfiguration(environment);
-  return config.enabled
-    ? new OpenAICompatibleTurnModelGateway(config, options)
-    : null;
+  if (!config.enabled) return null;
+  return config.runtime === 'ai-sdk'
+    ? createAiSdkTurnModelGateway(config, options)
+    : new OpenAICompatibleTurnModelGateway(config, options);
 }

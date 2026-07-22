@@ -9,6 +9,7 @@ export const config: EnabledModelGatewayConfiguration = {
   enabled: true,
   environment: 'local',
   provider: 'deepseek',
+  runtime: 'native',
   baseUrl: 'https://api.deepseek.com',
   apiKey: 'fixture-key-never-real',
   modelIds: { primary: 'explicitly-configured-model' },

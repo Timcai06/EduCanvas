@@ -26,7 +26,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 ## 真实 Agent Turn 当前边界
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
-- Web组合根通过`packages/model-gateway`创建可配置的OpenAI-compatible SSE Adapter；未配置或配置非法时写入诚实失败态，不回退到脚本回答；
+- Gateway与Web组合根通过`packages/model-gateway`公共工厂创建可配置的OpenAI-compatible Turn Adapter；`MODEL_GATEWAY_RUNTIME`显式选择`native | ai-sdk`且默认native，未配置或配置非法时写入诚实失败态，不回退到脚本回答或另一Adapter；
 - Web Teaching Profile把K12 Prompt、安全、教学状态与领域回调注入唯一`TurnApplicationService`；当前生产组合通过统一Tool Kernel注册只读`getStudentState`与`retrieveKnowledge`，工具可见性由可信教学状态、Actor/Agent/Notebook/Profile/入口/环境能力交集和Adapter共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
 - 学生消息、老师消息和安全决策继续保留K12领域形状；Model Run、Tool Call与Turn Context Snapshot改为统一`agent_operation`账本归属，同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到同一Operation的成功Model Run；
@@ -42,7 +42,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - Answer 已包含有界的持久化会话历史与本轮物化 Asset 文本，但尚不包含摘要或 Artifact 状态；
 - Web BFF仍承担lease、取消、安全、引用与SSE兼容投影，后续可继续削薄，但已不拥有通用身份/路由或第二套循环；
-- Node的L0/L1只读Adapter已通过统一Tool Kernel接入Web General与Gateway/TUI，并按Operation主体、新鲜心跳、Schema、timeout/cancel与幂等请求收敛；MCP v1无鉴权L0/L1 Adapter也已接入两处组合根，执行前核对服务端可信Schema，限制请求、响应和结构化输出，远端错误与元数据不进入模型。无鉴权MCP L2/L3 write能力在配置共享意图密钥后经公共审批与Worker continuation恢复；Bearer工具在真实Credential Broker接入前保持disabled；AI SDK Provider Adapter仍待后续纵切；
+- Node的L0/L1只读Adapter已通过统一Tool Kernel接入Web General与Gateway/TUI，并按Operation主体、新鲜心跳、Schema、timeout/cancel与幂等请求收敛；MCP v1无鉴权L0/L1 Adapter也已接入两处组合根，执行前核对服务端可信Schema，限制请求、响应和结构化输出，远端错误与元数据不进入模型。无鉴权MCP L2/L3 write能力在配置共享意图密钥后经公共审批与Worker continuation恢复；Bearer工具在真实Credential Broker接入前保持disabled；AI SDK Provider Adapter已作为显式可回滚Turn实现接线，结构化与语音任务仍保持原生Adapter；
 - 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；
 - Asset、KnowledgeSource与课程Session仍有垂直耦合，虽然Space/Conversation/Gateway主干已建立，统一摄取仍未完成。
 

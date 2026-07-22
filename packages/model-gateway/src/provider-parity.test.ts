@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { EnabledModelGatewayConfiguration } from './config';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
-import { AiSdkResearchTurnModelGateway } from './testing/ai-sdk-turn-model-gateway';
+import { AiSdkTurnModelGateway } from './ai-sdk-turn-model-gateway';
 import {
   createFixtureResponse,
   textStreamChunks,
@@ -102,6 +102,7 @@ const config: EnabledModelGatewayConfiguration = {
   enabled: true,
   environment: 'local',
   provider: 'deepseek',
+  runtime: 'native',
   baseUrl: 'https://api.deepseek.com',
   apiKey: 'fixture-key-never-real',
   modelIds: { primary: 'explicitly-configured-model' },
@@ -157,10 +158,12 @@ const nativeGateway = (
   });
 
 const aiGateway = (model: MockLanguageModelV3): TurnModelGateway =>
-  new AiSdkResearchTurnModelGateway(model, {
-    provider: 'ai-sdk-research',
-    resolvedModelId: 'explicitly-configured-model',
+  new AiSdkTurnModelGateway({
+    provider: config.provider,
+    modelIds: config.modelIds,
     timeoutMs: 1_000,
+    maxOutputTokens: config.maxOutputTokens,
+    modelFactory: () => model,
     now: () => 100,
   });
 

@@ -18,7 +18,7 @@
 
 当前生产教学 Turn 由 `packages/agent-runtime` 的唯一 `TurnApplicationService` 与 `AgentLoopEngine` 执行；`packages/teaching-runtime` 只提供纯 Prompt、确定性安全 Gate、状态机、教学 Tool 定义与 Adapter。直答只产生一次 `answer` Model Run；请求工具时产生 `answer → Tool Kernel → synthesis` 两次 Model Run。旧教学 Orchestrator 和 Tool Executor 已删除；Prompt材料明确排除 Trace、运行期 signal 与 secret。
 
-`packages/model-gateway` 已实现 OpenAI-compatible Turn、结构化 JSON 与`/audio/speech`三个Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取 `process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式 Fallback和nightly live smoke；测试替身不能注册到生产组合根。
+`packages/model-gateway` 已实现native与AI SDK两种OpenAI-compatible Turn Adapter，以及原生结构化JSON和`/audio/speech` Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取`process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式Fallback和nightly live smoke；测试替身不能注册到生产组合根。
 
 ## 别名语义
 
@@ -44,14 +44,17 @@
 
 ## Provider Adapter 实现选择
 
-首个 Adapter 选择原生 OpenAI-compatible SSE，原因是必须无损保留并严格校验：
+原生 OpenAI-compatible SSE 继续作为默认与回滚实现，因为必须无损保留并严格校验：
 
 - Provider response ID 与 tool call ID；
 - Token usage、finish reason、model revision 和 system fingerprint；
 - `AbortSignal` 的订阅、传播与上游取消；
 - 畸形事件、内容过滤、限流和连接中断的稳定错误映射。
 
-供应商原始 chunk、异常正文、推理内容和 SDK 类型均不得越过 Adapter。未来可以在相同 Port 后增加 AI SDK Adapter，但必须先用同一组官方格式 Fixture 证明上述语义完全等价。
+AI SDK Adapter现已在同一Port后生产接线，只能通过`MODEL_GATEWAY_RUNTIME=ai-sdk`显式启用；
+缺省和`native`均选择原生实现，运行中不会静默切换。两种Adapter用同一golden fixture验证文本、
+工具圈、usage、取消、错误和唯一终态等价，SDK Adapter另验证alias解析、最大输出限制与DeepSeek
+thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型均不得越过Adapter。
 
 语音输出采用OpenAI-compatible `POST /audio/speech`的非流式`mp3`形态；当前只
 解析音频二进制和安全响应头，不把供应商事件或临时URL暴露给业务层。模型ID由
@@ -70,7 +73,7 @@
 
 ## 配置与剩余治理
 
-- 已实现：环境 allowlist、DeepSeek 生产硬拒绝、显式模型 ID、HTTPS 校验、请求截止时间与取消；
+- 已实现：环境allowlist、DeepSeek生产硬拒绝、显式模型ID、HTTPS校验、请求截止时间与取消，以及`native | ai-sdk`显式Turn Adapter选择；
 - 已实现（speech）：每个音频任务一次TTS调用、1–8项来源、3500字符输入、
   20 MiB输出上限，无适配器自动重试；字符数、模型、voice与耗时随Artifact版本审计；
 - 待实现：跨用户/日并发与成本预算、显式 Fallback；
