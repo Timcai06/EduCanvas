@@ -200,6 +200,12 @@ export {
   type OperationContinuationExecutionScope,
 } from './operation-continuation-repository';
 export {
+  DrizzleToolApprovalIntentRepository,
+  ToolApprovalIntentConflictError,
+  ToolApprovalIntentLifecycleError,
+  ToolApprovalIntentOwnershipError,
+} from './tool-approval-intent-repository';
+export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,
   SafetyDecisionOwnershipError,

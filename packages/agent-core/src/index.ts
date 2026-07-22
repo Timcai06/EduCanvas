@@ -129,6 +129,7 @@ export {
   MIN_OPERATION_CONTINUATION_LEASE_MS,
   OPERATION_CONTINUATION_TASK,
   createOperationContinuationInputSchema,
+  prepareToolApprovalIntentInputSchema,
   operationContinuationAdapterSourceSchema,
   operationContinuationAdapterSources,
   operationContinuationProtocolVersion,
@@ -136,6 +137,10 @@ export {
   operationContinuationStatusSchema,
   operationContinuationStatuses,
   operationContinuationWorkSchema,
+  toolApprovalIntentProtocolVersion,
+  toolApprovalIntentSnapshotSchema,
+  toolApprovalIntentStatusSchema,
+  toolApprovalIntentStatuses,
   type CreateOperationContinuationInput,
   type OperationContinuationAdapterSource,
   type OperationContinuationPort,
@@ -143,6 +148,10 @@ export {
   type OperationContinuationStatus,
   type OperationContinuationTerminalStatus,
   type OperationContinuationWork,
+  type PrepareToolApprovalIntentInput,
+  type ToolApprovalIntentPort,
+  type ToolApprovalIntentSnapshot,
+  type ToolApprovalIntentStatus,
 } from './operation-continuation';
 
 export type {

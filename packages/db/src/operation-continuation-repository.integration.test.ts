@@ -14,6 +14,12 @@ import {
   OperationContinuationLifecycleError,
   OperationContinuationOwnershipError,
 } from './operation-continuation-repository';
+import {
+  DrizzleToolApprovalIntentRepository,
+  ToolApprovalIntentConflictError,
+  ToolApprovalIntentLifecycleError,
+  ToolApprovalIntentOwnershipError,
+} from './tool-approval-intent-repository';
 import * as schema from './schema';
 
 function resolveTestDatabaseUrl() {
@@ -144,6 +150,13 @@ function waitingInput(fixture: Awaited<ReturnType<typeof createFixture>>) {
   };
 }
 
+function intentInput(fixture: Awaited<ReturnType<typeof createFixture>>) {
+  return {
+    ...waitingInput(fixture),
+    expiresAt: '2026-07-21T12:10:01.000Z',
+  };
+}
+
 async function approve(fixture: Awaited<ReturnType<typeof createFixture>>) {
   await getDatabase()
     .insert(schema.gatewayApprovals)
@@ -171,7 +184,8 @@ describeWithDatabase('Operation continuation持久账本', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table operation_continuations, gateway_approvals, tool_effects,
+      truncate table operation_continuations, tool_approval_intents,
+        gateway_approvals, tool_effects,
         tool_calls, model_runs, conversation_messages, agent_operations,
         conversations, spaces, personal_agents, platform_users, lesson_sessions
       restart identity cascade
@@ -180,6 +194,54 @@ describeWithDatabase('Operation continuation持久账本', () => {
 
   afterAll(async () => {
     await connection?.end({ timeout: 5 });
+  });
+
+  it('幂等准备最小审批意图并拒绝越权、漂移与超长授权', async () => {
+    const fixture = await createFixture();
+    const repository = new DrizzleToolApprovalIntentRepository(getDatabase());
+    const first = await repository.prepare(intentInput(fixture));
+    const replayed = await repository.prepare(intentInput(fixture));
+
+    expect(first).toMatchObject({
+      replayed: false,
+      intent: {
+        protocol: 'educanvas.tool-approval-intent.v1',
+        status: 'prepared',
+        approvalId: fixture.approvalId,
+        work: {
+          toolCallId: fixture.toolCallId,
+          adapterSource: 'node',
+        },
+      },
+    });
+    expect(replayed).toMatchObject({
+      replayed: true,
+      intent: { approvalId: fixture.approvalId },
+    });
+    expect(JSON.stringify(first)).not.toContain('不得进入continuation账本');
+    await expect(
+      repository.prepare({
+        ...intentInput(fixture),
+        actorId: fixture.otherActorId,
+      }),
+    ).rejects.toBeInstanceOf(ToolApprovalIntentOwnershipError);
+    await expect(
+      repository.prepare({
+        ...intentInput(fixture),
+        approvalId: `approval:drift:${fixture.operationId}`,
+      }),
+    ).rejects.toBeInstanceOf(ToolApprovalIntentConflictError);
+    await expect(
+      repository.prepare({
+        ...intentInput(fixture),
+        approvalId: `approval:long:${fixture.operationId}`,
+        work: {
+          ...intentInput(fixture).work,
+          toolCallId: randomUUID(),
+        },
+        expiresAt: '2026-07-22T12:00:02.000Z',
+      }),
+    ).rejects.toBeInstanceOf(ToolApprovalIntentLifecycleError);
   });
 
   it('以Operation幂等创建等待态且只保存稳定引用', async () => {

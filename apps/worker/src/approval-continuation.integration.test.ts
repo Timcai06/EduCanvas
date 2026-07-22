@@ -9,12 +9,14 @@ import {
   DrizzleOperationContinuationRepository,
   DrizzlePlatformConversationRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleToolApprovalIntentRepository,
   GatewayPersistenceError,
   gatewayApprovals,
   gatewayOperationEvents,
   getDb,
   notebookMemberships,
   operationContinuations,
+  toolApprovalIntents,
 } from '@educanvas/db';
 import { eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -99,6 +101,22 @@ async function createWaitingApproval() {
     now,
   });
   const approvalId = `approval:${operation.operationId}`;
+  const expiresAt = new Date(now.getTime() + 10 * 60_000).toISOString();
+  const continuations = new DrizzleOperationContinuationRepository(database);
+  await new DrizzleToolApprovalIntentRepository(database).prepare({
+    operationId: operation.operationId,
+    actorId,
+    approvalId,
+    expiresAt,
+    work: {
+      kind: 'tool_invocation',
+      step: 'tool.invoke',
+      toolCallId: toolCall.call.id,
+      adapterSource: 'node',
+      resumeRef: `node-invocation:${operation.operationId}`,
+    },
+    now,
+  });
   await operations.append(
     operation.operationId,
     {
@@ -111,33 +129,23 @@ async function createWaitingApproval() {
         risk: 'l2',
         summary: '读取白名单内的学习资料',
         requestedAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+        expiresAt,
       },
     },
     now,
   );
-  const waiting = await new DrizzleOperationContinuationRepository(
-    database,
-  ).createWaiting({
+  const waiting = await continuations.getActive({
     operationId: operation.operationId,
     actorId,
-    approvalId,
-    work: {
-      kind: 'tool_invocation',
-      step: 'tool.invoke',
-      toolCallId: toolCall.call.id,
-      adapterSource: 'node',
-      resumeRef: `node-invocation:${operation.operationId}`,
-    },
-    now,
   });
+  if (!waiting) throw new Error('Gateway未原子创建continuation');
   return {
     actorId,
     approvalId,
     assistantMessageId: turn.assistantMessage.id,
     conversationId: conversation.id,
     operationId: operation.operationId,
-    continuationId: waiting.continuation.continuationId,
+    continuationId: waiting.continuationId,
     notebookId: conversation.spaceId,
     operations,
   };
@@ -157,7 +165,7 @@ describe('Gateway approval到continuation队列的原子边界', () => {
 
   beforeEach(async () => {
     await database.execute(sql`
-      truncate table operation_continuations, gateway_approvals,
+      truncate table operation_continuations, tool_approval_intents, gateway_approvals,
         gateway_operation_events, tool_effects, tool_calls, model_runs,
         conversation_messages, agent_operations, conversations, spaces,
         personal_agents, platform_users
@@ -185,6 +193,12 @@ describe('Gateway approval到continuation队列的原子边界', () => {
         .from(operationContinuations)
         .where(eq(operationContinuations.id, fixture.continuationId)),
     ).toEqual([{ status: 'ready' }]);
+    expect(
+      await database
+        .select({ status: toolApprovalIntents.status })
+        .from(toolApprovalIntents)
+        .where(eq(toolApprovalIntents.approvalId, fixture.approvalId)),
+    ).toEqual([{ status: 'bound' }]);
     const jobs = await database.execute<{
       task_identifier: string;
       payload: unknown;

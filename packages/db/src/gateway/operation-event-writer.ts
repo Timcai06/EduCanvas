@@ -1,16 +1,19 @@
 import { randomUUID } from 'node:crypto';
+import { operationContinuationProtocolVersion } from '@educanvas/agent-core';
 import {
   gatewayOperationEventSchema,
   gatewayProtocolVersion,
   isGatewayTerminalEvent,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import {
   agentOperations,
   gatewayApprovals,
   gatewayOperationEvents,
   operationContinuations,
+  toolApprovalIntents,
+  toolCalls,
 } from '../schema';
 import {
   GatewayPersistenceError,
@@ -53,6 +56,7 @@ export async function appendGatewayOperationEvent(
     .select({
       status: agentOperations.status,
       actorUserId: agentOperations.actorUserId,
+      cancelRequestedAt: agentOperations.cancelRequestedAt,
     })
     .from(agentOperations)
     .where(eq(agentOperations.id, operationId))
@@ -105,10 +109,121 @@ export async function appendGatewayOperationEvent(
     occurredAt: now,
   });
   if (event.type === 'approval.required') {
-    if (event.approval.actorUserId !== operation.actorUserId) {
+    if (
+      event.approval.operationId !== operationId ||
+      event.approval.actorUserId !== operation.actorUserId ||
+      operation.cancelRequestedAt !== null
+    ) {
       throw new GatewayPersistenceError(
         'invalid_event_sequence',
-        'Approval actor does not own operation',
+        'Approval scope does not match operation',
+      );
+    }
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`operation-continuation-v1:${operationId}`}, 0))`,
+    );
+    const [intent] = await transaction
+      .select()
+      .from(toolApprovalIntents)
+      .where(
+        and(
+          eq(toolApprovalIntents.approvalId, event.approval.approvalId),
+          eq(toolApprovalIntents.operationId, operationId),
+          eq(toolApprovalIntents.actorUserId, event.approval.actorUserId),
+          eq(toolApprovalIntents.status, 'prepared'),
+          gt(toolApprovalIntents.expiresAt, now),
+        ),
+      )
+      .limit(1);
+    if (
+      !intent ||
+      intent.expiresAt.getTime() !==
+        new Date(event.approval.expiresAt).getTime()
+    ) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Approval has no matching prepared tool intent',
+      );
+    }
+    const [pendingCall] = await transaction
+      .select({ id: toolCalls.id })
+      .from(toolCalls)
+      .where(
+        and(
+          eq(toolCalls.id, intent.toolCallId),
+          eq(toolCalls.agentOperationId, operationId),
+          eq(toolCalls.status, 'pending'),
+        ),
+      )
+      .limit(1);
+    if (!pendingCall) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Prepared tool intent no longer references a pending Tool Call',
+      );
+    }
+    const [latest] = await transaction
+      .select({
+        sequence: operationContinuations.sequence,
+        status: operationContinuations.status,
+      })
+      .from(operationContinuations)
+      .where(eq(operationContinuations.operationId, operationId))
+      .orderBy(desc(operationContinuations.sequence))
+      .limit(1);
+    if (
+      latest &&
+      ['waiting_approval', 'ready', 'running'].includes(latest.status)
+    ) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Operation already has an active continuation',
+      );
+    }
+    const continuationSequence = (latest?.sequence ?? 0) + 1;
+    if (continuationSequence > 1_000) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Operation continuation limit exceeded',
+      );
+    }
+    const [continuation] = await transaction
+      .insert(operationContinuations)
+      .values({
+        operationId,
+        sequence: continuationSequence,
+        protocolVersion: operationContinuationProtocolVersion,
+        kind: 'tool_approval',
+        step: 'tool.invoke',
+        approvalId: intent.approvalId,
+        toolCallId: intent.toolCallId,
+        adapterSource: intent.adapterSource,
+        resumeRef: intent.resumeRef,
+        status: 'waiting_approval',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: operationContinuations.id });
+    if (!continuation) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Operation continuation insert failed',
+      );
+    }
+    const [bound] = await transaction
+      .update(toolApprovalIntents)
+      .set({ status: 'bound', boundAt: now })
+      .where(
+        and(
+          eq(toolApprovalIntents.approvalId, intent.approvalId),
+          eq(toolApprovalIntents.status, 'prepared'),
+        ),
+      )
+      .returning({ approvalId: toolApprovalIntents.approvalId });
+    if (!bound) {
+      throw new GatewayPersistenceError(
+        'invalid_event_sequence',
+        'Prepared tool intent was already consumed',
       );
     }
     await transaction.insert(gatewayApprovals).values({

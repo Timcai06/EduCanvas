@@ -3,6 +3,9 @@ import {
   createOperationContinuationInputSchema,
   operationContinuationProtocolVersion,
   operationContinuationSnapshotSchema,
+  prepareToolApprovalIntentInputSchema,
+  toolApprovalIntentProtocolVersion,
+  toolApprovalIntentSnapshotSchema,
 } from './operation-continuation';
 
 const base = {
@@ -101,5 +104,38 @@ describe('Operation continuation contract', () => {
         completedAt: '2026-07-21T12:00:02.000Z',
       }).success,
     ).toBe(true);
+  });
+
+  it('审批意图拒绝任意checkpoint并强制单一生命周期时间', () => {
+    const prepared = {
+      protocol: toolApprovalIntentProtocolVersion,
+      operationId: 'operation:1',
+      actorId: 'user:1',
+      approvalId: 'approval:1',
+      status: 'prepared' as const,
+      expiresAt: '2026-07-21T13:00:00.000Z',
+      work: base.work,
+      preparedAt: '2026-07-21T12:00:00.000Z',
+      boundAt: null,
+      abandonedAt: null,
+    };
+    expect(toolApprovalIntentSnapshotSchema.safeParse(prepared).success).toBe(
+      true,
+    );
+    expect(
+      toolApprovalIntentSnapshotSchema.safeParse({
+        ...prepared,
+        status: 'bound',
+      }).success,
+    ).toBe(false);
+    expect(
+      prepareToolApprovalIntentInputSchema.safeParse({
+        operationId: prepared.operationId,
+        actorId: prepared.actorId,
+        approvalId: prepared.approvalId,
+        expiresAt: prepared.expiresAt,
+        work: { ...prepared.work, parameters: { path: 'private.md' } },
+      }).success,
+    ).toBe(false);
   });
 });
