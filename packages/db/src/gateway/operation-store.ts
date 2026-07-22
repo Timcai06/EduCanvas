@@ -42,13 +42,13 @@ import {
  * 事件序号分配与终态写入委托给内部的 operation-event-writer，但仍在同一事务内提交。
  */
 
+/** PostgreSQL Operation快照不回显未持久化的历史Membership/Profile路由。 */
 export interface GatewayStoredOperationSnapshot {
   operationId: string;
   traceId: string;
   envelopeId: string;
   idempotencyKey: string;
   requestFingerprint: string;
-  route: GatewayResolvedRoute;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
   replayed: boolean;
 }
@@ -102,13 +102,6 @@ export class DrizzleGatewayOperationStore {
           envelopeId: existing.gatewayEnvelopeId,
           idempotencyKey: existing.idempotencyKey,
           requestFingerprint: existing.requestFingerprint,
-          route: {
-            actorUserId: existing.actorUserId,
-            agentId: existing.agentId,
-            notebookId: existing.notebookId,
-            conversationId: existing.conversationId,
-            membershipRole: input.route.membershipRole,
-          },
           status: normalizeOperationStatus(existing.status),
           replayed: true,
         };
@@ -144,7 +137,6 @@ export class DrizzleGatewayOperationStore {
         envelopeId: input.envelopeId,
         idempotencyKey: input.idempotencyKey,
         requestFingerprint: input.requestFingerprint,
-        route: input.route,
         status: 'running',
         replayed: false,
       };

@@ -55,7 +55,7 @@ Gateway文本Turn已迁入统一`TurnApplicationService`：Operation创建时生
 
 ## 路由和共享 Notebook
 
-路由取已认证 `userId/agentId` 与显式 Notebook/Conversation Hint 的交集。Repository 再校验 Membership、Conversation 从属和所需权限：owner/editor/contributor 可回复，viewer 与无成员关系主体被拒绝。共享 Notebook 不传播个人 Agent 的私人能力；每次 Operation 都保留真实 Actor 和其个人 Agent。
+路由取已认证 `userId/agentId` 与显式 Notebook/Conversation Hint 的交集。Repository 再校验 Membership、Conversation 从属和所需权限：owner/editor/contributor 可回复，viewer 与无成员关系主体被拒绝。解析结果同时携带服务端读取的 `conversations.agent_profile_id`，客户端、TUI或Channel不能覆盖 Profile。Gateway当前只装配`general`；遇到`k12.teacher`等尚未接入Gateway的Profile会明确返回`CAPABILITY_UNAVAILABLE`，不得静默降级成通用Agent。共享 Notebook 不传播个人 Agent 的私人能力；每次 Operation 都保留真实 Actor 和其个人 Agent。
 
 ## 能力与审批
 

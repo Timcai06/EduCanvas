@@ -119,6 +119,7 @@ describeWithDatabase('Notebook privacy research fixture', () => {
       agentId: contributor.agentId,
       notebookId: conversation.spaceId,
       conversationId: conversation.id,
+      agentProfileId: 'general',
       membershipRole: 'contributor',
     });
     expect(contributor.agentId).not.toBe(owner.agentId);

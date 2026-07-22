@@ -7,6 +7,7 @@ import {
   gatewayNodeInvocationRequestSchema,
   gatewayOperationEventSchema,
   gatewayProtocolVersion,
+  gatewayResolvedRouteSchema,
   isGatewayTerminalEvent,
   isNotebookMembershipActive,
   notebookRoleAllows,
@@ -76,6 +77,33 @@ describe('Gateway contracts', () => {
       gatewayInboundEnvelopeSchema.parse({
         ...makeEnvelope('web'),
         modelProvider: 'untrusted-client-choice',
+      }),
+    ).toThrow();
+  });
+
+  it('accepts only canonical server-resolved Agent Profile identifiers', () => {
+    const route = {
+      actorUserId: 'user:1',
+      agentId: 'agent:1',
+      notebookId: 'notebook:shared-1',
+      conversationId: 'conversation:1',
+      agentProfileId: 'k12.teacher',
+      membershipRole: 'owner',
+    };
+
+    expect(gatewayResolvedRouteSchema.parse(route).agentProfileId).toBe(
+      'k12.teacher',
+    );
+    expect(() =>
+      gatewayResolvedRouteSchema.parse({
+        ...route,
+        agentProfileId: 'K12 Teacher',
+      }),
+    ).toThrow();
+    expect(() =>
+      gatewayResolvedRouteSchema.parse({
+        ...route,
+        agentProfileId: `a${'b'.repeat(128)}`,
       }),
     ).toThrow();
   });
