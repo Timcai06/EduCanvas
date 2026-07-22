@@ -23,7 +23,10 @@ import {
   DrizzleToolApprovalIntentRepository,
   DrizzleToolEffectRepository,
 } from '@educanvas/db';
-import type { GatewayInboundEnvelope } from '@educanvas/gateway-core';
+import type {
+  GatewayInboundEnvelope,
+  GatewayResolvedRoute,
+} from '@educanvas/gateway-core';
 import {
   projectTurnApplicationEventToGateway,
   type GatewayEventPayload,
@@ -109,6 +112,7 @@ function productionDependencies(): GatewayApplicationDependencies {
 
 type ApplicationFactory = (input: {
   signal: ModelAbortSignal;
+  route: GatewayResolvedRoute;
 }) => TurnApplicationPort;
 
 /** Gateway只负责把可信路由投影成统一命令，再把统一事件投影回Gateway事件。 */
@@ -123,7 +127,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
     this.createApplication =
       typeof dependenciesOrFactory === 'function'
         ? dependenciesOrFactory
-        : ({ signal }) => {
+        : ({ signal, route }) => {
             const nodeAdapters = createNodeToolAdapters(
               dependenciesOrFactory.nodeInvocations,
             );
@@ -137,6 +141,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
                 dependenciesOrFactory.turns,
                 dependenciesOrFactory.nodeInvocations,
                 dependenciesOrFactory.mcpRuntime.capabilities,
+                route.membershipRole,
               ),
               contextLedger: dependenciesOrFactory.contextLedger,
               modelRunLedger: dependenciesOrFactory.modelRunLedger,
@@ -203,7 +208,10 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
         (capability) => capability.name,
       ),
     };
-    const application = this.createApplication({ signal: input.signal });
+    const application = this.createApplication({
+      signal: input.signal,
+      route: input.route,
+    });
     for await (const event of application.run(command)) {
       yield projectTurnApplicationEventToGateway(event, {
         actorUserId: input.route.actorUserId,

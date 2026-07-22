@@ -81,8 +81,10 @@ describe('Gateway Turn Application adapter', () => {
   it('只投影可信route为统一command并映射回Gateway事件', async () => {
     const captured: { command?: TurnApplicationCommand } = {};
     let capturedSignal: typeof signal | null = null;
+    let capturedRoute: GatewayResolvedRoute | null = null;
     const runner = new GatewayAgentTurnRunner((input) => {
       capturedSignal = input.signal as typeof signal;
+      capturedRoute = input.route;
       return {
         async *run(command): AsyncIterable<TurnApplicationEvent> {
           captured.command = command;
@@ -113,6 +115,7 @@ describe('Gateway Turn Application adapter', () => {
 
     const events = await collect(runner);
     expect(capturedSignal).toBe(signal);
+    expect(capturedRoute).toBe(route);
     expect(captured.command).toMatchObject({
       operationId: 'operation:1',
       traceId: 'trace:gateway:1',

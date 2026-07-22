@@ -60,6 +60,7 @@ export {
   type TurnApplicationProfileEvent,
   type TurnApplicationProfilePlan,
   type TurnApplicationProfilePort,
+  type TurnApplicationToolPolicy,
   type TurnApplicationTracePort,
   type TurnApplicationTraceSpan,
 } from './turn-application';
@@ -90,3 +91,7 @@ export {
   type ToolRiskLevel,
   type ToolSource,
 } from './tool-kernel';
+export {
+  resolveToolPolicy,
+  type ToolPolicyResolverInput,
+} from './tool-policy-resolver';

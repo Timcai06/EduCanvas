@@ -1,9 +1,11 @@
 import type { TurnApplicationProfilePort } from '@educanvas/agent-runtime';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import {
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
 import type { GatewayTurnRepositoryPort } from './lifecycle';
+import { resolveGatewayGeneralToolPolicy } from './general-tool-policy';
 
 const SYSTEM_PROMPT = `你是 EduCanvas，一个以教育能力见长的通用个人 Agent。
 根据用户真实意图工作；学习任务中要循序解释、检查理解并尊重可信教学证据，通用任务中不要强行课程化。
@@ -15,6 +17,7 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
     private readonly turns: GatewayTurnRepositoryPort,
     private readonly nodeInvocations: NodeInvocationPersistencePort,
     private readonly staticToolCapabilities: readonly string[],
+    private readonly membershipRole: NotebookMembershipRole,
   ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
@@ -37,16 +40,20 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
         agentId: input.command.actor.agentId,
       },
     ).catch(() => []);
-    const grantedTools = [
+    const availableCapabilities = [
       ...new Set([...this.staticToolCapabilities, ...nodeCapabilities]),
     ];
-    const capabilities = {
-      actor: grantedTools,
-      notebook: grantedTools,
-      profile: grantedTools,
-      channel: grantedTools,
-      environment: grantedTools,
-    };
+    const environment =
+      process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development';
+    const toolPolicy = resolveGatewayGeneralToolPolicy({
+      availableCapabilities,
+      actorCapabilities: availableCapabilities,
+      membershipRole: this.membershipRole,
+      profileId: input.command.profile.profileId,
+      channel: input.command.entrypoint,
+      environment,
+      environmentCapabilities: availableCapabilities,
+    });
     return {
       context: {
         profileVersion: 'gateway-profile-v1',
@@ -88,13 +95,8 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
         promptVersion: 'gateway-general-v2',
         maxToolRounds: 1,
       },
-      toolPolicy: {
-        capabilities,
-        approvedCapabilities: [],
-        channel: input.command.entrypoint,
-        environment:
-          process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
-      },
+      // command.capabilities 是入口传输/渲染协商，不是 Tool grant；只采用服务端策略。
+      toolPolicy,
     };
   }
 }
