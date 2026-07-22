@@ -4,6 +4,7 @@ import '@fontsource-variable/inter';
 import '@fontsource/noto-serif-sc/400.css';
 import '@fontsource/noto-serif-sc/600.css';
 import './globals.css';
+import './effects.css';
 
 /** 统一站点标题和摘要，避免各页面自行维护时出现产品定位漂移。 */
 export const metadata: Metadata = {

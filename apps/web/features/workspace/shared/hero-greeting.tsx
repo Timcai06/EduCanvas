@@ -10,8 +10,9 @@ gsap.registerPlugin(useGSAP, SplitText, DrawSVGPlugin);
 
 /**
  * 扉页问候：墨色衬线大字逐字落下，随后一道朱砂笔触在字底划过——
- * 「落笔」动效身份的第一现场。SplitText 的 aria 兜底保留原文，
- * E2E 的 heading 断言不受切分影响；reduced-motion 下全部静态渲染。
+ * 「落笔」动效身份的第一现场。落字完成后逐字保留一层极缓的墨色呼吸（.hero-ink-char），
+ * 让大字持续「活着」而不喧宾夺主。SplitText 的 aria 兜底保留原文，
+ * E2E 的 heading 断言不受切分影响；reduced-motion 下全部静态渲染、无持续动效。
  */
 export function HeroGreeting() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -30,6 +31,9 @@ export function HeroGreeting() {
           type: 'chars',
           mask: 'chars',
         });
+        /* 落字用 mask 遮住上冒的溢出；完成后换成无遮罩的普通切分承载持续呼吸，
+           否则呼吸的位移会被 mask 裁掉字顶。loopSplit 在 revert 时一并回收。 */
+        let loopSplit: SplitText | null = null;
         const timeline = gsap.timeline();
         timeline
           .fromTo(
@@ -45,6 +49,15 @@ export function HeroGreeting() {
               onComplete: () => {
                 split.revert();
                 heading.classList.remove('is-splitting');
+                loopSplit = SplitText.create(heading, { type: 'chars' });
+                loopSplit.chars.forEach((char, index) => {
+                  const el = char as HTMLElement;
+                  el.classList.add('hero-ink-char');
+                  el.style.setProperty(
+                    '--hero-char-delay',
+                    `${(index * 0.11).toFixed(2)}s`,
+                  );
+                });
               },
             },
           )
@@ -54,6 +67,11 @@ export function HeroGreeting() {
             { drawSVG: '100%', duration: 0.5, ease: 'power2.inOut' },
             '-=0.25',
           );
+        return () => {
+          timeline.kill();
+          loopSplit?.revert();
+          split.revert();
+        };
       });
       media.add('(prefers-reduced-motion: reduce)', () => {
         gsap.set(stroke, { autoAlpha: 1 });

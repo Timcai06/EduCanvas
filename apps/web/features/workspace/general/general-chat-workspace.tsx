@@ -28,10 +28,7 @@ import {
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useGSAP } from '@gsap/react';
-import { List, NotePencil } from '@phosphor-icons/react';
-import { Gear } from '@phosphor-icons/react';
 import gsap from 'gsap';
-import Link from 'next/link';
 import { Flip } from 'gsap/Flip';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -42,9 +39,10 @@ import {
 import { ConversationSidebar } from './conversation-sidebar';
 import { SourcesPanel } from './sources-panel';
 import { HeroGreeting } from '../shared/hero-greeting';
-import { LogoMark } from '../shared/logo-mark';
-import { PromptSuggestions } from './prompt-suggestions';
+import { HeroInkField } from '../shared/hero-ink-field';
+import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { Sheet } from '../shared/sheet';
+import { GeneralWorkspaceHeader } from './general-workspace-header';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -288,60 +286,19 @@ export function GeneralChatWorkspace({
 
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
-      <header className="z-20 flex h-16 shrink-0 items-center gap-1.5 px-3 sm:px-4">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label="笔记本列表"
-          aria-expanded={sidebarOpen}
-          title="笔记本列表"
-          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <List size={19} weight="bold" />
-        </button>
-        {/* 始终可见的"新建"：无论侧栏收起与否，一键回到大搜索框首页开新会话 */}
-        <button
-          type="button"
-          onClick={() => void startNewGeneralChatAction()}
-          aria-label="新建笔记本"
-          title="新建笔记本"
-          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <NotePencil size={19} />
-        </button>
-        <span className="ml-1 inline-flex items-center gap-2.5 font-display text-base font-semibold">
-          <LogoMark size={20} />
-          <span className="hidden sm:inline">EduCanvas</span>
-        </span>
-        <span
-          aria-hidden="true"
-          className="hidden h-5 w-px bg-line/80 sm:block"
-        />
-        <span className="max-w-40 truncate text-sm font-medium text-ink-muted sm:max-w-64">
-          {notebookTitle ?? '未命名笔记本'}
-        </span>
-        <span className="flex-1" />
-        <Link
-          href="/settings"
-          aria-label="通信方式设置"
-          title="通信方式设置"
-          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <Gear aria-hidden="true" size={19} />
-        </Link>
-        <button
-          type="button"
-          onClick={() => {
-            setStudioOpen(true);
-            void fetchNotebookArtifacts()
-              .then(setStudioItems)
-              .catch(() => setStudioItems([]));
-          }}
-          className="rounded-full px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-        >
-          Studio
-        </button>
-      </header>
+      <GeneralWorkspaceHeader
+        notebookTitle={notebookTitle}
+        sidebarOpen={sidebarOpen}
+        studioOpen={studioOpen}
+        onToggleSidebar={toggleSidebar}
+        onNewNotebook={() => void startNewGeneralChatAction()}
+        onOpenStudio={() => {
+          setStudioOpen(true);
+          void fetchNotebookArtifacts()
+            .then(setStudioItems)
+            .catch(() => setStudioItems([]));
+        }}
+      />
 
       <div className="relative flex min-h-0 flex-1">
         <ConversationSidebar
@@ -372,40 +329,45 @@ export function GeneralChatWorkspace({
             </div>
           ) : null}
           {isLanding ? (
-            <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
-              <HeroGreeting />
-              <div ref={composerDockRef} className="w-full">
-                {artifactFlow.generation &&
-                artifactFlow.generation.phase !== 'confirm' ? (
-                  <div className="px-4">
-                    <ArtifactStatusCard
-                      generation={artifactFlow.generation}
-                      onOpen={() => {
-                        const artifactId = artifactFlow.generation?.artifactId;
-                        if (artifactId)
-                          void artifactFlow.openArtifact(artifactId);
-                      }}
-                      onDismiss={artifactFlow.dismiss}
-                      dismissable={!revisingOpenArtifact}
-                    />
-                  </div>
-                ) : null}
-                <Composer
-                  chips={[]}
-                  busy={turn.busy}
-                  statusText={turn.statusText ?? error}
-                  statusTone={error && !turn.busy ? 'error' : 'info'}
-                  onSend={send}
-                  onRemoveChip={() => undefined}
-                  onMenuAction={handleMenuAction}
-                  availableMenuActions={GENERAL_MENU_ACTIONS}
-                  toolChips={composerTools}
-                  onToolAction={handleToolAction}
-                  variant="landing"
-                />
+            <>
+              <HeroInkField />
+              <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
+                <HeroGreeting />
+                <div ref={composerDockRef} className="w-full">
+                  {artifactFlow.generation &&
+                  artifactFlow.generation.phase !== 'confirm' ? (
+                    <div className="px-4">
+                      <ArtifactStatusCard
+                        generation={artifactFlow.generation}
+                        onOpen={() => {
+                          const artifactId =
+                            artifactFlow.generation?.artifactId;
+                          if (artifactId)
+                            void artifactFlow.openArtifact(artifactId);
+                        }}
+                        onDismiss={artifactFlow.dismiss}
+                        dismissable={!revisingOpenArtifact}
+                      />
+                    </div>
+                  ) : null}
+                  <Composer
+                    chips={[]}
+                    busy={turn.busy}
+                    statusText={turn.statusText ?? error}
+                    statusTone={error && !turn.busy ? 'error' : 'info'}
+                    onSend={send}
+                    onStop={() => void turn.stop()}
+                    stopAvailable={turn.stopAvailable}
+                    onRemoveChip={() => undefined}
+                    onMenuAction={handleMenuAction}
+                    availableMenuActions={GENERAL_MENU_ACTIONS}
+                    toolChips={composerTools}
+                    onToolAction={handleToolAction}
+                    variant="landing"
+                  />
+                </div>
               </div>
-              <PromptSuggestions onPick={send} disabled={turn.busy} />
-            </div>
+            </>
           ) : (
             <div className="relative z-10 flex min-h-0 flex-1">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -452,6 +414,8 @@ export function GeneralChatWorkspace({
                     statusText={turn.statusText ?? error}
                     statusTone={error && !turn.busy ? 'error' : 'info'}
                     onSend={send}
+                    onStop={() => void turn.stop()}
+                    stopAvailable={turn.stopAvailable}
                     onRemoveChip={() => undefined}
                     onMenuAction={handleMenuAction}
                     availableMenuActions={GENERAL_MENU_ACTIONS}
@@ -497,6 +461,8 @@ export function GeneralChatWorkspace({
           )}
         </main>
       </div>
+      {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
+      <AgentBusyOverlay active={turn.busy} />
       {isLanding && artifactFlow.openDetail ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
            否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */

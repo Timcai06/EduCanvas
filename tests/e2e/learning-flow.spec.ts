@@ -65,7 +65,9 @@ async function ensureConversationUi(page: Page) {
   if (await progressTrigger.isVisible()) return;
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('继续学习并查看进度。');
-  await composer.press('Enter');
+  const send = page.getByRole('button', { name: '发送' });
+  await expect(send).toBeEnabled();
+  await send.click();
   await expect(aiUnavailableMessage(page)).toBeVisible();
 }
 
@@ -169,6 +171,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
     const encoder = new TextEncoder();
     const testWindow = window as typeof window & {
       __educanvasTurnBodies?: unknown[];
+      __educanvasReleaseTurn?: () => void;
     };
     testWindow.__educanvasTurnBodies = [];
 
@@ -215,7 +218,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               }),
             );
           }, 100);
-          window.setTimeout(() => {
+          testWindow.__educanvasReleaseTurn = () => {
             controller.enqueue(
               frame('message.delta', {
                 turnId,
@@ -223,8 +226,6 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
                 delta: '再比较胡须 [1]。',
               }),
             );
-          }, 220);
-          window.setTimeout(() => {
             controller.enqueue(
               frame('message.citation', {
                 turnId,
@@ -239,8 +240,6 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
                 pageEnd: 3,
               }),
             );
-          }, 280);
-          window.setTimeout(() => {
             controller.enqueue(
               frame('turn.completed', {
                 turnId,
@@ -248,7 +247,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               }),
             );
             controller.close();
-          }, 380);
+          };
         },
       });
       return new Response(stream, {
@@ -265,6 +264,11 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
   await expect(page.getByText('先观察耳朵，', { exact: true })).toBeVisible();
   const lifecycleAnnouncement = page.locator('p[aria-live="polite"]');
   await expect(lifecycleAnnouncement).not.toContainText('先观察耳朵');
+  await page.evaluate(() => {
+    (
+      window as typeof window & { __educanvasReleaseTurn?: () => void }
+    ).__educanvasReleaseTurn?.();
+  });
   await expect(
     page.getByText('先观察耳朵，再比较胡须 ', { exact: false }),
   ).toBeVisible();

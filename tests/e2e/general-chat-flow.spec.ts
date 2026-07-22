@@ -79,7 +79,11 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill(firstPrompt);
   await composer.press('Enter');
-  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'AI 对话' })
+      .getByText(firstPrompt, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
   const notebooks = page.getByRole('navigation', { name: '笔记本' });
@@ -92,7 +96,11 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
     .getByRole('textbox', { name: '向 EduCanvas 提问' })
     .fill(secondPrompt);
   await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
-  await expect(page.getByText(secondPrompt, { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'AI 对话' })
+      .getByText(secondPrompt, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
   await page
@@ -118,7 +126,11 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill(firstPrompt);
   await composer.press('Enter');
-  await expect(page.getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'AI 对话' })
+      .getByText(firstPrompt, { exact: true }),
+  ).toBeVisible();
   /* 学生消息先乐观渲染；等服务端终态后再读取权威Conversation标题，避免与POST并发。 */
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
