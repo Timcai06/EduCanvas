@@ -10,7 +10,7 @@
 - 数据：PostgreSQL + Drizzle，二进制进入对象存储；
 - 长任务：graphile-worker；
 - 模型：`model-gateway` Provider Adapter；
-- 观测：Gateway已有安全结构化日志和进程内低基数指标；外部OpenTelemetry/SLO后端尚未接入。
+- 观测：Gateway已有安全结构化日志和进程内低基数指标；`packages/telemetry`已把默认关闭的OTel Turn Trace Adapter接入Gateway、Web General与Web Teaching，使用属性/事件白名单、比例采样、有界Batch和OTLP HTTP Exporter。Exporter失败只进入`degraded`健康状态，不改变Turn终态；跨进程W3C传播、SLO后端与告警仍待后续纵切。
 
 Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定依赖；真实需求出现时另行决策。
 

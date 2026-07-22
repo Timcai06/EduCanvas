@@ -19,6 +19,7 @@
     "@educanvas/model-gateway": "workspace:*",
     "@educanvas/mcp-runtime": "workspace:*",
     "@educanvas/node-runtime": "workspace:*",
+    "@educanvas/telemetry": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

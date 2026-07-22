@@ -10,7 +10,7 @@
 - Web、Gateway与Worker共享Monorepo包和数据库，但分别是独立进程组合根；
 - Artifact 二进制通过对象存储 Port 保存；
 - `apps/gateway`已实现HTTP/NDJSON、Client/Node session、路由、恢复、审批和内部指标；尚未部署到共享云环境；
-- Redis、Temporal、Kafka、Kubernetes 和 OpenTelemetry 尚未接入。
+- Redis、Temporal、Kafka和Kubernetes尚未接入。OpenTelemetry已完成默认关闭的Turn Trace与OTLP Exporter纵切；跨进程W3C carrier和正式Collector/SLO仍未完成。
 
 ## 环境
 
@@ -76,7 +76,16 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 
 ## Trace
 
-一次用户操作以Gateway `operationId`为主关联键：Client/Channel、Gateway事件、Agent Runtime `traceId/turnId`、Model Run、Tool Call和数据库共享该ID或显式关联；Artifact长任务另有job ID并从Operation/Artifact引用恢复。当前单进程日志与账本已可串联，跨进程OpenTelemetry传播仍是production门禁。
+一次用户操作以Gateway `operationId`为主关联键：Client/Channel、Gateway事件、Agent Runtime `traceId/turnId`、Model Run、Tool Call和数据库共享该ID或显式关联；Artifact长任务另有job ID并从Operation/Artifact引用恢复。当前Turn span只记录`operation_id/stage/entrypoint`和静态事件白名单，采样默认0.1、Batch队列512、批次64、导出超时默认3秒；Actor、Notebook、正文、Prompt、工具参数、判分键、Token、Secret、Credential和对象key均不进入遥测。跨进程W3C carrier仍是production门禁。
+
+遥测配置：
+
+- `EDUCANVAS_OTEL_ENABLED=false`默认关闭；
+- `EDUCANVAS_OTEL_EXPORTER_OTLP_ENDPOINT`必须显式配置，production/staging只允许HTTPS，本地HTTP只允许loopback；
+- `EDUCANVAS_OTEL_EXPORTER_HEADERS_JSON`最多16个受控Header，拒绝CR/LF、Host和Content-Length；
+- `EDUCANVAS_OTEL_SAMPLE_RATIO`范围0–1，默认0.1；
+- `EDUCANVAS_OTEL_EXPORT_TIMEOUT_MS`范围100–30000，默认3000；
+- 配置或初始化失败返回安全`degraded` NOOP；运行期导出失败更新`export_failed`，业务继续运行。
 
 ## 故障降级
 

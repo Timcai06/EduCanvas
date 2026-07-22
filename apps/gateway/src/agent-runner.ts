@@ -48,6 +48,7 @@ import {
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
+import { getGatewayTelemetryRuntime } from './telemetry';
 
 const SYSTEM_PROMPT = `你是 EduCanvas，一个以教育能力见长的通用个人 Agent。
 根据用户真实意图工作；学习任务中要循序解释、检查理解并尊重可信教学证据，通用任务中不要强行课程化。
@@ -359,6 +360,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
                 signal,
                 dependenciesOrFactory.turns,
               ),
+              trace: getGatewayTelemetryRuntime().turnTrace,
             });
           };
   }

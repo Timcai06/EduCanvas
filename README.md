@@ -199,6 +199,7 @@ EduCanvas/
 │   ├── channel-telegram/     # Telegram 原生 Update/Delivery 映射
 │   ├── node-host/            # Node 只读能力安全执行器
 │   ├── model-gateway/        # 可回滚native/AI SDK Provider Adapters
+│   ├── telemetry/            # 可关闭OTel Trace Adapter与脱敏/采样边界
 │   ├── canvas-protocol/      # Artifact Schema、交互事件与服务端判分
 │   ├── teaching-core/        # K12 状态机、可信事件、掌握度与领域 Port
 │   ├── teaching-runtime/     # 迁移期 K12 Loop/Tool；长期只保留 Profile/Workflow/领域适配
@@ -218,6 +219,7 @@ EduCanvas/
 | `gateway-client`   | `gateway-core`                           | 数据库、Agent Runtime、Provider SDK         |
 | `agent-runtime`    | `agent-core`                             | K12 教学状态                                |
 | `model-gateway`    | `agent-core`、隔离的Provider Adapter SDK | Web、K12 领域                               |
+| `telemetry`        | `agent-runtime`、隔离的OTel SDK          | 正文、Prompt、Credential、业务事实          |
 | `canvas-protocol`  | Zod                                      | React 页面、模型供应商                      |
 | `teaching-core`    | `agent-core`、Zod                        | Next.js、Drizzle、具体 Provider             |
 | `teaching-runtime` | Agent/Canvas/Teaching Core               | 另一套 Agent Loop、React、具体 Provider SDK |
