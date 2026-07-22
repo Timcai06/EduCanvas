@@ -32,7 +32,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 - 学生消息、老师消息和安全决策继续保留K12领域形状；Model Run、Tool Call与Turn Context Snapshot改为统一`agent_operation`账本归属，同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到同一Operation的成功Model Run；
 - `agent-runtime`按消息数/字符预算选择最新完整历史，Web在创建Turn时把选择的消息ID、AssetVersion ID、builder版本和计数与消息/Model Run原子落账；历史不能注入`system`角色；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
-- 已定义`educanvas.operation-continuation.v1`并建立最小化PostgreSQL控制账本：一个Operation可按序保留多个历史等待点、同一时刻仅一个活动等待点。approval通过后，决策事件、ready游标与Graphile任务原子提交；worker以owner + generation + expiry领取，恢复前重算Agent/Membership/Conversation/approval，continuation与Operation终态原子提交。Turn Application已把L2/L3从失败终态改为“Schema验证→pending Tool Call→Adapter耐久准备→approval.required无终态挂起”；`educanvas.tool-approval-intent.v1`仓储已把prepared意图与Gateway事件、Approval、continuation原子绑定，缺少或漂移的意图整笔拒绝，过期prepared记录由有界维护任务收敛。生产Node/MCP Adapter仍待后续纵切，因此尚不是可用的高风险工具产品能力；
+- 已定义`educanvas.operation-continuation.v1`并建立最小化PostgreSQL控制账本：一个Operation可按序保留多个历史等待点、同一时刻仅一个活动等待点。approval通过后，决策事件、ready游标与Graphile任务原子提交；worker以owner + generation + expiry领取，恢复前重算Agent/Membership/Conversation/approval，continuation与Operation终态原子提交。Turn Application把L2/L3变为“Schema验证→pending Tool Call→Adapter耐久准备→approval.required无终态挂起”；`educanvas.tool-approval-intent.v1`把prepared意图与Gateway事件、Approval、continuation原子绑定。MCP Adapter现以独立短期密文意图实现L2/L3恢复，外呼前擦除参数，重领时按Effect Ledger补齐或收敛未知；高风险Node仍未开放；
 - continuation取消以PostgreSQL请求为跨进程事实：等待态立即原子取消，运行态由Worker heartbeat/结算观察，未过期lease触发Graphile重试而不是误报成功，过期后用新generation重领；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
@@ -42,7 +42,7 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - Answer 已包含有界的持久化会话历史与本轮物化 Asset 文本，但尚不包含摘要或 Artifact 状态；
 - Web BFF仍承担lease、取消、安全、引用与SSE兼容投影，后续可继续削薄，但已不拥有通用身份/路由或第二套循环；
-- Node的L0/L1只读Adapter已通过统一Tool Kernel接入Web General与Gateway/TUI，并按Operation主体、新鲜心跳、Schema、timeout/cancel与幂等请求收敛；MCP v1无鉴权L0/L1 Adapter也已接入两处组合根，执行前核对服务端可信Schema，限制请求、响应和结构化输出，远端错误与元数据不进入模型。Bearer工具在真实Credential Broker接入前保持disabled；MCP L2/L3 continuation与AI SDK Provider Adapter仍待后续纵切；
+- Node的L0/L1只读Adapter已通过统一Tool Kernel接入Web General与Gateway/TUI，并按Operation主体、新鲜心跳、Schema、timeout/cancel与幂等请求收敛；MCP v1无鉴权L0/L1 Adapter也已接入两处组合根，执行前核对服务端可信Schema，限制请求、响应和结构化输出，远端错误与元数据不进入模型。无鉴权MCP L2/L3 write能力在配置共享意图密钥后经公共审批与Worker continuation恢复；Bearer工具在真实Credential Broker接入前保持disabled；AI SDK Provider Adapter仍待后续纵切；
 - 图片虽然可作为 Asset 保留原生引用，但当前文本 Provider 不消费原生图片、音频或视频；
 - Asset、KnowledgeSource与课程Session仍有垂直耦合，虽然Space/Conversation/Gateway主干已建立，统一摄取仍未完成。
 

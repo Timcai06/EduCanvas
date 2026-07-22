@@ -275,6 +275,9 @@ importers:
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@educanvas/mcp-runtime':
+        specifier: workspace:*
+        version: link:../../packages/mcp-runtime
       '@educanvas/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -491,6 +494,9 @@ importers:
 
   packages/mcp-runtime:
     dependencies:
+      '@educanvas/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
       '@educanvas/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime

@@ -209,6 +209,20 @@ export {
   ToolApprovalIntentOwnershipError,
 } from './tool-approval-intent-repository';
 export {
+  DrizzleMcpIntentRepository,
+  McpIntentConflictError,
+  McpIntentLifecycleError,
+  McpIntentOwnershipError,
+  type McpDurableIntentRecord,
+  type McpIntentMetadataRecord,
+  type McpSealedIntentRecord,
+} from './mcp-intent-repository';
+export {
+  DrizzleMcpIntentReconciler,
+  MAX_MCP_INTENT_RECONCILIATION_BATCH,
+} from './mcp-intent-reconciler';
+export { mcpToolIntents } from './schema/mcp-intent';
+export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,
   SafetyDecisionOwnershipError,

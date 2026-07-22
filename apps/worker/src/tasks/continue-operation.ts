@@ -11,6 +11,7 @@ import {
 } from '@educanvas/db';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
+import { createProductionMcpContinuationAdapters } from '../mcp/production-adapter';
 
 const payloadSchema = z.object({ continuationId: z.uuid() }).strict();
 
@@ -213,7 +214,9 @@ export function createContinueOperationTask(input: {
   };
 }
 
-/** 生产注册点；真实Node/MCP Adapter将在对应纵切显式加入，缺失时诚实失败。 */
-export const continueOperation = createContinueOperationTask({ adapters: [] });
+/** 生产只注册配置完整的耐久Adapter；缺密钥/配置时仍以adapter_unavailable诚实失败。 */
+export const continueOperation = createContinueOperationTask({
+  adapters: createProductionMcpContinuationAdapters(),
+});
 
 export { OPERATION_CONTINUATION_TASK };

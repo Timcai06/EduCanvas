@@ -34,7 +34,7 @@ const registrationSchema = z
     modelToolName: toolNameSchema,
     description: z.string().trim().min(1).max(500),
     capability: capabilitySchema,
-    risk: z.enum(['l0', 'l1']),
+    risk: z.enum(['l0', 'l1', 'l2', 'l3']),
     effect: z.enum(['read', 'write']),
     authentication: z.enum(['none', 'bearer']),
     inputSchema: z.record(z.string(), z.unknown()),
@@ -102,6 +102,13 @@ export function readMcpToolRegistrations(
         env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
       );
       canonicalMcpInputSchema(registration.inputSchema);
+      if (
+        (registration.risk === 'l2' || registration.risk === 'l3') &&
+        (registration.effect !== 'write' ||
+          registration.capability !== 'external.mcp.invoke')
+      ) {
+        throw new McpConfigurationError();
+      }
     }
     ensureUniqueRegistrations(registrations);
     return registrations;

@@ -27,9 +27,11 @@ Telegram 不属于默认 `make all` profile。只有同时配置 `TELEGRAM_BOT_T
 
 ### MCP v1 外部工具
 
-`EDUCANVAS_MCP_TOOLS_JSON`是最多32项的服务端可信注册数组；默认`[]`即关闭。每项必须显式给出`serverId`、`endpoint`、`remoteToolName`、`modelToolName`、`description`、`capability`、`risk`、`effect`、`authentication`、`inputSchema`和`timeoutMs`。当前只允许L0/L1；生产端点强制HTTPS，本地HTTP只允许loopback。配置不应包含Token、Cookie或URL userinfo。
+`EDUCANVAS_MCP_TOOLS_JSON`是最多32项的服务端可信注册数组；默认`[]`即关闭。每项必须显式给出`serverId`、`endpoint`、`remoteToolName`、`modelToolName`、`description`、`capability`、`risk`、`effect`、`authentication`、`inputSchema`和`timeoutMs`。生产端点强制HTTPS，本地HTTP只允许loopback。配置不应包含Token、Cookie或URL userinfo。
 
-Gateway与Web General在进程启动时读取同一配置。无鉴权工具进入统一Tool Kernel；Bearer工具只有组合根注入真实Credential Broker后才会暴露，当前默认组合保持disabled。状态使用`disabled/idle/ready/degraded`和`configuration/credential/transport/protocol`稳定码，不记录端点、参数、Credential或远端错误正文。MCP配置错误只禁用MCP，不拖垮普通聊天；协议或输出异常只让该次工具诚实失败。
+L2/L3只允许write，capability必须为`external.mcp.invoke`，并额外要求`EDUCANVAS_MCP_INTENT_ENCRYPTION_KEY`：32字节随机值的base64编码。可用`openssl rand -base64 32`生成，但只能写入部署Secret，禁止提交仓库。Gateway、Web和Worker必须使用同一密钥；缺失或非法时仅高风险工具以`disabled/durability`关闭。当前生产组合尚无Bearer Credential Broker，因此Bearer工具仍全部关闭；不要把Token改放进工具JSON或加密意图。
+
+Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具直接进入统一Tool Kernel；L2/L3只准备审批并由Worker continuation恢复，前台调用被拒绝。状态使用`disabled/idle/ready/degraded`和`configuration/credential/durability/transport/protocol`稳定码，不记录端点、参数、Credential或远端错误正文。MCP配置错误只禁用MCP，不拖垮普通聊天；协议或输出异常只让该次工具诚实失败。
 
 ## 部署原则
 

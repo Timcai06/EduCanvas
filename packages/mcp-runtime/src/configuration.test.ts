@@ -61,4 +61,19 @@ describe('MCP服务端可信注册', () => {
       ).toThrow(McpConfigurationError);
     }
   });
+
+  it('高风险MCP必须声明write副作用', () => {
+    expect(() =>
+      readMcpToolRegistrations({
+        EDUCANVAS_DEPLOYMENT_ENV: 'local',
+        EDUCANVAS_MCP_TOOLS_JSON: JSON.stringify([
+          mcpRegistration({
+            capability: 'external.mcp.invoke',
+            risk: 'l2',
+            effect: 'read',
+          }),
+        ]),
+      }),
+    ).toThrow(McpConfigurationError);
+  });
 });
