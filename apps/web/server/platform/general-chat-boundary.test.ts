@@ -21,14 +21,29 @@ describe('默认通用Chat产品边界', () => {
   });
 
   it('通用Turn不导入教学Session、教学工具或固定课程', () => {
-    const turn = source('./general-turn.ts');
+    const turn = [
+      source('./general-turn.ts'),
+      source('./general-turn-profile.ts'),
+    ].join('\n');
     expect(turn).toContain('TurnApplicationService');
-    expect(turn).not.toContain('AgentLoopEngine');
-    expect(turn).not.toContain('AgentToolRegistry');
     expect(turn).toContain('默认不要假定用户是学生');
     expect(turn).not.toContain('demoLesson');
     expect(turn).not.toContain('lessonSessions');
     expect(turn).not.toContain('getStudentState');
     expect(turn).not.toContain("taskAlias: 'teaching.turn'");
+  });
+
+  it('通用Turn拆分模块不引入K12 Runtime或第二套模型循环', () => {
+    const modules = [
+      source('./general-turn.ts'),
+      source('./general-turn-lifecycle.ts'),
+      source('./general-turn-persistence.ts'),
+      source('./general-turn-profile.ts'),
+      source('./general-turn-tools.ts'),
+    ].join('\n');
+    expect(modules).not.toContain('@educanvas/teaching-core');
+    expect(modules).not.toContain('@educanvas/teaching-runtime');
+    expect(modules).not.toContain('AgentLoopEngine');
+    expect(modules).not.toContain('AgentToolRegistry');
   });
 });
