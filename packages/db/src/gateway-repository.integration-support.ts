@@ -49,6 +49,8 @@ export async function truncateGatewayTables(): Promise<void> {
   await getDatabase().execute(sql`
       truncate table
         gateway_handoff_tokens,
+        operation_continuations,
+        tool_approval_intents,
         gateway_approvals,
         gateway_operation_events,
         gateway_deliveries,

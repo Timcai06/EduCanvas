@@ -1376,6 +1376,64 @@ export const toolEffects = pgTable(
 );
 
 /**
+ * Adapter完成耐久准备、Gateway尚未公开approval.required之间的最小意图。
+ * 这里只保存恢复引用，不提供参数、Prompt、正文、Credential、Secret或结果字段。
+ */
+export const toolApprovalIntents = pgTable(
+  'tool_approval_intents',
+  {
+    approvalId: text('approval_id').primaryKey(),
+    operationId: uuid('operation_id')
+      .notNull()
+      .references(() => agentOperations.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => platformUsers.id, { onDelete: 'cascade' }),
+    protocolVersion: text('protocol_version').notNull(),
+    toolCallId: uuid('tool_call_id')
+      .notNull()
+      .references(() => toolCalls.id, { onDelete: 'cascade' }),
+    adapterSource: text('adapter_source').notNull(),
+    resumeRef: text('resume_ref').notNull(),
+    status: text('status').notNull().default('prepared'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    preparedAt: timestamp('prepared_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    boundAt: timestamp('bound_at', { withTimezone: true }),
+    abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('tool_approval_intents_tool_call_unique').on(table.toolCallId),
+    uniqueIndex('tool_approval_intents_adapter_resume_unique').on(
+      table.adapterSource,
+      table.resumeRef,
+    ),
+    index('tool_approval_intents_status_expiry_idx').on(
+      table.status,
+      table.expiresAt,
+      table.preparedAt,
+    ),
+    check(
+      'tool_approval_intents_status_check',
+      sql`${table.status} in ('prepared', 'bound', 'abandoned')`,
+    ),
+    check(
+      'tool_approval_intents_text_check',
+      sql`${table.protocolVersion} = 'educanvas.tool-approval-intent.v1' and char_length(${table.approvalId}) between 1 and 256 and ${table.approvalId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and ${table.adapterSource} in ('local', 'teaching', 'mcp', 'node') and char_length(${table.resumeRef}) between 1 and 256 and ${table.resumeRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$'`,
+    ),
+    check(
+      'tool_approval_intents_lifecycle_check',
+      sql`(${table.status} = 'prepared' and ${table.boundAt} is null and ${table.abandonedAt} is null) or (${table.status} = 'bound' and ${table.boundAt} is not null and ${table.abandonedAt} is null) or (${table.status} = 'abandoned' and ${table.boundAt} is null and ${table.abandonedAt} is not null)`,
+    ),
+    check(
+      'tool_approval_intents_time_check',
+      sql`${table.expiresAt} > ${table.preparedAt} and (${table.boundAt} is null or ${table.boundAt} >= ${table.preparedAt}) and (${table.abandonedAt} is null or ${table.abandonedAt} >= ${table.preparedAt})`,
+    ),
+  ],
+);
+
+/**
  * 高风险工具/外部等待的耐久执行游标。只保存稳定业务引用与lease，
  * 不保存Prompt、消息正文、工具参数、Credential、Secret或副作用结果。
  */

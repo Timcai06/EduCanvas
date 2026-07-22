@@ -4,6 +4,10 @@ import { z } from 'zod';
 export const operationContinuationProtocolVersion =
   'educanvas.operation-continuation.v1' as const;
 
+/** Adapter耐久准备与Gateway原子绑定之间的最小意图协议。 */
+export const toolApprovalIntentProtocolVersion =
+  'educanvas.tool-approval-intent.v1' as const;
+
 /** Graphile Worker注册与Gateway原子入队共用的任务名，禁止调用方散写。 */
 export const OPERATION_CONTINUATION_TASK = 'operation:continue' as const;
 
@@ -86,6 +90,79 @@ export const createOperationContinuationInputSchema = z
 export type CreateOperationContinuationInput = z.infer<
   typeof createOperationContinuationInputSchema
 >;
+
+export const toolApprovalIntentStatuses = [
+  'prepared',
+  'bound',
+  'abandoned',
+] as const;
+export const toolApprovalIntentStatusSchema = z.enum(
+  toolApprovalIntentStatuses,
+);
+export type ToolApprovalIntentStatus = z.infer<
+  typeof toolApprovalIntentStatusSchema
+>;
+
+/**
+ * Adapter只能准备稳定恢复引用；参数、Prompt、正文、Credential、Secret与结果均无字段可写。
+ * expiresAt与公开审批共用，Gateway绑定时必须逐值核对。
+ */
+export const prepareToolApprovalIntentInputSchema = z
+  .object({
+    operationId: opaqueIdSchema,
+    actorId: opaqueIdSchema,
+    approvalId: opaqueIdSchema,
+    expiresAt: z.iso.datetime({ offset: true }),
+    work: operationContinuationWorkSchema,
+  })
+  .strict();
+export type PrepareToolApprovalIntentInput = z.infer<
+  typeof prepareToolApprovalIntentInputSchema
+>;
+
+export const toolApprovalIntentSnapshotSchema = z
+  .object({
+    protocol: z.literal(toolApprovalIntentProtocolVersion),
+    operationId: opaqueIdSchema,
+    actorId: opaqueIdSchema,
+    approvalId: opaqueIdSchema,
+    status: toolApprovalIntentStatusSchema,
+    expiresAt: z.iso.datetime({ offset: true }),
+    work: operationContinuationWorkSchema,
+    preparedAt: z.iso.datetime({ offset: true }),
+    boundAt: z.iso.datetime({ offset: true }).nullable(),
+    abandonedAt: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .strict()
+  .superRefine((snapshot, context) => {
+    const bound = snapshot.status === 'bound';
+    const abandoned = snapshot.status === 'abandoned';
+    if (bound !== (snapshot.boundAt !== null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['boundAt'],
+        message: '只有bound意图必须记录绑定时间',
+      });
+    }
+    if (abandoned !== (snapshot.abandonedAt !== null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['abandonedAt'],
+        message: '只有abandoned意图必须记录放弃时间',
+      });
+    }
+  });
+export type ToolApprovalIntentSnapshot = z.infer<
+  typeof toolApprovalIntentSnapshotSchema
+>;
+
+/** Adapter准备审批时使用；绑定Approval与continuation仍由Gateway Operation Store独占。 */
+export interface ToolApprovalIntentPort {
+  prepare(input: PrepareToolApprovalIntentInput): Promise<{
+    intent: ToolApprovalIntentSnapshot;
+    replayed: boolean;
+  }>;
+}
 
 /** 只包含控制状态与稳定引用的恢复快照；身份、授权、审批与副作用结果均不是本表事实。 */
 export const operationContinuationSnapshotSchema = z

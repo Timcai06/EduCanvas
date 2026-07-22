@@ -97,10 +97,11 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 ## 七、Operation、Workflow 与持久任务
 
 - Gateway Event 的 `operationId + sequence` 支持断线后的事件恢复；
-- 事件恢复不等于计算续跑：当前审批通过、进程崩溃或等待外部结果后，没有统一 continuation 执行器；
+- 事件恢复与计算续跑保持两层：Gateway事件负责客户端断线恢复，PostgreSQL continuation + Graphile Worker只恢复明确的审批/外部等待点；
 - Artifact 生成、资料摄取、OCR、音视频渲染等分钟级工作由 Worker 处理；
 - 普通 Turn 不应全部进入耐久 Workflow；只有存在明确等待点、人工审批或跨进程副作用的有界流程才需要 checkpoint/continuation；
 - L2/L3 Tool必须先过五维权限与参数Schema，再写pending Tool Call并调用Adapter的幂等`prepareApproval`；成功后Turn只发`approval.required`、Trace以`suspended`结束并保持无业务终态挂起，准备失败或取消不得伪装成已创建审批，更不能提前执行副作用；
+- `prepareApproval`必须先写版本化最小意图；Gateway只消费同Operation、同Actor、同expiry的prepared意图，并在单事务创建公开审批与continuation，禁止事件存在而恢复游标缺失；
 - 无论采用原生实现还是 LangGraph，Operation 仍是业务游标，权限与 effect ledger 仍由 EduCanvas 拥有。
 
 ## 八、框架边界

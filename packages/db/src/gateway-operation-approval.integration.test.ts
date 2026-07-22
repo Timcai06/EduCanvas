@@ -4,8 +4,12 @@ import {
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayOperationStore,
 } from './gateway-repository';
+import { DrizzleAgentModelRunRepository } from './agent-model-run-repository';
+import { DrizzleAgentToolCallRepository } from './agent-tool-call-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
+import { DrizzleToolApprovalIntentRepository } from './tool-approval-intent-repository';
+import * as schema from './schema';
 import {
   closeGatewayConnection,
   describeWithDatabase,
@@ -238,23 +242,84 @@ describeWithDatabase(
         { type: 'operation.accepted' },
         now,
       );
-      await store.append(
-        operation.operationId,
-        {
-          type: 'approval.required',
-          approval: {
-            approvalId: 'approval:1',
-            operationId: operation.operationId,
-            actorUserId: owner.userId,
-            capability: 'filesystem.read_allowlisted',
-            risk: 'l2',
-            summary: '读取本地学习资料',
-            requestedAt: now.toISOString(),
-            expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-          },
+      const expiresAt = new Date(now.getTime() + 60_000).toISOString();
+      const approvalRequired = {
+        type: 'approval.required' as const,
+        approval: {
+          approvalId: 'approval:1',
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          capability: 'filesystem.read_allowlisted' as const,
+          risk: 'l2' as const,
+          summary: '读取本地学习资料',
+          requestedAt: now.toISOString(),
+          expiresAt,
+        },
+      };
+      await expect(
+        store.append(operation.operationId, approvalRequired, now),
+      ).rejects.toMatchObject({ code: 'invalid_event_sequence' });
+      expect(
+        await store.listEvents(operation.operationId, -1, owner.userId),
+      ).toMatchObject([{ type: 'operation.accepted' }]);
+      expect(await approvals.listPending(owner.userId, now)).toHaveLength(0);
+      expect(
+        await getDatabase()
+          .select({ id: schema.operationContinuations.id })
+          .from(schema.operationContinuations),
+      ).toHaveLength(0);
+      const turn = await new DrizzlePlatformTurnRepository(
+        getDatabase(),
+      ).attachGatewayTurn({
+        operationId: operation.operationId,
+        conversationId: conversation.id,
+        trustedSubjectId: owner.userId,
+        clientMessageId: 'approval:message',
+        parts: [{ type: 'text', text: '读取受控资料' }],
+        now,
+      });
+      const modelRun = await new DrizzleAgentModelRunRepository(
+        getDatabase(),
+      ).createOrGet({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        assistantMessageId: turn.assistantMessage.id,
+        phase: 'answer',
+        taskAlias: 'agent.turn',
+        modelAlias: 'primary',
+        promptVersion: 'approval-intent-test-v1',
+        promptHash: 'd'.repeat(64),
+        now,
+      });
+      const toolCall = await new DrizzleAgentToolCallRepository(
+        getDatabase(),
+      ).createOrGet({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        answerModelRunId: modelRun.run.id,
+        providerToolCallId: 'approval:provider-call',
+        executionId: 'approval:execution',
+        toolName: 'readAllowlistedFile',
+        exposure: 'model',
+        effect: 'read',
+        arguments: { path: 'notes/algebra.md' },
+        now,
+      });
+      await new DrizzleToolApprovalIntentRepository(getDatabase()).prepare({
+        operationId: operation.operationId,
+        actorId: owner.userId,
+        approvalId: 'approval:1',
+        expiresAt,
+        work: {
+          kind: 'tool_invocation',
+          step: 'tool.invoke',
+          toolCallId: toolCall.call.id,
+          adapterSource: 'node',
+          resumeRef: 'node-invocation:approval-1',
         },
         now,
-      );
+      });
+      await store.append(operation.operationId, approvalRequired, now);
       expect(await approvals.listPending(owner.userId, now)).toHaveLength(1);
       await expect(
         store.resolveApproval({
