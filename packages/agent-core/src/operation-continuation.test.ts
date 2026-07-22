@@ -45,6 +45,7 @@ describe('Operation continuation contract', () => {
       actorId: 'user:1',
       approvalId: 'approval:1',
       work: base.work,
+      traceCarrier: null,
     });
     expect(
       createOperationContinuationInputSchema.safeParse({
@@ -56,13 +57,48 @@ describe('Operation continuation contract', () => {
     ).toBe(false);
   });
 
+  it('只接受有效的W3C carrier并兼容旧记录', () => {
+    const traceCarrier = {
+      traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+    };
+    expect(
+      createOperationContinuationInputSchema.parse({
+        operationId: 'operation:1',
+        actorId: 'user:1',
+        approvalId: 'approval:1',
+        work: base.work,
+        traceCarrier,
+      }).traceCarrier,
+    ).toEqual(traceCarrier);
+    expect(
+      createOperationContinuationInputSchema.safeParse({
+        operationId: 'operation:1',
+        actorId: 'user:1',
+        approvalId: 'approval:1',
+        work: base.work,
+        traceCarrier: {
+          traceparent: `00-${'0'.repeat(32)}-${'b'.repeat(16)}-01`,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createOperationContinuationInputSchema.safeParse({
+        operationId: 'operation:1',
+        actorId: 'user:1',
+        approvalId: 'approval:1',
+        work: base.work,
+        traceCarrier: { ...traceCarrier, baggage: 'private=value' },
+      }).success,
+    ).toBe(false);
+  });
+
   it('强制running持有完整lease且非running不保留lease', () => {
     expect(
-      operationContinuationSnapshotSchema.safeParse({
+      operationContinuationSnapshotSchema.parse({
         ...base,
         status: 'waiting_approval',
-      }).success,
-    ).toBe(true);
+      }).traceCarrier,
+    ).toBeNull();
     expect(
       operationContinuationSnapshotSchema.safeParse({
         ...base,
@@ -119,9 +155,9 @@ describe('Operation continuation contract', () => {
       boundAt: null,
       abandonedAt: null,
     };
-    expect(toolApprovalIntentSnapshotSchema.safeParse(prepared).success).toBe(
-      true,
-    );
+    expect(
+      toolApprovalIntentSnapshotSchema.parse(prepared).traceCarrier,
+    ).toBeNull();
     expect(
       toolApprovalIntentSnapshotSchema.safeParse({
         ...prepared,

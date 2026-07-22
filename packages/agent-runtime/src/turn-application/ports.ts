@@ -5,6 +5,7 @@ import type {
   TurnApplicationCommand,
   TurnApplicationEvent,
   TurnApplicationFailureCode,
+  W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
 import type { ToolKernelPolicyContext } from '../tool-kernel';
@@ -186,7 +187,9 @@ export interface TurnApplicationCancellationPort {
   }): Promise<TurnApplicationCancellationHandle>;
 }
 
+/** Turn span只导出可空W3C carrier；它是观测元数据，不得充当业务Trace或授权。 */
 export interface TurnApplicationTraceSpan {
+  carrier(): W3cTraceCarrier | null;
   event(name: string, attributes?: Readonly<Record<string, string>>): void;
   end(status: 'completed' | 'failed' | 'cancelled' | 'suspended'): void;
 }

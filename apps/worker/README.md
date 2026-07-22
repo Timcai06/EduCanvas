@@ -10,14 +10,16 @@ EduCanvas 的持久任务 worker 进程（[ADR-0019](../../docs/09-decisions/001
 
 ## 核心文件
 
-- `src/index.ts`：进程入口，读取 `DATABASE_URL`、注册任务、优雅停机；
-- `src/tasks/index.ts`：任务注册表；
+- `src/index.ts`：进程入口，启动Graphile并在退出前flush/shutdown telemetry；
+- `src/bootstrap.ts`：先加载workspace环境，再惰性加载并构造Telemetry与任务注册表；
+- `src/process-lifecycle.ts`：接管终止信号，先停止Graphile Runner，再由进程入口flush/shutdown telemetry；
+- `src/tasks/index.ts`：惰性任务注册表；
 - `src/tasks/system-heartbeat.ts`：冒烟任务，验证入队→消费回路；
 - `src/tasks/purge-anonymous-subjects.ts`：每日03:15 UTC清理超过保留窗口的匿名数据库主体；
 - `src/tasks/ingest-knowledge-document.ts`：受控创建/复用Source并写入已解析资料版本；
 - `src/tasks/generate-artifact.ts`：结构化产物与音频概览生成；音频在对象写入后
   先保存checkpoint，重投时校验已有对象并继续提交版本，不重复调用TTS；
-- `src/tasks/continue-operation.ts`：消费只含continuation UUID的审批续跑任务，重算当前Agent/Notebook/approval范围、维护generation lease，并要求Adapter先结算业务账本再原子提交continuation与Operation终态；
+- `src/tasks/continue-operation.ts`：消费只含continuation UUID的审批续跑任务，重算当前Agent/Notebook/approval范围，在恢复的W3C active子span内维护generation lease、调用Adapter并提交continuation与Operation终态；
 - `src/approval-continuation.integration.test.ts`：覆盖批准原子入队、队列隐私、Worker跨进程领取、终态原子性与Membership撤销后fail closed；
 - `src/tasks/audio-overview-generation.ts`：把1–8项已验证来源压成受限脚本；
 - `src/worker.integration.test.ts`：队列回路与 SQL 事务性入队的集成测试。
@@ -28,7 +30,7 @@ EduCanvas 的持久任务 worker 进程（[ADR-0019](../../docs/09-decisions/001
 make dev                 # 仓库根:同时启动 Web 与 worker
 pnpm dev                 # 亦可:worker 会自行加载根 .env/.env.local(不覆盖已有环境)
 pnpm --filter @educanvas/worker dev    # 只启动 worker
-pnpm --filter @educanvas/worker build  # esbuild打包内部workspace源码
+pnpm --filter @educanvas/worker build  # esbuild打包内部workspace源码，E2E会直接启动该bundle
 make integration         # 含本包的 PostgreSQL 集成测试
 ```
 

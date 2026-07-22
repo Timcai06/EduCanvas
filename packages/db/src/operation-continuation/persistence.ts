@@ -62,6 +62,7 @@ export function toContinuationSnapshot(
       adapterSource: row.adapterSource,
       resumeRef: row.resumeRef,
     },
+    traceCarrier: row.traceParent ? { traceparent: row.traceParent } : null,
     leaseGeneration: row.leaseGeneration,
     leaseOwnerId: row.leaseOwnerId,
     leaseExpiresAt: row.leaseExpiresAt?.toISOString() ?? null,

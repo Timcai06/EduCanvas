@@ -13,18 +13,24 @@ import {
   type TelemetryConfiguration,
   type TelemetryEnvironment,
 } from './config';
+import {
+  NOOP_CONTINUATION_TRACE,
+  OpenTelemetryContinuationTracePort,
+  type ContinuationTracePort,
+} from './continuation-trace-adapter';
 import { MutableTelemetryHealth, type TelemetryHealthSnapshot } from './health';
 import { ResilientSpanExporter } from './resilient-exporter';
 import { OpenTelemetryTurnTracePort } from './turn-trace-adapter';
 
 const NOOP_TRACE: TurnApplicationTracePort = {
   start() {
-    return { event() {}, end() {} };
+    return { carrier: () => null, event() {}, end() {} };
   },
 };
 
 export interface TelemetryRuntime {
   readonly turnTrace: TurnApplicationTracePort;
+  readonly continuationTrace: ContinuationTracePort;
   health(): TelemetryHealthSnapshot;
   forceFlush(): Promise<void>;
   shutdown(): Promise<void>;
@@ -34,6 +40,7 @@ const inactiveRuntime = (
   health: TelemetryHealthSnapshot,
 ): TelemetryRuntime => ({
   turnTrace: NOOP_TRACE,
+  continuationTrace: NOOP_CONTINUATION_TRACE,
   health: () => health,
   async forceFlush() {},
   async shutdown() {},
@@ -63,6 +70,9 @@ export function createTelemetryRuntime(
   return {
     turnTrace: new OpenTelemetryTurnTracePort(
       provider.getTracer('educanvas-turn', '1.0.0'),
+    ),
+    continuationTrace: new OpenTelemetryContinuationTracePort(
+      provider.getTracer('educanvas-continuation', '1.0.0'),
     ),
     health: () => health.snapshot(),
     async forceFlush() {

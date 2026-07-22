@@ -10,6 +10,8 @@
 
 - `config.ts`：显式环境、Endpoint、Header、采样和导出超时闸门；
 - `turn-trace-adapter.ts`：span属性、静态事件和risk白名单；
+- `w3c-trace-context.ts`：只注入/提取`traceparent`的显式W3C传播边界；
+- `continuation-trace-adapter.ts`：Worker恢复active子span与业务结果隔离；
 - `resilient-exporter.ts`：Exporter失败到安全健康状态的隔离层；
 - `runtime.ts`：Node Provider、比例采样、有界Batch、OTLP与NOOP组合；
 - `health.ts`：`disabled | ready | degraded`低基数状态。
@@ -24,8 +26,9 @@
 
 ## 当前范围
 
-Gateway、Web General与Web Teaching已注入相同Turn Trace Port。跨进程W3C carrier、Worker
-continuation父子关系和正式Collector/SLO仍是下一纵切，不能以研究fixture代替生产事实。
+Gateway、Web General与Web Teaching已注入相同Turn Trace Port；审批continuation会持久化
+Turn的`traceparent`，Worker领取成功后恢复`educanvas.continuation`子span。Graphile payload仍
+只有continuation ID，carrier只来自PostgreSQL耐久快照。正式Collector/SLO仍是后续范围。
 
 ## 验证
 

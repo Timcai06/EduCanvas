@@ -154,6 +154,8 @@ export {
   type ToolApprovalIntentStatus,
 } from './operation-continuation';
 
+export { w3cTraceCarrierSchema, type W3cTraceCarrier } from './trace-carrier';
+
 export type {
   AgentTurnContextLedgerPort,
   AgentTurnContextMaterial,

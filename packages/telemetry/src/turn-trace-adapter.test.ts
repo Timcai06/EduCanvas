@@ -2,6 +2,7 @@ import {
   InMemorySpanExporter,
   NodeTracerProvider,
   SimpleSpanProcessor,
+  TraceIdRatioBasedSampler,
 } from '@opentelemetry/sdk-trace-node';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OpenTelemetryTurnTracePort } from './turn-trace-adapter';
@@ -35,6 +36,12 @@ describe('OpenTelemetryTurnTracePort', () => {
       profileId: sensitive,
       entrypoint: 'web',
     });
+    expect(span.carrier()).toEqual({
+      traceparent: expect.stringMatching(
+        /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/,
+      ),
+    });
+    expect(Object.keys(span.carrier() ?? {})).toEqual(['traceparent']);
     span.event('context.prepare', { prompt: sensitive });
     span.event('approval.required', {
       capability: sensitive,
@@ -68,5 +75,33 @@ describe('OpenTelemetryTurnTracePort', () => {
         })),
       ),
     ).not.toContain(sensitive);
+  });
+
+  it('未采样Turn仍生成flags 00的合法carrier', async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new NodeTracerProvider({
+      sampler: new TraceIdRatioBasedSampler(0),
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    providers.push(provider);
+    const span = new OpenTelemetryTurnTracePort(
+      provider.getTracer('educanvas-unsampled-carrier-test'),
+    ).start({
+      operationId: '00000000-0000-4000-8000-000000000001',
+      traceId: 'business-trace-id',
+      actorId: 'actor:test',
+      agentId: 'agent:test',
+      notebookId: 'notebook:test',
+      conversationId: 'conversation:test',
+      profileId: 'profile:test',
+      entrypoint: 'tui',
+    });
+
+    expect(span.carrier()?.traceparent).toMatch(
+      /^00-[0-9a-f]{32}-[0-9a-f]{16}-00$/,
+    );
+    span.end('suspended');
+    await provider.forceFlush();
+    expect(exporter.getFinishedSpans()).toEqual([]);
   });
 });

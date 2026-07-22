@@ -3,6 +3,7 @@ import type {
   TurnApplicationTracePort,
   TurnApplicationTraceSpan,
 } from '@educanvas/agent-runtime';
+import { W3cTraceContextAdapter } from './w3c-trace-context';
 
 const allowedEvents = new Set([
   'context.prepare',
@@ -23,7 +24,10 @@ const safeEventAttributes = (
 
 /** OTel Turn Adapter只记录白名单标识；Actor、Notebook、正文和参数全部丢弃。 */
 export class OpenTelemetryTurnTracePort implements TurnApplicationTracePort {
-  constructor(private readonly tracer: Tracer) {}
+  constructor(
+    private readonly tracer: Tracer,
+    private readonly traceContext = new W3cTraceContextAdapter(),
+  ) {}
 
   start(
     input: Parameters<TurnApplicationTracePort['start']>[0],
@@ -35,8 +39,12 @@ export class OpenTelemetryTurnTracePort implements TurnApplicationTracePort {
         'educanvas.entrypoint': input.entrypoint,
       },
     });
+    const carrier = this.traceContext.inject(span);
     let ended = false;
     return {
+      carrier() {
+        return carrier === null ? null : { ...carrier };
+      },
       event(name, attributes) {
         if (ended || !allowedEvents.has(name)) return;
         span.addEvent(name, safeEventAttributes(name, attributes));

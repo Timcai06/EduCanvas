@@ -102,6 +102,7 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - 普通 Turn 不应全部进入耐久 Workflow；只有存在明确等待点、人工审批或跨进程副作用的有界流程才需要 checkpoint/continuation；
 - L2/L3 Tool必须先过五维权限与参数Schema，再写pending Tool Call并调用Adapter的幂等`prepareApproval`；成功后Turn只发`approval.required`、Trace以`suspended`结束并保持无业务终态挂起，准备失败或取消不得伪装成已创建审批，更不能提前执行副作用；
 - `prepareApproval`必须先写版本化最小意图；Gateway只消费同Operation、同Actor、同expiry的prepared意图，并在单事务创建公开审批与continuation，禁止事件存在而恢复游标缺失；
+- W3C carrier由服务端的真实Turn span显式导出，只经审批意图与PostgreSQL continuation传递给Worker；不接受浏览器/渠道carrier，不将业务`traceId`伪造成W3C Trace ID，不让Trace参与授权、幂等或学习事实；
 - 无论采用原生实现还是 LangGraph，Operation 仍是业务游标，权限与 effect ledger 仍由 EduCanvas 拥有。
 
 ## 八、框架边界

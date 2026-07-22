@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ToolAdapterInvocationContext } from '@educanvas/agent-runtime';
+import type { ToolAdapterApprovalContext } from '@educanvas/agent-runtime';
 import type {
   McpDurableIntentStorePort,
   McpIntentCipherPort,
@@ -30,7 +30,7 @@ export async function prepareMcpApproval(input: {
     effect: 'write';
   };
   arguments: Readonly<Record<string, unknown>>;
-  context: ToolAdapterInvocationContext & { toolCallId: string };
+  context: ToolAdapterApprovalContext;
   dependencies: McpApprovalPreparationDependencies;
 }) {
   const { registration, context, dependencies } = input;
@@ -83,6 +83,7 @@ export async function prepareMcpApproval(input: {
       adapterSource: 'mcp',
       resumeRef,
     },
+    traceCarrier: context.traceCarrier,
   });
   return {
     approvalId,

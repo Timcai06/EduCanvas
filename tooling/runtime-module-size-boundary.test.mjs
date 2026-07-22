@@ -29,6 +29,18 @@ const CONTINUATION_DB_SUPPORT =
   'packages/db/src/operation-continuation-repository.integration.support.ts';
 const CONTINUATION_WORKER_SUPPORT =
   'apps/worker/src/approval-continuation.integration-support.ts';
+const CONTINUATION_WORKER_TASK =
+  'apps/worker/src/tasks/continue-operation.ts';
+const CONTINUATION_WORKER_TASK_TEST =
+  'apps/worker/src/tasks/continue-operation.test.ts';
+const WORKER_BOOTSTRAP_MODULES = [
+  'apps/worker/src/index.ts',
+  'apps/worker/src/bootstrap.ts',
+  'apps/worker/src/bootstrap.test.ts',
+  'apps/worker/src/workspace-env.ts',
+  'apps/worker/src/process-lifecycle.ts',
+  'apps/worker/src/process-lifecycle.test.ts',
+];
 const WEB_SHARED_ROOT = 'apps/web/features/workspace/shared';
 const WEB_SETTINGS_ROOT = 'apps/web/features/settings';
 const WEB_GENERAL_WORKSPACE =
@@ -148,6 +160,17 @@ describe('Runtime module size boundary', () => {
         ...dbTests,
         CONTINUATION_WORKER_SUPPORT,
         ...workerTests,
+      ],
+      CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Worker bootstrap and continuation orchestration independently readable', () => {
+    assertFilesWithinLimit(
+      [
+        ...WORKER_BOOTSTRAP_MODULES,
+        CONTINUATION_WORKER_TASK,
+        CONTINUATION_WORKER_TASK_TEST,
       ],
       CONTINUATION_REVIEW_LIMIT,
     );

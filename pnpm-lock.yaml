@@ -299,6 +299,9 @@ importers:
       '@educanvas/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@educanvas/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       graphile-worker:
         specifier: ^0.16.6
         version: 0.16.6(typescript@5.9.3)
@@ -656,6 +659,9 @@ importers:
 
   packages/telemetry:
     dependencies:
+      '@educanvas/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
       '@educanvas/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime

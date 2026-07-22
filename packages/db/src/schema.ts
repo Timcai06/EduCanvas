@@ -1377,7 +1377,8 @@ export const toolEffects = pgTable(
 
 /**
  * Adapter完成耐久准备、Gateway尚未公开approval.required之间的最小意图。
- * 这里只保存恢复引用，不提供参数、Prompt、正文、Credential、Secret或结果字段。
+ * 这里只保存恢复引用与可空W3C父上下文，不提供参数、Prompt、正文、Credential、Secret或结果字段。
+ * trace_parent使用text而非JSON：W3C v00长度固定且不允许tracestate/baggage扩展信任边界。
  */
 export const toolApprovalIntents = pgTable(
   'tool_approval_intents',
@@ -1395,6 +1396,7 @@ export const toolApprovalIntents = pgTable(
       .references(() => toolCalls.id, { onDelete: 'cascade' }),
     adapterSource: text('adapter_source').notNull(),
     resumeRef: text('resume_ref').notNull(),
+    traceParent: text('trace_parent'),
     status: text('status').notNull().default('prepared'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     preparedAt: timestamp('prepared_at', { withTimezone: true })
@@ -1423,6 +1425,10 @@ export const toolApprovalIntents = pgTable(
       sql`${table.protocolVersion} = 'educanvas.tool-approval-intent.v1' and char_length(${table.approvalId}) between 1 and 256 and ${table.approvalId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and ${table.adapterSource} in ('local', 'teaching', 'mcp', 'node') and char_length(${table.resumeRef}) between 1 and 256 and ${table.resumeRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$'`,
     ),
     check(
+      'tool_approval_intents_trace_parent_check',
+      sql`${table.traceParent} is null or (char_length(${table.traceParent}) = 55 and ${table.traceParent} ~ '^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$' and substring(${table.traceParent} from 4 for 32) <> repeat('0', 32) and substring(${table.traceParent} from 37 for 16) <> repeat('0', 16))`,
+    ),
+    check(
       'tool_approval_intents_lifecycle_check',
       sql`(${table.status} = 'prepared' and ${table.boundAt} is null and ${table.abandonedAt} is null) or (${table.status} = 'bound' and ${table.boundAt} is not null and ${table.abandonedAt} is null) or (${table.status} = 'abandoned' and ${table.boundAt} is null and ${table.abandonedAt} is not null)`,
     ),
@@ -1434,8 +1440,8 @@ export const toolApprovalIntents = pgTable(
 );
 
 /**
- * 高风险工具/外部等待的耐久执行游标。只保存稳定业务引用与lease，
- * 不保存Prompt、消息正文、工具参数、Credential、Secret或副作用结果。
+ * 高风险工具/外部等待的耐久执行游标。只保存稳定业务引用、lease与可空W3C父上下文，
+ * 不保存Prompt、消息正文、工具参数、Credential、Secret或副作用结果。trace_parent仅用于观测，不参与业务状态。
  */
 export const operationContinuations = pgTable(
   'operation_continuations',
@@ -1454,6 +1460,7 @@ export const operationContinuations = pgTable(
       .references(() => toolCalls.id, { onDelete: 'cascade' }),
     adapterSource: text('adapter_source').notNull(),
     resumeRef: text('resume_ref').notNull(),
+    traceParent: text('trace_parent'),
     status: text('status').notNull().default('waiting_approval'),
     leaseGeneration: integer('lease_generation').notNull().default(0),
     leaseOwnerId: text('lease_owner_id'),
@@ -1500,6 +1507,10 @@ export const operationContinuations = pgTable(
     check(
       'operation_continuations_text_check',
       sql`${table.protocolVersion} = 'educanvas.operation-continuation.v1' and char_length(${table.approvalId}) between 1 and 256 and ${table.approvalId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and ${table.adapterSource} in ('local', 'teaching', 'mcp', 'node') and char_length(${table.resumeRef}) between 1 and 256 and ${table.resumeRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' and (${table.leaseOwnerId} is null or (char_length(${table.leaseOwnerId}) between 1 and 256 and ${table.leaseOwnerId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$')) and (${table.failureCode} is null or ${table.failureCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
+    ),
+    check(
+      'operation_continuations_trace_parent_check',
+      sql`${table.traceParent} is null or (char_length(${table.traceParent}) = 55 and ${table.traceParent} ~ '^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$' and substring(${table.traceParent} from 4 for 32) <> repeat('0', 32) and substring(${table.traceParent} from 37 for 16) <> repeat('0', 16))`,
     ),
     check(
       'operation_continuations_lease_check',
