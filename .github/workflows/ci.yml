@@ -67,8 +67,35 @@ jobs:
       - name: PostgreSQL integration tests
         run: pnpm test:integration
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate local environment example
+        run: pnpm env:check .env.example
+
+      - name: Parse Windows startup scripts
+        shell: pwsh
+        run: |
+          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'start-educanvas.ps1'))
+          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'stop-educanvas.ps1'))
+
+      - name: Windows unit smoke
+        run: pnpm --filter @educanvas/node-host test
+
   e2e:
-    needs: [checks, integration]
+    needs: [checks, integration, windows]
     runs-on: ubuntu-latest
     services:
       postgres:
