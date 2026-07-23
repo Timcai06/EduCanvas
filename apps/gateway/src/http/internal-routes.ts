@@ -1,4 +1,8 @@
 import {
+  gatewayEffectReconciliationPrincipalHeader,
+  resolveGatewayEffectReconciliationPrincipal,
+} from '../effect-reconciliation-control';
+import {
   HANDLED,
   UNHANDLED,
   readJsonBody,
@@ -33,6 +37,36 @@ export async function handleInternalRoutes(
       writeEvent(response, event, deps.observability);
     }
     response.end();
+    return HANDLED;
+  }
+
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/v1/internal/tool-effects/reconciliations'
+  ) {
+    if (!deps.effectReconciliation) {
+      writeJson(response, 503, {
+        error: { code: 'EFFECT_RECONCILIATION_DISABLED' },
+      });
+      return HANDLED;
+    }
+    const result = await deps.effectReconciliation.reconcile(
+      await readJsonBody(request),
+      resolveGatewayEffectReconciliationPrincipal(
+        request.headers[gatewayEffectReconciliationPrincipalHeader],
+      ),
+    );
+    const status =
+      result.status === 'recorded'
+        ? 200
+        : result.reason === 'manual_authorization_denied'
+          ? 403
+          : result.reason === 'manual_authorization_failed'
+            ? 503
+            : 409;
+    writeJson(response, status, {
+      reconciliation: result,
+    });
     return HANDLED;
   }
 

@@ -124,6 +124,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 - Web兼容SSE不复制Gateway审批控制面：`approval.required`保持Operation无终态。
   当前Web未接审批控制面，其Profile不得开放需要交互审批的能力；TUI可直接渲染
   Gateway审批事件，任何入口都不能把等待伪装成完成或失败。
+- `POST /v1/internal/tool-effects/reconciliations`只在Internal token开启且鉴权通过后可用；正文只接受Operation/Actor/Effect稳定标识、决议、原因code和SHA-256证据/回执摘要。审计主体来自`x-educanvas-reconciliation-principal: operator:<id> | service:<id>`的受信Internal上下文，缺省为固定Gateway service，正文提交`principal`会被严格Schema拒绝。归属隐藏为404，既有决议冲突或非`outcome_unknown`生命周期返回409，未注入控制面返回503，不把预期业务结果伪装成500；
 
 完整HTTP入口、认证和能力边界见[Gateway 与多入口架构](../02-architecture/02-Gateway与多入口.md)。
 
