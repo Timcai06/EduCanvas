@@ -119,6 +119,11 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 - 恢复接口必须重新验证actor，越权与不存在不泄露目标内容；
 - Event和错误只使用稳定码，不返回Provider异常、Secret或消息正文；
 - Web兼容层把`message.started`映射为`turn.accepted`，确保Gateway Operation与既有Turn复用同一ID。
+- 当前没有`steer` API、事件或Capability；用户中途改写意图统一采用
+  `cancel + contextual resend`。任何入口都不得显示本地“steer成功”状态；
+- Web兼容SSE不复制Gateway审批控制面：`approval.required`保持Operation无终态。
+  当前Web未接审批控制面，其Profile不得开放需要交互审批的能力；TUI可直接渲染
+  Gateway审批事件，任何入口都不能把等待伪装成完成或失败。
 
 完整HTTP入口、认证和能力边界见[Gateway 与多入口架构](../02-architecture/02-Gateway与多入口.md)。
 
