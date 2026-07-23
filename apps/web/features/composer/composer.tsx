@@ -24,8 +24,9 @@ export interface ComposerToolChip {
 
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
- * 视觉上它是桌面上「刚铺开的一页纸」（card 层），聚焦时黛青描边——
- * 不用光晕做反馈。它不持有对话状态；文本提交、菜单动作全部上抛。
+ * 视觉上它是桌面上「刚铺开的一页纸」（card 层），黛青描边为主，
+ * 边缘另有一道极淡的墨光扫过、聚焦时提亮（.star-sweep，纯装饰、不承载状态）。
+ * 它不持有对话状态；文本提交、菜单动作全部上抛。
  * Enter 发送、Shift+Enter 换行（触屏窄屏由发送按钮承担发送）。
  */
 export function Composer({
@@ -107,8 +108,11 @@ export function Composer({
             : 'rounded-[1.375rem] shadow-[0_1px_2px_rgb(72_60_34_/_0.05)]'
         }`}
       >
-        {/* 聚焦时一道墨线沿框边环绕（纯 CSS，见 effects.css .ink-flow-border） */}
-        <span aria-hidden="true" className="ink-flow-border" />
+        {/* 边缘扫光：两道黛青墨光沿上下边掠过，平时弱、聚焦强（纯 CSS，见 effects.css .star-sweep） */}
+        <span aria-hidden="true" className="star-sweep">
+          <span className="star-sweep__strip star-sweep__top" />
+          <span className="star-sweep__strip star-sweep__bottom" />
+        </span>
         <PlusMenu
           onAction={onMenuAction}
           availableActions={availableMenuActions}
