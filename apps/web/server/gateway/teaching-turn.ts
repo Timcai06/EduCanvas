@@ -1,3 +1,24 @@
+/**
+ * 教学 Turn Gateway 适配器 — 将 Gateway 协议映射到 Web 教学 Turn Application。
+ *
+ * ## 职责
+ *
+ * Gateway Service 需要 `GatewayTurnRunnerPort`。
+ * 本文件创建 `TeachingTurnApplicationRunner` 实现该接口，
+ * 内部调用 `beginGatewayTeachingTurnApplication`（learning-turn.ts 的组合根）。
+ *
+ * ## 适配流程
+ *
+ * ```
+ * Gateway Inbound Envelope →
+ *   loadOwnedTeachingSession → loadOwnedTeachingGatewayTarget →
+ *     beginGatewayTeachingTurnApplication → projectTurnApplicationEventToGateway →
+ *       Gateway Outbound Event
+ * ```
+ *
+ * 本文件不创建新的教学逻辑 — 只是 Gateway 协议层和教学 Turn Application 间的薄适配。
+ */
+
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';

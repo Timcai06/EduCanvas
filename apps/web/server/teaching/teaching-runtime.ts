@@ -1,3 +1,19 @@
+/**
+ * Web 教学运行时组合根 — 在 Next.js 服务端组装教学应用服务。
+ *
+ * ## 职责
+ *
+ * 这是 DI（依赖注入）层，不是业务逻辑层：
+ * - 创建 Drizzle 实现的具体 Repository/UnitOfWork
+ * - 注入到 teaching-runtime 的应用服务（GradeCanvasSubmissionService、ProgressTeachingStateService）
+ * - 配置 K12 课程策略参数（练习最少次数、补救目标状态等）
+ *
+ * ## 为什么是单例
+ *
+ * 两个服务都无状态（所有状态在 DB 事务内），单例避免每次请求重新创建。
+ * 调用方必须先完成身份认证和 session 归属校验才能调用这些服务。
+ */
+
 import 'server-only';
 
 import {
@@ -8,8 +24,6 @@ import {
   GradeCanvasSubmissionService,
   ProgressTeachingStateService,
 } from '@educanvas/teaching-runtime';
-
-// Next.js阶段一组合根：领域与应用包只认识Port，具体Drizzle实现仅在服务端装配。
 const artifactRepository = new DrizzleArtifactRepository();
 const teachingUnitOfWork = new DrizzleTeachingUnitOfWork();
 
