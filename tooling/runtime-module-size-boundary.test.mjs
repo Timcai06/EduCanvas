@@ -11,7 +11,8 @@ const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
 const GATEWAY_TURN_REVIEW_LIMIT = 300;
 const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
-const WEB_VISUAL_REVIEW_LIMIT = 350;
+// PixelBlast runtime 因反闪烁的同步补渲等真实改动小幅增长，2026-07 从 350 上调到 360；仍是可读性护栏。
+const WEB_VISUAL_REVIEW_LIMIT = 360;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
 const WEB_WORKSPACE_REVIEW_LIMIT = 600;
 // 主题系统（light-dark 双色板 + data-theme + 墨点场专用色）让 globals.css 合理增长，

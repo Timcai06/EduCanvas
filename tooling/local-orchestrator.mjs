@@ -64,6 +64,7 @@ async function waitFor(label, check, timeoutMs = 30_000) {
 
 function spawnOwned(command, args, options = {}) {
   const child = spawn(command, args, {
+    shell: process.platform === 'win32' && command === 'pnpm',
     env: process.env,
     ...options,
   });

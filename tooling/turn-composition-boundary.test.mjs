@@ -6,6 +6,10 @@ import { describe, it } from 'node:test';
 const roots = ['apps', 'packages'];
 const ignoredDirectories = new Set(['.next', 'dist', 'node_modules']);
 
+function posixRelative(path) {
+  return relative(process.cwd(), path).replaceAll('\\', '/');
+}
+
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -25,7 +29,7 @@ function constructionFiles(className) {
     .flatMap(sourceFiles)
     .flatMap((path) => {
       const count = [...readFileSync(path, 'utf8').matchAll(pattern)].length;
-      return Array.from({ length: count }, () => relative(process.cwd(), path));
+      return Array.from({ length: count }, () => posixRelative(path));
     })
     .sort();
 }

@@ -13,20 +13,28 @@ const STORAGE_KEY = 'educanvas.theme';
 // 同标签内切换用自定义事件通知订阅者；跨标签用原生 storage 事件同步。
 const CHANGE_EVENT = 'educanvas:theme-change';
 
-/**
- * 把偏好落到 <html data-theme>：亮/暗写显式属性，跟随系统移除属性，
- * 交给 globals.css 的 prefers-color-scheme 媒体查询决定。color-scheme 由 CSS 派生。
- */
-function applyPreference(preference: ThemePreference): void {
-  const root = document.documentElement;
-  if (preference === 'light' || preference === 'dark') {
-    root.setAttribute('data-theme', preference);
-  } else {
-    root.removeAttribute('data-theme');
-  }
+/** 把「跟随系统」解析成当下具体的 light/dark；显式偏好原样返回。 */
+function resolveTheme(preference: ThemePreference): 'light' | 'dark' {
+  if (preference === 'light' || preference === 'dark') return preference;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
 }
 
-function readPreference(): ThemePreference {
+/**
+ * 把偏好落到 <html>：data-theme 属性驱动 token 覆写，内联 style 同步写 color-scheme
+ * （原生表单/滚动条随之）。跟随系统在 JS 里解析成具体值——CSS 不再有 prefers-color-scheme
+ * 媒体查询兜底（globals.css 用属性覆写而非 light-dark()，后者动态切换时 Chromium 不重算）。
+ * 与 app/layout.tsx 的水合前脚本、theme-sync.tsx 的常驻监听同源。
+ */
+export function applyThemePreference(preference: ThemePreference): void {
+  const root = document.documentElement;
+  const resolved = resolveTheme(preference);
+  root.setAttribute('data-theme', resolved);
+  root.style.colorScheme = resolved;
+}
+
+export function readThemePreference(): ThemePreference {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'light' || stored === 'dark' || stored === 'system') {
@@ -57,7 +65,7 @@ export function useThemePreference(): {
 } {
   const preference = useSyncExternalStore(
     subscribe,
-    readPreference,
+    readThemePreference,
     () => 'system' as ThemePreference,
   );
 
@@ -71,7 +79,7 @@ export function useThemePreference(): {
     } catch {
       // 存储不可用时仍即时应用到当前会话，只是不持久
     }
-    applyPreference(next);
+    applyThemePreference(next);
     window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);
 
