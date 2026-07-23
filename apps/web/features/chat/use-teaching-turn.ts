@@ -243,7 +243,9 @@ export function useAgentTurn(
           /* 用户主动停止的 abort 不算失败；其余按本机在线情况归因 */
           const resolved = resolveTurnFailureMessage({
             online: isBrowserOnline(),
-            serverMessage: aborted ? SAFE_INTERRUPTED_ERROR : safeConnectionError,
+            serverMessage: aborted
+              ? SAFE_INTERRUPTED_ERROR
+              : safeConnectionError,
             serverRetryable: true,
           });
           dispatch({

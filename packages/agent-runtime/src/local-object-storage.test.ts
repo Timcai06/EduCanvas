@@ -64,8 +64,8 @@ describe('LocalObjectStorage', () => {
     await expect(storage.read('artifacts/missing.bin')).rejects.toMatchObject({
       code: 'object_not_found',
     });
-    await expect(
-      storage.read('artifacts/missing.bin'),
-    ).rejects.toBeInstanceOf(ObjectStorageError);
+    await expect(storage.read('artifacts/missing.bin')).rejects.toBeInstanceOf(
+      ObjectStorageError,
+    );
   });
 });

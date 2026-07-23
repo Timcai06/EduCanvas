@@ -12,6 +12,7 @@ import {
   errorForHttpResponse,
   failedEvent,
   isRecord,
+  logProviderFailure,
   mapFinishReason,
   nonNegativeInteger,
   optionalString,
@@ -98,10 +99,9 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
       );
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        yield failedEvent(
-          request.phase,
-          errorForHttpResponse(response, this.now()),
-        );
+        const normalized = errorForHttpResponse(response, this.now());
+        logProviderFailure(this.config.provider, normalized, response.status);
+        yield failedEvent(request.phase, normalized);
         return;
       }
       if (
@@ -323,6 +323,7 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           : error instanceof SseProtocolError
             ? { code: 'invalid_response', retryable: false }
             : { code: 'unavailable', retryable: true };
+      logProviderFailure(this.config.provider, normalized);
       yield failedEvent(request.phase, normalized);
     } finally {
       clearTimeout(timeout);

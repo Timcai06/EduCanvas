@@ -3,7 +3,10 @@ import {
   PlatformTurnLifecycleError,
 } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import {
+  isTrustedSameOriginWrite,
+  jsonError,
+} from '@/server/http/request-security';
 import { abortRegisteredTurn } from '@/server/http/turn-abort-registry';
 
 export const runtime = 'nodejs';

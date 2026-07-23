@@ -3,11 +3,7 @@
 import { Headphones } from '@phosphor-icons/react';
 import type { AudioOverviewMedia } from './artifact-client';
 
-export function AudioOverviewPlayer({
-  media,
-}: {
-  media: AudioOverviewMedia;
-}) {
+export function AudioOverviewPlayer({ media }: { media: AudioOverviewMedia }) {
   return (
     <section
       data-audio-overview

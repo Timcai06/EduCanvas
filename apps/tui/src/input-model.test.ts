@@ -138,7 +138,10 @@ describe('multi-line cursor mapping', () => {
   it('clamps column when the target line is shorter', () => {
     const value = '很长的一行\n短';
     const down = lineColToCursor(value, 1, 4);
-    expect(cursorToLineCol(value, down)).toEqual({ lineIndex: 1, charOffset: 1 });
+    expect(cursorToLineCol(value, down)).toEqual({
+      lineIndex: 1,
+      charOffset: 1,
+    });
   });
 });
 

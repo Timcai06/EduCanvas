@@ -113,7 +113,10 @@ export function renderBanner(
     const right = textLines[index] ?? '';
     return ` ${padToWidth(left, 5)}  ${right}`;
   });
-  return [renderRule(theme, width - 1), ...body, renderRule(theme, width - 1), ''].join(
-    '\n',
-  );
+  return [
+    renderRule(theme, width - 1),
+    ...body,
+    renderRule(theme, width - 1),
+    '',
+  ].join('\n');
 }

@@ -11,7 +11,9 @@ describe('Composer 边缘扫光边界', () => {
     const composer = source('./composer.tsx');
     const effects = source('../../app/effects.css');
 
-    expect(composer).toContain('<span aria-hidden="true" className="star-sweep">');
+    expect(composer).toContain(
+      '<span aria-hidden="true" className="star-sweep">',
+    );
     expect(effects).toContain('pointer-events: none');
     expect(effects).toContain('var(--color-accent)');
   });
@@ -23,8 +25,6 @@ describe('Composer 边缘扫光边界', () => {
     );
 
     expect(reducedMotion).not.toContain('.star-sweep');
-    expect(effects).toContain(
-      '@media (prefers-reduced-motion: no-preference)',
-    );
+    expect(effects).toContain('@media (prefers-reduced-motion: no-preference)');
   });
 });

@@ -9,9 +9,7 @@ describe('citation links', () => {
         new Set([1]),
         'assistant-1',
       ),
-    ).toBe(
-      '第一条结论 [1](#cite-assistant-1-1)，未使用的候选 [2]。',
-    );
+    ).toBe('第一条结论 [1](#cite-assistant-1-1)，未使用的候选 [2]。');
   });
 
   it('不改写 Markdown 链接或没有服务端投影的编号', () => {

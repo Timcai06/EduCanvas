@@ -13,7 +13,10 @@ describe('extractCitationMarkers', () => {
 
   it('忽略越界号码、Markdown 链接与非标记方括号', () => {
     expect(
-      extractCitationMarkers('参考 [5] 与 [链接](https://x) 以及 [0],还有 [1](http://y)。', 3),
+      extractCitationMarkers(
+        '参考 [5] 与 [链接](https://x) 以及 [0],还有 [1](http://y)。',
+        3,
+      ),
     ).toEqual([]);
   });
 

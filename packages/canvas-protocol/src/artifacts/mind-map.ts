@@ -45,10 +45,16 @@ export const mindMapContentSchema = z
     };
     walk(value.root, 1);
     if (count > 120) {
-      context.addIssue({ code: 'custom', message: '思维导图节点数超过 120 上限' });
+      context.addIssue({
+        code: 'custom',
+        message: '思维导图节点数超过 120 上限',
+      });
     }
     if (tooDeep) {
-      context.addIssue({ code: 'custom', message: '思维导图深度超过 4 层上限' });
+      context.addIssue({
+        code: 'custom',
+        message: '思维导图深度超过 4 层上限',
+      });
     }
   });
 

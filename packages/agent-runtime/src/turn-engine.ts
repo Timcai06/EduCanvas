@@ -85,7 +85,6 @@ const metadataMatchesRequest = (
 const isAborted = (signal: ModelAbortSignal | undefined): boolean =>
   signal?.aborted === true;
 
-
 /**
  * 验证一次模型运行的归一化事件流。这里不信任自定义 ModelGateway 的 TS 类型：
  * 事件必须 strict 解析、阶段一致、恰有一个终态，并满足文本/工具互斥。
@@ -252,4 +251,9 @@ export {
   modelFailure,
   validateModelRun,
 };
-export type { ModelRunFailure, ModelRunResult, ModelRunSuccess, ParsedToolCall };
+export type {
+  ModelRunFailure,
+  ModelRunResult,
+  ModelRunSuccess,
+  ParsedToolCall,
+};

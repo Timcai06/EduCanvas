@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArtifactDetail } from './artifact-client';
 import { isArtifactGenerating } from './artifact-provenance-model';
 
-function detail(
-  latestJob: ArtifactDetail['latestJob'],
-): ArtifactDetail {
+function detail(latestJob: ArtifactDetail['latestJob']): ArtifactDetail {
   return {
     artifact: {
       id: 'a',
@@ -27,7 +25,12 @@ describe('isArtifactGenerating', () => {
   it('is true while a job is queued or running', () => {
     expect(
       isArtifactGenerating(
-        detail({ id: 'j', status: 'queued', progress: null, failureCode: null }),
+        detail({
+          id: 'j',
+          status: 'queued',
+          progress: null,
+          failureCode: null,
+        }),
         false,
       ),
     ).toBe(true);

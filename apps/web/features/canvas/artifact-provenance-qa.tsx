@@ -117,7 +117,9 @@ export function ArtifactProvenanceQa() {
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <h2 className="font-display text-lg font-semibold text-ink">溯源条状态</h2>
+        <h2 className="font-display text-lg font-semibold text-ink">
+          溯源条状态
+        </h2>
         <div className="space-y-4">
           {cases.map((testCase) => (
             <div key={testCase.label} className="space-y-1.5">

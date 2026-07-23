@@ -35,7 +35,9 @@ describe('workspace truth and motion boundaries', () => {
     expect(globals).toContain('--color-accent');
     expect(globals).not.toContain('ambient-halo');
     expect(globals).not.toContain('hero-gradient-text');
-    expect(existsSync(join(WEB_ROOT, 'features/workspace/shared/ambient-halo.tsx'))).toBe(false);
+    expect(
+      existsSync(join(WEB_ROOT, 'features/workspace/shared/ambient-halo.tsx')),
+    ).toBe(false);
 
     /* 扉页动效必须尊重 reduced-motion,朱砂笔触只能来自语义 token */
     expect(hero).toContain("'(prefers-reduced-motion: reduce)'");
