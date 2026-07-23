@@ -47,9 +47,23 @@ function validateVersion(value: string): boolean {
 }
 
 /**
- * 对已由可信仓储完成Actor/Notebook过滤的Segment做确定性预算选择。
- * 本层不读取数据库、不授予权限，也不把“尚未实现的Memory”伪装为空结果。
+ * Context 引擎 — 确定性 Segment 预算选择。
+ *
+ * ## 输入约束
+ *
+ * 所有 Segment 必须已由可信仓储完成 Actor/Notebook 权限过滤。
+ * 本层不读取数据库、不授予权限、不把”尚未实现的 Memory”伪装为空结果。
+ *
+ * ## 处理流程
+ *
+ * 1. **校验** — 版本格式、预算范围、Segment ID 唯一性、必需字段
+ * 2. **配对** — 使用 pairKey 将 tool_call + tool_result 绑定为不可分割的 unit
+ *     （必须成对出现，否则拒绝；required 的 pair 不完整也拒绝）
+ * 3. **排序** — required 优先 → 高 priority 优先 → 原始输入顺序（稳定排序）
+ * 4. **截断** — 按 maxSegments + maxCharacters 预算从高到低选入，required 超出预算则报错
+ * 5. **还原顺序** — 选中项按原始输入顺序排列（而非 priority 顺序）
  */
+
 export function buildAgentContext(input: {
   profileVersion: string;
   profile: readonly ContextSegment[];
@@ -119,6 +133,11 @@ export function buildAgentContext(input: {
     segment: { ...segment, content: segment.content.trim() },
     index,
   }));
+  /**
+   * 步骤 1：Segment 去重与范围校验。
+   * tool_call/tool_result 通过 pairKey 成对绑定为不可分割的 unit。
+   * required Segment 的 pair 不完整 → 直接报错（而非默默丢弃）。
+   */
   const paired = new Map<string, typeof indexed>();
   const units: (typeof indexed)[] = [];
   for (const item of indexed) {
@@ -141,6 +160,10 @@ export function buildAgentContext(input: {
       throw new ContextEngineInputError('必需Tool Pair不完整');
     }
   }
+  /**
+   * 步骤 2：排序 — required 优先 → 高 priority 优先 → 原始输入顺序。
+   * required Segment 必须被选入，即使 priority 较低也排最前面。
+   */
   units.sort((left, right) => {
     const leftRequired = left.some((item) => item.segment.required);
     const rightRequired = right.some((item) => item.segment.required);
@@ -160,6 +183,10 @@ export function buildAgentContext(input: {
     const fits =
       selected.length + unit.length <= maxSegments &&
       characterCount + unitCharacters <= maxCharacters;
+    /**
+     * 步骤 3：预算截断 — required 超出预算则报错（而非默默丢弃），
+     * 非 required 超出预算则跳过。
+     */
     if (!fits) {
       if (unit.some((item) => item.segment.required)) {
         throw new ContextEngineInputError('必需Profile Context超过预算');

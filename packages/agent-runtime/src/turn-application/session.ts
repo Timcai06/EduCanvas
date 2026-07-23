@@ -18,7 +18,13 @@ export interface TurnTerminalState {
   emitted: boolean;
 }
 
-/** @internal 校验持久化replay序列；replay不得再次执行Profile、Provider或Tool。 */
+/**
+ * @internal 校验持久化 replay 序列。
+ *
+ * replay 是幂等保障的关键 — 同一 turn 的重复请求跳过所有 side-effect 阶段
+ * （preflight/prepare/loop），直接从 EventStore 回放已持久化的事件流。
+ * 校验确保 replay 序列有效：不含重复 started、事件顺序合法、以终态事件结尾。
+ */
 export async function loadValidatedReplay(input: {
   dependencies: TurnApplicationDependencies;
   command: TurnApplicationCommand;
@@ -56,7 +62,12 @@ export async function loadValidatedReplay(input: {
   };
 }
 
-/** @internal 写入失败或取消唯一终态，并返回对应公开事件。 */
+/**
+ * @internal 写入失败或取消唯一终态，返回对应的 turn.failed/turn.cancelled 事件。
+ *
+ * 关键：CANCELLED code + cancellation 端口二次确认 → 才标记为 cancelled（而非 failed）。
+ * 这防止客户端单方面声明取消但 Gateway 没有确认的情况。
+ */
 export async function settleTurnFailure(input: {
   dependencies: TurnApplicationDependencies;
   command: TurnApplicationCommand;

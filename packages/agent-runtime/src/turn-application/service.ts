@@ -27,8 +27,36 @@ import {
 } from './session';
 
 /**
- * 第二代唯一Turn应用服务。Transport、Profile、Provider与数据库只通过Port注入；
- * 本类固定启动、准备、Loop、完成与唯一终态的阶段顺序。
+ * Turn Application 主编排服务 — 固定五阶段管线。
+ *
+ * ## 阶段流程
+ *
+ * ```
+ * BEGIN → PREFLIGHT(可选) → PREPARE → LOOP → COMPLETE/FAIL/CANCEL
+ *   │          │               │         │           │
+ *   │          │               │         │           └─ 唯一终态（只能发一次）
+ *   │          │               │         └─ 模型↔工具循环（answer + synthesis）
+ *   │          │               └─ Context 选择 + Profile Plan 校验 + Tool 列表
+ *   │          └─ 输入安全预检（可拒绝整个请求）
+ *   └─ Lifecycle.begin() 创建 Operation/Message
+ * ```
+ *
+ * ## Replay 快速路径
+ *
+ * 如果 `turn.replayed === true`，跳过 PREFLIGHT→PREPARE→LOOP，直接从 EventStore
+ * 读取已持久化的事件流回放。这保证同一 turn 不会被执行两次（幂等）。
+ *
+ * ## 失败处理矩阵
+ *
+ * | 失败点 | 终态 | retryable |
+ * |--------|------|-----------|
+ * | Cancellation open 失败 | RUNTIME_FAILED | true |
+ * | Preflight reject | profile 指定的 code | false |
+ * | 模型失败 | MODEL_FAILED / RATE_LIMITED | 看 error |
+ * | 工具失败（需审批） | 挂起等 APPROVAL_REQUIRED | — |
+ * | 工具失败（已取消） | CANCELLED | false |
+ * | Output block | profile 指定的 code | false |
+ * | 未分类失败 | RUNTIME_FAILED | true |
  */
 export class TurnApplicationService implements TurnApplicationPort {
   constructor(private readonly dependencies: TurnApplicationDependencies) {}
