@@ -6,6 +6,7 @@ import type {
   TurnApplicationOutputGuardPort,
   TurnApplicationProfilePort,
 } from '@educanvas/agent-runtime';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
 import {
   TEACHING_TURN_ANSWER_PROMPT_VERSION,
@@ -14,13 +15,13 @@ import {
 } from '@educanvas/teaching-runtime';
 import type { AnonymousIdentity } from '../../identity/anonymous-identity';
 import { extractCitationMarkers } from '../citation-markers';
-import { teachingToolCapabilitiesForState } from '../teaching-tools';
 import { createWebTeachingCitationEvent } from './citations';
 import { webTeachingPersistence } from './persistence';
 import {
   createWebTeachingOutputGuard,
   evaluateWebTeachingPreflight,
 } from './safety';
+import { resolveWebTeachingToolPolicy } from './tool-policy';
 
 const CONTEXT_PROFILE_VERSION = 'web-teaching-v2';
 
@@ -32,6 +33,8 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
     private readonly identity: AnonymousIdentity,
     private readonly session: LessonSessionSnapshot,
     private readonly assetContext: BuiltAssetContext,
+    private readonly availableToolCapabilities: readonly string[],
+    private readonly membershipRole: NotebookMembershipRole,
   ) {}
 
   collectKnowledgeEvidence(candidateIds: readonly string[]): void {
@@ -86,16 +89,25 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
     if (answerSystem?.role !== 'system' || synthesisSystem?.role !== 'system') {
       throw new Error('teaching_system_prompt_missing');
     }
-    const grantedTools = teachingToolCapabilitiesForState(
-      this.session.state,
-    ).filter((capability) => input.command.capabilities.includes(capability));
-    const capabilities = {
-      actor: grantedTools,
-      notebook: grantedTools,
-      profile: grantedTools,
-      channel: grantedTools,
-      environment: grantedTools,
+    const environment =
+      process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development';
+    const profileContext = {
+      studentId: this.identity.studentId,
+      sessionId: this.session.id,
+      knowledgeNodeId: this.session.knowledgeNodeId,
+      state: this.session.state,
     };
+    const toolPolicy = resolveWebTeachingToolPolicy({
+      availableCapabilities: this.availableToolCapabilities,
+      actorCapabilities: this.availableToolCapabilities,
+      membershipRole: this.membershipRole,
+      profileId: input.command.profile.profileId,
+      state: this.session.state,
+      channel: input.command.entrypoint,
+      environment,
+      environmentCapabilities: this.availableToolCapabilities,
+      profileContext,
+    });
     return {
       context: {
         profileVersion: CONTEXT_PROFILE_VERSION,
@@ -166,19 +178,8 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
         synthesisPromptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
         maxToolRounds: 1,
       },
-      toolPolicy: {
-        capabilities,
-        approvedCapabilities: [],
-        channel: 'web',
-        environment:
-          process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
-        profileContext: {
-          studentId: this.identity.studentId,
-          sessionId: this.session.id,
-          knowledgeNodeId: this.session.knowledgeNodeId,
-          state: this.session.state,
-        },
-      },
+      // command.capabilities 是传输/渲染协商，不是 Teaching Tool grant。
+      toolPolicy,
     };
   }
 
