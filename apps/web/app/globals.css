@@ -17,7 +17,10 @@
   --color-surface-strong: #e5ddcb;
   --color-ink: #262219;
   --color-ink-muted: #6d6552;
-  --color-ink-faint: #98907b;
+  /* ink-faint 是「装饰/图标」层（图标、分隔、占位），只保证图形对比度 ≥3:1；
+     承载信息的可读文字一律用 ink-muted（≥4.5:1），不用 faint，见 docs 验收 #8。
+     纸面上不存在既更淡又达正文 AA 的第三级，故按用途分层而非把 faint 提亮成 muted。 */
+  --color-ink-faint: #847d6b;
   --color-line: #ddd4c0;
 
   /* 黛青：讲课的笔 */

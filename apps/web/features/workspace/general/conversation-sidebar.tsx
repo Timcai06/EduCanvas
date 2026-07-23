@@ -184,7 +184,7 @@ export function ConversationSidebar({
               新建笔记本
             </button>
           </div>
-          <p className="px-5 pt-3 pb-1 text-xs font-medium text-ink-faint">
+          <p className="px-5 pt-3 pb-1 text-xs font-medium text-ink-muted">
             笔记本
           </p>
           <ul
@@ -224,7 +224,7 @@ export function ConversationSidebar({
                     <span className="min-w-0 flex-1 truncate">
                       {item.title ?? '未命名笔记本'}
                     </span>
-                    <span className="shrink-0 text-[11px] text-ink-faint">
+                    <span className="shrink-0 text-[11px] text-ink-muted">
                       {formatWhen(item.lastActivityAt)}
                     </span>
                   </button>
@@ -232,7 +232,7 @@ export function ConversationSidebar({
               );
             })}
             {items.length === 0 ? (
-              <li className="px-3 py-2 text-xs text-ink-faint">还没有笔记本</li>
+              <li className="px-3 py-2 text-xs text-ink-muted">还没有笔记本</li>
             ) : null}
           </ul>
           {children}

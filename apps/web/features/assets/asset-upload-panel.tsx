@@ -145,7 +145,7 @@ export function AssetUploadPanel({
       </button>
       <p
         data-upload-section
-        className={`min-h-5 text-sm ${error ? 'text-bad' : 'text-ink-faint'}`}
+        className={`min-h-5 text-sm ${error ? 'text-bad' : 'text-ink-muted'}`}
       >
         {error ?? '对象存储地址和模型密钥不会发送到浏览器。'}
       </p>

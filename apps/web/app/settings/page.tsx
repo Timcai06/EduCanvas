@@ -34,7 +34,7 @@ export default async function SettingsPage() {
               <LogoMark size={26} />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
                 EduCanvas 设置
               </p>
               <h1 className="mt-0.5 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
