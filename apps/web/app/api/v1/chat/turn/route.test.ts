@@ -176,7 +176,9 @@ describe('POST /api/v1/chat/turn', () => {
   });
 
   it('maps asset-related errors to 422', async () => {
-    vi.mocked(beginWebGatewayTurn).mockRejectedValueOnce(new AssetAccessError());
+    vi.mocked(beginWebGatewayTurn).mockRejectedValueOnce(
+      new AssetAccessError(),
+    );
 
     const responseA = await POST(
       turnRequest(JSON.stringify({ clientMessageId: 'msg-1', text: 'hi' })),
@@ -214,7 +216,7 @@ describe('POST /api/v1/chat/turn', () => {
     });
   });
 
-  it('does not leak internal exception text and returns 503 on unknown errors', async () => {
+  it('maps validation errors and does not leak unknown exception text', async () => {
     vi.mocked(beginWebGatewayTurn).mockRejectedValue(
       new TurnRequestValidationError('invalid_json'),
     );
@@ -224,7 +226,9 @@ describe('POST /api/v1/chat/turn', () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.text()).resolves.not.toContain('invalid_json');
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'invalid_json', message: '消息格式不正确。' },
+    });
 
     vi.mocked(beginWebGatewayTurn).mockRejectedValue(
       new Error('DATABASE_URL=postgres://secret'),
