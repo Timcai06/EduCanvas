@@ -9,36 +9,38 @@
  * 全部色彩取自传统颜料谱系（纸、墨、黛青、朱砂、藤黄、松绿），
  * 亮色是默认的「纸面」，深色是「晚自习砚墨」。组件禁止散写色值。
  */
+/*
+ * 每个语义色一次写清 light-dark(纸面, 砚墨)，由 color-scheme 取哪支笔，避免维护两套色板。
+ * 砚墨（暗色）= 晚自习暖墨黑而非蓝黑。color-scheme 由下方 <html>/data-theme 统一控制：
+ * 跟随系统交 OS，手动亮/暗则强制，无需 prefers-color-scheme 覆写。组件禁止散写色值。
+ */
 @theme {
   /* 纸面层级：canvas 是桌面，card 是刚铺开的一页新纸 */
-  --color-canvas: #f7f4ec;
-  --color-card: #fffdf7;
-  --color-surface: #efeadd;
-  --color-surface-strong: #e5ddcb;
-  --color-ink: #262219;
-  --color-ink-muted: #6d6552;
-  /* ink-faint 是「装饰/图标」层（图标、分隔、占位），只保证图形对比度 ≥3:1；
-     承载信息的可读文字一律用 ink-muted（≥4.5:1），不用 faint，见 docs 验收 #8。
-     纸面上不存在既更淡又达正文 AA 的第三级，故按用途分层而非把 faint 提亮成 muted。 */
-  --color-ink-faint: #847d6b;
-  --color-line: #ddd4c0;
+  --color-canvas: light-dark(#f7f4ec, #1a1712);
+  --color-card: light-dark(#fffdf7, #211e17);
+  --color-surface: light-dark(#efeadd, #262217);
+  --color-surface-strong: light-dark(#e5ddcb, #322d20);
+  --color-ink: light-dark(#262219, #eae4d4);
+  --color-ink-muted: light-dark(#6d6552, #b0a78f);
+  --color-ink-faint: light-dark(#847d6b, #7f7663);
+  --color-line: light-dark(#ddd4c0, #3b3527);
 
   /* 黛青：讲课的笔 */
-  --color-accent: #31606c;
-  --color-accent-strong: #234c58;
-  --color-accent-soft: #dfe9e6;
+  --color-accent: light-dark(#31606c, #86b7c1);
+  --color-accent-strong: light-dark(#234c58, #a5cdd5);
+  --color-accent-soft: light-dark(#dfe9e6, #223138);
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
-  --color-cinnabar: #bf4029;
-  --color-cinnabar-strong: #a33420;
-  --color-cinnabar-soft: #f6e2d8;
+  --color-cinnabar: light-dark(#bf4029, #dd6f52);
+  --color-cinnabar-strong: light-dark(#a33420, #e98a70);
+  --color-cinnabar-soft: light-dark(#f6e2d8, #3f2018);
 
-  --color-good: #4a7c44;
-  --color-good-soft: #e3ecda;
-  --color-warn: #97711e;
-  --color-warn-soft: #f2e7ca;
-  --color-bad: #ab2f17;
-  --color-bad-soft: #f6dcd2;
+  --color-good: light-dark(#4a7c44, #8db77d);
+  --color-good-soft: light-dark(#e3ecda, #26321f);
+  --color-warn: light-dark(#97711e, #d0a751);
+  --color-warn-soft: light-dark(#f2e7ca, #372e14);
+  --color-bad: light-dark(#ab2f17, #de6a4c);
+  --color-bad-soft: light-dark(#f6dcd2, #3d1d13);
 
   --font-sans:
     'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
@@ -46,6 +48,7 @@
     'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'PingFang SC', serif;
 
   --radius-pill: 1.75rem;
+  /* 阴影亮暗连模糊/偏移都不同，无法塞进 light-dark()（仅接受颜色），故走下方 dark 覆写 */
   --shadow-float:
     0 1px 2px rgb(72 60 34 / 0.05), 0 10px 32px rgb(72 60 34 / 0.1);
   --shadow-card-hover:
@@ -54,45 +57,37 @@
 }
 
 /*
- * 深色 = 晚自习的砚墨：暖墨黑而非蓝黑。只覆写变量，
- * 让 @theme 生成的全部工具类自动换色。
+ * 主题偏好存于 <html data-theme>（水合前由内联脚本设定，见 app/layout.tsx）：
+ *   无属性 = 跟随系统；data-theme=light = 手动纸色亮；data-theme=dark = 手动砚墨暗。
+ * color-scheme 同时驱动 light-dark() 取色与原生表单/滚动条外观，二者始终一致。
  */
+html {
+  color-scheme: light dark;
+  background: var(--color-canvas);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* 砚墨阴影：手动暗色，或跟随系统且系统为暗且未显式选亮色时生效；下两块同值需同步。 */
+:root[data-theme='dark'] {
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
+  --shadow-card-hover:
+    0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
+  --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #1a1712;
-    --color-card: #211e17;
-    --color-surface: #262217;
-    --color-surface-strong: #322d20;
-    --color-ink: #eae4d4;
-    --color-ink-muted: #b0a78f;
-    --color-ink-faint: #7f7663;
-    --color-line: #3b3527;
-
-    --color-accent: #86b7c1;
-    --color-accent-strong: #a5cdd5;
-    --color-accent-soft: #223138;
-
-    --color-cinnabar: #dd6f52;
-    --color-cinnabar-strong: #e98a70;
-    --color-cinnabar-soft: #3f2018;
-
-    --color-good: #8db77d;
-    --color-good-soft: #26321f;
-    --color-warn: #d0a751;
-    --color-warn-soft: #372e14;
-    --color-bad: #de6a4c;
-    --color-bad-soft: #3d1d13;
-
+  :root:not([data-theme='light']) {
     --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
     --shadow-card-hover:
       0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
     --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
   }
-}
-
-html {
-  color-scheme: light dark;
-  background: var(--color-canvas);
 }
 
 /*
@@ -111,8 +106,13 @@ body::before {
   opacity: 0.035;
 }
 
+/* 纸纹在砚墨面改用 overlay，随手动/系统暗色切换（两块同值需同步，同上 data-theme 说明）。 */
+:root[data-theme='dark'] body::before {
+  mix-blend-mode: overlay;
+  opacity: 0.05;
+}
 @media (prefers-color-scheme: dark) {
-  body::before {
+  :root:not([data-theme='light']) body::before {
     mix-blend-mode: overlay;
     opacity: 0.05;
   }
