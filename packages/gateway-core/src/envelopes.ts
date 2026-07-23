@@ -1,3 +1,24 @@
+/**
+ * Gateway 信封 — 跨 Transport 的统一消息容器。
+ *
+ * ## InboundEnvelope（客户端→Gateway）
+ *
+ * 所有 Transport Adapter（Web/TUI/Telegram/Node）将各自的原生消息
+ * 标准化为统一的 InboundEnvelope 结构。Gateway Service 只理解这一种输入。
+ *
+ * ## OutboundEnvelope（Gateway→客户端）
+ *
+ * Gateway 产生的 OperationEvent 被 Transport Adapter 按各自协议
+ * 编码输出（Web=SSE, TUI=NDJSON, Telegram=Bot API）。
+ *
+ * ## Part 类型
+ *
+ * 消息体由多个 Part 组成，支持：
+ * - text/asset_ref/artifact_ref（来自 agent-core，客户端通用）
+ * - external_media（Adapter 本地媒体句柄，不含 Provider URL）
+ * - action（交互按钮/快捷回复）
+ */
+
 import {
   agentArtifactPartSchema,
   agentAssetPartSchema,
