@@ -73,89 +73,67 @@
 }
 
 /*
- * 输入栏边缘扫光：两道黛青「墨光」分别沿上、下边缘水平掠过（StarBorder 式）。
- * 平时极淡慢扫作陪衬，聚焦时提亮加速；纯 CSS transform，不占 GSAP ticker，
- * pointer-events:none 不拦截输入。扫光层置于卡片背景之上、正文之下
- * （isolate + z-index:-1），微光只作边缘背光、绝不遮住文字与图标。
- * 减少动态偏好下整体隐去，只留输入框自身的黛青聚焦描边（见文件末 @media）。
+ * 输入栏边框流动线：一条黛青光弧绕输入框边缘匀速流动（见下方 .ink-flow-line）。
+ * isolate 建立独立层叠上下文，让流动线以 z-index:-1 落在卡片底色之上、正文之下。
+ * 减少动态偏好下整线隐去，只留输入框自身的黛青聚焦描边（见 no-preference @media）。
  */
 .ink-flow-shell {
+  position: relative;
   isolation: isolate;
 }
 
-.star-sweep {
+/* 注册角度以便 conic-gradient 的旋转可被动画插值（裸自定义属性不可动画）。 */
+@property --ink-flow-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/*
+ * 沿框流动的黛青渐变线：一段亮弧在整圈 conic 渐变里匀速旋转，再用 mask 只保留
+ * 1.5px 边框环，看起来像一条光线绕着输入框边缘流动。inset:-1px 让它压住卡片
+ * 描边、读作「会发光的框」。z-index:-1 使其画在卡片底色之上、正文之下，边角
+ * 无正文处才显形，绝不遮挡文字与图标。纯装饰、pointer-events:none、不承载状态。
+ */
+.ink-flow-line {
   position: absolute;
-  inset: 0;
+  inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 280ms ease;
-}
-
-.star-sweep__strip {
-  position: absolute;
-  width: 300%;
-  height: 50%;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--color-accent) 60%, transparent),
-    transparent 42%
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--ink-flow-angle),
+    transparent 0deg,
+    transparent 200deg,
+    color-mix(in srgb, var(--color-accent) 65%, transparent) 290deg,
+    var(--color-accent) 325deg,
+    transparent 360deg
   );
-  will-change: transform, opacity;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 320ms ease;
+  pointer-events: none;
 }
 
-.star-sweep__top {
-  top: -18%;
-  left: -250%;
-}
-
-.star-sweep__bottom {
-  bottom: -18%;
-  right: -250%;
-}
-
-@keyframes star-sweep-top {
-  0% {
-    transform: translateX(0%);
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(100%);
-    opacity: 0.15;
+@keyframes ink-flow-spin {
+  to {
+    --ink-flow-angle: 360deg;
   }
 }
 
-@keyframes star-sweep-bottom {
-  0% {
-    transform: translateX(0%);
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(-100%);
-    opacity: 0.15;
-  }
-}
-
-/* 平时弱、聚焦强：可见性与动效只在允许动态时开启；减少动态下整层隐去。 */
+/* 平时安静低亮、聚焦提亮加速；可见性与旋转只在允许动态时开启，减少动态下整线隐去。 */
 @media (prefers-reduced-motion: no-preference) {
-  .star-sweep {
-    opacity: 0.32;
+  .ink-flow-line {
+    opacity: 0.55;
+    animation: ink-flow-spin 6s linear infinite;
   }
-  .ink-flow-shell:focus-within .star-sweep {
-    opacity: 0.92;
-  }
-  .star-sweep__top {
-    animation: star-sweep-top 9s linear infinite alternate;
-  }
-  .star-sweep__bottom {
-    animation: star-sweep-bottom 9s linear infinite alternate;
-  }
-  .ink-flow-shell:focus-within .star-sweep__top,
-  .ink-flow-shell:focus-within .star-sweep__bottom {
-    animation-duration: 4.2s;
+  .ink-flow-shell:focus-within .ink-flow-line {
+    opacity: 1;
+    animation-duration: 3.2s;
   }
 }
 
