@@ -36,7 +36,7 @@ export function AssetsDrawer({
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
           <p className="text-sm font-medium text-ink">还没有资料</p>
-          <p className="mt-1 text-xs text-ink-faint">
+          <p className="mt-1 text-xs text-ink-muted">
             上传图片、PDF或网页链接，建立这个笔记本自己的来源集合。
           </p>
         </div>
@@ -75,7 +75,7 @@ export function AssetsDrawer({
                   <span className="block truncate text-sm font-medium text-ink">
                     {asset.label}
                   </span>
-                  <span className="block text-xs text-ink-faint">
+                  <span className="block text-xs text-ink-muted">
                     {asset.kind === 'image'
                       ? '图片'
                       : asset.kind === 'link'

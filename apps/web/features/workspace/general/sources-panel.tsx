@@ -53,7 +53,7 @@ export function SourcesPanel({
   return (
     <div className="flex min-h-0 flex-col border-t border-line/60">
       <div className="flex items-center justify-between px-5 pt-3 pb-1">
-        <p className="text-xs font-medium text-ink-faint">来源</p>
+        <p className="text-xs font-medium text-ink-muted">来源</p>
         <div className="flex gap-1">
           <button
             type="button"
@@ -151,7 +151,7 @@ export function SourcesPanel({
           </li>
         ))}
         {assets.length === 0 ? (
-          <li className="px-3 py-2 text-xs text-ink-faint">
+          <li className="px-3 py-2 text-xs text-ink-muted">
             当前笔记本还没有来源。上传 PDF、图片或网页链接后，后续回答都能使用它们。
           </li>
         ) : null}

@@ -92,7 +92,7 @@ export function SlidesRenderer({ content }: { content: unknown }) {
         >
           <CaretLeft aria-hidden="true" size={18} />
         </button>
-        <span className="text-xs text-ink-faint" aria-live="polite">
+        <span className="text-xs text-ink-muted" aria-live="polite">
           {index + 1} / {slides.length}
         </span>
         <button

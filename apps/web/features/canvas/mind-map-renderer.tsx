@@ -56,7 +56,8 @@ const DEPTH_STYLES = [
   'text-lg font-semibold text-ink',
   'text-[15px] font-medium text-ink',
   'text-sm text-ink-muted',
-  'text-sm text-ink-faint',
+  /* 最深层节点仍是可读内容，用 ink-muted 保 AA；层级差由左缩进承载而非更淡的字色 */
+  'text-sm text-ink-muted',
 ] as const;
 
 function MindMapBranch({ node, depth }: { node: MindMapNode; depth: number }) {

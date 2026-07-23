@@ -221,7 +221,7 @@ export function ArtifactConfirmSheet({
           </p>
         ) : null}
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-faint">产物标题</span>
+          <span className="text-xs font-medium text-ink-muted">产物标题</span>
           <input
             value={title}
             maxLength={120}
@@ -385,7 +385,7 @@ export function ArtifactCanvas({
               ))}
             </select>
           </label>
-          <span className="text-xs text-ink-faint">
+          <span className="text-xs text-ink-muted">
             {isLatest ? '当前版本' : '历史只读版本'}
           </span>
         </div>
@@ -452,7 +452,7 @@ export function ArtifactCanvas({
                 {revising ? '生成中…' : '生成新版本'}
               </button>
             </div>
-            <p className="mt-1.5 text-xs text-ink-faint">
+            <p className="mt-1.5 text-xs text-ink-muted">
               修改会基于 v{detail.artifact.latestVersion}、当前 Notebook
               对话和这条要求生成完整新版本。
             </p>

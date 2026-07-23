@@ -21,7 +21,7 @@ export function PipelineFlowQa({ artifact }: { artifact: PublicArtifact }) {
         onAnimationObservation={setLastObservation}
       />
       <p
-        className="mt-4 text-center text-xs text-ink-faint"
+        className="mt-4 text-center text-xs text-ink-muted"
         aria-live="polite"
         data-testid="animation-observation"
       >

@@ -137,7 +137,7 @@ export function Composer({
               submit();
             }
           }}
-          className={`max-h-36 min-h-10 flex-1 resize-none self-center bg-transparent px-2 py-2 leading-6 text-ink outline-none placeholder:text-ink-faint ${
+          className={`max-h-36 min-h-10 flex-1 resize-none self-center bg-transparent px-2 py-2 leading-6 text-ink outline-none placeholder:text-ink-muted ${
             isLanding ? 'text-base' : 'text-[15px]'
           }`}
         />
@@ -197,7 +197,7 @@ export function Composer({
                 <SidebarSimple aria-hidden="true" size={15} />
                 <span>{tool.label}</span>
                 {tool.detail ? (
-                  <span className="text-[11px] text-ink-faint">
+                  <span className="text-[11px] text-ink-muted">
                     {tool.detail}
                   </span>
                 ) : null}
@@ -209,7 +209,7 @@ export function Composer({
       {!isLanding || statusText ? (
         <p
           className={`mt-2 min-h-4 text-center text-xs ${
-            statusTone === 'error' ? 'text-bad' : 'text-ink-faint'
+            statusTone === 'error' ? 'text-bad' : 'text-ink-muted'
           }`}
         >
           {statusText ?? 'AI 也可能出错，请核对重要信息。'}

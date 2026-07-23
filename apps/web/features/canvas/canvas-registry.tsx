@@ -131,7 +131,7 @@ function QuizRenderer({
           </fieldset>
         );
       })}
-      <p className="text-xs text-ink-faint">
+      <p className="text-xs text-ink-muted">
         答案由老师批改，做完每道题记得点提交。
       </p>
     </div>
@@ -302,7 +302,7 @@ export function PipelineFlowRenderer({
                   className="relative min-h-48 rounded-2xl border border-line/70 bg-canvas/75 p-4 [will-change:transform,opacity] motion-reduce:will-change-auto"
                 >
                   <div className="mb-7 flex items-start justify-between gap-3">
-                    <span className="text-xs font-medium tracking-wide text-ink-faint">
+                    <span className="text-xs font-medium tracking-wide text-ink-muted">
                       {eyebrow}
                     </span>
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-strong">

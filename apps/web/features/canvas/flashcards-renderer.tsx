@@ -92,7 +92,7 @@ export function FlashcardsRenderer({ content }: { content: unknown }) {
         aria-label={flipped ? '显示正面' : '显示答案'}
         className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-line/70 bg-surface/50 px-8 py-6 text-center transition-colors hover:border-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <span className="text-xs font-medium text-ink-faint">
+        <span className="text-xs font-medium text-ink-muted">
           {flipped ? '答案' : '问题 · 点击翻面'}
         </span>
         <span
@@ -106,7 +106,7 @@ export function FlashcardsRenderer({ content }: { content: unknown }) {
         </span>
       </button>
       <div className="flex shrink-0 items-center justify-between pt-3">
-        <span className="text-xs text-ink-faint" aria-live="polite">
+        <span className="text-xs text-ink-muted" aria-live="polite">
           {index + 1} / {cards.length}
         </span>
         <div className="flex gap-2">
