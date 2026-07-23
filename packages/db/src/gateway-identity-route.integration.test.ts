@@ -84,6 +84,7 @@ describeWithDatabase(
         ownerSubjectId: 'user:owner',
         spaceKind: 'notebook',
         spaceTitle: '班级笔记本',
+        agentProfileId: 'k12.teacher',
         now,
       });
       const member = await identities.ensureAnonymousCompatibility({
@@ -120,6 +121,7 @@ describeWithDatabase(
         agentId: member.agentId,
         notebookId: conversation.spaceId,
         conversationId: conversation.id,
+        agentProfileId: 'k12.teacher',
         membershipRole: 'contributor',
       });
       expect(resolved.agentId).not.toBe(

@@ -10,7 +10,7 @@
 - 数据：PostgreSQL + Drizzle，二进制进入对象存储；
 - 长任务：graphile-worker；
 - 模型：`model-gateway` Provider Adapter；
-- 观测：Gateway已有安全结构化日志和进程内低基数指标；`packages/telemetry`已把默认关闭的OTel Turn Trace Adapter接入Gateway、Web General与Web Teaching，使用属性/事件白名单、比例采样、有界Batch和OTLP HTTP Exporter。Exporter失败只进入`degraded`健康状态，不改变Turn终态；跨进程W3C传播、SLO后端与告警仍待后续纵切。
+- 观测：Gateway已有安全结构化日志和进程内低基数指标；`packages/telemetry`已把默认关闭的OTel Turn Trace Adapter接入Gateway、Web General与Web Teaching，使用属性/事件白名单、比例采样、有界Batch和OTLP HTTP Exporter。Turn的服务端W3C `traceparent`可以通过PostgreSQL continuation在Worker恢复为因果子Span，不进入公开事件或Graphile payload。Exporter、carrier生成与提取失败只降级观测，不改变Turn或continuation终态；入口/Gateway/Model/Tool独立生产Span、SLO后端与告警仍待后续纵切。
 
 Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定依赖；真实需求出现时另行决策。
 
@@ -27,13 +27,18 @@ Redis、Temporal、Kafka、Python 服务和独立 core API 都不是当前既定
 
 - `POST /api/v1/learn/turn`只接受受限正文和`clientMessageId`，从服务端匿名身份恢复Session，不接受浏览器声明学生或Session归属；
 - Gateway与Web组合根通过`packages/model-gateway`公共工厂创建可配置的OpenAI-compatible Turn Adapter；`MODEL_GATEWAY_RUNTIME`显式选择`native | ai-sdk`且默认native，未配置或配置非法时写入诚实失败态，不回退到脚本回答或另一Adapter；
+- Gateway Route Resolver从`conversations.agent_profile_id`读取权威Profile并写入严格`GatewayResolvedRoute`；Runner不再硬编码Profile，也不接受入口覆盖。Operation `begin/replay`返回值只包含自身已持久事实，不回显或伪造未持久化的历史Membership/Profile路由。当前只支持`general`，其余Profile在进入模型或Tool前以`CAPABILITY_UNAVAILABLE`诚实失败，待共享K12组合边界接线；
+- Gateway General的Tool Policy由公共纯Resolver生成：实际注册Adapter是共同上界，Actor私人Node、Notebook Membership、Conversation Profile、服务端入口ceiling与部署环境分别提供grant；Envelope capability manifest只描述传输/渲染协商，不能增权。Web/TUI允许最终交集，Channel/System在交互审批与停止语义完成前保持空Tool能力；
 - Web Teaching Profile把K12 Prompt、安全、教学状态与领域回调注入唯一`TurnApplicationService`；当前生产组合通过统一Tool Kernel注册只读`getStudentState`与`retrieveKnowledge`，工具可见性由可信教学状态、Actor/Agent/Notebook/Profile/入口/环境能力交集和Adapter共同收敛；
 - Provider事件先归一为`teaching-core`协议，再由Route映射成版本化EduCanvas SSE；供应商chunk、模型ID、Key和原始异常不进入浏览器；
 - 学生消息、老师消息和安全决策继续保留K12领域形状；Model Run、Tool Call与Turn Context Snapshot改为统一`agent_operation`账本归属，同一`clientMessageId`具备幂等/冲突语义，成功老师消息必须能够追溯到同一Operation的成功Model Run；
 - `agent-runtime`按消息数/字符预算选择最新完整历史，Web在创建Turn时把选择的消息ID、AssetVersion ID、builder版本和计数与消息/Model Run原子落账；历史不能注入`system`角色；
 - 已实现单Session活动Turn约束、PostgreSQL窗口限流、Turn租约/heartbeat、显式取消、过期收敛和刷新消息恢复；浏览器断连不等同于学生取消；
 - 已定义`educanvas.operation-continuation.v1`并建立最小化PostgreSQL控制账本：一个Operation可按序保留多个历史等待点、同一时刻仅一个活动等待点。approval通过后，决策事件、ready游标与Graphile任务原子提交；worker以owner + generation + expiry领取，恢复前重算Agent/Membership/Conversation/approval，continuation与Operation终态原子提交。Turn Application把L2/L3变为“Schema验证→pending Tool Call→Adapter耐久准备→approval.required无终态挂起”；`educanvas.tool-approval-intent.v1`把prepared意图与Gateway事件、Approval、continuation原子绑定。MCP Adapter现以独立短期密文意图实现L2/L3恢复，外呼前擦除参数，重领时按Effect Ledger补齐或收敛未知；高风险Node仍未开放；
+- Tool Effect reconciliation已建立core契约与PostgreSQL追加式决议边界：只允许为`outcome_unknown` write Effect记录`confirmed_committed/confirmed_not_committed`，不改写原Effect、Tool Call或Operation终态。自动verifier必须是Adapter专属的只查询实现，并在Effect intention中由服务端冻结身份；运行时和仓储都拒绝调用方换用其他verifier，禁止invoke/replay。MCP v1当前没有可信查询契约，因此自动路径fail closed。人工resolver必须是受信operator或service principal，不能接受学生/模型自证。当前尚未接入生产触发或具体Adapter verifier；
 - continuation取消以PostgreSQL请求为跨进程事实：等待态立即原子取消，运行态由Worker heartbeat/结算观察，未过期lease触发Graphile重试而不是误报成功，过期后用新generation重领；
+- Graphile异常退出长锁由独立`OperationContinuationRecoveryPort`和每分钟有界维护任务收敛：DB以`SKIP LOCKED`扫描过期业务lease，在同一事务用原稳定job key重投纯`continuationId`，扫描不改业务状态或generation；新任务仍经claim和全量重授权。恢复健康面只输出计数与最老过期时间，generation耗尽、终态Operation仍挂活动continuation必须人工处置；
+- `traceparent`只作为可丢弃的观测元数据：Turn在耐久准备审批意图时写入首个carrier，Gateway绑定审批时在同一事务复制到continuation，Worker领取后恢复父上下文。它不是身份、授权、幂等键或业务`traceId`，重试产生不同carrier时保留首次值；
 - 输入在Provider前经过确定性K12安全判断，输出delta在发给浏览器前经过流式安全Gate；这只是阶段一工程基线，不等于生产级未成年人治理已经完成。
 
 通用与K12对话 Turn 都由`TurnApplicationService + AgentLoopEngine + ToolKernel`执行，圈数配额3；`webSearch`负责发现候选，只有`fetchWebPage`实际读取成功的网页才会落为不可变Link AssetVersion并进入`operation_sources`白名单。最终正文只把真实出现的合法`[n]`提升为Citation。Gateway Operation与通用/K12 Turn复用同一ID并记录Actor、Agent、Notebook和标准事件；模型、工具与上下文详细审计写统一Turn Ledger，学习安全和掌握度仍写教育领域账本。

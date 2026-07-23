@@ -9,6 +9,13 @@
  * 全部色彩取自传统颜料谱系（纸、墨、黛青、朱砂、藤黄、松绿），
  * 亮色是默认的「纸面」，深色是「晚自习砚墨」。组件禁止散写色值。
  */
+/*
+ * 亮色（纸面）是默认，@theme 直接给静态值；砚墨（暗色）由 :root[data-theme='dark'] 覆写全部 token。
+ * 为什么不用 light-dark()：Chromium 不会在 color-scheme 动态变化时重新解析「自定义属性里的
+ * light-dark()」，导致手动切主题时 token 不更新、切不动（曾在此踩坑）。属性覆写改一次属性就重算，稳。
+ * 跟随系统由 JS 在水合前把 system 解析成具体 light/dark 写进 data-theme（见 layout.tsx），
+ * 故 CSS 不需要 prefers-color-scheme 媒体查询。组件禁止散写色值。
+ */
 @theme {
   /* 纸面层级：canvas 是桌面，card 是刚铺开的一页新纸 */
   --color-canvas: #f7f4ec;
@@ -17,13 +24,16 @@
   --color-surface-strong: #e5ddcb;
   --color-ink: #262219;
   --color-ink-muted: #6d6552;
-  --color-ink-faint: #98907b;
+  /* ink-faint=装饰/图标层(≥3:1)；信息文字用 ink-muted(≥4.5:1)，见验收#8 */
+  --color-ink-faint: #847d6b;
   --color-line: #ddd4c0;
 
   /* 黛青：讲课的笔 */
   --color-accent: #31606c;
   --color-accent-strong: #234c58;
   --color-accent-soft: #dfe9e6;
+  /* 扉页墨点场专用点色：shader 会二次 sRGB 提亮，亮色喂更深黛青墨才留得住对比，见 hero-ink-field.tsx */
+  --hero-ink-dot: #0e343d;
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
   --color-cinnabar: #bf4029;
@@ -51,43 +61,43 @@
 }
 
 /*
- * 深色 = 晚自习的砚墨：暖墨黑而非蓝黑。只覆写变量，
- * 让 @theme 生成的全部工具类自动换色。
+ * 砚墨暗：手动选暗、或 JS 把「跟随系统」解析为暗时（data-theme=dark）覆写全部 token。
+ * color-scheme 由 JS 写内联 style（原生表单/滚动条随之），不在 CSS 重复。
  */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #1a1712;
-    --color-card: #211e17;
-    --color-surface: #262217;
-    --color-surface-strong: #322d20;
-    --color-ink: #eae4d4;
-    --color-ink-muted: #b0a78f;
-    --color-ink-faint: #7f7663;
-    --color-line: #3b3527;
+:root[data-theme='dark'] {
+  --color-canvas: #1a1712;
+  --color-card: #211e17;
+  --color-surface: #262217;
+  --color-surface-strong: #322d20;
+  --color-ink: #eae4d4;
+  --color-ink-muted: #b0a78f;
+  --color-ink-faint: #7f7663;
+  --color-line: #3b3527;
 
-    --color-accent: #86b7c1;
-    --color-accent-strong: #a5cdd5;
-    --color-accent-soft: #223138;
+  --color-accent: #86b7c1;
+  --color-accent-strong: #a5cdd5;
+  --color-accent-soft: #223138;
+  --hero-ink-dot: #86b7c1;
 
-    --color-cinnabar: #dd6f52;
-    --color-cinnabar-strong: #e98a70;
-    --color-cinnabar-soft: #3f2018;
+  --color-cinnabar: #dd6f52;
+  --color-cinnabar-strong: #e98a70;
+  --color-cinnabar-soft: #3f2018;
 
-    --color-good: #8db77d;
-    --color-good-soft: #26321f;
-    --color-warn: #d0a751;
-    --color-warn-soft: #372e14;
-    --color-bad: #de6a4c;
-    --color-bad-soft: #3d1d13;
+  --color-good: #8db77d;
+  --color-good-soft: #26321f;
+  --color-warn: #d0a751;
+  --color-warn-soft: #372e14;
+  --color-bad: #de6a4c;
+  --color-bad-soft: #3d1d13;
 
-    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
-    --shadow-card-hover:
-      0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
-    --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
-  }
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
+  --shadow-card-hover:
+    0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
+  --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
 }
 
 html {
+  /* 兜底：JS 未跑时（SSR/禁用）交给系统；JS 就绪后由内联 style 覆盖为所选主题 */
   color-scheme: light dark;
   background: var(--color-canvas);
 }
@@ -108,11 +118,10 @@ body::before {
   opacity: 0.035;
 }
 
-@media (prefers-color-scheme: dark) {
-  body::before {
-    mix-blend-mode: overlay;
-    opacity: 0.05;
-  }
+/* 纸纹在砚墨面改用 overlay */
+:root[data-theme='dark'] body::before {
+  mix-blend-mode: overlay;
+  opacity: 0.05;
 }
 
 /*

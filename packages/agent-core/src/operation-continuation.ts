@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { w3cTraceCarrierSchema } from './trace-carrier';
 
 /** Operation continuation持久行与worker payload共同使用的协议版本。 */
 export const operationContinuationProtocolVersion =
@@ -85,9 +86,10 @@ export const createOperationContinuationInputSchema = z
     actorId: opaqueIdSchema,
     approvalId: opaqueIdSchema,
     work: operationContinuationWorkSchema,
+    traceCarrier: w3cTraceCarrierSchema.nullable().default(null),
   })
   .strict();
-export type CreateOperationContinuationInput = z.infer<
+export type CreateOperationContinuationInput = z.input<
   typeof createOperationContinuationInputSchema
 >;
 
@@ -114,9 +116,10 @@ export const prepareToolApprovalIntentInputSchema = z
     approvalId: opaqueIdSchema,
     expiresAt: z.iso.datetime({ offset: true }),
     work: operationContinuationWorkSchema,
+    traceCarrier: w3cTraceCarrierSchema.nullable().default(null),
   })
   .strict();
-export type PrepareToolApprovalIntentInput = z.infer<
+export type PrepareToolApprovalIntentInput = z.input<
   typeof prepareToolApprovalIntentInputSchema
 >;
 
@@ -129,6 +132,7 @@ export const toolApprovalIntentSnapshotSchema = z
     status: toolApprovalIntentStatusSchema,
     expiresAt: z.iso.datetime({ offset: true }),
     work: operationContinuationWorkSchema,
+    traceCarrier: w3cTraceCarrierSchema.nullable().default(null),
     preparedAt: z.iso.datetime({ offset: true }),
     boundAt: z.iso.datetime({ offset: true }).nullable(),
     abandonedAt: z.iso.datetime({ offset: true }).nullable(),
@@ -174,6 +178,7 @@ export const operationContinuationSnapshotSchema = z
     status: operationContinuationStatusSchema,
     approvalId: opaqueIdSchema,
     work: operationContinuationWorkSchema,
+    traceCarrier: w3cTraceCarrierSchema.nullable().default(null),
     leaseGeneration: z.number().int().min(0).max(1_000_000),
     leaseOwnerId: opaqueIdSchema.nullable(),
     leaseExpiresAt: z.iso.datetime({ offset: true }).nullable(),

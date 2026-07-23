@@ -11,6 +11,7 @@ import {
   createFixture,
   describeWithDatabase,
   getDatabase,
+  initialTraceParent,
   registerContinuationIntegrationHooks,
   waitingInput,
 } from './operation-continuation-repository.integration.support';
@@ -25,20 +26,37 @@ describeWithDatabase('Operation continuation等待态与审批推进', () => {
       getDatabase(),
     );
     const first = await repository.createWaiting(waitingInput(fixture));
-    const replayed = await repository.createWaiting(waitingInput(fixture));
+    const replayed = await repository.createWaiting({
+      ...waitingInput(fixture),
+      traceCarrier: {
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00',
+      },
+    });
     expect(first).toMatchObject({
       replayed: false,
       continuation: {
         operationId: fixture.operationId,
         status: 'waiting_approval',
         approvalId: fixture.approvalId,
+        traceCarrier: { traceparent: initialTraceParent },
         leaseGeneration: 0,
         work: { toolCallId: fixture.toolCallId, adapterSource: 'node' },
       },
     });
     expect(replayed).toMatchObject({
       replayed: true,
-      continuation: { operationId: fixture.operationId },
+      continuation: {
+        operationId: fixture.operationId,
+        traceCarrier: { traceparent: initialTraceParent },
+      },
+    });
+    await expect(
+      repository.get({
+        continuationId: first.continuation.continuationId,
+        actorId: fixture.actorId,
+      }),
+    ).resolves.toMatchObject({
+      traceCarrier: { traceparent: initialTraceParent },
     });
     await expect(
       repository.get({

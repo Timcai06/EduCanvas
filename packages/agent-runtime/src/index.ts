@@ -60,11 +60,13 @@ export {
   type TurnApplicationProfileEvent,
   type TurnApplicationProfilePlan,
   type TurnApplicationProfilePort,
+  type TurnApplicationToolPolicy,
   type TurnApplicationTracePort,
   type TurnApplicationTraceSpan,
 } from './turn-application';
 export {
   ToolKernel,
+  ToolEffectReconciler,
   ToolOutcomeUnknownError,
   toolPolicyDimensions,
   toolRiskLevels,
@@ -72,6 +74,14 @@ export {
   type ToolAdapterApprovalContext,
   type ToolAdapterApprovalPreparation,
   type ToolAdapterInvocationContext,
+  type ManualToolEffectReconciliation,
+  type ToolEffectReconcileResult,
+  type ToolEffectReconciliationAuthorizerPort,
+  type ToolEffectReconciliationPrincipal,
+  type ToolEffectReconciliationTarget,
+  type ToolEffectVerificationInput,
+  type ToolEffectVerificationVerdict,
+  type ToolEffectVerifier,
   type ToolKernelAdapter,
   type ToolKernelFailureCode,
   type ToolKernelPolicyContext,
@@ -81,3 +91,7 @@ export {
   type ToolRiskLevel,
   type ToolSource,
 } from './tool-kernel';
+export {
+  resolveToolPolicy,
+  type ToolPolicyResolverInput,
+} from './tool-policy-resolver';

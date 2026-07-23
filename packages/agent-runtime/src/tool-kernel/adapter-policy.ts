@@ -22,6 +22,11 @@ export function assertValidAdapter(
     !toolRiskLevels.includes(adapter.risk) ||
     !['model', 'runtime'].includes(adapter.exposure) ||
     !['read', 'write'].includes(adapter.effect) ||
+    (adapter.reconciliationVerifierId != null &&
+      (adapter.effect !== 'write' ||
+        !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(
+          adapter.reconciliationVerifierId,
+        ))) ||
     !Number.isSafeInteger(adapter.timeoutMs) ||
     adapter.timeoutMs < 1 ||
     adapter.timeoutMs > 10 * 60_000 ||

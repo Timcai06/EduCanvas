@@ -176,6 +176,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         prepared,
         cancellation,
         controller: executionController,
+        traceCarrier: trace.carrier(),
         ...(outputGuard ? { outputGuard } : {}),
       });
       answer = outcome.answer;

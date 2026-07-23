@@ -61,6 +61,7 @@ export class InMemoryGatewayRouteResolver implements GatewayRouteResolverPort {
 }
 
 interface StoredOperation extends GatewayOperationSnapshot {
+  route: GatewayResolvedRoute;
   events: GatewayOperationEvent[];
   createdAt: string;
   cancelRequestedAt: string | null;
@@ -76,7 +77,6 @@ function toOperationSnapshot(
     envelopeId: operation.envelopeId,
     idempotencyKey: operation.idempotencyKey,
     requestFingerprint: operation.requestFingerprint,
-    route: operation.route,
     status: operation.status,
     replayed,
   };

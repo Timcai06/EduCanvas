@@ -121,7 +121,7 @@ export function ArtifactProvenanceQa() {
         <div className="space-y-4">
           {cases.map((testCase) => (
             <div key={testCase.label} className="space-y-1.5">
-              <p className="text-xs font-medium text-ink-faint">
+              <p className="text-xs font-medium text-ink-muted">
                 {testCase.label}
               </p>
               <div className="overflow-hidden rounded-2xl border border-line bg-canvas">

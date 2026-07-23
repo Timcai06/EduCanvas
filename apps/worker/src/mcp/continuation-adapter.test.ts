@@ -83,6 +83,7 @@ function resumeInput() {
         adapterSource: 'mcp',
         resumeRef: ids.resumeRef,
       },
+      traceCarrier: null,
       leaseGeneration: 1,
       leaseOwnerId: 'worker:1',
       leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),

@@ -70,6 +70,7 @@ function buildService(runner?: GatewayTurnRunnerPort): GatewayService & {
     agentId: 'agent:1',
     notebookId: 'notebook:1',
     conversationId: 'conversation:1',
+    agentProfileId: 'general',
     membershipRole: 'owner' as const,
   };
   const resolver = new InMemoryGatewayRouteResolver([

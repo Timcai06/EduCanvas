@@ -25,6 +25,10 @@ import { beforeAll, beforeEach } from 'vitest';
 export const connectionString = process.env.TEST_DATABASE_URL!;
 export const now = new Date('2026-07-21T15:00:00.000Z');
 export const mcpKey = Buffer.alloc(32, 6).toString('base64');
+/** 集成夹具使用的非敏感、固定W3C父上下文。 */
+export const approvalTraceCarrier = {
+  traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+} as const;
 export const mcpRegistration: McpToolRegistration & {
   risk: 'l2';
   effect: 'write';
@@ -73,6 +77,7 @@ export async function createWaitingApproval(kind: 'node' | 'mcp' = 'node') {
       agentId: identity.agentId,
       notebookId: conversation.spaceId,
       conversationId: conversation.id,
+      agentProfileId: conversation.agentProfileId,
       membershipRole: 'owner',
     },
     now,
@@ -168,6 +173,7 @@ export async function createWaitingApproval(kind: 'node' | 'mcp' = 'node') {
       adapterSource: kind,
       resumeRef,
     },
+    traceCarrier: approvalTraceCarrier,
     now,
   });
   await operations.append(

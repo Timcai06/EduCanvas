@@ -2,6 +2,7 @@ import type {
   AgentToolEffect,
   AgentToolExposure,
   ModelAbortSignal,
+  W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import { type z } from 'zod';
 
@@ -74,6 +75,7 @@ export interface ToolAdapterApprovalPreparation {
 /** 审批准备可见已持久化Tool Call ID，用于绑定Adapter私有意图。 */
 export interface ToolAdapterApprovalContext extends ToolAdapterInvocationContext {
   toolCallId: string;
+  traceCarrier: W3cTraceCarrier | null;
 }
 
 /** Adapter声明能力与执行；身份、授权、审批、幂等和终态属于Kernel。 */
@@ -85,6 +87,8 @@ export interface ToolKernelAdapter<Input = unknown, Output = unknown> {
   risk: ToolRiskLevel;
   exposure: AgentToolExposure;
   effect: AgentToolEffect;
+  /** 仅write Adapter可声明的受信只读对账核验器；调用方不能覆盖。 */
+  reconciliationVerifierId?: string | null;
   timeoutMs: number;
   inputSchema: z.ZodType<Input>;
   modelInputSchema?: Readonly<Record<string, unknown>>;
@@ -108,6 +112,7 @@ export interface AnyToolKernelAdapter {
   risk: ToolRiskLevel;
   exposure: AgentToolExposure;
   effect: AgentToolEffect;
+  reconciliationVerifierId?: string | null;
   timeoutMs: number;
   inputSchema: z.ZodType<unknown>;
   modelInputSchema?: Readonly<Record<string, unknown>>;
@@ -181,6 +186,8 @@ export interface ToolKernelExecuteRequest {
   tool: string;
   arguments: unknown;
   context: ToolKernelTrustedContext;
+  /** 只在L2/L3审批意图准备时下传，不得投影到普通invoke上下文。 */
+  traceCarrier?: W3cTraceCarrier | null;
   signal?: ModelAbortSignal;
 }
 

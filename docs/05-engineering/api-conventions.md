@@ -105,7 +105,7 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
 
 ## Gateway v1
 
-`gateway.v1` 使用严格 Zod Schema 和 `application/x-ndjson` 流。标准输入由服务端认证边界构造，包含 connection、principal、route hint、parts、capability manifest 与 reply target；公共Client请求不允许提交principal。
+`gateway.v1` 使用严格 Zod Schema 和 `application/x-ndjson` 流。标准输入由服务端认证边界构造，包含 connection、principal、route hint、parts、capability manifest 与 reply target；公共Client请求不允许提交principal。capability manifest只描述该入口可收发或渲染的协议能力，不是Tool授权源；Tool grant必须由服务端对Actor、Notebook、Profile、Channel与Environment分别解析，入口声明至多继续收窄。
 
 核心语义：
 

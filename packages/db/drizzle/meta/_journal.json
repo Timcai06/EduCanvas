@@ -225,6 +225,20 @@
       "when": 1784694459406,
       "tag": "0031_clean_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784731132010,
+      "tag": "0032_famous_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784736296205,
+      "tag": "0033_crazy_misty_knight",
+      "breakpoints": true
     }
   ]
 }

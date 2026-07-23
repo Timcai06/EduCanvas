@@ -178,6 +178,7 @@ describeWithDatabase('Tool Effect持久账本', () => {
       toolCallId: fixture.writeToolCallId,
       effectKey: 'execution-write-effect',
       semanticsHash: 'c'.repeat(64),
+      reconciliationVerifierId: 'mcp.receipt-query:v1',
       now: new Date('2026-07-21T12:00:01.000Z'),
     };
     const results = await Promise.all([
@@ -199,7 +200,11 @@ describeWithDatabase('Tool Effect持久账本', () => {
     });
     expect(committed).toMatchObject({
       transitioned: true,
-      effect: { status: 'committed', receiptHash: 'd'.repeat(64) },
+      effect: {
+        status: 'committed',
+        receiptHash: 'd'.repeat(64),
+        reconciliationVerifierId: 'mcp.receipt-query:v1',
+      },
     });
     await expect(
       repository.settle({
@@ -232,6 +237,7 @@ describeWithDatabase('Tool Effect持久账本', () => {
       toolCallId: fixture.writeToolCallId,
       effectKey: 'execution-write-effect',
       semanticsHash: 'e'.repeat(64),
+      reconciliationVerifierId: 'mcp.receipt-query:v1',
     });
     await expect(
       repository.intend({
@@ -240,6 +246,17 @@ describeWithDatabase('Tool Effect持久账本', () => {
         toolCallId: fixture.writeToolCallId,
         effectKey: 'execution-write-effect',
         semanticsHash: 'f'.repeat(64),
+        reconciliationVerifierId: 'mcp.receipt-query:v1',
+      }),
+    ).rejects.toBeInstanceOf(ToolEffectConflictError);
+    await expect(
+      repository.intend({
+        operationId: fixture.operationId,
+        actorId: fixture.actorId,
+        toolCallId: fixture.writeToolCallId,
+        effectKey: 'execution-write-effect',
+        semanticsHash: 'e'.repeat(64),
+        reconciliationVerifierId: 'mcp.other-verifier:v1',
       }),
     ).rejects.toBeInstanceOf(ToolEffectConflictError);
     await expect(

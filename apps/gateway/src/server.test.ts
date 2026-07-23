@@ -30,6 +30,7 @@ function createService(
     agentId: 'agent:1',
     notebookId: 'notebook:1',
     conversationId: 'conversation:1',
+    agentProfileId: 'general',
     membershipRole: 'owner' as const,
   };
   const runner: GatewayTurnRunnerPort = {

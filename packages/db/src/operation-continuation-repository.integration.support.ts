@@ -146,11 +146,15 @@ export async function createFixture() {
 
 export type ContinuationFixture = Awaited<ReturnType<typeof createFixture>>;
 
+export const initialTraceParent =
+  '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+
 export function waitingInput(fixture: ContinuationFixture) {
   return {
     operationId: fixture.operationId,
     actorId: fixture.actorId,
     approvalId: fixture.approvalId,
+    traceCarrier: { traceparent: initialTraceParent },
     work: {
       kind: 'tool_invocation' as const,
       step: 'tool.invoke' as const,

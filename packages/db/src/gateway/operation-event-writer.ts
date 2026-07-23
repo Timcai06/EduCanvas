@@ -199,6 +199,7 @@ export async function appendGatewayOperationEvent(
         toolCallId: intent.toolCallId,
         adapterSource: intent.adapterSource,
         resumeRef: intent.resumeRef,
+        traceParent: intent.traceParent,
         status: 'waiting_approval',
         createdAt: now,
         updatedAt: now,

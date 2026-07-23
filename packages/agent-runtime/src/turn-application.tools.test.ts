@@ -116,7 +116,10 @@ describe('TurnApplicationService (tool kernel and approvals)', () => {
     const lifecycle = new MemoryLifecycle();
     const calls = new MemoryCallLedger();
     const traceStatuses: string[] = [];
-    const prepareApproval = vi.fn(async () => ({
+    const traceCarrier = {
+      traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+    } as const;
+    const prepareApproval = vi.fn(async (..._arguments: unknown[]) => ({
       approvalId: 'approval:turn-application',
       summary: '读取已配对设备中的白名单学习资料',
       expiresAt: '2026-07-21T01:00:00.000Z',
@@ -196,6 +199,7 @@ describe('TurnApplicationService (tool kernel and approvals)', () => {
         trace: {
           start() {
             return {
+              carrier: () => traceCarrier,
               event() {},
               end(status) {
                 traceStatuses.push(status);
@@ -224,5 +228,8 @@ describe('TurnApplicationService (tool kernel and approvals)', () => {
       { relativePath: 'algebra.md' },
       expect.objectContaining({ toolCallId: calls.calls[0]!.id }),
     );
+    expect(prepareApproval.mock.calls[0]?.[1]).toMatchObject({
+      traceCarrier,
+    });
   });
 });

@@ -43,6 +43,7 @@ describeWithDatabase('Gateway capability-scoped Node lifecycle', () => {
         agentId: owner.agentId,
         notebookId: conversation.spaceId,
         conversationId: conversation.id,
+        agentProfileId: 'general',
         membershipRole: 'owner',
       },
       now,

@@ -9,7 +9,9 @@ import {
 
 describe('Tool Kernel执行与副作用边界', () => {
   it('相同executionId只执行一次，语义漂移拒绝', async () => {
-    const invoke = vi.fn(async () => ({ source: 'local' }));
+    const invoke = vi.fn(async (..._arguments: unknown[]) => ({
+      source: 'local',
+    }));
     const kernel = new ToolKernel(
       [adapter({ invoke })],
       new MemoryCallLedger(),
@@ -20,6 +22,9 @@ describe('Tool Kernel执行与副作用边界', () => {
       tool: 'runLocal',
       arguments: { value: 'same' },
       context: trusted,
+      traceCarrier: {
+        traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+      },
     });
     const replay = await kernel.execute({
       tool: 'runLocal',
@@ -36,6 +41,7 @@ describe('Tool Kernel执行与副作用边界', () => {
       }),
     ).resolves.toMatchObject({ code: 'idempotency_conflict' });
     expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls[0]?.[1]).not.toHaveProperty('traceCarrier');
   });
 
   it('执行前已取消时不调用Adapter也不建立副作用意图', async () => {
@@ -77,6 +83,7 @@ describe('Tool Kernel执行与副作用边界', () => {
       [
         adapter({
           effect: 'write',
+          reconciliationVerifierId: 'adapter:timeout-query',
           timeoutMs: 5,
           invoke: async () => new Promise(() => undefined),
         }),
@@ -96,7 +103,11 @@ describe('Tool Kernel执行与副作用边界', () => {
       retryable: false,
     });
     expect([...effects.effects.values()]).toMatchObject([
-      { status: 'outcome_unknown', code: 'write_outcome_unknown' },
+      {
+        status: 'outcome_unknown',
+        code: 'write_outcome_unknown',
+        reconciliationVerifierId: 'adapter:timeout-query',
+      },
     ]);
     expect([...calls.calls.values()]).toMatchObject([
       { status: 'outcome_unknown', code: 'write_outcome_unknown' },

@@ -5,13 +5,19 @@ import { describe, it } from 'node:test';
 
 const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
+const TURN_APPLICATION_TEST_REVIEW_LIMIT = 400;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
-const WEB_VISUAL_REVIEW_LIMIT = 350;
+const GATEWAY_TURN_REVIEW_LIMIT = 300;
+const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
+// PixelBlast runtime 因反闪烁的同步补渲等真实改动小幅增长，2026-07 从 350 上调到 360；仍是可读性护栏。
+const WEB_VISUAL_REVIEW_LIMIT = 360;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
 const WEB_WORKSPACE_REVIEW_LIMIT = 600;
-const WEB_STYLES_REVIEW_LIMIT = 400;
+// 主题系统（light-dark 双色板 + data-theme + 墨点场专用色）让 globals.css 合理增长，
+// 2026-07 从 400 上调到 420；仍是可读性护栏而非无界额度。
+const WEB_STYLES_REVIEW_LIMIT = 420;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -29,10 +35,66 @@ const CONTINUATION_DB_SUPPORT =
   'packages/db/src/operation-continuation-repository.integration.support.ts';
 const CONTINUATION_WORKER_SUPPORT =
   'apps/worker/src/approval-continuation.integration-support.ts';
+const CONTINUATION_WORKER_TASK = 'apps/worker/src/tasks/continue-operation.ts';
+const CONTINUATION_WORKER_TASK_TEST =
+  'apps/worker/src/tasks/continue-operation.test.ts';
+const TOOL_EFFECT_RECONCILIATION_MODULES = [
+  'packages/agent-core/src/tool-effect-reconciliation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation-validation.ts',
+  'packages/agent-runtime/src/tool-kernel/reconciliation-verifier.ts',
+  'packages/db/src/schema/tool-effect-reconciliation.ts',
+  'packages/db/src/tool-effect-reconciliation-persistence.ts',
+  'packages/db/src/tool-effect-reconciliation-repository.ts',
+];
+const OPERATION_CONTINUATION_RECOVERY_MODULES = [
+  'packages/agent-core/src/operation-continuation-recovery.ts',
+  'packages/db/src/operation-continuation/recovery-contracts.ts',
+  'packages/db/src/operation-continuation/recovery-repository.ts',
+  'apps/worker/src/tasks/recover-operation-continuations.ts',
+];
+const OPERATION_CONTINUATION_RECOVERY_FIXTURES = [
+  'apps/worker/src/approval-continuation-sigkill.fixture.ts',
+  'apps/worker/src/approval-continuation-sigkill.integration-support.ts',
+];
+const GATEWAY_TURN_MODULES = [
+  'apps/gateway/src/agent-runner.ts',
+  'apps/gateway/src/agent-runner.test.ts',
+  ...typescriptFiles('apps/gateway/src/turn-application'),
+];
+const WORKER_BOOTSTRAP_MODULES = [
+  'apps/worker/src/index.ts',
+  'apps/worker/src/bootstrap.ts',
+  'apps/worker/src/bootstrap.test.ts',
+  'apps/worker/src/workspace-env.ts',
+  'apps/worker/src/process-lifecycle.ts',
+  'apps/worker/src/process-lifecycle.test.ts',
+];
 const WEB_SHARED_ROOT = 'apps/web/features/workspace/shared';
 const WEB_SETTINGS_ROOT = 'apps/web/features/settings';
 const WEB_GENERAL_WORKSPACE =
   'apps/web/features/workspace/general/general-chat-workspace.tsx';
+const WEB_GENERAL_TURN_MODULES = [
+  'apps/web/server/platform/general-turn.ts',
+  'apps/web/server/platform/general-turn-lifecycle.ts',
+  'apps/web/server/platform/general-turn-persistence.ts',
+  'apps/web/server/platform/general-turn-profile.ts',
+  'apps/web/server/platform/general-turn-tool-policy.ts',
+  'apps/web/server/platform/general-turn-tools.ts',
+];
+const WEB_GENERAL_TURN_TESTS = typescriptFiles(
+  'apps/web/server/platform',
+).filter((path) =>
+  /\/general-(?:turn(?:[.-].+)?|chat-boundary)\.test\.ts$/.test(path),
+);
+const WEB_TEACHING_TURN_ENTRY = 'apps/web/server/teaching/learning-turn.ts';
+const WEB_TEACHING_TURN_MODULES = [
+  WEB_TEACHING_TURN_ENTRY,
+  ...typescriptFiles('apps/web/server/teaching/turn-application'),
+];
+const WEB_TEACHING_TURN_TESTS = typescriptFiles(
+  'apps/web/server/teaching',
+).filter((path) => /\/learning-turn(?:\..+)?\.test\.ts$/.test(path));
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -121,6 +183,17 @@ describe('Runtime module size boundary', () => {
     );
   });
 
+  it('keeps Tool Effect reconciliation production responsibilities independently readable', () => {
+    assertFilesWithinLimit(TOOL_EFFECT_RECONCILIATION_MODULES, REVIEW_LIMIT);
+  });
+
+  it('keeps continuation recovery contracts independently readable', () => {
+    assertFilesWithinLimit(
+      OPERATION_CONTINUATION_RECOVERY_MODULES,
+      REVIEW_LIMIT,
+    );
+  });
+
   it('keeps continuation integration fixtures independently readable', () => {
     const dbTests = readdirSync('packages/db/src', { withFileTypes: true })
       .filter(
@@ -147,9 +220,32 @@ describe('Runtime module size boundary', () => {
         CONTINUATION_DB_SUPPORT,
         ...dbTests,
         CONTINUATION_WORKER_SUPPORT,
+        ...OPERATION_CONTINUATION_RECOVERY_FIXTURES,
         ...workerTests,
       ],
       CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Worker bootstrap and continuation orchestration independently readable', () => {
+    assertFilesWithinLimit(
+      [
+        ...WORKER_BOOTSTRAP_MODULES,
+        CONTINUATION_WORKER_TASK,
+        CONTINUATION_WORKER_TASK_TEST,
+      ],
+      CONTINUATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Gateway Turn composition independently readable', () => {
+    assertFilesWithinLimit(GATEWAY_TURN_MODULES, GATEWAY_TURN_REVIEW_LIMIT);
+  });
+
+  it('keeps Gateway Runtime modules and tests independently readable', () => {
+    assertFilesWithinLimit(
+      typescriptFiles('packages/gateway-runtime/src'),
+      GATEWAY_RUNTIME_REVIEW_LIMIT,
     );
   });
 
@@ -169,5 +265,34 @@ describe('Runtime module size boundary', () => {
       ['apps/web/app/globals.css', 'apps/web/app/effects.css'],
       WEB_STYLES_REVIEW_LIMIT,
     );
+  });
+
+  it('keeps Web General Turn responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      WEB_GENERAL_TURN_MODULES,
+      TURN_APPLICATION_REVIEW_LIMIT,
+    );
+    assertFilesWithinLimit(
+      WEB_GENERAL_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Web Teaching Turn responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_MODULES,
+      TURN_APPLICATION_REVIEW_LIMIT,
+    );
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps one explicit Web Teaching Turn Application composition root', () => {
+    const compositionRoots = WEB_TEACHING_TURN_MODULES.filter((path) =>
+      readFileSync(path, 'utf8').includes('new TurnApplicationService('),
+    );
+    assert.deepEqual(compositionRoots, [WEB_TEACHING_TURN_ENTRY]);
   });
 });

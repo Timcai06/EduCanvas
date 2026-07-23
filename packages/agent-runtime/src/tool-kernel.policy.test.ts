@@ -66,4 +66,24 @@ describe('Tool Kernel策略与Adapter边界', () => {
     expect(calls.calls.size).toBe(4);
     expect(effects.effects.size).toBe(0);
   });
+
+  it('只有write Adapter可绑定稳定对账核验器ID', () => {
+    const create = (
+      effect: 'read' | 'write',
+      reconciliationVerifierId: string,
+    ) =>
+      new ToolKernel(
+        [adapter({ effect, reconciliationVerifierId })],
+        new MemoryCallLedger(),
+        new MemoryEffectLedger(),
+      );
+
+    expect(() => create('write', 'adapter:effect-query-v1')).not.toThrow();
+    expect(() => create('read', 'adapter:effect-query-v1')).toThrow(
+      '非法或重复Tool Adapter',
+    );
+    expect(() => create('write', 'bad verifier id')).toThrow(
+      '非法或重复Tool Adapter',
+    );
+  });
 });

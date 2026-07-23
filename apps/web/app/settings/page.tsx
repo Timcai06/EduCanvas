@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from '@phosphor-icons/react/dist/ssr';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
+import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { LogoMark } from '@/features/workspace/shared/logo-mark';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
@@ -34,7 +35,7 @@ export default async function SettingsPage() {
               <LogoMark size={26} />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
                 EduCanvas 设置
               </p>
               <h1 className="mt-0.5 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -48,7 +49,20 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-8 sm:py-10">
+        {/* 外观：主题与 Notebook 无关，始终可见，不依赖是否已创建笔记本 */}
+        <section className="rounded-3xl border border-line bg-card p-6 shadow-float sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="font-display text-xl font-semibold">外观</h2>
+              <p className="mt-1 max-w-md text-sm leading-6 text-ink-muted">
+                纸色亮如白日铺纸，砚墨暗如晚自习灯下。默认跟随系统。
+              </p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </section>
+
         {conversation ? (
           <ConnectionSettings
             conversationId={conversation.id}

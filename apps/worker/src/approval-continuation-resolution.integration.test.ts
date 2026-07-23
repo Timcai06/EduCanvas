@@ -13,8 +13,10 @@ import {
 } from '@educanvas/db';
 import { eq, sql } from 'drizzle-orm';
 import { runOnce } from 'graphile-worker';
+import type { ContinuationTraceInput } from '@educanvas/telemetry';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  approvalTraceCarrier,
   connectionString,
   createWaitingApproval,
   database,
@@ -71,6 +73,13 @@ describe('Gateway approval到continuation队列的原子边界', () => {
     ]);
     expect(JSON.stringify(jobs)).not.toContain('algebra.md');
     const resumed = vi.fn();
+    const continuationTraceInputs: ContinuationTraceInput[] = [];
+    const continuationTrace = {
+      run<T>(input: ContinuationTraceInput, callback: () => Promise<T>) {
+        continuationTraceInputs.push(input);
+        return callback();
+      },
+    };
     const task = createContinueOperationTask({
       adapters: [
         {
@@ -107,6 +116,7 @@ describe('Gateway approval到continuation队列的原子边界', () => {
           },
         },
       ],
+      trace: continuationTrace,
     });
     await runOnce({
       connectionString,
@@ -120,6 +130,12 @@ describe('Gateway approval到continuation队列的原子边界', () => {
         capability: 'filesystem.read_allowlisted',
       }),
     );
+    expect(continuationTraceInputs).toEqual([
+      {
+        operationId: fixture.operationId,
+        carrier: approvalTraceCarrier,
+      },
+    ]);
     expect(
       await database
         .select({ status: operationContinuations.status })
