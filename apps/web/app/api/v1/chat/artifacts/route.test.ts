@@ -18,8 +18,12 @@ vi.mock('@educanvas/db', async () => {
     await vi.importActual<typeof import('@educanvas/db')>('@educanvas/db');
   return {
     ...actual,
-    DrizzlePlatformArtifactRepository: vi.fn(() => artifactRepo),
-    DrizzleAssetRepository: vi.fn(() => assetRepo),
+    DrizzlePlatformArtifactRepository: vi.fn(function () {
+      return artifactRepo;
+    }),
+    DrizzleAssetRepository: vi.fn(function () {
+      return assetRepo;
+    }),
   };
 });
 
@@ -76,14 +80,10 @@ const sources = [
   },
 ];
 
-function getRequest(path: string = 'http://localhost/api/v1/chat/artifacts'): Request {
-  return new Request(path, {
-    method: 'GET',
-    headers: { origin: 'http://localhost' },
-  });
-}
-
-function postRequest(body: string, headers: Record<string, string> = {}): Request {
+function postRequest(
+  body: string,
+  headers: Record<string, string> = {},
+): Request {
   return new Request('http://localhost/api/v1/chat/artifacts', {
     method: 'POST',
     headers: {
@@ -166,7 +166,12 @@ describe('POST /api/v1/chat/artifacts', () => {
     assetRepo.materializeOwnedReferences.mockReset();
     artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
       artifact: validArtifact,
-      job: { id: 'jobs-1', status: 'queued', progress: null, failureCode: null },
+      job: {
+        id: 'jobs-1',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
     });
   });
 
@@ -226,9 +231,7 @@ describe('POST /api/v1/chat/artifacts', () => {
     );
 
     expect(response.status).toBe(403);
-    expect(
-      artifactRepo.createArtifactWithGenerationJob,
-    ).not.toHaveBeenCalled();
+    expect(artifactRepo.createArtifactWithGenerationJob).not.toHaveBeenCalled();
   });
 
   it('returns 401 when identity missing', async () => {
@@ -260,7 +263,9 @@ describe('POST /api/v1/chat/artifacts', () => {
   });
 
   it('maps audio source availability problems to 400/audio_sources_unavailable', async () => {
-    assetRepo.materializeOwnedReferences.mockRejectedValue(new AssetAccessError());
+    assetRepo.materializeOwnedReferences.mockRejectedValue(
+      new AssetAccessError(),
+    );
 
     const response = await POST(
       postRequest(
