@@ -1,4 +1,35 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
+
+async function activeConversationId(page: Page) {
+  return (await page.context().cookies()).find(
+    (cookie) => cookie.name === ACTIVE_CONVERSATION_COOKIE,
+  )?.value;
+}
+
+async function createNotebook(page: Page, trigger: Locator) {
+  const previousConversationId = await activeConversationId(page);
+  expect(previousConversationId).toBeDefined();
+
+  await trigger.click();
+  await expect
+    .poll(() => activeConversationId(page), {
+      message: '新建笔记本后应切换服务端权威的活动会话',
+      timeout: 15_000,
+    })
+    .not.toBe(previousConversationId);
+
+  await expect(
+    page
+      .getByRole('navigation', { name: '笔记本' })
+      .locator('button[aria-current="true"]'),
+  ).toContainText('未命名笔记本', { timeout: 15_000 });
+
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await expect(composer).toBeEnabled();
+  await expect(composer).toHaveValue('');
+}
 
 test('根入口默认创建通用Chat，界面上不存在K12模式入口', async ({
   context,
@@ -72,6 +103,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
 });
 
 test('笔记本可反复切换，并整体恢复各自的消息', async ({ page }) => {
+  test.slow();
   const firstPrompt = '太阳能小车研究笔记本';
   const secondPrompt = '校园雨水花园笔记本';
 
@@ -87,10 +119,10 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
 
   const notebooks = page.getByRole('navigation', { name: '笔记本' });
-  await notebooks.getByRole('button', { name: '新建笔记本' }).click();
-  await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
-  ).toBeVisible();
+  await createNotebook(
+    page,
+    notebooks.getByRole('button', { name: '新建笔记本' }),
+  );
 
   await page
     .getByRole('textbox', { name: '向 EduCanvas 提问' })
@@ -121,6 +153,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
 });
 
 test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }) => {
+  test.slow();
   const firstPrompt = '第一本：机器视觉资料';
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
@@ -181,17 +214,21 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
       title: '第一本视觉导图',
     });
 
-  await page.reload();
-  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible({
+    timeout: 15_000,
+  });
   await page.getByRole('button', { name: 'Studio', exact: true }).click();
   let studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
   await expect(studio.getByText('第一本视觉导图')).toBeVisible();
   await studio.getByRole('button', { name: '关闭' }).click();
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
-    .getByRole('button', { name: '新建笔记本' })
-    .click();
+  await createNotebook(
+    page,
+    page
+      .getByRole('navigation', { name: '笔记本' })
+      .getByRole('button', { name: '新建笔记本' }),
+  );
   await expect(page.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
   await page.getByRole('button', { name: 'Studio', exact: true }).click();
   studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });

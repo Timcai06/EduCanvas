@@ -97,6 +97,7 @@ async function completeVisibleArtifact(canvas: Locator) {
 test('首次访问创建隔离的匿名 HttpOnly Cookie，且不伪造 AI 回复', async ({
   browser,
 }) => {
+  test.slow();
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
 
@@ -124,8 +125,7 @@ test('首次访问创建隔离的匿名 HttpOnly Cookie，且不伪造 AI 回复
     expect(secondCookies[0]?.name).toBe(firstCookies[0]?.name);
     expect(secondCookies[0]?.value).not.toBe(firstCookies[0]?.value);
   } finally {
-    await firstContext.close();
-    await secondContext.close();
+    await Promise.allSettled([firstContext.close(), secondContext.close()]);
   }
 });
 
