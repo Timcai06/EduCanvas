@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-23
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -18,7 +18,7 @@
 
 ## 当前计划
 
-当前 active 执行线是[第二代 Hybrid Ports 架构升级](active/2026-07-第二代架构升级.md)。前置源码研究、能力映射、五类对照 fixture 和 ADR-0020 已于 2026-07-21 完成并获项目负责人接受；实施按独立纵切迁移统一 Turn、Context、Tool、Ledger、Continuation 与 Trace。历史交付与去向见[`completed/`](completed/README.md)。
+当前 active 执行线是[第二代 Hybrid Ports 架构收口](active/2026-07-第二代架构升级.md)。统一 Turn、Context、Tool、Ledger、Continuation 与 Trace 的核心迁移已经完成；剩余范围限定为决策文档一致性、跨入口证据、最小人工 Effect 对账和最终验收。Memory、多模态、正式身份、渠道生产化、自动 verifier 与完整 SLO 使用后续独立计划。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 

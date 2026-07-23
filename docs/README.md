@@ -25,7 +25,7 @@
 ## 已接受的架构方向
 
 - EduCanvas是以教育能力为核心的通用个人Agent平台；Agent是产品主体，Web/TUI/渠道是交互表面；
-- EduCanvas Gateway统一承载身份、配对、Notebook路由、能力协商、审批和事件分发；它不同于模型Provider Gateway；
+- EduCanvas Gateway是身份、配对、Notebook路由、能力协商、审批和事件分发的逻辑权威；Web可使用共进程BFF，远程入口使用Gateway协议；它不同于模型Provider Gateway；
 - 通用Chat、Assets、Agent Runtime、Artifact Runtime和Studio不得依赖教学状态机、掌握度或课程概念；
 - Web端采用Next.js、React和TypeScript；
 - UI使用可自由修改的Headless组件与自有设计系统；
@@ -81,7 +81,7 @@
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first 与第二代架构研究已经结档；当前 active 计划按已接受的 ADR-0020 执行生产架构迁移。三类文档不能互相替代：
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first 与第二代架构研究已经结档；统一内核已落地，当前 active 计划只承担入口一致性、最小人工对账、清理和验收收口。三类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；

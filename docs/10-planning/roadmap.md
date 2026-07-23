@@ -2,79 +2,75 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-23
 
-EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平台**。Gateway-first 基础架构已完成，当前路线图从“建边界”转为“补真实生产能力与教育质量”。完成证据见 [Gateway-first 计划](../plan/completed/2026-07-gateway-first-personal-agent.md)。
+EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平台**。默认 Agent 可以研究、创作、整理资料和进行普通教学问答；诊断、练习、测评、掌握度与可信学习证据通过按需结构化 K12 Workflow 提供。
 
-第二代架构研究与 ADR-0020 已完成，当前进入[第二代 Hybrid Ports 架构升级](../plan/active/2026-07-第二代架构升级.md)：按 Gateway → Web General → Web Teaching 的纵切顺序收敛 Turn、Context、Tool、Ledger、Continuation 与 Trace，不以更换框架或目录重排冒充升级。
+## 已完成基础
 
-## 已完成：产品与 Gateway 边界
+- 一人一 Personal Agent；家庭与班级通过共享 Notebook 和角色授权协作；
+- Gateway 身份、Notebook 路由、Operation、审批、事件恢复、Connections 与投递控制面；
+- Web、TUI、实验性 Telegram Channel 和只读 Capability Node；
+- 唯一 `TurnApplicationService`、`AgentLoopEngine`、Context Engine 与 Tool Kernel；
+- General、K12、Gateway 三条生产路径共享统一运行语义和账本；
+- PostgreSQL 事实源、graphile-worker 持久任务、Artifact/Studio/Canvas 和可信学习事实；
+- approval continuation、跨进程 cancel/lease、可回滚 Provider Adapter 与脱敏 Trace Adapter。
 
-- 确定一人一Personal Agent、家庭/班级共享Notebook而不共享Agent身份；
-- 冻结Client/Channel/Node/Operator、Envelope、Event、能力、审批、投递和恢复协议；
-- 建立User/Agent、Membership、Delegated Grant和Actor审计数据边界；
-- 落地`apps/gateway`、持久Operation Event、幂等、恢复、审批、Client/Node session；
-- 保留`apps/ + packages/`宏观结构并增加真实组合根/协议包，没有创建空占位模块。
+## 当前：第二代架构有限收口
 
-## 已完成：Web 与唯一 Runtime
+执行计划：[第二代架构收口](../plan/active/2026-07-第二代架构升级.md)。
 
-- Web Chat/Learn Route通过Gateway兼容层进入可信Envelope；
-- 通用、K12和独立Gateway Runner共用唯一`AgentLoopEngine`；
-- 保持历史切换、Sources/Studio隔离、引用、Artifact、可信判分、取消、幂等和刷新恢复；
-- Web继续输出兼容SSE，但不再定义跨客户端永久协议；
-- PostgreSQL迁移全部additive，保留旧教育账本用于领域事实和回放。
+- 统一 README、产品、架构、ADR 与计划中的当前事实；
+- 补 Web/TUI/Gateway 的 Notebook、Profile、Tool Policy、approval、send/abort 和终态一致性证据；
+- 完成仅限内部受信主体的 append-only 人工 Effect 对账入口；
+- 清理重复实现和过期研究导入；
+- 通过全量工程门禁、PTY、E2E、安全与代码质量复核后结档。
 
-## 已完成：第二客户端、渠道与安全 Node
+自动 effect verifier、完整 OTel Collector、正式 IdP、Memory 与原生多模态都不是该架构 Goal 的完成前置条件。
 
-- TUI支持认证bootstrap、会话选择、流式Chat、status、resume和审批；
-- Telegram私聊文本Adapter支持账号/线程绑定、Update去重、Delivery回执和官方形状离线Fixture；
-- Capability Node支持出站配对、心跳、撤销、状态与白名单只读文件；
-- Traversal、symlink escape、绝对路径、Shell/写入、过期与重放请求均被拒绝；
-- Web/TUI同路由、共享Notebook隐私、审批、Channel投递和Node生命周期都有自动化证据。
+## 下一阶段一：Notebook Context 与 Memory
 
-## 已完成：Web-first 产品入口与连接控制面
+- Notebook 摘要、Conversation compaction 与统一上下文预算；
+- 区分 Personal Memory 和 Notebook Memory，提供来源、版本、删除与共享边界；
+- Artifact Context、长期来源摄取和检索质量；
+- Memory 未实现、禁用或无权限时保持明确 unavailable。
 
-- `make all`、`make dev`、`make tui` 提供完整服务、Web 验证和交互式 TUI 入口；
-- Web/TUI 使用统一本地主体和默认 Personal Workspace，通过一次性 token 完成 TUI→Web handoff；
-- Web `/settings` 与 TUI `/channels` 共用 provider-neutral Connections 服务，Telegram 支持 pending/激活/撤销，微信/QQ 未开放时诚实 disabled；
-- 完成证据见 [Web-first 结档记录](../plan/completed/2026-07-web-first-entrypoints-and-handoff.md)。
+## 下一阶段二：原生多模态
 
-## 当前 P0：正式身份与生产运维
+- 图片与 PDF 页面原生模型输入；
+- 语音输入、转写、语音输出与可访问文本等价物；
+- 后续视频能力必须有成本、版权、来源与未成年人安全证据；
+- 上传 Asset 统一进入 Source/Representation/Chunk 管线。
 
-- 接入正式IdP、账号恢复、session撤销和密钥轮换，移除最终用户对共享bootstrap token的依赖；
-- 完成 enabled Channel Adapter 的启动、停止、重连、进程监督和 degraded health，并让 Web/TUI 显示真实状态；
-- 增加Gateway/模型/工具限流、并发舱壁和成本配额；
-- 把现有安全结构化日志/指标接入外部Trace、SLO和告警；
-- 完成备份/PITR、恢复演练、对象删除Outbox和隐私导出/更正/删除流程；
-- 真实微信/QQ Adapter 在取得平台资格和凭据后单独立项；Telegram live smoke 不再占用当前 P0。
+## 下一阶段三：教育质量
 
-## 当前 P1：Context、多模态与教育质量
+- 建立年龄、学科和任务分层的教学评测集；
+- 评测讲解、追问、误区识别、证据引用、练习适配与安全；
+- 打通普通教育问答与结构化课程的自然进入/退出；
+- 提供教师资料审核、学习证据视图、复习建议与不过度操纵的反馈。
 
-- Notebook摘要、长期学习者记忆、Artifact Context和统一检索预算；
-- 上传Asset统一进入Source/Representation/Chunk链路；
-- 原生图片、语音和后续视频输入输出；
-- 建立年龄、学科、任务分层的教学评测集，评测讲解、追问、证据、误区、练习适配和安全；
-- 完成结构化课程从诊断、练习到评价/补救的证据，并提供教师资料审核与学习证据视图；
-- 支持学习作品保存与受控分享、个性化课后报告、复习提醒和不过度操纵的成就反馈。
+## 生产发布门
 
-## 后续 P2：受控能力扩展
+产品能力推进可以与以下工作并行，但 production 声明前必须完成：
 
-- Profile/Skill/Tool/Channel注册、版本和兼容治理；
-- 多供应商显式路由、Fallback、成本和质量评测；
-- 只有成年/管理员场景、安全评审和可恢复审批续跑完成后才增加L2/L3 Node能力；
-- 只有真实连接规模、隔离或发布压力出现时才拆分Gateway、Runtime或Worker服务。
+- 正式 IdP、账号恢复、session 撤销与密钥轮换；
+- Gateway/模型/工具限流、并发舱壁与成本配额；
+- 外部 Collector、SLO、告警、备份/PITR 和恢复演练；
+- 对象删除 Outbox、隐私导出/更正/删除；
+- enabled Channel Adapter 的生命周期、degraded health 与真实平台凭据验证。
 
-## 竞赛交付线
+## 受控扩展
 
-- K12演示路径、课程内容和可信判分；
-- 当前Gateway/Runtime架构图、测试与安全证据；
-- 部署说明、演示视频和答辩材料；
-- 明确区分已实现的离线Telegram/Node纵切与仍缺凭据/云部署的production证据。
+- 微信/QQ 等渠道只有取得平台资格和凭据后才实现，不以假二维码冒充；
+- 自动 Effect 对账只有真实 write Adapter 提供受信查询或服务端幂等契约后才实现；
+- L2/L3 Node 只允许成年/管理员场景，并需单独安全评审；
+- LangGraph 仅在有界复杂 Workflow 证明至少 30% 总成本收益后重新评估；
+- 只有真实连接规模、故障隔离或团队发布压力出现时才拆分服务。
 
 ## 长期非目标
 
-- 复制OpenClaw的全部渠道、插件市场和单用户信任模型；
-- 用多Agent数量、工作流复杂度或长视频衡量教育价值；
-- 默认向未成年人开放Shell、任意文件系统或设备控制；
-- 在没有负载和隔离证据时提前拆微服务；
-- 让模型自述替代身份、权限、判分或掌握度事实。
+- 复制 OpenClaw 的全部渠道、插件数量或单操作者宿主机信任模型；
+- 让所有教育问题强制进入五阶段课程；
+- 用多 Agent、工作流复杂度或长视频代替教育价值；
+- 默认向未成年人开放 Shell、任意文件系统、Credential 或设备写能力；
+- 让模型、客户端、Trace 或框架 Checkpoint 写入身份、权限、判分或掌握度事实。
