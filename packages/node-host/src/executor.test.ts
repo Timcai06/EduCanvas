@@ -78,16 +78,9 @@ describe('SafeNodeHostExecutor', () => {
     });
   });
 
-  it('rejects traversal, absolute paths and symlink escape', async () => {
+  it('rejects traversal and absolute paths before filesystem resolution', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'educanvas-node-'));
-    const outside = await mkdtemp(path.join(os.tmpdir(), 'educanvas-outside-'));
-    created.push(root, outside);
-    await writeFile(path.join(outside, 'secret.txt'), 'secret');
-    await mkdir(path.join(root, 'links'));
-    await symlink(
-      path.join(outside, 'secret.txt'),
-      path.join(root, 'links', 'secret.txt'),
-    );
+    created.push(root);
     const executor = await SafeNodeHostExecutor.create({
       nodeId: 'node:1',
       capabilities,
@@ -97,7 +90,6 @@ describe('SafeNodeHostExecutor', () => {
     for (const [index, relativePath] of [
       '../secret',
       '/etc/passwd',
-      'links/secret.txt',
     ].entries()) {
       await expect(
         executor.execute(
@@ -112,6 +104,54 @@ describe('SafeNodeHostExecutor', () => {
         code: 'PATH_NOT_ALLOWED',
       });
     }
+  });
+
+  it('rejects symlink escape when the platform permits symlink setup', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'educanvas-node-'));
+    const outside = await mkdtemp(path.join(os.tmpdir(), 'educanvas-outside-'));
+    created.push(root, outside);
+    await writeFile(path.join(outside, 'secret.txt'), 'secret');
+    await mkdir(path.join(root, 'links'));
+    try {
+      await symlink(
+        path.join(outside, 'secret.txt'),
+        path.join(root, 'links', 'secret.txt'),
+      );
+    } catch (error) {
+      // Windows without Developer Mode/admin rights rejects symlink creation
+      // before executor code runs. Linux CI still exercises this escape path.
+      if (
+        process.platform === 'win32' &&
+        error instanceof Error &&
+        'code' in error &&
+        (error.code === 'EPERM' || error.code === 'EACCES')
+      ) {
+        return;
+      }
+      throw error;
+    }
+    const executor = await SafeNodeHostExecutor.create({
+      nodeId: 'node:1',
+      capabilities,
+      roots: { notes: root },
+      now: () => now,
+    });
+    await expect(
+      executor.execute(
+        request({
+          requestId: 'request:symlink',
+          nonce: 'nonce:symlink',
+          parameters: {
+            operation: 'read',
+            root: 'notes',
+            relativePath: 'links/secret.txt',
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'PATH_NOT_ALLOWED',
+    });
   });
 
   it('rejects expired, replayed, revoked and unapproved requests', async () => {

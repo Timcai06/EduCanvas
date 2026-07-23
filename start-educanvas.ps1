@@ -180,6 +180,7 @@ if (-not $env:EDUCANVAS_GATEWAY_PORT) { $env:EDUCANVAS_GATEWAY_PORT = '3200' }
 $gatewayPort = [int]$env:EDUCANVAS_GATEWAY_PORT
 if ($gatewayPort -lt 1 -or $gatewayPort -gt 65535) { throw 'EDUCANVAS_GATEWAY_PORT must be between 1 and 65535.' }
 
-if (-not $SkipMigrate) { Ensure-DockerDb; Run-Migrations }
+Ensure-DockerDb
+if (-not $SkipMigrate) { Run-Migrations }
 else { Write-Step 'Skipping database migration (-SkipMigrate).' }
 Start-EduCanvas $gatewayPort

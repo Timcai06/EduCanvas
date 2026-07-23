@@ -19,6 +19,17 @@ describe('Windows startup boundary', () => {
     assert.match(launcher, /LogPath/);
   });
 
+  it('does not let -SkipMigrate skip starting PostgreSQL', () => {
+    const ensureIndex = launcher.lastIndexOf('\nEnsure-DockerDb');
+    const migrateBranchIndex = launcher.indexOf('if (-not $SkipMigrate)');
+
+    assert.ok(ensureIndex >= 0, 'launcher must start the local database');
+    assert.ok(
+      migrateBranchIndex > ensureIndex,
+      '-SkipMigrate should only affect Run-Migrations after the database is ready',
+    );
+  });
+
   it('lets the shared orchestrator launch pnpm on Windows', () => {
     assert.match(
       orchestrator,
