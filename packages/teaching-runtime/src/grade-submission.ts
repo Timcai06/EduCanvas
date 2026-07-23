@@ -1,3 +1,19 @@
+/**
+ * Canvas 提交判分服务 — 将不可信客户端提交提升为可信 assessment_graded 事件。
+ *
+ * ## 安全约束
+ *
+ * - 客户端自报 isCorrect 永远不参与计算，判分使用服务端保存的 GradingKey
+ * - 先修分数来自知识图谱投影，不能取客户端 payload
+ * - 同一 eventId 幂等：重复提交返回已有结果（replayed=true）
+ * - IDEMPOTENCY_CONFLICT：同一幂等键但参数不同 → 拒绝
+ *
+ * ## 事务保证
+ *
+ * 判分、掌握度投影更新、事件持久化在同一 TeachingUnitOfWork 事务内原子完成。
+ * 先锁幂等键，再检查已有事件 — 防止并发重复提交。
+ */
+
 import {
   canvasInteractionEventSchema,
   type CanvasInteractionEvent,
