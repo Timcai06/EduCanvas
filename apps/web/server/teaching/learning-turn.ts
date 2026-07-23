@@ -1,3 +1,26 @@
+/**
+ * Web 教学 Turn 组合根 — 装配完整的教学 Turn Application 依赖图。
+ *
+ * ## 依赖装配清单
+ *
+ * | Port | 实现 | 来源 |
+ * |------|------|------|
+ * | lifecycle | WebTeachingLifecycle | turn-application/lifecycle（消息/操作持久化） |
+ * | profile | WebTeachingProfile | turn-application/profile（Context/Prompt/策略/安全门） |
+ * | contextLedger | DrizzleAgentTurnContextRepository | db |
+ * | modelRunLedger | DrizzleAgentModelRunRepository | db |
+ * | modelGateway | resolveTurnModelRuntime() | model/model-runtime（环境变量配置） |
+ * | toolKernel | createTeachingToolKernelAdapters() | teaching-tools（8 个教学工具 + 审批） |
+ * | cancellation | WebTeachingCancellation | turn-application/cancellation |
+ * | trace | getWebTelemetryRuntime() | telemetry/telemetry-runtime |
+ *
+ * ## 为什么教学不创建私有模型循环
+ *
+ * 教学共用 TurnApplicationService 的 Agent Loop（agent-runtime）。
+ * 教学 Profile 只负责 Context/Prompt/策略装配，不拥有第二个模型循环。
+ * 这保证通用 Agent 和教学 Agent 共享同一套 turn 编排、取消、审批和终态纪律。
+ */
+
 import 'server-only';
 
 import type {
