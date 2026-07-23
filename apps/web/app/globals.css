@@ -24,6 +24,8 @@
   --color-accent: #31606c;
   --color-accent-strong: #234c58;
   --color-accent-soft: #dfe9e6;
+  /* 扉页墨点场专用点色：shader 会再做一次 linear→sRGB 提亮，故亮色纸面喂足够深的黛青墨才留得住对比，见 hero-ink-field.tsx */
+  --hero-ink-dot: #0e343d;
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
   --color-cinnabar: #bf4029;
@@ -68,6 +70,7 @@
     --color-accent: #86b7c1;
     --color-accent-strong: #a5cdd5;
     --color-accent-soft: #223138;
+    --hero-ink-dot: #86b7c1; /* 砚墨底：浅黛青点才显，维持此前效果 */
 
     --color-cinnabar: #dd6f52;
     --color-cinnabar-strong: #e98a70;
