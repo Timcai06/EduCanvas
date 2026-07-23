@@ -14,7 +14,9 @@ const OBJECT_KEY_PATTERN = /^[a-z0-9][a-z0-9/_.-]{0,1023}$/;
 export function isValidObjectKey(key: string): boolean {
   if (!OBJECT_KEY_PATTERN.test(key)) return false;
   if (key.endsWith('/')) return false;
-  return key.split('/').every((segment) => segment !== '' && segment !== '..' && segment !== '.');
+  return key
+    .split('/')
+    .every((segment) => segment !== '' && segment !== '..' && segment !== '.');
 }
 
 export interface StoredObject {

@@ -53,7 +53,10 @@ export function FlashcardsRenderer({ content }: { content: unknown }) {
 
   if (done) {
     return (
-      <div ref={rootRef} className="flex h-full flex-col items-center justify-center gap-4 text-center">
+      <div
+        ref={rootRef}
+        className="flex h-full flex-col items-center justify-center gap-4 text-center"
+      >
         <p className="text-lg font-semibold text-ink">
           本轮完成:记住 {gotCount} / {cards.length}
         </p>

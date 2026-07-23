@@ -97,16 +97,51 @@ make all
 - 停止数据库并保留数据：`make stop`
 - 查看全部命令：`make help`
 
-Windows 原生环境也可以使用同一套启动逻辑。首次运行先在 PowerShell 执行
-`corepack enable`、`pnpm install --frozen-lockfile`，并把 `.env.example`
-复制为 `.env`；之后双击根目录的 `Start EduCanvas.cmd`。该入口只负责加载
-环境、准备数据库，再把 Web、Gateway、Worker 的启动、完整性检查和浏览器打开
-委托给与 `make dev` 相同的 local orchestrator，不维护第二套运行时。
+### Windows 原生启动
+
+Windows 用户不需要安装 GNU make。首次运行在 PowerShell 执行：
+
+```powershell
+corepack enable
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env
+pnpm env:check
+```
+
+需要 DeepSeek 时，可参考 `.env.local.example.deepseek`，把变量合并到 `.env`，
+再填写真实的 `MODEL_GATEWAY_API_KEY`。真实 Key 只放在本地 `.env`，不要提交。
+
+之后双击根目录的 `Start EduCanvas.cmd`。它会检查端口、准备数据库、按迁移文件
+指纹决定是否执行迁移，并把日志路径打印出来。常用参数可以从命令行传入：
+
+```powershell
+.\start-educanvas.ps1 -NoOpen
+.\start-educanvas.ps1 -SkipMigrate
+.\start-educanvas.ps1 -Port 3102
+```
+
+停止 Web、Gateway、Worker 并停止数据库（数据卷保留）：
+
+```powershell
+.\stop-educanvas.ps1
+```
+
+如果只想停止应用、继续保留数据库运行，使用 `-KeepDb`。启动脚本只会停止
+自己记录的进程树，不会误杀其他项目的 Node 服务。后台日志默认位于项目根目录
+的 `.educanvas-local.log` 和 `.educanvas-local.err.log`。
 
 如果启动失败，先运行：
 
 ```bash
 make doctor
+```
+
+Windows 等价检查命令是 `pnpm env:check`；它会指出缺失的环境变量，而不会输出
+任何密钥或供应商响应正文。跨平台项目脚本也可以直接使用：
+
+```bash
+pnpm setup:local
+pnpm start:local
 ```
 
 进入 TUI：

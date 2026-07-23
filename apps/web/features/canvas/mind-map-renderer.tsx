@@ -1,6 +1,9 @@
 'use client';
 
-import { mindMapContentSchema, type MindMapNode } from '@educanvas/canvas-protocol';
+import {
+  mindMapContentSchema,
+  type MindMapNode,
+} from '@educanvas/canvas-protocol';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useMemo, useRef } from 'react';
@@ -13,7 +16,10 @@ gsap.registerPlugin(useGSAP);
  */
 export function MindMapRenderer({ content }: { content: unknown }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const parsed = useMemo(() => mindMapContentSchema.safeParse(content), [content]);
+  const parsed = useMemo(
+    () => mindMapContentSchema.safeParse(content),
+    [content],
+  );
 
   useGSAP(
     () => {
@@ -71,7 +77,11 @@ function MindMapBranch({ node, depth }: { node: MindMapNode; depth: number }) {
         <span
           aria-hidden="true"
           className={`size-1.5 shrink-0 rounded-full ${
-            depth === 0 ? 'bg-accent' : depth === 1 ? 'bg-accent/60' : 'bg-ink-faint'
+            depth === 0
+              ? 'bg-accent'
+              : depth === 1
+                ? 'bg-accent/60'
+                : 'bg-ink-faint'
           }`}
         />
         {node.label}

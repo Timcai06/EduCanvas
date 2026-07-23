@@ -1,10 +1,5 @@
 const SHARED_KINDS = new Set(['source', 'conversation', 'artifact']);
-const PRIVATE_KINDS = new Set([
-  'memory',
-  'credential',
-  'node',
-  'defaultGrant',
-]);
+const PRIVATE_KINDS = new Set(['memory', 'credential', 'node', 'defaultGrant']);
 
 const deny = (code) => ({ allowed: false, code });
 
@@ -27,10 +22,16 @@ export const createNotebookPrivacyFixture = ({
     ),
   );
   const sharedById = new Map(
-    sharedResources.map((resource) => [resource.id, Object.freeze({ ...resource })]),
+    sharedResources.map((resource) => [
+      resource.id,
+      Object.freeze({ ...resource }),
+    ]),
   );
   const privateById = new Map(
-    privateResources.map((resource) => [resource.id, Object.freeze({ ...resource })]),
+    privateResources.map((resource) => [
+      resource.id,
+      Object.freeze({ ...resource }),
+    ]),
   );
 
   return Object.freeze({
@@ -45,7 +46,8 @@ export const createNotebookPrivacyFixture = ({
         return deny('notebook_membership_required');
       }
       const resource = sharedById.get(resourceId);
-      if (!resource || resource.kind !== kind) return deny('resource_unavailable');
+      if (!resource || resource.kind !== kind)
+        return deny('resource_unavailable');
       if (resource.notebookId !== notebookId) {
         return deny('resource_notebook_mismatch');
       }

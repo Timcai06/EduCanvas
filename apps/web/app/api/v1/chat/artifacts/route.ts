@@ -97,13 +97,12 @@ export async function POST(request: Request): Promise<Response> {
     if (parsed.data.kind === 'audio_overview') {
       let materialized;
       try {
-        materialized = await new DrizzleAssetRepository().materializeOwnedReferences(
-          {
+        materialized =
+          await new DrizzleAssetRepository().materializeOwnedReferences({
             ownerSubjectId: identity.studentId,
             spaceId: conversation.spaceId,
             references: parsed.data.sources,
-          },
-        );
+          });
       } catch (error) {
         if (error instanceof AssetAccessError) {
           return jsonError(

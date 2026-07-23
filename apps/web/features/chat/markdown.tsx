@@ -76,10 +76,7 @@ export function MessageMarkdown({
             if (!isBlock) {
               return <code className="chat-prose__inline-code">{source}</code>;
             }
-            if (
-              onPreviewHtml &&
-              isPreviewableHtml(language ?? null, source)
-            ) {
+            if (onPreviewHtml && isPreviewableHtml(language ?? null, source)) {
               return (
                 <HtmlPreviewCard
                   source={source}
@@ -87,9 +84,7 @@ export function MessageMarkdown({
                 />
               );
             }
-            return (
-              <CodeFence language={language ?? null}>{source}</CodeFence>
-            );
+            return <CodeFence language={language ?? null}>{source}</CodeFence>;
           },
         }}
       >

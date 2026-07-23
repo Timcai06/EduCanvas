@@ -86,9 +86,7 @@ export class TurnRenderer {
         this.startedAt = Date.parse(event.occurredAt);
         /* 首个 token 到达前的等待感：墨点研磨。任何后续事件都会 settle 掉它 */
         this.spinner.start(
-          this.theme.dim(
-            this.interruptible ? '思考中… (esc 停止)' : '思考中…',
-          ),
+          this.theme.dim(this.interruptible ? '思考中… (esc 停止)' : '思考中…'),
         );
         break;
       case 'message.delta': {
@@ -180,7 +178,10 @@ export class TurnRenderer {
         this.breakTextLine();
         const seconds =
           this.startedAt !== null
-            ? Math.max(0, (Date.parse(event.occurredAt) - this.startedAt) / 1000)
+            ? Math.max(
+                0,
+                (Date.parse(event.occurredAt) - this.startedAt) / 1000,
+              )
             : null;
         this.io.err.write(
           `${renderCompletion(this.theme, this.io.width(), seconds)}\n`,
@@ -198,9 +199,7 @@ export class TurnRenderer {
         this.settleActiveTool();
         this.io.out.write(this.markdown.flush());
         this.breakTextLine();
-        this.io.err.write(
-          `${this.theme.dim('── 已停止这轮回答 ──')}\n`,
-        );
+        this.io.err.write(`${this.theme.dim('── 已停止这轮回答 ──')}\n`);
         break;
       }
       case 'artifact.proposed': {

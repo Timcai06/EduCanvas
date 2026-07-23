@@ -74,7 +74,8 @@ export function ArtifactProvenanceStrip({
             className="size-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none"
           />
           {revising ? '正在生成新版本…' : '正在生成…'}
-          {detail.latestJob?.progress != null && detail.latestJob.progress > 0 ? (
+          {detail.latestJob?.progress != null &&
+          detail.latestJob.progress > 0 ? (
             <span className="tabular-nums text-ink-muted">
               {detail.latestJob.progress}%
             </span>

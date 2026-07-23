@@ -44,13 +44,22 @@ export function ThemeToggle() {
                 : 'text-ink-muted hover:bg-surface hover:text-ink'
             }`}
           >
-            <Icon aria-hidden="true" size={16} weight={selected ? 'fill' : 'regular'} />
+            <Icon
+              aria-hidden="true"
+              size={16}
+              weight={selected ? 'fill' : 'regular'}
+            />
             <span>{label}</span>
           </button>
         );
       })}
       {/* 切换时向读屏器播报当前主题；aria-pressed 已表达焦点态，这里补一次显式播报 */}
-      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         当前主题：{activeLabel}
       </span>
     </div>

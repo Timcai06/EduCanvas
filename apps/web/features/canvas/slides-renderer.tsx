@@ -14,7 +14,10 @@ gsap.registerPlugin(useGSAP);
  */
 export function SlidesRenderer({ content }: { content: unknown }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const parsed = useMemo(() => slidesContentSchema.safeParse(content), [content]);
+  const parsed = useMemo(
+    () => slidesContentSchema.safeParse(content),
+    [content],
+  );
   const [index, setIndex] = useState(0);
 
   useGSAP(

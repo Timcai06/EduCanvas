@@ -7,9 +7,8 @@ export default async function CanvasProvenanceDesignQaPage() {
   if (!isDesignQaEnabled(process.env.EDUCANVAS_ENABLE_DESIGN_QA)) {
     notFound();
   }
-  const { ArtifactProvenanceQa } = await import(
-    '@/features/canvas/artifact-provenance-qa'
-  );
+  const { ArtifactProvenanceQa } =
+    await import('@/features/canvas/artifact-provenance-qa');
   return (
     <main className="min-h-dvh bg-canvas px-4 py-8 text-ink sm:px-8 sm:py-12">
       <div className="mx-auto w-full max-w-2xl">

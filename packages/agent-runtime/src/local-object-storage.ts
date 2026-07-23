@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import {
   isValidObjectKey,
@@ -102,7 +109,10 @@ export class LocalObjectStorage implements ObjectStoragePort {
   }
 
   /** 读取并强制校验完整性;调用方持有权威 checksum(来自 artifact_versions)。 */
-  async readVerified(key: string, expectedChecksum: string): Promise<Uint8Array> {
+  async readVerified(
+    key: string,
+    expectedChecksum: string,
+  ): Promise<Uint8Array> {
     const bytes = await this.read(key);
     if (sha256Hex(bytes) !== expectedChecksum) {
       throw new ObjectStorageError(

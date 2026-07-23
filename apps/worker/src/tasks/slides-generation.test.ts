@@ -1,6 +1,10 @@
 import { slidesContentSchema } from '@educanvas/canvas-protocol';
 import { describe, expect, it } from 'vitest';
-import { SLIDES_RULE_GENERATOR, buildRuleSlides, generateSlidesContent } from './slides-generation';
+import {
+  SLIDES_RULE_GENERATOR,
+  buildRuleSlides,
+  generateSlidesContent,
+} from './slides-generation';
 
 const messages = [
   { role: 'user' as const, content: '什么是神经网络?' },

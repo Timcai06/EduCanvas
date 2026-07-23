@@ -91,7 +91,9 @@ export function AssetUploadPanel({
         </p>
       ) : (
         <fieldset data-upload-section>
-          <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
+          <legend className="mb-2 text-sm font-medium text-ink">
+            保存范围
+          </legend>
           <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
             {(['turn', 'space'] as const).map((value) => (
               <button

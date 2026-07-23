@@ -56,20 +56,26 @@ describe('approval card', () => {
   };
 
   it('keeps every row at identical display width despite CJK', () => {
-    const lines = stripAnsi(renderApprovalCard(color, 80, approval)).split('\n');
+    const lines = stripAnsi(renderApprovalCard(color, 80, approval)).split(
+      '\n',
+    );
     const widths = lines.map(stringWidth);
     expect(new Set(widths).size).toBe(1);
   });
 
   it('adapts to narrow terminals without breaking the frame', () => {
-    const lines = stripAnsi(renderApprovalCard(plain, 34, approval)).split('\n');
+    const lines = stripAnsi(renderApprovalCard(plain, 34, approval)).split(
+      '\n',
+    );
     expect(lines[0]!.startsWith('┏')).toBe(true);
     expect(lines.at(-1)!.startsWith('┗')).toBe(true);
     expect(Math.max(...lines.map(stringWidth))).toBeLessThanOrEqual(34);
   });
 
   it('keeps colored card rows aligned with the reverse-video header', () => {
-    const lines = stripAnsi(renderApprovalCard(color, 80, approval)).split('\n');
+    const lines = stripAnsi(renderApprovalCard(color, 80, approval)).split(
+      '\n',
+    );
     expect(new Set(lines.map(stringWidth)).size).toBe(1);
   });
 
@@ -129,8 +135,8 @@ describe('failure vocabulary', () => {
 
 describe('completion rule', () => {
   it('stays within terminal width', () => {
-    expect(stringWidth(stripAnsi(renderCompletion(color, 60, 3.2)))).toBeLessThanOrEqual(
-      60,
-    );
+    expect(
+      stringWidth(stripAnsi(renderCompletion(color, 60, 3.2))),
+    ).toBeLessThanOrEqual(60);
   });
 });

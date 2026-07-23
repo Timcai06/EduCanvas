@@ -32,9 +32,7 @@ interface RendererInteractionProps {
   disabled: boolean;
   feedback: CanvasFeedbackDTO | null;
   onSubmit: (draft: CanvasSubmissionDraft) => void;
-  onAnimationObservation?: (
-    observation: AnimationClientObservation,
-  ) => void;
+  onAnimationObservation?: (observation: AnimationClientObservation) => void;
 }
 
 type ArtifactRendererRegistry = {

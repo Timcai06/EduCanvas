@@ -152,7 +152,8 @@ export function SourcesPanel({
         ))}
         {assets.length === 0 ? (
           <li className="px-3 py-2 text-xs text-ink-muted">
-            当前笔记本还没有来源。上传 PDF、图片或网页链接后，后续回答都能使用它们。
+            当前笔记本还没有来源。上传
+            PDF、图片或网页链接后，后续回答都能使用它们。
           </li>
         ) : null}
       </ul>

@@ -5,9 +5,9 @@ import type {
 import type { AudioOverviewMetadata } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
-export const AUDIO_OVERVIEW_PROMPT_VERSION = 'artifact-audio-overview-script-v1';
-export const AUDIO_OVERVIEW_RULE_GENERATOR =
-  'rule:audio-overview-script-v1';
+export const AUDIO_OVERVIEW_PROMPT_VERSION =
+  'artifact-audio-overview-script-v1';
+export const AUDIO_OVERVIEW_RULE_GENERATOR = 'rule:audio-overview-script-v1';
 export const AUDIO_OVERVIEW_MODEL_GENERATOR =
   'model:artifact.generate:audio-overview-script-v1';
 

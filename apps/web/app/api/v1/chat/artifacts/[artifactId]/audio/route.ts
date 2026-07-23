@@ -61,12 +61,11 @@ export async function GET(
   }
 
   try {
-    const detail = await new DrizzlePlatformArtifactRepository().getArtifactDetail(
-      {
+    const detail =
+      await new DrizzlePlatformArtifactRepository().getArtifactDetail({
         artifactId,
         trustedSubjectId: identity.studentId,
-      },
-    );
+      });
     const version = detail.latestVersion;
     const metadata = audioOverviewMetadataSchema.safeParse(version?.metadata);
     if (
