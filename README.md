@@ -97,6 +97,12 @@ make all
 - 停止数据库并保留数据：`make stop`
 - 查看全部命令：`make help`
 
+Windows 原生环境也可以使用同一套启动逻辑。首次运行先在 PowerShell 执行
+`corepack enable`、`pnpm install --frozen-lockfile`，并把 `.env.example`
+复制为 `.env`；之后双击根目录的 `Start EduCanvas.cmd`。该入口只负责加载
+环境、准备数据库，再把 Web、Gateway、Worker 的启动、完整性检查和浏览器打开
+委托给与 `make dev` 相同的 local orchestrator，不维护第二套运行时。
+
 如果启动失败，先运行：
 
 ```bash
