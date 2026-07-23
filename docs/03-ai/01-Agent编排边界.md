@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：项目负责人
 - 最后验证时间：2026-07-22
-- 内容边界：定义稳定术语、可信边界与当前实现；第二代收敛方案见[第二代架构提案](../02-architecture/03-第二代架构提案.md)
+- 内容边界：定义稳定术语、可信边界与当前实现；第二代稳定形态见[第二代架构](../02-architecture/03-第二代架构.md)
 - 关键决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
 ## 一、稳定术语
