@@ -1,3 +1,22 @@
+/**
+ * Gateway 路由与权限 — Notebook 成员角色与操作权限。
+ *
+ * ## 四层角色
+ *
+ * | 角色 | 权限范围 |
+ * |------|---------|
+ * | owner | 全部权限（含成员管理、Notebook 设置） |
+ * | editor | 读写内容（创建对话、写 Source/Artifact），不能管成员 |
+ * | contributor | 只读+回复（不能创建新对话、写 Source） |
+ * | viewer | 只读 |
+ *
+ * ## 路由解析
+ *
+ * RouteResolver 接受 Principal + RouteHint + 所需权限，
+ * 返回 GatewayResolvedRoute（含 actorUserId, agentId, notebookId, conversationId）。
+ * 解析失败 → ROUTE_NOT_FOUND。
+ */
+
 import { z } from 'zod';
 import { gatewayOpaqueIdSchema, gatewayTimestampSchema } from './common';
 
