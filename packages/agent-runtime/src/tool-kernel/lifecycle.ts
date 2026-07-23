@@ -11,7 +11,22 @@ import type {
 } from './contracts';
 import { toolFailure } from './result';
 
-/** @internal 创建或复用Tool Call，并路由到审批准备或真实调用。 */
+/**
+ * @internal 工具调用生命周期编排。
+ *
+ * ## 路由逻辑
+ *
+ * ```
+ * createOrGet Tool Call →
+ *   ├─ 已重放 + 非 pending → 拒绝（result_replay_required / execution_in_progress）
+ *   ├─ 已取消 → 记录 tool_cancelled 并返回
+ *   ├─ L2/L3 + 未审批 → prepareApproval（挂起等用户确认）
+ *   └─ 其他 → invoke（实际执行）
+ * ```
+ *
+ * createOrGet 在 Tool Call Ledger 中原子创建或查找已有的 tool call 记录。
+ * 同一 executionId 的重复请求不会创建第二条记录。
+ */
 export async function executeToolLifecycle(input: {
   adapter: AnyToolKernelAdapter;
   parsedInput: never;

@@ -1,3 +1,19 @@
+/**
+ * 教学领域端口 — teaching-core 对外依赖的接口定义。
+ *
+ * ## 端口-适配器模式
+ *
+ * teaching-core 是纯领域层，不依赖 Drizzle/Next.js/PGVector 等基础设施。
+ * 它只定义接口（Port），由外部适配器（db/teaching-adapters 等）实现。
+ * 这保证领域逻辑可独立测试、独立演进。
+ *
+ * ## Transaction 边界
+ *
+ * `TeachingTransaction` 把 Session/Mastery/Event 三个 Repository 绑在一起，
+ * `TeachingUnitOfWork.run()` 保证三者在同一数据库事务内原子更新。
+ * 这至关重要 — 状态转移和对应领域事件必须同时落盘或同时回滚。
+ */
+
 import type { DomainLearningEvent } from './domain-events';
 import type { MisconceptionTag } from './mastery';
 import type { TeachingState } from './state-machine';

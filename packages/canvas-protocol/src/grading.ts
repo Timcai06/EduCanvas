@@ -1,3 +1,33 @@
+/**
+ * Canvas 判分管线 — 服务端确定性评分。
+ *
+ * ## 公开/私有分离
+ *
+ * Artifact 在服务端被拆成两份：
+ * - **PublicArtifact** → 发给浏览器，不包含正确答案。学生看到题目但不知道答案
+ * - **GradingKey** → 留在服务端，包含正确答案。用于对学生提交做确定性判分
+ *
+ * 这个分离是安全边界 — 客户端永远拿不到 GradingKey，
+ * 所以即使学生打开 DevTools 也看不到答案。
+ *
+ * ## 判分流程
+ *
+ * ```
+ * 模型输出 Artifact → prepareArtifact() → { publicArtifact, gradingKey }
+ *                                                │
+ *                                   发到浏览器，存入 gradingKey 到 DB
+ *                                                │
+ * 学生提交 → CanvasInteractionEvent → gradeCanvasSubmission(gradingKey, event)
+ *                                                │
+ *                                   返回 GradingDecision → 可信 assessment_graded 事件
+ * ```
+ *
+ * ## 判分拒绝 ≠ 答错
+ *
+ * 被拒绝的提交（ARTIFACT_MISMATCH、UNKNOWN_ITEM 等）不能降级为"答错"。
+ * 拒绝原因可能是客户端 bug、协议版本不匹配、或篡改 — 这些不是学生的错。
+ */
+
 import { z } from 'zod';
 import {
   artifactSchema,
@@ -65,9 +95,12 @@ export interface PreparedArtifact {
 }
 
 /**
- * Produce the browser-safe projection for every registered renderer.
- * Render-only templates deliberately stop here: no grading key is invented and
- * no assessment persistence contract is implied.
+ * 提取浏览器安全投影 — 剥离正确答案和解析，只保留学生可见内容。
+ *
+ * 三类 Artifact 的提取策略不同：
+ * - quiz: 去掉 correctOptionId 和 explanation，只保留题干+选项
+ * - classification_game: 去掉 correctCategoryId，只保留 item 的 id/label/emoji
+ * - pipeline_flow: 渲染型模板，直接透传（无答案概念，无需剥离）
  */
 export function projectRenderableArtifact(input: unknown): PublicArtifact {
   const artifact: Artifact = artifactSchema.parse(input);
@@ -142,7 +175,10 @@ function prepareValidatedArtifact(
   };
 }
 
-/** 验证模型输出并在单一服务端边界生成公开投影与私有判分键。 */
+/**
+ * 验证模型输出的 GradableArtifact，生成 { publicArtifact, gradingKey } 对。
+ * 这是服务端接收模型输出的唯一入口 — 同步完成校验、公开投影提取、判分键生成。
+ */
 export function prepareArtifact(input: unknown): PreparedArtifact {
   return prepareValidatedArtifact(gradableArtifactSchema.parse(input));
 }
@@ -169,6 +205,10 @@ export type GradingDecision =
   | { ok: true; result: GradingResult }
   | { ok: false; code: GradingRejectionCode };
 
+/**
+ * 单选题判分 — 每题独立判对/错，返回 feedback 为那道题的解释文本。
+ * 单个 event 只提交一道题，所以 attemptedItems 恒为 1。
+ */
 function gradeQuiz(
   key: Extract<ArtifactGradingKey, { type: 'quiz' }>,
   event: Extract<CanvasInteractionEvent, { type: 'quiz_answer_submitted' }>,
@@ -193,6 +233,10 @@ function gradeQuiz(
   };
 }
 
+/**
+ * 分类游戏判分 — 必须提交全部 item 才算完整提交（INCOMPLETE_SUBMISSION 拒绝部分提交）。
+ * 全部正确时返回 successMessage 作为反馈。
+ */
 function gradeClassification(
   key: Extract<ArtifactGradingKey, { type: 'classification_game' }>,
   event: Extract<CanvasInteractionEvent, { type: 'classification_submitted' }>,
@@ -228,8 +272,20 @@ function gradeClassification(
 }
 
 /**
- * 仅在服务端使用保存的判分键验证客户端提交；客户端自报结果永远不参与计算。
- * Schema不合法的输入抛出ZodError；通过Schema但语义冲突的提交返回显式拒绝结果。
+ * 服务端判分唯一入口 — 使用保存的 GradingKey 验证客户端提交。
+ *
+ * ## 安全约束
+ *
+ * - 客户端自报 isCorrect/masteryScore 永远不参与计算
+ * - Schema 不合法的输入抛出 ZodError（协议违规，不是学生的问题）
+ * - 通过 Schema 但语义冲突（ID 不匹配、类型不匹配）返回显式拒绝码
+ * - 判分键必须与提交事件的 artifactId 一致，防跨 Artifact 提交
+ *
+ * ## 分派
+ *
+ * quiz_answer_submitted + quiz key → gradeQuiz()
+ * classification_submitted + classification_game key → gradeClassification()
+ * 其他组合 → EVENT_TYPE_MISMATCH
  */
 export function gradeCanvasSubmission(
   gradingKeyInput: unknown,

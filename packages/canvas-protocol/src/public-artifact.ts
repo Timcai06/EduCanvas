@@ -1,3 +1,24 @@
+/**
+ * 公开 Artifact — 浏览器安全的 Artifact 投影。
+ *
+ * ## 为什么需要公开/私有分离
+ *
+ * 完整的 Artifact（如 quiz）包含正确答案（correctOptionId）和解析（explanation）。
+ * 如果直接发给浏览器，学生打开 DevTools 就能看到答案。
+ *
+ * 解决方案：
+ * - **Artifact** → 保留在服务端，包含完整信息（题目+答案）
+ * - **PublicArtifact** → 发给浏览器，剥离答案相关内容
+ * - **GradingKey** → 保留在服务端，用于对学生提交做判分
+ *
+ * ## Schema 安全设计
+ *
+ * PublicArtifact 的每个字段都经过审查：
+ * - 不包含 correctOptionId、explanation、correctCategoryId 等答案字段
+ * - strict 模式拒绝未评审的额外字段
+ * - 渲染前再用 validatePublicArtifact 校验一次，防协议版本不匹配
+ */
+
 import { z } from 'zod';
 import { ARTIFACT_SCHEMA_VERSION } from './artifact';
 import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';

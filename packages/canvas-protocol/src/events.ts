@@ -1,9 +1,33 @@
 import { z } from 'zod';
 import { pipelineFlowSlotSchema } from './artifacts/pipeline-flow';
 
-// Canvas交互事件只描述浏览器发生的操作，是进入服务端验证边界前的不可信输入。
-// 服务端验证后产生的state_transition、assessment_graded等可信领域事件归teaching-core所有，
-// 不能与本文件的客户端事件混为同一种类型（ADR-0006）。
+/**
+ * Canvas 交互事件 — 客户端到服务端的不可信输入。
+ *
+ * ## 与领域事件的区别（ADR-0006）
+ *
+ * | 维度 | Canvas 交互事件（本文件） | 领域事件（teaching-core） |
+ * |------|--------------------------|---------------------------|
+ * | 来源 | 浏览器，不可信 | 服务端，可信 |
+ * | 用途 | 描述用户操作（点了什么、拖了什么） | 描述已发生的事实（状态转移、判分结果） |
+ * | 持久化 | 不持久化 | 持久化到 learning_events |
+ * | 回放 | 不回放 | 回放用于投影计算 |
+ *
+ * 服务端收到 Canvas 交互事件后做校验 + 判分，产出可信领域事件。
+ * 这两个事件流有独立的 Schema 版本。
+ *
+ * ## 七种事件类型
+ *
+ * | 事件 | 触发时机 | 来源 |
+ * |------|---------|------|
+ * | artifact_rendered | Canvas 渲染完毕 | 任意 Artifact |
+ * | animation_started | 动画开始播放 | pipeline_flow |
+ * | animation_paused | 动画暂停 | pipeline_flow |
+ * | animation_step_completed | 动画某个步骤播完 | pipeline_flow |
+ * | hint_requested | 学生点提示按钮 | quiz / classification_game / animation |
+ * | quiz_answer_submitted | 学生提交单选题答案 | quiz |
+ * | classification_submitted | 学生提交分类结果 | classification_game |
+ */
 
 /** 客户端Canvas交互协议版本；领域事件拥有独立版本，不能复用此常量。 */
 export const CANVAS_INTERACTION_SCHEMA_VERSION = '1' as const;

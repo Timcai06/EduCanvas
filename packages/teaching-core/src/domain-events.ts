@@ -1,3 +1,35 @@
+/**
+ * 领域事件 — 事件溯源模式的可信事实记录。
+ *
+ * ## 为什么用事件溯源？
+ *
+ * 教学场景的核心数据（状态转移、掌握度变化）必须**可审计、可回放**。
+ * 直接 UPDATE 一行数据会丢失"这个分数是怎么算出来的"、"为什么从这里跳到那里"的全部上下文。
+ * 事件溯源把每个事实变化记录为不可变事件，掌握度可以通过回放事件流确定性重算。
+ *
+ * ## 事件类型（阶段一闭集）
+ *
+ * | 事件 | 生产者 | 含义 |
+ * |------|--------|------|
+ * | state_transition | teaching_runtime | 教学状态转移（DIAGNOSE→EXPLAIN 等） |
+ * | assessment_exit_decided | teaching_runtime | ASSESS 出口决策（仅 ADVANCE，REMEDIATE 走 state_transition） |
+ * | assessment_graded | grading_service | 判分结果（测验/分类游戏） |
+ * | hint_recorded | teaching_runtime | 学生请求了提示 |
+ * | misconception_updated | misconception_service | 误区标签变更（激活/消除） |
+ * | artifact_completed | teaching_runtime | 学生完成了 Canvas 交互 |
+ *
+ * ## Schema 版本独立演进
+ *
+ * 服务端事件协议版本 (`DOMAIN_EVENT_SCHEMA_VERSION`) 与客户端 Canvas 事件版本**独立**。
+ * 服务端事件是持久化事实，升级需要迁移策略；客户端事件是瞬态的。
+ *
+ * ## 新增事件类型检查清单
+ * 1. 加入 domainLearningEventTypes
+ * 2. 在 discriminatedUnion 中定义 Schema
+ * 3. 在 superRefine 中添加 source 校验规则
+ * 4. 在 learning-projection 中添加投影逻辑
+ */
+
 import { z } from 'zod';
 import {
   assessmentEvidenceSchema,
@@ -25,7 +57,11 @@ export const domainLearningEventTypes = [
   'artifact_completed',
 ] as const;
 
-/** 允许签发可信领域事件的服务端生产者闭集。 */
+/**
+ * 服务端可签发事件的四个生产者。
+ * `migration` 是历史数据导入的显式兼容通道 — 在线生产者必须与事件类型严格匹配，
+ * 但 migration 可以写入任意事件类型以回填遗留记录。
+ */
 export const domainEventSources = [
   'teaching_runtime',
   'grading_service',
@@ -61,7 +97,10 @@ const stateTransitionPayloadSchema = z
   .object({
     from: teachingStateSchema,
     to: teachingStateSchema,
-    // 历史migration事件可能使用自由文本；当前runtime在联合Schema的跨字段校验中收紧为闭集信号。
+    /**
+     * 转移原因。历史 migration 事件可能使用自由文本；
+     * 当前 runtime 通过 superRefine 跨字段校验收紧为闭集候选信号。
+     */
     reason: z.string().min(1).max(300),
     triggerTool: z.enum(teachingTools).optional(),
     /** 新事件冻结课程策略与当时可见的练习事实；全部缺省仅用于旧事件兼容。 */
@@ -72,6 +111,10 @@ const stateTransitionPayloadSchema = z
   })
   .strict()
   .superRefine((payload, context) => {
+    /**
+     * 策略快照完整性校验 — 三类字段要么全填（新版事件，支持确定性回放），
+     * 要么全空（旧版事件，回放时使用当前配置）。禁止半填半空，否则回放结果不确定。
+     */
     const policySnapshot = [
       payload.policyVersion,
       payload.minimumPracticeEvents,
@@ -87,6 +130,11 @@ const stateTransitionPayloadSchema = z
         message: '状态转移策略快照必须完整提供或全部缺省',
       });
     }
+    /**
+     * ASSESS 出口约束 — state_transition 只记录 REMEDIATE（退回重学），
+     * ADVANCE 走独立的 assessment_exit_decided 事件。
+     * 这保证"通过"和"不通过"有各自独立的审计轨迹。
+     */
     if (payload.from === 'ASSESS') {
       if (
         payload.assessmentExit &&
@@ -139,6 +187,12 @@ const assessmentPayloadSchema = z
         message: 'correctItems不能大于attemptedItems',
       });
     }
+    /**
+     * 掌握度策略快照完整性 — 版本号与参数必须同时出现或同时缺席。
+     * 同时出现 = 新版事件，回放时可重现当时的掌握度计算。
+     * 同时缺席 = 旧版事件，回放时 fallback 到当前配置。
+     * 一半有一半没有 = 回放结果不确定，拒绝。
+     */
     if (
       (payload.masteryPolicyVersion === undefined) !==
       (payload.masteryConfig === undefined)
@@ -238,13 +292,16 @@ export const domainLearningEventSchema = z
       .strict(),
   ])
   .superRefine((event, context) => {
+    /**
+     * 事件 source 必须与事件类型匹配 — 每种事件只能由特定生产者签发。
+     * `migration` 是唯一例外，允许写入任意类型以兼容历史数据导入。
+     */
     const expectedSource =
       event.eventType === 'assessment_graded'
         ? 'grading_service'
         : event.eventType === 'misconception_updated'
           ? 'misconception_service'
           : 'teaching_runtime';
-    // migration是已有事实的显式兼容通道；在线生产者必须与事件类型严格匹配。
     if (event.source !== 'migration' && event.source !== expectedSource) {
       context.addIssue({
         code: 'custom',
@@ -252,6 +309,15 @@ export const domainLearningEventSchema = z
         message: `${event.eventType}不能由${event.source}签发`,
       });
     }
+    /**
+     * 在线 state_transition 的 reason 必须是候选信号闭集成员，
+     * 且 from/to 必须与 resolveTransitionCandidate 的结果一致。
+     *
+     * 这层校验确保即使有 bug 的模型发出了"DIAGNOSE 时要求跳到 ASSESS"，
+     * 事件在写入前就被 Schema 拒绝。
+     *
+     * migration 事件跳过此校验 — 历史数据可能使用自由文本 reason。
+     */
     if (
       event.eventType !== 'state_transition' ||
       event.source === 'migration'
