@@ -1,3 +1,31 @@
+/**
+ * 教学状态推进服务 — 接受模型提出的候选信号，经两层守卫评估后推进状态。
+ *
+ * ## 两层守卫
+ *
+ * 1. **候选信号解析** (`resolveTransitionCandidate`) — 信号→目标映射，拒绝非法信号。
+ *    ASSESSMENT_COMPLETED 信号解析为 ASSESSMENT_EXIT 分支。
+ * 2. **转移评估** (`evaluateTransition`) — 检查练习证据量、掌握度决策。
+ *    PRACTICE→ASSESS 必须满足 minimumPracticeEvents。
+ *    ASSESS→EXPLAIN/PRACTICE 必须提供 assessmentDecision。
+ *
+ * ## ASSESS 出口分叉
+ *
+ * ```
+ * ASSESS + ASSESSMENT_COMPLETED 信号 →
+ *   ├─ decideTrustedAssessmentExit() 返回 ADVANCE → 生成 assessment_exit_decided 事件（课程完成）
+ *   └─ 返回 REMEDIATE → target = remediationTarget → 继续 evaluateTransition → state_transition
+ * ```
+ *
+ * ADVANCE 是终点 — 生成 assessment_exit_decided 后不推进状态。
+ * REMEDIATE 走正常 state_transition 流程，退回 EXPLAIN 或 PRACTICE。
+ *
+ * ## 幂等设计
+ *
+ * 同一个 causationId 的重复提交返回已持久化的事件（replayed=true）。
+ * 先锁幂等键再读会话 — 防止并发条件下持有过期 version 快照。
+ */
+
 import {
   decideAssessmentExit,
   defaultMasteryConfig,
@@ -96,6 +124,11 @@ function idempotencyKey(command: ProgressTeachingStateCommand): string {
   return `state:${command.sessionId}:${command.causationId}`;
 }
 
+/**
+ * 筛选出当前 teaching state 开始以后的所有事件。
+ * 从事件列表末尾反向查找最后一次进入当前 state 的 state_transition，
+ * 截取其后的所有事件作为"当前状态的证据窗口"。
+ */
 function eventsInCurrentState(
   events: readonly DomainLearningEvent[],
   currentState: TeachingState,
@@ -114,6 +147,7 @@ function eventsInCurrentState(
   return events.slice(startIndex);
 }
 
+/** 统计当前状态窗口内指定知识点的判分事件 — 总作答数和正确数。 */
 function assessmentEvidence(
   events: readonly DomainLearningEvent[],
   knowledgeNodeId: string,
@@ -135,6 +169,12 @@ function assessmentEvidence(
   );
 }
 
+/**
+ * 从可信事件构造 ASSESS 证据，调用 teaching-core 的 decideAssessmentExit。
+ *
+ * previouslyMastered 的判定：掌握度不为 null 且已达到进入阈值。
+ * 已掌握走 exitThreshold（宽松），未掌握走 enterThreshold（严格）。
+ */
 function decideTrustedAssessmentExit(
   mastery: MasterySnapshot | null,
   knowledgeNodeId: string,
@@ -161,6 +201,7 @@ function decideTrustedAssessmentExit(
   };
 }
 
+/** 幂等检查：已持久化的事件是否匹配当前命令的 assessment_exit_decided 事实。 */
 function isSameAssessmentExitFact(
   event: DomainLearningEvent,
   command: ProgressTeachingStateCommand,
@@ -189,6 +230,7 @@ function assessmentExitFromFact(
   };
 }
 
+/** 幂等检查：已持久化的事件是否匹配当前命令的 state_transition 事实。 */
 function isSameTransitionFact(
   event: DomainLearningEvent,
   command: ProgressTeachingStateCommand,

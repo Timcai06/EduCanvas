@@ -1,3 +1,24 @@
+/**
+ * 教学 Prompt 构建 — 将 K12 教学上下文转换为 model-ready 消息列表。
+ *
+ * ## 双 Prompt 设计
+ *
+ * | 阶段 | 用途 | System 指令 |
+ * |------|------|------------|
+ * | answer | 模型可以调用工具 | 可以请求工具、可以先用自然语言告诉学生、最终答案在 synthesis |
+ * | synthesis | 模型不能调用工具 | 基于工具结果生成最终回答、引用标注、不能再次调工具 |
+ *
+ * 两个阶段共享 `commonPolicy`（身份声明 + 当前状态 + 知识节点），
+ * 但 synthesis 有额外的引用标注和工具禁用指令。
+ *
+ * ## 安全约束
+ *
+ * - 对话历史不允许包含 system role（防止 injection）
+ * - conversationMessages 最多 24 条
+ * - 学生消息永远在最后（user role）
+ * - System prompt 包含内部规则 + K12_TEACHING_SYSTEM_POLICY
+ */
+
 import { modelMessageSchema, type ModelMessage } from '@educanvas/agent-core';
 import {
   teachingStateSchema,

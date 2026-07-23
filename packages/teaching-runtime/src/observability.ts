@@ -1,3 +1,26 @@
+/**
+ * 教学可观测性 — best-effort 旁路指标。
+ *
+ * ## 设计原则
+ *
+ * - 指标是旁路：观测后端故障不能改变教学结果
+ * - 零正文：联合中没有 labels/message/text/trace 字段，避免高基数与正文外泄
+ * - recordTeachingMetric 静默丢弃失败 — 不抛异常，不记录异常正文日志
+ *
+ * ## 指标列表
+ *
+ * | 指标 | 含义 |
+ * |------|------|
+ * | provider_calls_per_completed_turn | 每个完成 turn 的 Provider 调用次数 |
+ * | model_first_token_latency_ms | 首 token 延迟 |
+ * | model_call_latency_ms | 模型调用总延迟 |
+ * | teaching_turn_latency_ms | 教学 turn 总延迟 |
+ * | policy_blocks | 安全策略拦截次数 |
+ * | provider_rate_limits | Provider 限流次数 |
+ * | tool_rejections | 工具执行拒绝次数 |
+ * | citation_invalid | 引用标注无效次数 |
+ */
+
 import type { ModelAlias, TaskAlias } from '@educanvas/agent-core';
 import type {
   TeachingSafetyAction,
