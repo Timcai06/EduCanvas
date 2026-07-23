@@ -31,7 +31,16 @@ function Load-DotEnv($Path) {
   Get-Content -Encoding utf8 -LiteralPath $Path | ForEach-Object {
     if ($_ -match '^\s*$' -or $_ -match '^\s*#') { return }
     if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-      [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+      $Name = $matches[1]
+      $Value = $matches[2].Trim()
+      if (
+        $Value.Length -ge 2 -and
+        (($Value.StartsWith('"') -and $Value.EndsWith('"')) -or
+          ($Value.StartsWith("'") -and $Value.EndsWith("'")))
+      ) {
+        $Value = $Value.Substring(1, $Value.Length - 2)
+      }
+      [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
     }
   }
 }
