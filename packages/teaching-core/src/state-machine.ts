@@ -1,3 +1,29 @@
+/**
+ * 教学状态机 — K12 教学脊柱的核心确定性规则。
+ *
+ * ## 设计哲学
+ *
+ * 教学脊柱是一个**严格线性五态模型**：DIAGNOSE → EXPLAIN → DEMONSTRATE → PRACTICE → ASSESS。
+ * 模型不能跳过状态、不能倒退（除 ASSESS → REMEDIATE/ADVANCE 外）、不能提出自定义状态名。
+ *
+ * ## 两层守卫架构
+ *
+ * 1. **候选信号解析** (`resolveTransitionCandidate`) — 将模型提出的"阶段完成"信号映射为目标状态。
+ *    刻意不接受 `targetState` 参数，从协议层消灭模型请求跳级的可能。
+ * 2. **转移评估** (`evaluateTransition`) — 根据运行时证据（练习次数、掌握度决策）允许或拒绝转移。
+ *    只有 ok=true 才能持久化并生成 state_transition 事件。
+ *
+ * ## REMEDIATE/ADVANCE 不在状态列表里
+ *
+ * 这两个是 ASSESS 的**出口决策**，控制下一步行为但不进入 lesson_sessions.state 字段。
+ * 持久化的始终是五个教学状态之一。
+ *
+ * ## 中断机制
+ *
+ * 单层中断栈：学生提问跳题时压入 `interruptedState`，回答完恢复。拒绝嵌套中断，
+ * 避免形成隐式分层状态机。
+ */
+
 import { z } from 'zod';
 
 /** 教学脊柱唯一允许持久化的五个状态。 */
@@ -55,7 +81,10 @@ export type CandidateTransitionResolution =
 
 /**
  * 把封闭候选信号映射到当前状态的唯一下一步。
- * 该函数故意不接受`targetState`，从协议层消除模型请求跳级的通道。
+ *
+ * 该函数故意不接受 `targetState` 参数 — 从协议层消除模型请求跳级的通道。
+ * 模型只能说"我认为诊断完成了"，不能直接说"跳到 PRACTICE"。
+ * 这保证了教学进度的控制权始终在 runtime，不在模型。
  */
 export function resolveTransitionCandidate(
   state: TeachingState,
@@ -189,7 +218,12 @@ export type InterruptionResult =
       code: 'INTERRUPTION_ALREADY_ACTIVE' | 'NO_ACTIVE_INTERRUPTION';
     };
 
-/** 开始一次跳题中断；已有中断时拒绝继续压栈。 */
+/**
+ * 开始一次跳题中断 — 学生中途提问偏离当前教学流程时调用。
+ *
+ * 将当前 state 压入 interruptedState，session.state 变为新状态后继续。
+ * 已有中断时拒绝继续压栈 — 单层中断防止嵌套导致状态不可追踪。
+ */
 export function beginInterruption(
   cursor: TeachingSessionCursor,
 ): InterruptionResult {
@@ -198,7 +232,10 @@ export function beginInterruption(
   return { ok: true, cursor: { ...cursor, interruptedState: cursor.state } };
 }
 
-/** 结束跳题并恢复原脊柱状态。 */
+/**
+ * 结束跳题中断 — 学生回到教学主线时调用。
+ * 从 interruptedState 恢复原脊柱状态。无活跃中断时拒绝恢复。
+ */
 export function resumeInterruption(
   cursor: TeachingSessionCursor,
 ): InterruptionResult {

@@ -1,3 +1,34 @@
+/**
+ * 掌握度计算 — K12 教学的核心量化模型。
+ *
+ * ## 设计目标
+ *
+ * 掌握度不是简单的"正确率"，而是一个**多维加权评分**：
+ * - 成功/失败（Beta(1,1) 先验冷启动）
+ * - 时间衰减（久未练习 → 分数降低）
+ * - 提示惩罚（频繁求助 → 分数降低）
+ * - 误区惩罚（活跃误区 → 分数降低）
+ * - 先修上限（前驱知识未掌握 → 当前分数被 cap）
+ *
+ * ## 公式（ADR-0005 确认）
+ *
+ * ```
+ * score = previousWeight × recencyAdjustedPrevious + evidenceWeight × evidence
+ * evidence = successRate × hintFactor × misconceptionFactor
+ * score = clamp(score, 0, prerequisiteCap)
+ * ```
+ *
+ * ## 滞后阈值（Hysteresis）
+ *
+ * enterThreshold (0.85) > exitThreshold (0.75) — 防止分数在边界反复弹跳。
+ * 进入需要更高门槛，退出需要更低门槛，形成"已掌握"的稳定性。
+ *
+ * ## 策略快照
+ *
+ * 所有算法参数打包为 `MasteryConfig`，事件保存当时的配置快照，
+ * 确保历史掌握度可以**确定性回放** — 不会因为后续参数调优改变历史计算结果。
+ */
+
 import { z } from 'zod';
 
 /** K12人工智能通识课v1允许驱动补救策略的封闭误区标签集。 */
@@ -130,11 +161,23 @@ export function calculateMastery(
 ): MasteryCalculation {
   const input = masteryInputSchema.parse(rawInput);
   const parsedConfig = masteryConfigSchema.parse(config);
+  /**
+   * v1 掌握度公式 — 分步说明：
+   *
+   * 1. recencyDecay = e^(-rate × days) — 指数衰减，越久越降
+   * 2. successRate = (correct+1)/(attempts+2) — Beta(1,1) 先验冷启动，
+   *    +1/+2 相当于假设"已经有过一次虚拟正确和一次虚拟错误"，
+   *    避免 1/1=100% 或 0/1=0% 的极端值
+   * 3. hintFactor = 1 - rate × hints/attempts — 频繁提示降低分数
+   * 4. misconceptionFactor = 1 - rate × activeMiscCount — 活跃误区越多越降
+   * 5. prerequisiteCap — 最弱先修决定上限，用 min() 而非 mean()：
+   *    避免其他高分先修掩盖关键知识缺口（比如除法很好但乘法很差）
+   * 6. score = clamp(prevWeight × old + evidWeight × new, 0, prerequisiteCap)
+   */
   const recencyDecay = Math.exp(
     -parsedConfig.recencyDecayRate * input.daysSincePracticed,
   );
   const recencyAdjustedPrevious = input.previousScore * recencyDecay;
-  // Beta(1,1)先验避免冷启动时被一次结果推到0或1；+1/+2对应一次虚拟成功与失败。
   const successRate = (input.correctCount + 1) / (input.attemptCount + 2);
   const hintFactor = Math.max(
     parsedConfig.hintFactorFloor,
@@ -153,7 +196,6 @@ export function calculateMastery(
           1,
           parsedConfig.prerequisiteBaseCap +
             parsedConfig.prerequisiteWeight *
-              // 最弱先修决定上限，避免其他高分先修掩盖关键知识缺口。
               Math.min(...input.prerequisiteScores),
         );
   const evidence = successRate * hintFactor * misconceptionFactor;
@@ -221,7 +263,25 @@ export interface AssessmentExit {
   recentAccuracy: number;
 }
 
-/** 使用滞后阈值、先修门槛和近期证据确定ASSESS出口。 */
+/**
+ * 使用滞后阈值、先修门槛和近期证据确定 ASSESS 出口。
+ *
+ * ## 双分支设计
+ *
+ * 学生分两种情况，检查标准不同：
+ *
+ * ### 分支 1：已掌握过 (`previouslyMastered=true`)
+ * 用 **exitThreshold**（较低，默认 0.75）判断是否需要退回。
+ * 宽松标准 — 曾经掌握的知识只需不低于退出线就放行。
+ * 只检查两项：分数低于退出阈值 + 严重活跃误区。
+ *
+ * ### 分支 2：首次掌握 (`previouslyMastered=false`)
+ * 用 **enterThreshold**（较高，默认 0.85）判断是否达到掌握。
+ * 严格标准 — 必须跨过进入门槛才算"学会了"。
+ * 检查五项：分数/先修门槛/近期作答量/近期正确率/严重误区。
+ *
+ * 任何一项不满足 → REMEDIATE；全部满足 → ADVANCE。
+ */
 export function decideAssessmentExit(
   rawEvidence: AssessmentEvidence,
   config: Readonly<MasteryConfig> = defaultMasteryConfig,
@@ -233,6 +293,7 @@ export function decideAssessmentExit(
       ? 0
       : evidence.recentCorrectCount / evidence.recentAttemptCount;
 
+  // 分支 1：已掌握过的学生 — 只检查是否掉出 exitThreshold
   if (evidence.previouslyMastered) {
     const reasons: AssessmentReason[] = [];
     if (evidence.score < parsedConfig.exitThreshold)
@@ -244,6 +305,7 @@ export function decideAssessmentExit(
       : { decision: 'ADVANCE', reasons: ['MASTERY_CONFIRMED'], recentAccuracy };
   }
 
+  // 分支 2：首次掌握 — 全量检查五维条件
   const reasons: AssessmentReason[] = [];
   if (evidence.score < parsedConfig.enterThreshold)
     reasons.push('MASTERY_BELOW_ENTER_THRESHOLD');
@@ -268,7 +330,25 @@ export function decideAssessmentExit(
     : { decision: 'ADVANCE', reasons: ['MASTERY_CONFIRMED'], recentAccuracy };
 }
 
-/** 返回独立复习调度器的间隔天数；它不参与是否掌握的判断。 */
+/**
+ * 返回独立复习调度器的间隔天数 — 不参与是否掌握的判断。
+ *
+ * ## v1 分桶策略
+ *
+ * 根据掌握度分数分桶，间隔从 1 天到 30 天不等。
+ * 有 >= 2 个活跃误区时，间隔减半（不低于 1 天）。
+ *
+ * | 分数范围 | 复习间隔 | 含义 |
+ * |---------|---------|------|
+ * | < 0.45 | 1 天 | 薄弱 — 明天就复习 |
+ * | < 0.65 | 3 天 | 一般 |
+ * | < 0.80 | 7 天 | 不错 |
+ * | < 0.90 | 14 天 | 好 |
+ * | >= 0.90 | 30 天 | 扎实 |
+ *
+ * 这是可校准的教学策略，不是掌握度公式推导出的固定常数。
+ * 后续版本可能改为更细粒度的间隔算法。
+ */
 export function getReviewIntervalDays(
   score: number,
   activeMisconceptionCount: number,
