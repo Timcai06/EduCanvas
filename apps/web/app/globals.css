@@ -10,39 +10,42 @@
  * 亮色是默认的「纸面」，深色是「晚自习砚墨」。组件禁止散写色值。
  */
 /*
- * 每个语义色一次写清 light-dark(纸面, 砚墨)，由 color-scheme 取哪支笔，避免维护两套色板。
- * 砚墨（暗色）= 晚自习暖墨黑而非蓝黑。color-scheme 由下方 <html>/data-theme 统一控制：
- * 跟随系统交 OS，手动亮/暗则强制，无需 prefers-color-scheme 覆写。组件禁止散写色值。
+ * 亮色（纸面）是默认，@theme 直接给静态值；砚墨（暗色）由 :root[data-theme='dark'] 覆写全部 token。
+ * 为什么不用 light-dark()：Chromium 不会在 color-scheme 动态变化时重新解析「自定义属性里的
+ * light-dark()」，导致手动切主题时 token 不更新、切不动（曾在此踩坑）。属性覆写改一次属性就重算，稳。
+ * 跟随系统由 JS 在水合前把 system 解析成具体 light/dark 写进 data-theme（见 layout.tsx），
+ * 故 CSS 不需要 prefers-color-scheme 媒体查询。组件禁止散写色值。
  */
 @theme {
   /* 纸面层级：canvas 是桌面，card 是刚铺开的一页新纸 */
-  --color-canvas: light-dark(#f7f4ec, #1a1712);
-  --color-card: light-dark(#fffdf7, #211e17);
-  --color-surface: light-dark(#efeadd, #262217);
-  --color-surface-strong: light-dark(#e5ddcb, #322d20);
-  --color-ink: light-dark(#262219, #eae4d4);
-  --color-ink-muted: light-dark(#6d6552, #b0a78f);
-  --color-ink-faint: light-dark(#847d6b, #7f7663);
-  --color-line: light-dark(#ddd4c0, #3b3527);
+  --color-canvas: #f7f4ec;
+  --color-card: #fffdf7;
+  --color-surface: #efeadd;
+  --color-surface-strong: #e5ddcb;
+  --color-ink: #262219;
+  --color-ink-muted: #6d6552;
+  /* ink-faint=装饰/图标层(≥3:1)；信息文字用 ink-muted(≥4.5:1)，见验收#8 */
+  --color-ink-faint: #847d6b;
+  --color-line: #ddd4c0;
 
   /* 黛青：讲课的笔 */
-  --color-accent: light-dark(#31606c, #86b7c1);
-  --color-accent-strong: light-dark(#234c58, #a5cdd5);
-  --color-accent-soft: light-dark(#dfe9e6, #223138);
-  /* 扉页墨点场专用点色：shader 会再做一次 linear→sRGB 提亮，故亮色喂更深黛青墨才留得住对比，见 hero-ink-field.tsx */
-  --hero-ink-dot: light-dark(#0e343d, #86b7c1);
+  --color-accent: #31606c;
+  --color-accent-strong: #234c58;
+  --color-accent-soft: #dfe9e6;
+  /* 扉页墨点场专用点色：shader 会二次 sRGB 提亮，亮色喂更深黛青墨才留得住对比，见 hero-ink-field.tsx */
+  --hero-ink-dot: #0e343d;
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
-  --color-cinnabar: light-dark(#bf4029, #dd6f52);
-  --color-cinnabar-strong: light-dark(#a33420, #e98a70);
-  --color-cinnabar-soft: light-dark(#f6e2d8, #3f2018);
+  --color-cinnabar: #bf4029;
+  --color-cinnabar-strong: #a33420;
+  --color-cinnabar-soft: #f6e2d8;
 
-  --color-good: light-dark(#4a7c44, #8db77d);
-  --color-good-soft: light-dark(#e3ecda, #26321f);
-  --color-warn: light-dark(#97711e, #d0a751);
-  --color-warn-soft: light-dark(#f2e7ca, #372e14);
-  --color-bad: light-dark(#ab2f17, #de6a4c);
-  --color-bad-soft: light-dark(#f6dcd2, #3d1d13);
+  --color-good: #4a7c44;
+  --color-good-soft: #e3ecda;
+  --color-warn: #97711e;
+  --color-warn-soft: #f2e7ca;
+  --color-bad: #ab2f17;
+  --color-bad-soft: #f6dcd2;
 
   --font-sans:
     'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
@@ -50,7 +53,6 @@
     'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'PingFang SC', serif;
 
   --radius-pill: 1.75rem;
-  /* 阴影亮暗连模糊/偏移都不同，无法塞进 light-dark()（仅接受颜色），故走下方 dark 覆写 */
   --shadow-float:
     0 1px 2px rgb(72 60 34 / 0.05), 0 10px 32px rgb(72 60 34 / 0.1);
   --shadow-card-hover:
@@ -59,37 +61,45 @@
 }
 
 /*
- * 主题偏好存于 <html data-theme>（水合前由内联脚本设定，见 app/layout.tsx）：
- *   无属性 = 跟随系统；data-theme=light = 手动纸色亮；data-theme=dark = 手动砚墨暗。
- * color-scheme 同时驱动 light-dark() 取色与原生表单/滚动条外观，二者始终一致。
+ * 砚墨暗：手动选暗、或 JS 把「跟随系统」解析为暗时（data-theme=dark）覆写全部 token。
+ * color-scheme 由 JS 写内联 style（原生表单/滚动条随之），不在 CSS 重复。
  */
-html {
-  color-scheme: light dark;
-  background: var(--color-canvas);
-}
-
-:root[data-theme='light'] {
-  color-scheme: light;
-}
 :root[data-theme='dark'] {
-  color-scheme: dark;
-}
+  --color-canvas: #1a1712;
+  --color-card: #211e17;
+  --color-surface: #262217;
+  --color-surface-strong: #322d20;
+  --color-ink: #eae4d4;
+  --color-ink-muted: #b0a78f;
+  --color-ink-faint: #7f7663;
+  --color-line: #3b3527;
 
-/* 砚墨阴影：手动暗色，或跟随系统且系统为暗且未显式选亮色时生效；下两块同值需同步。 */
-:root[data-theme='dark'] {
+  --color-accent: #86b7c1;
+  --color-accent-strong: #a5cdd5;
+  --color-accent-soft: #223138;
+  --hero-ink-dot: #86b7c1;
+
+  --color-cinnabar: #dd6f52;
+  --color-cinnabar-strong: #e98a70;
+  --color-cinnabar-soft: #3f2018;
+
+  --color-good: #8db77d;
+  --color-good-soft: #26321f;
+  --color-warn: #d0a751;
+  --color-warn-soft: #372e14;
+  --color-bad: #de6a4c;
+  --color-bad-soft: #3d1d13;
+
   --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
   --shadow-card-hover:
     0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
   --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
-    --shadow-card-hover:
-      0 2px 4px rgb(0 0 0 / 0.46), 0 16px 40px rgb(0 0 0 / 0.54);
-    --shadow-sheet: 0 8px 40px rgb(0 0 0 / 0.58);
-  }
+html {
+  /* 兜底：JS 未跑时（SSR/禁用）交给系统；JS 就绪后由内联 style 覆盖为所选主题 */
+  color-scheme: light dark;
+  background: var(--color-canvas);
 }
 
 /*
@@ -102,22 +112,16 @@ body::before {
   inset: 0;
   z-index: 60;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 180px 180px;
   mix-blend-mode: multiply;
   opacity: 0.035;
 }
 
-/* 纸纹在砚墨面改用 overlay，随手动/系统暗色切换（两块同值需同步，同上 data-theme 说明）。 */
+/* 纸纹在砚墨面改用 overlay */
 :root[data-theme='dark'] body::before {
   mix-blend-mode: overlay;
   opacity: 0.05;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) body::before {
-    mix-blend-mode: overlay;
-    opacity: 0.05;
-  }
 }
 
 /*
