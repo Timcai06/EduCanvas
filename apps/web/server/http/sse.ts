@@ -1,3 +1,19 @@
+/**
+ * SSE（Server-Sent Events）编码工具。
+ *
+ * ## 安全约束
+ *
+ * - 事件名只能包含小写字母和点号（如 `message.delta`），拒绝换行注入
+ * - 事件数据通过 JSON.stringify 序列化，不是字符串拼接
+ * - 响应头包含 `x-accel-buffering: no` 禁用 Nginx 代理缓冲
+ *
+ * ## 客户端断开处理
+ *
+ * `createSseEventStream` 不因客户端断开而终止业务生成。
+ * 客户端 `clientOpen = false` 只停止写响应，服务端继续生成并持久化。
+ * 这保证用户关掉浏览器重开后可以通过 replay 拿到完整结果。
+ */
+
 import 'server-only';
 
 const SSE_EVENT_NAME = /^[a-z]+(?:\.[a-z]+)*$/;
