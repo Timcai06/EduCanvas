@@ -8,7 +8,7 @@
 
 ## 背景
 
-Web 是 K12 用户的主要入口。新的“两支笔”视觉在扉页使用 PixelBlast 墨点场、液态指针与点击涟漪，在真实 Turn busy 期间使用 PulsingBorder 边缘光。完整效果需要 Three.js、Postprocessing 与 Paper Shaders；若直接改成静态 CSS 或删去液态后处理，会降低项目负责人已确认的产品体验。与此同时，持续 GPU、WebGL Context、第三方移植代码和动态 Chunk 不能拖垮 Notebook 的输入、流式回答与无障碍边界。
+Web 是 K12 用户的主要入口。新的“两支笔”视觉在扉页使用 PixelBlast 墨点场，在真实 Turn busy 期间使用 PulsingBorder 边缘光。PixelBlast Runtime 保留液态指针与点击涟漪能力，但扉页产品配置主动选择安静自漂移，不响应鼠标。完整视觉仍需要 Three.js 与 Paper Shaders；若直接改成静态 CSS 或删除已登记的 Runtime 能力，会降低可回滚性和已确认的产品体验。与此同时，持续 GPU、WebGL Context、第三方移植代码和动态 Chunk 不能拖垮 Notebook 的输入、流式回答与无障碍边界。
 
 ## 决定
 
@@ -22,11 +22,13 @@ Web 是 K12 用户的主要入口。新的“两支笔”视觉在扉页使用 P
 
 ## 取舍与回滚
 
-静态 CSS、删除液态后处理或只保留一个简化 Shader 的依赖更少，但无法保持当前完整效果，因此不采用。把 Shader 写入业务工作区会扩大故障半径，也不采用。
+静态 CSS、物理删除液态后处理能力或只保留一个简化 Shader 的依赖更少，但会丢失已验证的 Runtime 回滚能力，因此不采用；具体产品表面可以通过受测配置关闭指针交互。把 Shader 写入业务工作区会扩大故障半径，也不采用。
 
 回滚时可以在视觉 Adapter 入口停止挂载并启用静态兜底，不改 Notebook、Turn、教学状态或任何服务端事实；只有达到像素和交互等价的替代实现才能删除现有依赖。
 
 2026-07-22 的生产构建中，PixelBlast 动态 Chunk 为 578,637 B（gzip 144,106 B）；经静态适配器 tree-shaking 后，Paper busy Chunk 为 52,354 B（gzip 27,731 B），低于此前 namespace 动态导入的 250,580 B（gzip 76,050 B）。这些数字是本次验收基线，不是未来可以无界增长的额度。
+
+2026-07-23 的安静墨点场验收覆盖桌面亮暗主题、390×844 移动端和连续宽度变化；各场景均保持单一 Canvas、无横向溢出且 WebGL Context 未丢失。切到已有 Notebook 时 Canvas 归零，回到空 Notebook 后恢复为一个；页面隐藏后的 2.5 秒观测窗口内没有继续调度动画帧。四倍 CPU 限速下前台 2.2 秒观测到 67 帧，期间输入区可用、Context 未丢失且浏览器无错误。生产 PixelBlast 动态 Chunk 为 578,686 B（gzip 143,417 B），与基线相当。源码边界测试固定了扉页关闭指针液态/涟漪、尺寸变化立即补渲和单一 RAF 调度。
 
 ## 接受记录
 
