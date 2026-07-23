@@ -16,7 +16,8 @@ const PixelBlast = dynamic(() => import('./pixel-blast'), { ssr: false });
 
 export function HeroInkField() {
   const reduced = useReducedMotion();
-  const ink = useCssVarColor('--color-accent', '#31606c');
+  // 专用点色而非 --color-accent：亮色需喂更深的黛青墨抵消 shader 的提亮，见 globals.css
+  const ink = useCssVarColor('--hero-ink-dot', '#0e343d');
 
   if (reduced) return null;
 

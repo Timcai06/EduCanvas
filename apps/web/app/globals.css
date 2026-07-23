@@ -29,6 +29,8 @@
   --color-accent: light-dark(#31606c, #86b7c1);
   --color-accent-strong: light-dark(#234c58, #a5cdd5);
   --color-accent-soft: light-dark(#dfe9e6, #223138);
+  /* 扉页墨点场专用点色：shader 会再做一次 linear→sRGB 提亮，故亮色喂更深黛青墨才留得住对比，见 hero-ink-field.tsx */
+  --hero-ink-dot: light-dark(#0e343d, #86b7c1);
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
   --color-cinnabar: light-dark(#bf4029, #dd6f52);

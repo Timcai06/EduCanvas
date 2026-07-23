@@ -14,7 +14,9 @@ const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
 const WEB_VISUAL_REVIEW_LIMIT = 350;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
 const WEB_WORKSPACE_REVIEW_LIMIT = 600;
-const WEB_STYLES_REVIEW_LIMIT = 400;
+// 主题系统（light-dark 双色板 + data-theme + 墨点场专用色）让 globals.css 合理增长，
+// 2026-07 从 400 上调到 420；仍是可读性护栏而非无界额度。
+const WEB_STYLES_REVIEW_LIMIT = 420;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
