@@ -112,7 +112,8 @@ pnpm env:check
 再填写真实的 `MODEL_GATEWAY_API_KEY`。真实 Key 只放在本地 `.env`，不要提交。
 
 之后双击根目录的 `Start EduCanvas.cmd`。它会检查端口、准备数据库、按迁移文件
-指纹决定是否执行迁移，并把日志路径打印出来。常用参数可以从命令行传入：
+指纹决定是否执行迁移，并把日志路径打印出来；`.env` 值允许使用成对的单引号或
+双引号包裹。常用参数可以从命令行传入：
 
 ```powershell
 .\start-educanvas.ps1 -NoOpen
