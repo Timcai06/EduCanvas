@@ -1,3 +1,13 @@
+/**
+ * Worker 启动引导 — 环境加载、数据库连接、遥测和任务列表的一次性构造。
+ *
+ * ## 为什么延迟加载
+ *
+ * Task Adapter（generate-artifact 等）和 Telemetry Runtime 依赖环境变量。
+ * 环境加载完成前不能求值这些模块 — 否则会读到空配置导致运行时错误。
+ * 通过函数参数注入 loadTelemetryModule/loadTaskModule，测试可替换为 fixture。
+ */
+
 import type { TelemetryRuntime } from '@educanvas/telemetry';
 import type { TaskList } from 'graphile-worker';
 import { loadWorkspaceEnvFiles } from './workspace-env.js';
