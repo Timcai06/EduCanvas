@@ -78,8 +78,14 @@ const WEB_GENERAL_TURN_MODULES = [
   'apps/web/server/platform/general-turn-lifecycle.ts',
   'apps/web/server/platform/general-turn-persistence.ts',
   'apps/web/server/platform/general-turn-profile.ts',
+  'apps/web/server/platform/general-turn-tool-policy.ts',
   'apps/web/server/platform/general-turn-tools.ts',
 ];
+const WEB_GENERAL_TURN_TESTS = typescriptFiles(
+  'apps/web/server/platform',
+).filter((path) =>
+  /\/general-(?:turn(?:[.-].+)?|chat-boundary)\.test\.ts$/.test(path),
+);
 const WEB_TEACHING_TURN_ENTRY = 'apps/web/server/teaching/learning-turn.ts';
 const WEB_TEACHING_TURN_MODULES = [
   WEB_TEACHING_TURN_ENTRY,
@@ -264,6 +270,10 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       WEB_GENERAL_TURN_MODULES,
       TURN_APPLICATION_REVIEW_LIMIT,
+    );
+    assertFilesWithinLimit(
+      WEB_GENERAL_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
     );
   });
 

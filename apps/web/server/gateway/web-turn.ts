@@ -181,15 +181,12 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
       turn = beginGatewayGeneralTurnApplication({
         operationId: input.operationId,
         traceId: input.traceId,
-        actorId: input.route.actorUserId,
-        agentId: input.route.agentId,
+        route: input.route,
         identity: this.input.identity,
-        conversationId: input.route.conversationId,
-        spaceId: input.route.notebookId,
         request: this.input.request,
         assetContext: this.input.assetContext,
         signal: input.signal,
-        capabilities: input.envelope.capabilities.capabilities.map(
+        transportCapabilities: input.envelope.capabilities.capabilities.map(
           (capability) => capability.name,
         ),
       });
