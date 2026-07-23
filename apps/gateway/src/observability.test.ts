@@ -6,6 +6,9 @@ describe('GatewayObservability', () => {
     expect(gatewayRouteLabel('POST', '/v1/local/onboard')).toBe(
       'local.onboard',
     );
+    expect(
+      gatewayRouteLabel('POST', '/v1/internal/tool-effects/reconciliations'),
+    ).toBe('internal.tool-effect.reconciliation');
   });
 
   it('uses bounded route labels and records no request content', () => {

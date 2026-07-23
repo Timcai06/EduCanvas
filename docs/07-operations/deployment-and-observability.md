@@ -93,7 +93,9 @@ Gateway与Web General在进程启动时读取同一配置。无鉴权L0/L1工具
 
 Effect reconciliation是追加审计，不是修改历史终态：原`outcome_unknown` Effect、Tool Call与Operation保持不变，受控读取投影再联合最新决议。自动核验只能查询Adapter提供的可信外部状态，且只能使用Effect intention中由服务端冻结的verifier；调用方选择、缺少绑定或绑定漂移都必须fail closed，禁止invoke或重放write。MCP v1当前没有可信查询契约，必须继续显示未决。人工处置只允许已鉴权operator或service principal，学生与模型不能自证。数据库、日志与指标只使用稳定身份、低基数code、证据/回执hash和时间，不记录参数、输出、证据正文、远端错误、Credential或Secret。
 
-当前只具备core/runtime/db决议边界，不应部署成无人值守对账任务。生产触发、各Adapter只查询verifier和未决积压告警仍待后续独立PR；在此之前不得把“没有核验器”降级为默认成功或默认未提交。Graphile continuation恢复只解决任务长锁，不会也不得替代Effect reconciliation。
+Gateway提供`POST /v1/internal/tool-effects/reconciliations`人工入口，仅在Internal transport开启且token鉴权通过后可用。请求正文只允许稳定目标、决议、低基数原因code和SHA-256证据/回执摘要；审计主体由受信代理通过`x-educanvas-reconciliation-principal: operator:<id> | service:<id>`注入，缺省为固定Gateway service。该header不是最终用户身份协议，不能转发浏览器或渠道输入；持有Internal token的代理必须负责operator身份真实性。服务端日志只记录固定路由、状态和时延，不记录Actor、Effect、hash或主体。
+
+当前不部署无人值守对账任务。各Adapter只查询verifier和未决积压告警仍待真实write Adapter提供可信查询/幂等契约后单独立项；在此之前不得把“没有核验器”降级为默认成功或默认未提交。Graphile continuation恢复只解决任务长锁，不会也不得替代Effect reconciliation。
 
 ## Continuation 异常恢复 Runbook
 

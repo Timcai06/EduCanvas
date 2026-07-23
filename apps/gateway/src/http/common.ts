@@ -5,7 +5,12 @@ import {
   GatewayConnectionRuntimeError,
   GatewayRuntimeError,
 } from '@educanvas/gateway-runtime';
-import { GatewayPersistenceError } from '@educanvas/db';
+import {
+  GatewayPersistenceError,
+  ToolEffectReconciliationConflictError,
+  ToolEffectReconciliationLifecycleError,
+  ToolEffectReconciliationOwnershipError,
+} from '@educanvas/db';
 import { ZodError } from 'zod';
 import type { GatewayObservability } from '../observability';
 import type { GatewayHttpDependencies } from './dependencies';
@@ -84,6 +89,15 @@ export function mapError(error: unknown): {
 } {
   if (error instanceof ZodError)
     return { status: 400, code: 'INVALID_REQUEST' };
+  if (error instanceof ToolEffectReconciliationOwnershipError) {
+    return { status: 404, code: 'NOT_FOUND' };
+  }
+  if (
+    error instanceof ToolEffectReconciliationConflictError ||
+    error instanceof ToolEffectReconciliationLifecycleError
+  ) {
+    return { status: 409, code: 'INVALID_STATE' };
+  }
   if (error instanceof GatewayPersistenceError) {
     if (error.code === 'forbidden') return { status: 403, code: 'FORBIDDEN' };
     if (error.code === 'idempotency_conflict') {
@@ -120,7 +134,11 @@ export function mapError(error: unknown): {
   if (
     error instanceof SyntaxError ||
     (error instanceof Error &&
-      ['BODY_TOO_LARGE', 'EMPTY_BODY'].includes(error.message))
+      [
+        'BODY_TOO_LARGE',
+        'EMPTY_BODY',
+        'EFFECT_RECONCILIATION_PRINCIPAL_INVALID',
+      ].includes(error.message))
   ) {
     return {
       status: error.message === 'BODY_TOO_LARGE' ? 413 : 400,
