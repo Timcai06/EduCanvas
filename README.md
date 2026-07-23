@@ -307,13 +307,18 @@ stateDiagram-v2
 
 ## 下一阶段
 
-[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)、[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)与[第二代架构研究](docs/plan/completed/2026-07-第二代架构研究.md)已经完成。当前只进行[第二代架构有限收口](docs/plan/active/2026-07-第二代架构升级.md)：入口一致性、最小人工对账、清理和完整验证。收口后优先级是：
+[Gateway-first个人Agent计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)、
+[Web-first产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)、
+[第二代架构研究](docs/plan/completed/2026-07-第二代架构研究.md)与
+[第二代架构升级](docs/plan/completed/2026-07-第二代架构升级.md)均已完成。
+下一阶段转向用户可见的功能与前端设计，优先级是：
 
-1. Notebook 摘要、Personal/Notebook Memory 与可解释上下文；
-2. 原生图片、语音及后续视频输入输出；
-3. 年龄、学科和任务分层的教学质量评测与结构化学习体验；
-4. 正式 IdP、账号恢复、密钥轮换和 production hardening；
-5. 有平台资格和真实需求后再完成渠道生产化；只有成年/管理员场景通过安全评审后才增加 L2/L3 Node。
+1. 做出年级自适应的完整学习纵切，连接普通问答、结构化教学与个性化反馈；
+2. 补Notebook摘要、Personal/Notebook Memory与可解释上下文；
+3. 打通原生图片、PDF页面、语音及后续视频输入输出；
+4. 以Web为K12主入口继续提升信息架构、移动端可用性、无障碍和视觉完成度，
+   TUI保持同一Notebook与操作语义；
+5. 建立年龄、学科和任务分层的教学质量评测，再推进正式IdP与production hardening。
 
 此前的 Gemini + NotebookLM 产品体验计划已经[结档](docs/plan/completed/2026-07-gemini-notebooklm-replica.md)；持久 Artifact、Notebook 来源/引用、轻产物、音频和 Canvas 共创已成为当前基线。
 
