@@ -77,6 +77,11 @@ const WEB_GENERAL_TURN_MODULES = [
   'apps/web/server/platform/general-turn-profile.ts',
   'apps/web/server/platform/general-turn-tools.ts',
 ];
+const WEB_TEACHING_TURN_ENTRY = 'apps/web/server/teaching/learning-turn.ts';
+const WEB_TEACHING_TURN_MODULES = [
+  WEB_TEACHING_TURN_ENTRY,
+  ...typescriptFiles('apps/web/server/teaching/turn-application'),
+];
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -254,5 +259,19 @@ describe('Runtime module size boundary', () => {
       WEB_GENERAL_TURN_MODULES,
       TURN_APPLICATION_REVIEW_LIMIT,
     );
+  });
+
+  it('keeps Web Teaching Turn responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_MODULES,
+      TURN_APPLICATION_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps one explicit Web Teaching Turn Application composition root', () => {
+    const compositionRoots = WEB_TEACHING_TURN_MODULES.filter((path) =>
+      readFileSync(path, 'utf8').includes('new TurnApplicationService('),
+    );
+    assert.deepEqual(compositionRoots, [WEB_TEACHING_TURN_ENTRY]);
   });
 });
