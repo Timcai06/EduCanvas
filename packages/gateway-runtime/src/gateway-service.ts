@@ -1,3 +1,25 @@
+/**
+ * Gateway Service — Gateway 协议的中央编排引擎。
+ *
+ * ## 请求生命周期
+ *
+ * ```
+ * Inbound Envelope → Route Resolution → Idempotency Check → Turn Runner → Event Projection → Outbound Events
+ *                      │                      │                   │
+ *                      └─ 身份→路由映射       └─ 重放已有事件     └─ 调用 TurnApplicationService
+ * ```
+ *
+ * ## 幂等
+ *
+ * 同一 idempotencyKey 的重复请求直接回放已持久化事件（replayed=true），
+ * 不重新执行 Turn Runner。指纹不匹配时拒绝（IDEMPOTENCY_CONFLICT）。
+ *
+ * ## 取消
+ *
+ * GatewayCancellationRegistry 管理跨 Operation 的 AbortSignal。
+ * 客户端取消请求通过独立的 cancel() 方法处理，不在主 handle() 路径。
+ */
+
 import {
   gatewayInboundEnvelopeSchema,
   isGatewayTerminalEvent,
