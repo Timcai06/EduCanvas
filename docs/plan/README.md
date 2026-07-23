@@ -18,7 +18,10 @@
 
 ## 当前计划
 
-当前 active 执行线是[第二代 Hybrid Ports 架构收口](active/2026-07-第二代架构升级.md)。统一 Turn、Context、Tool、Ledger、Continuation 与 Trace 的核心迁移已经完成；剩余范围限定为决策文档一致性、跨入口证据、最小人工 Effect 对账和最终验收。Memory、多模态、正式身份、渠道生产化、自动 verifier 与完整 SLO 使用后续独立计划。历史交付与去向见[`completed/`](completed/README.md)。
+当前没有active执行线。第二代Hybrid Ports架构已
+[完成并结档](completed/2026-07-第二代架构升级.md)。下一阶段聚焦功能与前端设计，
+开始前使用模板创建新的短期计划；Memory、多模态、教育质量、正式身份、渠道生产化、
+自动verifier与完整SLO继续分别立项。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 
