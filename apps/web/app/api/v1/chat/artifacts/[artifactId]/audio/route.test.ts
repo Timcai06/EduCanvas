@@ -14,15 +14,20 @@ vi.mock('@educanvas/db', async () => {
     await vi.importActual<typeof import('@educanvas/db')>('@educanvas/db');
   return {
     ...actual,
-    DrizzlePlatformArtifactRepository: vi.fn(() => artifactRepo),
+    DrizzlePlatformArtifactRepository: vi.fn(function () {
+      return artifactRepo;
+    }),
   };
 });
 vi.mock('@educanvas/agent-runtime', async () => {
-  const actual =
-    await vi.importActual<typeof import('@educanvas/agent-runtime')>('@educanvas/agent-runtime');
+  const actual = await vi.importActual<
+    typeof import('@educanvas/agent-runtime')
+  >('@educanvas/agent-runtime');
   return {
     ...actual,
-    LocalObjectStorage: vi.fn(() => objectStorage),
+    LocalObjectStorage: vi.fn(function () {
+      return objectStorage;
+    }),
   };
 });
 
@@ -124,7 +129,7 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     objectStorage.readVerified.mockReset();
     artifactRepo.getArtifactDetail.mockResolvedValue(artifactDetail);
     objectStorage.readVerified.mockResolvedValue(
-      new Uint8Array([1, 2, 3, 4]).buffer
+      new Uint8Array([1, 2, 3, 4]).buffer,
     );
   });
 
@@ -144,7 +149,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
 
   it('returns 401 when no identity', async () => {
     vi.mocked(readAnonymousIdentity).mockResolvedValue(null);
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
@@ -154,7 +161,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
 
   it('returns 401 when conversation is unavailable', async () => {
     vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(null as never);
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
@@ -169,7 +178,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
       latestVersion: { ...artifactDetail.latestVersion, objectKey: null },
     } as never);
 
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({
@@ -178,7 +189,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
   });
 
   it('streams full audio when no range is provided', async () => {
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
     const bytes = await response.arrayBuffer();
 
     expect(response.status).toBe(200);
@@ -189,10 +202,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
   });
 
   it('streams partial audio with range and content-range', async () => {
-    const response = await GET(
-      rangeRequest('bytes=1-2'),
-      { params: Promise.resolve({ artifactId }) },
-    );
+    const response = await GET(rangeRequest('bytes=1-2'), {
+      params: Promise.resolve({ artifactId }),
+    });
     const bytes = await response.arrayBuffer();
 
     expect(response.status).toBe(206);
@@ -201,10 +213,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
   });
 
   it('returns 416 for invalid range requests', async () => {
-    const response = await GET(
-      rangeRequest('bytes=100-200'),
-      { params: Promise.resolve({ artifactId }) },
-    );
+    const response = await GET(rangeRequest('bytes=100-200'), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(416);
     expect(response.headers.get('content-range')).toBe('bytes */4');
@@ -214,7 +225,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     objectStorage.readVerified.mockResolvedValueOnce(
       new Uint8Array([1, 2]).buffer,
     );
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
@@ -226,7 +239,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     objectStorage.readVerified.mockRejectedValueOnce(
       new ObjectStorageError('object_not_found', 'not found'),
     );
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
@@ -239,7 +254,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
       new ArtifactOwnershipError(),
     );
 
-    const response = await GET(request(), { params: Promise.resolve({ artifactId }) });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({

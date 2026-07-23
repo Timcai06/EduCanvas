@@ -2,17 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-const drizzleRepo = {
-  createUploaded: vi.fn(),
-  listOwnedSpace: vi.fn(),
-};
+const { drizzleRepo } = vi.hoisted(() => ({
+  drizzleRepo: {
+    createUploaded: vi.fn(),
+    listOwnedSpace: vi.fn(),
+  },
+}));
 
 vi.mock('@educanvas/db', async () => {
   const actual =
     await vi.importActual<typeof import('@educanvas/db')>('@educanvas/db');
   return {
     ...actual,
-    DrizzleAssetRepository: vi.fn(() => drizzleRepo),
+    DrizzleAssetRepository: vi.fn(function () {
+      return drizzleRepo;
+    }),
   };
 });
 vi.mock('@/server/teaching/learning-session', () => ({
@@ -37,11 +41,7 @@ const identity = {
   studentId: `anon:v1:${'d'.repeat(64)}`,
 };
 
-function bytesFile(
-  bytes: readonly number[],
-  name: string,
-  type: string,
-): File {
+function bytesFile(bytes: readonly number[], name: string, type: string): File {
   return new File([new Uint8Array(bytes)], name, { type });
 }
 
@@ -76,9 +76,7 @@ describe('uploadOwnedAsset', () => {
     vi.clearAllMocks();
     drizzleRepo.createUploaded.mockReset();
     drizzleRepo.listOwnedSpace.mockReset();
-    (loadOwnedTeachingSession as ReturnType<
-      typeof vi.fn
-    >).mockReset?.();
+    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockReset?.();
     (storeAssetBytes as ReturnType<typeof vi.fn>).mockReset?.();
     (removeStoredAsset as ReturnType<typeof vi.fn>).mockReset?.();
     (extractText as ReturnType<typeof vi.fn>).mockReset?.();
@@ -88,15 +86,16 @@ describe('uploadOwnedAsset', () => {
       id: 'space-1',
     });
     drizzleRepo.createUploaded.mockResolvedValue(snapshot('asset-1'));
-    storeAssetBytes.mockResolvedValue({
+    vi.mocked(storeAssetBytes).mockResolvedValue({
       storageKey: 'assets/a',
       absolutePath: '/tmp/assets/a',
     });
-    getDocumentProxy.mockResolvedValue({});
+    vi.mocked(removeStoredAsset).mockResolvedValue(undefined);
+    vi.mocked(getDocumentProxy).mockResolvedValue({} as never);
   });
 
   it('upload成功后返回持久化快照并写入解析文本', async () => {
-    extractText.mockResolvedValue(' 课程资料   ');
+    vi.mocked(extractText).mockResolvedValue({ text: ' 课程资料   ' } as never);
 
     const result = await uploadOwnedAsset({
       identity,
@@ -122,17 +121,13 @@ describe('uploadOwnedAsset', () => {
   });
 
   it('没有教学会话时直接返回会话未找到错误', async () => {
-    (
-      loadOwnedTeachingSession as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(null);
+    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue(
+      null,
+    );
 
     const promise = uploadOwnedAsset({
       identity,
-      file: bytesFile(
-        [0x25, 0x50, 0x44, 0x46],
-        'note.pdf',
-        'application/pdf',
-      ),
+      file: bytesFile([0x25, 0x50, 0x44, 0x46], 'note.pdf', 'application/pdf'),
       scope: 'space',
     });
 
@@ -145,7 +140,11 @@ describe('uploadOwnedAsset', () => {
   it('非法字节流会拒绝上传', async () => {
     const promise = uploadOwnedAsset({
       identity,
-      file: bytesFile([0x00, 0x11, 0x22], 'note.bin', 'application/octet-stream'),
+      file: bytesFile(
+        [0x00, 0x11, 0x22],
+        'note.bin',
+        'application/octet-stream',
+      ),
       scope: 'space',
     });
 
@@ -174,7 +173,7 @@ describe('uploadOwnedAsset', () => {
       'note.pdf',
       'application/pdf',
     );
-    extractText.mockResolvedValue('   ');
+    vi.mocked(extractText).mockResolvedValue({ text: '   ' } as never);
 
     const result = uploadOwnedAsset({
       identity,
@@ -196,6 +195,7 @@ describe('uploadOwnedAsset', () => {
 
   it('持久化失败时会清理已落地对象', async () => {
     drizzleRepo.createUploaded.mockRejectedValue(new Error('db down'));
+    vi.mocked(extractText).mockResolvedValue({ text: '正文' } as never);
 
     const promise = uploadOwnedAsset({
       identity,
@@ -206,7 +206,6 @@ describe('uploadOwnedAsset', () => {
       ),
       scope: 'space',
     });
-    extractText.mockResolvedValue('正文');
 
     await expect(promise).rejects.toThrow('db down');
     expect(removeStoredAsset).toHaveBeenCalledWith({

@@ -19,7 +19,9 @@ vi.mock('@educanvas/db', async () => {
     await vi.importActual<typeof import('@educanvas/db')>('@educanvas/db');
   return {
     ...actual,
-    DrizzlePlatformArtifactRepository: vi.fn(() => artifactRepo),
+    DrizzlePlatformArtifactRepository: vi.fn(function () {
+      return artifactRepo;
+    }),
   };
 });
 
@@ -68,17 +70,14 @@ function getRequest(artifactId: string): Request {
 }
 
 function patchRequest(artifactId: string, body: string): Request {
-  return new Request(
-    `http://localhost/api/v1/chat/artifacts/${artifactId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'content-type': 'application/json',
-        origin: 'http://localhost',
-      },
-      body,
+  return new Request(`http://localhost/api/v1/chat/artifacts/${artifactId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'http://localhost',
     },
-  );
+    body,
+  });
 }
 
 const detail = {
@@ -124,7 +123,12 @@ const detail = {
     failureCode: null,
   },
   versions: [
-    { version: 1, generatedBy: 'gpt', revisionInstruction: 'rev', createdAt: '2026-01-01T00:00:00.000Z' },
+    {
+      version: 1,
+      generatedBy: 'gpt',
+      revisionInstruction: 'rev',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
   ],
 };
 
@@ -142,7 +146,12 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.createRevisionGenerationJob.mockReset();
     artifactRepo.getArtifactDetail.mockResolvedValue(detail);
     artifactRepo.listVersionProvenance.mockResolvedValue([
-      { version: 1, generatedBy: 'gpt', revisionInstruction: 'init', createdAt: '2026-01-01T00:00:00.000Z' },
+      {
+        version: 1,
+        generatedBy: 'gpt',
+        revisionInstruction: 'init',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
     ]);
     artifactRepo.getVersion.mockResolvedValue(detail.latestVersion);
     artifactRepo.getArtifact.mockResolvedValue(validArtifact);
@@ -153,10 +162,7 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
   });
 
   it('returns detail projection and denies invalid artifact id', async () => {
-    const response = await GET(
-      getRequest('not-uuid'),
-      params('not-uuid'),
-    );
+    const response = await GET(getRequest('not-uuid'), params('not-uuid'));
     const payload = await response.json();
 
     expect(response.status).toBe(404);
@@ -253,7 +259,10 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
 
   it('returns 404 for invalid artifact ids before auth', async () => {
     const response = await PATCH(
-      patchRequest('bad-id', JSON.stringify({ baseVersion: 1, instruction: '修订' })),
+      patchRequest(
+        'bad-id',
+        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+      ),
       params('bad-id'),
     );
 
@@ -278,7 +287,10 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     );
 
     const response = await PATCH(
-      patchRequest(validArtifact.id, JSON.stringify({ baseVersion: 1, instruction: '修订' })),
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+      ),
       params(validArtifact.id),
     );
 
@@ -290,7 +302,10 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
 
   it('returns 202 for accepted revision request', async () => {
     const response = await PATCH(
-      patchRequest(validArtifact.id, JSON.stringify({ baseVersion: 1, instruction: '修订' })),
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+      ),
       params(validArtifact.id),
     );
 
@@ -316,7 +331,10 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.getArtifact.mockRejectedValue(new ArtifactOwnershipError());
 
     const response = await PATCH(
-      patchRequest(validArtifact.id, JSON.stringify({ baseVersion: 1, instruction: '修订' })),
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+      ),
       params(validArtifact.id),
     );
 
@@ -332,7 +350,10 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     );
 
     const response = await PATCH(
-      patchRequest(validArtifact.id, JSON.stringify({ baseVersion: 1, instruction: '修订' })),
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+      ),
       params(validArtifact.id),
     );
 
