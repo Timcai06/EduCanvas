@@ -11,6 +11,10 @@ const compositionFiles = [
   'apps/web/server/teaching/learning-turn.ts',
 ];
 
+function posixRelative(path) {
+  return relative(process.cwd(), path).replaceAll('\\', '/');
+}
+
 function productionTypescriptFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -28,7 +32,7 @@ describe('Telemetry production boundary', () => {
     const violations = roots
       .flatMap(productionTypescriptFiles)
       .filter((path) => readFileSync(path, 'utf8').includes('@opentelemetry/'))
-      .map((path) => relative(process.cwd(), path))
+      .map(posixRelative)
       .filter((path) => !path.startsWith(allowedFrameworkRoot));
     assert.deepEqual(violations, []);
   });
