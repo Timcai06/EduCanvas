@@ -1,3 +1,18 @@
+/**
+ * Capability Node 安全执行器 — 受控只读文件能力。
+ *
+ * ## 安全模型
+ *
+ * Node 只开放两种文件操作：list（列目录）和 read（读文件）。
+ * 不开放 shell 执行、文件写入、网络访问。
+ * 所有路径通过 realpath 解析后必须在声明的 root 范围内，拒绝路径遍历攻击。
+ *
+ * ## 适用场景
+ *
+ * Teacher/Operator 通过 Capability Node 让 Agent 访问本地课件目录。
+ * 学生不能使用 Node 能力（Profile 策略控制）。
+ */
+
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
