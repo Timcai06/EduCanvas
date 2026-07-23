@@ -12,7 +12,7 @@ Web 是 K12 用户的主要入口。新的“两支笔”视觉在扉页使用 P
 
 ## 决定
 
-1. 正常且支持 WebGL2 的设备保留 PixelBlast 墨点场、问候呼吸、输入墨线和 busy 边缘光，不以依赖体积或实现便利为由静默降级参数或帧率。**（2026-07-23 项目负责人决定：扉页墨点场去掉鼠标液态跟随与点击涟漪，改为不响应指针的安静自漂移，向 Gemini/NotebookLM 沉静背景看齐、避免喧宾夺主；这是主动的审美取舍而非静默降级。液态/涟漪能力仍保留在 Runtime 中、由配置开关。busy 边缘光不受影响。）**
+1. 正常且支持 WebGL2 的设备保留 PixelBlast 墨点场、问候呼吸、输入框黛青边缘扫光和 busy 边缘光，不以依赖体积或实现便利为由静默降级参数或帧率。**（2026-07-23 项目负责人决定：扉页墨点场去掉鼠标液态跟随与点击涟漪，改为不响应指针的安静自漂移，向 Gemini/NotebookLM 沉静背景看齐、避免喧宾夺主；这是主动的审美取舍而非静默降级。液态/涟漪能力仍保留在 Runtime 中、由配置开关。busy 边缘光不受影响。）**
 2. Three.js 与 Postprocessing 只属于 PixelBlast 视觉 Adapter；Paper Shaders 只属于 busy 边缘 Adapter。两者必须 `ssr:false` 动态加载，不得进入服务端执行或无动效路由的关键 Chunk。
 3. 移植的 PixelBlast 按 React 入口、Runtime、Shader、指针、触控纹理和类型拆分，单文件不得超过 360 行（2026-07 因反闪烁同步补渲从 350 上调）；来源、固定提交与许可证记录在 `apps/web/THIRD_PARTY_NOTICES.md`。
 4. 每个 PixelBlast 实例最多拥有一个 WebGL Context。Runtime 必须幂等释放 RAF、Observer、事件、Texture、Geometry、Material、Composer、Renderer 和 Context；离屏、页面隐藏或 Context lost 时真正停止调度，恢复后从暂停时间连续运行。
