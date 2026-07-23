@@ -1,3 +1,27 @@
+/**
+ * Tool Kernel 契约 — 四类 Adapter 注册模型与调用边界。
+ *
+ * ## 四类 Adapter 来源
+ *
+ * | 来源 | 信任边界 | 典型用途 |
+ * |------|---------|---------|
+ * | local | 进程内可信 | 数据库写入、文件操作 |
+ * | teaching | 教学领域 | 检索知识、出题判分、Canvas 渲染 |
+ * | mcp | MCP 协议远端 | 外部工具服务 |
+ * | node | Capability Node | 受控只读文件能力 |
+ *
+ * ## 风险等级
+ *
+ * | 等级 | 含义 | 审批要求 |
+ * |------|------|---------|
+ * | l0 | 只读、无副作用 | 无需审批 |
+ * | l1 | 写入、受控副作用 | 无需审批（策略允许即放行） |
+ * | l2 | 高风险写入 | 需审批（approval_required），有 reconciliation |
+ * | l3 | 最高风险 | 同 l2 + 更严格的 reconciliation 要求 |
+ *
+ * 风险等级由服务端 Adapter 注册时冻结，模型和远端协议都不得覆盖。
+ */
+
 import type {
   AgentToolEffect,
   AgentToolExposure,
