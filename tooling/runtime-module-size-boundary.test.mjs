@@ -92,9 +92,12 @@ const WEB_TEACHING_TURN_MODULES = [
   WEB_TEACHING_TURN_ENTRY,
   ...typescriptFiles('apps/web/server/teaching/turn-application'),
 ];
-const WEB_TEACHING_TURN_TESTS = typescriptFiles(
-  'apps/web/server/teaching',
-).filter((path) => /\/learning-turn(?:\..+)?\.test\.ts$/.test(path));
+const WEB_TEACHING_TURN_TESTS = [
+  ...typescriptFiles('apps/web/server/teaching').filter((path) =>
+    /\/(?:learning-turn(?:\..+)?|teaching-tools)\.test\.ts$/.test(path),
+  ),
+  'apps/web/server/gateway/teaching-turn-boundary.test.ts',
+];
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;

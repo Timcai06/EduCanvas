@@ -42,4 +42,4 @@
 
 `AgentLoopEngine`现为唯一生产模型/工具循环；General、Teaching与Gateway Runner都只注入Profile/Prompt/工具回调。User/Personal Agent、Notebook Membership和Actor审计已落库，Web/TUI同路由与共享contributor/viewer权限已有测试。
 
-这里的“统一 Runtime”目前只证明了生产 Loop 唯一，不表示 Turn 应用层、Context、Tool Kernel、Trace 或各入口能力已经完全统一。独立 Gateway、Web 通用 Chat 与 Web Teaching 仍有不同的组合路径；Notebook 摘要、长期记忆、Artifact Context、统一预算、Context Snapshot 与原生多模态仍是后续能力。第二代架构研究必须在不建立第二事实源的前提下收敛这些语义。
+这里的“统一 Runtime”已经扩展到唯一生产Loop、唯一`TurnApplicationService`语义和共享五维Tool Policy Resolver，但不表示各入口能力已经完全相等。独立Gateway、Web General与Web Teaching仍保留小型组合Adapter；Gateway Asset/K12装配、Notebook摘要、长期记忆、统一预算与原生多模态仍是后续能力。第二代架构升级必须在不建立第二事实源的前提下继续收敛这些语义。

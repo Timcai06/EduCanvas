@@ -94,7 +94,13 @@ describe('WebTeachingProfile characterization', () => {
           createdAt: '2026-07-23T00:00:00.000Z',
         },
       });
-    const profile = new WebTeachingProfile(identity, session, assetContext);
+    const profile = new WebTeachingProfile(
+      identity,
+      session,
+      assetContext,
+      ['education.knowledge.retrieve', 'education.student_state.read'],
+      'owner',
+    );
 
     const result = await profile.preflight({
       command: {
@@ -127,7 +133,13 @@ describe('WebTeachingProfile characterization', () => {
     const persist = vi
       .spyOn(webTeachingPersistence.knowledge, 'persistMessageCitations')
       .mockResolvedValue({ replayed: false, citations: [citation] });
-    const profile = new WebTeachingProfile(identity, session, assetContext);
+    const profile = new WebTeachingProfile(
+      identity,
+      session,
+      assetContext,
+      ['education.knowledge.retrieve', 'education.student_state.read'],
+      'owner',
+    );
     profile.collectKnowledgeEvidence(['candidate-1', 'candidate-2']);
 
     const result = await profile.finalize({
