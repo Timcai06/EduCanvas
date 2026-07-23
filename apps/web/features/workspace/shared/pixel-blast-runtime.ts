@@ -242,6 +242,8 @@ export class PixelBlastRuntime {
     this.composer?.setSize(width, height, false);
     uniforms.uPixelSize.value =
       this.config.pixelSize * renderer.getPixelRatio();
+    // resize 会重建并清空绘制缓冲，立即以新尺寸补渲一帧，消除侧栏展开连续 resize 的透明帧闪烁
+    this.renderOnce();
   };
 
   private shouldAnimate() {
@@ -275,11 +277,15 @@ export class PixelBlastRuntime {
     if (this.uniforms) this.uniforms.uTime.value = time;
     for (const effect of this.effects) setPixelBlastEffectTime(effect, time);
     this.touch?.update();
+    this.renderOnce();
+    this.raf = requestAnimationFrame(this.renderFrame);
+  };
+
+  private renderOnce() {
     if (this.composer) this.composer.render();
     else if (this.renderer && this.scene && this.camera)
       this.renderer.render(this.scene, this.camera);
-    this.raf = requestAnimationFrame(this.renderFrame);
-  };
+  }
 
   update(config: PixelBlastRuntimeConfig) {
     this.config = config;
