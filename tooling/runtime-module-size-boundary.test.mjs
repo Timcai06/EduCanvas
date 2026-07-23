@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
+const TURN_APPLICATION_TEST_REVIEW_LIMIT = 400;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
@@ -82,6 +83,9 @@ const WEB_TEACHING_TURN_MODULES = [
   WEB_TEACHING_TURN_ENTRY,
   ...typescriptFiles('apps/web/server/teaching/turn-application'),
 ];
+const WEB_TEACHING_TURN_TESTS = typescriptFiles(
+  'apps/web/server/teaching',
+).filter((path) => /\/learning-turn(?:\..+)?\.test\.ts$/.test(path));
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -265,6 +269,10 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       WEB_TEACHING_TURN_MODULES,
       TURN_APPLICATION_REVIEW_LIMIT,
+    );
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
     );
   });
 
