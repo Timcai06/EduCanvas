@@ -108,6 +108,14 @@ export async function loadOwnedTeachingSession(
   return session;
 }
 
+export async function loadOwnedTeachingGatewayTarget(
+  identity: AnonymousIdentity,
+) {
+  return learningSessions.getCurrentOwnedGatewayTarget(
+    scopeFor(identity.studentId),
+  );
+}
+
 /** 页面只得到公共Artifact和公开进度，不得到session、student或判分键。 */
 export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
   const identity = await readAnonymousIdentity();
@@ -161,6 +169,7 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
                 : '';
               return {
                 id: citation.id,
+                marker: citation.ordinal,
                 sourceId: citation.sourceId,
                 documentId: citation.documentId,
                 chunkId: citation.chunkId,

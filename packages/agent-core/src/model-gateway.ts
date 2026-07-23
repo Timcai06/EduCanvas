@@ -4,6 +4,7 @@ import type {
   ModelAlias,
   ModelMessage,
   ProviderCallMetadata,
+  SpeechTaskAlias,
   StreamAgentTextRequest,
   StructuredTaskAlias,
   TurnModelEvent,
@@ -27,6 +28,29 @@ export interface StructuredModelResult<Output> {
   metadata: ProviderCallMetadata;
 }
 
+export type SpeechAudioFormat = 'mp3';
+
+/** 语音合成请求。业务侧只传受限脚本与稳定别名，不传供应商模型 ID。 */
+export interface SpeechSynthesisRequest {
+  taskAlias: SpeechTaskAlias;
+  modelAlias: 'speech';
+  input: string;
+  format: SpeechAudioFormat;
+  promptVersion: string;
+  traceId: string;
+  operationId: string;
+  signal?: ModelAbortSignal;
+}
+
+/** 二进制只活在进程内直到写入对象存储；metadata 可安全进入审计记录。 */
+export interface SpeechSynthesisResult {
+  bytes: Uint8Array;
+  contentType: 'audio/mpeg';
+  inputCharacters: number;
+  voice: string;
+  metadata: ProviderCallMetadata;
+}
+
 /** 正常Agent Turn使用的供应商无关Port。 */
 export interface TurnModelGateway {
   streamTurnText(
@@ -41,6 +65,13 @@ export interface StructuredModelGateway {
   ): Promise<StructuredModelResult<Output>>;
 }
 
+/** TTS 专用 Port；不得用 StructuredModelGateway 返回 base64。 */
+export interface SpeechModelGateway {
+  generateSpeech(
+    request: SpeechSynthesisRequest,
+  ): Promise<SpeechSynthesisResult>;
+}
+
 /** 组合根可提供的完整模型网关。 */
 export interface ModelGateway
-  extends TurnModelGateway, StructuredModelGateway {}
+  extends TurnModelGateway, StructuredModelGateway, SpeechModelGateway {}

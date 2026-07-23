@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -81,7 +81,8 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'retrieval_candidates', 'message_citations',
             'assets', 'asset_versions', 'agent_message_parts',
             'turn_context_snapshots', 'spaces', 'conversations',
-            'agent_operations', 'conversation_messages'
+            'agent_operations', 'conversation_messages', 'tool_effects',
+            'operation_continuations'
           )
         order by table_name
       `;
@@ -99,10 +100,12 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'lesson_sessions',
         'message_citations',
         'model_runs',
+        'operation_continuations',
         'retrieval_candidates',
         'session_source_bindings',
         'spaces',
         'tool_calls',
+        'tool_effects',
         'turn_context_snapshots',
         'turn_safety_decisions',
         'turn_source_snapshots',
@@ -119,6 +122,284 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       `;
       expect(statusDefault[0]).toMatchObject({ is_nullable: 'NO' });
       expect(statusDefault[0]?.column_default).toContain('now()');
+    });
+  });
+
+  it('从0023升级时保留旧教学Model Run并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0024_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '76000000-0000-4000-8000-000000000001';
+      const assistantMessageId = '76000000-0000-4000-8000-000000000002';
+      const turnId = '76000000-0000-4000-8000-000000000003';
+      const runId = '76000000-0000-4000-8000-000000000004';
+      const leaseId = '76000000-0000-4000-8000-000000000005';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-model-run-student', 'middle_school',
+          'migration-model-run-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, role, status, lease_id,
+          lease_expires_at, heartbeat_at
+        ) values (
+          ${assistantMessageId}, ${sessionId}, ${turnId}, 'assistant',
+          'pending', ${leaseId}, now() + interval '5 minutes', now()
+        )
+      `;
+      await connection`
+        insert into model_runs (
+          id, session_id, operation_id, operation_kind,
+          assistant_message_id, turn_id, phase, attempt, trace_id,
+          task_alias, model_alias, prompt_version, prompt_hash, status
+        ) values (
+          ${runId}, ${sessionId}, ${turnId}, 'teaching_turn',
+          ${assistantMessageId}, ${turnId}, 'answer', 1, 'trace:migration',
+          'teaching.turn', 'primary', 'teaching-v1', ${'a'.repeat(64)},
+          'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0024_light_viper.sql');
+      expect(
+        await connection`
+          select session_id, operation_kind, agent_operation_id,
+            assistant_message_id, conversation_message_id
+          from model_runs where id = ${runId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          operation_kind: 'teaching_turn',
+          agent_operation_id: null,
+          assistant_message_id: assistantMessageId,
+          conversation_message_id: null,
+        },
+      ]);
+      const sessionColumn = await connection<{ is_nullable: string }[]>`
+        select is_nullable
+        from information_schema.columns
+        where table_schema = 'public' and table_name = 'model_runs'
+          and column_name = 'session_id'
+      `;
+      expect(sessionColumn).toEqual([{ is_nullable: 'YES' }]);
+    });
+  });
+
+  it('从0024升级时保留旧教学Context Snapshot并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0025_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '77000000-0000-4000-8000-000000000001';
+      const turnId = '77000000-0000-4000-8000-000000000002';
+      const snapshotId = '77000000-0000-4000-8000-000000000003';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-context-student', 'middle_school',
+          'migration-context-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into turn_context_snapshots (
+          id, session_id, turn_id, builder_version,
+          included_message_ids, selected_asset_version_ids,
+          omitted_message_count, character_count, context_hash
+        ) values (
+          ${snapshotId}, ${sessionId}, ${turnId}, 'teaching-context-v1',
+          '[]'::jsonb, '[]'::jsonb, 0, 42, ${'b'.repeat(64)}
+        )
+      `;
+
+      await applyMigrationFile(connection, '0025_perfect_zemo.sql');
+      expect(
+        await connection`
+          select session_id, turn_id, agent_operation_id, builder_version
+          from turn_context_snapshots where id = ${snapshotId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          turn_id: turnId,
+          agent_operation_id: null,
+          builder_version: 'teaching-context-v1',
+        },
+      ]);
+      const nullableColumns = await connection<
+        { column_name: string; is_nullable: string }[]
+      >`
+        select column_name, is_nullable
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'turn_context_snapshots'
+          and column_name in ('session_id', 'turn_id', 'agent_operation_id')
+        order by column_name
+      `;
+      expect(nullableColumns).toEqual([
+        { column_name: 'agent_operation_id', is_nullable: 'YES' },
+        { column_name: 'session_id', is_nullable: 'YES' },
+        { column_name: 'turn_id', is_nullable: 'YES' },
+      ]);
+    });
+  });
+
+  it('从0025升级时保留旧教学Tool Call并开放agent_turn形状', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0026_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sessionId = '78000000-0000-4000-8000-000000000001';
+      const assistantMessageId = '78000000-0000-4000-8000-000000000002';
+      const turnId = '78000000-0000-4000-8000-000000000003';
+      const runId = '78000000-0000-4000-8000-000000000004';
+      const callId = '78000000-0000-4000-8000-000000000005';
+      const leaseId = '78000000-0000-4000-8000-000000000006';
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, 'migration-tool-student', 'middle_school',
+          'migration-tool-course', 'node', 'EXPLAIN', 'active'
+        )
+      `;
+      await connection`
+        insert into chat_messages (
+          id, session_id, turn_id, role, status, lease_id,
+          lease_expires_at, heartbeat_at
+        ) values (
+          ${assistantMessageId}, ${sessionId}, ${turnId}, 'assistant',
+          'pending', ${leaseId}, now() + interval '5 minutes', now()
+        )
+      `;
+      await connection`
+        insert into model_runs (
+          id, session_id, operation_id, operation_kind,
+          assistant_message_id, turn_id, phase, attempt, trace_id,
+          task_alias, model_alias, prompt_version, prompt_hash, status
+        ) values (
+          ${runId}, ${sessionId}, ${turnId}, 'teaching_turn',
+          ${assistantMessageId}, ${turnId}, 'answer', 1, 'trace:migration-tool',
+          'teaching.turn', 'primary', 'teaching-v1', ${'c'.repeat(64)},
+          'pending'
+        )
+      `;
+      await connection`
+        insert into tool_calls (
+          id, session_id, turn_id, answer_model_run_id,
+          provider_tool_call_id, execution_id, request_hash, trace_id,
+          tool_name, teaching_state, exposure, effect, argument_summary,
+          status
+        ) values (
+          ${callId}, ${sessionId}, ${turnId}, ${runId},
+          'call_migration', 'execution-migration', ${'d'.repeat(64)},
+          'trace:migration-tool', 'getStudentState', 'EXPLAIN', 'model',
+          'read', ${JSON.stringify({
+            schemaVersion: '1',
+            kind: 'object',
+            byteLength: 2,
+            itemCount: 0,
+            sha256: 'e'.repeat(64),
+          })}::jsonb, 'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0026_furry_the_call.sql');
+      expect(
+        await connection`
+          select session_id, turn_id, teaching_state, agent_operation_id
+          from tool_calls where id = ${callId}
+        `,
+      ).toEqual([
+        {
+          session_id: sessionId,
+          turn_id: turnId,
+          teaching_state: 'EXPLAIN',
+          agent_operation_id: null,
+        },
+      ]);
+    });
+  });
+
+  it('从0028升级时保留平台事实并新增最小化continuation账本', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0029_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const actorId = 'user:migration-continuation';
+      await connection`
+        insert into platform_users (id, kind)
+        values (${actorId}, 'registered')
+      `;
+
+      await applyMigrationFile(connection, '0029_aspiring_ezekiel_stane.sql');
+
+      expect(
+        await connection`
+          select id, kind from platform_users where id = ${actorId}
+        `,
+      ).toEqual([{ id: actorId, kind: 'registered' }]);
+      const columns = await connection<
+        { column_name: string; data_type: string }[]
+      >`
+        select column_name, data_type
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'operation_continuations'
+        order by ordinal_position
+      `;
+      expect(columns.map((column) => column.column_name)).toEqual([
+        'id',
+        'operation_id',
+        'sequence',
+        'protocol_version',
+        'kind',
+        'step',
+        'approval_id',
+        'tool_call_id',
+        'adapter_source',
+        'resume_ref',
+        'status',
+        'lease_generation',
+        'lease_owner_id',
+        'lease_expires_at',
+        'heartbeat_at',
+        'failure_code',
+        'created_at',
+        'updated_at',
+        'completed_at',
+      ]);
+      expect(
+        columns.some((column) => ['json', 'jsonb'].includes(column.data_type)),
+      ).toBe(false);
+      expect(
+        await connection`
+          select indexname from pg_indexes
+          where schemaname = 'public'
+            and indexname = 'operation_continuations_active_operation_unique'
+        `,
+      ).toHaveLength(1);
     });
   });
 

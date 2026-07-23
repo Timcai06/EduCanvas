@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   DrizzlePlatformConversationRepository,
+  DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
   type PlatformConversationSnapshot,
 } from '@educanvas/db';
@@ -21,6 +22,7 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 const conversations = new DrizzlePlatformConversationRepository();
 const turns = new DrizzlePlatformTurnRepository();
+const sources = new DrizzlePlatformSourceRepository();
 
 export interface GeneralChatPageData {
   conversation: PlatformConversationSnapshot;
@@ -51,8 +53,8 @@ export async function createGeneralConversation(
 ): Promise<PlatformConversationSnapshot> {
   return conversations.create({
     ownerSubjectId: identity.studentId,
-    spaceKind: 'personal',
-    spaceTitle: '我的空间',
+    spaceKind: 'notebook',
+    spaceTitle: '未命名笔记本',
     agentProfileId: 'general',
   });
 }
@@ -62,7 +64,19 @@ export async function loadOwnedGeneralConversation(
   identity: AnonymousIdentity,
 ): Promise<PlatformConversationSnapshot | null> {
   const conversationId = await readActiveConversationId();
-  if (!conversationId) return null;
+  if (!conversationId) {
+    if (!identity.studentId.startsWith('anon:')) {
+      return (
+        (
+          await conversations.listOwnedRecent({
+            trustedSubjectId: identity.studentId,
+            limit: 1,
+          })
+        )[0] ?? null
+      );
+    }
+    return null;
+  }
   return conversations.getOwned({
     conversationId,
     trustedSubjectId: identity.studentId,
@@ -79,6 +93,17 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
     trustedSubjectId: identity.studentId,
     limit: 100,
   });
+  const citations = await sources.listOwnedConversationCitations({
+    conversationId: conversation.id,
+    trustedSubjectId: identity.studentId,
+  });
+  const citationsByMessage = new Map<string, typeof citations>();
+  for (const citation of citations) {
+    citationsByMessage.set(citation.assistantMessageId, [
+      ...(citationsByMessage.get(citation.assistantMessageId) ?? []),
+      citation,
+    ]);
+  }
   return {
     conversation,
     initialMessages: messages.map((message) => ({
@@ -89,6 +114,20 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       status: message.role === 'user' ? 'completed' : message.status,
       content: message.content,
       parts: message.parts,
+      citations:
+        message.role === 'assistant'
+          ? (citationsByMessage.get(message.id) ?? []).map((citation) => ({
+              id: citation.citationId,
+              marker: citation.ordinal,
+              kind: 'web' as const,
+              assetId: citation.assetId,
+              assetVersionId: citation.assetVersionId,
+              label: citation.label,
+              url: citation.url,
+              pageStart: null,
+              pageEnd: null,
+            }))
+          : undefined,
       failureCode: message.failureCode,
       createdAt: message.createdAt,
       completedAt: message.completedAt,

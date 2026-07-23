@@ -12,6 +12,7 @@
 - `src/chat-repository.ts`与`src/model-run-repository.ts`：发送幂等、消息生命周期、历史cursor与Provider运行审计。
 - `src/turn-ledger-repository.ts`与`src/turn-lease-repository.ts`：原子创建Turn账本、PostgreSQL窗口限流、heartbeat和过期收敛。
 - `src/tool-call-repository.ts`：Provider tool call的双唯一幂等键、状态机和不含原值的脱敏摘要。
+- `src/operation-continuation-repository.ts`：审批等待点的版本化控制游标、活动唯一性、跨进程lease generation与Actor复核；不保存正文、参数、Credential或副作用结果。
 - `src/turn-safety-decision-repository.ts`：只保存稳定分类与版本的Turn安全决策审计；写入和读取都校验可信学生、Session与Turn归属。
 - `src/asset-repository.ts`与`src/message-parts.ts`：通用Asset所有权、不可变版本、可物化内容和多Part消息的原子持久化。
 - `src/anonymous-data-lifecycle.ts`：匿名合成主体7天保留期、中央subject-owned表注册表与逐主体幂等事务清理。
@@ -29,6 +30,7 @@
 - `drizzle/0007_ambiguous_silver_surfer.sql`：审核资料、generated `tsvector`/GIN、Turn检索快照、候选与引用审计。
 - `drizzle/0008_k1_snapshot_integrity.sql`：强化K1快照与版本归属约束，保证快照完成后不可变并拒绝跨快照候选。
 - `drizzle/0009_slow_shinobi_shaw.sql`：新增通用`assets / asset_versions / agent_message_parts`及其所有权、版本和消息引用约束。
+- `drizzle/0029_aspiring_ezekiel_stane.sql`：新增`operation_continuations`控制账本；同一Operation按序保留历史等待点且仅允许一个活动等待点。
 - `drizzle/meta/`：Drizzle Kit的迁移快照与日志，生成迁移时同步更新。
 - `tsconfig.json`：数据库包和Drizzle配置的TypeScript检查范围。
 
@@ -60,6 +62,7 @@ K1只支持服务端受控任务交付的纯文本/可解析PDF结果：数据�
 - `DrizzleArtifactRepository`与`DrizzleTeachingUnitOfWork`已接入预置Canvas判分、可信事件和掌握度更新；
 - K1审核资料、FTS、Turn快照、候选与引用防伪仓储已经接入Web生产工具、SSE引用事件和引用UI；
 - T1数据Port与事务适配器已接入Web组合根；Canvas判分后仅在可信状态为`ASSESS`时调用状态推进服务，其他状态事件仍待接线；
+- Operation continuation契约、最小化控制账本、Actor复核、活动唯一约束和generation fencing已实现；approval原子入队、worker恢复前重新鉴权与真实续跑仍待下一纵切，不能仅凭表存在宣称完成；
 - Artifact仓储支持公开投影与私有判分键分级持久化，当前产品纵切仍使用课程bootstrap预置Artifact，不代表Agent提议/生成链路已经完成。
 
 > 验证状态：全部迁移已在真实PostgreSQL完成全新安装和含历史事件的升级验证；CI集成测试覆盖事务写入/回滚、乐观锁与并发幂等。执行迁移前仍应备份目标数据库；历史迁移不承诺自动向下回滚，回退与恢复方案必须在发布前单独演练。
@@ -70,4 +73,5 @@ K1只支持服务端受控任务交付的纯文本/可解析PDF结果：数据�
 - [后端工程](../../docs/05-engineering/backend.md)：数据库在阶段架构中的服务边界。
 - [API约定](../../docs/05-engineering/api-conventions.md)：写入幂等、版本和错误返回要求。
 - [安全与隐私](../../docs/06-quality/security-and-privacy.md)：未成年人数据最小化与审计要求。
-- [ADR-0003](../../docs/09-decisions/0003-phase1-monorepo-and-drizzle.md)：阶段一选用Drizzle和Monorepo的原因。
+- [ADR-0019](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)：继续采用Drizzle、PostgreSQL与模块化单体的当前决定。
+- [关键决策历史](../../docs/09-decisions/decision-history.md)：阶段一数据库选型的压缩记录。

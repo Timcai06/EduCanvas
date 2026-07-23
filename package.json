@@ -6,12 +6,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "pnpm dev:core",
+    "dev:core": "turbo dev --filter=@educanvas/web --filter=@educanvas/worker --filter=@educanvas/gateway",
+    "dev:all": "pnpm dev:core",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "pnpm test:unit",
-    "test:unit": "turbo test",
-    "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker",
+    "test:unit": "pnpm test:tooling && turbo test",
+    "test:tooling": "node --test tooling/*.test.mjs",
+    "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker --concurrency=1",
     "pretest:e2e": "pnpm build",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
@@ -26,6 +29,10 @@
     "turbo": "^2.10.4"
   },
   "pnpm": {
+    "overrides": {
+      "@hono/node-server": "^2.0.5",
+      "postcss": "^8.5.10"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp",

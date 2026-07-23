@@ -20,9 +20,16 @@ export const openAICompatibleProviders = [
 export type OpenAICompatibleProvider =
   (typeof openAICompatibleProviders)[number];
 
+/** Turn Provider Adapter 的显式生产实现；native始终保留为默认回滚路径。 */
+export const turnModelGatewayRuntimes = ['native', 'ai-sdk'] as const;
+
+/** Turn Provider Adapter实现类型；只能由服务端组合根配置。 */
+export type TurnModelGatewayRuntime = (typeof turnModelGatewayRuntimes)[number];
+
 export const modelGatewayConfigurationErrorCodes = [
   'INVALID_ENVIRONMENT',
   'INVALID_PROVIDER',
+  'INVALID_RUNTIME',
   'DEEPSEEK_FORBIDDEN',
   'INVALID_BOOLEAN',
   'MISSING_BASE_URL',
@@ -33,6 +40,10 @@ export const modelGatewayConfigurationErrorCodes = [
   'INVALID_MODEL_ID',
   'INVALID_TIMEOUT',
   'INVALID_MAX_OUTPUT_TOKENS',
+  'SPEECH_UNSUPPORTED_PROVIDER',
+  'INVALID_SPEECH_VOICE',
+  'INVALID_SPEECH_TIMEOUT',
+  'INVALID_SPEECH_MAX_INPUT_CHARS',
 ] as const;
 
 export type ModelGatewayConfigurationErrorCode =
@@ -57,6 +68,7 @@ export interface EnabledModelGatewayConfiguration {
   enabled: true;
   environment: DeploymentEnvironment;
   provider: OpenAICompatibleProvider;
+  runtime: TurnModelGatewayRuntime;
   baseUrl: string;
   apiKey: string;
   modelIds: Readonly<Partial<Record<ModelAlias, string>>> & {
@@ -64,6 +76,9 @@ export interface EnabledModelGatewayConfiguration {
   };
   timeoutMs: number;
   maxOutputTokens: number;
+  speechVoice: string;
+  speechTimeoutMs: number;
+  speechMaxInputChars: number;
 }
 
 export type ModelGatewayConfiguration =
@@ -123,6 +138,14 @@ const parseModelId = (
     throw new ModelGatewayConfigurationError('INVALID_MODEL_ID');
   }
   return modelId;
+};
+
+const parseSpeechVoice = (value: string | undefined): string => {
+  const voice = trimmed(value) ?? 'alloy';
+  if (voice.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(voice)) {
+    throw new ModelGatewayConfigurationError('INVALID_SPEECH_VOICE');
+  }
+  return voice;
 };
 
 const parseBaseUrl = (
@@ -192,6 +215,11 @@ export function parseModelGatewayConfiguration(
     throw new ModelGatewayConfigurationError('INVALID_ENVIRONMENT');
   }
   const provider = providerValue;
+  const runtimeValue =
+    trimmed(environmentValues.MODEL_GATEWAY_RUNTIME) ?? 'native';
+  if (!isOneOf(runtimeValue, turnModelGatewayRuntimes)) {
+    throw new ModelGatewayConfigurationError('INVALID_RUNTIME');
+  }
 
   if (
     provider === 'deepseek' &&
@@ -229,16 +257,25 @@ export function parseModelGatewayConfiguration(
     environmentValues.MODEL_GATEWAY_STRUCTURED_MODEL,
     false,
   );
+  const speech = parseModelId(
+    environmentValues.MODEL_GATEWAY_SPEECH_MODEL,
+    false,
+  );
+  if (speech !== undefined && provider !== 'openai-compatible') {
+    throw new ModelGatewayConfigurationError('SPEECH_UNSUPPORTED_PROVIDER');
+  }
   const modelIds: EnabledModelGatewayConfiguration['modelIds'] = {
     primary,
     ...(fast === undefined ? {} : { fast }),
     ...(structured === undefined ? {} : { structured }),
+    ...(speech === undefined ? {} : { speech }),
   };
 
   return {
     enabled: true,
     environment,
     provider,
+    runtime: runtimeValue,
     baseUrl: parseBaseUrl(
       environmentValues.MODEL_GATEWAY_BASE_URL,
       environment,
@@ -257,6 +294,21 @@ export function parseModelGatewayConfiguration(
       2_048,
       { min: 1, max: 65_536 },
       'INVALID_MAX_OUTPUT_TOKENS',
+    ),
+    speechVoice: parseSpeechVoice(
+      environmentValues.MODEL_GATEWAY_SPEECH_VOICE,
+    ),
+    speechTimeoutMs: parseInteger(
+      environmentValues.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
+      60_000,
+      { min: 1_000, max: 180_000 },
+      'INVALID_SPEECH_TIMEOUT',
+    ),
+    speechMaxInputChars: parseInteger(
+      environmentValues.MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS,
+      3_500,
+      { min: 80, max: 4_096 },
+      'INVALID_SPEECH_MAX_INPUT_CHARS',
     ),
   };
 }

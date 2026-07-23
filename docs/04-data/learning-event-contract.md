@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：@Timcai06
 - 最后验证：2026-07-14
-- 相关决策：[ADR-0006](../09-decisions/0006-trusted-learning-events.md)
+- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
 ## 两层事件模型
 

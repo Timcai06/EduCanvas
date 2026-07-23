@@ -58,6 +58,8 @@ export {
   normalizedModelErrorCodes,
   normalizedModelErrorSchema,
   providerCallMetadataSchema,
+  speechTaskAliasSchema,
+  speechTaskAliases,
   streamingTaskAliasSchema,
   streamingTaskAliases,
   structuredTaskAliasSchema,
@@ -76,6 +78,7 @@ export {
   type ModelUsage,
   type NormalizedModelError,
   type ProviderCallMetadata,
+  type SpeechTaskAlias,
   type StreamAgentTextRequest,
   type StreamingTaskAlias,
   type StreamTurnTextRequest,
@@ -87,11 +90,118 @@ export {
 
 export type {
   ModelGateway,
+  SpeechAudioFormat,
+  SpeechModelGateway,
+  SpeechSynthesisRequest,
+  SpeechSynthesisResult,
   StructuredModelGateway,
   StructuredModelRequest,
   StructuredModelResult,
   TurnModelGateway,
 } from './model-gateway';
+
+export {
+  agentModelRunStatuses,
+  agentModelRunStatusSchema,
+  type AgentModelRunLedgerPort,
+  type AgentModelRunProviderResult,
+  type AgentModelRunSnapshot,
+  type AgentModelRunStatus,
+  type AgentModelRunTerminalStatus,
+  type CreateAgentModelRunInput,
+} from './model-run-ledger';
+
+export {
+  isTurnApplicationTerminalEvent,
+  turnApplicationCommandSchema,
+  turnApplicationEventSchema,
+  turnApplicationFailureCodeSchema,
+  turnApplicationFailureCodes,
+  turnApplicationProtocolVersion,
+  validateTurnApplicationEventSequence,
+  type TurnApplicationCommand,
+  type TurnApplicationEvent,
+  type TurnApplicationFailureCode,
+} from './turn-application-contracts';
+
+export {
+  MAX_OPERATION_CONTINUATION_LEASE_MS,
+  MIN_OPERATION_CONTINUATION_LEASE_MS,
+  OPERATION_CONTINUATION_TASK,
+  createOperationContinuationInputSchema,
+  prepareToolApprovalIntentInputSchema,
+  operationContinuationAdapterSourceSchema,
+  operationContinuationAdapterSources,
+  operationContinuationProtocolVersion,
+  operationContinuationSnapshotSchema,
+  operationContinuationStatusSchema,
+  operationContinuationStatuses,
+  operationContinuationWorkSchema,
+  toolApprovalIntentProtocolVersion,
+  toolApprovalIntentSnapshotSchema,
+  toolApprovalIntentStatusSchema,
+  toolApprovalIntentStatuses,
+  type CreateOperationContinuationInput,
+  type OperationContinuationAdapterSource,
+  type OperationContinuationPort,
+  type OperationContinuationSnapshot,
+  type OperationContinuationStatus,
+  type OperationContinuationTerminalStatus,
+  type OperationContinuationWork,
+  type PrepareToolApprovalIntentInput,
+  type ToolApprovalIntentPort,
+  type ToolApprovalIntentSnapshot,
+  type ToolApprovalIntentStatus,
+} from './operation-continuation';
+
+export {
+  MAX_OPERATION_CONTINUATION_RECOVERY_BATCH,
+  operationContinuationRecoveryInputSchema,
+  operationContinuationRecoveryResultSchema,
+  type OperationContinuationRecoveryInput,
+  type OperationContinuationRecoveryPort,
+  type OperationContinuationRecoveryResult,
+} from './operation-continuation-recovery';
+
+export { w3cTraceCarrierSchema, type W3cTraceCarrier } from './trace-carrier';
+
+export type {
+  AgentTurnContextLedgerPort,
+  AgentTurnContextMaterial,
+  AgentTurnContextSnapshot,
+} from './turn-context-ledger';
+
+export {
+  agentToolCallStatusSchema,
+  agentToolCallStatuses,
+  agentToolEffectSchema,
+  agentToolExposureSchema,
+  type AgentToolAuditValueSummary,
+  type AgentToolCallLedgerPort,
+  type AgentToolCallSnapshot,
+  type AgentToolCallStatus,
+  type AgentToolCallTerminalStatus,
+  type AgentToolEffect,
+  type AgentToolExposure,
+  type CreateAgentToolCallInput,
+} from './tool-call-ledger';
+
+export {
+  toolEffectLedgerStatuses,
+  type ToolEffectLedgerPort,
+  type ToolEffectLedgerSnapshot,
+  type ToolEffectLedgerStatus,
+  type ToolEffectLedgerTerminalStatus,
+} from './tool-effect-ledger';
+
+export {
+  toolEffectReconciliationResolutions,
+  toolEffectReconciliationSources,
+  type ToolEffectReconciliationPort,
+  type ToolEffectReconciliationResolution,
+  type ToolEffectReconciliationSnapshot,
+  type ToolEffectReconciliationSource,
+} from './tool-effect-reconciliation';
 
 export {
   ObjectStorageError,

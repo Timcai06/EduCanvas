@@ -67,4 +67,16 @@ describe('prepareTurnContextMaterial', () => {
       }),
     ).toThrow(TurnContextConflictError);
   });
+
+  it('拒绝重复消息或Asset版本，避免同一上下文重复计费', () => {
+    expect(() =>
+      prepareTurnContextMaterial({
+        builderVersion: 'conversation-context-v1',
+        includedMessageIds: [firstMessageId, firstMessageId],
+        selectedAssetVersionIds: [],
+        omittedMessageCount: 0,
+        characterCount: 10,
+      }),
+    ).toThrow(TurnContextConflictError);
+  });
 });

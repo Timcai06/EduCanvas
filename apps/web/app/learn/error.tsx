@@ -20,7 +20,7 @@ export default function LearnError({
         <button
           type="button"
           onClick={reset}
-          className="mt-6 min-h-12 w-full max-w-xs rounded-full bg-accent px-8 py-3 font-semibold text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          className="mt-6 min-h-12 w-full max-w-xs rounded-full bg-accent px-8 py-3 font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           重新加载
         </button>

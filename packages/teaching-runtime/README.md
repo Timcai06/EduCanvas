@@ -8,8 +8,9 @@ EduCanvas 的 K12 教学应用层：在 `@educanvas/agent-core` 通用模型契�
 
 - `src/grade-submission.ts`：`GradeCanvasSubmissionService` 将不可信 Canvas 提交经私有判分键验证后提升为 `assessment_graded`，并在同一事务更新掌握度；
 - `src/state-transition.ts`：`ProgressTeachingStateService` 从可信候选信号、事件历史、课程策略和掌握度决定合法状态转移或 ASSESS 出口，并以幂等可信事件提交；
-- `src/tool-executor.ts`：`TeachingToolExecutor` 按“权威状态策略 ∩ 已注册能力 ∩ 模型暴露级别”筛选工具，执行 Schema、超时、幂等、写批次隔离和脱敏审计；
-- `src/turn-orchestrator.ts`：`TeachingTurnOrchestrator` 执行两阶段 `answer -> tools -> synthesis` 流式轮次；无工具时单次回答，有工具时只使用服务端验证结果进行第二次合成；Web 注入的有界历史位于系统策略之后、当前输入之前，`system` 历史角色会被拒绝；
+- `src/teaching-tool.ts`：只定义教学 Tool 的 Schema、handler 与可信上下文契约，不执行生命周期；
+- `src/tool-kernel-adapter.ts`：把Teaching Tool适配到统一`ToolKernel`；教学Profile上下文必须先通过Schema，状态白名单由Kernel的Profile能力集表达；
+- `src/teaching-prompt.ts`：为统一 Turn Application 提供教育 Profile 的纯 Prompt，不创建模型循环；
 - `src/teaching-safety.ts`：K12 系统策略与流式输出安全 Gate；
 - `src/observability.ts`：稳定教学指标名称与观测 Port；
 - `src/testing/scripted-model-gateway.ts`：仅供单元测试和开发 Harness 使用的确定性替身，不是生产 Provider；
@@ -18,15 +19,16 @@ EduCanvas 的 K12 教学应用层：在 `@educanvas/agent-core` 通用模型契�
 
 ## 已接线与未接线
 
-`apps/web` 已将 `TeachingTurnOrchestrator` 接入真实 OpenAI-compatible Gateway、EduCanvas SSE、消息/Model Run/Tool Call/Safety 账本和生产 `getStudentState` 工具。因此旧的“没有真实供应商、二次合成或浏览器 SSE”描述已经失效；这些基础设施由 Web 和 DB 包提供，而不是本包自己实现。
+`apps/web` 已把教学Profile接入唯一`TurnApplicationService`、真实 OpenAI-compatible Gateway、EduCanvas SSE、统一Operation/Model Run/Tool Call/Context账本、K12消息与安全账本，以及生产`getStudentState`/`retrieveKnowledge`工具。真实DeepSeek的answer、两项工具与synthesis纵切已经通过；这些基础设施由`agent-runtime`、Web和DB包提供，而不是本包自己实现。
 
 仍需保持以下边界：
 
 - 当前生产工具包括 `getStudentState` 与只读 `retrieveKnowledge`；后者由Web组合根注入PostgreSQL FTS，并只返回本轮持久化候选；
-- `ProgressTeachingStateService` 已接到 Web 的 Canvas 判分后流程，但仅在可信当前状态为 `ASSESS` 时消费服务端判分事件；Turn Orchestrator 本身仍显式返回 `STAY`，不允许模型直接推进状态；
+- `ProgressTeachingStateService` 已接到 Web 的 Canvas 判分后流程，但仅在可信当前状态为 `ASSESS` 时消费服务端判分事件；教学Profile不允许模型直接推进状态；
 - Artifact 提议、确认和独立生成用例尚未实现；
-- 历史消息窗口已接通，但摘要、Artifact 上下文与引用 claim/span 对齐尚未实现；
-- 本包不直接写数据库，也不代表真实 Provider 已完成 live smoke 或整节课闭环 E2E。
+- 历史消息、Asset/Source上下文与候选引用已接通，但摘要与引用 claim/span 对齐尚未实现；
+- 本包不直接写数据库；真实Provider smoke只证明基础纵切，不代表整节课教育质量已经验收；
+- 旧 `TeachingToolExecutor` 和 `TeachingTurnOrchestrator` 已删除；模型循环、Tool 生命周期和失败语义只有统一 Runtime 一份实现。
 
 ## 常用命令
 

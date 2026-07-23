@@ -1,0 +1,6 @@
+ALTER TABLE "turn_context_snapshots" ALTER COLUMN "session_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "turn_context_snapshots" ALTER COLUMN "turn_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "turn_context_snapshots" ADD COLUMN "agent_operation_id" uuid;--> statement-breakpoint
+ALTER TABLE "turn_context_snapshots" ADD CONSTRAINT "turn_context_snapshots_agent_operation_id_agent_operations_id_fk" FOREIGN KEY ("agent_operation_id") REFERENCES "public"."agent_operations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "turn_context_snapshots_agent_operation_unique" ON "turn_context_snapshots" USING btree ("agent_operation_id") WHERE "turn_context_snapshots"."agent_operation_id" is not null;--> statement-breakpoint
+ALTER TABLE "turn_context_snapshots" ADD CONSTRAINT "turn_context_snapshots_scope_check" CHECK (("turn_context_snapshots"."session_id" is not null and "turn_context_snapshots"."turn_id" is not null and "turn_context_snapshots"."agent_operation_id" is null) or ("turn_context_snapshots"."session_id" is null and "turn_context_snapshots"."turn_id" is null and "turn_context_snapshots"."agent_operation_id" is not null));

@@ -1,21 +1,21 @@
 # 教学Canvas与GSAP
 
 - 状态：`accepted`
-- 相关决策：[ADR-0010](../09-decisions/0010-canvas-trust-tiers.md)（取代 [ADR-0002](../09-decisions/0002-controlled-canvas.md)）
+- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
 ## 核心决定
 
 Canvas 采用分层信任模型。Tier 1（判分型可信 Artifact）：模型输出结构化 Artifact，前端选择审核过的 React 组件渲染，服务端判分；Tier 2（沙箱探索型产物）：模型生成的 HTML/JS 只能在无 same-origin、禁网络的 sandboxed iframe 中运行，交互不产生可信学习事件。模型在任何 tier 下都不能在主页面执行任意 HTML 或 JavaScript。
 
-**Tier 2 v1（已实现）**：助手消息中的 ```` ```html ```` 代码块是 Tier 2 的轻量入口——`MessageMarkdown` 识别后渲染为沙箱预览产物卡，用户显式点击"运行"才在 `HtmlSandbox`（`sandbox="allow-scripts"`、文档级 CSP `default-src 'none'`、禁嵌套 iframe 与表单提交、来源上限 256KB）中执行；v1 为纯展示型沙箱，无 postMessage 桥，产物随消息文本持久化。正式的 Artifact 生命周期（提议/确认/版本/Studio）仍属 P4，见 ADR-0010 开放问题。
+**Tier 2 v1（已实现）**：助手消息中的 ` ```html ` 代码块是 Tier 2 的轻量入口——`MessageMarkdown` 识别后渲染为沙箱预览产物卡，用户显式点击"运行"才在 `HtmlSandbox`（`sandbox="allow-scripts"`、文档级 CSP `default-src 'none'`、禁嵌套 iframe 与表单提交、来源上限 256KB）中执行；v1 为纯展示型沙箱，无 postMessage 桥，产物随消息文本持久化。平台结构化Artifact已具备独立生命周期，HTML沙箱是否升级为同类持久产物仍是后续决策。
 
 ## 当前实现状态
 
 - **已实现**：`classification_game`、`quiz`的严格Schema，公开投影/私有判分键拆分，编译期静态Renderer注册表和确定性服务端判分；匿名会话范围内的浏览器提交、可信事件写入和进度回显已连通；`pipeline_flow`以render-only Artifact加入公开投影，不伪造判分键，也不复用assessment持久化路径；
-- **已实现的GSAP范围**：`gsap`与`@gsap/react`已经安装；`AmbientHalo`、`CanvasPanel`和`Sheet`使用`useGSAP()`实现呼吸或表面进入动效。三层Halo的gradient/blur为静态子层，Timeline只修改wrapper的transform/opacity；页面不可见时暂停，reduced-motion不创建无限Timeline，移动端降为一层动画core加静态haze；
+- **已实现的GSAP范围**：`gsap`与`@gsap/react`已经安装；扉页问候（SplitText 逐字 + DrawSVG 朱砂笔触）、批改笔迹（`GradeMark`）、印章（`SealStamp`）、`CanvasPanel`和`Sheet`使用`useGSAP()`实现「落笔」入场或表面进入动效。Timeline只修改transform/opacity（DrawSVG 只改 stroke-dash），reduced-motion不创建无限Timeline并直接呈现静态终态；此前的三层 AmbientHalo 光场已随「两支笔」视觉基线移除；
 - **已实现的教学动画范围**：首个`pipeline_flow`模板、静态React Renderer和共享`AnimationShell`已落地，支持播放/暂停/跳转/上下步/重置/速度、键盘控制、页面隐藏暂停及reduced-motion即时切换；模型只可提供严格Schema中的步骤文案、注册槽位、高亮顺序和暂停点；
 - **阶段一待实现**：将客户端动画观察与真实runtime完成确认对齐后再提升为可信学习事件，以及正式身份认证后的浏览器提交链路；普通播放不得改变mastery；
-- **已实现的平台产物**：`mind_map`（Tier 1 render-only）——确认卡显式创建、worker 后台生成（v1 为规则大纲，M2 换模型生成）、版本化、Studio 列表与 `ArtifactCanvas`（复用 CanvasHost）打开；全链路 E2E 含真实 worker 进程；
+- **已实现的平台产物**：`mind_map`、`slides`、`flashcards`与`audio_overview`——确认卡显式创建、worker后台生成、不可变版本、Studio恢复与`ArtifactCanvas`打开；前三种结构化产物支持在Canvas内提交修改要求，模型读取当前版本和Notebook对话后追加新版本，历史版本只读可恢复；全链路E2E含真实worker进程；
 - **候选能力**：其余Artifact与动画模板按课程需求逐个增加，不因出现在规划清单中就视为已实现。
 
 ## 初始Artifact类型
@@ -58,7 +58,7 @@ Canvas 采用分层信任模型。Tier 1（判分型可信 Artifact）：模型�
 - 高频指针跟随优先使用`quickTo()`；
 - 低端设备也要验证动画流畅度。
 
-当前 `AmbientHalo` 是装饰性 UI 动效，不是模型可生成 Artifact，也不进入统一教学动画控制协议。Canvas 在桌面分栏使用 `region`；移动端和桌面全屏使用 `dialog + aria-modal`，背景分支 `inert`，焦点约束和归还由共享模态工具管理。
+扉页笔触、批改笔迹与印章是装饰性 UI 动效，不是模型可生成 Artifact，也不进入统一教学动画控制协议。Canvas 在桌面分栏使用 `region`；移动端和桌面全屏使用 `dialog + aria-modal`，背景分支 `inert`，焦点约束和归还由共享模态工具管理。
 
 ## 统一控制协议
 
@@ -81,7 +81,7 @@ classification_submitted
 
 模型生成的是教学语义和模板参数，不是任意GSAP源码。可操作目标只能引用模板注册的语义槽位；实际DOM、可动画属性和持续时间由人工Renderer决定。
 
-**信任分界线**：Canvas产生的交互事件只表示客户端发生了什么，不能直接证明学生答对或掌握。服务端必须依据保存的答案、当前会话与状态机规则完成验证，再生成可信领域事件；只有可信领域事件可以进入掌握度计算。详细契约见[学习事件契约](../04-data/learning-event-contract.md)与[ADR-0006](../09-decisions/0006-trusted-learning-events.md)。
+**信任分界线**：Canvas产生的交互事件只表示客户端发生了什么，不能直接证明学生答对或掌握。服务端必须依据保存的答案、当前会话与结构化课程规则完成验证，再生成可信领域事件；只有可信领域事件可以进入掌握度计算。详细契约见[学习事件契约](../04-data/learning-event-contract.md)与 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。
 
 ## 开放问题
 

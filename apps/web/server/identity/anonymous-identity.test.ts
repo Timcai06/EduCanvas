@@ -7,6 +7,7 @@ vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 import {
   createAnonymousIdentity,
   deriveAnonymousStudentId,
+  isEphemeralAnonymousIdentity,
   parseAnonymousToken,
 } from './anonymous-identity';
 
@@ -45,5 +46,17 @@ describe('anonymous identity token', () => {
     expect(first.studentId).toBe(deriveAnonymousStudentId(first.token));
     expect(second.token).not.toBe(first.token);
     expect(second.studentId).not.toBe(first.studentId);
+  });
+
+  it('只把带有效bearer的匿名身份视为可轮换身份', () => {
+    const anonymous = createAnonymousIdentity();
+
+    expect(isEphemeralAnonymousIdentity(anonymous)).toBe(true);
+    expect(
+      isEphemeralAnonymousIdentity({ token: '', studentId: 'local:owner' }),
+    ).toBe(false);
+    expect(
+      isEphemeralAnonymousIdentity({ token: '', studentId: 'user:registered' }),
+    ).toBe(false);
   });
 });

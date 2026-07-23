@@ -17,6 +17,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { useId, useState, type ComponentType } from 'react';
+import { GradeMark } from '@/features/workspace/shared/two-pen-marks';
 import {
   AnimationShell,
   type AnimationClientObservation,
@@ -116,16 +117,13 @@ function QuizRenderer({
                     },
                   });
                 }}
-                className="min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
+                className="min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
               >
                 {disabled ? '正在提交…' : '提交本题'}
               </button>
               {itemResult ? (
-                <span
-                  className={
-                    itemResult.isCorrect ? 'text-good' : 'text-warn'
-                  }
-                >
+                <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                  <GradeMark correct={itemResult.isCorrect} />
                   {itemResult.isCorrect ? '回答正确' : '还可以再想一想'}
                 </span>
               ) : null}
@@ -205,11 +203,8 @@ function ClassificationGameRenderer({
                 })}
               </div>
               {itemResult ? (
-                <p
-                  className={`mt-2 text-sm ${
-                    itemResult.isCorrect ? 'text-good' : 'text-warn'
-                  }`}
-                >
+                <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-ink-muted">
+                  <GradeMark correct={itemResult.isCorrect} size={15} />
                   {itemResult.isCorrect ? '分类正确' : '分类不正确，请再观察'}
                 </p>
               ) : null}
@@ -234,7 +229,7 @@ function ClassificationGameRenderer({
               },
             });
           }}
-          className="min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
+          className="min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
         >
           {disabled ? '正在提交…' : '提交分类'}
         </button>

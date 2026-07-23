@@ -7,8 +7,11 @@ import {
 } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
-import { beginOwnedGeneralTurn } from '@/server/platform/general-turn';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import { beginWebGatewayTurn } from '@/server/gateway/web-turn';
+import {
+  isTrustedSameOriginWrite,
+  jsonError,
+} from '@/server/http/request-security';
 import { createSseEventStream, sseResponse } from '@/server/http/sse';
 import {
   parseTeachingTurnRequest,
@@ -37,7 +40,7 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const body = await parseTeachingTurnRequest(request);
-    const turn = await beginOwnedGeneralTurn(identity, body);
+    const turn = await beginWebGatewayTurn(identity, body);
     return sseResponse(createSseEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {

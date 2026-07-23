@@ -6,9 +6,14 @@ import {
   DrizzleSessionRepository,
   getDb,
 } from '@educanvas/db';
-import { teachingStateSchema } from '@educanvas/teaching-core';
+import type { ToolKernelAdapter } from '@educanvas/agent-runtime';
 import {
-  TeachingToolExecutor,
+  isToolAllowed,
+  teachingStateSchema,
+  type TeachingState,
+} from '@educanvas/teaching-core';
+import {
+  adaptTeachingTool,
   defineTeachingTool,
 } from '@educanvas/teaching-runtime';
 import { z } from 'zod';
@@ -133,7 +138,62 @@ const retrieveKnowledgeTool = defineTeachingTool({
   },
 });
 
-/** 每个 Turn 使用独立 executor，避免跨学生复用进程内 execution cache。 */
-export function createTeachingToolExecutor(): TeachingToolExecutor {
-  return new TeachingToolExecutor([getStudentStateTool, retrieveKnowledgeTool]);
+const capabilityByTool = {
+  getStudentState: 'education.student_state.read',
+  retrieveKnowledge: 'education.knowledge.retrieve',
+} as const;
+
+export type TeachingToolCapability =
+  (typeof capabilityByTool)[keyof typeof capabilityByTool];
+
+/** Teaching Profile 当前实现可用且通过状态白名单的能力集合。 */
+export function teachingToolCapabilitiesForState(
+  state: TeachingState,
+): readonly TeachingToolCapability[] {
+  return [
+    {
+      tool: getStudentStateTool,
+      capability: capabilityByTool.getStudentState,
+    },
+    {
+      tool: retrieveKnowledgeTool,
+      capability: capabilityByTool.retrieveKnowledge,
+    },
+  ]
+    .filter((entry) => isToolAllowed(state, entry.tool.name))
+    .map((entry) => entry.capability);
+}
+
+/**
+ * 把教学工具接入通用 Tool Kernel；回调只接收已通过输出 Schema 的证据 ID，
+ * 不得把检索正文或学生身份带出 Adapter 边界。
+ */
+export function createTeachingToolKernelAdapters(
+  onKnowledgeEvidence?: (candidateIds: readonly string[]) => void,
+): readonly ToolKernelAdapter[] {
+  const studentState = adaptTeachingTool(getStudentStateTool, {
+    capability: capabilityByTool.getStudentState,
+    risk: 'l0',
+  });
+  const retrieval = adaptTeachingTool(retrieveKnowledgeTool, {
+    capability: capabilityByTool.retrieveKnowledge,
+    risk: 'l0',
+  });
+  return [
+    studentState,
+    {
+      ...retrieval,
+      async invoke(input, context) {
+        const output = await retrieval.invoke(input, context);
+        const parsed = z
+          .object({ evidence: z.array(knowledgeEvidenceSchema).max(8) })
+          .passthrough()
+          .parse(output);
+        onKnowledgeEvidence?.(
+          parsed.evidence.map((candidate) => candidate.candidateId),
+        );
+        return output;
+      },
+    },
+  ];
 }

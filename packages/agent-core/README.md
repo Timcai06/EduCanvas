@@ -6,6 +6,7 @@ EduCanvas 通用 Agent 领域契约包。它定义供应商无关的全模态资
 
 - `agent.turn` 是通用对话任务别名；`teaching.turn` 作为 K12 垂直任务别名在迁移期继续受支持；
 - `artifact.generate` 与 `retrieval.query_rewrite` 只能走结构化生成入口；
+- `speech.generate` 只能走`SpeechModelGateway`，二进制不得塞进结构化JSON；
 - 图片、音频、视频、文档、数据和链接统一建模为带不可变版本的 Asset；
 - 文本、Asset 引用和生成 Artifact 可以组合为一条多 Part 对话消息；
 - Provider 原始 chunk、错误正文、API Key 与推理内容不能进入本包契约；

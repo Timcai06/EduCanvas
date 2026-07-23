@@ -1,7 +1,8 @@
 /**
- * EduCanvas 品牌标记:四芒星火花 + 品牌渐变,替代通用图标库的 Sparkle。
- * 纯内联 SVG,无运行时依赖;渐变 id 加前缀避免同页多实例冲突由 aria-hidden
- * 装饰性使用规避(同 id 引用同一渐变定义是合法的)。
+ * EduCanvas 品牌标记：一枚朱砂印章，章面是老师批改的笔触对勾。
+ * 「两支笔」体系里朱砂代表批改与肯定，印章代表完成与身份——
+ * 这是整个产品唯一允许朱砂脱离批改语义出现的地方（品牌例外）。
+ * 纯内联 SVG 取色自语义 token，随亮暗主题联动。
  */
 export function LogoMark({ size = 16 }: { size?: number }) {
   return (
@@ -12,23 +13,41 @@ export function LogoMark({ size = 16 }: { size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
     >
-      <defs>
-        <linearGradient
-          id="educanvas-logo-gradient"
-          x1="3"
-          y1="21"
-          x2="21"
-          y2="3"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor="#98a5ff" />
-          <stop offset="0.55" stopColor="#a78bfa" />
-          <stop offset="1" stopColor="#e0a6c8" />
-        </linearGradient>
-      </defs>
+      <rect
+        x="1.6"
+        y="1.6"
+        width="20.8"
+        height="20.8"
+        rx="5.6"
+        fill="var(--color-cinnabar)"
+      />
       <path
-        d="M12 2c.9 5.2 4.8 9.1 10 10-5.2.9-9.1 4.8-10 10-.9-5.2-4.8-9.1-10-10 5.2-.9 9.1-4.8 10-10Z"
-        fill="url(#educanvas-logo-gradient)"
+        d="M6.8 12.6l3.6 3.9 6.8-8.6"
+        stroke="var(--color-card)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * 助手消息的「墨点」标识：黛青的一滴墨，代表讲课的那支笔。
+ * 与品牌印章刻意区分——助手每条消息都会出现，不能滥用朱砂。
+ */
+export function InkDot({ size = 10 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      <path
+        d="M6 1.2c1.9 1.5 4.3 3.4 4.3 5.7A4.3 4.3 0 0 1 6 11.1 4.3 4.3 0 0 1 1.7 6.9C1.7 4.6 4.1 2.7 6 1.2Z"
+        fill="var(--color-accent)"
       />
     </svg>
   );

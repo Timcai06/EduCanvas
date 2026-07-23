@@ -9,7 +9,12 @@ import { loadGeneralChatPageData } from '@/server/platform/general-conversation'
 export default async function HomePage() {
   const data = await loadGeneralChatPageData();
   return data ? (
-    <GeneralChatWorkspace initialMessages={data.initialMessages} />
+    <GeneralChatWorkspace
+      key={data.conversation.id}
+      initialMessages={data.initialMessages}
+      conversationId={data.conversation.id}
+      notebookTitle={data.conversation.title}
+    />
   ) : (
     <GeneralChatEntry />
   );

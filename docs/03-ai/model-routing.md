@@ -1,33 +1,35 @@
 # 模型路由
 
 - 状态：`accepted`
-- 相关决策：[ADR-0007](../09-decisions/0007-real-turn-and-provider-governance.md)
-- 最后验证：2026-07-15
+- 相关决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)
+- 最后验证：2026-07-22
 
 ## 当前实现边界
 
 `packages/teaching-core` 已定义供应商无关的模型契约：
 
-- `TaskAlias`：`teaching.turn`、`artifact.generate`、`retrieval.query_rewrite`；
-- `ModelAlias`：`primary`、`fast`、`structured`；
+- `TaskAlias`：`agent.turn`、`teaching.turn`、`artifact.generate`、`retrieval.query_rewrite`、`speech.generate`；
+- `ModelAlias`：`primary`、`fast`、`structured`、`speech`；
 - `TurnModelGateway.streamTurnText()`：正常教学 Turn 的唯一模型入口；
 - `StructuredModelGateway.generateStructured()`：只允许 Artifact 和非 Turn 结构化任务；
+- `SpeechModelGateway.generateSpeech()`：只允许受限文本脚本转`audio/mpeg`二进制；
 - `TurnModelEvent`：`text_delta / tool_call / usage / completed / failed`；
 - `ProviderCallMetadata` 与 `NormalizedModelError`：用于稳定审计和错误收敛。
 
-`packages/teaching-runtime` 的 `TeachingTurnOrchestrator.streamTurn()` 已实现直答一次 `answer`，或 `answer → tools → synthesis` 两次模型运行的硬边界。`createTeachingTurnAnswerPromptMaterial()` 是 answer Prompt 的唯一纯构建入口，供 Orchestrator 与组合根在生成 `turnId` 前计算同一份 `promptHash`，材料明确排除 Trace、运行期 signal 与 secret。
+当前生产教学 Turn 由 `packages/agent-runtime` 的唯一 `TurnApplicationService` 与 `AgentLoopEngine` 执行；`packages/teaching-runtime` 只提供纯 Prompt、确定性安全 Gate、状态机、教学 Tool 定义与 Adapter。直答只产生一次 `answer` Model Run；请求工具时产生 `answer → Tool Kernel → synthesis` 两次 Model Run。旧教学 Orchestrator 和 Tool Executor 已删除；Prompt材料明确排除 Trace、运行期 signal 与 secret。
 
-`packages/model-gateway` 已实现首个真实 OpenAI-compatible Adapter：原生 `fetch` + WHATWG SSE 解析，支持文本增量、工具参数分片、自包含工具结果回放、尾部 usage、Abort/截止时间和稳定错误映射。它不直接读取 `process.env`，环境配置由组合根显式注入。当前仍未实现显式 Fallback、并发/成本配额和 nightly live smoke；测试替身 `ScriptedModelGateway` 仍只位于 `src/testing`，不能注册到生产组合根。
+`packages/model-gateway` 已实现native与AI SDK两种OpenAI-compatible Turn Adapter，以及原生结构化JSON和`/audio/speech` Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取`process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式Fallback和nightly live smoke；测试替身不能注册到生产组合根。
 
 ## 别名语义
 
 `taskAlias` 表示业务目的，`modelAlias` 表示路由档位，二者不能混用：
 
-| taskAlias                 | 允许调用方式                 | 默认 modelAlias |
-| ------------------------- | ---------------------------- | --------------- |
-| `teaching.turn`           | 仅 `streamTurnText()`        | `primary`       |
-| `artifact.generate`       | 仅受确认后的结构化 operation | `structured`    |
-| `retrieval.query_rewrite` | 非 Turn 结构化辅助任务       | `fast`          |
+| taskAlias                 | 允许调用方式                   | 默认 modelAlias |
+| ------------------------- | ------------------------------ | --------------- |
+| `teaching.turn`           | 仅 `streamTurnText()`          | `primary`       |
+| `artifact.generate`       | 仅受确认后的结构化 operation   | `structured`    |
+| `retrieval.query_rewrite` | 非 Turn 结构化辅助任务         | `fast`          |
+| `speech.generate`         | 仅`generateSpeech()`二进制输出 | `speech`        |
 
 供应商模型 ID、版本和区域只能出现在服务端路由配置、Provider Adapter 与审计结果中，不能进入教学 runtime、Web 组件、Prompt 业务分支或客户端请求。
 
@@ -38,18 +40,26 @@
 3. 工具参数允许以 JSON 字符串分片传输，runtime 在 `done=true` 后统一解析并执行 Schema、状态和 exposure 校验；
 4. 工具路径必须把 `callId / tool / 已验证 arguments / 已验证 output` 组成自包含交换传入 `synthesis`，Provider Adapter 不得依赖上一请求的进程内记忆；
 5. `synthesis` 不再暴露工具，只生成最终学生可见文本；
-6. 单个 `teaching.turn` 最多两次模型运行，不允许隐藏重试成为第三次业务调用。供应商级网络重试必须在同一个 model run/attempt 策略内显式审计。
+6. 当前 `teaching.turn` 配置一个工具圈，因而最多两次模型运行；统一 Runtime 对工具圈、文本和上下文设置显式上限。任何供应商级网络重试仍必须在同一个 model run/attempt 策略内显式审计。
 
 ## Provider Adapter 实现选择
 
-首个 Adapter 选择原生 OpenAI-compatible SSE，原因是必须无损保留并严格校验：
+原生 OpenAI-compatible SSE 继续作为默认与回滚实现，因为必须无损保留并严格校验：
 
 - Provider response ID 与 tool call ID；
 - Token usage、finish reason、model revision 和 system fingerprint；
 - `AbortSignal` 的订阅、传播与上游取消；
 - 畸形事件、内容过滤、限流和连接中断的稳定错误映射。
 
-供应商原始 chunk、异常正文、推理内容和 SDK 类型均不得越过 Adapter。未来可以在相同 Port 后增加 AI SDK Adapter，但必须先用同一组官方格式 Fixture 证明上述语义完全等价。
+AI SDK Adapter现已在同一Port后生产接线，只能通过`MODEL_GATEWAY_RUNTIME=ai-sdk`显式启用；
+缺省和`native`均选择原生实现，运行中不会静默切换。两种Adapter用同一golden fixture验证文本、
+工具圈、usage、取消、错误和唯一终态等价，SDK Adapter另验证alias解析、最大输出限制与DeepSeek
+thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型均不得越过Adapter。
+
+语音输出采用OpenAI-compatible `POST /audio/speech`的非流式`mp3`形态；当前只
+解析音频二进制和安全响应头，不把供应商事件或临时URL暴露给业务层。模型ID由
+`MODEL_GATEWAY_SPEECH_MODEL`显式配置，voice由
+`MODEL_GATEWAY_SPEECH_VOICE`配置；实现依据[OpenAI Audio API](https://platform.openai.com/docs/api-reference/audio/createSpeech)。
 
 ## DeepSeek 开发边界
 
@@ -63,8 +73,10 @@
 
 ## 配置与剩余治理
 
-- 已实现：环境 allowlist、DeepSeek 生产硬拒绝、显式模型 ID、HTTPS 校验、请求截止时间与取消；
-- 待实现：并发配额、成本预算和显式 Fallback；
+- 已实现：环境allowlist、DeepSeek生产硬拒绝、显式模型ID、HTTPS校验、请求截止时间与取消，以及`native | ai-sdk`显式Turn Adapter选择；
+- 已实现（speech）：每个音频任务一次TTS调用、1–8项来源、3500字符输入、
+  20 MiB输出上限，无适配器自动重试；字符数、模型、voice与耗时随Artifact版本审计；
+- 待实现：跨用户/日并发与成本预算、显式 Fallback；
 - 每个 alias 的允许模态、上下文窗口和最大输出约束；
 - response ID、解析模型、Prompt 版本、Token、耗时、错误码和结果状态审计；
 - 合成输入的手动/nightly live smoke，确定性 CI 继续只用 Fixture。

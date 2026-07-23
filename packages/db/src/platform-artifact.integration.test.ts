@@ -106,6 +106,35 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
+  it('Studio 按 Notebook Space 聚合，不依赖产物是否挂接 Conversation', async () => {
+    const first = await createArtifact();
+    const [otherSpace] = await database!
+      .insert(schema.spaces)
+      .values({ ownerSubjectId: owner, title: '另一本笔记本' })
+      .returning();
+    if (!otherSpace) throw new Error('第二个Space创建失败');
+    await repository.createArtifact({
+      spaceId: otherSpace.id,
+      trustedSubjectId: owner,
+      kind: 'slides',
+      trustTier: 'tier1',
+      title: '另一本的 Slides',
+    });
+
+    await expect(
+      repository.listSpaceArtifacts({
+        spaceId,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toMatchObject([{ id: first.id, title: '思维导图' }]);
+    await expect(
+      repository.listSpaceArtifacts({
+        spaceId,
+        trustedSubjectId: stranger,
+      }),
+    ).resolves.toEqual([]);
+  });
+
   it('版本单调递增,首个版本使产物转为 active,版本列表按新到旧', async () => {
     const artifact = await createArtifact();
     const v1 = await repository.appendVersion({
@@ -132,6 +161,47 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       trustedSubjectId: owner,
     });
     expect(versions.map((version) => version.version)).toEqual([2, 1]);
+  });
+
+  it('版本溯源还原每版来历:初始生成与共创修改要求', async () => {
+    const artifact = await createArtifact();
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { nodes: [{ id: 'root', label: 'AI' }] },
+      generatedBy: 'rule:outline-v1',
+    });
+    const reviseJob = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { revision: { baseVersion: 1, instruction: '把根节点改成蓝色' } },
+    });
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { nodes: [{ id: 'root', label: 'AI（蓝）' }] },
+      generatedBy: 'model:artifact.revise:v1',
+      generationJobId: reviseJob.id,
+    });
+
+    const provenance = await repository.listVersionProvenance({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(provenance).toEqual([
+      {
+        version: 2,
+        generatedBy: 'model:artifact.revise:v1',
+        revisionInstruction: '把根节点改成蓝色',
+        createdAt: expect.any(String),
+      },
+      {
+        version: 1,
+        generatedBy: 'rule:outline-v1',
+        revisionInstruction: null,
+        createdAt: expect.any(String),
+      },
+    ]);
   });
 
   it('数据库形状约束拒绝\"内容与对象引用同时缺失或同时存在\"', async () => {
@@ -215,6 +285,28 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       progress: 10,
     });
     expect(running.status).toBe('running');
+
+    const resumed = await repository.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 15,
+    });
+    expect(resumed).toMatchObject({ status: 'running', progress: 15 });
+    await repository.updateGenerationJobCheckpoint({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      checkpoint: { stage: 'object_stored' },
+    });
+    await expect(
+      repository.getGenerationJob({
+        jobId: job.id,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toMatchObject({
+      params: { kind: 'mind_map' },
+      checkpoint: { stage: 'object_stored' },
+    });
 
     const done = await repository.transitionGenerationJob({
       jobId: job.id,

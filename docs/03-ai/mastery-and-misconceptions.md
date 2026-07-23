@@ -1,7 +1,7 @@
 # 掌握度模型与误区标注规格
 
 - 状态：`accepted`
-- 相关决策：[ADR-0005](../09-decisions/0005-mastery-modeling.md)
+- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 - 本文档是实现依据；所有数值参数为初始默认值，放配置，待评测集校准。
 
 ## 掌握度公式（v1）
@@ -42,7 +42,7 @@ m_new      = clamp(0.35 * m_recency + 0.65 * evidence, 0, prereq_cap)
 
 事件到计数的映射：测评答对 → `a+1, c+1`；答错 → `a+1`；请求提示 → `h+1`；误区标注由 `updateMisconception` 工具写入标签对象。互动实验和动画步骤事件 v1 不进公式，只作过程记录（开放问题 1）。
 
-## ASSESS 出口决策（填 ADR-0004 的 guard）
+## ASSESS 出口决策（结构化课程 guard）
 
 ```text
 θ_enter = 0.85    # 进入掌握

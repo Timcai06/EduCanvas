@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-17
+- 最后验证时间：2026-07-21
 
 `docs/plan/`是短期执行工作区，用于把阶段目标落实为有负责人、有边界、有证据的任务。这里不是产品、架构、接口或部署事实的长期来源。
 
@@ -18,17 +18,11 @@
 
 ## 当前计划
 
-当前只有一条执行线：
-
-- **产品复刻主线**：[`active/2026-07-gemini-notebooklm-replica.md`](active/2026-07-gemini-notebooklm-replica.md)，目标是复刻 Gemini + NotebookLM 的产品体验（产物主干 → 轻产物 → 来源与网页搜索 → 音频 → 视频，UI 蓝图线并行）；Agent 编排优化与创新属于下一阶段。
-
-前两条执行线（平台主线与 K12 垂直线）已于 2026-07-17 结档，交付与未完成项去向见 [`completed/`](completed/README.md)；K12 教学边界的约束（教学状态、可信判分不得反向定义平台对象）继续有效。
-
-最近完成：[`completed/2026-07-real-agent-learning-vertical-slice.md`](completed/2026-07-real-agent-learning-vertical-slice.md)、[`completed/2026-07-platform-decoupling-runtime-hardening.md`](completed/2026-07-platform-decoupling-runtime-hardening.md)。
+当前 active 执行线是[第二代 Hybrid Ports 架构升级](active/2026-07-第二代架构升级.md)。前置源码研究、能力映射、五类对照 fixture 和 ADR-0020 已于 2026-07-21 完成并获项目负责人接受；实施按独立纵切迁移统一 Turn、Context、Tool、Ledger、Continuation 与 Trace。历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 
-- 文件名使用`YYYY-MM-短横线英文主题.md`，例如`2026-07-real-model-vertical-slice.md`；
+- 新计划文件使用`YYYY-MM-中文主题.md`，例如`2026-07-第二代架构研究.md`；已有 completed 记录不为统一外观而批量重命名；
 - 一个文件只描述一个可独立验收的阶段目标；
 - 状态只使用`draft`、`active`、`blocked`、`completed`、`cancelled`；
 - `active`计划必须有负责人和最后验证时间；

@@ -5,6 +5,7 @@ import { CodeBlock, Play } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { isCitationAnchor, linkifyCitationMarkers } from './citation-links';
 
 export interface HtmlPreviewRequest {
   source: string;
@@ -20,20 +21,53 @@ export interface HtmlPreviewRequest {
 export function MessageMarkdown({
   text,
   onPreviewHtml,
+  citationMarkers,
+  citationAnchorPrefix,
 }: {
   text: string;
   onPreviewHtml?: (request: HtmlPreviewRequest) => void;
+  /** 该消息已持久化引用的标记号集合;缺省表示不启用行内引用改写 */
+  citationMarkers?: readonly number[];
+  citationAnchorPrefix?: string;
 }) {
+  const rendered =
+    citationMarkers && citationMarkers.length > 0 && citationAnchorPrefix
+      ? linkifyCitationMarkers(
+          text,
+          new Set(citationMarkers),
+          citationAnchorPrefix,
+        )
+      : text;
   return (
     <div className="chat-prose min-w-0">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            if (isCitationAnchor(href)) {
+              return (
+                <sup>
+                  <a
+                    href={href}
+                    className="chat-prose__citation"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      document
+                        .getElementById(href.slice(1))
+                        ?.scrollIntoView({ block: 'nearest' });
+                    }}
+                  >
+                    {children}
+                  </a>
+                </sup>
+              );
+            }
+            return (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            );
+          },
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children }) => {
             const language = /language-(\w+)/.exec(className ?? '')?.[1];
@@ -59,7 +93,7 @@ export function MessageMarkdown({
           },
         }}
       >
-        {text}
+        {rendered}
       </ReactMarkdown>
     </div>
   );

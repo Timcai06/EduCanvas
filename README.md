@@ -1,7 +1,7 @@
 # EduCanvas
 
 <p align="center">
-  <strong>Chat-first · Multimodal Assets · Governed Agents · Safe Artifacts</strong>
+  <strong>Education-first · Personal Agent · Gateway · Notebook · Safe Artifacts</strong>
 </p>
 
 <p align="center">
@@ -13,25 +13,24 @@
   <a href="https://github.com/Timcai06/EduCanvas/actions/workflows/ci.yml"><img src="https://github.com/Timcai06/EduCanvas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-EduCanvas 是一个以持续对话为核心的全模态 AI 工作空间。Chat 负责表达意图与维持上下文，文件和媒体沉淀为可复用资产，受控 Agent 使用工具完成任务，Canvas 与 Studio 承载可交互、可版本化的数字产物。
+EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。每个自然人用户拥有自己的长期 Agent，通过 Web、TUI 和受控消息渠道与它协作；家庭与班级通过共享 Notebook 和角色授权协作，但不共享 Agent 身份、私人记忆或默认工具权限。
 
-仓库同时交付浙江省大学生人工智能竞赛 **JBGS-2026-02：多模态 K12 人工智能通识课教学助手对话智能体**。K12 AI 教师是第一个垂直 Agent 和当前工程验证纵切，不是平台全部边界。
+仓库同时交付浙江省大学生人工智能竞赛 **JBGS-2026-02：多模态 K12 人工智能通识课教学助手对话智能体**。教育是平台默认且最完整的能力域；K12 是首个正式 Profile 和当前工程验证纵切，但通用 Gateway、Runtime、Notebook 与 Artifact 不依赖课程状态。
 
-> **北极星目标**：用户通过一个可信、可恢复的对话入口组织多模态上下文，让 AI 使用受控工具生成能够继续编辑、交互和复用的产物。
+> **北极星目标**：用户可以从任意受信入口访问同一个长期个人 Agent，让它理解自己的资料和学习状态，使用受控工具完成任务，并持续沉淀可恢复的知识、记忆与产物。
 
 ## 当前状态
 
 当前是一个可本地运行的模块化单体，已经越过静态原型阶段，但尚未进入 production。
 
-| 已落地 | 部分落地 | 尚未完成 |
-| --- | --- | --- |
-| 通用 Chat 默认入口；K12 为显式 Vertical Agent | 通用 Turn 幂等、取消、持久化与刷新恢复 | 通用 Turn 租约与后台恢复 |
-| 真实 Provider SSE 与诚实失败 | PDF/图片 Asset 已持久化 | 原生图片、音频、视频模型输入 |
-| Answer → Tools → Synthesis | 有界跨轮历史与 Context Snapshot | 摘要、记忆与 Artifact 上下文 |
-| Space/Conversation/Operation 通用数据主干 | 通用 Operation 尚未关联 Model Run/Trace 细账 | Asset/Source/Chunk 统一模型 |
-| K12 取消、租约、幂等与刷新恢复 | K12 只接通首条可信状态推进 | 通用 Model Run 全量迁移 |
-| Schema-first Canvas 与服务端判分 | Studio 当前只展示预置产物 | Artifact 提议、生成、版本与真实 Studio |
-| 深色 Chat-first UI 与 GSAP 动效 | Registry 仍是编译期闭集 | 通用 Agent/Tool/Provider 插件装配 |
+| 已落地                                                    | 有意保留的兼容层                             | 尚未完成                                   |
+| --------------------------------------------------------- | -------------------------------------------- | ------------------------------------------ |
+| `gateway.v1`、云端 Gateway、持久 Operation/恢复/审批      | Web 继续输出原 `schemaVersion=1` SSE         | 正式用户 IdP 与自助账号恢复                |
+| User/Personal Agent、私人/共享 Notebook Membership 与审计 | 匿名 Web 身份映射为受限兼容主体              | 摘要、长期学习者记忆和完整 Context Engine  |
+| 唯一 `AgentLoopEngine`，通用与 K12 通过 Profile/回调配置  | K12 课程账本仍保留教育领域专用表             | 原生图片、音频、视频 Provider 输入         |
+| Web、交互式 TUI、实验性 Telegram 私聊适配器               | Telegram 只有离线官方协议 Fixture，未做 live | 微信/QQ 等渠道的正式扫码授权与生产验证     |
+| 可选 Capability Node：配对、心跳、撤销、只读文件能力      | Node 使用出站 bearer session；不开放主机入站 | L2/L3 高风险设备动作及审批后续执行         |
+| Sources/引用、Artifact/Studio、Worker、可信学习事实       | Asset 与 Source/Chunk 仍有迁移期双链         | production SLO、外部指标后端与对象删除闭环 |
 
 当前事实以 [开发文档中心](docs/README.md)、已接受 ADR 与 Schema 为准；2026-07-16 的长篇技术报告已转为[历史快照](docs/00-overview/snapshots/2026-07-16-project-technical-report.md)，不再双重维护当前状态。
 
@@ -39,17 +38,16 @@ EduCanvas 是一个以持续对话为核心的全模态 AI 工作空间。Chat �
 
 ```mermaid
 flowchart LR
-    Chat[Chat\n主要交互] --> Context[Assets / Sources\n上下文与知识]
-    Context --> Agent[Agent Runtime\n模型、策略、工具]
-    Agent --> Answer[流式回答]
-    Agent --> Proposal[Artifact Proposal]
-    Proposal --> Canvas[Canvas\n受控交互]
-    Canvas --> Studio[Studio\n版本与复用]
-    Answer -.持续对话.-> Chat
-    Studio -.继续编辑.-> Chat
+    Surfaces[Web / TUI / Channels] --> Gateway[EduCanvas Gateway\n身份、路由、审批、事件]
+    Gateway --> Notebook[Notebook\nSources / Conversations / Memory / Studio]
+    Notebook --> Agent[Agent Runtime\nContext / Model / Tools]
+    Agent --> Answer[回答与行动]
+    Agent --> Artifact[Artifact Runtime]
+    Artifact --> Canvas[Canvas / Studio\n版本与共创]
 ```
 
-- Chat 始终是主叙事，Canvas 不在首屏默认展开；
+- Chat 是主要协作方式，但 Web 不是唯一入口；
+- Web 提供完整 Sources、Studio 和 Canvas，TUI/渠道按能力返回摘要、媒体、卡片或深链接；
 - 用户可以通过输入栏 `+` 添加本轮附件、长期资产或显式创建产物；
 - Agent 只能调用 Runtime 暴露并授权的工具；
 - Artifact 通过严格 Schema 和可信 Renderer 渲染，不执行模型生成的任意 HTML、JavaScript 或 GSAP；
@@ -86,11 +84,15 @@ MODEL_GATEWAY_PRIMARY_MODEL=<explicit-model-id>
 
 ```bash
 make setup
-make dev
+make all
 ```
 
-- `make dev` 会再次确认数据库已启动并执行尚未应用的迁移，避免拉取新代码后本地 Schema 落后；
+- `make all`：启动全部已启用的非交互服务；
+- `make dev`：进入 Web 验证环境，服务就绪后打开浏览器；
+- `make tui`：进入交互式 TUI，不需要填写用户 ID、Conversation ID 或共享 bootstrap token；
+- 三个入口都会确认数据库和迁移，并复用已经运行的正确服务；不会擅自终止占用端口的其他进程；
 - Web：<http://localhost:3101>
+- Gateway：<http://127.0.0.1:3200>（本地 loopback onboarding 自动开放第一方 Client；远程部署仍需正式认证）
 - PostgreSQL：`localhost:5432`
 - 停止数据库并保留数据：`make stop`
 - 查看全部命令：`make help`
@@ -100,6 +102,16 @@ make dev
 ```bash
 make doctor
 ```
+
+进入 TUI：
+
+```bash
+make tui
+```
+
+Web 是 K12 学生的主入口；TUI 是共享同一 Agent、Notebook 与 Conversation 的高级第一方客户端。渠道连接和停用已由 Web `/settings` 与 TUI `/channels` 共同管理同一份 Gateway 状态。Telegram 保留为实验性 Adapter，不默认启动；真实微信/QQ 因平台资格与凭据未就绪而明确 disabled，不用假二维码或手工数据库绑定冒充完成。
+
+bootstrap token是管理员建联密钥，不是最终用户密码；不要放入命令历史或分发给学生。loopback local onboarding 只用于本地开发，生产仍需正式 IdP。
 
 ## 常用验证
 
@@ -116,91 +128,108 @@ make build        # Next.js production build
 2. PostgreSQL integration；
 3. Chromium E2E 与失败诊断上传。
 
-最近核对的本地基线为 289 项单元测试、46 项 PostgreSQL integration、23 项 Chromium E2E、TypeScript typecheck 与 production build 通过。该证据证明当前纵切可回归，不代表 production 就绪。
+测试数量会随主线演进，以当前分支 CI 和具体 PR 证据为准；通过现有门禁只证明当前纵切可回归，不代表 production 就绪。
 
-## 当前架构
+## 目标架构
 
 ```mermaid
-flowchart LR
-    Browser[Browser] --> Web[apps/web\nNext.js UI + BFF]
-    Web --> AgentCore[agent-core\n通用契约]
-    Web --> AgentRuntime[agent-runtime\nAsset + Conversation Context]
-    Web --> TeachingRuntime[teaching-runtime\nK12 Turn / Tool / 判分]
-    Web --> Gateway[model-gateway\nProvider Adapter]
-    Web --> Canvas[canvas-protocol\n受控 Artifact]
-    Web --> DB[db\nDrizzle Adapters]
-    AgentRuntime --> AgentCore
-    Gateway --> AgentCore
-    TeachingRuntime --> AgentCore
-    TeachingRuntime --> TeachingCore[teaching-core\n状态机 / 事件 / 掌握度]
-    TeachingRuntime --> Canvas
-    DB --> PG[(PostgreSQL)]
+flowchart TB
+    Web[Web Client] --> Gateway[EduCanvas Gateway]
+    TUI[TUI Client] --> Gateway
+    Channels[Channel Adapters] --> Gateway
+    Nodes[Capability Nodes] --> Gateway
+    Gateway --> Router[Notebook / Conversation Router]
+    Router --> Runtime[Agent Runtime]
+    Runtime --> ModelGateway[Model Gateway]
+    Runtime --> Tools[Tools / Profiles / Skills]
+    Runtime --> Education[Trusted Education Services]
+    Runtime --> Artifact[Artifact Runtime]
+    Artifact --> Worker[Durable Worker]
+    Gateway --> DB[(PostgreSQL)]
+    Runtime --> DB
 ```
 
-当前采用模块化单体：Next.js 是 Web/BFF 与部署组合根，核心规则和适配器位于独立 Workspace Package。只有连接规模、长任务、团队发布边界或故障隔离产生可测需求后，才沿现有 Port 抽出独立服务。
+图中的核心边界已经落地：`apps/gateway` 是独立组合根，Web 通过兼容 Gateway 边界进入同一协议，TUI 和 Telegram 通过 Gateway HTTP 接入，可选 Node 只提供出站配对的受控能力。当前仍是共享 PostgreSQL 的模块化单体，不代表已经完成生产部署或需要立即拆成微服务。
 
 ### 一次 Agent Turn
 
 ```mermaid
 sequenceDiagram
-    participant U as Browser
-    participant W as Web BFF
-    participant O as Orchestrator
+    participant U as Client / Channel
+    participant G as EduCanvas Gateway
+    participant R as Agent Runtime
     participant M as Model Gateway
-    participant T as Tool Runtime
+    participant T as Tool / Domain Service
     participant D as PostgreSQL
 
-    U->>W: message + validated asset parts
-    W->>D: identity, ownership, recent history
-    W->>O: trusted session + bounded context
-    W->>D: atomic turn + context snapshot
-    O->>M: answer stream
-    alt model requests tools
-        O->>T: schema + policy + state + timeout
-        T-->>O: verified results
-        O->>M: synthesis stream
+    U->>G: normalized-capable input
+    G->>G: identity / pairing / Notebook routing
+    G->>R: trusted turn request
+    R->>D: operation + context snapshot
+    R->>M: multimodal model input
+    loop within TurnBudget
+        M-->>R: text or tool request
+        R->>T: policy + schema + approval
+        T-->>R: verified result
     end
-    W->>D: message, model run, tool call, citations
-    W-->>U: EduCanvas SSE v1
+    R->>D: message + runs + tools + citations + terminal state
+    R-->>G: normalized events
+    G-->>U: surface-specific delivery
 ```
 
-当前 SSE 事件为 `turn.accepted`、`message.delta`、`message.citation`、`tool.*` 与 `turn.completed/failed/cancelled`。Artifact 生命周期事件尚未进入当前协议。
+Gateway 对外使用严格的 `gateway.v1` NDJSON 事件；当前 Web SSE 是兼容投影，以保持现有浏览器状态机、取消、刷新恢复和教学 UI 行为。Web 与 TUI Fixture 已证明可以通过 Gateway 到达同一 Notebook/Conversation。
 
 ## Workspace 结构
 
 ```text
 EduCanvas/
 ├── apps/
-│   ├── web/                  # Next.js Chat、Assets、Canvas、BFF
-│   └── worker/               # 持久任务 worker(graphile-worker,ADR-0012)
+│   ├── web/                  # Next.js Client + 迁移期兼容 BFF
+│   ├── gateway/              # Gateway HTTP、身份/路由/事件/审批组合根
+│   ├── tui/                  # 第一方终端客户端
+│   ├── telegram/             # Telegram 私聊长轮询适配器
+│   ├── node/                 # 可选出站 Capability Node 宿主
+│   └── worker/               # 持久任务 worker（graphile-worker）
 ├── packages/
-│   ├── agent-core/           # 通用 Asset、Message、Model、Gateway 契约
-│   ├── agent-runtime/        # Asset/Conversation Context；目标承载通用 Turn/Tool/Policy
-│   ├── model-gateway/        # OpenAI-compatible 原生 SSE Provider Adapter
+│   ├── agent-core/           # 通用 Asset、Message、Model 与 Tool 契约
+│   ├── agent-runtime/        # 唯一 Agent Loop、Context、工具与模型流验证
+│   ├── gateway-core/         # gateway.v1 纯协议、身份、能力与事件 Schema
+│   ├── gateway-runtime/      # 路由、幂等、持久事件与终态应用服务
+│   ├── gateway-client/       # TUI 等第一方客户端共享 HTTP/NDJSON Client
+│   ├── channel-telegram/     # Telegram 原生 Update/Delivery 映射
+│   ├── node-host/            # Node 只读能力安全执行器
+│   ├── model-gateway/        # 可回滚native/AI SDK Provider Adapters
+│   ├── telemetry/            # 可关闭OTel Trace Adapter与脱敏/采样边界
 │   ├── canvas-protocol/      # Artifact Schema、交互事件与服务端判分
 │   ├── teaching-core/        # K12 状态机、可信事件、掌握度与领域 Port
-│   ├── teaching-runtime/     # K12 Turn、Tool、判分和状态推进应用服务
+│   ├── teaching-runtime/     # 迁移期 K12 Loop/Tool；长期只保留 Profile/Workflow/领域适配
 │   └── db/                   # Drizzle Schema、Repositories 与迁移
 ├── docs/                     # canonical 产品、架构、数据、工程、质量和 ADR
 ├── tests/e2e/                # 学习流、视觉和 Canvas Playwright 测试
 └── Makefile                  # 本地统一开发入口
 ```
 
-| Package | 可以依赖 | 不应依赖 |
-| --- | --- | --- |
-| `agent-core` | Zod | Web、K12、数据库、供应商 SDK |
-| `agent-runtime` | `agent-core` | K12 教学状态 |
-| `model-gateway` | `agent-core` | Web、K12 领域 |
-| `canvas-protocol` | Zod | React 页面、模型供应商 |
-| `teaching-core` | `agent-core`、Zod | Next.js、Drizzle、具体 Provider |
-| `teaching-runtime` | Agent/Canvas/Teaching Core | React、具体 Provider SDK |
-| `db` | Core 协议与 Drizzle | UI、Prompt、供应商事件 |
+`apps/ + packages/` 的 Monorepo 结构继续保留：`apps/*` 是可运行组合根，`packages/*` 是无界面协议、应用服务和领域能力。当前目录已经按这一规则落位，不需要重排顶层；下一步只继续削薄 Web 兼容 BFF 和完善生产认证/运维，不做全仓改名。
+
+| Package            | 可以依赖                                 | 不应依赖                                    |
+| ------------------ | ---------------------------------------- | ------------------------------------------- |
+| `agent-core`       | Zod                                      | Web、K12、数据库、供应商 SDK                |
+| `gateway-core`     | Zod                                      | Next.js、K12、Drizzle、渠道/供应商 SDK      |
+| `gateway-runtime`  | `gateway-core`                           | Next.js、K12、具体渠道和 Provider SDK       |
+| `gateway-client`   | `gateway-core`                           | 数据库、Agent Runtime、Provider SDK         |
+| `agent-runtime`    | `agent-core`                             | K12 教学状态                                |
+| `model-gateway`    | `agent-core`、隔离的Provider Adapter SDK | Web、K12 领域                               |
+| `telemetry`        | `agent-runtime`、隔离的OTel SDK          | 正文、Prompt、Credential、业务事实          |
+| `canvas-protocol`  | Zod                                      | React 页面、模型供应商                      |
+| `teaching-core`    | `agent-core`、Zod                        | Next.js、Drizzle、具体 Provider             |
+| `teaching-runtime` | Agent/Canvas/Teaching Core               | 另一套 Agent Loop、React、具体 Provider SDK |
+| `db`               | Core 协议与 Drizzle                      | UI、Prompt、供应商事件                      |
 
 ## 关键安全设计
 
 ### 分层信任 Canvas
 
-Canvas 按"产物是否进入可信学习事实"分两级信任（ADR-0010）。Tier 1 判分型 Artifact：模型输出结构化 JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染，公开题面与私有判分键物理分离，浏览器交互必须通过服务端验证才能提升为可信学习事件。Tier 2 沙箱探索型产物：模型生成的 HTML/JS 只允许在无 same-origin、禁网络的 sandboxed iframe 中运行，不产生可信学习事件（尚未实现）。任何 tier 都不在主页面直接执行模型代码。
+Canvas 按“产物是否进入可信学习事实”分两级信任。Tier 1 判分型 Artifact：模型输出结构化 JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染，公开题面与私有判分键物理分离，浏览器交互必须通过服务端验证才能提升为可信学习事件。Tier 2 沙箱探索型产物：模型生成的 HTML/JS 只允许在无 same-origin、禁网络的 sandboxed iframe 中运行，不产生可信学习事件（尚未实现）。任何 tier 都不在主页面直接执行模型代码。
 
 已实现（均为 Tier 1）：
 
@@ -208,9 +237,9 @@ Canvas 按"产物是否进入可信学习事实"分两级信任（ADR-0010）。
 - `quiz`：可判分；
 - `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0010](docs/09-decisions/0010-canvas-trust-tiers.md)。
+详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0018](docs/09-decisions/0018-capability-trust-and-learning-evidence.md)。
 
-### 可信 K12 状态
+### 可信 K12 课程状态
 
 ```mermaid
 stateDiagram-v2
@@ -224,7 +253,7 @@ stateDiagram-v2
     ASSESS --> [*]: ADVANCE
 ```
 
-模型和浏览器不能直接修改状态或掌握度。Runtime 只接受封闭候选信号，并结合服务端判分、历史事件和课程策略执行确定性 Guard。
+这套状态只在显式结构化课程中启用，不是普通教学问答的前置条件。模型和浏览器不能直接修改状态或掌握度；Runtime 只接受封闭候选信号，并结合服务端判分、历史事件和课程策略执行确定性 Guard。
 
 ### Provider 与 Secret
 
@@ -236,29 +265,34 @@ stateDiagram-v2
 
 ## 下一阶段
 
-按 [Gemini + NotebookLM 产品复刻计划](docs/plan/active/2026-07-gemini-notebooklm-replica.md) 执行（阶段目标：复刻 Gemini + NotebookLM 的产品体验，Agent 编排优化与创新属于下一阶段）：
+[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)和[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)已经完成。当前架构线先进入[第二代研究与决策](docs/plan/active/2026-07-第二代架构研究.md)，不直接改写生产架构。后续产品与运维优先级是：
 
-1. **M1 产物主干**：PostgreSQL 持久任务队列 + worker、Artifact/版本/生成任务一等公民、SSE 产物事件、对象存储 Port（[ADR-0012](docs/09-decisions/0012-artifact-runtime-durable-jobs.md)）；
-2. **M2 轻产物**：思维导图、Slides、泛化测验/闪卡；
-3. **M3 来源统一与网页搜索**：Asset/Source/Chunk 单链路、搜索 Provider、最小 Agent Runtime（maxToolRounds 策略 + Tool Registry）；
-4. **M4 音频概览**、**M5 视频概览**；
-5. **UI 蓝图线（并行）**：侧栏历史对话、来源常驻面板、行内引用、Canvas 工具芯片与共创化、`/learn` 并入统一界面。
+1. 接入正式 IdP，替换仅供管理员/本地 bootstrap 使用的共享令牌；
+2. 完成统一 Context Engine：Notebook 摘要、长期学习者记忆、Artifact 上下文和原生多模态；
+3. 为 Telegram 一次性自助绑定纵切补 live 账号 smoke，并完成 enabled Adapter 生命周期、degraded health、可靠部署与告警；
+4. 完成对象删除 Outbox、外部指标/Trace 后端、SLO 与恢复演练；
+5. 只有明确的成年/管理员场景通过安全评审后，才增加 L2/L3 Node 能力。
+
+此前的 Gemini + NotebookLM 产品体验计划已经[结档](docs/plan/completed/2026-07-gemini-notebooklm-replica.md)；持久 Artifact、Notebook 来源/引用、轻产物、音频和 Canvas 共创已成为当前基线。
 
 ## 文档入口
 
-| 内容 | 入口 |
-| --- | --- |
-| 文档索引 | [docs/README.md](docs/README.md) |
+| 内容                            | 入口                                                                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 文档索引                        | [docs/README.md](docs/README.md)                                                                                                       |
 | 历史技术报告（2026-07-16 快照） | [docs/00-overview/snapshots/2026-07-16-project-technical-report.md](docs/00-overview/snapshots/2026-07-16-project-technical-report.md) |
-| 产品定义 | [docs/01-product/product-definition.md](docs/01-product/product-definition.md) |
-| 学生 UI 规范 | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md) |
-| 系统架构 | [docs/02-architecture/system-architecture.md](docs/02-architecture/system-architecture.md) |
-| Agent 编排 | [docs/03-ai/agent-orchestration.md](docs/03-ai/agent-orchestration.md) |
-| 数据设计 | [docs/04-data/data-design.md](docs/04-data/data-design.md) |
-| API/SSE | [docs/05-engineering/api-conventions.md](docs/05-engineering/api-conventions.md) |
-| 测试与安全 | [docs/06-quality/testing-and-evaluation.md](docs/06-quality/testing-and-evaluation.md) |
-| ADR | [docs/09-decisions/README.md](docs/09-decisions/README.md) |
-| 路线图 | [docs/10-planning/roadmap.md](docs/10-planning/roadmap.md) |
+| 产品定义                        | [docs/01-product/product-definition.md](docs/01-product/product-definition.md)                                                         |
+| 学生 UI 规范                    | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md)                                                               |
+| 系统架构现状                    | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md)                                                     |
+| Gateway 与多入口                | [docs/02-architecture/02-Gateway与多入口.md](docs/02-architecture/02-Gateway与多入口.md)                                               |
+| 第二代架构提案                  | [docs/02-architecture/03-第二代架构提案.md](docs/02-architecture/03-第二代架构提案.md)                                                 |
+| Agent 编排边界                  | [docs/03-ai/01-Agent编排边界.md](docs/03-ai/01-Agent编排边界.md)                                                                       |
+| 架构研究索引                    | [docs/research/00-研究说明.md](docs/research/00-研究说明.md)                                                                           |
+| 数据设计                        | [docs/04-data/data-design.md](docs/04-data/data-design.md)                                                                             |
+| API/SSE                         | [docs/05-engineering/api-conventions.md](docs/05-engineering/api-conventions.md)                                                       |
+| 测试与安全                      | [docs/06-quality/testing-and-evaluation.md](docs/06-quality/testing-and-evaluation.md)                                                 |
+| ADR                             | [docs/09-decisions/README.md](docs/09-decisions/README.md)                                                                             |
+| 路线图                          | [docs/10-planning/roadmap.md](docs/10-planning/roadmap.md)                                                                             |
 
 ## 协作规则
 
@@ -269,4 +303,3 @@ stateDiagram-v2
 5. 新能力不能用 Fixture 或 UI 文案伪装为已经接通。
 
 首次参与开发请阅读 [团队协作指南](docs/08-collaboration/team-guide.md)。
-

@@ -42,8 +42,24 @@ export function createAnonymousIdentity(): AnonymousIdentity {
   return { token, studentId: deriveAnonymousStudentId(token) };
 }
 
+/** 仅区分可轮换的浏览器匿名身份；local/registered 身份不得因尚无课程被替换。 */
+export function isEphemeralAnonymousIdentity(
+  identity: AnonymousIdentity,
+): boolean {
+  return identity.token.length > 0 && identity.studentId.startsWith('anon:v1:');
+}
+
 /** Server Component只能调用读取函数；缺失或畸形Cookie不会被静默替换。 */
 export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
+  if (
+    process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
+    (process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner')
+  ) {
+    return {
+      token: '',
+      studentId: process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner',
+    };
+  }
   const value = (await cookies()).get(ANONYMOUS_IDENTITY_COOKIE)?.value;
   if (!value) return null;
   const token = parseAnonymousToken(value);

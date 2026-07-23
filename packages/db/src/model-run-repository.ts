@@ -107,7 +107,7 @@ export class ModelRunLifecycleError extends Error {
 function toSnapshot(row: typeof modelRuns.$inferSelect): ModelRunSnapshot {
   return {
     id: row.id,
-    sessionId: row.sessionId,
+    sessionId: row.sessionId as string,
     operationId: row.operationId,
     operationKind: row.operationKind as 'teaching_turn',
     assistantMessageId: row.assistantMessageId as string,

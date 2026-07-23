@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -8,6 +8,8 @@ import {
   DrizzlePlatformConversationRepository,
   PlatformConversationOwnershipError,
 } from './conversation-platform-repository';
+import { DrizzleAssetRepository } from './asset-repository';
+import { DrizzlePlatformSourceRepository } from './platform-source-repository';
 import {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,
@@ -48,7 +50,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table lesson_sessions, conversation_messages, agent_operations, conversations, spaces
+      truncate table lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
       restart identity cascade
     `);
   });
@@ -96,6 +98,46 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     );
   });
 
+  it('历史消息limit返回最新窗口且保持正序，当前Turn不会被长会话挤出', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'latest-window-user',
+      spaceKind: 'notebook',
+      spaceTitle: '长会话',
+    });
+    for (let index = 1; index <= 4; index += 1) {
+      const turn = await turns.createOrGetTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        clientMessageId: `latest-${index}`,
+        text: `消息${index}`,
+        now: new Date(`2026-07-16T06:0${index}:00.000Z`),
+      });
+      await turns.settleTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        turnId: turn.turnId,
+        status: 'completed',
+        content: `回答${index}`,
+        now: new Date(`2026-07-16T06:0${index}:01.000Z`),
+      });
+    }
+
+    expect(
+      await turns.listMessages({
+        conversationId: conversation.id,
+        trustedSubjectId: 'latest-window-user',
+        limit: 2,
+      }),
+    ).toMatchObject([
+      { role: 'user', content: '消息4' },
+      { role: 'assistant', content: '回答4' },
+    ]);
+  });
+
   it('拒绝跨主体写入和读取', async () => {
     const repository = new DrizzlePlatformConversationRepository(getDatabase());
     const conversation = await repository.create({
@@ -126,8 +168,8 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     const turns = new DrizzlePlatformTurnRepository(getDatabase());
     const conversation = await conversations.create({
       ownerSubjectId: 'general-turn-user',
-      spaceKind: 'personal',
-      spaceTitle: '通用对话',
+      spaceKind: 'notebook',
+      spaceTitle: '未命名笔记本',
     });
     const started = await turns.createOrGetTurn({
       conversationId: conversation.id,
@@ -161,9 +203,139 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         content: '当然，我们先明确目标。',
       },
     });
+    const [notebook] = await getDatabase()
+      .select({ title: schema.spaces.title, kind: schema.spaces.kind })
+      .from(schema.spaces)
+      .where(eq(schema.spaces.id, conversation.spaceId))
+      .limit(1);
+    expect(notebook).toEqual({
+      title: '帮我分析一个想法',
+      kind: 'notebook',
+    });
     expect(await getDatabase().select().from(schema.lessonSessions)).toEqual(
       [],
     );
+  });
+
+  it('网页来源按多轮读取顺序冻结编号，消息只持久化正文实际引用子集', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const assets = new DrizzleAssetRepository(getDatabase());
+    const sources = new DrizzlePlatformSourceRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'web-source-user',
+      spaceKind: 'personal',
+      spaceTitle: '网页研究',
+    });
+    const started = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      clientMessageId: 'web-research-1',
+      text: '比较两个网页的结论',
+    });
+    const firstAsset = await assets.createUploaded({
+      ownerSubjectId: 'web-source-user',
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: '网页甲',
+      mimeType: 'text/plain',
+      byteSize: 6,
+      contentHash: 'a'.repeat(64),
+      storageKey: 'tests/web-source-a.txt',
+      extractedText: '甲正文',
+      outcome: { status: 'ready' },
+    });
+    const secondAsset = await assets.createUploaded({
+      ownerSubjectId: 'web-source-user',
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: '网页乙',
+      mimeType: 'text/plain',
+      byteSize: 6,
+      contentHash: 'b'.repeat(64),
+      storageKey: 'tests/web-source-b.txt',
+      extractedText: '乙正文',
+      outcome: { status: 'ready' },
+    });
+    if (!firstAsset.version || !secondAsset.version) {
+      throw new Error('测试网页Asset版本创建失败');
+    }
+    const first = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: firstAsset.descriptor.assetId,
+      assetVersionId: firstAsset.version.versionId,
+      label: '网页甲',
+      url: 'https://example.com/a#section',
+    });
+    const second = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: secondAsset.descriptor.assetId,
+      assetVersionId: secondAsset.version.versionId,
+      label: '网页乙',
+      url: 'https://example.com/b',
+    });
+    const replayedFirst = await sources.createOrGetWebSource({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      operationId: started.turnId,
+      assetId: firstAsset.descriptor.assetId,
+      assetVersionId: firstAsset.version.versionId,
+      label: '网页甲',
+      url: 'https://example.com/a',
+    });
+    expect([first.ordinal, second.ordinal, replayedFirst.ordinal]).toEqual([
+      1, 2, 1,
+    ]);
+
+    const settledWithCitations = await turns.settleTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: 'web-source-user',
+      turnId: started.turnId,
+      status: 'completed',
+      content: '最终只采用网页乙的结论 [2]。',
+      sourceMarkers: [2],
+    });
+    expect(settledWithCitations.settledCitations).toMatchObject([
+      {
+        assistantMessageId: started.assistantMessage.id,
+        ordinal: 2,
+        assetId: secondAsset.descriptor.assetId,
+        assetVersionId: secondAsset.version.versionId,
+        label: '网页乙',
+        url: 'https://example.com/b',
+      },
+    ]);
+    expect(
+      await sources.listOwnedConversationCitations({
+        conversationId: conversation.id,
+        trustedSubjectId: 'web-source-user',
+      }),
+    ).toMatchObject([
+      {
+        assistantMessageId: started.assistantMessage.id,
+        ordinal: 2,
+        assetId: secondAsset.descriptor.assetId,
+        assetVersionId: secondAsset.version.versionId,
+        label: '网页乙',
+        url: 'https://example.com/b',
+      },
+    ]);
+    expect(
+      await assets.listOwnedSpace({
+        ownerSubjectId: 'web-source-user',
+        spaceId: conversation.spaceId,
+      }),
+    ).toHaveLength(2);
   });
 
   it('拒绝相同clientMessageId绑定不同通用消息内容', async () => {

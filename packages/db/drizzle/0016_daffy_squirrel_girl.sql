@@ -1,0 +1,2 @@
+ALTER TABLE "artifact_versions" ADD COLUMN "generated_by" text;--> statement-breakpoint
+ALTER TABLE "artifact_versions" ADD CONSTRAINT "artifact_versions_generated_by_check" CHECK ("artifact_versions"."generated_by" is null or char_length("artifact_versions"."generated_by") between 1 and 128);

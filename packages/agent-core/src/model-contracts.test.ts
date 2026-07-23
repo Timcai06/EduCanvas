@@ -6,6 +6,7 @@ import {
   normalizeModelGatewayError,
   providerCallMetadataSchema,
   streamingTaskAliasSchema,
+  speechTaskAliasSchema,
   structuredTaskAliasSchema,
   taskAliasSchema,
   turnModelEventSchema,
@@ -40,6 +41,10 @@ describe('agent model contracts', () => {
     );
     expect(taskAliasSchema.parse('artifact.generate')).toBe(
       'artifact.generate',
+    );
+    expect(taskAliasSchema.parse('speech.generate')).toBe('speech.generate');
+    expect(speechTaskAliasSchema.parse('speech.generate')).toBe(
+      'speech.generate',
     );
     expect(modelAliasSchema.parse('primary')).toBe('primary');
     expect(structuredTaskAliasSchema.safeParse('agent.turn').success).toBe(
@@ -85,17 +90,6 @@ describe('agent model contracts', () => {
       event: { type: 'provider.delta', phase: 'answer', delta: 'x' },
     },
     {
-      label: 'synthesis工具调用',
-      event: {
-        type: 'tool_call',
-        phase: 'synthesis',
-        callId: 'call-1',
-        tool: 'inspectAsset',
-        argumentsDelta: '{}',
-        done: true,
-      },
-    },
-    {
       label: '供应商私有字段',
       event: {
         type: 'completed',
@@ -114,6 +108,18 @@ describe('agent model contracts', () => {
     },
   ])('拒绝畸形或泄漏供应商细节的事件：$label', ({ event }) => {
     expect(turnModelEventSchema.safeParse(event).success).toBe(false);
+  });
+
+  it('tool_call 允许任意 phase:是否合法由请求的 tools 列表在运行时裁决(M3)', () => {
+    const event = {
+      type: 'tool_call',
+      phase: 'synthesis',
+      callId: 'call-1',
+      tool: 'inspectAsset',
+      argumentsDelta: '{}',
+      done: true,
+    };
+    expect(turnModelEventSchema.safeParse(event).success).toBe(true);
   });
 
   it('稳定映射显式错误、Abort和未知异常且不泄漏异常文本', () => {

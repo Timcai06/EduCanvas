@@ -35,7 +35,7 @@ async function startLearning(page: Page) {
   await mockUnavailableTurn(page);
   await page.goto('/learn');
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('请打开互动演示，让我动手试试。');
@@ -65,7 +65,9 @@ async function ensureConversationUi(page: Page) {
   if (await progressTrigger.isVisible()) return;
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('继续学习并查看进度。');
-  await composer.press('Enter');
+  const send = page.getByRole('button', { name: '发送' });
+  await expect(send).toBeEnabled();
+  await send.click();
   await expect(aiUnavailableMessage(page)).toBeVisible();
 }
 
@@ -169,6 +171,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
     const encoder = new TextEncoder();
     const testWindow = window as typeof window & {
       __educanvasTurnBodies?: unknown[];
+      __educanvasReleaseTurn?: () => void;
     };
     testWindow.__educanvasTurnBodies = [];
 
@@ -215,16 +218,28 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               }),
             );
           }, 100);
-          window.setTimeout(() => {
+          testWindow.__educanvasReleaseTurn = () => {
             controller.enqueue(
               frame('message.delta', {
                 turnId,
                 messageId: assistantMessageId,
-                delta: '再比较胡须。',
+                delta: '再比较胡须 [1]。',
               }),
             );
-          }, 220);
-          window.setTimeout(() => {
+            controller.enqueue(
+              frame('message.citation', {
+                turnId,
+                messageId: assistantMessageId,
+                citationId: 'citation-fixture-1',
+                marker: 1,
+                sourceId: 'source-fixture-1',
+                documentId: 'document-fixture-1',
+                chunkId: 'chunk-fixture-1',
+                label: '课程讲义 · 第3页',
+                pageStart: 3,
+                pageEnd: 3,
+              }),
+            );
             controller.enqueue(
               frame('turn.completed', {
                 turnId,
@@ -232,7 +247,7 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
               }),
             );
             controller.close();
-          }, 320);
+          };
         },
       });
       return new Response(stream, {
@@ -249,9 +264,25 @@ test('浏览器只消费真实 SSE delta，并按生命周期有限播报', asyn
   await expect(page.getByText('先观察耳朵，', { exact: true })).toBeVisible();
   const lifecycleAnnouncement = page.locator('p[aria-live="polite"]');
   await expect(lifecycleAnnouncement).not.toContainText('先观察耳朵');
+  await page.evaluate(() => {
+    (
+      window as typeof window & { __educanvasReleaseTurn?: () => void }
+    ).__educanvasReleaseTurn?.();
+  });
   await expect(
-    page.getByText('先观察耳朵，再比较胡须。', { exact: true }),
+    page.getByText('先观察耳朵，再比较胡须 ', { exact: false }),
   ).toBeVisible();
+  const citationLink = page.getByRole('link', { name: '1' });
+  await expect(citationLink).toHaveAttribute(
+    'href',
+    '#cite-assistant-fixture-complete-1',
+  );
+  const citationBadge = page.locator(
+    '[id="cite-assistant-fixture-complete-1"]',
+  );
+  await expect(citationBadge).toContainText('课程讲义 · 第3页');
+  await citationLink.click();
+  await expect(citationBadge).toBeInViewport();
   await expect(lifecycleAnnouncement).toHaveText('AI 老师回答完成');
 
   const bodies = await page.evaluate(
@@ -395,7 +426,7 @@ test('S0 只显示品牌、问候与 Composer，不暗示学习状态或产物',
     page.getByRole('banner').getByText('EduCanvas', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   await expect(
     page.getByRole('textbox', { name: '向 EduCanvas 提问' }),
@@ -427,7 +458,7 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
 
   await page.getByRole('button', { name: '开始新学习' }).click();
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '展开学习记录' }).click();
   const currentNewSession = page.locator('[aria-current="page"]');
@@ -441,7 +472,7 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
   await expect(archivedSession).toBeVisible();
   await archivedSession.click();
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '展开学习记录' }).click();
   await expect(
@@ -565,7 +596,7 @@ test('320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/learn');
   await expect(
-    page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+    page.getByRole('heading', { name: '今天想学点什么？' }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -673,7 +704,7 @@ test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
     await mockUnavailableTurn(forgedPage);
     await forgedPage.goto('/learn');
     await expect(
-      forgedPage.getByRole('heading', { name: '你好，今天想探索什么？' }),
+      forgedPage.getByRole('heading', { name: '今天想学点什么？' }),
     ).toBeVisible();
     await expect(canvasRegion(forgedPage)).toHaveCount(0);
     const forgedComposer = forgedPage.getByRole('textbox', {

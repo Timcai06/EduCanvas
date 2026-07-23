@@ -11,6 +11,7 @@ import {
 } from './anonymous-data-lifecycle';
 import {
   CitationCandidateInvalidError,
+  CitationConflictError,
   DrizzleKnowledgeRetrievalRepository,
   KnowledgeSourceScopeError,
 } from './knowledge-retrieval-repository';
@@ -513,6 +514,83 @@ describeWithDatabase('K1审核资料、FTS与服务端引用', () => {
         candidateIds: [resultA.candidates[0]!.candidateId],
       }),
     ).resolves.toMatchObject({ replayed: true });
+  });
+
+  it('实际引用子集保留正文稀疏编号，重放时同时校验候选与ordinal', async () => {
+    const ready = await createReadySource({
+      courseSlug: 'citation-subset-course',
+      sourceKey: 'citation-subset-source',
+      title: '引用子集教材',
+      documentLabel: 'citation-subset-v1',
+      chunks: [
+        { content: '引用 证据 第一段', pageStart: 1, pageEnd: 1 },
+        { content: '引用 证据 第二段', pageStart: 2, pageEnd: 2 },
+      ],
+    });
+    const studentId = anonymousSubject('7');
+    const sessionId = await seedSession({
+      studentId,
+      courseSlug: 'citation-subset-course',
+      suffix: 'citation-subset',
+    });
+    const turn = await seedTurn(sessionId, 'citation-subset');
+    const retrieval = new DrizzleKnowledgeRetrievalRepository(getDatabase());
+    await retrieval.setSessionSourceBinding({
+      trustedStudentId: studentId,
+      sessionId,
+      sourceId: ready.source.id,
+      enabled: true,
+      mutationId: 'bind-citation-subset',
+    });
+    await retrieval.freezeTurnSourceVersions({
+      trustedStudentId: studentId,
+      sessionId,
+      turnId: turn.turnId,
+    });
+    const result = await retrieval.retrieveFts({
+      trustedStudentId: studentId,
+      sessionId,
+      turnId: turn.turnId,
+      query: '引用 证据',
+      limit: 10,
+      traceId: 'trace-citation-subset',
+    });
+    expect(result.candidates).toHaveLength(2);
+
+    const candidateId = result.candidates[1]!.candidateId;
+    await expect(
+      retrieval.persistMessageCitations({
+        trustedStudentId: studentId,
+        sessionId,
+        turnId: turn.turnId,
+        assistantMessageId: turn.assistantMessageId,
+        candidateIds: [candidateId],
+        markers: [2],
+      }),
+    ).resolves.toMatchObject({
+      replayed: false,
+      citations: [{ candidateId, ordinal: 2 }],
+    });
+    await expect(
+      retrieval.persistMessageCitations({
+        trustedStudentId: studentId,
+        sessionId,
+        turnId: turn.turnId,
+        assistantMessageId: turn.assistantMessageId,
+        candidateIds: [candidateId],
+        markers: [2],
+      }),
+    ).resolves.toMatchObject({ replayed: true });
+    await expect(
+      retrieval.persistMessageCitations({
+        trustedStudentId: studentId,
+        sessionId,
+        turnId: turn.turnId,
+        assistantMessageId: turn.assistantMessageId,
+        candidateIds: [candidateId],
+        markers: [1],
+      }),
+    ).rejects.toBeInstanceOf(CitationConflictError);
   });
 
   it('换版后旧Turn保持冻结版本，新Turn只检索新版本，历史引用返回tombstone投影', async () => {

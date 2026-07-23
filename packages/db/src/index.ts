@@ -28,12 +28,46 @@ export {
   PlatformTurnOwnershipError,
   type PlatformTurnMessageSnapshot,
   type PlatformTurnSnapshot,
+  type PlatformSettledCitationSnapshot,
+  type PlatformTurnSettlementSnapshot,
   type PlatformTurnTerminalStatus,
 } from './platform-turn-repository';
+export {
+  DrizzlePlatformSourceRepository,
+  PlatformSourceOwnershipError,
+  type PlatformMessageCitationSnapshot,
+  type PlatformOperationSourceSnapshot,
+} from './platform-source-repository';
+export {
+  DrizzleGatewayIdentityRepository,
+  DrizzleGatewayDirectoryRepository,
+  DrizzleGatewayChannelBindingRepository,
+  DrizzleGatewayDeliveryRepository,
+  DrizzleGatewayNodeRepository,
+  DrizzleGatewayApprovalRepository,
+  DrizzleGatewayOperationStore,
+  DrizzleGatewayRouteResolver,
+  GatewayPersistenceError,
+  ensurePersonalIdentity,
+  type GatewayIdentitySnapshot,
+  type GatewayConversationDirectoryEntry,
+  type GatewayChannelPrivateRoute,
+  type GatewayPendingApprovalSnapshot,
+  type GatewayStoredOperationSnapshot,
+  type GatewayInvokableNodeCapability,
+  type GatewayNodeInvocationOutcome,
+} from './gateway-repository';
+export {
+  DrizzleGatewayHandoffRepository,
+  type GatewayHandoffConsumeResult,
+  type GatewayHandoffRejectionReason,
+} from './gateway-handoff-repository';
+export { DrizzleGatewayConnectionRepository } from './gateway-connection-repository';
 export {
   ARTIFACT_GENERATE_TASK,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
+  ArtifactRevisionConflictError,
   ArtifactVersionConflictError,
   DrizzlePlatformArtifactRepository,
   type ArtifactJobStatus,
@@ -68,6 +102,7 @@ export {
   type LearningSessionScope,
   type LearningSessionSummary,
   type OwnedLearningSession,
+  type OwnedLearningGatewayTarget,
 } from './learning-session-repository';
 export {
   ChatLifecycleError,
@@ -90,6 +125,12 @@ export {
   type TeachingTurnSnapshot,
 } from './chat-repository';
 export {
+  AgentModelRunConflictError,
+  AgentModelRunLifecycleError,
+  AgentModelRunOwnershipError,
+  DrizzleAgentModelRunRepository,
+} from './agent-model-run-repository';
+export {
   DrizzleModelRunRepository,
   ModelRunConflictError,
   ModelRunLifecycleError,
@@ -106,7 +147,9 @@ export {
   DrizzleTeachingTurnLedger,
   TurnLedgerInvariantError,
   TurnRateLimitError,
+  type BeginTeachingApplicationTurnInput,
   type BeginTeachingTurnInput,
+  type TeachingApplicationTurnLedgerSnapshot,
   type TeachingTurnLedgerSnapshot,
 } from './turn-ledger-repository';
 export {
@@ -119,6 +162,11 @@ export {
   type PreparedTurnContextMaterial,
   type TurnContextMaterial,
 } from './turn-context';
+export {
+  AgentTurnContextLifecycleError,
+  AgentTurnContextOwnershipError,
+  DrizzleAgentTurnContextRepository,
+} from './agent-turn-context-repository';
 export {
   DrizzleToolCallRepository,
   MAX_TOOL_AUDIT_VALUE_BYTES,
@@ -133,6 +181,58 @@ export {
   type ToolEffect,
   type ToolExposure,
 } from './tool-call-repository';
+export {
+  AgentToolCallConflictError,
+  AgentToolCallLifecycleError,
+  AgentToolCallOwnershipError,
+  DrizzleAgentToolCallRepository,
+} from './agent-tool-call-repository';
+export {
+  DrizzleToolEffectRepository,
+  ToolEffectConflictError,
+  ToolEffectLifecycleError,
+  ToolEffectOwnershipError,
+} from './tool-effect-repository';
+export {
+  DrizzleToolEffectReconciliationRepository,
+  ToolEffectReconciliationConflictError,
+  ToolEffectReconciliationLifecycleError,
+  ToolEffectReconciliationOwnershipError,
+} from './tool-effect-reconciliation-repository';
+export {
+  DrizzleOperationContinuationRecoveryRepository,
+  DrizzleOperationContinuationRepository,
+  MAX_OPERATION_CONTINUATION_RECOVERY_BATCH,
+  OperationContinuationConflictError,
+  OperationContinuationLifecycleError,
+  OperationContinuationOwnershipError,
+  OperationContinuationRecoveryError,
+  type OperationContinuationExecutionClaim,
+  type OperationContinuationExecutionScope,
+  type OperationContinuationRecoveryHealth,
+} from './operation-continuation-repository';
+export {
+  DrizzleToolApprovalIntentRepository,
+  MAX_TOOL_APPROVAL_INTENT_RECONCILIATION_BATCH,
+  ToolApprovalIntentConflictError,
+  ToolApprovalIntentLifecycleError,
+  ToolApprovalIntentOwnershipError,
+} from './tool-approval-intent-repository';
+export {
+  DrizzleMcpIntentRepository,
+  McpIntentConflictError,
+  McpIntentLifecycleError,
+  McpIntentOwnershipError,
+  type McpDurableIntentRecord,
+  type McpIntentMetadataRecord,
+  type McpSealedIntentRecord,
+} from './mcp-intent-repository';
+export {
+  DrizzleMcpIntentReconciler,
+  MAX_MCP_INTENT_RECONCILIATION_BATCH,
+} from './mcp-intent-reconciler';
+export { mcpToolIntents } from './schema/mcp-intent';
+export { toolEffectReconciliations } from './schema/tool-effect-reconciliation';
 export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,

@@ -11,6 +11,7 @@ import {
 } from './anonymous-data-lifecycle';
 import { ensurePreparedArtifact } from './artifact-repository';
 import { getDb } from './client';
+import { ensurePersonalIdentity } from './gateway-repository';
 import { isUuid } from './internal/identifiers';
 import {
   canvasArtifacts,
@@ -18,6 +19,7 @@ import {
   conversations,
   lessonSessions,
   masteryStates,
+  notebookMemberships,
   spaces,
 } from './schema';
 
@@ -69,6 +71,11 @@ export interface OwnedLearningSession {
   sessionId: string;
   studentId: string;
   knowledgeNodeId: string;
+}
+
+export interface OwnedLearningGatewayTarget extends OwnedLearningSession {
+  conversationId: string;
+  notebookId: string;
 }
 
 export interface LearningSessionSummary extends OwnedLearningSession {
@@ -185,6 +192,20 @@ async function insertSession(
     })
     .returning({ id: spaces.id });
   if (!space) throw new Error('学习Space写入失败');
+  const identity = await ensurePersonalIdentity(transaction, {
+    userId: scope.studentId,
+    kind: isAnonymousSyntheticSubjectId(scope.studentId)
+      ? 'anonymous_compat'
+      : 'registered',
+    now,
+  });
+  await transaction.insert(notebookMemberships).values({
+    notebookId: space.id,
+    userId: identity.userId,
+    role: 'owner',
+    grantedByUserId: identity.userId,
+    grantedAt: now,
+  });
   const [conversation] = await transaction
     .insert(conversations)
     .values({
@@ -315,6 +336,43 @@ export class DrizzleLearningSessionRepository {
       .limit(1);
     if (!row || !row.knowledgeNodeId) return null;
     return { ...row, knowledgeNodeId: row.knowledgeNodeId };
+  }
+
+  async getCurrentOwnedGatewayTarget(
+    scope: LearningSessionScope,
+  ): Promise<OwnedLearningGatewayTarget | null> {
+    const [row] = await this.database
+      .select({
+        sessionId: lessonSessions.id,
+        studentId: lessonSessions.studentId,
+        knowledgeNodeId: lessonSessions.knowledgeNodeId,
+        conversationId: lessonSessions.conversationId,
+        notebookId: conversations.spaceId,
+      })
+      .from(lessonSessions)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, lessonSessions.conversationId),
+      )
+      .where(
+        and(
+          eq(lessonSessions.studentId, scope.studentId),
+          eq(lessonSessions.gradeBand, scope.gradeBand),
+          eq(lessonSessions.courseSlug, scope.courseSlug),
+          eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
+          eq(lessonSessions.status, 'active'),
+          eq(conversations.status, 'active'),
+          gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
+        ),
+      )
+      .orderBy(desc(lessonSessions.lastActivityAt), desc(lessonSessions.id))
+      .limit(1);
+    if (!row || !row.knowledgeNodeId || !row.conversationId) return null;
+    return {
+      ...row,
+      knowledgeNodeId: row.knowledgeNodeId,
+      conversationId: row.conversationId,
+    };
   }
 
   async getPageSnapshot(

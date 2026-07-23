@@ -4,36 +4,39 @@
 
 ## 文档地图
 
-| 目录               | 记录内容                                            | 主要读者         |
-| ------------------ | --------------------------------------------------- | ---------------- |
-| `00-overview`      | 赛题、目标、范围、术语；官方原件归档在`references/` | 所有人           |
-| `00-overview/snapshots` | 已注明日期、停止维护的阶段性长报告              | 历史核对         |
-| `01-product`       | 产品形态、用户流程、功能边界                        | 产品、设计、研发 |
-| `02-architecture`  | 总体架构、Canvas、GSAP协议                          | 前后端、架构     |
-| `03-ai`            | 智能体、RAG、Embedding、模型路由                    | AI、后端         |
-| `04-data`          | PostgreSQL、学习数据、可信事件契约和掌握度事实源    | 后端、数据       |
-| `05-engineering`   | 前端、后端和API工程规范                             | 研发             |
-| `06-quality`       | 测试、评测、安全和隐私                              | 研发、测试       |
-| `07-operations`    | 部署、扩容、监控和故障处理                          | 后端、运维       |
-| `08-collaboration` | 开发和文档协作机制                                  | 所有人           |
-| `09-decisions`     | 已确认的架构决策ADR                                 | 所有人           |
-| `10-planning`      | 跨阶段路线图、里程碑和长期交付边界                  | 项目负责人       |
-| `plan`             | 当前阶段的短期执行计划、验收证据和收尾记录          | 计划负责人、研发 |
-| `templates`        | 新文档模板                                          | 所有人           |
+| 目录                    | 记录内容                                            | 主要读者         |
+| ----------------------- | --------------------------------------------------- | ---------------- |
+| `00-overview`           | 赛题、目标、范围、术语；官方原件归档在`references/` | 所有人           |
+| `00-overview/snapshots` | 已注明日期、停止维护的项目阶段快照                  | 历史核对         |
+| `01-product`            | 产品形态、用户流程、功能边界                        | 产品、设计、研发 |
+| `02-architecture`       | Gateway、总体架构、Canvas、GSAP协议                 | 前后端、架构     |
+| `03-ai`                 | 智能体、RAG、Embedding、模型路由                    | AI、后端         |
+| `04-data`               | PostgreSQL、学习数据、可信事件契约和掌握度事实源    | 后端、数据       |
+| `05-engineering`        | 前端、后端和API工程规范                             | 研发             |
+| `06-quality`            | 测试、评测、安全和隐私                              | 研发、测试       |
+| `07-operations`         | 部署、扩容、监控和故障处理                          | 后端、运维       |
+| `08-collaboration`      | 开发和文档协作机制                                  | 所有人           |
+| `09-decisions`          | 已确认的架构决策ADR                                 | 所有人           |
+| `10-planning`           | 跨阶段路线图、里程碑和长期交付边界                  | 项目负责人       |
+| `plan`                  | 当前阶段的短期执行计划、验收证据和收尾记录          | 计划负责人、研发 |
+| `research`              | 源码研究、能力盘点、实验与待决假设                  | 架构、研发       |
+| `templates`             | 新文档模板                                          | 所有人           |
 
 ## 已接受的架构方向
 
-- EduCanvas是Chat-first全模态AI平台，K12 AI教师是首个可插拔垂直Agent，不是平台本体；
+- EduCanvas是以教育能力为核心的通用个人Agent平台；Agent是产品主体，Web/TUI/渠道是交互表面；
+- EduCanvas Gateway统一承载身份、配对、Notebook路由、能力协商、审批和事件分发；它不同于模型Provider Gateway；
 - 通用Chat、Assets、Agent Runtime、Artifact Runtime和Studio不得依赖教学状态机、掌握度或课程概念；
 - Web端采用Next.js、React和TypeScript；
 - UI使用可自由修改的Headless组件与自有设计系统；
 - 动画统一使用GSAP；
 - Canvas使用受控组件协议，不直接执行模型生成的任意代码；
-- 核心后端与Next.js解耦；
+- Web只作为第一方客户端和迁移期BFF，长期控制平面与Agent Runtime不依赖Next.js；
 - PostgreSQL是业务事实数据库，pgvector承载向量检索；
-- K12 Agent的教学流程由确定性状态机约束，模型负责表达和受控工具调用；
-- 状态机、掌握度、可信领域事件和外部Port集中在`packages/teaching-core`，不依赖Web、数据库或模型供应商；
-- 服务端教学用例集中在`packages/teaching-runtime`，由Web组合根注入Drizzle等适配器；
+- 所有普通对话只使用一个通用 `AgentLoopEngine`；K12通过Profile、Skills、Tools和可信领域服务接入；
+- 五阶段状态机只约束显式结构化课程，不是普通K12问答的前置条件；
+- 状态机、掌握度与可信学习事件集中在`packages/teaching-core`，不依赖Web、数据库或模型供应商；
+- `packages/teaching-runtime`只保留K12 Profile、Workflow和领域应用能力，不再拥有独立模型循环；
 - Canvas交互事件必须经服务端验证后才能提升为影响掌握度的可信领域事件；
 - Embedding空间必须记录模型、版本、维度、指令和切块版本。
 
@@ -41,12 +44,13 @@
 
 ## 当前实现边界
 
-- 已实现：通用`agent-core`模型/流事件/Gateway契约基座、模块化monorepo骨架、两种可判分Canvas Artifact与一个render-only `pipeline_flow`、静态Renderer注册表和AnimationShell、匿名Canvas Server Action、确定性判分、教学状态机、可信学习投影/回放/下一节点推荐、阶段一Drizzle事务适配器、Chat-first学生端布局与深色Halo、EduCanvas SSE对话UI、消息/模型/工具/安全账本、两阶段Tool Loop、取消与刷新恢复、状态感知Tool Executor，以及可配置的原生OpenAI-compatible SSE Provider Adapter；
+- 已实现：严格 `gateway.v1`、Gateway HTTP组合根、个人Agent与Notebook Membership、持久Operation/恢复/审批、唯一 `AgentLoopEngine`、Web兼容接入、TUI、Telegram私聊Adapter、可选只读Capability Node；
+- 保持可用：真实Provider SSE、账本/取消/刷新恢复、服务端判分、可信学习投影、Notebook聚合、持久Artifact任务、Studio、导图/Slides/闪卡/音频和Canvas共创；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
-- 已接通：通用PDF/图片Asset上传、不可变版本和消息Part；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
-- 已确认的架构缺口：模型输入仍是纯文本；通用Space/Conversation虽已落库但K12账本迁移尚未完成；上传Asset与可检索Source未统一；中文`simple` FTS、实际引用证明、附件重试和对象删除仍需修复；
-- 尚未实现：通用Agent Runtime插件装配、原生图片/音视频Provider输入、受控Artifact提议/确认/独立生成与真实Studio列表、完整教学状态事件接线、正式用户认证、真实Provider live smoke及完整整节课E2E；
-- 当前证据只支持本地开发基线；在C1、完整状态事件、受控live smoke和整节课E2E完成前，不宣称已进入shared dev、staging或production；
+- 已接通：通用PDF/图片/Link Asset、不可变版本和消息Part；通用网页实际读取快照、稳定编号、引用子集持久化/SSE/历史恢复/原网址导航；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
+- 已确认的剩余缺口：原生图片/音视频模型输入、上传Asset统一摄取、Context摘要、长期学习者记忆、正式IdP、对象删除闭环和production治理；
+- Telegram只有官方协议Fixture，没有用户凭据下的live smoke；Node只有L0/L1白名单能力，没有高风险设备控制；
+- 当前证据支持本地模块化单体基线；正式认证、外部观测/SLO、受控live smoke、教学质量评测和production hardening完成前，不宣称production就绪；
 - `draft`文档中的独立服务和生产基础设施是演进目标，不能作为当前部署事实。
 
 ## 文档状态
@@ -62,13 +66,22 @@
 
 1. 功能PR修改了行为，就更新对应功能文档；
 2. 接口、数据表或事件结构变化，就更新工程或数据文档；
-3. 改变重大技术选择，先新增ADR；
-4. 文档只写当前事实，历史争论放入ADR；
+3. 改变重大技术选择，先新增或替换当前ADR；
+4. 文档只写当前事实，关键历史压缩进入`09-decisions/decision-history.md`；
 5. 未确定内容明确写入“开放问题”，不能伪装成结论。
+
+## 命名与事实分层
+
+- 一个主题目录内需要阅读顺序的文档使用`数字-中文主题.md`，例如`01-系统架构现状.md`；标准、产品名和代码术语可以保留英文，如`02-Gateway与多入口.md`；
+- 计划文件使用`YYYY-MM-中文主题.md`，日期表达计划批次，中文主题表达目标；
+- `accepted` canonical 文档只记录稳定边界和已验证现状；
+- `proposed` 架构文档记录目标、开放问题和决策门，不写成已经实现；
+- `research` 记录事实、推断、实验和反例，不替代 ADR；
+- `00-overview/snapshots` 只保存停止维护的项目阶段快照，进行中的架构研究放入`research/`。
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区。当前平台主线与K12垂直线分别维护，但共享同一canonical事实源。两者不能互相替代：
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first 与第二代架构研究已经结档；当前 active 计划按已接受的 ADR-0020 执行生产架构迁移。三类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；
@@ -79,4 +92,3 @@
 计划目录的命名、状态和归档流程见[`plan/README.md`](plan/README.md)。
 
 首次参与开发请先阅读[`08-collaboration/team-guide.md`](08-collaboration/team-guide.md)；本地启动优先使用仓库根目录`Makefile`提供的`make setup`、`make dev`和`make check`入口。
-

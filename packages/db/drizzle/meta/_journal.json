@@ -113,6 +113,132 @@
       "when": 1784253895529,
       "tag": "0015_public_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784295053302,
+      "tag": "0016_daffy_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784371846231,
+      "tag": "0017_new_scourge",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784374519264,
+      "tag": "0018_married_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784435237489,
+      "tag": "0019_good_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784438201375,
+      "tag": "0020_giant_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784438507375,
+      "tag": "0021_brief_red_wolf",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784597763966,
+      "tag": "0022_red_tusk",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784599238745,
+      "tag": "0023_furry_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784624695041,
+      "tag": "0024_light_viper",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784625913995,
+      "tag": "0025_perfect_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784626959598,
+      "tag": "0026_furry_the_call",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784627733407,
+      "tag": "0027_conscious_risque",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784636138243,
+      "tag": "0028_glamorous_whistler",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784645223977,
+      "tag": "0029_aspiring_ezekiel_stane",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784652363974,
+      "tag": "0030_known_post",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784694459406,
+      "tag": "0031_clean_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784731132010,
+      "tag": "0032_famous_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784736296205,
+      "tag": "0033_crazy_misty_knight",
+      "breakpoints": true
     }
   ]
 }

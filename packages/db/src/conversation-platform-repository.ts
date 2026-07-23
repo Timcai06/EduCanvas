@@ -1,6 +1,12 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from './client';
-import { conversationMessages, conversations, spaces } from './schema';
+import { ensurePersonalIdentity } from './gateway-repository';
+import {
+  conversationMessages,
+  conversations,
+  notebookMemberships,
+  spaces,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -93,6 +99,25 @@ export class DrizzlePlatformConversationRepository {
     return conversation ? toConversation(conversation) : null;
   }
 
+  /** 侧栏历史列表:按最近活动排序,只返回本主体的 active 会话公开投影。 */
+  async listOwnedRecent(input: {
+    trustedSubjectId: string;
+    limit?: number;
+  }): Promise<readonly PlatformConversationSnapshot[]> {
+    const rows = await this.database
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          eq(conversations.status, 'active'),
+        ),
+      )
+      .orderBy(desc(conversations.lastActivityAt), desc(conversations.id))
+      .limit(Math.min(input.limit ?? 30, 100));
+    return rows.map(toConversation);
+  }
+
   async create(input: {
     ownerSubjectId: string;
     spaceKind: 'personal' | 'notebook' | 'course';
@@ -113,6 +138,13 @@ export class DrizzlePlatformConversationRepository {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
+      await ensurePersonalIdentity(transaction, {
+        userId: input.ownerSubjectId,
+        kind: input.ownerSubjectId.startsWith('anon:')
+          ? 'anonymous_compat'
+          : 'registered',
+        now,
+      });
       const [space] = await transaction
         .insert(spaces)
         .values({
@@ -124,6 +156,13 @@ export class DrizzlePlatformConversationRepository {
         })
         .returning({ id: spaces.id });
       if (!space) throw new Error('Space写入失败');
+      await transaction.insert(notebookMemberships).values({
+        notebookId: space.id,
+        userId: input.ownerSubjectId,
+        role: 'owner',
+        grantedByUserId: input.ownerSubjectId,
+        grantedAt: now,
+      });
       const [conversation] = await transaction
         .insert(conversations)
         .values({

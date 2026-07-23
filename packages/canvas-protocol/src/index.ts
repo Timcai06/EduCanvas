@@ -31,3 +31,20 @@ export {
   type MindMapContent,
   type MindMapNode,
 } from './artifacts/mind-map';
+export {
+  SLIDES_CONTENT_VERSION,
+  slidesContentSchema,
+  type Slide,
+  type SlidesContent,
+} from './artifacts/slides';
+export {
+  FLASHCARDS_CONTENT_VERSION,
+  flashcardsContentSchema,
+  type Flashcard,
+  type FlashcardsContent,
+} from './artifacts/flashcards';
+export {
+  AUDIO_OVERVIEW_CONTENT_VERSION,
+  audioOverviewMetadataSchema,
+  type AudioOverviewMetadata,
+} from './artifacts/audio-overview';

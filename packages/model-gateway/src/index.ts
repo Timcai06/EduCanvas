@@ -6,6 +6,7 @@ export {
   modelGatewayConfigurationErrorCodes,
   openAICompatibleProviders,
   parseModelGatewayConfiguration,
+  turnModelGatewayRuntimes,
   type DeploymentEnvironment,
   type DisabledModelGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
@@ -13,9 +14,18 @@ export {
   type ModelGatewayConfigurationErrorCode,
   type ModelGatewayEnvironment,
   type OpenAICompatibleProvider,
+  type TurnModelGatewayRuntime,
 } from './config';
 export {
   OpenAICompatibleTurnModelGateway,
-  createTurnModelGatewayFromEnvironment,
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
+export { createTurnModelGatewayFromEnvironment } from './turn-model-gateway-factory';
+export {
+  OpenAICompatibleStructuredModelGateway,
+  type OpenAICompatibleStructuredModelGatewayOptions,
+} from './openai-compatible-structured-model-gateway';
+export {
+  OpenAICompatibleSpeechModelGateway,
+  type OpenAICompatibleSpeechModelGatewayOptions,
+} from './openai-compatible-speech-model-gateway';

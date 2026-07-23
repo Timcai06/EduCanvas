@@ -158,6 +158,9 @@ function isSafeId(value: string): boolean {
 }
 
 function toSnapshot(row: typeof toolCalls.$inferSelect): ToolCallSnapshot {
+  if (!row.sessionId || !row.turnId || !row.teachingState) {
+    throw new ToolCallLifecycleError('Tool Call不是有效teaching_turn形状');
+  }
   return {
     id: row.id,
     sessionId: row.sessionId,
@@ -296,6 +299,7 @@ export class DrizzleToolCallRepository {
       if (
         answerRun.run.operationKind !== 'teaching_turn' ||
         answerRun.run.phase !== 'answer' ||
+        !answerRun.run.sessionId ||
         !answerRun.run.turnId
       ) {
         throw new ToolCallLifecycleError(

@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@educanvas/agent-core": "workspace:*",
+    "@educanvas/agent-runtime": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/teaching-core": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }

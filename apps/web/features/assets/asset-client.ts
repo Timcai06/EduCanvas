@@ -12,7 +12,10 @@ interface AssetResponseItem {
   version: { versionId: string } | null;
 }
 
-function toItem(asset: AssetResponseItem): AssetItem {
+function toItem(
+  asset: AssetResponseItem,
+  options: { enableSpaceByDefault?: boolean } = {},
+): AssetItem {
   const versionId =
     asset.version?.versionId ?? asset.descriptor.currentVersionId;
   return {
@@ -22,7 +25,11 @@ function toItem(asset: AssetResponseItem): AssetItem {
     kind: asset.descriptor.kind,
     scope: asset.descriptor.scope,
     status: asset.descriptor.status,
-    enabled: false,
+    enabled:
+      options.enableSpaceByDefault === true &&
+      asset.descriptor.scope === 'space' &&
+      asset.descriptor.status === 'ready' &&
+      versionId !== null,
     selectable: asset.descriptor.status === 'ready' && versionId !== null,
   };
 }
@@ -44,13 +51,16 @@ async function publicError(
 
 export async function loadAssets(
   endpoint = '/api/v1/assets',
+  options: { enableSpaceByDefault?: boolean } = {},
 ): Promise<readonly AssetItem[]> {
   const response = await fetch(endpoint, { cache: 'no-store' });
   if (!response.ok)
     throw new Error(await publicError(response, '暂时无法读取资料。'));
   const body = (await response.json()) as { assets?: unknown };
   if (!Array.isArray(body.assets)) throw new Error('资料响应格式不正确。');
-  return (body.assets as AssetResponseItem[]).map(toItem);
+  return (body.assets as AssetResponseItem[]).map((asset) =>
+    toItem(asset, options),
+  );
 }
 
 export async function uploadAsset(input: {
@@ -70,5 +80,22 @@ export async function uploadAsset(input: {
   }
   const body = (await response.json()) as { asset?: AssetResponseItem };
   if (!body.asset) throw new Error('上传响应格式不正确。');
+  return toItem(body.asset);
+}
+
+export async function importLinkAsset(input: {
+  url: string;
+  endpoint?: string;
+}): Promise<AssetItem> {
+  const response = await fetch(input.endpoint ?? '/api/v1/chat/assets/link', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: input.url }),
+  });
+  if (!response.ok) {
+    throw new Error(await publicError(response, '暂时无法导入链接。'));
+  }
+  const body = (await response.json()) as { asset?: AssetResponseItem };
+  if (!body.asset) throw new Error('导入响应格式不正确。');
   return toItem(body.asset);
 }

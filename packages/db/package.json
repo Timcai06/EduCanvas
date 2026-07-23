@@ -16,12 +16,14 @@
   "dependencies": {
     "@educanvas/agent-core": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
+    "@educanvas/gateway-core": "workspace:*",
     "@educanvas/teaching-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@educanvas/teaching-runtime": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
     "@types/node": "^26.1.1",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.9.3",

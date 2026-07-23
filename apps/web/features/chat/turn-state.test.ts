@@ -55,6 +55,7 @@ describe('teaching turn browser state machine', () => {
         turnId: 'turn-1',
         messageId: 'assistant-1',
         citationId: 'citation-1',
+        marker: 3,
         sourceId: 'source-1',
         documentId: 'document-1',
         chunkId: 'chunk-1',
@@ -64,7 +65,37 @@ describe('teaching turn browser state machine', () => {
       },
     });
     expect(state.messages.at(-1)).toMatchObject({
-      citations: [{ id: 'citation-1', label: '课程讲义 · 第3页' }],
+      citations: [{ id: 'citation-1', marker: 3, label: '课程讲义 · 第3页' }],
+    });
+
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'message.citation',
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        messageId: 'assistant-1',
+        citationId: 'citation-web-1',
+        marker: 2,
+        kind: 'web',
+        assetId: 'asset-1',
+        assetVersionId: 'asset-version-1',
+        label: '研究网页',
+        url: 'https://example.com/research',
+        pageStart: null,
+        pageEnd: null,
+      },
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      citations: [
+        { id: 'citation-1', marker: 3 },
+        {
+          id: 'citation-web-1',
+          marker: 2,
+          kind: 'web',
+          url: 'https://example.com/research',
+        },
+      ],
     });
 
     state = teachingTurnReducer(state, {

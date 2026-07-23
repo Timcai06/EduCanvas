@@ -5,19 +5,28 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --external:graphile-worker --external:zod --external:drizzle-orm --external:drizzle-orm/* --external:postgres --outfile=dist/index.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --external:graphile-worker --external:zod --external:drizzle-orm --external:drizzle-orm/* --external:postgres --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js",
     "start": "node dist/index.js",
     "test": "vitest run --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/agent-core": "workspace:*",
+    "@educanvas/agent-runtime": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
+    "@educanvas/model-gateway": "workspace:*",
+    "@educanvas/mcp-runtime": "workspace:*",
+    "@educanvas/telemetry": "workspace:*",
     "graphile-worker": "^0.16.6",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@langchain/langgraph": "1.4.8",
+    "@langchain/langgraph-checkpoint-postgres": "1.0.4",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-trace-node": "2.10.0",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.11.10",
     "drizzle-orm": "^0.45.2",

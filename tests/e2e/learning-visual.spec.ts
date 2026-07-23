@@ -1,42 +1,44 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('学习页视觉基线', () => {
-  test('桌面端深色 Chat-empty', async ({ page }) => {
+  test('桌面端 Chat-empty（纸面亮色默认）', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+      page.getByRole('heading', { name: '今天想学点什么？' }),
     ).toBeVisible();
-    await expect(page.locator('.ambient-halo__layer')).toHaveCount(3);
-    await expect(page).toHaveScreenshot('chat-empty-desktop-dark.png', {
+    /* 两支笔基线:光场不回归,扉页只有衬线问候与朱砂笔触 */
+    await expect(page.locator('.ambient-halo__layer')).toHaveCount(0);
+    await expect(page.locator('.hero-ink-text')).toBeVisible();
+    await expect(page).toHaveScreenshot('chat-empty-desktop.png', {
       animations: 'disabled',
       fullPage: true,
     });
   });
 
-  test('移动端深色 Chat-empty 降级为单动画核心', async ({ page }) => {
+  test('移动端 Chat-empty 无装饰残留', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+      page.getByRole('heading', { name: '今天想学点什么？' }),
     ).toBeVisible();
-    await expect(page.locator('.ambient-halo__bloom')).toBeHidden();
-    await expect(page).toHaveScreenshot('chat-empty-mobile-dark.png', {
+    await expect(page.locator('.ambient-halo__layer')).toHaveCount(0);
+    await expect(page).toHaveScreenshot('chat-empty-mobile.png', {
       animations: 'disabled',
       fullPage: true,
     });
   });
 
-  test('reduced-motion 的 Halo 在五秒后保持像素稳定', async ({ page }) => {
+  test('reduced-motion 的静止扉页在五秒后保持像素稳定', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/learn');
     await expect(
-      page.getByRole('heading', { name: '你好，今天想探索什么？' }),
+      page.getByRole('heading', { name: '今天想学点什么？' }),
     ).toBeVisible();
 
     const first = await page.screenshot({ animations: 'disabled' });
@@ -64,7 +66,7 @@ test.describe('学习页视觉基线', () => {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(page).toHaveScreenshot('chat-unavailable-mobile-dark.png', {
+    await expect(page).toHaveScreenshot('chat-unavailable-mobile.png', {
       animations: 'disabled',
       fullPage: true,
     });

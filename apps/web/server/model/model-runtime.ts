@@ -1,7 +1,7 @@
 import 'server-only';
 
 import {
-  OpenAICompatibleTurnModelGateway,
+  createTurnModelGatewayFromEnvironment,
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
@@ -15,6 +15,7 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
   return {
     EDUCANVAS_DEPLOYMENT_ENV: process.env.EDUCANVAS_DEPLOYMENT_ENV,
     MODEL_GATEWAY_PROVIDER: process.env.MODEL_GATEWAY_PROVIDER,
+    MODEL_GATEWAY_RUNTIME: process.env.MODEL_GATEWAY_RUNTIME,
     MODEL_GATEWAY_ALLOW_DEEPSEEK: process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
     MODEL_GATEWAY_BASE_URL: process.env.MODEL_GATEWAY_BASE_URL,
     MODEL_GATEWAY_API_KEY: process.env.MODEL_GATEWAY_API_KEY,
@@ -41,9 +42,11 @@ export function resolveTurnModelRuntime(
 ): ResolvedTurnModelRuntime | null {
   const configuration = parseModelGatewayConfiguration(environment);
   if (!configuration.enabled) return null;
+  const gateway = createTurnModelGatewayFromEnvironment(environment);
+  if (gateway === null) return null;
 
   return {
-    gateway: new OpenAICompatibleTurnModelGateway(configuration),
+    gateway,
     provider: configuration.provider,
   };
 }

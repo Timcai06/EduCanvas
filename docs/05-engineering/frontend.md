@@ -15,6 +15,8 @@ Radix UI/shadcn、TanStack Query和Zustand是后续按需求引入的候选能�
 
 ## 当前 K12 学习纵切
 
+Web 是功能最完整的 Client，但不再是唯一入口。TUI、Telegram 私聊 Adapter 和可选 Capability Node 已实现；以下内容只描述 Web 特有的 Sources/Studio/Canvas 与兼容 SSE。
+
 - `app/learn/page.tsx`作为Server Component读取匿名身份对应的公开Artifact和掌握度投影；
 - 显式“开始学习”Server Action先在一个数据库事务内bootstrap Session、公开Artifact和私有判分键，成功后再写入HttpOnly Cookie；
 - 首次访问和已有匿名会话都从深色S0 Chat-empty进入；首条消息后由`LearnWorkspace`切到S1 Chat-only，Canvas按需进入S2 Chat + Canvas；
@@ -26,17 +28,9 @@ Radix UI/shadcn、TanStack Query和Zustand是后续按需求引入的候选能�
 - Canvas提交经Server Action恢复可信身份和课程范围，服务端判分成功后只把公开反馈与最新Progress返回浏览器；
 - 刷新页面后消息终态、会话摘要与Progress从PostgreSQL重新读取，不依赖客户端缓存恢复。
 
-当前客户端能力边界必须与后端事实一致：资产抽屉只显示服务端归属校验后的真实Asset；Turn可以携带结构化Asset引用并在刷新后恢复；K1引用来自服务端候选白名单并通过SSE/历史消息呈现；Canvas判分只在可信`ASSESS`状态触发状态推进。C1仍无真实Artifact提议、确认、生成和Studio列表，图片在当前文本Provider下也不会被伪装成已理解。Progress和Studio只能显示服务端已提供的真实数据或明确的未建设状态，不能用Fixture补成“可用”功能。
+当前客户端能力边界必须与后端事实一致：来源面板只显示服务端归属校验后的真实Asset；Turn可以携带结构化Asset引用并在刷新后恢复；K1引用来自服务端候选白名单并通过SSE/历史消息呈现；Canvas判分只在可信`ASSESS`状态触发状态推进。Artifact提议、确认、Worker生成、版本和Studio已经接通，图片原生模型输入仍未接通。Progress和Studio只能显示服务端已提供的真实数据，不能用Fixture补成“可用”功能。
 
-`LearnWorkspace` 当前是 K12 垂直页的页面级状态容器，不是通用产品壳。
-它同时协调 Chat、Rail、Asset Drawer、Canvas 和 Progress，后续应抽出只负责
-布局与可访问性的 `PlatformShell`，再由 K12 vertical adapter 注入课程标题、
-教学状态与进度入口。这样 NotebookLM 式资产/Studio 能力和 Gemini 式主对话
-体验可以共享同一壳层，而不把教学状态机写进通用 UI。
-
-当前 Studio 入口与预置互动不等于真实 Studio：只有当 Artifact proposal、
-生成任务、版本存储、恢复与列表查询全部由服务端事实驱动后，才能标记为
-可用能力。
+`LearnWorkspace` 当前是 K12 页的页面级状态容器，不是长期产品壳。它同时协调 Chat、Rail、Sources、Canvas 和 Progress；迁移方向是由统一 Web Client Shell 消费 Gateway 协议，再注入教育 Profile 的课程和进度投影，而不是继续维护通用/K12 两套页面运行路径。
 
 前端Demo Script已经删除；测试只通过测试Gateway或Fixture提供确定性输入，且不可被描述为模型降级回答。无Provider时必须显示诚实的不可用状态。
 
@@ -50,7 +44,8 @@ features/chat/               两条产品线共享的对话协议与视图
 features/canvas/             Artifact运行时
 features/workspace/general/  通用Chat工作区
 features/workspace/learning/ K12学习工作区
-features/workspace/shared/   工作区共享品牌、Halo、Sheet与焦点工具
+features/workspace/shared/   工作区共享品牌（印章/墨滴/批改笔迹）、问候、Sheet与焦点工具
+server/gateway/              Web Request 与 gateway.v1/SSE 的兼容投影
 server/identity/             匿名身份边界
 server/http/                 请求、SSE与取消边界
 server/assets/               Asset上传、存储与物化
@@ -60,6 +55,8 @@ server/teaching/             K12 Session/Turn/Tool组合根
 ```
 
 `features/chat/turn-events.ts`是浏览器可见的SSE边界，`turn-state.ts`是纯状态机，`use-teaching-turn.ts`只负责固定Route、取消和AbortController生命周期。三者不得解析供应商事件、模型ID或原始异常。
+
+Web 继续复用这些已验证的浏览器状态语义；跨客户端永久协议是 `packages/gateway-core` 的 `gateway.v1`，固定 `/learn` Route 与 Web SSE 只是兼容表面。通用与教学 Turn Route 均已在服务端构造 Gateway Envelope，浏览器不能提交可信 principal 或路由归属。
 
 ## 约束
 

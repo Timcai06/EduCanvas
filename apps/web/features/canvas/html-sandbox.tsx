@@ -26,7 +26,7 @@ export function HtmlSandbox({
       title={title}
       referrerPolicy="no-referrer"
       loading="lazy"
-      className="h-full w-full rounded-2xl border border-line/80 bg-[#101116]"
+      className="h-full w-full rounded-2xl border border-line/80 bg-card"
     />
   );
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   artifactGenerationJobs,
@@ -26,6 +26,20 @@ export class ArtifactVersionConflictError extends Error {
   constructor() {
     super('产物版本写入冲突,请重试');
     this.name = 'ArtifactVersionConflictError';
+  }
+}
+
+/** Canvas 修改基于过期版本或目标已有运行中任务时拒绝，防止覆盖更新。 */
+export class ArtifactRevisionConflictError extends Error {
+  readonly code = 'artifact_revision_conflict';
+
+  constructor(readonly reason: 'stale_version' | 'job_in_progress') {
+    super(
+      reason === 'stale_version'
+        ? '产物已经产生新版本，请刷新后再修改'
+        : '产物仍有修改任务在运行',
+    );
+    this.name = 'ArtifactRevisionConflictError';
   }
 }
 
@@ -66,8 +80,10 @@ export interface PlatformArtifactVersion {
   artifactId: string;
   version: number;
   content: unknown;
+  metadata: unknown;
   objectKey: string | null;
   checksum: string | null;
+  generatedBy: string | null;
   createdAt: string;
 }
 
@@ -77,6 +93,8 @@ export interface PlatformArtifactJob {
   status: ArtifactJobStatus;
   progress: number | null;
   failureCode: string | null;
+  params: Record<string, unknown>;
+  checkpoint: Record<string, unknown>;
   queueJobKey: string | null;
 }
 
@@ -84,7 +102,7 @@ export interface PlatformArtifactJob {
 const JOB_TRANSITIONS: Record<ArtifactJobStatus, readonly ArtifactJobStatus[]> =
   {
     queued: ['running', 'cancelled'],
-    running: ['succeeded', 'failed', 'cancelled'],
+    running: ['running', 'succeeded', 'failed', 'cancelled'],
     succeeded: [],
     failed: [],
     cancelled: [],
@@ -180,6 +198,26 @@ export class DrizzlePlatformArtifactRepository {
     return rows.map(toArtifact);
   }
 
+  /** Notebook/Space 是 Studio 的聚合根；Conversation 只记录产物产生时的聊天上下文。 */
+  async listSpaceArtifacts(input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    limit?: number;
+  }): Promise<readonly PlatformArtifact[]> {
+    const rows = await this.database
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.spaceId, input.spaceId),
+          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
+      .limit(Math.min(input.limit ?? 50, 100));
+    return rows.map(toArtifact);
+  }
+
   /**
    * 追加不可变版本。事务内 `for update` 锁产物行保证版本单调;
    * 结构化内容与对象存储引用二选一由数据库形状约束兜底。
@@ -188,10 +226,14 @@ export class DrizzlePlatformArtifactRepository {
     artifactId: string;
     trustedSubjectId: string;
     content?: unknown;
+    metadata?: Record<string, unknown> | null;
     objectKey?: string;
     checksum?: string;
+    generatedBy?: string | null;
     createdByOperationId?: string | null;
     generationJobId?: string | null;
+    /** Canvas 共创的乐观并发基线；首版生成不传。 */
+    expectedLatestVersion?: number;
   }): Promise<PlatformArtifactVersion> {
     try {
       return await this.database.transaction(async (tx) => {
@@ -208,6 +250,12 @@ export class DrizzlePlatformArtifactRepository {
         if (!artifact || artifact.ownerSubjectId !== input.trustedSubjectId) {
           throw new ArtifactOwnershipError();
         }
+        if (
+          input.expectedLatestVersion !== undefined &&
+          artifact.latestVersion !== input.expectedLatestVersion
+        ) {
+          throw new ArtifactRevisionConflictError('stale_version');
+        }
 
         const nextVersion = artifact.latestVersion + 1;
         const [version] = await tx
@@ -216,8 +264,10 @@ export class DrizzlePlatformArtifactRepository {
             artifactId: input.artifactId,
             version: nextVersion,
             content: input.content ?? null,
+            metadata: input.metadata ?? null,
             objectKey: input.objectKey ?? null,
             checksum: input.checksum ?? null,
+            generatedBy: input.generatedBy ?? null,
             createdByOperationId: input.createdByOperationId ?? null,
             generationJobId: input.generationJobId ?? null,
           })
@@ -249,6 +299,67 @@ export class DrizzlePlatformArtifactRepository {
       .where(eq(artifactVersions.artifactId, input.artifactId))
       .orderBy(desc(artifactVersions.version));
     return rows.map(toVersion);
+  }
+
+  /**
+   * 版本溯源清单：每版怎么来的。用生成任务 params 里的 revision.instruction
+   * 还原"你当时的修改要求"，供 Canvas 版本历史讲清初始生成 vs 逐轮共创。
+   * 只投影用户自己写下的指令与生成器标识，不含判分键或模型内部账本。
+   */
+  async listVersionProvenance(input: {
+    artifactId: string;
+    trustedSubjectId: string;
+  }): Promise<
+    readonly {
+      version: number;
+      generatedBy: string | null;
+      revisionInstruction: string | null;
+      createdAt: string;
+    }[]
+  > {
+    await this.getArtifact(input);
+    const rows = await this.database
+      .select({
+        version: artifactVersions.version,
+        generatedBy: artifactVersions.generatedBy,
+        createdAt: artifactVersions.createdAt,
+        instruction: sql<
+          string | null
+        >`${artifactGenerationJobs.params} #>> '{revision,instruction}'`,
+      })
+      .from(artifactVersions)
+      .leftJoin(
+        artifactGenerationJobs,
+        eq(artifactVersions.generationJobId, artifactGenerationJobs.id),
+      )
+      .where(eq(artifactVersions.artifactId, input.artifactId))
+      .orderBy(desc(artifactVersions.version));
+    return rows.map((row) => ({
+      version: row.version,
+      generatedBy: row.generatedBy,
+      revisionInstruction: row.instruction,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async getVersion(input: {
+    artifactId: string;
+    version: number;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactVersion> {
+    await this.getArtifact(input);
+    const [row] = await this.database
+      .select()
+      .from(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.artifactId, input.artifactId),
+          eq(artifactVersions.version, input.version),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new ArtifactOwnershipError();
+    return toVersion(row);
   }
 
   async createGenerationJob(input: {
@@ -316,13 +427,87 @@ export class DrizzlePlatformArtifactRepository {
           failureCode:
             input.to === 'failed' ? (input.failureCode ?? null) : null,
           startedAt:
-            input.to === 'running' ? sql`now()` : (row.startedAt ?? null),
+            input.to === 'running'
+              ? (row.startedAt ?? sql`now()`)
+              : (row.startedAt ?? null),
           completedAt: isTerminal ? sql`now()` : null,
         })
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .returning();
       return toJob(updated!);
     });
+  }
+
+  /** 队列重投时按 jobId 读取权威参数与 checkpoint，并再次校验主体。 */
+  async getGenerationJob(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactJob> {
+    const [row] = await this.database
+      .select({ job: artifactGenerationJobs })
+      .from(artifactGenerationJobs)
+      .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
+      .where(
+        and(
+          eq(artifactGenerationJobs.id, input.jobId),
+          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new ArtifactOwnershipError();
+    return toJob(row.job);
+  }
+
+  /**
+   * 只允许 running 任务写入可恢复 checkpoint。音频先落对象存储、再写此记录，
+   * 重投时可校验并继续 append version，而无需再次调用计费 Provider。
+   */
+  async updateGenerationJobCheckpoint(input: {
+    jobId: string;
+    trustedSubjectId: string;
+    checkpoint: Record<string, unknown>;
+  }): Promise<PlatformArtifactJob> {
+    return await this.database.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          job: artifactGenerationJobs,
+          owner: artifacts.ownerSubjectId,
+        })
+        .from(artifactGenerationJobs)
+        .innerJoin(
+          artifacts,
+          eq(artifactGenerationJobs.artifactId, artifacts.id),
+        )
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .for('update', { of: artifactGenerationJobs })
+        .limit(1);
+      if (!row || row.owner !== input.trustedSubjectId) {
+        throw new ArtifactOwnershipError();
+      }
+      if (row.job.status !== 'running') {
+        throw new ArtifactJobLifecycleError(row.job.status, 'running');
+      }
+      const [updated] = await tx
+        .update(artifactGenerationJobs)
+        .set({ checkpoint: input.checkpoint })
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .returning();
+      return toJob(updated!);
+    });
+  }
+
+  /** generationJobId 唯一对应一次版本提交；用于 crash 后识别“已写版本未终态”。 */
+  async findVersionByGenerationJob(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactVersion | null> {
+    await this.getGenerationJob(input);
+    const [row] = await this.database
+      .select()
+      .from(artifactVersions)
+      .where(eq(artifactVersions.generationJobId, input.jobId))
+      .limit(1);
+    return row ? toVersion(row) : null;
   }
 
   /**
@@ -395,6 +580,89 @@ export class DrizzlePlatformArtifactRepository {
     });
   }
 
+  /**
+   * 在同一 Artifact 上创建下一轮 Canvas 修改任务。锁定产物并校验基线版本，
+   * 同一时刻只允许一个非终态任务；任务与队列行仍保持原子提交。
+   */
+  async createRevisionGenerationJob(input: {
+    artifactId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+    baseVersion: number;
+    instruction: string;
+    taskIdentifier: string;
+    maxAttempts?: number;
+  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
+    return await this.database.transaction(async (tx) => {
+      const [artifactRow] = await tx
+        .select()
+        .from(artifacts)
+        .where(eq(artifacts.id, input.artifactId))
+        .for('update')
+        .limit(1);
+      if (
+        !artifactRow ||
+        artifactRow.ownerSubjectId !== input.trustedSubjectId ||
+        artifactRow.conversationId !== input.conversationId ||
+        artifactRow.status !== 'active'
+      ) {
+        throw new ArtifactOwnershipError();
+      }
+      if (artifactRow.latestVersion !== input.baseVersion) {
+        throw new ArtifactRevisionConflictError('stale_version');
+      }
+
+      const [activeJob] = await tx
+        .select({ id: artifactGenerationJobs.id })
+        .from(artifactGenerationJobs)
+        .where(
+          and(
+            eq(artifactGenerationJobs.artifactId, input.artifactId),
+            inArray(artifactGenerationJobs.status, ['queued', 'running']),
+          ),
+        )
+        .limit(1);
+      if (activeJob) {
+        throw new ArtifactRevisionConflictError('job_in_progress');
+      }
+
+      const [insertedJob] = await tx
+        .insert(artifactGenerationJobs)
+        .values({
+          artifactId: input.artifactId,
+          params: {
+            revision: {
+              baseVersion: input.baseVersion,
+              instruction: input.instruction,
+            },
+          },
+        })
+        .returning();
+      const queueJobKey = `artifact-revise:${input.artifactId}:${insertedJob!.id}`;
+      const [jobRow] = await tx
+        .update(artifactGenerationJobs)
+        .set({ queueJobKey })
+        .where(eq(artifactGenerationJobs.id, insertedJob!.id))
+        .returning();
+
+      const payload = JSON.stringify({
+        jobId: jobRow!.id,
+        artifactId: input.artifactId,
+        subjectId: input.trustedSubjectId,
+      });
+      await tx.execute(sql`
+        select graphile_worker.add_job(
+          ${input.taskIdentifier},
+          payload := ${payload}::json,
+          job_key := ${queueJobKey},
+          max_attempts := ${input.maxAttempts ?? 3}
+        )
+      `);
+
+      return { artifact: toArtifact(artifactRow), job: toJob(jobRow!) };
+    });
+  }
+
   /** 产物详情:最新版本内容与最近一次生成任务,供轮询与 Canvas 打开使用。 */
   async getArtifactDetail(input: {
     artifactId: string;
@@ -448,8 +716,10 @@ const toVersion = (row: VersionRow): PlatformArtifactVersion => ({
   artifactId: row.artifactId,
   version: row.version,
   content: row.content,
+  metadata: row.metadata,
   objectKey: row.objectKey,
   checksum: row.checksum,
+  generatedBy: row.generatedBy,
   createdAt: row.createdAt.toISOString(),
 });
 
@@ -459,5 +729,7 @@ const toJob = (row: JobRow): PlatformArtifactJob => ({
   status: row.status as ArtifactJobStatus,
   progress: row.progress,
   failureCode: row.failureCode,
+  params: row.params as Record<string, unknown>,
+  checkpoint: row.checkpoint as Record<string, unknown>,
   queueJobKey: row.queueJobKey,
 });

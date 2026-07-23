@@ -280,6 +280,166 @@ async function seedOwnedGraph(input: {
   };
 }
 
+async function seedGeneralWebGraph(input: {
+  subjectId: string;
+  lastActivityAt: Date;
+  suffix: string;
+}) {
+  const db = getDatabase();
+  const spaceId = randomUUID();
+  const conversationId = randomUUID();
+  const operationId = randomUUID();
+  const assistantMessageId = randomUUID();
+  await db.insert(schema.spaces).values({
+    id: spaceId,
+    ownerSubjectId: input.subjectId,
+    kind: 'personal',
+    title: '通用网页研究',
+    createdAt: input.lastActivityAt,
+    updatedAt: input.lastActivityAt,
+  });
+  await db.insert(schema.conversations).values({
+    id: conversationId,
+    spaceId,
+    ownerSubjectId: input.subjectId,
+    agentProfileId: 'general',
+    title: '网页研究',
+    lastActivityAt: input.lastActivityAt,
+    createdAt: input.lastActivityAt,
+    updatedAt: input.lastActivityAt,
+  });
+  await db.insert(schema.agentOperations).values({
+    id: operationId,
+    conversationId,
+    kind: 'turn',
+    idempotencyKey: `general-${input.suffix}`,
+    traceId: `general-trace-${input.suffix}`,
+    status: 'completed',
+    createdAt: input.lastActivityAt,
+    completedAt: input.lastActivityAt,
+  });
+  await db.insert(schema.conversationMessages).values([
+    {
+      conversationId,
+      operationId,
+      role: 'user',
+      status: 'completed',
+      content: '读取网页',
+      createdAt: input.lastActivityAt,
+      completedAt: input.lastActivityAt,
+    },
+    {
+      id: assistantMessageId,
+      conversationId,
+      operationId,
+      role: 'assistant',
+      status: 'completed',
+      content: '网页结论 [1]',
+      createdAt: input.lastActivityAt,
+      completedAt: input.lastActivityAt,
+    },
+  ]);
+  const [asset] = await db
+    .insert(schema.assets)
+    .values({
+      ownerSubjectId: input.subjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'url_import',
+      displayName: '网页来源',
+      mimeType: 'text/plain',
+      status: 'processing',
+      createdAt: input.lastActivityAt,
+      updatedAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.assets.id });
+  if (!asset) throw new Error('通用测试Asset创建失败');
+  const [assetVersion] = await db
+    .insert(schema.assetVersions)
+    .values({
+      assetId: asset.id,
+      kind: 'link',
+      mimeType: 'text/plain',
+      byteSize: 12,
+      contentHash: 'e'.repeat(64),
+      status: 'ready',
+      storageKey: `fixture/general-${input.suffix}.txt`,
+      extractedText: '网页来源正文',
+      createdAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.assetVersions.id });
+  if (!assetVersion) throw new Error('通用测试Asset版本创建失败');
+  await db
+    .update(schema.assets)
+    .set({
+      status: 'ready',
+      currentVersionId: assetVersion.id,
+      updatedAt: input.lastActivityAt,
+    })
+    .where(eq(schema.assets.id, asset.id));
+  const [source] = await db
+    .insert(schema.operationSources)
+    .values({
+      operationId,
+      assetVersionId: assetVersion.id,
+      kind: 'web',
+      ordinal: 1,
+      label: '网页来源',
+      locatorUrl: `https://example.com/${input.suffix}`,
+      createdAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.operationSources.id });
+  if (!source) throw new Error('通用测试来源创建失败');
+  await db.insert(schema.conversationMessageCitations).values({
+    assistantMessageId,
+    operationSourceId: source.id,
+    createdAt: input.lastActivityAt,
+  });
+
+  const [artifact] = await db
+    .insert(schema.artifacts)
+    .values({
+      spaceId,
+      conversationId,
+      ownerSubjectId: input.subjectId,
+      kind: 'mind_map',
+      trustTier: 'tier1',
+      title: '网页研究图',
+      status: 'active',
+      latestVersion: 1,
+      createdAt: input.lastActivityAt,
+      updatedAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.artifacts.id });
+  if (!artifact) throw new Error('通用测试Artifact创建失败');
+  const [job] = await db
+    .insert(schema.artifactGenerationJobs)
+    .values({
+      artifactId: artifact.id,
+      operationId,
+      status: 'succeeded',
+      progress: 100,
+      params: {},
+      queueJobKey: `general-job-${input.suffix}`,
+      createdAt: input.lastActivityAt,
+      startedAt: input.lastActivityAt,
+      completedAt: input.lastActivityAt,
+    })
+    .returning({ id: schema.artifactGenerationJobs.id });
+  if (!job) throw new Error('通用测试Artifact Job创建失败');
+  await db.insert(schema.artifactVersions).values({
+    artifactId: artifact.id,
+    version: 1,
+    content: { nodes: [] },
+    createdByOperationId: operationId,
+    generatedBy: 'rule:lifecycle-fixture',
+    generationJobId: job.id,
+    createdAt: input.lastActivityAt,
+  });
+  return { spaceId, conversationId };
+}
+
 async function countGraphRows(graphs: readonly SeededGraph[]) {
   const db = getDatabase();
   const sessionIds = graphs.map((graph) => graph.sessionId);
@@ -392,6 +552,15 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
   beforeEach(async () => {
     await getDatabase().execute(sql`
       truncate table
+        conversation_message_citations,
+        operation_sources,
+        artifact_generation_jobs,
+        artifact_versions,
+        artifacts,
+        conversation_messages,
+        agent_operations,
+        conversations,
+        spaces,
         turn_safety_decisions,
         tool_calls,
         model_runs,
@@ -536,6 +705,55 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
         detectorVersion: 'structural-v1',
       }),
     ).rejects.toMatchObject({ cause: { code: '23514' } });
+  });
+
+  it('从未进入K12的通用Chat匿名主体也会连同网页来源与Artifact完整清理', async () => {
+    const subjectId = anonymousSubject('9');
+    const oldAt = new Date(
+      baseTime.getTime() - ANONYMOUS_SUBJECT_RETENTION_MS - 60_000,
+    );
+    await seedGeneralWebGraph({
+      subjectId,
+      lastActivityAt: oldAt,
+      suffix: 'general-only',
+    });
+
+    const lifecycle = new DrizzleAnonymousDataLifecycleService(getDatabase());
+    await expect(
+      lifecycle.purgeExpiredSubjects({ now: baseTime }),
+    ).resolves.toMatchObject({
+      evaluatedSubjects: 1,
+      deletedSubjects: 1,
+      deletedRows: {
+        conversation_message_citations: 1,
+        operation_sources: 1,
+        artifact_generation_jobs: 1,
+        artifact_versions: 1,
+        artifacts: 1,
+        conversation_messages: 2,
+        agent_operations: 1,
+        conversations: 1,
+        spaces: 1,
+        asset_versions: 1,
+        assets: 1,
+        lesson_sessions: 0,
+      },
+    });
+    const remaining = await Promise.all([
+      getDatabase().$count(
+        schema.conversations,
+        eq(schema.conversations.ownerSubjectId, subjectId),
+      ),
+      getDatabase().$count(
+        schema.artifacts,
+        eq(schema.artifacts.ownerSubjectId, subjectId),
+      ),
+      getDatabase().$count(
+        schema.assets,
+        eq(schema.assets.ownerSubjectId, subjectId),
+      ),
+    ]);
+    expect(remaining).toEqual([0, 0, 0]);
   });
 
   it('仅当整个anon:v1主体全部超过7天时逐表清零，隔离近期/边界/非匿名与共享数据', async () => {

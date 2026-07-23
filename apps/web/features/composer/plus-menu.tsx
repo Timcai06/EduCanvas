@@ -7,7 +7,10 @@ import {
   ImageSquare,
   Plus,
   PresentationChart,
+  Cards,
+  Slideshow,
   TreeStructure,
+  Headphones,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -19,6 +22,8 @@ export type PlusMenuActionId =
   | 'upload_file'
   | 'upload_image'
   | 'create_mind_map'
+  | 'create_flashcards'
+  | 'create_audio_overview'
   | 'pick_course_material'
   | 'add_link'
   | 'create_demo'
@@ -58,6 +63,24 @@ const menuItems: readonly PlusMenuItem[] = [
     available: true,
   },
   {
+    id: 'create_slides',
+    icon: Slideshow,
+    label: '生成 Slides',
+    available: true,
+  },
+  {
+    id: 'create_flashcards',
+    icon: Cards,
+    label: '生成闪卡',
+    available: true,
+  },
+  {
+    id: 'create_audio_overview',
+    icon: Headphones,
+    label: '生成音频概览',
+    available: true,
+  },
+  {
     id: 'create_demo',
     icon: PresentationChart,
     label: '打开互动演示',
@@ -67,7 +90,7 @@ const menuItems: readonly PlusMenuItem[] = [
 
 /**
  * 「+」菜单自管开合与键盘漫游（↑↓/Enter/Esc），动作语义交给上层：
- * 「添加材料」进入上下文标签，「请老师创建」必须先产生参数确认卡，绝不静默生成。
+ * 通用笔记本中的上传会沉淀为来源；「请老师创建」必须先产生参数确认卡，绝不静默生成。
  */
 export function PlusMenu({
   onAction,
@@ -188,7 +211,7 @@ export function PlusMenu({
           role="menu"
           aria-label="添加上下文或创建内容"
           onKeyDown={handleMenuKeyDown}
-          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line/80 bg-surface/98 py-1.5 shadow-[var(--shadow-sheet)] backdrop-blur-xl"
+          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line bg-card py-1.5 shadow-[var(--shadow-sheet)]"
         >
           {items.map((item, index) => (
             <button

@@ -17,14 +17,16 @@ export function AssetUploadPanel({
   kind,
   onUploaded,
   endpoint,
+  fixedScope,
 }: {
   kind: AssetItem['kind'];
   onUploaded: (asset: AssetItem) => void;
   endpoint?: string;
+  fixedScope?: AssetItem['scope'];
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [scope, setScope] = useState<AssetItem['scope']>('turn');
+  const [scope, setScope] = useState<AssetItem['scope']>(fixedScope ?? 'turn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accept =
@@ -61,12 +63,8 @@ export function AssetUploadPanel({
     <div ref={rootRef} className="space-y-6">
       <div
         data-upload-section
-        className="relative overflow-hidden rounded-3xl border border-line bg-[linear-gradient(145deg,rgb(37_41_51_/_0.96),rgb(25_27_33_/_0.96))] p-5 shadow-[0_16px_50px_rgb(0_0_0_/_0.18)]"
+        className="relative overflow-hidden rounded-3xl border border-line bg-card p-5 shadow-[var(--shadow-float)]"
       >
-        <span
-          aria-hidden="true"
-          className="absolute -top-16 -right-16 size-44 rounded-full bg-accent/10 blur-3xl"
-        />
         <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent">
           {kind === 'image' ? <ImageIcon size={23} /> : <FilePdf size={23} />}
         </span>
@@ -75,31 +73,44 @@ export function AssetUploadPanel({
         </h3>
         <p className="mt-1 text-sm leading-6 text-ink-muted">
           {kind === 'image'
-            ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
-            : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
+            ? fixedScope === 'space'
+              ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为当前笔记本来源；当前模型暂不读取图片像素。'
+              : '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
+            : fixedScope === 'space'
+              ? '支持带可复制文字的PDF，最大10MB。文字会在服务端解析并成为当前笔记本的长期来源。'
+              : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
         </p>
       </div>
 
-      <fieldset data-upload-section>
-        <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
-          {(['turn', 'space'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={scope === value}
-              onClick={() => setScope(value)}
-              className={`min-h-11 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                scope === value
-                  ? 'bg-canvas text-ink shadow-[0_1px_8px_rgb(0_0_0_/_0.18)]'
-                  : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              {value === 'turn' ? '仅用于本轮' : '保存到空间'}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      {fixedScope ? (
+        <p
+          data-upload-section
+          className="rounded-2xl bg-surface px-4 py-3 text-sm text-ink-muted"
+        >
+          文件会保存到当前笔记本的来源中，切换笔记本不会带走。
+        </p>
+      ) : (
+        <fieldset data-upload-section>
+          <legend className="mb-2 text-sm font-medium text-ink">保存范围</legend>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
+            {(['turn', 'space'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => setScope(value)}
+                className={`min-h-11 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  scope === value
+                    ? 'bg-card text-ink shadow-[var(--shadow-float)]'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {value === 'turn' ? '仅用于本轮' : '保存到空间'}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <input
         ref={inputRef}
@@ -127,7 +138,7 @@ export function AssetUploadPanel({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
       >
         <UploadSimple size={20} />
         {busy ? '正在安全处理…' : '选择文件'}

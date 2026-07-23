@@ -8,6 +8,7 @@ import {
   getRetryAssetParts,
   teachingTurnReducer,
 } from './turn-state';
+import { resolveTurnFailureMessage } from './connection-status';
 import {
   consumeTeachingTurnResponse,
   type TeachingTurnEvent,
@@ -15,6 +16,11 @@ import {
 } from './turn-events';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
+
+/** 本机是否在线；SSR 无 navigator 时假定在线。 */
+function isBrowserOnline(): boolean {
+  return typeof navigator === 'undefined' ? true : navigator.onLine;
+}
 
 export interface AgentTurnClientOptions {
   endpoint: string;
@@ -211,12 +217,18 @@ export function useAgentTurn(
           !current.terminalReceived &&
           !current.stopConfirmed
         ) {
+          /* 流未达终态就结束：本机离线时归因给网络，否则按意外中断 */
+          const resolved = resolveTurnFailureMessage({
+            online: isBrowserOnline(),
+            serverMessage: SAFE_INTERRUPTED_ERROR,
+            serverRetryable: true,
+          });
           dispatch({
             type: 'stream.failed',
             status: 'interrupted',
             code: 'interrupted',
-            message: SAFE_INTERRUPTED_ERROR,
-            retryable: true,
+            message: resolved.message,
+            retryable: resolved.retryable,
           });
         }
         return current.terminalReceived;
@@ -228,12 +240,18 @@ export function useAgentTurn(
           inFlight.current === current &&
           !(aborted && current.stopConfirmed)
         ) {
+          /* 用户主动停止的 abort 不算失败；其余按本机在线情况归因 */
+          const resolved = resolveTurnFailureMessage({
+            online: isBrowserOnline(),
+            serverMessage: aborted ? SAFE_INTERRUPTED_ERROR : safeConnectionError,
+            serverRetryable: true,
+          });
           dispatch({
             type: 'stream.failed',
             status: aborted ? 'interrupted' : 'failed',
             code: aborted ? 'interrupted' : 'stream_unavailable',
-            message: aborted ? SAFE_INTERRUPTED_ERROR : safeConnectionError,
-            retryable: true,
+            message: resolved.message,
+            retryable: resolved.retryable,
           });
         }
         return false;

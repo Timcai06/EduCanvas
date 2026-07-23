@@ -12,15 +12,57 @@ export interface ArtifactSummary {
   latestVersion: number;
 }
 
+/** 产物详情里附带的溯源信息:产物是否由本对话生成、创建/更新时间。 */
+export interface ArtifactProvenance {
+  fromConversation: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ArtifactDetail {
-  artifact: ArtifactSummary;
-  latestVersion: { version: number; content: unknown } | null;
+  artifact: ArtifactSummary & ArtifactProvenance;
+  version: {
+    version: number;
+    content: unknown;
+    media: AudioOverviewMedia | null;
+  } | null;
+  versions: readonly {
+    version: number;
+    generatedBy: string | null;
+    /** 该版本由用户的哪条修改要求生成;初始生成为 null。 */
+    revisionInstruction: string | null;
+    createdAt: string;
+  }[];
   latestJob: {
     id: string;
     status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     progress: number | null;
     failureCode: string | null;
   } | null;
+}
+
+export interface AudioOverviewMedia {
+  url: string;
+  contentVersion: 1;
+  contentType: 'audio/mpeg';
+  byteSize: number;
+  transcript: string;
+  sourceCount: number;
+  script: {
+    generator: string;
+    provider: string | null;
+    resolvedModelId: string | null;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+  };
+  speech: {
+    provider: string;
+    resolvedModelId: string;
+    voice: string;
+    inputCharacters: number;
+    latencyMs: number;
+  };
 }
 
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
@@ -32,18 +74,31 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function createMindMapArtifact(
+export type CreatableArtifactKind =
+  'mind_map' | 'slides' | 'flashcards' | 'audio_overview';
+
+export interface ArtifactSourceReference {
+  assetId: string;
+  versionId: string;
+  kind: 'document' | 'link';
+}
+
+export async function createArtifact(
+  kind: CreatableArtifactKind,
   title: string,
+  sources: readonly ArtifactSourceReference[] = [],
 ): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(ARTIFACTS_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'mind_map', title }),
+    body: JSON.stringify(
+      kind === 'audio_overview' ? { kind, title, sources } : { kind, title },
+    ),
   });
   return parseJsonOrThrow(response);
 }
 
-export async function fetchConversationArtifacts(): Promise<
+export async function fetchNotebookArtifacts(): Promise<
   readonly ArtifactSummary[]
 > {
   const response = await fetch(ARTIFACTS_ENDPOINT);
@@ -55,9 +110,27 @@ export async function fetchConversationArtifacts(): Promise<
 
 export async function fetchArtifactDetail(
   artifactId: string,
+  version?: number,
 ): Promise<ArtifactDetail> {
+  const query = version === undefined ? '' : `?version=${version}`;
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}${query}`,
+  );
+  return parseJsonOrThrow(response);
+}
+
+export async function reviseArtifact(
+  artifactId: string,
+  baseVersion: number,
+  instruction: string,
+): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(
     `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseVersion, instruction }),
+    },
   );
   return parseJsonOrThrow(response);
 }
@@ -68,18 +141,25 @@ export async function fetchArtifactDetail(
  */
 export async function pollArtifactUntilSettled(
   artifactId: string,
-  options: { intervalMs?: number; timeoutMs?: number; signal?: AbortSignal } = {},
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    minimumVersion?: number;
+  } = {},
 ): Promise<ArtifactDetail> {
   const interval = options.intervalMs ?? 1_500;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
   let detail = await fetchArtifactDetail(artifactId);
   while (Date.now() < deadline && !options.signal?.aborted) {
     const jobStatus = detail.latestJob?.status;
+    const minimumVersion = options.minimumVersion ?? 1;
+    if (jobStatus === 'failed' || jobStatus === 'cancelled') {
+      return detail;
+    }
     if (
-      detail.artifact.latestVersion > 0 ||
-      jobStatus === 'succeeded' ||
-      jobStatus === 'failed' ||
-      jobStatus === 'cancelled'
+      detail.artifact.latestVersion >= minimumVersion &&
+      (jobStatus === 'succeeded' || jobStatus === undefined)
     ) {
       return detail;
     }
