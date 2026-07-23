@@ -25,7 +25,8 @@ export default async function PipelineFlowDesignQaPage() {
           受控教学动画模板
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
-          固定 React 结构与 GSAP 时间轴；内容只来自严格语义 Schema，不执行模型 HTML、JavaScript 或动画代码。
+          固定 React 结构与 GSAP 时间轴；内容只来自严格语义 Schema，不执行模型
+          HTML、JavaScript 或动画代码。
         </p>
       </div>
       <div className="mx-auto flex w-full justify-center">

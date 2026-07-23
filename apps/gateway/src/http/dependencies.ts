@@ -14,6 +14,7 @@ import type {
   GatewayClientSessionAuth,
   GatewayNodeSessionAuth,
 } from '../client-auth';
+import type { GatewayEffectReconciliationControl } from '../effect-reconciliation-control';
 import type { GatewayObservability } from '../observability';
 
 /**
@@ -55,6 +56,10 @@ export interface GatewayNodeTransport {
 export interface GatewayHttpDependencies {
   service: GatewayService;
   internalToken: string | null;
+  effectReconciliation?: Pick<
+    GatewayEffectReconciliationControl,
+    'reconcile'
+  > | null;
   clientTransport?: GatewayClientTransport | null;
   nodeTransport?: GatewayNodeTransport | null;
   observability?: GatewayObservability;

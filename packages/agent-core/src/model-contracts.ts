@@ -28,7 +28,12 @@ export const taskAliasSchema = z.enum(taskAliases);
 export type TaskAlias = z.infer<typeof taskAliasSchema>;
 
 /** 路由档位而非供应商模型名。具体模型只允许由服务端适配器解析。 */
-export const modelAliases = ['primary', 'fast', 'structured', 'speech'] as const;
+export const modelAliases = [
+  'primary',
+  'fast',
+  'structured',
+  'speech',
+] as const;
 export const modelAliasSchema = z.enum(modelAliases);
 export type ModelAlias = z.infer<typeof modelAliasSchema>;
 

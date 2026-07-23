@@ -56,10 +56,10 @@ export function ArtifactProvenanceStrip({
         {meta.label}
       </span>
       {detail.artifact.fromConversation ? (
-        <span className="text-ink-faint">· 由本对话生成</span>
+        <span className="text-ink-muted">· 由本对话生成</span>
       ) : null}
       {detail.version?.media && detail.version.media.sourceCount > 0 ? (
-        <span className="text-ink-faint">
+        <span className="text-ink-muted">
           · 引用 {detail.version.media.sourceCount} 个来源
         </span>
       ) : null}
@@ -74,8 +74,9 @@ export function ArtifactProvenanceStrip({
             className="size-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none"
           />
           {revising ? '正在生成新版本…' : '正在生成…'}
-          {detail.latestJob?.progress != null && detail.latestJob.progress > 0 ? (
-            <span className="tabular-nums text-ink-faint">
+          {detail.latestJob?.progress != null &&
+          detail.latestJob.progress > 0 ? (
+            <span className="tabular-nums text-ink-muted">
               {detail.latestJob.progress}%
             </span>
           ) : null}
@@ -86,7 +87,7 @@ export function ArtifactProvenanceStrip({
           生成失败
         </span>
       ) : (
-        <span className="text-ink-faint">
+        <span className="text-ink-muted">
           {formatUpdatedAt(detail.artifact.updatedAt)}
         </span>
       )}

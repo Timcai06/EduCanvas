@@ -24,8 +24,9 @@ export interface ComposerToolChip {
 
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
- * 视觉上它是桌面上「刚铺开的一页纸」（card 层），聚焦时黛青描边——
- * 不用光晕做反馈。它不持有对话状态；文本提交、菜单动作全部上抛。
+ * 视觉上它是桌面上「刚铺开的一页纸」（card 层），黛青描边为主，
+ * 边缘另有一条黛青光弧沿框流动、聚焦时提亮加速（.ink-flow-line，纯装饰、不承载状态）。
+ * 它不持有对话状态；文本提交、菜单动作全部上抛。
  * Enter 发送、Shift+Enter 换行（触屏窄屏由发送按钮承担发送）。
  */
 export function Composer({
@@ -107,8 +108,8 @@ export function Composer({
             : 'rounded-[1.375rem] shadow-[0_1px_2px_rgb(72_60_34_/_0.05)]'
         }`}
       >
-        {/* 聚焦时一道墨线沿框边环绕（纯 CSS，见 effects.css .ink-flow-border） */}
-        <span aria-hidden="true" className="ink-flow-border" />
+        {/* 边框流动线：一条黛青光弧绕框匀速流动，平时安静、聚焦提亮加速（纯 CSS，见 effects.css .ink-flow-line） */}
+        <span aria-hidden="true" className="ink-flow-line" />
         <PlusMenu
           onAction={onMenuAction}
           availableActions={availableMenuActions}
@@ -137,7 +138,7 @@ export function Composer({
               submit();
             }
           }}
-          className={`max-h-36 min-h-10 flex-1 resize-none self-center bg-transparent px-2 py-2 leading-6 text-ink outline-none placeholder:text-ink-faint ${
+          className={`max-h-36 min-h-10 flex-1 resize-none self-center bg-transparent px-2 py-2 leading-6 text-ink outline-none placeholder:text-ink-muted ${
             isLanding ? 'text-base' : 'text-[15px]'
           }`}
         />
@@ -197,7 +198,7 @@ export function Composer({
                 <SidebarSimple aria-hidden="true" size={15} />
                 <span>{tool.label}</span>
                 {tool.detail ? (
-                  <span className="text-[11px] text-ink-faint">
+                  <span className="text-[11px] text-ink-muted">
                     {tool.detail}
                   </span>
                 ) : null}
@@ -209,7 +210,7 @@ export function Composer({
       {!isLanding || statusText ? (
         <p
           className={`mt-2 min-h-4 text-center text-xs ${
-            statusTone === 'error' ? 'text-bad' : 'text-ink-faint'
+            statusTone === 'error' ? 'text-bad' : 'text-ink-muted'
           }`}
         >
           {statusText ?? 'AI 也可能出错，请核对重要信息。'}

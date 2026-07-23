@@ -9,8 +9,10 @@ import {
   resolveAvailableNodeToolCapabilities,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import { extractCitationMarkers } from '../teaching/citation-markers';
 import { webGeneralTurns } from './general-turn-persistence';
+import { resolveWebGeneralToolPolicy } from './general-turn-tool-policy';
 import type { WebOperationSources } from './general-turn-tools';
 
 const PROMPT_VERSION = 'general-chat-v3';
@@ -28,6 +30,7 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
     private readonly operationSources: WebOperationSources,
     private readonly staticToolCapabilities: readonly string[],
     private readonly nodeInvocations: NodeInvocationPersistencePort,
+    private readonly membershipRole: NotebookMembershipRole,
   ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
@@ -55,16 +58,20 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
         agentId: input.command.actor.agentId,
       },
     ).catch(() => []);
-    const grantedTools = [
+    const availableCapabilities = [
       ...new Set([...this.staticToolCapabilities, ...nodeCapabilities]),
     ];
-    const capabilities = {
-      actor: grantedTools,
-      notebook: grantedTools,
-      profile: grantedTools,
-      channel: grantedTools,
-      environment: grantedTools,
-    };
+    const environment =
+      process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development';
+    const toolPolicy = resolveWebGeneralToolPolicy({
+      availableCapabilities,
+      actorCapabilities: availableCapabilities,
+      membershipRole: this.membershipRole,
+      profileId: input.command.profile.profileId,
+      channel: input.command.entrypoint,
+      environment,
+      environmentCapabilities: availableCapabilities,
+    });
     return {
       context: {
         profileVersion: 'web-general-v2',
@@ -130,13 +137,8 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
         promptVersion: PROMPT_VERSION,
         maxToolRounds: GENERAL_MAX_TOOL_ROUNDS,
       },
-      toolPolicy: {
-        capabilities,
-        approvedCapabilities: [],
-        channel: 'web',
-        environment:
-          process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() || 'development',
-      },
+      // command.capabilities 是传输/渲染协商，不是 Tool grant。
+      toolPolicy,
     };
   }
 

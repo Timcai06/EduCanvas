@@ -29,17 +29,19 @@ const request = {
 
 describe('OpenAICompatibleSpeechModelGateway', () => {
   it('调用受控 speech 端点并返回二进制与审计元数据', async () => {
-    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toEqual({
-        model: 'speech-model',
-        voice: 'alloy',
-        input: request.input,
-        response_format: 'mp3',
-      });
-      return new Response(new Uint8Array([0x49, 0x44, 0x33, 1]), {
-        headers: { 'content-type': 'audio/mpeg', 'x-request-id': 'req-1' },
-      });
-    });
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          model: 'speech-model',
+          voice: 'alloy',
+          input: request.input,
+          response_format: 'mp3',
+        });
+        return new Response(new Uint8Array([0x49, 0x44, 0x33, 1]), {
+          headers: { 'content-type': 'audio/mpeg', 'x-request-id': 'req-1' },
+        });
+      },
+    );
     const gateway = new OpenAICompatibleSpeechModelGateway(configuration, {
       fetchImpl: fetchImpl as typeof fetch,
       now: () => 10,

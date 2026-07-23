@@ -106,7 +106,9 @@ export function projectRenderableArtifact(input: unknown): PublicArtifact {
   });
 }
 
-function prepareValidatedArtifact(artifact: GradableArtifact): PreparedArtifact {
+function prepareValidatedArtifact(
+  artifact: GradableArtifact,
+): PreparedArtifact {
   if (artifact.type === 'quiz') {
     return {
       publicArtifact: projectRenderableArtifact(artifact),

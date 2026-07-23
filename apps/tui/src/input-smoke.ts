@@ -9,5 +9,7 @@ const line = await box.read({
   placeholder: '输入问题，/ 呼出命令',
   statusLine: '冒烟测试 · ● 已连接',
 });
-process.stdout.write(`RESULT=${line === null ? '<quit>' : JSON.stringify(line)}\n`);
+process.stdout.write(
+  `RESULT=${line === null ? '<quit>' : JSON.stringify(line)}\n`,
+);
 process.exit(0);

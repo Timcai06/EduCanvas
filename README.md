@@ -15,7 +15,7 @@
 
 EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。每个自然人用户拥有自己的长期 Agent，通过 Web、TUI 和受控消息渠道与它协作；家庭与班级通过共享 Notebook 和角色授权协作，但不共享 Agent 身份、私人记忆或默认工具权限。
 
-仓库同时交付浙江省大学生人工智能竞赛 **JBGS-2026-02：多模态 K12 人工智能通识课教学助手对话智能体**。教育是平台默认且最完整的能力域；K12 是首个正式 Profile 和当前工程验证纵切，但通用 Gateway、Runtime、Notebook 与 Artifact 不依赖课程状态。
+仓库同时交付浙江省大学生人工智能竞赛 **JBGS-2026-02：多模态 K12 人工智能通识课教学助手对话智能体**。教育是平台核心且最完整的能力域；默认对话不会强迫用户进入课程，K12 结构化 Profile 只在诊断、练习、测评和可信学习证据场景按需启用。
 
 > **北极星目标**：用户可以从任意受信入口访问同一个长期个人 Agent，让它理解自己的资料和学习状态，使用受控工具完成任务，并持续沉淀可恢复的知识、记忆与产物。
 
@@ -26,7 +26,7 @@ EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。�
 | 已落地                                                    | 有意保留的兼容层                             | 尚未完成                                   |
 | --------------------------------------------------------- | -------------------------------------------- | ------------------------------------------ |
 | `gateway.v1`、云端 Gateway、持久 Operation/恢复/审批      | Web 继续输出原 `schemaVersion=1` SSE         | 正式用户 IdP 与自助账号恢复                |
-| User/Personal Agent、私人/共享 Notebook Membership 与审计 | 匿名 Web 身份映射为受限兼容主体              | 摘要、长期学习者记忆和完整 Context Engine  |
+| User/Personal Agent、私人/共享 Notebook Membership 与审计 | 匿名 Web 身份映射为受限兼容主体              | Notebook 摘要与长期学习者记忆              |
 | 唯一 `AgentLoopEngine`，通用与 K12 通过 Profile/回调配置  | K12 课程账本仍保留教育领域专用表             | 原生图片、音频、视频 Provider 输入         |
 | Web、交互式 TUI、实验性 Telegram 私聊适配器               | Telegram 只有离线官方协议 Fixture，未做 live | 微信/QQ 等渠道的正式扫码授权与生产验证     |
 | 可选 Capability Node：配对、心跳、撤销、只读文件能力      | Node 使用出站 bearer session；不开放主机入站 | L2/L3 高风险设备动作及审批后续执行         |
@@ -38,7 +38,7 @@ EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。�
 
 ```mermaid
 flowchart LR
-    Surfaces[Web / TUI / Channels] --> Gateway[EduCanvas Gateway\n身份、路由、审批、事件]
+    Surfaces[Web / TUI / Channels] --> Gateway[Gateway logical authority\n身份、路由、审批、事件]
     Gateway --> Notebook[Notebook\nSources / Conversations / Memory / Studio]
     Notebook --> Agent[Agent Runtime\nContext / Model / Tools]
     Agent --> Answer[回答与行动]
@@ -97,10 +97,52 @@ make all
 - 停止数据库并保留数据：`make stop`
 - 查看全部命令：`make help`
 
+### Windows 原生启动
+
+Windows 用户不需要安装 GNU make。首次运行在 PowerShell 执行：
+
+```powershell
+corepack enable
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env
+pnpm env:check
+```
+
+需要 DeepSeek 时，可参考 `.env.local.example.deepseek`，把变量合并到 `.env`，
+再填写真实的 `MODEL_GATEWAY_API_KEY`。真实 Key 只放在本地 `.env`，不要提交。
+
+之后双击根目录的 `Start EduCanvas.cmd`。它会检查端口、准备数据库、按迁移文件
+指纹决定是否执行迁移，并把日志路径打印出来；`.env` 值允许使用成对的单引号或
+双引号包裹。常用参数可以从命令行传入：
+
+```powershell
+.\start-educanvas.ps1 -NoOpen
+.\start-educanvas.ps1 -SkipMigrate
+.\start-educanvas.ps1 -Port 3102
+```
+
+停止 Web、Gateway、Worker 并停止数据库（数据卷保留）：
+
+```powershell
+.\stop-educanvas.ps1
+```
+
+如果只想停止应用、继续保留数据库运行，使用 `-KeepDb`。启动脚本只会停止
+自己记录的进程树，不会误杀其他项目的 Node 服务。后台日志默认位于项目根目录
+的 `.educanvas-local.log` 和 `.educanvas-local.err.log`。
+
 如果启动失败，先运行：
 
 ```bash
 make doctor
+```
+
+Windows 等价检查命令是 `pnpm env:check`；它会指出缺失的环境变量，而不会输出
+任何密钥或供应商响应正文。跨平台项目脚本也可以直接使用：
+
+```bash
+pnpm setup:local
+pnpm start:local
 ```
 
 进入 TUI：
@@ -134,7 +176,7 @@ make build        # Next.js production build
 
 ```mermaid
 flowchart TB
-    Web[Web Client] --> Gateway[EduCanvas Gateway]
+    Web[Web BFF / SSE Adapter] --> Gateway[Gateway logical authority]
     TUI[TUI Client] --> Gateway
     Channels[Channel Adapters] --> Gateway
     Nodes[Capability Nodes] --> Gateway
@@ -149,7 +191,7 @@ flowchart TB
     Runtime --> DB
 ```
 
-图中的核心边界已经落地：`apps/gateway` 是独立组合根，Web 通过兼容 Gateway 边界进入同一协议，TUI 和 Telegram 通过 Gateway HTTP 接入，可选 Node 只提供出站配对的受控能力。当前仍是共享 PostgreSQL 的模块化单体，不代表已经完成生产部署或需要立即拆成微服务。
+图中的核心边界已经落地：`apps/gateway` 是远程 Gateway 组合根；Web 通过共进程 BFF 使用同一身份、路由、Operation、Tool Policy 和 Turn Application 语义；TUI 和 Telegram 通过 Gateway HTTP 接入，可选 Node 只提供出站配对的受控能力。统一的是控制事实与运行语义，不要求 Web 为形式一致多一次网络跳转。
 
 ### 一次 Agent Turn
 
@@ -162,7 +204,7 @@ sequenceDiagram
     participant T as Tool / Domain Service
     participant D as PostgreSQL
 
-    U->>G: normalized-capable input
+    U->>G: remote protocol or co-located BFF input
     G->>G: identity / pairing / Notebook routing
     G->>R: trusted turn request
     R->>D: operation + context snapshot
@@ -177,7 +219,7 @@ sequenceDiagram
     G-->>U: surface-specific delivery
 ```
 
-Gateway 对外使用严格的 `gateway.v1` NDJSON 事件；当前 Web SSE 是兼容投影，以保持现有浏览器状态机、取消、刷新恢复和教学 UI 行为。Web 与 TUI Fixture 已证明可以通过 Gateway 到达同一 Notebook/Conversation。
+Gateway 对远程客户端使用严格的 `gateway.v1` NDJSON 事件；Web SSE 是共进程兼容投影，以保持现有浏览器状态机、取消、刷新恢复和教学 UI 行为。Web 与 TUI Fixture 已证明可使用同一可信 Notebook/Conversation 路由。
 
 ## Workspace 结构
 
@@ -202,7 +244,7 @@ EduCanvas/
 │   ├── telemetry/            # 可关闭OTel Trace Adapter与脱敏/采样边界
 │   ├── canvas-protocol/      # Artifact Schema、交互事件与服务端判分
 │   ├── teaching-core/        # K12 状态机、可信事件、掌握度与领域 Port
-│   ├── teaching-runtime/     # 迁移期 K12 Loop/Tool；长期只保留 Profile/Workflow/领域适配
+│   ├── teaching-runtime/     # K12 Profile、Workflow、安全与领域适配；无独立Loop
 │   └── db/                   # Drizzle Schema、Repositories 与迁移
 ├── docs/                     # canonical 产品、架构、数据、工程、质量和 ADR
 ├── tests/e2e/                # 学习流、视觉和 Canvas Playwright 测试
@@ -265,13 +307,18 @@ stateDiagram-v2
 
 ## 下一阶段
 
-[Gateway-first 个人 Agent 计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)和[Web-first 产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)已经完成。当前架构线先进入[第二代研究与决策](docs/plan/active/2026-07-第二代架构研究.md)，不直接改写生产架构。后续产品与运维优先级是：
+[Gateway-first个人Agent计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)、
+[Web-first产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)、
+[第二代架构研究](docs/plan/completed/2026-07-第二代架构研究.md)与
+[第二代架构升级](docs/plan/completed/2026-07-第二代架构升级.md)均已完成。
+下一阶段转向用户可见的功能与前端设计，优先级是：
 
-1. 接入正式 IdP，替换仅供管理员/本地 bootstrap 使用的共享令牌；
-2. 完成统一 Context Engine：Notebook 摘要、长期学习者记忆、Artifact 上下文和原生多模态；
-3. 为 Telegram 一次性自助绑定纵切补 live 账号 smoke，并完成 enabled Adapter 生命周期、degraded health、可靠部署与告警；
-4. 完成对象删除 Outbox、外部指标/Trace 后端、SLO 与恢复演练；
-5. 只有明确的成年/管理员场景通过安全评审后，才增加 L2/L3 Node 能力。
+1. 做出年级自适应的完整学习纵切，连接普通问答、结构化教学与个性化反馈；
+2. 补Notebook摘要、Personal/Notebook Memory与可解释上下文；
+3. 打通原生图片、PDF页面、语音及后续视频输入输出；
+4. 以Web为K12主入口继续提升信息架构、移动端可用性、无障碍和视觉完成度，
+   TUI保持同一Notebook与操作语义；
+5. 建立年龄、学科和任务分层的教学质量评测，再推进正式IdP与production hardening。
 
 此前的 Gemini + NotebookLM 产品体验计划已经[结档](docs/plan/completed/2026-07-gemini-notebooklm-replica.md)；持久 Artifact、Notebook 来源/引用、轻产物、音频和 Canvas 共创已成为当前基线。
 
@@ -285,7 +332,7 @@ stateDiagram-v2
 | 学生 UI 规范                    | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md)                                                               |
 | 系统架构现状                    | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md)                                                     |
 | Gateway 与多入口                | [docs/02-architecture/02-Gateway与多入口.md](docs/02-architecture/02-Gateway与多入口.md)                                               |
-| 第二代架构提案                  | [docs/02-architecture/03-第二代架构提案.md](docs/02-architecture/03-第二代架构提案.md)                                                 |
+| 第二代架构                      | [docs/02-architecture/03-第二代架构.md](docs/02-architecture/03-第二代架构.md)                                                         |
 | Agent 编排边界                  | [docs/03-ai/01-Agent编排边界.md](docs/03-ai/01-Agent编排边界.md)                                                                       |
 | 架构研究索引                    | [docs/research/00-研究说明.md](docs/research/00-研究说明.md)                                                                           |
 | 数据设计                        | [docs/04-data/data-design.md](docs/04-data/data-design.md)                                                                             |

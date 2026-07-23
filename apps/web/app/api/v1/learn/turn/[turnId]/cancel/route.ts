@@ -45,6 +45,10 @@ export async function POST(
     if (error instanceof ChatLifecycleError) {
       return jsonError(400, 'invalid_turn', '回答标识无效。');
     }
-    return jsonError(503, 'cancel_unavailable', '暂时无法停止回答，请稍后重试。');
+    return jsonError(
+      503,
+      'cancel_unavailable',
+      '暂时无法停止回答，请稍后重试。',
+    );
   }
 }

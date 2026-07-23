@@ -35,14 +35,8 @@ describe('production AI dependency boundary', () => {
   });
 
   it('loads the design-QA client and fixture only after the server gate', () => {
-    const pagePath = join(
-      WEB_ROOT,
-      'app/design-qa/pipeline-flow/page.tsx',
-    );
-    const clientPath = join(
-      WEB_ROOT,
-      'features/canvas/pipeline-flow-qa.tsx',
-    );
+    const pagePath = join(WEB_ROOT, 'app/design-qa/pipeline-flow/page.tsx');
+    const clientPath = join(WEB_ROOT, 'features/canvas/pipeline-flow-qa.tsx');
     const pageSource = readFileSync(pagePath, 'utf8');
     const clientSource = readFileSync(clientPath, 'utf8');
 

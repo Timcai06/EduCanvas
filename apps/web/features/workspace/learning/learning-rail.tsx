@@ -120,7 +120,7 @@ function RailContents(props: LearningRailProps) {
             type="search"
             placeholder="搜索学习记录"
             onChange={(event) => props.onSearch?.(event.currentTarget.value)}
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
           />
         </label>
       ) : null}

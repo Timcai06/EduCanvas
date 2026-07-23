@@ -21,7 +21,9 @@ export function toolLabel(tool: string): string {
 
 /* 工具行使用树形连接线：把 Agent 行为挂在回答的页边，与引用旁注(┊)同列。 */
 export function renderToolStarted(theme: TuiTheme, tool: string): string {
-  return theme.dim('  ├─ ') + theme.dai('⚙') + theme.dim(` ${toolLabel(tool)}…`);
+  return (
+    theme.dim('  ├─ ') + theme.dai('⚙') + theme.dim(` ${toolLabel(tool)}…`)
+  );
 }
 
 export function renderToolCompleted(
@@ -65,7 +67,13 @@ export function renderProgressBar(
   const bar =
     theme.dai('▰'.repeat(filled)) + theme.dim('▱'.repeat(width - filled));
   const percent = `${Math.round(clamped * 100)}%`.padStart(4);
-  return theme.dim('  ├─ ') + theme.dai('▣') + theme.dim(` ${label} `) + bar + theme.dim(percent);
+  return (
+    theme.dim('  ├─ ') +
+    theme.dai('▣') +
+    theme.dim(` ${label} `) +
+    bar +
+    theme.dim(percent)
+  );
 }
 
 /** 引用旁注：与 Web 端 marginalia 同语义；有注号时与正文 [n] 对应。 */
@@ -84,10 +92,15 @@ export function renderCompletion(
   width: number,
   seconds: number | null,
 ): string {
-  const label = seconds !== null ? ` ✓ 完成 · ${seconds.toFixed(1)}s ` : ' ✓ 完成 ';
+  const label =
+    seconds !== null ? ` ✓ 完成 · ${seconds.toFixed(1)}s ` : ' ✓ 完成 ';
   const total = Math.max(20, Math.min(width, 72));
   const tail = Math.max(2, total - stringWidth(label) - 3);
-  return theme.dim('── ') + theme.good('✓') + theme.dim(`${label.slice(2)}${'─'.repeat(tail)}`);
+  return (
+    theme.dim('── ') +
+    theme.good('✓') +
+    theme.dim(`${label.slice(2)}${'─'.repeat(tail)}`)
+  );
 }
 
 /** 失败码 → 人话。可恢复与不可恢复的措辞明确区分，不暴露内部术语。 */
@@ -109,11 +122,17 @@ export function failureMessage(code: GatewayFailureCode): {
     case 'APPROVAL_DENIED':
       return { text: '你拒绝了本次操作，回答已停止。', recoverable: true };
     case 'UNAUTHENTICATED':
-      return { text: '登录已过期，请重新运行 educanvas login。', recoverable: false };
+      return {
+        text: '登录已过期，请重新运行 educanvas login。',
+        recoverable: false,
+      };
     case 'FORBIDDEN':
       return { text: '当前账户没有权限执行这个操作。', recoverable: false };
     case 'CAPABILITY_UNAVAILABLE':
-      return { text: '所需能力当前不可用（设备可能离线）。', recoverable: false };
+      return {
+        text: '所需能力当前不可用（设备可能离线）。',
+        recoverable: false,
+      };
     default:
       return { text: `出错了（${code}），可以稍后重试。`, recoverable: true };
   }
@@ -151,9 +170,7 @@ export function renderApprovalCard(
   const innerWidth = cardWidth - 4;
   const border = (value: string) => theme.zhusha(value);
   const headLabel = '需要你确认';
-  const head = theme.enabled
-    ? theme.seal(headLabel)
-    : `【${headLabel}】`;
+  const head = theme.enabled ? theme.seal(headLabel) : `【${headLabel}】`;
   /* 头行总宽 = ┏(1) + ━(1) + 章面 + 填充 + ┓(1)，与 body 行的 cardWidth 对齐；
      反白章面两侧各垫 1 空格(宽 2)，无色降级的全角【】共宽 4 */
   const headTail = Math.max(
@@ -188,9 +205,6 @@ export function renderApprovalListItem(
   width: number,
   approval: ApprovalCardInfo,
 ): string {
-  const summary = truncateToWidth(
-    approval.summary,
-    Math.max(10, width - 24),
-  );
+  const summary = truncateToWidth(approval.summary, Math.max(10, width - 24));
   return `${theme.zhusha('●')} ${summary} ${theme.dim(`· ${approval.risk.toUpperCase()} · ${approval.approvalId}`)}`;
 }

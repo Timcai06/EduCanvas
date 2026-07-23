@@ -5,6 +5,7 @@
 .env
 .env.*
 !.env.example
+!.env.local.example.deepseek
 *.pem
 *.key
 
@@ -51,6 +52,8 @@ CLAUDE.local.md
 logs/
 tmp/
 temp/
+.educanvas-local.pid
+.educanvas-migrate-state.json
 .omx/
 
 # Local runtime data and large generated artifacts

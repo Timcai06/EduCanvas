@@ -7,11 +7,11 @@
 
 ## 定位与实现
 
-EduCanvas Gateway 是长期个人 Agent 的云端控制平面。`packages/gateway-core` 已冻结严格的 `gateway.v1`；`packages/gateway-runtime` 承担路由、幂等、事件恢复和终态纪律；`apps/gateway` 提供真实 HTTP/NDJSON 组合根。Client、Channel 和 Node 都不能绕过 Gateway 直连 Runtime。
+EduCanvas Gateway 是长期个人 Agent 的逻辑控制平面。`packages/gateway-core` 定义严格的 `gateway.v1`；`packages/gateway-runtime` 承担路由、幂等、事件恢复和终态纪律；`apps/gateway` 提供真实 HTTP/NDJSON 组合根。TUI、Channel、Node 和远程 Client 通过该协议接入。第一方 Web 使用共进程 BFF Adapter，但仍消费同一身份、路由、Operation、审批和 Tool Policy 权威，不另建控制事实。
 
 ## 连接角色
 
-- `client`：Web、TUI 等第一方交互应用；
+- `client`：TUI 与其他远程第一方交互应用；Web 是共享控制面语义的共进程 BFF Client Adapter；
 - `channel`：Telegram 等第三方消息协议适配器；
 - `node`：经配对、从本地主动出站连接的能力宿主；
 - `operator`：内部运维/管理入口，不等同于普通用户。

@@ -9,7 +9,10 @@ import {
   parseAssetUploadRequest,
 } from '@/server/assets/asset-upload-http';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
-import { isTrustedSameOriginWrite, jsonError } from '@/server/http/request-security';
+import {
+  isTrustedSameOriginWrite,
+  jsonError,
+} from '@/server/http/request-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

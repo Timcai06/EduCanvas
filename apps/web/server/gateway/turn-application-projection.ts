@@ -30,7 +30,8 @@ function displayToolLabel(tool: string): string {
 
 /**
  * 统一 Turn Application 到浏览器 SSE 的兼容投影。
- * approval 由独立控制面呈现，因此不伪装成聊天流事件。
+ * approval 不进入聊天流；未接审批控制面的Web Profile不得开放需审批能力，
+ * 更不能把等待审批伪装成完成或失败。
  */
 export function projectTurnApplicationEventToWeb(
   event: TurnApplicationEvent,

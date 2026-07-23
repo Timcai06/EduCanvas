@@ -41,7 +41,9 @@ export async function storeAssetBytes(input: {
     .update(input.ownerSubjectId, 'utf8')
     .digest('hex')
     .slice(0, 16);
-  const safeExtension = input.extension.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const safeExtension = input.extension
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase();
   if (!safeExtension) throw new Error('asset_extension_invalid');
   const storageKey = `assets/${ownerPartition}/${randomUUID()}.${safeExtension}`;
   const root = await storageRoot();

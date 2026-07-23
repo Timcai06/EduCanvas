@@ -83,9 +83,7 @@ export function AnimationShell({
 }: {
   steps: readonly AnimationStepSummary[];
   pausePoints: readonly PipelineFlowSlot[];
-  children:
-    | ReactNode
-    | ((state: AnimationShellRenderState) => ReactNode);
+  children: ReactNode | ((state: AnimationShellRenderState) => ReactNode);
   onObservation?: (observation: AnimationClientObservation) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -153,11 +151,15 @@ export function AnimationShell({
       });
 
       timeline.set(cards, { opacity: 0.64, scale: 0.97 }, 0);
-      timeline.set(connectors, {
-        opacity: 0.35,
-        scaleX: 0,
-        transformOrigin: 'left center',
-      }, 0);
+      timeline.set(
+        connectors,
+        {
+          opacity: 0.35,
+          scaleX: 0,
+          transformOrigin: 'left center',
+        },
+        0,
+      );
 
       steps.forEach((step, index) => {
         const card = cards[index];
@@ -253,7 +255,9 @@ export function AnimationShell({
   const play = useCallback(() => {
     if (steps.length === 0) return;
     const startIndex =
-      currentStep >= steps.length - 1 ? 0 : clampStepIndex(currentStep, steps.length);
+      currentStep >= steps.length - 1
+        ? 0
+        : clampStepIndex(currentStep, steps.length);
     onObservation?.({
       type: 'animation_started',
       templateKey: 'pipeline_flow',
@@ -261,11 +265,7 @@ export function AnimationShell({
     });
 
     if (reducedMotion) {
-      const target = getNextPlaybackStop(
-        startIndex,
-        stepIds,
-        pauseSet,
-      );
+      const target = getNextPlaybackStop(startIndex, stepIds, pauseSet);
       applyControlledVisualState(target);
       setCurrentStep(target);
       setIsPlaying(false);
@@ -281,7 +281,11 @@ export function AnimationShell({
         });
       }
       const stoppedStep = steps[target];
-      if (stoppedStep && pauseSet.has(stoppedStep.id) && target < steps.length - 1) {
+      if (
+        stoppedStep &&
+        pauseSet.has(stoppedStep.id) &&
+        target < steps.length - 1
+      ) {
         onObservation?.({
           type: 'animation_paused',
           templateKey: 'pipeline_flow',
@@ -326,12 +330,16 @@ export function AnimationShell({
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && timelineRef.current?.isActive()) {
+      if (
+        document.visibilityState === 'hidden' &&
+        timelineRef.current?.isActive()
+      ) {
         pause();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibility);
   }, [pause]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {

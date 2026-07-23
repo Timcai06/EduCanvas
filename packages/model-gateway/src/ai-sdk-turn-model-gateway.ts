@@ -15,7 +15,7 @@ import {
   parseAiSdkEvent,
   stringifyAiSdkToolInput,
 } from './ai-sdk-protocol';
-import { failedEvent } from './openai-compatible-protocol';
+import { failedEvent, logProviderFailure } from './openai-compatible-protocol';
 
 /** @internal SDK Adapter构造依赖；不得由Web、领域层或客户端直接组装。 */
 export interface AiSdkTurnModelGatewayOptions {
@@ -129,15 +129,14 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
           return;
         }
         if (part.type === 'error') {
-          yield failedEvent(
-            request.phase,
-            normalizeAiSdkError(
-              part.error,
-              request.signal,
-              timedOut,
-              this.now(),
-            ),
+          const normalized = normalizeAiSdkError(
+            part.error,
+            request.signal,
+            timedOut,
+            this.now(),
           );
+          logProviderFailure(this.options.provider, normalized);
+          yield failedEvent(request.phase, normalized);
           return;
         }
         if (part.type !== 'finish-step') continue;
@@ -182,10 +181,14 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         retryable: false,
       });
     } catch (error) {
-      yield failedEvent(
-        request.phase,
-        normalizeAiSdkError(error, request.signal, timedOut, this.now()),
+      const normalized = normalizeAiSdkError(
+        error,
+        request.signal,
+        timedOut,
+        this.now(),
       );
+      logProviderFailure(this.options.provider, normalized);
+      yield failedEvent(request.phase, normalized);
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);

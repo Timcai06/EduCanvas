@@ -14,6 +14,7 @@ import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentTurnContextRepository,
 } from '@educanvas/db';
+import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
@@ -43,23 +44,23 @@ const unavailableModelGateway: TurnModelGateway = {
 export function beginGatewayGeneralTurnApplication(input: {
   operationId: string;
   traceId: string;
-  actorId: string;
-  agentId: string;
+  route: GatewayResolvedRoute;
   identity: AnonymousIdentity;
-  conversationId: string;
-  spaceId: string;
   request: TeachingTurnRequestBody;
   assetContext: BuiltAssetContext;
   signal: ModelAbortSignal;
-  capabilities: readonly string[];
+  transportCapabilities: readonly string[];
 }): { events: AsyncIterable<TurnApplicationEvent> } {
-  if (input.actorId !== input.identity.studentId) {
+  if (input.route.actorUserId !== input.identity.studentId) {
     throw new Error('web_general_actor_scope_mismatch');
+  }
+  if (input.route.agentProfileId !== 'general') {
+    throw new Error('web_general_profile_unsupported');
   }
   const operationSources = new WebOperationSources({
     identity: input.identity,
-    conversationId: input.conversationId,
-    spaceId: input.spaceId,
+    conversationId: input.route.conversationId,
+    spaceId: input.route.notebookId,
     operationId: input.operationId,
   });
   const tools = createGeneralToolKernel(operationSources);
@@ -71,6 +72,7 @@ export function beginGatewayGeneralTurnApplication(input: {
       operationSources,
       tools.staticCapabilities,
       tools.nodeInvocations,
+      input.route.membershipRole,
     ),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
@@ -83,20 +85,21 @@ export function beginGatewayGeneralTurnApplication(input: {
     protocol: 'educanvas.turn.v2',
     operationId: input.operationId,
     traceId: input.traceId,
-    actor: { actorId: input.actorId, agentId: input.agentId },
-    notebook: {
-      notebookId: input.spaceId,
-      conversationId: input.conversationId,
+    actor: {
+      actorId: input.route.actorUserId,
+      agentId: input.route.agentId,
     },
-    profile: { profileId: 'agent.general' },
+    notebook: {
+      notebookId: input.route.notebookId,
+      conversationId: input.route.conversationId,
+    },
+    profile: { profileId: input.route.agentProfileId },
     entrypoint: 'web',
     input: {
       clientMessageId: input.request.clientMessageId,
       parts: [...input.request.parts],
     },
-    capabilities: [
-      ...new Set([...input.capabilities, ...tools.staticCapabilities]),
-    ],
+    capabilities: [...new Set(input.transportCapabilities)],
   };
   return { events: service.run(command) };
 }

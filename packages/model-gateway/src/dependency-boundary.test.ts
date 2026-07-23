@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const sdkAdapterFiles = new Set([
@@ -36,7 +37,9 @@ describe('model-gateway dependency boundary', () => {
   });
 
   it('只允许可回滚AI SDK Adapter导入框架类型和实现', () => {
-    const root = new URL('.', import.meta.url).pathname;
+    // URL.pathname keeps a leading slash on Windows (for example /D:/...);
+    // fileURLToPath performs the platform-specific conversion before scanning.
+    const root = fileURLToPath(new URL('.', import.meta.url));
     const violations = productionTypescriptFiles(root)
       .filter((path) =>
         /from ['"](?:ai(?:\/[^'"]*)?|@ai-sdk\/[^'"]+)['"]/.test(

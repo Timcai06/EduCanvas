@@ -34,9 +34,7 @@ const errorForHttpStatus = (status: number): NormalizedModelError => {
  * JSON Schema 说明作为**机械协议**由适配器注入尾部 system 消息;业务提示词
  * 仍完全由调用方拥有。
  */
-export class OpenAICompatibleStructuredModelGateway
-  implements StructuredModelGateway
-{
+export class OpenAICompatibleStructuredModelGateway implements StructuredModelGateway {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
 
@@ -80,7 +78,10 @@ export class OpenAICompatibleStructuredModelGateway
     }, this.config.timeoutMs);
     const onExternalAbort = () => controller.abort();
     if (request.signal?.aborted === true) controller.abort();
-    else request.signal?.addEventListener('abort', onExternalAbort, { once: true });
+    else
+      request.signal?.addEventListener('abort', onExternalAbort, {
+        once: true,
+      });
 
     const startedAt = this.now();
     try {

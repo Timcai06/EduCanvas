@@ -8,10 +8,10 @@ const read = (relative: string) => readFileSync(join(root, relative), 'utf8');
 
 describe('音频Artifact浏览器边界', () => {
   it('详情投影只返回受控media URL，不映射私有key/checksum', () => {
-    const route = read(
-      '../../app/api/v1/chat/artifacts/[artifactId]/route.ts',
+    const route = read('../../app/api/v1/chat/artifacts/[artifactId]/route.ts');
+    const responseProjection = route.slice(
+      route.indexOf('return Response.json'),
     );
-    const responseProjection = route.slice(route.indexOf('return Response.json'));
     expect(responseProjection).toContain('media:');
     expect(responseProjection).toContain('/audio`');
     expect(responseProjection).not.toContain('objectKey:');
@@ -25,6 +25,6 @@ describe('音频Artifact浏览器边界', () => {
     expect(route).toContain('trustedSubjectId: identity.studentId');
     expect(route).toContain('.readVerified(');
     expect(route).toContain("request.headers.get('range')");
-    expect(route).toContain("status: range ? 206 : 200");
+    expect(route).toContain('status: range ? 206 : 200');
   });
 });

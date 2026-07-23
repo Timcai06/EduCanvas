@@ -101,6 +101,9 @@ export function gatewayRouteLabel(method: string, pathname: string): string {
   if (pathname === '/healthz') return 'health';
   if (pathname === '/v1/internal/metrics') return 'internal.metrics';
   if (pathname === '/v1/internal/envelopes') return 'internal.envelopes';
+  if (pathname === '/v1/internal/tool-effects/reconciliations') {
+    return 'internal.tool-effect.reconciliation';
+  }
   if (/^\/v1\/internal\/operations\/[^/]+\/events$/.test(pathname)) {
     return 'internal.operation.events';
   }

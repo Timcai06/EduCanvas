@@ -95,11 +95,7 @@ export async function parseTeachingTurnRequest(
     if (error instanceof TurnRequestValidationError) throw error;
     throw new TurnRequestValidationError('invalid_json');
   }
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value)
-  ) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TurnRequestValidationError('invalid_request');
   }
   const record = value as Record<string, unknown>;

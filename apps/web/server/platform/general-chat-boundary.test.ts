@@ -39,11 +39,31 @@ describe('默认通用Chat产品边界', () => {
       source('./general-turn-lifecycle.ts'),
       source('./general-turn-persistence.ts'),
       source('./general-turn-profile.ts'),
+      source('./general-turn-tool-policy.ts'),
       source('./general-turn-tools.ts'),
     ].join('\n');
     expect(modules).not.toContain('@educanvas/teaching-core');
     expect(modules).not.toContain('@educanvas/teaching-runtime');
     expect(modules).not.toContain('AgentLoopEngine');
     expect(modules).not.toContain('AgentToolRegistry');
+  });
+
+  it('Web兼容入口只从Gateway可信Route投影Profile与Membership', () => {
+    const runner = source('../gateway/web-turn.ts');
+    const turn = source('./general-turn.ts');
+    const profile = source('./general-turn-profile.ts');
+
+    expect(runner).toContain('route: input.route');
+    expect(runner).toContain('transportCapabilities:');
+    expect(turn).toContain(
+      'profile: { profileId: input.route.agentProfileId }',
+    );
+    expect(turn).toContain('input.route.membershipRole');
+    expect(turn).not.toContain("profileId: 'agent.general'");
+    expect(turn).not.toContain(
+      '...input.transportCapabilities, ...tools.staticCapabilities',
+    );
+    expect(profile).toContain('resolveWebGeneralToolPolicy');
+    expect(profile).not.toContain('command.capabilities.includes');
   });
 });

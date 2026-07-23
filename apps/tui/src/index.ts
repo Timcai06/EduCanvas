@@ -13,10 +13,7 @@ import { renderBanner, renderRule } from './banner';
 import { saveConfig } from './config';
 import { renderHome } from './home';
 import { InputBox } from './input-box';
-import {
-  renderApprovalCard,
-  renderApprovalListItem,
-} from './render';
+import { renderApprovalCard, renderApprovalListItem } from './render';
 import { TurnRenderer, type RendererIO } from './renderer';
 import { runUiDemo } from './ui-demo';
 import { establishGatewaySession } from './session';
@@ -34,7 +31,9 @@ function usage(): never {
   process.stderr.write(`  educanvas approvals\n`);
   process.stderr.write(`  educanvas approve <approval-id> [reason]\n`);
   process.stderr.write(`  educanvas deny <approval-id> [reason]\n`);
-  process.stderr.write(`  educanvas ui-demo              界面全状态走查（设计 QA）\n`);
+  process.stderr.write(
+    `  educanvas ui-demo              界面全状态走查（设计 QA）\n`,
+  );
   process.exit(2);
 }
 
@@ -149,8 +148,11 @@ async function main(): Promise<void> {
     if (!current) throw new Error('当前账户没有可访问的笔记本');
     let lastApprovalId: string | null = null;
     let approvalsCount = 0;
-    let recentOperations: Awaited<ReturnType<typeof client.listOperations>> = [];
-    let recentConnections: Awaited<ReturnType<typeof client.listConnections>>['connections'] = [];
+    let recentOperations: Awaited<ReturnType<typeof client.listOperations>> =
+      [];
+    let recentConnections: Awaited<
+      ReturnType<typeof client.listConnections>
+    >['connections'] = [];
     try {
       [approvalsCount, recentOperations] = await Promise.all([
         client.listApprovals().then((list) => list.length),
@@ -199,8 +201,9 @@ async function main(): Promise<void> {
       }
     };
 
-    const resolveApprovalTarget = (argument: string | undefined): string | null =>
-      argument?.trim() || lastApprovalId;
+    const resolveApprovalTarget = (
+      argument: string | undefined,
+    ): string | null => argument?.trim() || lastApprovalId;
 
     try {
       while (true) {
@@ -219,9 +222,7 @@ async function main(): Promise<void> {
               `${notebookLine(theme, conversation, index, conversation.conversationId === current!.conversationId)}\n`,
             );
           });
-          process.stdout.write(
-            `${theme.dim('  /use <编号或 id> 切换')}\n\n`,
-          );
+          process.stdout.write(`${theme.dim('  /use <编号或 id> 切换')}\n\n`);
           continue;
         }
         if (line.startsWith('/use ')) {
@@ -270,12 +271,12 @@ async function main(): Promise<void> {
           try {
             const events = await client.resume(operationId, -1);
             if (events.length === 0) {
-              process.stdout.write(`${theme.dim('这条回答没有可回看的记录。')}\n\n`);
+              process.stdout.write(
+                `${theme.dim('这条回答没有可回看的记录。')}\n\n`,
+              );
               continue;
             }
-            process.stderr.write(
-              `${renderRule(theme, terminalWidth() - 1)}\n`,
-            );
+            process.stderr.write(`${renderRule(theme, terminalWidth() - 1)}\n`);
             const replayRenderer = new TurnRenderer(theme, makeIO());
             for (const event of events) replayRenderer.render(event);
             process.stdout.write('\n');
@@ -305,8 +306,12 @@ async function main(): Promise<void> {
           );
           continue;
         }
-        if (line === '/approve' || line.startsWith('/approve ') ||
-            line === '/deny' || line.startsWith('/deny ')) {
+        if (
+          line === '/approve' ||
+          line.startsWith('/approve ') ||
+          line === '/deny' ||
+          line.startsWith('/deny ')
+        ) {
           const isApprove = line === '/approve' || line.startsWith('/approve ');
           const argument = line.split(/\s+/)[1];
           const target = resolveApprovalTarget(argument);
@@ -350,7 +355,8 @@ async function main(): Promise<void> {
         }
         if (line.startsWith('/channels connect ')) {
           const rawProvider = line.split(/\s+/)[2];
-          const parsedProvider = gatewayConnectionProviderSchema.safeParse(rawProvider);
+          const parsedProvider =
+            gatewayConnectionProviderSchema.safeParse(rawProvider);
           if (!parsedProvider.success) {
             process.stderr.write(
               `${theme.warn('!')} 不支持这个通信方式。用 /channels 查看可用选项。\n`,
@@ -452,8 +458,14 @@ async function main(): Promise<void> {
         const localAbort = new AbortController();
         const rawCapable = process.stdin.isTTY === true;
         let cancelRequested = false;
-        const onStreamKey = (_input: string | undefined, key: Key | undefined) => {
-          if (key?.name === 'escape' || (key?.ctrl === true && key.name === 'c')) {
+        const onStreamKey = (
+          _input: string | undefined,
+          key: Key | undefined,
+        ) => {
+          if (
+            key?.name === 'escape' ||
+            (key?.ctrl === true && key.name === 'c')
+          ) {
             if (cancelRequested) return;
             cancelRequested = true;
             const operationId = turnRenderer.operationId;

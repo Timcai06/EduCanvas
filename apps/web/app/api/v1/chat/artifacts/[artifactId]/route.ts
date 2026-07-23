@@ -59,13 +59,14 @@ export async function GET(
     ) {
       throw new ArtifactOwnershipError();
     }
-    const selectedVersion = requestedVersionNumber !== null
-      ? await repository.getVersion({
-          artifactId,
-          version: requestedVersionNumber,
-          trustedSubjectId: identity.studentId,
-        })
-      : detail.latestVersion;
+    const selectedVersion =
+      requestedVersionNumber !== null
+        ? await repository.getVersion({
+            artifactId,
+            version: requestedVersionNumber,
+            trustedSubjectId: identity.studentId,
+          })
+        : detail.latestVersion;
     const versions = await repository.listVersionProvenance({
       artifactId,
       trustedSubjectId: identity.studentId,

@@ -45,10 +45,7 @@ describe('buildConversationOutline', () => {
 describe('生成任务的信任边界(静态)', () => {
   it('generateArtifact 不触碰可信学习事实(learning_events/掌握度)', () => {
     const source = readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        './generate-artifact.ts',
-      ),
+      join(dirname(fileURLToPath(import.meta.url)), './generate-artifact.ts'),
       'utf8',
     );
     expect(source).not.toMatch(/learning_?[eE]vents/);

@@ -150,9 +150,9 @@ describe('真实 PostgreSQL 队列 Trace fixture', () => {
 
     const orderedSpans = orderedNames.map((name) => byName.get(name)!);
     const traceId = orderedSpans[0]!.spanContext().traceId;
-    expect(new Set(orderedSpans.map((span) => span.spanContext().traceId))).toEqual(
-      new Set([traceId]),
-    );
+    expect(
+      new Set(orderedSpans.map((span) => span.spanContext().traceId)),
+    ).toEqual(new Set([traceId]));
     for (let index = 1; index < orderedSpans.length; index += 1) {
       expect(orderedSpans[index]!.parentSpanContext?.spanId).toBe(
         orderedSpans[index - 1]!.spanContext().spanId,
@@ -160,7 +160,9 @@ describe('真实 PostgreSQL 队列 Trace fixture', () => {
     }
 
     for (const span of orderedSpans) {
-      expect(new Set(Object.keys(span.attributes))).toEqual(allowedAttributeKeys);
+      expect(new Set(Object.keys(span.attributes))).toEqual(
+        allowedAttributeKeys,
+      );
       expect(span.attributes['educanvas.operation_id']).toBe(operationId);
       expect(span.events).toEqual([]);
     }

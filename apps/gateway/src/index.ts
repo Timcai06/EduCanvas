@@ -20,6 +20,7 @@ import {
   Sha256GatewayRequestFingerprint,
 } from '@educanvas/gateway-runtime';
 import { readGatewayConfig } from './config';
+import { createGatewayEffectReconciliationControl } from './effect-reconciliation-control';
 import { createGatewayHttpHandler } from './server';
 import { GatewayAgentTurnRunner } from './agent-runner';
 import {
@@ -78,6 +79,9 @@ const server = createServer(
   createGatewayHttpHandler({
     service,
     internalToken: config.internalToken,
+    effectReconciliation: config.internalToken
+      ? createGatewayEffectReconciliationControl()
+      : null,
     clientTransport: clientSessionAuth
       ? {
           bootstrapToken: config.bootstrapToken,

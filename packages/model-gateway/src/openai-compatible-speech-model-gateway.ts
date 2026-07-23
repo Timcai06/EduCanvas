@@ -31,9 +31,7 @@ const errorForHttpStatus = (status: number): NormalizedModelError => {
  * OpenAI-compatible `/audio/speech` 适配器。一次请求最多合成配置上限字符，
  * 不做内部重试；调用方决定失败终态，避免超时或限流时静默重复计费。
  */
-export class OpenAICompatibleSpeechModelGateway
-  implements SpeechModelGateway
-{
+export class OpenAICompatibleSpeechModelGateway implements SpeechModelGateway {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
 
@@ -68,30 +66,30 @@ export class OpenAICompatibleSpeechModelGateway
     }, this.config.speechTimeoutMs);
     const onExternalAbort = () => controller.abort();
     if (request.signal?.aborted === true) controller.abort();
-    else request.signal?.addEventListener('abort', onExternalAbort, { once: true });
+    else
+      request.signal?.addEventListener('abort', onExternalAbort, {
+        once: true,
+      });
 
     const modelId = this.config.modelIds.speech!;
     const startedAt = this.now();
     try {
       let response: Response;
       try {
-        response = await this.fetchImpl(
-          `${this.config.baseUrl}/audio/speech`,
-          {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${this.config.apiKey}`,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: modelId,
-              voice: this.config.speechVoice,
-              input,
-              response_format: 'mp3',
-            }),
-            signal: controller.signal,
+        response = await this.fetchImpl(`${this.config.baseUrl}/audio/speech`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.config.apiKey}`,
+            'content-type': 'application/json',
           },
-        );
+          body: JSON.stringify({
+            model: modelId,
+            voice: this.config.speechVoice,
+            input,
+            response_format: 'mp3',
+          }),
+          signal: controller.signal,
+        });
       } catch (cause) {
         if (timedOut) {
           throw invocationError({ code: 'timeout', retryable: true }, cause);

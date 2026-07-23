@@ -14,7 +14,10 @@ gsap.registerPlugin(useGSAP);
  */
 export function SlidesRenderer({ content }: { content: unknown }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const parsed = useMemo(() => slidesContentSchema.safeParse(content), [content]);
+  const parsed = useMemo(
+    () => slidesContentSchema.safeParse(content),
+    [content],
+  );
   const [index, setIndex] = useState(0);
 
   useGSAP(
@@ -92,7 +95,7 @@ export function SlidesRenderer({ content }: { content: unknown }) {
         >
           <CaretLeft aria-hidden="true" size={18} />
         </button>
-        <span className="text-xs text-ink-faint" aria-live="polite">
+        <span className="text-xs text-ink-muted" aria-live="polite">
           {index + 1} / {slides.length}
         </span>
         <button

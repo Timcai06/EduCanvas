@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+dist
+build
+coverage
+.turbo
+output
+tmp
+temp
+apps/web/.next

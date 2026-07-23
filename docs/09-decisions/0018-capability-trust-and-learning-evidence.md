@@ -39,3 +39,7 @@
 - 客户端提交 `isCorrect` 或模型声称“已掌握”不能形成可信事件；
 - 沙箱无法访问宿主 DOM、Cookie、网络或学习事件写入口；
 - 权限与学习事件回放可以解释最终决定。
+
+## 实施证据（2026-07-23）
+
+Gateway General、Web General与Web Teaching均通过共享`resolveToolPolicy`解析五维交集。Web Teaching直接消费Gateway权威Route中的Profile与Membership，教学状态白名单只收窄Profile维；浏览器Envelope仅协商输入、输出和Artifact能力，不再携带或授予Teaching Tool capability。纯策略、Profile、可信Route、实际Adapter上界与源码组合边界测试共同覆盖未知来源fail closed、viewer拒绝、恶意manifest不增权和审批结果重新落入最终交集。

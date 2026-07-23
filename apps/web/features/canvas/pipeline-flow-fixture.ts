@@ -33,12 +33,7 @@ export const pipelineFlowQaArtifact = {
         narration: '展示分数最高的类别，同时保留结果可能出错的提醒。',
       },
     ],
-    highlightOrder: [
-      'input',
-      'feature_extraction',
-      'classification',
-      'output',
-    ],
+    highlightOrder: ['input', 'feature_extraction', 'classification', 'output'],
     pausePoints: ['feature_extraction', 'classification'],
     completionMessage: '动画播放完成不等于掌握；请回到对话解释每一步。',
   },

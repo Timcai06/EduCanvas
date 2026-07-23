@@ -1,4 +1,9 @@
-import { codePointWidth, padToWidth, stringWidth, truncateToWidth } from './text';
+import {
+  codePointWidth,
+  padToWidth,
+  stringWidth,
+  truncateToWidth,
+} from './text';
 import type { TuiTheme } from './theme';
 
 /**
@@ -217,7 +222,8 @@ export function renderInputFrame(
     const prefix = index === 0 ? `${theme.dai('✎')} ` : '  ';
     const padded =
       empty && index === 0
-        ? rowText + ' '.repeat(Math.max(0, innerWidth - stringWidth(state.placeholder)))
+        ? rowText +
+          ' '.repeat(Math.max(0, innerWidth - stringWidth(state.placeholder)))
         : padToWidth(rowText, innerWidth);
     return `${border('│')} ${prefix}${padded} ${border('│')}`;
   });
@@ -230,7 +236,9 @@ export function renderInputFrame(
             (command) =>
               `${theme.dai(command.name)} ${theme.dim(command.description)}`,
           )
-          .join(theme.dim(' · '))}${theme.dim(' — Tab 补全 · Shift+Enter 换行')}`
+          .join(
+            theme.dim(' · '),
+          )}${theme.dim(' — Tab 补全 · Shift+Enter 换行')}`
       : `  ${theme.dim(truncateToWidth(state.statusLine, frameWidth - 2))}`;
 
   return {

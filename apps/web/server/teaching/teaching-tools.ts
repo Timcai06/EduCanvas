@@ -146,6 +146,11 @@ const capabilityByTool = {
 export type TeachingToolCapability =
   (typeof capabilityByTool)[keyof typeof capabilityByTool];
 
+/** 返回当前 Teaching Tool Kernel 实际注册的能力上界。 */
+export function teachingToolAdapterCapabilities(): readonly TeachingToolCapability[] {
+  return [...new Set(Object.values(capabilityByTool))].sort();
+}
+
 /** Teaching Profile 当前实现可用且通过状态白名单的能力集合。 */
 export function teachingToolCapabilitiesForState(
   state: TeachingState,

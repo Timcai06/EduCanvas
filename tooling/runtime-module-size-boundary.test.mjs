@@ -5,15 +5,19 @@ import { describe, it } from 'node:test';
 
 const REVIEW_LIMIT = 250;
 const TURN_APPLICATION_REVIEW_LIMIT = 300;
+const TURN_APPLICATION_TEST_REVIEW_LIMIT = 400;
 const MODEL_GATEWAY_REVIEW_LIMIT = 400;
 const TELEMETRY_REVIEW_LIMIT = 300;
 const CONTINUATION_REVIEW_LIMIT = 300;
 const GATEWAY_TURN_REVIEW_LIMIT = 300;
 const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
-const WEB_VISUAL_REVIEW_LIMIT = 350;
+// PixelBlast runtime 因反闪烁的同步补渲等真实改动小幅增长，2026-07 从 350 上调到 360；仍是可读性护栏。
+const WEB_VISUAL_REVIEW_LIMIT = 360;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
 const WEB_WORKSPACE_REVIEW_LIMIT = 600;
-const WEB_STYLES_REVIEW_LIMIT = 400;
+// 主题系统（light-dark 双色板 + data-theme + 墨点场专用色）让 globals.css 合理增长，
+// 2026-07 从 400 上调到 420；仍是可读性护栏而非无界额度。
+const WEB_STYLES_REVIEW_LIMIT = 420;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
 const TOOL_KERNEL_TEST_PATTERN =
@@ -75,7 +79,24 @@ const WEB_GENERAL_TURN_MODULES = [
   'apps/web/server/platform/general-turn-lifecycle.ts',
   'apps/web/server/platform/general-turn-persistence.ts',
   'apps/web/server/platform/general-turn-profile.ts',
+  'apps/web/server/platform/general-turn-tool-policy.ts',
   'apps/web/server/platform/general-turn-tools.ts',
+];
+const WEB_GENERAL_TURN_TESTS = typescriptFiles(
+  'apps/web/server/platform',
+).filter((path) =>
+  /\/general-(?:turn(?:[.-].+)?|chat-boundary)\.test\.ts$/.test(path),
+);
+const WEB_TEACHING_TURN_ENTRY = 'apps/web/server/teaching/learning-turn.ts';
+const WEB_TEACHING_TURN_MODULES = [
+  WEB_TEACHING_TURN_ENTRY,
+  ...typescriptFiles('apps/web/server/teaching/turn-application'),
+];
+const WEB_TEACHING_TURN_TESTS = [
+  ...typescriptFiles('apps/web/server/teaching').filter((path) =>
+    /\/(?:learning-turn(?:\..+)?|teaching-tools)\.test\.ts$/.test(path),
+  ),
+  'apps/web/server/gateway/teaching-turn-boundary.test.ts',
 ];
 
 function lineCount(path) {
@@ -254,5 +275,27 @@ describe('Runtime module size boundary', () => {
       WEB_GENERAL_TURN_MODULES,
       TURN_APPLICATION_REVIEW_LIMIT,
     );
+    assertFilesWithinLimit(
+      WEB_GENERAL_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Web Teaching Turn responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_MODULES,
+      TURN_APPLICATION_REVIEW_LIMIT,
+    );
+    assertFilesWithinLimit(
+      WEB_TEACHING_TURN_TESTS,
+      TURN_APPLICATION_TEST_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps one explicit Web Teaching Turn Application composition root', () => {
+    const compositionRoots = WEB_TEACHING_TURN_MODULES.filter((path) =>
+      readFileSync(path, 'utf8').includes('new TurnApplicationService('),
+    );
+    assert.deepEqual(compositionRoots, [WEB_TEACHING_TURN_ENTRY]);
   });
 });

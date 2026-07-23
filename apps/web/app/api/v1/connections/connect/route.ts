@@ -42,7 +42,11 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (error instanceof GatewayPersistenceError) {
       if (error.code === 'idempotency_conflict') {
-        return jsonError(409, 'connection_exists', '这个渠道已有待确认或有效连接。');
+        return jsonError(
+          409,
+          'connection_exists',
+          '这个渠道已有待确认或有效连接。',
+        );
       }
       return jsonError(403, 'forbidden', '无法把渠道连接到这个笔记本。');
     }

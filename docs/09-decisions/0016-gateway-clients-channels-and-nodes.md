@@ -12,7 +12,7 @@
 
 1. 新增逻辑上的 **EduCanvas Gateway**，作为常驻交互控制平面。它与连接模型供应商的 `model-gateway` 是两个不同概念。
 2. Web 与 TUI 是第一方客户端；微信、QQ、飞书、Telegram、Discord、短信和语音等通过 Channel Adapter 接入；手机、电脑或其他设备能力通过受配对的 Node 接入。
-3. 所有入口只连接 Gateway，不直接调用 Agent Runtime、领域服务或数据库。
+3. Gateway 是**逻辑控制面权威**，不是强制所有第一方请求发生一次独立网络跳转。Web BFF 可以在同一进程组合 Gateway 用例服务和统一 Turn Application；它仍必须使用服务端解析的身份、Notebook 路由、Operation、审批与 Tool Policy，不能另建一套可信事实。TUI、Channel 与 Node 通过 Gateway HTTP/协议接入。
 4. Gateway 负责身份与配对、消息标准化、Notebook/Conversation 路由、能力协商、幂等、速率限制、审批、事件分发、断线恢复、操作取消和渠道投递。取消是协作式的：客户端请求后，运行中操作在下一个事件边界（或竞速打断正在 await 的 runner）追加 `operation.cancelled`，经既有事件流回到客户端，不另开终态写入路径，也不伪造已取消。
 5. Gateway 不负责模型循环、Prompt/Context 构造、Provider 路由、判分、掌握度或 Artifact 生成；这些职责分别属于 Agent Runtime、Model Gateway、可信领域服务和 Worker。
 6. Web 是 K12 学生主客户端，提供 Chat、Sources、Studio、Canvas、渠道连接和复杂授权；TUI 是高级第一方客户端，提供聊天、任务、状态、日志、渠道连接与审批；能力较弱的渠道返回文本、媒体、卡片或 Web 深链接，不要求功能表现完全相同。
@@ -33,8 +33,8 @@
 
 ## 后果
 
-- Next.js 不再是长期系统中枢，只是 Web 客户端及迁移期 BFF；
-- 现有 SSE 可以作为 Web 传输兼容层，但长期事件协议由 Gateway 对所有客户端统一提供；
+- Next.js 不是跨客户端系统中枢；它是 Web 客户端和共进程 BFF Adapter；
+- Web SSE 是第一方兼容投影，`gateway.v1` 是 TUI、Channel、Node 和远程 Client 的持久协议；两种传输必须共享控制事实与运行语义，但不要求字节级或网络拓扑一致；
 - 渠道插件和设备 Node 不能绕过主体权限、Notebook 所有权和工具策略；
 - 云端部署必须提供服务端强制的用户级租户隔离、配对撤销和审计，不能只依赖 Prompt 或客户端传入的用户标识；
 - 本地 Node 是可撤销的能力扩展，不是绕过云端 Gateway 的第二条控制路径；
@@ -44,7 +44,7 @@
 
 - 同一条规范化消息可以从 Web 和 TUI Fixture 进入同一 Conversation；
 - Channel Adapter 不导入 Agent Runtime 内部实现；
-- Gateway 停止时客户端明确失败，不隐式绕过 Gateway 直连 Runtime；
+- 远程 Gateway 停止时，TUI、Channel 与 Node 明确失败；Web BFF 不因远程进程停止而绕过身份、路由、Operation 或 Tool Policy；
 - 两个用户即使连接同一渠道或同类 Node，也不能读取彼此的 Notebook、Operation、凭据或事件；
 - Node 断线、撤销或重放旧请求时，Gateway 能给出明确终态且不执行越权设备动作；
 - 能力协商测试覆盖文本、图片、文件、语音和 Web 深链接降级。
@@ -61,4 +61,4 @@
 
 **Connections 控制面（2026-07-21）**：`gateway-core` 只公开 `telegram/wechat/qq` 产品级 provider、`pending/active/revoked` 状态与 external URL 授权，不公开 Adapter ID 或外部账号 ID。Gateway Client API、Web `/settings` BFF 与 TUI `/channels` 复用同一个 `GatewayConnectionService` 和 PostgreSQL Repository。Telegram 发起后创建十分钟 pending，官方 Bot 私聊只有携正确 `/start educanvas_<connectionId>` 才可原子激活；过期、重放、已被其他主体绑定均拒绝。微信/QQ 在正式资格和凭据缺失时为 disabled。撤销同时终止账号/线程 Binding 并保留 `revokedAt`，列表和撤销查询始终带可信 userId。
 
-**兼容投影边界（2026-07-21）**：浏览器继续通过 Next.js BFF 和既有 SSE 使用统一 Runtime，这是第一方 Web 的有意兼容投影，不要求为了形式统一迁移到 Gateway 持久传输。独立Gateway runner与Web General均已迁入`TurnApplicationService`并接通通用Context/Model Run审计；Web General额外接通Asset、网页Tool/Effect与引用，Web Teaching仍在迁移，独立Gateway也尚未复用Web Tool/Asset Adapter。“同一Gateway协议/Notebook路由”不等于能力已经等价。后续收敛的是应用语义和可验证能力，不把替换浏览器传输本身列为架构债务。
+**兼容投影边界（2026-07-23 更新）**：浏览器继续通过 Next.js BFF 和既有 SSE 使用统一 Runtime，这是第一方 Web 的有意兼容投影，不要求为了形式统一迁移到 Gateway 持久传输。独立Gateway runner、Web General与Web Teaching均已迁入`TurnApplicationService`并接通通用Context/Model Run审计；三条组合路径都通过共享Resolver解析可信五维Tool Policy，Web Teaching额外保留K12安全、状态与学习证据。独立Gateway仍未复用Web Tool/Asset和K12 Adapter，因此“同一Gateway协议/Notebook路由”不等于能力已经等价。后续收敛的是应用语义和可验证能力，不把替换浏览器传输本身列为架构债务。

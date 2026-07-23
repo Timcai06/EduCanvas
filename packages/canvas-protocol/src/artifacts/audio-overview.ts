@@ -10,7 +10,11 @@ export const audioOverviewMetadataSchema = z
   .object({
     contentVersion: z.literal(AUDIO_OVERVIEW_CONTENT_VERSION),
     contentType: z.literal('audio/mpeg'),
-    byteSize: z.number().int().positive().max(20 * 1024 * 1024),
+    byteSize: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 * 1024),
     transcript: z.string().min(1).max(3_500),
     sourceCount: z.number().int().min(1).max(8),
     script: z
@@ -35,6 +39,4 @@ export const audioOverviewMetadataSchema = z
   })
   .strict();
 
-export type AudioOverviewMetadata = z.infer<
-  typeof audioOverviewMetadataSchema
->;
+export type AudioOverviewMetadata = z.infer<typeof audioOverviewMetadataSchema>;

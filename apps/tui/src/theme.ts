@@ -64,10 +64,19 @@ export function detectThemeEnvironment(
 
 export function resolveColorDepth(environment: ThemeEnvironment): ColorDepth {
   const forced = environment.forceDepth;
-  if (forced === 'none' || forced === 'ansi16' || forced === 'ansi256' || forced === 'truecolor') {
+  if (
+    forced === 'none' ||
+    forced === 'ansi16' ||
+    forced === 'ansi256' ||
+    forced === 'truecolor'
+  ) {
     return forced;
   }
-  if (!environment.isTTY || environment.noColor || environment.term === 'dumb') {
+  if (
+    !environment.isTTY ||
+    environment.noColor ||
+    environment.term === 'dumb'
+  ) {
     return 'none';
   }
   if (

@@ -29,7 +29,6 @@ import {
   loadOwnedTeachingGatewayTarget,
   loadOwnedTeachingSession,
 } from '../teaching/learning-session';
-import { teachingToolCapabilitiesForState } from '../teaching/teaching-tools';
 import { gatewayToLegacy } from './turn-application-projection';
 
 const identities = new DrizzleGatewayIdentityRepository();
@@ -59,16 +58,13 @@ class TeachingTurnApplicationRunner implements GatewayTurnRunnerPort {
       turn = beginGatewayTeachingTurnApplication({
         operationId: input.operationId,
         traceId: input.traceId,
-        actorId: input.route.actorUserId,
-        agentId: input.route.agentId,
+        route: input.route,
         identity: this.input.identity,
         session: this.input.session,
-        conversationId: input.route.conversationId,
-        notebookId: input.route.notebookId,
         request: this.input.request,
         assetContext: this.input.assetContext,
         signal: input.signal,
-        capabilities: input.envelope.capabilities.capabilities.map(
+        transportCapabilities: input.envelope.capabilities.capabilities.map(
           (capability) => capability.name,
         ),
       });
@@ -142,12 +138,6 @@ export async function beginTeachingGatewayTurn(
         { name: 'output.markdown', risk: 'l0', version: '1', constraints: {} },
         { name: 'output.stream', risk: 'l0', version: '1', constraints: {} },
         { name: 'artifact.native', risk: 'l1', version: '1', constraints: {} },
-        ...teachingToolCapabilitiesForState(session.state).map((name) => ({
-          name,
-          risk: 'l0' as const,
-          version: '1',
-          constraints: {},
-        })),
       ],
     },
     replyTarget: { kind: 'connection', connectionId },

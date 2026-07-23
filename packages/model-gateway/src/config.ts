@@ -295,9 +295,7 @@ export function parseModelGatewayConfiguration(
       { min: 1, max: 65_536 },
       'INVALID_MAX_OUTPUT_TOKENS',
     ),
-    speechVoice: parseSpeechVoice(
-      environmentValues.MODEL_GATEWAY_SPEECH_VOICE,
-    ),
+    speechVoice: parseSpeechVoice(environmentValues.MODEL_GATEWAY_SPEECH_VOICE),
     speechTimeoutMs: parseInteger(
       environmentValues.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
       60_000,
