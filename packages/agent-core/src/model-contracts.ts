@@ -1,3 +1,28 @@
+/**
+ * 模型契约 — 任务别名系统 + 供应商无关的模型类型。
+ *
+ * ## 任务别名（Task Alias）路由
+ *
+ * 业务代码不引用供应商模型 ID（如 `deepseek-chat`），而是使用抽象别名。
+ * 服务端适配器负责 alias → 具体模型的映射。这保证换模型只改配置，不动业务代码。
+ *
+ * | 类别 | 别名 | 用途 |
+ * |------|------|------|
+ * | streaming | agent.turn | 通用 Agent 对话 |
+ * | streaming | teaching.turn | K12 教学对话 |
+ * | structured | artifact.generate | Artifact 生成（JSON Schema 约束） |
+ * | structured | retrieval.query_rewrite | 检索查询改写 |
+ * | speech | speech.generate | TTS 语音合成 |
+ *
+ * ## 模型别名（Model Alias）
+ *
+ * 路由档位而非供应商模型名：
+ * - primary: 主力模型（DeepSeek 等）
+ * - fast: 快速轻量模型
+ * - structured: 结构化输出专用
+ * - speech: TTS 专用
+ */
+
 import { z } from 'zod';
 
 /** 可以使用流式文本入口的业务任务；垂直Agent通过稳定别名接入。 */

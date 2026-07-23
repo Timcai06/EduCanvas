@@ -1,3 +1,25 @@
+/**
+ * 消息契约 — 多模态 Agent 消息的类型定义。
+ *
+ * ## 消息 Part 类型
+ *
+ * 一条消息由多个 Part 组成（文本 + 资产引用 + Artifact 引用）：
+ * - text: 纯文本，max 64KB per part
+ * - asset_ref: 资产引用（图片/音频/视频/文档），指向不可变版本
+ * - artifact_ref: Artifact 产物引用（生成的视频/Slide/交互内容）
+ *
+ * ## 为什么用 Part 而不是纯文本
+ *
+ * 纯文本无法表达"用户上传了这张图 + 说了这句话"的语义。
+ * Part 数组让模型同时看到文本和资产的组合，而不是把资产塞进文本字符串。
+ *
+ * ## NFC 规范化
+ *
+ * normalizeAgentMessageParts 对文本 Part 执行 NFC Unicode 规范化 +
+ * 换行符统一（\r\n → \n）。这保证不同客户端（Web/Telegram/TUI）的
+ * 输入在语义一致的前提下字符表示也一致。
+ */
+
 import { z } from 'zod';
 import { assetVersionReferenceSchema } from './asset-contracts';
 import type { AssetKind } from './asset-contracts';

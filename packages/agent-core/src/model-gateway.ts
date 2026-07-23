@@ -1,3 +1,18 @@
+/**
+ * 模型网关 Port — 三种独立接口。
+ *
+ * ## 为什么分三个 Port 而不是一个
+ *
+ * - **TurnModelGateway**: 流式 Agent 对话 — AsyncIterable，长连接，cancel-able
+ * - **StructuredModelGateway**: JSON Schema 约束的结构化生成 — Promise，短请求
+ * - **SpeechModelGateway**: TTS 二进制语音合成 — 返回 Uint8Array
+ *
+ * 分开的好处：调用方显式声明需要哪种网关。TTS 不能用 StructuredModelGateway 返回 base64，
+ * Turn 不能用 Promise 一次拿完（需要流式输出给用户）。
+ *
+ * ModelGateway 是组合类型，组合根可以注入一个三合一的实现。
+ */
+
 import type { z } from 'zod';
 import type {
   ModelAbortSignal,
