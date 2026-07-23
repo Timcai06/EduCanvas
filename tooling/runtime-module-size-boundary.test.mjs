@@ -70,6 +70,13 @@ const WEB_SHARED_ROOT = 'apps/web/features/workspace/shared';
 const WEB_SETTINGS_ROOT = 'apps/web/features/settings';
 const WEB_GENERAL_WORKSPACE =
   'apps/web/features/workspace/general/general-chat-workspace.tsx';
+const WEB_GENERAL_TURN_MODULES = [
+  'apps/web/server/platform/general-turn.ts',
+  'apps/web/server/platform/general-turn-lifecycle.ts',
+  'apps/web/server/platform/general-turn-persistence.ts',
+  'apps/web/server/platform/general-turn-profile.ts',
+  'apps/web/server/platform/general-turn-tools.ts',
+];
 
 function lineCount(path) {
   return readFileSync(path, 'utf8').split('\n').length;
@@ -239,6 +246,13 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       ['apps/web/app/globals.css', 'apps/web/app/effects.css'],
       WEB_STYLES_REVIEW_LIMIT,
+    );
+  });
+
+  it('keeps Web General Turn responsibilities independently readable', () => {
+    assertFilesWithinLimit(
+      WEB_GENERAL_TURN_MODULES,
+      TURN_APPLICATION_REVIEW_LIMIT,
     );
   });
 });
