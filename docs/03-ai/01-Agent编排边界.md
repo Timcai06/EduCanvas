@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：项目负责人
 - 最后验证时间：2026-07-22
-- 内容边界：定义稳定术语、可信边界与当前实现；第二代收敛方案见[第二代架构提案](../02-architecture/03-第二代架构提案.md)
+- 内容边界：定义稳定术语、可信边界与当前实现；第二代稳定形态见[第二代架构](../02-architecture/03-第二代架构.md)
 - 关键决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
 
 ## 一、稳定术语
@@ -116,4 +116,6 @@ DIAGNOSE -> EXPLAIN -> DEMONSTRATE -> PRACTICE -> ASSESS
 - 第一阶段不开放宿主机 Shell、任意文件系统、无约束代码执行或多 Agent 编队；
 - 安全、预算、权限、判分和学习状态必须在模型之外可测试、可审计。
 
-当前三入口统一路径、遗留代码清理边界和审计事实见[系统架构现状](../02-architecture/01-系统架构现状.md)，后续continuation与Adapter收口见[第二代架构升级计划](../plan/active/2026-07-第二代架构升级.md)。
+当前三入口统一路径、遗留代码清理边界和审计事实见
+[系统架构现状](../02-architecture/01-系统架构现状.md)，第二代continuation与Adapter
+实施证据见[第二代架构结档](../plan/completed/2026-07-第二代架构升级.md)。

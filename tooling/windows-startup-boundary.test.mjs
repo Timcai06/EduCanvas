@@ -30,6 +30,21 @@ describe('Windows startup boundary', () => {
     );
   });
 
+  it('normalizes common quoted .env values without evaluating them', () => {
+    assert.match(launcher, /\$Value = \$matches\[2\]\.Trim\(\)/);
+    assert.match(launcher, /\$Value\.StartsWith\('"'\)/);
+    assert.match(launcher, /\$Value\.StartsWith\("'"\)/);
+    assert.match(
+      launcher,
+      /\$Value = \$Value\.Substring\(1, \$Value\.Length - 2\)/,
+    );
+    assert.match(
+      launcher,
+      /SetEnvironmentVariable\(\$Name, \$Value, 'Process'\)/,
+    );
+    assert.doesNotMatch(launcher, /Invoke-Expression/);
+  });
+
   it('lets the shared orchestrator launch pnpm on Windows', () => {
     assert.match(
       orchestrator,

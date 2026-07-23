@@ -185,12 +185,12 @@ const localeFor = (input: string): TeachingSafetyLocale =>
  * 匹配则 block + 返回隐私保护提示，不记录命中内容。
  */
 const piiPatterns: readonly RegExp[] = [
-  /[a-z0-9._%+-]+\s*@\s*[a-z0-9.-]+\.[a-z]{2,}/i,                           // 邮箱
-  /(?:^|\D)(?:\+?86[ -]?)?1[3-9]\d{9}(?:\D|$)/,                               // 中国手机号
-  /\b\d{17}[\dx]\b/i,                                                           // 身份证号
+  /[a-z0-9._%+-]+\s*@\s*[a-z0-9.-]+\.[a-z]{2,}/i, // 邮箱
+  /(?:^|\D)(?:\+?86[ -]?)?1[3-9]\d{9}(?:\D|$)/, // 中国手机号
+  /\b\d{17}[\dx]\b/i, // 身份证号
   /(?:手机号|手机号码|联系电话|phone|mobile|call me at)[^\d+]{0,12}\+?\d[\d ()-]{7,}\d/i, // 上下文+号码
-  /(?:身份证(?:号|号码)?|identity number|id number|id no\.?)[^\d]{0,8}\d{6,18}[\dx]?/i,     // 上下文+身份证
-  /(?:我的真实姓名是|真实姓名[:：]|real name is)\s*[\p{L}·.' -]{2,40}/iu,       // 自报真实姓名
+  /(?:身份证(?:号|号码)?|identity number|id number|id no\.?)[^\d]{0,8}\d{6,18}[\dx]?/i, // 上下文+身份证
+  /(?:我的真实姓名是|真实姓名[:：]|real name is)\s*[\p{L}·.' -]{2,40}/iu, // 自报真实姓名
   /(?:我家住在|我的住址是|家庭住址|home address is|i live at)\s*[:：]?\s*.{4,}/iu, // 自报住址
   /(?:密码|口令|验证码|password|passcode|verification code)\s*(?:是|为|[:：=])\s*\S{4,}/iu, // 密码/验证码泄露
 ];

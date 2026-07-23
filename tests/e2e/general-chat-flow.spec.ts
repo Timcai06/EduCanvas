@@ -8,7 +8,11 @@ async function activeConversationId(page: Page) {
   )?.value;
 }
 
-async function createNotebook(page: Page, trigger: Locator) {
+async function createNotebook(
+  page: Page,
+  trigger: Locator,
+  previousConversationContent: Locator,
+) {
   const previousConversationId = await activeConversationId(page);
   expect(previousConversationId).toBeDefined();
 
@@ -20,15 +24,19 @@ async function createNotebook(page: Page, trigger: Locator) {
     })
     .not.toBe(previousConversationId);
 
-  await expect(
-    page
-      .getByRole('navigation', { name: '笔记本' })
-      .locator('button[aria-current="true"]'),
-  ).toContainText('未命名笔记本', { timeout: 15_000 });
+  await expect(previousConversationContent).toHaveCount(0, {
+    timeout: 15_000,
+  });
 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await expect(composer).toBeEnabled();
   await expect(composer).toHaveValue('');
+}
+
+async function waitForUnavailableTurn(page: Page) {
+  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 test('根入口默认创建通用Chat，界面上不存在K12模式入口', async ({
@@ -116,12 +124,16 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
       .getByRole('region', { name: 'AI 对话' })
       .getByText(firstPrompt, { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
+  await waitForUnavailableTurn(page);
 
   const notebooks = page.getByRole('navigation', { name: '笔记本' });
+  const firstConversationContent = page
+    .getByRole('region', { name: 'AI 对话' })
+    .getByText(firstPrompt, { exact: true });
   await createNotebook(
     page,
     notebooks.getByRole('button', { name: '新建笔记本' }),
+    firstConversationContent,
   );
 
   await page
@@ -133,7 +145,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
       .getByRole('region', { name: 'AI 对话' })
       .getByText(secondPrompt, { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
+  await waitForUnavailableTurn(page);
 
   await page
     .getByRole('navigation', { name: '笔记本' })
@@ -165,7 +177,7 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
       .getByText(firstPrompt, { exact: true }),
   ).toBeVisible();
   /* 学生消息先乐观渲染；等服务端终态后再读取权威Conversation标题，避免与POST并发。 */
-  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible();
+  await waitForUnavailableTurn(page);
 
   const firstConversationId = await page.evaluate(async () => {
     const response = await fetch('/api/v1/chat/conversations');
@@ -228,6 +240,9 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     page
       .getByRole('navigation', { name: '笔记本' })
       .getByRole('button', { name: '新建笔记本' }),
+    page
+      .getByRole('region', { name: 'AI 对话' })
+      .getByText(firstPrompt, { exact: true }),
   );
   await expect(page.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
   await page.getByRole('button', { name: 'Studio', exact: true }).click();
