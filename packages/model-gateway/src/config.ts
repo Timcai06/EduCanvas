@@ -1,3 +1,31 @@
+/**
+ * 模型网关配置 — OpenAI 兼容协议适配器的环境变量解析。
+ *
+ * ## 配置模型
+ *
+ * `parseModelGatewayConfiguration()` 从显式传入的环境变量 Record 解析配置，
+ * 不主动读 process.env。组合根控制哪些变量进入解析，避免配置泄漏到测试。
+ *
+ * ## 启用/禁用
+ *
+ * 配置有两种状态：
+ * - **disabled**: MODEL_GATEWAY_PROVIDER 未设置 → `{ enabled: false, reason: 'not_configured' }`
+ *   DeepSeek 未被允许 → `{ enabled: false, reason: 'deepseek_not_enabled' }`
+ * - **enabled**: 所有必需配置完整 → 可创建 TurnModelGateway
+ *
+ * 禁用时不抛异常，调用方收到 null Gateway 后自行决定降级策略。
+ *
+ * ## Provider 约束
+ *
+ * - deepseek: 仅本地/开发环境可用，staging/production 禁止
+ * - openai-compatible: 全环境可用
+ * - speech 仅 openai-compatible provider 支持（DeepSeek 无 TTS）
+ *
+ * ## 安全
+ *
+ * 配置异常只暴露稳定错误码（如 MISSING_API_KEY），不把 secret 或原始环境变量拼入消息。
+ */
+
 import type { ModelAlias } from '@educanvas/agent-core';
 
 export const deploymentEnvironments = [
