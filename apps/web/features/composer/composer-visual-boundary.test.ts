@@ -25,8 +25,6 @@ describe('Composer 边框流动线边界', () => {
 
     // 流动线的可见性与旋转都写在 no-preference 分支内，reduce 分支不得再启用它。
     expect(reducedMotion).not.toContain('.ink-flow-line');
-    expect(effects).toContain(
-      '@media (prefers-reduced-motion: no-preference)',
-    );
+    expect(effects).toContain('@media (prefers-reduced-motion: no-preference)');
   });
 });
