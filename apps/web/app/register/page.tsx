@@ -1,33 +1,9 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { AuthForm } from '@/features/auth/auth-form';
-import { LogoMark } from '@/features/workspace/shared/logo-mark';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: '注册 · EduCanvas' };
-
+/**
+ * 注册已改为首页上的抽屉（见 features/auth/auth-drawer.tsx），不再是独立页面。
+ * 保留此路由只为兼容旧书签/外链：重定向回首页并带意图，由 UserMenu 自动弹开注册抽屉。
+ */
 export default function RegisterPage() {
-  return (
-    <main className="grid min-h-dvh place-items-center bg-canvas px-4 text-ink">
-      <section className="w-full max-w-md rounded-3xl border border-line bg-card p-8 shadow-float">
-        <div className="mb-7 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent-strong">
-            <LogoMark size={24} />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
-              EduCanvas
-            </p>
-            <h1 className="font-display text-2xl font-semibold">创建账号</h1>
-          </div>
-        </div>
-        <AuthForm mode="register" />
-        <p className="mt-5 text-center text-sm text-ink-muted">
-          已有账号？
-          <Link href="/login" className="font-medium text-accent-strong">
-            去登录
-          </Link>
-        </p>
-      </section>
-    </main>
-  );
+  redirect('/?auth=register');
 }

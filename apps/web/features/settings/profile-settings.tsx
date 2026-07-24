@@ -107,7 +107,7 @@ export function ProfileSettings() {
 
   if (!user) {
     return (
-      <section className="rounded-3xl border border-line bg-card p-6 shadow-float sm:p-8">
+      <section>
         <h2 className="font-display text-xl font-semibold">个人资料</h2>
         <p className="mt-2 text-sm leading-6 text-ink-muted">
           登录后可以修改昵称和头像。
@@ -118,7 +118,7 @@ export function ProfileSettings() {
 
   return (
     <>
-      <section className="rounded-3xl border border-line bg-card p-6 shadow-float sm:p-8">
+      <section>
         <div className="flex flex-wrap items-start gap-5">
           <div className="grid size-20 place-items-center overflow-hidden rounded-full bg-surface text-ink-muted">
             {user.avatarAvailable ? (
@@ -135,7 +135,7 @@ export function ProfileSettings() {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-xl font-semibold">个人资料</h2>
+            <h3 className="font-display text-lg font-semibold">个人资料</h3>
             <p className="mt-1 text-sm text-ink-muted">@{user.username}</p>
             <label className="mt-4 inline-flex min-h-10 cursor-pointer items-center rounded-full border border-line px-4 text-sm font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink">
               上传头像
@@ -154,19 +154,21 @@ export function ProfileSettings() {
           className="mt-6 flex flex-col gap-3 sm:flex-row"
         >
           <label className="min-w-0 flex-1">
-            <span className="text-sm font-medium text-ink">昵称</span>
+            <span className="mb-1.5 block text-xs font-medium tracking-wide text-ink-muted">
+              昵称
+            </span>
             <input
               value={nickname}
               onChange={(event) => setNickname(event.target.value)}
               required
               maxLength={30}
-              className="mt-1.5 h-11 w-full rounded-2xl border border-line bg-canvas px-4 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+              className="ec-input h-11 w-full rounded-2xl px-4 text-sm text-ink"
             />
           </label>
           <button
             type="submit"
             disabled={busy}
-            className="mt-auto inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-colors hover:bg-accent-strong disabled:opacity-60"
+            className="mt-auto inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60"
           >
             保存
           </button>
@@ -175,7 +177,7 @@ export function ProfileSettings() {
           <p className="mt-3 text-sm text-ink-muted">{status}</p>
         ) : null}
       </section>
-      <div className="mt-6">
+      <div className="mt-7 border-t border-line/60 pt-7">
         <ChangePasswordForm />
       </div>
     </>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, EyeSlash } from '@phosphor-icons/react';
+import { ArrowRight, Eye, EyeSlash } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { assessPasswordRisk } from './password-strength';
 
@@ -23,7 +23,17 @@ async function publicError(
   return fallback;
 }
 
-export function AuthForm({ mode }: { mode: Mode }) {
+/**
+ * onSuccess：注册/登录成功后的收尾。抽屉里传入以「原地刷新 + 关抽屉」替代整页跳转；
+ * 不传时退回默认的 window.location.assign('/')，保证独立页面（/login 直达）仍能用。
+ */
+export function AuthForm({
+  mode,
+  onSuccess,
+}: {
+  mode: Mode;
+  onSuccess?: () => void;
+}) {
   const [username, setUsername] = useState('');
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
@@ -62,7 +72,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
           ),
         );
       }
-      window.location.assign('/');
+      if (onSuccess) onSuccess();
+      else window.location.assign('/');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '请求失败。');
     } finally {
@@ -73,7 +84,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <label className="block">
-        <span className="text-sm font-medium text-ink">用户名</span>
+        <span className="mb-1.5 block text-xs font-medium tracking-wide text-ink-muted">
+          用户名
+        </span>
         <input
           value={username}
           onChange={(event) => setUsername(event.target.value)}
@@ -81,27 +94,32 @@ export function AuthForm({ mode }: { mode: Mode }) {
           minLength={3}
           maxLength={32}
           pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,31}"
-          className="mt-1.5 h-11 w-full rounded-2xl border border-line bg-canvas px-4 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+          className="ec-input h-11 w-full rounded-2xl px-4 text-sm text-ink"
         />
       </label>
       {isRegister ? (
         <label className="block">
-          <span className="text-sm font-medium text-ink">昵称</span>
+          <span className="mb-1.5 block text-xs font-medium tracking-wide text-ink-muted">
+            昵称
+          </span>
           <input
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
             required
             maxLength={30}
-            className="mt-1.5 h-11 w-full rounded-2xl border border-line bg-canvas px-4 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+            className="ec-input h-11 w-full rounded-2xl px-4 text-sm text-ink"
             placeholder="你想显示的名字"
           />
         </label>
       ) : null}
       <div className="block">
-        <label htmlFor="auth-password" className="text-sm font-medium text-ink">
+        <label
+          htmlFor="auth-password"
+          className="mb-1.5 block text-xs font-medium tracking-wide text-ink-muted"
+        >
           密码
         </label>
-        <div className="relative mt-1.5">
+        <div className="relative">
           <input
             id="auth-password"
             value={password}
@@ -110,7 +128,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             minLength={isRegister ? 8 : undefined}
             maxLength={128}
             type={passwordVisible ? 'text' : 'password'}
-            className="h-11 w-full rounded-2xl border border-line bg-canvas px-4 pr-12 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+            className="ec-input h-11 w-full rounded-2xl px-4 pr-12 text-sm text-ink"
             placeholder={isRegister ? '至少 8 位' : undefined}
           />
           <button
@@ -152,9 +170,15 @@ export function AuthForm({ mode }: { mode: Mode }) {
       <button
         type="submit"
         disabled={busy}
-        className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-colors hover:bg-accent-strong disabled:opacity-60"
+        className="shine-sweep group inline-flex min-h-12 w-full items-center justify-between rounded-full bg-accent px-6 text-sm font-semibold text-card shadow-[0_10px_28px_-8px_color-mix(in_srgb,var(--color-accent)_65%,transparent)] transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-accent-strong disabled:translate-y-0 disabled:opacity-60"
       >
-        {busy ? '处理中…' : isRegister ? '注册并登录' : '登录'}
+        <span>{busy ? '处理中…' : isRegister ? '注册并登录' : '登录'}</span>
+        <ArrowRight
+          aria-hidden="true"
+          size={17}
+          weight="bold"
+          className="transition-transform group-hover:translate-x-1"
+        />
       </button>
     </form>
   );

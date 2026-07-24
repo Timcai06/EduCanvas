@@ -42,7 +42,7 @@ function PasswordField({
           minLength={label === '新密码' ? 8 : undefined}
           maxLength={128}
           type={visible ? 'text' : 'password'}
-          className="h-11 w-full rounded-2xl border border-line bg-canvas px-4 pr-12 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+          className="ec-input h-11 w-full rounded-2xl px-4 pr-12 text-sm text-ink"
         />
         <button
           type="button"
@@ -103,8 +103,8 @@ export function ChangePasswordForm() {
   };
 
   return (
-    <section className="rounded-3xl border border-line bg-card p-6 shadow-float sm:p-8">
-      <h2 className="font-display text-xl font-semibold">修改密码</h2>
+    <section>
+      <h3 className="font-display text-lg font-semibold">修改密码</h3>
       <p className="mt-2 text-sm leading-6 text-ink-muted">
         修改后，其他已登录设备需要重新登录。
       </p>
