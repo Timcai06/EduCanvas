@@ -21,15 +21,17 @@
 
 import { modelMessageSchema, type ModelMessage } from '@educanvas/agent-core';
 import {
+  learnerAdaptationPolicySchema,
   teachingStateSchema,
+  type LearnerAdaptationPolicy,
   type TeachingState,
 } from '@educanvas/teaching-core';
 import { z } from 'zod';
 import { K12_TEACHING_SYSTEM_POLICY } from './teaching-safety';
 
-export const TEACHING_TURN_ANSWER_PROMPT_VERSION = 'turn-answer-v4' as const;
+export const TEACHING_TURN_ANSWER_PROMPT_VERSION = 'turn-answer-v5' as const;
 export const TEACHING_TURN_SYNTHESIS_PROMPT_VERSION =
-  'turn-synthesis-v5' as const;
+  'turn-synthesis-v6' as const;
 
 const promptSessionSchema = z
   .object({
@@ -49,6 +51,7 @@ export interface TeachingTurnPromptInput {
   };
   conversationMessages?: readonly ModelMessage[];
   studentMessage: string;
+  adaptation?: LearnerAdaptationPolicy;
 }
 
 export interface TeachingTurnPromptMessages {
@@ -56,10 +59,32 @@ export interface TeachingTurnPromptMessages {
   synthesis: readonly ModelMessage[];
 }
 
+const gradeBandLabels = {
+  primary_school: '小学',
+  middle_school: '初中',
+  high_school: '高中',
+} as const;
+
+function adaptationPolicy(input: TeachingTurnPromptInput): readonly string[] {
+  if (!input.adaptation) return [];
+  const adaptation = learnerAdaptationPolicySchema.parse(input.adaptation);
+  const preference = adaptation.preferences;
+  return [
+    `按${gradeBandLabels[adaptation.gradeBand]}阶段的语言与认知负担表达。`,
+    adaptation.minorSafetyRequired
+      ? '当前必须采用未成年人安全策略；不得因教学偏好放宽安全、隐私或工具权限。'
+      : '教学偏好只改变表达方式，不改变安全、隐私或工具权限。',
+    `讲解顺序：${preference.explanationOrder === 'example_first' ? '先例子后概念' : '先概念后例子'}。`,
+    `回答深度：${preference.responseDepth}；引导方式：${preference.guidance}；首选模态：${preference.modality}；反馈风格：${preference.feedbackStyle}。`,
+    '不得向学生声称或暗示系统推断了其年龄、性格、心理或能力标签。',
+  ];
+}
+
 const commonPolicy = (input: TeachingTurnPromptInput): readonly string[] => [
   '你是EduCanvas的AI老师。对学生只自称"AI老师"，绝不使用"受控教学智能体"、"Artifact"、"Schema"等内部术语。',
   `当前教学状态：${input.session.state}。`,
   `当前知识节点：${input.session.knowledgeNodeId ?? 'none'}。`,
+  ...adaptationPolicy(input),
 ];
 
 function answerMessages(

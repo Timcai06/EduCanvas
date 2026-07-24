@@ -3,46 +3,34 @@ import {
   publicArtifactSchema,
   type PublicArtifact,
 } from '@educanvas/canvas-protocol';
-import { selectInitialState } from '@educanvas/teaching-core';
-import { and, desc, eq, gt, gte, lt, or, sql } from 'drizzle-orm';
-import {
-  anonymousSubjectLockKey,
-  isAnonymousSyntheticSubjectId,
-} from './anonymous-data-lifecycle';
+import { and, desc, eq, gt, gte, lt, or } from 'drizzle-orm';
 import { ensurePreparedArtifact } from './artifact-repository';
 import { getDb } from './client';
-import { ensurePersonalIdentity } from './gateway-repository';
 import { isUuid } from './internal/identifiers';
+import {
+  archiveActiveLearningSessionScope,
+  insertActiveLearningSession,
+} from './learning-session-active-lifecycle';
+import { restoreArchivedSessionIfScopeVacant } from './learning-session-compensation';
+import {
+  learningSessionScopeCondition,
+  lockLearningSessionScope,
+} from './learning-session-locks';
 import {
   canvasArtifacts,
   chatMessages,
   conversations,
   lessonSessions,
   masteryStates,
-  notebookMemberships,
-  spaces,
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
-type DatabaseTransaction = Parameters<
-  Parameters<Database['transaction']>[0]
->[0];
 
 /** 匿名演示会话的服务端有效期；Cookie过期不能替代数据库侧的重放限制。 */
 export const ANONYMOUS_LEARNING_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 
 function activeSessionCutoff(): Date {
   return new Date(Date.now() - ANONYMOUS_LEARNING_SESSION_TTL_MS);
-}
-
-async function lockAnonymousSubjectLifecycle(
-  transaction: DatabaseTransaction,
-  studentId: string,
-): Promise<void> {
-  if (!isAnonymousSyntheticSubjectId(studentId)) return;
-  await transaction.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${anonymousSubjectLockKey(studentId)}, 0))`,
-  );
 }
 
 /** 阶段一课程纵切的稳定范围；匿名身份只能在此范围内恢复自己的当前会话。 */
@@ -65,6 +53,8 @@ export interface BootstrappedLearningSession {
   studentId: string;
   knowledgeNodeId: string;
   artifact: PublicArtifact;
+  /** 仅本次调用实际插入 Session 时为 true，供上层失败补偿判断，不能由客户端提供。 */
+  created: boolean;
 }
 
 export interface OwnedLearningSession {
@@ -118,24 +108,7 @@ export class LearningSessionNotFoundError extends Error {
   }
 }
 
-function scopeLockKey(scope: LearningSessionScope): string {
-  return [
-    'lesson-session-scope-v2',
-    scope.studentId,
-    scope.gradeBand,
-    scope.courseSlug,
-    scope.knowledgeNodeId,
-  ].join(':');
-}
-
-function scopeCondition(scope: LearningSessionScope) {
-  return and(
-    eq(lessonSessions.studentId, scope.studentId),
-    eq(lessonSessions.gradeBand, scope.gradeBand),
-    eq(lessonSessions.courseSlug, scope.courseSlug),
-    eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
-  );
-}
+const scopeCondition = learningSessionScopeCondition;
 
 function courseScopeCondition(scope: LearningSessionCourseScope) {
   return and(
@@ -165,100 +138,6 @@ function toSessionSummary(
   };
 }
 
-async function insertSession(
-  transaction: DatabaseTransaction,
-  scope: LearningSessionScope,
-  now: Date,
-): Promise<string> {
-  const [existingMastery] = await transaction
-    .select({ studentId: masteryStates.studentId })
-    .from(masteryStates)
-    .where(
-      and(
-        eq(masteryStates.studentId, scope.studentId),
-        eq(masteryStates.knowledgeNodeId, scope.knowledgeNodeId),
-      ),
-    )
-    .limit(1);
-  const [space] = await transaction
-    .insert(spaces)
-    .values({
-      ownerSubjectId: scope.studentId,
-      kind: 'course',
-      title: scope.courseSlug,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({ id: spaces.id });
-  if (!space) throw new Error('学习Space写入失败');
-  const identity = await ensurePersonalIdentity(transaction, {
-    userId: scope.studentId,
-    kind: isAnonymousSyntheticSubjectId(scope.studentId)
-      ? 'anonymous_compat'
-      : 'registered',
-    now,
-  });
-  await transaction.insert(notebookMemberships).values({
-    notebookId: space.id,
-    userId: identity.userId,
-    role: 'owner',
-    grantedByUserId: identity.userId,
-    grantedAt: now,
-  });
-  const [conversation] = await transaction
-    .insert(conversations)
-    .values({
-      spaceId: space.id,
-      ownerSubjectId: scope.studentId,
-      agentProfileId: 'k12.teacher',
-      title: scope.courseSlug,
-      status: 'active',
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({ id: conversations.id });
-  if (!conversation) throw new Error('学习Conversation写入失败');
-  const [created] = await transaction
-    .insert(lessonSessions)
-    .values({
-      conversationId: conversation.id,
-      studentId: scope.studentId,
-      gradeBand: scope.gradeBand,
-      courseSlug: scope.courseSlug,
-      knowledgeNodeId: scope.knowledgeNodeId,
-      state: selectInitialState(Boolean(existingMastery)),
-      status: 'active',
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({ id: lessonSessions.id });
-  if (!created) throw new Error('学习会话写入失败');
-  return created.id;
-}
-
-async function archiveActiveScope(
-  transaction: DatabaseTransaction,
-  scope: LearningSessionScope,
-  now: Date,
-  exceptSessionId?: string,
-): Promise<void> {
-  await transaction
-    .update(lessonSessions)
-    .set({ status: 'archived', archivedAt: now, updatedAt: now })
-    .where(
-      and(
-        scopeCondition(scope),
-        eq(lessonSessions.status, 'active'),
-        exceptSessionId
-          ? sql`${lessonSessions.id} <> ${exceptSessionId}`
-          : undefined,
-      ),
-    );
-}
-
 /**
  * 匿名学习纵切仓储。bootstrap通过事务级advisory lock保证同一学生和课程并发请求只创建一个会话，
  * 并把Session、公开Artifact与私有判分键作为一个原子提交。
@@ -274,13 +153,9 @@ export class DrizzleLearningSessionRepository {
     input: BootstrapLearningSessionInput,
   ): Promise<BootstrappedLearningSession> {
     const prepared = prepareArtifact(input.completeArtifact);
-    const lockKey = scopeLockKey(input);
 
     return this.database.transaction(async (transaction) => {
-      await lockAnonymousSubjectLifecycle(transaction, input.studentId);
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
-      );
+      await lockLearningSessionScope(transaction, input);
       const [existingSession] = await transaction
         .select({ id: lessonSessions.id })
         .from(lessonSessions)
@@ -295,11 +170,13 @@ export class DrizzleLearningSessionRepository {
         .limit(1);
 
       let sessionId = existingSession?.id;
+      let created = false;
       if (!sessionId) {
         const now = new Date();
         // 过期 active 行仍会命中部分唯一索引，必须先显式归档再新建。
-        await archiveActiveScope(transaction, input, now);
-        sessionId = await insertSession(transaction, input, now);
+        await archiveActiveLearningSessionScope(transaction, input, now);
+        sessionId = await insertActiveLearningSession(transaction, input, now);
+        created = true;
       }
 
       await ensurePreparedArtifact(transaction, sessionId, prepared);
@@ -308,6 +185,7 @@ export class DrizzleLearningSessionRepository {
         studentId: input.studentId,
         knowledgeNodeId: input.knowledgeNodeId,
         artifact: prepared.publicArtifact,
+        created,
       };
     });
   }
@@ -433,18 +311,20 @@ export class DrizzleLearningSessionRepository {
     const prepared = prepareArtifact(input.completeArtifact);
     const now = new Date();
     return this.database.transaction(async (transaction) => {
-      await lockAnonymousSubjectLifecycle(transaction, input.studentId);
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(input)}, 0))`,
+      await lockLearningSessionScope(transaction, input);
+      await archiveActiveLearningSessionScope(transaction, input, now);
+      const sessionId = await insertActiveLearningSession(
+        transaction,
+        input,
+        now,
       );
-      await archiveActiveScope(transaction, input, now);
-      const sessionId = await insertSession(transaction, input, now);
       await ensurePreparedArtifact(transaction, sessionId, prepared);
       return {
         sessionId,
         studentId: input.studentId,
         knowledgeNodeId: input.knowledgeNodeId,
         artifact: prepared.publicArtifact,
+        created: true,
       };
     });
   }
@@ -456,10 +336,7 @@ export class DrizzleLearningSessionRepository {
   ): Promise<LearningSessionSummary> {
     const now = new Date();
     return this.database.transaction(async (transaction) => {
-      await lockAnonymousSubjectLifecycle(transaction, scope.studentId);
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(scope)}, 0))`,
-      );
+      await lockLearningSessionScope(transaction, scope);
       const [target] = await transaction
         .select()
         .from(lessonSessions)
@@ -474,7 +351,12 @@ export class DrizzleLearningSessionRepository {
       if (!target) throw new LearningSessionNotFoundError();
       if (target.status === 'active') return toSessionSummary(target);
 
-      await archiveActiveScope(transaction, scope, now, sessionId);
+      await archiveActiveLearningSessionScope(
+        transaction,
+        scope,
+        now,
+        sessionId,
+      );
       const [resumed] = await transaction
         .update(lessonSessions)
         .set({ status: 'active', archivedAt: null, updatedAt: now })
@@ -490,16 +372,35 @@ export class DrizzleLearningSessionRepository {
     });
   }
 
+  /**
+   * 失败补偿专用：仅当同一 scope 不存在任何 active Session 时恢复旧归档会话。
+   *
+   * 与 startNew 使用相同主体锁和 scope 锁，因此并发的新建会话一旦成功，
+   * 本操作只返回 false，绝不会归档或覆盖它。操作不修改 lastActivityAt。
+   */
+  async restoreArchivedIfNoActiveSession(
+    scope: LearningSessionScope,
+    sessionId: string,
+  ): Promise<boolean> {
+    const outcome = await restoreArchivedSessionIfScopeVacant(
+      this.database,
+      scope,
+      sessionId,
+      activeSessionCutoff(),
+    );
+    if (outcome === 'target_not_found') {
+      throw new LearningSessionNotFoundError();
+    }
+    return outcome === 'restored';
+  }
+
   async archive(
     scope: LearningSessionScope,
     sessionId: string,
   ): Promise<LearningSessionSummary> {
     const now = new Date();
     return this.database.transaction(async (transaction) => {
-      await lockAnonymousSubjectLifecycle(transaction, scope.studentId);
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${scopeLockKey(scope)}, 0))`,
-      );
+      await lockLearningSessionScope(transaction, scope);
       const [existing] = await transaction
         .select()
         .from(lessonSessions)

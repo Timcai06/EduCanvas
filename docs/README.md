@@ -48,6 +48,7 @@
 - 保持可用：真实Provider SSE、账本/取消/刷新恢复、服务端判分、可信学习投影、Notebook聚合、持久Artifact任务、Studio、导图/Slides/闪卡/音频和Canvas共创；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
 - 已接通：通用PDF/图片/Link Asset、不可变版本和消息Part；通用网页实际读取快照、稳定编号、引用子集持久化/SSE/历史恢复/原网址导航；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
+- 已接通：显式年龄段/学段与闭集教学偏好、Notebook Goal和6–12节点目标图、无答案短诊断、可信三态目标进度，以及诊断事件/mastery原子写入；
 - 已确认的剩余缺口：原生图片/音视频模型输入、上传Asset统一摄取、Context摘要、长期学习者记忆、正式IdP、对象删除闭环和production治理；
 - Telegram只有官方协议Fixture，没有用户凭据下的live smoke；Node只有L0/L1白名单能力，没有高风险设备控制；
 - 当前证据支持本地模块化单体基线；正式认证、外部观测/SLO、受控live smoke、教学质量评测和production hardening完成前，不宣称production就绪；
@@ -81,7 +82,7 @@
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first 与第二代架构研究已经结档；统一内核已落地，当前 active 计划只承担入口一致性、最小人工对账、清理和验收收口。三类文档不能互相替代：
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first、第二代架构研究与 Web 自适应学习 P0/P1 基线都已经结档；当前工作重心转入功能与前端设计，并以 `10-planning/roadmap.md` 为准。三类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；

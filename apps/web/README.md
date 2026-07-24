@@ -11,7 +11,7 @@
 已经接通：
 
 - S0 空对话入口、S1 对话态，以及按需打开的桌面 Canvas 侧栏/移动端 Canvas 模态；Assets、Studio、Progress 使用互斥抽屉；
-- 匿名课程启动、新建、恢复和最近学习记录；
+- 显式学习者声明、Notebook Goal、短诊断、匿名课程启动、新建、恢复和最近学习记录；
 - `POST /api/v1/learn/turn` 的 EduCanvas SSE、显式取消、失败收敛、消息历史与刷新恢复；
 - 通过 `@educanvas/model-gateway` 注入真实 OpenAI-compatible Provider；未配置 Provider 时明确返回 unavailable，不回退到脚本回答；
 - 两阶段 `answer -> tools -> synthesis` 教学轮次、生产工具 `getStudentState` / `retrieveKnowledge`、输入/流式输出安全 Gate，以及消息、Model Run、Tool Call、Turn lease 和安全决策账本；
@@ -36,8 +36,9 @@
 
 - `app/layout.tsx`：全站根布局、字体和默认元数据。
 - `app/page.tsx`：项目首页入口。
-- `app/learn/page.tsx`：加载匿名学习页快照，呈现课程启动页或学习工作区。
-- `app/learn/actions.ts`：课程启动、新建、恢复与 Canvas 提交的 Server Action 边界，只返回公开 DTO。
+- `app/learn/page.tsx`：在学习计划、无答案短诊断与学习工作区三种服务端状态间切换。
+- `app/learn/actions.ts`：计划创建、诊断、新建、恢复与 Canvas 提交的 Server Action 边界，只返回公开 DTO。
+- `server/study/`：代码内受信课程版本、Goal/诊断应用服务与浏览器安全投影。
 - `app/api/v1/learn/turn/route.ts`：校验同源请求和匿名身份，创建教学 Turn 并返回 SSE。
 - `app/api/v1/assets/route.ts`：校验同源请求和匿名身份，上传或列出当前主体拥有的Asset。
 - `app/api/v1/learn/turn/[turnId]/cancel/route.ts`：学生显式停止当前回答的接口。
@@ -60,7 +61,8 @@
 - `features/assets/asset-client.ts`、`asset-upload-panel.tsx`与`assets-drawer.tsx`：真实Asset上传、选择和资料抽屉。
 - `features/studio/studio-drawer.tsx`、`features/progress/progress-drawer.tsx`：产物和进度抽屉。
 - `features/settings/connection-settings.tsx`：渠道 provider、pending/active/revoked 与撤销界面。
-- `features/learning/learning-contracts.ts`：学习页、Canvas 提交和 Progress 的浏览器公开 DTO。
+- `features/learning/learning-contracts.ts`：计划、诊断、学习页、Canvas 提交和 Progress 的浏览器公开 DTO。
+- `features/study/`：显式画像/目标表单和短诊断，不进行年龄或性格推断。
 
 ### 服务端组合根
 

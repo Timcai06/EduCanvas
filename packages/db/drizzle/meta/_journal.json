@@ -239,6 +239,13 @@
       "when": 1784736296205,
       "tag": "0033_crazy_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784860077130,
+      "tag": "0034_dapper_tag",
+      "breakpoints": true
     }
   ]
 }

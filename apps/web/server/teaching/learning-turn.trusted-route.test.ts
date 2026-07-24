@@ -30,6 +30,7 @@ vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
   DrizzleAgentToolCallRepository: vi.fn(),
   DrizzleAgentTurnContextRepository: vi.fn(),
+  DrizzleStudyPlanRepository: vi.fn(),
   DrizzleToolEffectRepository: vi.fn(),
 }));
 vi.mock('../assets/asset-materialization', () => ({
