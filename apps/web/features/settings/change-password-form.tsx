@@ -1,7 +1,7 @@
 'use client';
 
 import { Eye, EyeSlash } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { assessPasswordRisk } from '@/features/auth/password-strength';
 
 async function publicError(
@@ -26,12 +26,16 @@ function PasswordField({
   value: string;
   onChange(value: string): void;
 }) {
+  const inputId = useId();
   const [visible, setVisible] = useState(false);
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-ink">{label}</span>
+    <div className="block">
+      <label htmlFor={inputId} className="text-sm font-medium text-ink">
+        {label}
+      </label>
       <div className="relative mt-1.5">
         <input
+          id={inputId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           required
@@ -54,7 +58,7 @@ function PasswordField({
           )}
         </button>
       </div>
-    </label>
+    </div>
   );
 }
 

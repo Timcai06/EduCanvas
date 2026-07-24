@@ -97,10 +97,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
           />
         </label>
       ) : null}
-      <label className="block">
-        <span className="text-sm font-medium text-ink">密码</span>
+      <div className="block">
+        <label htmlFor="auth-password" className="text-sm font-medium text-ink">
+          密码
+        </label>
         <div className="relative mt-1.5">
           <input
+            id="auth-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
@@ -124,7 +127,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             )}
           </button>
         </div>
-      </label>
+      </div>
       {isRegister ? (
         <div className="rounded-2xl bg-surface px-4 py-3 text-sm text-ink-muted">
           密码风险等级：
