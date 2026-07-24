@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assessPasswordRisk } from './password-strength';
 
 describe('password risk assessment', () => {
-  it('rejects passwords shorter than 6 characters', () => {
+  it('rejects passwords shorter than 8 characters', () => {
     expect(assessPasswordRisk('a1!')).toMatchObject({
       acceptable: false,
       level: 'high',
@@ -10,7 +10,7 @@ describe('password risk assessment', () => {
   });
 
   it('classifies accepted passwords into three risk levels', () => {
-    expect(assessPasswordRisk('abcdef')).toMatchObject({
+    expect(assessPasswordRisk('abcdefgh')).toMatchObject({
       acceptable: true,
       level: 'high',
     });

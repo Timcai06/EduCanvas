@@ -12,6 +12,8 @@ interface CurrentUser {
 
 export function UserMenu() {
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -31,8 +33,20 @@ export function UserMenu() {
   }, []);
 
   const logout = async () => {
-    await fetch('/api/v1/auth/logout', { method: 'POST' });
-    window.location.assign('/');
+    setLogoutBusy(true);
+    setLogoutError(null);
+    try {
+      const response = await fetch('/api/v1/auth/logout', { method: 'POST' });
+      if (!response.ok) {
+        setLogoutError('暂时无法安全退出，请稍后重试。');
+        return;
+      }
+      window.location.assign('/');
+    } catch {
+      setLogoutError('网络异常，暂时无法退出。');
+    } finally {
+      setLogoutBusy(false);
+    }
   };
 
   if (!user) {
@@ -55,7 +69,7 @@ export function UserMenu() {
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="relative flex items-center gap-1.5">
       <Link
         href="/settings"
         className="inline-flex min-h-9 items-center gap-2 rounded-full px-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -80,12 +94,21 @@ export function UserMenu() {
       <button
         type="button"
         onClick={logout}
+        disabled={logoutBusy}
         aria-label="退出登录"
         title="退出登录"
-        className="grid size-9 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="grid size-9 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
       >
         <SignOut aria-hidden="true" size={17} />
       </button>
+      {logoutError ? (
+        <p
+          role="alert"
+          className="absolute right-0 top-11 z-20 w-52 rounded-2xl border border-line bg-card px-3 py-2 text-xs leading-5 text-cinnabar-strong shadow-float"
+        >
+          {logoutError}
+        </p>
+      ) : null}
     </div>
   );
 }

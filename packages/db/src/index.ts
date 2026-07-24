@@ -23,12 +23,13 @@ export {
 } from './conversation-platform-repository';
 export {
   DrizzleWebAccountRepository,
-  DrizzleWebSessionRepository,
+  WebCredentialChangedError,
   WebUsernameTakenError,
   type WebPasswordMaterial,
   type WebUserCredentialSnapshot,
   type WebUserProfileSnapshot,
 } from './web-account-repository';
+export { DrizzleWebSessionRepository } from './web-session-repository';
 export {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,

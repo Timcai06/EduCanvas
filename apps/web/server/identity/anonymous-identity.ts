@@ -52,10 +52,6 @@ export function isEphemeralAnonymousIdentity(
 
 /** Server Component只能调用读取函数；缺失或畸形Cookie不会被静默替换。 */
 export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
-  const registered = await readRegisteredSessionIdentity();
-  if (registered) {
-    return { token: '', studentId: registered.userId };
-  }
   if (
     process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
     (process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner')
@@ -64,6 +60,10 @@ export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null>
       token: '',
       studentId: process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner',
     };
+  }
+  const registered = await readRegisteredSessionIdentity();
+  if (registered) {
+    return { token: '', studentId: registered.userId };
   }
   const value = (await cookies()).get(ANONYMOUS_IDENTITY_COOKIE)?.value;
   if (!value) return null;

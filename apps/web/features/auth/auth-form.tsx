@@ -36,7 +36,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isRegister && !risk.acceptable) {
-      setError('密码至少需要 6 位。');
+      setError('密码至少需要 8 位。');
       return;
     }
     setBusy(true);
@@ -104,10 +104,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
-            minLength={6}
+            minLength={isRegister ? 8 : undefined}
+            maxLength={128}
             type={passwordVisible ? 'text' : 'password'}
             className="h-11 w-full rounded-2xl border border-line bg-canvas px-4 pr-12 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
-            placeholder="至少 6 位"
+            placeholder={isRegister ? '至少 8 位' : undefined}
           />
           <button
             type="button"
@@ -130,9 +131,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
           <span
             className={
               risk.level === 'low'
-                ? 'font-semibold text-green-700'
+                ? 'font-semibold text-accent'
                 : risk.level === 'medium'
-                  ? 'font-semibold text-amber-700'
+                  ? 'font-semibold text-ink'
                   : 'font-semibold text-cinnabar-strong'
             }
           >

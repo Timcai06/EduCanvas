@@ -35,7 +35,8 @@ function PasswordField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           required
-          minLength={label === '新密码' ? 6 : undefined}
+          minLength={label === '新密码' ? 8 : undefined}
+          maxLength={128}
           type={visible ? 'text' : 'password'}
           className="h-11 w-full rounded-2xl border border-line bg-canvas px-4 pr-12 text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
         />
@@ -68,7 +69,7 @@ export function ChangePasswordForm() {
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!risk.acceptable) {
-      setStatus('新密码至少需要 6 位。');
+      setStatus('新密码至少需要 8 位。');
       return;
     }
     if (newPassword !== confirmation) {
@@ -124,9 +125,9 @@ export function ChangePasswordForm() {
           <span
             className={
               risk.level === 'low'
-                ? 'font-semibold text-green-700'
+                ? 'font-semibold text-accent'
                 : risk.level === 'medium'
-                  ? 'font-semibold text-amber-700'
+                  ? 'font-semibold text-ink'
                   : 'font-semibold text-cinnabar-strong'
             }
           >

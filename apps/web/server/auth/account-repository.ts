@@ -2,11 +2,17 @@ import 'server-only';
 
 import {
   DrizzleWebAccountRepository,
+  WebCredentialChangedError,
   WebUsernameTakenError,
   type WebUserProfileSnapshot,
 } from '@educanvas/db';
-import { hashPassword, verifyPassword } from './password';
+import {
+  consumeDummyPasswordVerification,
+  hashPassword,
+  verifyPassword,
+} from './password';
 
+/** Web 账号应用错误；HTTP 层只能映射稳定 code，不得透传内部异常。 */
 export class AccountError extends Error {
   constructor(
     readonly code:
@@ -26,12 +32,14 @@ export type WebUserProfile = WebUserProfileSnapshot;
 
 const USERNAME = /^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$/;
 
+/** 将用户输入规范为数据库唯一键使用的小写用户名。 */
 export function normalizeUsername(username: string): string {
   const normalized = username.trim().toLowerCase();
   if (!USERNAME.test(normalized)) throw new AccountError('invalid_username');
   return normalized;
 }
 
+/** 规范化显示昵称并拒绝空值、控制字符和超过 30 个字符的输入。 */
 export function normalizeNickname(nickname: string): string {
   const normalized = nickname
     .normalize('NFC')
@@ -43,15 +51,21 @@ export function normalizeNickname(nickname: string): string {
   return normalized;
 }
 
+/** Web 账号应用服务；组合密码策略与数据库事务，不负责写 Cookie。 */
 export class WebAccountRepository {
   constructor(
     private readonly accountRepository = new DrizzleWebAccountRepository(),
   ) {}
 
-  async register(input: {
+  /**
+   * 公共注册的原子边界；账号四张表与首个 session 必须在同一事务提交。
+   * 原始 session token 只能由调用方保留到 Cookie 写入阶段。
+   */
+  async registerAndCreateSession(input: {
     username: string;
     nickname: string;
     password: string;
+    newSession: { tokenHash: string; expiresAt: Date };
     now?: Date;
   }): Promise<WebUserProfile> {
     const username = normalizeUsername(input.username);
@@ -62,6 +76,7 @@ export class WebAccountRepository {
         usernameNormalized: username,
         nickname,
         passwordMaterial,
+        newSession: input.newSession,
         now: input.now,
       });
     } catch (error) {
@@ -78,11 +93,15 @@ export class WebAccountRepository {
   }): Promise<WebUserProfile> {
     const username = normalizeUsername(input.username);
     const row = await this.accountRepository.findByUsername(username);
-    if (!row) throw new AccountError('invalid_credentials');
+    if (!row) {
+      await consumeDummyPasswordVerification(input.password);
+      throw new AccountError('invalid_credentials');
+    }
     const valid = await verifyPassword({
       password: input.password,
       passwordHash: row.passwordHash,
       passwordSalt: row.passwordSalt,
+      passwordParams: row.passwordParams,
     });
     if (!valid) throw new AccountError('invalid_credentials');
     return row;
@@ -112,13 +131,19 @@ export class WebAccountRepository {
     mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
     now?: Date;
   }): Promise<void> {
-    await this.accountRepository.updateAvatar(input);
+    const updated = await this.accountRepository.updateAvatar(input);
+    if (!updated) throw new AccountError('not_registered');
   }
 
-  async changePassword(input: {
+  /**
+   * Web 改密的原子高层边界；调用方负责生成原始 token，
+   * 本方法只接收其 hash 与过期时间，并在验证旧密码后统一轮换凭据和 session。
+   */
+  async changePasswordAndRotateSession(input: {
     userId: string;
     currentPassword: string;
     newPassword: string;
+    newSession: { tokenHash: string; expiresAt: Date };
     now?: Date;
   }): Promise<void> {
     const credentials = await this.accountRepository.findCredentialsByUserId({
@@ -127,15 +152,26 @@ export class WebAccountRepository {
     if (!credentials) throw new AccountError('not_registered');
     const valid = await verifyPassword({
       password: input.currentPassword,
-      passwordHash: credentials.passwordHash,
-      passwordSalt: credentials.passwordSalt,
+      ...credentials,
     });
     if (!valid) throw new AccountError('invalid_current_password');
-    await this.accountRepository.updatePassword({
-      userId: input.userId,
-      passwordMaterial: await hashPassword(input.newPassword),
-      now: input.now,
-    });
+    try {
+      await this.accountRepository.updatePasswordAndRotateSession({
+        userId: input.userId,
+        expectedCredential: {
+          passwordHash: credentials.passwordHash,
+          passwordSalt: credentials.passwordSalt,
+        },
+        passwordMaterial: await hashPassword(input.newPassword),
+        newSession: input.newSession,
+        now: input.now,
+      });
+    } catch (error) {
+      if (error instanceof WebCredentialChangedError) {
+        throw new AccountError('invalid_current_password');
+      }
+      throw error;
+    }
   }
 
   async getAvatar(userId: string): Promise<{

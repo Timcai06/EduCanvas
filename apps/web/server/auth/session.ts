@@ -35,6 +35,28 @@ export interface RegisteredSessionIdentity {
   userId: string;
 }
 
+export interface PreparedWebSession {
+  token: string;
+  tokenHash: string;
+  expiresAt: Date;
+  now: Date;
+}
+
+/**
+ * 只在服务端内存中准备新 session；原始 token 仅用于事务成功后的 HttpOnly Cookie，
+ * 持久层只能接收 tokenHash。
+ */
+export function prepareWebSession(now = new Date()): PreparedWebSession {
+  const token = createSessionToken();
+  return {
+    token,
+    tokenHash: hashSessionToken(token),
+    expiresAt: new Date(now.getTime() + COOKIE_MAX_AGE_SECONDS * 1000),
+    now,
+  };
+}
+
+/** 从 HttpOnly Cookie 恢复仍有效的注册主体；无效、过期或撤销统一返回 null。 */
 export async function readRegisteredSessionIdentity(): Promise<RegisteredSessionIdentity | null> {
   const value = (await cookies()).get(WEB_SESSION_COOKIE)?.value;
   const token = value ? parseSessionToken(value) : null;
@@ -45,18 +67,19 @@ export async function readRegisteredSessionIdentity(): Promise<RegisteredSession
   return userId ? { userId } : null;
 }
 
+/** 创建普通登录 session；数据库提交后由调用方单独写 HttpOnly Cookie。 */
 export async function createWebSession(userId: string): Promise<string> {
-  const token = createSessionToken();
-  const now = new Date();
+  const prepared = prepareWebSession();
   await sessionRepository.create({
     userId,
-    tokenHash: hashSessionToken(token),
-    expiresAt: new Date(now.getTime() + COOKIE_MAX_AGE_SECONDS * 1000),
-    now,
+    tokenHash: prepared.tokenHash,
+    expiresAt: prepared.expiresAt,
+    now: prepared.now,
   });
-  return token;
+  return prepared.token;
 }
 
+/** 仅把规范原始 token 写入 HttpOnly Cookie；不得接受 token hash。 */
 export async function writeWebSessionCookie(token: string): Promise<void> {
   const parsed = parseSessionToken(token);
   if (!parsed) throw new Error('web_session_token_invalid');
@@ -69,6 +92,7 @@ export async function writeWebSessionCookie(token: string): Promise<void> {
   });
 }
 
+/** 撤销当前 Cookie 对应 session；数据库成功前不会删除浏览器凭据。 */
 export async function revokeCurrentWebSession(): Promise<void> {
   const cookieStore = await cookies();
   const value = cookieStore.get(WEB_SESSION_COOKIE)?.value;
@@ -79,10 +103,4 @@ export async function revokeCurrentWebSession(): Promise<void> {
     });
   }
   cookieStore.delete(WEB_SESSION_COOKIE);
-}
-
-export async function revokeAllWebSessionsForUser(
-  userId: string,
-): Promise<void> {
-  await sessionRepository.revokeAllForUser({ userId });
 }

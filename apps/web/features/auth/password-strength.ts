@@ -16,12 +16,11 @@ function characterClassCount(password: string): number {
 }
 
 /**
- * Shared UI/server password risk rubric. The server still enforces the minimum
- * length independently; this function only explains the risk level consistently.
+ * 浏览器风险提示只用于解释输入质量；服务端以独立策略执行真实长度边界。
  */
 export function assessPasswordRisk(password: string): PasswordRiskAssessment {
   const classes = characterClassCount(password);
-  if (password.length < 6) {
+  if (password.length < 8) {
     // 长度不足仍由注册提交时的明确错误提示处理；风险区只表达风险等级。
     return { level: 'high', label: '高风险', acceptable: false };
   }

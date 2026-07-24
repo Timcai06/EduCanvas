@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   JsonRequestValidationError,
   jsonRequestErrorResponse,
@@ -12,21 +11,32 @@ import {
   AccountError,
   WebAccountRepository,
 } from '@/server/auth/account-repository';
+import { registerInputSchema } from '@/server/auth/input-policy';
 import { PasswordValidationError } from '@/server/auth/password';
-import { createWebSession, writeWebSessionCookie } from '@/server/auth/session';
+import {
+  authRateLimitDeploymentReady,
+  checkAuthAttempt,
+  recordAuthFailure,
+  resetAuthFailures,
+} from '@/server/auth/rate-limit';
+import {
+  prepareWebSession,
+  writeWebSessionCookie,
+} from '@/server/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const registerSchema = z.object({
-  username: z.string(),
-  nickname: z.string(),
-  password: z.string(),
-});
-
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+  }
+  if (!authRateLimitDeploymentReady()) {
+    return jsonError(
+      503,
+      'auth_rate_limit_unavailable',
+      '当前部署尚未配置认证请求保护。',
+    );
   }
   let raw: unknown;
   try {
@@ -37,19 +47,47 @@ export async function POST(request: Request): Promise<Response> {
     }
     throw error;
   }
-  const parsed = registerSchema.safeParse(raw);
+  const parsed = registerInputSchema.safeParse(raw);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '注册信息格式不正确。');
   }
+  const attemptKey = `register:${parsed.data.username.trim().toLowerCase()}`;
+  const attempt = checkAuthAttempt(attemptKey);
+  if (!attempt.allowed) {
+    return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+      retryAfterMs: attempt.retryAfterMs,
+    });
+  }
   try {
-    const profile = await new WebAccountRepository().register(parsed.data);
-    await writeWebSessionCookie(await createWebSession(profile.userId));
+    const newSession = prepareWebSession();
+    const profile = await new WebAccountRepository().registerAndCreateSession({
+      ...parsed.data,
+      newSession: {
+        tokenHash: newSession.tokenHash,
+        expiresAt: newSession.expiresAt,
+      },
+      now: newSession.now,
+    });
+    resetAuthFailures(attemptKey);
+    await writeWebSessionCookie(newSession.token);
     return Response.json({ user: profile }, { status: 201 });
   } catch (error) {
     if (error instanceof PasswordValidationError) {
-      return jsonError(400, 'password_too_short', '密码至少需要 6 位。');
+      const failed = recordAuthFailure(attemptKey);
+      if (!failed.allowed) {
+        return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+          retryAfterMs: failed.retryAfterMs,
+        });
+      }
+      return jsonError(400, 'password_too_short', '密码需为 8 至 128 位。');
     }
     if (error instanceof AccountError) {
+      const failed = recordAuthFailure(attemptKey);
+      if (!failed.allowed) {
+        return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+          retryAfterMs: failed.retryAfterMs,
+        });
+      }
       const status = error.code === 'username_taken' ? 409 : 400;
       const message =
         error.code === 'username_taken'

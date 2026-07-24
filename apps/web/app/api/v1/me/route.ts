@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   JsonRequestValidationError,
   jsonRequestErrorResponse,
@@ -14,15 +13,17 @@ import {
   WebAccountRepository,
 } from '@/server/auth/account-repository';
 import { readCurrentWebUser } from '@/server/auth/current-user';
+import { profileUpdateInputSchema } from '@/server/auth/input-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const profileSchema = z.object({ nickname: z.string() });
-
 export async function GET(): Promise<Response> {
   const user = await readCurrentWebUser();
-  return Response.json({ user });
+  return Response.json(
+    { user },
+    { headers: { 'cache-control': 'private, no-store' } },
+  );
 }
 
 export async function PATCH(request: Request): Promise<Response> {
@@ -40,7 +41,7 @@ export async function PATCH(request: Request): Promise<Response> {
     }
     throw error;
   }
-  const parsed = profileSchema.safeParse(raw);
+  const parsed = profileUpdateInputSchema.safeParse(raw);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '资料格式不正确。');
   }
