@@ -52,17 +52,22 @@ function withDatabaseName(url: string, databaseName: string): string {
 }
 
 /**
- * 运行时构造截止0033的真实Drizzle bundle，避免手工SQL回放绕过journal。
+ * 运行时构造截止指定序号的真实Drizzle bundle，避免手工SQL回放绕过journal。
  * 临时目录只包含既有migration的副本，不修改仓库migration或meta。
  */
-async function withMigrationBundleThrough0033(
+async function withMigrationBundleThrough(
+  lastMigrationIndex: number,
   operation: (folder: string, lastMigrationAt: number) => Promise<void>,
 ): Promise<void> {
-  const folder = await mkdtemp(join(tmpdir(), 'educanvas-migrations-0033-'));
+  const folder = await mkdtemp(
+    join(tmpdir(), `educanvas-migrations-${lastMigrationIndex}-`),
+  );
   const journal = JSON.parse(
     await readFile(`${migrationsFolder}/meta/_journal.json`, 'utf8'),
   ) as MigrationJournal;
-  const entries = journal.entries.filter((entry) => entry.idx <= 33);
+  const entries = journal.entries.filter(
+    (entry) => entry.idx <= lastMigrationIndex,
+  );
   try {
     await mkdir(`${folder}/meta`);
     await writeFile(
@@ -76,7 +81,11 @@ async function withMigrationBundleThrough0033(
       );
     }
     const lastMigrationAt = entries.at(-1)?.when;
-    if (lastMigrationAt === undefined) throw new Error('0033 journal missing');
+    if (lastMigrationAt === undefined) {
+      throw new Error(
+        `migration journal missing through ${lastMigrationIndex}`,
+      );
+    }
     await operation(folder, lastMigrationAt);
   } finally {
     await rm(folder, { recursive: true, force: true });
@@ -109,44 +118,47 @@ async function withTemporaryDatabase(
 describeWithDatabase('Study Plan 0034 additive migration', () => {
   it('用Drizzle从0033升级并保留既有事实、约束与索引', async () => {
     await withTemporaryDatabase(async (connection) => {
-      await withMigrationBundleThrough0033(async (priorMigrationsFolder) => {
-        const database = drizzle(connection, { schema });
-        await migrate(database, {
-          migrationsFolder: priorMigrationsFolder,
-        });
-        const userId = 'user:migration-study-plan';
-        const notebookId = '83000000-0000-4000-8000-000000000001';
-        await connection`
+      await withMigrationBundleThrough(33, async (priorMigrationsFolder) => {
+        await withMigrationBundleThrough(34, async (targetMigrationsFolder) => {
+          const database = drizzle(connection, { schema });
+          await migrate(database, {
+            migrationsFolder: priorMigrationsFolder,
+          });
+          const userId = 'user:migration-study-plan';
+          const notebookId = '83000000-0000-4000-8000-000000000001';
+          await connection`
           insert into platform_users (id, kind)
           values (${userId}, 'registered')
         `;
-        await connection`
+          await connection`
           insert into spaces (id, owner_subject_id, kind, title)
           values (${notebookId}, ${userId}, 'notebook', '迁移前Notebook')
         `;
-        const userBefore = await connection`
+          const userBefore = await connection`
           select id, kind, status from platform_users where id = ${userId}
         `;
-        const spaceBefore = await connection`
+          const spaceBefore = await connection`
           select id, owner_subject_id, kind, title
           from spaces where id = ${notebookId}
         `;
 
-        await migrate(database, { migrationsFolder });
+          await migrate(database, {
+            migrationsFolder: targetMigrationsFolder,
+          });
 
-        expect(
-          await connection`
+          expect(
+            await connection`
             select id, kind, status from platform_users where id = ${userId}
           `,
-        ).toEqual(userBefore);
-        expect(
-          await connection`
+          ).toEqual(userBefore);
+          expect(
+            await connection`
             select id, owner_subject_id, kind, title
             from spaces where id = ${notebookId}
           `,
-        ).toEqual(spaceBefore);
-        expect(
-          await connection<{ conname: string }[]>`
+          ).toEqual(spaceBefore);
+          expect(
+            await connection<{ conname: string }[]>`
             select conname
             from pg_constraint
             where conrelid in (
@@ -158,34 +170,34 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
             )
             order by conname
           `,
-        ).toEqual(
-          expect.arrayContaining([
-            {
-              conname: 'diagnostic_attempts_goal_id_learning_goals_id_fk',
-            },
-            {
-              conname: 'diagnostic_attempts_session_id_lesson_sessions_id_fk',
-            },
-            { conname: 'diagnostic_attempts_shape_check' },
-            { conname: 'diagnostic_responses_attempt_id_question_id_pk' },
-            {
-              conname:
-                'diagnostic_responses_objective_id_learning_objectives_id_fk',
-            },
-            {
-              conname: 'learner_profiles_student_id_platform_users_id_fk',
-            },
-            { conname: 'learner_profiles_shape_check' },
-            { conname: 'learning_goals_notebook_id_spaces_id_fk' },
-            { conname: 'learning_goals_lifecycle_check' },
-            {
-              conname: 'learning_objectives_goal_id_learning_goals_id_fk',
-            },
-            { conname: 'learning_objectives_shape_check' },
-          ]),
-        );
-        expect(
-          await connection<{ indexname: string }[]>`
+          ).toEqual(
+            expect.arrayContaining([
+              {
+                conname: 'diagnostic_attempts_goal_id_learning_goals_id_fk',
+              },
+              {
+                conname: 'diagnostic_attempts_session_id_lesson_sessions_id_fk',
+              },
+              { conname: 'diagnostic_attempts_shape_check' },
+              { conname: 'diagnostic_responses_attempt_id_question_id_pk' },
+              {
+                conname:
+                  'diagnostic_responses_objective_id_learning_objectives_id_fk',
+              },
+              {
+                conname: 'learner_profiles_student_id_platform_users_id_fk',
+              },
+              { conname: 'learner_profiles_shape_check' },
+              { conname: 'learning_goals_notebook_id_spaces_id_fk' },
+              { conname: 'learning_goals_lifecycle_check' },
+              {
+                conname: 'learning_objectives_goal_id_learning_goals_id_fk',
+              },
+              { conname: 'learning_objectives_shape_check' },
+            ]),
+          );
+          expect(
+            await connection<{ indexname: string }[]>`
             select indexname
             from pg_indexes
             where schemaname = 'public'
@@ -198,15 +210,15 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
               )
             order by indexname
           `,
-        ).toEqual([
-          { indexname: 'diagnostic_attempts_client_id_unique' },
-          { indexname: 'learning_goals_notebook_active_unique' },
-          { indexname: 'learning_objectives_goal_key_unique' },
-          { indexname: 'learning_objectives_goal_node_unique' },
-          { indexname: 'learning_objectives_goal_sequence_unique' },
-        ]);
+          ).toEqual([
+            { indexname: 'diagnostic_attempts_client_id_unique' },
+            { indexname: 'learning_goals_notebook_active_unique' },
+            { indexname: 'learning_objectives_goal_key_unique' },
+            { indexname: 'learning_objectives_goal_node_unique' },
+            { indexname: 'learning_objectives_goal_sequence_unique' },
+          ]);
 
-        await connection`
+          await connection`
           insert into learning_goals (
             notebook_id, student_id, course_slug, course_version, grade_band,
             topic, desired_outcome
@@ -215,8 +227,8 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
             '一次函数', '掌握图像与解析式'
           )
         `;
-        await expect(
-          connection`
+          await expect(
+            connection`
             insert into learning_goals (
               notebook_id, student_id, course_slug, course_version, grade_band,
               topic, desired_outcome
@@ -225,9 +237,9 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
               '二次函数', '掌握抛物线'
             )
           `,
-        ).rejects.toMatchObject({ code: '23505' });
-        await expect(
-          connection`
+          ).rejects.toMatchObject({ code: '23505' });
+          await expect(
+            connection`
             insert into diagnostic_attempts (
               client_attempt_id, goal_id, session_id, student_id,
               definition_version, answer_fingerprint,
@@ -237,26 +249,35 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
               'v1', ${'a'.repeat(64)}, 2, 0
             )
           `,
-        ).rejects.toMatchObject({ code: '23514' });
+          ).rejects.toMatchObject({ code: '23514' });
+        });
       });
     });
   });
 
   it('Drizzle升级中途失败时回滚DDL与journal并可前向重跑', async () => {
     await withTemporaryDatabase(async (connection) => {
-      await withMigrationBundleThrough0033(
+      await withMigrationBundleThrough(
+        33,
         async (priorMigrationsFolder, lastMigrationAt) => {
-          const database = drizzle(connection, { schema });
-          await migrate(database, {
-            migrationsFolder: priorMigrationsFolder,
-          });
-          await connection.unsafe('create table learner_profiles (stub text)');
+          await withMigrationBundleThrough(
+            34,
+            async (targetMigrationsFolder) => {
+              const database = drizzle(connection, { schema });
+              await migrate(database, {
+                migrationsFolder: priorMigrationsFolder,
+              });
+              await connection.unsafe(
+                'create table learner_profiles (stub text)',
+              );
 
-          await expect(
-            migrate(database, { migrationsFolder }),
-          ).rejects.toMatchObject({ cause: { code: '42P07' } });
-          expect(
-            await connection<{ table_name: string }[]>`
+              await expect(
+                migrate(database, {
+                  migrationsFolder: targetMigrationsFolder,
+                }),
+              ).rejects.toMatchObject({ cause: { code: '42P07' } });
+              expect(
+                await connection<{ table_name: string }[]>`
               select table_name
               from information_schema.tables
               where table_schema = 'public'
@@ -264,20 +285,22 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
                   'diagnostic_attempts', 'diagnostic_responses'
                 )
             `,
-          ).toEqual([]);
-          expect(
-            await connection<{ created_at: string }[]>`
+              ).toEqual([]);
+              expect(
+                await connection<{ created_at: string }[]>`
               select created_at::text
               from drizzle.__drizzle_migrations
               order by created_at desc
               limit 1
             `,
-          ).toEqual([{ created_at: String(lastMigrationAt) }]);
+              ).toEqual([{ created_at: String(lastMigrationAt) }]);
 
-          await connection.unsafe('drop table learner_profiles');
-          await migrate(database, { migrationsFolder });
-          expect(
-            await connection<{ table_name: string }[]>`
+              await connection.unsafe('drop table learner_profiles');
+              await migrate(database, {
+                migrationsFolder: targetMigrationsFolder,
+              });
+              expect(
+                await connection<{ table_name: string }[]>`
               select table_name
               from information_schema.tables
               where table_schema = 'public'
@@ -287,13 +310,15 @@ describeWithDatabase('Study Plan 0034 additive migration', () => {
                 )
               order by table_name
             `,
-          ).toEqual([
-            { table_name: 'diagnostic_attempts' },
-            { table_name: 'diagnostic_responses' },
-            { table_name: 'learner_profiles' },
-            { table_name: 'learning_goals' },
-            { table_name: 'learning_objectives' },
-          ]);
+              ).toEqual([
+                { table_name: 'diagnostic_attempts' },
+                { table_name: 'diagnostic_responses' },
+                { table_name: 'learner_profiles' },
+                { table_name: 'learning_goals' },
+                { table_name: 'learning_objectives' },
+              ]);
+            },
+          );
         },
       );
     });
