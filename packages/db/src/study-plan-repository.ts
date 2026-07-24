@@ -264,7 +264,9 @@ export class DrizzleStudyPlanRepository {
             eq(lessonSessions.id, input.sessionId),
             eq(lessonSessions.studentId, input.trustedStudentId),
             eq(lessonSessions.status, 'active'),
+            eq(conversations.ownerSubjectId, input.trustedStudentId),
             eq(conversations.status, 'active'),
+            eq(spaces.ownerSubjectId, input.trustedStudentId),
             eq(spaces.status, 'active'),
             eq(notebookMemberships.role, 'owner'),
             isNull(notebookMemberships.revokedAt),
@@ -274,7 +276,8 @@ export class DrizzleStudyPlanRepository {
             ),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for('update', { of: notebookMemberships });
       if (
         !ownedSession ||
         ownedSession.gradeBand !== course.gradeBand ||
