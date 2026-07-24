@@ -66,10 +66,12 @@ export function GeneralChatWorkspace({
   initialMessages,
   conversationId,
   notebookTitle,
+  nickname,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
   notebookTitle: string | null;
+  nickname?: string | null;
 }) {
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
@@ -332,7 +334,7 @@ export function GeneralChatWorkspace({
             <>
               <HeroInkField />
               <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
-                <HeroGreeting />
+                <HeroGreeting nickname={nickname} />
                 <div ref={composerDockRef} className="w-full">
                   {artifactFlow.generation &&
                   artifactFlow.generation.phase !== 'confirm' ? (
