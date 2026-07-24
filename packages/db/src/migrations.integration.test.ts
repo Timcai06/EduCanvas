@@ -82,7 +82,8 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'assets', 'asset_versions', 'agent_message_parts',
             'turn_context_snapshots', 'spaces', 'conversations',
             'agent_operations', 'conversation_messages', 'tool_effects',
-            'operation_continuations'
+            'operation_continuations', 'learner_profiles', 'learning_goals',
+            'learning_objectives', 'diagnostic_attempts', 'diagnostic_responses'
           )
         order by table_name
       `;
@@ -94,9 +95,14 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'chat_messages',
         'conversation_messages',
         'conversations',
+        'diagnostic_attempts',
+        'diagnostic_responses',
         'knowledge_chunks',
         'knowledge_documents',
         'knowledge_sources',
+        'learner_profiles',
+        'learning_goals',
+        'learning_objectives',
         'lesson_sessions',
         'message_citations',
         'model_runs',
@@ -110,6 +116,47 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'turn_safety_decisions',
         'turn_source_snapshots',
         'turn_source_versions',
+      ]);
+      expect(
+        await connection<{ conname: string }[]>`
+          select conname
+          from pg_constraint
+          where conname in (
+            'diagnostic_attempts_shape_check',
+            'diagnostic_responses_attempt_id_question_id_pk',
+            'learner_profiles_shape_check',
+            'learning_goals_lifecycle_check',
+            'learning_objectives_shape_check'
+          )
+          order by conname
+        `,
+      ).toEqual([
+        { conname: 'diagnostic_attempts_shape_check' },
+        { conname: 'diagnostic_responses_attempt_id_question_id_pk' },
+        { conname: 'learner_profiles_shape_check' },
+        { conname: 'learning_goals_lifecycle_check' },
+        { conname: 'learning_objectives_shape_check' },
+      ]);
+      expect(
+        await connection<{ indexname: string }[]>`
+          select indexname
+          from pg_indexes
+          where schemaname = 'public'
+            and indexname in (
+              'diagnostic_attempts_client_id_unique',
+              'learning_goals_notebook_active_unique',
+              'learning_objectives_goal_key_unique',
+              'learning_objectives_goal_node_unique',
+              'learning_objectives_goal_sequence_unique'
+            )
+          order by indexname
+        `,
+      ).toEqual([
+        { indexname: 'diagnostic_attempts_client_id_unique' },
+        { indexname: 'learning_goals_notebook_active_unique' },
+        { indexname: 'learning_objectives_goal_key_unique' },
+        { indexname: 'learning_objectives_goal_node_unique' },
+        { indexname: 'learning_objectives_goal_sequence_unique' },
       ]);
       const statusDefault = await connection<
         { column_default: string | null; is_nullable: string }[]
