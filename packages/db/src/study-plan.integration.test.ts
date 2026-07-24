@@ -1,5 +1,5 @@
 import { gradeDiagnostic } from '@educanvas/teaching-core';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -21,6 +21,7 @@ import {
   bootstrapStudyTestPlan,
   studyTestArtifact as artifact,
   studyTestCourse as course,
+  studyTestScope,
 } from './study-plan.integration-support';
 
 function resolveTestDatabaseUrl() {
@@ -131,6 +132,132 @@ describeWithDatabase('学习计划与可信诊断仓储', () => {
       .where(eq(baseSchema.platformUsers.id, first.plan.goal.studentId));
     expect(
       await getDatabase().select().from(studySchema.learnerProfiles),
+    ).toHaveLength(0);
+  });
+
+  it('拒绝过期owner Membership的bootstrap', async () => {
+    const studentId = 'expired-owner-test';
+    const scope = studyTestScope(studentId);
+    const sessionRepo = new DrizzleLearningSessionRepository(getDatabase());
+    const { sessionId } = await sessionRepo.bootstrap({
+      ...scope,
+      completeArtifact: artifact,
+    });
+    const [conversationRow] = await getDatabase()
+      .select({ spaceId: baseSchema.conversations.spaceId })
+      .from(baseSchema.conversations)
+      .innerJoin(
+        baseSchema.lessonSessions,
+        eq(
+          baseSchema.lessonSessions.conversationId,
+          baseSchema.conversations.id,
+        ),
+      )
+      .where(eq(baseSchema.lessonSessions.id, sessionId))
+      .limit(1);
+    if (!conversationRow) throw new Error('Conversation not found');
+    await getDatabase()
+      .update(baseSchema.notebookMemberships)
+      .set({
+        grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+        expiresAt: new Date('2026-01-02T00:00:00.000Z'),
+      })
+      .where(
+        and(
+          eq(
+            baseSchema.notebookMemberships.notebookId,
+            conversationRow.spaceId,
+          ),
+          eq(baseSchema.notebookMemberships.userId, studentId),
+        ),
+      );
+    const repo = new DrizzleStudyPlanRepository(getDatabase());
+    await expect(
+      repo.bootstrap({
+        trustedStudentId: studentId,
+        declaredByUserId: studentId,
+        sessionId,
+        desiredOutcome: '测试过期所有权',
+        profile: {
+          ageBand: '13_to_15',
+          gradeBand: 'middle_school',
+          declarationSource: 'self_declared',
+          preferences: {
+            explanationOrder: 'example_first',
+            responseDepth: 'balanced',
+            guidance: 'step_by_step',
+            modality: 'mixed',
+            feedbackStyle: 'balanced',
+          },
+        },
+        course,
+      }),
+    ).rejects.toBeInstanceOf(StudyPlanNotFoundError);
+    expect(
+      await getDatabase().select().from(studySchema.learningGoals),
+    ).toHaveLength(0);
+  });
+
+  it('拒绝已撤销owner Membership的bootstrap', async () => {
+    const studentId = 'revoked-owner-test';
+    const scope = studyTestScope(studentId);
+    const sessionRepo = new DrizzleLearningSessionRepository(getDatabase());
+    const { sessionId } = await sessionRepo.bootstrap({
+      ...scope,
+      completeArtifact: artifact,
+    });
+    const [conversationRow] = await getDatabase()
+      .select({ spaceId: baseSchema.conversations.spaceId })
+      .from(baseSchema.conversations)
+      .innerJoin(
+        baseSchema.lessonSessions,
+        eq(
+          baseSchema.lessonSessions.conversationId,
+          baseSchema.conversations.id,
+        ),
+      )
+      .where(eq(baseSchema.lessonSessions.id, sessionId))
+      .limit(1);
+    if (!conversationRow) throw new Error('Conversation not found');
+    await getDatabase()
+      .update(baseSchema.notebookMemberships)
+      .set({
+        grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+        revokedAt: new Date('2026-01-02T00:00:00.000Z'),
+      })
+      .where(
+        and(
+          eq(
+            baseSchema.notebookMemberships.notebookId,
+            conversationRow.spaceId,
+          ),
+          eq(baseSchema.notebookMemberships.userId, studentId),
+        ),
+      );
+    const repo = new DrizzleStudyPlanRepository(getDatabase());
+    await expect(
+      repo.bootstrap({
+        trustedStudentId: studentId,
+        declaredByUserId: studentId,
+        sessionId,
+        desiredOutcome: '测试已撤销所有权',
+        profile: {
+          ageBand: '13_to_15',
+          gradeBand: 'middle_school',
+          declarationSource: 'self_declared',
+          preferences: {
+            explanationOrder: 'example_first',
+            responseDepth: 'balanced',
+            guidance: 'step_by_step',
+            modality: 'mixed',
+            feedbackStyle: 'balanced',
+          },
+        },
+        course,
+      }),
+    ).rejects.toBeInstanceOf(StudyPlanNotFoundError);
+    expect(
+      await getDatabase().select().from(studySchema.learningGoals),
     ).toHaveLength(0);
   });
 
