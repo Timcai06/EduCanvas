@@ -16,7 +16,7 @@ import {
   type StoredAssetObject,
 } from './asset-storage';
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_EXTRACTED_TEXT = 120_000;
 
 const assets = new DrizzleAssetRepository();

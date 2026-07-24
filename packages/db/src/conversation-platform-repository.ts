@@ -118,6 +118,31 @@ export class DrizzlePlatformConversationRepository {
     return rows.map(toConversation);
   }
 
+  /** 历史记录删除采用归档语义，保留账本和外键完整性，避免 UI 删除导致数据级误删。 */
+  async archiveOwned(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    now?: Date;
+  }): Promise<boolean> {
+    const now = input.now ?? new Date();
+    const [archived] = await this.database
+      .update(conversations)
+      .set({
+        status: 'archived',
+        archivedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversations.id, input.conversationId),
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          eq(conversations.status, 'active'),
+        ),
+      )
+      .returning({ id: conversations.id });
+    return archived !== undefined;
+  }
+
   async create(input: {
     ownerSubjectId: string;
     spaceKind: 'personal' | 'notebook' | 'course';

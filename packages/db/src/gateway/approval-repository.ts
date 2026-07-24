@@ -1,6 +1,15 @@
-import { and, asc, eq, gt } from 'drizzle-orm';
+import {
+  notebookMembershipRoleSchema,
+  notebookRoleAllows,
+} from '@educanvas/gateway-core';
+import { and, asc, eq, gt, isNull, or } from 'drizzle-orm';
 import { getDb } from '../client';
-import { gatewayApprovals } from '../schema';
+import {
+  agentOperations,
+  conversations,
+  gatewayApprovals,
+  notebookMemberships,
+} from '../schema';
 import { type Database } from './persistence';
 
 /**
@@ -30,24 +39,69 @@ export class DrizzleGatewayApprovalRepository {
     now: Date = new Date(),
   ): Promise<readonly GatewayPendingApprovalSnapshot[]> {
     const rows = await this.database
-      .select()
+      .select({
+        id: gatewayApprovals.id,
+        operationId: gatewayApprovals.operationId,
+        capability: gatewayApprovals.capability,
+        risk: gatewayApprovals.risk,
+        summary: gatewayApprovals.summary,
+        requestedAt: gatewayApprovals.requestedAt,
+        expiresAt: gatewayApprovals.expiresAt,
+        membershipRole: notebookMemberships.role,
+      })
       .from(gatewayApprovals)
+      .innerJoin(
+        agentOperations,
+        eq(agentOperations.id, gatewayApprovals.operationId),
+      )
+      .innerJoin(
+        conversations,
+        and(
+          eq(conversations.id, agentOperations.conversationId),
+          eq(conversations.spaceId, agentOperations.notebookId),
+        ),
+      )
+      .innerJoin(
+        notebookMemberships,
+        and(
+          eq(notebookMemberships.notebookId, agentOperations.notebookId),
+          eq(notebookMemberships.userId, actorUserId),
+        ),
+      )
       .where(
         and(
           eq(gatewayApprovals.actorUserId, actorUserId),
+          eq(agentOperations.actorUserId, actorUserId),
           eq(gatewayApprovals.status, 'pending'),
           gt(gatewayApprovals.expiresAt, now),
+          eq(conversations.status, 'active'),
+          isNull(notebookMemberships.revokedAt),
+          or(
+            isNull(notebookMemberships.expiresAt),
+            gt(notebookMemberships.expiresAt, now),
+          ),
         ),
       )
       .orderBy(asc(gatewayApprovals.requestedAt));
-    return rows.map((row) => ({
-      approvalId: row.id,
-      operationId: row.operationId,
-      capability: row.capability,
-      risk: row.risk as 'l2' | 'l3',
-      summary: row.summary,
-      requestedAt: row.requestedAt.toISOString(),
-      expiresAt: row.expiresAt.toISOString(),
-    }));
+    return rows.flatMap((row) => {
+      const role = notebookMembershipRoleSchema.safeParse(row.membershipRole);
+      if (
+        !role.success ||
+        !notebookRoleAllows(role.data, 'conversation.reply')
+      ) {
+        return [];
+      }
+      return [
+        {
+          approvalId: row.id,
+          operationId: row.operationId,
+          capability: row.capability,
+          risk: row.risk as 'l2' | 'l3',
+          summary: row.summary,
+          requestedAt: row.requestedAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+        },
+      ];
+    });
   }
 }
