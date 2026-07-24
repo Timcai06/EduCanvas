@@ -65,6 +65,8 @@ export interface BootstrappedLearningSession {
   studentId: string;
   knowledgeNodeId: string;
   artifact: PublicArtifact;
+  /** 仅本次调用实际插入 Session 时为 true，供上层失败补偿判断，不能由客户端提供。 */
+  created: boolean;
 }
 
 export interface OwnedLearningSession {
@@ -295,11 +297,13 @@ export class DrizzleLearningSessionRepository {
         .limit(1);
 
       let sessionId = existingSession?.id;
+      let created = false;
       if (!sessionId) {
         const now = new Date();
         // 过期 active 行仍会命中部分唯一索引，必须先显式归档再新建。
         await archiveActiveScope(transaction, input, now);
         sessionId = await insertSession(transaction, input, now);
+        created = true;
       }
 
       await ensurePreparedArtifact(transaction, sessionId, prepared);
@@ -308,6 +312,7 @@ export class DrizzleLearningSessionRepository {
         studentId: input.studentId,
         knowledgeNodeId: input.knowledgeNodeId,
         artifact: prepared.publicArtifact,
+        created,
       };
     });
   }
@@ -445,6 +450,7 @@ export class DrizzleLearningSessionRepository {
         studentId: input.studentId,
         knowledgeNodeId: input.knowledgeNodeId,
         artifact: prepared.publicArtifact,
+        created: true,
       };
     });
   }
