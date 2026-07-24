@@ -1,6 +1,8 @@
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 import {
   clearActiveConversationCookie,
+  isValidConversationId,
+  readActiveConversationId,
   writeActiveConversationCookie,
 } from '@/server/platform/general-conversation';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
@@ -22,6 +24,9 @@ export async function DELETE(
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   const { conversationId } = await context.params;
+  if (!isValidConversationId(conversationId)) {
+    return jsonError(400, 'invalid_conversation_id', '历史记录编号不正确。');
+  }
   const repository = new DrizzlePlatformConversationRepository();
   const archived = await repository.archiveOwned({
     conversationId,
@@ -29,6 +34,13 @@ export async function DELETE(
   });
   if (!archived) {
     return jsonError(404, 'conversation_not_found', '历史记录不存在。');
+  }
+  const activeConversationId = await readActiveConversationId();
+  if (activeConversationId !== conversationId) {
+    return Response.json({
+      deleted: true,
+      nextConversationId: activeConversationId,
+    });
   }
   const [next] = await repository.listOwnedRecent({
     trustedSubjectId: identity.studentId,

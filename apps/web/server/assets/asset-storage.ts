@@ -75,3 +75,13 @@ export async function removeStoredAsset(
 ): Promise<void> {
   await rm(stored.absolutePath, { force: true });
 }
+
+/** 仅删除通过受控 storageKey 定位的私有对象；调用方不得传入任意文件路径。 */
+export async function removeStoredAssetByKey(
+  storageKey: string,
+): Promise<void> {
+  if (!/^assets\/[a-f0-9]{16}\/[0-9a-f-]+\.[a-z0-9]+$/.test(storageKey)) {
+    throw new Error('asset_storage_key_invalid');
+  }
+  await rm(await resolveStorageKey(storageKey), { force: true });
+}

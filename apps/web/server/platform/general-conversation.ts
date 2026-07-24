@@ -29,9 +29,15 @@ export interface GeneralChatPageData {
   initialMessages: readonly InitialChatMessageDTO[];
 }
 
-async function readActiveConversationId(): Promise<string | null> {
+/** 只读取并校验 HttpOnly 当前对话游标；不得把畸形 Cookie 传入数据库 UUID 查询。 */
+export async function readActiveConversationId(): Promise<string | null> {
   const value = (await cookies()).get(ACTIVE_CONVERSATION_COOKIE)?.value;
   return value && UUID.test(value) ? value : null;
+}
+
+/** HTTP 边界在访问 PostgreSQL UUID 列之前使用同一规范校验。 */
+export function isValidConversationId(value: string): boolean {
+  return UUID.test(value);
 }
 
 /** 仅在显式Server Action成功创建Conversation后写入当前对话游标。 */

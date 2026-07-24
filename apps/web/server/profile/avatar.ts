@@ -1,5 +1,6 @@
 import 'server-only';
 
+/** 头像内容不满足大小或受支持格式边界。 */
 export class AvatarUploadError extends Error {
   constructor(readonly code: 'avatar_too_large' | 'unsupported_avatar_type') {
     super(code);
@@ -9,6 +10,7 @@ export class AvatarUploadError extends Error {
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
+/** 只从受限字节内容识别 PNG/JPEG/WebP，不信任浏览器 MIME 声明。 */
 export function detectAvatarImage(
   bytes: Uint8Array,
 ):
@@ -49,6 +51,7 @@ export function detectAvatarImage(
   throw new AvatarUploadError('unsupported_avatar_type');
 }
 
+/** 将内部头像校验 code 映射为稳定中文公开文案。 */
 export function avatarUploadErrorMessage(error: AvatarUploadError): string {
   return error.code === 'avatar_too_large'
     ? '头像不能超过 2MB。'
