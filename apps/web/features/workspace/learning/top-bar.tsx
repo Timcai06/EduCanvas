@@ -5,6 +5,7 @@ import {
   ClockCounterClockwise,
   SquaresFour,
 } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { LogoMark } from '../shared/logo-mark';
 
 /**
@@ -31,12 +32,18 @@ export function TopBar({
   const percent = masteryPercent ?? 0;
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
-      <span className="inline-flex items-center gap-2 text-base font-semibold tracking-[-0.02em] text-ink">
-        <span className="grid size-8 place-items-center rounded-full bg-accent-soft">
+      {/* 品牌即「退出 AI 家教、返回主页」的出口——对称于首页进入家教的入口 */}
+      <Link
+        href="/"
+        title="退出 AI 家教 · 返回主页"
+        aria-label="退出 AI 家教，返回主页"
+        className="group inline-flex items-center gap-2 rounded-full pr-1 text-base font-semibold tracking-[-0.02em] text-ink transition-colors hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <span className="grid size-8 place-items-center rounded-full bg-accent-soft transition-colors group-hover:bg-accent/15">
           <LogoMark size={17} />
         </span>
         EduCanvas
-      </span>
+      </Link>
       {!quiet && courseTitle ? (
         <>
           <span
