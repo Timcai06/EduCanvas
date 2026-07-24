@@ -48,6 +48,10 @@ export async function writeActiveConversationCookie(
   });
 }
 
+export async function clearActiveConversationCookie(): Promise<void> {
+  (await cookies()).delete(ACTIVE_CONVERSATION_COOKIE);
+}
+
 export async function createGeneralConversation(
   identity: AnonymousIdentity,
 ): Promise<PlatformConversationSnapshot> {

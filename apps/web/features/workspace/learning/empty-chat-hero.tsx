@@ -10,7 +10,13 @@ import { HeroInkField } from '../shared/hero-ink-field';
 gsap.registerPlugin(useGSAP);
 
 /** 空会话只呈现问题入口，不预先伪造教学对话或学习成果。 */
-export function EmptyChatHero({ children }: { children: ReactNode }) {
+export function EmptyChatHero({
+  children,
+  nickname,
+}: {
+  children: ReactNode;
+  nickname?: string | null;
+}) {
   const rootRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +53,7 @@ export function EmptyChatHero({ children }: { children: ReactNode }) {
     >
       <HeroInkField />
       <section className="relative z-10 w-full -translate-y-6 text-center sm:-translate-y-8">
-        <HeroGreeting />
+        <HeroGreeting nickname={nickname} />
         <div ref={contentRef}>{children}</div>
       </section>
     </main>

@@ -21,6 +21,14 @@ export {
   type PlatformMessageSnapshot,
 } from './conversation-platform-repository';
 export {
+  DrizzleWebAccountRepository,
+  DrizzleWebSessionRepository,
+  WebUsernameTakenError,
+  type WebPasswordMaterial,
+  type WebUserCredentialSnapshot,
+  type WebUserProfileSnapshot,
+} from './web-account-repository';
+export {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,
   PlatformTurnInProgressError,

@@ -239,6 +239,13 @@
       "when": 1784736296205,
       "tag": "0033_crazy_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784861284303,
+      "tag": "0034_brave_aaron_stack",
+      "breakpoints": true
     }
   ]
 }

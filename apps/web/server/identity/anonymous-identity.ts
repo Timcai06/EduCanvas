@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash, randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
+import { readRegisteredSessionIdentity } from '../auth/session';
 
 export const ANONYMOUS_IDENTITY_COOKIE =
   process.env.NODE_ENV === 'production'
@@ -51,6 +52,10 @@ export function isEphemeralAnonymousIdentity(
 
 /** Server Component只能调用读取函数；缺失或畸形Cookie不会被静默替换。 */
 export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
+  const registered = await readRegisteredSessionIdentity();
+  if (registered) {
+    return { token: '', studentId: registered.userId };
+  }
   if (
     process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
     (process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner')
