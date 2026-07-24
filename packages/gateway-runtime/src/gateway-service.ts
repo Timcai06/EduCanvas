@@ -188,7 +188,11 @@ export class GatewayService {
   }): Promise<{
     status: 'cancelling' | 'not_running' | 'completed' | 'failed' | 'cancelled';
   }> {
-    const descriptor = await this.operationStore.describe(input.operationId);
+    const descriptor = await this.operationStore.describe(
+      input.operationId,
+      input.principalUserId,
+      this.now(),
+    );
     if (!descriptor) {
       throw new GatewayRuntimeError(
         'OPERATION_NOT_FOUND',
@@ -224,6 +228,7 @@ export class GatewayService {
       input.operationId,
       input.afterSequence,
       input.principalUserId,
+      this.now(),
     );
   }
 }

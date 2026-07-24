@@ -293,7 +293,7 @@ describe('GatewayService', () => {
 
     await expect(
       service.requestCancel({ operationId, principalUserId: 'user:2' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).rejects.toMatchObject({ code: 'OPERATION_NOT_FOUND' });
 
     /* 已完成的操作取消是幂等 no-op，回报其终态而非伪造 cancelling */
     const result = await service.requestCancel({

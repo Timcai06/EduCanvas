@@ -125,12 +125,18 @@ describeWithDatabase(
       ).rejects.toMatchObject({ code: 'invalid_event_sequence' });
 
       /* describe：取消鉴权用的归属+终态；未知 id 返回 null */
-      expect(await store.describe(started.operationId)).toMatchObject({
+      expect(
+        await store.describe(started.operationId, owner.userId, now),
+      ).toMatchObject({
         actorUserId: owner.userId,
         status: 'completed',
       });
       expect(
-        await store.describe('00000000-0000-0000-0000-000000000000'),
+        await store.describe(
+          '00000000-0000-0000-0000-000000000000',
+          owner.userId,
+          now,
+        ),
       ).toBeNull();
 
       /* listRecent：只返回本人的回合操作。本 fixture 只给 Space 命名、
