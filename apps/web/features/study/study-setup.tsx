@@ -72,6 +72,10 @@ const FEEDBACK_STYLES: Option[] = [
   { value: 'direct', label: '直接指出问题' },
 ];
 
+function optionLabel(options: Option[], value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
 function SelectField({
   label,
   value,
@@ -203,12 +207,21 @@ export function StudySetup() {
           </label>
 
           <details className="unfold-item group mt-3">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-ink-muted select-none marker:hidden hover:text-ink">
-              调整年龄与讲解方式
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm text-ink-muted select-none marker:hidden hover:text-ink">
+              <span className="min-w-0">
+                <span className="block font-medium text-ink">
+                  年龄与讲解方式
+                </span>
+                <span className="block truncate text-xs text-ink-faint">
+                  {optionLabel(AGE_BANDS, input.ageBand)} ·{' '}
+                  {optionLabel(GRADE_BANDS, input.gradeBand)} ·{' '}
+                  {optionLabel(DECLARATION_SOURCES, input.declarationSource)}
+                </span>
+              </span>
               <CaretDown
                 aria-hidden="true"
                 size={15}
-                className="transition-transform group-open:rotate-180"
+                className="shrink-0 transition-transform group-open:rotate-180"
               />
             </summary>
             <div className="mt-4 grid gap-5 rounded-2xl border border-line bg-surface/60 p-5 sm:grid-cols-2">

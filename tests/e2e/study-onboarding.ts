@@ -18,6 +18,16 @@ export async function completeStudyOnboarding(page: Page): Promise<void> {
     await page.getByRole('button', { name: '开始短诊断' }).click();
   }
 
+  const notebookSetupHeading = page.getByRole('heading', {
+    name: '今天想学会什么？',
+  });
+  if (await notebookSetupHeading.isVisible()) {
+    await page
+      .getByRole('textbox', { name: '这次想学会什么' })
+      .fill('理解图像 AI 如何根据特征完成分类');
+    await page.getByRole('button', { name: '开始', exact: true }).click();
+  }
+
   const diagnosticHeading = page.getByRole('heading', {
     name: '找到最适合你的起点',
   });
