@@ -1,4 +1,5 @@
 import type { AssetItem } from './assets-drawer';
+import { z } from 'zod';
 
 interface AssetResponseItem {
   descriptor: {
@@ -11,6 +12,18 @@ interface AssetResponseItem {
   };
   version: { versionId: string } | null;
 }
+
+const assetResponseItemSchema = z.object({
+  descriptor: z.object({
+    assetId: z.string(),
+    scope: z.enum(['turn', 'space']),
+    kind: z.enum(['image', 'document', 'link']),
+    displayName: z.string(),
+    status: z.enum(['pending', 'processing', 'ready', 'failed', 'tombstoned']),
+    currentVersionId: z.string().nullable(),
+  }),
+  version: z.object({ versionId: z.string() }).nullable(),
+});
 
 function toItem(
   asset: AssetResponseItem,
@@ -56,11 +69,33 @@ export async function loadAssets(
   const response = await fetch(endpoint, { cache: 'no-store' });
   if (!response.ok)
     throw new Error(await publicError(response, '暂时无法读取资料。'));
-  const body = (await response.json()) as { assets?: unknown };
-  if (!Array.isArray(body.assets)) throw new Error('资料响应格式不正确。');
-  return (body.assets as AssetResponseItem[]).map((asset) =>
-    toItem(asset, options),
-  );
+  const parsed = z
+    .object({ assets: z.array(assetResponseItemSchema) })
+    .safeParse(await response.json());
+  if (!parsed.success) throw new Error('资料响应格式不正确。');
+  return parsed.data.assets.map((asset) => toItem(asset, options));
+}
+
+async function parseAssetMutationResponse(
+  response: Response,
+  invalidMessage: string,
+): Promise<AssetItem> {
+  const parsed = z
+    .object({ asset: assetResponseItemSchema })
+    .safeParse(await response.json());
+  if (!parsed.success) throw new Error(invalidMessage);
+  return toItem(parsed.data.asset);
+}
+
+async function parseAssetMutationOrThrow(
+  response: Response,
+  fallback: string,
+  invalidMessage: string,
+): Promise<AssetItem> {
+  if (!response.ok) {
+    throw new Error(await publicError(response, fallback));
+  }
+  return parseAssetMutationResponse(response, invalidMessage);
 }
 
 export async function uploadAsset(input: {
@@ -78,9 +113,7 @@ export async function uploadAsset(input: {
   if (!response.ok) {
     throw new Error(await publicError(response, '文件上传暂时不可用。'));
   }
-  const body = (await response.json()) as { asset?: AssetResponseItem };
-  if (!body.asset) throw new Error('上传响应格式不正确。');
-  return toItem(body.asset);
+  return parseAssetMutationResponse(response, '上传响应格式不正确。');
 }
 
 export async function importLinkAsset(input: {
@@ -92,10 +125,9 @@ export async function importLinkAsset(input: {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: input.url }),
   });
-  if (!response.ok) {
-    throw new Error(await publicError(response, '暂时无法导入链接。'));
-  }
-  const body = (await response.json()) as { asset?: AssetResponseItem };
-  if (!body.asset) throw new Error('导入响应格式不正确。');
-  return toItem(body.asset);
+  return parseAssetMutationOrThrow(
+    response,
+    '暂时无法导入链接。',
+    '导入响应格式不正确。',
+  );
 }

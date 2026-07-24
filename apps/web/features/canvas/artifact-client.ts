@@ -3,6 +3,8 @@
  * 事件生产者接通后轮询退化为兜底路径,函数签名不变。
  */
 
+import { z } from 'zod';
+
 export interface ArtifactSummary {
   id: string;
   kind: string;
@@ -67,11 +69,89 @@ export interface AudioOverviewMedia {
 
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
 
-async function parseJsonOrThrow<T>(response: Response): Promise<T> {
+const artifactSummarySchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  trustTier: z.enum(['tier1', 'tier2']),
+  title: z.string(),
+  status: z.enum(['proposed', 'active', 'archived']),
+  latestVersion: z.number().int().min(0),
+});
+
+const artifactJobSchema = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+});
+
+const artifactMutationResponseSchema = z.object({
+  artifact: artifactSummarySchema,
+  job: artifactJobSchema.pick({ id: true }),
+});
+
+const audioOverviewMediaSchema = z.object({
+  url: z.string(),
+  contentVersion: z.literal(1),
+  contentType: z.literal('audio/mpeg'),
+  byteSize: z.number().int().nonnegative(),
+  transcript: z.string(),
+  sourceCount: z.number().int().nonnegative(),
+  script: z.object({
+    generator: z.string(),
+    provider: z.string().nullable(),
+    resolvedModelId: z.string().nullable(),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    latencyMs: z.number().int().nonnegative(),
+  }),
+  speech: z.object({
+    provider: z.string(),
+    resolvedModelId: z.string(),
+    voice: z.string(),
+    inputCharacters: z.number().int().nonnegative(),
+    latencyMs: z.number().int().nonnegative(),
+  }),
+});
+
+const artifactDetailSchema = z.object({
+  artifact: artifactSummarySchema.extend({
+    fromConversation: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  }),
+  version: z
+    .object({
+      version: z.number().int().min(1),
+      content: z.unknown(),
+      media: audioOverviewMediaSchema.nullable(),
+    })
+    .nullable(),
+  versions: z.array(
+    z.object({
+      version: z.number().int().min(1),
+      generatedBy: z.string().nullable(),
+      revisionInstruction: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
+  latestJob: artifactJobSchema
+    .extend({
+      progress: z.number().int().min(0).max(100).nullable(),
+      failureCode: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+async function parseJsonOrThrow<T>(
+  response: Response,
+  schema: z.ZodType<T>,
+  invalidMessage: string,
+): Promise<T> {
   if (!response.ok) {
     throw new Error(`artifact request failed with ${response.status}`);
   }
-  return (await response.json()) as T;
+  const parsed = schema.safeParse(await response.json());
+  if (!parsed.success) throw new Error(invalidMessage);
+  return parsed.data;
 }
 
 export type CreatableArtifactKind =
@@ -95,15 +175,21 @@ export async function createArtifact(
       kind === 'audio_overview' ? { kind, title, sources } : { kind, title },
     ),
   });
-  return parseJsonOrThrow(response);
+  return parseJsonOrThrow(
+    response,
+    artifactMutationResponseSchema,
+    '产物创建响应格式不正确。',
+  );
 }
 
 export async function fetchNotebookArtifacts(): Promise<
   readonly ArtifactSummary[]
 > {
   const response = await fetch(ARTIFACTS_ENDPOINT);
-  const data = await parseJsonOrThrow<{ artifacts: ArtifactSummary[] }>(
+  const data = await parseJsonOrThrow(
     response,
+    z.object({ artifacts: z.array(artifactSummarySchema) }),
+    '产物列表响应格式不正确。',
   );
   return data.artifacts;
 }
@@ -116,7 +202,11 @@ export async function fetchArtifactDetail(
   const response = await fetch(
     `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}${query}`,
   );
-  return parseJsonOrThrow(response);
+  return parseJsonOrThrow(
+    response,
+    artifactDetailSchema,
+    '产物详情响应格式不正确。',
+  );
 }
 
 export async function reviseArtifact(
@@ -132,7 +222,11 @@ export async function reviseArtifact(
       body: JSON.stringify({ baseVersion, instruction }),
     },
   );
-  return parseJsonOrThrow(response);
+  return parseJsonOrThrow(
+    response,
+    artifactMutationResponseSchema,
+    '产物修改响应格式不正确。',
+  );
 }
 
 /**
