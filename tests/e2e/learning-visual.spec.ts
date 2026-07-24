@@ -7,7 +7,7 @@ test.describe('学习页视觉基线', () => {
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '今天想学点什么？' }),
+      page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
     /* 两支笔基线:光场不回归,扉页只有衬线问候与朱砂笔触 */
     await expect(page.locator('.ambient-halo__layer')).toHaveCount(0);
@@ -24,7 +24,7 @@ test.describe('学习页视觉基线', () => {
     await page.goto('/learn');
 
     await expect(
-      page.getByRole('heading', { name: '今天想学点什么？' }),
+      page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
     await expect(page.locator('.ambient-halo__layer')).toHaveCount(0);
     await expect(page).toHaveScreenshot('chat-empty-mobile.png', {
@@ -38,7 +38,7 @@ test.describe('学习页视觉基线', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/learn');
     await expect(
-      page.getByRole('heading', { name: '今天想学点什么？' }),
+      page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
 
     const first = await page.screenshot({ animations: 'disabled' });
