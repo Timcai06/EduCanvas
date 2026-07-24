@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from '@phosphor-icons/react/dist/ssr';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
+import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { LogoMark } from '@/features/workspace/shared/logo-mark';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
@@ -50,6 +51,8 @@ export default async function SettingsPage() {
       </div>
 
       <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-8 sm:py-10">
+        <ProfileSettings />
+
         {/* 外观：主题与 Notebook 无关，始终可见，不依赖是否已创建笔记本 */}
         <section className="rounded-3xl border border-line bg-card p-6 shadow-float sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
