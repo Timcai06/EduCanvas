@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openLearningWorkspace } from './study-onboarding';
 
+const THREE_ANSWER_PROGRESS = /答对\s*\d+\/3/;
+
 /*
  * Chat-first 布局下 Canvas 与进度均按需打开：Canvas 经「+」菜单显式打开，
  * 进度经顶栏徽章展开抽屉。安全与幂等断言（Cookie 隔离、判分键不泄漏、重复提交
@@ -654,13 +656,13 @@ test('Canvas 提交后展示反馈并持久化 Progress', async ({ page }) => {
   await expect(canvas.getByRole('status').first()).toContainText('本次答对');
 
   const progress = await openProgress(page);
-  await expect(progress).toContainText(/已作答\s*[:：]?\s*3/);
+  await expect(progress).toContainText(THREE_ANSWER_PROGRESS);
   await closeSheet(page);
 
   await page.reload();
   await ensureConversationUi(page);
   const progressAfterReload = await openProgress(page);
-  await expect(progressAfterReload).toContainText(/已作答\s*[:：]?\s*3/);
+  await expect(progressAfterReload).toContainText(THREE_ANSWER_PROGRESS);
 });
 
 test('快速重复操作在界面只增加一次 Progress', async ({ page }) => {
@@ -670,13 +672,13 @@ test('快速重复操作在界面只增加一次 Progress', async ({ page }) => 
 
   await submit.dblclick();
   const progress = await openProgress(page);
-  await expect(progress).toContainText(/已作答\s*[:：]?\s*3/);
+  await expect(progress).toContainText(THREE_ANSWER_PROGRESS);
   await closeSheet(page);
 
   await page.reload();
   await ensureConversationUi(page);
   const progressAfterReload = await openProgress(page);
-  await expect(progressAfterReload).toContainText(/已作答\s*[:：]?\s*3/);
+  await expect(progressAfterReload).toContainText(THREE_ANSWER_PROGRESS);
 });
 
 test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
@@ -730,7 +732,7 @@ test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
     await ownerPage.reload();
     await ensureConversationUi(ownerPage);
     const ownerProgress = await openProgress(ownerPage);
-    await expect(ownerProgress).toContainText(/已作答\s*[:：]?\s*3/);
+    await expect(ownerProgress).toContainText(THREE_ANSWER_PROGRESS);
   } finally {
     await ownerContext.close();
     await forgedContext.close();
