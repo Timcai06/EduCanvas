@@ -5,6 +5,11 @@ import {
   jsonError,
 } from '@/server/http/request-security';
 import {
+  JsonRequestValidationError,
+  jsonRequestErrorResponse,
+  readLimitedJsonRequest,
+} from '@/server/http/json-request';
+import {
   ARTIFACT_GENERATE_TASK,
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
@@ -151,9 +156,12 @@ export async function PATCH(
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, 'invalid_request', '请求格式不正确。');
+    body = await readLimitedJsonRequest(request);
+  } catch (error) {
+    if (error instanceof JsonRequestValidationError) {
+      return jsonRequestErrorResponse(error);
+    }
+    throw error;
   }
   const parsed = reviseArtifactSchema.safeParse(body);
   if (!parsed.success) {

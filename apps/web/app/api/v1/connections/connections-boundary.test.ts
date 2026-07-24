@@ -21,8 +21,9 @@ describe('Web connection routes', () => {
     for (const source of [connectSource, revokeSource]) {
       expect(source).toContain('isTrustedSameOriginWrite(request)');
       expect(source.indexOf('isTrustedSameOriginWrite(request)')).toBeLessThan(
-        source.indexOf('request.json()'),
+        source.indexOf('readLimitedJsonRequest(request)'),
       );
+      expect(source).not.toContain('request.json()');
     }
   });
 

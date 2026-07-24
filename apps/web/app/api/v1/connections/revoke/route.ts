@@ -5,6 +5,11 @@ import {
   isTrustedSameOriginWrite,
   jsonError,
 } from '@/server/http/request-security';
+import {
+  JsonRequestValidationError,
+  jsonRequestErrorResponse,
+  readLimitedJsonRequest,
+} from '@/server/http/json-request';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 
 export const runtime = 'nodejs';
@@ -19,9 +24,12 @@ export async function POST(request: Request): Promise<Response> {
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   let raw: unknown;
   try {
-    raw = await request.json();
-  } catch {
-    return jsonError(400, 'invalid_request', '请求格式不正确。');
+    raw = await readLimitedJsonRequest(request);
+  } catch (error) {
+    if (error instanceof JsonRequestValidationError) {
+      return jsonRequestErrorResponse(error);
+    }
+    throw error;
   }
   const parsed = gatewayConnectionRevokeRequestSchema.safeParse(raw);
   if (!parsed.success) {
