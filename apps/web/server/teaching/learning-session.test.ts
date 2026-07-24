@@ -40,6 +40,11 @@ vi.mock('@educanvas/db', () => ({
   DrizzleStudyPlanRepository: vi.fn(function () {
     return studyPlans;
   }),
+  DrizzleWebSessionRepository: vi.fn(function () {
+    return {
+      findActiveRegisteredUserIdByTokenHash: vi.fn(async () => null),
+    };
+  }),
   getDb: vi.fn(),
 }));
 

@@ -14,7 +14,7 @@ gsap.registerPlugin(useGSAP, SplitText, DrawSVGPlugin);
  * 让大字持续「活着」而不喧宾夺主。SplitText 的 aria 兜底保留原文，
  * E2E 的 heading 断言不受切分影响；reduced-motion 下全部静态渲染、无持续动效。
  */
-export function HeroGreeting() {
+export function HeroGreeting({ nickname }: { nickname?: string | null }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const strokeRef = useRef<SVGPathElement>(null);
@@ -87,7 +87,7 @@ export function HeroGreeting() {
         ref={headingRef}
         className="hero-ink-text text-[clamp(1.9rem,3vw,2.6rem)] leading-snug tracking-[0.01em] text-balance"
       >
-        今天想学点什么？
+        {nickname ? `Hi ${nickname}，今天想学什么？` : '今天想学什么？'}
       </h1>
       {/* 朱砂笔触下划线：宽度跟随文字盒，起笔重收笔轻 */}
       <svg

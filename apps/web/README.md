@@ -10,6 +10,8 @@
 
 已经接通：
 
+- Web 用户名账号、昵称/私有头像、登录/退出、原子密码与 session 轮换，以及历史会话归档；
+  local 部署的 Agent/Notebook 归属仍固定为 `local:owner`，账号只提供资料与凭据走查；
 - S0 空对话入口、S1 对话态，以及按需打开的桌面 Canvas 侧栏/移动端 Canvas 模态；Assets、Studio、Progress 使用互斥抽屉；
 - 显式学习者声明、Notebook Goal、短诊断、匿名课程启动、新建、恢复和最近学习记录；
 - `POST /api/v1/learn/turn` 的 EduCanvas SSE、显式取消、失败收敛、消息历史与刷新恢复；
@@ -44,6 +46,8 @@
 - `app/api/v1/learn/turn/[turnId]/cancel/route.ts`：学生显式停止当前回答的接口。
 - `app/design-qa/`：受环境闸门保护的设计验收页面，不是生产课程入口。
 - `app/settings/page.tsx` 与 `app/api/v1/connections/`：通信方式 GUI 与同源、可信身份 BFF。
+- `app/login`、`app/register`、`app/api/v1/auth/` 与 `server/auth/`：Web 账号界面、
+  有界认证输入、版本化 scrypt、session 和 local-only 限流；生产共享限流仍是部署门禁。
 - `app/globals.css`：「两支笔」设计 Token（黛青/朱砂、纸/砚墨双主题）、排版与 Canvas 样式；`app/effects.css` 只保存受控视觉效果参数。
 
 ### 学生端功能
