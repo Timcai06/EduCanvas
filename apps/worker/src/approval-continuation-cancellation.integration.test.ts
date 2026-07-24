@@ -1,6 +1,7 @@
 import { OPERATION_CONTINUATION_TASK } from '@educanvas/agent-core';
 import {
   gatewayApprovals,
+  gatewayOperationEvents,
   notebookMemberships,
   operationContinuations,
 } from '@educanvas/db';
@@ -96,12 +97,20 @@ describe('Gateway approval到continuation队列的原子边界', () => {
         .from(operationContinuations)
         .where(eq(operationContinuations.id, fixture.continuationId)),
     ).toEqual([{ status: 'failed', failureCode: 'reauthorization_failed' }]);
-    const events = await fixture.operations.listEvents(
-      fixture.operationId,
-      -1,
-      fixture.actorId,
-    );
-    expect(events.at(-1)).toMatchObject({
+    await expect(
+      fixture.operations.listEvents(
+        fixture.operationId,
+        -1,
+        fixture.actorId,
+        new Date(now.getTime() + 3_000),
+      ),
+    ).rejects.toMatchObject({ code: 'operation_not_found' });
+    const events = await database
+      .select({ payload: gatewayOperationEvents.payload })
+      .from(gatewayOperationEvents)
+      .where(eq(gatewayOperationEvents.operationId, fixture.operationId))
+      .orderBy(gatewayOperationEvents.sequence);
+    expect(events.at(-1)?.payload).toMatchObject({
       type: 'operation.failed',
       code: 'FORBIDDEN',
       retryable: false,
