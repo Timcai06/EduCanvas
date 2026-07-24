@@ -7,7 +7,10 @@ import type {
   TurnApplicationProfilePort,
 } from '@educanvas/agent-runtime';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
-import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
+import {
+  type LearnerAdaptationPolicy,
+  type LessonSessionSnapshot,
+} from '@educanvas/teaching-core';
 import {
   TEACHING_TURN_ANSWER_PROMPT_VERSION,
   TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
@@ -35,6 +38,8 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
     private readonly assetContext: BuiltAssetContext,
     private readonly availableToolCapabilities: readonly string[],
     private readonly membershipRole: NotebookMembershipRole,
+    private readonly loadAdaptation: () => Promise<LearnerAdaptationPolicy | null> = async () =>
+      null,
   ) {}
 
   collectKnowledgeEvidence(candidateIds: readonly string[]): void {
@@ -80,9 +85,11 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
     const currentText =
       extractAgentMessageText(input.command.input.parts).trim() ||
       '请分析我提供的资料。';
+    const adaptation = await this.loadAdaptation();
     const prompts = createTeachingTurnPromptMessages({
       session: this.session,
       studentMessage: currentText,
+      adaptation: adaptation ?? undefined,
     });
     const answerSystem = prompts.answer[0];
     const synthesisSystem = prompts.synthesis[0];

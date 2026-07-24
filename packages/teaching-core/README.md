@@ -10,6 +10,8 @@
 - `src/mastery.ts`：PFA风格掌握度公式、ASSESS出口决策、误区标签和复习间隔；
 - `src/domain-events.ts`：服务端可信领域事件的版本化strict Schema；
 - `src/learning-projection.ts`：从可信事件回放学习投影，并按课程配置推荐下一知识节点；
+- `src/learner-profile.ts`：显式年龄/学段、闭集教学偏好与未成年人默认适配策略；
+- `src/study-plan.ts`：6–12节点目标图、公开诊断投影和确定性服务端判分；
 - `src/tools.ts`：受控教学工具名称和状态白名单；
 - `src/model-contracts.ts`：迁移期兼容出口；通用模型、流式事件与Gateway契约已归属`@educanvas/agent-core`；
 - `src/safety-policy.ts`：K12输入/输出安全策略、稳定分类和公开拦截响应；
@@ -52,6 +54,7 @@ pnpm typecheck
 - [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)
 - [掌握度与误区规格](../../docs/03-ai/mastery-and-misconceptions.md)
 - [学习事件契约](../../docs/04-data/learning-event-contract.md)
+- [学习计划与诊断数据契约](../../docs/04-data/02-学习计划与诊断.md)
 - [ADR-0017：统一 Agent Runtime 与 Notebook 上下文](../../docs/09-decisions/0017-unified-runtime-and-notebook-context.md)
 - [ADR-0018：能力授权、Artifact 信任与学习证据](../../docs/09-decisions/0018-capability-trust-and-learning-evidence.md)
 - [关键决策历史](../../docs/09-decisions/decision-history.md)

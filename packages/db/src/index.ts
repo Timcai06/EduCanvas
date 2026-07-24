@@ -5,6 +5,7 @@
 
 export { getDb } from './client';
 export * from './schema';
+export * from './schema/study';
 export {
   AssetAccessError,
   AssetPersistenceError,
@@ -112,6 +113,24 @@ export {
   type OwnedLearningSession,
   type OwnedLearningGatewayTarget,
 } from './learning-session-repository';
+export { DrizzleStudyPlanRepository } from './study-plan-repository';
+export {
+  DrizzleStudyBootstrapCompensator,
+  type DiscardUnplannedStudySessionInput,
+} from './study-bootstrap-compensator';
+export { DrizzleStudyDiagnosticRepository } from './study-diagnostic-repository';
+export {
+  DiagnosticAttemptConflictError,
+  StudyPlanNotFoundError,
+  type BootstrapStudyPlanInput,
+  type DiagnosticAttemptSnapshot,
+  type LearnerProfileSnapshot,
+  type PersistDiagnosticInput,
+  type PersistDiagnosticResult,
+  type StudyGoalSnapshot,
+  type StudyObjectiveSnapshot,
+  type StudyPlanSnapshot,
+} from './study-repository-contracts';
 export {
   ChatLifecycleError,
   ChatMessageIdConflictError,

@@ -9,6 +9,8 @@
 - `src/index.ts`：包的公共出口，统一导出数据库客户端、表定义、仓储和Drizzle适配器。
 - `src/client.ts`：读取`DATABASE_URL`并惰性创建Drizzle客户端，避免构建阶段连接数据库。
 - `src/schema.ts`：阶段一学习会话、对话/Model Run账本、Canvas产物、学习事件和掌握度表。
+- `src/schema/study.ts`：最小学习者画像、Notebook Goal/Objectives与诊断Attempt/Responses，单独成文件避免继续放大主Schema。
+- `src/study-plan-repository.ts`与`src/study-diagnostic-repository.ts`：计划所有权、幂等诊断与可信事件/mastery原子事务。
 - `src/chat-repository.ts`与`src/model-run-repository.ts`：发送幂等、消息生命周期、历史cursor与Provider运行审计。
 - `src/turn-ledger-repository.ts`与`src/turn-lease-repository.ts`：原子创建Turn账本、PostgreSQL窗口限流、heartbeat和过期收敛。
 - `src/tool-call-repository.ts`：Provider tool call的双唯一幂等键、状态机和不含原值的脱敏摘要。

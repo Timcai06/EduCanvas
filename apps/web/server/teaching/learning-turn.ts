@@ -38,10 +38,14 @@ import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
+  DrizzleStudyPlanRepository,
   DrizzleToolEffectRepository,
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
-import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
+import {
+  resolveLearnerAdaptationPolicy,
+  type LessonSessionSnapshot,
+} from '@educanvas/teaching-core';
 import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
@@ -64,6 +68,7 @@ const unavailableModelGateway: TurnModelGateway = {
     };
   },
 };
+const studyPlans = new DrizzleStudyPlanRepository();
 
 /** Web 教学入口的唯一显式 Turn Application 组合根；教学 Profile 不创建私有模型循环。 */
 export function beginGatewayTeachingTurnApplication(input: {
@@ -92,6 +97,13 @@ export function beginGatewayTeachingTurnApplication(input: {
     input.assetContext,
     teachingToolAdapterCapabilities(),
     input.route.membershipRole,
+    async () => {
+      const plan = await studyPlans.getOwnedBySession(
+        input.identity.studentId,
+        input.session.id,
+      );
+      return plan ? resolveLearnerAdaptationPolicy(plan.profile) : null;
+    },
   );
   const adapters = createTeachingToolKernelAdapters((candidateIds) =>
     profile.collectKnowledgeEvidence(candidateIds),

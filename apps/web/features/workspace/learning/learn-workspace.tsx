@@ -335,7 +335,7 @@ function LearnWorkspaceSession({
       className="flex h-dvh flex-col bg-canvas text-ink"
     >
       <TopBar
-        courseTitle="人工智能通识 · 图像是怎么被认出来的"
+        courseTitle={initialData.study.topic}
         stageLabel={null}
         masteryPercent={progress?.masteryPercent ?? null}
         onOpenStudio={() => setDrawer('studio')}
@@ -540,7 +540,7 @@ function LearnWorkspaceSession({
       ) : null}
       {drawer === 'progress' ? (
         <Sheet label="学习进度" onClose={() => setDrawer(null)}>
-          <ProgressDrawer progress={progress} />
+          <ProgressDrawer progress={progress} study={initialData.study} />
         </Sheet>
       ) : null}
     </div>

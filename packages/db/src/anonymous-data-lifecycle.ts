@@ -28,6 +28,7 @@ import {
   turnSourceSnapshots,
   turnSourceVersions,
 } from './schema';
+import { anonymousStudyLifecycleDefinitions } from './anonymous-study-data-lifecycle';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -51,6 +52,9 @@ export function anonymousSubjectLockKey(subjectId: string): string {
 
 export type AnonymousDataOwnershipPath =
   | 'session_id'
+  | 'student_id'
+  | 'attempt_id -> diagnostic_attempts.student_id'
+  | 'goal_id -> learning_goals.student_id'
   | 'message_id -> chat_messages.session_id'
   | 'artifact_record_id -> canvas_artifacts.session_id'
   | 'message_id -> conversation_messages.conversation_id'
@@ -462,16 +466,7 @@ const lifecycleDefinitions = [
     ownershipPath: 'conversation_id -> conversations.owner_subject_id',
     deleteRows: deleteAgentOperations,
   },
-  {
-    tableName: 'conversations',
-    ownershipPath: 'owner_subject_id',
-    deleteRows: deleteConversations,
-  },
-  {
-    tableName: 'spaces',
-    ownershipPath: 'owner_subject_id',
-    deleteRows: deleteSpaces,
-  },
+  ...anonymousStudyLifecycleDefinitions,
   {
     tableName: 'message_citations',
     ownershipPath: 'session_id',
@@ -556,6 +551,16 @@ const lifecycleDefinitions = [
     tableName: 'mastery_states',
     ownershipPath: 'student_id',
     deleteRows: deleteMasteryStates,
+  },
+  {
+    tableName: 'conversations',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteConversations,
+  },
+  {
+    tableName: 'spaces',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteSpaces,
   },
 ] as const satisfies readonly AnonymousLifecycleDefinition[];
 
