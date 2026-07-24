@@ -12,8 +12,8 @@ const input = {
 
 describe('Teaching Profile Prompt', () => {
   it('冻结版本并分别提供answer和synthesis约束', () => {
-    expect(TEACHING_TURN_ANSWER_PROMPT_VERSION).toBe('turn-answer-v4');
-    expect(TEACHING_TURN_SYNTHESIS_PROMPT_VERSION).toBe('turn-synthesis-v5');
+    expect(TEACHING_TURN_ANSWER_PROMPT_VERSION).toBe('turn-answer-v5');
+    expect(TEACHING_TURN_SYNTHESIS_PROMPT_VERSION).toBe('turn-synthesis-v6');
     const prompts = createTeachingTurnPromptMessages(input);
     expect(prompts.answer[0]).toMatchObject({ role: 'system' });
     expect(prompts.answer[0]?.content).toContain('当前教学状态：EXPLAIN');
@@ -22,6 +22,28 @@ describe('Teaching Profile Prompt', () => {
       role: 'user',
       content: input.studentMessage,
     });
+  });
+
+  it('只把显式画像解析成有限适配规则且未知年龄保持未成年人安全', () => {
+    const prompts = createTeachingTurnPromptMessages({
+      ...input,
+      adaptation: {
+        ageBand: 'unknown',
+        gradeBand: 'middle_school',
+        minorSafetyRequired: true,
+        preferences: {
+          explanationOrder: 'example_first',
+          responseDepth: 'concise',
+          guidance: 'independent_first',
+          modality: 'practice',
+          feedbackStyle: 'gentle',
+        },
+      },
+    });
+    expect(prompts.answer[0]?.content).toContain('按初中阶段');
+    expect(prompts.answer[0]?.content).toContain('未成年人安全策略');
+    expect(prompts.answer[0]?.content).toContain('先例子后概念');
+    expect(prompts.answer[0]?.content).not.toContain('性格是');
   });
 
   it('历史位于系统策略之后和当前输入之前且拒绝system注入', () => {

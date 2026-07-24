@@ -6,6 +6,8 @@ import {
   DrizzleKnowledgeRetrievalRepository,
   DrizzleLearningSessionRepository,
   DrizzleSessionRepository,
+  DrizzleStudyBootstrapCompensator,
+  DrizzleStudyPlanRepository,
   getDb,
 } from '@educanvas/db';
 import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
@@ -19,6 +21,10 @@ import {
   readAnonymousIdentity,
   type AnonymousIdentity,
 } from '../identity/anonymous-identity';
+import {
+  loadOwnedStudyContext,
+  type OwnedStudyContext,
+} from '../study/study-service';
 import { demoLesson } from './demo-lesson';
 import {
   gradeCanvasSubmissionService,
@@ -28,13 +34,16 @@ import {
 const learningSessions = new DrizzleLearningSessionRepository();
 const chatMessages = new DrizzleChatRepository();
 const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
+const studyPlans = new DrizzleStudyPlanRepository();
+const bootstrapCompensator = new DrizzleStudyBootstrapCompensator();
 
-function scopeFor(studentId: string) {
+function scopeFor(identity: AnonymousIdentity, context: OwnedStudyContext) {
   return {
-    studentId,
-    gradeBand: demoLesson.gradeBand,
-    courseSlug: demoLesson.courseSlug,
-    knowledgeNodeId: demoLesson.knowledgeNodeId,
+    studentId: identity.studentId,
+    gradeBand: context.plan.goal.gradeBand,
+    courseSlug: context.plan.goal.courseSlug,
+    // 受信课程目录保证至少六个目标。
+    knowledgeNodeId: context.course.objectives[0]!.knowledgeNodeId,
   };
 }
 
@@ -56,24 +65,63 @@ function toProgressDTO(input: {
   };
 }
 
-/** Cookie创建由Action负责；本函数只在数据库成功bootstrap后被调用。 */
-export async function bootstrapAnonymousLesson(
-  identity: AnonymousIdentity,
-): Promise<void> {
-  await learningSessions.bootstrap({
-    ...scopeFor(identity.studentId),
-    completeArtifact: demoLesson.artifact,
-  });
-}
-
-/** 显式创建新的学习记录；旧 active 会话由仓储在同一事务内归档。 */
+/**
+ * 显式创建新的学习记录，并把同一可信课程与目标复制到新 Notebook。
+ *
+ * Session 与 Goal 分属两个事务；Goal 失败时，只将本次新 Session 交给带主体锁的
+ * 补偿器。新 Notebook 确认删除后恢复旧 Session；若并发请求已绑定 Goal，则两者都不动。
+ */
 export async function startNewAnonymousLesson(
   identity: AnonymousIdentity,
 ): Promise<void> {
-  await learningSessions.startNew({
-    ...scopeFor(identity.studentId),
+  const context = await loadOwnedStudyContext(identity);
+  if (!context) throw new Error('活动学习计划不存在');
+  const session = await learningSessions.startNew({
+    ...scopeFor(identity, context),
     completeArtifact: demoLesson.artifact,
   });
+  try {
+    await studyPlans.bootstrap({
+      trustedStudentId: identity.studentId,
+      declaredByUserId: context.plan.profile.declaredByUserId,
+      sessionId: session.sessionId,
+      desiredOutcome: context.plan.goal.desiredOutcome,
+      profile: {
+        ageBand: context.plan.profile.ageBand,
+        gradeBand: context.plan.profile.gradeBand,
+        declarationSource: context.plan.profile.declarationSource,
+        preferences: context.plan.profile.preferences,
+      },
+      course: context.course,
+    });
+  } catch (error) {
+    let removed: boolean;
+    try {
+      removed = await bootstrapCompensator.discardUnplannedSession({
+        trustedStudentId: identity.studentId,
+        sessionId: session.sessionId,
+      });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        '新学习记录创建失败且新建Notebook补偿失败',
+      );
+    }
+    if (removed) {
+      try {
+        await learningSessions.resume(
+          scopeFor(identity, context),
+          context.sessionId,
+        );
+      } catch (resumeError) {
+        throw new AggregateError(
+          [error, resumeError],
+          '新学习记录创建失败且旧Notebook恢复失败',
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 /** 恢复操作只接受会话 ID，所有权与课程范围仍由服务端可信身份收窄。 */
@@ -81,24 +129,19 @@ export async function resumeOwnedAnonymousLesson(
   identity: AnonymousIdentity,
   sessionId: string,
 ): Promise<void> {
-  await learningSessions.resume(scopeFor(identity.studentId), sessionId);
+  const context = await loadOwnedStudyContext(identity);
+  if (!context) throw new Error('活动学习计划不存在');
+  await learningSessions.resume(scopeFor(identity, context), sessionId);
 }
 
-/** 只有已经绑定当前有效会话的Cookie才允许在start Action中继续复用。 */
-export async function hasActiveAnonymousLesson(
-  identity: AnonymousIdentity,
-): Promise<boolean> {
-  return Boolean(
-    await learningSessions.getCurrentOwned(scopeFor(identity.studentId)),
-  );
-}
-
-/** Agent runtime 只从可信 Cookie + 固定课程范围恢复完整会话游标。 */
+/** Agent runtime 只从可信 Cookie + 当前 Notebook 计划恢复完整会话游标。 */
 export async function loadOwnedTeachingSession(
   identity: AnonymousIdentity,
 ): Promise<LessonSessionSnapshot | null> {
+  const context = await loadOwnedStudyContext(identity);
+  if (!context) return null;
   const owned = await learningSessions.getCurrentOwned(
-    scopeFor(identity.studentId),
+    scopeFor(identity, context),
   );
   if (!owned) return null;
   const session = await new DrizzleSessionRepository(getDb()).getById(
@@ -111,17 +154,20 @@ export async function loadOwnedTeachingSession(
 export async function loadOwnedTeachingGatewayTarget(
   identity: AnonymousIdentity,
 ) {
+  const context = await loadOwnedStudyContext(identity);
+  if (!context) return null;
   return learningSessions.getCurrentOwnedGatewayTarget(
-    scopeFor(identity.studentId),
+    scopeFor(identity, context),
   );
 }
 
 /** 页面只得到公共Artifact和公开进度，不得到session、student或判分键。 */
-export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
-  const identity = await readAnonymousIdentity();
-  if (!identity) return null;
+export async function loadLearningPageData(
+  identity: AnonymousIdentity,
+  context: OwnedStudyContext,
+): Promise<LearningPageDTO | null> {
   const snapshot = await learningSessions.getPageSnapshot(
-    scopeFor(identity.studentId),
+    scopeFor(identity, context),
     demoLesson.artifact.artifactId,
   );
   if (!snapshot) return null;
@@ -134,8 +180,8 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
     learningSessions.listOwnedRecent(
       {
         studentId: identity.studentId,
-        gradeBand: demoLesson.gradeBand,
-        courseSlug: demoLesson.courseSlug,
+        gradeBand: context.plan.goal.gradeBand,
+        courseSlug: context.plan.goal.courseSlug,
       },
       { limit: 20 },
     ),
@@ -190,6 +236,22 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
           ...snapshot.mastery,
         })
       : null,
+    study: {
+      topic: context.plan.goal.topic,
+      desiredOutcome: context.plan.goal.desiredOutcome,
+      objectives:
+        context.plan.latestDiagnostic?.progress.map((objective) => ({
+          objectiveKey: objective.objectiveKey,
+          title: objective.title,
+          status: objective.status,
+        })) ??
+        context.plan.objectives.map((objective) => ({
+          objectiveKey: objective.objectiveKey,
+          title: objective.title,
+          status: 'not_started' as const,
+        })),
+      nextObjectiveKey: context.plan.latestDiagnostic?.nextObjectiveKey ?? null,
+    },
     initialMessages: history.messages.map((message) => {
       const clientMessageId = clientMessageIdByTurn.get(message.turnId);
       if (!clientMessageId) {
@@ -211,8 +273,8 @@ export async function loadLearningPageData(): Promise<LearningPageDTO | null> {
     }),
     initialSessions: recent.sessions.map((session) => ({
       id: session.sessionId,
-      title: session.title ?? demoLesson.courseTitle,
-      courseTitle: demoLesson.courseTitle,
+      title: session.title ?? context.plan.goal.topic,
+      courseTitle: context.plan.goal.topic,
       status: session.status,
       lastActivityAt: session.lastActivityAt,
       hasInterruptedTurn: session.hasInterruptedTurn,
@@ -238,8 +300,10 @@ export async function submitOwnedCanvas(
   }
   const identity = await readAnonymousIdentity();
   if (!identity) return { authenticated: false };
+  const context = await loadOwnedStudyContext(identity);
+  if (!context) return { authenticated: false };
   const session = await learningSessions.getCurrentOwned(
-    scopeFor(identity.studentId),
+    scopeFor(identity, context),
   );
   if (!session) return { authenticated: false };
 

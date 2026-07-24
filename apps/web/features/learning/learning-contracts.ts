@@ -2,6 +2,14 @@ import type {
   CanvasInteractionEvent,
   PublicArtifact,
 } from '@educanvas/canvas-protocol';
+import type {
+  DiagnosticObjectiveStatus,
+  LearnerAgeBand,
+  LearnerDeclarationSource,
+  LearnerGradeBand,
+  PublicDiagnostic,
+  TeachingPreferences,
+} from '@educanvas/teaching-core';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 
 /** 浏览器可见的学习进度投影；不包含匿名身份、会话ID或数据库版本。 */
@@ -18,10 +26,54 @@ export interface ProgressDTO {
 export interface LearningPageDTO {
   artifact: PublicArtifact;
   progress: ProgressDTO | null;
+  study: StudyProgressDTO;
   initialMessages: readonly InitialChatMessageDTO[];
   initialSessions: readonly LearningSessionSummaryDTO[];
   currentSessionId: string | null;
 }
+
+/** 浏览器可编辑的是显式声明和教学偏好，不包含模型推断字段。 */
+export interface CreateStudyPlanInputDTO {
+  ageBand: LearnerAgeBand;
+  gradeBand: LearnerGradeBand;
+  declarationSource: Exclude<LearnerDeclarationSource, 'school_asserted'>;
+  desiredOutcome: string;
+  preferences: TeachingPreferences;
+}
+
+export interface StudyObjectiveProgressDTO {
+  objectiveKey: string;
+  title: string;
+  status: DiagnosticObjectiveStatus;
+}
+
+/** Notebook 级目标与诊断结果的公开投影，不暴露 student/session/答案键。 */
+export interface StudyProgressDTO {
+  topic: string;
+  desiredOutcome: string;
+  objectives: readonly StudyObjectiveProgressDTO[];
+  nextObjectiveKey: string | null;
+}
+
+/** 初始诊断题面只含版本、题目和选项，内部 objective 映射与答案都留在服务端。 */
+export interface StudyDiagnosticDTO {
+  topic: string;
+  desiredOutcome: string;
+  diagnostic: PublicDiagnostic;
+}
+
+export interface SubmitDiagnosticInputDTO {
+  attemptId: string;
+  answers: readonly {
+    questionId: string;
+    selectedOptionId: string;
+  }[];
+}
+
+export type StudyActionResultDTO =
+  | { status: 'invalid'; message: string }
+  | { status: 'unauthorized'; message: string }
+  | { status: 'error'; requestId: string; message: string };
 
 /** Sidebar projection; ownership and pagination internals stay server-only. */
 export interface LearningSessionSummaryDTO {

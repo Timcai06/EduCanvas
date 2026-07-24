@@ -1,6 +1,9 @@
 'use client';
 
-import type { ProgressDTO } from '@/features/learning/learning-contracts';
+import type {
+  ProgressDTO,
+  StudyProgressDTO,
+} from '@/features/learning/learning-contracts';
 import { SealStamp } from '@/features/workspace/shared/two-pen-marks';
 
 /** 印章只在服务端投影表明高掌握时出现;阈值只影响展示,不参与任何判定。 */
@@ -20,7 +23,13 @@ function formatReviewDate(value: string | null): string {
  * 进度详情：只展示服务端可信投影（ProgressDTO），客户端不自行估算掌握度。
  * 常驻形态是顶栏徽章；本组件只在学生主动展开抽屉时出现，避免数字成为压力源。
  */
-export function ProgressDrawer({ progress }: { progress: ProgressDTO | null }) {
+export function ProgressDrawer({
+  progress,
+  study,
+}: {
+  progress: ProgressDTO | null;
+  study: StudyProgressDTO;
+}) {
   const masteryPercent = progress?.masteryPercent ?? 0;
 
   return (
@@ -88,6 +97,41 @@ export function ProgressDrawer({ progress }: { progress: ProgressDTO | null }) {
           完成第一道练习后，这里会显示由老师批改得出的掌握度与复习建议。
         </p>
       )}
+
+      <div className="border-t border-line pt-5">
+        <p className="text-sm font-semibold text-ink">{study.desiredOutcome}</p>
+        <ol className="mt-4 space-y-2">
+          {study.objectives.map((objective) => {
+            const statusLabel = {
+              strength: '优势',
+              focus: '重点',
+              not_started: '待学习',
+            }[objective.status];
+            const current = objective.objectiveKey === study.nextObjectiveKey;
+            return (
+              <li
+                key={objective.objectiveKey}
+                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm ${
+                  current ? 'bg-accent-soft' : 'bg-surface'
+                }`}
+              >
+                <span className="min-w-0 truncate text-ink">
+                  {objective.title}
+                </span>
+                <span
+                  className={
+                    objective.status === 'focus'
+                      ? 'shrink-0 font-medium text-cinnabar'
+                      : 'shrink-0 text-ink-muted'
+                  }
+                >
+                  {statusLabel}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </section>
   );
 }
