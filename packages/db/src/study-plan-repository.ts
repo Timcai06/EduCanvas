@@ -5,7 +5,7 @@ import {
   teachingPreferencesSchema,
   type DiagnosticObjectiveProgress,
 } from '@educanvas/teaching-core';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   conversations,
@@ -238,6 +238,7 @@ export class DrizzleStudyPlanRepository {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`study-plan:${input.trustedStudentId}`}, 0))`,
       );
+      const now = new Date();
       const [ownedSession] = await transaction
         .select({
           notebookId: conversations.spaceId,
@@ -263,13 +264,20 @@ export class DrizzleStudyPlanRepository {
             eq(lessonSessions.id, input.sessionId),
             eq(lessonSessions.studentId, input.trustedStudentId),
             eq(lessonSessions.status, 'active'),
+            eq(conversations.ownerSubjectId, input.trustedStudentId),
             eq(conversations.status, 'active'),
+            eq(spaces.ownerSubjectId, input.trustedStudentId),
             eq(spaces.status, 'active'),
             eq(notebookMemberships.role, 'owner'),
-            sql`${notebookMemberships.revokedAt} is null`,
+            isNull(notebookMemberships.revokedAt),
+            or(
+              isNull(notebookMemberships.expiresAt),
+              gt(notebookMemberships.expiresAt, now),
+            ),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for('update', { of: notebookMemberships });
       if (
         !ownedSession ||
         ownedSession.gradeBand !== course.gradeBand ||
@@ -278,7 +286,6 @@ export class DrizzleStudyPlanRepository {
       ) {
         throw new StudyPlanNotFoundError();
       }
-      const now = new Date();
       await upsertProfile(transaction, input, now);
       const [existingGoal] = await transaction
         .select()

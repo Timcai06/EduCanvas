@@ -1,5 +1,5 @@
 import { gradeDiagnostic } from '@educanvas/teaching-core';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -21,6 +21,7 @@ import {
   bootstrapStudyTestPlan,
   studyTestArtifact as artifact,
   studyTestCourse as course,
+  studyTestScope,
 } from './study-plan.integration-support';
 
 function resolveTestDatabaseUrl() {
@@ -68,6 +69,65 @@ function gradeAttempt(
   });
   if (!decision.ok) throw new Error(`fixture_grading_failed:${decision.code}`);
   return decision.result;
+}
+
+async function expectBootstrapRejectedAfterOwnershipMutation(input: {
+  studentId: string;
+  desiredOutcome: string;
+  mutate: (scope: {
+    conversationId: string;
+    notebookId: string;
+    studentId: string;
+  }) => Promise<void>;
+}) {
+  const sessionRepo = new DrizzleLearningSessionRepository(getDatabase());
+  const { sessionId } = await sessionRepo.bootstrap({
+    ...studyTestScope(input.studentId),
+    completeArtifact: artifact,
+  });
+  const [conversationRow] = await getDatabase()
+    .select({
+      conversationId: baseSchema.conversations.id,
+      spaceId: baseSchema.conversations.spaceId,
+    })
+    .from(baseSchema.conversations)
+    .innerJoin(
+      baseSchema.lessonSessions,
+      eq(baseSchema.lessonSessions.conversationId, baseSchema.conversations.id),
+    )
+    .where(eq(baseSchema.lessonSessions.id, sessionId))
+    .limit(1);
+  if (!conversationRow) throw new Error('Conversation not found');
+  await input.mutate({
+    conversationId: conversationRow.conversationId,
+    notebookId: conversationRow.spaceId,
+    studentId: input.studentId,
+  });
+
+  await expect(
+    new DrizzleStudyPlanRepository(getDatabase()).bootstrap({
+      trustedStudentId: input.studentId,
+      declaredByUserId: input.studentId,
+      sessionId,
+      desiredOutcome: input.desiredOutcome,
+      profile: {
+        ageBand: '13_to_15',
+        gradeBand: 'middle_school',
+        declarationSource: 'self_declared',
+        preferences: {
+          explanationOrder: 'example_first',
+          responseDepth: 'balanced',
+          guidance: 'step_by_step',
+          modality: 'mixed',
+          feedbackStyle: 'balanced',
+        },
+      },
+      course,
+    }),
+  ).rejects.toBeInstanceOf(StudyPlanNotFoundError);
+  expect(
+    await getDatabase().select().from(studySchema.learningGoals),
+  ).toHaveLength(0);
 }
 
 describeWithDatabase('学习计划与可信诊断仓储', () => {
@@ -132,6 +192,74 @@ describeWithDatabase('学习计划与可信诊断仓储', () => {
     expect(
       await getDatabase().select().from(studySchema.learnerProfiles),
     ).toHaveLength(0);
+  });
+
+  it('拒绝过期owner Membership的bootstrap', async () => {
+    await expectBootstrapRejectedAfterOwnershipMutation({
+      studentId: 'expired-owner-test',
+      desiredOutcome: '测试过期所有权',
+      mutate: async ({ notebookId, studentId }) => {
+        await getDatabase()
+          .update(baseSchema.notebookMemberships)
+          .set({
+            grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+            expiresAt: new Date('2026-01-02T00:00:00.000Z'),
+          })
+          .where(
+            and(
+              eq(baseSchema.notebookMemberships.notebookId, notebookId),
+              eq(baseSchema.notebookMemberships.userId, studentId),
+            ),
+          );
+      },
+    });
+  });
+
+  it('拒绝已撤销owner Membership的bootstrap', async () => {
+    await expectBootstrapRejectedAfterOwnershipMutation({
+      studentId: 'revoked-owner-test',
+      desiredOutcome: '测试已撤销所有权',
+      mutate: async ({ notebookId, studentId }) => {
+        await getDatabase()
+          .update(baseSchema.notebookMemberships)
+          .set({
+            grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+            revokedAt: new Date('2026-01-02T00:00:00.000Z'),
+          })
+          .where(
+            and(
+              eq(baseSchema.notebookMemberships.notebookId, notebookId),
+              eq(baseSchema.notebookMemberships.userId, studentId),
+            ),
+          );
+      },
+    });
+  });
+
+  it('拒绝只有owner Membership但并非Notebook实际所有者的bootstrap', async () => {
+    await expectBootstrapRejectedAfterOwnershipMutation({
+      studentId: 'delegated-owner-test',
+      desiredOutcome: '测试永久所有权边界',
+      mutate: async ({ notebookId }) => {
+        await getDatabase()
+          .update(baseSchema.spaces)
+          .set({ ownerSubjectId: 'another-notebook-owner' })
+          .where(eq(baseSchema.spaces.id, notebookId));
+      },
+    });
+  });
+
+  it('拒绝Session所属Conversation所有者漂移后的bootstrap', async () => {
+    await expectBootstrapRejectedAfterOwnershipMutation({
+      studentId: 'conversation-owner-drift-test',
+      desiredOutcome: '测试Conversation所有权边界',
+      mutate: async ({ conversationId }) => {
+        await getDatabase()
+          .update(baseSchema.conversations)
+          .set({ ownerSubjectId: 'another-conversation-owner' })
+          .where(eq(baseSchema.conversations.id, conversationId));
+      },
+    });
   });
 
   it('只补偿删除本次新建且仍未绑定Goal的Notebook', async () => {
