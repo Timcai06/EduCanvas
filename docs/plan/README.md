@@ -18,10 +18,12 @@
 
 ## 当前计划
 
-当前没有active执行线。第二代Hybrid Ports架构已
-[完成并结档](completed/2026-07-第二代架构升级.md)。下一阶段聚焦功能与前端设计，
-开始前使用模板创建新的短期计划；Memory、多模态、教育质量、正式身份、渠道生产化、
-自动verifier与完整SLO继续分别立项。历史交付与去向见[`completed/`](completed/README.md)。
+当前没有 active 计划。
+[自适应学习基线](completed/2026-07-自适应学习基线.md) 已完成并归档，
+后续按[路线图](../10-planning/roadmap.md)推进功能与前端设计。
+第二代Hybrid Ports架构已[完成并结档](completed/2026-07-第二代架构升级.md)；
+Memory、多模态、教育质量、正式身份、渠道生产化、自动verifier与完整SLO继续分别立项。
+历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
 
