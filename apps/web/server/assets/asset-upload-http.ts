@@ -1,5 +1,9 @@
 import 'server-only';
 
+import {
+  BoundedMultipartError,
+  readBoundedMultipartFormData,
+} from '../http/bounded-multipart';
 import { jsonError } from '../http/request-security';
 import { AssetUploadError, MAX_UPLOAD_BYTES } from './asset-upload';
 
@@ -12,50 +16,6 @@ export type ParsedAssetUpload = {
   scope: 'turn' | 'space';
 };
 
-async function readLimitedMultipartRequest(request: Request): Promise<Request> {
-  const contentLength = request.headers.get('content-length');
-  if (contentLength !== null) {
-    const parsed = Number(contentLength);
-    if (!Number.isSafeInteger(parsed) || parsed < 0) {
-      throw new AssetUploadError('invalid_upload', 400);
-    }
-    if (parsed > MAX_MULTIPART_BODY_BYTES) {
-      throw new AssetUploadError('file_too_large', 413);
-    }
-  }
-  if (!request.body) throw new AssetUploadError('invalid_upload', 400);
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      byteLength += result.value.byteLength;
-      if (byteLength > MAX_MULTIPART_BODY_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        throw new AssetUploadError('file_too_large', 413);
-      }
-      chunks.push(result.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const body = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body,
-  });
-}
-
 export async function parseAssetUploadRequest(
   request: Request,
 ): Promise<ParsedAssetUpload | Response> {
@@ -65,10 +25,15 @@ export async function parseAssetUploadRequest(
   }
   let form: FormData;
   try {
-    form = await (await readLimitedMultipartRequest(request)).formData();
+    form = await readBoundedMultipartFormData(
+      request,
+      MAX_MULTIPART_BODY_BYTES,
+    );
   } catch (error) {
-    if (error instanceof AssetUploadError) {
-      return assetUploadErrorResponse(error);
+    if (error instanceof BoundedMultipartError) {
+      return error.code === 'multipart_too_large'
+        ? assetUploadErrorResponse(new AssetUploadError('file_too_large', 413))
+        : jsonError(400, 'invalid_upload', '上传参数不完整。');
     }
     return jsonError(400, 'invalid_upload', '上传参数不完整。');
   }
