@@ -109,7 +109,7 @@ export async function startNewAnonymousLesson(
     }
     if (removed) {
       try {
-        await learningSessions.resume(
+        await learningSessions.restoreArchivedIfNoActiveSession(
           scopeFor(identity, context),
           context.sessionId,
         );

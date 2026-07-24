@@ -13,7 +13,7 @@ const {
   },
   learningSessions: {
     startNew: vi.fn(),
-    resume: vi.fn(),
+    restoreArchivedIfNoActiveSession: vi.fn(),
   },
   studyPlans: {
     bootstrap: vi.fn(),
@@ -100,7 +100,7 @@ describe('startNewAnonymousLesson', () => {
       sessionId: 'new-session',
       created: true,
     });
-    learningSessions.resume.mockResolvedValue({});
+    learningSessions.restoreArchivedIfNoActiveSession.mockResolvedValue(true);
     studyPlans.bootstrap.mockResolvedValue({});
     bootstrapCompensator.discardUnplannedSession.mockResolvedValue(true);
   });
@@ -120,8 +120,12 @@ describe('startNewAnonymousLesson', () => {
     ).not.toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: context.sessionId }),
     );
-    expect(learningSessions.resume).toHaveBeenCalledOnce();
-    expect(learningSessions.resume).toHaveBeenCalledWith(
+    expect(
+      learningSessions.restoreArchivedIfNoActiveSession,
+    ).toHaveBeenCalledOnce();
+    expect(
+      learningSessions.restoreArchivedIfNoActiveSession,
+    ).toHaveBeenCalledWith(
       {
         studentId: identity.studentId,
         gradeBand: context.plan.goal.gradeBand,
@@ -139,7 +143,9 @@ describe('startNewAnonymousLesson', () => {
 
     await expect(startNewAnonymousLesson(identity)).rejects.toBe(failure);
     expect(bootstrapCompensator.discardUnplannedSession).toHaveBeenCalledOnce();
-    expect(learningSessions.resume).not.toHaveBeenCalled();
+    expect(
+      learningSessions.restoreArchivedIfNoActiveSession,
+    ).not.toHaveBeenCalled();
   });
 
   it('Goal与清理都失败时保留两项失败原因', async () => {
@@ -156,14 +162,18 @@ describe('startNewAnonymousLesson', () => {
       message: '新学习记录创建失败且新建Notebook补偿失败',
       errors: [goalFailure, cleanupFailure],
     });
-    expect(learningSessions.resume).not.toHaveBeenCalled();
+    expect(
+      learningSessions.restoreArchivedIfNoActiveSession,
+    ).not.toHaveBeenCalled();
   });
 
   it('Goal失败且清理成功但旧Session恢复失败时保留两项失败原因', async () => {
     const goalFailure = new Error('goal insert failed');
     const resumeFailure = new Error('resume failed');
     studyPlans.bootstrap.mockRejectedValue(goalFailure);
-    learningSessions.resume.mockRejectedValue(resumeFailure);
+    learningSessions.restoreArchivedIfNoActiveSession.mockRejectedValue(
+      resumeFailure,
+    );
 
     const promise = startNewAnonymousLesson(identity);
 

@@ -1,7 +1,4 @@
-import {
-  gradeDiagnostic,
-  type StudyCourseDefinition,
-} from '@educanvas/teaching-core';
+import { gradeDiagnostic } from '@educanvas/teaching-core';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -9,8 +6,8 @@ import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { DrizzleLearningSessionRepository } from './learning-session-repository';
 import { DrizzleAnonymousDataLifecycleService } from './anonymous-data-lifecycle';
+import { DrizzleLearningSessionRepository } from './learning-session-repository';
 import * as baseSchema from './schema';
 import * as studySchema from './schema/study';
 import { DrizzleStudyDiagnosticRepository } from './study-diagnostic-repository';
@@ -20,6 +17,11 @@ import {
   DiagnosticAttemptConflictError,
   StudyPlanNotFoundError,
 } from './study-repository-contracts';
+import {
+  bootstrapStudyTestPlan,
+  studyTestArtifact as artifact,
+  studyTestCourse as course,
+} from './study-plan.integration-support';
 
 function resolveTestDatabaseUrl() {
   const value = process.env.TEST_DATABASE_URL;
@@ -44,89 +46,13 @@ const connection = testDatabaseUrl
 const schema = { ...baseSchema, ...studySchema };
 const database = connection ? drizzle(connection, { schema }) : null;
 
-const course: StudyCourseDefinition = {
-  courseSlug: 'integration-study',
-  version: 'v1',
-  gradeBand: 'middle_school',
-  title: '集成测试课程',
-  objectives: Array.from({ length: 6 }, (_, index) => ({
-    objectiveKey: `objective-${index + 1}`,
-    knowledgeNodeId: `integration.node-${index + 1}`,
-    title: `目标 ${index + 1}`,
-    description: `掌握集成测试目标 ${index + 1}`,
-    sequence: index + 1,
-    prerequisiteObjectiveKeys: index === 0 ? [] : [`objective-${index}`],
-  })),
-  diagnostic: {
-    version: 'v1',
-    questions: [1, 2, 3].map((number) => ({
-      questionId: `question-${number}`,
-      objectiveKey: `objective-${number}`,
-      prompt: `问题 ${number}`,
-      options: [
-        { id: `q${number}-correct`, text: '正确选项' },
-        { id: `q${number}-wrong`, text: '错误选项' },
-      ],
-      correctOptionId: `q${number}-correct`,
-    })),
-  },
-};
-
-const artifact = {
-  schemaVersion: '1',
-  artifactId: 'study-integration-artifact',
-  type: 'quiz',
-  title: '集成测试练习',
-  params: {
-    questions: [
-      {
-        id: 'artifact-q1',
-        question: '测试问题',
-        options: [
-          { id: 'yes', text: '是' },
-          { id: 'no', text: '否' },
-        ],
-        correctOptionId: 'yes',
-      },
-    ],
-  },
-} as const;
-
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
   return database;
 }
 
-async function bootstrapPlan(studentId = 'study-student') {
-  const session = await new DrizzleLearningSessionRepository(
-    getDatabase(),
-  ).bootstrap({
-    studentId,
-    gradeBand: course.gradeBand,
-    courseSlug: course.courseSlug,
-    knowledgeNodeId: course.objectives[0]!.knowledgeNodeId,
-    completeArtifact: artifact,
-  });
-  const plan = await new DrizzleStudyPlanRepository(getDatabase()).bootstrap({
-    trustedStudentId: studentId,
-    declaredByUserId: studentId,
-    sessionId: session.sessionId,
-    desiredOutcome: '完成集成测试课程',
-    profile: {
-      ageBand: '13_to_15',
-      gradeBand: 'middle_school',
-      declarationSource: 'self_declared',
-      preferences: {
-        explanationOrder: 'example_first',
-        responseDepth: 'balanced',
-        guidance: 'step_by_step',
-        modality: 'mixed',
-        feedbackStyle: 'balanced',
-      },
-    },
-    course,
-  });
-  return { session, plan };
+function bootstrapPlan(studentId?: string) {
+  return bootstrapStudyTestPlan(getDatabase(), studentId);
 }
 
 function gradeAttempt(
