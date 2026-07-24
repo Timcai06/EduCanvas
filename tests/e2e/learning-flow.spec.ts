@@ -36,7 +36,7 @@ async function startLearning(page: Page) {
   await mockUnavailableTurn(page);
   await openLearningWorkspace(page);
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('请打开互动演示，让我动手试试。');
@@ -427,7 +427,7 @@ test('S0 只显示品牌、问候与 Composer，不暗示学习状态或产物',
     page.getByRole('banner').getByText('EduCanvas', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   await expect(
     page.getByRole('textbox', { name: '向 EduCanvas 提问' }),
@@ -465,7 +465,7 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
   await page.getByRole('button', { name: '开始新学习' }).click();
   await newLearningResponse;
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '展开学习记录' }).click();
   const currentNewSession = page.locator('[aria-current="page"]');
@@ -479,7 +479,7 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
   await expect(archivedSession).toBeVisible();
   await archivedSession.click();
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '展开学习记录' }).click();
   await expect(
@@ -603,7 +603,7 @@ test('320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openLearningWorkspace(page);
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -711,7 +711,7 @@ test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
     await mockUnavailableTurn(forgedPage);
     await openLearningWorkspace(forgedPage);
     await expect(
-      forgedPage.getByRole('heading', { name: '今天想学点什么？' }),
+      forgedPage.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
     await expect(canvasRegion(forgedPage)).toHaveCount(0);
     const forgedComposer = forgedPage.getByRole('textbox', {

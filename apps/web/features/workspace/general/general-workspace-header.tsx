@@ -2,6 +2,7 @@
 
 import { Gear, List, NotePencil } from '@phosphor-icons/react';
 import Link from 'next/link';
+import { UserMenu } from '@/features/auth/user-menu';
 import { LogoMark } from '../shared/logo-mark';
 
 /**
@@ -57,6 +58,7 @@ export function GeneralWorkspaceHeader({
         {notebookTitle ?? '未命名笔记本'}
       </span>
       <span className="flex-1" />
+      <UserMenu />
       <Link
         href="/settings"
         aria-label="通信方式设置"

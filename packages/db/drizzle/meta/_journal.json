@@ -246,6 +246,13 @@
       "when": 1784860077130,
       "tag": "0034_dapper_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784875436079,
+      "tag": "0035_curvy_justin_hammer",
+      "breakpoints": true
     }
   ]
 }

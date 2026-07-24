@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash, randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
+import { readRegisteredSessionIdentity } from '../auth/session';
 
 export const ANONYMOUS_IDENTITY_COOKIE =
   process.env.NODE_ENV === 'production'
@@ -59,6 +60,10 @@ export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null>
       token: '',
       studentId: process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner',
     };
+  }
+  const registered = await readRegisteredSessionIdentity();
+  if (registered) {
+    return { token: '', studentId: registered.userId };
   }
   const value = (await cookies()).get(ANONYMOUS_IDENTITY_COOKIE)?.value;
   if (!value) return null;
