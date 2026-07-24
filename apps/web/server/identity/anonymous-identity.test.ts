@@ -1,15 +1,25 @@
 import { Buffer } from 'node:buffer';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
+vi.mock('../auth/session', () => ({
+  readRegisteredSessionIdentity: vi.fn(),
+}));
 
 import {
   createAnonymousIdentity,
   deriveAnonymousStudentId,
   isEphemeralAnonymousIdentity,
   parseAnonymousToken,
+  readAnonymousIdentity,
 } from './anonymous-identity';
+import { readRegisteredSessionIdentity } from '../auth/session';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
 
 function tokenFor(byte: number): string {
   return Buffer.alloc(32, byte).toString('base64url');
@@ -58,5 +68,30 @@ describe('anonymous identity token', () => {
     expect(
       isEphemeralAnonymousIdentity({ token: '', studentId: 'user:registered' }),
     ).toBe(false);
+  });
+
+  it('local部署始终保持与TUI共享的可信主体', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'local');
+    vi.stubEnv('EDUCANVAS_LOCAL_USER_ID', 'local:owner');
+    vi.mocked(readRegisteredSessionIdentity).mockResolvedValue({
+      userId: 'user:registered',
+    });
+
+    await expect(readAnonymousIdentity()).resolves.toEqual({
+      token: '',
+      studentId: 'local:owner',
+    });
+  });
+
+  it('非local部署才允许注册session成为平台主体', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'cloud');
+    vi.mocked(readRegisteredSessionIdentity).mockResolvedValue({
+      userId: 'user:registered',
+    });
+
+    await expect(readAnonymousIdentity()).resolves.toEqual({
+      token: '',
+      studentId: 'user:registered',
+    });
   });
 });

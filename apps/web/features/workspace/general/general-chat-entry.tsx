@@ -10,6 +10,7 @@ import { EmptyChatHero } from '../learning/empty-chat-hero';
 import { LogoMark } from '../shared/logo-mark';
 import { Gear } from '@phosphor-icons/react';
 import Link from 'next/link';
+import { UserMenu } from '@/features/auth/user-menu';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
@@ -24,7 +25,7 @@ const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'create_audio_overview',
 ];
 
-export function GeneralChatEntry() {
+export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
   const [canvasSelected, setCanvasSelected] = useState(false);
@@ -60,6 +61,7 @@ export function GeneralChatEntry() {
           EduCanvas
         </span>
         <span className="flex-1" />
+        <UserMenu />
         <Link
           href="/settings"
           aria-label="通信方式设置"
@@ -74,7 +76,7 @@ export function GeneralChatEntry() {
           <OfflineBanner />
         </div>
       ) : null}
-      <EmptyChatHero>
+      <EmptyChatHero nickname={nickname}>
         <Composer
           chips={[]}
           busy={isPending}

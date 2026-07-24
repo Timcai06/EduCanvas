@@ -73,7 +73,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
 
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   /* 产品决策:多模态 Agent 是第一身份,不存在"K12 模式"入口(student-ui-spec) */
   await expect(page.getByRole('link', { name: 'K12 学习模式' })).toHaveCount(0);
