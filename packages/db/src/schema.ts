@@ -2272,3 +2272,4 @@ export const artifactVersions = pgTable(
 
 // P1 学习表保持独立模块，统一从 schema 入口导出，确保生产连接与测试连接使用同一 Drizzle 类型。
 export * from './schema/study';
+export * from './schema/account';

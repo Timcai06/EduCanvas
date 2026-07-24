@@ -142,11 +142,6 @@ export function Composer({
             isLanding ? 'text-base' : 'text-[15px]'
           }`}
         />
-        {isLanding ? (
-          <span className="hidden shrink-0 items-center px-2 font-display text-sm text-ink-muted sm:inline-flex">
-            EduCanvas
-          </span>
-        ) : null}
         {busy && stopAvailable && onStop ? (
           <button
             type="button"
