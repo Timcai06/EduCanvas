@@ -4,9 +4,9 @@
  * 「两支笔」设计系统 —— EduCanvas 自有视觉身份。
  *
  * 隐喻：老师批改作业时手边的两支笔。
- *   黛青（accent）  = 讲课的笔：Agent 的声音、链接、常规交互；
+ *   墨紫（accent）  = 讲课的笔：Agent 的声音、链接、常规交互；
  *   朱砂（cinnabar）= 批改的笔：判分、圈点、审批、需要注意的事。
- * 全部色彩取自传统颜料谱系（纸、墨、黛青、朱砂、藤黄、松绿），
+ * 全部色彩取自传统颜料谱系（纸、墨、墨紫、朱砂、藤黄、松绿），
  * 亮色是默认的「纸面」，深色是「晚自习砚墨」。组件禁止散写色值。
  */
 /*
@@ -28,17 +28,24 @@
   --color-ink-faint: #847d6b;
   --color-line: #ddd4c0;
 
-  /* 黛青：讲课的笔 */
-  --color-accent: #31606c;
-  --color-accent-strong: #234c58;
-  --color-accent-soft: #dfe9e6;
-  /* 扉页墨点场专用点色：shader 会二次 sRGB 提亮，亮色喂更深黛青墨才留得住对比，见 hero-ink-field.tsx */
-  --hero-ink-dot: #0e343d;
+  /* 墨紫：讲课的笔 */
+  --color-accent: #6a4a86;
+  --color-accent-strong: #523368;
+  --color-accent-soft: #ebe3f2;
+  /* 扉页墨点场专用点色：shader 会二次 sRGB 提亮，亮色喂更深墨紫墨才留得住对比，见 hero-ink-field.tsx */
+  --hero-ink-dot: #2e1c46;
 
   /* 朱砂：批改的笔（审批、判分、重点）。错误语义与其同族但更深 */
-  --color-cinnabar: #bf4029;
-  --color-cinnabar-strong: #a33420;
-  --color-cinnabar-soft: #f6e2d8;
+  --color-cinnabar: #cf4429;
+  --color-cinnabar-strong: #ac3620;
+  --color-cinnabar-soft: #f7e0d6;
+
+  /* 学习热力五档：由纸线到深墨紫，越学越深；只用于学习档案热力图，不承载状态语义 */
+  --color-heat-0: #e7e0d2;
+  --color-heat-1: #d9c9e8;
+  --color-heat-2: #b99fd9;
+  --color-heat-3: #8f6ab7;
+  --color-heat-4: #6a4a86;
 
   --color-good: #4a7c44;
   --color-good-soft: #e3ecda;
@@ -74,14 +81,20 @@
   --color-ink-faint: #7f7663;
   --color-line: #3b3527;
 
-  --color-accent: #86b7c1;
-  --color-accent-strong: #a5cdd5;
-  --color-accent-soft: #223138;
-  --hero-ink-dot: #86b7c1;
+  --color-accent: #b79bd6;
+  --color-accent-strong: #cbb6e6;
+  --color-accent-soft: #2c2340;
+  --hero-ink-dot: #b79bd6;
 
-  --color-cinnabar: #dd6f52;
-  --color-cinnabar-strong: #e98a70;
-  --color-cinnabar-soft: #3f2018;
+  --color-cinnabar: #e2795b;
+  --color-cinnabar-strong: #ee9377;
+  --color-cinnabar-soft: #3d2018;
+
+  --color-heat-0: #2a2519;
+  --color-heat-1: #3d3150;
+  --color-heat-2: #574172;
+  --color-heat-3: #8064a6;
+  --color-heat-4: #b79bd6;
 
   --color-good: #8db77d;
   --color-good-soft: #26321f;
@@ -100,6 +113,256 @@ html {
   /* 兜底：JS 未跑时（SSR/禁用）交给系统；JS 就绪后由内联 style 覆盖为所选主题 */
   color-scheme: light dark;
   background: var(--color-canvas);
+  /* 预留滚动槽，避免抽屉开合、内容增减时整页因滚动条出现而横向抖动 */
+  scrollbar-gutter: stable;
+}
+
+/*
+ * 全站滚动条治理：把原生粗滚动条统一成一条细墨线，只在需要时显形。
+ * 缘由见交互约定——内联/抽屉里的长列表以前直接露原生条，又粗又贴边。
+ * Firefox 用 scrollbar-width/color；Chromium 用 ::-webkit-*，thumb 靠透明 border
+ * 做出内缩留白，视觉更细。取色一律走 ink 令牌，跟随主题。
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-ink) 24%, transparent)
+    transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-ink) 22%, transparent);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-ink) 38%, transparent);
+  background-clip: padding-box;
+}
+
+/*
+ * 隐藏滚动条但保留可滚动（触控 / 触控板仍可横滑）。用于学习热力图这类「桌面铺满不溢出、
+ * 窄屏溢出也不该露滚轮」的容器——对齐 GitHub 贡献图的做法。
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * 水墨极光（灵感：React Bits「Aurora」流光背景，改成两支笔的墨紫/朱砂低饱和版）。
+ * 几团高斯模糊色斑极缓漂移，只作氛围、pointer-events:none、不承载信息；reduced-motion 下停帧。
+ */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate(-8%, -6%) scale(1);
+  }
+  33% {
+    transform: translate(7%, 5%) scale(1.18);
+  }
+  66% {
+    transform: translate(-5%, 9%) scale(1.06);
+  }
+}
+.aurora-ink {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-ink > span {
+  position: absolute;
+  width: 42%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  filter: blur(52px);
+  opacity: 0.42;
+  will-change: transform;
+  animation: aurora-drift 20s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-ink > span {
+    animation: none;
+  }
+}
+
+/*
+ * 扫光（灵感：React Bits「ShinyText」），一道柔光斜掠过主按钮。悬停触发一次，reduced-motion 下不触发。
+ */
+.shine-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.shine-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 32%,
+    rgb(255 255 255 / 0.32) 50%,
+    transparent 68%
+  );
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shine-sweep:hover::after {
+    animation: shine-sweep 0.9s ease;
+  }
+}
+@keyframes shine-sweep {
+  to {
+    transform: translateX(130%);
+  }
+}
+
+/*
+ * 跟随光斑（灵感：React Bits「SpotlightCard」）：卡片跟随鼠标的墨紫柔光，由 JS 写入 --spot-x/y。
+ */
+.spotlight-card {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    16rem 16rem at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in srgb, var(--color-accent) 22%, transparent),
+    transparent 70%
+  );
+}
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/*
+ * 旁注导航（灵感：React Bits「LineSidebar」，改为两支笔的「页边批注」身份）：编号 + 发丝
+ * 标记线的列表，鼠标邻近时该项向墨紫位移染色、标记线拉长。--effect（0..1）由组件按 rAF
+ * 指数平滑逐帧写入，故位移/染色/标记线同步且无 CSS transition 错拍；取色一律走令牌。
+ * reduced-motion 下组件不跑 rAF、--effect 仅在选中项为 1，退化为静态高亮。
+ */
+.marginalia-nav__marker {
+  transform-origin: left center;
+  transform: scaleX(calc(0.55 + var(--effect, 0) * 0.55));
+  background: color-mix(
+    in srgb,
+    var(--color-accent) calc(var(--effect, 0) * 100%),
+    var(--color-line)
+  );
+}
+.marginalia-nav__index {
+  color: var(--color-ink-faint);
+  opacity: calc(0.6 + var(--effect, 0) * 0.4);
+}
+.marginalia-nav__title {
+  color: color-mix(
+    in srgb,
+    var(--color-accent-strong) calc(var(--effect, 0) * 100%),
+    var(--color-ink)
+  );
+  transform: translateX(calc(var(--effect, 0) * 6px));
+}
+
+/*
+ * 学科滚轮（灵感：React Bits「OptionWheel」，改为墨色 + 衬线）。选项沿一段圆弧排布，
+ * 越接近中线（选中位）越墨越实，离开越淡越虚——布局/透明度/模糊由组件按 rAF 逐帧写内联样式。
+ * --ow-p（0..1）随选项接近中心升到 1，驱动字色由 ink-muted 融向墨紫。取色走令牌。
+ */
+.option-wheel {
+  --ow-inset: 20px;
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+}
+.option-wheel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 1rem;
+}
+.option-wheel--dragging {
+  cursor: grabbing;
+}
+.option-wheel__item {
+  position: absolute;
+  top: 50%;
+  left: var(--ow-inset);
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--ow-font-size, 1.9rem);
+  line-height: 1;
+  font-weight: 300;
+  transform-origin: left center;
+  cursor: pointer;
+  will-change: transform, opacity, filter;
+  color: color-mix(
+    in srgb,
+    var(--color-accent-strong) calc(var(--ow-p, 0) * 100%),
+    var(--color-ink-muted)
+  );
+}
+.option-wheel__item--selected {
+  font-weight: 600;
+}
+
+/*
+ * 渐变描边输入框（.ec-input）：静止时是一条素净的墨紫→纸线细边，聚焦时
+ * 描边转为墨紫→朱砂的两支笔渐变并罩一圈柔光。用 padding-box/border-box 双层
+ * 背景在裸 input 上直接画渐变边——input 无法挂 ::before，故不走伪元素。
+ * 用法：套 .ec-input，并去掉组件里原有的 border/bg 工具类以免相互抵消。
+ */
+@layer components {
+  /* .ec-input 用于裸 input/textarea；.ec-field 用于「图标 + input」的外层容器，
+     二者视觉一致，区别只是聚焦判定：input 看 :focus，容器看 :focus-within。 */
+  .ec-input,
+  .ec-field {
+    border: 1.5px solid transparent;
+    background:
+      linear-gradient(var(--color-card), var(--color-card)) padding-box,
+      linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--color-accent) 60%, var(--color-line)),
+          var(--color-line)
+        )
+        border-box;
+    transition:
+      background 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .ec-input::placeholder {
+    color: var(--color-ink-faint);
+  }
+  .ec-input:focus,
+  .ec-input:focus-visible,
+  .ec-field:focus-within {
+    outline: none;
+    background:
+      linear-gradient(var(--color-card), var(--color-card)) padding-box,
+      linear-gradient(135deg, var(--color-accent), var(--color-cinnabar))
+        border-box;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 16%, transparent);
+  }
 }
 
 /*
@@ -208,7 +471,7 @@ body::before {
   text-decoration-color: currentColor;
 }
 
-/* 引文 = 页边批注的口吻：细黛青竖线 + 衬线 */
+/* 引文 = 页边批注的口吻：细墨紫竖线 + 衬线 */
 .chat-prose blockquote {
   margin-block: 0.85em;
   border-inline-start: 2px solid
@@ -305,7 +568,7 @@ body::before {
 
 /*
  * 旁注（marginalia）：回答下方的来源清单。不是芯片堆，而是书页边的批注——
- * 黛青点线在左，衬线小字在右。这是「回答依据来源」的排版化表达。
+ * 墨紫点线在左，衬线小字在右。这是「回答依据来源」的排版化表达。
  */
 .marginalia {
   border-inline-start: 1px dotted
@@ -337,7 +600,7 @@ body::before {
 /*
  * 问候语：墨色衬线大字，作为扉页第一现场的排版身份。
  * 2026-07 起重新引入受控的墨色动效/渐变（PixelBlast 墨点场、PulsingBorder 工作态流光），
- * 但严格走黛青/朱砂色谱，是「我们的水墨」而非通用彩虹渐变——身份仍由排版主导、动效点缀。
+ * 但严格走墨紫/朱砂色谱，是「我们的水墨」而非通用彩虹渐变——身份仍由排版主导、动效点缀。
  * SplitText 切分中文字符时避免字距抖动；持续动效见下方 .hero-ink-char。
  */
 .hero-ink-text {
@@ -352,7 +615,7 @@ body::before {
 }
 
 /*
- * 流式回答占位 shimmer：纸面灰条 + GSAP 平移的黛青微光。
+ * 流式回答占位 shimmer：纸面灰条 + GSAP 平移的墨紫微光。
  * 高光只动 transform，reduced-motion 下由组件停用，灰条保持静态。
  */
 .stream-shimmer {

@@ -30,7 +30,7 @@ describe('workspace truth and motion boundaries', () => {
     const globals = read('app/globals.css');
     const hero = read('features/workspace/shared/hero-greeting.tsx');
 
-    /* 「两支笔」身份的硬边界:朱砂/黛青语义 token 存在,光晕与渐变文字不回归 */
+    /* 「两支笔」身份的硬边界:朱砂/墨紫语义 token 存在,光晕与渐变文字不回归 */
     expect(globals).toContain('--color-cinnabar');
     expect(globals).toContain('--color-accent');
     expect(globals).not.toContain('ambient-halo');

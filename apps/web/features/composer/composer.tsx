@@ -24,8 +24,8 @@ export interface ComposerToolChip {
 
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
- * 视觉上它是桌面上「刚铺开的一页纸」（card 层），黛青描边为主，
- * 边缘另有一条黛青光弧沿框流动、聚焦时提亮加速（.ink-flow-line，纯装饰、不承载状态）。
+ * 视觉上它是桌面上「刚铺开的一页纸」（card 层），墨紫描边为主，
+ * 边缘另有一条墨紫光弧沿框流动、聚焦时提亮加速（.ink-flow-line，纯装饰、不承载状态）。
  * 它不持有对话状态；文本提交、菜单动作全部上抛。
  * Enter 发送、Shift+Enter 换行（触屏窄屏由发送按钮承担发送）。
  */
@@ -108,7 +108,7 @@ export function Composer({
             : 'rounded-[1.375rem] shadow-[0_1px_2px_rgb(72_60_34_/_0.05)]'
         }`}
       >
-        {/* 边框流动线：一条黛青光弧绕框匀速流动，平时安静、聚焦提亮加速（纯 CSS，见 effects.css .ink-flow-line） */}
+        {/* 边框流动线：一条墨紫光弧绕框匀速流动，平时安静、聚焦提亮加速（纯 CSS，见 effects.css .ink-flow-line） */}
         <span aria-hidden="true" className="ink-flow-line" />
         <PlusMenu
           onAction={onMenuAction}
