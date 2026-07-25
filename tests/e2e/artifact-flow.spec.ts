@@ -29,7 +29,7 @@ async function openStudioOutput(page: Page) {
 }
 
 async function closeStudio(page: Page) {
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);
@@ -266,7 +266,9 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   const source = inputStudio.getByRole('option', {
     name: /音频来源讲义\.pdf/,
   });
-  await source.click();
+  if ((await source.textContent())?.includes('未启用')) {
+    await source.click();
+  }
   await expect(
     inputStudio.getByRole('option', {
       name: /音频来源讲义\.pdf · 已启用/,

@@ -35,7 +35,7 @@ async function openStudioOutput(page: Page) {
 }
 
 async function closeStudio(page: Page) {
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);
