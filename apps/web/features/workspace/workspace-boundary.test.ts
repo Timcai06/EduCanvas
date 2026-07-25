@@ -45,8 +45,12 @@ describe('workspace truth and motion boundaries', () => {
     expect(studio).toContain('studio-cascade__wheel--secondary');
     expect(studio).toContain('一级保持可见');
     expect(studio).toContain('ROOT_ITEMS');
-    expect(studioOptions).toContain('SOURCE_ADD_ITEMS');
-    expect(studioOptions).toContain('OUTPUT_CREATE_ITEMS');
+    expect(studioOptions).toContain("['来源', 'AI 产物']");
+    expect(studioOptions).toContain('Studio只返回当前Notebook内可浏览');
+    expect(studioOptions).not.toContain('SOURCE_ADD_ITEMS');
+    expect(studioOptions).not.toContain('OUTPUT_CREATE_ITEMS');
+    expect(generalWorkspace).toContain("'add_link'");
+    expect(generalWorkspace).toContain('<SourcePreviewPanel');
     expect(studio).toContain('GENERATED_SOFT_CLICK');
     expect(studio).toContain('soundVolume={0.38}');
     expect(optionWheel).toContain('requestAnimationFrame');

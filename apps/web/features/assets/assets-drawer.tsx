@@ -31,13 +31,13 @@ export function AssetsDrawer({
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF会提取文字，当前模型暂不读取图片像素。
+        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF、Markdown和TXT会提取文字，当前模型暂不读取图片像素。
       </p>
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
           <p className="text-sm font-medium text-ink">还没有资料</p>
           <p className="mt-1 text-xs text-ink-muted">
-            上传图片、PDF或网页链接，建立这个笔记本自己的来源集合。
+            上传图片、文档或网页链接，建立这个笔记本自己的来源集合。
           </p>
         </div>
       ) : (
@@ -80,7 +80,7 @@ export function AssetsDrawer({
                       ? '图片'
                       : asset.kind === 'link'
                         ? '网页'
-                        : 'PDF'}{' '}
+                        : '文档'}{' '}
                     · {asset.scope === 'space' ? '笔记本来源' : '仅本轮'} ·{' '}
                     {asset.status === 'ready'
                       ? '已就绪'
