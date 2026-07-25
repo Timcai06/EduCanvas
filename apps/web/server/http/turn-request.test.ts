@@ -80,6 +80,32 @@ describe('teaching turn request boundary', () => {
     });
   });
 
+  it('接受有界 Canvas 展示偏好但拒绝它伪装成能力声明', async () => {
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-canvas-1',
+            text: '帮我整理成思维导图',
+            outputPreference: 'canvas',
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({ outputPreference: 'canvas' });
+
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-canvas-2',
+            text: '帮我整理',
+            outputPreference: 'root.shell',
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
   it('拒绝错误类型、畸形 JSON、空消息和非法幂等键', async () => {
     const cases = [
       request('{}', 'text/plain'),

@@ -21,6 +21,7 @@ import {
   resolveStructuredModelGateway,
 } from '../model-runtime.js';
 import { generateAudioOverviewScript } from './audio-overview-generation.js';
+import { resolveArtifactGenerationIntent } from './artifact-generation-intent.js';
 import { generateMindMapContent } from './mind-map-generation.js';
 import { generateFlashcardsContent } from './flashcards-generation.js';
 import { generateSlidesContent } from './slides-generation.js';
@@ -37,17 +38,6 @@ const payloadSchema = z
 const audioJobParamsSchema = z
   .object({
     selectedSources: z.array(assetVersionReferenceSchema).min(1).max(8),
-  })
-  .strict();
-
-const revisionJobParamsSchema = z
-  .object({
-    revision: z
-      .object({
-        baseVersion: z.number().int().min(1),
-        instruction: z.string().trim().min(1).max(2_000),
-      })
-      .strict(),
   })
   .strict();
 
@@ -325,21 +315,19 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       return;
     }
 
-    const revision =
-      Object.keys(job.params).length === 0
-        ? null
-        : revisionJobParamsSchema.safeParse(job.params);
-    if (revision && !revision.success) {
-      await failJob('revision_params_invalid');
+    const generationIntent = resolveArtifactGenerationIntent(job.params);
+    if (generationIntent.kind === 'invalid') {
+      await failJob('generation_params_invalid');
       return;
     }
-    const baseVersion = revision
-      ? await artifacts.getVersion({
-          artifactId: artifact.id,
-          version: revision.data.revision.baseVersion,
-          trustedSubjectId: payload.subjectId,
-        })
-      : null;
+    const baseVersion =
+      generationIntent.kind === 'revision'
+        ? await artifacts.getVersion({
+            artifactId: artifact.id,
+            version: generationIntent.baseVersion,
+            trustedSubjectId: payload.subjectId,
+          })
+        : null;
 
     const messages = await turns.listMessages({
       conversationId: artifact.conversationId,
@@ -348,18 +336,30 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     });
     const generatorInput = {
       title: artifact.title,
-      messages: messages.map((message) => ({
-        role:
-          message.role === 'user' ? ('user' as const) : ('assistant' as const),
-        content: message.content,
-      })),
+      messages: [
+        ...messages.map((message) => ({
+          role:
+            message.role === 'user'
+              ? ('user' as const)
+              : ('assistant' as const),
+          content: message.content,
+        })),
+        ...(generationIntent.kind === 'initial'
+          ? [
+              {
+                role: 'user' as const,
+                content: `本次产物生成要求：${generationIntent.instruction}`,
+              },
+            ]
+          : []),
+      ],
       gateway: resolveStructuredModelGateway(),
       traceId: `artifact:${payload.artifactId}`,
       operationId: payload.jobId,
       revision:
-        revision && baseVersion
+        generationIntent.kind === 'revision' && baseVersion
           ? {
-              instruction: revision.data.revision.instruction,
+              instruction: generationIntent.instruction,
               baseContent: baseVersion.content,
             }
           : undefined,
@@ -379,9 +379,10 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       content,
       generatedBy,
       generationJobId: payload.jobId,
-      expectedLatestVersion: revision
-        ? revision.data.revision.baseVersion
-        : undefined,
+      expectedLatestVersion:
+        generationIntent.kind === 'revision'
+          ? generationIntent.baseVersion
+          : undefined,
     });
     await artifacts.transitionGenerationJob({
       jobId: payload.jobId,

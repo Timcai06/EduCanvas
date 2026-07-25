@@ -110,6 +110,37 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
+  it('原子生成拒绝把其他 Notebook 的 Conversation 挂到目标 Space', async () => {
+    const [conversationSpace] = await database!
+      .insert(schema.spaces)
+      .values({ ownerSubjectId: owner, title: '其他笔记本' })
+      .returning();
+    const [foreignConversation] = await database!
+      .insert(schema.conversations)
+      .values({
+        spaceId: conversationSpace!.id,
+        ownerSubjectId: owner,
+        title: '其他会话',
+      })
+      .returning();
+
+    await expect(
+      repository.createArtifactWithGenerationJob({
+        spaceId,
+        conversationId: foreignConversation!.id,
+        trustedSubjectId: owner,
+        kind: 'mind_map',
+        trustTier: 'tier1',
+        title: '错误归属的思维导图',
+        taskIdentifier: 'artifact:generate',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+
+    await expect(database!.select().from(schema.artifacts)).resolves.toEqual(
+      [],
+    );
+  });
+
   it('手动内容以 active Artifact 与 v1 原子创建且不伪造生成任务', async () => {
     const created = await manualRepository.createWithInitialVersion({
       spaceId,

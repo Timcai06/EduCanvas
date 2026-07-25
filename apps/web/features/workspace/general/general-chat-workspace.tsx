@@ -43,6 +43,7 @@ import { HeroInkField } from '../shared/hero-ink-field';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
+import { useAgentArtifactEvents } from './use-agent-artifact-events';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -75,7 +76,6 @@ export function GeneralChatWorkspace({
   notebookTitle: string | null;
   nickname?: string | null;
 }) {
-  const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null);
@@ -88,6 +88,15 @@ export function GeneralChatWorkspace({
   );
   const artifactFlow = useArtifactGeneration();
   const [canvasSelected, setCanvasSelected] = useState(false);
+  const handleArtifactProposed = useAgentArtifactEvents({
+    canvasSelected,
+    setCanvasSelected,
+    setStudioItems,
+    observeProposedArtifact: artifactFlow.observeProposedArtifact,
+  });
+  const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS, {
+    onArtifactProposed: handleArtifactProposed,
+  });
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,17 +169,25 @@ export function GeneralChatWorkspace({
             ]
           : [],
       );
-      void turn.send(text, undefined, selected).then((accepted) => {
-        if (!accepted) return;
-        setAssets((current) =>
-          current.map((asset) =>
-            asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
-          ),
-        );
-        void refreshAssets().catch(() => undefined);
-      });
+      void turn
+        .send(
+          text,
+          undefined,
+          selected,
+          canvasSelected ? { outputPreference: 'canvas' } : {},
+        )
+        .then((accepted) => {
+          if (!accepted) return;
+          if (canvasSelected) setCanvasSelected(false);
+          setAssets((current) =>
+            current.map((asset) =>
+              asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
+            ),
+          );
+          void refreshAssets().catch(() => undefined);
+        });
     },
-    [assets, refreshAssets, turn],
+    [assets, canvasSelected, refreshAssets, turn],
   );
 
   useEffect(() => {

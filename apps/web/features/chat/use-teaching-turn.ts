@@ -28,6 +28,19 @@ export interface AgentTurnClientOptions {
   cancelEndpoint?: (turnId: string) => string;
 }
 
+export interface AgentTurnClientCallbacks {
+  onArtifactProposed?: (
+    event: Extract<
+      TeachingTurnEvent,
+      { type: 'artifact.proposed' | 'artifact.created' }
+    >,
+  ) => void;
+}
+
+export interface AgentTurnSendOptions {
+  outputPreference?: 'canvas';
+}
+
 const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
   endpoint: '/api/v1/learn/turn',
   assistantLabel: 'AI 老师',
@@ -69,6 +82,7 @@ async function readPublicRouteError(
 export function useAgentTurn(
   initialMessages: readonly InitialChatMessageDTO[],
   options: AgentTurnClientOptions,
+  callbacks: AgentTurnClientCallbacks = {},
 ) {
   const safeConnectionError = `${options.assistantLabel}暂时无法连接，请稍后重试。`;
   const [state, dispatch] = useReducer(
@@ -77,8 +91,13 @@ export function useAgentTurn(
     createTeachingTurnState,
   );
   const inFlight = useRef<InFlightTurn | null>(null);
+  const callbacksRef = useRef(callbacks);
   const mounted = useRef(true);
   const [controlError, setControlError] = useState<string | null>(null);
+
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
 
   useEffect(() => {
     mounted.current = true;
@@ -94,6 +113,7 @@ export function useAgentTurn(
       text: string,
       suppliedId?: string,
       assetParts: readonly (AgentAssetPart & { label?: string })[] = [],
+      sendOptions: AgentTurnSendOptions = {},
     ) => {
       const normalizedText = text.trim();
       if ((!normalizedText && assetParts.length === 0) || inFlight.current)
@@ -139,14 +159,14 @@ export function useAgentTurn(
         const response = await fetch(options.endpoint, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(
-            assetParts.length > 0
-              ? {
-                  clientMessageId,
-                  parts: requestParts,
-                }
-              : { clientMessageId, text: normalizedText },
-          ),
+          body: JSON.stringify({
+            ...(assetParts.length > 0
+              ? { clientMessageId, parts: requestParts }
+              : { clientMessageId, text: normalizedText }),
+            ...(sendOptions.outputPreference
+              ? { outputPreference: sendOptions.outputPreference }
+              : {}),
+          }),
           signal: current.controller.signal,
         });
         if (!response.ok) {
@@ -206,6 +226,12 @@ export function useAgentTurn(
             ) {
               current.terminalReceived = true;
               setControlError(null);
+            }
+            if (
+              event.type === 'artifact.proposed' ||
+              event.type === 'artifact.created'
+            ) {
+              callbacksRef.current.onArtifactProposed?.(event);
             }
             dispatch({ type: 'stream.event', event });
           },

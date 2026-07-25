@@ -6,6 +6,7 @@ import {
   artifacts,
   spaces,
 } from './schema';
+import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -528,12 +529,7 @@ export class DrizzlePlatformArtifactRepository {
     maxAttempts?: number;
   }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
     return await this.database.transaction(async (tx) => {
-      const [space] = await tx
-        .select({ ownerSubjectId: spaces.ownerSubjectId })
-        .from(spaces)
-        .where(eq(spaces.id, input.spaceId))
-        .limit(1);
-      if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
+      if (!(await ownsArtifactConversationScope(tx, input))) {
         throw new ArtifactOwnershipError();
       }
 
