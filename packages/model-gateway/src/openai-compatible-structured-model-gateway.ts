@@ -58,6 +58,9 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       stream: false,
       response_format: { type: 'json_object' },
       max_tokens: this.config.maxOutputTokens,
+      ...(this.config.provider === 'deepseek'
+        ? { thinking: { type: 'disabled' } }
+        : {}),
       messages: [
         ...request.messages.map((message) => ({
           role: message.role,
