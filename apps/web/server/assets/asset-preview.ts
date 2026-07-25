@@ -5,6 +5,7 @@ import {
   DrizzleAssetRepository,
   type OwnedStoredAssetVersion,
 } from '@educanvas/db';
+import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { readStoredAssetBytes } from './asset-storage';
 import type { AssetPreview } from '@/features/assets/asset-preview-contract';
@@ -91,6 +92,23 @@ export async function loadOwnedAssetPreview(input: {
       fileName: version.displayName,
       mimeType: 'text/plain',
       content: version.extractedText.slice(0, 120_000),
+    };
+  }
+  if (
+    version.mimeType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml'
+  ) {
+    const bytes = await readStoredAssetBytes(version.storageKey);
+    const result = await mammoth.convertToHtml({
+      buffer: Buffer.from(bytes),
+    });
+    return {
+      kind: 'docx',
+      fileName: version.displayName,
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      content: result.value.slice(0, 500_000),
+      warnings: result.messages.map((m) => m.message),
     };
   }
   throw new AssetPreviewError('preview_unavailable', 422);

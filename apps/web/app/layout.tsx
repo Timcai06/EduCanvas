@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Script from 'next/script';
+
 import '@fontsource-variable/inter';
 /* 衬线显示字体只引入实际使用的字重；fontsource 按 unicode-range 分块，浏览器按需下载 */
 import '@fontsource/noto-serif-sc/400.css';
@@ -38,11 +38,7 @@ export default function RootLayout({
     // suppressHydrationWarning：内联脚本会在水合前改写 data-theme，属于预期的服务端/客户端差异
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <Script
-          id="educanvas-theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-screen bg-canvas text-ink antialiased">
         <ThemeSync />

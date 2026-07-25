@@ -3,14 +3,24 @@
 import { CanvasHost } from '@/features/canvas/canvas-host';
 import { MessageMarkdown } from '@/features/chat/markdown';
 import { Trash } from '@phosphor-icons/react';
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { deleteAsset, loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
 import type { AssetItem } from './assets-drawer';
 
+/** pdf.js 依赖浏览器 Canvas API，禁止 SSR */
+const PdfPreview = dynamic(
+  () => import('./preview/pdf-preview').then((mod) => mod.PdfPreview),
+  { ssr: false },
+);
+import { DocxPreview } from './preview/docx-preview';
+
 /**
- * 来源Canvas：以当前Asset ID逐次鉴权加载，PDF/图片只读取同源文件端点；
- * Markdown不执行原始HTML，删除为显式二次确认的软删除。
+ * 来源预览面板：PDF（pdf.js 翻页+缩放）、DOCX（mammoth HTML）、
+ * 图片（同源 img）、Markdown、纯文本。
+ * 复用 CanvasHost 提供统一的标题栏、全屏切换与关闭交互。
+ * 删除为显式二次确认的软删除。
  */
 export function SourcePreviewPanel({
   asset,
@@ -90,41 +100,42 @@ export function SourcePreviewPanel({
             {deleting ? '删除中…' : deleteArmed ? '再次点击确认' : '删除来源'}
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto bg-surface/30 p-4">
+        <div className="min-h-0 flex-1 overflow-auto bg-surface/30">
           {!asset.selectable ? (
-            <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+            <div className="m-4 rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
               {asset.status === 'failed'
                 ? '这个来源处理失败，暂时没有可预览内容；你可以删除后重新添加。'
                 : '这个来源仍在处理中，完成后即可预览。'}
             </div>
           ) : error ? (
-            <div className="rounded-2xl border border-cinnabar/25 bg-cinnabar-soft p-4 text-sm text-cinnabar">
+            <div className="m-4 rounded-2xl border border-cinnabar/25 bg-cinnabar-soft p-4 text-sm text-cinnabar">
               {error}
             </div>
           ) : !preview ? (
-            <div className="h-full min-h-52 animate-pulse rounded-2xl bg-surface-strong" />
-          ) : preview.kind === 'pdf' ? (
-            <iframe
-              src={preview.fileUrl}
-              title={`${preview.fileName} PDF预览`}
-              sandbox=""
-              className="h-full min-h-[32rem] w-full rounded-2xl border border-line bg-card"
-            />
-          ) : preview.kind === 'image' ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 私有同源动态Asset不适合Next静态图片优化器
+            <div className="m-4 h-52 animate-pulse rounded-2xl bg-surface-strong" />
+          ) : preview.kind === 'pdf' && preview.fileUrl ? (
+            <PdfPreview fileUrl={preview.fileUrl} />
+          ) : preview.kind === 'image' && preview.fileUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={preview.fileUrl}
               alt={preview.fileName}
-              className="mx-auto max-h-full max-w-full rounded-2xl object-contain shadow-[var(--shadow-float)]"
+              className="mx-auto max-h-full max-w-full rounded-2xl object-contain p-4 shadow-[var(--shadow-float)]"
             />
-          ) : preview.kind === 'markdown' ? (
+          ) : preview.kind === 'docx' && preview.content ? (
+            <DocxPreview html={preview.content} warnings={preview.warnings} />
+          ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />
             </article>
-          ) : (
+          ) : preview.kind === 'text' && preview.content ? (
             <pre className="mx-auto max-w-3xl whitespace-pre-wrap break-words rounded-2xl bg-card p-5 font-mono text-sm leading-6 text-ink shadow-[var(--shadow-float)]">
               {preview.content}
             </pre>
+          ) : (
+            <div className="m-4 rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+              暂不支持预览此来源。
+            </div>
           )}
         </div>
       </div>
