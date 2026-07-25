@@ -20,6 +20,24 @@
 
 第二代运行内核先定义 `educanvas.turn.v2` 的 transport-neutral 命令与事件。命令只接受服务端解析后的 Actor/Agent、Notebook/Conversation、Profile、入口、消息 Parts 和有效能力清单；浏览器、TUI、Channel、模型或 Provider 不能提交可信主体。ID 采用非空、最多 256 字符的 opaque ID，能力名最多 64 字符，消息复用 `agentMessageInputSchema` 的 32 Parts/64000 文本总长边界，能力清单最多 128 项且不得重复。
 
+### Canvas资源协议
+
+`@educanvas/canvas-protocol` 的 `CanvasResource` 是 Source 与 Artifact
+进入Canvas前共享的浏览器安全描述，不是新的持久化事实源。`notebookId`、允许动作和
+信任层只能由已鉴权的服务端Adapter投影；客户端提交的同名字段不能作为授权依据。
+协议不包含内容本体、对象存储键、私有判分键、动态组件、原始Prompt或Provider响应。
+
+资源ID最多128字符，标题最多300字符，MIME最多255字符，派生来源最多32项且不得重复；
+动作最多16项且不得重复。Tier 1不能依赖不受信Runtime；`web_sandbox`只对应Tier 2，
+`experiment`只对应Tier 3。候选学习事件必须同时满足Tier 1、能力标记和显式动作，
+最终仍由可信领域服务验证。尚未产出内容的processing/failed/unavailable资源可以没有
+版本；ready/archived资源必须引用真实不可变版本。只有Artifact拥有序号时才填写
+`sequence`，Source不能为满足统一协议伪造数字版本。
+
+Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtime和动作兼容性，
+不能携带React组件、URL或动态代码。资源不存在与跨Notebook无权访问统一映射为
+`resource_not_found`，公共错误不得包含堆栈、私有路径或Provider原文。
+
 应用事件包含 `turn.started`、消息 delta/引用、Tool 生命周期、approval、Artifact 生命周期和 `turn.completed/failed/cancelled`。已知事件使用 strict Schema；Tool 完成事件只允许最多 1000 字符的安全摘要，不接受原始参数、输出、异常或 Secret。一个事件前缀必须以唯一 `turn.started` 开始、全部属于同一 Operation，终态出现后不得再有事件。
 
 该契约位于 `@educanvas/agent-core`，唯一调用边界 `TurnApplicationPort` 位于 `@educanvas/agent-runtime`。Web SSE 和 Gateway NDJSON 仍保持各自对外版本，只能投影内部事件，不能把传输字段或供应商类型反向写入应用契约。
