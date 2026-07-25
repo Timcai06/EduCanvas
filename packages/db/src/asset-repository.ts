@@ -11,7 +11,7 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
@@ -37,6 +37,20 @@ export interface MaterializedAssetVersion {
   displayName: string;
   mimeType: string;
   byteSize: number;
+  extractedText: string | null;
+}
+
+/**
+ * 仅供服务端对象存储 Adapter 使用的当前版本。
+ * storageKey 绝不能进入 AssetSnapshot、公共 API、模型 Context 或客户端状态。
+ */
+export interface OwnedStoredAssetVersion {
+  assetId: string;
+  versionId: string;
+  displayName: string;
+  mimeType: string;
+  byteSize: number;
+  storageKey: string;
   extractedText: string | null;
 }
 
@@ -236,11 +250,50 @@ export class DrizzleAssetRepository {
         and(
           eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
         ),
       )
       .orderBy(desc(assets.createdAt), desc(assets.id))
       .limit(limit);
     return rows.map(({ asset, version }) => toSnapshot(asset, version));
+  }
+
+  /**
+   * 读取当前主体和空间内的已就绪对象存储版本。
+   * 调用边界：只允许服务端在完成身份与Notebook路由后读取，返回值不得序列化给客户端。
+   */
+  async loadOwnedCurrentStoredVersion(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<OwnedStoredAssetVersion> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const [row] = await this.database
+      .select({ asset: assets, version: assetVersions })
+      .from(assets)
+      .innerJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.ownerSubjectId, ownerSubjectId),
+          eq(assets.spaceId, spaceId),
+          eq(assets.status, 'ready'),
+          eq(assetVersions.status, 'ready'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    return {
+      assetId: row.asset.id,
+      versionId: row.version.id,
+      displayName: row.asset.displayName,
+      mimeType: row.version.mimeType,
+      byteSize: row.version.byteSize,
+      storageKey: row.version.storageKey,
+      extractedText: row.version.extractedText,
+    };
   }
 
   async materializeOwnedReferences(input: {
@@ -275,5 +328,45 @@ export class DrizzleAssetRepository {
       if (error instanceof OwnedAssetVersionError) throw new AssetAccessError();
       throw error;
     }
+  }
+
+  /**
+   * 将资产及版本收敛为tombstoned；保留storageKey供后续Outbox物理清理。
+   * 调用者必须传入服务端确认的主体与空间，跨主体请求统一返回false。
+   */
+  async tombstoneOwnedAsset(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<boolean> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const now = new Date();
+    return this.database.transaction(async (transaction) => {
+      const [owned] = await transaction
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.ownerSubjectId, ownerSubjectId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .limit(1);
+      if (!owned) return false;
+
+      await transaction
+        .update(assetVersions)
+        .set({ status: 'tombstoned' })
+        .where(eq(assetVersions.assetId, assetId));
+      await transaction
+        .update(assets)
+        .set({ status: 'tombstoned', tombstonedAt: now, updatedAt: now })
+        .where(eq(assets.id, assetId));
+      return true;
+    });
   }
 }

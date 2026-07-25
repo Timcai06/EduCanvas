@@ -154,6 +154,51 @@ describe('uploadOwnedAsset', () => {
     });
   });
 
+  it('Markdown按UTF-8文本提取并以document保存', async () => {
+    drizzleRepo.createUploaded.mockResolvedValue(
+      snapshot('asset-md', 'lesson.md'),
+    );
+    const result = await uploadOwnedAsset({
+      identity,
+      file: bytesFile(
+        [...new TextEncoder().encode('# 光合作用\r\n\r\n叶绿体')],
+        'lesson.md',
+        'text/markdown',
+      ),
+      scope: 'space',
+    });
+
+    expect(result.descriptor.assetId).toBe('asset-md');
+    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'document',
+        mimeType: 'text/markdown',
+        extractedText: '# 光合作用\n\n叶绿体',
+      }),
+    );
+  });
+
+  it('无效UTF-8文本会记录失败版本并返回明确错误', async () => {
+    const promise = uploadOwnedAsset({
+      identity,
+      file: bytesFile([0xff, 0xfe, 0xfd], 'broken.txt', 'text/plain'),
+      scope: 'space',
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      code: 'text_content_unavailable',
+      status: 422,
+    });
+    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: {
+          status: 'failed',
+          failureCode: 'text_content_unavailable',
+        },
+      }),
+    );
+  });
+
   it('0字节文件返回invalid_upload', async () => {
     const promise = uploadOwnedAsset({
       identity,

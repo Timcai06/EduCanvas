@@ -13,6 +13,7 @@ export {
   type AssetSnapshot,
   type CreateUploadedAssetInput,
   type MaterializedAssetVersion,
+  type OwnedStoredAssetVersion,
 } from './asset-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
