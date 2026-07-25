@@ -3,11 +3,17 @@
 import { CanvasHost } from '@/features/canvas/canvas-host';
 import { MessageMarkdown } from '@/features/chat/markdown';
 import { Trash } from '@phosphor-icons/react';
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { deleteAsset, loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
 import type { AssetItem } from './assets-drawer';
-import { PdfPreview } from './preview/pdf-preview';
+
+/** pdf.js 依赖浏览器 Canvas API，禁止 SSR */
+const PdfPreview = dynamic(
+  () => import('./preview/pdf-preview').then((mod) => mod.PdfPreview),
+  { ssr: false },
+);
 import { DocxPreview } from './preview/docx-preview';
 
 /**
