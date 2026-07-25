@@ -1,6 +1,7 @@
 'use client';
 
 import { switchConversationAction } from '@/app/actions';
+import LineSidebar from '@/components/LineSidebar';
 import { Plus, Trash } from '@phosphor-icons/react';
 import {
   type CSSProperties,
@@ -9,7 +10,6 @@ import {
   useState,
   useTransition,
 } from 'react';
-import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
 
 interface NotebookListItem {
   id: string;
@@ -167,12 +167,9 @@ export function ConversationSidebar({
     };
   }, [activeConversationId, open]);
 
-  const navItems: MarginaliaItem[] = items.map((item) => ({
-    id: item.id,
-    title: item.title ?? '未命名笔记本',
-    meta: formatWhen(item.lastActivityAt),
-    selectable: true,
-  }));
+  const activeIndex = items.findIndex(
+    (item) => item.id === activeConversationId,
+  );
 
   return (
     <>
@@ -217,26 +214,58 @@ export function ConversationSidebar({
             Notebooks
           </p>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {navItems.length > 0 ? (
-              <MarginaliaNav
+            {items.length > 0 ? (
+              <LineSidebar
                 ariaLabel="笔记本"
-                items={navItems}
-                activeId={activeConversationId}
-                onSelect={switchTo}
-                pendingId={pendingId}
-                busy={isSwitchPending}
-                animateIn
-                renderAction={(item) => (
-                  <button
-                    type="button"
-                    aria-label="删除历史记录"
-                    title="删除历史记录"
-                    onClick={() => void deleteConversation(item.id)}
-                    className="grid size-7 place-items-center self-center rounded-full text-ink-faint opacity-0 transition-opacity hover:bg-cinnabar-soft hover:text-cinnabar-strong focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent group-hover:opacity-100"
+                items={items.map((item) => item.title ?? '未命名笔记本')}
+                itemIds={items.map((item) => item.id)}
+                activeIndex={activeIndex >= 0 ? activeIndex : null}
+                disabled={isSwitchPending}
+                accentColor="var(--color-accent)"
+                textColor="var(--color-ink-muted)"
+                markerColor="var(--color-line)"
+                proximityRadius={92}
+                maxShift={16}
+                falloff="smooth"
+                markerLength={24}
+                tickScale={0.42}
+                itemGap={2}
+                fontSize={0.88}
+                smoothing={100}
+                onItemClick={(index) => {
+                  const item = items[index];
+                  if (item) switchTo(item.id);
+                }}
+                renderLabel={(index, label) => (
+                  <span
+                    className={`flex min-w-0 items-start gap-2 ${
+                      pendingId === items[index]?.id ? 'opacity-60' : ''
+                    }`}
                   >
-                    <Trash aria-hidden="true" size={14} />
-                  </button>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {label}
+                    </span>
+                    <span className="shrink-0 pt-0.5 text-[11px] text-ink-muted">
+                      {items[index]
+                        ? formatWhen(items[index].lastActivityAt)
+                        : ''}
+                    </span>
+                  </span>
                 )}
+                renderAction={(index) => {
+                  const item = items[index];
+                  return item ? (
+                    <button
+                      type="button"
+                      aria-label="删除历史记录"
+                      title="删除历史记录"
+                      onClick={() => void deleteConversation(item.id)}
+                      className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-cinnabar-soft hover:text-cinnabar-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <Trash aria-hidden="true" size={14} />
+                    </button>
+                  ) : null;
+                }}
               />
             ) : (
               <p className="px-3 py-2 text-xs text-ink-muted">还没有笔记本</p>
