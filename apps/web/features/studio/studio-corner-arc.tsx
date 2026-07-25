@@ -1,6 +1,5 @@
 'use client';
 
-import { FolderOpen, Sparkle } from '@phosphor-icons/react';
 import './studio-corner-arc.css';
 
 /**
@@ -27,16 +26,14 @@ export function StudioCornerArc({
         onClick={() => onSelect('input')}
         className="studio-corner-arc__item studio-corner-arc__item--input"
       >
-        <FolderOpen aria-hidden="true" size={18} />
-        <span>文件输入</span>
+        文件输入
       </button>
       <button
         type="button"
         onClick={() => onSelect('output')}
         className="studio-corner-arc__item studio-corner-arc__item--output"
       >
-        <Sparkle aria-hidden="true" size={18} />
-        <span>内容输出</span>
+        内容输出
       </button>
       <p className="studio-corner-arc__hint">选择一个方向展开工作台</p>
     </nav>

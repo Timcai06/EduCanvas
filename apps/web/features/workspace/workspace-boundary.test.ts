@@ -30,8 +30,8 @@ describe('workspace truth and motion boundaries', () => {
     expect(studio).toContain('onSelect=');
     expect(studio).toContain("if (level === 'root')");
     expect(studio).toContain('onExpandedChange(true)');
-    expect(cornerArc).toContain('<span>文件输入</span>');
-    expect(cornerArc).toContain('<span>内容输出</span>');
+    expect(cornerArc).toContain('文件输入');
+    expect(cornerArc).toContain('内容输出');
     expect(studioDock).toContain('<aside');
     expect(studioDock).not.toContain('<Sheet');
     expect(studioDock).not.toContain('role="dialog"');
