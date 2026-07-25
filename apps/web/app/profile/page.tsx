@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, GearSix, UserCircle } from '@phosphor-icons/react/dist/ssr';
+import { ArrowLeft, UserCircle } from '@phosphor-icons/react/dist/ssr';
 import { AuroraInk } from '@/features/profile/aurora-ink';
 import { LearningHeatmap } from '@/features/profile/learning-heatmap';
 import { ProfileStats } from '@/features/profile/profile-stats';
@@ -40,14 +40,6 @@ export default async function ProfilePage() {
               <ArrowLeft aria-hidden="true" size={17} weight="bold" />
             </span>
             返回
-          </Link>
-          <span className="flex-1" />
-          <Link
-            href="/settings"
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-medium text-ink-muted transition-colors hover:border-accent/40 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <GearSix aria-hidden="true" size={16} />
-            设置
           </Link>
         </div>
       </header>

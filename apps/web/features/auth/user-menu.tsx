@@ -14,11 +14,18 @@ interface CurrentUser {
 
 type AuthMode = 'login' | 'register';
 
-export function UserMenu() {
+export function UserMenu({
+  conversationId,
+  notebookTitle,
+}: {
+  conversationId?: string;
+  notebookTitle?: string | null;
+} = {}) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileVersion, setProfileVersion] = useState(0);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -46,9 +53,16 @@ export function UserMenu() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get('auth');
-    if (auth !== 'login' && auth !== 'register') return;
-    queueMicrotask(() => setAuthMode(auth));
-    params.delete('auth');
+    const profile = params.get('profile');
+    if (auth === 'login' || auth === 'register') {
+      queueMicrotask(() => setAuthMode(auth));
+      params.delete('auth');
+    } else if (profile === '1') {
+      queueMicrotask(() => setProfileOpen(true));
+      params.delete('profile');
+    } else {
+      return;
+    }
     const query = params.toString();
     window.history.replaceState(
       null,
@@ -88,7 +102,7 @@ export function UserMenu() {
             {user.avatarAvailable ? (
               // The avatar route revalidates the current session; no raw asset key is exposed to the browser.
               <Image
-                src="/api/v1/me/avatar"
+                src={`/api/v1/me/avatar?v=${profileVersion}`}
                 alt=""
                 width={28}
                 height={28}
@@ -154,7 +168,17 @@ export function UserMenu() {
         />
       ) : null}
       {profileOpen ? (
-        <ProfileDrawer onClose={() => setProfileOpen(false)} />
+        <ProfileDrawer
+          conversationId={conversationId}
+          notebookTitle={notebookTitle}
+          onUserChange={(nextUser) => {
+            setUser((current) =>
+              current ? { ...current, ...nextUser } : current,
+            );
+            setProfileVersion((version) => version + 1);
+          }}
+          onClose={() => setProfileOpen(false)}
+        />
       ) : null}
     </>
   );

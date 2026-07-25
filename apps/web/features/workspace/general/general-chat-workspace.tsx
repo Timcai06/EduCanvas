@@ -2,7 +2,6 @@
 
 import { startNewGeneralChatAction } from '@/app/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
-import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import {
@@ -27,6 +26,8 @@ import {
 } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
+import { StudioDock } from '@/features/studio/studio-dock';
+import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
@@ -37,7 +38,6 @@ import {
   PENDING_GENERAL_CANVAS_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
-import { SourcesPanel } from './sources-panel';
 import { HeroGreeting } from '../shared/hero-greeting';
 import { HeroInkField } from '../shared/hero-ink-field';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
@@ -75,12 +75,11 @@ export function GeneralChatWorkspace({
 }) {
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
-  const [assetPanel, setAssetPanel] = useState<
-    'assets' | AssetItem['kind'] | null
-  >(null);
+  const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [studioExpanded, setStudioExpanded] = useState(false);
   const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
     [],
   );
@@ -290,40 +289,34 @@ export function GeneralChatWorkspace({
     <div className="flex h-dvh flex-col bg-canvas text-ink">
       <GeneralWorkspaceHeader
         notebookTitle={notebookTitle}
+        conversationId={conversationId}
         sidebarOpen={sidebarOpen}
         studioOpen={studioOpen}
         onToggleSidebar={toggleSidebar}
         onNewNotebook={() => void startNewGeneralChatAction()}
         onOpenStudio={() => {
-          setStudioOpen(true);
+          const opening = !studioOpen;
+          setStudioOpen(opening);
+          if (!opening) {
+            setStudioExpanded(false);
+            return;
+          }
           void fetchNotebookArtifacts()
             .then(setStudioItems)
             .catch(() => setStudioItems([]));
         }}
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
-          open={sidebarOpen}
+          open={sidebarOpen && !studioExpanded}
           onClose={toggleSidebar}
           activeConversationId={conversationId}
           onNewNotebook={() => void startNewGeneralChatAction()}
-        >
-          <SourcesPanel
-            assets={notebookSources}
-            onToggle={toggleAsset}
-            onUpload={(kind) => setAssetPanel(kind)}
-            onImported={(asset) =>
-              setAssets((current) => [
-                { ...asset, enabled: asset.selectable },
-                ...current.filter((item) => item.id !== asset.id),
-              ])
-            }
-          />
-        </ConversationSidebar>
+        />
         <main
           ref={mainRef}
-          className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
+          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
           {!online ? (
             <div className="relative z-10 shrink-0 pt-1">
@@ -462,6 +455,43 @@ export function GeneralChatWorkspace({
             </div>
           )}
         </main>
+        {studioOpen ? (
+          <StudioDock
+            expanded={studioExpanded}
+            onClose={() => {
+              setStudioOpen(false);
+              setStudioExpanded(false);
+            }}
+          >
+            <StudioWorkspace
+              assets={notebookSources}
+              outputs={studioItems}
+              onToggleAsset={toggleAsset}
+              onUpload={(kind) => {
+                setStudioOpen(false);
+                setStudioExpanded(false);
+                setAssetPanel(kind);
+              }}
+              onImported={(asset) =>
+                setAssets((current) => [
+                  { ...asset, enabled: asset.selectable },
+                  ...current.filter((item) => item.id !== asset.id),
+                ])
+              }
+              onOpenOutput={(artifactId) => {
+                setStudioOpen(false);
+                setStudioExpanded(false);
+                void artifactFlow.openArtifact(artifactId);
+              }}
+              onCreateOutput={(kind, defaultTitle) => {
+                setStudioOpen(false);
+                setStudioExpanded(false);
+                artifactFlow.beginConfirm(kind, defaultTitle);
+              }}
+              onExpandedChange={setStudioExpanded}
+            />
+          </StudioDock>
+        ) : null}
       </div>
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={turn.busy} />
@@ -506,48 +536,6 @@ export function GeneralChatWorkspace({
           }}
           onClose={artifactFlow.dismiss}
         />
-      ) : null}
-      {studioOpen ? (
-        <Sheet label="当前笔记本的 Studio" onClose={() => setStudioOpen(false)}>
-          {studioItems.length === 0 ? (
-            <p className="text-sm text-ink-muted">
-              还没有产物。在输入框的「+」菜单里试试「生成思维导图」。
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {studioItems.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStudioOpen(false);
-                      void artifactFlow.openArtifact(item.id);
-                    }}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface/70 p-3 text-left transition-colors hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink">
-                        {item.title}
-                      </span>
-                      <span className="block text-xs text-ink-muted">
-                        {item.latestVersion > 0
-                          ? `v${item.latestVersion}`
-                          : item.status === 'proposed'
-                            ? '生成中或未完成'
-                            : item.status}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Sheet>
-      ) : null}
-      {assetPanel === 'assets' ? (
-        <Sheet label="笔记本来源" onClose={() => setAssetPanel(null)}>
-          <AssetsDrawer assets={notebookSources} onToggle={toggleAsset} />
-        </Sheet>
       ) : null}
       {assetPanel === 'image' || assetPanel === 'document' ? (
         <Sheet

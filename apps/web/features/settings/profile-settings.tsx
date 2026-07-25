@@ -26,7 +26,15 @@ async function publicError(
   return fallback;
 }
 
-export function ProfileSettings() {
+/**
+ * 账号资料编辑器。成功写入后通过 onUserChange 回传公开头像/昵称投影，
+ * 让承载它的头像入口同步更新；调用方不接收用户名、密码或存储键。
+ */
+export function ProfileSettings({
+  onUserChange,
+}: {
+  onUserChange?: (user: { nickname: string; avatarAvailable: boolean }) => void;
+} = {}) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [nickname, setNickname] = useState('');
   const [status, setStatus] = useState<string | null>(null);
@@ -69,6 +77,7 @@ export function ProfileSettings() {
       const body = (await response.json()) as { user: CurrentUser };
       setUser(body.user);
       setNickname(body.user.nickname);
+      onUserChange?.(body.user);
       setStatus('昵称已更新。');
     } catch (reason) {
       setStatus(reason instanceof Error ? reason.message : '请求失败。');
@@ -95,6 +104,10 @@ export function ProfileSettings() {
       setUser((current) =>
         current ? { ...current, avatarAvailable: true } : current,
       );
+      onUserChange?.({
+        nickname: user?.nickname ?? nickname,
+        avatarAvailable: true,
+      });
       setAvatarVersion((version) => version + 1);
       setStatus('头像已更新。');
     } catch (reason) {

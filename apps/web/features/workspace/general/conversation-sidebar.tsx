@@ -2,7 +2,13 @@
 
 import { switchConversationAction } from '@/app/actions';
 import { Plus, Trash } from '@phosphor-icons/react';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import {
+  type CSSProperties,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
 
 interface NotebookListItem {
@@ -24,6 +30,11 @@ const formatWhen = (iso: string): string => {
   return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 };
 
+const SIDEBAR_WIDTH_KEY = 'educanvas.sidebar-width.v1';
+const SIDEBAR_WIDTH_DEFAULT = 256;
+const SIDEBAR_WIDTH_MIN = 224;
+const SIDEBAR_WIDTH_MAX = 400;
+
 /**
  * Notebook 侧栏：可展开的抽屉层（学习 Gemini/GPT/Claude 的 Web 交互）。
  * 桌面端在流内折叠（收起时宽度归零、内容占满全宽），窄屏为覆盖抽屉 + 遮罩。
@@ -37,19 +48,40 @@ export function ConversationSidebar({
   onClose,
   activeConversationId,
   onNewNotebook,
-  children,
 }: {
   open: boolean;
   onClose: () => void;
   activeConversationId: string | null;
   onNewNotebook: () => void;
-  /** 侧栏底部扩展区（来源面板等）。 */
-  children?: React.ReactNode;
 }) {
   const firstActionRef = useRef<HTMLButtonElement>(null);
   const [items, setItems] = useState<readonly NotebookListItem[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [isSwitchPending, startSwitchTransition] = useTransition();
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_WIDTH_DEFAULT);
+  const sidebarWidthRef = useRef(SIDEBAR_WIDTH_DEFAULT);
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const stored = Number.parseInt(
+      window.localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? '',
+      10,
+    );
+    if (!Number.isFinite(stored)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const next = Math.min(
+        SIDEBAR_WIDTH_MAX,
+        Math.max(SIDEBAR_WIDTH_MIN, stored),
+      );
+      sidebarWidthRef.current = next;
+      setSidebarWidth(next);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -162,13 +194,14 @@ export function ConversationSidebar({
         aria-label="笔记本侧栏"
         aria-hidden={!open}
         inert={!open}
+        style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
         className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas transition-[width,transform] duration-300 ease-out ${
           open
-            ? 'w-72 translate-x-0 border-r lg:w-64'
+            ? 'w-72 translate-x-0 border-r lg:w-[var(--sidebar-width)]'
             : 'w-72 -translate-x-full border-r-0 lg:w-0'
         } fixed inset-y-0 left-0 lg:static lg:inset-auto lg:translate-x-0`}
       >
-        <div className="flex h-full w-72 flex-col lg:w-64">
+        <div className="flex h-full w-72 flex-col lg:w-[var(--sidebar-width)]">
           <div className="px-3 pt-3 pb-1.5">
             <button
               ref={firstActionRef}
@@ -209,8 +242,65 @@ export function ConversationSidebar({
               <p className="px-3 py-2 text-xs text-ink-muted">还没有笔记本</p>
             )}
           </div>
-          {children}
         </div>
+        {open ? (
+          <div
+            role="separator"
+            aria-label="调整笔记本列表宽度"
+            aria-orientation="vertical"
+            aria-valuemin={SIDEBAR_WIDTH_MIN}
+            aria-valuemax={SIDEBAR_WIDTH_MAX}
+            aria-valuenow={sidebarWidth}
+            tabIndex={0}
+            onPointerDown={(event) => {
+              resizeRef.current = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startWidth: sidebarWidth,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              const resize = resizeRef.current;
+              if (!resize || resize.pointerId !== event.pointerId) return;
+              const next = Math.min(
+                SIDEBAR_WIDTH_MAX,
+                Math.max(
+                  SIDEBAR_WIDTH_MIN,
+                  resize.startWidth + event.clientX - resize.startX,
+                ),
+              );
+              sidebarWidthRef.current = next;
+              setSidebarWidth(next);
+            }}
+            onPointerUp={(event) => {
+              if (resizeRef.current?.pointerId !== event.pointerId) return;
+              resizeRef.current = null;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+              window.localStorage.setItem(
+                SIDEBAR_WIDTH_KEY,
+                String(sidebarWidthRef.current),
+              );
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                return;
+              }
+              event.preventDefault();
+              const next = Math.min(
+                SIDEBAR_WIDTH_MAX,
+                Math.max(
+                  SIDEBAR_WIDTH_MIN,
+                  sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16),
+                ),
+              );
+              sidebarWidthRef.current = next;
+              setSidebarWidth(next);
+              window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+            }}
+            className="absolute inset-y-0 right-0 z-10 hidden w-2 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-accent/20 focus-visible:bg-accent/30 focus-visible:outline-none lg:block"
+          />
+        ) : null}
       </aside>
     </>
   );

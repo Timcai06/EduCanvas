@@ -43,7 +43,9 @@ test('账号注册、资料更新、改密码和会话撤销走真实服务端�
       secondPage.getByRole('button', { name: nickname }),
     ).toBeVisible();
 
-    await page.goto('/settings');
+    await page.getByRole('button', { name: nickname }).click();
+    await expect(page.getByRole('heading', { name: '我的档案' })).toBeVisible();
+    await page.locator('summary').filter({ hasText: '账号与头像' }).click();
     await page.getByLabel('昵称').fill(updatedNickname);
     await page.getByRole('button', { name: '保存' }).click();
     await expect(page.getByText('昵称已更新。')).toBeVisible();
@@ -59,7 +61,7 @@ test('账号注册、资料更新、改密码和会话撤销走真实服务端�
     await secondPage.reload();
     await expect(loginTrigger(secondPage)).toBeVisible();
 
-    await page.getByRole('link', { name: '返回', exact: true }).click();
+    await page.getByRole('button', { name: '关闭', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
