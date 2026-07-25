@@ -77,7 +77,7 @@ export function GeneralWorkspaceHeader({
       <button
         type="button"
         aria-expanded={studioOpen}
-        aria-controls="notebook-studio-dock"
+        aria-controls="notebook-studio-layer"
         data-studio-trigger
         title="展开当前笔记本的输入与输出"
         onClick={onOpenStudio}

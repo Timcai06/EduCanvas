@@ -1,25 +1,41 @@
 'use client';
 
+import OptionWheel from '@/components/OptionWheel';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type {
   ArtifactSummary,
   CreatableArtifactKind,
 } from '@/features/canvas/artifact-client';
-import { ArrowLeft } from '@phosphor-icons/react';
-import { useState } from 'react';
-import OptionWheel from './option-wheel';
-import { STUDIO_INPUT_OPTIONS, StudioInputPanel } from './studio-input-panel';
-import {
-  STUDIO_OUTPUT_OPTIONS,
-  StudioOutputPanel,
-} from './studio-output-panel';
-import { StudioCornerArc } from './studio-corner-arc';
+import { useMemo, useState } from 'react';
+import { StudioLinkBubble } from './studio-link-bubble';
 
-type StudioLevel = 'root' | 'input' | 'output';
+type StudioRoute =
+  'root' | 'source-add' | 'source-manage' | 'output-create' | 'output-browse';
+
+const ROOT_ITEMS = ['添加来源', '管理来源', '生成内容', '查看产物'] as const;
+const SOURCE_ADD_ITEMS = [
+  '返回 Studio',
+  '上传 PDF',
+  '上传图片',
+  '导入网页',
+] as const;
+const OUTPUT_CREATE_ITEMS = [
+  '返回 Studio',
+  '思维导图',
+  'Slides',
+  '复习闪卡',
+  '音频概览',
+] as const;
+const OUTPUT_ACTIONS: readonly [CreatableArtifactKind, string][] = [
+  ['mind_map', '对话思维导图'],
+  ['slides', '对话小结 Slides'],
+  ['flashcards', '复习闪卡'],
+  ['audio_overview', '来源音频概览'],
+];
 
 /**
- * 当前 Notebook 的统一 Studio。第一层只表达输入/输出两个同级主题，第二层选择
- * 具体能力；历史会话不进入这里，所有数据仍以父级当前 Space 投影为边界。
+ * 当前 Notebook 的分级 Studio。每一级都由 React Bits OptionWheel 呈现；
+ * 滚动只改变中心选项，再次点击中心项或按 Enter 才执行最终动作。
  */
 export function StudioWorkspace({
   assets,
@@ -29,7 +45,6 @@ export function StudioWorkspace({
   onImported,
   onOpenOutput,
   onCreateOutput,
-  onExpandedChange,
 }: {
   assets: readonly AssetItem[];
   outputs: readonly ArtifactSummary[];
@@ -38,117 +53,144 @@ export function StudioWorkspace({
   onImported: (asset: AssetItem) => void;
   onOpenOutput: (id: string) => void;
   onCreateOutput: (kind: CreatableArtifactKind, defaultTitle: string) => void;
-  onExpandedChange: (expanded: boolean) => void;
 }) {
-  const [level, setLevel] = useState<StudioLevel>('root');
-  const [inputIndex, setInputIndex] = useState(0);
-  const [outputIndex, setOutputIndex] = useState(0);
+  const [route, setRoute] = useState<StudioRoute>('root');
+  const [linkOpen, setLinkOpen] = useState(false);
+  const items = useMemo(
+    () => itemsForRoute(route, assets, outputs),
+    [assets, outputs, route],
+  );
 
-  const options =
-    level === 'input' ? STUDIO_INPUT_OPTIONS : STUDIO_OUTPUT_OPTIONS;
-  const selectedIndex = level === 'input' ? inputIndex : outputIndex;
-
-  const setSelectedIndex = (index: number) => {
-    if (level === 'input') setInputIndex(index);
-    else setOutputIndex(index);
-  };
-
-  const enterSelected = (index = selectedIndex) => {
-    if (level === 'input') {
-      if (index === 1) onUpload('document');
-      else if (index === 2) onUpload('image');
+  const selectItem = (index: number) => {
+    if (route === 'root') {
+      const routes: readonly StudioRoute[] = [
+        'source-add',
+        'source-manage',
+        'output-create',
+        'output-browse',
+      ];
+      setRoute(routes[index] ?? 'root');
       return;
     }
-    if (index === 0) return;
-    const actions: readonly [CreatableArtifactKind, string][] = [
-      ['mind_map', '对话思维导图'],
-      ['slides', '对话小结 Slides'],
-      ['flashcards', '复习闪卡'],
-      ['audio_overview', '来源音频概览'],
-    ];
-    const action = actions[index - 1];
-    if (action) onCreateOutput(...action);
+    if (index === 0) {
+      setLinkOpen(false);
+      setRoute('root');
+      return;
+    }
+    if (route === 'source-add') {
+      if (index === 1) onUpload('document');
+      else if (index === 2) onUpload('image');
+      else if (index === 3) setLinkOpen(true);
+      return;
+    }
+    if (route === 'source-manage') {
+      if (index === items.length - 1) {
+        setRoute('source-add');
+        return;
+      }
+      const asset = assets[index - 1];
+      if (asset?.selectable) onToggleAsset(asset.id);
+      return;
+    }
+    if (route === 'output-create') {
+      const action = OUTPUT_ACTIONS[index - 1];
+      if (action) onCreateOutput(...action);
+      return;
+    }
+    if (index === items.length - 1) {
+      setRoute('output-create');
+      return;
+    }
+    const output = outputs[index - 1];
+    if (output) onOpenOutput(output.id);
   };
 
-  if (level === 'root') {
-    return (
-      <StudioCornerArc
-        onSelect={(nextLevel) => {
-          setLevel(nextLevel);
-          onExpandedChange(true);
-        }}
-      />
-    );
-  }
-
   return (
-    <div className="grid min-h-[calc(100dvh-8.5rem)] gap-3 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-2">
+    <div className="relative h-full w-full">
       <section
-        aria-label="Studio 选择轮盘"
-        className="studio-wheel-stage relative min-h-64 overflow-hidden lg:order-2 lg:min-h-0"
+        aria-label="Studio 分级选择轮盘"
+        className="pointer-events-auto absolute inset-0"
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-ink-faint">
-            {level === 'input' ? 'File input' : 'Content output'}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setLevel('root');
-              onExpandedChange(false);
-            }}
-            className="pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-card/80 px-3 text-xs font-medium text-ink-muted backdrop-blur transition-colors hover:border-accent/40 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <ArrowLeft aria-hidden="true" size={14} />
-            两个主题
-          </button>
-        </div>
         <OptionWheel
-          key={level}
-          items={options}
-          selectedIndex={selectedIndex}
-          onChange={(index) => setSelectedIndex(index)}
-          onSelect={(index) => enterSelected(index)}
-          ariaLabel={
-            level === 'input' ? '选择文件输入方式' : '选择内容输出方式'
-          }
+          key={route}
+          items={items}
+          defaultSelected={Math.min(1, items.length - 1)}
+          onSelect={(index) => selectItem(index)}
+          textColor="var(--color-ink-muted)"
+          activeColor="var(--color-ink)"
           side="right"
-          fontSize={1.72}
-          spacing={1.65}
-          inset={72}
-          curve={2.15}
-          tilt={11}
-          blur={1.4}
-          fade={0.19}
-          smoothing={220}
+          fontSize={route === 'root' ? 2.25 : 1.6}
+          spacing={route === 'root' ? 1.55 : 1.5}
+          curve={1}
+          tilt={route === 'root' ? 8 : 7}
+          blur={route === 'root' ? 1.8 : 1.45}
+          fade={route === 'root' ? 0.22 : 0.18}
+          minOpacity={0.08}
+          smoothing={200}
+          inset={52}
+          draggable
+          ariaLabel={routeLabel(route)}
+          className="font-display"
         />
-        <p className="pointer-events-none absolute inset-x-0 bottom-5 px-6 text-right text-[11px] leading-5 text-ink-faint">
-          滚轮或拖动选择 · 再点中心项确认
-        </p>
       </section>
-
-      <section
-        aria-live="polite"
-        data-studio-detail
-        className="min-w-0 rounded-[2rem] border border-line/60 bg-card/75 px-5 py-6 shadow-[var(--shadow-float)] backdrop-blur-xl sm:px-8 sm:py-9 lg:order-1"
-      >
-        {level === 'input' ? (
-          <StudioInputPanel
-            selectedIndex={inputIndex}
-            assets={assets}
-            onToggle={onToggleAsset}
-            onUpload={onUpload}
-            onImported={onImported}
-          />
-        ) : (
-          <StudioOutputPanel
-            selectedIndex={outputIndex}
-            outputs={outputs}
-            onOpen={onOpenOutput}
-            onCreate={onCreateOutput}
-          />
-        )}
-      </section>
+      <p className="pointer-events-none absolute bottom-5 right-6 text-[11px] text-ink-faint">
+        {route === 'root'
+          ? '滚轮或拖动浏览 · 再点中心项进入'
+          : '每一级都是滚轮 · 返回 Studio 回到上级'}
+      </p>
+      {linkOpen ? (
+        <StudioLinkBubble
+          onCancel={() => setLinkOpen(false)}
+          onImported={(asset) => {
+            onImported(asset);
+            setLinkOpen(false);
+            setRoute('source-manage');
+          }}
+        />
+      ) : null}
     </div>
   );
+}
+
+function itemsForRoute(
+  route: StudioRoute,
+  assets: readonly AssetItem[],
+  outputs: readonly ArtifactSummary[],
+): readonly string[] {
+  if (route === 'root') return ROOT_ITEMS;
+  if (route === 'source-add') return SOURCE_ADD_ITEMS;
+  if (route === 'output-create') return OUTPUT_CREATE_ITEMS;
+  if (route === 'source-manage') {
+    return assets.length === 0
+      ? ['返回 Studio', '暂无来源', '添加新来源']
+      : [
+          '返回 Studio',
+          ...assets.map((asset) => `${asset.label} · ${assetStatus(asset)}`),
+          '添加新来源',
+        ];
+  }
+  return outputs.length === 0
+    ? ['返回 Studio', '暂无产物', '生成新内容']
+    : [
+        '返回 Studio',
+        ...outputs.map(
+          (output) =>
+            `${output.title} · ${output.latestVersion > 0 ? `v${output.latestVersion}` : '生成中'}`,
+        ),
+        '生成新内容',
+      ];
+}
+
+function assetStatus(asset: AssetItem): string {
+  if (asset.status === 'ready') return asset.enabled ? '已启用' : '未启用';
+  if (asset.status === 'failed') return '处理失败';
+  return '处理中';
+}
+
+function routeLabel(route: StudioRoute): string {
+  if (route === 'source-add') return '选择来源添加方式';
+  if (route === 'source-manage') return '管理当前笔记本来源';
+  if (route === 'output-create') return '选择内容输出类型';
+  if (route === 'output-browse') return '查看当前笔记本产物';
+  return '选择 Studio 能力';
 }

@@ -26,7 +26,7 @@ import {
 } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import { StudioDock } from '@/features/studio/studio-dock';
+import { StudioOverlay } from '@/features/studio/studio-overlay';
 import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -79,7 +79,6 @@ export function GeneralChatWorkspace({
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
-  const [studioExpanded, setStudioExpanded] = useState(false);
   const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
     [],
   );
@@ -297,10 +296,7 @@ export function GeneralChatWorkspace({
         onOpenStudio={() => {
           const opening = !studioOpen;
           setStudioOpen(opening);
-          if (!opening) {
-            setStudioExpanded(false);
-            return;
-          }
+          if (!opening) return;
           void fetchNotebookArtifacts()
             .then(setStudioItems)
             .catch(() => setStudioItems([]));
@@ -309,7 +305,7 @@ export function GeneralChatWorkspace({
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
-          open={sidebarOpen && !studioExpanded}
+          open={sidebarOpen}
           onClose={toggleSidebar}
           activeConversationId={conversationId}
           onNewNotebook={() => void startNewGeneralChatAction()}
@@ -456,20 +452,13 @@ export function GeneralChatWorkspace({
           )}
         </main>
         {studioOpen ? (
-          <StudioDock
-            expanded={studioExpanded}
-            onClose={() => {
-              setStudioOpen(false);
-              setStudioExpanded(false);
-            }}
-          >
+          <StudioOverlay onClose={() => setStudioOpen(false)}>
             <StudioWorkspace
               assets={notebookSources}
               outputs={studioItems}
               onToggleAsset={toggleAsset}
               onUpload={(kind) => {
                 setStudioOpen(false);
-                setStudioExpanded(false);
                 setAssetPanel(kind);
               }}
               onImported={(asset) =>
@@ -480,17 +469,14 @@ export function GeneralChatWorkspace({
               }
               onOpenOutput={(artifactId) => {
                 setStudioOpen(false);
-                setStudioExpanded(false);
                 void artifactFlow.openArtifact(artifactId);
               }}
               onCreateOutput={(kind, defaultTitle) => {
                 setStudioOpen(false);
-                setStudioExpanded(false);
                 artifactFlow.beginConfirm(kind, defaultTitle);
               }}
-              onExpandedChange={setStudioExpanded}
             />
-          </StudioDock>
+          </StudioOverlay>
         ) : null}
       </div>
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
