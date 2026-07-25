@@ -16,6 +16,7 @@ describe('workspace truth and motion boundaries', () => {
       'features/workspace/general/general-chat-workspace.tsx',
     );
     const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
+    const lineSidebar = read('components/LineSidebar.tsx');
     const studio = read('features/studio/studio-workspace.tsx');
     const studioOverlay = read('features/studio/studio-overlay.tsx');
     const optionWheel = read('components/OptionWheel.tsx');
@@ -26,6 +27,10 @@ describe('workspace truth and motion boundaries', () => {
     expect(generalWorkspace).not.toContain('<SourcesPanel');
     expect(sidebar).not.toContain('children');
     expect(sidebar).not.toContain('来源');
+    expect(sidebar).toContain('<LineSidebar');
+    expect(lineSidebar).toContain('requestAnimationFrame');
+    expect(lineSidebar).toContain('getBoundingClientRect');
+    expect(lineSidebar).toContain('data-session-id');
     expect(studio).toContain('<OptionWheel');
     expect(studio).toContain('onSelect=');
     expect(studio).toContain('pointer-events-auto absolute inset-0');
@@ -60,10 +65,16 @@ describe('workspace truth and motion boundaries', () => {
 
   it('uses viewport coordinates for scrolled marginalia proximity', () => {
     const marginalia = read('features/workspace/shared/marginalia-nav.tsx');
+    const lineSidebar = read('components/LineSidebar.tsx');
 
     expect(marginalia).toContain('rowRect.top + rowRect.height / 2');
     expect(marginalia).toContain('event.clientY - center');
     expect(marginalia).not.toContain('el.offsetTop - list.scrollTop');
+    expect(lineSidebar).toContain(
+      'const row = element.getBoundingClientRect()',
+    );
+    expect(lineSidebar).toContain('event.clientY - center');
+    expect(lineSidebar).not.toContain('element.offsetTop');
   });
 
   it('does not describe planned assets or preset artifacts as active AI output', () => {

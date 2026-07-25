@@ -5,7 +5,11 @@ async function openStudioInput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  await studio.getByRole('button', { name: '文件输入' }).click();
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '管理当前笔记本来源' }),
+  ).toBeVisible();
   return studio;
 }
 
@@ -14,8 +18,21 @@ async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  await studio.getByRole('button', { name: '内容输出' }).click();
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('ArrowDown');
+  await wheel.press('ArrowDown');
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '查看当前笔记本产物' }),
+  ).toBeVisible();
   return studio;
+}
+
+async function closeStudio(page: Page) {
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await expect(
+    page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
+  ).toHaveCount(0);
 }
 
 /**
@@ -246,8 +263,18 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
 
   await page.reload();
   const inputStudio = await openStudioInput(page);
-  await inputStudio.getByRole('checkbox', { name: '音频来源讲义.pdf' }).check();
-  await inputStudio.getByRole('button', { name: '收起 Studio' }).click();
+  const source = inputStudio.getByRole('option', {
+    name: /音频来源讲义\.pdf/,
+  });
+  if ((await source.textContent())?.includes('未启用')) {
+    await source.click();
+  }
+  await expect(
+    inputStudio.getByRole('option', {
+      name: /音频来源讲义\.pdf · 已启用/,
+    }),
+  ).toBeVisible();
+  await closeStudio(page);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
   const confirm = page.getByRole('dialog', { name: '生成音频概览' });
@@ -285,7 +312,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
   const studio = await openStudioOutput(page);
-  await studio.getByText('来源音频概览').click();
+  await studio.getByRole('option', { name: /来源音频概览/ }).click();
   await expect(
     page
       .getByRole('dialog', { name: '产物Canvas' })
