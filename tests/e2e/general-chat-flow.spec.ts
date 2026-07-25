@@ -70,6 +70,9 @@ async function createNotebook(
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await expect(composer).toBeEnabled();
   await expect(composer).toHaveValue('');
+  await expect(
+    page.getByRole('region', { name: 'EduCanvas 技术栈' }),
+  ).toBeVisible();
 }
 
 async function waitForUnavailableTurn(page: Page) {
@@ -272,11 +275,10 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
     .getByRole('textbox', { name: '向 EduCanvas 提问' })
     .fill(secondPrompt);
   await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
+  /* 乐观消息先进入对话；此刻 GSAP 入场可能仍在过渡。切换后的可见性在下方验证。 */
   await expect(
-    page
-      .getByRole('region', { name: 'AI 对话' })
-      .getByText(secondPrompt, { exact: true }),
-  ).toBeVisible();
+    page.getByRole('region', { name: 'AI 对话' }),
+  ).toContainText(secondPrompt);
   await waitForUnavailableTurn(page);
 
   await notebookSidebar(page)
