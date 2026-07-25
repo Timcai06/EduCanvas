@@ -273,10 +273,12 @@ const OptionWheel = ({
       if (snap) v = Math.round(v);
       targetRef.current = v;
       const idx = ((Math.round(v) % cfg.count) + cfg.count) % cfg.count;
+      const item = cfg.items[idx];
+      if (item === undefined) return;
       if (idx !== selectedRef.current) {
         selectedRef.current = idx;
         setSelectedIndex(idx);
-        onChangeRef.current?.(idx, cfg.items[idx]);
+        onChangeRef.current?.(idx, item);
         playTick();
       }
       startLoop();
