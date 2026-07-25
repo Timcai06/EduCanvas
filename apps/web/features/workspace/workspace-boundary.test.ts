@@ -166,8 +166,8 @@ describe('workspace truth and motion boundaries', () => {
     expect(textType).toContain('pauseRange');
     expect(textType).toContain('Math.random()');
     expect(textType).not.toContain('cursor');
-    expect(layout).toContain("from 'next/script'");
-    expect(layout).toContain('strategy="beforeInteractive"');
-    expect(layout).not.toContain('<script dangerouslySetInnerHTML');
+    expect(layout).toContain('<script dangerouslySetInnerHTML');
+    expect(layout).toContain('THEME_INIT_SCRIPT');
+    expect(layout).not.toContain("from 'next/script'");
   });
 });
