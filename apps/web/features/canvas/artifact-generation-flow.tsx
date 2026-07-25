@@ -346,7 +346,9 @@ export function ArtifactStatusCard({
         </span>
         <span
           className={`block text-xs ${
-            generation.phase === 'failed' ? 'text-cinnabar-strong' : 'text-ink-muted'
+            generation.phase === 'failed'
+              ? 'text-cinnabar-strong'
+              : 'text-ink-muted'
           }`}
         >
           {generation.phase === 'generating'

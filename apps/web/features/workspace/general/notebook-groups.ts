@@ -13,11 +13,7 @@ export interface NotebookListItem {
 }
 
 export type NotebookGroupKey =
-  | 'today'
-  | 'yesterday'
-  | 'prev7'
-  | 'prev30'
-  | 'older';
+  'today' | 'yesterday' | 'prev7' | 'prev30' | 'older';
 
 export interface NotebookGroup {
   key: NotebookGroupKey;

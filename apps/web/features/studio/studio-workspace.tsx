@@ -133,7 +133,9 @@ export function StudioWorkspace({
    */
   const collapseSecondary = () => {
     const el = secondaryRef.current;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
     if (!el || reduce) {
       setRoute(null);
       return;
