@@ -102,7 +102,7 @@ make dev
 
 - [产品定义](../../docs/01-product/product-definition.md)
 - [学生端 UI 规格](../../docs/01-product/student-ui-spec.md)
-- [Canvas 与 GSAP](../../docs/02-architecture/canvas-and-gsap.md)
+- [统一 Canvas 工作面](../../docs/02-architecture/04-统一Canvas工作面.md)
 - [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)
 - [前端工程](../../docs/05-engineering/frontend.md)
 - [API 约定](../../docs/05-engineering/api-conventions.md)

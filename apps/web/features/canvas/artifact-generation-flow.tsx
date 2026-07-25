@@ -45,6 +45,12 @@ export interface ConfirmArtifactOptions {
   openWhenReady?: boolean;
 }
 
+export interface ProposedArtifact {
+  artifactId: string;
+  kind: CreatableArtifactKind;
+  title: string;
+}
+
 export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
@@ -103,6 +109,53 @@ export function useArtifactGeneration() {
         }
       } catch {
         setGeneration({ phase: 'failed', kind, title });
+      }
+    },
+    [],
+  );
+
+  /**
+   * 接管 Agent 工具已经创建的后台任务。这里不再次 POST，避免一个模型工具调用
+   * 产生两份产物；只恢复现有 Artifact 的轮询与可选 Canvas 自动打开。
+   */
+  const observeProposedArtifact = useCallback(
+    async (
+      artifact: ProposedArtifact,
+      options: ConfirmArtifactOptions = {},
+    ) => {
+      pollAbort.current?.abort();
+      setGeneration({
+        phase: 'generating',
+        kind: artifact.kind,
+        artifactId: artifact.artifactId,
+        title: artifact.title,
+      });
+      try {
+        pollAbort.current = new AbortController();
+        const detail = await pollArtifactUntilSettled(artifact.artifactId, {
+          signal: pollAbort.current.signal,
+        });
+        const succeeded =
+          detail.artifact.latestVersion > 0 &&
+          detail.latestJob?.status !== 'failed';
+        setGeneration({
+          phase: succeeded ? 'ready' : 'failed',
+          kind: artifact.kind,
+          artifactId: artifact.artifactId,
+          title: detail.artifact.title,
+          detail,
+        });
+        if (succeeded && options.openWhenReady) {
+          setOpenDetail(detail);
+          setCanvasFull(false);
+        }
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          kind: artifact.kind,
+          artifactId: artifact.artifactId,
+          title: artifact.title,
+        });
       }
     },
     [],
@@ -234,6 +287,7 @@ export function useArtifactGeneration() {
     setCanvasFull,
     beginConfirm,
     confirm,
+    observeProposedArtifact,
     createBlankNote,
     revise,
     saveNote,

@@ -1,41 +1,41 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
+const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
 
 function notebookSidebar(page: Page) {
   return page.getByRole('complementary', { name: '笔记本侧栏' });
 }
 
 async function openStudioInput(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
   const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
   await wheel.press('Enter');
   await expect(
-    studio.getByRole('listbox', { name: '管理当前笔记本来源' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
   ).toBeVisible();
   return studio;
 }
 
 async function openStudioOutput(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
   const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
   await wheel.press('ArrowDown');
-  await wheel.press('ArrowDown');
   await wheel.press('Enter');
   await expect(
-    studio.getByRole('listbox', { name: '查看当前笔记本产物' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
   ).toBeVisible();
   return studio;
 }
 
 async function closeStudio(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);
@@ -136,7 +136,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   ).toHaveCount(0);
   const studio = await openStudioInput(page);
   await expect(
-    studio.getByRole('listbox', { name: '管理当前笔记本来源' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
   ).toBeVisible();
 
   const cookieNames = (await context.cookies())
@@ -144,6 +144,102 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
     .map((cookie) => cookie.name);
   expect(cookieNames).toContain('__Host-educanvas_anonymous_identity');
   expect(cookieNames).toContain('__Host-educanvas_active_conversation');
+});
+
+test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async ({ page }) => {
+  const artifactId = '10000000-0000-4000-8000-000000000001';
+  await page.route('**/api/v1/chat/turn', async (route) => {
+    const turnId = 'artifact-turn-e2e';
+    const messageId = 'artifact-assistant-e2e';
+    const frame = (type: string, data: Record<string, unknown>) =>
+      `event: ${type}\ndata: ${JSON.stringify({
+        type,
+        schemaVersion: '1',
+        turnId,
+        ...data,
+      })}\n\n`;
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      body: [
+        frame('turn.accepted', {
+          studentMessageId: 'artifact-student-e2e',
+          assistantMessageId: messageId,
+          replayed: false,
+        }),
+        frame('message.delta', {
+          messageId,
+          delta: '我已经开始生成，并会把结果留在这段回答下面。',
+        }),
+        frame('artifact.proposed', {
+          artifactId,
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '函数思维导图',
+        }),
+        frame('turn.completed', { messageId }),
+      ].join(''),
+    });
+  });
+  await page.route(`**/api/v1/chat/artifacts/${artifactId}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        artifact: {
+          id: artifactId,
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '函数思维导图',
+          status: 'active',
+          latestVersion: 1,
+          fromConversation: true,
+          createdAt: '2026-07-25T00:00:00.000Z',
+          updatedAt: '2026-07-25T00:01:00.000Z',
+        },
+        version: {
+          version: 1,
+          content: {
+            contentVersion: 1,
+            root: { id: 'root', label: '函数思维导图' },
+          },
+          media: null,
+        },
+        versions: [
+          {
+            version: 1,
+            generatedBy: 'e2e:fixture',
+            revisionInstruction: null,
+            createdAt: '2026-07-25T00:01:00.000Z',
+          },
+        ],
+        latestJob: {
+          id: '20000000-0000-4000-8000-000000000002',
+          status: 'succeeded',
+          progress: 100,
+          failureCode: null,
+        },
+      }),
+    }),
+  );
+
+  await page.goto('/');
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill('生成函数思维导图');
+  await composer.press('Enter');
+
+  const output = page.getByRole('button', { name: '打开产物：函数思维导图' });
+  await expect(output).toBeVisible();
+  await output.click();
+  const canvas = page.getByRole('region', { name: '产物Canvas' });
+  await expect(
+    canvas.getByRole('heading', { name: '函数思维导图' }),
+  ).toBeVisible();
+  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await output.click();
+  await expect(
+    canvas.getByRole('heading', { name: '函数思维导图' }),
+  ).toBeVisible();
 });
 
 test('笔记本可反复切换，并整体恢复各自的消息', async ({ page }) => {

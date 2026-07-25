@@ -6,6 +6,7 @@ import {
   artifacts,
   spaces,
 } from './schema';
+import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -520,6 +521,8 @@ export class DrizzlePlatformArtifactRepository {
     spaceId: string;
     conversationId: string;
     trustedSubjectId: string;
+    /** 仅 Agent Turn 创建时传入；用于把产物恢复到对应助手消息末尾。 */
+    operationId?: string | null;
     kind: string;
     trustTier: ArtifactTrustTier;
     title: string;
@@ -528,12 +531,7 @@ export class DrizzlePlatformArtifactRepository {
     maxAttempts?: number;
   }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
     return await this.database.transaction(async (tx) => {
-      const [space] = await tx
-        .select({ ownerSubjectId: spaces.ownerSubjectId })
-        .from(spaces)
-        .where(eq(spaces.id, input.spaceId))
-        .limit(1);
-      if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
+      if (!(await ownsArtifactConversationScope(tx, input))) {
         throw new ArtifactOwnershipError();
       }
 
@@ -556,6 +554,7 @@ export class DrizzlePlatformArtifactRepository {
         .insert(artifactGenerationJobs)
         .values({
           artifactId: artifact.id,
+          operationId: input.operationId ?? null,
           params: input.params ?? {},
           queueJobKey,
         })

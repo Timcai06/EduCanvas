@@ -1,7 +1,7 @@
 # 学生端核心 UI/UX 规格
 
 - 状态：`accepted`
-- 相关文档：[产品定义](./product-definition.md)、[Canvas与GSAP](../02-architecture/canvas-and-gsap.md)、[Agent编排边界](../03-ai/01-Agent编排边界.md)
+- 相关文档：[产品定义](./product-definition.md)、[统一Canvas工作面](../02-architecture/04-统一Canvas工作面.md)、[Agent编排边界](../03-ai/01-Agent编排边界.md)
 
 ## Web 学生客户端方向
 
@@ -50,9 +50,9 @@
 
 - Enter 发送、Shift+Enter 换行；文本框自增高至约 6 行后内部滚动；
 - 空白态输入栏位于页面视觉中心；学生输入内容后，语音占位切换为发送按钮，发送后输入栏平滑回到底部对话态；
-- Canvas 工具芯片只表达“本轮创建并打开产物”的一次性意图，提交确认后立即清除；产物打开后由Canvas自己的修改框继续共创，不把长期Artifact伪装成Composer附件。当前Notebook已经存在的Sources只在Studio浏览和管理；
+- Canvas 工具芯片只表达“本轮优先使用 Canvas，并在产物生成成功后自动打开”的一次性意图，请求被服务端接受后立即清除；浏览器只提交有界的 `outputPreference=canvas`，它不授予 Tool 权限，也不伪造产物。若本轮收到真实 `artifact.proposed`，客户端接管既有任务的轮询并在成功后打开，而不是重复创建产物。产物打开后由 Canvas 自己的修改框继续共创，不把长期 Artifact 伪装成 Composer 附件；当前 Notebook 已存在的 Sources 只在 Studio 浏览和管理；
 - 「+」菜单是唯一创建入口：上传PDF、Markdown、TXT与图片，导入网页，以及生成笔记、思维导图、Slides、闪卡和音频概览都从这里发起；未接能力不展示或明确禁用，不进入 roving focus。上传类型由服务端依据魔数或受限文本扩展名复核，不能只信浏览器MIME；
-- “打开本课互动演示”只打开课程预置 Artifact，不称为 AI 创建。真实“请老师创建”必须先产生结构化提案和学生确认卡，不能从自由文本静默生成大产物；
+- 用户也可在自然语言中明确要求思维导图、Slides、闪卡或笔记，由 General Agent 调用受控 `artifact.create` Tool；普通问答不得静默生成大产物，`artifact.proposed` 之后仍必须显示真实生成状态，不能把后台提案说成已经完成；
 - 未建设能力不触发动作、不产生上下文标签，也不出现伪装成功。无 Provider 时统一显示“AI 老师暂时无法连接，请稍后重试”，不暴露 SDK、模型或服务端术语。
 - **本机网络与服务端问题分开归因**：`navigator.onLine` 为 false 时，对话上方显示藤黄离线提示（“网络连接已断开，恢复后可以继续对话”），且一轮回答的失败/中断文案归因给网络（“网络似乎断开了，恢复后可以重新发送”）而非甩锅“AI 老师无法连接”。离线只用于归因与提示，不阻断发送——`navigator.onLine` 只能证伪离线，真正的可达性仍由请求结果裁决。
 - 发送后只消费服务端 SSE 的真实 `message.delta`，禁止浏览器定时器、假 typing dots 或完整文本切片；收到 `turn.accepted` 后才显示 Stop，Stop 必须调用取消端点；失败、取消或中断消息提供内联重试，并生成新的 `clientMessageId`；
@@ -109,7 +109,7 @@ TUI 与 Web 是操作同一个笔记本的两种窗口，不是两套数据。
 - **纸与墨双主题**：亮色是默认的暖纸白（canvas/card/surface 三层纸面 + 低于 5% 的纸纹肌理），深色是「晚自习砚墨」的暖墨黑。每个语义色以 `light-dark(纸面, 砚墨)` 一次写清，由 `color-scheme` 决定取哪支笔，避免维护两套色板（阴影因模糊/偏移亦不同、无法进 `light-dark()`，仍走 `data-theme` 覆写）。用户可在头像档案抽屉「外观」区块于**跟随系统 / 纸色亮 / 砚墨暗**间手动选择，偏好存 localStorage（键 `educanvas.theme`），并由 `<head>` 内联脚本在水合前落到 `<html data-theme>`，保证首帧零闪烁；跟随系统时移除属性、交回 `prefers-color-scheme`。`color-scheme` 随所选主题切换，原生表单/滚动条一并一致。组件必须通过 token 取色，禁止散写色值，禁止 `text-white` 这类不随主题走的字色；
 - **排版即品牌**：标题、问候语、品牌与产物标题使用衬线显示字体（`--font-display`，Noto Serif SC），正文保持无衬线；中文行高 1.8，引用以旁注（marginalia：墨紫点线 + 衬线小字）形式挂在回答末尾，与行内衬线注号 [n] 对应；
 - **签名元素**：产品品牌是环形旋转文字（`ProductMark` / `CircularText`）；助手消息以墨紫墨滴（`InkDot`）标识；判分反馈用朱砂笔迹（`GradeMark`，对勾/圈点按笔顺画出）；高掌握度盖朱砂印章（`SealStamp`）。对错含义由字形与文案承载，颜色只做冗余强调；
-- **动效身份「落笔」**：扉页问候逐字落下后保留极缓墨色呼吸，纸面边缘使用受控墨点场；输入框沿上下边缘有一道墨紫墨光掠过，平时极淡作陪衬、聚焦时提亮加速（纯 CSS，`prefers-reduced-motion` 下隐去只留静态聚焦描边），Agent 工作期间以墨紫为主、朱砂点睛的视口边缘光补充“正在落笔”状态。旧版无语义彩色 Halo 不再回归；持续 GPU 动效必须在页面隐藏时真正停帧并释放无主资源，`prefers-reduced-motion` 下不创建动态上下文。边缘光只能冗余表达已有文案/停止按钮状态，不能成为判断 Agent 是否工作的唯一依据。自动化快照、性能预算与人工复核清单统一维护在[视觉回归与动效验收](../06-quality/visual-regression.md)；
+- **动效身份「落笔」**：扉页问候逐字落下后保留极缓墨色呼吸，纸面边缘使用受控墨点场；输入框沿上下边缘有一道墨紫墨光掠过，平时极淡作陪衬、聚焦时提亮加速（纯 CSS，`prefers-reduced-motion` 下隐去只留静态聚焦描边），Agent 工作期间以墨紫为主、朱砂点睛的视口边缘光补充“正在落笔”状态。旧版无语义彩色 Halo 不再回归；持续 GPU 动效必须在页面隐藏时真正停帧并释放无主资源，`prefers-reduced-motion` 下不创建动态上下文。边缘光只能冗余表达已有文案/停止按钮状态，不能成为判断 Agent 是否工作的唯一依据。行为 E2E、性能预算与人工复核清单统一维护在[前端交互与动效验收](../06-quality/visual-regression.md)，不维护跨系统像素快照；
 - **跨端一致**：TUI 共享同一套语义（墨紫/朱砂 ANSI 色、印章扉页、旁注引用、朱砂审批卡），见 `apps/tui/README.md`。
 
 ## 阶段一实现边界

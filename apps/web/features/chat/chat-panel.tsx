@@ -15,6 +15,7 @@ import { InkDot } from '@/features/workspace/shared/ink-dot';
 import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
+import { ConversationArtifactCard } from './conversation-artifact-card';
 import { StreamShimmer } from './stream-shimmer';
 
 gsap.registerPlugin(useGSAP);
@@ -108,6 +109,7 @@ export function ChatPanel({
   onContinueText,
   onRetry,
   onPreviewHtml,
+  onOpenArtifact,
   assistantLabel = 'AI 老师',
 }: {
   messages: readonly ChatMessage[];
@@ -118,6 +120,8 @@ export function ChatPanel({
   onRetry: (assistantMessageId: string) => void;
   /** 提供后,助手消息中的 ```html 代码块渲染为可点击的沙箱预览卡(ADR-0010 Tier 2)。 */
   onPreviewHtml?: (request: HtmlPreviewRequest) => void;
+  /** 通用对话产物按 ID 重开；Canvas 点击时重新读取最新版本和状态。 */
+  onOpenArtifact?: (artifactId: string) => void;
   assistantLabel?: string;
 }) {
   return (
@@ -265,6 +269,19 @@ export function ChatPanel({
                       </span>
                     );
                   })}
+                </div>
+              ) : null}
+              {message.artifacts &&
+              message.artifacts.length > 0 &&
+              onOpenArtifact ? (
+                <div className="flex flex-col gap-2 pt-1" aria-label="本轮产物">
+                  {message.artifacts.map((artifact) => (
+                    <ConversationArtifactCard
+                      key={artifact.id}
+                      artifact={artifact}
+                      onOpen={onOpenArtifact}
+                    />
+                  ))}
                 </div>
               ) : null}
               {message.suggestsCanvas && !canvasOpen ? (

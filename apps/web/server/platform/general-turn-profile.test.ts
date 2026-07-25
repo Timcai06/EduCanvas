@@ -6,6 +6,7 @@ import type {
 import type { NodeInvocationPersistencePort } from '@educanvas/node-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webGeneralTurns } from './general-turn-persistence';
+import type { WebOperationArtifacts } from './general-artifact-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import type { WebOperationSources } from './general-turn-tools';
 
@@ -60,10 +61,15 @@ function createProfile(input?: {
   nodeInvocations?: NodeInvocationPersistencePort;
   membershipRole?: 'owner' | 'editor' | 'contributor' | 'viewer';
   staticToolCapabilities?: readonly string[];
+  operationArtifacts?: WebOperationArtifacts;
+  preferCanvas?: boolean;
 }) {
   return new WebGeneralProfile(
     assetContext,
     { sourceCount: 0 } as unknown as WebOperationSources,
+    input?.operationArtifacts ??
+      ({ events: () => [] } as unknown as WebOperationArtifacts),
+    input?.preferCanvas ?? false,
     input?.staticToolCapabilities ?? ['web.fetch', 'web.search'],
     input?.nodeInvocations ?? createNodeInvocations(),
     input?.membershipRole ?? 'owner',
@@ -169,5 +175,42 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
 
     expect(plan.toolPolicy?.capabilities.actor).toContain('device.status');
     expect(plan.toolPolicy?.capabilities.notebook).toEqual([]);
+  });
+
+  it('把本轮真实创建的 Canvas 产物投影到终态事件', async () => {
+    const event = {
+      protocol: 'educanvas.turn.v2' as const,
+      operationId: command.operationId,
+      type: 'artifact.proposed' as const,
+      artifactId: 'artifact-1',
+      artifactKind: 'mind_map',
+      trustTier: 'tier1' as const,
+      title: '分数思维导图',
+    };
+    const profile = createProfile({
+      operationArtifacts: {
+        events: () => [event],
+      } as unknown as WebOperationArtifacts,
+    });
+
+    await expect(
+      profile.finalize({ command, turn, content: '已经开始生成。' }),
+    ).resolves.toEqual({
+      citationMarkers: [],
+      events: [event],
+    });
+  });
+
+  it('Canvas 偏好只强化本轮输出指令而不改变可信 Tool grant', async () => {
+    const normal = await createProfile().prepare({ command, turn });
+    const canvas = await createProfile({ preferCanvas: true }).prepare({
+      command,
+      turn,
+    });
+    const canvasSystemPrompt = canvas.context.profile[0]?.message.content ?? '';
+
+    expect(canvasSystemPrompt).toContain('必须调用 createCanvasArtifact');
+    expect(canvasSystemPrompt).toContain('不要用 ASCII 图');
+    expect(canvas.toolPolicy).toEqual(normal.toolPolicy);
   });
 });

@@ -88,6 +88,10 @@ export {
   type PlatformArtifactJob,
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';
+export {
+  DrizzlePlatformArtifactTurnReferenceRepository,
+  type PlatformArtifactTurnReference,
+} from './platform-artifact-turn-reference-repository';
 export { DrizzleManualArtifactRepository } from './manual-artifact-repository';
 export {
   ArtifactContentConflictError,

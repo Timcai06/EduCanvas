@@ -29,6 +29,8 @@ export interface TeachingTurnRequestBody {
   clientMessageId: string;
   text: string;
   parts: readonly AgentMessagePart[];
+  /** 不可信的展示偏好，只能影响回答形态，不能授予 Tool 或数据权限。 */
+  outputPreference?: 'canvas';
 }
 
 async function readLimitedUtf8(request: Request): Promise<string> {
@@ -106,7 +108,19 @@ export async function parseTeachingTurnRequest(
     throw new TurnRequestValidationError('invalid_request');
   }
 
-  const keys = Object.keys(record).sort().join(',');
+  const outputPreference =
+    record.outputPreference === undefined
+      ? undefined
+      : record.outputPreference === 'canvas'
+        ? 'canvas'
+        : null;
+  if (outputPreference === null) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
+  const keys = Object.keys(record)
+    .filter((key) => key !== 'outputPreference')
+    .sort()
+    .join(',');
   const candidate =
     keys === 'clientMessageId,text' && typeof record.text === 'string'
       ? {
@@ -132,5 +146,6 @@ export async function parseTeachingTurnRequest(
     clientMessageId: parsed.data.clientMessageId,
     text,
     parts,
+    ...(outputPreference ? { outputPreference } : {}),
   };
 }

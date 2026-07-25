@@ -43,6 +43,11 @@ import { HeroInkField } from '../shared/hero-ink-field';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
+import { useAgentArtifactEvents } from './use-agent-artifact-events';
+import {
+  isArtifactRevisionInProgress,
+  selectAudioArtifactSources,
+} from './general-artifact-selection';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -75,7 +80,6 @@ export function GeneralChatWorkspace({
   notebookTitle: string | null;
   nickname?: string | null;
 }) {
-  const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null);
@@ -88,6 +92,15 @@ export function GeneralChatWorkspace({
   );
   const artifactFlow = useArtifactGeneration();
   const [canvasSelected, setCanvasSelected] = useState(false);
+  const handleArtifactProposed = useAgentArtifactEvents({
+    canvasSelected,
+    setCanvasSelected,
+    setStudioItems,
+    observeProposedArtifact: artifactFlow.observeProposedArtifact,
+  });
+  const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS, {
+    onArtifactProposed: handleArtifactProposed,
+  });
   const [error, setError] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,17 +173,25 @@ export function GeneralChatWorkspace({
             ]
           : [],
       );
-      void turn.send(text, undefined, selected).then((accepted) => {
-        if (!accepted) return;
-        setAssets((current) =>
-          current.map((asset) =>
-            asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
-          ),
-        );
-        void refreshAssets().catch(() => undefined);
-      });
+      void turn
+        .send(
+          text,
+          undefined,
+          selected,
+          canvasSelected ? { outputPreference: 'canvas' } : {},
+        )
+        .then((accepted) => {
+          if (!accepted) return;
+          if (canvasSelected) setCanvasSelected(false);
+          setAssets((current) =>
+            current.map((asset) =>
+              asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
+            ),
+          );
+          void refreshAssets().catch(() => undefined);
+        });
     },
-    [assets, refreshAssets, turn],
+    [assets, canvasSelected, refreshAssets, turn],
   );
 
   useEffect(() => {
@@ -235,28 +256,8 @@ export function GeneralChatWorkspace({
   const handleToolAction = useCallback(() => {
     setCanvasSelected((selected) => !selected);
   }, []);
-  const selectedAudioSources = notebookSources.flatMap((asset) =>
-    asset.enabled &&
-    asset.versionId &&
-    (asset.kind === 'document' || asset.kind === 'link')
-      ? [
-          {
-            assetId: asset.id,
-            versionId: asset.versionId,
-            kind: asset.kind,
-          } as const,
-        ]
-      : [],
-  );
-  const revisingOpenArtifact = Boolean(
-    artifactFlow.openDetail &&
-    ((artifactFlow.generation?.phase === 'generating' &&
-      artifactFlow.generation.artifactId ===
-        artifactFlow.openDetail.artifact.id) ||
-      ['queued', 'running'].includes(
-        artifactFlow.openDetail.latestJob?.status ?? '',
-      )),
-  );
+  const selectedAudioSources = selectAudioArtifactSources(notebookSources);
+  const revisingOpenArtifact = isArtifactRevisionInProgress(artifactFlow);
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
@@ -381,6 +382,12 @@ export function GeneralChatWorkspace({
                       setPreviewAsset(null);
                       setSourcePreviewFull(false);
                       setPreviewHtml(source);
+                    }}
+                    onOpenArtifact={(artifactId) => {
+                      setPreviewAsset(null);
+                      setSourcePreviewFull(false);
+                      setPreviewHtml(null);
+                      void artifactFlow.openArtifact(artifactId);
                     }}
                     assistantLabel="AI"
                   />

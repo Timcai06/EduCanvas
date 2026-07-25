@@ -40,7 +40,7 @@ async function startLearning(page: Page) {
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
-  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  const composer = page.getByPlaceholder('向 EduCanvas 提问');
   await composer.fill('请打开互动演示，让我动手试试。');
   await composer.press('Enter');
   await expect(aiUnavailableMessage(page)).toBeVisible();
@@ -66,7 +66,7 @@ async function openProgress(page: Page) {
 async function ensureConversationUi(page: Page) {
   const progressTrigger = page.getByRole('button', { name: /学习进度/ });
   if (await progressTrigger.isVisible()) return;
-  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  const composer = page.getByPlaceholder('向 EduCanvas 提问');
   await composer.fill('继续学习并查看进度。');
   const send = page.getByRole('button', { name: '发送' });
   await expect(send).toBeEnabled();
@@ -426,7 +426,7 @@ test('S0 只显示品牌、问候与 Composer，不暗示学习状态或产物',
   await openLearningWorkspace(page);
 
   await expect(
-    page.getByRole('banner').getByText('EduCanvas', { exact: true }),
+    page.getByRole('link', { name: '返回 EduCanvas 主对话' }),
   ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),

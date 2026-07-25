@@ -18,6 +18,7 @@ import { persistFetchedWebPageAsset } from '../assets/asset-upload';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { createFetchWebPageTool, type FetchedWebPage } from '../tools/web-page';
 import { resolveWebSearchTool } from '../tools/web-search';
+import type { WebOperationArtifacts } from './general-artifact-tool';
 import { webGeneralSources } from './general-turn-persistence';
 
 const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
@@ -73,6 +74,7 @@ export class WebOperationSources {
 /** 组装Web General本次可用Tool；静态能力不包含需按Actor实时解析的Node能力。 */
 export function createGeneralToolKernel(
   operationSources: WebOperationSources,
+  operationArtifacts: WebOperationArtifacts,
 ): {
   kernel: ToolKernel;
   staticCapabilities: readonly string[];
@@ -83,6 +85,11 @@ export function createGeneralToolKernel(
   );
   const searchTool = resolveWebSearchTool();
   const localAdapters = [
+    adaptAgentTool(operationArtifacts.createTool(), {
+      capability: 'artifact.create',
+      risk: 'l1',
+      effect: 'write',
+    }),
     adaptAgentTool(fetchTool, {
       capability: 'web.fetch',
       risk: 'l1',

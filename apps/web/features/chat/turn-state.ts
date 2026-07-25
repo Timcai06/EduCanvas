@@ -110,6 +110,7 @@ export function hydrateChatMessages(
       text: message.content,
       attachments: [],
       citations: message.citations ?? [],
+      artifacts: message.artifacts ?? [],
       failureCode: message.failureCode,
       retryText: studentInputByTurn.get(message.turnId)?.content,
       retryParts: studentInputByTurn.get(message.turnId)?.parts,
@@ -292,8 +293,29 @@ export function teachingTurnReducer(
     };
   }
 
-  if (!('messageId' in event)) return state;
   const assistantId = active.assistantMessageId ?? active.localAssistantId;
+  if (event.type === 'artifact.proposed' || event.type === 'artifact.created') {
+    return {
+      ...state,
+      messages: updateAssistant(state.messages, assistantId, (message) => ({
+        ...message,
+        artifacts: [
+          ...(message.artifacts ?? []).filter(
+            (artifact) => artifact.id !== event.artifactId,
+          ),
+          {
+            id: event.artifactId,
+            kind: event.kind,
+            title: event.title,
+            status: 'proposed',
+            latestVersion: 0,
+          },
+        ],
+      })),
+    };
+  }
+
+  if (!('messageId' in event)) return state;
   if (event.type === 'message.citation') {
     if (event.messageId !== assistantId) return state;
     const citation =
