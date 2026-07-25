@@ -18,17 +18,20 @@ describe('workspace truth and motion boundaries', () => {
     const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
     const studio = read('features/studio/studio-workspace.tsx');
     const studioDock = read('features/studio/studio-dock.tsx');
+    const cornerArc = read('features/studio/studio-corner-arc.tsx');
 
     expect(generalWorkspace).toContain('<StudioWorkspace');
     expect(generalWorkspace).toContain('<StudioDock');
     expect(generalWorkspace).not.toContain('<SourcesPanel');
     expect(sidebar).not.toContain('children');
     expect(sidebar).not.toContain('来源');
-    expect(studio).toContain("['文件输入', '内容输出']");
+    expect(studio).toContain('<StudioCornerArc');
     expect(studio).toContain('<OptionWheel');
     expect(studio).toContain('onSelect=');
-    expect(studio).toContain("activateOnItemClick={level === 'root'}");
-    expect(studio).toContain("{level !== 'root' ? (");
+    expect(studio).toContain("if (level === 'root')");
+    expect(studio).toContain('onExpandedChange(true)');
+    expect(cornerArc).toContain('<span>文件输入</span>');
+    expect(cornerArc).toContain('<span>内容输出</span>');
     expect(studioDock).toContain('<aside');
     expect(studioDock).not.toContain('<Sheet');
     expect(studioDock).not.toContain('role="dialog"');

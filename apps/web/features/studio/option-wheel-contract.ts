@@ -10,8 +10,6 @@ export interface OptionWheelProps {
   defaultSelected?: number;
   onChange?: (index: number, item: string) => void;
   onSelect?: (index: number, item: string) => void;
-  /** 单击非中心项时同时确认；只适合无成本的一级导航，不能用于创建动作。 */
-  activateOnItemClick?: boolean;
   textColor?: string;
   activeColor?: string;
   side?: OptionWheelSide;

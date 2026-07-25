@@ -31,20 +31,22 @@ export function StudioDock({
       id="notebook-studio-dock"
       aria-label="当前笔记本的 Studio"
       data-expanded={expanded}
-      className={`fixed right-0 top-16 z-30 overflow-x-hidden transition-[width,height,background-color,box-shadow] duration-500 ease-out ${
+      className={`fixed right-0 z-30 transition-[width,height,background-color,box-shadow] duration-500 ease-out ${
         expanded
-          ? 'bottom-0 w-full overflow-y-auto border-l border-t border-line/70 bg-canvas px-4 pb-5 pt-12 shadow-[-22px_18px_60px_color-mix(in_srgb,var(--color-ink)_16%,transparent)] sm:px-6 lg:w-[min(62vw,62rem)] lg:border-t-0 lg:px-8'
-          : 'h-[30rem] w-full max-w-[32rem] overflow-hidden bg-transparent px-0 pb-0 pt-0 shadow-none'
+          ? 'bottom-0 top-16 w-full overflow-x-hidden overflow-y-auto border-l border-t border-line/70 bg-canvas px-4 pb-5 pt-12 shadow-[-22px_18px_60px_color-mix(in_srgb,var(--color-ink)_16%,transparent)] sm:px-6 lg:w-[min(62vw,62rem)] lg:border-t-0 lg:px-8'
+          : 'pointer-events-none top-0 h-[22.5rem] w-full max-w-[30rem] overflow-visible bg-transparent p-0 shadow-none'
       }`}
     >
-      <button
-        type="button"
-        aria-label="收起 Studio"
-        onClick={onClose}
-        className="absolute right-5 top-4 z-20 grid size-10 place-items-center rounded-full border border-line bg-card/75 text-ink-muted backdrop-blur transition-colors hover:border-accent/45 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        <X aria-hidden="true" size={17} weight="bold" />
-      </button>
+      {expanded ? (
+        <button
+          type="button"
+          aria-label="收起 Studio"
+          onClick={onClose}
+          className="absolute right-5 top-4 z-20 grid size-10 place-items-center rounded-full border border-line bg-card/75 text-ink-muted backdrop-blur transition-colors hover:border-accent/45 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <X aria-hidden="true" size={17} weight="bold" />
+        </button>
+      ) : null}
       {children}
     </aside>
   );
