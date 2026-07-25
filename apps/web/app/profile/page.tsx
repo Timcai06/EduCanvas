@@ -5,7 +5,6 @@ import { ArrowLeft, GearSix, UserCircle } from '@phosphor-icons/react/dist/ssr';
 import { AuroraInk } from '@/features/profile/aurora-ink';
 import { LearningHeatmap } from '@/features/profile/learning-heatmap';
 import { ProfileStats } from '@/features/profile/profile-stats';
-import { SpotlightCard } from '@/features/profile/spotlight-card';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { getLearningActivity } from '@/server/profile/learning-activity-service';
@@ -109,7 +108,7 @@ export default async function ProfilePage() {
         </div>
 
         {/* 热力图 */}
-        <SpotlightCard className="mt-6 rounded-3xl border border-line bg-card p-5 shadow-float sm:p-6">
+        <section className="mt-6 rounded-3xl border border-line bg-card p-5 shadow-float sm:p-6">
           <h2 className="font-display text-lg font-semibold">学习热力图</h2>
           <p className="mb-4 mt-1 text-sm text-ink-muted">
             过去一年，每一格是一天；判分练习越多，墨色越深越密。
@@ -129,7 +128,7 @@ export default async function ProfilePage() {
               </Link>
             </div>
           )}
-        </SpotlightCard>
+        </section>
       </div>
     </main>
   );
