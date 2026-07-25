@@ -6,7 +6,7 @@ import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { useCallback, useState, useTransition } from 'react';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
-import { EmptyChatHero } from '../learning/empty-chat-hero';
+import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GraduationCap } from '@phosphor-icons/react';
 import { UserMenu } from '@/features/auth/user-menu';
 import { ProductMark } from '@/components/ProductMark';

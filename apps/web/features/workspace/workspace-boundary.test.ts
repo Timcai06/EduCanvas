@@ -28,7 +28,7 @@ describe('workspace truth and motion boundaries', () => {
     const technologyBrandLoop = read(
       'features/workspace/shared/technology-brand-loop.tsx',
     );
-    const emptyHero = read('features/workspace/learning/empty-chat-hero.tsx');
+    const emptyHero = read('features/workspace/shared/empty-chat-hero.tsx');
 
     expect(generalWorkspace).toContain('<StudioWorkspace');
     expect(generalWorkspace).toContain('<StudioOverlay');
@@ -71,7 +71,9 @@ describe('workspace truth and motion boundaries', () => {
     expect(logoLoop).toContain("'(prefers-reduced-motion: reduce)'");
     expect(technologyBrandLoop).toContain('SiPostgresql');
     expect(technologyBrandLoop).toContain('Built on an open learning stack');
+    expect(technologyBrandLoop).toContain('ariaLabel="EduCanvas 技术栈"');
     expect(emptyHero).toContain('<TechnologyBrandLoop');
+    expect(generalWorkspace).toContain('<EmptyChatHero as="section"');
     expect(studioOverlay).toContain('<aside');
     expect(studioOverlay).not.toContain('<Sheet');
     expect(studioOverlay).not.toContain('role="dialog"');

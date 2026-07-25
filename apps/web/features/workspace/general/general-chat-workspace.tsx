@@ -38,9 +38,8 @@ import {
   PENDING_GENERAL_CANVAS_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
-import { HeroGreeting } from '../shared/hero-greeting';
-import { HeroInkField } from '../shared/hero-ink-field';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
+import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
@@ -317,45 +316,40 @@ export function GeneralChatWorkspace({
             </div>
           ) : null}
           {isLanding ? (
-            <>
-              <HeroInkField />
-              <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center pb-14 text-center sm:pb-16">
-                <HeroGreeting nickname={nickname} />
-                <div ref={composerDockRef} className="w-full">
-                  {artifactFlow.generation &&
-                  artifactFlow.generation.phase !== 'confirm' ? (
-                    <div className="px-4">
-                      <ArtifactStatusCard
-                        generation={artifactFlow.generation}
-                        onOpen={() => {
-                          const artifactId =
-                            artifactFlow.generation?.artifactId;
-                          if (artifactId)
-                            void artifactFlow.openArtifact(artifactId);
-                        }}
-                        onDismiss={artifactFlow.dismiss}
-                        dismissable={!revisingOpenArtifact}
-                      />
-                    </div>
-                  ) : null}
-                  <Composer
-                    chips={[]}
-                    busy={turn.busy}
-                    statusText={turn.statusText ?? error}
-                    statusTone={error && !turn.busy ? 'error' : 'info'}
-                    onSend={send}
-                    onStop={() => void turn.stop()}
-                    stopAvailable={turn.stopAvailable}
-                    onRemoveChip={() => undefined}
-                    onMenuAction={handleMenuAction}
-                    availableMenuActions={GENERAL_MENU_ACTIONS}
-                    toolChips={composerTools}
-                    onToolAction={handleToolAction}
-                    variant="landing"
-                  />
-                </div>
+            <EmptyChatHero as="section" nickname={nickname}>
+              <div ref={composerDockRef} className="w-full">
+                {artifactFlow.generation &&
+                artifactFlow.generation.phase !== 'confirm' ? (
+                  <div className="px-4">
+                    <ArtifactStatusCard
+                      generation={artifactFlow.generation}
+                      onOpen={() => {
+                        const artifactId = artifactFlow.generation?.artifactId;
+                        if (artifactId)
+                          void artifactFlow.openArtifact(artifactId);
+                      }}
+                      onDismiss={artifactFlow.dismiss}
+                      dismissable={!revisingOpenArtifact}
+                    />
+                  </div>
+                ) : null}
+                <Composer
+                  chips={[]}
+                  busy={turn.busy}
+                  statusText={turn.statusText ?? error}
+                  statusTone={error && !turn.busy ? 'error' : 'info'}
+                  onSend={send}
+                  onStop={() => void turn.stop()}
+                  stopAvailable={turn.stopAvailable}
+                  onRemoveChip={() => undefined}
+                  onMenuAction={handleMenuAction}
+                  availableMenuActions={GENERAL_MENU_ACTIONS}
+                  toolChips={composerTools}
+                  onToolAction={handleToolAction}
+                  variant="landing"
+                />
               </div>
-            </>
+            </EmptyChatHero>
           ) : (
             <div className="relative z-10 flex min-h-0 flex-1">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">

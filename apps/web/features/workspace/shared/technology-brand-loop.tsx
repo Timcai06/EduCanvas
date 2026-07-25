@@ -47,6 +47,7 @@ export function TechnologyBrandLoop() {
         hoverSpeed={7}
         fadeOut
         scaleOnHover
+        ariaLabel="EduCanvas 技术栈"
       />
     </div>
   );

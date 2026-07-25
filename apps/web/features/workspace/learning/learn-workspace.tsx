@@ -22,7 +22,7 @@ import { StudioDrawer } from '@/features/studio/studio-drawer';
 import { CANVAS_INTERACTION_SCHEMA_VERSION } from '@educanvas/canvas-protocol';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Sheet } from '../shared/sheet';
-import { EmptyChatHero } from './empty-chat-hero';
+import { EmptyChatHero } from '../shared/empty-chat-hero';
 import {
   PENDING_FIRST_MENU_ACTION_KEY,
   PENDING_FIRST_PROMPT_KEY,
