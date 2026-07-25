@@ -44,7 +44,7 @@ async function closeStudio(page: Page) {
 test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开', async ({
   page,
 }) => {
-  /* 与套件其余 spec 一致:reduced-motion 下交互确定性,动效由视觉基线覆盖 */
+  /* reduced-motion 下验证交互确定性；最终视觉由人工在真实页面验收。 */
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await expect(
