@@ -52,7 +52,9 @@
  */
 .agent-busy-overlay {
   position: fixed;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 100vw;
+  height: 100dvh;
   z-index: 45;
   pointer-events: none;
   opacity: 0;
@@ -80,6 +82,11 @@
 .ink-flow-shell {
   position: relative;
   isolation: isolate;
+  transform-origin: center bottom;
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 260ms ease,
+    border-color 220ms ease;
 }
 
 /* 注册角度以便 conic-gradient 的旋转可被动画插值（裸自定义属性不可动画）。 */
@@ -115,7 +122,10 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0;
-  transition: opacity 320ms ease;
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    padding 220ms ease;
   pointer-events: none;
 }
 
@@ -133,7 +143,24 @@
   }
   .ink-flow-shell:focus-within .ink-flow-line {
     opacity: 1;
-    animation-duration: 3.2s;
+    padding: 2.5px;
+    filter: drop-shadow(
+      0 0 9px color-mix(in srgb, var(--color-accent) 74%, transparent)
+    );
+    animation-duration: 1.35s;
+  }
+  .ink-flow-shell:focus-within {
+    border-color: color-mix(
+      in srgb,
+      var(--color-cinnabar) 46%,
+      var(--color-accent)
+    );
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-accent) 18%, transparent),
+      0 18px 54px -18px color-mix(in srgb, var(--color-accent) 72%, transparent),
+      0 8px 26px -14px
+        color-mix(in srgb, var(--color-cinnabar) 58%, transparent);
+    transform: translateY(-3px) scale(1.018);
   }
 }
 

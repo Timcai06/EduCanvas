@@ -1,0 +1,103 @@
+.studio-option-wheel {
+  --ow-text-color: var(--color-ink-muted);
+  --ow-active-color: var(--color-ink);
+  --ow-font-size: 1.6rem;
+  --ow-inset: 38px;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+  transform: rotate(-5deg);
+  transform-origin: right center;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 1%,
+    black 20%,
+    black 80%,
+    transparent 99%
+  );
+}
+
+.studio-option-wheel:focus-visible {
+  border-radius: 1.5rem;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.studio-option-wheel--dragging {
+  cursor: grabbing;
+}
+
+.studio-option-wheel__item {
+  position: absolute;
+  top: 50%;
+  left: var(--ow-inset);
+  max-width: calc(100% - var(--ow-inset) - 1rem);
+  overflow: hidden;
+  color: color-mix(
+    in srgb,
+    var(--ow-active-color) calc(var(--ow-proximity, 0) * 100%),
+    var(--ow-text-color)
+  );
+  font-family: var(--font-display);
+  font-size: var(--ow-font-size);
+  font-weight: 400;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transform-origin: left center;
+  will-change: transform, opacity, filter;
+}
+
+.studio-option-wheel--right .studio-option-wheel__item {
+  right: var(--ow-inset);
+  left: auto;
+  transform-origin: right center;
+}
+
+.studio-option-wheel__item--selected {
+  font-weight: 600;
+}
+
+.studio-option-wheel__focus-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 1.5rem;
+  height: 2px;
+  background: var(--color-cinnabar);
+  transform: translateY(-50%);
+}
+
+.studio-option-wheel--right .studio-option-wheel__focus-line {
+  right: 0;
+  left: auto;
+}
+
+.studio-wheel-stage::after {
+  position: absolute;
+  top: 50%;
+  right: -26rem;
+  width: 34rem;
+  height: 48rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+  transform: translateY(-50%) rotate(-7deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-option-wheel {
+    transform: none;
+  }
+
+  .studio-option-wheel__item {
+    filter: none !important;
+  }
+}

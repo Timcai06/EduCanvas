@@ -148,12 +148,16 @@ export function MarginaliaNav({
     if (reducedRef.current) return;
     const list = listRef.current;
     if (!list) return;
-    const rect = list.getBoundingClientRect();
-    const pointerY = event.clientY - rect.top;
     itemRefs.current.forEach((el, i) => {
       if (!el) return;
-      const center = el.offsetTop + el.offsetHeight / 2;
-      const distance = Math.abs(pointerY - center);
+      /*
+       * 历史列表真正滚动的是 MarginaliaNav 外层，而非 ul 本身。直接比较
+       * clientY 与每行的视口矩形，可同时覆盖外层滚动、嵌套定位和缩放，
+       * 避免邻近高亮稳定漂到鼠标上方几行。
+       */
+      const rowRect = el.getBoundingClientRect();
+      const center = rowRect.top + rowRect.height / 2;
+      const distance = Math.abs(event.clientY - center);
       const p = Math.max(0, 1 - distance / PROXIMITY_RADIUS);
       targets.current[i] = p * p * (3 - 2 * p); // smoothstep
     });

@@ -6,6 +6,24 @@ function notebookSidebar(page: Page) {
   return page.getByRole('complementary', { name: '笔记本侧栏' });
 }
 
+async function openStudioInput(page: Page) {
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  await studio.getByRole('option', { name: '文件输入' }).click();
+  return studio;
+}
+
+async function openStudioOutput(page: Page) {
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  await studio.getByRole('option', { name: '内容输出' }).click();
+  return studio;
+}
+
 async function activeConversationId(page: Page) {
   return (await page.context().cookies()).find(
     (cookie) => cookie.name === ACTIVE_CONVERSATION_COOKIE,
@@ -95,13 +113,12 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
      消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
   await expect(notebookSidebar(page).getByText('未命名笔记本')).toBeVisible();
 
-  /* U2 v1:来源常驻区在侧栏可见 */
+  /* 当前 Notebook 的来源与输出属于 Studio，不再混入历史列表。 */
   await expect(
     notebookSidebar(page).getByText('来源', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: '上传 PDF 来源' }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  const studio = await openStudioInput(page);
+  await expect(studio.getByText('当前笔记本的来源')).toBeVisible();
 
   const cookieNames = (await context.cookies())
     .filter((cookie) => cookie.httpOnly && cookie.path === '/')
@@ -225,13 +242,14 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     });
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible({
+  let studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toBeVisible({
     timeout: 15_000,
   });
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  let studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  await studio.getByRole('button', { name: '收起 Studio' }).click();
+  studio = await openStudioOutput(page);
   await expect(studio.getByText('第一本视觉导图')).toBeVisible();
-  await studio.getByRole('button', { name: '关闭' }).click();
+  await studio.getByRole('button', { name: '收起 Studio' }).click();
 
   await createNotebook(
     page,
@@ -240,11 +258,12 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
       .getByRole('region', { name: 'AI 对话' })
       .getByText(firstPrompt, { exact: true }),
   );
-  await expect(page.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
+  await studio.getByRole('button', { name: '收起 Studio' }).click();
+  studio = await openStudioOutput(page);
   await expect(studio.getByText('第一本视觉导图')).toHaveCount(0);
-  await studio.getByRole('button', { name: '关闭' }).click();
+  await studio.getByRole('button', { name: '收起 Studio' }).click();
   await expect(
     page.evaluate(async (artifactId) => {
       const response = await fetch(`/api/v1/chat/artifacts/${artifactId}`);
@@ -255,13 +274,11 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
   await notebookSidebar(page)
     .getByRole('button', { name: /第一本：机器视觉资料/ })
     .click();
-  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  await expect(
-    page
-      .getByRole('dialog', { name: '当前笔记本的 Studio' })
-      .getByText('第一本视觉导图'),
-  ).toBeVisible();
+  studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toBeVisible();
+  await studio.getByRole('button', { name: '收起 Studio' }).click();
+  studio = await openStudioOutput(page);
+  await expect(studio.getByText('第一本视觉导图')).toBeVisible();
 });
 
 test('Scripted：搜索并读取多个网页后，以稳定编号展示可打开的原文引用', async ({

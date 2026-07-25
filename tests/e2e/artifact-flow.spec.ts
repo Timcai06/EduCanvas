@@ -1,4 +1,22 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+async function openStudioInput(page: Page) {
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  await studio.getByRole('option', { name: '文件输入' }).click();
+  return studio;
+}
+
+async function openStudioOutput(page: Page) {
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  await studio.getByRole('option', { name: '内容输出' }).click();
+  return studio;
+}
 
 /**
  * M1 验收场景:生成思维导图全链路
@@ -38,8 +56,7 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
   /* 断连恢复读取面:刷新后产物仍在当前笔记本的 Studio 中 */
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  const studio = await openStudioOutput(page);
   await expect(studio.getByText('对话思维导图')).toBeVisible();
   await expect(studio.getByText('v1')).toBeVisible();
 });
@@ -112,8 +129,7 @@ test('Canvas 可在同一产物上跨轮生成新版本并查看历史', async (
   await expect(canvas.getByText('当前版本')).toBeVisible();
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  const studio = await openStudioOutput(page);
   await expect(studio.getByText('v2')).toBeVisible();
 });
 
@@ -229,7 +245,9 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   });
 
   await page.reload();
-  await page.getByRole('checkbox', { name: '音频来源讲义.pdf' }).check();
+  const inputStudio = await openStudioInput(page);
+  await inputStudio.getByRole('checkbox', { name: '音频来源讲义.pdf' }).check();
+  await inputStudio.getByRole('button', { name: '收起 Studio' }).click();
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
   const confirm = page.getByRole('dialog', { name: '生成音频概览' });
@@ -266,8 +284,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
 
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  const studio = await openStudioOutput(page);
   await studio.getByText('来源音频概览').click();
   await expect(
     page

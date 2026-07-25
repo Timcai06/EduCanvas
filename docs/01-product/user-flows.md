@@ -16,12 +16,12 @@
 → 终态、Trace 与产物可从其他表面恢复
 ```
 
-Web、TUI 和 Gateway 路由已经落地并共享 Notebook/Conversation 权限边界。Web 是 K12 主入口；TUI 是高级第一方客户端。用户可从 Web `/settings` 或 TUI `/channels` 管理 provider-neutral 连接：Telegram 已有 pending/激活/撤销纵切但仍缺真实账号 live smoke，微信/QQ 在平台资格和凭据就绪前明确显示 disabled。
+Web、TUI 和 Gateway 路由已经落地并共享 Notebook/Conversation 权限边界。Web 是 K12 主入口；TUI 是高级第一方客户端。用户可从 Web 页头头像内的“通信方式”或 TUI `/channels` 管理 provider-neutral 连接；旧 `/settings` 只负责重定向到头像抽屉。Telegram 已有 pending/激活/撤销纵切但仍缺真实账号 live smoke，微信/QQ 在平台资格和凭据就绪前明确显示 disabled。
 
 ## 管理通信方式
 
 ```text
-用户从 Web 设置或 TUI /channels 查看可用渠道
+用户从 Web 头像档案抽屉或 TUI /channels 查看可用渠道
 → Gateway 返回 provider 能力和真实连接状态
 → 用户按 provider 支持情况授权或确认一次性连接码
 → 选择默认 Notebook 与允许范围

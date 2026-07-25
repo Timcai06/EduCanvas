@@ -1,19 +1,23 @@
 'use client';
 
-import { GraduationCap, Gear, List, NotePencil } from '@phosphor-icons/react';
+import {
+  CaretDown,
+  GraduationCap,
+  List,
+  NotePencil,
+} from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useState } from 'react';
 import { UserMenu } from '@/features/auth/user-menu';
-import { SettingsDrawer } from '@/features/settings/settings-drawer';
 import { LogoMark } from '../shared/logo-mark';
 
 /**
  * 通用笔记本顶部导航。只负责入口与可访问状态，不读取会话或产物数据；
- * 新建、侧栏和 Studio 的业务动作由工作区组合根注入。设置以抽屉形式就地打开
- * （账号 + 外观），完整配置在 /settings 页面，不再跳到整页。
+ * 新建、侧栏和 Studio 的业务动作由工作区组合根注入；账号、外观与通信方式统一
+ * 收进头像入口，顶栏不再维护重复的齿轮按钮。
  */
 export function GeneralWorkspaceHeader({
   notebookTitle,
+  conversationId,
   sidebarOpen,
   studioOpen,
   onToggleSidebar,
@@ -21,13 +25,13 @@ export function GeneralWorkspaceHeader({
   onOpenStudio,
 }: {
   notebookTitle: string | null;
+  conversationId: string;
   sidebarOpen: boolean;
   studioOpen: boolean;
   onToggleSidebar: () => void;
   onNewNotebook: () => void;
   onOpenStudio: () => void;
 }) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <header className="z-20 flex h-16 shrink-0 items-center gap-1.5 px-3 sm:px-4">
       <button
@@ -69,30 +73,25 @@ export function GeneralWorkspaceHeader({
         <GraduationCap aria-hidden="true" size={17} className="text-accent" />
         <span className="hidden sm:inline">学习计划</span>
       </Link>
-      <UserMenu />
+      <UserMenu conversationId={conversationId} notebookTitle={notebookTitle} />
       <button
         type="button"
-        aria-haspopup="dialog"
-        aria-expanded={settingsOpen}
-        onClick={() => setSettingsOpen(true)}
-        aria-label="设置"
-        title="设置"
-        className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        <Gear aria-hidden="true" size={19} />
-      </button>
-      {settingsOpen ? (
-        <SettingsDrawer onClose={() => setSettingsOpen(false)} />
-      ) : null}
-      <button
-        type="button"
-        aria-haspopup="dialog"
         aria-expanded={studioOpen}
-        title="打开当前笔记本的产物"
+        aria-controls="notebook-studio-dock"
+        data-studio-trigger
+        title="展开当前笔记本的输入与输出"
         onClick={onOpenStudio}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line/70 px-3.5 py-2 text-sm text-ink-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line/70 px-3.5 py-2 text-sm text-ink-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         Studio
+        <CaretDown
+          aria-hidden="true"
+          size={14}
+          weight="bold"
+          className={`transition-transform duration-300 ${
+            studioOpen ? 'rotate-180' : ''
+          }`}
+        />
       </button>
     </header>
   );

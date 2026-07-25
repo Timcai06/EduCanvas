@@ -11,6 +11,51 @@ function read(relativePath: string): string {
 }
 
 describe('workspace truth and motion boundaries', () => {
+  it('keeps notebook history separate from Studio input and output', () => {
+    const generalWorkspace = read(
+      'features/workspace/general/general-chat-workspace.tsx',
+    );
+    const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
+    const studio = read('features/studio/studio-workspace.tsx');
+    const studioDock = read('features/studio/studio-dock.tsx');
+
+    expect(generalWorkspace).toContain('<StudioWorkspace');
+    expect(generalWorkspace).toContain('<StudioDock');
+    expect(generalWorkspace).not.toContain('<SourcesPanel');
+    expect(sidebar).not.toContain('children');
+    expect(sidebar).not.toContain('来源');
+    expect(studio).toContain("['文件输入', '内容输出']");
+    expect(studio).toContain('<OptionWheel');
+    expect(studio).toContain('onSelect=');
+    expect(studio).toContain("activateOnItemClick={level === 'root'}");
+    expect(studio).toContain("{level !== 'root' ? (");
+    expect(studioDock).toContain('<aside');
+    expect(studioDock).not.toContain('<Sheet');
+    expect(studioDock).not.toContain('role="dialog"');
+  });
+
+  it('keeps settings behind the avatar entry instead of a duplicate gear', () => {
+    const header = read(
+      'features/workspace/general/general-workspace-header.tsx',
+    );
+    const profileDrawer = read('features/profile/profile-drawer.tsx');
+    const settingsRoute = read('app/settings/page.tsx');
+
+    expect(header).not.toContain('Gear');
+    expect(profileDrawer).toContain('<ThemeToggle');
+    expect(profileDrawer).toContain('<ProfileSettings');
+    expect(profileDrawer).toContain('<ConnectionSettings');
+    expect(settingsRoute).toContain("redirect('/?profile=1')");
+  });
+
+  it('uses viewport coordinates for scrolled marginalia proximity', () => {
+    const marginalia = read('features/workspace/shared/marginalia-nav.tsx');
+
+    expect(marginalia).toContain('rowRect.top + rowRect.height / 2');
+    expect(marginalia).toContain('event.clientY - center');
+    expect(marginalia).not.toContain('el.offsetTop - list.scrollTop');
+  });
+
   it('does not describe planned assets or preset artifacts as active AI output', () => {
     const workspace = read('features/workspace/learning/learn-workspace.tsx');
     const assets = read('features/assets/assets-drawer.tsx');

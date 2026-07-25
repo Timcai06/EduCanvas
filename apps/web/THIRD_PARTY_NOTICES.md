@@ -20,3 +20,16 @@
 版权声明与许可声明须保留在软件的全部或实质部分中。不得单独、打包或以移植版本出售、再许可或重新分发这些组件。软件按“原样”提供，不附带任何明示或暗示担保。
 
 EduCanvas 将其作为产品内部视觉层使用，不把该组件作为独立组件库销售或分发。
+
+## React Bits OptionWheel
+
+`features/studio/option-wheel*` 基于 Code Owner 在 2026-07-25 提供的 React Bits
+OptionWheel TypeScript + CSS 源码修改，项目来源：
+
+- 项目：https://github.com/DavidHDev/react-bits
+- Registry：https://reactbits.dev/r/{name}.json
+- Copyright (c) David Haz
+
+主要修改包括受控选中态、确认动作、中文无障碍标签、低动态模式和 EduCanvas
+语义颜色。上游项目使用 MIT + Commons Clause License Condition v1.0；本组件仅作为
+EduCanvas 产品内部交互使用，不单独出售、再许可或重新分发。

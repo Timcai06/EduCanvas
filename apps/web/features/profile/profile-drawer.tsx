@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, GearSix, UserCircle } from '@phosphor-icons/react';
+import { ArrowRight, UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -8,6 +8,9 @@ import {
   type LearningActivity,
   learningActivityResponseSchema,
 } from '@/features/profile/activity-contract';
+import { ConnectionSettings } from '@/features/settings/connection-settings';
+import { ProfileSettings } from '@/features/settings/profile-settings';
+import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { Sheet } from '@/features/workspace/shared/sheet';
 
 interface CurrentUser {
@@ -20,7 +23,17 @@ interface CurrentUser {
  * 档案抽屉：从头像打开的「快速一瞥」。只放身份与两个入口，深入信息（热力图、掌握度、
  * 未来的成就与目标）在 /profile 完整页。抽屉=一瞥，页面=深入。
  */
-export function ProfileDrawer({ onClose }: { onClose: () => void }) {
+export function ProfileDrawer({
+  conversationId,
+  notebookTitle,
+  onUserChange,
+  onClose,
+}: {
+  conversationId?: string;
+  notebookTitle?: string | null;
+  onUserChange?: (user: { nickname: string; avatarAvailable: boolean }) => void;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [activity, setActivity] = useState<LearningActivity | null>(null);
@@ -108,23 +121,61 @@ export function ProfileDrawer({ onClose }: { onClose: () => void }) {
           />
         </button>
 
-        <button
+        <section
           data-sheet-item
-          type="button"
-          onClick={() => go('/settings')}
-          className="group inline-flex min-h-11 items-center justify-between rounded-full border border-line px-5 text-sm font-medium text-ink transition-colors hover:border-accent/40 hover:bg-accent-soft"
+          className="border-t border-line/60 pt-6"
+          aria-labelledby="profile-appearance-heading"
         >
-          <span className="inline-flex items-center gap-2">
-            <GearSix aria-hidden="true" size={17} className="text-ink-muted" />
-            账号设置
-          </span>
-          <ArrowRight
-            aria-hidden="true"
-            size={16}
-            weight="bold"
-            className="text-accent transition-transform group-hover:translate-x-0.5"
-          />
-        </button>
+          <h3
+            id="profile-appearance-heading"
+            className="font-display text-lg font-semibold text-ink"
+          >
+            外观
+          </h3>
+          <p className="mb-4 mt-1 text-sm leading-6 text-ink-muted">
+            主题偏好跟随你的账号入口，不再另设设置页面。
+          </p>
+          <ThemeToggle />
+        </section>
+
+        <details data-sheet-item className="group border-t border-line/60 pt-5">
+          <summary className="cursor-pointer list-none rounded-xl py-2 font-display text-lg font-semibold text-ink outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-accent">
+            账号与头像
+            <span className="float-right text-sm font-normal text-ink-muted transition-transform group-open:rotate-45">
+              +
+            </span>
+          </summary>
+          <div className="pt-5">
+            <ProfileSettings
+              onUserChange={(nextUser) => {
+                setUser((current) =>
+                  current ? { ...current, ...nextUser } : current,
+                );
+                onUserChange?.(nextUser);
+              }}
+            />
+          </div>
+        </details>
+
+        {conversationId ? (
+          <details
+            data-sheet-item
+            className="group border-t border-line/60 pt-5"
+          >
+            <summary className="cursor-pointer list-none rounded-xl py-2 font-display text-lg font-semibold text-ink outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-accent">
+              通信方式
+              <span className="float-right text-sm font-normal text-ink-muted transition-transform group-open:rotate-45">
+                +
+              </span>
+            </summary>
+            <div className="pt-5">
+              <ConnectionSettings
+                conversationId={conversationId}
+                notebookTitle={notebookTitle ?? null}
+              />
+            </div>
+          </details>
+        ) : null}
       </div>
     </Sheet>
   );

@@ -8,10 +8,9 @@ import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
 import { LogoMark } from '../shared/logo-mark';
-import { GraduationCap, Gear } from '@phosphor-icons/react';
+import { GraduationCap } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { UserMenu } from '@/features/auth/user-menu';
-import { SettingsDrawer } from '@/features/settings/settings-drawer';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
@@ -30,7 +29,6 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
   const [canvasSelected, setCanvasSelected] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const begin = useCallback((prompt: string) => {
     sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
     sessionStorage.setItem(PENDING_GENERAL_PROMPT_KEY, prompt);
@@ -71,20 +69,6 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
           学习计划
         </Link>
         <UserMenu />
-        <button
-          type="button"
-          aria-haspopup="dialog"
-          aria-expanded={settingsOpen}
-          onClick={() => setSettingsOpen(true)}
-          aria-label="设置"
-          title="设置"
-          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <Gear aria-hidden="true" size={19} />
-        </button>
-        {settingsOpen ? (
-          <SettingsDrawer onClose={() => setSettingsOpen(false)} />
-        ) : null}
       </header>
       {!online ? (
         <div className="shrink-0 pt-1">
