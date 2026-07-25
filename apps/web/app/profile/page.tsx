@@ -61,7 +61,7 @@ export default async function ProfilePage() {
                 )}
               </span>
               <div className="min-w-0 flex-1">
-                <h1 className="font-display text-3xl font-semibold tracking-tight">
+                <h1 className="font-display text-3xl font-semibold tracking-[0.025em]">
                   {displayName}
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">

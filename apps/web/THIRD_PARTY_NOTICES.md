@@ -33,3 +33,17 @@ OptionWheel TypeScript + CSS 源码修改，项目来源：
 主要修改包括受控选中态、确认动作、中文无障碍标签、低动态模式和 EduCanvas
 语义颜色。上游项目使用 MIT + Commons Clause License Condition v1.0；本组件仅作为
 EduCanvas 产品内部交互使用，不单独出售、再许可或重新分发。
+
+## React Bits 品牌与导航动效
+
+`components/CircularText*`、`components/PillNav*`、`components/LogoLoop*`、
+`components/LineSidebar*` 和 `features/workspace/shared/text-type*` 基于 Code Owner
+在 2026-07-25 提供的 React Bits TypeScript + CSS 源码与 Registry 设计调整：
+
+- 项目：https://github.com/DavidHDev/react-bits
+- Registry：https://reactbits.dev/r/{name}.json
+- Copyright (c) David Haz
+
+EduCanvas 的适配补充了语义颜色、Next.js 路由、中文无障碍标签、可控状态、动画清理与
+`prefers-reduced-motion`。上游项目使用 MIT + Commons Clause License Condition v1.0；
+这些组件只作为 EduCanvas 产品内部交互使用，不单独出售、再许可或重新分发。

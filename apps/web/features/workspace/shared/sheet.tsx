@@ -24,12 +24,15 @@ import {
 export function Sheet({
   label,
   eyebrow,
+  stableHeight = false,
   onClose,
   children,
 }: {
   label: string;
   /** 标题上方的英文小标签（大写字距），给抽屉一点扉页感；可省略。 */
   eyebrow?: string;
+  /** 异步内容较多时固定可视高度，避免数据返回后整张纸页上下跳动。 */
+  stableHeight?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -173,7 +176,9 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="relative flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-line/70 bg-card shadow-[var(--shadow-sheet)] outline-none lg:max-h-[calc(100dvh-2.5rem)] lg:w-[27rem] lg:rounded-[1.75rem]"
+        className={`relative flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-line/70 bg-card shadow-[var(--shadow-sheet)] outline-none will-change-transform lg:max-h-[calc(100dvh-2.5rem)] lg:w-[27rem] lg:rounded-[1.75rem] ${
+          stableHeight ? 'h-[86dvh] lg:h-[calc(100dvh-2.5rem)]' : ''
+        }`}
       >
         {/* 前缘墨紫竖线：抽屉的「讲课笔」签名，入场自上而下拉起 */}
         <div

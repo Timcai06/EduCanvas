@@ -12,6 +12,7 @@ import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { Sheet } from '@/features/workspace/shared/sheet';
+import { AuroraInk } from './aurora-ink';
 
 interface CurrentUser {
   nickname: string;
@@ -26,16 +27,19 @@ interface CurrentUser {
 export function ProfileDrawer({
   conversationId,
   notebookTitle,
+  initialUser = null,
   onUserChange,
   onClose,
 }: {
   conversationId?: string;
   notebookTitle?: string | null;
+  /** 头像入口已读取的用户投影，用于避免抽屉首帧从“游客”跳到真实昵称。 */
+  initialUser?: CurrentUser | null;
   onUserChange?: (user: { nickname: string; avatarAvailable: boolean }) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [user, setUser] = useState<CurrentUser | null>(initialUser);
   const [activity, setActivity] = useState<LearningActivity | null>(null);
 
   useEffect(() => {
@@ -43,9 +47,11 @@ export function ProfileDrawer({
       .then(async (response) =>
         response.ok
           ? ((await response.json()) as { user: CurrentUser | null })
-          : { user: null },
+          : undefined,
       )
-      .then((body) => setUser(body.user))
+      .then((body) => {
+        if (body !== undefined) setUser(body.user);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -66,45 +72,62 @@ export function ProfileDrawer({
   };
 
   return (
-    <Sheet label="我的档案" eyebrow="Profile" onClose={onClose}>
+    <Sheet label="我的档案" eyebrow="Profile" stableHeight onClose={onClose}>
       <div className="flex flex-col gap-6">
-        <div data-sheet-item className="flex items-center gap-4">
-          <span className="grid size-16 place-items-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent">
-            {user?.avatarAvailable ? (
-              <Image
-                src="/api/v1/me/avatar"
-                alt=""
-                width={64}
-                height={64}
-                unoptimized
-                className="size-full object-cover"
-              />
-            ) : (
-              <UserCircle aria-hidden="true" size={36} />
-            )}
-          </span>
-          <div className="min-w-0">
-            <p className="font-display text-xl font-semibold text-ink">
-              {user?.nickname ?? '游客'}
-            </p>
-            <p className="mt-0.5 text-sm text-ink-muted">
-              {user?.username
-                ? `@${user.username}`
-                : '未登录 · 记录只留在当前浏览器'}
-            </p>
+        <div
+          data-sheet-item
+          className="relative overflow-hidden rounded-3xl border border-line/70 bg-surface/55 p-4 shadow-[var(--shadow-sm)]"
+        >
+          <AuroraInk />
+          <div className="relative flex items-center gap-4">
+            <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent shadow-[var(--shadow-sm)]">
+              {user?.avatarAvailable ? (
+                <Image
+                  src="/api/v1/me/avatar"
+                  alt=""
+                  width={64}
+                  height={64}
+                  unoptimized
+                  className="size-full object-cover"
+                />
+              ) : (
+                <UserCircle aria-hidden="true" size={36} />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate font-display text-xl font-semibold tracking-[0.025em] text-ink">
+                {user?.nickname ?? '游客'}
+              </p>
+              <p className="mt-0.5 truncate font-mono text-xs tracking-wide text-ink-muted">
+                {user?.username
+                  ? `@${user.username}`
+                  : '未登录 · 记录只留在当前浏览器'}
+              </p>
+            </div>
           </div>
         </div>
 
-        {activity ? (
-          <div
-            data-sheet-item
-            className="grid grid-cols-3 gap-2 rounded-2xl border border-line bg-surface/40 p-1"
-          >
-            <MiniStat value={activity.streakDays} unit="天" label="连续" />
-            <MiniStat value={activity.activeDays} unit="天" label="活跃" />
-            <MiniStat value={activity.masteryPercent} unit="%" label="掌握度" />
-          </div>
-        ) : null}
+        <div
+          data-sheet-item
+          aria-busy={activity === null}
+          className="grid min-h-[4.25rem] grid-cols-3 gap-2 rounded-2xl border border-line bg-surface/40 p-1"
+        >
+          <MiniStat
+            value={activity?.streakDays ?? null}
+            unit="天"
+            label="连续"
+          />
+          <MiniStat
+            value={activity?.activeDays ?? null}
+            unit="天"
+            label="活跃"
+          />
+          <MiniStat
+            value={activity?.masteryPercent ?? null}
+            unit="%"
+            label="掌握度"
+          />
+        </div>
 
         <button
           data-sheet-item

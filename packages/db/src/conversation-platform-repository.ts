@@ -143,6 +143,64 @@ export class DrizzlePlatformConversationRepository {
     return archived !== undefined;
   }
 
+  /**
+   * 原子重命名一对一 Notebook 的 Space 与主 Conversation。
+   * 主体归属和 active 状态由数据库条件强制校验，避免侧栏标题与 Notebook 标题分叉。
+   */
+  async renameOwned(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    title: string;
+    now?: Date;
+  }): Promise<PlatformConversationSnapshot | null> {
+    const title = input.title.normalize('NFC').trim();
+    if (!title || title.length > 120) {
+      throw new PlatformConversationOwnershipError();
+    }
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [owned] = await transaction
+        .select({ id: conversations.id, spaceId: conversations.spaceId })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, input.conversationId),
+            eq(conversations.ownerSubjectId, input.trustedSubjectId),
+            eq(conversations.status, 'active'),
+          ),
+        )
+        .limit(1);
+      if (!owned) return null;
+
+      const [renamed] = await transaction
+        .update(conversations)
+        .set({ title, updatedAt: now })
+        .where(
+          and(
+            eq(conversations.id, owned.id),
+            eq(conversations.ownerSubjectId, input.trustedSubjectId),
+            eq(conversations.status, 'active'),
+          ),
+        )
+        .returning();
+      if (!renamed) throw new Error('Conversation重命名失败');
+
+      const [renamedSpace] = await transaction
+        .update(spaces)
+        .set({ title, updatedAt: now })
+        .where(
+          and(
+            eq(spaces.id, owned.spaceId),
+            eq(spaces.ownerSubjectId, input.trustedSubjectId),
+            eq(spaces.status, 'active'),
+          ),
+        )
+        .returning({ id: spaces.id });
+      if (!renamedSpace) throw new Error('Notebook Space重命名失败');
+      return toConversation(renamed);
+    });
+  }
+
   async create(input: {
     ownerSubjectId: string;
     spaceKind: 'personal' | 'notebook' | 'course';

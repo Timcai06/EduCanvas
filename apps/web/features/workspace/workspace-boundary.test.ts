@@ -24,6 +24,11 @@ describe('workspace truth and motion boundaries', () => {
     const optionWheelCss = read('components/OptionWheel.css');
     const pillNav = read('components/PillNav.tsx');
     const pillNavCss = read('components/PillNav.css');
+    const logoLoop = read('components/LogoLoop.tsx');
+    const technologyBrandLoop = read(
+      'features/workspace/shared/technology-brand-loop.tsx',
+    );
+    const emptyHero = read('features/workspace/learning/empty-chat-hero.tsx');
 
     expect(generalWorkspace).toContain('<StudioWorkspace');
     expect(generalWorkspace).toContain('<StudioOverlay');
@@ -54,6 +59,13 @@ describe('workspace truth and motion boundaries', () => {
     expect(pillNav).toContain("'(prefers-reduced-motion: reduce)'");
     expect(pillNavCss).toContain('var(--color-accent)');
     expect(pillNavCss).not.toContain('#');
+    expect(pillNavCss).toContain('backdrop-filter: blur(12px)');
+    expect(logoLoop).toContain('requestAnimationFrame');
+    expect(logoLoop).toContain('ResizeObserver');
+    expect(logoLoop).toContain("'(prefers-reduced-motion: reduce)'");
+    expect(technologyBrandLoop).toContain('SiPostgresql');
+    expect(technologyBrandLoop).toContain('Built on an open learning stack');
+    expect(emptyHero).toContain('<TechnologyBrandLoop');
     expect(studioOverlay).toContain('<aside');
     expect(studioOverlay).not.toContain('<Sheet');
     expect(studioOverlay).not.toContain('role="dialog"');
@@ -71,6 +83,8 @@ describe('workspace truth and motion boundaries', () => {
     const learningTopBar = read('features/workspace/learning/top-bar.tsx');
     const profilePage = read('app/profile/page.tsx');
     const profileDrawer = read('features/profile/profile-drawer.tsx');
+    const userMenu = read('features/auth/user-menu.tsx');
+    const sheet = read('features/workspace/shared/sheet.tsx');
     const settingsRoute = read('app/settings/page.tsx');
 
     expect(header).not.toContain('Gear');
@@ -85,9 +99,15 @@ describe('workspace truth and motion boundaries', () => {
     expect(circularText).toContain('gsap.matchMedia');
     expect(circularText).toContain("'(prefers-reduced-motion: reduce)'");
     expect(sidebar).toContain('新建笔记本');
+    expect(sidebar).toContain('命名笔记本');
+    expect(sidebar).toContain("method: 'PATCH'");
     expect(profileDrawer).toContain('<ThemeToggle');
     expect(profileDrawer).toContain('<ProfileSettings');
     expect(profileDrawer).toContain('<ConnectionSettings');
+    expect(profileDrawer).toContain('stableHeight');
+    expect(profileDrawer).toContain('activity?.streakDays');
+    expect(userMenu).toContain('initialUser={user}');
+    expect(sheet).toContain('stableHeight');
     expect(settingsRoute).toContain("redirect('/?profile=1')");
   });
 
