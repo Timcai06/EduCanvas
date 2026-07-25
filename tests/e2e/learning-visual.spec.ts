@@ -62,7 +62,7 @@ test.describe('学习页视觉基线', () => {
     await composer.press('Enter');
 
     await expect(
-      page.getByRole('banner').getByText('EduCanvas', { exact: true }),
+      page.getByRole('link', { name: '返回 EduCanvas 主对话' }),
     ).toBeVisible();
     await expect(page.getByText('为什么计算机能认出图片？')).toBeVisible();
     await expect(composer).toBeVisible();

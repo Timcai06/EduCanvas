@@ -1,41 +1,41 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
+const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
 
 function notebookSidebar(page: Page) {
   return page.getByRole('complementary', { name: '笔记本侧栏' });
 }
 
 async function openStudioInput(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
   const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
   await wheel.press('Enter');
   await expect(
-    studio.getByRole('listbox', { name: '管理当前笔记本来源' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
   ).toBeVisible();
   return studio;
 }
 
 async function openStudioOutput(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
   const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
   await wheel.press('ArrowDown');
-  await wheel.press('ArrowDown');
   await wheel.press('Enter');
   await expect(
-    studio.getByRole('listbox', { name: '查看当前笔记本产物' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
   ).toBeVisible();
   return studio;
 }
 
 async function closeStudio(page: Page) {
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);
@@ -136,7 +136,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   ).toHaveCount(0);
   const studio = await openStudioInput(page);
   await expect(
-    studio.getByRole('listbox', { name: '管理当前笔记本来源' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
   ).toBeVisible();
 
   const cookieNames = (await context.cookies())
