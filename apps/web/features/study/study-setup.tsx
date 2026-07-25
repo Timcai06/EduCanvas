@@ -11,6 +11,7 @@ import gsap from 'gsap';
 import { useRef, useState, useTransition } from 'react';
 import { TopBar } from '../workspace/learning/top-bar';
 import { OptionWheel } from './option-wheel';
+import { celebrate } from '@/features/celebrate/ink-splash';
 
 gsap.registerPlugin(useGSAP);
 
@@ -150,6 +151,8 @@ export function StudySetup() {
     startTransition(async () => {
       const result: StudyActionResultDTO = await createStudyPlanAction(input);
       setError(result.message);
+      // 计划创建成功即「落笔泼墨」庆祝一次（宿主在根布局，跨页面转场仍在）。
+      if (!result.message) celebrate();
     });
   };
 
