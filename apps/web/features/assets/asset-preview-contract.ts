@@ -39,6 +39,17 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
       content: z.string().max(120_000),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('docx'),
+      fileName: fileNameSchema,
+      mimeType: z.literal(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      ),
+      content: z.string().max(500_000),
+      warnings: z.array(z.string()).optional(),
+    })
+    .strict(),
 ]);
 
 export type AssetPreview = z.infer<typeof assetPreviewSchema>;
