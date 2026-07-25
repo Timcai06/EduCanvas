@@ -96,7 +96,7 @@ export async function loadOwnedAssetPreview(input: {
   }
   if (
     version.mimeType ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml'
   ) {
     const bytes = await readStoredAssetBytes(version.storageKey);
     const result = await mammoth.convertToHtml({

@@ -20,7 +20,11 @@ const TECHNOLOGIES: readonly LogoItem[] = [
   technology(<SiReact />, 'React', 'https://react.dev'),
   technology(<SiTypescript />, 'TypeScript', 'https://typescriptlang.org'),
   technology(<SiPostgresql />, 'PostgreSQL', 'https://postgresql.org'),
-  technology(<SiPostgresql />, 'Drizzle + PostgreSQL', 'https://orm.drizzle.team'),
+  technology(
+    <SiPostgresql />,
+    'Drizzle + PostgreSQL',
+    'https://orm.drizzle.team',
+  ),
   technology(<SiGreensock />, 'GSAP', 'https://gsap.com'),
   technology(<SiThreedotjs />, 'Three.js', 'https://threejs.org'),
   technology(<SiTurborepo />, 'Turborepo', 'https://turborepo.com'),

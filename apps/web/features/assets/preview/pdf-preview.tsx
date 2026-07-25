@@ -52,9 +52,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
         await renderPage(1, doc);
       } catch {
         if (!cancelled) {
-          setError(
-            'PDF 文件可能已损坏或为扫描件（无文本层），无法预览。',
-          );
+          setError('PDF 文件可能已损坏或为扫描件（无文本层），无法预览。');
         }
       }
     };
@@ -76,7 +74,9 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
   if (error) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-sm text-ink-muted" role="alert">{error}</p>
+        <p className="text-sm text-ink-muted" role="alert">
+          {error}
+        </p>
       </div>
     );
   }
@@ -123,10 +123,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
           </button>
         </div>
       ) : null}
-      <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto p-4"
-      />
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-auto p-4" />
     </div>
   );
 }
