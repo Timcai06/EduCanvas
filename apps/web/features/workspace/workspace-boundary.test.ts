@@ -18,9 +18,12 @@ describe('workspace truth and motion boundaries', () => {
     const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
     const lineSidebar = read('components/LineSidebar.tsx');
     const studio = read('features/studio/studio-workspace.tsx');
+    const studioOptions = read('features/studio/studio-workspace-options.ts');
     const studioOverlay = read('features/studio/studio-overlay.tsx');
     const optionWheel = read('components/OptionWheel.tsx');
     const optionWheelCss = read('components/OptionWheel.css');
+    const pillNav = read('components/PillNav.tsx');
+    const pillNavCss = read('components/PillNav.css');
 
     expect(generalWorkspace).toContain('<StudioWorkspace');
     expect(generalWorkspace).toContain('<StudioOverlay');
@@ -33,16 +36,24 @@ describe('workspace truth and motion boundaries', () => {
     expect(lineSidebar).toContain('data-session-id');
     expect(studio).toContain('<OptionWheel');
     expect(studio).toContain('onSelect=');
-    expect(studio).toContain('pointer-events-auto absolute inset-0');
+    expect(studio).toContain('studio-cascade__wheel--primary');
+    expect(studio).toContain('studio-cascade__wheel--secondary');
+    expect(studio).toContain('一级保持可见');
     expect(studio).toContain('ROOT_ITEMS');
-    expect(studio).toContain('SOURCE_ADD_ITEMS');
-    expect(studio).toContain('OUTPUT_CREATE_ITEMS');
+    expect(studioOptions).toContain('SOURCE_ADD_ITEMS');
+    expect(studioOptions).toContain('OUTPUT_CREATE_ITEMS');
     expect(studio).toContain('GENERATED_SOFT_CLICK');
     expect(studio).toContain('soundVolume={0.38}');
     expect(optionWheel).toContain('requestAnimationFrame');
     expect(optionWheel).toContain('onSelectRef');
+    expect(optionWheel).toContain('idPrefix');
     expect(optionWheelCss).not.toContain('border-radius: 50%');
     expect(optionWheelCss).not.toContain('stroke');
+    expect(pillNav).toContain('useGSAP');
+    expect(pillNav).toContain('ResizeObserver');
+    expect(pillNav).toContain("'(prefers-reduced-motion: reduce)'");
+    expect(pillNavCss).toContain('var(--color-accent)');
+    expect(pillNavCss).not.toContain('#');
     expect(studioOverlay).toContain('<aside');
     expect(studioOverlay).not.toContain('<Sheet');
     expect(studioOverlay).not.toContain('role="dialog"');
@@ -53,10 +64,15 @@ describe('workspace truth and motion boundaries', () => {
     const header = read(
       'features/workspace/general/general-workspace-header.tsx',
     );
+    const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
     const profileDrawer = read('features/profile/profile-drawer.tsx');
     const settingsRoute = read('app/settings/page.tsx');
 
     expect(header).not.toContain('Gear');
+    expect(header).toContain('<PillNav');
+    expect(header).not.toContain('新建笔记本');
+    expect(header).not.toContain('LogoMark');
+    expect(sidebar).toContain('新建笔记本');
     expect(profileDrawer).toContain('<ThemeToggle');
     expect(profileDrawer).toContain('<ProfileSettings');
     expect(profileDrawer).toContain('<ConnectionSettings');
