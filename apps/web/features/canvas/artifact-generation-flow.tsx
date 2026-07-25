@@ -321,7 +321,11 @@ export function ArtifactStatusCard({
     >
       <span
         aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
+        className={`grid size-9 shrink-0 place-items-center rounded-xl ${
+          generation.phase === 'failed'
+            ? 'bg-cinnabar-soft text-cinnabar-strong'
+            : 'bg-accent-soft text-accent'
+        }`}
       >
         {generation.phase === 'generating' ? (
           <CircleNotch
@@ -340,7 +344,11 @@ export function ArtifactStatusCard({
         <span className="block truncate text-sm font-semibold text-ink">
           {generation.title}
         </span>
-        <span className="block text-xs text-ink-muted">
+        <span
+          className={`block text-xs ${
+            generation.phase === 'failed' ? 'text-cinnabar-strong' : 'text-ink-muted'
+          }`}
+        >
           {generation.phase === 'generating'
             ? '后台生成中…关闭页面也不会中断'
             : generation.phase === 'ready'
