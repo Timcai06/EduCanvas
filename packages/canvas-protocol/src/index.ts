@@ -54,3 +54,42 @@ export {
   noteContentSchema,
   type NoteContent,
 } from './artifacts/note';
+export {
+  CANVAS_RESOURCE_SCHEMA_VERSION,
+  canvasRepresentationKinds,
+  canvasRepresentationKindSchema,
+  canvasResourceActions,
+  canvasResourceActionSchema,
+  canvasResourceKinds,
+  canvasResourceKindSchema,
+  canvasResourceSchema,
+  canvasResourceStatuses,
+  canvasResourceStatusSchema,
+  canvasRuntimeKinds,
+  canvasRuntimeKindSchema,
+  canvasRuntimeRequirementSchema,
+  canvasTrustTiers,
+  canvasTrustTierSchema,
+  validateCanvasResource,
+  type CanvasRepresentationKind,
+  type CanvasResource,
+  type CanvasResourceAction,
+  type CanvasResourceKind,
+  type CanvasResourceValidation,
+  type CanvasRuntimeKind,
+  type CanvasRuntimeRequirement,
+  type CanvasTrustTier,
+} from './resource';
+export {
+  CANVAS_RENDERER_MANIFEST_VERSION,
+  canvasRendererManifestSchema,
+  rendererSupportsResource,
+  type CanvasRendererManifest,
+} from './renderer-manifest';
+export {
+  canvasResourceErrorCodes,
+  canvasResourceErrorCodeSchema,
+  canvasResourceErrorSchema,
+  type CanvasResourceError,
+  type CanvasResourceErrorCode,
+} from './resource-errors';

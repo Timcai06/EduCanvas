@@ -100,6 +100,9 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 
 截至 2026-07-25，已经落地：
 
+- `canvas-protocol` 已定义浏览器安全的 `CanvasResource`、Renderer Manifest、
+  Runtime要求与标准错误。该协议只描述服务端授权后的资源投影，不携带内容本体、
+  对象存储键、动态组件或权限；Source/Artifact Adapter与Web Renderer Registry仍待组合；
 - `classification_game`、`quiz` 的严格 Schema、公开题面/私有判分键拆分、静态 Renderer 和服务端判分；
 - `pipeline_flow` 参数化 GSAP 模板与 `AnimationShell` 控制；
 - `mind_map`、`slides`、`flashcards`、`audio_overview`、`note` 的持久 Artifact、不可变版本、Studio 恢复和 Worker 生成；
@@ -113,7 +116,7 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 
 尚未落地：
 
-- Source 与 Artifact 共用的 `CanvasResource`/Renderer Registry；
+- Source 与 Artifact 到 `CanvasResource` 的服务端Adapter，以及消费Renderer Manifest的Web Registry；
 - Source 与 Artifact 共用的页面、时间轴、引用定位和 Renderer Registry 协议；当前文件预览仍是第一阶段的类型分支；
 - 持久的沙箱应用 Artifact、审计依赖包和版本化桥接；
 - 生图、真实音视频生成、代码执行与机器学习 Runtime；
