@@ -102,7 +102,18 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 
 - `canvas-protocol` 已定义浏览器安全的 `CanvasResource`、Renderer Manifest、
   Runtime要求与标准错误。该协议只描述服务端授权后的资源投影，不携带内容本体、
-  对象存储键、动态组件或权限；Source/Artifact Adapter与Web Renderer Registry仍待组合；
+  对象存储键、动态组件或权限；
+- Web服务端Source Adapter已在现有Asset Preview组合层附加`canvasResource`，
+  按服务端MIME映射PDF、PNG/JPEG/WebP、Markdown、TXT和DOCX；Source只有不可变
+  versionId，没有数字序号时`sequence=null`。Artifact Adapter已在现有Artifact
+  Detail组合层附加同一投影，覆盖思维导图、Slides、闪卡、笔记与`audio_overview`，
+  并依据真实版本和生成任务收敛processing/ready/failed/unavailable状态；
+- 两个Adapter都只在现有Repository完成主体与Notebook归属校验后运行。动作、信任层、
+  Renderer和Runtime来自服务端白名单策略；客户端同名字段、对象存储键、私有判分信息、
+  原始Prompt、Provider响应与堆栈不参与投影；有界只读接口
+  `GET /api/v1/canvas/resources/{resourceKind}/{resourceId}`只接受资源种类与ID，
+  身份和当前Notebook由服务端会话解析，不存在与越权统一返回
+  `resource_not_found/404`；
 - `classification_game`、`quiz` 的严格 Schema、公开题面/私有判分键拆分、静态 Renderer 和服务端判分；
 - `pipeline_flow` 参数化 GSAP 模板与 `AnimationShell` 控制；
 - `mind_map`、`slides`、`flashcards`、`audio_overview`、`note` 的持久 Artifact、不可变版本、Studio 恢复和 Worker 生成；
@@ -111,12 +122,16 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
   同一引用可反复打开最新 Canvas；Studio 继续按 Notebook 聚合更久远的输入与输出，
   两个入口不复制 Artifact 内容或状态；
 - 助手消息中的显式 `html/htm` 代码块可由用户点击后在 `sandbox="allow-scripts"`、文档级禁网络 CSP、256KB 上限的 iframe 中运行；当前无 `postMessage` 桥，也不是一等持久 Artifact；
-- 当前 Notebook 的 PDF、PNG/JPEG/WebP、Markdown 与 TXT 已可从 Studio 进入统一 Canvas 工作面；二进制只经同源、逐次所有权校验的私有端点以内联 `nosniff` 响应读取，Markdown 不执行原始 HTML，对象存储键不进入公共契约。DOCX 在具备隔离解析、资源限制与净化策略前明确不支持；
+- 当前 Notebook 的 PDF、PNG/JPEG/WebP、Markdown、TXT与DOCX已可从 Studio
+  进入统一 Canvas 工作面；二进制只经同源、逐次所有权校验的私有端点以内联
+  `nosniff` 响应读取，Markdown不执行原始HTML，DOCX沿用服务端有界转换，
+  对象存储键不进入公共契约；
 - Web Canvas 已有桌面 `region` 和移动端/全屏 `dialog` 语义。
 
 尚未落地：
 
-- Source 与 Artifact 到 `CanvasResource` 的服务端Adapter，以及消费Renderer Manifest的Web Registry；
+- 消费Renderer Manifest的Web Registry；当前页面仍沿用既有Source Preview与Artifact
+  Renderer分发，尚未改由`canvasResource.renderer`驱动；
 - Source 与 Artifact 共用的页面、时间轴、引用定位和 Renderer Registry 协议；当前文件预览仍是第一阶段的类型分支；
 - 持久的沙箱应用 Artifact、审计依赖包和版本化桥接；
 - 生图、真实音视频生成、代码执行与机器学习 Runtime；

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   assetDescriptorSchema,
+  assetOriginSchema,
   assetVersionDescriptorSchema,
   assetVersionReferenceSchema,
   canTransitionAssetStatus,
@@ -50,6 +51,9 @@ export interface OwnedStoredAssetVersion {
   displayName: string;
   mimeType: string;
   byteSize: number;
+  contentHash: string;
+  origin: AssetOrigin;
+  createdAt: string;
   storageKey: string;
   extractedText: string | null;
 }
@@ -259,6 +263,35 @@ export class DrizzleAssetRepository {
   }
 
   /**
+   * 读取单个主体和空间内的Asset状态投影；失败或处理中可以没有当前内容版本。
+   * 不返回storageKey，供状态类只读组合层使用。
+   */
+  async getOwnedSnapshot(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<AssetSnapshot> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const [row] = await this.database
+      .select({ asset: assets, version: assetVersions })
+      .from(assets)
+      .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.ownerSubjectId, ownerSubjectId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    return toSnapshot(row.asset, row.version);
+  }
+
+  /**
    * 读取当前主体和空间内的已就绪对象存储版本。
    * 调用边界：只允许服务端在完成身份与Notebook路由后读取，返回值不得序列化给客户端。
    */
@@ -291,6 +324,9 @@ export class DrizzleAssetRepository {
       displayName: row.asset.displayName,
       mimeType: row.version.mimeType,
       byteSize: row.version.byteSize,
+      contentHash: row.version.contentHash,
+      origin: assetOriginSchema.parse(row.asset.origin),
+      createdAt: row.version.createdAt.toISOString(),
       storageKey: row.version.storageKey,
       extractedText: row.version.extractedText,
     };

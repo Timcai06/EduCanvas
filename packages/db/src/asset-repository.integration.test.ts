@@ -31,6 +31,7 @@ const database = connection ? drizzle(connection, { schema }) : null;
 const ownerSubjectId = `anon:v1:${'a'.repeat(64)}`;
 const otherSubjectId = `anon:v1:${'b'.repeat(64)}`;
 const spaceId = '91000000-0000-4000-8000-000000000001';
+const otherSpaceId = '91000000-0000-4000-8000-000000000002';
 
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
@@ -158,6 +159,16 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     const created = await repository.createUploaded(readyPdf());
 
     await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: { assetId: created.descriptor.assetId, status: 'ready' },
+      version: { versionId: created.version!.versionId },
+    });
+    await expect(
       repository.loadOwnedCurrentStoredVersion({
         ownerSubjectId,
         spaceId,
@@ -172,6 +183,20 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       repository.loadOwnedCurrentStoredVersion({
         ownerSubjectId: otherSubjectId,
         spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId: otherSpaceId,
         assetId: created.descriptor.assetId,
       }),
     ).rejects.toBeInstanceOf(AssetAccessError);

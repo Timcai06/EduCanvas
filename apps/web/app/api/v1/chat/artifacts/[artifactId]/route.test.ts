@@ -83,13 +83,15 @@ function patchRequest(artifactId: string, body: string): Request {
 
 const detail = {
   artifact: {
-    id: validArtifact.id,
-    kind: validArtifact.kind,
-    status: validArtifact.status,
+    ...validArtifact,
     spaceId: conversation.spaceId,
     conversationId: null,
+    ownerSubjectId: identity.studentId,
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   latestVersion: {
+    id: '22222222-2222-4222-8222-222222222222',
+    artifactId: validArtifact.id,
     version: 1,
     content: { blocks: [] },
     metadata: {
@@ -116,6 +118,8 @@ const detail = {
     },
     objectKey: 'audio.mp3',
     checksum: 'a'.repeat(64),
+    generatedBy: 'model:artifact.generate:v1',
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   latestJob: {
     id: 'job-1',
@@ -197,6 +201,11 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
         id: validArtifact.id,
         kind: validArtifact.kind,
       },
+      canvasResource: {
+        resourceId: validArtifact.id,
+        notebookId: conversation.spaceId,
+        renderer: { rendererId: 'artifact.mind-map' },
+      },
     });
     expect(payload.versions[0].version).toBe(1);
   });
@@ -211,6 +220,22 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_detail_unavailable' },
+    });
+  });
+
+  it('maps a cross-Notebook artifact to the same 404 as a missing artifact', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValue({
+      ...detail,
+      artifact: { ...detail.artifact, spaceId: 'other-notebook' },
+    });
+    const response = await GET(
+      getRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
     });
   });
 });

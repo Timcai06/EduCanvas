@@ -7,8 +7,10 @@ import {
 } from '@educanvas/db';
 import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { projectOwnedSourceResource } from '../canvas/source-resource-adapter';
 import { readStoredAssetBytes } from './asset-storage';
 import type { AssetPreview } from '@/features/assets/asset-preview-contract';
+import type { CanvasResource } from '@educanvas/canvas-protocol';
 
 const assets = new DrizzleAssetRepository();
 const BINARY_PREVIEW_MIME_TYPES = new Set([
@@ -56,14 +58,40 @@ export async function loadOwnedAssetPreview(input: {
   spaceId: string;
   assetId: string;
 }): Promise<AssetPreview> {
+  return (await loadOwnedAssetPreviewDetail(input)).preview;
+}
+
+/** 在旧预览投影旁附加统一资源描述，不改变既有Preview消费者。 */
+export async function loadOwnedAssetPreviewDetail(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  assetId: string;
+}): Promise<{ preview: AssetPreview; canvasResource: CanvasResource }> {
   const version = await loadStoredVersion(input);
   const fileUrl = `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}/file`;
+  const canvasResource = projectOwnedSourceResource({
+    assetId: version.assetId,
+    notebookId: input.spaceId,
+    title: version.displayName,
+    mimeType: version.mimeType,
+    status: 'ready',
+    origin: version.origin,
+    createdAt: version.createdAt,
+    version: {
+      versionId: version.versionId,
+      byteSize: version.byteSize,
+      checksum: version.contentHash,
+    },
+  });
   if (version.mimeType === 'application/pdf') {
     return {
-      kind: 'pdf',
-      fileName: version.displayName,
-      mimeType: version.mimeType,
-      fileUrl,
+      preview: {
+        kind: 'pdf',
+        fileName: version.displayName,
+        mimeType: version.mimeType,
+        fileUrl,
+      },
+      canvasResource,
     };
   }
   if (
@@ -72,26 +100,35 @@ export async function loadOwnedAssetPreview(input: {
     version.mimeType === 'image/webp'
   ) {
     return {
-      kind: 'image',
-      fileName: version.displayName,
-      mimeType: version.mimeType,
-      fileUrl,
+      preview: {
+        kind: 'image',
+        fileName: version.displayName,
+        mimeType: version.mimeType,
+        fileUrl,
+      },
+      canvasResource,
     };
   }
   if (version.mimeType === 'text/markdown' && version.extractedText) {
     return {
-      kind: 'markdown',
-      fileName: version.displayName,
-      mimeType: 'text/markdown',
-      content: version.extractedText.slice(0, 120_000),
+      preview: {
+        kind: 'markdown',
+        fileName: version.displayName,
+        mimeType: 'text/markdown',
+        content: version.extractedText.slice(0, 120_000),
+      },
+      canvasResource,
     };
   }
   if (version.mimeType === 'text/plain' && version.extractedText) {
     return {
-      kind: 'text',
-      fileName: version.displayName,
-      mimeType: 'text/plain',
-      content: version.extractedText.slice(0, 120_000),
+      preview: {
+        kind: 'text',
+        fileName: version.displayName,
+        mimeType: 'text/plain',
+        content: version.extractedText.slice(0, 120_000),
+      },
+      canvasResource,
     };
   }
   if (
@@ -103,12 +140,15 @@ export async function loadOwnedAssetPreview(input: {
       buffer: Buffer.from(bytes),
     });
     return {
-      kind: 'docx',
-      fileName: version.displayName,
-      mimeType:
-        'application/vnd.openxmlformats-officedocument.wordprocessingml',
-      content: result.value.slice(0, 500_000),
-      warnings: result.messages.map((m) => m.message),
+      preview: {
+        kind: 'docx',
+        fileName: version.displayName,
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        content: result.value.slice(0, 500_000),
+        warnings: result.messages.map((m) => m.message),
+      },
+      canvasResource,
     };
   }
   throw new AssetPreviewError('preview_unavailable', 422);

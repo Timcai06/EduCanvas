@@ -20,6 +20,10 @@ import {
   NOTE_MARKDOWN_MAX_CHARS,
   noteContentSchema,
 } from '@educanvas/canvas-protocol';
+import {
+  ArtifactResourceProjectionError,
+  projectOwnedArtifactResource,
+} from '@/server/canvas/artifact-resource-adapter';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -84,6 +88,12 @@ export async function GET(
       detail.artifact.kind === 'audio_overview' && selectedVersion
         ? audioOverviewMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
+    const canvasResource = projectOwnedArtifactResource({
+      notebookId: conversation.spaceId,
+      artifact: detail.artifact,
+      version: selectedVersion,
+      latestJob: detail.latestJob,
+    });
     return Response.json({
       artifact: {
         id: detail.artifact.id,
@@ -125,10 +135,15 @@ export async function GET(
             failureCode: detail.latestJob.failureCode,
           }
         : null,
+      canvasResource,
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
       return jsonError(404, 'artifact_not_found', '产物不存在。');
+    }
+    if (error instanceof ArtifactResourceProjectionError) {
+      const status = error.code === 'resource_not_found' ? 404 : error.status;
+      return jsonError(status, error.code, '这个产物暂时无法在Canvas中打开。');
     }
     return jsonError(503, 'artifact_detail_unavailable', '暂时无法读取产物。');
   }

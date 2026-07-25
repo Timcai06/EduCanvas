@@ -38,6 +38,24 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
 不能携带React组件、URL或动态代码。资源不存在与跨Notebook无权访问统一映射为
 `resource_not_found`，公共错误不得包含堆栈、私有路径或Provider原文。
 
+当前Web兼容读取面以additive字段接入Adapter，不删除或改名原有字段：
+
+- `GET /api/v1/canvas/resources/{resourceKind}/{resourceId}`返回
+  `{resource: CanvasResource}`，其中`resourceKind`只允许`source/artifact`。该接口
+  从服务端身份和当前Notebook解析授权范围，不接受客户端提交的归属或能力字段；
+  不存在、跨用户和跨Notebook统一返回`resource_not_found/404`；
+- `GET /api/v1/chat/assets/{assetId}/preview`继续返回`preview`，并在完成当前主体与
+  Notebook归属校验后附加`canvasResource`。当前支持PDF、PNG/JPEG/WebP、Markdown、
+  TXT和DOCX；未知MIME由Adapter以`renderer_not_found`拒绝，不生成假预览；
+- `GET /api/v1/chat/artifacts/{artifactId}`继续返回`artifact/version/versions/latestJob`，
+  并附加`canvasResource`。`latestVersion=0`且任务仍在处理时`version=null`；
+  ready/archived投影必须引用真实版本，否则以`resource_invalid`拒绝；
+- 两个端点都不接受客户端提交的`notebookId/trustTier/allowedActions/rendererId`。
+  Source跨主体或跨Notebook仍使用既有`asset_not_found/404`兼容错误，Artifact使用
+  既有`artifact_not_found/404`；统一Canvas读取接口使用
+  `resource_not_found/404`。额外字段不改变现有Preview、Artifact Detail、消息末尾
+  Artifact或Studio消费者行为，Web Renderer Registry尚未迁移。
+
 应用事件包含 `turn.started`、消息 delta/引用、Tool 生命周期、approval、Artifact 生命周期和 `turn.completed/failed/cancelled`。已知事件使用 strict Schema；Tool 完成事件只允许最多 1000 字符的安全摘要，不接受原始参数、输出、异常或 Secret。一个事件前缀必须以唯一 `turn.started` 开始、全部属于同一 Operation，终态出现后不得再有事件。
 
 该契约位于 `@educanvas/agent-core`，唯一调用边界 `TurnApplicationPort` 位于 `@educanvas/agent-runtime`。Web SSE 和 Gateway NDJSON 仍保持各自对外版本，只能投影内部事件，不能把传输字段或供应商类型反向写入应用契约。
@@ -71,7 +89,8 @@ Artifact 生命周期事件已以 additive 方式定义（`schemaVersion=1`，�
   产物行、任务账本与graphile队列行同事务原子提交，生成在worker内异步执行；
 - `GET /api/v1/chat/artifacts/{artifactId}`：最新版本内容（结构化 JSONB；媒体
   版本只含受控读取URL和浏览器安全metadata）与最近生成任务状态，供轮询与
-  Canvas打开；私有`objectKey/checksum`不返回浏览器，越权与不存在同错404；
+  Canvas打开，并附加不含内容本体的`canvasResource`；私有`objectKey/checksum`
+  不返回浏览器，越权与不存在同错404；
 - `GET /api/v1/chat/artifacts/{artifactId}/audio`：按主体重新校验版本归属，完整
   SHA-256校验后返回`audio/mpeg`，支持单段HTTP Range；对象缺失、损坏与越权均
   不泄露私有key。
