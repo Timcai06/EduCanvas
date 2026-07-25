@@ -1,0 +1,18 @@
+.text-type {
+  display: inline-block;
+  min-width: 0.7ch;
+  color: var(--color-accent-strong);
+  white-space: pre-wrap;
+}
+
+.text-type__cursor {
+  display: inline-block;
+  margin-left: 0.08em;
+  color: var(--color-cinnabar);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text-type__cursor {
+    display: none;
+  }
+}
