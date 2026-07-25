@@ -9,6 +9,9 @@ const artifactRepo = {
   getArtifact: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
 };
+const manualArtifactRepo = {
+  createWithInitialVersion: vi.fn(),
+};
 const assetRepo = {
   materializeOwnedReferences: vi.fn(),
 };
@@ -20,6 +23,9 @@ vi.mock('@educanvas/db', async () => {
     ...actual,
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
+    }),
+    DrizzleManualArtifactRepository: vi.fn(function () {
+      return manualArtifactRepo;
     }),
     DrizzleAssetRepository: vi.fn(function () {
       return assetRepo;
@@ -43,7 +49,7 @@ const identity = {
   studentId: `anon:v1:${'c'.repeat(64)}`,
 };
 const conversation = {
-  id: 'conversation-1',
+  id: '30000000-0000-4000-8000-000000000003',
   spaceId: 'space-1',
 };
 
@@ -163,6 +169,7 @@ describe('POST /api/v1/chat/artifacts', () => {
     );
     artifactRepo.getArtifact.mockReset?.();
     artifactRepo.createArtifactWithGenerationJob.mockReset();
+    manualArtifactRepo.createWithInitialVersion.mockReset();
     assetRepo.materializeOwnedReferences.mockReset();
     artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
       artifact: validArtifact,
@@ -172,6 +179,14 @@ describe('POST /api/v1/chat/artifacts', () => {
         progress: null,
         failureCode: null,
       },
+    });
+    manualArtifactRepo.createWithInitialVersion.mockResolvedValue({
+      artifact: {
+        ...validArtifact,
+        kind: 'note',
+        title: '课堂笔记',
+      },
+      version: { version: 1 },
     });
   });
 
@@ -195,6 +210,45 @@ describe('POST /api/v1/chat/artifacts', () => {
         params: {},
       }),
     );
+  });
+
+  it('creates a manual note atomically without enqueueing a worker job', async () => {
+    const response = await POST(
+      postRequest(
+        JSON.stringify({
+          kind: 'note',
+          title: '课堂笔记',
+          markdown: '# 二次函数',
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      artifact: {
+        kind: 'note',
+        title: '课堂笔记',
+        status: 'active',
+        latestVersion: 1,
+      },
+      job: null,
+    });
+    expect(manualArtifactRepo.createWithInitialVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: conversation.spaceId,
+        conversationId: conversation.id,
+        trustedSubjectId: identity.studentId,
+        kind: 'note',
+        content: {
+          contentVersion: 1,
+          markdown: '# 二次函数',
+          sourceConversationId: conversation.id,
+          generatedByModel: false,
+        },
+        generatedBy: 'user:manual',
+      }),
+    );
+    expect(artifactRepo.createArtifactWithGenerationJob).not.toHaveBeenCalled();
   });
 
   it('rejects invalid json payload with 400', async () => {

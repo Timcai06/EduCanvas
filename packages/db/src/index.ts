@@ -87,6 +87,7 @@ export {
   type PlatformArtifactJob,
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';
+export { DrizzleManualArtifactRepository } from './manual-artifact-repository';
 export {
   ArtifactContentConflictError,
   DrizzleArtifactRepository,

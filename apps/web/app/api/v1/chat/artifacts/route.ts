@@ -13,9 +13,14 @@ import {
   AssetAccessError,
   ARTIFACT_GENERATE_TASK,
   DrizzleAssetRepository,
+  DrizzleManualArtifactRepository,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
 import { assetVersionReferenceSchema } from '@educanvas/agent-core';
+import {
+  NOTE_MARKDOWN_MAX_CHARS,
+  noteContentSchema,
+} from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -61,6 +66,13 @@ const createArtifactSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.enum(['mind_map', 'slides', 'flashcards']),
       title: titleSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('note'),
+      title: titleSchema,
+      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS).optional(),
     })
     .strict(),
   z
@@ -136,6 +148,42 @@ export async function POST(request: Request): Promise<Response> {
       }
       params = { selectedSources: parsed.data.sources };
     }
+
+    /* 用户直接新建空白笔记时，Artifact 与 v1 在同一事务落库，不产生
+       generation job；缺少 markdown 则仍按普通生成请求进入 Worker。 */
+    if (parsed.data.kind === 'note' && parsed.data.markdown !== undefined) {
+      const created =
+        await new DrizzleManualArtifactRepository().createWithInitialVersion({
+          spaceId: conversation.spaceId,
+          conversationId: conversation.id,
+          trustedSubjectId: identity.studentId,
+          kind: 'note',
+          trustTier: 'tier1',
+          title: parsed.data.title,
+          content: noteContentSchema.parse({
+            contentVersion: 1,
+            markdown: parsed.data.markdown,
+            sourceConversationId: conversation.id,
+            generatedByModel: false,
+          }),
+          generatedBy: 'user:manual',
+        });
+      return Response.json(
+        {
+          artifact: {
+            id: created.artifact.id,
+            kind: created.artifact.kind,
+            trustTier: created.artifact.trustTier,
+            title: created.artifact.title,
+            status: 'active',
+            latestVersion: 1,
+          },
+          job: null,
+        },
+        { status: 201 },
+      );
+    }
+
     const repository = new DrizzlePlatformArtifactRepository();
     const created = await repository.createArtifactWithGenerationJob({
       spaceId: conversation.spaceId,

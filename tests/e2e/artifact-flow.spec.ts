@@ -211,6 +211,53 @@ test('生成闪卡全链路:翻面自评且自评不上行', async ({ page }) =>
   await expect(canvas.getByText('不影响学习进度记录')).toBeVisible();
 });
 
+test('Studio 可新建、编辑并恢复不可变版本笔记', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  /* 空入口尚未建立 Notebook；打开一次真实上传入口完成本地身份与会话引导。 */
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: '上传文件' }).click();
+  await page
+    .getByRole('dialog', { name: '添加 PDF' })
+    .getByRole('button', { name: '关闭' })
+    .click();
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  const rootWheel = studio.getByRole('listbox', {
+    name: '选择 Studio 能力',
+  });
+  await rootWheel.press('ArrowDown');
+  await rootWheel.press('Enter');
+  const createWheel = studio.getByRole('listbox', {
+    name: '选择内容输出类型',
+  });
+  await expect(
+    createWheel.getByRole('option', { name: '新建空白笔记' }),
+  ).toBeVisible();
+  await createWheel.press('Enter');
+
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await expect(canvas).toBeVisible();
+  await canvas.getByRole('button', { name: '编辑', exact: true }).click();
+  await canvas
+    .getByRole('textbox', { name: '笔记编辑区' })
+    .fill('# 勾股定理\n\n直角三角形满足 $a^2+b^2=c^2$。');
+  const versionSelect = canvas.getByRole('combobox', { name: 'Canvas版本' });
+  await expect(versionSelect).toHaveValue('2', { timeout: 10_000 });
+  await expect(canvas.getByText('勾股定理')).toBeVisible();
+
+  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.reload();
+  const outputStudio = await openStudioOutput(page);
+  await outputStudio.getByRole('option', { name: /未命名笔记 · v2/ }).click();
+  await expect(
+    page.getByRole('dialog', { name: '产物Canvas' }).getByText('勾股定理'),
+  ).toBeVisible();
+});
+
 test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');

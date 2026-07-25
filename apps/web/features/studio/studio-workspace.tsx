@@ -22,12 +22,15 @@ const SOURCE_ADD_ITEMS = [
 ] as const;
 const OUTPUT_CREATE_ITEMS = [
   '返回 Studio',
+  '新建空白笔记',
+  '生成对话笔记',
   '思维导图',
   'Slides',
   '复习闪卡',
   '音频概览',
 ] as const;
 const OUTPUT_ACTIONS: readonly [CreatableArtifactKind, string][] = [
+  ['note', '对话笔记'],
   ['mind_map', '对话思维导图'],
   ['slides', '对话小结 Slides'],
   ['flashcards', '复习闪卡'],
@@ -46,6 +49,7 @@ export function StudioWorkspace({
   onImported,
   onOpenOutput,
   onCreateOutput,
+  onCreateBlankNote,
 }: {
   assets: readonly AssetItem[];
   outputs: readonly ArtifactSummary[];
@@ -54,6 +58,7 @@ export function StudioWorkspace({
   onImported: (asset: AssetItem) => void;
   onOpenOutput: (id: string) => void;
   onCreateOutput: (kind: CreatableArtifactKind, defaultTitle: string) => void;
+  onCreateBlankNote: () => void;
 }) {
   const [route, setRoute] = useState<StudioRoute>('root');
   const [linkOpen, setLinkOpen] = useState(false);
@@ -94,7 +99,11 @@ export function StudioWorkspace({
       return;
     }
     if (route === 'output-create') {
-      const action = OUTPUT_ACTIONS[index - 1];
+      if (index === 1) {
+        onCreateBlankNote();
+        return;
+      }
+      const action = OUTPUT_ACTIONS[index - 2];
       if (action) onCreateOutput(...action);
       return;
     }
