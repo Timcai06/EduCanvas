@@ -2,8 +2,7 @@ import { z } from 'zod';
 
 /**
  * 学习档案「活动」契约 —— 前后端单一真源（zod 定义，类型由其推导）。
- * 服务端产出后按此 schema 校验再返回，客户端按此 schema 解析，保证全栈链路形状一致；
- * 当前数据源为 mock（见 server/profile/learning-activity-service.ts），接口与链路为正式实现。
+ * 服务端产出后按此 schema 校验再返回，客户端按此 schema 解析，保证全栈链路形状一致。
  */
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;

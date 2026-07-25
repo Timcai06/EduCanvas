@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 学习档案页：抽屉「查看完整档案 →」的落地页，也是后续堆放成就 / 目标时间线 / 错题本
- * 的地方。只读投影，不接受 URL 指定他人主体；活动数据经服务层取得（当前 mock，链路正式）。
+ * 的地方。只读投影，不接受 URL 指定他人主体；活动数据只来自服务端可信事实。
  * 炫技集合（均尊重 reduced-motion）：Aurora 水墨极光头图、CountUp 数字上数、SpotlightCard
  * 跟随光斑、热力图波浪点亮、主按钮扫光——灵感来源见各组件注释（React Bits / GSAP）。
  */
@@ -24,9 +24,7 @@ export default async function ProfilePage() {
     readAnonymousIdentity(),
   ]);
 
-  const activity = await getLearningActivity(
-    identity?.studentId ?? 'demo-anon',
-  );
+  const activity = await getLearningActivity(identity?.studentId ?? null);
   const hasActivity = activity.activeDays > 0;
   const displayName = user?.nickname ?? '游客';
 

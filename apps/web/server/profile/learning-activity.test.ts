@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { learningActivitySchema } from '@/features/profile/activity-contract';
-import {
-  buildLearningActivity,
-  buildMockLearningActivity,
-} from './learning-activity';
+import { buildLearningActivity } from './learning-activity';
 
 const NOW = new Date('2026-07-24T09:00:00+08:00');
 
@@ -69,26 +65,19 @@ describe('buildLearningActivity', () => {
     expect(activity.streakDays).toBe(0);
     expect(activity.activeDays).toBe(2);
   });
-});
 
-describe('buildMockLearningActivity（mock 数据源）', () => {
-  it('产出严格符合活动契约，窗口对齐今天', () => {
-    const activity = buildMockLearningActivity('student-1', NOW);
-    expect(() => learningActivitySchema.parse(activity)).not.toThrow();
-    expect(activity.days).toHaveLength(53 * 7);
-    expect(activity.days.at(-1)?.date).toBe('2026-07-24');
-    expect(activity.activeDays).toBeGreaterThan(0);
-  });
-
-  it('同一 seed 确定性一致，避免热力图闪烁', () => {
-    expect(buildMockLearningActivity('student-1', NOW)).toEqual(
-      buildMockLearningActivity('student-1', NOW),
-    );
-  });
-
-  it('不同 seed 得到不同的活动分布', () => {
-    const a = buildMockLearningActivity('student-1', NOW);
-    const b = buildMockLearningActivity('student-2', NOW);
-    expect(a.days).not.toEqual(b.days);
+  it('忽略窗口外与未来事件，避免活跃天数和热力图口径漂移', () => {
+    const activity = buildLearningActivity({
+      sessionActivityAt: [
+        isoDaysAgo(0),
+        isoDaysAgo(53 * 7),
+        new Date(NOW.getTime() + 86_400_000).toISOString(),
+      ],
+      masteryPercent: null,
+      totalSessions: 1,
+      now: NOW,
+    });
+    expect(activity.activeDays).toBe(1);
+    expect(activity.days.reduce((sum, day) => sum + day.count, 0)).toBe(1);
   });
 });

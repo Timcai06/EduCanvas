@@ -121,6 +121,10 @@ export {
 } from './study-bootstrap-compensator';
 export { DrizzleStudyDiagnosticRepository } from './study-diagnostic-repository';
 export {
+  DrizzleLearningActivityRepository,
+  type LearningActivityFacts,
+} from './learning-activity-repository';
+export {
   DiagnosticAttemptConflictError,
   StudyPlanNotFoundError,
   type BootstrapStudyPlanInput,

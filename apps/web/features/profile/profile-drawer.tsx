@@ -36,7 +36,7 @@ export function ProfileDrawer({ onClose }: { onClose: () => void }) {
       .catch(() => undefined);
   }, []);
 
-  // 走正式接口 /api/v1/me/activity（当前 mock 数据），按契约 schema 解析后展示一瞥统计。
+  // 走正式接口 /api/v1/me/activity，按契约 schema 解析后展示可信统计。
   useEffect(() => {
     void fetch('/api/v1/me/activity', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
