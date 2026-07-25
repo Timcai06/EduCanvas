@@ -321,7 +321,11 @@ export function ArtifactStatusCard({
     >
       <span
         aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
+        className={`grid size-9 shrink-0 place-items-center rounded-xl ${
+          generation.phase === 'failed'
+            ? 'bg-cinnabar-soft text-cinnabar-strong'
+            : 'bg-accent-soft text-accent'
+        }`}
       >
         {generation.phase === 'generating' ? (
           <CircleNotch
@@ -340,7 +344,13 @@ export function ArtifactStatusCard({
         <span className="block truncate text-sm font-semibold text-ink">
           {generation.title}
         </span>
-        <span className="block text-xs text-ink-muted">
+        <span
+          className={`block text-xs ${
+            generation.phase === 'failed'
+              ? 'text-cinnabar-strong'
+              : 'text-ink-muted'
+          }`}
+        >
           {generation.phase === 'generating'
             ? '后台生成中…关闭页面也不会中断'
             : generation.phase === 'ready'
@@ -435,7 +445,7 @@ export function ArtifactCanvas({
               aria-label="Canvas版本"
               value={displayedVersion || ''}
               onChange={(event) => onSelectVersion(Number(event.target.value))}
-              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none transition-colors hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent"
             >
               {detail.versions.map((version) => (
                 <option key={version.version} value={version.version}>
@@ -510,7 +520,7 @@ export function ArtifactCanvas({
                     : '请先切回最新版本再继续修改'
                 }
                 onChange={(event) => setInstruction(event.target.value)}
-                className="min-h-12 flex-1 resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:text-ink-faint"
+                className="ec-input min-h-12 flex-1 resize-none rounded-xl px-3 py-2 text-sm text-ink disabled:text-ink-faint"
               />
               <button
                 type="submit"

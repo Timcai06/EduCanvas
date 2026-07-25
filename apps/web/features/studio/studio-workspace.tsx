@@ -126,6 +126,32 @@ export function StudioWorkspace({
     { scope: rootRef, dependencies: [route], revertOnUpdate: true },
   );
 
+  /*
+   * 收起二级轮：与入场对称地向右淡出并模糊，落幕后再卸载，避免直接消失的突兀。
+   * 保持在 useGSAP 之外的命令式回调里，不干扰被入场动画与 revertOnUpdate 管理的
+   * 内联样式；reduced-motion 直接卸载不做补间。切换到另一路由不走这里（交由入场重播）。
+   */
+  const collapseSecondary = () => {
+    const el = secondaryRef.current;
+    const reduce = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    if (!el || reduce) {
+      setRoute(null);
+      return;
+    }
+    gsap.to(el, {
+      autoAlpha: 0,
+      x: 60,
+      scale: 0.8,
+      filter: 'blur(8px)',
+      duration: 0.34,
+      ease: 'power3.in',
+      overwrite: 'auto',
+      onComplete: () => setRoute(null),
+    });
+  };
+
   const selectRoot = (index: number) => {
     const routes: readonly StudioRoute[] = [
       'source-add',
@@ -136,7 +162,13 @@ export function StudioWorkspace({
     const nextRoute = routes[index];
     if (!nextRoute) return;
     setLinkOpen(false);
-    setRoute((current) => (current === nextRoute ? null : nextRoute));
+    if (route === nextRoute) {
+      collapseSecondary();
+      return;
+    }
+    // 切换到另一路由时清掉可能在途的退场补间，让入场 fromTo 从干净状态重播。
+    if (secondaryRef.current) gsap.killTweensOf(secondaryRef.current);
+    setRoute(nextRoute);
   };
 
   const selectSecondary = (index: number) => {

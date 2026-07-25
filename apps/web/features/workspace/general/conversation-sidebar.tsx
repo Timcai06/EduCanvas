@@ -6,16 +6,14 @@ import { PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import {
+  groupNotebooksByRecency,
+  type NotebookListItem,
+} from './notebook-groups';
+import {
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   useResizableSidebar,
 } from './use-resizable-sidebar';
-
-interface NotebookListItem {
-  id: string;
-  title: string | null;
-  lastActivityAt: string;
-}
 
 const formatWhen = (iso: string): string => {
   const date = new Date(iso);
@@ -179,9 +177,7 @@ export function ConversationSidebar({
     };
   }, [activeConversationId, open]);
 
-  const activeIndex = items.findIndex(
-    (item) => item.id === activeConversationId,
-  );
+  const groups = groupNotebooksByRecency(items, new Date());
 
   return (
     <>
@@ -226,73 +222,108 @@ export function ConversationSidebar({
             Notebooks
           </p>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {items.length > 0 ? (
-              <LineSidebar
-                ariaLabel="笔记本"
-                items={items.map((item) => item.title ?? '未命名笔记本')}
-                itemIds={items.map((item) => item.id)}
-                activeIndex={activeIndex >= 0 ? activeIndex : null}
-                disabled={isSwitchPending}
-                accentColor="var(--color-accent)"
-                textColor="var(--color-ink-muted)"
-                markerColor="var(--color-line)"
-                proximityRadius={92}
-                maxShift={16}
-                falloff="smooth"
-                markerLength={24}
-                tickScale={0.42}
-                itemGap={2}
-                fontSize={0.88}
-                smoothing={100}
-                onItemClick={(index) => {
-                  const item = items[index];
-                  if (item) switchTo(item.id);
-                }}
-                renderLabel={(index, label) => (
-                  <span
-                    className={`flex min-w-0 items-start gap-2 ${
-                      pendingId === items[index]?.id ? 'opacity-60' : ''
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {label}
-                    </span>
-                    <span className="shrink-0 pt-0.5 text-[11px] text-ink-muted">
-                      {items[index]
-                        ? formatWhen(items[index].lastActivityAt)
-                        : ''}
-                    </span>
-                  </span>
-                )}
-                renderAction={(index) => {
-                  const item = items[index];
-                  return item ? (
-                    <span className="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        aria-label="命名笔记本"
-                        title="命名笔记本"
-                        disabled={renamingId === item.id}
-                        onClick={() => void renameConversation(item)}
-                        className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-accent-soft hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
-                      >
-                        <PencilSimple aria-hidden="true" size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="删除历史记录"
-                        title="删除历史记录"
-                        onClick={() => void deleteConversation(item.id)}
-                        className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-cinnabar-soft hover:text-cinnabar-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      >
-                        <Trash aria-hidden="true" size={14} />
-                      </button>
-                    </span>
-                  ) : null;
-                }}
-              />
+            {groups.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {groups.map((group) => {
+                  const groupActiveIndex = group.items.findIndex(
+                    (item) => item.id === activeConversationId,
+                  );
+                  return (
+                    <section key={group.key} aria-label={group.label}>
+                      {/* 时间近度小标题：发丝分隔线 + 极淡标签，作为长列表的查找锚点 */}
+                      <p className="flex items-center gap-2.5 px-5 pb-1 pt-3 text-[11px] font-medium tracking-wide text-ink-faint">
+                        <span className="shrink-0">{group.label}</span>
+                        <span
+                          aria-hidden="true"
+                          className="h-px flex-1 bg-line/60"
+                        />
+                      </p>
+                      <LineSidebar
+                        ariaLabel={group.label}
+                        items={group.items.map(
+                          (item) => item.title ?? '未命名笔记本',
+                        )}
+                        itemIds={group.items.map((item) => item.id)}
+                        activeIndex={
+                          groupActiveIndex >= 0 ? groupActiveIndex : null
+                        }
+                        disabled={isSwitchPending}
+                        accentColor="var(--color-accent)"
+                        textColor="var(--color-ink-muted)"
+                        markerColor="var(--color-line)"
+                        proximityRadius={92}
+                        maxShift={16}
+                        falloff="smooth"
+                        markerLength={24}
+                        tickScale={0.42}
+                        itemGap={2}
+                        fontSize={0.88}
+                        smoothing={100}
+                        onItemClick={(index) => {
+                          const item = group.items[index];
+                          if (item) switchTo(item.id);
+                        }}
+                        renderLabel={(index, label) => {
+                          const item = group.items[index];
+                          return (
+                            <span
+                              className={`flex min-w-0 items-start gap-2 ${
+                                pendingId === item?.id ? 'opacity-60' : ''
+                              }`}
+                            >
+                              <span className="min-w-0 flex-1 truncate font-medium">
+                                {label}
+                              </span>
+                              <span className="shrink-0 pt-0.5 text-[11px] text-ink-muted">
+                                {item ? formatWhen(item.lastActivityAt) : ''}
+                              </span>
+                            </span>
+                          );
+                        }}
+                        renderAction={(index) => {
+                          const item = group.items[index];
+                          return item ? (
+                            <span className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                aria-label="命名笔记本"
+                                title="命名笔记本"
+                                disabled={renamingId === item.id}
+                                onClick={() => void renameConversation(item)}
+                                className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-accent-soft hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                              >
+                                <PencilSimple aria-hidden="true" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="删除历史记录"
+                                title="删除历史记录"
+                                onClick={() => void deleteConversation(item.id)}
+                                className="grid size-7 place-items-center rounded-full text-ink-faint transition-colors hover:bg-cinnabar-soft hover:text-cinnabar-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                <Trash aria-hidden="true" size={14} />
+                              </button>
+                            </span>
+                          ) : null;
+                        }}
+                      />
+                    </section>
+                  );
+                })}
+              </div>
             ) : (
-              <p className="px-3 py-2 text-xs text-ink-muted">还没有笔记本</p>
+              <div className="px-5 py-10 text-center">
+                <span
+                  aria-hidden="true"
+                  className="mx-auto mb-3 block h-px w-10 bg-line"
+                />
+                <p className="text-sm font-medium text-ink-muted">
+                  还没有笔记本
+                </p>
+                <p className="mt-1 text-xs leading-5 text-ink-faint">
+                  新建一个，开始你的第一次对话
+                </p>
+              </div>
             )}
           </div>
         </div>

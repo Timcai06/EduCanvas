@@ -13,6 +13,7 @@ import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { Sheet } from '@/features/workspace/shared/sheet';
 import { AuroraInk } from './aurora-ink';
+import { CountUp } from './count-up';
 
 interface CurrentUser {
   nickname: string;
@@ -216,7 +217,7 @@ function MiniStat({
   return (
     <div className="rounded-xl px-3 py-2 text-center">
       <p className="font-display text-lg font-semibold leading-none tabular-nums text-ink">
-        {value ?? '—'}
+        <CountUp value={value} />
         {value !== null ? (
           <span className="ml-0.5 text-xs text-ink-muted">{unit}</span>
         ) : null}
