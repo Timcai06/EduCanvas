@@ -190,7 +190,12 @@ export function Composer({
                     : 'border-line bg-surface/75 text-ink-muted hover:bg-surface hover:text-ink'
                 }`}
               >
-                <SidebarSimple aria-hidden="true" size={15} />
+                <SidebarSimple
+                  aria-hidden="true"
+                  size={15}
+                  weight={tool.selected ? 'fill' : 'regular'}
+                  className={tool.selected ? 'text-accent' : undefined}
+                />
                 <span>{tool.label}</span>
                 {tool.detail ? (
                   <span className="text-[11px] text-ink-muted">
