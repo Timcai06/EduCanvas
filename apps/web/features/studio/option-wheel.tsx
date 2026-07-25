@@ -31,7 +31,6 @@ export default function OptionWheel({
   defaultSelected = 0,
   onChange,
   onSelect,
-  activateOnItemClick = false,
   textColor = 'var(--color-ink-muted)',
   activeColor = 'var(--color-ink)',
   side = 'left',
@@ -308,11 +307,8 @@ export default function OptionWheel({
         else if (delta < -config.count / 2) delta += config.count;
       }
       applyTarget(current + delta, true);
-      if (activateOnItemClick) {
-        onSelectRef.current?.(index, config.items[index]!);
-      }
     },
-    [activateOnItemClick, applyTarget],
+    [applyTarget],
   );
 
   const handleKeyDown = useCallback(

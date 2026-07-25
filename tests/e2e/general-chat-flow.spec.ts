@@ -11,7 +11,7 @@ async function openStudioInput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  await studio.getByRole('option', { name: '文件输入' }).click();
+  await studio.getByRole('button', { name: '文件输入' }).click();
   return studio;
 }
 
@@ -20,7 +20,7 @@ async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  await studio.getByRole('option', { name: '内容输出' }).click();
+  await studio.getByRole('button', { name: '内容输出' }).click();
   return studio;
 }
 
