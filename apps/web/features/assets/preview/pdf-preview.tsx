@@ -31,9 +31,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
         canvas.className = 'mx-auto shadow-sm rounded-lg';
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvas, viewport }).promise;
         container.appendChild(canvas);
       } catch {
         setError(`第 ${pageNum} 页渲染失败。`);
@@ -46,7 +44,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
     let cancelled = false;
     const loadAndRender = async () => {
       try {
-        const doc = await pdfjs.getDocument(fileUrl).promise;
+        const doc = await pdfjs.getDocument({ url: fileUrl }).promise;
         if (cancelled) return;
         pdfDoc.current = doc;
         setPageCount(doc.numPages);

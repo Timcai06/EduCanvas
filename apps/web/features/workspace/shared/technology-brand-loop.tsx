@@ -1,9 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+// react-icons/si v4 不含 Drizzle ORM 图标；Drizzle 使用数据库通用占位标识
 import {
   SiDocker,
-  SiDrizzle,
   SiGreensock,
   SiNextdotjs,
   SiPnpm,
@@ -20,7 +20,7 @@ const TECHNOLOGIES: readonly LogoItem[] = [
   technology(<SiReact />, 'React', 'https://react.dev'),
   technology(<SiTypescript />, 'TypeScript', 'https://typescriptlang.org'),
   technology(<SiPostgresql />, 'PostgreSQL', 'https://postgresql.org'),
-  technology(<SiDrizzle />, 'Drizzle', 'https://orm.drizzle.team'),
+  technology(<SiPostgresql />, 'Drizzle + PostgreSQL', 'https://orm.drizzle.team'),
   technology(<SiGreensock />, 'GSAP', 'https://gsap.com'),
   technology(<SiThreedotjs />, 'Three.js', 'https://threejs.org'),
   technology(<SiTurborepo />, 'Turborepo', 'https://turborepo.com'),
