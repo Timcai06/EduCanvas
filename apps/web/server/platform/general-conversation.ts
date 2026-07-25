@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   DrizzlePlatformConversationRepository,
+  DrizzlePlatformArtifactTurnReferenceRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
   type PlatformConversationSnapshot,
@@ -23,6 +24,7 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const conversations = new DrizzlePlatformConversationRepository();
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
+const artifactReferences = new DrizzlePlatformArtifactTurnReferenceRepository();
 
 export interface GeneralChatPageData {
   conversation: PlatformConversationSnapshot;
@@ -107,6 +109,21 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
     conversationId: conversation.id,
     trustedSubjectId: identity.studentId,
   });
+  const referencedArtifacts = await artifactReferences.listForOperations({
+    conversationId: conversation.id,
+    trustedSubjectId: identity.studentId,
+    operationIds: messages.map((message) => message.operationId),
+  });
+  const artifactsByOperation = new Map<
+    string,
+    (typeof referencedArtifacts)[number]['artifact'][]
+  >();
+  for (const reference of referencedArtifacts) {
+    artifactsByOperation.set(reference.operationId, [
+      ...(artifactsByOperation.get(reference.operationId) ?? []),
+      reference.artifact,
+    ]);
+  }
   const citationsByMessage = new Map<string, typeof citations>();
   for (const citation of citations) {
     citationsByMessage.set(citation.assistantMessageId, [
@@ -124,6 +141,18 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       status: message.role === 'user' ? 'completed' : message.status,
       content: message.content,
       parts: message.parts,
+      artifacts:
+        message.role === 'assistant'
+          ? (artifactsByOperation.get(message.operationId) ?? []).map(
+              (artifact) => ({
+                id: artifact.id,
+                kind: artifact.kind,
+                title: artifact.title,
+                status: artifact.status,
+                latestVersion: artifact.latestVersion,
+              }),
+            )
+          : undefined,
       citations:
         message.role === 'assistant'
           ? (citationsByMessage.get(message.id) ?? []).map((citation) => ({

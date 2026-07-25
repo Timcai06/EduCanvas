@@ -70,6 +70,7 @@ describe('WebOperationArtifacts', () => {
       spaceId: artifact.spaceId,
       conversationId: context.conversationId,
       trustedSubjectId: identity.studentId,
+      operationId: 'operation-1',
       kind: 'mind_map',
       trustTier: 'tier1',
       title: artifact.title,

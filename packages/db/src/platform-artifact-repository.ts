@@ -521,6 +521,8 @@ export class DrizzlePlatformArtifactRepository {
     spaceId: string;
     conversationId: string;
     trustedSubjectId: string;
+    /** 仅 Agent Turn 创建时传入；用于把产物恢复到对应助手消息末尾。 */
+    operationId?: string | null;
     kind: string;
     trustTier: ArtifactTrustTier;
     title: string;
@@ -552,6 +554,7 @@ export class DrizzlePlatformArtifactRepository {
         .insert(artifactGenerationJobs)
         .values({
           artifactId: artifact.id,
+          operationId: input.operationId ?? null,
           params: input.params ?? {},
           queueJobKey,
         })

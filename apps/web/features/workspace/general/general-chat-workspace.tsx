@@ -44,6 +44,10 @@ import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
+import {
+  isArtifactRevisionInProgress,
+  selectAudioArtifactSources,
+} from './general-artifact-selection';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -252,28 +256,8 @@ export function GeneralChatWorkspace({
   const handleToolAction = useCallback(() => {
     setCanvasSelected((selected) => !selected);
   }, []);
-  const selectedAudioSources = notebookSources.flatMap((asset) =>
-    asset.enabled &&
-    asset.versionId &&
-    (asset.kind === 'document' || asset.kind === 'link')
-      ? [
-          {
-            assetId: asset.id,
-            versionId: asset.versionId,
-            kind: asset.kind,
-          } as const,
-        ]
-      : [],
-  );
-  const revisingOpenArtifact = Boolean(
-    artifactFlow.openDetail &&
-    ((artifactFlow.generation?.phase === 'generating' &&
-      artifactFlow.generation.artifactId ===
-        artifactFlow.openDetail.artifact.id) ||
-      ['queued', 'running'].includes(
-        artifactFlow.openDetail.latestJob?.status ?? '',
-      )),
-  );
+  const selectedAudioSources = selectAudioArtifactSources(notebookSources);
+  const revisingOpenArtifact = isArtifactRevisionInProgress(artifactFlow);
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
@@ -398,6 +382,12 @@ export function GeneralChatWorkspace({
                       setPreviewAsset(null);
                       setSourcePreviewFull(false);
                       setPreviewHtml(source);
+                    }}
+                    onOpenArtifact={(artifactId) => {
+                      setPreviewAsset(null);
+                      setSourcePreviewFull(false);
+                      setPreviewHtml(null);
+                      void artifactFlow.openArtifact(artifactId);
                     }}
                     assistantLabel="AI"
                   />

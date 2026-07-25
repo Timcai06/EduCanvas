@@ -8,6 +8,15 @@ export type ChatMessageStatus =
   | 'cancelled'
   | 'interrupted';
 
+/** 对话末尾的 Artifact 只保存可重新打开所需的服务端事实，不复制 Canvas 内容。 */
+export interface MessageArtifactDTO {
+  id: string;
+  kind: string;
+  title: string;
+  status: 'proposed' | 'active' | 'archived';
+  latestVersion: number;
+}
+
 /**
  * Server Component hydrates the browser with this provider-neutral projection.
  * It intentionally contains no provider/model identifiers, prompts or internal
@@ -21,6 +30,7 @@ export interface InitialChatMessageDTO {
   status: ChatMessageStatus;
   content: string;
   parts?: readonly AgentMessagePart[];
+  artifacts?: readonly MessageArtifactDTO[];
   citations?: readonly MessageCitationDTO[];
   failureCode: string | null;
   createdAt: string;
@@ -87,6 +97,7 @@ export interface AssistantMessage extends ChatMessageBase {
   retryParts?: readonly AgentMessagePart[];
   cite?: string;
   citations?: readonly MessageCitationDTO[];
+  artifacts?: readonly MessageArtifactDTO[];
   suggestsCanvas?: boolean;
   outputCard?: boolean;
 }

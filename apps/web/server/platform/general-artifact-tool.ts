@@ -44,6 +44,7 @@ interface ArtifactGenerationRepository {
     spaceId: string;
     conversationId: string;
     trustedSubjectId: string;
+    operationId: string;
     kind: string;
     trustTier: 'tier1';
     title: string;
@@ -106,6 +107,7 @@ export class WebOperationArtifacts {
       spaceId: this.input.spaceId,
       conversationId: this.input.conversationId,
       trustedSubjectId: this.input.identity.studentId,
+      operationId: this.input.operationId,
       kind: toolInput.kind,
       trustTier: 'tier1',
       title: toolInput.title,

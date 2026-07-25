@@ -104,6 +104,9 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 - `pipeline_flow` 参数化 GSAP 模板与 `AnimationShell` 控制；
 - `mind_map`、`slides`、`flashcards`、`audio_overview`、`note` 的持久 Artifact、不可变版本、Studio 恢复和 Worker 生成；
 - General Agent 在用户明确要求时可通过受控 `artifact.create` Tool 发起部分 Artifact；
+- Agent 创建的 Artifact 通过生成任务 `operation_id` 回挂到对应助手消息末尾，
+  同一引用可反复打开最新 Canvas；Studio 继续按 Notebook 聚合更久远的输入与输出，
+  两个入口不复制 Artifact 内容或状态；
 - 助手消息中的显式 `html/htm` 代码块可由用户点击后在 `sandbox="allow-scripts"`、文档级禁网络 CSP、256KB 上限的 iframe 中运行；当前无 `postMessage` 桥，也不是一等持久 Artifact；
 - 当前 Notebook 的 PDF、PNG/JPEG/WebP、Markdown 与 TXT 已可从 Studio 进入统一 Canvas 工作面；二进制只经同源、逐次所有权校验的私有端点以内联 `nosniff` 响应读取，Markdown 不执行原始 HTML，对象存储键不进入公共契约。DOCX 在具备隔离解析、资源限制与净化策略前明确不支持；
 - Web Canvas 已有桌面 `region` 和移动端/全屏 `dialog` 语义。

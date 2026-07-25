@@ -221,4 +221,46 @@ describe('teaching turn browser state machine', () => {
       ]),
     });
   });
+
+  it('把本轮Artifact提议附在助手消息末尾且重复事件不复制卡片', () => {
+    let state = teachingTurnReducer(createTeachingTurnState([]), {
+      type: 'send.started',
+      clientMessageId: 'client-artifact',
+      text: '生成一张函数思维导图',
+    });
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: accepted('turn-artifact'),
+    });
+    const proposed = {
+      type: 'artifact.proposed' as const,
+      schemaVersion: '1' as const,
+      turnId: 'turn-artifact',
+      artifactId: 'artifact-1',
+      kind: 'mind_map',
+      trustTier: 'tier1' as const,
+      title: '函数思维导图',
+    };
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: proposed,
+    });
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: proposed,
+    });
+
+    expect(state.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      artifacts: [
+        {
+          id: 'artifact-1',
+          kind: 'mind_map',
+          title: '函数思维导图',
+          status: 'proposed',
+          latestVersion: 0,
+        },
+      ],
+    });
+  });
 });

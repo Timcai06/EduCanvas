@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { getDb } from './client';
-import { conversations, spaces } from './schema';
+import { agentOperations, conversations, spaces } from './schema';
 
 type ArtifactScopeReader = Pick<ReturnType<typeof getDb>, 'select'>;
 
@@ -14,6 +14,7 @@ export async function ownsArtifactConversationScope(
     spaceId: string;
     conversationId: string;
     trustedSubjectId: string;
+    operationId?: string | null;
   },
 ): Promise<boolean> {
   const [scope] = await database
@@ -31,8 +32,22 @@ export async function ownsArtifactConversationScope(
     )
     .where(eq(spaces.id, input.spaceId))
     .limit(1);
-  return (
+  const ownsNotebook =
     scope?.ownerSubjectId === input.trustedSubjectId &&
-    scope.conversationOwnerSubjectId === input.trustedSubjectId
-  );
+    scope.conversationOwnerSubjectId === input.trustedSubjectId;
+  if (!ownsNotebook || !input.operationId) return ownsNotebook;
+
+  const [operation] = await database
+    .select({ id: agentOperations.id })
+    .from(agentOperations)
+    .where(
+      and(
+        eq(agentOperations.id, input.operationId),
+        eq(agentOperations.conversationId, input.conversationId),
+        eq(agentOperations.actorUserId, input.trustedSubjectId),
+        eq(agentOperations.kind, 'turn'),
+      ),
+    )
+    .limit(1);
+  return Boolean(operation);
 }
