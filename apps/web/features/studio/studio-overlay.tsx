@@ -42,7 +42,7 @@ export function StudioOverlay({
       ref={rootRef}
       id="notebook-studio-layer"
       aria-label="当前笔记本的 Studio"
-      className="pointer-events-none fixed right-0 top-16 z-30 h-[min(34rem,calc(100dvh-4rem))] w-full max-w-[34rem] overflow-visible"
+      className="pointer-events-none fixed right-0 top-16 z-30 h-[min(34rem,calc(100dvh-4rem))] w-full max-w-[58rem] overflow-visible"
     >
       {children}
     </aside>

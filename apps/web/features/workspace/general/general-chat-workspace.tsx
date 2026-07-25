@@ -295,7 +295,6 @@ export function GeneralChatWorkspace({
         sidebarOpen={sidebarOpen}
         studioOpen={studioOpen}
         onToggleSidebar={toggleSidebar}
-        onNewNotebook={() => void startNewGeneralChatAction()}
         onOpenStudio={() => {
           const opening = !studioOpen;
           setStudioOpen(opening);

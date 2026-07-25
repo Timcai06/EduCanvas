@@ -37,6 +37,7 @@ export interface OptionWheelProps {
   soundUrl?: string;
   soundVolume?: number;
   ariaLabel?: string;
+  idPrefix?: string;
   className?: string;
 }
 
@@ -94,6 +95,7 @@ const OptionWheel = ({
   soundUrl = '',
   soundVolume = 0.5,
   ariaLabel = 'Option wheel',
+  idPrefix = 'studio-option-wheel',
   className = '',
 }: OptionWheelProps) => {
   const remPx =
@@ -421,7 +423,7 @@ const OptionWheel = ({
       role="listbox"
       tabIndex={0}
       aria-label={ariaLabel}
-      aria-activedescendant={`studio-option-wheel-item-${selectedIndex}`}
+      aria-activedescendant={`${idPrefix}-item-${selectedIndex}`}
       className={`react-bits-option-wheel${side === 'right' ? ' react-bits-option-wheel--right' : ''}${isDragging ? ' react-bits-option-wheel--dragging' : ''}${className ? ` ${className}` : ''}`}
       style={
         {
@@ -439,7 +441,7 @@ const OptionWheel = ({
     >
       {items.map((label, index) => (
         <div
-          id={`studio-option-wheel-item-${index}`}
+          id={`${idPrefix}-item-${index}`}
           key={`${label}-${index}`}
           ref={(el) => {
             itemRefs.current[index] = el;
