@@ -2,6 +2,7 @@ import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   AssetUploadError,
   listOwnedSpaceAssets,
+  tombstoneOwnedAsset,
   uploadOwnedAssetToSpace,
 } from '@/server/assets/asset-upload';
 import {

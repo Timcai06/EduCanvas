@@ -3,6 +3,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
+import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingSession } from '../teaching/learning-session';
 import {
@@ -29,10 +30,12 @@ export class AssetUploadError extends Error {
       | 'file_too_large'
       | 'session_not_found'
       | 'pdf_text_unavailable'
+      | 'docx_text_unavailable'
       | `link_${string}`,
     readonly status: number,
+    options?: { cause?: unknown },
   ) {
-    super(code);
+    super(code, options);
     this.name = 'AssetUploadError';
   }
 }
@@ -82,6 +85,62 @@ function detectFile(bytes: Uint8Array): DetectedFile | null {
   ) {
     return { kind: 'image', mimeType: 'image/webp', extension: 'webp' };
   }
+  // DOCX: PK zip + 内部文件名校验
+  // DOCX 文件本质是 ZIP 压缩包（PK\x03\x04 开头），
+  // 但这与普通 ZIP 无法区分，因此额外检查文件内部路径。
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 && // 'P'
+    bytes[1] === 0x4b && // 'K'
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04
+  ) {
+    // 检查 ZIP 内是否包含 docx 关键路径 [Content_Types].xml
+    const header = new TextDecoder('ascii').decode(bytes.slice(0, Math.min(bytes.length, 4096)));
+    if (header.includes('[Content_Types].xml')) {
+      return {
+        kind: 'document',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        extension: 'docx',
+      };
+    }
+    // 无法确认为 DOCX 的 ZIP 文件——不匹配后续后缀检测规则，返回 null 让调用方拒绝
+  }
+  return null;
+}
+
+/*
+ * Markdown / 纯文本没有可靠魔术字，回退到文件后缀检测。
+ * 服务端无法无限制扩展，优先检出高价值类型（DOCX/MD/TXT），
+ * 其余交回调用方的 unsupported_file_type 统一拒绝。
+ */
+/**
+ * 后缀回退检测：魔术字无法匹配时（如 DOCX 的 ZIP 头部内容偏移、MD/TXT 无魔术字），
+ * 通过文件扩展名兜底判断。仅用于 document 类别——image 仍严格走魔术字。
+ */
+function detectByExtension(fileName: string): DetectedFile | null {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.docx')) {
+    return {
+      kind: 'document',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      extension: 'docx',
+    };
+  }
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
+    return {
+      kind: 'document',
+      mimeType: 'text/markdown',
+      extension: 'md',
+    };
+  }
+  if (lower.endsWith('.txt')) {
+    return {
+      kind: 'document',
+      mimeType: 'text/plain',
+      extension: 'txt',
+    };
+  }
   return null;
 }
 
@@ -104,6 +163,47 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
   if (!normalized) {
     throw new AssetUploadError('pdf_text_unavailable', 422);
   }
+  return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
+}
+
+/**
+ * 使用 mammoth 从 DOCX 提取纯文本。
+ * DOCX 本质是 ZIP 内嵌 XML，mammoth 负责解析 WordprocessingML。
+ * @param bytes - DOCX 原始字节
+ * @returns 提取的纯文本，截断至 MAX_EXTRACTED_TEXT
+ * @throws {AssetUploadError} 提取失败时抛出 docx_text_unavailable
+ */
+async function extractDocxText(bytes: Uint8Array): Promise<string> {
+  const buffer = Buffer.from(bytes);
+  let result;
+  try {
+    result = await mammoth.extractRawText({ buffer });
+  } catch (cause) {
+    throw new AssetUploadError('docx_text_unavailable', 422, { cause });
+  }
+  const normalized = result.value
+    .normalize('NFC')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+  if (!normalized) {
+    throw new AssetUploadError('docx_text_unavailable', 422);
+  }
+  return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
+}
+
+/**
+ * 从 UTF-8 编码的字节中提取纯文本（MD/TXT）。
+ * 自动处理 BOM（U+FEFF）和不同平台换行符。
+ * @param bytes - 原始 UTF-8 字节
+ * @returns 提取并规范化的文本内容
+ */
+function extractPlainText(bytes: Uint8Array): string {
+  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  const normalized = decoded
+    .replace(/^﻿/, '') // 去掉 UTF-8 BOM
+    .normalize('NFC')
+    .replace(/\r\n?/g, '\n')
+    .trim();
   return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
 }
 
@@ -136,10 +236,15 @@ export async function uploadOwnedAssetToSpace(input: {
   }
 
   const bytes = new Uint8Array(await input.file.arrayBuffer());
-  const detected = detectFile(bytes);
+  const detected = detectFile(bytes) ?? detectByExtension(input.file.name);
   if (!detected) throw new AssetUploadError('unsupported_file_type', 415);
   if (input.file.type && input.file.type.toLowerCase() !== detected.mimeType) {
-    throw new AssetUploadError('unsupported_file_type', 415);
+    // 浏览器对文档类文件的 MIME 判断不稳定（PDF/DOCX 常被报告为 octet-stream），
+    // 服务端的魔术字检测更可靠。仅当不匹配时对 image 仍要求浏览器一致。
+    const isDocument = detected.kind === 'document';
+    if (!isDocument) {
+      throw new AssetUploadError('unsupported_file_type', 415);
+    }
   }
 
   let stored: StoredAssetObject | null = null;
@@ -151,8 +256,29 @@ export async function uploadOwnedAssetToSpace(input: {
     });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
     try {
-      const extractedText =
-        detected.kind === 'document' ? await extractPdfText(bytes) : null;
+      let extractedText: string | null = null;
+      if (detected.kind === 'document') {
+        if (detected.mimeType === 'application/pdf') {
+          extractedText = await extractPdfText(bytes);
+        } else if (
+          detected.mimeType ===
+          'application/vnd.openxmlformats-officedocument.wordprocessingml'
+        ) {
+          extractedText = await extractDocxText(bytes);
+        } else if (
+          detected.mimeType === 'text/markdown' ||
+          detected.mimeType === 'text/plain'
+        ) {
+          // 同步路径：MD/TXT 直接读 UTF-8
+          const text = extractPlainText(bytes);
+          extractedText = text || null;
+          if (!extractedText) {
+            throw new AssetUploadError('pdf_text_unavailable', 422);
+            // 复用 pdf_text_unavailable code——UI 显示"无文本内容"
+            // 后续可改为独立 code
+          }
+        }
+      }
       return await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
         spaceId: input.spaceId,
@@ -261,6 +387,22 @@ export async function listOwnedAssets(
   const session = await loadOwnedTeachingSession(identity);
   if (!session) throw new AssetUploadError('session_not_found', 404);
   return listOwnedSpaceAssets(identity, session.id);
+}
+
+/**
+ * 软删除资产：校验所有权后将资产及版本标记为 tombstoned。
+ * @returns true 表示删除成功，false 表示资产不存在
+ */
+export async function tombstoneOwnedAsset(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  assetId: string;
+}): Promise<boolean> {
+  return assets.tombstoneAsset({
+    assetId: input.assetId,
+    trustedSubjectId: input.identity.studentId,
+    spaceId: input.spaceId,
+  });
 }
 
 export async function listOwnedSpaceAssets(

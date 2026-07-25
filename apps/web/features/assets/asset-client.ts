@@ -131,3 +131,75 @@ export async function importLinkAsset(input: {
     '导入响应格式不正确。',
   );
 }
+
+/** 预览 API 返回的数据结构 */
+export interface PreviewData {
+  mimeType: string;
+  fileName?: string;
+  content?: string;
+  fileUrl?: string;
+  warnings?: string[];
+}
+
+const previewDataSchema = z.object({
+  mimeType: z.string(),
+  fileName: z.string().optional(),
+  content: z.string().optional(),
+  fileUrl: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+});
+
+/**
+ * 软删除指定资产。服务端将资产及版本标记为 tombstoned。
+ * @param assetId - 资产 UUID
+ * @param endpoint - API 端点 URL
+ * @returns true 表示删除成功
+ * @throws 资产不存在或无权访问时抛出 Error
+ */
+export async function deleteAsset(
+  assetId: string,
+  endpoint?: string,
+): Promise<boolean> {
+  const url =
+    endpoint ??
+    `/api/v1/chat/assets/${encodeURIComponent(assetId)}`;
+  const response = await fetch(url, { method: 'DELETE' });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404
+        ? '文件不存在或已删除。'
+        : '暂时无法删除文件。',
+    );
+  }
+  const parsed = z
+    .object({ deleted: z.boolean() })
+    .safeParse(await response.json());
+  if (!parsed.success) throw new Error('删除响应格式不正确。');
+  return parsed.data.deleted;
+}
+
+/**
+ * 获取资产的预览数据。
+ * PDF 返回 fileUrl，DOCX 返回 mammoth HTML content，MD/TXT 返回文本 content。
+ * @param assetId - 资产 UUID
+ * @param endpoint - 预览 API 端点 URL
+ */
+export async function fetchAssetPreview(
+  assetId: string,
+  endpoint?: string,
+): Promise<PreviewData> {
+  const url =
+    endpoint ??
+    `/api/v1/chat/assets/${encodeURIComponent(assetId)}/preview`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(
+      response.status === 415
+        ? '暂不支持预览此文件格式。'
+        : '暂时无法加载预览。',
+    );
+  }
+  const parsed = previewDataSchema.safeParse(await response.json());
+  if (!parsed.success) throw new Error('预览响应格式不正确。');
+  return parsed.data;
+}

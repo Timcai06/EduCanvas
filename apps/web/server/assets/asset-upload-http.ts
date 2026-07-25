@@ -51,7 +51,9 @@ export function assetUploadErrorResponse(error: AssetUploadError): Response {
       case 'file_too_large':
         return '文件不能超过10MB。';
       case 'unsupported_file_type':
-        return '目前只支持PDF、PNG、JPEG和WebP。';
+        return '目前支持 PDF、DOCX、Markdown 和纯文本文件。如需更多格式请反馈。';
+      case 'docx_text_unavailable':
+        return '这个 DOCX 文件无法提取文本，请确认文件未损坏。';
       case 'pdf_text_unavailable':
         return '这个PDF没有可读取文本；扫描版PDF将在OCR能力上线后支持。';
       case 'session_not_found':

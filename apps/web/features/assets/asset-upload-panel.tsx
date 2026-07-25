@@ -2,7 +2,7 @@
 
 import { useGSAP } from '@gsap/react';
 import {
-  FilePdf,
+  FileText,
   Image as ImageIcon,
   UploadSimple,
 } from '@phosphor-icons/react';
@@ -30,7 +30,9 @@ export function AssetUploadPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accept =
-    kind === 'image' ? 'image/png,image/jpeg,image/webp' : 'application/pdf';
+    kind === 'image'
+      ? 'image/png,image/jpeg,image/webp'
+      : '.pdf,.docx,.md,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml,text/markdown,text/plain';
 
   useGSAP(
     () => {
@@ -66,10 +68,10 @@ export function AssetUploadPanel({
         className="relative overflow-hidden rounded-3xl border border-line bg-card p-5 shadow-[var(--shadow-float)]"
       >
         <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent">
-          {kind === 'image' ? <ImageIcon size={23} /> : <FilePdf size={23} />}
+          {kind === 'image' ? <ImageIcon size={23} /> : <FileText size={23} />}
         </span>
         <h3 className="mt-4 font-display text-lg font-semibold text-ink">
-          {kind === 'image' ? '添加图片' : '添加PDF资料'}
+          {kind === 'image' ? '添加图片' : '添加文档资料'}
         </h3>
         <p className="mt-1 text-sm leading-6 text-ink-muted">
           {kind === 'image'
@@ -77,8 +79,8 @@ export function AssetUploadPanel({
               ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为当前笔记本来源；当前模型暂不读取图片像素。'
               : '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
             : fixedScope === 'space'
-              ? '支持带可复制文字的PDF，最大10MB。文字会在服务端解析并成为当前笔记本的长期来源。'
-              : '支持带可复制文字的PDF，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
+              ? '支持 PDF、DOCX、Markdown 和纯文本，最大10MB。文字会在服务端解析并成为当前笔记本的长期来源。'
+              : '支持 PDF、DOCX、Markdown 和纯文本，最大10MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
         </p>
       </div>
 

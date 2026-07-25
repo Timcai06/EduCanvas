@@ -117,6 +117,7 @@ function toSnapshot(
           byteSize: version.byteSize,
           contentHash: version.contentHash,
           status: version.status,
+          storageKey: version.storageKey,
         })
       : null,
     createdAt: asset.createdAt.toISOString(),
@@ -275,5 +276,44 @@ export class DrizzleAssetRepository {
       if (error instanceof OwnedAssetVersionError) throw new AssetAccessError();
       throw error;
     }
+  }
+
+  /**
+   * 软删除资产：将资产及其所有版本标记为 tombstoned。
+   * 不物理删除文件——storageKey 保留以便后续清理。
+   * @returns tombstone 操作是否影响了行（false 表示资产不存在或已删除）
+   */
+  async tombstoneAsset(input: {
+    assetId: string;
+    trustedSubjectId: string;
+    spaceId: string;
+  }): Promise<boolean> {
+    const assetId = requireUuid(input.assetId);
+    const trustedSubjectId = requireOwner(input.trustedSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const now = new Date();
+    return await this.database.transaction(async (tx) => {
+      const [found] = await tx
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.ownerSubjectId, trustedSubjectId),
+            eq(assets.spaceId, spaceId),
+          ),
+        )
+        .limit(1);
+      if (!found) return false;
+      await tx
+        .update(assets)
+        .set({ status: 'tombstoned', tombstonedAt: now })
+        .where(eq(assets.id, assetId));
+      await tx
+        .update(assetVersions)
+        .set({ status: 'tombstoned' })
+        .where(eq(assetVersions.assetId, assetId));
+      return true;
+    });
   }
 }

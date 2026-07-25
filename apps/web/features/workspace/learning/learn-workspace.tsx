@@ -6,6 +6,7 @@ import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
+import { FilePreviewPanel } from '@/features/assets/file-preview-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
@@ -129,6 +130,7 @@ function LearnWorkspaceSession({
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [uploadKind, setUploadKind] = useState<AssetItem['kind'] | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewAsset, setPreviewAsset] = useState<{ id: string; label: string } | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
 
   const pendingPromptConsumed = useRef(false);
@@ -173,8 +175,9 @@ function LearnWorkspaceSession({
     }
     setDrawer(null);
     setChatError(null);
-    /* 判分 Canvas 与沙箱预览共用同一个分栏宿主槽位,互斥展开 */
+    /* 判分 Canvas 与沙箱预览、文件预览共用同一个分栏宿主槽位,互斥展开 */
     setPreviewHtml(null);
+    setPreviewAsset(null);
     setPreviewFull(false);
     setCanvasOpen(true);
   }, []);
@@ -324,7 +327,7 @@ function LearnWorkspaceSession({
   const enabledAssets = assets.filter((asset) => asset.enabled);
   const artifactCompleted =
     feedback !== null && feedback.correctItems === feedback.attemptedItems;
-  const previewOpen = previewHtml !== null;
+  const previewOpen = previewHtml !== null || previewAsset !== null;
   const splitActive =
     (canvasOpen && !canvasFull) || (previewOpen && !previewFull);
   const isLanding = messages.length === 0 && !canvasOpen;
@@ -412,6 +415,7 @@ function LearnWorkspaceSession({
                       setCanvasOpen(false);
                       setCanvasFull(false);
                       setDrawer(null);
+                      setPreviewAsset(null);
                       setPreviewHtml(source);
                     }}
                   />
@@ -488,6 +492,11 @@ function LearnWorkspaceSession({
                 setPreviewFull(false);
               }}
             />
+          ) : previewAsset ? (
+            <FilePreviewPanel
+              asset={previewAsset}
+              onClose={() => setPreviewAsset(null)}
+            />
           ) : null}
         </div>
       </div>
@@ -500,12 +509,24 @@ function LearnWorkspaceSession({
       </p>
       {drawer === 'assets' ? (
         <Sheet label="知识与媒体资产" onClose={() => setDrawer(null)}>
-          <AssetsDrawer assets={assets} onToggle={handleToggleAsset} />
+          <AssetsDrawer
+            assets={assets}
+            onToggle={handleToggleAsset}
+            onPreview={(assetId) => {
+              const asset = assets.find((a) => a.id === assetId);
+              if (!asset) return;
+              setDrawer(null);
+              setCanvasOpen(false);
+              setCanvasFull(false);
+              setPreviewHtml(null);
+              setPreviewAsset({ id: asset.id, label: asset.label });
+            }}
+          />
         </Sheet>
       ) : null}
       {uploadKind ? (
         <Sheet
-          label={uploadKind === 'image' ? '添加图片' : '添加PDF'}
+          label={uploadKind === 'image' ? '添加图片' : '添加文档'}
           onClose={() => setUploadKind(null)}
         >
           <AssetUploadPanel

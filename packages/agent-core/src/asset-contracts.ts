@@ -71,6 +71,7 @@ export const assetVersionDescriptorSchema = z
     byteSize: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     contentHash: sha256Schema,
     status: z.enum(['processing', 'ready', 'failed', 'tombstoned']),
+    storageKey: z.string().min(1).max(1024).nullable().optional(),
   })
   .strict();
 

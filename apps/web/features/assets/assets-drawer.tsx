@@ -24,14 +24,16 @@ export interface AssetItem {
 export function AssetsDrawer({
   assets,
   onToggle,
+  onPreview,
 }: {
   assets: readonly AssetItem[];
   onToggle: (id: string) => void;
+  onPreview?: (assetId: string) => void;
 }) {
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF会提取文字，当前模型暂不读取图片像素。
+        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。文档会提取文字，当前模型暂不读取图片像素。
       </p>
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
@@ -45,6 +47,7 @@ export function AssetsDrawer({
           {assets.map((asset) => (
             <li key={asset.id}>
               <label
+                onClick={() => asset.selectable && onPreview?.(asset.id)}
                 className={`flex min-h-12 items-center gap-3 rounded-2xl border border-line px-4 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
                   asset.selectable
                     ? 'cursor-pointer hover:bg-surface'
@@ -80,7 +83,7 @@ export function AssetsDrawer({
                       ? '图片'
                       : asset.kind === 'link'
                         ? '网页'
-                        : 'PDF'}{' '}
+                        : '文档'}{' '}
                     · {asset.scope === 'space' ? '笔记本来源' : '仅本轮'} ·{' '}
                     {asset.status === 'ready'
                       ? '已就绪'
