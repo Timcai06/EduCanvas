@@ -15,7 +15,11 @@ import {
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
-import { audioOverviewMetadataSchema } from '@educanvas/canvas-protocol';
+import {
+  audioOverviewMetadataSchema,
+  NOTE_MARKDOWN_MAX_CHARS,
+  noteContentSchema,
+} from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -130,14 +134,27 @@ export async function GET(
   }
 }
 
-const reviseArtifactSchema = z
-  .object({
-    baseVersion: z.number().int().min(1),
-    instruction: z.string().trim().min(1).max(2_000),
-  })
-  .strict();
+const mutateArtifactSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('generate'),
+      baseVersion: z.number().int().min(1),
+      instruction: z.string().trim().min(1).max(2_000),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('save_note'),
+      baseVersion: z.number().int().min(1),
+      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS),
+    })
+    .strict(),
+]);
 
-/** Canvas 共创：显式修改要求进入同一 Artifact 的持久生成任务。 */
+/**
+ * Canvas 共创入口：AI 修改进入持久生成任务，笔记直接保存只追加不可变
+ * 版本。两种动作使用显式判别字段，禁止用正文前缀推断调用意图。
+ */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
@@ -163,7 +180,7 @@ export async function PATCH(
     }
     throw error;
   }
-  const parsed = reviseArtifactSchema.safeParse(body);
+  const parsed = mutateArtifactSchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '修改要求不正确。');
   }
@@ -176,10 +193,47 @@ export async function PATCH(
     });
     if (
       artifact.spaceId !== conversation.spaceId ||
-      !['mind_map', 'slides', 'flashcards'].includes(artifact.kind)
+      (parsed.data.action === 'save_note'
+        ? artifact.kind !== 'note'
+        : !['mind_map', 'slides', 'flashcards', 'note'].includes(artifact.kind))
     ) {
       throw new ArtifactOwnershipError();
     }
+
+    if (parsed.data.action === 'save_note') {
+      const currentVersion = await repository.getVersion({
+        artifactId,
+        version: parsed.data.baseVersion,
+        trustedSubjectId: identity.studentId,
+      });
+      const currentContent = noteContentSchema.parse(currentVersion.content);
+      const version = await repository.appendVersion({
+        artifactId,
+        trustedSubjectId: identity.studentId,
+        content: noteContentSchema.parse({
+          ...currentContent,
+          markdown: parsed.data.markdown,
+          generatedByModel: false,
+        }),
+        generatedBy: 'user:manual',
+        expectedLatestVersion: parsed.data.baseVersion,
+      });
+      return Response.json(
+        {
+          artifact: {
+            id: artifact.id,
+            kind: artifact.kind,
+            trustTier: artifact.trustTier,
+            title: artifact.title,
+            status: artifact.status,
+            latestVersion: version.version,
+          },
+          job: null,
+        },
+        { status: 200 },
+      );
+    }
+
     const created = await repository.createRevisionGenerationJob({
       artifactId,
       conversationId: conversation.id,

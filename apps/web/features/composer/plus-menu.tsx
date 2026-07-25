@@ -11,6 +11,7 @@ import {
   Slideshow,
   TreeStructure,
   Headphones,
+  NotePencil,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -29,6 +30,7 @@ export type PlusMenuActionId =
   | 'create_demo'
   | 'create_slides'
   | 'create_quiz'
+  | 'create_note'
   | 'more_tools';
 
 interface PlusMenuItem {
@@ -78,6 +80,12 @@ const menuItems: readonly PlusMenuItem[] = [
     id: 'create_audio_overview',
     icon: Headphones,
     label: '生成音频概览',
+    available: true,
+  },
+  {
+    id: 'create_note',
+    icon: NotePencil,
+    label: '生成笔记',
     available: true,
   },
   {

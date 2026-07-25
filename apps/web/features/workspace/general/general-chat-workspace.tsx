@@ -60,6 +60,7 @@ const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'create_slides',
   'create_flashcards',
   'create_audio_overview',
+  'create_note',
 ];
 
 export function GeneralChatWorkspace({
@@ -200,6 +201,8 @@ export function GeneralChatWorkspace({
         artifactFlow.beginConfirm('flashcards', '复习闪卡');
       } else if (action === 'create_audio_overview') {
         artifactFlow.beginConfirm('audio_overview', '来源音频概览');
+      } else if (action === 'create_note') {
+        artifactFlow.beginConfirm('note', '对话笔记');
       }
     },
     [artifactFlow],
@@ -435,6 +438,12 @@ export function GeneralChatWorkspace({
                       instruction,
                     )
                   }
+                  onSaveNote={(markdown) =>
+                    void artifactFlow.saveNote(
+                      artifactFlow.openDetail!,
+                      markdown,
+                    )
+                  }
                   revising={revisingOpenArtifact}
                 />
               ) : previewHtml !== null ? (
@@ -475,6 +484,10 @@ export function GeneralChatWorkspace({
                 setStudioOpen(false);
                 artifactFlow.beginConfirm(kind, defaultTitle);
               }}
+              onCreateBlankNote={() => {
+                setStudioOpen(false);
+                void artifactFlow.createBlankNote('未命名笔记');
+              }}
             />
           </StudioOverlay>
         ) : null}
@@ -497,6 +510,9 @@ export function GeneralChatWorkspace({
           }
           onRevise={(instruction) =>
             void artifactFlow.revise(artifactFlow.openDetail!, instruction)
+          }
+          onSaveNote={(markdown) =>
+            void artifactFlow.saveNote(artifactFlow.openDetail!, markdown)
           }
           revising={revisingOpenArtifact}
         />

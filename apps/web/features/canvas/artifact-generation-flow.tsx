@@ -13,6 +13,7 @@ import {
   fetchArtifactDetail,
   pollArtifactUntilSettled,
   reviseArtifact,
+  saveNoteArtifact,
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
@@ -27,6 +28,8 @@ import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
+import { NoteRenderer } from './note-renderer';
+import type { NoteContent } from '@educanvas/canvas-protocol';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -47,6 +50,7 @@ export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   slides: 'Slides',
   flashcards: '闪卡',
   audio_overview: '音频概览',
+  note: '笔记',
 };
 
 /**
@@ -167,6 +171,57 @@ export function useArtifactGeneration() {
     [],
   );
 
+  const createBlankNote = useCallback(async (title: string) => {
+    setGeneration({ phase: 'generating', kind: 'note', title });
+    try {
+      const created = await createArtifact('note', title, [], `# ${title}\n\n`);
+      const detail = await fetchArtifactDetail(created.artifact.id);
+      setGeneration({
+        phase: 'ready',
+        kind: 'note',
+        artifactId: created.artifact.id,
+        title,
+        detail,
+      });
+      setOpenDetail(detail);
+      setCanvasFull(false);
+    } catch {
+      setGeneration({ phase: 'failed', kind: 'note', title });
+    }
+  }, []);
+
+  const saveNote = useCallback(
+    async (detail: ArtifactDetail, markdown: string) => {
+      const baseVersion = detail.artifact.latestVersion;
+      setGeneration({
+        phase: 'generating',
+        kind: 'note',
+        artifactId: detail.artifact.id,
+        title: detail.artifact.title,
+      });
+      try {
+        await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
+        const updated = await fetchArtifactDetail(detail.artifact.id);
+        setOpenDetail(updated);
+        setGeneration({
+          phase: 'ready',
+          kind: 'note',
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+          detail: updated,
+        });
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          kind: 'note',
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+        });
+      }
+    },
+    [],
+  );
+
   const dismiss = useCallback(() => {
     pollAbort.current?.abort();
     setGeneration(null);
@@ -179,7 +234,9 @@ export function useArtifactGeneration() {
     setCanvasFull,
     beginConfirm,
     confirm,
+    createBlankNote,
     revise,
+    saveNote,
     openArtifact,
     openArtifactVersion,
     closeCanvas: () => {
@@ -325,6 +382,7 @@ export function ArtifactCanvas({
   onClose,
   onSelectVersion,
   onRevise,
+  onSaveNote,
   revising = false,
 }: {
   detail: ArtifactDetail;
@@ -333,12 +391,13 @@ export function ArtifactCanvas({
   onClose: () => void;
   onSelectVersion: (version: number) => void;
   onRevise: (instruction: string) => void;
+  onSaveNote: (markdown: string) => void;
   revising?: boolean;
 }) {
   const [instruction, setInstruction] = useState('');
   const displayedVersion = detail.version?.version ?? 0;
   const isLatest = displayedVersion === detail.artifact.latestVersion;
-  const canRevise = ['mind_map', 'slides', 'flashcards'].includes(
+  const canRevise = ['mind_map', 'slides', 'flashcards', 'note'].includes(
     detail.artifact.kind,
   );
   const generating = isArtifactGenerating(detail, revising);
@@ -410,6 +469,15 @@ export function ArtifactCanvas({
           ) : detail.artifact.kind === 'audio_overview' &&
             detail.version?.media ? (
             <AudioOverviewPlayer media={detail.version.media} />
+          ) : detail.artifact.kind === 'note' && detail.version ? (
+            <NoteRenderer
+              key={displayedVersion}
+              content={detail.version.content as NoteContent}
+              isLatest={isLatest}
+              readOnly={!isLatest}
+              onSave={onSaveNote}
+              saving={revising}
+            />
           ) : (
             <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
           )}

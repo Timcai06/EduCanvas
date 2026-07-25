@@ -15,7 +15,7 @@ Canvas 采用分层信任模型。Tier 1（判分型可信 Artifact）：模型�
 - **已实现的GSAP范围**：`gsap`与`@gsap/react`已经安装；扉页问候（SplitText 逐字 + DrawSVG 朱砂笔触）、批改笔迹（`GradeMark`）、印章（`SealStamp`）、`CanvasPanel`和`Sheet`使用`useGSAP()`实现「落笔」入场或表面进入动效。Timeline只修改transform/opacity（DrawSVG 只改 stroke-dash），reduced-motion不创建无限Timeline并直接呈现静态终态；此前的三层 AmbientHalo 光场已随「两支笔」视觉基线移除；
 - **已实现的教学动画范围**：首个`pipeline_flow`模板、静态React Renderer和共享`AnimationShell`已落地，支持播放/暂停/跳转/上下步/重置/速度、键盘控制、页面隐藏暂停及reduced-motion即时切换；模型只可提供严格Schema中的步骤文案、注册槽位、高亮顺序和暂停点；
 - **阶段一待实现**：将客户端动画观察与真实runtime完成确认对齐后再提升为可信学习事件，以及正式身份认证后的浏览器提交链路；普通播放不得改变mastery；
-- **已实现的平台产物**：`mind_map`、`slides`、`flashcards`与`audio_overview`——确认卡显式创建、worker后台生成、不可变版本、Studio恢复与`ArtifactCanvas`打开；前三种结构化产物支持在Canvas内提交修改要求，模型读取当前版本和Notebook对话后追加新版本，历史版本只读可恢复；全链路E2E含真实worker进程；
+- **已实现的平台产物**：`mind_map`、`slides`、`flashcards`、`audio_overview`与`note`——确认卡显式创建、worker后台生成、不可变版本、Studio恢复与`ArtifactCanvas`打开；结构化产物支持在Canvas内提交修改要求，模型读取当前版本和Notebook对话后追加新版本，历史版本只读可恢复；`note`还允许用户直接新建、编辑和保存有界Markdown，每次保存原子追加版本且不伪造生成任务；全链路E2E含真实worker进程；
 - **候选能力**：其余Artifact与动画模板按课程需求逐个增加，不因出现在规划清单中就视为已实现。
 
 ## 初始Artifact类型

@@ -9,6 +9,7 @@ import {
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
 } from './platform-artifact-repository';
+import { DrizzleManualArtifactRepository } from './manual-artifact-repository';
 import * as schema from './schema';
 
 function resolveTestDatabaseUrl() {
@@ -47,6 +48,9 @@ const database = connection ? drizzle(connection, { schema }) : null;
 
 describeWithDatabase('平台 Artifact 仓储', () => {
   const repository = new DrizzlePlatformArtifactRepository(
+    database as NonNullable<typeof database>,
+  );
+  const manualRepository = new DrizzleManualArtifactRepository(
     database as NonNullable<typeof database>,
   );
   const owner = 'subject-owner-1';
@@ -102,6 +106,51 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       repository.getArtifact({
         artifactId: artifact.id,
         trustedSubjectId: stranger,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+  });
+
+  it('手动内容以 active Artifact 与 v1 原子创建且不伪造生成任务', async () => {
+    const created = await manualRepository.createWithInitialVersion({
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'note',
+      trustTier: 'tier1',
+      title: '课堂笔记',
+      content: {
+        contentVersion: 1,
+        markdown: '# 二次函数',
+        generatedByModel: false,
+      },
+      generatedBy: 'user:manual',
+    });
+
+    expect(created.artifact).toMatchObject({
+      kind: 'note',
+      status: 'active',
+      latestVersion: 1,
+    });
+    expect(created.version).toMatchObject({
+      artifactId: created.artifact.id,
+      version: 1,
+      generatedBy: 'user:manual',
+    });
+    const jobs = await database!.select().from(schema.artifactGenerationJobs);
+    expect(jobs).toEqual([]);
+
+    await expect(
+      manualRepository.createWithInitialVersion({
+        spaceId,
+        trustedSubjectId: stranger,
+        kind: 'note',
+        trustTier: 'tier1',
+        title: '越权笔记',
+        content: {
+          contentVersion: 1,
+          markdown: '',
+          generatedByModel: false,
+        },
+        generatedBy: 'user:manual',
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });

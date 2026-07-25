@@ -48,3 +48,9 @@ export {
   audioOverviewMetadataSchema,
   type AudioOverviewMetadata,
 } from './artifacts/audio-overview';
+export {
+  NOTE_MARKDOWN_MAX_CHARS,
+  NOTE_CONTENT_VERSION,
+  noteContentSchema,
+  type NoteContent,
+} from './artifacts/note';
