@@ -1,7 +1,7 @@
 # 学生端核心 UI/UX 规格
 
 - 状态：`accepted`
-- 相关文档：[产品定义](./product-definition.md)、[Canvas与GSAP](../02-architecture/canvas-and-gsap.md)、[Agent编排边界](../03-ai/01-Agent编排边界.md)
+- 相关文档：[产品定义](./product-definition.md)、[统一Canvas工作面](../02-architecture/04-统一Canvas工作面.md)、[Agent编排边界](../03-ai/01-Agent编排边界.md)
 
 ## Web 学生客户端方向
 
@@ -50,9 +50,9 @@
 
 - Enter 发送、Shift+Enter 换行；文本框自增高至约 6 行后内部滚动；
 - 空白态输入栏位于页面视觉中心；学生输入内容后，语音占位切换为发送按钮，发送后输入栏平滑回到底部对话态；
-- Canvas 工具芯片只表达“本轮创建并打开产物”的一次性意图，提交确认后立即清除；产物打开后由Canvas自己的修改框继续共创，不把长期Artifact伪装成Composer附件。当前Notebook已经存在的Sources只在Studio浏览和管理；
+- Canvas 工具芯片只表达“本轮优先使用 Canvas，并在产物生成成功后自动打开”的一次性意图，请求被服务端接受后立即清除；浏览器只提交有界的 `outputPreference=canvas`，它不授予 Tool 权限，也不伪造产物。若本轮收到真实 `artifact.proposed`，客户端接管既有任务的轮询并在成功后打开，而不是重复创建产物。产物打开后由 Canvas 自己的修改框继续共创，不把长期 Artifact 伪装成 Composer 附件；当前 Notebook 已存在的 Sources 只在 Studio 浏览和管理；
 - 「+」菜单是唯一创建入口：上传PDF、Markdown、TXT与图片，导入网页，以及生成笔记、思维导图、Slides、闪卡和音频概览都从这里发起；未接能力不展示或明确禁用，不进入 roving focus。上传类型由服务端依据魔数或受限文本扩展名复核，不能只信浏览器MIME；
-- “打开本课互动演示”只打开课程预置 Artifact，不称为 AI 创建。真实“请老师创建”必须先产生结构化提案和学生确认卡，不能从自由文本静默生成大产物；
+- 用户也可在自然语言中明确要求思维导图、Slides、闪卡或笔记，由 General Agent 调用受控 `artifact.create` Tool；普通问答不得静默生成大产物，`artifact.proposed` 之后仍必须显示真实生成状态，不能把后台提案说成已经完成；
 - 未建设能力不触发动作、不产生上下文标签，也不出现伪装成功。无 Provider 时统一显示“AI 老师暂时无法连接，请稍后重试”，不暴露 SDK、模型或服务端术语。
 - **本机网络与服务端问题分开归因**：`navigator.onLine` 为 false 时，对话上方显示藤黄离线提示（“网络连接已断开，恢复后可以继续对话”），且一轮回答的失败/中断文案归因给网络（“网络似乎断开了，恢复后可以重新发送”）而非甩锅“AI 老师无法连接”。离线只用于归因与提示，不阻断发送——`navigator.onLine` 只能证伪离线，真正的可达性仍由请求结果裁决。
 - 发送后只消费服务端 SSE 的真实 `message.delta`，禁止浏览器定时器、假 typing dots 或完整文本切片；收到 `turn.accepted` 后才显示 Stop，Stop 必须调用取消端点；失败、取消或中断消息提供内联重试，并生成新的 `clientMessageId`；

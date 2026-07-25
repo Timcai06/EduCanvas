@@ -23,15 +23,15 @@ EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。�
 
 当前是一个可本地运行的模块化单体，已经越过静态原型阶段，但尚未进入 production。
 
-| 已落地                                                    | 有意保留的兼容层                             | 尚未完成                                   |
-| --------------------------------------------------------- | -------------------------------------------- | ------------------------------------------ |
-| `gateway.v1`、云端 Gateway、持久 Operation/恢复/审批      | Web 继续输出原 `schemaVersion=1` SSE         | 正式用户 IdP 与自助账号恢复                |
-| User/Personal Agent、私人/共享 Notebook Membership 与审计 | 匿名 Web 身份映射为受限兼容主体              | Notebook 摘要与长期学习者记忆              |
-| 唯一 `AgentLoopEngine`，通用与 K12 通过 Profile/回调配置  | K12 课程账本仍保留教育领域专用表             | 原生图片、音频、视频 Provider 输入         |
-| Web、交互式 TUI、实验性 Telegram 私聊适配器               | Telegram 只有离线官方协议 Fixture，未做 live | 微信/QQ 等渠道的正式扫码授权与生产验证     |
-| 可选 Capability Node：配对、心跳、撤销、只读文件能力      | Node 使用出站 bearer session；不开放主机入站 | L2/L3 高风险设备动作及审批后续执行         |
-| Sources/引用、Artifact/Studio、Worker、可信学习事实       | Asset 与 Source/Chunk 仍有迁移期双链         | production SLO、外部指标后端与对象删除闭环 |
-| 显式学习者画像、Notebook Goal/目标图、可信短诊断与三态进度 | P1 课程目录仍是代码内受信版本                | 教师课程发布与动态图推荐                    |
+| 已落地                                                     | 有意保留的兼容层                             | 尚未完成                                   |
+| ---------------------------------------------------------- | -------------------------------------------- | ------------------------------------------ |
+| `gateway.v1`、云端 Gateway、持久 Operation/恢复/审批       | Web 继续输出原 `schemaVersion=1` SSE         | 正式用户 IdP 与自助账号恢复                |
+| User/Personal Agent、私人/共享 Notebook Membership 与审计  | 匿名 Web 身份映射为受限兼容主体              | Notebook 摘要与长期学习者记忆              |
+| 唯一 `AgentLoopEngine`，通用与 K12 通过 Profile/回调配置   | K12 课程账本仍保留教育领域专用表             | 原生图片、音频、视频 Provider 输入         |
+| Web、交互式 TUI、实验性 Telegram 私聊适配器                | Telegram 只有离线官方协议 Fixture，未做 live | 微信/QQ 等渠道的正式扫码授权与生产验证     |
+| 可选 Capability Node：配对、心跳、撤销、只读文件能力       | Node 使用出站 bearer session；不开放主机入站 | L2/L3 高风险设备动作及审批后续执行         |
+| Sources/引用、Artifact/Studio、Worker、可信学习事实        | Asset 与 Source/Chunk 仍有迁移期双链         | production SLO、外部指标后端与对象删除闭环 |
+| 显式学习者画像、Notebook Goal/目标图、可信短诊断与三态进度 | P1 课程目录仍是代码内受信版本                | 教师课程发布与动态图推荐                   |
 
 当前事实以 [开发文档中心](docs/README.md)、已接受 ADR 与 Schema 为准；2026-07-16 的长篇技术报告已转为[历史快照](docs/00-overview/snapshots/2026-07-16-project-technical-report.md)，不再双重维护当前状态。
 
@@ -272,7 +272,7 @@ EduCanvas/
 
 ### 分层信任 Canvas
 
-Canvas 按“产物是否进入可信学习事实”分两级信任。Tier 1 判分型 Artifact：模型输出结构化 JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染，公开题面与私有判分键物理分离，浏览器交互必须通过服务端验证才能提升为可信学习事件。Tier 2 沙箱探索型产物：模型生成的 HTML/JS 只允许在无 same-origin、禁网络的 sandboxed iframe 中运行，不产生可信学习事件（尚未实现）。任何 tier 都不在主页面直接执行模型代码。
+Canvas 按“产物是否进入可信学习事实”分层信任。Tier 1 判分型 Artifact：模型输出结构化 JSON，经 Zod 白名单校验后由预注册 React Renderer 渲染，公开题面与私有判分键物理分离，浏览器交互必须通过服务端验证才能提升为可信学习事件。Tier 2 沙箱探索型产物：显式 HTML/JS 只能由用户启动并在无 same-origin、禁网络的 sandboxed iframe 中运行，不产生可信学习事件；当前只实现消息内轻量 HTML 预览，尚未成为持久 Artifact。未来代码与机器学习使用独立受控 Compute Runtime。任何层级都不在主页面直接执行模型代码。
 
 已实现（均为 Tier 1）：
 
@@ -280,7 +280,7 @@ Canvas 按“产物是否进入可信学习事实”分两级信任。Tier 1 判
 - `quiz`：可判分；
 - `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-详见 [Canvas 与 GSAP 架构](docs/02-architecture/canvas-and-gsap.md) 和 [ADR-0018](docs/09-decisions/0018-capability-trust-and-learning-evidence.md)。
+详见 [统一 Canvas 工作面](docs/02-architecture/04-统一Canvas工作面.md)、[ADR-0018](docs/09-decisions/0018-capability-trust-and-learning-evidence.md)和[ADR-0024](docs/09-decisions/0024-统一Canvas工作面与运行时分层.md)。
 
 ### 可信 K12 课程状态
 

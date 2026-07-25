@@ -2,7 +2,7 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-24
+- 最后验证时间：2026-07-25
 
 EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平台**。默认 Agent 可以研究、创作、整理资料和进行普通教学问答；诊断、练习、测评、掌握度与可信学习证据通过按需结构化 K12 Workflow 提供。
 
@@ -14,51 +14,70 @@ EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平�
 - 唯一 `TurnApplicationService`、`AgentLoopEngine`、Context Engine 与 Tool Kernel；
 - General、K12、Gateway 三条生产路径共享统一运行语义和账本；
 - PostgreSQL 事实源、graphile-worker 持久任务、Artifact/Studio/Canvas 和可信学习事实；
-- approval continuation、跨进程 cancel/lease、可回滚 Provider Adapter 与脱敏 Trace Adapter。
+- approval continuation、跨进程 cancel/lease、可回滚 Provider Adapter 与脱敏 Trace Adapter；
 - 最小显式学习者画像、Notebook Goal/目标图、确定性短诊断和可信三态进度。
 
-## 当前：功能与前端设计
+## 当前核心阶段：统一 Canvas 工作面
 
-第二代架构已经[完成结档](../plan/completed/2026-07-第二代架构升级.md)。
-新阶段不再延长架构Goal，以用户可见的垂直纵切推进：
+第二代架构已经[完成结档](../plan/completed/2026-07-第二代架构升级.md)。下一阶段不重写 Agent 内核，而是让同一 Notebook 的 Sources、Artifacts 和受控 Runtime 在统一 Canvas 中形成真实可用的输入、输出、阅读、创作和实验闭环。
 
-- Web继续作为K12主入口，TUI保持高级入口和同一Notebook操作窗口；
-- 以已完成的 P0/P1 自适应学习基线为底座，继续目标切换、复习调度、讲解、练习与反馈纵切；
-- 以系统级、Notebook级和会话级三层 Memory 补齐可解释上下文；
-- 打通图片、PDF页面、语音等真实多模态输入输出；
-- 继续提升Web信息架构、移动端、无障碍、响应性能和视觉完成度；
-- 每个功能纵切同时带教育评测、真实Provider dogfood和UI回归证据。
+稳定边界见[统一 Canvas 工作面](../02-architecture/04-统一Canvas工作面.md)与 [ADR-0024](../09-decisions/0024-统一Canvas工作面与运行时分层.md)，短期执行以[active plan](../plan/active/2026-07-统一Canvas工作面.md)为准。
 
-## 下一阶段一：Notebook Context 与 Memory
+### C0：统一资源和 Renderer 边界
 
-- Notebook 摘要、Conversation compaction 与统一上下文预算；
-- 区分 Personal Memory 和 Notebook Memory，提供来源、版本、删除与共享边界；
-- Artifact Context、长期来源摄取和检索质量；
-- Memory 未实现、禁用或无权限时保持明确 unavailable。
+- 定义 Source/Artifact 通用的 `CanvasResource`、Renderer manifest、能力与错误协议；
+- 建立 Renderer Registry，拆开协议、资源解析、具体 Renderer 与页面组合；
+- Studio 以输入/输出组织同一 Notebook 的 Sources 与 Artifacts；
+- 保持现有 Artifact、HTML 沙箱和学习事件兼容。
 
-## 下一阶段二：原生多模态
+### C1：来源阅读与多模态输入
 
-- 图片与 PDF 页面原生模型输入；
-- 语音输入、转写、语音输出与可访问文本等价物；
-- 后续视频能力必须有成本、版权、来源与未成年人安全证据；
-- 上传 Asset 统一进入 Source/Representation/Chunk 管线。
+- PDF 页面、图片、网页、文本、音频和视频以 Representation 进入 Canvas；
+- 支持页码、时间轴、引用高亮、转写、替代文本和来源定位；
+- 原始 Source 不被 Canvas 编辑覆盖，摘录和标注形成可追溯派生事实；
+- Context Engine 能选择有界多模态表示并记录 Snapshot。
 
-## 下一阶段三：教育质量
+### C2：多模态生成与共创
 
-- 建立年龄、学科和任务分层的教学评测集；
-- 评测讲解、追问、误区识别、证据引用、练习适配与安全；
-- 打通普通教育问答与结构化课程的自然进入/退出；
-- 提供教师资料审核、学习证据视图、复习建议与不过度操纵的反馈。
+- 加固思维导图、Slides、闪卡、笔记和音频产物的生成、版本和失败恢复；
+- 接入真实生图与语音 Provider，输出带 Provenance、成本和可访问等价物；
+- 后续视频生成必须先具备成本、版权、来源和未成年人安全证据；
+- Web、TUI 与渠道保持相同 Artifact 状态；无法渲染时返回摘要、媒体或 Web 交接。
+
+### C3：隔离交互应用
+
+- 把轻量 HTML 预览演进为持久、版本化的探索型 Artifact；
+- 建立版本化沙箱桥接、资源配额、取消、错误和恢复协议；
+- React、GSAP、Motion、Three.js 只通过平台审计并固定版本的依赖包进入沙箱；
+- Tier 2 交互不得访问主页面、Credential、任意网络或可信学习事件写入口。
+
+### C4：代码与机器学习实验
+
+- 通过 `ExperimentRuntimePort` 接入受控代码环境，而不是在 Web 主进程或浏览器直接执行；
+- 提供文件、终端/Notebook、日志、图表、取消、超时和输出 Artifact；
+- 记录代码、依赖镜像、数据集、随机种子、资源预算和运行 Provenance；
+- 机器学习先从可复现的小型 CPU 实验开始；GPU、联网和自定义镜像另行审批。
+
+## 并行产品能力
+
+以下能力与 C0-C4 协同推进，但不能成为绕开 Canvas、Runtime 或 Notebook 边界的第二套系统：
+
+- Personal、Notebook、Conversation 三层 Memory，带来源、版本、删除、共享和不可用状态；
+- 基于年龄、学科和任务分层的教学质量评测；
+- 普通教育问答与结构化课程的自然进入和退出；
+- 教师资料审核、学习证据视图、复习建议和不过度操纵的反馈；
+- Web 信息架构、移动端、无障碍、响应性能和视觉完成度。
 
 ## 生产发布门
 
 产品能力推进可以与以下工作并行，但 production 声明前必须完成：
 
 - 正式 IdP、账号恢复、session 撤销与密钥轮换；
-- Gateway/模型/工具限流、并发舱壁与成本配额；
+- Gateway、模型、工具与 Runtime 的限流、并发舱壁和成本配额；
 - 外部 Collector、SLO、告警、备份/PITR 和恢复演练；
 - 对象删除 Outbox、隐私导出/更正/删除；
-- enabled Channel Adapter 的生命周期、degraded health 与真实平台凭据验证。
+- enabled Channel Adapter 的生命周期、degraded health 与真实平台凭据验证；
+- 沙箱与 Compute Runtime 的隔离、依赖供应链和滥用测试。
 
 ## 受控扩展
 
@@ -73,5 +92,6 @@ EduCanvas 的长期方向是**以教育能力为核心的通用个人 Agent 平�
 - 复制 OpenClaw 的全部渠道、插件数量或单操作者宿主机信任模型；
 - 让所有教育问题强制进入五阶段课程；
 - 用多 Agent、工作流复杂度或长视频代替教育价值；
-- 默认向未成年人开放 Shell、任意文件系统、Credential 或设备写能力；
-- 让模型、客户端、Trace 或框架 Checkpoint 写入身份、权限、判分或掌握度事实。
+- 默认向未成年人开放 Shell、任意文件系统、Credential、任意网络或设备写能力；
+- 让模型、客户端、Canvas、Runtime、Trace 或框架 Checkpoint 写入身份、权限、判分或掌握度事实；
+- 为追求“统一”而把所有媒体、Artifact 和运行环境塞进单一 Schema 或超大前端组件。
