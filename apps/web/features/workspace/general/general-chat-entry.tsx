@@ -7,10 +7,10 @@ import { useCallback, useState, useTransition } from 'react';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { EmptyChatHero } from '../learning/empty-chat-hero';
-import { LogoMark } from '../shared/logo-mark';
 import { GraduationCap } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { UserMenu } from '@/features/auth/user-menu';
+import { ProductMark } from '@/components/ProductMark';
 
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
@@ -56,10 +56,7 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
       <header className="flex h-16 shrink-0 items-center px-4 sm:px-6">
-        <span className="inline-flex items-center gap-2.5 font-display text-base font-semibold">
-          <LogoMark size={20} />
-          EduCanvas
-        </span>
+        <ProductMark />
         <span className="flex-1" />
         <Link
           href="/learn"

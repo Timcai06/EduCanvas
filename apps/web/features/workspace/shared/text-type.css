@@ -1,0 +1,6 @@
+.text-type {
+  display: inline-block;
+  min-width: 0.7ch;
+  color: var(--color-accent-strong);
+  white-space: pre-wrap;
+}

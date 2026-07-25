@@ -3,6 +3,7 @@
 import { CaretDown, GraduationCap, List } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import { PillNav, type PillNavItem } from '@/components/PillNav';
+import { ProductMark } from '@/components/ProductMark';
 import { UserMenu } from '@/features/auth/user-menu';
 
 /**
@@ -68,9 +69,7 @@ export function GeneralWorkspaceHeader({
 
   return (
     <header className="z-20 flex h-16 shrink-0 items-center gap-3 px-3 sm:px-5">
-      <span className="font-display text-[0.94rem] font-semibold tracking-[-0.015em] text-ink">
-        EduCanvas
-      </span>
+      <ProductMark />
       <span
         className="hidden h-4 w-px bg-line/80 sm:block"
         aria-hidden="true"

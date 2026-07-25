@@ -11,7 +11,7 @@ import {
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { InkDot } from '@/features/workspace/shared/logo-mark';
+import { InkDot } from '@/features/workspace/shared/ink-dot';
 import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
