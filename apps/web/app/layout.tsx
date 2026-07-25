@@ -4,8 +4,10 @@ import '@fontsource-variable/inter';
 import '@fontsource/noto-serif-sc/400.css';
 import '@fontsource/noto-serif-sc/600.css';
 import './globals.css';
+import './conversation-content.css';
 import './effects.css';
 import { ThemeSync } from '@/features/theme/theme-sync';
+import { InkSplashHost } from '@/features/celebrate/ink-splash-host';
 
 /** 统一站点标题和摘要，避免各页面自行维护时出现产品定位漂移。 */
 export const metadata: Metadata = {
@@ -40,6 +42,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-canvas text-ink antialiased">
         <ThemeSync />
         {children}
+        <InkSplashHost />
       </body>
     </html>
   );

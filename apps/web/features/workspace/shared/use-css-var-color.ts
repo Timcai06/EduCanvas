@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * 读取 :root 上某个设计 token 的解析后颜色值（如 `--hero-ink-dot` → `#0e343d`）。
+ * 读取 :root 上某个设计 token 的解析后颜色值（如 `--hero-ink-dot` → `#2e1c46`）。
  * WebGL shader 只吃具体色值、不认 CSS 变量，故必须在运行时取值；且随亮色/砚墨
  * 主题切换重取，否则深色下颜色不对。SSR 阶段返回 fallback，客户端挂载后校正。
  *

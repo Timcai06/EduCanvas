@@ -25,7 +25,7 @@ function formatReviewDate(value: string | null): string {
   return shanghaiDateFormatter.format(new Date(value));
 }
 
-// 目标状态决定路径节点的笔色：优势=黛青实心，重点=朱砂实心，待学习=空心。
+// 目标状态决定路径节点的笔色：优势=墨紫实心，重点=朱砂实心，待学习=空心。
 // 语义同时由右侧文案承载，色弱与无色环境下含义不丢失（见 two-pen-marks 同款约束）。
 const STATUS_LABEL: Record<
   StudyProgressDTO['objectives'][number]['status'],

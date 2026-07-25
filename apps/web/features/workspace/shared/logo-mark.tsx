@@ -33,7 +33,7 @@ export function LogoMark({ size = 16 }: { size?: number }) {
 }
 
 /**
- * 助手消息的「墨点」标识：黛青的一滴墨，代表讲课的那支笔。
+ * 助手消息的「墨点」标识：墨紫的一滴墨，代表讲课的那支笔。
  * 与品牌印章刻意区分——助手每条消息都会出现，不能滥用朱砂。
  */
 export function InkDot({ size = 10 }: { size?: number }) {

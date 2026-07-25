@@ -2,6 +2,10 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 
+function notebookSidebar(page: Page) {
+  return page.getByRole('complementary', { name: '笔记本侧栏' });
+}
+
 async function activeConversationId(page: Page) {
   return (await page.context().cookies()).find(
     (cookie) => cookie.name === ACTIVE_CONVERSATION_COOKIE,
@@ -89,15 +93,11 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   ).toBeVisible();
   /* 当前Notebook出现在列表(本 spec 的 turn 被 mock,服务端不落
      消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
-  await expect(
-    page.getByRole('navigation', { name: '笔记本' }).getByText('未命名笔记本'),
-  ).toBeVisible();
+  await expect(notebookSidebar(page).getByText('未命名笔记本')).toBeVisible();
 
   /* U2 v1:来源常驻区在侧栏可见 */
   await expect(
-    page
-      .getByRole('navigation', { name: '笔记本' })
-      .getByText('来源', { exact: true }),
+    notebookSidebar(page).getByText('来源', { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: '上传 PDF 来源' }),
@@ -126,7 +126,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   ).toBeVisible();
   await waitForUnavailableTurn(page);
 
-  const notebooks = page.getByRole('navigation', { name: '笔记本' });
+  const notebooks = notebookSidebar(page);
   const firstConversationContent = page
     .getByRole('region', { name: 'AI 对话' })
     .getByText(firstPrompt, { exact: true });
@@ -147,16 +147,14 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   ).toBeVisible();
   await waitForUnavailableTurn(page);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: new RegExp(firstPrompt) })
     .click();
   let chat = page.getByRole('region', { name: 'AI 对话' });
   await expect(chat.getByText(firstPrompt, { exact: true })).toBeVisible();
   await expect(chat.getByText(secondPrompt, { exact: true })).toHaveCount(0);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: new RegExp(secondPrompt) })
     .click();
   chat = page.getByRole('region', { name: 'AI 对话' });
@@ -237,9 +235,7 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
 
   await createNotebook(
     page,
-    page
-      .getByRole('navigation', { name: '笔记本' })
-      .getByRole('button', { name: '新建笔记本' }),
+    notebookSidebar(page).getByRole('button', { name: '新建笔记本' }),
     page
       .getByRole('region', { name: 'AI 对话' })
       .getByText(firstPrompt, { exact: true }),
@@ -256,8 +252,7 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     }, firstArtifact.id),
   ).resolves.toBe(404);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: /第一本：机器视觉资料/ })
     .click();
   await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();

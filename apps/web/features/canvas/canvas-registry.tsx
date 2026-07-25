@@ -275,7 +275,7 @@ export function PipelineFlowRenderer({
       {({ isComplete }) => (
         <section
           aria-labelledby={objectiveId}
-          className="overflow-hidden rounded-3xl border border-line/70 bg-[radial-gradient(circle_at_50%_0%,rgba(111,130,255,0.18),transparent_48%),linear-gradient(180deg,rgba(29,31,35,0.96),rgba(11,12,15,0.96))] p-4 shadow-2xl shadow-black/30 sm:p-6"
+          className="overflow-hidden rounded-3xl border border-line/70 bg-[radial-gradient(circle_at_50%_0%,color-mix(in_srgb,var(--color-accent)_18%,transparent),transparent_48%),linear-gradient(180deg,var(--color-surface-strong),var(--color-surface))] p-4 shadow-float sm:p-6"
           data-testid="pipeline-flow"
         >
           <div className="mb-5 max-w-2xl">
@@ -297,7 +297,7 @@ export function PipelineFlowRenderer({
                 <li
                   key={step.slot}
                   data-animation-step={step.slot}
-                  className="relative min-h-48 rounded-2xl border border-line/70 bg-canvas/75 p-4 [will-change:transform,opacity] motion-reduce:will-change-auto"
+                  className="relative min-h-48 rounded-2xl border border-line/70 bg-card/80 p-4 [will-change:transform,opacity] motion-reduce:will-change-auto"
                 >
                   <div className="mb-7 flex items-start justify-between gap-3">
                     <span className="text-xs font-medium tracking-wide text-ink-muted">
@@ -330,7 +330,7 @@ export function PipelineFlowRenderer({
               className={`mt-4 min-h-12 rounded-xl border px-4 py-3 text-sm ${
                 isComplete
                   ? 'border-good/30 bg-good-soft/70 text-good'
-                  : 'border-line/70 bg-canvas/55 text-ink-muted'
+                  : 'border-line/70 bg-card/70 text-ink-muted'
               }`}
               aria-live="polite"
               data-testid="pipeline-completion"

@@ -183,7 +183,7 @@ export function ConnectionSettings({
     <div
       ref={rootRef}
       aria-busy={busyKey !== null || (data === null && error === null)}
-      className="space-y-10"
+      className="space-y-6"
     >
       <p
         className="sr-only"

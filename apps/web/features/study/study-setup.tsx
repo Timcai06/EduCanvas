@@ -10,6 +10,8 @@ import { ArrowRight, CaretDown } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useRef, useState, useTransition } from 'react';
 import { TopBar } from '../workspace/learning/top-bar';
+import { OptionWheel } from './option-wheel';
+import { celebrate } from '@/features/celebrate/ink-splash';
 
 gsap.registerPlugin(useGSAP);
 
@@ -43,6 +45,8 @@ const GRADE_BANDS: Option[] = [
   { value: 'middle_school', label: '初中' },
   { value: 'high_school', label: '高中' },
 ];
+// 稳定的标签数组，供滚轮消费（避免每次渲染新建数组而重装动画）。
+const GRADE_LABELS = GRADE_BANDS.map((option) => option.label);
 const DECLARATION_SOURCES: Option[] = [
   { value: 'self_declared', label: '学习者本人' },
   { value: 'guardian_declared', label: '家长或监护人' },
@@ -147,6 +151,8 @@ export function StudySetup() {
     startTransition(async () => {
       const result: StudyActionResultDTO = await createStudyPlanAction(input);
       setError(result.message);
+      // 计划创建成功即「落笔泼墨」庆祝一次（宿主在根布局，跨页面转场仍在）。
+      if (!result.message) celebrate();
     });
   };
 
@@ -202,9 +208,39 @@ export function StudySetup() {
               onChange={(event) =>
                 setField('desiredOutcome', event.target.value)
               }
-              className="w-full resize-none rounded-2xl border border-line bg-card px-4 py-3.5 text-lg leading-7 shadow-sm outline-none placeholder:text-ink-faint focus:ring-2 focus:ring-accent"
+              className="ec-input w-full resize-none rounded-2xl px-4 py-3.5 text-lg leading-7 text-ink shadow-sm"
             />
           </label>
+
+          {/* 学段：拨轮选定（取代下拉），是学习计划里最定调的一项，值得一个有仪式感的入口 */}
+          <div className="unfold-item mt-3 rounded-2xl border border-line bg-surface/50 p-4 sm:p-5">
+            <div className="flex items-baseline justify-between">
+              <p className="text-sm font-medium text-ink">当前学段</p>
+              <p className="text-xs text-ink-faint">拨到中间即选定</p>
+            </div>
+            <div className="relative mt-1 h-32">
+              {/* 中线：选中位指示 */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-accent/20"
+              />
+              <OptionWheel
+                items={GRADE_LABELS}
+                defaultSelected={Math.max(
+                  0,
+                  GRADE_BANDS.findIndex(
+                    (option) => option.value === input.gradeBand,
+                  ),
+                )}
+                ariaLabel="当前学段"
+                fontSize={1.6}
+                spacing={1.5}
+                onChange={(index) =>
+                  setField('gradeBand', GRADE_BANDS[index]!.value)
+                }
+              />
+            </div>
+          </div>
 
           <details className="unfold-item group mt-3">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm text-ink-muted select-none marker:hidden hover:text-ink">
@@ -230,12 +266,6 @@ export function StudySetup() {
                 value={input.ageBand}
                 options={AGE_BANDS}
                 onChange={(value) => setField('ageBand', value)}
-              />
-              <SelectField
-                label="当前学段"
-                value={input.gradeBand}
-                options={GRADE_BANDS}
-                onChange={(value) => setField('gradeBand', value)}
               />
               <SelectField
                 label="这份信息由谁填写"

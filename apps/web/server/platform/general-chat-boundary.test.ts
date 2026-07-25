@@ -27,6 +27,9 @@ describe('默认通用Chat产品边界', () => {
     ].join('\n');
     expect(turn).toContain('TurnApplicationService');
     expect(turn).toContain('默认不要假定用户是学生');
+    expect(turn).toContain('以教育能力为特色的通用个人 Agent');
+    expect(turn).toContain('不要求用户先切换模式');
+    expect(turn).not.toContain('进入学习模式');
     expect(turn).not.toContain('demoLesson');
     expect(turn).not.toContain('lessonSessions');
     expect(turn).not.toContain('getStudentState');

@@ -1,13 +1,16 @@
 'use client';
 
-import { Gear, List, NotePencil } from '@phosphor-icons/react';
+import { GraduationCap, Gear, List, NotePencil } from '@phosphor-icons/react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { UserMenu } from '@/features/auth/user-menu';
+import { SettingsDrawer } from '@/features/settings/settings-drawer';
 import { LogoMark } from '../shared/logo-mark';
 
 /**
  * 通用笔记本顶部导航。只负责入口与可访问状态，不读取会话或产物数据；
- * 新建、侧栏和 Studio 的业务动作由工作区组合根注入。
+ * 新建、侧栏和 Studio 的业务动作由工作区组合根注入。设置以抽屉形式就地打开
+ * （账号 + 外观），完整配置在 /settings 页面，不再跳到整页。
  */
 export function GeneralWorkspaceHeader({
   notebookTitle,
@@ -24,6 +27,7 @@ export function GeneralWorkspaceHeader({
   onNewNotebook: () => void;
   onOpenStudio: () => void;
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <header className="z-20 flex h-16 shrink-0 items-center gap-1.5 px-3 sm:px-4">
       <button
@@ -58,15 +62,28 @@ export function GeneralWorkspaceHeader({
         {notebookTitle ?? '未命名笔记本'}
       </span>
       <span className="flex-1" />
-      <UserMenu />
       <Link
-        href="/settings"
-        aria-label="通信方式设置"
-        title="通信方式设置"
+        href="/learn"
+        className="mr-1 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-medium text-ink transition-colors hover:border-accent/40 hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <GraduationCap aria-hidden="true" size={17} className="text-accent" />
+        <span className="hidden sm:inline">学习计划</span>
+      </Link>
+      <UserMenu />
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={settingsOpen}
+        onClick={() => setSettingsOpen(true)}
+        aria-label="设置"
+        title="设置"
         className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <Gear aria-hidden="true" size={19} />
-      </Link>
+      </button>
+      {settingsOpen ? (
+        <SettingsDrawer onClose={() => setSettingsOpen(false)} />
+      ) : null}
       <button
         type="button"
         aria-haspopup="dialog"
