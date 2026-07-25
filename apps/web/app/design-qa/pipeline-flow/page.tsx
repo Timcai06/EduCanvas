@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { ProductMark } from '@/components/ProductMark';
 import { isDesignQaEnabled } from '../design-qa-gate';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export default async function PipelineFlowDesignQaPage() {
   return (
     <main className="min-h-dvh bg-canvas px-4 py-8 text-ink sm:px-8 sm:py-12">
       <div className="mx-auto mb-7 w-full max-w-7xl">
+        <ProductMark href="/" className="mb-5" />
         <p className="text-xs font-semibold tracking-[0.2em] text-accent-strong uppercase">
           Design QA · Pipeline Flow
         </p>

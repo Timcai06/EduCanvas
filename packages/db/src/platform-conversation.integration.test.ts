@@ -161,6 +161,44 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     ).rejects.toBeInstanceOf(PlatformConversationOwnershipError);
   });
 
+  it('重命名在同一事务同步Notebook和主Conversation且拒绝跨主体', async () => {
+    const repository = new DrizzlePlatformConversationRepository(getDatabase());
+    const conversation = await repository.create({
+      ownerSubjectId: 'rename-owner',
+      spaceKind: 'notebook',
+      spaceTitle: '未命名笔记本',
+      conversationTitle: '未命名笔记本',
+    });
+
+    const renamed = await repository.renameOwned({
+      conversationId: conversation.id,
+      trustedSubjectId: 'rename-owner',
+      title: '  分数函数复习  ',
+      now: new Date('2026-07-25T08:00:00.000Z'),
+    });
+    expect(renamed?.title).toBe('分数函数复习');
+    const [notebook] = await getDatabase()
+      .select({ title: schema.spaces.title })
+      .from(schema.spaces)
+      .where(eq(schema.spaces.id, conversation.spaceId))
+      .limit(1);
+    expect(notebook?.title).toBe('分数函数复习');
+
+    await expect(
+      repository.renameOwned({
+        conversationId: conversation.id,
+        trustedSubjectId: 'rename-intruder',
+        title: '越权改名',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.getOwned({
+        conversationId: conversation.id,
+        trustedSubjectId: 'rename-owner',
+      }),
+    ).resolves.toMatchObject({ title: '分数函数复习' });
+  });
+
   it('通用Turn幂等持久化并在终态后恢复，不创建教学Session', async () => {
     const conversations = new DrizzlePlatformConversationRepository(
       getDatabase(),

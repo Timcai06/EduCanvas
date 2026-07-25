@@ -5,8 +5,7 @@ import {
   ClockCounterClockwise,
   SquaresFour,
 } from '@phosphor-icons/react';
-import Link from 'next/link';
-import { LogoMark } from '../shared/logo-mark';
+import { ProductMark } from '@/components/ProductMark';
 
 /**
  * 顶栏只保留必要上下文。quiet 空态严格只显示品牌；阶段徽章只有服务端传入
@@ -33,17 +32,7 @@ export function TopBar({
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
       {/* 结构化学习是统一 Agent 的工作流，品牌返回同一 Agent 的主对话。 */}
-      <Link
-        href="/"
-        title="返回主对话"
-        aria-label="返回 EduCanvas 主对话"
-        className="group inline-flex items-center gap-2 rounded-full pr-1 text-base font-semibold tracking-[-0.02em] text-ink transition-colors hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        <span className="grid size-8 place-items-center rounded-full bg-accent-soft transition-colors group-hover:bg-accent/15">
-          <LogoMark size={17} />
-        </span>
-        EduCanvas
-      </Link>
+      <ProductMark href="/" />
       {!quiet && courseTitle ? (
         <>
           <span

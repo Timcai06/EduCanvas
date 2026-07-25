@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { HeroGreeting } from '../shared/hero-greeting';
 import { HeroInkField } from '../shared/hero-ink-field';
+import { TechnologyBrandLoop } from '../shared/technology-brand-loop';
 
 gsap.registerPlugin(useGSAP);
 
@@ -56,6 +57,7 @@ export function EmptyChatHero({
         <HeroGreeting nickname={nickname} />
         <div ref={contentRef}>{children}</div>
       </section>
+      <TechnologyBrandLoop />
     </main>
   );
 }

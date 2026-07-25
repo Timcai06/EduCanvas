@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, UserCircle } from '@phosphor-icons/react/dist/ssr';
+import { UserCircle } from '@phosphor-icons/react/dist/ssr';
+import { ProductMark } from '@/components/ProductMark';
 import { AuroraInk } from '@/features/profile/aurora-ink';
 import { LearningHeatmap } from '@/features/profile/learning-heatmap';
 import { ProfileStats } from '@/features/profile/profile-stats';
@@ -32,15 +33,7 @@ export default async function ProfilePage() {
     <main className="min-h-dvh bg-canvas text-ink">
       <header className="border-b border-line/70">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4 sm:px-8">
-          <Link
-            href="/"
-            className="group inline-flex min-h-9 items-center gap-2 rounded-full pr-3 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <span className="grid size-9 place-items-center rounded-full transition-colors group-hover:bg-surface">
-              <ArrowLeft aria-hidden="true" size={17} weight="bold" />
-            </span>
-            返回
-          </Link>
+          <ProductMark href="/" />
         </div>
       </header>
 
@@ -68,7 +61,7 @@ export default async function ProfilePage() {
                 )}
               </span>
               <div className="min-w-0 flex-1">
-                <h1 className="font-display text-3xl font-semibold tracking-tight">
+                <h1 className="font-display text-3xl font-semibold tracking-[0.025em]">
                   {displayName}
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">

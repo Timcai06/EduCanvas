@@ -9,6 +9,7 @@ import { AuthDrawer } from './auth-drawer';
 
 interface CurrentUser {
   nickname: string;
+  username?: string;
   avatarAvailable: boolean;
 }
 
@@ -171,6 +172,7 @@ export function UserMenu({
         <ProfileDrawer
           conversationId={conversationId}
           notebookTitle={notebookTitle}
+          initialUser={user}
           onUserChange={(nextUser) => {
             setUser((current) =>
               current ? { ...current, ...nextUser } : current,

@@ -1,0 +1,9 @@
+.text-type {
+  display: inline-block;
+  min-width: 0.7ch;
+  color: var(--color-accent-strong);
+  font-family: var(--font-display);
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  white-space: pre-wrap;
+}

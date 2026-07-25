@@ -22,19 +22,27 @@ import {
   readActiveConversationId,
   writeActiveConversationCookie,
 } from '@/server/platform/general-conversation';
-import { DELETE } from './route';
+import { DELETE, PATCH } from './route';
 
 const ACTIVE_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const archiveOwned = vi.fn();
 const listOwnedRecent = vi.fn();
+const renameOwned = vi.fn();
 
-function request(): Request {
+function request(
+  method: 'DELETE' | 'PATCH' = 'DELETE',
+  body?: unknown,
+): Request {
   return new Request(
     `http://localhost/api/v1/chat/conversations/${ACTIVE_ID}`,
     {
-      method: 'DELETE',
-      headers: { origin: 'http://localhost' },
+      method,
+      headers: {
+        origin: 'http://localhost',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     },
   );
 }
@@ -46,6 +54,7 @@ beforeEach(() => {
       return {
         archiveOwned,
         listOwnedRecent,
+        renameOwned,
       };
     } as never,
   );
@@ -58,6 +67,50 @@ beforeEach(() => {
   );
   archiveOwned.mockResolvedValue(true);
   listOwnedRecent.mockResolvedValue([]);
+  renameOwned.mockResolvedValue({
+    id: ACTIVE_ID,
+    title: '新的笔记本名称',
+  });
+});
+
+describe('PATCH conversation', () => {
+  it('在仓储调用前拒绝空标题和超长标题', async () => {
+    const response = await PATCH(request('PATCH', { title: '   ' }), {
+      params: Promise.resolve({ conversationId: ACTIVE_ID }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(renameOwned).not.toHaveBeenCalled();
+  });
+
+  it('只以服务端身份重命名所属笔记本', async () => {
+    const response = await PATCH(
+      request('PATCH', { title: '  新的笔记本名称  ' }),
+      {
+        params: Promise.resolve({ conversationId: ACTIVE_ID }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(renameOwned).toHaveBeenCalledWith({
+      conversationId: ACTIVE_ID,
+      trustedSubjectId: 'local:owner',
+      title: '新的笔记本名称',
+    });
+    await expect(response.json()).resolves.toEqual({
+      conversation: { id: ACTIVE_ID, title: '新的笔记本名称' },
+    });
+  });
+
+  it('跨主体或已归档笔记本统一返回不存在', async () => {
+    renameOwned.mockResolvedValue(null);
+
+    const response = await PATCH(request('PATCH', { title: '越权改名' }), {
+      params: Promise.resolve({ conversationId: OTHER_ID }),
+    });
+
+    expect(response.status).toBe(404);
+  });
 });
 
 describe('DELETE conversation', () => {
