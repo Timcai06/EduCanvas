@@ -17,24 +17,29 @@ describe('workspace truth and motion boundaries', () => {
     );
     const sidebar = read('features/workspace/general/conversation-sidebar.tsx');
     const studio = read('features/studio/studio-workspace.tsx');
-    const studioDock = read('features/studio/studio-dock.tsx');
-    const cornerArc = read('features/studio/studio-corner-arc.tsx');
+    const studioOverlay = read('features/studio/studio-overlay.tsx');
+    const optionWheel = read('components/OptionWheel.tsx');
+    const optionWheelCss = read('components/OptionWheel.css');
 
     expect(generalWorkspace).toContain('<StudioWorkspace');
-    expect(generalWorkspace).toContain('<StudioDock');
+    expect(generalWorkspace).toContain('<StudioOverlay');
     expect(generalWorkspace).not.toContain('<SourcesPanel');
     expect(sidebar).not.toContain('children');
     expect(sidebar).not.toContain('来源');
-    expect(studio).toContain('<StudioCornerArc');
     expect(studio).toContain('<OptionWheel');
     expect(studio).toContain('onSelect=');
-    expect(studio).toContain("if (level === 'root')");
-    expect(studio).toContain('onExpandedChange(true)');
-    expect(cornerArc).toContain('文件输入');
-    expect(cornerArc).toContain('内容输出');
-    expect(studioDock).toContain('<aside');
-    expect(studioDock).not.toContain('<Sheet');
-    expect(studioDock).not.toContain('role="dialog"');
+    expect(studio).toContain('pointer-events-auto absolute inset-0');
+    expect(studio).toContain('ROOT_ITEMS');
+    expect(studio).toContain('SOURCE_ADD_ITEMS');
+    expect(studio).toContain('OUTPUT_CREATE_ITEMS');
+    expect(optionWheel).toContain('requestAnimationFrame');
+    expect(optionWheel).toContain('onSelectRef');
+    expect(optionWheelCss).not.toContain('border-radius: 50%');
+    expect(optionWheelCss).not.toContain('stroke');
+    expect(studioOverlay).toContain('<aside');
+    expect(studioOverlay).not.toContain('<Sheet');
+    expect(studioOverlay).not.toContain('role="dialog"');
+    expect(studioOverlay).not.toContain('bg-card');
   });
 
   it('keeps settings behind the avatar entry instead of a duplicate gear', () => {
