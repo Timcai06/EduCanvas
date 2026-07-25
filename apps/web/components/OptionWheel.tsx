@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { GENERATED_SOFT_CLICK, playSoftClick } from './option-wheel-sound';
 import './OptionWheel.css';
 
 type Side = 'left' | 'right';
@@ -128,6 +129,7 @@ const OptionWheel = ({
   const dragRef = useRef<{ y: number; start: number; id: number } | null>(null);
   const dragMovedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const generatedAudioContextRef = useRef<AudioContext | null>(null);
   const audioUrlRef = useRef('');
   const lastTickRef = useRef(0);
   const [selectedIndex, setSelectedIndex] = useState(defaultSelected);
@@ -244,6 +246,13 @@ const OptionWheel = ({
     const now = performance.now();
     if (now - lastTickRef.current < 70) return;
     lastTickRef.current = now;
+    if (soundUrl === GENERATED_SOFT_CLICK) {
+      generatedAudioContextRef.current = playSoftClick(
+        generatedAudioContextRef.current,
+        soundVolume,
+      );
+      return;
+    }
     if (!audioRef.current || audioUrlRef.current !== soundUrl) {
       audioRef.current = new Audio(soundUrl);
       audioRef.current.preload = 'auto';
@@ -396,6 +405,10 @@ const OptionWheel = ({
         rafRef.current = null;
       }
       audioRef.current?.pause();
+      if (generatedAudioContextRef.current) {
+        void generatedAudioContextRef.current.close();
+        generatedAudioContextRef.current = null;
+      }
     },
     [],
   );

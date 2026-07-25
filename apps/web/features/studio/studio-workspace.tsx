@@ -1,6 +1,7 @@
 'use client';
 
 import OptionWheel from '@/components/OptionWheel';
+import { GENERATED_SOFT_CLICK } from '@/components/option-wheel-sound';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type {
   ArtifactSummary,
@@ -119,16 +120,18 @@ export function StudioWorkspace({
           textColor="var(--color-ink-muted)"
           activeColor="var(--color-ink)"
           side="right"
-          fontSize={route === 'root' ? 2.25 : 1.6}
+          fontSize={route === 'root' ? 2.7 : 1.95}
           spacing={route === 'root' ? 1.55 : 1.5}
           curve={1}
-          tilt={route === 'root' ? 8 : 7}
+          tilt={route === 'root' ? 7 : 6}
           blur={route === 'root' ? 1.8 : 1.45}
           fade={route === 'root' ? 0.22 : 0.18}
           minOpacity={0.08}
           smoothing={200}
           inset={52}
           draggable
+          soundUrl={GENERATED_SOFT_CLICK}
+          soundVolume={0.38}
           ariaLabel={routeLabel(route)}
           className="font-display"
         />
