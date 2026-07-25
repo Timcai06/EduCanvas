@@ -1,0 +1,284 @@
+/*
+ * 对话内容的全局排版与状态视觉。
+ * 只负责消息 Markdown、来源旁注、问候语与流式占位；颜色均来自 globals.css 的语义 token。
+ */
+
+/*
+ * 助手消息 Markdown 排版。中文正文行高 1.8；标题走衬线显示字体，
+ * 这是「课堂讲义」的排版身份。全部取色自语义 token，禁止散写色值。
+ */
+.chat-prose {
+  line-height: 1.8;
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+.chat-prose > :first-child {
+  margin-top: 0;
+}
+
+.chat-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-prose p {
+  margin-block: 0.65em;
+}
+
+.chat-prose h1,
+.chat-prose h2,
+.chat-prose h3,
+.chat-prose h4 {
+  margin-block: 1.15em 0.5em;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+}
+
+.chat-prose h1 {
+  font-size: 1.3rem;
+}
+
+.chat-prose h2 {
+  font-size: 1.15rem;
+}
+
+.chat-prose h3,
+.chat-prose h4 {
+  font-size: 1rem;
+}
+
+.chat-prose ul,
+.chat-prose ol {
+  margin-block: 0.65em;
+  padding-inline-start: 1.4em;
+}
+
+.chat-prose ul {
+  list-style: disc;
+}
+
+.chat-prose ol {
+  list-style: decimal;
+}
+
+.chat-prose li {
+  margin-block: 0.3em;
+}
+
+.chat-prose li::marker {
+  color: var(--color-ink-faint);
+}
+
+.chat-prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--color-accent) 45%,
+    transparent
+  );
+  text-underline-offset: 3px;
+}
+
+.chat-prose a:hover {
+  color: var(--color-accent-strong);
+  text-decoration-color: currentColor;
+}
+
+/* 引文 = 页边批注的口吻：细墨紫竖线 + 衬线 */
+.chat-prose blockquote {
+  margin-block: 0.85em;
+  border-inline-start: 2px solid
+    color-mix(in srgb, var(--color-accent) 45%, var(--color-line));
+  padding-inline-start: 0.95em;
+  font-family: var(--font-display);
+  color: var(--color-ink-muted);
+}
+
+.chat-prose hr {
+  margin-block: 1.2em;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.chat-prose table {
+  margin-block: 0.8em;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.chat-prose th,
+.chat-prose td {
+  border: 1px solid var(--color-line);
+  padding: 0.42em 0.8em;
+  text-align: left;
+}
+
+.chat-prose th {
+  background: var(--color-surface);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.chat-prose__inline-code {
+  border-radius: 0.375rem;
+  background: var(--color-surface-strong);
+  padding: 0.12em 0.4em;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.875em;
+}
+
+/*
+ * 行内引用标记 [n]：衬线上标注号，像书页里的脚注序号，
+ * 点击滚动到消息下方对应的旁注条目。
+ */
+/* 组件层已用 <sup> 包裹,这里不再叠加上标定位,只负责字形与颜色 */
+.chat-prose__citation {
+  margin-inline: 0.08em;
+  padding-inline: 0.12em;
+  font-family: var(--font-display);
+  font-size: 0.95em;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.chat-prose__citation:hover {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-prose__code-block {
+  position: relative;
+  margin-block: 0.8em;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--color-card) 80%, var(--color-surface));
+}
+
+.chat-prose__code-block pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.chat-prose__code-lang {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.8rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/*
+ * 旁注（marginalia）：回答下方的来源清单。不是芯片堆，而是书页边的批注——
+ * 墨紫点线在左，衬线小字在右。这是「回答依据来源」的排版化表达。
+ */
+.marginalia {
+  border-inline-start: 1px dotted
+    color-mix(in srgb, var(--color-accent) 55%, var(--color-line));
+  padding-inline-start: 0.8rem;
+  font-family: var(--font-display);
+}
+
+.marginalia__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4em;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--color-ink-muted);
+  text-decoration: none;
+}
+
+.marginalia__item[href]:hover {
+  color: var(--color-accent);
+}
+
+.marginalia__marker {
+  font-size: 0.72em;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+/*
+ * 问候语：墨色衬线大字，作为扉页第一现场的排版身份。
+ * 2026-07 起重新引入受控的墨色动效/渐变（PixelBlast 墨点场、PulsingBorder 工作态流光），
+ * 但严格走墨紫/朱砂色谱，是「我们的水墨」而非通用彩虹渐变——身份仍由排版主导、动效点缀。
+ * SplitText 切分中文字符时避免字距抖动；持续动效见下方 .hero-ink-char。
+ */
+.hero-ink-text {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.hero-ink-text.is-splitting {
+  font-kerning: none;
+  text-rendering: optimizeSpeed;
+}
+
+/*
+ * 流式回答占位 shimmer：纸面灰条 + GSAP 平移的墨紫微光。
+ * 高光只动 transform，reduced-motion 下由组件停用，灰条保持静态。
+ */
+.stream-shimmer {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.stream-shimmer__line {
+  position: relative;
+  height: 0.8rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.stream-shimmer__line:nth-child(2) {
+  width: 82%;
+}
+
+.stream-shimmer__line:nth-child(3) {
+  width: 56%;
+}
+
+.stream-shimmer__glint {
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-accent) 22%, transparent) 50%,
+    transparent 100%
+  );
+  will-change: transform;
+}
+
+/* 减少动态模式由组件上的 motion-reduce:animate-none 停用此动画。 */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-0.2rem);
+  }
+}

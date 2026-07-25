@@ -4,6 +4,7 @@ import '@fontsource-variable/inter';
 import '@fontsource/noto-serif-sc/400.css';
 import '@fontsource/noto-serif-sc/600.css';
 import './globals.css';
+import './conversation-content.css';
 import './effects.css';
 import { ThemeSync } from '@/features/theme/theme-sync';
 import { InkSplashHost } from '@/features/celebrate/ink-splash-host';

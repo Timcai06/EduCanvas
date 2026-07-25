@@ -48,7 +48,8 @@
 - `app/settings/page.tsx` 与 `app/api/v1/connections/`：通信方式 GUI 与同源、可信身份 BFF。
 - `app/login`、`app/register`、`app/api/v1/auth/` 与 `server/auth/`：Web 账号界面、
   有界认证输入、版本化 scrypt、session 和 local-only 限流；生产共享限流仍是部署门禁。
-- `app/globals.css`：「两支笔」设计 Token（黛青/朱砂、纸/砚墨双主题）、排版与 Canvas 样式；`app/effects.css` 只保存受控视觉效果参数。
+- `app/globals.css` 保存「两支笔」设计 Token 与全局基础样式，`app/conversation-content.css`
+  保存消息、来源与流式占位排版，`app/effects.css` 只保存受控视觉效果参数。
 
 ### 学生端功能
 
