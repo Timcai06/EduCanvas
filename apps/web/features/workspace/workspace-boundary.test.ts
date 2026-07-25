@@ -32,6 +32,8 @@ describe('workspace truth and motion boundaries', () => {
     expect(studio).toContain('ROOT_ITEMS');
     expect(studio).toContain('SOURCE_ADD_ITEMS');
     expect(studio).toContain('OUTPUT_CREATE_ITEMS');
+    expect(studio).toContain('GENERATED_SOFT_CLICK');
+    expect(studio).toContain('soundVolume={0.38}');
     expect(optionWheel).toContain('requestAnimationFrame');
     expect(optionWheel).toContain('onSelectRef');
     expect(optionWheelCss).not.toContain('border-radius: 50%');
