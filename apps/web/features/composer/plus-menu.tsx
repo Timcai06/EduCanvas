@@ -11,6 +11,7 @@ import {
   Slideshow,
   TreeStructure,
   Headphones,
+  LinkSimple,
   NotePencil,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
@@ -52,6 +53,7 @@ const menuItems: readonly PlusMenuItem[] = [
     label: '上传图片',
     available: true,
   },
+  { id: 'add_link', icon: LinkSimple, label: '导入网页', available: true },
   {
     id: 'pick_course_material',
     icon: BookOpen,

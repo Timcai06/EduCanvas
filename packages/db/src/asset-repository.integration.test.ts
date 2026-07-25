@@ -153,6 +153,61 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ).rejects.toBeInstanceOf(AssetAccessError);
   });
 
+  it('对象存储键只经服务端所有权方法返回且跨主体拒绝', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      assetId: created.descriptor.assetId,
+      storageKey: 'uploads/fixture/vision.pdf',
+      extractedText: '图像分类模型会从像素中提取可比较的特征。',
+    });
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    expect(JSON.stringify(created)).not.toContain('uploads/fixture');
+  });
+
+  it('软删除只影响本主体资产并从公开列表隐藏', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+
+    await expect(
+      repository.tombstoneOwnedAsset({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.tombstoneOwnedAsset({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      repository.listOwnedSpace({ ownerSubjectId, spaceId }),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+  });
+
   it('消息账本原子保存文本与资产引用并可从历史恢复', async () => {
     const repository = new DrizzleAssetRepository(getDatabase());
     const created = await repository.createUploaded(readyPdf());

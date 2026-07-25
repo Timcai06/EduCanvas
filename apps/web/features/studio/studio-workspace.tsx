@@ -6,14 +6,9 @@ import { useMemo, useRef, useState } from 'react';
 import OptionWheel from '@/components/OptionWheel';
 import { GENERATED_SOFT_CLICK } from '@/components/option-wheel-sound';
 import type { AssetItem } from '@/features/assets/assets-drawer';
-import type {
-  ArtifactSummary,
-  CreatableArtifactKind,
-} from '@/features/canvas/artifact-client';
-import { StudioLinkBubble } from './studio-link-bubble';
+import type { ArtifactSummary } from '@/features/canvas/artifact-client';
 import {
   itemsForRoute,
-  OUTPUT_ACTIONS,
   ROOT_ITEMS,
   routeLabel,
   type StudioRoute,
@@ -27,27 +22,18 @@ import './studio-workspace.css';
 export function StudioWorkspace({
   assets,
   outputs,
-  onToggleAsset,
-  onUpload,
-  onImported,
+  onOpenSource,
   onOpenOutput,
-  onCreateOutput,
-  onCreateBlankNote,
 }: {
   assets: readonly AssetItem[];
   outputs: readonly ArtifactSummary[];
-  onToggleAsset: (id: string) => void;
-  onUpload: (kind: 'document' | 'image') => void;
-  onImported: (asset: AssetItem) => void;
+  onOpenSource: (asset: AssetItem) => void;
   onOpenOutput: (id: string) => void;
-  onCreateOutput: (kind: CreatableArtifactKind, defaultTitle: string) => void;
-  onCreateBlankNote: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLElement>(null);
   const secondaryRef = useRef<HTMLElement>(null);
   const [route, setRoute] = useState<StudioRoute | null>(null);
-  const [linkOpen, setLinkOpen] = useState(false);
   const secondaryItems = useMemo(
     () => (route ? itemsForRoute(route, assets, outputs) : []),
     [assets, outputs, route],
@@ -153,15 +139,9 @@ export function StudioWorkspace({
   };
 
   const selectRoot = (index: number) => {
-    const routes: readonly StudioRoute[] = [
-      'source-add',
-      'source-manage',
-      'output-create',
-      'output-browse',
-    ];
+    const routes: readonly StudioRoute[] = ['source-browse', 'output-browse'];
     const nextRoute = routes[index];
     if (!nextRoute) return;
-    setLinkOpen(false);
     if (route === nextRoute) {
       collapseSecondary();
       return;
@@ -172,35 +152,12 @@ export function StudioWorkspace({
   };
 
   const selectSecondary = (index: number) => {
-    if (route === 'source-add') {
-      if (index === 0) onUpload('document');
-      else if (index === 1) onUpload('image');
-      else if (index === 2) setLinkOpen(true);
-      return;
-    }
-    if (route === 'source-manage') {
-      if (index === secondaryItems.length - 1) {
-        setRoute('source-add');
-        return;
-      }
+    if (route === 'source-browse') {
       const asset = assets[index];
-      if (asset?.selectable) onToggleAsset(asset.id);
-      return;
-    }
-    if (route === 'output-create') {
-      if (index === 0) {
-        onCreateBlankNote();
-        return;
-      }
-      const action = OUTPUT_ACTIONS[index - 1];
-      if (action) onCreateOutput(...action);
+      if (asset) onOpenSource(asset);
       return;
     }
     if (route === 'output-browse') {
-      if (index === secondaryItems.length - 1) {
-        setRoute('output-create');
-        return;
-      }
       const output = outputs[index];
       if (output) onOpenOutput(output.id);
     }
@@ -272,18 +229,8 @@ export function StudioWorkspace({
       <p className="studio-cascade__hint">
         {route
           ? '一级保持可见 · 再点当前一级可收起二级'
-          : '滚轮或拖动浏览 · 再点中心项展开二级'}
+          : '这里只浏览和管理 · 添加与生成请使用输入框 +'}
       </p>
-      {linkOpen ? (
-        <StudioLinkBubble
-          onCancel={() => setLinkOpen(false)}
-          onImported={(asset) => {
-            onImported(asset);
-            setLinkOpen(false);
-            setRoute('source-manage');
-          }}
-        />
-      ) : null}
     </div>
   );
 }
