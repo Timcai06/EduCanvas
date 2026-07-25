@@ -38,6 +38,7 @@ export interface LineSidebarProps {
   onItemClick?: (index: number, label: string) => void;
   renderLabel?: (index: number, label: string) => ReactNode;
   renderAction?: (index: number, label: string) => ReactNode;
+  actionWidth?: number;
   className?: string;
 }
 
@@ -78,6 +79,7 @@ export default function LineSidebar({
   onItemClick,
   renderLabel,
   renderAction,
+  actionWidth = 0,
   className = '',
 }: LineSidebarProps) {
   const listRef = useRef<HTMLUListElement>(null);
@@ -197,6 +199,7 @@ export default function LineSidebar({
           '--max-shift': `${maxShift}px`,
           '--item-gap': `${itemGap}px`,
           '--font-size': `${fontSize}rem`,
+          '--action-width': `${renderAction ? actionWidth : 0}px`,
         } as CSSProperties
       }
     >

@@ -9,6 +9,7 @@
   --item-gap: 20px;
   --font-size: 1.1rem;
   --smoothing: 100ms;
+  --action-width: 0px;
 
   position: relative;
   display: flex;
@@ -52,7 +53,7 @@
   border: 0;
   border-radius: 0.8rem;
   background: transparent;
-  padding: 0.55rem 2.25rem 0.55rem 0;
+  padding: 0.55rem calc(var(--action-width) + 0.5rem) 0.55rem 0;
   text-align: left;
   cursor: pointer;
 }

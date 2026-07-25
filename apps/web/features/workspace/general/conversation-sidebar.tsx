@@ -259,6 +259,7 @@ export function ConversationSidebar({
                         itemGap={2}
                         fontSize={0.88}
                         smoothing={100}
+                        actionWidth={60}
                         onItemClick={(index) => {
                           const item = group.items[index];
                           if (item) switchTo(item.id);

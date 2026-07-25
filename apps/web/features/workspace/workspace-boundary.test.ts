@@ -39,6 +39,8 @@ describe('workspace truth and motion boundaries', () => {
     expect(lineSidebar).toContain('requestAnimationFrame');
     expect(lineSidebar).toContain('getBoundingClientRect');
     expect(lineSidebar).toContain('data-session-id');
+    expect(lineSidebar).toContain("'--action-width'");
+    expect(sidebar).toContain('actionWidth={60}');
     expect(studio).toContain('<OptionWheel');
     expect(studio).toContain('onSelect=');
     expect(studio).toContain('studio-cascade__wheel--primary');
