@@ -157,9 +157,9 @@ export function ConversationSidebar({
        * 外层控制开合：桌面端折叠为 0 宽（内容占满全宽），窄屏为固定覆盖抽屉。
        * 内层固定 w-64 以免折叠动画时正文重排。
        */}
-      <nav
+      <aside
         id="conversation-sidebar"
-        aria-label="笔记本"
+        aria-label="笔记本侧栏"
         aria-hidden={!open}
         inert={!open}
         className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas transition-[width,transform] duration-300 ease-out ${
@@ -211,7 +211,7 @@ export function ConversationSidebar({
           </div>
           {children}
         </div>
-      </nav>
+      </aside>
     </>
   );
 }

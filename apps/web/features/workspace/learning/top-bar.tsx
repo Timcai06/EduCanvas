@@ -32,11 +32,11 @@ export function TopBar({
   const percent = masteryPercent ?? 0;
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
-      {/* 品牌即「退出 AI 家教、返回主页」的出口——对称于首页进入家教的入口 */}
+      {/* 结构化学习是统一 Agent 的工作流，品牌返回同一 Agent 的主对话。 */}
       <Link
         href="/"
-        title="退出 AI 家教 · 返回主页"
-        aria-label="退出 AI 家教，返回主页"
+        title="返回主对话"
+        aria-label="返回 EduCanvas 主对话"
         className="group inline-flex items-center gap-2 rounded-full pr-1 text-base font-semibold tracking-[-0.02em] text-ink transition-colors hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span className="grid size-8 place-items-center rounded-full bg-accent-soft transition-colors group-hover:bg-accent/15">

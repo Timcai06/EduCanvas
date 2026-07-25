@@ -68,7 +68,7 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
           className="mr-1 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-medium text-ink transition-colors hover:border-accent/40 hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <GraduationCap aria-hidden="true" size={17} className="text-accent" />
-          AI 家教
+          学习计划
         </Link>
         <UserMenu />
         <button

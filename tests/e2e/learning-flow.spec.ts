@@ -444,12 +444,14 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
 }) => {
   await startLearning(page);
   const desktopRailToggle = page.getByRole('button', {
-    name: '展开学习记录',
+    name: '打开学习记录',
   });
   await expect(desktopRailToggle).toHaveAttribute('aria-expanded', 'false');
   await desktopRailToggle.click();
+  const desktopDialog = page.getByRole('dialog', { name: '学习记录' });
+  await expect(desktopDialog).toBeVisible();
   await expect(
-    page.getByRole('navigation', { name: '学习记录' }),
+    desktopDialog.getByRole('navigation', { name: '学习记录' }),
   ).toBeVisible();
   const currentSession = page.locator('[aria-current="page"]');
   await expect(currentSession).toHaveCount(1);
@@ -469,7 +471,7 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '展开学习记录' }).click();
+  await page.getByRole('button', { name: '打开学习记录' }).click();
   const currentNewSession = page.locator('[aria-current="page"]');
   await expect(currentNewSession).toHaveCount(1);
   expect(await currentNewSession.getAttribute('data-session-id')).not.toBe(
@@ -483,13 +485,15 @@ test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', 
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '展开学习记录' }).click();
+  await page.getByRole('button', { name: '打开学习记录' }).click();
   await expect(
     page.locator(
       `[aria-current="page"][data-session-id="${originalSessionId}"]`,
     ),
   ).toHaveCount(1);
 
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '学习记录' })).toHaveCount(0);
   await ensureConversationUi(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileTrigger = page.getByRole('button', { name: '打开学习记录' });

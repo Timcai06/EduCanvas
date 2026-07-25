@@ -67,7 +67,7 @@ export function GeneralWorkspaceHeader({
         className="mr-1 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-medium text-ink transition-colors hover:border-accent/40 hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <GraduationCap aria-hidden="true" size={17} className="text-accent" />
-        <span className="hidden sm:inline">AI 家教</span>
+        <span className="hidden sm:inline">学习计划</span>
       </Link>
       <UserMenu />
       <button
