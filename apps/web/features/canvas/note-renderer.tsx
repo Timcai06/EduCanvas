@@ -48,13 +48,13 @@ const toolbarIcons: Record<string, React.ComponentType<{ size?: number }>> = {
   H1: TextHOne,
   H2: TextHTwo,
   H3: TextHThree,
-  粗体: TextB,
-  斜体: TextItalic,
-  无序列表: ListBullets,
-  有序列表: ListNumbers,
-  代码块: CodeBlock,
-  链接: LinkSimple,
-  引用: Quotes,
+  '粗体': TextB,
+  '斜体': TextItalic,
+  '无序列表': ListBullets,
+  '有序列表': ListNumbers,
+  '代码块': CodeBlock,
+  '链接': LinkSimple,
+  '引用': Quotes,
 };
 
 function insertMarkdown(
@@ -80,10 +80,6 @@ function insertMarkdown(
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-/**
- * 渲染并编辑单个不可变笔记版本。父级必须以版本号作为 key，在保存产生新
- * 版本后重新挂载；组件只负责本地草稿和有界延迟保存，不自行访问 API。
- */
 export function NoteRenderer({
   content,
   isLatest,
@@ -103,12 +99,10 @@ export function NoteRenderer({
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(
-    () => () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    setMarkdown(content.markdown);
+    setEditing(false);
+  }, [content.markdown]);
 
   const canEdit = isLatest && !readOnly;
   const dirty = markdown !== content.markdown;
@@ -149,9 +143,7 @@ export function NoteRenderer({
                       action.suffix,
                       action.block,
                     );
-                    const value = textareaRef.current.value;
-                    setMarkdown(value);
-                    triggerAutosave(value);
+                    setMarkdown(textareaRef.current.value);
                   }
                 }}
                 className="grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
@@ -177,7 +169,11 @@ export function NoteRenderer({
             <>
               <span className="flex-1" aria-hidden="true" />
               <span className="text-xs text-ink-muted">
-                {saving ? '保存中…' : dirty ? '未保存' : '已保存'}
+                {saving
+                  ? '保存中…'
+                  : dirty
+                    ? '未保存'
+                    : '已保存'}
               </span>
               <button
                 type="button"
@@ -272,7 +268,9 @@ export function NoteRenderer({
             历史版本（只读）
           </span>
         ) : null}
-        {readOnly ? <span className="text-xs text-ink-muted">只读</span> : null}
+        {readOnly ? (
+          <span className="text-xs text-ink-muted">只读</span>
+        ) : null}
       </div>
     </div>
   );

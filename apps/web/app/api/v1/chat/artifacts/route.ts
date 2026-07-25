@@ -13,14 +13,10 @@ import {
   AssetAccessError,
   ARTIFACT_GENERATE_TASK,
   DrizzleAssetRepository,
-  DrizzleManualArtifactRepository,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
 import { assetVersionReferenceSchema } from '@educanvas/agent-core';
-import {
-  NOTE_MARKDOWN_MAX_CHARS,
-  noteContentSchema,
-} from '@educanvas/canvas-protocol';
+import { noteContentSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -64,15 +60,9 @@ const titleSchema = z.string().trim().min(1).max(120);
 const createArtifactSchema = z.discriminatedUnion('kind', [
   z
     .object({
-      kind: z.enum(['mind_map', 'slides', 'flashcards']),
+      kind: z.enum(['mind_map', 'slides', 'flashcards', 'note']),
       title: titleSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('note'),
-      title: titleSchema,
-      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS).optional(),
+      markdown: z.string().optional(),
     })
     .strict(),
   z
@@ -149,25 +139,36 @@ export async function POST(request: Request): Promise<Response> {
       params = { selectedSources: parsed.data.sources };
     }
 
-    /* 用户直接新建空白笔记时，Artifact 与 v1 在同一事务落库，不产生
-       generation job；缺少 markdown 则仍按普通生成请求进入 Worker。 */
+    // 笔记手动创建：直接写入初始内容，不走 Worker
     if (parsed.data.kind === 'note' && parsed.data.markdown !== undefined) {
-      const created =
-        await new DrizzleManualArtifactRepository().createWithInitialVersion({
-          spaceId: conversation.spaceId,
-          conversationId: conversation.id,
-          trustedSubjectId: identity.studentId,
-          kind: 'note',
-          trustTier: 'tier1',
-          title: parsed.data.title,
-          content: noteContentSchema.parse({
-            contentVersion: 1,
-            markdown: parsed.data.markdown,
-            sourceConversationId: conversation.id,
-            generatedByModel: false,
-          }),
-          generatedBy: 'user:manual',
-        });
+      const repository = new DrizzlePlatformArtifactRepository();
+      const created = await repository.createArtifactWithGenerationJob({
+        spaceId: conversation.spaceId,
+        conversationId: conversation.id,
+        trustedSubjectId: identity.studentId,
+        kind: 'note',
+        trustTier: 'tier1',
+        title: parsed.data.title,
+        taskIdentifier: ARTIFACT_GENERATE_TASK,
+        params: {},
+      });
+      await repository.appendVersion({
+        artifactId: created.artifact.id,
+        trustedSubjectId: identity.studentId,
+        content: noteContentSchema.parse({
+          contentVersion: 1,
+          markdown: parsed.data.markdown ?? '',
+          generatedByModel: false,
+        }),
+        generatedBy: 'user:manual',
+        generationJobId: created.job.id,
+      });
+      await repository.transitionGenerationJob({
+        jobId: created.job.id,
+        trustedSubjectId: identity.studentId,
+        to: 'succeeded',
+        progress: 100,
+      });
       return Response.json(
         {
           artifact: {
@@ -178,7 +179,7 @@ export async function POST(request: Request): Promise<Response> {
             status: 'active',
             latestVersion: 1,
           },
-          job: null,
+          job: { id: created.job.id, status: 'succeeded' },
         },
         { status: 201 },
       );

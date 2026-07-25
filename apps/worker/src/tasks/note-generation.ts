@@ -1,8 +1,5 @@
 import type { StructuredModelGateway } from '@educanvas/agent-core';
-import {
-  noteContentSchema,
-  type NoteContent,
-} from '@educanvas/canvas-protocol';
+import { noteContentSchema, type NoteContent } from '@educanvas/canvas-protocol';
 
 export const NOTE_PROMPT_VERSION = 'artifact-note-v1';
 export const NOTE_REVISION_PROMPT_VERSION = 'artifact-note-revision-v1';
@@ -45,21 +42,23 @@ export async function generateNoteContent(input: {
   operationId: string;
   revision?: ArtifactRevisionContext;
 }): Promise<{ content: NoteContent; generatedBy: string }> {
-  const revisionBase = input.revision
-    ? noteContentSchema.parse(input.revision.baseContent)
-    : null;
   if (!input.gateway) {
-    if (input.revision && revisionBase) {
+    if (input.revision) {
+      const base = noteContentSchema.parse(input.revision.baseContent);
       return {
         content: noteContentSchema.parse({
-          ...revisionBase,
-          markdown: `${revisionBase.markdown}\n\n---\n\n> 修改要求：${input.revision.instruction}`,
-          generatedByModel: false,
+          ...base,
+          markdown: `${base.markdown}\n\n---\n\n> 修改要求：${input.revision.instruction}`,
         }),
         generatedBy: RULE_REVISION_GENERATOR,
       };
     }
-    const lines: string[] = [`# ${input.title}`, '', '## 对话摘要', ''];
+    const lines: string[] = [
+      `# ${input.title}`,
+      '',
+      '## 对话摘要',
+      '',
+    ];
     for (const message of input.messages.slice(-20)) {
       const role = message.role === 'user' ? '学生' : 'AI';
       lines.push(`**${role}**：${message.content.slice(0, 500)}`);
@@ -102,7 +101,7 @@ export async function generateNoteContent(input: {
       {
         role: 'user',
         content: input.revision
-          ? `标题：${input.title}\n\n当前笔记：\n${revisionBase!.markdown}\n\n修改要求：\n${input.revision.instruction}\n\n对话记录：\n${buildTranscript(input.messages)}`
+          ? `标题：${input.title}\n\n当前笔记：\n${(input.revision.baseContent as NoteContent).markdown}\n\n修改要求：\n${input.revision.instruction}\n\n对话记录：\n${buildTranscript(input.messages)}`
           : `标题：${input.title}\n\n对话记录：\n${buildTranscript(input.messages)}`,
       },
     ],

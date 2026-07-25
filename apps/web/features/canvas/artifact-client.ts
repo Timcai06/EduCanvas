@@ -85,7 +85,7 @@ const artifactJobSchema = z.object({
 
 const artifactMutationResponseSchema = z.object({
   artifact: artifactSummarySchema,
-  job: artifactJobSchema.pick({ id: true }).nullable(),
+  job: artifactJobSchema.pick({ id: true }),
 });
 
 const audioOverviewMediaSchema = z.object({
@@ -168,7 +168,7 @@ export async function createArtifact(
   title: string,
   sources: readonly ArtifactSourceReference[] = [],
   markdown?: string,
-): Promise<{ artifact: ArtifactSummary; job: { id: string } | null }> {
+): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const body: Record<string, unknown> = { kind, title };
   if (kind === 'audio_overview') body.sources = sources;
   if (kind === 'note' && markdown !== undefined) body.markdown = markdown;
@@ -215,17 +215,13 @@ export async function reviseArtifact(
   artifactId: string,
   baseVersion: number,
   instruction: string,
-): Promise<{ artifact: ArtifactSummary; job: { id: string } | null }> {
+): Promise<{ artifact: ArtifactSummary; job: { id: string } }> {
   const response = await fetch(
     `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
     {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        action: 'generate',
-        baseVersion,
-        instruction,
-      }),
+      body: JSON.stringify({ baseVersion, instruction }),
     },
   );
   return parseJsonOrThrow(
@@ -233,35 +229,6 @@ export async function reviseArtifact(
     artifactMutationResponseSchema,
     '产物修改响应格式不正确。',
   );
-}
-
-/** 直接保存 Markdown 笔记为新版本；它不创建模型任务或伪造 generation job。 */
-export async function saveNoteArtifact(
-  artifactId: string,
-  baseVersion: number,
-  markdown: string,
-): Promise<{ artifact: ArtifactSummary; job: null }> {
-  const response = await fetch(
-    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
-    {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        action: 'save_note',
-        baseVersion,
-        markdown,
-      }),
-    },
-  );
-  const result = await parseJsonOrThrow(
-    response,
-    artifactMutationResponseSchema,
-    '笔记保存响应格式不正确。',
-  );
-  if (result.job !== null) {
-    throw new Error('笔记保存不应创建生成任务。');
-  }
-  return { artifact: result.artifact, job: null };
 }
 
 /**

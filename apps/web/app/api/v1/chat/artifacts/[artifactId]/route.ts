@@ -15,11 +15,8 @@ import {
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
-import {
-  audioOverviewMetadataSchema,
-  NOTE_MARKDOWN_MAX_CHARS,
-  noteContentSchema,
-} from '@educanvas/canvas-protocol';
+import { audioOverviewMetadataSchema } from '@educanvas/canvas-protocol';
+import { noteContentSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -134,27 +131,14 @@ export async function GET(
   }
 }
 
-const mutateArtifactSchema = z.discriminatedUnion('action', [
-  z
-    .object({
-      action: z.literal('generate'),
-      baseVersion: z.number().int().min(1),
-      instruction: z.string().trim().min(1).max(2_000),
-    })
-    .strict(),
-  z
-    .object({
-      action: z.literal('save_note'),
-      baseVersion: z.number().int().min(1),
-      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS),
-    })
-    .strict(),
-]);
+const reviseArtifactSchema = z
+  .object({
+    baseVersion: z.number().int().min(1),
+    instruction: z.string().trim().min(1).max(2_000),
+  })
+  .strict();
 
-/**
- * Canvas 共创入口：AI 修改进入持久生成任务，笔记直接保存只追加不可变
- * 版本。两种动作使用显式判别字段，禁止用正文前缀推断调用意图。
- */
+/** Canvas 共创：显式修改要求进入同一 Artifact 的持久生成任务。 */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
@@ -180,7 +164,7 @@ export async function PATCH(
     }
     throw error;
   }
-  const parsed = mutateArtifactSchema.safeParse(body);
+  const parsed = reviseArtifactSchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '修改要求不正确。');
   }
@@ -193,14 +177,17 @@ export async function PATCH(
     });
     if (
       artifact.spaceId !== conversation.spaceId ||
-      (parsed.data.action === 'save_note'
-        ? artifact.kind !== 'note'
-        : !['mind_map', 'slides', 'flashcards', 'note'].includes(artifact.kind))
+      !['mind_map', 'slides', 'flashcards', 'note'].includes(artifact.kind)
     ) {
       throw new ArtifactOwnershipError();
     }
 
-    if (parsed.data.action === 'save_note') {
+    // 笔记手动编辑：直接保存 Markdown 内容为不可变版本，不走 Worker
+    if (artifact.kind === 'note') {
+      const manualPrefix = '[手动编辑]\n';
+      const markdown = parsed.data.instruction.startsWith(manualPrefix)
+        ? parsed.data.instruction.slice(manualPrefix.length)
+        : parsed.data.instruction;
       const currentVersion = await repository.getVersion({
         artifactId,
         version: parsed.data.baseVersion,
@@ -212,7 +199,7 @@ export async function PATCH(
         trustedSubjectId: identity.studentId,
         content: noteContentSchema.parse({
           ...currentContent,
-          markdown: parsed.data.markdown,
+          markdown,
           generatedByModel: false,
         }),
         generatedBy: 'user:manual',

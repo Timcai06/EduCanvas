@@ -13,7 +13,6 @@ import {
   fetchArtifactDetail,
   pollArtifactUntilSettled,
   reviseArtifact,
-  saveNoteArtifact,
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
@@ -171,57 +170,6 @@ export function useArtifactGeneration() {
     [],
   );
 
-  const createBlankNote = useCallback(async (title: string) => {
-    setGeneration({ phase: 'generating', kind: 'note', title });
-    try {
-      const created = await createArtifact('note', title, [], `# ${title}\n\n`);
-      const detail = await fetchArtifactDetail(created.artifact.id);
-      setGeneration({
-        phase: 'ready',
-        kind: 'note',
-        artifactId: created.artifact.id,
-        title,
-        detail,
-      });
-      setOpenDetail(detail);
-      setCanvasFull(false);
-    } catch {
-      setGeneration({ phase: 'failed', kind: 'note', title });
-    }
-  }, []);
-
-  const saveNote = useCallback(
-    async (detail: ArtifactDetail, markdown: string) => {
-      const baseVersion = detail.artifact.latestVersion;
-      setGeneration({
-        phase: 'generating',
-        kind: 'note',
-        artifactId: detail.artifact.id,
-        title: detail.artifact.title,
-      });
-      try {
-        await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
-        const updated = await fetchArtifactDetail(detail.artifact.id);
-        setOpenDetail(updated);
-        setGeneration({
-          phase: 'ready',
-          kind: 'note',
-          artifactId: detail.artifact.id,
-          title: detail.artifact.title,
-          detail: updated,
-        });
-      } catch {
-        setGeneration({
-          phase: 'failed',
-          kind: 'note',
-          artifactId: detail.artifact.id,
-          title: detail.artifact.title,
-        });
-      }
-    },
-    [],
-  );
-
   const dismiss = useCallback(() => {
     pollAbort.current?.abort();
     setGeneration(null);
@@ -234,9 +182,7 @@ export function useArtifactGeneration() {
     setCanvasFull,
     beginConfirm,
     confirm,
-    createBlankNote,
     revise,
-    saveNote,
     openArtifact,
     openArtifactVersion,
     closeCanvas: () => {
@@ -382,7 +328,6 @@ export function ArtifactCanvas({
   onClose,
   onSelectVersion,
   onRevise,
-  onSaveNote,
   revising = false,
 }: {
   detail: ArtifactDetail;
@@ -391,7 +336,6 @@ export function ArtifactCanvas({
   onClose: () => void;
   onSelectVersion: (version: number) => void;
   onRevise: (instruction: string) => void;
-  onSaveNote: (markdown: string) => void;
   revising?: boolean;
 }) {
   const [instruction, setInstruction] = useState('');
@@ -475,7 +419,9 @@ export function ArtifactCanvas({
               content={detail.version.content as NoteContent}
               isLatest={isLatest}
               readOnly={!isLatest}
-              onSave={onSaveNote}
+              onSave={(markdown) => {
+                if (onRevise) onRevise(`[手动编辑]\n${markdown}`);
+              }}
               saving={revising}
             />
           ) : (

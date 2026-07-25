@@ -2,6 +2,7 @@
 
 import { startNewGeneralChatAction } from '@/app/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
+import { AssetsDrawer } from '@/features/assets/assets-drawer';
 import { loadAssets } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import {
@@ -14,6 +15,7 @@ import {
   fetchNotebookArtifacts,
   type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
+import { FilePreviewPanel } from '@/features/assets/file-preview-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { OfflineBanner } from '@/features/chat/offline-banner';
@@ -26,8 +28,6 @@ import {
 } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import { StudioOverlay } from '@/features/studio/studio-overlay';
-import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
@@ -38,10 +38,12 @@ import {
   PENDING_GENERAL_CANVAS_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
+import { SourcesPanel } from './sources-panel';
 import { HeroGreeting } from '../shared/hero-greeting';
 import { HeroInkField } from '../shared/hero-ink-field';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { Sheet } from '../shared/sheet';
+import { StudioDrawer } from '@/features/studio/studio-drawer';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 
 gsap.registerPlugin(useGSAP, Flip);
@@ -76,8 +78,11 @@ export function GeneralChatWorkspace({
 }) {
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS);
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
-  const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
+  const [assetPanel, setAssetPanel] = useState<
+    'assets' | AssetItem['kind'] | null
+  >(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewAsset, setPreviewAsset] = useState<{ id: string; label: string } | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
   const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
@@ -291,30 +296,52 @@ export function GeneralChatWorkspace({
     <div className="flex h-dvh flex-col bg-canvas text-ink">
       <GeneralWorkspaceHeader
         notebookTitle={notebookTitle}
-        conversationId={conversationId}
         sidebarOpen={sidebarOpen}
         studioOpen={studioOpen}
         onToggleSidebar={toggleSidebar}
+        onNewNotebook={() => void startNewGeneralChatAction()}
         onOpenStudio={() => {
-          const opening = !studioOpen;
-          setStudioOpen(opening);
-          if (!opening) return;
+          setStudioOpen(true);
           void fetchNotebookArtifacts()
             .then(setStudioItems)
             .catch(() => setStudioItems([]));
         }}
       />
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1">
         <ConversationSidebar
           open={sidebarOpen}
           onClose={toggleSidebar}
           activeConversationId={conversationId}
           onNewNotebook={() => void startNewGeneralChatAction()}
-        />
+        >
+          <SourcesPanel
+            assets={notebookSources}
+            onToggle={toggleAsset}
+            onUpload={(kind) => setAssetPanel(kind)}
+            onImported={(asset) =>
+              setAssets((current) => [
+                { ...asset, enabled: asset.selectable },
+                ...current.filter((item) => item.id !== asset.id),
+              ])
+            }
+            onPreview={(asset) => {
+              setPreviewHtml(null);
+              setPreviewAsset({ id: asset.id, label: asset.label });
+            }}
+            onDelete={(assetId) => {
+              setAssets((current) =>
+                current.filter((item) => item.id !== assetId),
+              );
+              setPreviewAsset((current) =>
+                current?.id === assetId ? null : current,
+              );
+            }}
+          />
+        </ConversationSidebar>
         <main
           ref={mainRef}
-          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden"
         >
           {!online ? (
             <div className="relative z-10 shrink-0 pt-1">
@@ -437,12 +464,6 @@ export function GeneralChatWorkspace({
                       instruction,
                     )
                   }
-                  onSaveNote={(markdown) =>
-                    void artifactFlow.saveNote(
-                      artifactFlow.openDetail!,
-                      markdown,
-                    )
-                  }
                   revising={revisingOpenArtifact}
                 />
               ) : previewHtml !== null ? (
@@ -455,41 +476,15 @@ export function GeneralChatWorkspace({
                     setPreviewFull(false);
                   }}
                 />
+              ) : previewAsset ? (
+                <FilePreviewPanel
+                  asset={previewAsset}
+                  onClose={() => setPreviewAsset(null)}
+                />
               ) : null}
             </div>
           )}
         </main>
-        {studioOpen ? (
-          <StudioOverlay onClose={() => setStudioOpen(false)}>
-            <StudioWorkspace
-              assets={notebookSources}
-              outputs={studioItems}
-              onToggleAsset={toggleAsset}
-              onUpload={(kind) => {
-                setStudioOpen(false);
-                setAssetPanel(kind);
-              }}
-              onImported={(asset) =>
-                setAssets((current) => [
-                  { ...asset, enabled: asset.selectable },
-                  ...current.filter((item) => item.id !== asset.id),
-                ])
-              }
-              onOpenOutput={(artifactId) => {
-                setStudioOpen(false);
-                void artifactFlow.openArtifact(artifactId);
-              }}
-              onCreateOutput={(kind, defaultTitle) => {
-                setStudioOpen(false);
-                artifactFlow.beginConfirm(kind, defaultTitle);
-              }}
-              onCreateBlankNote={() => {
-                setStudioOpen(false);
-                void artifactFlow.createBlankNote('未命名笔记');
-              }}
-            />
-          </StudioOverlay>
-        ) : null}
       </div>
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={turn.busy} />
@@ -509,9 +504,6 @@ export function GeneralChatWorkspace({
           }
           onRevise={(instruction) =>
             void artifactFlow.revise(artifactFlow.openDetail!, instruction)
-          }
-          onSaveNote={(markdown) =>
-            void artifactFlow.saveNote(artifactFlow.openDetail!, markdown)
           }
           revising={revisingOpenArtifact}
         />
@@ -537,6 +529,39 @@ export function GeneralChatWorkspace({
           }}
           onClose={artifactFlow.dismiss}
         />
+      ) : null}
+      {studioOpen ? (
+        <Sheet label="当前笔记本的 Studio" onClose={() => setStudioOpen(false)}>
+          <StudioDrawer
+            outputs={studioItems.map((item) => ({
+              id: item.id,
+              title: item.title,
+              kind: item.kind,
+              status: item.latestVersion > 0 ? '已完成' : '本课预置',
+            }))}
+            onOpen={(id) => {
+              setStudioOpen(false);
+              void artifactFlow.openArtifact(id);
+            }}
+            onCreateNote={async () => {
+              setStudioOpen(false);
+              const { createArtifact: create } = await import(
+                '@/features/canvas/artifact-client'
+              );
+              try {
+                const created = await create('note', '未命名笔记', [], '# 未命名笔记\n\n开始写笔记…');
+                void artifactFlow.openArtifact(created.artifact.id);
+              } catch {
+                /* silently fail */
+              }
+            }}
+          />
+        </Sheet>
+      ) : null}
+      {assetPanel === 'assets' ? (
+        <Sheet label="笔记本来源" onClose={() => setAssetPanel(null)}>
+          <AssetsDrawer assets={notebookSources} onToggle={toggleAsset} />
+        </Sheet>
       ) : null}
       {assetPanel === 'image' || assetPanel === 'document' ? (
         <Sheet

@@ -73,41 +73,41 @@ export function StudioDrawer({
         {outputs.map((output) => {
           const IconComp = KindIcon(output.kind);
           return (
-            <li key={output.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(output.id)}
-                className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+          <li key={output.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(output.id)}
+              className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+            >
+              <span
+                aria-hidden="true"
+                className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
               >
-                <span
-                  aria-hidden="true"
-                  className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
-                >
-                  <IconComp size={21} weight="regular" />
+                <IconComp size={21} weight="regular" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">
+                  {output.title}
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">
-                    {output.title}
-                  </span>
-                  <span className="block text-xs text-ink-muted">
-                    {output.kind} ·{' '}
-                    <span
-                      className={
-                        output.status === '已完成' ? 'text-good' : undefined
-                      }
-                    >
-                      {output.status}
-                    </span>
+                <span className="block text-xs text-ink-muted">
+                  {output.kind} ·{' '}
+                  <span
+                    className={
+                      output.status === '已完成' ? 'text-good' : undefined
+                    }
+                  >
+                    {output.status}
                   </span>
                 </span>
-                <ArrowRight
-                  aria-hidden="true"
-                  size={16}
-                  weight="bold"
-                  className="shrink-0 text-accent"
-                />
-              </button>
-            </li>
+              </span>
+              <ArrowRight
+                aria-hidden="true"
+                size={16}
+                weight="bold"
+                className="shrink-0 text-accent"
+              />
+            </button>
+          </li>
           );
         })}
       </ul>
