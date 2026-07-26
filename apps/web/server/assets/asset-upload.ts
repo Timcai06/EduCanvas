@@ -7,8 +7,11 @@ import {
   type CursorPage,
   type TemporalIdCursor,
 } from '@educanvas/db';
-import { extractText, getDocumentProxy } from 'unpdf';
-import mammoth from 'mammoth';
+import {
+  AssetExtractionError,
+  extractAssetText,
+  supportsTextExtraction,
+} from '@educanvas/asset-processing';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
@@ -55,61 +58,6 @@ function safeDisplayName(value: string): string {
   return [...(normalized || '未命名文件')].slice(0, 180).join('');
 }
 
-async function extractPdfText(bytes: Uint8Array): Promise<string> {
-  const pdf = await getDocumentProxy(bytes);
-  const result = await extractText(pdf, { mergePages: true });
-  const normalized = result.text
-    .normalize('NFC')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-  if (!normalized) {
-    throw new AssetUploadError('pdf_text_unavailable', 422);
-  }
-  return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
-}
-
-function extractPlainText(bytes: Uint8Array): string {
-  let decoded: string;
-  try {
-    decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch (cause) {
-    throw new AssetUploadError('text_content_unavailable', 422, { cause });
-  }
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(decoded)) {
-    throw new AssetUploadError('text_content_unavailable', 422);
-  }
-  const normalized = decoded
-    .replace(/^\uFEFF/u, '')
-    .normalize('NFC')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-  if (!normalized) {
-    throw new AssetUploadError('text_content_unavailable', 422);
-  }
-  return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
-}
-
-async function extractDocxText(bytes: Uint8Array): Promise<string> {
-  try {
-    const result = await mammoth.extractRawText({
-      buffer: Buffer.from(bytes),
-    });
-    const normalized = result.value
-      .normalize('NFC')
-      .replace(/\r\n?/g, '\n')
-      .trim();
-    if (!normalized) {
-      throw new AssetUploadError('text_content_unavailable', 422);
-    }
-    return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
-  } catch (error) {
-    if (error instanceof AssetUploadError) throw error;
-    throw new AssetUploadError('text_content_unavailable', 422, {
-      cause: error,
-    });
-  }
-}
-
 export async function uploadOwnedAsset(input: {
   identity: AnonymousIdentity;
   file: File;
@@ -150,16 +98,27 @@ export async function uploadOwnedAssetToSpace(input: {
     });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
     try {
-      const extractedText =
-        detected.mimeType === 'application/pdf'
-          ? await extractPdfText(bytes)
-          : detected.mimeType ===
-              'application/vnd.openxmlformats-officedocument.wordprocessingml'
-            ? await extractDocxText(bytes)
-            : detected.mimeType === 'text/markdown' ||
-                detected.mimeType === 'text/plain'
-              ? extractPlainText(bytes)
-              : null;
+      /* 抽取实现由 @educanvas/asset-processing 独占，web 与 worker 共用同一份，
+         避免两条上传路径对同一份 PDF 得出不同结果（见 ADR-0025）。 */
+      const extractedText = supportsTextExtraction(detected.mimeType)
+        ? await extractAssetText({
+            bytes,
+            mimeType: detected.mimeType,
+          }).catch((error: unknown) => {
+            /* 抽取包用自己的稳定码；HTTP 边界仍按 AssetUploadError 归一，
+               让下方失败版本记录与用户文案映射保持单一出口。 */
+            if (error instanceof AssetExtractionError) {
+              throw new AssetUploadError(
+                error.code === 'pdf_text_unavailable'
+                  ? 'pdf_text_unavailable'
+                  : 'text_content_unavailable',
+                422,
+                { cause: error },
+              );
+            }
+            throw error;
+          })
+        : null;
       return await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
         spaceId: input.spaceId,
