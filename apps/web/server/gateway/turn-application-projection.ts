@@ -18,14 +18,34 @@ function safeFailureMessage(
   return 'AI 暂时无法回答，请稍后重试。';
 }
 
+/**
+ * 能力标识 → 学生可读的动作名。
+ *
+ * 这张表是服务端唯一的来源：模型碰不到它，所以工具轨迹上显示的文字不可能被
+ * 模型influence。键同时收录 capability 与工具名两种写法，因为不同入口（本地
+ * Adapter、Node、MCP）传进来的标识形式不一致。
+ *
+ * 兜底刻意返回通用文案而不是原始标识：`artifact.create`、`filesystem.read_allowlisted`
+ * 这类技术串直接透给学生会违反「界面零技术术语」（docs/01-product/student-ui-spec.md）。
+ * 新增工具时如果忘了加映射，学生看到的是「正在使用工具」而不是内部名称。
+ */
+const TOOL_LABELS: Readonly<Record<string, string>> = {
+  'web.search': '正在搜索网页',
+  web_search: '正在搜索网页',
+  webSearch: '正在搜索网页',
+  'web.fetch': '正在读取网页',
+  web_fetch: '正在读取网页',
+  fetchWebPage: '正在读取网页',
+  'artifact.create': '正在准备学习材料',
+  createCanvasArtifact: '正在准备学习材料',
+  'device.status': '正在查看设备状态',
+  'filesystem.read_allowlisted': '正在读取本机文件',
+  'agent.plan_note': '正在梳理思路',
+  planNote: '正在梳理思路',
+};
+
 function displayToolLabel(tool: string): string {
-  if (['web_search', 'web.search', 'webSearch'].includes(tool)) {
-    return '正在搜索网页';
-  }
-  if (['web_fetch', 'web.fetch', 'fetchWebPage'].includes(tool)) {
-    return '正在读取网页';
-  }
-  return tool;
+  return TOOL_LABELS[tool] ?? '正在使用工具';
 }
 
 /**
