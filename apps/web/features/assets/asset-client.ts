@@ -4,6 +4,7 @@ import {
   type AssetPreview,
 } from './asset-preview-contract';
 import { z } from 'zod';
+import { validateCanvasResource } from '@educanvas/canvas-protocol';
 
 interface AssetResponseItem {
   descriptor: {
@@ -15,6 +16,7 @@ interface AssetResponseItem {
     currentVersionId: string | null;
   };
   version: { versionId: string } | null;
+  canvasResource?: unknown;
 }
 
 const assetResponseItemSchema = z.object({
@@ -27,6 +29,8 @@ const assetResponseItemSchema = z.object({
     currentVersionId: z.string().nullable(),
   }),
   version: z.object({ versionId: z.string() }).nullable(),
+  /* 旧端点不返回该字段；这里只保证形状可选，内容一律交给协议校验器判定。 */
+  canvasResource: z.unknown().nullish(),
 });
 
 function toItem(
@@ -35,7 +39,13 @@ function toItem(
 ): AssetItem {
   const versionId =
     asset.version?.versionId ?? asset.descriptor.currentVersionId;
+  /* 校验失败即当作没有资源描述，UI 退化为只读；不接受未经白名单的动作列表。 */
+  const validated =
+    asset.canvasResource == null
+      ? null
+      : validateCanvasResource(asset.canvasResource);
   return {
+    resource: validated?.ok === true ? validated.resource : null,
     id: asset.descriptor.assetId,
     versionId,
     label: asset.descriptor.displayName,

@@ -6,6 +6,7 @@ import {
   LinkSimple,
   SpinnerGap,
 } from '@phosphor-icons/react';
+import type { CanvasResource } from '@educanvas/canvas-protocol';
 
 export interface AssetItem {
   id: string;
@@ -16,6 +17,12 @@ export interface AssetItem {
   status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
   enabled: boolean;
   selectable: boolean;
+  /**
+   * 服务端授权后的统一资源描述。为 null 有两种情况：调用的是尚未附加该字段的
+   * 旧端点，或该资产的 MIME 没有对应 Renderer。两种情况下 UI 都必须退化为
+   * 「只读、无动作」，绝不能自行推断可以删除或下载。
+   */
+  resource: CanvasResource | null;
 }
 
 /**

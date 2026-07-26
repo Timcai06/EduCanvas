@@ -7,6 +7,7 @@ import {
   DrizzlePlatformArtifactRepository,
   getDb,
   requireNotebookAccess,
+  type AssetSnapshot,
 } from '@educanvas/db';
 import type {
   CanvasResource,
@@ -120,6 +121,62 @@ async function loadArtifact(input: {
     }
     throw error;
   }
+}
+
+/**
+ * 批量投影当前Notebook的Source列表。
+ *
+ * 与单资源读取的两点刻意差异：
+ * 1. Notebook 成员资格只解析一次。角色是 Notebook 级事实，逐条再查会把列表变成 N+1；
+ * 2. 无法投影的条目被跳过而不是抛错。列表里混进一个未知 MIME 的历史资产时，
+ *    整页不能因此 503——调用方保留该条目的既有字段，只是拿不到 canvasResource。
+ *    单资源端点仍按 renderer_not_found 显式拒绝，两处语义不同是有意的。
+ *
+ * 返回 assetId → CanvasResource 的映射，调用方自行决定如何与既有投影合并。
+ */
+export async function projectOwnedSourceResources(input: {
+  identity: AnonymousIdentity;
+  notebookId: string;
+  snapshots: readonly AssetSnapshot[];
+}): Promise<ReadonlyMap<string, CanvasResource>> {
+  const projected = new Map<string, CanvasResource>();
+  if (input.snapshots.length === 0) return projected;
+  const access = await requireNotebookAccess(getDb(), {
+    notebookId: input.notebookId,
+    trustedSubjectId: input.identity.studentId,
+    requiredPermission: 'notebook.read',
+  }).catch(() => null);
+  if (!access) throw new CanvasResourceAccessError('resource_not_found', 404);
+
+  for (const snapshot of input.snapshots) {
+    try {
+      projected.set(
+        snapshot.descriptor.assetId,
+        projectOwnedSourceResource({
+          assetId: snapshot.descriptor.assetId,
+          notebookId: input.notebookId,
+          title: snapshot.descriptor.displayName,
+          mimeType:
+            snapshot.version?.mimeType ?? snapshot.descriptor.mimeType ?? '',
+          status: snapshot.descriptor.status,
+          origin: snapshot.descriptor.origin,
+          createdAt: snapshot.createdAt,
+          accessRole: access.role,
+          version: snapshot.version
+            ? {
+                versionId: snapshot.version.versionId,
+                byteSize: snapshot.version.byteSize,
+                checksum: snapshot.version.contentHash,
+              }
+            : null,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof SourceResourceProjectionError) continue;
+      throw error;
+    }
+  }
+  return projected;
 }
 
 /**

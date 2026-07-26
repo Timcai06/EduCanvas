@@ -19,6 +19,7 @@ import {
   PaginationRequestError,
   parseListPagination,
 } from '@/server/http/pagination';
+import { projectOwnedSourceResources } from '@/server/canvas/resource-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,8 +41,18 @@ export async function GET(request?: Request): Promise<Response> {
       context.conversation.spaceId,
       pagination,
     );
+    /* 与预览、产物详情端点同一约定：既有投影字段保持不变，额外附加 canvasResource，
+       让 Studio 直接读服务端授权过的动作与状态，而不是在浏览器里猜。 */
+    const resources = await projectOwnedSourceResources({
+      identity: context.identity,
+      notebookId: context.conversation.spaceId,
+      snapshots: page.items,
+    });
     return jsonResponse({
-      assets: page.items,
+      assets: page.items.map((asset) => ({
+        ...asset,
+        canvasResource: resources.get(asset.descriptor.assetId) ?? null,
+      })),
       page: { nextCursor: encodeTemporalCursor(page.nextCursor) },
     });
   } catch (error) {

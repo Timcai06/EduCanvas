@@ -43,8 +43,35 @@
   left: auto;
   right: var(--ow-inset);
   transform-origin: right center;
+  text-align: right;
 }
 
 .react-bits-option-wheel__item--selected {
   font-weight: 500;
+}
+
+/* 空态占位仍要能被滚过，所以只弱化呈现，不 pointer-events: none —— 否则
+   指针会穿透到下层浮层，点击空态就变成关闭 Studio。 */
+.react-bits-option-wheel__item--disabled {
+  cursor: default;
+  font-style: italic;
+  opacity: 0.72;
+}
+
+/* 来源标题可以很长（PDF 文件名），必须在轮内截断而不是撑破浮层。
+   上限按 inset 两侧留白算，右侧轮的 inset 在右边，公式对称成立。 */
+.react-bits-option-wheel__label,
+.react-bits-option-wheel__secondary {
+  display: block;
+  max-width: calc(100% - var(--ow-inset) - 1rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.react-bits-option-wheel__secondary {
+  margin-top: 0.25em;
+  font-size: 0.42em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  opacity: 0.7;
 }
