@@ -5,7 +5,7 @@ import {
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
-import type { TurnModelGateway } from '@educanvas/agent-core';
+import type { AssetKind, TurnModelGateway } from '@educanvas/agent-core';
 
 /**
  * Web 组合根只显式转交模型路由所需的环境变量，避免把整个 process.env
@@ -25,12 +25,15 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
     MODEL_GATEWAY_TIMEOUT_MS: process.env.MODEL_GATEWAY_TIMEOUT_MS,
     MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
       process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
+    MODEL_GATEWAY_VISION: process.env.MODEL_GATEWAY_VISION,
   };
 }
 
 export interface ResolvedTurnModelRuntime {
   gateway: TurnModelGateway;
   provider: string;
+  /** 当前 Provider 能直接消费、无需转成文本的输入模态。 */
+  nativeAssetKinds: readonly AssetKind[];
 }
 
 /**
@@ -48,5 +51,7 @@ export function resolveTurnModelRuntime(
   return {
     gateway,
     provider: configuration.provider,
+    /* 能力来自与 gateway 同一份配置，避免物化层与 Adapter 各持一份判断。 */
+    nativeAssetKinds: configuration.visionEnabled ? (['image'] as const) : [],
   };
 }

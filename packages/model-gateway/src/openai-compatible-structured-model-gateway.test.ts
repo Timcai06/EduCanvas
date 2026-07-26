@@ -14,6 +14,7 @@ const config: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'model-primary', structured: 'model-structured' },
   timeoutMs: 5_000,
   maxOutputTokens: 2_000,
+  visionEnabled: false,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,

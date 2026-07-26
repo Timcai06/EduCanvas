@@ -82,7 +82,7 @@ export function AssetUploadPanel({
         <p className="mt-1 text-sm leading-6 text-ink-muted">
           {kind === 'image'
             ? fixedScope === 'space'
-              ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为当前笔记本来源；当前模型暂不读取图片像素。'
+              ? '支持PNG、JPEG和WebP，最大10MB。图片会保存为当前笔记本来源；能否被模型直接读取取决于当前所用模型，不支持时发送会明确提示。'
               : '支持PNG、JPEG和WebP，最大10MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
             : fixedScope === 'space'
               ? '支持PDF、Word（.docx）、Markdown和TXT，最大10MB。文字会在服务端解析并成为当前笔记本的长期来源。'
