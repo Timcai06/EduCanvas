@@ -4,7 +4,7 @@ import type {
   NormalizedModelError,
   TurnApplicationFailureCode,
 } from '@educanvas/agent-core';
-import { w3cTraceCarrierSchema } from '@educanvas/agent-core';
+import { modelMessageText, w3cTraceCarrierSchema } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
 import type {
   TurnApplicationCancellationPort,
@@ -118,7 +118,9 @@ export function modelMessages(
     const candidate = byId.get(segment.id);
     if (
       !candidate ||
-      candidate.message.content.trim() !== segment.content.trim() ||
+      /* 漂移检查比对文本投影：图片片段的字节不进 segment.content（那里只放
+         占位摘要供预算与审计），把 base64 计进来只会让这条守卫永远失败。 */
+      modelMessageText(candidate.message).trim() !== segment.content.trim() ||
       (segment.kind === 'profile' && candidate.message.role !== 'system') ||
       (segment.kind !== 'profile' && candidate.message.role === 'system') ||
       (candidate.synthesisMessage !== undefined &&

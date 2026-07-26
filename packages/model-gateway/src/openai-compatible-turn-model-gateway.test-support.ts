@@ -15,6 +15,7 @@ export const config: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'explicitly-configured-model' },
   timeoutMs: 1_000,
   maxOutputTokens: 2_048,
+  visionEnabled: false,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,

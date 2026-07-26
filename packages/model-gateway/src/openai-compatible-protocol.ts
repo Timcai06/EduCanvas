@@ -178,10 +178,31 @@ export const mapFinishReason = (
   }
 };
 
+/**
+ * 投影为 OpenAI chat completions 的 content。
+ *
+ * 纯字符串原样透传，保证既有请求的线上形状一字不变；只有携带原生模态时才升级为
+ * 片段数组。图片走 data URL 内联，不放任何可回源的内部地址——这条路径的内容会
+ * 原样发给外部供应商。
+ */
+const buildProviderContent = (
+  content: StreamAgentTextRequest['messages'][number]['content'],
+): unknown => {
+  if (typeof content === 'string') return content;
+  return content.map((part) =>
+    part.type === 'text'
+      ? { type: 'text', text: part.text }
+      : {
+          type: 'image_url',
+          image_url: { url: `data:${part.mimeType};base64,${part.data}` },
+        },
+  );
+};
+
 const buildProviderMessages = (request: StreamAgentTextRequest): unknown[] => {
   const messages: unknown[] = request.messages.map((message) => ({
     role: message.role,
-    content: message.content,
+    content: buildProviderContent(message.content),
   }));
   if (request.phase === 'synthesis' && request.toolResults.length === 0) {
     throw new SseProtocolError();

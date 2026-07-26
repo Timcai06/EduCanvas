@@ -68,19 +68,56 @@ export const turnModelPhaseSchema = z.enum(turnModelPhases);
 export type TurnModelPhase = z.infer<typeof turnModelPhaseSchema>;
 
 /**
- * 阶段一供应商调用前的文本兼容消息。通用全模态输入虽然先使用
- * AgentMessagePart 表示，但本契约尚不能携带已验证的原生图片、音频或视频引用；
- * 当前运行时只能把可提取文本的 Asset 物化到 content。后续必须通过独立的
- * ModelInputPart/ProviderCapability 契约扩展，不能把私有 storage key 塞进字符串。
+ * 供应商调用前的输入片段。
+ *
+ * 图片一律内联字节，绝不携带私有 storage key 或可回源的 URL：Adapter 会把内容
+ * 发给外部供应商，任何形式的内部地址都不能出现在这条路径上。字节由服务端从
+ * 已鉴权的不可变 AssetVersion 读出，浏览器不能直接提交。
+ *
+ * `data` 上限对应上传侧 10MB 原始字节经 base64 膨胀 4/3 后的量；它是防御异常
+ * 输入的硬边界，真正该控制张数与总量的地方在物化层。
+ */
+export const modelInputPartSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), text: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal('image'),
+      mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+      /** 不带 `data:` 前缀的裸 base64。 */
+      data: z.string().min(1).max(14_000_000),
+    })
+    .strict(),
+]);
+
+export type ModelInputPart = z.infer<typeof modelInputPartSchema>;
+
+/**
+ * 供应商调用前的消息。
+ *
+ * content 允许纯字符串或输入片段数组：绝大多数消息仍是纯文本，保留字符串形态
+ * 让既有调用方与审计路径不必改写；只有携带原生模态时才升级为数组。
+ * Provider 是否真的能读某种模态由 `AgentInputCapabilities` 决定，物化层据此
+ * 要么产出原生片段、要么明确失败，不会静默丢弃。
  */
 export const modelMessageSchema = z
   .object({
     role: z.enum(['system', 'user', 'assistant']),
-    content: z.string(),
+    content: z.union([z.string(), z.array(modelInputPartSchema).min(1)]),
   })
   .strict();
 
 export type ModelMessage = z.infer<typeof modelMessageSchema>;
+
+/**
+ * 取消息的纯文本投影，用于预算计数、审计摘要和只认字符串的旧路径。
+ * 图片片段不参与文本预算，这里按占位符计长度而不是把 base64 计进去。
+ */
+export function modelMessageText(message: ModelMessage): string {
+  if (typeof message.content === 'string') return message.content;
+  return message.content
+    .map((part) => (part.type === 'text' ? part.text : '[image]'))
+    .join('\n');
+}
 
 /** 适配器可见的受控工具定义；handler与供应商SDK类型不会进入契约。 */
 export interface ModelToolDefinition {

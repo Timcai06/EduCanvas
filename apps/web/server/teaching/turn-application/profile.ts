@@ -1,6 +1,9 @@
 import 'server-only';
 
-import { extractAgentMessageText } from '@educanvas/agent-core';
+import {
+  extractAgentMessageText,
+  modelMessageText,
+} from '@educanvas/agent-core';
 import type {
   BuiltAssetContext,
   TurnApplicationOutputGuardPort,
@@ -123,7 +126,7 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
             segment: {
               id: `profile:${CONTEXT_PROFILE_VERSION}`,
               kind: 'profile' as const,
-              content: answerSystem.content,
+              content: modelMessageText(answerSystem),
               priority: 100,
               required: true,
             },
