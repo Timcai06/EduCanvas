@@ -279,6 +279,12 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       .values({ ownerSubjectId: owner, title: '另一本笔记本' })
       .returning();
     if (!otherSpace) throw new Error('第二个Space创建失败');
+    await database!.insert(schema.notebookMemberships).values({
+      notebookId: otherSpace.id,
+      userId: owner,
+      role: 'owner',
+      grantedByUserId: owner,
+    });
     await repository.createArtifact({
       spaceId: otherSpace.id,
       trustedSubjectId: owner,
@@ -298,7 +304,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         spaceId,
         trustedSubjectId: stranger,
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
   it('版本单调递增,首个版本使产物转为 active,版本列表按新到旧', async () => {

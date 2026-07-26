@@ -442,14 +442,14 @@ const lifecycleDefinitions = [
     deleteRows: deleteOperationSources,
   },
   {
-    tableName: 'artifact_generation_jobs',
-    ownershipPath: 'artifact_id -> artifacts.owner_subject_id',
-    deleteRows: deleteArtifactGenerationJobs,
-  },
-  {
     tableName: 'artifact_versions',
     ownershipPath: 'artifact_id -> artifacts.owner_subject_id',
     deleteRows: deleteArtifactVersions,
+  },
+  {
+    tableName: 'artifact_generation_jobs',
+    ownershipPath: 'artifact_id -> artifacts.owner_subject_id',
+    deleteRows: deleteArtifactGenerationJobs,
   },
   {
     tableName: 'artifacts',
