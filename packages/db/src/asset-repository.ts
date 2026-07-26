@@ -13,7 +13,17 @@ import {
   type AssetVersionReference,
 } from '@educanvas/agent-core';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
-import { and, desc, eq, isNotNull, lt, ne, or } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
@@ -36,6 +46,9 @@ import {
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
+
+/** worker 任务注册表里的稳定标识；`域:动作` 命名与其他周期/业务任务一致。 */
+export const ASSET_EXTRACT_TEXT_TASK = 'assets:extract_text' as const;
 
 const OWNER_ID = /^.{1,160}$/u;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -166,6 +179,248 @@ export class DrizzleAssetRepository {
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
+  }
+
+  /**
+   * 落库一个等待异步解析的上传（ADR-0025）。
+   *
+   * 与 `createUploaded` 的关键差异：asset 与 version 都停在 `processing`，
+   * `currentVersionId` 保持为空（`assets_status_shape_check` 要求非 ready 状态
+   * 不得引用当前版本），同时写一条 `queued` 的解析任务。只有 worker 调用
+   * `settleTextExtraction` 之后，资产才会推进到 ready 或 failed。
+   *
+   * 入队在同一事务内完成：graphile-worker 的队列与业务表同库，
+   * `graphile_worker.add_job` 因此和业务写入是一个原子单元，不存在
+   * 「任务已入队但资产不存在」或「资产已建但任务丢了」的中间态。
+   * 这与 `platform-artifact-repository` 创建生成任务的做法一致。
+   */
+  async createUploadedPending(
+    input: Omit<CreateUploadedAssetInput, 'extractedText' | 'outcome'>,
+  ): Promise<{ snapshot: AssetSnapshot; versionId: string; jobId: string }> {
+    const validated = this.validateUploadInput(input);
+    const now = input.now ?? new Date();
+    const assetId = randomUUID();
+    const versionId = randomUUID();
+    const jobId = randomUUID();
+
+    return this.database.transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId: validated.spaceId,
+        trustedSubjectId: validated.ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => {
+        throw new AssetAccessError();
+      });
+      const [createdAsset] = await transaction
+        .insert(assets)
+        .values({
+          id: assetId,
+          ownerSubjectId: validated.ownerSubjectId,
+          spaceId: validated.spaceId,
+          scope: input.scope,
+          kind: input.kind,
+          origin: input.origin ?? 'upload',
+          displayName: validated.displayName,
+          mimeType: validated.mimeType,
+          status: 'processing',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const [createdVersion] = await transaction
+        .insert(assetVersions)
+        .values({
+          id: versionId,
+          assetId,
+          kind: input.kind,
+          mimeType: validated.mimeType,
+          byteSize: input.byteSize,
+          contentHash: input.contentHash,
+          status: 'processing',
+          storageKey: validated.storageKey,
+          extractedText: null,
+          failureCode: null,
+          createdAt: now,
+        })
+        .returning();
+      const queueJobKey = `asset-extract-text:${jobId}`;
+      await transaction.insert(assetProcessingJobs).values({
+        id: jobId,
+        assetVersionId: versionId,
+        kind: 'extract_text',
+        status: 'queued',
+        attempts: 0,
+        queueJobKey,
+        createdAt: now,
+      });
+      await transaction.execute(sql`
+        select graphile_worker.add_job(
+          ${ASSET_EXTRACT_TEXT_TASK},
+          payload := ${JSON.stringify({ jobId })}::json,
+          job_key := ${queueJobKey},
+          max_attempts := 3
+        )
+      `);
+      if (!createdAsset || !createdVersion) {
+        throw new AssetPersistenceError('Asset创建失败');
+      }
+      return {
+        snapshot: toSnapshot(createdAsset, createdVersion),
+        versionId,
+        jobId,
+      };
+    });
+  }
+
+  /**
+   * 供 worker 读取一个待解析任务的输入。
+   *
+   * 只返回解析所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
+   */
+  async loadPendingExtraction(input: {
+    jobId: string;
+  }): Promise<{ storageKey: string; mimeType: string } | null> {
+    const jobId = requireUuid(input.jobId);
+    const [row] = await this.database
+      .select({
+        storageKey: assetVersions.storageKey,
+        mimeType: assetVersions.mimeType,
+      })
+      .from(assetProcessingJobs)
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
+      )
+      .where(
+        and(
+          eq(assetProcessingJobs.id, jobId),
+          eq(assetProcessingJobs.kind, 'extract_text'),
+          inArray(assetProcessingJobs.status, ['queued', 'running']),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * 由 worker 写入解析终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的资产改回 processing。
+   */
+  async settleTextExtraction(input: {
+    jobId: string;
+    outcome:
+      | { status: 'ready'; extractedText: string }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    const jobId = requireUuid(input.jobId);
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [claimed] = await transaction
+        .update(assetProcessingJobs)
+        .set({
+          status: input.outcome.status === 'ready' ? 'succeeded' : 'failed',
+          attempts: sql`${assetProcessingJobs.attempts} + 1`,
+          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now})`,
+          completedAt: now,
+          failureCode:
+            input.outcome.status === 'failed'
+              ? requireText(input.outcome.failureCode, 'failureCode', 128)
+              : null,
+        })
+        .where(
+          and(
+            eq(assetProcessingJobs.id, jobId),
+            inArray(assetProcessingJobs.status, ['queued', 'running']),
+          ),
+        )
+        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+      if (!claimed) return false;
+
+      const outcome = input.outcome;
+      const ready = outcome.status === 'ready';
+      const [version] = await transaction
+        .update(assetVersions)
+        .set({
+          status: ready ? 'ready' : 'failed',
+          extractedText:
+            outcome.status === 'ready' ? outcome.extractedText.trim() : null,
+          failureCode: outcome.status === 'failed' ? outcome.failureCode : null,
+        })
+        .where(eq(assetVersions.id, claimed.assetVersionId))
+        .returning();
+      if (!version) throw new AssetPersistenceError('Asset版本不存在');
+
+      if (ready && version.extractedText) {
+        await transaction.insert(assetRepresentations).values({
+          assetVersionId: version.id,
+          kind: 'text',
+          mimeType: 'text/plain',
+          status: 'ready',
+          byteSize: Buffer.byteLength(version.extractedText, 'utf8'),
+          createdAt: now,
+        });
+      }
+      if (!canTransitionAssetStatus('processing', ready ? 'ready' : 'failed')) {
+        throw new AssetPersistenceError('Asset状态转换无效');
+      }
+      await transaction
+        .update(assets)
+        .set({
+          status: ready ? 'ready' : 'failed',
+          currentVersionId: ready ? version.id : null,
+          updatedAt: now,
+        })
+        .where(eq(assets.id, version.assetId));
+      return true;
+    });
+  }
+
+  private validateUploadInput(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    displayName: string;
+    mimeType: string;
+    storageKey: string;
+    byteSize: number;
+    contentHash: string;
+  }): {
+    ownerSubjectId: string;
+    spaceId: string;
+    displayName: string;
+    mimeType: string;
+    storageKey: string;
+  } {
+    const storageKey = requireText(input.storageKey, 'storageKey', 1_024);
+    if (/^https?:\/\//i.test(storageKey)) {
+      throw new AssetPersistenceError('storageKey不能是公开URL');
+    }
+    if (
+      !Number.isSafeInteger(input.byteSize) ||
+      input.byteSize < 0 ||
+      input.byteSize > 50 * 1024 * 1024
+    ) {
+      throw new AssetPersistenceError('byteSize超出允许范围');
+    }
+    if (!SHA256.test(input.contentHash)) {
+      throw new AssetPersistenceError('contentHash必须是小写SHA-256');
+    }
+    if (!canTransitionAssetStatus('pending', 'processing')) {
+      throw new AssetPersistenceError('Asset状态机不可用');
+    }
+    return {
+      ownerSubjectId: requireOwner(input.ownerSubjectId),
+      spaceId: requireUuid(input.spaceId),
+      displayName: requireText(input.displayName, 'displayName', 300),
+      mimeType: requireText(input.mimeType, 'mimeType', 255).toLowerCase(),
+      storageKey,
+    };
   }
 
   async createUploaded(

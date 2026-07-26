@@ -9,6 +9,7 @@ export * from './schema/study';
 export {
   AssetAccessError,
   AssetPersistenceError,
+  ASSET_EXTRACT_TEXT_TASK,
   DrizzleAssetRepository,
   type AssetAccessPolicy,
   type AssetSnapshot,

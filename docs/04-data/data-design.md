@@ -94,9 +94,10 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 - `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
   派生对象引用，不复制Source正文；
 - `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码。
-  当前仍由同步上传路径写入一条已终结的记录（事后审计）；异步化后改为真实队列，
-  决策与迁移路径见 [ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)；
-  失败码由 `@educanvas/asset-processing` 定义，只能追加不能改写含义；
+  `extract_text` 已是真实队列（[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）：
+  上传在同一事务内写 `queued` 任务并调用 `graphile_worker.add_job`——队列与业务表同库，
+  因此不存在「任务已入队但资产不存在」的中间态；worker 只从 `queued/running` 推进终态，
+  重投因此幂等。失败码由 `@educanvas/asset-processing` 定义，只能追加不能改写含义；
 - `notebook_asset_bindings`：成员对Notebook来源的启用/停用事实流。按成员而非按
   Notebook，是因为「这轮对话要不要带这份资料」是个人选择，多人笔记本里不应互相覆盖；
   与`session_source_bindings`同一范式（追加事实 + `mutationId`幂等 + 取`sequence`最大者），

@@ -66,6 +66,11 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
   Notebook成员资格在整页范围内只解析一次；无法投影的历史资产（未知MIME）该字段为
   `null`而不使整页失败，客户端必须把`null`当作「只读、无动作」，不得自行推断可删除或可下载。
   单资源端点仍以`renderer_not_found`显式拒绝，两处语义差异是有意的；
+- `POST /api/v1/chat/assets`对可抽取文本的类型返回**已受理而非已就绪**的资产：
+  `status=processing`、`currentVersionId=null`，解析由 worker 异步完成
+  （[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）。
+  内容类问题（扫描件、编码错误）不再是上传响应的4xx，而是解析任务的终态，
+  客户端应轮询列表直到 `ready` 或 `failed`。图片等无需抽取的类型仍一次性返回 `ready`；
 - `GET /api/v1/chat/assets/{assetId}/preview`继续返回`preview`，并在完成当前主体与
   Notebook归属校验后附加`canvasResource`。当前支持PDF、PNG/JPEG/WebP、Markdown、
   TXT和DOCX；未知MIME由Adapter以`renderer_not_found`拒绝，不生成假预览；

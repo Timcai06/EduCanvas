@@ -7,11 +7,7 @@ import {
   type CursorPage,
   type TemporalIdCursor,
 } from '@educanvas/db';
-import {
-  AssetExtractionError,
-  extractAssetText,
-  supportsTextExtraction,
-} from '@educanvas/asset-processing';
+import { supportsTextExtraction } from '@educanvas/asset-processing';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
@@ -97,58 +93,32 @@ export async function uploadOwnedAssetToSpace(input: {
       extension: detected.extension,
     });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
-    try {
-      /* 抽取实现由 @educanvas/asset-processing 独占，web 与 worker 共用同一份，
-         避免两条上传路径对同一份 PDF 得出不同结果（见 ADR-0025）。 */
-      const extractedText = supportsTextExtraction(detected.mimeType)
-        ? await extractAssetText({
-            bytes,
-            mimeType: detected.mimeType,
-          }).catch((error: unknown) => {
-            /* 抽取包用自己的稳定码；HTTP 边界仍按 AssetUploadError 归一，
-               让下方失败版本记录与用户文案映射保持单一出口。 */
-            if (error instanceof AssetExtractionError) {
-              throw new AssetUploadError(
-                error.code === 'pdf_text_unavailable'
-                  ? 'pdf_text_unavailable'
-                  : 'text_content_unavailable',
-                422,
-                { cause: error },
-              );
-            }
-            throw error;
-          })
-        : null;
-      return await assets.createUploaded({
-        ownerSubjectId: input.identity.studentId,
-        spaceId: input.spaceId,
-        scope: input.scope,
-        kind: detected.kind,
-        displayName: safeDisplayName(input.file.name),
-        mimeType: detected.mimeType,
-        byteSize: bytes.byteLength,
-        contentHash,
-        storageKey: stored.storageKey,
-        extractedText,
-        outcome: { status: 'ready' },
-      });
-    } catch (error) {
-      if (!(error instanceof AssetUploadError)) throw error;
-      await assets.createUploaded({
-        ownerSubjectId: input.identity.studentId,
-        spaceId: input.spaceId,
-        scope: input.scope,
-        kind: detected.kind,
-        displayName: safeDisplayName(input.file.name),
-        mimeType: detected.mimeType,
-        byteSize: bytes.byteLength,
-        contentHash,
-        storageKey: stored.storageKey,
-        extractedText: null,
-        outcome: { status: 'failed', failureCode: error.code },
-      });
-      throw error;
+    const common = {
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      scope: input.scope,
+      kind: detected.kind,
+      displayName: safeDisplayName(input.file.name),
+      mimeType: detected.mimeType,
+      byteSize: bytes.byteLength,
+      contentHash,
+      storageKey: stored.storageKey,
+    };
+    /*
+     * 可抽取文本的类型走异步：落库为 processing 并入队，立即返回（ADR-0025）。
+     * 上传响应时间因此与文件大小解耦，用户先在来源列表看到「处理中」。
+     *
+     * 图片等无需抽取的类型没有等待的理由，仍然一次性写成 ready——为它们建一个
+     * 必然空转的任务只会让队列和状态机都变复杂。
+     */
+    if (supportsTextExtraction(detected.mimeType)) {
+      return (await assets.createUploadedPending(common)).snapshot;
     }
+    return await assets.createUploaded({
+      ...common,
+      extractedText: null,
+      outcome: { status: 'ready' },
+    });
   } catch (error) {
     if (stored && !(error instanceof AssetUploadError)) {
       await removeStoredAsset(stored).catch(() => undefined);

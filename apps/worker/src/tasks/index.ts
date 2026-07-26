@@ -1,5 +1,5 @@
 import { OPERATION_CONTINUATION_TASK } from '@educanvas/agent-core';
-import { ARTIFACT_GENERATE_TASK } from '@educanvas/db';
+import { ARTIFACT_GENERATE_TASK, ASSET_EXTRACT_TEXT_TASK } from '@educanvas/db';
 import type { ContinuationTracePort } from '@educanvas/telemetry';
 import type { TaskList } from 'graphile-worker';
 import { generateArtifact } from './generate-artifact.js';
@@ -10,6 +10,7 @@ import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
 import { deleteObjectOutbox } from './delete-object-outbox.js';
+import { extractAssetTextTask } from './extract-asset-text.js';
 
 /**
  * worker 的任务注册表。周期任务使用Graphile crontab兼容的 `域:动作` 命名;
@@ -21,6 +22,7 @@ export function createTaskList(input: {
 }): TaskList {
   return {
     [ARTIFACT_GENERATE_TASK]: generateArtifact,
+    [ASSET_EXTRACT_TEXT_TASK]: extractAssetTextTask,
     [OPERATION_CONTINUATION_TASK]: createProductionContinueOperationTask(
       input.continuationTrace,
     ),

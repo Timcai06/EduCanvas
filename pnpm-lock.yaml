@@ -299,6 +299,9 @@ importers:
       '@educanvas/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@educanvas/asset-processing':
+        specifier: workspace:*
+        version: link:../../packages/asset-processing
       '@educanvas/canvas-protocol':
         specifier: workspace:*
         version: link:../../packages/canvas-protocol

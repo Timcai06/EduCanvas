@@ -54,6 +54,22 @@ export function useNotebookSources(input: {
     };
   }, [endpoint, onError]);
 
+  /*
+   * 解析改为异步后（ADR-0025），上传返回时资产仍可能处于 processing。
+   * 只在集合里确实存在待处理来源时轮询；刷新失败静默重试，因为网络抖动
+   * 不会改变服务端解析事实，也不应覆盖更具体的上传或来源操作错误。
+   */
+  const hasProcessingAsset = assets.some(
+    (asset) => asset.status === 'pending' || asset.status === 'processing',
+  );
+  useEffect(() => {
+    if (!hasProcessingAsset) return;
+    const timer = setInterval(() => {
+      void refresh().catch(() => undefined);
+    }, 2_000);
+    return () => clearInterval(timer);
+  }, [hasProcessingAsset, refresh]);
+
   const patch = useCallback(
     (id: string, update: (asset: AssetItem) => AssetItem) => {
       setAssets((current) =>
