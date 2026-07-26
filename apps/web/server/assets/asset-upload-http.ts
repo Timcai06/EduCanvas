@@ -51,11 +51,12 @@ export function assetUploadErrorResponse(error: AssetUploadError): Response {
       case 'file_too_large':
         return '文件不能超过10MB。';
       case 'unsupported_file_type':
-        return '目前只支持PDF、Markdown、TXT、PNG、JPEG和WebP。';
+        return '目前只支持PDF、Word（.docx）、Markdown、TXT、PNG、JPEG和WebP。';
       case 'pdf_text_unavailable':
         return '这个PDF没有可读取文本；扫描版PDF将在OCR能力上线后支持。';
+      /* DOCX 抽取失败与纯文本解码失败共用此码，文案必须同时说得通。 */
       case 'text_content_unavailable':
-        return '文本文件不是有效的UTF-8内容或内容为空。';
+        return '这个文件没有可提取的文字，或编码不是有效的UTF-8。';
       case 'session_not_found':
         return '当前对话空间不存在。';
       default:
