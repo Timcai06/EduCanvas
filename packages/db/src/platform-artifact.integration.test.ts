@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ArtifactJobLifecycleError,
+  ArtifactIdempotencyConflictError,
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
 } from './platform-artifact-repository';
@@ -240,6 +241,35 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         generatedBy: 'user:manual',
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+  });
+
+  it('手动产物创建使用服务端指纹安全重放', async () => {
+    const input = {
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'note',
+      trustTier: 'tier1' as const,
+      title: '幂等笔记',
+      content: { contentVersion: 1, markdown: '# 同一份' },
+      generatedBy: 'user:manual',
+      idempotencyKey: 'manual-note-1',
+      requestFingerprint: 'a'.repeat(64),
+    };
+    const first = await manualRepository.createWithInitialVersion(input);
+    const replay = await manualRepository.createWithInitialVersion(input);
+
+    expect(first.replayed).toBe(false);
+    expect(replay).toMatchObject({
+      replayed: true,
+      artifact: { id: first.artifact.id },
+      version: { id: first.version.id },
+    });
+    await expect(
+      manualRepository.createWithInitialVersion({
+        ...input,
+        requestFingerprint: 'b'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(ArtifactIdempotencyConflictError);
   });
 
   it('Studio 按 Notebook Space 聚合，不依赖产物是否挂接 Conversation', async () => {

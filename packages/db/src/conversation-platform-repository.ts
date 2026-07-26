@@ -1,8 +1,13 @@
 import type { NotebookPermission } from '@educanvas/gateway-core';
-import { and, asc, desc, eq, gt, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { getDb } from './client';
 import { ensurePersonalIdentity } from './gateway-repository';
 import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
 import { appendSecurityAuditEvent } from './security-audit-repository';
 import {
   conversationMessages,
@@ -134,6 +139,24 @@ export class DrizzlePlatformConversationRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformConversationSnapshot[]> {
+    return (await this.listAccessibleRecentPage(input)).items;
+  }
+
+  async listAccessibleRecentPage(input: {
+    trustedSubjectId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<PlatformConversationSnapshot>> {
+    const limit = boundedPageLimit(input.limit ?? 30);
+    const cursorCondition = input.cursor
+      ? or(
+          lt(conversations.lastActivityAt, input.cursor.timestamp),
+          and(
+            eq(conversations.lastActivityAt, input.cursor.timestamp),
+            lt(conversations.id, input.cursor.id),
+          ),
+        )
+      : undefined;
     const rows = await this.database
       .select()
       .from(conversations)
@@ -152,13 +175,23 @@ export class DrizzlePlatformConversationRepository {
             isNull(notebookMemberships.expiresAt),
             gt(notebookMemberships.expiresAt, new Date()),
           ),
+          cursorCondition,
         ),
       )
       .orderBy(desc(conversations.lastActivityAt), desc(conversations.id))
-      .limit(Math.min(input.limit ?? 30, 100));
-    return rows.map(({ conversations: conversation }) =>
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const items = pageRows.map(({ conversations: conversation }) =>
       toConversation(conversation),
     );
+    const last = pageRows.at(-1)?.conversations;
+    return {
+      items,
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.lastActivityAt, id: last.id }
+          : null,
+    };
   }
 
   /** 历史记录删除采用归档语义，保留账本和外键完整性，避免 UI 删除导致数据级误删。 */

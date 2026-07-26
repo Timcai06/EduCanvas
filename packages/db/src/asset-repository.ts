@@ -13,7 +13,7 @@ import {
   type AssetVersionReference,
 } from '@educanvas/agent-core';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
-import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, lt, ne, or } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
@@ -21,6 +21,11 @@ import {
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
 import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
 import {
   assetProcessingJobs,
   assetRepresentations,
@@ -298,9 +303,18 @@ export class DrizzleAssetRepository {
     spaceId: string;
     limit?: number;
   }): Promise<readonly AssetSnapshot[]> {
+    return (await this.listAccessibleSpacePage(input)).items;
+  }
+
+  async listAccessibleSpacePage(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<AssetSnapshot>> {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
-    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    const limit = boundedPageLimit(input.limit);
     await requireNotebookAccess(this.database, {
       notebookId: spaceId,
       trustedSubjectId: ownerSubjectId,
@@ -312,10 +326,32 @@ export class DrizzleAssetRepository {
       .select({ asset: assets, version: assetVersions })
       .from(assets)
       .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
-      .where(and(eq(assets.spaceId, spaceId), ne(assets.status, 'tombstoned')))
+      .where(
+        and(
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+          input.cursor
+            ? or(
+                lt(assets.createdAt, input.cursor.timestamp),
+                and(
+                  eq(assets.createdAt, input.cursor.timestamp),
+                  lt(assets.id, input.cursor.id),
+                ),
+              )
+            : undefined,
+        ),
+      )
       .orderBy(desc(assets.createdAt), desc(assets.id))
-      .limit(limit);
-    return rows.map(({ asset, version }) => toSnapshot(asset, version));
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1)?.asset;
+    return {
+      items: pageRows.map(({ asset, version }) => toSnapshot(asset, version)),
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.createdAt, id: last.id }
+          : null,
+    };
   }
 
   /**

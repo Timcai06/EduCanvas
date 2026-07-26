@@ -1,7 +1,12 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { NotebookPermission } from '@educanvas/gateway-core';
 import { getDb } from './client';
 import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
 import {
   artifactGenerationJobs,
   artifactVersions,
@@ -50,6 +55,15 @@ export class ArtifactVersionConflictError extends Error {
   constructor() {
     super('产物版本写入冲突,请重试');
     this.name = 'ArtifactVersionConflictError';
+  }
+}
+
+export class ArtifactIdempotencyConflictError extends Error {
+  readonly code = 'artifact_idempotency_conflict';
+
+  constructor() {
+    super('相同幂等键已绑定不同的产物创建请求');
+    this.name = 'ArtifactIdempotencyConflictError';
   }
 }
 
@@ -231,6 +245,15 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformArtifact[]> {
+    return (await this.listSpaceArtifactsPage(input)).items;
+  }
+
+  async listSpaceArtifactsPage(input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<PlatformArtifact>> {
     await requireArtifactNotebookAccess(this.database, {
       spaceId: input.spaceId,
       trustedSubjectId: input.trustedSubjectId,
@@ -239,10 +262,32 @@ export class DrizzlePlatformArtifactRepository {
     const rows = await this.database
       .select()
       .from(artifacts)
-      .where(eq(artifacts.spaceId, input.spaceId))
+      .where(
+        and(
+          eq(artifacts.spaceId, input.spaceId),
+          input.cursor
+            ? or(
+                lt(artifacts.updatedAt, input.cursor.timestamp),
+                and(
+                  eq(artifacts.updatedAt, input.cursor.timestamp),
+                  lt(artifacts.id, input.cursor.id),
+                ),
+              )
+            : undefined,
+        ),
+      )
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
-      .limit(Math.min(input.limit ?? 50, 100));
-    return rows.map(toArtifact);
+      .limit(boundedPageLimit(input.limit) + 1);
+    const limit = boundedPageLimit(input.limit);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    return {
+      items: pageRows.map(toArtifact),
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.updatedAt, id: last.id }
+          : null,
+    };
   }
 
   /**
@@ -573,10 +618,54 @@ export class DrizzlePlatformArtifactRepository {
     taskIdentifier: string;
     params?: Record<string, unknown>;
     maxAttempts?: number;
-  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
+    idempotencyKey?: string | null;
+    requestFingerprint?: string | null;
+  }): Promise<{
+    artifact: PlatformArtifact;
+    job: PlatformArtifactJob;
+    replayed: boolean;
+  }> {
     return await this.database.transaction(async (tx) => {
+      if (Boolean(input.idempotencyKey) !== Boolean(input.requestFingerprint)) {
+        throw new ArtifactIdempotencyConflictError();
+      }
       if (!(await ownsArtifactConversationScope(tx, input))) {
         throw new ArtifactOwnershipError();
+      }
+      if (input.idempotencyKey) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`artifact-create:${input.trustedSubjectId}:${input.idempotencyKey}`}, 0))`,
+        );
+        const [existing] = await tx
+          .select()
+          .from(artifacts)
+          .where(
+            and(
+              eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+              eq(artifacts.creationIdempotencyKey, input.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          if (
+            !input.requestFingerprint ||
+            existing.creationRequestFingerprint !== input.requestFingerprint
+          ) {
+            throw new ArtifactIdempotencyConflictError();
+          }
+          const [existingJob] = await tx
+            .select()
+            .from(artifactGenerationJobs)
+            .where(eq(artifactGenerationJobs.artifactId, existing.id))
+            .orderBy(desc(artifactGenerationJobs.createdAt))
+            .limit(1);
+          if (!existingJob) throw new ArtifactIdempotencyConflictError();
+          return {
+            artifact: toArtifact(existing),
+            job: toJob(existingJob),
+            replayed: true,
+          };
+        }
       }
 
       const [artifactRow] = await tx
@@ -589,6 +678,8 @@ export class DrizzlePlatformArtifactRepository {
           trustTier: input.trustTier,
           title: input.title,
           status: 'proposed',
+          creationIdempotencyKey: input.idempotencyKey ?? null,
+          creationRequestFingerprint: input.requestFingerprint ?? null,
         })
         .returning();
       const artifact = toArtifact(artifactRow!);
@@ -619,7 +710,7 @@ export class DrizzlePlatformArtifactRepository {
         )
       `);
 
-      return { artifact, job };
+      return { artifact, job, replayed: false };
     });
   }
 

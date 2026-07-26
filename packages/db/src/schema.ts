@@ -2328,6 +2328,8 @@ export const artifacts = pgTable(
     title: text('title').notNull(),
     status: text('status').notNull().default('proposed'),
     latestVersion: integer('latest_version').notNull().default(0),
+    creationIdempotencyKey: text('creation_idempotency_key'),
+    creationRequestFingerprint: text('creation_request_fingerprint'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -2353,6 +2355,9 @@ export const artifacts = pgTable(
       table.updatedAt,
       table.id,
     ),
+    uniqueIndex('artifacts_owner_creation_idempotency_unique')
+      .on(table.ownerSubjectId, table.creationIdempotencyKey)
+      .where(sql`${table.creationIdempotencyKey} is not null`),
     check(
       'artifacts_trust_tier_check',
       sql`${table.trustTier} in ('tier1', 'tier2')`,
@@ -2370,6 +2375,10 @@ export const artifacts = pgTable(
       sql`char_length(${table.ownerSubjectId}) between 1 and 160 and char_length(${table.title}) between 1 and 300`,
     ),
     check('artifacts_version_check', sql`${table.latestVersion} >= 0`),
+    check(
+      'artifacts_creation_idempotency_shape_check',
+      sql`(${table.creationIdempotencyKey} is null and ${table.creationRequestFingerprint} is null) or (char_length(${table.creationIdempotencyKey}) between 1 and 128 and ${table.creationRequestFingerprint} ~ '^[a-f0-9]{64}$')`,
+    ),
     check(
       'artifacts_archive_shape_check',
       sql`(${table.status} = 'archived') = (${table.archivedAt} is not null)`,

@@ -1,9 +1,11 @@
+import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { requireNotebookAccess } from './notebook-access';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
 import { artifactVersions, artifacts } from './schema';
 import {
   ArtifactOwnershipError,
+  ArtifactIdempotencyConflictError,
   type ArtifactTrustTier,
   type PlatformArtifact,
   type PlatformArtifactVersion,
@@ -35,11 +37,17 @@ export class DrizzleManualArtifactRepository {
     title: string;
     content: unknown;
     generatedBy: string;
+    idempotencyKey?: string | null;
+    requestFingerprint?: string | null;
   }): Promise<{
     artifact: PlatformArtifact;
     version: PlatformArtifactVersion;
+    replayed: boolean;
   }> {
     return await this.database.transaction(async (tx) => {
+      if (Boolean(input.idempotencyKey) !== Boolean(input.requestFingerprint)) {
+        throw new ArtifactIdempotencyConflictError();
+      }
       const hasAccess = input.conversationId
         ? await ownsArtifactConversationScope(tx, {
             spaceId: input.spaceId,
@@ -56,6 +64,53 @@ export class DrizzleManualArtifactRepository {
       if (!hasAccess) {
         throw new ArtifactOwnershipError();
       }
+      if (input.idempotencyKey) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`artifact-create:${input.trustedSubjectId}:${input.idempotencyKey}`}, 0))`,
+        );
+        const [existing] = await tx
+          .select()
+          .from(artifacts)
+          .where(
+            and(
+              eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+              eq(artifacts.creationIdempotencyKey, input.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          if (
+            existing.creationRequestFingerprint !== input.requestFingerprint
+          ) {
+            throw new ArtifactIdempotencyConflictError();
+          }
+          const [existingVersion] = await tx
+            .select()
+            .from(artifactVersions)
+            .where(
+              and(
+                eq(artifactVersions.artifactId, existing.id),
+                eq(artifactVersions.version, 1),
+              ),
+            )
+            .limit(1);
+          if (!existingVersion) throw new ArtifactIdempotencyConflictError();
+          return {
+            artifact: {
+              ...existing,
+              trustTier: existing.trustTier as ArtifactTrustTier,
+              status: existing.status as PlatformArtifact['status'],
+              createdAt: existing.createdAt.toISOString(),
+              updatedAt: existing.updatedAt.toISOString(),
+            },
+            version: {
+              ...existingVersion,
+              createdAt: existingVersion.createdAt.toISOString(),
+            },
+            replayed: true,
+          };
+        }
+      }
 
       const [artifact] = await tx
         .insert(artifacts)
@@ -68,6 +123,8 @@ export class DrizzleManualArtifactRepository {
           title: input.title,
           status: 'active',
           latestVersion: 1,
+          creationIdempotencyKey: input.idempotencyKey ?? null,
+          creationRequestFingerprint: input.requestFingerprint ?? null,
         })
         .returning();
       const [version] = await tx
@@ -92,6 +149,7 @@ export class DrizzleManualArtifactRepository {
           ...version!,
           createdAt: version!.createdAt.toISOString(),
         },
+        replayed: false,
       };
     });
   }

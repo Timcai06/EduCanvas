@@ -267,6 +267,13 @@
       "when": 1785029985234,
       "tag": "0037_aromatic_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1785030405445,
+      "tag": "0038_mighty_shen",
+      "breakpoints": true
     }
   ]
 }

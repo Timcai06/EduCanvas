@@ -1,7 +1,12 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
+import {
+  DrizzleAssetRepository,
+  type AssetSnapshot,
+  type CursorPage,
+  type TemporalIdCursor,
+} from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
 import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
@@ -272,5 +277,17 @@ export async function listOwnedSpaceAssets(
   return assets.listOwnedSpace({
     ownerSubjectId: identity.studentId,
     spaceId,
+  });
+}
+
+export async function listOwnedSpaceAssetsPage(
+  identity: AnonymousIdentity,
+  spaceId: string,
+  input: { limit: number; cursor: TemporalIdCursor | null },
+): Promise<CursorPage<AssetSnapshot>> {
+  return assets.listAccessibleSpacePage({
+    ownerSubjectId: identity.studentId,
+    spaceId,
+    ...input,
   });
 }

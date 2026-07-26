@@ -1,7 +1,7 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   AssetUploadError,
-  listOwnedSpaceAssets,
+  listOwnedSpaceAssetsPage,
   uploadOwnedAssetToSpace,
 } from '@/server/assets/asset-upload';
 import {
@@ -14,6 +14,11 @@ import {
   jsonError,
   jsonResponse,
 } from '@/server/http/request-security';
+import {
+  encodeTemporalCursor,
+  PaginationRequestError,
+  parseListPagination,
+} from '@/server/http/pagination';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,17 +30,24 @@ async function loadContext() {
   return conversation ? { identity, conversation } : null;
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(request?: Request): Promise<Response> {
   const context = await loadContext();
   if (!context) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {
+    const pagination = parseListPagination(request);
+    const page = await listOwnedSpaceAssetsPage(
+      context.identity,
+      context.conversation.spaceId,
+      pagination,
+    );
     return jsonResponse({
-      assets: await listOwnedSpaceAssets(
-        context.identity,
-        context.conversation.spaceId,
-      ),
+      assets: page.items,
+      page: { nextCursor: encodeTemporalCursor(page.nextCursor) },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof PaginationRequestError) {
+      return jsonError(400, error.code, '分页参数不正确。');
+    }
     return jsonError(503, 'asset_list_unavailable', '暂时无法读取资料。');
   }
 }

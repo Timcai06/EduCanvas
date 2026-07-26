@@ -1,10 +1,14 @@
-import { ARTIFACT_GENERATE_TASK, AssetAccessError } from '@educanvas/db';
+import {
+  ARTIFACT_GENERATE_TASK,
+  ArtifactIdempotencyConflictError,
+  AssetAccessError,
+} from '@educanvas/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
 const artifactRepo = {
-  listSpaceArtifacts: vi.fn(),
+  listSpaceArtifactsPage: vi.fn(),
   createArtifactWithGenerationJob: vi.fn(),
   getArtifact: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
@@ -108,11 +112,17 @@ describe('GET /api/v1/chat/artifacts', () => {
     vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(
       conversation as unknown as never,
     );
-    artifactRepo.listSpaceArtifacts.mockResolvedValue([]);
+    artifactRepo.listSpaceArtifactsPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
   });
 
   it('returns artifact list for active general conversation', async () => {
-    artifactRepo.listSpaceArtifacts.mockResolvedValue([validArtifact]);
+    artifactRepo.listSpaceArtifactsPage.mockResolvedValue({
+      items: [validArtifact],
+      nextCursor: null,
+    });
 
     const response = await GET();
     const payload = await response.json();
@@ -130,11 +140,16 @@ describe('GET /api/v1/chat/artifacts', () => {
           updatedAt: validArtifact.updatedAt,
         },
       ],
+      page: { nextCursor: null },
     });
-    expect(artifactRepo.listSpaceArtifacts).toHaveBeenCalledWith({
-      spaceId: conversation.spaceId,
-      trustedSubjectId: identity.studentId,
-    });
+    expect(artifactRepo.listSpaceArtifactsPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: conversation.spaceId,
+        trustedSubjectId: identity.studentId,
+        limit: 50,
+        cursor: null,
+      }),
+    );
   });
 
   it('returns 401 when conversation cannot be loaded', async () => {
@@ -149,7 +164,7 @@ describe('GET /api/v1/chat/artifacts', () => {
   });
 
   it('maps query errors to 503', async () => {
-    artifactRepo.listSpaceArtifacts.mockRejectedValue(new Error('db down'));
+    artifactRepo.listSpaceArtifactsPage.mockRejectedValue(new Error('db down'));
 
     const response = await GET();
 
@@ -210,6 +225,54 @@ describe('POST /api/v1/chat/artifacts', () => {
         params: {},
       }),
     );
+  });
+
+  it('passes a bounded idempotency key and returns a replay as 200', async () => {
+    artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
+      artifact: validArtifact,
+      job: {
+        id: 'jobs-1',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
+      replayed: true,
+    });
+    const response = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'artifact:create:1',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ replayed: true });
+    expect(artifactRepo.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'artifact:create:1',
+        requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+  });
+
+  it('rejects malformed or conflicting idempotency keys', async () => {
+    const malformed = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'contains spaces',
+      }),
+    );
+    expect(malformed.status).toBe(400);
+    artifactRepo.createArtifactWithGenerationJob.mockRejectedValue(
+      new ArtifactIdempotencyConflictError(),
+    );
+    const conflict = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'artifact:create:conflict',
+      }),
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: 'idempotency_conflict' },
+    });
   });
 
   it('creates a manual note atomically without enqueueing a worker job', async () => {
