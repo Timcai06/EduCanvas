@@ -57,15 +57,8 @@ const rolePermissions: Record<
     'conversation.reply',
     'source.write',
     'artifact.write',
-    'membership.manage',
   ],
-  contributor: [
-    'notebook.read',
-    'conversation.create',
-    'conversation.reply',
-    'source.write',
-    'artifact.write',
-  ],
+  contributor: ['notebook.read', 'conversation.reply'],
   viewer: ['notebook.read'],
 };
 

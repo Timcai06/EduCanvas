@@ -85,7 +85,6 @@ export async function loadOwnedAssetPreviewDetail(input: {
     origin: version.origin,
     createdAt: version.createdAt,
     accessRole: policy.role,
-    isCreator: policy.isCreator,
     version: {
       versionId: version.versionId,
       byteSize: version.byteSize,

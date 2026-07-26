@@ -122,17 +122,17 @@ describeWithDatabase('平台 Artifact 仓储', () => {
   });
 
   it('Notebook协作者按角色共享产物且viewer保持只读', async () => {
-    const contributor = 'subject-contributor-1';
+    const editor = 'subject-editor-1';
     const viewer = 'subject-viewer-1';
     await database!.insert(schema.platformUsers).values([
-      { id: contributor, kind: 'registered', status: 'active' },
+      { id: editor, kind: 'registered', status: 'active' },
       { id: viewer, kind: 'registered', status: 'active' },
     ]);
     await database!.insert(schema.notebookMemberships).values([
       {
         notebookId: spaceId,
-        userId: contributor,
-        role: 'contributor',
+        userId: editor,
+        role: 'editor',
         grantedByUserId: owner,
       },
       {
@@ -145,7 +145,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
 
     const created = await repository.createArtifact({
       spaceId,
-      trustedSubjectId: contributor,
+      trustedSubjectId: editor,
       kind: 'mind_map',
       trustTier: 'tier1',
       title: '协作产物',

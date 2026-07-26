@@ -62,7 +62,6 @@ async function loadSource(input: {
       origin: snapshot.descriptor.origin,
       createdAt: snapshot.createdAt,
       accessRole: policy.role,
-      isCreator: policy.isCreator,
       version: snapshot.version
         ? {
             versionId: snapshot.version.versionId,

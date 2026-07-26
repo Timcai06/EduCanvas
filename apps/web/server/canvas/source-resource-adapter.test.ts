@@ -17,7 +17,6 @@ const readySource: SourceResourceProjectionInput = {
   origin: 'upload',
   createdAt: '2026-07-25T00:00:00.000Z',
   accessRole: 'owner',
-  isCreator: true,
   version: {
     versionId: '30000000-0000-4000-8000-000000000003',
     byteSize: 4096,
@@ -118,7 +117,6 @@ describe('Source CanvasResource adapter', () => {
     const resource = projectOwnedSourceResource({
       ...readySource,
       accessRole: 'viewer',
-      isCreator: false,
     });
 
     expect(resource.allowedActions).toEqual(['view', 'download']);

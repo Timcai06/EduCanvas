@@ -74,7 +74,6 @@ export interface SourceResourceProjectionInput {
   origin: AssetOrigin;
   createdAt: string;
   accessRole: NotebookMembershipRole;
-  isCreator: boolean;
   version: {
     versionId: string;
     byteSize: number;
@@ -116,12 +115,11 @@ function allowedActions(
   status: CanvasResource['status'],
   downloadable: boolean,
   accessRole: NotebookMembershipRole,
-  isCreator: boolean,
 ): CanvasResourceAction[] {
   if (status !== 'ready') return [];
   const actions: CanvasResourceAction[] = ['view'];
   if (downloadable) actions.push('download');
-  if (isCreator || accessRole === 'owner' || accessRole === 'editor') {
+  if (accessRole === 'owner' || accessRole === 'editor') {
     actions.push('delete');
   }
   return actions;
@@ -171,7 +169,6 @@ export function projectOwnedSourceResource(
       status,
       renderer.downloadable,
       input.accessRole,
-      input.isCreator,
     ),
     canProduceCandidateLearningEvents: false,
     provenance: {

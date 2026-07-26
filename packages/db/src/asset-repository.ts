@@ -56,7 +56,6 @@ export interface MaterializedAssetVersion {
 
 export interface AssetAccessPolicy {
   role: NotebookMembershipRole;
-  isCreator: boolean;
 }
 
 /**
@@ -405,7 +404,7 @@ export class DrizzleAssetRepository {
     }).catch(() => null);
     if (!access) throw new AssetAccessError();
     const [asset] = await this.database
-      .select({ createdBy: assets.ownerSubjectId })
+      .select({ id: assets.id })
       .from(assets)
       .where(
         and(
@@ -416,10 +415,7 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!asset) throw new AssetAccessError();
-    return {
-      role: access.role,
-      isCreator: asset.createdBy === ownerSubjectId,
-    };
+    return { role: access.role };
   }
 
   /**

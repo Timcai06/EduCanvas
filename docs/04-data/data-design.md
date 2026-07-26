@@ -91,8 +91,16 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 
 - `assets`：所有者、Space标识、Turn/Space范围、类型、来源和生命周期；
 - `asset_versions`：不可变内容版本、hash、私有storage key、解析文本和处理终态。
+- `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
+  派生对象引用，不复制Source正文；
+- `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码；
+- `object_deletion_outbox`：tombstone事务登记的私有对象删除意图，Worker使用
+  `FOR UPDATE SKIP LOCKED`领取、指数退避并幂等完成；
 
-当前限制：通用与K12路径都通过一等`spaces`/`conversations`校验Notebook归属；`lessonSession`只保留教学纵向状态，Asset归属使用关联Conversation的真实Space。`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权。worker 已每日 03:15 UTC 调度匿名数据库主体清理，但仍未通过对象删除Outbox删除磁盘/对象存储内容。
+当前限制：通用与K12路径都通过一等`spaces`/`conversations`校验Notebook归属；
+`lessonSession`只保留教学纵向状态，Asset归属使用关联Conversation的真实Space。
+`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权。对象删除Outbox已覆盖
+Asset tombstone和本地文件适配器；Artifact、Avatar、S3兼容适配器与残留巡检尚待接入。
 
 ### 知识与引用
 
@@ -123,7 +131,8 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 Studio恢复。音频二进制不进PostgreSQL；Worker写对象后先保存key/checksum/metadata
 checkpoint，crash重投校验对象后继续append version。结构化Canvas修改会冻结
 `baseVersion + instruction`到新任务，Worker读取基线版本与Notebook对话后追加不可变版本；
-并发任务或过期基线以冲突拒绝。仍缺正式对象删除Outbox与S3兼容生产适配器。
+并发任务或过期基线以冲突拒绝。创建入口以可选幂等键和请求指纹阻止网络重试重复建档；
+仍缺Artifact媒体删除写入Outbox与S3兼容生产适配器。
 
 ## 当前通用对象模型
 
@@ -215,15 +224,21 @@ provider_file
 - 状态、答案和归属由服务端验证后才产生可信事件；
 - 完整回放后必须与在线投影一致。
 
+数据库复合外键同时约束Event的Session/Student、Diagnostic Attempt的Goal/Session/Student、
+Response的Attempt/Objective/Goal，以及Operation/Conversation/Notebook和Artifact
+Version/Generation Job作用域。迁移先建立复合唯一索引再增加外键，避免生成顺序导致
+空库迁移失败。`mastery_states`当前主键仍是学生+知识节点；课程目录版本进入长期并行
+运行前，必须以独立迁移扩展口径，不能复用同名节点静默覆盖。
+
 事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)和 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。五阶段课程与现有掌握度公式属于教育领域当前实现，不是通用 Agent 数据前置条件。
 
 ## 生产门禁
 
 以下是进入production前的要求，不代表当前已经部署：
 
-- 正式认证、租户/学校边界和授权审计；
+- 正式认证、租户/学校边界和全量授权审计（当前已有安全审计表及Notebook管理事件）；
 - 备份、PITR与恢复演练；
-- Transactional Outbox与对象删除残留巡检；
+- Artifact/Avatar对象删除Outbox接入与残留巡检；
 - 连接池、容量测试和慢查询治理；
 - 数据保留、导出、更正和删除流程；
 - Provider与Tool Trace脱敏、OpenTelemetry和SLO告警。
