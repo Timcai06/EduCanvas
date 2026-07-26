@@ -10,6 +10,7 @@ export {
   AssetAccessError,
   AssetPersistenceError,
   DrizzleAssetRepository,
+  type AssetAccessPolicy,
   type AssetSnapshot,
   type CreateUploadedAssetInput,
   type MaterializedAssetVersion,

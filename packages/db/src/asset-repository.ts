@@ -12,6 +12,7 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
@@ -19,6 +20,7 @@ import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
+import { requireNotebookAccess } from './notebook-access';
 import {
   assetProcessingJobs,
   assetRepresentations,
@@ -45,6 +47,11 @@ export interface MaterializedAssetVersion {
   mimeType: string;
   byteSize: number;
   extractedText: string | null;
+}
+
+export interface AssetAccessPolicy {
+  role: NotebookMembershipRole;
+  isCreator: boolean;
 }
 
 /**
@@ -187,6 +194,14 @@ export class DrizzleAssetRepository {
     const versionStatus = input.outcome.status;
 
     return this.database.transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => {
+        throw new AssetAccessError();
+      });
       const [createdAsset] = await transaction
         .insert(assets)
         .values({
@@ -286,17 +301,18 @@ export class DrizzleAssetRepository {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
     const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const rows = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
       .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
-      .where(
-        and(
-          eq(assets.ownerSubjectId, ownerSubjectId),
-          eq(assets.spaceId, spaceId),
-          ne(assets.status, 'tombstoned'),
-        ),
-      )
+      .where(and(eq(assets.spaceId, spaceId), ne(assets.status, 'tombstoned')))
       .orderBy(desc(assets.createdAt), desc(assets.id))
       .limit(limit);
     return rows.map(({ asset, version }) => toSnapshot(asset, version));
@@ -314,6 +330,13 @@ export class DrizzleAssetRepository {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
     const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const [row] = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
@@ -321,7 +344,6 @@ export class DrizzleAssetRepository {
       .where(
         and(
           eq(assets.id, assetId),
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
           ne(assets.status, 'tombstoned'),
         ),
@@ -329,6 +351,39 @@ export class DrizzleAssetRepository {
       .limit(1);
     if (!row) throw new AssetAccessError();
     return toSnapshot(row.asset, row.version);
+  }
+
+  /** Canvas 动作策略只使用数据库成员角色与资源创建者，不接受客户端声明。 */
+  async getAccessPolicy(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<AssetAccessPolicy> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const access = await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new AssetAccessError();
+    const [asset] = await this.database
+      .select({ createdBy: assets.ownerSubjectId })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .limit(1);
+    if (!asset) throw new AssetAccessError();
+    return {
+      role: access.role,
+      isCreator: asset.createdBy === ownerSubjectId,
+    };
   }
 
   /**
@@ -343,6 +398,13 @@ export class DrizzleAssetRepository {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
     const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const [row] = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
@@ -350,7 +412,6 @@ export class DrizzleAssetRepository {
       .where(
         and(
           eq(assets.id, assetId),
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
           eq(assets.status, 'ready'),
           eq(assetVersions.status, 'ready'),
@@ -420,19 +481,32 @@ export class DrizzleAssetRepository {
     const assetId = requireUuid(input.assetId);
     const now = new Date();
     return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => null);
+      if (!access) return false;
       const [owned] = await transaction
-        .select({ id: assets.id })
+        .select({ id: assets.id, createdBy: assets.ownerSubjectId })
         .from(assets)
         .where(
           and(
             eq(assets.id, assetId),
-            eq(assets.ownerSubjectId, ownerSubjectId),
             eq(assets.spaceId, spaceId),
             ne(assets.status, 'tombstoned'),
           ),
         )
         .limit(1);
       if (!owned) return false;
+      if (
+        owned.createdBy !== ownerSubjectId &&
+        access.role !== 'owner' &&
+        access.role !== 'editor'
+      ) {
+        return false;
+      }
 
       const storedVersions = await transaction
         .select({

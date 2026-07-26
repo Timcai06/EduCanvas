@@ -65,13 +65,23 @@ describeWithDatabase('平台 Artifact 仓储', () => {
 
   beforeEach(async () => {
     await database!.execute(
-      sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, spaces restart identity cascade`,
+      sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, notebook_memberships, spaces, personal_agents, platform_users restart identity cascade`,
     );
+    await database!.insert(schema.platformUsers).values([
+      { id: owner, kind: 'registered', status: 'active' },
+      { id: stranger, kind: 'registered', status: 'active' },
+    ]);
     const [space] = await database!
       .insert(schema.spaces)
       .values({ ownerSubjectId: owner, title: '测试空间' })
       .returning();
     spaceId = space!.id;
+    await database!.insert(schema.notebookMemberships).values({
+      notebookId: spaceId,
+      userId: owner,
+      role: 'owner',
+      grantedByUserId: owner,
+    });
   });
 
   afterAll(async () => {
@@ -106,6 +116,52 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       repository.getArtifact({
         artifactId: artifact.id,
         trustedSubjectId: stranger,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+  });
+
+  it('Notebook协作者按角色共享产物且viewer保持只读', async () => {
+    const contributor = 'subject-contributor-1';
+    const viewer = 'subject-viewer-1';
+    await database!.insert(schema.platformUsers).values([
+      { id: contributor, kind: 'registered', status: 'active' },
+      { id: viewer, kind: 'registered', status: 'active' },
+    ]);
+    await database!.insert(schema.notebookMemberships).values([
+      {
+        notebookId: spaceId,
+        userId: contributor,
+        role: 'contributor',
+        grantedByUserId: owner,
+      },
+      {
+        notebookId: spaceId,
+        userId: viewer,
+        role: 'viewer',
+        grantedByUserId: owner,
+      },
+    ]);
+
+    const created = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: contributor,
+      kind: 'mind_map',
+      trustTier: 'tier1',
+      title: '协作产物',
+    });
+    await expect(
+      repository.getArtifact({
+        artifactId: created.id,
+        trustedSubjectId: viewer,
+      }),
+    ).resolves.toMatchObject({ id: created.id });
+    await expect(
+      repository.createArtifact({
+        spaceId,
+        trustedSubjectId: viewer,
+        kind: 'mind_map',
+        trustTier: 'tier1',
+        title: '越权创建',
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });

@@ -1,14 +1,37 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { NotebookPermission } from '@educanvas/gateway-core';
 import { getDb } from './client';
+import { requireNotebookAccess } from './notebook-access';
 import {
   artifactGenerationJobs,
   artifactVersions,
   artifacts,
-  spaces,
+  conversations,
 } from './schema';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
+type DatabaseTransaction = Parameters<
+  Parameters<Database['transaction']>[0]
+>[0];
+type DatabaseExecutor = Database | DatabaseTransaction;
+
+async function requireArtifactNotebookAccess(
+  executor: DatabaseExecutor,
+  input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    permission: NotebookPermission;
+  },
+): Promise<void> {
+  await requireNotebookAccess(executor, {
+    notebookId: input.spaceId,
+    trustedSubjectId: input.trustedSubjectId,
+    requiredPermission: input.permission,
+  }).catch(() => {
+    throw new ArtifactOwnershipError();
+  });
+}
 
 /** 主体不拥有目标 Space/Artifact 时抛出;与查无此物同错,避免所有权探测。 */
 export class ArtifactOwnershipError extends Error {
@@ -138,14 +161,11 @@ export class DrizzlePlatformArtifactRepository {
     title: string;
     status?: Extract<ArtifactStatus, 'proposed' | 'active'>;
   }): Promise<PlatformArtifact> {
-    const [space] = await this.database
-      .select({ ownerSubjectId: spaces.ownerSubjectId })
-      .from(spaces)
-      .where(eq(spaces.id, input.spaceId))
-      .limit(1);
-    if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
-      throw new ArtifactOwnershipError();
-    }
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: input.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'artifact.write',
+    });
 
     const [row] = await this.database
       .insert(artifacts)
@@ -169,14 +189,14 @@ export class DrizzlePlatformArtifactRepository {
     const [row] = await this.database
       .select()
       .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.id, input.artifactId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(eq(artifacts.id, input.artifactId))
       .limit(1);
     if (!row) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: row.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     return toArtifact(row);
   }
 
@@ -185,15 +205,21 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformArtifact[]> {
+    const [conversation] = await this.database
+      .select({ spaceId: conversations.spaceId })
+      .from(conversations)
+      .where(eq(conversations.id, input.conversationId))
+      .limit(1);
+    if (!conversation) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: conversation.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     const rows = await this.database
       .select()
       .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.conversationId, input.conversationId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(and(eq(artifacts.conversationId, input.conversationId)))
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
       .limit(Math.min(input.limit ?? 50, 100));
     return rows.map(toArtifact);
@@ -205,15 +231,15 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformArtifact[]> {
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: input.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     const rows = await this.database
       .select()
       .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.spaceId, input.spaceId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(eq(artifacts.spaceId, input.spaceId))
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
       .limit(Math.min(input.limit ?? 50, 100));
     return rows.map(toArtifact);
@@ -241,16 +267,21 @@ export class DrizzlePlatformArtifactRepository {
         const [artifact] = await tx
           .select({
             id: artifacts.id,
-            ownerSubjectId: artifacts.ownerSubjectId,
+            spaceId: artifacts.spaceId,
             latestVersion: artifacts.latestVersion,
           })
           .from(artifacts)
           .where(eq(artifacts.id, input.artifactId))
           .for('update')
           .limit(1);
-        if (!artifact || artifact.ownerSubjectId !== input.trustedSubjectId) {
+        if (!artifact) {
           throw new ArtifactOwnershipError();
         }
+        await requireArtifactNotebookAccess(tx, {
+          spaceId: artifact.spaceId,
+          trustedSubjectId: input.trustedSubjectId,
+          permission: 'artifact.write',
+        });
         if (
           input.expectedLatestVersion !== undefined &&
           artifact.latestVersion !== input.expectedLatestVersion
@@ -400,7 +431,7 @@ export class DrizzlePlatformArtifactRepository {
           id: artifactGenerationJobs.id,
           status: artifactGenerationJobs.status,
           startedAt: artifactGenerationJobs.startedAt,
-          owner: artifacts.ownerSubjectId,
+          spaceId: artifacts.spaceId,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -410,9 +441,14 @@ export class DrizzlePlatformArtifactRepository {
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .for('update', { of: artifactGenerationJobs })
         .limit(1);
-      if (!row || row.owner !== input.trustedSubjectId) {
+      if (!row) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: row.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
 
       const from = row.status as ArtifactJobStatus;
       if (!JOB_TRANSITIONS[from].includes(input.to)) {
@@ -445,17 +481,20 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
   }): Promise<PlatformArtifactJob> {
     const [row] = await this.database
-      .select({ job: artifactGenerationJobs })
+      .select({
+        job: artifactGenerationJobs,
+        spaceId: artifacts.spaceId,
+      })
       .from(artifactGenerationJobs)
       .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
-      .where(
-        and(
-          eq(artifactGenerationJobs.id, input.jobId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(eq(artifactGenerationJobs.id, input.jobId))
       .limit(1);
     if (!row) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: row.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     return toJob(row.job);
   }
 
@@ -472,7 +511,7 @@ export class DrizzlePlatformArtifactRepository {
       const [row] = await tx
         .select({
           job: artifactGenerationJobs,
-          owner: artifacts.ownerSubjectId,
+          spaceId: artifacts.spaceId,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -482,9 +521,14 @@ export class DrizzlePlatformArtifactRepository {
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .for('update', { of: artifactGenerationJobs })
         .limit(1);
-      if (!row || row.owner !== input.trustedSubjectId) {
+      if (!row) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: row.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
       if (row.job.status !== 'running') {
         throw new ArtifactJobLifecycleError(row.job.status, 'running');
       }
@@ -601,12 +645,16 @@ export class DrizzlePlatformArtifactRepository {
         .limit(1);
       if (
         !artifactRow ||
-        artifactRow.ownerSubjectId !== input.trustedSubjectId ||
         artifactRow.conversationId !== input.conversationId ||
         artifactRow.status !== 'active'
       ) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: artifactRow.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
       if (artifactRow.latestVersion !== input.baseVersion) {
         throw new ArtifactRevisionConflictError('stale_version');
       }

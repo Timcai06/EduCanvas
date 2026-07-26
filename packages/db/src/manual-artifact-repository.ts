@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { getDb } from './client';
-import { artifactVersions, artifacts, spaces } from './schema';
+import { requireNotebookAccess } from './notebook-access';
+import { ownsArtifactConversationScope } from './platform-artifact-scope';
+import { artifactVersions, artifacts } from './schema';
 import {
   ArtifactOwnershipError,
   type ArtifactTrustTier,
@@ -39,12 +40,20 @@ export class DrizzleManualArtifactRepository {
     version: PlatformArtifactVersion;
   }> {
     return await this.database.transaction(async (tx) => {
-      const [space] = await tx
-        .select({ ownerSubjectId: spaces.ownerSubjectId })
-        .from(spaces)
-        .where(eq(spaces.id, input.spaceId))
-        .limit(1);
-      if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
+      const hasAccess = input.conversationId
+        ? await ownsArtifactConversationScope(tx, {
+            spaceId: input.spaceId,
+            conversationId: input.conversationId,
+            trustedSubjectId: input.trustedSubjectId,
+          })
+        : Boolean(
+            await requireNotebookAccess(tx, {
+              notebookId: input.spaceId,
+              trustedSubjectId: input.trustedSubjectId,
+              requiredPermission: 'artifact.write',
+            }).catch(() => null),
+          );
+      if (!hasAccess) {
         throw new ArtifactOwnershipError();
       }
 

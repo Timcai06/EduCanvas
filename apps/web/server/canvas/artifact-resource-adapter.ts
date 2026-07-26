@@ -13,6 +13,7 @@ import type {
   PlatformArtifactJob,
   PlatformArtifactVersion,
 } from '@educanvas/db';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 
 const ARTIFACT_RENDERERS = {
   mind_map: {
@@ -89,10 +90,12 @@ function projectActions(
   kind: keyof typeof ARTIFACT_RENDERERS,
   status: CanvasResource['status'],
   hasVersion: boolean,
+  accessRole: NotebookMembershipRole,
 ): CanvasResourceAction[] {
   if (!hasVersion) return [];
   if (status === 'processing' || status === 'archived') return ['view'];
   if (status !== 'ready') return [];
+  if (accessRole === 'viewer') return ['view'];
   if (kind === 'note') return ['view', 'edit', 'regenerate'];
   if (kind === 'audio_overview') return ['view'];
   return ['view', 'regenerate'];
@@ -107,6 +110,7 @@ export function projectOwnedArtifactResource(input: {
   artifact: PlatformArtifact;
   version: PlatformArtifactVersion | null;
   latestJob: PlatformArtifactJob | null;
+  accessRole: NotebookMembershipRole;
 }): CanvasResource {
   if (input.artifact.spaceId !== input.notebookId) {
     throw new ArtifactResourceProjectionError('resource_not_found', 422);
@@ -146,7 +150,12 @@ export function projectOwnedArtifactResource(input: {
       rendererVersion: 1,
     },
     trustTier: renderer.trustTier,
-    allowedActions: projectActions(kind, status, input.version !== null),
+    allowedActions: projectActions(
+      kind,
+      status,
+      input.version !== null,
+      input.accessRole,
+    ),
     canProduceCandidateLearningEvents: false,
     provenance: {
       origin:

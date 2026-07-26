@@ -1,6 +1,7 @@
 import type { AssetVersionReference } from '@educanvas/agent-core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { assets, assetVersions } from '../schema';
+import { requireNotebookAccess } from '../notebook-access';
 import type { DatabaseExecutor } from './database-types';
 import { isUuid } from './identifiers';
 
@@ -28,6 +29,13 @@ export async function loadOwnedReadyAssetVersions(
     throw new OwnedAssetVersionError('invalid_reference');
   }
   if (input.references.length === 0) return [];
+  await requireNotebookAccess(executor, {
+    notebookId: input.spaceId,
+    trustedSubjectId: input.ownerSubjectId,
+    requiredPermission: 'notebook.read',
+  }).catch(() => {
+    throw new OwnedAssetVersionError('not_available');
+  });
 
   const rows = await executor
     .select({ asset: assets, version: assetVersions })
@@ -35,7 +43,6 @@ export async function loadOwnedReadyAssetVersions(
     .innerJoin(assets, eq(assets.id, assetVersions.assetId))
     .where(
       and(
-        eq(assets.ownerSubjectId, input.ownerSubjectId),
         eq(assets.spaceId, input.spaceId),
         eq(assets.status, 'ready'),
         eq(assetVersions.status, 'ready'),

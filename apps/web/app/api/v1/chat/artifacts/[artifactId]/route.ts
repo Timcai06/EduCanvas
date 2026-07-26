@@ -15,6 +15,8 @@ import {
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
+  getDb,
+  requireNotebookAccess,
 } from '@educanvas/db';
 import {
   audioOverviewMetadataSchema,
@@ -59,6 +61,12 @@ export async function GET(
     if (detail.artifact.spaceId !== conversation.spaceId) {
       throw new ArtifactOwnershipError();
     }
+    const access = await requireNotebookAccess(getDb(), {
+      notebookId: conversation.spaceId,
+      trustedSubjectId: identity.studentId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new ArtifactOwnershipError();
     const requestedVersion = new URL(request.url).searchParams.get('version');
     if (requestedVersion && !/^[1-9]\d*$/.test(requestedVersion)) {
       throw new ArtifactOwnershipError();
@@ -94,6 +102,7 @@ export async function GET(
       artifact: detail.artifact,
       version: selectedVersion,
       latestJob: detail.latestJob,
+      accessRole: access.role,
     });
     return jsonResponse({
       artifact: {

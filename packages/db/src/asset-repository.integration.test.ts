@@ -76,9 +76,51 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         chat_messages,
         asset_versions,
         assets,
-        lesson_sessions
+        lesson_sessions,
+        notebook_memberships,
+        spaces,
+        personal_agents,
+        platform_users
       restart identity cascade
     `);
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values([
+        { id: ownerSubjectId, kind: 'anonymous_compat', status: 'active' },
+        { id: otherSubjectId, kind: 'anonymous_compat', status: 'active' },
+      ]);
+    await getDatabase()
+      .insert(schema.spaces)
+      .values([
+        {
+          id: spaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Asset fixture',
+        },
+        {
+          id: otherSpaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Other fixture',
+        },
+      ]);
+    await getDatabase()
+      .insert(schema.notebookMemberships)
+      .values([
+        {
+          notebookId: spaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+        {
+          notebookId: otherSpaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+      ]);
   });
 
   afterAll(async () => {

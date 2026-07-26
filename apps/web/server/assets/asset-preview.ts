@@ -67,7 +67,14 @@ export async function loadOwnedAssetPreviewDetail(input: {
   spaceId: string;
   assetId: string;
 }): Promise<{ preview: AssetPreview; canvasResource: CanvasResource }> {
-  const version = await loadStoredVersion(input);
+  const [version, policy] = await Promise.all([
+    loadStoredVersion(input),
+    assets.getAccessPolicy({
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      assetId: input.assetId,
+    }),
+  ]);
   const fileUrl = `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}/file`;
   const canvasResource = projectOwnedSourceResource({
     assetId: version.assetId,
@@ -77,6 +84,8 @@ export async function loadOwnedAssetPreviewDetail(input: {
     status: 'ready',
     origin: version.origin,
     createdAt: version.createdAt,
+    accessRole: policy.role,
+    isCreator: policy.isCreator,
     version: {
       versionId: version.versionId,
       byteSize: version.byteSize,

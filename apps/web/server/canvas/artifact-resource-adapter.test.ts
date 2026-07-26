@@ -63,6 +63,7 @@ describe('Artifact CanvasResource adapter', () => {
       artifact,
       version,
       latestJob: null,
+      accessRole: 'owner',
     });
     const serialized = JSON.stringify(resource);
 
@@ -86,6 +87,7 @@ describe('Artifact CanvasResource adapter', () => {
       artifact: { ...artifact, latestVersion: 0, status: 'proposed' },
       version: null,
       latestJob: runningJob,
+      accessRole: 'owner',
     });
 
     expect(resource.status).toBe('processing');
@@ -100,6 +102,7 @@ describe('Artifact CanvasResource adapter', () => {
         artifact,
         version: null,
         latestJob: null,
+        accessRole: 'owner',
       }),
     ).toThrow(
       expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
@@ -115,6 +118,7 @@ describe('Artifact CanvasResource adapter', () => {
         artifact: { ...artifact, kind: 'unknown_kind' },
         version,
         latestJob: null,
+        accessRole: 'owner',
       }),
     ).toThrow(
       expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
@@ -127,6 +131,7 @@ describe('Artifact CanvasResource adapter', () => {
         artifact: { ...artifact, trustTier: 'tier2' },
         version,
         latestJob: null,
+        accessRole: 'owner',
       }),
     ).toThrow(
       expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
@@ -145,6 +150,7 @@ describe('Artifact CanvasResource adapter', () => {
       },
       version,
       latestJob: null,
+      accessRole: 'owner',
     });
 
     expect(resource).toMatchObject({
@@ -163,6 +169,7 @@ describe('Artifact CanvasResource adapter', () => {
         artifact,
         version,
         latestJob: null,
+        accessRole: 'owner',
       }),
     ).toThrow(
       expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
@@ -175,10 +182,23 @@ describe('Artifact CanvasResource adapter', () => {
       artifact,
       version,
       latestJob: null,
+      accessRole: 'owner',
       allowedActions: ['run'],
       rendererId: 'attacker.renderer',
     } as Parameters<typeof projectOwnedArtifactResource>[0]);
     expect(resource.allowedActions).toEqual(['view', 'regenerate']);
     expect(resource.renderer.rendererId).toBe('artifact.mind-map');
+  });
+
+  it('keeps a viewer read-only even when the artifact kind is editable', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'note' },
+      version,
+      latestJob: null,
+      accessRole: 'viewer',
+    });
+
+    expect(resource.allowedActions).toEqual(['view']);
   });
 });

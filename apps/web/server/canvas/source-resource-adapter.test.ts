@@ -16,6 +16,8 @@ const readySource: SourceResourceProjectionInput = {
   status: 'ready',
   origin: 'upload',
   createdAt: '2026-07-25T00:00:00.000Z',
+  accessRole: 'owner',
+  isCreator: true,
   version: {
     versionId: '30000000-0000-4000-8000-000000000003',
     byteSize: 4096,
@@ -110,5 +112,15 @@ describe('Source CanvasResource adapter', () => {
     expect(resource.allowedActions).toEqual(['view', 'delete']);
     expect(resource.renderer.rendererId).toBe('source.text');
     expect(resource.trustTier).toBe('tier1');
+  });
+
+  it('does not grant delete to a read-only collaborator', () => {
+    const resource = projectOwnedSourceResource({
+      ...readySource,
+      accessRole: 'viewer',
+      isCreator: false,
+    });
+
+    expect(resource.allowedActions).toEqual(['view', 'download']);
   });
 });
