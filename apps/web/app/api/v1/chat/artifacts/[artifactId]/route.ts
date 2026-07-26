@@ -3,6 +3,7 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -94,7 +95,7 @@ export async function GET(
       version: selectedVersion,
       latestJob: detail.latestJob,
     });
-    return Response.json({
+    return jsonResponse({
       artifact: {
         id: detail.artifact.id,
         kind: detail.artifact.kind,
@@ -233,7 +234,7 @@ export async function PATCH(
         generatedBy: 'user:manual',
         expectedLatestVersion: parsed.data.baseVersion,
       });
-      return Response.json(
+      return jsonResponse(
         {
           artifact: {
             id: artifact.id,
@@ -257,7 +258,7 @@ export async function PATCH(
       instruction: parsed.data.instruction,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
     });
-    return Response.json(
+    return jsonResponse(
       {
         artifact: {
           id: created.artifact.id,

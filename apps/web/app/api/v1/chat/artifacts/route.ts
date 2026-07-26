@@ -3,6 +3,7 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -43,7 +44,7 @@ export async function GET(): Promise<Response> {
       spaceId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
     });
-    return Response.json({
+    return jsonResponse({
       artifacts: artifacts.map((artifact) => ({
         id: artifact.id,
         kind: artifact.kind,
@@ -168,7 +169,7 @@ export async function POST(request: Request): Promise<Response> {
           }),
           generatedBy: 'user:manual',
         });
-      return Response.json(
+      return jsonResponse(
         {
           artifact: {
             id: created.artifact.id,
@@ -195,7 +196,7 @@ export async function POST(request: Request): Promise<Response> {
       taskIdentifier: ARTIFACT_GENERATE_TASK,
       params,
     });
-    return Response.json(
+    return jsonResponse(
       {
         artifact: {
           id: created.artifact.id,

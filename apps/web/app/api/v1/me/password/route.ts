@@ -6,6 +6,7 @@ import {
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   AccountError,
@@ -74,7 +75,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     resetAuthFailures(attemptKey);
     await writeWebSessionCookie(newSession.token);
-    return Response.json({ ok: true });
+    return jsonResponse({ ok: true });
   } catch (error) {
     if (error instanceof PasswordValidationError) {
       return jsonError(400, error.code, '新密码需为 8 至 128 位。');

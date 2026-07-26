@@ -208,6 +208,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
       },
     });
     expect(payload.versions[0].version).toBe(1);
+    expect(JSON.stringify(payload)).not.toContain('audio.mp3');
+    expect(payload).not.toHaveProperty('objectKey');
+    expect(payload).not.toHaveProperty('checksum');
   });
 
   it('maps repository errors to 503', async () => {

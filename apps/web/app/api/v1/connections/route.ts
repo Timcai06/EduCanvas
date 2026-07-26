@@ -1,5 +1,5 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { jsonError } from '@/server/http/request-security';
+import { jsonError, jsonResponse } from '@/server/http/request-security';
 import { createWebConnectionService } from '@/server/gateway/connections';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,7 @@ export async function GET(): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {
-    return Response.json(
+    return jsonResponse(
       await createWebConnectionService().list(identity.studentId),
     );
   } catch {

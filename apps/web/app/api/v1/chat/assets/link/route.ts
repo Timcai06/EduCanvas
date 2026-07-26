@@ -7,6 +7,7 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -67,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
       spaceId: conversation.spaceId,
       url: parsed.data.url,
     });
-    return Response.json({ asset }, { status: 201 });
+    return jsonResponse({ asset }, { status: 201 });
   } catch (error) {
     if (error instanceof AssetUploadError) {
       return jsonError(error.status, error.code, linkErrorMessage(error.code));

@@ -4,6 +4,7 @@ import { createWebConnectionService } from '@/server/gateway/connections';
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -36,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(400, 'invalid_request', '撤销参数不正确。');
   }
   try {
-    return Response.json(
+    return jsonResponse(
       await createWebConnectionService().revoke({
         userId: identity.studentId,
         connectionId: parsed.data.connectionId,

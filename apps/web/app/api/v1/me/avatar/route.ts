@@ -3,6 +3,7 @@ import { WebAccountRepository } from '@/server/auth/account-repository';
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   readStoredAssetBytes,
@@ -79,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
         });
       });
     }
-    return Response.json({ avatarAvailable: true });
+    return jsonResponse({ avatarAvailable: true });
   } catch (error) {
     if (stored) await removeStoredAsset(stored).catch(() => undefined);
     if (error instanceof BoundedMultipartError) {

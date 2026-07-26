@@ -1,5 +1,5 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { jsonError } from '@/server/http/request-security';
+import { jsonError, jsonResponse } from '@/server/http/request-security';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
 import {
   CanvasResourceAccessError,
@@ -41,7 +41,7 @@ export async function GET(
       resourceKind: parsed.data.resourceKind,
       resourceId: parsed.data.resourceId,
     });
-    return Response.json({ resource });
+    return jsonResponse({ resource });
   } catch (error) {
     if (error instanceof CanvasResourceAccessError) {
       return jsonError(

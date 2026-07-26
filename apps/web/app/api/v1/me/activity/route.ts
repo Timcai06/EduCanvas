@@ -1,5 +1,5 @@
 import { learningActivityResponseSchema } from '@/features/profile/activity-contract';
-import { jsonError } from '@/server/http/request-security';
+import { jsonError, jsonResponse } from '@/server/http/request-security';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { getLearningActivity } from '@/server/profile/learning-activity-service';
 
@@ -24,7 +24,7 @@ export async function GET(): Promise<Response> {
     );
   }
 
-  return Response.json(parsed.data, {
+  return jsonResponse(parsed.data, {
     headers: { 'cache-control': 'private, no-store' },
   });
 }

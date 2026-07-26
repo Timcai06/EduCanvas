@@ -10,6 +10,8 @@
 - ID不使用可猜测的连续整数暴露给客户端；
 - 分页默认使用Cursor；
 - 错误返回稳定错误码，不让前端解析错误文本；
+- 身份相关JSON响应统一使用`Cache-Control: private, no-store`、
+  `X-Content-Type-Options: nosniff`和`X-Request-Id`；
 - 写操作支持幂等键；
 - 长任务返回`job_id`；
 - 流式文本使用SSE，双向实时音频使用WebRTC或WebSocket。
@@ -178,10 +180,15 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
   "error": {
     "code": "COURSE_NOT_FOUND",
     "message": "课程不存在或无权访问",
-    "request_id": "req_xxx"
+    "requestId": "req_xxx"
   }
 }
 ```
+
+Web兼容API保留既有错误码大小写与字段，并以additive方式增加`requestId`；Gateway
+可以继续使用其标准大写错误码，但两者必须由服务端内部错误分类映射，客户端不得
+通过文案判断重试或授权分支。成功与失败的身份相关JSON响应都禁止被浏览器或中间
+代理缓存；二进制版本资源另行定义ETag、Range和缓存策略。
 
 ## 版本变化
 

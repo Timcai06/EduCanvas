@@ -1,6 +1,7 @@
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import { revokeCurrentWebSession } from '@/server/auth/session';
 
@@ -13,7 +14,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   try {
     await revokeCurrentWebSession();
-    return Response.json({ ok: true });
+    return jsonResponse({ ok: true });
   } catch {
     return jsonError(
       503,

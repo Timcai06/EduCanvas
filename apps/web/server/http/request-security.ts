@@ -1,5 +1,33 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
+interface JsonResponseOptions {
+  status?: number;
+  requestId?: string;
+  headers?: HeadersInit;
+}
+
+function secureJsonHeaders(options: JsonResponseOptions): Headers {
+  const headers = new Headers(options.headers);
+  headers.set('cache-control', 'private, no-store');
+  headers.set('content-type', 'application/json; charset=utf-8');
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-request-id', options.requestId ?? randomUUID());
+  return headers;
+}
+
+/** 身份相关 JSON 响应统一禁止缓存，并携带可用于关联服务端日志的请求 ID。 */
+export function jsonResponse(
+  body: unknown,
+  options: JsonResponseOptions = {},
+): Response {
+  return new Response(JSON.stringify(body), {
+    status: options.status ?? 200,
+    headers: secureJsonHeaders(options),
+  });
+}
+
 /**
  * Cookie 认证写请求的最小同源校验。浏览器提供 Origin 时必须精确匹配；
  * 没有 Origin 的非浏览器调用仍会拒绝明确标记为 cross-site 的请求。
@@ -35,12 +63,10 @@ export function jsonError(
   status: number,
   code: string,
   message: string,
-  options: { retryAfterMs?: number } = {},
+  options: { retryAfterMs?: number; requestId?: string } = {},
 ): Response {
-  const headers = new Headers({
-    'cache-control': 'no-store',
-    'content-type': 'application/json; charset=utf-8',
-  });
+  const requestId = options.requestId ?? randomUUID();
+  const headers = secureJsonHeaders({ requestId });
   if (options.retryAfterMs !== undefined) {
     headers.set(
       'retry-after',
@@ -52,6 +78,7 @@ export function jsonError(
       error: {
         code,
         message,
+        requestId,
         ...(options.retryAfterMs === undefined
           ? {}
           : { retryAfterMs: options.retryAfterMs }),

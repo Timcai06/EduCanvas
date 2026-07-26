@@ -6,6 +6,7 @@ import {
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import { readRegisteredSessionIdentity } from '@/server/auth/session';
 import {
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<Response> {
   const user = await readCurrentWebUser();
-  return Response.json(
+  return jsonResponse(
     { user },
     { headers: { 'cache-control': 'private, no-store' } },
   );
@@ -50,7 +51,7 @@ export async function PATCH(request: Request): Promise<Response> {
       userId: identity.userId,
       nickname: parsed.data.nickname,
     });
-    return Response.json({ user });
+    return jsonResponse({ user });
   } catch (error) {
     if (error instanceof AccountError) {
       return jsonError(400, error.code, '昵称不符合要求。');

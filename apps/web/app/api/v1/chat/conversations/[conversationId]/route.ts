@@ -10,6 +10,7 @@ import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 
 export const runtime = 'nodejs';
@@ -53,7 +54,7 @@ export async function PATCH(
   if (!conversation) {
     return jsonError(404, 'conversation_not_found', '笔记本不存在。');
   }
-  return Response.json({
+  return jsonResponse({
     conversation: { id: conversation.id, title: conversation.title },
   });
 }
@@ -82,7 +83,7 @@ export async function DELETE(
   }
   const activeConversationId = await readActiveConversationId();
   if (activeConversationId !== conversationId) {
-    return Response.json({
+    return jsonResponse({
       deleted: true,
       nextConversationId: activeConversationId,
     });
@@ -93,5 +94,5 @@ export async function DELETE(
   });
   if (next) await writeActiveConversationCookie(next.id);
   else await clearActiveConversationCookie();
-  return Response.json({ deleted: true, nextConversationId: next?.id ?? null });
+  return jsonResponse({ deleted: true, nextConversationId: next?.id ?? null });
 }

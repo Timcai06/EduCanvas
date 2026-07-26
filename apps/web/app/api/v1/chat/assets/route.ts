@@ -12,6 +12,7 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 
 export const runtime = 'nodejs';
@@ -28,7 +29,7 @@ export async function GET(): Promise<Response> {
   const context = await loadContext();
   if (!context) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {
-    return Response.json({
+    return jsonResponse({
       assets: await listOwnedSpaceAssets(
         context.identity,
         context.conversation.spaceId,
@@ -53,7 +54,7 @@ export async function POST(request: Request): Promise<Response> {
       spaceId: context.conversation.spaceId,
       ...upload,
     });
-    return Response.json({ asset }, { status: 201 });
+    return jsonResponse({ asset }, { status: 201 });
   } catch (error) {
     if (error instanceof AssetUploadError) {
       return assetUploadErrorResponse(error);
