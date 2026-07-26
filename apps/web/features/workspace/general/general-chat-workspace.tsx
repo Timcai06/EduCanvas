@@ -2,8 +2,9 @@
 
 import { startNewGeneralChatAction } from '@/app/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
-import { loadAssets } from '@/features/assets/asset-client';
+
 import { SourcePreviewPanel } from '@/features/assets/source-preview-panel';
+import { useNotebookSources } from './use-notebook-sources';
 import {
   ArtifactCanvas,
   ArtifactConfirmSheet,
@@ -79,7 +80,6 @@ export function GeneralChatWorkspace({
   notebookTitle: string | null;
   nickname?: string | null;
 }) {
-  const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null);
   const [sourcePreviewFull, setSourcePreviewFull] = useState(false);
@@ -110,38 +110,12 @@ export function GeneralChatWorkspace({
   const pendingMenuConsumed = useRef(false);
   const pendingToolsConsumed = useRef(false);
 
-  const refreshAssets = useCallback(async () => {
-    const items = await loadAssets(ASSET_ENDPOINT, {
-      enableSpaceByDefault: true,
-    });
-    setAssets((current) => {
-      const enabledById = new Map(
-        current.map((asset) => [asset.id, asset.enabled] as const),
-      );
-      return items.map((asset) => ({
-        ...asset,
-        enabled: enabledById.get(asset.id) ?? asset.enabled,
-      }));
-    });
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    void loadAssets(ASSET_ENDPOINT, { enableSpaceByDefault: true })
-      .then((items) => {
-        if (active) setAssets(items);
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setError(
-            reason instanceof Error ? reason.message : '暂时无法读取资料。',
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const sources = useNotebookSources({
+    endpoint: ASSET_ENDPOINT,
+    onError: setError,
+  });
+  const { assets, setAssets } = sources;
+  const refreshAssets = sources.refresh;
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -166,7 +140,13 @@ export function GeneralChatWorkspace({
                   versionId: asset.versionId,
                   kind: asset.kind,
                 },
-                usage: 'context' as const,
+                /* usage 跟随 scope：笔记本长期来源是背景上下文，只在 Studio 里管理；
+                   仅本轮的附件才属于这条消息，会在气泡里留痕。此前一律写死
+                   'context'，导致每条提问都把全部来源重新盖一遍章。 */
+                usage:
+                  asset.scope === 'space'
+                    ? ('context' as const)
+                    : ('attachment' as const),
                 label: asset.label,
               },
             ]
@@ -190,7 +170,7 @@ export function GeneralChatWorkspace({
           void refreshAssets().catch(() => undefined);
         });
     },
-    [assets, canvasSelected, refreshAssets, turn],
+    [assets, canvasSelected, refreshAssets, setAssets, turn],
   );
 
   useEffect(() => {
@@ -494,6 +474,9 @@ export function GeneralChatWorkspace({
                 setSourcePreviewFull(false);
                 void artifactFlow.openArtifact(artifactId);
               }}
+              onToggleSource={sources.toggle}
+              onRenameSource={sources.rename}
+              onDeleteSource={sources.remove}
             />
           </StudioOverlay>
         ) : null}

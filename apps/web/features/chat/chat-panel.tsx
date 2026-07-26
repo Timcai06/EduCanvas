@@ -97,6 +97,23 @@ function AnimatedMessage({
 }
 
 /**
+ * 把本轮附件收敛成一行说明，而不是逐个铺 chip。
+ *
+ * 气泡只承载「这一轮额外带了什么」；笔记本长期来源不进气泡（由 Studio 统一管理），
+ * 所以这里的数量天然有限，一行计数比一排 chip 更稳定，也不会随来源增多把气泡撑开。
+ */
+function attachmentSummary(
+  attachments: readonly { kind: 'image' | 'document' }[],
+): string {
+  const images = attachments.filter((item) => item.kind === 'image').length;
+  const documents = attachments.length - images;
+  const parts: string[] = [];
+  if (images > 0) parts.push(`${images} 张图片`);
+  if (documents > 0) parts.push(`${documents} 份资料`);
+  return `本轮附带 ${parts.join(' · ')}`;
+}
+
+/**
  * 消息流是纯展示组件：所有可变状态（消息、Canvas开合、判分）由 LearnWorkspace 持有。
  * 老师消息不使用气泡而直接写在纸面上，学生消息是页面里唯一的「纸片」——
  * 视觉权重本身在表达「这是老师的课堂」；来源以旁注（marginalia）形式挂在
@@ -136,23 +153,18 @@ export function ChatPanel({
             >
               {message.text ? <p>{message.text}</p> : null}
               {message.attachments.length > 0 ? (
-                <div
-                  className={`flex flex-wrap gap-2 ${message.text ? 'mt-2' : ''}`}
+                <p
+                  className={`flex items-center gap-1.5 text-xs text-ink-muted ${message.text ? 'mt-2' : ''}`}
                 >
-                  {message.attachments.map((attachment) => (
-                    <span
-                      key={attachment.id}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs text-ink-muted"
-                    >
-                      {attachment.kind === 'image' ? (
-                        <ImageIcon size={13} />
-                      ) : (
-                        <FilePdf size={13} />
-                      )}
-                      {attachment.label}
-                    </span>
-                  ))}
-                </div>
+                  {message.attachments.some(
+                    (attachment) => attachment.kind === 'image',
+                  ) ? (
+                    <ImageIcon size={13} />
+                  ) : (
+                    <FilePdf size={13} />
+                  )}
+                  {attachmentSummary(message.attachments)}
+                </p>
               ) : null}
             </AnimatedMessage>
           );

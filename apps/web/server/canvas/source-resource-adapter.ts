@@ -119,8 +119,10 @@ function allowedActions(
   if (status !== 'ready') return [];
   const actions: CanvasResourceAction[] = ['view'];
   if (downloadable) actions.push('download');
+  /* 重命名与删除都改变 Notebook 内所有成员看到的事实，按 source.write 的角色集授权。
+     成员私有的启用/停用不在这里，见 canvasResourceActions 的说明。 */
   if (accessRole === 'owner' || accessRole === 'editor') {
-    actions.push('delete');
+    actions.push('rename', 'delete');
   }
   return actions;
 }

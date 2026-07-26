@@ -38,12 +38,20 @@ export const canvasTrustTierSchema = z.enum(canvasTrustTiers);
 /**
  * 动作是服务端授权后的浏览器安全交集，不是客户端可申请的权限。
  * Renderer只能显示这里已经允许的动作，仍须在执行端再次鉴权。
+ *
+ * 这里只收录改变共享事实的动作。查看者私有状态（例如某个成员是否把这份来源
+ * 带进自己的对话）不属于资源动作，它按成员存储、viewer 也可自行改动，
+ * 因此单独用字段表达，不进这个枚举。
+ *
+ * 枚举新增值是向后兼容的：旧客户端遇到不认识的动作按未知忽略，
+ * 所以 CANVAS_RESOURCE_SCHEMA_VERSION 不随之升版。
  */
 export const canvasResourceActions = [
   'view',
   'download',
   'annotate',
   'edit',
+  'rename',
   'regenerate',
   'run',
   'cancel',

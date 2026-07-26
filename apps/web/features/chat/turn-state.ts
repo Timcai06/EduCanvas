@@ -81,7 +81,7 @@ export function hydrateChatMessages(
   return initialMessages.map((message): ChatMessage => {
     if (message.role === 'student') {
       const attachments = (message.parts ?? []).flatMap((part) =>
-        part.type === 'asset_ref'
+        part.type === 'asset_ref' && part.usage === 'attachment'
           ? [
               {
                 id: `${part.reference.assetId}:${part.reference.versionId}`,

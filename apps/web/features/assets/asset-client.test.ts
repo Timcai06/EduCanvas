@@ -112,6 +112,25 @@ describe('asset browser client', () => {
     expect(asset?.resource?.allowedActions).toEqual(['view', 'download']);
   });
 
+  it('lets the persisted binding win over the local default', async () => {
+    /* enabled 决定下一轮真正带上哪些资料。服务端已按成员持久化，
+       浏览器再算一次只会漂移——即使本地默认会算成 true 也必须服从 false。 */
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          assets: [{ ...assetWithResource(null), enabled: false }],
+        }),
+      ),
+    );
+
+    const [asset] = await loadAssets('/assets-fixture', {
+      enableSpaceByDefault: true,
+    });
+
+    expect(asset?.enabled).toBe(false);
+  });
+
   it('drops a canvas resource that fails protocol validation', async () => {
     /* 服务端不该发出这种资源，但客户端绝不能因为字段"看起来像"就信任其中的
        allowedActions —— 校验失败必须退化为无动作，而不是保留半个对象。 */
