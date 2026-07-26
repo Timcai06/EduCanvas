@@ -19,7 +19,7 @@ import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
-import { assets, assetVersions } from './schema';
+import { assets, assetVersions, objectDeletionOutbox } from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -394,6 +394,27 @@ export class DrizzleAssetRepository {
         .limit(1);
       if (!owned) return false;
 
+      const storedVersions = await transaction
+        .select({
+          id: assetVersions.id,
+          storageKey: assetVersions.storageKey,
+        })
+        .from(assetVersions)
+        .where(eq(assetVersions.assetId, assetId));
+      if (storedVersions.length > 0) {
+        await transaction
+          .insert(objectDeletionOutbox)
+          .values(
+            storedVersions.map((version) => ({
+              objectKind: 'asset',
+              storageKey: version.storageKey,
+              sourceType: 'asset_version',
+              sourceId: version.id,
+              availableAt: now,
+            })),
+          )
+          .onConflictDoNothing();
+      }
       await transaction
         .update(assetVersions)
         .set({ status: 'tombstoned' })

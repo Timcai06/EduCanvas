@@ -60,6 +60,57 @@ export const platformUsers = pgTable(
   ],
 );
 
+/**
+ * 安全与权限变更的只追加审计账本。metadata 仅允许稳定标识和公开原因码，
+ * 不得写入密码、Cookie、Prompt、Provider 原文或堆栈。
+ */
+export const securityAuditEvents = pgTable(
+  'security_audit_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorUserId: text('actor_user_id').references(() => platformUsers.id, {
+      onDelete: 'set null',
+    }),
+    eventType: text('event_type').notNull(),
+    resourceType: text('resource_type'),
+    resourceId: text('resource_id'),
+    outcome: text('outcome').notNull(),
+    reasonCode: text('reason_code'),
+    requestId: text('request_id'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('security_audit_events_actor_time_idx').on(
+      table.actorUserId,
+      table.occurredAt,
+      table.id,
+    ),
+    index('security_audit_events_type_time_idx').on(
+      table.eventType,
+      table.occurredAt,
+      table.id,
+    ),
+    check(
+      'security_audit_events_outcome_check',
+      sql`${table.outcome} in ('succeeded', 'denied', 'failed')`,
+    ),
+    check(
+      'security_audit_events_text_check',
+      sql`char_length(${table.eventType}) between 1 and 128 and (${table.resourceType} is null or char_length(${table.resourceType}) between 1 and 64) and (${table.resourceId} is null or char_length(${table.resourceId}) between 1 and 180) and (${table.reasonCode} is null or char_length(${table.reasonCode}) between 1 and 128) and (${table.requestId} is null or char_length(${table.requestId}) between 1 and 160)`,
+    ),
+    check(
+      'security_audit_events_metadata_check',
+      sql`jsonb_typeof(${table.metadata}) = 'object'`,
+    ),
+  ],
+);
+
 /** 当前产品模型是一位自然人一个个人 Agent；专业行为通过 Profile/Skill 组合。 */
 export const personalAgents = pgTable(
   'personal_agents',
@@ -902,6 +953,68 @@ export const assetVersions = pgTable(
     check(
       'asset_versions_failure_shape_check',
       sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/**
+ * 对象存储物理删除的可靠 Outbox。业务事务只登记 storageKey；Worker 负责幂等删除，
+ * 失败时保留稳定错误码与重试时间，不记录绝对路径或堆栈。
+ */
+export const objectDeletionOutbox = pgTable(
+  'object_deletion_outbox',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    objectKind: text('object_kind').notNull(),
+    storageKey: text('storage_key').notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceId: uuid('source_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('object_deletion_outbox_object_unique').on(
+      table.objectKind,
+      table.storageKey,
+    ),
+    index('object_deletion_outbox_claim_idx').on(
+      table.status,
+      table.availableAt,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'object_deletion_outbox_kind_check',
+      sql`${table.objectKind} in ('asset', 'artifact', 'avatar')`,
+    ),
+    check(
+      'object_deletion_outbox_source_check',
+      sql`${table.sourceType} in ('asset_version', 'artifact_version', 'user_avatar')`,
+    ),
+    check(
+      'object_deletion_outbox_status_check',
+      sql`${table.status} in ('pending', 'processing', 'completed', 'failed')`,
+    ),
+    check(
+      'object_deletion_outbox_storage_key_check',
+      sql`char_length(${table.storageKey}) between 1 and 1024 and ${table.storageKey} !~* '^https?://'`,
+    ),
+    check(
+      'object_deletion_outbox_lifecycle_check',
+      sql`(${table.status} = 'pending' and ${table.claimedAt} is null and ${table.completedAt} is null) or (${table.status} = 'processing' and ${table.claimedAt} is not null and ${table.completedAt} is null) or (${table.status} = 'completed' and ${table.completedAt} is not null) or (${table.status} = 'failed' and ${table.claimedAt} is null and ${table.completedAt} is null and ${table.failureCode} is not null)`,
+    ),
+    check(
+      'object_deletion_outbox_attempts_check',
+      sql`${table.attempts} between 0 and 100`,
     ),
   ],
 );

@@ -69,6 +69,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
   beforeEach(async () => {
     await getDatabase().execute(sql`
       truncate table
+        object_deletion_outbox,
         agent_message_parts,
         chat_messages,
         asset_versions,
@@ -231,6 +232,16 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         assetId: created.descriptor.assetId,
       }),
     ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      getDatabase().select().from(schema.objectDeletionOutbox),
+    ).resolves.toMatchObject([
+      {
+        objectKind: 'asset',
+        sourceType: 'asset_version',
+        storageKey: 'uploads/fixture/vision.pdf',
+        status: 'pending',
+      },
+    ]);
   });
 
   it('消息账本原子保存文本与资产引用并可从历史恢复', async () => {

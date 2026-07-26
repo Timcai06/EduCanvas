@@ -13,7 +13,7 @@ const helpers = {
 describe('受控后台任务边界', () => {
   it('维护计划可被Graphile解析且任务身份与批次固定', () => {
     const items = parseCrontab(workerCrontab);
-    expect(items).toHaveLength(3);
+    expect(items).toHaveLength(4);
     expect(items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -29,6 +29,11 @@ describe('受控后台任务边界', () => {
         expect.objectContaining({
           task: 'maintenance:purge_anonymous_subjects',
           identifier: 'anonymous-retention-daily',
+          payload: { limit: 100 },
+        }),
+        expect.objectContaining({
+          task: 'maintenance:delete_object_outbox',
+          identifier: 'object-deletion-outbox',
           payload: { limit: 100 },
         }),
       ]),

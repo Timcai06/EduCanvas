@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, isNull, or } from 'drizzle-orm';
 import { getDb } from './client';
 import { ensurePersonalIdentity } from './gateway-repository';
 import { requireNotebookAccess } from './notebook-access';
+import { appendSecurityAuditEvent } from './security-audit-repository';
 import {
   conversationMessages,
   conversations,
@@ -173,21 +174,32 @@ export class DrizzlePlatformConversationRepository {
       now,
     }).catch(() => null);
     if (!conversation) return false;
-    const [archived] = await this.database
-      .update(conversations)
-      .set({
-        status: 'archived',
-        archivedAt: now,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(conversations.id, input.conversationId),
-          eq(conversations.status, 'active'),
-        ),
-      )
-      .returning({ id: conversations.id });
-    return archived !== undefined;
+    return this.database.transaction(async (transaction) => {
+      const [archived] = await transaction
+        .update(conversations)
+        .set({
+          status: 'archived',
+          archivedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(conversations.id, input.conversationId),
+            eq(conversations.status, 'active'),
+          ),
+        )
+        .returning({ id: conversations.id });
+      if (!archived) return false;
+      await appendSecurityAuditEvent(transaction, {
+        actorUserId: input.trustedSubjectId,
+        eventType: 'conversation.archived',
+        resourceType: 'conversation',
+        resourceId: archived.id,
+        outcome: 'succeeded',
+        occurredAt: now,
+      });
+      return true;
+    });
   }
 
   /**
@@ -232,6 +244,15 @@ export class DrizzlePlatformConversationRepository {
         .where(and(eq(spaces.id, owned.spaceId), eq(spaces.status, 'active')))
         .returning({ id: spaces.id });
       if (!renamedSpace) throw new Error('Notebook Space重命名失败');
+      await appendSecurityAuditEvent(transaction, {
+        actorUserId: input.trustedSubjectId,
+        eventType: 'notebook.renamed',
+        resourceType: 'notebook',
+        resourceId: owned.spaceId,
+        outcome: 'succeeded',
+        metadata: { conversation_id: owned.id },
+        occurredAt: now,
+      });
       return toConversation(renamed);
     });
   }

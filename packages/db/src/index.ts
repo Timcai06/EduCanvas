@@ -333,3 +333,14 @@ export {
   type NotebookAccessExecutor,
   type NotebookAccessSnapshot,
 } from './notebook-access';
+export {
+  DrizzleSecurityAuditRepository,
+  appendSecurityAuditEvent,
+  type SecurityAuditEventInput,
+  type SecurityAuditOutcome,
+} from './security-audit-repository';
+export {
+  DrizzleObjectDeletionOutboxRepository,
+  MAX_OBJECT_DELETION_ATTEMPTS,
+  type ObjectDeletionClaim,
+} from './object-deletion-outbox-repository';
