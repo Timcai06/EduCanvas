@@ -16,7 +16,7 @@ vi.mock('@/server/assets/asset-preview', () => ({
       super(code);
     }
   },
-  loadOwnedAssetPreview: vi.fn(),
+  loadOwnedAssetPreviewDetail: vi.fn(),
   readOwnedAssetPreviewFile: vi.fn(),
   tombstoneOwnedAsset: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock('@/server/assets/asset-preview', () => ({
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
 import {
-  loadOwnedAssetPreview,
+  loadOwnedAssetPreviewDetail,
   readOwnedAssetPreviewFile,
   tombstoneOwnedAsset,
 } from '@/server/assets/asset-preview';
@@ -58,16 +58,23 @@ describe('owned source preview routes', () => {
     );
 
     expect(response.status).toBe(404);
-    expect(loadOwnedAssetPreview).not.toHaveBeenCalled();
+    expect(loadOwnedAssetPreviewDetail).not.toHaveBeenCalled();
   });
 
   it('returns only the bounded public preview contract', async () => {
-    vi.mocked(loadOwnedAssetPreview).mockResolvedValue({
-      kind: 'markdown',
-      fileName: 'notes.md',
-      mimeType: 'text/markdown',
-      content: '# Notes',
-    });
+    vi.mocked(loadOwnedAssetPreviewDetail).mockResolvedValue({
+      preview: {
+        kind: 'markdown',
+        fileName: 'notes.md',
+        mimeType: 'text/markdown',
+        content: '# Notes',
+      },
+      canvasResource: {
+        resourceId: assetId,
+        notebookId: conversation.spaceId,
+        version: { sequence: null },
+      },
+    } as never);
     const response = await GET_PREVIEW(
       new Request('http://localhost/preview'),
       params(),
@@ -80,6 +87,11 @@ describe('owned source preview routes', () => {
         fileName: 'notes.md',
         mimeType: 'text/markdown',
         content: '# Notes',
+      },
+      canvasResource: {
+        resourceId: assetId,
+        notebookId: conversation.spaceId,
+        version: { sequence: null },
       },
     });
   });

@@ -3,8 +3,9 @@ import { jsonError } from '@/server/http/request-security';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
 import {
   AssetPreviewError,
-  loadOwnedAssetPreview,
+  loadOwnedAssetPreviewDetail,
 } from '@/server/assets/asset-preview';
+import { SourceResourceProjectionError } from '@/server/canvas/source-resource-adapter';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -25,13 +26,16 @@ export async function GET(
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {
-    const preview = await loadOwnedAssetPreview({
+    const detail = await loadOwnedAssetPreviewDetail({
       identity,
       spaceId: conversation.spaceId,
       assetId: parsed.data.assetId,
     });
-    return Response.json({ preview });
+    return Response.json(detail);
   } catch (error) {
+    if (error instanceof SourceResourceProjectionError) {
+      return jsonError(error.status, error.code, '这个来源暂时不能预览。');
+    }
     if (error instanceof AssetPreviewError) {
       return jsonError(
         error.status,
