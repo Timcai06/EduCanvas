@@ -1,5 +1,5 @@
 {
-  "id": "3028a6dd-4932-4c0c-8471-2457de4da1a1",
+  "id": "67bae670-4081-4c5a-b0ca-6d8e4a65ab62",
   "prevId": "894a7514-0a81-46f1-81ca-18a4be0a8d56",
   "version": "7",
   "dialect": "postgresql",
@@ -322,6 +322,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "agent_operations_conversation_id_unique": {
+          "name": "agent_operations_conversation_id_unique",
+          "columns": [
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -531,6 +552,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "artifact_generation_jobs_artifact_id_unique": {
+          "name": "artifact_generation_jobs_artifact_id_unique",
+          "columns": [
+            {
+              "expression": "artifact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -724,19 +766,6 @@
           "tableTo": "agent_operations",
           "columnsFrom": [
             "created_by_operation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "artifact_versions_generation_job_id_artifact_generation_jobs_id_fk": {
-          "name": "artifact_versions_generation_job_id_artifact_generation_jobs_id_fk",
-          "tableFrom": "artifact_versions",
-          "tableTo": "artifact_generation_jobs",
-          "columnsFrom": [
-            "generation_job_id"
           ],
           "columnsTo": [
             "id"
@@ -998,6 +1027,322 @@
         "artifacts_archive_shape_check": {
           "name": "artifacts_archive_shape_check",
           "value": "(\"artifacts\".\"status\" = 'archived') = (\"artifacts\".\"archived_at\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.asset_processing_jobs": {
+      "name": "asset_processing_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "asset_version_id": {
+          "name": "asset_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "queue_job_key": {
+          "name": "queue_job_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "asset_processing_jobs_status_created_idx": {
+          "name": "asset_processing_jobs_status_created_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "asset_processing_jobs_version_created_idx": {
+          "name": "asset_processing_jobs_version_created_idx",
+          "columns": [
+            {
+              "expression": "asset_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "asset_processing_jobs_asset_version_id_asset_versions_id_fk": {
+          "name": "asset_processing_jobs_asset_version_id_asset_versions_id_fk",
+          "tableFrom": "asset_processing_jobs",
+          "tableTo": "asset_versions",
+          "columnsFrom": [
+            "asset_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "asset_processing_jobs_kind_check": {
+          "name": "asset_processing_jobs_kind_check",
+          "value": "\"asset_processing_jobs\".\"kind\" in ('extract_text', 'render_preview', 'generate_thumbnail')"
+        },
+        "asset_processing_jobs_status_check": {
+          "name": "asset_processing_jobs_status_check",
+          "value": "\"asset_processing_jobs\".\"status\" in ('queued', 'running', 'succeeded', 'failed', 'cancelled')"
+        },
+        "asset_processing_jobs_lifecycle_check": {
+          "name": "asset_processing_jobs_lifecycle_check",
+          "value": "(\"asset_processing_jobs\".\"status\" = 'queued' and \"asset_processing_jobs\".\"started_at\" is null and \"asset_processing_jobs\".\"completed_at\" is null) or (\"asset_processing_jobs\".\"status\" = 'running' and \"asset_processing_jobs\".\"started_at\" is not null and \"asset_processing_jobs\".\"completed_at\" is null) or (\"asset_processing_jobs\".\"status\" in ('succeeded', 'failed', 'cancelled') and \"asset_processing_jobs\".\"completed_at\" is not null)"
+        },
+        "asset_processing_jobs_failure_shape_check": {
+          "name": "asset_processing_jobs_failure_shape_check",
+          "value": "(\"asset_processing_jobs\".\"status\" = 'failed' and \"asset_processing_jobs\".\"failure_code\" is not null) or (\"asset_processing_jobs\".\"status\" <> 'failed' and \"asset_processing_jobs\".\"failure_code\" is null)"
+        },
+        "asset_processing_jobs_attempts_check": {
+          "name": "asset_processing_jobs_attempts_check",
+          "value": "\"asset_processing_jobs\".\"attempts\" between 0 and 100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.asset_representations": {
+      "name": "asset_representations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "asset_version_id": {
+          "name": "asset_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "derived_storage_key": {
+          "name": "derived_storage_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checksum": {
+          "name": "checksum",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "asset_representations_version_kind_unique": {
+          "name": "asset_representations_version_kind_unique",
+          "columns": [
+            {
+              "expression": "asset_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "asset_representations_version_status_idx": {
+          "name": "asset_representations_version_status_idx",
+          "columns": [
+            {
+              "expression": "asset_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "asset_representations_asset_version_id_asset_versions_id_fk": {
+          "name": "asset_representations_asset_version_id_asset_versions_id_fk",
+          "tableFrom": "asset_representations",
+          "tableTo": "asset_versions",
+          "columnsFrom": [
+            "asset_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "asset_representations_kind_check": {
+          "name": "asset_representations_kind_check",
+          "value": "\"asset_representations\".\"kind\" in ('original', 'text', 'preview', 'thumbnail')"
+        },
+        "asset_representations_status_check": {
+          "name": "asset_representations_status_check",
+          "value": "\"asset_representations\".\"status\" in ('processing', 'ready', 'failed', 'unavailable')"
+        },
+        "asset_representations_storage_shape_check": {
+          "name": "asset_representations_storage_shape_check",
+          "value": "(\"asset_representations\".\"derived_storage_key\" is null and \"asset_representations\".\"checksum\" is null) or (\"asset_representations\".\"derived_storage_key\" is not null and char_length(\"asset_representations\".\"derived_storage_key\") between 1 and 1024 and \"asset_representations\".\"derived_storage_key\" !~* '^https?://' and \"asset_representations\".\"checksum\" ~ '^[a-f0-9]{64}$')"
+        },
+        "asset_representations_failure_shape_check": {
+          "name": "asset_representations_failure_shape_check",
+          "value": "(\"asset_representations\".\"status\" = 'failed' and \"asset_representations\".\"failure_code\" is not null) or (\"asset_representations\".\"status\" <> 'failed' and \"asset_representations\".\"failure_code\" is null)"
         }
       },
       "isRLSEnabled": false
@@ -1947,19 +2292,6 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "conversation_messages_operation_id_agent_operations_id_fk": {
-          "name": "conversation_messages_operation_id_agent_operations_id_fk",
-          "tableFrom": "conversation_messages",
-          "tableTo": "agent_operations",
-          "columnsFrom": [
-            "operation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2113,6 +2445,27 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "conversations_id_space_unique": {
+          "name": "conversations_id_space_unique",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4156,21 +4509,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "learning_events_session_id_lesson_sessions_id_fk": {
-          "name": "learning_events_session_id_lesson_sessions_id_fk",
-          "tableFrom": "learning_events",
-          "tableTo": "lesson_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -4316,6 +4655,27 @@
           ],
           "isUnique": true,
           "where": "\"lesson_sessions\".\"status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lesson_sessions_id_student_unique": {
+          "name": "lesson_sessions_id_student_unique",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5159,6 +5519,176 @@
         "notebook_memberships_time_check": {
           "name": "notebook_memberships_time_check",
           "value": "(\"notebook_memberships\".\"expires_at\" is null or \"notebook_memberships\".\"expires_at\" > \"notebook_memberships\".\"granted_at\") and (\"notebook_memberships\".\"revoked_at\" is null or \"notebook_memberships\".\"revoked_at\" >= \"notebook_memberships\".\"granted_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.object_deletion_outbox": {
+      "name": "object_deletion_outbox",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "object_kind": {
+          "name": "object_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "object_deletion_outbox_object_unique": {
+          "name": "object_deletion_outbox_object_unique",
+          "columns": [
+            {
+              "expression": "object_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "storage_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "object_deletion_outbox_claim_idx": {
+          "name": "object_deletion_outbox_claim_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "object_deletion_outbox_kind_check": {
+          "name": "object_deletion_outbox_kind_check",
+          "value": "\"object_deletion_outbox\".\"object_kind\" in ('asset', 'artifact', 'avatar')"
+        },
+        "object_deletion_outbox_source_check": {
+          "name": "object_deletion_outbox_source_check",
+          "value": "\"object_deletion_outbox\".\"source_type\" in ('asset_version', 'asset_representation', 'artifact_version', 'user_avatar')"
+        },
+        "object_deletion_outbox_status_check": {
+          "name": "object_deletion_outbox_status_check",
+          "value": "\"object_deletion_outbox\".\"status\" in ('pending', 'processing', 'completed', 'failed')"
+        },
+        "object_deletion_outbox_storage_key_check": {
+          "name": "object_deletion_outbox_storage_key_check",
+          "value": "char_length(\"object_deletion_outbox\".\"storage_key\") between 1 and 1024 and \"object_deletion_outbox\".\"storage_key\" !~* '^https?://'"
+        },
+        "object_deletion_outbox_lifecycle_check": {
+          "name": "object_deletion_outbox_lifecycle_check",
+          "value": "(\"object_deletion_outbox\".\"status\" = 'pending' and \"object_deletion_outbox\".\"claimed_at\" is null and \"object_deletion_outbox\".\"completed_at\" is null) or (\"object_deletion_outbox\".\"status\" = 'processing' and \"object_deletion_outbox\".\"claimed_at\" is not null and \"object_deletion_outbox\".\"completed_at\" is null) or (\"object_deletion_outbox\".\"status\" = 'completed' and \"object_deletion_outbox\".\"completed_at\" is not null) or (\"object_deletion_outbox\".\"status\" = 'failed' and \"object_deletion_outbox\".\"claimed_at\" is null and \"object_deletion_outbox\".\"completed_at\" is null and \"object_deletion_outbox\".\"failure_code\" is not null)"
+        },
+        "object_deletion_outbox_attempts_check": {
+          "name": "object_deletion_outbox_attempts_check",
+          "value": "\"object_deletion_outbox\".\"attempts\" between 0 and 100"
         }
       },
       "isRLSEnabled": false
@@ -6031,6 +6561,164 @@
         "retrieval_candidates_version_check": {
           "name": "retrieval_candidates_version_check",
           "value": "\"retrieval_candidates\".\"retriever\" ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' and \"retrieval_candidates\".\"retriever_version\" ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.security_audit_events": {
+      "name": "security_audit_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "security_audit_events_actor_time_idx": {
+          "name": "security_audit_events_actor_time_idx",
+          "columns": [
+            {
+              "expression": "actor_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "security_audit_events_type_time_idx": {
+          "name": "security_audit_events_type_time_idx",
+          "columns": [
+            {
+              "expression": "event_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "security_audit_events_actor_user_id_platform_users_id_fk": {
+          "name": "security_audit_events_actor_user_id_platform_users_id_fk",
+          "tableFrom": "security_audit_events",
+          "tableTo": "platform_users",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "security_audit_events_outcome_check": {
+          "name": "security_audit_events_outcome_check",
+          "value": "\"security_audit_events\".\"outcome\" in ('succeeded', 'denied', 'failed')"
+        },
+        "security_audit_events_text_check": {
+          "name": "security_audit_events_text_check",
+          "value": "char_length(\"security_audit_events\".\"event_type\") between 1 and 128 and (\"security_audit_events\".\"resource_type\" is null or char_length(\"security_audit_events\".\"resource_type\") between 1 and 64) and (\"security_audit_events\".\"resource_id\" is null or char_length(\"security_audit_events\".\"resource_id\") between 1 and 180) and (\"security_audit_events\".\"reason_code\" is null or char_length(\"security_audit_events\".\"reason_code\") between 1 and 128) and (\"security_audit_events\".\"request_id\" is null or char_length(\"security_audit_events\".\"request_id\") between 1 and 160)"
+        },
+        "security_audit_events_metadata_check": {
+          "name": "security_audit_events_metadata_check",
+          "value": "jsonb_typeof(\"security_audit_events\".\"metadata\") = 'object'"
         }
       },
       "isRLSEnabled": false
@@ -7746,6 +8434,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "diagnostic_attempts_id_goal_unique": {
+          "name": "diagnostic_attempts_id_goal_unique",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "goal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -7809,6 +8518,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "goal_id": {
+          "name": "goal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "question_id": {
           "name": "question_id",
@@ -8121,6 +8836,27 @@
           "method": "btree",
           "with": {}
         },
+        "learning_goals_id_student_unique": {
+          "name": "learning_goals_id_student_unique",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "learning_goals_student_recent_idx": {
           "name": "learning_goals_student_recent_idx",
           "columns": [
@@ -8283,6 +9019,27 @@
             },
             {
               "expression": "objective_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "learning_objectives_id_goal_unique": {
+          "name": "learning_objectives_id_goal_unique",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "goal_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -362,6 +362,15 @@ describeWithDatabase('学习计划与可信诊断仓储', () => {
     expect(
       await getDatabase().select().from(baseSchema.masteryStates),
     ).toHaveLength(3);
+    expect(
+      await getDatabase()
+        .select({ goalId: studySchema.diagnosticResponses.goalId })
+        .from(studySchema.diagnosticResponses),
+    ).toEqual([
+      { goalId: plan.goal.id },
+      { goalId: plan.goal.id },
+      { goalId: plan.goal.id },
+    ]);
   });
 
   it('拒绝冲突重放与跨学生写入且不增加事件', async () => {

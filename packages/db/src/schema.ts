@@ -819,6 +819,10 @@ export const lessonSessions = pgTable(
         sql`coalesce(${table.knowledgeNodeId}, '')`,
       )
       .where(sql`${table.status} = 'active'`),
+    uniqueIndex('lesson_sessions_id_student_unique').on(
+      table.id,
+      table.studentId,
+    ),
     index('lesson_sessions_recent_scope_idx').on(
       table.studentId,
       table.gradeBand,
@@ -2249,9 +2253,7 @@ export const learningEvents = pgTable(
     id: uuid('id').primaryKey(),
     idempotencyKey: text('idempotency_key').notNull(),
     studentId: text('student_id').notNull(),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => lessonSessions.id),
+    sessionId: uuid('session_id').notNull(),
     knowledgeNodeId: text('knowledge_node_id'),
     sequence: integer('sequence').notNull(),
     eventType: text('event_type').notNull(),
@@ -2270,6 +2272,11 @@ export const learningEvents = pgTable(
       table.sessionId,
       table.sequence,
     ),
+    foreignKey({
+      columns: [table.sessionId, table.studentId],
+      foreignColumns: [lessonSessions.id, lessonSessions.studentId],
+      name: 'learning_events_session_student_fk',
+    }).onDelete('restrict'),
   ],
 );
 
