@@ -141,6 +141,44 @@ export function getRetryAssetParts(
   );
 }
 
+/**
+ * 把一条工具生命周期事件并入消息的轨迹。
+ *
+ * `tool.started` 追加；完成与失败按 toolCallId 就地改状态。找不到对应条目时
+ * 忽略而不是新建：那意味着 started 丢了（断连重连），凭空补一条「已完成」
+ * 会让界面声称做过一件没有证据的事。
+ */
+function applyToolStep(
+  message: AssistantMessage,
+  event: Extract<
+    TeachingTurnEvent,
+    { type: 'tool.started' | 'tool.completed' | 'tool.failed' }
+  >,
+): AssistantMessage {
+  const steps = message.toolSteps ?? [];
+  if (event.type === 'tool.started') {
+    if (steps.some((step) => step.id === event.toolCallId)) return message;
+    return {
+      ...message,
+      toolSteps: [
+        ...steps,
+        {
+          id: event.toolCallId,
+          label: event.label ?? '正在使用工具',
+          status: 'running',
+        },
+      ],
+    };
+  }
+  const status = event.type === 'tool.completed' ? 'completed' : 'failed';
+  return {
+    ...message,
+    toolSteps: steps.map((step) =>
+      step.id === event.toolCallId ? { ...step, status } : step,
+    ),
+  };
+}
+
 function updateAssistant(
   messages: readonly ChatMessage[],
   id: string,
@@ -284,12 +322,16 @@ export function teachingTurnReducer(
     event.type === 'tool.completed' ||
     event.type === 'tool.failed'
   ) {
+    /* 轨迹按 toolCallId 索引并保留到达顺序：一轮里可能有多个工具并发，
+       只留「最后一个 label」会互相覆盖，完成即清空则回看不到这轮做过什么。 */
+    const targetId = active.assistantMessageId ?? active.localAssistantId;
     return {
       ...state,
       activeToolLabel:
-        event.type === 'tool.started'
-          ? (event.label ?? '正在使用学习工具')
-          : null,
+        event.type === 'tool.started' ? (event.label ?? '正在使用工具') : null,
+      messages: updateAssistant(state.messages, targetId, (message) =>
+        applyToolStep(message, event),
+      ),
     };
   }
 

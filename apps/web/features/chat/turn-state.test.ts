@@ -264,3 +264,98 @@ describe('teaching turn browser state machine', () => {
     });
   });
 });
+
+describe('工具轨迹', () => {
+  function withTurn() {
+    let state = teachingTurnReducer(createTeachingTurnState([]), {
+      type: 'send.started',
+      clientMessageId: 'client-1',
+      text: '帮我查一下',
+    });
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        type: 'turn.accepted',
+        studentMessageId: 'student-1',
+        assistantMessageId: 'assistant-1',
+        replayed: false,
+      },
+    });
+    return state;
+  }
+
+  function started(toolCallId: string, label: string) {
+    return {
+      type: 'stream.event' as const,
+      event: {
+        schemaVersion: '1' as const,
+        turnId: 'turn-1',
+        type: 'tool.started' as const,
+        toolCallId,
+        label,
+      },
+    };
+  }
+
+  function assistantSteps(state: ReturnType<typeof withTurn>) {
+    const message = state.messages.at(-1);
+    return message?.role === 'assistant' ? message.toolSteps : undefined;
+  }
+
+  it('并发的多个工具各自留痕，不互相覆盖', () => {
+    let state = withTurn();
+    state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
+    state = teachingTurnReducer(state, started('call-2', '正在读取网页'));
+
+    expect(assistantSteps(state)).toEqual([
+      { id: 'call-1', label: '正在搜索网页', status: 'running' },
+      { id: 'call-2', label: '正在读取网页', status: 'running' },
+    ]);
+  });
+
+  it('完成只改对应条目的状态，痕迹不清空', () => {
+    let state = withTurn();
+    state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
+    state = teachingTurnReducer(state, started('call-2', '正在读取网页'));
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        type: 'tool.completed',
+        toolCallId: 'call-1',
+      },
+    });
+
+    expect(assistantSteps(state)).toEqual([
+      { id: 'call-1', label: '正在搜索网页', status: 'completed' },
+      { id: 'call-2', label: '正在读取网页', status: 'running' },
+    ]);
+  });
+
+  it('缺少 started 的完成事件被忽略，不凭空补一条已完成', () => {
+    /* 断连重连可能让 started 丢失；补一条会让界面声称做过没有证据的事。 */
+    let state = withTurn();
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        type: 'tool.completed',
+        toolCallId: 'ghost',
+      },
+    });
+
+    expect(assistantSteps(state) ?? []).toEqual([]);
+  });
+
+  it('重复的 started 不产生第二条痕迹', () => {
+    let state = withTurn();
+    state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
+    state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
+
+    expect(assistantSteps(state)).toHaveLength(1);
+  });
+});

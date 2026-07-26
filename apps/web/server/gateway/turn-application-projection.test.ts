@@ -123,3 +123,32 @@ describe('Turn Application Web/Gateway golden parity', () => {
     ]);
   });
 });
+
+describe('工具动作名投影', () => {
+  const base = {
+    protocol: 'educanvas.turn.v2' as const,
+    operationId: 'operation:1',
+  };
+
+  function label(tool: string): string | undefined {
+    const projected = projectTurnApplicationEventToWeb({
+      ...base,
+      type: 'tool.started',
+      toolCallId: 'tool-call:1',
+      tool,
+    });
+    return projected?.type === 'tool.started' ? projected.label : undefined;
+  }
+
+  it('把能力标识映射为学生可读的动作名', () => {
+    expect(label('web.search')).toBe('正在搜索网页');
+    expect(label('artifact.create')).toBe('正在准备学习材料');
+    expect(label('agent.plan_note')).toBe('正在梳理思路');
+  });
+
+  it('未知工具兜底为通用文案，绝不把内部标识透给学生', () => {
+    /* 界面零技术术语（docs/01-product/student-ui-spec.md）：新增工具忘了加
+       映射时，学生应看到「正在使用工具」而不是 filesystem.read_allowlisted。 */
+    expect(label('some.unmapped_capability')).toBe('正在使用工具');
+  });
+});

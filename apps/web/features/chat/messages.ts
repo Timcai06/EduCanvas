@@ -88,8 +88,23 @@ export interface StudentMessage extends ChatMessageBase {
  * Assistant UI state. Optional rich fields are public product data; they must
  * come from a future versioned citation/artifact event, never browser inference.
  */
+/**
+ * 一次工具调用在界面上的痕迹。
+ *
+ * `label` 只来自服务端映射表，模型碰不到它，所以这里不可能显示内部标识或
+ * 被模型影响的文字。参数与返回值一律不进入这个结构——判分类工具的返回值直接
+ * 包含答案（docs/01-product/student-ui-spec.md）。
+ */
+export interface MessageToolStep {
+  id: string;
+  label: string;
+  status: 'running' | 'completed' | 'failed';
+}
+
 export interface AssistantMessage extends ChatMessageBase {
   role: 'assistant';
+  /** 按到达顺序保留本轮全部工具调用；完成后不清空，用于回看这轮做了什么。 */
+  toolSteps?: readonly MessageToolStep[];
   failureCode?: string | null;
   failureMessage?: string;
   retryable?: boolean;

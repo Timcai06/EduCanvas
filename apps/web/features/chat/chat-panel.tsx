@@ -17,6 +17,7 @@ import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
 import { ConversationArtifactCard } from './conversation-artifact-card';
 import { StreamShimmer } from './stream-shimmer';
+import { ToolTrace } from './tool-trace';
 
 gsap.registerPlugin(useGSAP);
 
@@ -168,6 +169,9 @@ export function ChatPanel({
               }
             />
             <div className="min-w-0 flex-1 space-y-2">
+              {message.toolSteps && message.toolSteps.length > 0 ? (
+                <ToolTrace steps={message.toolSteps} />
+              ) : null}
               {message.status === 'pending' && !message.text ? (
                 <>
                   <StreamShimmer />
