@@ -12,14 +12,20 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
-import { assets, assetVersions, objectDeletionOutbox } from './schema';
+import {
+  assetProcessingJobs,
+  assetRepresentations,
+  assets,
+  assetVersions,
+  objectDeletionOutbox,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -219,6 +225,40 @@ export class DrizzleAssetRepository {
       if (!createdAsset || !createdVersion) {
         throw new AssetPersistenceError('Asset或版本写入失败');
       }
+      await transaction.insert(assetRepresentations).values({
+        assetVersionId: versionId,
+        kind: 'original',
+        mimeType,
+        status: 'ready',
+        byteSize: input.byteSize,
+        createdAt: now,
+      });
+      const extractedText = input.extractedText?.trim() || null;
+      if (extractedText) {
+        await transaction.insert(assetRepresentations).values({
+          assetVersionId: versionId,
+          kind: 'text',
+          mimeType: 'text/plain',
+          status: 'ready',
+          byteSize: Buffer.byteLength(extractedText, 'utf8'),
+          createdAt: now,
+        });
+      }
+      if (input.kind === 'document') {
+        await transaction.insert(assetProcessingJobs).values({
+          assetVersionId: versionId,
+          kind: 'extract_text',
+          status: versionStatus === 'ready' ? 'succeeded' : 'failed',
+          attempts: 1,
+          failureCode:
+            versionStatus === 'failed'
+              ? requireText(input.outcome.failureCode, 'failureCode', 128)
+              : null,
+          startedAt: now,
+          completedAt: now,
+          createdAt: now,
+        });
+      }
 
       const nextAssetStatus = versionStatus === 'ready' ? 'ready' : 'failed';
       if (!canTransitionAssetStatus('processing', nextAssetStatus)) {
@@ -401,18 +441,48 @@ export class DrizzleAssetRepository {
         })
         .from(assetVersions)
         .where(eq(assetVersions.assetId, assetId));
-      if (storedVersions.length > 0) {
+      const derivedRepresentations = await transaction
+        .select({
+          id: assetRepresentations.id,
+          storageKey: assetRepresentations.derivedStorageKey,
+        })
+        .from(assetRepresentations)
+        .innerJoin(
+          assetVersions,
+          eq(assetVersions.id, assetRepresentations.assetVersionId),
+        )
+        .where(
+          and(
+            eq(assetVersions.assetId, assetId),
+            isNotNull(assetRepresentations.derivedStorageKey),
+          ),
+        );
+      const deletionEntries = [
+        ...storedVersions.map((version) => ({
+          objectKind: 'asset' as const,
+          storageKey: version.storageKey,
+          sourceType: 'asset_version' as const,
+          sourceId: version.id,
+          availableAt: now,
+        })),
+        ...derivedRepresentations.flatMap((representation) =>
+          representation.storageKey
+            ? [
+                {
+                  objectKind: 'asset' as const,
+                  storageKey: representation.storageKey,
+                  sourceType: 'asset_representation' as const,
+                  sourceId: representation.id,
+                  availableAt: now,
+                },
+              ]
+            : [],
+        ),
+      ];
+      if (deletionEntries.length > 0) {
         await transaction
           .insert(objectDeletionOutbox)
-          .values(
-            storedVersions.map((version) => ({
-              objectKind: 'asset',
-              storageKey: version.storageKey,
-              sourceType: 'asset_version',
-              sourceId: version.id,
-              availableAt: now,
-            })),
-          )
+          .values(deletionEntries)
           .onConflictDoNothing();
       }
       await transaction

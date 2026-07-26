@@ -957,6 +957,106 @@ export const assetVersions = pgTable(
   ],
 );
 
+/** 不复制 Source 内容，只登记某个不可变版本已经具备的服务端表现能力。 */
+export const assetRepresentations = pgTable(
+  'asset_representations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    mimeType: text('mime_type').notNull(),
+    status: text('status').notNull(),
+    derivedStorageKey: text('derived_storage_key'),
+    byteSize: integer('byte_size'),
+    checksum: text('checksum'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_representations_version_kind_unique').on(
+      table.assetVersionId,
+      table.kind,
+    ),
+    index('asset_representations_version_status_idx').on(
+      table.assetVersionId,
+      table.status,
+    ),
+    check(
+      'asset_representations_kind_check',
+      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail')`,
+    ),
+    check(
+      'asset_representations_status_check',
+      sql`${table.status} in ('processing', 'ready', 'failed', 'unavailable')`,
+    ),
+    check(
+      'asset_representations_storage_shape_check',
+      sql`(${table.derivedStorageKey} is null and ${table.checksum} is null) or (${table.derivedStorageKey} is not null and char_length(${table.derivedStorageKey}) between 1 and 1024 and ${table.derivedStorageKey} !~* '^https?://' and ${table.checksum} ~ '^[a-f0-9]{64}$')`,
+    ),
+    check(
+      'asset_representations_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/** Source 解析、转码和缩略图生成的业务任务账本；队列行不是事实源。 */
+export const assetProcessingJobs = pgTable(
+  'asset_processing_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    status: text('status').notNull().default('queued'),
+    attempts: integer('attempts').notNull().default(0),
+    queueJobKey: text('queue_job_key'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('asset_processing_jobs_status_created_idx').on(
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    index('asset_processing_jobs_version_created_idx').on(
+      table.assetVersionId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'asset_processing_jobs_kind_check',
+      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail')`,
+    ),
+    check(
+      'asset_processing_jobs_status_check',
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'failed', 'cancelled')`,
+    ),
+    check(
+      'asset_processing_jobs_lifecycle_check',
+      sql`(${table.status} = 'queued' and ${table.startedAt} is null and ${table.completedAt} is null) or (${table.status} = 'running' and ${table.startedAt} is not null and ${table.completedAt} is null) or (${table.status} in ('succeeded', 'failed', 'cancelled') and ${table.completedAt} is not null)`,
+    ),
+    check(
+      'asset_processing_jobs_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+    check(
+      'asset_processing_jobs_attempts_check',
+      sql`${table.attempts} between 0 and 100`,
+    ),
+  ],
+);
+
 /**
  * 对象存储物理删除的可靠 Outbox。业务事务只登记 storageKey；Worker 负责幂等删除，
  * 失败时保留稳定错误码与重试时间，不记录绝对路径或堆栈。
@@ -998,7 +1098,7 @@ export const objectDeletionOutbox = pgTable(
     ),
     check(
       'object_deletion_outbox_source_check',
-      sql`${table.sourceType} in ('asset_version', 'artifact_version', 'user_avatar')`,
+      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'artifact_version', 'user_avatar')`,
     ),
     check(
       'object_deletion_outbox_status_check',

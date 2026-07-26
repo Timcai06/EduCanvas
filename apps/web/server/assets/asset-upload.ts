@@ -3,6 +3,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
+import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
@@ -83,6 +84,27 @@ function extractPlainText(bytes: Uint8Array): string {
   return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
 }
 
+async function extractDocxText(bytes: Uint8Array): Promise<string> {
+  try {
+    const result = await mammoth.extractRawText({
+      buffer: Buffer.from(bytes),
+    });
+    const normalized = result.value
+      .normalize('NFC')
+      .replace(/\r\n?/g, '\n')
+      .trim();
+    if (!normalized) {
+      throw new AssetUploadError('text_content_unavailable', 422);
+    }
+    return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
+  } catch (error) {
+    if (error instanceof AssetUploadError) throw error;
+    throw new AssetUploadError('text_content_unavailable', 422, {
+      cause: error,
+    });
+  }
+}
+
 export async function uploadOwnedAsset(input: {
   identity: AnonymousIdentity;
   file: File;
@@ -126,10 +148,13 @@ export async function uploadOwnedAssetToSpace(input: {
       const extractedText =
         detected.mimeType === 'application/pdf'
           ? await extractPdfText(bytes)
-          : detected.mimeType === 'text/markdown' ||
-              detected.mimeType === 'text/plain'
-            ? extractPlainText(bytes)
-            : null;
+          : detected.mimeType ===
+              'application/vnd.openxmlformats-officedocument.wordprocessingml'
+            ? await extractDocxText(bytes)
+            : detected.mimeType === 'text/markdown' ||
+                detected.mimeType === 'text/plain'
+              ? extractPlainText(bytes)
+              : null;
       return await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
         spaceId: input.spaceId,

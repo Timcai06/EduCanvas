@@ -10,7 +10,11 @@ export interface ObjectDeletionClaim {
   id: string;
   objectKind: 'asset' | 'artifact' | 'avatar';
   storageKey: string;
-  sourceType: 'asset_version' | 'artifact_version' | 'user_avatar';
+  sourceType:
+    | 'asset_version'
+    | 'asset_representation'
+    | 'artifact_version'
+    | 'user_avatar';
   sourceId: string;
   attempt: number;
 }

@@ -70,6 +70,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     await getDatabase().execute(sql`
       truncate table
         object_deletion_outbox,
+        asset_processing_jobs,
+        asset_representations,
         agent_message_parts,
         chat_messages,
         asset_versions,
@@ -97,6 +99,20 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       created.descriptor.currentVersionId,
     );
     expect(JSON.stringify(created)).not.toContain('uploads/fixture');
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetRepresentations)
+        .orderBy(schema.assetRepresentations.kind),
+    ).resolves.toMatchObject([
+      { kind: 'original', status: 'ready' },
+      { kind: 'text', status: 'ready' },
+    ]);
+    await expect(
+      getDatabase().select().from(schema.assetProcessingJobs),
+    ).resolves.toMatchObject([
+      { kind: 'extract_text', status: 'succeeded', attempts: 1 },
+    ]);
 
     await expect(
       repository.listOwnedSpace({ ownerSubjectId, spaceId }),

@@ -31,4 +31,22 @@ describe('detectAssetFile', () => {
     });
     expect(detectAssetFile(bytes, 'lesson.docx')).toBeNull();
   });
+
+  it('recognizes only a Word OOXML ZIP as DOCX', () => {
+    const docxDirectory = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml word/document.xml',
+    );
+    expect(detectAssetFile(docxDirectory, 'lesson.bin')).toEqual({
+      kind: 'document',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      extension: 'docx',
+    });
+    expect(
+      detectAssetFile(
+        new TextEncoder().encode('PK\u0003\u0004archive/readme.txt'),
+        'fake.docx',
+      ),
+    ).toBeNull();
+  });
 });

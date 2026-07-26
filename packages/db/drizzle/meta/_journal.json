@@ -274,6 +274,13 @@
       "when": 1785029613562,
       "tag": "0038_complete_salo",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785029808723,
+      "tag": "0039_clever_wild_child",
+      "breakpoints": true
     }
   ]
 }
