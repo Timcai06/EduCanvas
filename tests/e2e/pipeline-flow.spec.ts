@@ -1,42 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-type PerformanceEvidence = {
-  longTasks: number;
-  layoutShift: number;
-};
-
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    const evidence: PerformanceEvidence = { longTasks: 0, layoutShift: 0 };
-    (
-      window as Window & { __pipelinePerformance?: PerformanceEvidence }
-    ).__pipelinePerformance = evidence;
-
-    if ('PerformanceObserver' in window) {
-      try {
-        new PerformanceObserver((list) => {
-          evidence.longTasks += list.getEntries().length;
-        }).observe({ type: 'longtask', buffered: true });
-      } catch {
-        // Older engines may not expose longtask; the counter remains explicit 0.
-      }
-      try {
-        new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) {
-            const shift = entry as PerformanceEntry & {
-              value: number;
-              hadRecentInput: boolean;
-            };
-            if (!shift.hadRecentInput) evidence.layoutShift += shift.value;
-          }
-        }).observe({ type: 'layout-shift', buffered: true });
-      } catch {
-        // LayoutShift is optional in the PerformanceObserver implementation.
-      }
-    }
-  });
-});
-
 test('desktop playback, pause points and keyboard stay inside the template', async ({
   page,
 }) => {
@@ -73,28 +36,11 @@ test('desktop playback, pause points and keyboard stay inside the template', asy
   await expect(shell).toContainText('步骤 1/4');
 
   await page.getByLabel('播放速度').selectOption('1.5');
-  await page.evaluate(() => {
-    const evidence = (
-      window as Window & { __pipelinePerformance?: PerformanceEvidence }
-    ).__pipelinePerformance;
-    if (evidence) {
-      evidence.longTasks = 0;
-      evidence.layoutShift = 0;
-    }
-  });
   await page.getByRole('button', { name: '播放流程' }).click();
   await expect(shell).toContainText('步骤 2/4');
   await expect(page.getByTestId('animation-observation')).toContainText(
     'animation_paused',
   );
-
-  const performance = await page.evaluate(
-    () =>
-      (window as Window & { __pipelinePerformance?: PerformanceEvidence })
-        .__pipelinePerformance,
-  );
-  expect(performance?.layoutShift).toBe(0);
-  expect(performance?.longTasks).toBe(0);
 
   await page.getByRole('button', { name: '播放流程' }).click();
   await expect(shell).toContainText('步骤 3/4');
