@@ -100,13 +100,11 @@ describe('asset browser client', () => {
   it('keeps a canvas resource that passes protocol validation', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse({
-            assets: [assetWithResource(canvasResourceFixture())],
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          assets: [assetWithResource(canvasResourceFixture())],
+        }),
+      ),
     );
 
     const [asset] = await loadAssets('/assets-fixture');
