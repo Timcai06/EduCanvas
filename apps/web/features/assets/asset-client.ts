@@ -17,6 +17,7 @@ interface AssetResponseItem {
   };
   version: { versionId: string } | null;
   canvasResource?: unknown;
+  enabled?: boolean | null;
 }
 
 const assetResponseItemSchema = z.object({
@@ -31,6 +32,8 @@ const assetResponseItemSchema = z.object({
   version: z.object({ versionId: z.string() }).nullable(),
   /* 旧端点不返回该字段；这里只保证形状可选，内容一律交给协议校验器判定。 */
   canvasResource: z.unknown().nullish(),
+  /* 成员私有的启停绑定。旧端点不返回时退回本地默认，见 toItem。 */
+  enabled: z.boolean().nullish(),
 });
 
 function toItem(
@@ -52,11 +55,14 @@ function toItem(
     kind: asset.descriptor.kind,
     scope: asset.descriptor.scope,
     status: asset.descriptor.status,
+    /* 服务端给出启停就以它为准——它决定下一轮真正带上哪些资料，两端各算一次会漂移。
+       只有尚未附加该字段的旧端点才退回本地默认。 */
     enabled:
-      options.enableSpaceByDefault === true &&
-      asset.descriptor.scope === 'space' &&
-      asset.descriptor.status === 'ready' &&
-      versionId !== null,
+      asset.enabled ??
+      (options.enableSpaceByDefault === true &&
+        asset.descriptor.scope === 'space' &&
+        asset.descriptor.status === 'ready' &&
+        versionId !== null),
     selectable: asset.descriptor.status === 'ready' && versionId !== null,
   };
 }
@@ -144,6 +150,66 @@ export async function importLinkAsset(input: {
     '暂时无法导入链接。',
     '导入响应格式不正确。',
   );
+}
+
+/**
+ * 切换某个来源是否参与当前成员的后续对话。
+ *
+ * `mutationId` 由调用方生成并在重试时复用，让服务端把重发认成同一次切换——
+ * 没有它，一次超时重试就会把开关又翻回去。返回服务端确认后的值，调用方应以
+ * 它为准而不是自己取反。
+ */
+export async function setAssetEnabled(input: {
+  assetId: string;
+  enabled: boolean;
+  mutationId: string;
+}): Promise<boolean> {
+  const response = await fetch(
+    `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_enabled',
+        enabled: input.enabled,
+        mutationId: input.mutationId,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await publicError(response, '暂时无法更新来源。'));
+  }
+  const parsed = z
+    .object({ enabled: z.boolean() })
+    .safeParse(await response.json());
+  if (!parsed.success) throw new Error('来源更新响应格式不正确。');
+  return parsed.data.enabled;
+}
+
+/** 重命名来源。展示名对Notebook全体成员可见，服务端按 source.write 授权。 */
+export async function renameAsset(input: {
+  assetId: string;
+  displayName: string;
+}): Promise<string> {
+  const response = await fetch(
+    `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'rename',
+        displayName: input.displayName,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await publicError(response, '暂时无法重命名来源。'));
+  }
+  const parsed = z
+    .object({ displayName: z.string() })
+    .safeParse(await response.json());
+  if (!parsed.success) throw new Error('来源更新响应格式不正确。');
+  return parsed.data.displayName;
 }
 
 /** 读取当前Notebook内的来源预览；响应契约不会暴露对象存储地址。 */

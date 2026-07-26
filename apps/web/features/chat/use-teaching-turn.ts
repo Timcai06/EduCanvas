@@ -145,13 +145,18 @@ export function useAgentTurn(
         clientMessageId,
         text: normalizedText,
         parts: requestParts,
-        attachments: assetParts.map((part) => ({
-          id: `${part.reference.assetId}:${part.reference.versionId}`,
-          label:
-            part.label ??
-            (part.reference.kind === 'image' ? '图片附件' : 'PDF资料'),
-          kind: part.reference.kind === 'image' ? 'image' : 'document',
-        })),
+        /* 只有 attachment 才在气泡里留痕；笔记本长期来源（context）由 Studio
+           统一呈现，否则每条提问都会重复列出全部来源。与 hydrateChatMessages
+           的过滤保持一致，避免乐观渲染和刷新后的结果不同。 */
+        attachments: assetParts
+          .filter((part) => part.usage === 'attachment')
+          .map((part) => ({
+            id: `${part.reference.assetId}:${part.reference.versionId}`,
+            label:
+              part.label ??
+              (part.reference.kind === 'image' ? '图片附件' : 'PDF资料'),
+            kind: part.reference.kind === 'image' ? 'image' : 'document',
+          })),
         assistantLabel: options.assistantLabel,
       });
 

@@ -94,6 +94,10 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 - `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
   派生对象引用，不复制Source正文；
 - `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码；
+- `notebook_asset_bindings`：成员对Notebook来源的启用/停用事实流。按成员而非按
+  Notebook，是因为「这轮对话要不要带这份资料」是个人选择，多人笔记本里不应互相覆盖；
+  与`session_source_bindings`同一范式（追加事实 + `mutationId`幂等 + 取`sequence`最大者），
+  保留切换历史用于审计。不存notebookId——它由`assets.spaceId`唯一确定，denormalize只会引入漂移；
 - `object_deletion_outbox`：tombstone事务登记的私有对象删除意图，Worker使用
   `FOR UPDATE SKIP LOCKED`领取、指数退避并幂等完成；
 

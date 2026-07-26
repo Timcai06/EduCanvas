@@ -222,6 +222,51 @@ describe('teaching turn browser state machine', () => {
     });
   });
 
+  it('只把仅本轮附件写进气泡，笔记本长期来源不留痕', () => {
+    /* 长期来源由 Studio 统一管理；若也进气泡，挂 N 个来源问 M 个问题就会
+       在屏幕上重复 N×M 次同一份列表。 */
+    const initial: InitialChatMessageDTO[] = [
+      {
+        id: 'student-1',
+        turnId: 'turn-1',
+        clientMessageId: 'client-1',
+        role: 'student',
+        status: 'completed',
+        content: '看看这张图',
+        parts: [
+          { type: 'text', text: '看看这张图' },
+          {
+            type: 'asset_ref',
+            reference: {
+              assetId: 'notebook-source',
+              versionId: 'version-1',
+              kind: 'document',
+            },
+            usage: 'context',
+          },
+          {
+            type: 'asset_ref',
+            reference: {
+              assetId: 'this-turn-image',
+              versionId: 'version-2',
+              kind: 'image',
+            },
+            usage: 'attachment',
+          },
+        ],
+        failureCode: null,
+        createdAt: '2026-07-26T00:00:00.000Z',
+        completedAt: '2026-07-26T00:00:00.000Z',
+      },
+    ];
+
+    const [student] = createTeachingTurnState(initial).messages;
+
+    expect(student?.attachments).toEqual([
+      { id: 'this-turn-image:version-2', label: '图片附件', kind: 'image' },
+    ]);
+  });
+
   it('把本轮Artifact提议附在助手消息末尾且重复事件不复制卡片', () => {
     let state = teachingTurnReducer(createTeachingTurnState([]), {
       type: 'send.started',

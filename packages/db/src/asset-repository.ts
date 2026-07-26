@@ -31,6 +31,7 @@ import {
   assetRepresentations,
   assets,
   assetVersions,
+  notebookAssetBindings,
   objectDeletionOutbox,
 } from './schema';
 
@@ -503,6 +504,155 @@ export class DrizzleAssetRepository {
    * 将资产及版本收敛为tombstoned；保留storageKey供后续Outbox物理清理。
    * 调用者必须传入服务端确认的主体与空间，跨主体请求统一返回false。
    */
+  /**
+   * 读取某个成员在当前 Notebook 内的来源启停状态。
+   *
+   * 启停是成员私有事实：只要求 `notebook.read`，viewer 也能有自己的一份。
+   * 取值是每个 asset 下 sequence 最大的那条事实；从未切换过的 asset 不出现在
+   * 结果里，由调用方决定默认值（当前 UI 默认启用 space 级来源）。
+   */
+  async listSubjectAssetBindings(input: {
+    subjectId: string;
+    spaceId: string;
+  }): Promise<ReadonlyMap<string, boolean>> {
+    const subjectId = requireOwner(input.subjectId);
+    const spaceId = requireUuid(input.spaceId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: subjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const rows = await this.database
+      .selectDistinctOn(
+        [notebookAssetBindings.subjectId, notebookAssetBindings.assetId],
+        {
+          assetId: notebookAssetBindings.assetId,
+          enabled: notebookAssetBindings.enabled,
+        },
+      )
+      .from(notebookAssetBindings)
+      .innerJoin(assets, eq(assets.id, notebookAssetBindings.assetId))
+      .where(
+        and(
+          eq(notebookAssetBindings.subjectId, subjectId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .orderBy(
+        notebookAssetBindings.subjectId,
+        notebookAssetBindings.assetId,
+        desc(notebookAssetBindings.sequence),
+      );
+    return new Map(rows.map((row) => [row.assetId, row.enabled]));
+  }
+
+  /**
+   * 追加一条启停事实。返回生效后的值。
+   *
+   * `mutationId` 让重放幂等：同一成员重复提交同一个 mutationId 时唯一索引冲突，
+   * 此时读回既有事实返回，而不是写第二条或报错——网络重试不该翻转开关。
+   */
+  async setSubjectAssetBinding(input: {
+    subjectId: string;
+    spaceId: string;
+    assetId: string;
+    enabled: boolean;
+    mutationId: string;
+  }): Promise<boolean | null> {
+    const subjectId = requireOwner(input.subjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const mutationId = requireText(input.mutationId, 'mutationId', 128);
+    return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: subjectId,
+        requiredPermission: 'notebook.read',
+      }).catch(() => null);
+      if (!access) return null;
+      const [owned] = await transaction
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .limit(1);
+      if (!owned) return null;
+
+      const [replayed] = await transaction
+        .select({ enabled: notebookAssetBindings.enabled })
+        .from(notebookAssetBindings)
+        .where(
+          and(
+            eq(notebookAssetBindings.subjectId, subjectId),
+            eq(notebookAssetBindings.mutationId, mutationId),
+          ),
+        )
+        .limit(1);
+      if (replayed) return replayed.enabled;
+
+      const [latest] = await transaction
+        .select({ sequence: notebookAssetBindings.sequence })
+        .from(notebookAssetBindings)
+        .where(
+          and(
+            eq(notebookAssetBindings.subjectId, subjectId),
+            eq(notebookAssetBindings.assetId, assetId),
+          ),
+        )
+        .orderBy(desc(notebookAssetBindings.sequence))
+        .limit(1);
+      await transaction.insert(notebookAssetBindings).values({
+        subjectId,
+        assetId,
+        sequence: (latest?.sequence ?? 0) + 1,
+        enabled: input.enabled,
+        mutationId,
+      });
+      return input.enabled;
+    });
+  }
+
+  /** 重命名是共享事实，按 `source.write` 授权；只改展示名，不动任何版本。 */
+  async renameOwnedAsset(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+    displayName: string;
+  }): Promise<boolean> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const displayName = requireText(input.displayName, 'displayName', 300);
+    return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+      }).catch(() => null);
+      if (!access) return false;
+      const updated = await transaction
+        .update(assets)
+        .set({ displayName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .returning({ id: assets.id });
+      return updated.length > 0;
+    });
+  }
+
   async tombstoneOwnedAsset(input: {
     ownerSubjectId: string;
     spaceId: string;

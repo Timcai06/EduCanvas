@@ -7,6 +7,7 @@ import OptionWheel from '@/components/OptionWheel';
 import { GENERATED_SOFT_CLICK } from '@/components/option-wheel-sound';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { ArtifactSummary } from '@/features/canvas/artifact-client';
+import { StudioSourceActions } from './studio-source-actions';
 import {
   itemsForRoute,
   ROOT_ITEMS,
@@ -24,20 +25,34 @@ export function StudioWorkspace({
   outputs,
   onOpenSource,
   onOpenOutput,
+  onToggleSource,
+  onRenameSource,
+  onDeleteSource,
 }: {
   assets: readonly AssetItem[];
   outputs: readonly ArtifactSummary[];
   onOpenSource: (asset: AssetItem) => void;
   onOpenOutput: (id: string) => void;
+  /** 成员私有的启停绑定；与删除/重命名不同，viewer 也能改自己的。 */
+  onToggleSource: (asset: AssetItem) => void;
+  onRenameSource: (asset: AssetItem, displayName: string) => void;
+  onDeleteSource: (asset: AssetItem) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLElement>(null);
   const secondaryRef = useRef<HTMLElement>(null);
   const [route, setRoute] = useState<StudioRoute | null>(null);
+  const [centeredId, setCenteredId] = useState<string | null>(null);
   const secondaryItems = useMemo(
     () => (route ? itemsForRoute(route, assets, outputs) : []),
     [assets, outputs, route],
   );
+  /* 动作气泡只跟随「来源」轮的居中项。首帧滚轮尚未回调 onChange，
+     此时退到列表首项，避免刚展开时气泡空着。 */
+  const centeredAsset =
+    route === 'source-browse'
+      ? (assets.find((asset) => asset.id === centeredId) ?? assets[0] ?? null)
+      : null;
 
   useGSAP(
     () => {
@@ -167,6 +182,17 @@ export function StudioWorkspace({
 
   return (
     <div ref={rootRef} className="studio-cascade">
+      {centeredAsset ? (
+        <div className="studio-cascade__actions">
+          <StudioSourceActions
+            key={centeredAsset.id}
+            asset={centeredAsset}
+            onToggleEnabled={onToggleSource}
+            onRename={onRenameSource}
+            onDelete={onDeleteSource}
+          />
+        </div>
+      ) : null}
       {route ? (
         <section
           ref={secondaryRef}
@@ -178,6 +204,7 @@ export function StudioWorkspace({
             idPrefix={`studio-secondary-${route}`}
             items={secondaryItems}
             defaultSelected={0}
+            onChange={(_index, item) => setCenteredId(item.id)}
             onSelect={(_index, item) => selectSecondary(item.id)}
             textColor="var(--color-ink-faint)"
             activeColor="var(--color-ink)"

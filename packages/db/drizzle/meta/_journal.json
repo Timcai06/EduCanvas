@@ -274,6 +274,13 @@
       "when": 1785030405445,
       "tag": "0038_mighty_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785034688271,
+      "tag": "0039_little_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

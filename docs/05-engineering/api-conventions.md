@@ -54,7 +54,15 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
   `{resource: CanvasResource}`，其中`resourceKind`只允许`source/artifact`。该接口
   从服务端身份和当前Notebook解析授权范围，不接受客户端提交的归属或能力字段；
   不存在、跨用户和跨Notebook统一返回`resource_not_found/404`；
+- `PATCH /api/v1/chat/assets/{assetId}`按`action`判别两类改动，它们的授权层级不同：
+  `set_enabled`改当前成员私有的来源绑定（`notebook.read`即可，viewer也能改自己的），
+  必须带客户端生成的`mutationId`，重放同一个`mutationId`返回既有事实而不写第二条，
+  也不翻转开关；`rename`改全体成员共见的展示名，需要`source.write`。
+  无权限与不存在一律回`asset_not_found/404`，不泄露「存在但你不能改」；
 - `GET /api/v1/chat/assets`继续返回`assets`分页，并为每一项附加`canvasResource`。
+  同时返回`enabled`：它是当前成员的绑定事实，没有绑定过时由服务端给默认值
+  （仅「已就绪的space级来源」为真）。默认值只放服务端——它决定下一轮真正带上哪些资料，
+  两端各算一次迟早漂移；
   Notebook成员资格在整页范围内只解析一次；无法投影的历史资产（未知MIME）该字段为
   `null`而不使整页失败，客户端必须把`null`当作「只读、无动作」，不得自行推断可删除或可下载。
   单资源端点仍以`renderer_not_found`显式拒绝，两处语义差异是有意的；

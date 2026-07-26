@@ -39,7 +39,7 @@ describe('Source CanvasResource adapter', () => {
       renderer: { rendererId: 'source.pdf', rendererVersion: 1 },
       trustTier: 'tier1',
       runtime: { kind: 'none' },
-      allowedActions: ['view', 'download', 'delete'],
+      allowedActions: ['view', 'download', 'rename', 'delete'],
     });
   });
 
@@ -108,7 +108,7 @@ describe('Source CanvasResource adapter', () => {
       trustTier: 'tier3',
     } as SourceResourceProjectionInput);
 
-    expect(resource.allowedActions).toEqual(['view', 'delete']);
+    expect(resource.allowedActions).toEqual(['view', 'rename', 'delete']);
     expect(resource.renderer.rendererId).toBe('source.text');
     expect(resource.trustTier).toBe('tier1');
   });
