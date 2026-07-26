@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -15,11 +16,30 @@ import './OptionWheel.css';
 
 type Side = 'left' | 'right';
 
+/**
+ * 滚轮条目。`id` 用作 React key，必须在同一份 items 内唯一且跨重排稳定——
+ * 用下标或标题当 key 会在列表重排（如产物按更新时间重新排序）时错配 DOM，
+ * 让正在播放的位移补间落到别的条目上。
+ *
+ * `secondary` 是次要说明（状态、版本号等），不参与选中语义，只影响呈现；
+ * 把状态拼进 `label` 会让屏幕阅读器把它读成条目名称的一部分。
+ */
+export interface OptionWheelItem {
+  id: string;
+  label: string;
+  secondary?: string;
+  /** 空态占位这类不可选条目：仍可滚过，但不会触发 onSelect。 */
+  disabled?: boolean;
+}
+
+/** 纯导航场景可以继续直接传字符串，内部会归一化成 OptionWheelItem。 */
+export type OptionWheelInput = string | OptionWheelItem;
+
 export interface OptionWheelProps {
-  items?: readonly string[];
+  items?: readonly OptionWheelInput[];
   defaultSelected?: number;
-  onChange?: (index: number, item: string) => void;
-  onSelect?: (index: number, item: string) => void;
+  onChange?: (index: number, item: OptionWheelItem) => void;
+  onSelect?: (index: number, item: OptionWheelItem) => void;
   textColor?: string;
   activeColor?: string;
   side?: Side;
@@ -43,7 +63,7 @@ export interface OptionWheelProps {
 
 interface WheelConfig {
   count: number;
-  items: readonly string[];
+  items: readonly OptionWheelItem[];
   rowH: number;
   curve: number;
   tilt: number;
@@ -56,6 +76,7 @@ interface WheelConfig {
   draggable: boolean;
   soundUrl: string;
   soundVolume: number;
+  reducedMotion: boolean;
 }
 
 const DEFAULT_ITEMS = [
@@ -73,8 +94,14 @@ const DEFAULT_ITEMS = [
   'Drum & Bass',
 ];
 
+function normalizeItem(item: OptionWheelInput, index: number): OptionWheelItem {
+  return typeof item === 'string'
+    ? { id: `${index}:${item}`, label: item }
+    : item;
+}
+
 const OptionWheel = ({
-  items = DEFAULT_ITEMS,
+  items: rawItems = DEFAULT_ITEMS,
   defaultSelected = 3,
   onChange,
   onSelect,
@@ -98,6 +125,7 @@ const OptionWheel = ({
   idPrefix = 'studio-option-wheel',
   className = '',
 }: OptionWheelProps) => {
+  const items = useMemo(() => rawItems.map(normalizeItem), [rawItems]);
   const remPx =
     typeof window !== 'undefined'
       ? parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
@@ -123,6 +151,8 @@ const OptionWheel = ({
     draggable,
     soundUrl,
     soundVolume,
+    /* 与下方 reducedMotion state 的初值一致；真实取值由 effect 纠正。 */
+    reducedMotion: false,
   });
   const onChangeRef = useRef(onChange);
   const onSelectRef = useRef(onSelect);
@@ -136,6 +166,16 @@ const OptionWheel = ({
   const lastTickRef = useRef(0);
   const [selectedIndex, setSelectedIndex] = useState(defaultSelected);
   const [isDragging, setIsDragging] = useState(false);
+  /* SSR 与首帧一律按“允许动效”渲染，再由 effect 纠正，避免水合前后不一致。 */
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(query.matches);
+    const onChangeMotion = () => setReducedMotion(query.matches);
+    query.addEventListener('change', onChangeMotion);
+    return () => query.removeEventListener('change', onChangeMotion);
+  }, []);
 
   // Single rAF loop that eases the wheel position toward its target with
   // frame-rate independent exponential smoothing, then lays every option out
@@ -144,7 +184,9 @@ const OptionWheel = ({
     const dt = Math.min((now - lastRef.current) / 1000, 0.05);
     lastRef.current = now;
     const cfg = cfgRef.current;
-    const tau = Math.max(cfg.smoothing, 1) / 1000;
+    /* reduced-motion 下把时间常数压到≈0：选中瞬时到位，不做缓动旋转。
+       与 features/study/option-wheel.tsx 的处理保持一致。 */
+    const tau = Math.max(cfg.reducedMotion ? 1 : cfg.smoothing, 1) / 1000;
     const k = 1 - Math.exp(-dt / tau);
 
     const target = targetRef.current;
@@ -181,8 +223,9 @@ const OptionWheel = ({
       }
       el.style.transform = `translate(${x.toFixed(2)}px, calc(${y.toFixed(2)}px - 50%)) rotate(${rot.toFixed(3)}deg)`;
       el.style.opacity = String(Math.max(cfg.minOpacity, 1 - dist * cfg.fade));
+      const blur = cfg.reducedMotion ? 0 : cfg.blur;
       el.style.filter =
-        cfg.blur > 0 ? `blur(${(dist * cfg.blur).toFixed(2)}px)` : 'none';
+        blur > 0 ? `blur(${(dist * blur).toFixed(2)}px)` : 'none';
       el.style.setProperty(
         '--ow-p',
         Math.max(0, 1 - Math.min(dist, 1)).toFixed(4),
@@ -219,6 +262,7 @@ const OptionWheel = ({
       draggable,
       soundUrl,
       soundVolume,
+      reducedMotion,
     };
     runFrame(performance.now());
   }, [
@@ -230,6 +274,7 @@ const OptionWheel = ({
     items,
     loop,
     minOpacity,
+    reducedMotion,
     remPx,
     side,
     smoothing,
@@ -353,7 +398,9 @@ const OptionWheel = ({
       if (dragMovedRef.current) return;
       const cfg = cfgRef.current;
       if (index === selectedRef.current) {
-        onSelectRef.current?.(index, cfg.items[index]!);
+        const item = cfg.items[index];
+        /* 空态占位可以被滚到中心，但确认动作必须落空，否则会拿 undefined 去开资源。 */
+        if (item && !item.disabled) onSelectRef.current?.(index, item);
         return;
       }
       const cur = targetRef.current;
@@ -372,7 +419,8 @@ const OptionWheel = ({
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         const index = selectedRef.current;
-        onSelectRef.current?.(index, cfgRef.current.items[index]!);
+        const item = cfgRef.current.items[index];
+        if (item && !item.disabled) onSelectRef.current?.(index, item);
         return;
       }
       let delta: number | null = null;
@@ -439,19 +487,25 @@ const OptionWheel = ({
       onPointerCancel={handlePointerEnd}
       onKeyDown={handleKeyDown}
     >
-      {items.map((label, index) => (
+      {items.map((item, index) => (
         <div
           id={`${idPrefix}-item-${index}`}
-          key={`${label}-${index}`}
+          key={item.id}
           ref={(el) => {
             itemRefs.current[index] = el;
           }}
           role="option"
           aria-selected={selectedIndex === index}
-          className={`react-bits-option-wheel__item${selectedIndex === index ? ' react-bits-option-wheel__item--selected' : ''}`}
+          aria-disabled={item.disabled === true ? true : undefined}
+          className={`react-bits-option-wheel__item${selectedIndex === index ? ' react-bits-option-wheel__item--selected' : ''}${item.disabled === true ? ' react-bits-option-wheel__item--disabled' : ''}`}
           onClick={() => handleItemClick(index)}
         >
-          {label}
+          <span className="react-bits-option-wheel__label">{item.label}</span>
+          {item.secondary ? (
+            <span className="react-bits-option-wheel__secondary">
+              {item.secondary}
+            </span>
+          ) : null}
         </div>
       ))}
     </div>

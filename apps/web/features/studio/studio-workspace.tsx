@@ -151,14 +151,16 @@ export function StudioWorkspace({
     setRoute(nextRoute);
   };
 
-  const selectSecondary = (index: number) => {
+  /* 按条目 id 而不是下标回查：列表在滚轮播放补间期间刷新（产物完成、来源新增）
+     时下标会错位，id 不会。空态条目是 disabled，不会走到这里。 */
+  const selectSecondary = (itemId: string) => {
     if (route === 'source-browse') {
-      const asset = assets[index];
+      const asset = assets.find((candidate) => candidate.id === itemId);
       if (asset) onOpenSource(asset);
       return;
     }
     if (route === 'output-browse') {
-      const output = outputs[index];
+      const output = outputs.find((candidate) => candidate.id === itemId);
       if (output) onOpenOutput(output.id);
     }
   };
@@ -176,7 +178,7 @@ export function StudioWorkspace({
             idPrefix={`studio-secondary-${route}`}
             items={secondaryItems}
             defaultSelected={0}
-            onSelect={(index) => selectSecondary(index)}
+            onSelect={(_index, item) => selectSecondary(item.id)}
             textColor="var(--color-ink-faint)"
             activeColor="var(--color-ink)"
             side="right"

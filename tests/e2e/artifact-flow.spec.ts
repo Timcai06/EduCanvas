@@ -241,7 +241,9 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   });
   expect(created).toEqual({ ok: true, status: 201 });
   const studio = await openStudioOutput(page);
-  await studio.getByRole('option', { name: /未命名笔记 · v1/ }).click();
+  const createdNote = studio.getByRole('option', { name: /^未命名笔记/ });
+  await expect(createdNote.getByText('v1', { exact: true })).toBeVisible();
+  await createdNote.click();
 
   const canvas = page.getByRole('dialog', { name: '产物Canvas' });
   await expect(canvas).toBeVisible();
@@ -256,7 +258,11 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
   const outputStudio = await openStudioOutput(page);
-  await outputStudio.getByRole('option', { name: /未命名笔记 · v2/ }).click();
+  const updatedNote = outputStudio.getByRole('option', {
+    name: /^未命名笔记/,
+  });
+  await expect(updatedNote.getByText('v2', { exact: true })).toBeVisible();
+  await updatedNote.click();
   await expect(
     page.getByRole('dialog', { name: '产物Canvas' }).getByText('勾股定理'),
   ).toBeVisible();
@@ -317,11 +323,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   const source = inputStudio.getByRole('option', {
     name: /音频来源讲义\.pdf/,
   });
-  await expect(
-    inputStudio.getByRole('option', {
-      name: /音频来源讲义\.pdf · 已用于对话/,
-    }),
-  ).toBeVisible();
+  await expect(source.getByText('已用于对话', { exact: true })).toBeVisible();
   await closeStudio(page);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
