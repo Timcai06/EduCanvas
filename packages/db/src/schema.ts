@@ -462,6 +462,7 @@ export const conversations = pgTable(
       table.lastActivityAt,
       table.id,
     ),
+    uniqueIndex('conversations_id_space_unique').on(table.id, table.spaceId),
     check(
       'conversations_status_check',
       sql`${table.status} in ('active', 'archived')`,
@@ -523,6 +524,15 @@ export const agentOperations = pgTable(
       table.createdAt,
       table.id,
     ),
+    uniqueIndex('agent_operations_conversation_id_unique').on(
+      table.conversationId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.conversationId, table.notebookId],
+      foreignColumns: [conversations.id, conversations.spaceId],
+      name: 'agent_operations_conversation_notebook_fk',
+    }).onDelete('restrict'),
     check(
       'agent_operations_kind_check',
       sql`${table.kind} in ('turn', 'artifact_generation')`,
@@ -537,7 +547,7 @@ export const agentOperations = pgTable(
     ),
     check(
       'agent_operations_gateway_shape_check',
-      sql`(${table.gatewayEnvelopeId} is null and ${table.requestFingerprint} is null and ${table.actorUserId} is null and ${table.agentId} is null and ${table.notebookId} is null) or (${table.gatewayEnvelopeId} is not null and char_length(${table.gatewayEnvelopeId}) between 1 and 160 and ${table.requestFingerprint} ~ '^[a-f0-9]{64}$' and ${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null)`,
+      sql`(${table.gatewayEnvelopeId} is null and ${table.requestFingerprint} is null and ((${table.actorUserId} is null and ${table.agentId} is null and ${table.notebookId} is null) or (${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null))) or (${table.gatewayEnvelopeId} is not null and char_length(${table.gatewayEnvelopeId}) between 1 and 160 and ${table.requestFingerprint} ~ '^[a-f0-9]{64}$' and ${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null)`,
     ),
   ],
 );
@@ -671,9 +681,7 @@ export const conversationMessages = pgTable(
     conversationId: uuid('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
-    operationId: uuid('operation_id').references(() => agentOperations.id, {
-      onDelete: 'set null',
-    }),
+    operationId: uuid('operation_id'),
     role: text('role').notNull(),
     status: text('status').notNull(),
     content: text('content').notNull().default(''),
@@ -690,6 +698,11 @@ export const conversationMessages = pgTable(
       table.createdAt,
       table.id,
     ),
+    foreignKey({
+      columns: [table.conversationId, table.operationId],
+      foreignColumns: [agentOperations.conversationId, agentOperations.id],
+      name: 'conversation_messages_operation_scope_fk',
+    }).onDelete('restrict'),
     check(
       'conversation_messages_role_check',
       sql`${table.role} in ('system', 'user', 'assistant', 'tool')`,
@@ -2182,6 +2195,10 @@ export const artifactGenerationJobs = pgTable(
       table.status,
       table.createdAt,
     ),
+    uniqueIndex('artifact_generation_jobs_artifact_id_unique').on(
+      table.artifactId,
+      table.id,
+    ),
     check(
       'artifact_generation_jobs_status_check',
       sql`${table.status} in ('queued', 'running', 'succeeded', 'failed', 'cancelled')`,
@@ -2234,10 +2251,7 @@ export const artifactVersions = pgTable(
        模型运行账本待平台 Operation 迁移(M3 承接债务)后关联,此列先保证
        "这版内容怎么来的"可审计。 */
     generatedBy: text('generated_by'),
-    generationJobId: uuid('generation_job_id').references(
-      () => artifactGenerationJobs.id,
-      { onDelete: 'set null' },
-    ),
+    generationJobId: uuid('generation_job_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2250,6 +2264,14 @@ export const artifactVersions = pgTable(
     uniqueIndex('artifact_versions_generation_job_unique')
       .on(table.generationJobId)
       .where(sql`${table.generationJobId} is not null`),
+    foreignKey({
+      columns: [table.artifactId, table.generationJobId],
+      foreignColumns: [
+        artifactGenerationJobs.artifactId,
+        artifactGenerationJobs.id,
+      ],
+      name: 'artifact_versions_generation_job_scope_fk',
+    }).onDelete('restrict'),
     check('artifact_versions_version_check', sql`${table.version} >= 1`),
     check(
       'artifact_versions_content_shape_check',

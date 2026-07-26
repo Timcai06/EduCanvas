@@ -20,7 +20,7 @@ vi.mock('@educanvas/db', async () => {
   };
 });
 vi.mock('@/server/teaching/learning-session', () => ({
-  loadOwnedTeachingSession: vi.fn(),
+  loadOwnedTeachingGatewayTarget: vi.fn(),
 }));
 vi.mock('@/server/assets/asset-storage', () => ({
   storeAssetBytes: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('unpdf', () => ({
   getDocumentProxy: vi.fn(),
 }));
 
-import { loadOwnedTeachingSession } from '@/server/teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
 import { removeStoredAsset, storeAssetBytes } from './asset-storage';
 import { uploadOwnedAsset } from './asset-upload';
 import { extractText, getDocumentProxy } from 'unpdf';
@@ -76,15 +76,15 @@ describe('uploadOwnedAsset', () => {
     vi.clearAllMocks();
     drizzleRepo.createUploaded.mockReset();
     drizzleRepo.listOwnedSpace.mockReset();
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockReset?.();
+    (loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>).mockReset?.();
     (storeAssetBytes as ReturnType<typeof vi.fn>).mockReset?.();
     (removeStoredAsset as ReturnType<typeof vi.fn>).mockReset?.();
     (extractText as ReturnType<typeof vi.fn>).mockReset?.();
     (getDocumentProxy as ReturnType<typeof vi.fn>).mockReset?.();
 
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 'space-1',
-    });
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({ notebookId: 'space-1' });
     drizzleRepo.createUploaded.mockResolvedValue(snapshot('asset-1'));
     vi.mocked(storeAssetBytes).mockResolvedValue({
       storageKey: 'assets/a',
@@ -121,9 +121,9 @@ describe('uploadOwnedAsset', () => {
   });
 
   it('没有教学会话时直接返回会话未找到错误', async () => {
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue(
-      null,
-    );
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(null);
 
     const promise = uploadOwnedAsset({
       identity,

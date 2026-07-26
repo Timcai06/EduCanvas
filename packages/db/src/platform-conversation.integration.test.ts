@@ -218,6 +218,20 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     });
     expect(started.replayed).toBe(false);
     expect(started.assistantMessage.status).toBe('streaming');
+    const [operationIdentity] = await getDatabase()
+      .select({
+        actorUserId: schema.agentOperations.actorUserId,
+        agentId: schema.agentOperations.agentId,
+        notebookId: schema.agentOperations.notebookId,
+      })
+      .from(schema.agentOperations)
+      .where(eq(schema.agentOperations.id, started.turnId))
+      .limit(1);
+    expect(operationIdentity).toMatchObject({
+      actorUserId: 'general-turn-user',
+      notebookId: conversation.spaceId,
+    });
+    expect(operationIdentity?.agentId).toBeTruthy();
 
     await turns.settleTurn({
       conversationId: conversation.id,

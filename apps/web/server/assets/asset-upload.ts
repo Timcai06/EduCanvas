@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { loadOwnedTeachingSession } from '../teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
   WebPageFetchError,
   fetchReadableWebPage,
@@ -88,9 +88,9 @@ export async function uploadOwnedAsset(input: {
   file: File;
   scope: 'turn' | 'space';
 }): Promise<AssetSnapshot> {
-  const session = await loadOwnedTeachingSession(input.identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return uploadOwnedAssetToSpace({ ...input, spaceId: session.id });
+  const target = await loadOwnedTeachingGatewayTarget(input.identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return uploadOwnedAssetToSpace({ ...input, spaceId: target.notebookId });
 }
 
 /** 平台级上传边界：调用方先完成Conversation/Space所有权校验，再传入可信spaceId。 */
@@ -235,9 +235,9 @@ export async function persistFetchedWebPageAsset(input: {
 export async function listOwnedAssets(
   identity: AnonymousIdentity,
 ): Promise<readonly AssetSnapshot[]> {
-  const session = await loadOwnedTeachingSession(identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return listOwnedSpaceAssets(identity, session.id);
+  const target = await loadOwnedTeachingGatewayTarget(identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return listOwnedSpaceAssets(identity, target.notebookId);
 }
 
 export async function listOwnedSpaceAssets(

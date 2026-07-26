@@ -326,3 +326,10 @@ export {
   type SessionSourceBindingSnapshot,
   type TurnSourceVersionSnapshot,
 } from './knowledge-retrieval-repository';
+export {
+  NotebookAccessNotFoundError,
+  requireNotebookAccess,
+  resolveNotebookAccess,
+  type NotebookAccessExecutor,
+  type NotebookAccessSnapshot,
+} from './notebook-access';

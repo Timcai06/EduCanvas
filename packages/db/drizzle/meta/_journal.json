@@ -253,6 +253,20 @@
       "when": 1784875436079,
       "tag": "0035_curvy_justin_hammer",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785029250620,
+      "tag": "0036_steep_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785029406182,
+      "tag": "0037_tidy_fat_cobra",
+      "breakpoints": true
     }
   ]
 }
