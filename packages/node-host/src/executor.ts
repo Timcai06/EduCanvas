@@ -71,6 +71,16 @@ function isWithin(root: string, target: string): boolean {
   );
 }
 
+function safeUptimeSeconds(): number {
+  try {
+    return Math.floor(os.uptime());
+  } catch {
+    // Sandboxed hosts may deny the libuv uptime probe. Device discovery remains
+    // useful without turning an optional diagnostic into an execution failure.
+    return 0;
+  }
+}
+
 export class SafeNodeHostExecutor {
   private readonly now: () => Date;
   private readonly revoked: () => boolean;
@@ -151,7 +161,7 @@ export class SafeNodeHostExecutor {
           platform: os.platform(),
           architecture: os.arch(),
           hostname: os.hostname(),
-          uptimeSeconds: Math.floor(os.uptime()),
+          uptimeSeconds: safeUptimeSeconds(),
         },
       };
     }
