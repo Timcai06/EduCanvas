@@ -8,8 +8,8 @@ import {
 const currentSubjectOwnedTables = [
   'conversation_message_citations',
   'operation_sources',
-  'artifact_generation_jobs',
   'artifact_versions',
+  'artifact_generation_jobs',
   'artifacts',
   'conversation_messages',
   'agent_operations',
