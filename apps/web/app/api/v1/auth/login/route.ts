@@ -6,6 +6,7 @@ import {
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   AccountError,
@@ -58,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
     const profile = await new WebAccountRepository().authenticate(parsed.data);
     resetAuthFailures(attemptKey);
     await writeWebSessionCookie(await createWebSession(profile.userId));
-    return Response.json({ user: profile });
+    return jsonResponse({ user: profile });
   } catch (error) {
     if (error instanceof AccountError) {
       const failed = recordAuthFailure(attemptKey);

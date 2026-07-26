@@ -1,0 +1,4 @@
+ALTER TABLE "artifacts" ADD COLUMN "creation_idempotency_key" text;--> statement-breakpoint
+ALTER TABLE "artifacts" ADD COLUMN "creation_request_fingerprint" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "artifacts_owner_creation_idempotency_unique" ON "artifacts" USING btree ("owner_subject_id","creation_idempotency_key") WHERE "artifacts"."creation_idempotency_key" is not null;--> statement-breakpoint
+ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_creation_idempotency_shape_check" CHECK (("artifacts"."creation_idempotency_key" is null and "artifacts"."creation_request_fingerprint" is null) or (char_length("artifacts"."creation_idempotency_key") between 1 and 128 and "artifacts"."creation_request_fingerprint" ~ '^[a-f0-9]{64}$'));

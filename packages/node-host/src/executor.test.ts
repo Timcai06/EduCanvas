@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SafeNodeHostExecutor } from './executor';
 
 const created: string[] = [];
@@ -40,6 +40,7 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   const { rm } = await import('node:fs/promises');
   await Promise.all(
     created
@@ -75,6 +76,29 @@ describe('SafeNodeHostExecutor', () => {
     ).resolves.toMatchObject({
       status: 'completed',
       output: { platform: expect.any(String) },
+    });
+  });
+
+  it('keeps device status available when the host denies the uptime probe', async () => {
+    vi.spyOn(os, 'uptime').mockImplementation(() => {
+      throw new Error('uptime unavailable');
+    });
+    const executor = await SafeNodeHostExecutor.create({
+      nodeId: 'node:1',
+      capabilities,
+      now: () => now,
+    });
+
+    await expect(
+      executor.execute(
+        request({
+          capability: 'device.status',
+          parameters: {},
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      output: { uptimeSeconds: 0 },
     });
   });
 

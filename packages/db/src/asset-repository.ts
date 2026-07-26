@@ -12,14 +12,27 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
+import { and, desc, eq, isNotNull, lt, ne, or } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
-import { assets, assetVersions } from './schema';
+import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
+import {
+  assetProcessingJobs,
+  assetRepresentations,
+  assets,
+  assetVersions,
+  objectDeletionOutbox,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -39,6 +52,10 @@ export interface MaterializedAssetVersion {
   mimeType: string;
   byteSize: number;
   extractedText: string | null;
+}
+
+export interface AssetAccessPolicy {
+  role: NotebookMembershipRole;
 }
 
 /**
@@ -181,6 +198,14 @@ export class DrizzleAssetRepository {
     const versionStatus = input.outcome.status;
 
     return this.database.transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => {
+        throw new AssetAccessError();
+      });
       const [createdAsset] = await transaction
         .insert(assets)
         .values({
@@ -219,6 +244,40 @@ export class DrizzleAssetRepository {
       if (!createdAsset || !createdVersion) {
         throw new AssetPersistenceError('Asset或版本写入失败');
       }
+      await transaction.insert(assetRepresentations).values({
+        assetVersionId: versionId,
+        kind: 'original',
+        mimeType,
+        status: 'ready',
+        byteSize: input.byteSize,
+        createdAt: now,
+      });
+      const extractedText = input.extractedText?.trim() || null;
+      if (extractedText) {
+        await transaction.insert(assetRepresentations).values({
+          assetVersionId: versionId,
+          kind: 'text',
+          mimeType: 'text/plain',
+          status: 'ready',
+          byteSize: Buffer.byteLength(extractedText, 'utf8'),
+          createdAt: now,
+        });
+      }
+      if (input.kind === 'document') {
+        await transaction.insert(assetProcessingJobs).values({
+          assetVersionId: versionId,
+          kind: 'extract_text',
+          status: versionStatus === 'ready' ? 'succeeded' : 'failed',
+          attempts: 1,
+          failureCode:
+            versionStatus === 'failed'
+              ? requireText(input.outcome.failureCode, 'failureCode', 128)
+              : null,
+          startedAt: now,
+          completedAt: now,
+          createdAt: now,
+        });
+      }
 
       const nextAssetStatus = versionStatus === 'ready' ? 'ready' : 'failed';
       if (!canTransitionAssetStatus('processing', nextAssetStatus)) {
@@ -243,23 +302,55 @@ export class DrizzleAssetRepository {
     spaceId: string;
     limit?: number;
   }): Promise<readonly AssetSnapshot[]> {
+    return (await this.listAccessibleSpacePage(input)).items;
+  }
+
+  async listAccessibleSpacePage(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<AssetSnapshot>> {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
-    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    const limit = boundedPageLimit(input.limit);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const rows = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
       .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
       .where(
         and(
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
           ne(assets.status, 'tombstoned'),
+          input.cursor
+            ? or(
+                lt(assets.createdAt, input.cursor.timestamp),
+                and(
+                  eq(assets.createdAt, input.cursor.timestamp),
+                  lt(assets.id, input.cursor.id),
+                ),
+              )
+            : undefined,
         ),
       )
       .orderBy(desc(assets.createdAt), desc(assets.id))
-      .limit(limit);
-    return rows.map(({ asset, version }) => toSnapshot(asset, version));
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1)?.asset;
+    return {
+      items: pageRows.map(({ asset, version }) => toSnapshot(asset, version)),
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.createdAt, id: last.id }
+          : null,
+    };
   }
 
   /**
@@ -274,6 +365,13 @@ export class DrizzleAssetRepository {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
     const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const [row] = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
@@ -281,7 +379,6 @@ export class DrizzleAssetRepository {
       .where(
         and(
           eq(assets.id, assetId),
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
           ne(assets.status, 'tombstoned'),
         ),
@@ -289,6 +386,36 @@ export class DrizzleAssetRepository {
       .limit(1);
     if (!row) throw new AssetAccessError();
     return toSnapshot(row.asset, row.version);
+  }
+
+  /** Canvas 动作策略只使用数据库成员角色与资源创建者，不接受客户端声明。 */
+  async getAccessPolicy(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<AssetAccessPolicy> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const access = await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new AssetAccessError();
+    const [asset] = await this.database
+      .select({ id: assets.id })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .limit(1);
+    if (!asset) throw new AssetAccessError();
+    return { role: access.role };
   }
 
   /**
@@ -303,6 +430,13 @@ export class DrizzleAssetRepository {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
     const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const [row] = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
@@ -310,7 +444,6 @@ export class DrizzleAssetRepository {
       .where(
         and(
           eq(assets.id, assetId),
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
           eq(assets.status, 'ready'),
           eq(assetVersions.status, 'ready'),
@@ -380,20 +513,84 @@ export class DrizzleAssetRepository {
     const assetId = requireUuid(input.assetId);
     const now = new Date();
     return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => null);
+      if (!access) return false;
       const [owned] = await transaction
-        .select({ id: assets.id })
+        .select({ id: assets.id, createdBy: assets.ownerSubjectId })
         .from(assets)
         .where(
           and(
             eq(assets.id, assetId),
-            eq(assets.ownerSubjectId, ownerSubjectId),
             eq(assets.spaceId, spaceId),
             ne(assets.status, 'tombstoned'),
           ),
         )
         .limit(1);
       if (!owned) return false;
+      if (
+        owned.createdBy !== ownerSubjectId &&
+        access.role !== 'owner' &&
+        access.role !== 'editor'
+      ) {
+        return false;
+      }
 
+      const storedVersions = await transaction
+        .select({
+          id: assetVersions.id,
+          storageKey: assetVersions.storageKey,
+        })
+        .from(assetVersions)
+        .where(eq(assetVersions.assetId, assetId));
+      const derivedRepresentations = await transaction
+        .select({
+          id: assetRepresentations.id,
+          storageKey: assetRepresentations.derivedStorageKey,
+        })
+        .from(assetRepresentations)
+        .innerJoin(
+          assetVersions,
+          eq(assetVersions.id, assetRepresentations.assetVersionId),
+        )
+        .where(
+          and(
+            eq(assetVersions.assetId, assetId),
+            isNotNull(assetRepresentations.derivedStorageKey),
+          ),
+        );
+      const deletionEntries = [
+        ...storedVersions.map((version) => ({
+          objectKind: 'asset' as const,
+          storageKey: version.storageKey,
+          sourceType: 'asset_version' as const,
+          sourceId: version.id,
+          availableAt: now,
+        })),
+        ...derivedRepresentations.flatMap((representation) =>
+          representation.storageKey
+            ? [
+                {
+                  objectKind: 'asset' as const,
+                  storageKey: representation.storageKey,
+                  sourceType: 'asset_representation' as const,
+                  sourceId: representation.id,
+                  availableAt: now,
+                },
+              ]
+            : [],
+        ),
+      ];
+      if (deletionEntries.length > 0) {
+        await transaction
+          .insert(objectDeletionOutbox)
+          .values(deletionEntries)
+          .onConflictDoNothing();
+      }
       await transaction
         .update(assetVersions)
         .set({ status: 'tombstoned' })

@@ -8,6 +8,7 @@ import {
   type CanvasResourceErrorCode,
 } from '@educanvas/canvas-protocol';
 import type { AssetOrigin, AssetStatus } from '@educanvas/agent-core';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 
 const SOURCE_RENDERERS = {
   'application/pdf': {
@@ -72,6 +73,7 @@ export interface SourceResourceProjectionInput {
   status: AssetStatus;
   origin: AssetOrigin;
   createdAt: string;
+  accessRole: NotebookMembershipRole;
   version: {
     versionId: string;
     byteSize: number;
@@ -112,9 +114,15 @@ function provenance(origin: AssetOrigin): {
 function allowedActions(
   status: CanvasResource['status'],
   downloadable: boolean,
+  accessRole: NotebookMembershipRole,
 ): CanvasResourceAction[] {
   if (status !== 'ready') return [];
-  return downloadable ? ['view', 'download', 'delete'] : ['view', 'delete'];
+  const actions: CanvasResourceAction[] = ['view'];
+  if (downloadable) actions.push('download');
+  if (accessRole === 'owner' || accessRole === 'editor') {
+    actions.push('delete');
+  }
+  return actions;
 }
 
 /**
@@ -157,7 +165,11 @@ export function projectOwnedSourceResource(
       rendererVersion: 1,
     },
     trustTier: 'tier1',
-    allowedActions: allowedActions(status, renderer.downloadable),
+    allowedActions: allowedActions(
+      status,
+      renderer.downloadable,
+      input.accessRole,
+    ),
     canProduceCandidateLearningEvents: false,
     provenance: {
       ...sourceProvenance,

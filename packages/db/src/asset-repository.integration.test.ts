@@ -69,13 +69,58 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
   beforeEach(async () => {
     await getDatabase().execute(sql`
       truncate table
+        object_deletion_outbox,
+        asset_processing_jobs,
+        asset_representations,
         agent_message_parts,
         chat_messages,
         asset_versions,
         assets,
-        lesson_sessions
+        lesson_sessions,
+        notebook_memberships,
+        spaces,
+        personal_agents,
+        platform_users
       restart identity cascade
     `);
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values([
+        { id: ownerSubjectId, kind: 'anonymous_compat', status: 'active' },
+        { id: otherSubjectId, kind: 'anonymous_compat', status: 'active' },
+      ]);
+    await getDatabase()
+      .insert(schema.spaces)
+      .values([
+        {
+          id: spaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Asset fixture',
+        },
+        {
+          id: otherSpaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Other fixture',
+        },
+      ]);
+    await getDatabase()
+      .insert(schema.notebookMemberships)
+      .values([
+        {
+          notebookId: spaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+        {
+          notebookId: otherSpaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+      ]);
   });
 
   afterAll(async () => {
@@ -96,6 +141,20 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       created.descriptor.currentVersionId,
     );
     expect(JSON.stringify(created)).not.toContain('uploads/fixture');
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetRepresentations)
+        .orderBy(schema.assetRepresentations.kind),
+    ).resolves.toMatchObject([
+      { kind: 'original', status: 'ready' },
+      { kind: 'text', status: 'ready' },
+    ]);
+    await expect(
+      getDatabase().select().from(schema.assetProcessingJobs),
+    ).resolves.toMatchObject([
+      { kind: 'extract_text', status: 'succeeded', attempts: 1 },
+    ]);
 
     await expect(
       repository.listOwnedSpace({ ownerSubjectId, spaceId }),
@@ -231,6 +290,16 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         assetId: created.descriptor.assetId,
       }),
     ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      getDatabase().select().from(schema.objectDeletionOutbox),
+    ).resolves.toMatchObject([
+      {
+        objectKind: 'asset',
+        sourceType: 'asset_version',
+        storageKey: 'uploads/fixture/vision.pdf',
+        status: 'pending',
+      },
+    ]);
   });
 
   it('消息账本原子保存文本与资产引用并可从历史恢复', async () => {

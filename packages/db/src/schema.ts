@@ -60,6 +60,57 @@ export const platformUsers = pgTable(
   ],
 );
 
+/**
+ * 安全与权限变更的只追加审计账本。metadata 仅允许稳定标识和公开原因码，
+ * 不得写入密码、Cookie、Prompt、Provider 原文或堆栈。
+ */
+export const securityAuditEvents = pgTable(
+  'security_audit_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorUserId: text('actor_user_id').references(() => platformUsers.id, {
+      onDelete: 'set null',
+    }),
+    eventType: text('event_type').notNull(),
+    resourceType: text('resource_type'),
+    resourceId: text('resource_id'),
+    outcome: text('outcome').notNull(),
+    reasonCode: text('reason_code'),
+    requestId: text('request_id'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('security_audit_events_actor_time_idx').on(
+      table.actorUserId,
+      table.occurredAt,
+      table.id,
+    ),
+    index('security_audit_events_type_time_idx').on(
+      table.eventType,
+      table.occurredAt,
+      table.id,
+    ),
+    check(
+      'security_audit_events_outcome_check',
+      sql`${table.outcome} in ('succeeded', 'denied', 'failed')`,
+    ),
+    check(
+      'security_audit_events_text_check',
+      sql`char_length(${table.eventType}) between 1 and 128 and (${table.resourceType} is null or char_length(${table.resourceType}) between 1 and 64) and (${table.resourceId} is null or char_length(${table.resourceId}) between 1 and 180) and (${table.reasonCode} is null or char_length(${table.reasonCode}) between 1 and 128) and (${table.requestId} is null or char_length(${table.requestId}) between 1 and 160)`,
+    ),
+    check(
+      'security_audit_events_metadata_check',
+      sql`jsonb_typeof(${table.metadata}) = 'object'`,
+    ),
+  ],
+);
+
 /** 当前产品模型是一位自然人一个个人 Agent；专业行为通过 Profile/Skill 组合。 */
 export const personalAgents = pgTable(
   'personal_agents',
@@ -462,6 +513,7 @@ export const conversations = pgTable(
       table.lastActivityAt,
       table.id,
     ),
+    uniqueIndex('conversations_id_space_unique').on(table.id, table.spaceId),
     check(
       'conversations_status_check',
       sql`${table.status} in ('active', 'archived')`,
@@ -523,6 +575,15 @@ export const agentOperations = pgTable(
       table.createdAt,
       table.id,
     ),
+    uniqueIndex('agent_operations_conversation_id_unique').on(
+      table.conversationId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.conversationId, table.notebookId],
+      foreignColumns: [conversations.id, conversations.spaceId],
+      name: 'agent_operations_conversation_notebook_fk',
+    }).onDelete('restrict'),
     check(
       'agent_operations_kind_check',
       sql`${table.kind} in ('turn', 'artifact_generation')`,
@@ -537,7 +598,7 @@ export const agentOperations = pgTable(
     ),
     check(
       'agent_operations_gateway_shape_check',
-      sql`(${table.gatewayEnvelopeId} is null and ${table.requestFingerprint} is null and ${table.actorUserId} is null and ${table.agentId} is null and ${table.notebookId} is null) or (${table.gatewayEnvelopeId} is not null and char_length(${table.gatewayEnvelopeId}) between 1 and 160 and ${table.requestFingerprint} ~ '^[a-f0-9]{64}$' and ${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null)`,
+      sql`(${table.gatewayEnvelopeId} is null and ${table.requestFingerprint} is null and ((${table.actorUserId} is null and ${table.agentId} is null and ${table.notebookId} is null) or (${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null))) or (${table.gatewayEnvelopeId} is not null and char_length(${table.gatewayEnvelopeId}) between 1 and 160 and ${table.requestFingerprint} ~ '^[a-f0-9]{64}$' and ${table.actorUserId} is not null and ${table.agentId} is not null and ${table.notebookId} is not null)`,
     ),
   ],
 );
@@ -671,9 +732,7 @@ export const conversationMessages = pgTable(
     conversationId: uuid('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
-    operationId: uuid('operation_id').references(() => agentOperations.id, {
-      onDelete: 'set null',
-    }),
+    operationId: uuid('operation_id'),
     role: text('role').notNull(),
     status: text('status').notNull(),
     content: text('content').notNull().default(''),
@@ -690,6 +749,11 @@ export const conversationMessages = pgTable(
       table.createdAt,
       table.id,
     ),
+    foreignKey({
+      columns: [table.conversationId, table.operationId],
+      foreignColumns: [agentOperations.conversationId, agentOperations.id],
+      name: 'conversation_messages_operation_scope_fk',
+    }).onDelete('restrict'),
     check(
       'conversation_messages_role_check',
       sql`${table.role} in ('system', 'user', 'assistant', 'tool')`,
@@ -755,6 +819,10 @@ export const lessonSessions = pgTable(
         sql`coalesce(${table.knowledgeNodeId}, '')`,
       )
       .where(sql`${table.status} = 'active'`),
+    uniqueIndex('lesson_sessions_id_student_unique').on(
+      table.id,
+      table.studentId,
+    ),
     index('lesson_sessions_recent_scope_idx').on(
       table.studentId,
       table.gradeBand,
@@ -889,6 +957,168 @@ export const assetVersions = pgTable(
     check(
       'asset_versions_failure_shape_check',
       sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/** 不复制 Source 内容，只登记某个不可变版本已经具备的服务端表现能力。 */
+export const assetRepresentations = pgTable(
+  'asset_representations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    mimeType: text('mime_type').notNull(),
+    status: text('status').notNull(),
+    derivedStorageKey: text('derived_storage_key'),
+    byteSize: integer('byte_size'),
+    checksum: text('checksum'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_representations_version_kind_unique').on(
+      table.assetVersionId,
+      table.kind,
+    ),
+    index('asset_representations_version_status_idx').on(
+      table.assetVersionId,
+      table.status,
+    ),
+    check(
+      'asset_representations_kind_check',
+      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail')`,
+    ),
+    check(
+      'asset_representations_status_check',
+      sql`${table.status} in ('processing', 'ready', 'failed', 'unavailable')`,
+    ),
+    check(
+      'asset_representations_storage_shape_check',
+      sql`(${table.derivedStorageKey} is null and ${table.checksum} is null) or (${table.derivedStorageKey} is not null and char_length(${table.derivedStorageKey}) between 1 and 1024 and ${table.derivedStorageKey} !~* '^https?://' and ${table.checksum} ~ '^[a-f0-9]{64}$')`,
+    ),
+    check(
+      'asset_representations_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/** Source 解析、转码和缩略图生成的业务任务账本；队列行不是事实源。 */
+export const assetProcessingJobs = pgTable(
+  'asset_processing_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    status: text('status').notNull().default('queued'),
+    attempts: integer('attempts').notNull().default(0),
+    queueJobKey: text('queue_job_key'),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('asset_processing_jobs_status_created_idx').on(
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    index('asset_processing_jobs_version_created_idx').on(
+      table.assetVersionId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'asset_processing_jobs_kind_check',
+      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail')`,
+    ),
+    check(
+      'asset_processing_jobs_status_check',
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'failed', 'cancelled')`,
+    ),
+    check(
+      'asset_processing_jobs_lifecycle_check',
+      sql`(${table.status} = 'queued' and ${table.startedAt} is null and ${table.completedAt} is null) or (${table.status} = 'running' and ${table.startedAt} is not null and ${table.completedAt} is null) or (${table.status} in ('succeeded', 'failed', 'cancelled') and ${table.completedAt} is not null)`,
+    ),
+    check(
+      'asset_processing_jobs_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+    check(
+      'asset_processing_jobs_attempts_check',
+      sql`${table.attempts} between 0 and 100`,
+    ),
+  ],
+);
+
+/**
+ * 对象存储物理删除的可靠 Outbox。业务事务只登记 storageKey；Worker 负责幂等删除，
+ * 失败时保留稳定错误码与重试时间，不记录绝对路径或堆栈。
+ */
+export const objectDeletionOutbox = pgTable(
+  'object_deletion_outbox',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    objectKind: text('object_kind').notNull(),
+    storageKey: text('storage_key').notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceId: uuid('source_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('object_deletion_outbox_object_unique').on(
+      table.objectKind,
+      table.storageKey,
+    ),
+    index('object_deletion_outbox_claim_idx').on(
+      table.status,
+      table.availableAt,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'object_deletion_outbox_kind_check',
+      sql`${table.objectKind} in ('asset', 'artifact', 'avatar')`,
+    ),
+    check(
+      'object_deletion_outbox_source_check',
+      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'artifact_version', 'user_avatar')`,
+    ),
+    check(
+      'object_deletion_outbox_status_check',
+      sql`${table.status} in ('pending', 'processing', 'completed', 'failed')`,
+    ),
+    check(
+      'object_deletion_outbox_storage_key_check',
+      sql`char_length(${table.storageKey}) between 1 and 1024 and ${table.storageKey} !~* '^https?://'`,
+    ),
+    check(
+      'object_deletion_outbox_lifecycle_check',
+      sql`(${table.status} = 'pending' and ${table.claimedAt} is null and ${table.completedAt} is null) or (${table.status} = 'processing' and ${table.claimedAt} is not null and ${table.completedAt} is null) or (${table.status} = 'completed' and ${table.completedAt} is not null) or (${table.status} = 'failed' and ${table.claimedAt} is null and ${table.completedAt} is null and ${table.failureCode} is not null)`,
+    ),
+    check(
+      'object_deletion_outbox_attempts_check',
+      sql`${table.attempts} between 0 and 100`,
     ),
   ],
 );
@@ -2023,9 +2253,7 @@ export const learningEvents = pgTable(
     id: uuid('id').primaryKey(),
     idempotencyKey: text('idempotency_key').notNull(),
     studentId: text('student_id').notNull(),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => lessonSessions.id),
+    sessionId: uuid('session_id').notNull(),
     knowledgeNodeId: text('knowledge_node_id'),
     sequence: integer('sequence').notNull(),
     eventType: text('event_type').notNull(),
@@ -2044,6 +2272,11 @@ export const learningEvents = pgTable(
       table.sessionId,
       table.sequence,
     ),
+    foreignKey({
+      columns: [table.sessionId, table.studentId],
+      foreignColumns: [lessonSessions.id, lessonSessions.studentId],
+      name: 'learning_events_session_student_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -2095,6 +2328,8 @@ export const artifacts = pgTable(
     title: text('title').notNull(),
     status: text('status').notNull().default('proposed'),
     latestVersion: integer('latest_version').notNull().default(0),
+    creationIdempotencyKey: text('creation_idempotency_key'),
+    creationRequestFingerprint: text('creation_request_fingerprint'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -2120,6 +2355,9 @@ export const artifacts = pgTable(
       table.updatedAt,
       table.id,
     ),
+    uniqueIndex('artifacts_owner_creation_idempotency_unique')
+      .on(table.ownerSubjectId, table.creationIdempotencyKey)
+      .where(sql`${table.creationIdempotencyKey} is not null`),
     check(
       'artifacts_trust_tier_check',
       sql`${table.trustTier} in ('tier1', 'tier2')`,
@@ -2137,6 +2375,10 @@ export const artifacts = pgTable(
       sql`char_length(${table.ownerSubjectId}) between 1 and 160 and char_length(${table.title}) between 1 and 300`,
     ),
     check('artifacts_version_check', sql`${table.latestVersion} >= 0`),
+    check(
+      'artifacts_creation_idempotency_shape_check',
+      sql`(${table.creationIdempotencyKey} is null and ${table.creationRequestFingerprint} is null) or (char_length(${table.creationIdempotencyKey}) between 1 and 128 and ${table.creationRequestFingerprint} ~ '^[a-f0-9]{64}$')`,
+    ),
     check(
       'artifacts_archive_shape_check',
       sql`(${table.status} = 'archived') = (${table.archivedAt} is not null)`,
@@ -2181,6 +2423,10 @@ export const artifactGenerationJobs = pgTable(
     index('artifact_generation_jobs_status_created_idx').on(
       table.status,
       table.createdAt,
+    ),
+    uniqueIndex('artifact_generation_jobs_artifact_id_unique').on(
+      table.artifactId,
+      table.id,
     ),
     check(
       'artifact_generation_jobs_status_check',
@@ -2234,10 +2480,7 @@ export const artifactVersions = pgTable(
        模型运行账本待平台 Operation 迁移(M3 承接债务)后关联,此列先保证
        "这版内容怎么来的"可审计。 */
     generatedBy: text('generated_by'),
-    generationJobId: uuid('generation_job_id').references(
-      () => artifactGenerationJobs.id,
-      { onDelete: 'set null' },
-    ),
+    generationJobId: uuid('generation_job_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2250,6 +2493,14 @@ export const artifactVersions = pgTable(
     uniqueIndex('artifact_versions_generation_job_unique')
       .on(table.generationJobId)
       .where(sql`${table.generationJobId} is not null`),
+    foreignKey({
+      columns: [table.artifactId, table.generationJobId],
+      foreignColumns: [
+        artifactGenerationJobs.artifactId,
+        artifactGenerationJobs.id,
+      ],
+      name: 'artifact_versions_generation_job_scope_fk',
+    }).onDelete('restrict'),
     check('artifact_versions_version_check', sql`${table.version} >= 1`),
     check(
       'artifact_versions_content_shape_check',

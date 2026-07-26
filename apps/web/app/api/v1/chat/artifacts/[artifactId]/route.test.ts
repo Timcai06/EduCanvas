@@ -14,6 +14,9 @@ const artifactRepo = {
   appendVersion: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
 };
+const { requireNotebookAccessMock } = vi.hoisted(() => ({
+  requireNotebookAccessMock: vi.fn(),
+}));
 
 vi.mock('@educanvas/db', async () => {
   const actual =
@@ -23,6 +26,8 @@ vi.mock('@educanvas/db', async () => {
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
     }),
+    getDb: vi.fn(() => ({})),
+    requireNotebookAccess: requireNotebookAccessMock,
   };
 });
 
@@ -150,6 +155,12 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.getArtifact.mockReset();
     artifactRepo.appendVersion.mockReset();
     artifactRepo.createRevisionGenerationJob.mockReset();
+    requireNotebookAccessMock.mockReset();
+    requireNotebookAccessMock.mockResolvedValue({
+      notebookId: conversation.spaceId,
+      role: 'owner',
+      permissions: ['notebook.read'],
+    });
     artifactRepo.getArtifactDetail.mockResolvedValue(detail);
     artifactRepo.listVersionProvenance.mockResolvedValue([
       {
@@ -208,6 +219,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
       },
     });
     expect(payload.versions[0].version).toBe(1);
+    expect(JSON.stringify(payload)).not.toContain('audio.mp3');
+    expect(payload).not.toHaveProperty('objectKey');
+    expect(payload).not.toHaveProperty('checksum');
   });
 
   it('maps repository errors to 503', async () => {

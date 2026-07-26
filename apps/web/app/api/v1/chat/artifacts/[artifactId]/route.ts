@@ -3,6 +3,7 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -14,6 +15,8 @@ import {
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
+  getDb,
+  requireNotebookAccess,
 } from '@educanvas/db';
 import {
   audioOverviewMetadataSchema,
@@ -58,6 +61,12 @@ export async function GET(
     if (detail.artifact.spaceId !== conversation.spaceId) {
       throw new ArtifactOwnershipError();
     }
+    const access = await requireNotebookAccess(getDb(), {
+      notebookId: conversation.spaceId,
+      trustedSubjectId: identity.studentId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new ArtifactOwnershipError();
     const requestedVersion = new URL(request.url).searchParams.get('version');
     if (requestedVersion && !/^[1-9]\d*$/.test(requestedVersion)) {
       throw new ArtifactOwnershipError();
@@ -93,8 +102,9 @@ export async function GET(
       artifact: detail.artifact,
       version: selectedVersion,
       latestJob: detail.latestJob,
+      accessRole: access.role,
     });
-    return Response.json({
+    return jsonResponse({
       artifact: {
         id: detail.artifact.id,
         kind: detail.artifact.kind,
@@ -233,7 +243,7 @@ export async function PATCH(
         generatedBy: 'user:manual',
         expectedLatestVersion: parsed.data.baseVersion,
       });
-      return Response.json(
+      return jsonResponse(
         {
           artifact: {
             id: artifact.id,
@@ -257,7 +267,7 @@ export async function PATCH(
       instruction: parsed.data.instruction,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
     });
-    return Response.json(
+    return jsonResponse(
       {
         artifact: {
           id: created.artifact.id,

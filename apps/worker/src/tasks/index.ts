@@ -9,6 +9,7 @@ import { recoverOperationContinuations } from './recover-operation-continuations
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
+import { deleteObjectOutbox } from './delete-object-outbox.js';
 
 /**
  * worker 的任务注册表。周期任务使用Graphile crontab兼容的 `域:动作` 命名;
@@ -25,6 +26,7 @@ export function createTaskList(input: {
     ),
     'knowledge:ingest_document': ingestKnowledgeDocument,
     'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
+    'maintenance:delete_object_outbox': deleteObjectOutbox,
     'maintenance:recover_operation_continuations':
       recoverOperationContinuations,
     'maintenance:reconcile_tool_approval_intents': reconcileToolApprovalIntents,

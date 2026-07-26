@@ -5,6 +5,8 @@ import {
   ArtifactOwnershipError,
   DrizzleAssetRepository,
   DrizzlePlatformArtifactRepository,
+  getDb,
+  requireNotebookAccess,
 } from '@educanvas/db';
 import type {
   CanvasResource,
@@ -37,11 +39,19 @@ async function loadSource(input: {
   resourceId: string;
 }): Promise<CanvasResource> {
   try {
-    const snapshot = await new DrizzleAssetRepository().getOwnedSnapshot({
-      ownerSubjectId: input.identity.studentId,
-      spaceId: input.notebookId,
-      assetId: input.resourceId,
-    });
+    const repository = new DrizzleAssetRepository();
+    const [snapshot, policy] = await Promise.all([
+      repository.getOwnedSnapshot({
+        ownerSubjectId: input.identity.studentId,
+        spaceId: input.notebookId,
+        assetId: input.resourceId,
+      }),
+      repository.getAccessPolicy({
+        ownerSubjectId: input.identity.studentId,
+        spaceId: input.notebookId,
+        assetId: input.resourceId,
+      }),
+    ]);
     return projectOwnedSourceResource({
       assetId: snapshot.descriptor.assetId,
       notebookId: input.notebookId,
@@ -51,6 +61,7 @@ async function loadSource(input: {
       status: snapshot.descriptor.status,
       origin: snapshot.descriptor.origin,
       createdAt: snapshot.createdAt,
+      accessRole: policy.role,
       version: snapshot.version
         ? {
             versionId: snapshot.version.versionId,
@@ -76,6 +87,12 @@ async function loadArtifact(input: {
   resourceId: string;
 }): Promise<CanvasResource> {
   try {
+    const access = await requireNotebookAccess(getDb(), {
+      notebookId: input.notebookId,
+      trustedSubjectId: input.identity.studentId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new ArtifactOwnershipError();
     const detail =
       await new DrizzlePlatformArtifactRepository().getArtifactDetail({
         artifactId: input.resourceId,
@@ -89,6 +106,7 @@ async function loadArtifact(input: {
       artifact: detail.artifact,
       version: detail.latestVersion,
       latestJob: detail.latestJob,
+      accessRole: access.role,
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {

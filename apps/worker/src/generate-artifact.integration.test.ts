@@ -20,6 +20,8 @@ import {
   getDb,
   spaces,
   conversations,
+  notebookMemberships,
+  platformUsers,
 } from '@educanvas/db';
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -110,11 +112,21 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
       sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, asset_versions, assets, conversations, spaces restart identity cascade`,
     );
     await database.execute(sql`delete from graphile_worker._private_jobs`);
+    await database
+      .insert(platformUsers)
+      .values({ id: owner, kind: 'registered', status: 'active' })
+      .onConflictDoNothing();
     const [space] = await database
       .insert(spaces)
       .values({ ownerSubjectId: owner, title: '链路测试空间' })
       .returning();
     spaceId = space!.id;
+    await database.insert(notebookMemberships).values({
+      notebookId: spaceId,
+      userId: owner,
+      role: 'owner',
+      grantedByUserId: owner,
+    });
     const [conversation] = await database
       .insert(conversations)
       .values({ spaceId, ownerSubjectId: owner })

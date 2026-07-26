@@ -1,10 +1,16 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
+import {
+  DrizzleAssetRepository,
+  type AssetSnapshot,
+  type CursorPage,
+  type TemporalIdCursor,
+} from '@educanvas/db';
 import { extractText, getDocumentProxy } from 'unpdf';
+import mammoth from 'mammoth';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { loadOwnedTeachingSession } from '../teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
   WebPageFetchError,
   fetchReadableWebPage,
@@ -83,14 +89,35 @@ function extractPlainText(bytes: Uint8Array): string {
   return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
 }
 
+async function extractDocxText(bytes: Uint8Array): Promise<string> {
+  try {
+    const result = await mammoth.extractRawText({
+      buffer: Buffer.from(bytes),
+    });
+    const normalized = result.value
+      .normalize('NFC')
+      .replace(/\r\n?/g, '\n')
+      .trim();
+    if (!normalized) {
+      throw new AssetUploadError('text_content_unavailable', 422);
+    }
+    return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
+  } catch (error) {
+    if (error instanceof AssetUploadError) throw error;
+    throw new AssetUploadError('text_content_unavailable', 422, {
+      cause: error,
+    });
+  }
+}
+
 export async function uploadOwnedAsset(input: {
   identity: AnonymousIdentity;
   file: File;
   scope: 'turn' | 'space';
 }): Promise<AssetSnapshot> {
-  const session = await loadOwnedTeachingSession(input.identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return uploadOwnedAssetToSpace({ ...input, spaceId: session.id });
+  const target = await loadOwnedTeachingGatewayTarget(input.identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return uploadOwnedAssetToSpace({ ...input, spaceId: target.notebookId });
 }
 
 /** 平台级上传边界：调用方先完成Conversation/Space所有权校验，再传入可信spaceId。 */
@@ -126,10 +153,13 @@ export async function uploadOwnedAssetToSpace(input: {
       const extractedText =
         detected.mimeType === 'application/pdf'
           ? await extractPdfText(bytes)
-          : detected.mimeType === 'text/markdown' ||
-              detected.mimeType === 'text/plain'
-            ? extractPlainText(bytes)
-            : null;
+          : detected.mimeType ===
+              'application/vnd.openxmlformats-officedocument.wordprocessingml'
+            ? await extractDocxText(bytes)
+            : detected.mimeType === 'text/markdown' ||
+                detected.mimeType === 'text/plain'
+              ? extractPlainText(bytes)
+              : null;
       return await assets.createUploaded({
         ownerSubjectId: input.identity.studentId,
         spaceId: input.spaceId,
@@ -235,9 +265,9 @@ export async function persistFetchedWebPageAsset(input: {
 export async function listOwnedAssets(
   identity: AnonymousIdentity,
 ): Promise<readonly AssetSnapshot[]> {
-  const session = await loadOwnedTeachingSession(identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return listOwnedSpaceAssets(identity, session.id);
+  const target = await loadOwnedTeachingGatewayTarget(identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return listOwnedSpaceAssets(identity, target.notebookId);
 }
 
 export async function listOwnedSpaceAssets(
@@ -247,5 +277,17 @@ export async function listOwnedSpaceAssets(
   return assets.listOwnedSpace({
     ownerSubjectId: identity.studentId,
     spaceId,
+  });
+}
+
+export async function listOwnedSpaceAssetsPage(
+  identity: AnonymousIdentity,
+  spaceId: string,
+  input: { limit: number; cursor: TemporalIdCursor | null },
+): Promise<CursorPage<AssetSnapshot>> {
+  return assets.listAccessibleSpacePage({
+    ownerSubjectId: identity.studentId,
+    spaceId,
+    ...input,
   });
 }

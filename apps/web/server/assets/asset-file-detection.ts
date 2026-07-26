@@ -51,6 +51,28 @@ function detectBinaryFile(bytes: Uint8Array): DetectedAssetFile | null {
   ) {
     return { kind: 'image', mimeType: 'image/webp', extension: 'webp' };
   }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
+    (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08)
+  ) {
+    // ZIP 中央目录的条目名不压缩；同时出现 OOXML 清单和 Word 主文档，
+    // 才把容器识别为 DOCX，普通 ZIP 不因文件后缀被误收。
+    const signatureWindow = new TextDecoder('latin1').decode(bytes);
+    if (
+      signatureWindow.includes('[Content_Types].xml') &&
+      signatureWindow.includes('word/document.xml')
+    ) {
+      return {
+        kind: 'document',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        extension: 'docx',
+      };
+    }
+  }
   return null;
 }
 

@@ -50,7 +50,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
+      truncate table security_audit_events, object_deletion_outbox, lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
       restart identity cascade
     `);
   });
@@ -183,6 +183,18 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       .where(eq(schema.spaces.id, conversation.spaceId))
       .limit(1);
     expect(notebook?.title).toBe('分数函数复习');
+    await expect(
+      getDatabase().select().from(schema.securityAuditEvents),
+    ).resolves.toMatchObject([
+      {
+        actorUserId: 'rename-owner',
+        eventType: 'notebook.renamed',
+        resourceType: 'notebook',
+        resourceId: conversation.spaceId,
+        outcome: 'succeeded',
+        metadata: { conversation_id: conversation.id },
+      },
+    ]);
 
     await expect(
       repository.renameOwned({
@@ -218,6 +230,20 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     });
     expect(started.replayed).toBe(false);
     expect(started.assistantMessage.status).toBe('streaming');
+    const [operationIdentity] = await getDatabase()
+      .select({
+        actorUserId: schema.agentOperations.actorUserId,
+        agentId: schema.agentOperations.agentId,
+        notebookId: schema.agentOperations.notebookId,
+      })
+      .from(schema.agentOperations)
+      .where(eq(schema.agentOperations.id, started.turnId))
+      .limit(1);
+    expect(operationIdentity).toMatchObject({
+      actorUserId: 'general-turn-user',
+      notebookId: conversation.spaceId,
+    });
+    expect(operationIdentity?.agentId).toBeTruthy();
 
     await turns.settleTurn({
       conversationId: conversation.id,

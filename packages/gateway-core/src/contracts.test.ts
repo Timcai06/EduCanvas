@@ -124,7 +124,9 @@ describe('Gateway contracts', () => {
   it('keeps shared Notebook role permissions explicit', () => {
     expect(notebookRoleAllows('viewer', 'notebook.read')).toBe(true);
     expect(notebookRoleAllows('viewer', 'conversation.reply')).toBe(false);
-    expect(notebookRoleAllows('contributor', 'artifact.write')).toBe(true);
+    expect(notebookRoleAllows('contributor', 'artifact.write')).toBe(false);
+    expect(notebookRoleAllows('editor', 'artifact.write')).toBe(true);
+    expect(notebookRoleAllows('editor', 'membership.manage')).toBe(false);
     expect(notebookRoleAllows('editor', 'notebook.manage')).toBe(false);
     expect(notebookRoleAllows('owner', 'notebook.manage')).toBe(true);
   });

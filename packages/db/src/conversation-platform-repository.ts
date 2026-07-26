@@ -1,6 +1,14 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import type { NotebookPermission } from '@educanvas/gateway-core';
+import { and, asc, desc, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { getDb } from './client';
 import { ensurePersonalIdentity } from './gateway-repository';
+import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
+import { appendSecurityAuditEvent } from './security-audit-repository';
 import {
   conversationMessages,
   conversations,
@@ -9,6 +17,10 @@ import {
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
+type DatabaseTransaction = Parameters<
+  Parameters<Database['transaction']>[0]
+>[0];
+type DatabaseExecutor = Database | DatabaseTransaction;
 
 export interface PlatformConversationSnapshot {
   id: string;
@@ -73,6 +85,36 @@ function toMessage(
   };
 }
 
+async function requireConversationAccess(
+  executor: DatabaseExecutor,
+  input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    requiredPermission: NotebookPermission;
+    now?: Date;
+  },
+) {
+  const [conversation] = await executor
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.id, input.conversationId),
+        eq(conversations.status, 'active'),
+      ),
+    )
+    .limit(1);
+  if (!conversation) throw new PlatformConversationOwnershipError();
+  const access = await requireNotebookAccess(executor, {
+    notebookId: conversation.spaceId,
+    trustedSubjectId: input.trustedSubjectId,
+    requiredPermission: input.requiredPermission,
+    now: input.now,
+  }).catch(() => null);
+  if (!access) throw new PlatformConversationOwnershipError();
+  return conversation;
+}
+
 /** P1 通用持久化边界；不读取 lesson_sessions 或任何 K12 领域表。 */
 export class DrizzlePlatformConversationRepository {
   constructor(private readonly providedDatabase?: Database) {}
@@ -85,37 +127,71 @@ export class DrizzlePlatformConversationRepository {
     conversationId: string;
     trustedSubjectId: string;
   }): Promise<PlatformConversationSnapshot | null> {
-    const [conversation] = await this.database
-      .select()
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, input.conversationId),
-          eq(conversations.ownerSubjectId, input.trustedSubjectId),
-          eq(conversations.status, 'active'),
-        ),
-      )
-      .limit(1);
-    return conversation ? toConversation(conversation) : null;
+    const conversation = await requireConversationAccess(this.database, {
+      ...input,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    return conversation === null ? null : toConversation(conversation);
   }
 
-  /** 侧栏历史列表:按最近活动排序,只返回本主体的 active 会话公开投影。 */
+  /** 侧栏历史列表：按最近活动排序，只返回当前主体可读的 active 会话。 */
   async listOwnedRecent(input: {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformConversationSnapshot[]> {
+    return (await this.listAccessibleRecentPage(input)).items;
+  }
+
+  async listAccessibleRecentPage(input: {
+    trustedSubjectId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<PlatformConversationSnapshot>> {
+    const limit = boundedPageLimit(input.limit ?? 30);
+    const cursorCondition = input.cursor
+      ? or(
+          lt(conversations.lastActivityAt, input.cursor.timestamp),
+          and(
+            eq(conversations.lastActivityAt, input.cursor.timestamp),
+            lt(conversations.id, input.cursor.id),
+          ),
+        )
+      : undefined;
     const rows = await this.database
       .select()
       .from(conversations)
+      .innerJoin(
+        notebookMemberships,
+        and(
+          eq(notebookMemberships.notebookId, conversations.spaceId),
+          eq(notebookMemberships.userId, input.trustedSubjectId),
+        ),
+      )
       .where(
         and(
-          eq(conversations.ownerSubjectId, input.trustedSubjectId),
           eq(conversations.status, 'active'),
+          isNull(notebookMemberships.revokedAt),
+          or(
+            isNull(notebookMemberships.expiresAt),
+            gt(notebookMemberships.expiresAt, new Date()),
+          ),
+          cursorCondition,
         ),
       )
       .orderBy(desc(conversations.lastActivityAt), desc(conversations.id))
-      .limit(Math.min(input.limit ?? 30, 100));
-    return rows.map(toConversation);
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const items = pageRows.map(({ conversations: conversation }) =>
+      toConversation(conversation),
+    );
+    const last = pageRows.at(-1)?.conversations;
+    return {
+      items,
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.lastActivityAt, id: last.id }
+          : null,
+    };
   }
 
   /** 历史记录删除采用归档语义，保留账本和外键完整性，避免 UI 删除导致数据级误删。 */
@@ -125,22 +201,38 @@ export class DrizzlePlatformConversationRepository {
     now?: Date;
   }): Promise<boolean> {
     const now = input.now ?? new Date();
-    const [archived] = await this.database
-      .update(conversations)
-      .set({
-        status: 'archived',
-        archivedAt: now,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(conversations.id, input.conversationId),
-          eq(conversations.ownerSubjectId, input.trustedSubjectId),
-          eq(conversations.status, 'active'),
-        ),
-      )
-      .returning({ id: conversations.id });
-    return archived !== undefined;
+    const conversation = await requireConversationAccess(this.database, {
+      ...input,
+      requiredPermission: 'notebook.manage',
+      now,
+    }).catch(() => null);
+    if (!conversation) return false;
+    return this.database.transaction(async (transaction) => {
+      const [archived] = await transaction
+        .update(conversations)
+        .set({
+          status: 'archived',
+          archivedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(conversations.id, input.conversationId),
+            eq(conversations.status, 'active'),
+          ),
+        )
+        .returning({ id: conversations.id });
+      if (!archived) return false;
+      await appendSecurityAuditEvent(transaction, {
+        actorUserId: input.trustedSubjectId,
+        eventType: 'conversation.archived',
+        resourceType: 'conversation',
+        resourceId: archived.id,
+        outcome: 'succeeded',
+        occurredAt: now,
+      });
+      return true;
+    });
   }
 
   /**
@@ -159,17 +251,12 @@ export class DrizzlePlatformConversationRepository {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
-      const [owned] = await transaction
-        .select({ id: conversations.id, spaceId: conversations.spaceId })
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, input.conversationId),
-            eq(conversations.ownerSubjectId, input.trustedSubjectId),
-            eq(conversations.status, 'active'),
-          ),
-        )
-        .limit(1);
+      const owned = await requireConversationAccess(transaction, {
+        conversationId: input.conversationId,
+        trustedSubjectId: input.trustedSubjectId,
+        requiredPermission: 'notebook.manage',
+        now,
+      }).catch(() => null);
       if (!owned) return null;
 
       const [renamed] = await transaction
@@ -178,7 +265,6 @@ export class DrizzlePlatformConversationRepository {
         .where(
           and(
             eq(conversations.id, owned.id),
-            eq(conversations.ownerSubjectId, input.trustedSubjectId),
             eq(conversations.status, 'active'),
           ),
         )
@@ -188,15 +274,18 @@ export class DrizzlePlatformConversationRepository {
       const [renamedSpace] = await transaction
         .update(spaces)
         .set({ title, updatedAt: now })
-        .where(
-          and(
-            eq(spaces.id, owned.spaceId),
-            eq(spaces.ownerSubjectId, input.trustedSubjectId),
-            eq(spaces.status, 'active'),
-          ),
-        )
+        .where(and(eq(spaces.id, owned.spaceId), eq(spaces.status, 'active')))
         .returning({ id: spaces.id });
       if (!renamedSpace) throw new Error('Notebook Space重命名失败');
+      await appendSecurityAuditEvent(transaction, {
+        actorUserId: input.trustedSubjectId,
+        eventType: 'notebook.renamed',
+        resourceType: 'notebook',
+        resourceId: owned.spaceId,
+        outcome: 'succeeded',
+        metadata: { conversation_id: owned.id },
+        occurredAt: now,
+      });
       return toConversation(renamed);
     });
   }
@@ -279,18 +368,12 @@ export class DrizzlePlatformConversationRepository {
     }
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
-      const [owned] = await transaction
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, input.conversationId),
-            eq(conversations.ownerSubjectId, input.trustedSubjectId),
-            eq(conversations.status, 'active'),
-          ),
-        )
-        .limit(1);
-      if (!owned) throw new PlatformConversationOwnershipError();
+      await requireConversationAccess(transaction, {
+        conversationId: input.conversationId,
+        trustedSubjectId: input.trustedSubjectId,
+        requiredPermission: 'conversation.reply',
+        now,
+      });
       const [message] = await transaction
         .insert(conversationMessages)
         .values({
@@ -316,17 +399,11 @@ export class DrizzlePlatformConversationRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformMessageSnapshot[]> {
-    const [owned] = await this.database
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, input.conversationId),
-          eq(conversations.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
-      .limit(1);
-    if (!owned) throw new PlatformConversationOwnershipError();
+    await requireConversationAccess(this.database, {
+      conversationId: input.conversationId,
+      trustedSubjectId: input.trustedSubjectId,
+      requiredPermission: 'notebook.read',
+    });
     const limit = Math.max(1, Math.min(input.limit ?? 100, 100));
     const rows = await this.database
       .select()

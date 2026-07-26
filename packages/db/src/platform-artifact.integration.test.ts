@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ArtifactJobLifecycleError,
+  ArtifactIdempotencyConflictError,
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
 } from './platform-artifact-repository';
@@ -65,13 +66,23 @@ describeWithDatabase('平台 Artifact 仓储', () => {
 
   beforeEach(async () => {
     await database!.execute(
-      sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, spaces restart identity cascade`,
+      sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, notebook_memberships, spaces, personal_agents, platform_users restart identity cascade`,
     );
+    await database!.insert(schema.platformUsers).values([
+      { id: owner, kind: 'registered', status: 'active' },
+      { id: stranger, kind: 'registered', status: 'active' },
+    ]);
     const [space] = await database!
       .insert(schema.spaces)
       .values({ ownerSubjectId: owner, title: '测试空间' })
       .returning();
     spaceId = space!.id;
+    await database!.insert(schema.notebookMemberships).values({
+      notebookId: spaceId,
+      userId: owner,
+      role: 'owner',
+      grantedByUserId: owner,
+    });
   });
 
   afterAll(async () => {
@@ -106,6 +117,52 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       repository.getArtifact({
         artifactId: artifact.id,
         trustedSubjectId: stranger,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+  });
+
+  it('Notebook协作者按角色共享产物且viewer保持只读', async () => {
+    const editor = 'subject-editor-1';
+    const viewer = 'subject-viewer-1';
+    await database!.insert(schema.platformUsers).values([
+      { id: editor, kind: 'registered', status: 'active' },
+      { id: viewer, kind: 'registered', status: 'active' },
+    ]);
+    await database!.insert(schema.notebookMemberships).values([
+      {
+        notebookId: spaceId,
+        userId: editor,
+        role: 'editor',
+        grantedByUserId: owner,
+      },
+      {
+        notebookId: spaceId,
+        userId: viewer,
+        role: 'viewer',
+        grantedByUserId: owner,
+      },
+    ]);
+
+    const created = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: editor,
+      kind: 'mind_map',
+      trustTier: 'tier1',
+      title: '协作产物',
+    });
+    await expect(
+      repository.getArtifact({
+        artifactId: created.id,
+        trustedSubjectId: viewer,
+      }),
+    ).resolves.toMatchObject({ id: created.id });
+    await expect(
+      repository.createArtifact({
+        spaceId,
+        trustedSubjectId: viewer,
+        kind: 'mind_map',
+        trustTier: 'tier1',
+        title: '越权创建',
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
@@ -186,6 +243,35 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
+  it('手动产物创建使用服务端指纹安全重放', async () => {
+    const input = {
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'note',
+      trustTier: 'tier1' as const,
+      title: '幂等笔记',
+      content: { contentVersion: 1, markdown: '# 同一份' },
+      generatedBy: 'user:manual',
+      idempotencyKey: 'manual-note-1',
+      requestFingerprint: 'a'.repeat(64),
+    };
+    const first = await manualRepository.createWithInitialVersion(input);
+    const replay = await manualRepository.createWithInitialVersion(input);
+
+    expect(first.replayed).toBe(false);
+    expect(replay).toMatchObject({
+      replayed: true,
+      artifact: { id: first.artifact.id },
+      version: { id: first.version.id },
+    });
+    await expect(
+      manualRepository.createWithInitialVersion({
+        ...input,
+        requestFingerprint: 'b'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(ArtifactIdempotencyConflictError);
+  });
+
   it('Studio 按 Notebook Space 聚合，不依赖产物是否挂接 Conversation', async () => {
     const first = await createArtifact();
     const [otherSpace] = await database!
@@ -193,6 +279,12 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       .values({ ownerSubjectId: owner, title: '另一本笔记本' })
       .returning();
     if (!otherSpace) throw new Error('第二个Space创建失败');
+    await database!.insert(schema.notebookMemberships).values({
+      notebookId: otherSpace.id,
+      userId: owner,
+      role: 'owner',
+      grantedByUserId: owner,
+    });
     await repository.createArtifact({
       spaceId: otherSpace.id,
       trustedSubjectId: owner,
@@ -212,7 +304,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         spaceId,
         trustedSubjectId: stranger,
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
   it('版本单调递增,首个版本使产物转为 active,版本列表按新到旧', async () => {

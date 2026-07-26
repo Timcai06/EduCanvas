@@ -3,7 +3,10 @@ import 'server-only';
 import { jsonError } from './request-security';
 
 export type JsonRequestValidationCode =
-  'invalid_content_type' | 'request_too_large' | 'invalid_json';
+  | 'invalid_content_type'
+  | 'request_too_large'
+  | 'invalid_json'
+  | 'invalid_idempotency_key';
 
 export class JsonRequestValidationError extends Error {
   override readonly name = 'JsonRequestValidationError';
@@ -89,6 +92,17 @@ export async function readLimitedJsonRequest(
   }
 }
 
+/** 可选写请求幂等键；只接受有界可打印标识，禁止把凭证或任意正文塞入 Header。 */
+export function readIdempotencyKey(request: Request): string | null {
+  const value = request.headers.get('idempotency-key');
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(normalized)) {
+    throw new JsonRequestValidationError('invalid_idempotency_key');
+  }
+  return normalized;
+}
+
 export function jsonRequestErrorResponse(
   error: JsonRequestValidationError,
 ): Response {
@@ -97,6 +111,9 @@ export function jsonRequestErrorResponse(
   }
   if (error.code === 'request_too_large') {
     return jsonError(413, error.code, '请求内容太大，请精简后再提交。');
+  }
+  if (error.code === 'invalid_idempotency_key') {
+    return jsonError(400, error.code, '幂等键格式不正确。');
   }
   return jsonError(400, 'invalid_request', '请求格式不正确。');
 }

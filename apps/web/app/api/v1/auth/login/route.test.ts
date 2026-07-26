@@ -86,13 +86,14 @@ describe('POST /api/v1/auth/login', () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('2');
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'auth_rate_limited',
         message: '登录尝试过于频繁。',
         retryAfterMs: 1_250,
       },
     });
+    expect(response.headers.get('x-request-id')).toBeTruthy();
     expect(authMocks.recordFailure).toHaveBeenCalledWith('login:student');
   });
 

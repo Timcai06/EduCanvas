@@ -98,7 +98,7 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 
 ## 五、当前实现状态
 
-截至 2026-07-25，已经落地：
+截至 2026-07-26，已经落地：
 
 - `canvas-protocol` 已定义浏览器安全的 `CanvasResource`、Renderer Manifest、
   Runtime要求与标准错误。该协议只描述服务端授权后的资源投影，不携带内容本体、
@@ -108,7 +108,9 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
   versionId，没有数字序号时`sequence=null`。Artifact Adapter已在现有Artifact
   Detail组合层附加同一投影，覆盖思维导图、Slides、闪卡、笔记与`audio_overview`，
   并依据真实版本和生成任务收敛processing/ready/failed/unavailable状态；
-- 两个Adapter都只在现有Repository完成主体与Notebook归属校验后运行。动作、信任层、
+- 两个Adapter都只在Repository按有效`notebook_memberships`完成主体、过期/撤销状态和
+  角色权限校验后运行；不存在、跨用户、跨Notebook和权限不足不暴露差异。Source与
+  Artifact的`allowedActions`由当前有效成员角色决定，viewer只读。动作、信任层、
   Renderer和Runtime来自服务端白名单策略；客户端同名字段、对象存储键、私有判分信息、
   原始Prompt、Provider响应与堆栈不参与投影；有界只读接口
   `GET /api/v1/canvas/resources/{resourceKind}/{resourceId}`只接受资源种类与ID，
@@ -126,6 +128,11 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
   进入统一 Canvas 工作面；二进制只经同源、逐次所有权校验的私有端点以内联
   `nosniff` 响应读取，Markdown不执行原始HTML，DOCX沿用服务端有界转换，
   对象存储键不进入公共契约；
+- Source上传会为不可变版本登记`original/text`表现能力和有界处理任务事实；DOCX先校验
+  OOXML容器再提取正文。representation与job不复制原文件，也不成为第三个内容事实源；
+- Source删除在tombstone事务内写对象删除Outbox，由Worker以行锁、退避和稳定错误码
+  幂等清理本地私有对象；安全审计账本已覆盖Notebook重命名/Conversation归档。Artifact
+  创建支持可选幂等键和请求指纹，Notebook/Source/Artifact列表提供兼容的Cursor分页；
 - Web Canvas 已有桌面 `region` 和移动端/全屏 `dialog` 语义。
 
 尚未落地：
@@ -133,6 +140,7 @@ HTML/JavaScript、未来审计过的 React/GSAP/Motion/Three.js 依赖包在隔�
 - 消费Renderer Manifest的Web Registry；当前页面仍沿用既有Source Preview与Artifact
   Renderer分发，尚未改由`canvasResource.renderer`驱动；
 - Source 与 Artifact 共用的页面、时间轴、引用定位和 Renderer Registry 协议；当前文件预览仍是第一阶段的类型分支；
+- 全量认证、成员变更、连接撤销和管理操作的安全审计覆盖，以及对象删除残留巡检/S3适配；
 - 持久的沙箱应用 Artifact、审计依赖包和版本化桥接；
 - 生图、真实音视频生成、代码执行与机器学习 Runtime；
 - Runtime 配额、数据集快照、运行产物和完整跨入口恢复；

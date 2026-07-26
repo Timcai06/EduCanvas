@@ -5,6 +5,7 @@ import { createWebConnectionService } from '@/server/gateway/connections';
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
   JsonRequestValidationError,
@@ -37,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(400, 'invalid_request', '连接参数不正确。');
   }
   try {
-    return Response.json(
+    return jsonResponse(
       await createWebConnectionService().connect({
         userId: identity.studentId,
         request: parsed.data,

@@ -203,6 +203,7 @@ export class DrizzleStudyDiagnosticRepository {
           }
           return {
             attemptId: createdAttempt.id,
+            goalId: input.goalId,
             questionId: answer.questionId,
             objectiveId: objective.id,
             selectedOptionId: answer.selectedOptionId,

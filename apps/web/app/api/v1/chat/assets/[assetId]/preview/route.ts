@@ -1,5 +1,5 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { jsonError } from '@/server/http/request-security';
+import { jsonError, jsonResponse } from '@/server/http/request-security';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
 import {
   AssetPreviewError,
@@ -31,7 +31,7 @@ export async function GET(
       spaceId: conversation.spaceId,
       assetId: parsed.data.assetId,
     });
-    return Response.json(detail);
+    return jsonResponse(detail);
   } catch (error) {
     if (error instanceof SourceResourceProjectionError) {
       return jsonError(error.status, error.code, '这个来源暂时不能预览。');

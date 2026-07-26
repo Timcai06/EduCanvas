@@ -10,6 +10,7 @@ export {
   AssetAccessError,
   AssetPersistenceError,
   DrizzleAssetRepository,
+  type AssetAccessPolicy,
   type AssetSnapshot,
   type CreateUploadedAssetInput,
   type MaterializedAssetVersion,
@@ -76,6 +77,7 @@ export {
 export { DrizzleGatewayConnectionRepository } from './gateway-connection-repository';
 export {
   ARTIFACT_GENERATE_TASK,
+  ArtifactIdempotencyConflictError,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
@@ -326,3 +328,26 @@ export {
   type SessionSourceBindingSnapshot,
   type TurnSourceVersionSnapshot,
 } from './knowledge-retrieval-repository';
+export {
+  NotebookAccessNotFoundError,
+  requireNotebookAccess,
+  resolveNotebookAccess,
+  type NotebookAccessExecutor,
+  type NotebookAccessSnapshot,
+} from './notebook-access';
+export {
+  DrizzleSecurityAuditRepository,
+  appendSecurityAuditEvent,
+  type SecurityAuditEventInput,
+  type SecurityAuditOutcome,
+} from './security-audit-repository';
+export {
+  DrizzleObjectDeletionOutboxRepository,
+  MAX_OBJECT_DELETION_ATTEMPTS,
+  type ObjectDeletionClaim,
+} from './object-deletion-outbox-repository';
+export {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';

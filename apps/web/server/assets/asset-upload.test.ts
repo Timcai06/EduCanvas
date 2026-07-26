@@ -20,7 +20,7 @@ vi.mock('@educanvas/db', async () => {
   };
 });
 vi.mock('@/server/teaching/learning-session', () => ({
-  loadOwnedTeachingSession: vi.fn(),
+  loadOwnedTeachingGatewayTarget: vi.fn(),
 }));
 vi.mock('@/server/assets/asset-storage', () => ({
   storeAssetBytes: vi.fn(),
@@ -30,11 +30,17 @@ vi.mock('unpdf', () => ({
   extractText: vi.fn(),
   getDocumentProxy: vi.fn(),
 }));
+vi.mock('mammoth', () => ({
+  default: {
+    extractRawText: vi.fn(),
+  },
+}));
 
-import { loadOwnedTeachingSession } from '@/server/teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
 import { removeStoredAsset, storeAssetBytes } from './asset-storage';
 import { uploadOwnedAsset } from './asset-upload';
 import { extractText, getDocumentProxy } from 'unpdf';
+import mammoth from 'mammoth';
 
 const identity = {
   token: 'token',
@@ -76,15 +82,16 @@ describe('uploadOwnedAsset', () => {
     vi.clearAllMocks();
     drizzleRepo.createUploaded.mockReset();
     drizzleRepo.listOwnedSpace.mockReset();
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockReset?.();
+    (loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>).mockReset?.();
     (storeAssetBytes as ReturnType<typeof vi.fn>).mockReset?.();
     (removeStoredAsset as ReturnType<typeof vi.fn>).mockReset?.();
     (extractText as ReturnType<typeof vi.fn>).mockReset?.();
     (getDocumentProxy as ReturnType<typeof vi.fn>).mockReset?.();
+    vi.mocked(mammoth.extractRawText).mockReset();
 
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 'space-1',
-    });
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({ notebookId: 'space-1' });
     drizzleRepo.createUploaded.mockResolvedValue(snapshot('asset-1'));
     vi.mocked(storeAssetBytes).mockResolvedValue({
       storageKey: 'assets/a',
@@ -120,10 +127,35 @@ describe('uploadOwnedAsset', () => {
     );
   });
 
-  it('没有教学会话时直接返回会话未找到错误', async () => {
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue(
-      null,
+  it('验证DOCX容器并保存可检索正文', async () => {
+    vi.mocked(mammoth.extractRawText).mockResolvedValue({
+      value: ' 一元二次方程 ',
+      messages: [],
+    });
+    const docxBytes = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml word/document.xml',
     );
+
+    await uploadOwnedAsset({
+      identity,
+      file: new File([docxBytes], 'lesson.docx'),
+      scope: 'space',
+    });
+
+    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        extractedText: '一元二次方程',
+        outcome: { status: 'ready' },
+      }),
+    );
+  });
+
+  it('没有教学会话时直接返回会话未找到错误', async () => {
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(null);
 
     const promise = uploadOwnedAsset({
       identity,

@@ -32,7 +32,7 @@ function resolveTestDatabaseUrl() {
 const testDatabaseUrl = resolveTestDatabaseUrl();
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
 const connection = testDatabaseUrl
-  ? postgres(testDatabaseUrl, { max: 12 })
+  ? postgres(testDatabaseUrl, { max: 4 })
   : null;
 const database = connection ? drizzle(connection, { schema }) : null;
 const baseTime = new Date('2026-07-15T08:00:00.000Z');

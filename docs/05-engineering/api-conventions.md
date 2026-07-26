@@ -10,6 +10,8 @@
 - ID不使用可猜测的连续整数暴露给客户端；
 - 分页默认使用Cursor；
 - 错误返回稳定错误码，不让前端解析错误文本；
+- 身份相关JSON响应统一使用`Cache-Control: private, no-store`、
+  `X-Content-Type-Options: nosniff`和`X-Request-Id`；
 - 写操作支持幂等键；
 - 长任务返回`job_id`；
 - 流式文本使用SSE，双向实时音频使用WebRTC或WebSocket。
@@ -40,6 +42,14 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
 
 当前Web兼容读取面以additive字段接入Adapter，不删除或改名原有字段：
 
+- `GET /api/v1/chat/conversations`、`/chat/assets`、`/chat/artifacts`保留原数组字段，
+  并新增`page.nextCursor`；`limit`范围为1..100，`cursor`是服务端编码的
+  `updatedAt/createdAt + id`稳定游标，非法值返回`invalid_pagination/400`；
+- `POST /api/v1/chat/artifacts`可选接收`Idempotency-Key`（1..128位受限标识）。
+  服务端保存规范化请求的SHA-256指纹；同键同请求安全重放返回200和`replayed:true`，
+  首次创建返回201，键复用到不同请求返回`idempotency_conflict/409`。Header不承载
+  Prompt、Credential或正文；
+
 - `GET /api/v1/canvas/resources/{resourceKind}/{resourceId}`返回
   `{resource: CanvasResource}`，其中`resourceKind`只允许`source/artifact`。该接口
   从服务端身份和当前Notebook解析授权范围，不接受客户端提交的归属或能力字段；
@@ -55,6 +65,12 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
   既有`artifact_not_found/404`；统一Canvas读取接口使用
   `resource_not_found/404`。额外字段不改变现有Preview、Artifact Detail、消息末尾
   Artifact或Studio消费者行为，Web Renderer Registry尚未迁移。
+
+成员权限以数据库中的有效Notebook成员关系为唯一依据：`notebook.read`控制资源读取，
+`source.write/artifact.write`控制创建与修改；Source删除仅允许owner/editor角色。
+owner可管理Notebook和成员，editor可读写内容但不能管理成员，
+contributor只读并可回复既有Conversation，viewer只读。客户端提供的owner、role、
+permission或action字段全部忽略。
 
 应用事件包含 `turn.started`、消息 delta/引用、Tool 生命周期、approval、Artifact 生命周期和 `turn.completed/failed/cancelled`。已知事件使用 strict Schema；Tool 完成事件只允许最多 1000 字符的安全摘要，不接受原始参数、输出、异常或 Secret。一个事件前缀必须以唯一 `turn.started` 开始、全部属于同一 Operation，终态出现后不得再有事件。
 
@@ -178,10 +194,15 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
   "error": {
     "code": "COURSE_NOT_FOUND",
     "message": "课程不存在或无权访问",
-    "request_id": "req_xxx"
+    "requestId": "req_xxx"
   }
 }
 ```
+
+Web兼容API保留既有错误码大小写与字段，并以additive方式增加`requestId`；Gateway
+可以继续使用其标准大写错误码，但两者必须由服务端内部错误分类映射，客户端不得
+通过文案判断重试或授权分支。成功与失败的身份相关JSON响应都禁止被浏览器或中间
+代理缓存；二进制版本资源另行定义ETag、Range和缓存策略。
 
 ## 版本变化
 

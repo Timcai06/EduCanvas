@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -102,6 +103,10 @@ export const learningGoals = pgTable(
     uniqueIndex('learning_goals_notebook_active_unique')
       .on(table.notebookId)
       .where(sql`${table.status} = 'active'`),
+    uniqueIndex('learning_goals_id_student_unique').on(
+      table.id,
+      table.studentId,
+    ),
     index('learning_goals_student_recent_idx').on(
       table.studentId,
       table.status,
@@ -152,6 +157,10 @@ export const learningObjectives = pgTable(
     uniqueIndex('learning_objectives_goal_key_unique').on(
       table.goalId,
       table.objectiveKey,
+    ),
+    uniqueIndex('learning_objectives_id_goal_unique').on(
+      table.id,
+      table.goalId,
     ),
     uniqueIndex('learning_objectives_goal_node_unique').on(
       table.goalId,
@@ -207,6 +216,20 @@ export const diagnosticAttempts = pgTable(
       table.submittedAt,
       table.id,
     ),
+    uniqueIndex('diagnostic_attempts_id_goal_unique').on(
+      table.id,
+      table.goalId,
+    ),
+    foreignKey({
+      columns: [table.goalId, table.studentId],
+      foreignColumns: [learningGoals.id, learningGoals.studentId],
+      name: 'diagnostic_attempts_goal_student_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.sessionId, table.studentId],
+      foreignColumns: [lessonSessions.id, lessonSessions.studentId],
+      name: 'diagnostic_attempts_session_student_fk',
+    }).onDelete('cascade'),
     check(
       'diagnostic_attempts_shape_check',
       sql`${table.attemptedItems} between 3 and 10 and ${table.correctItems} between 0 and ${table.attemptedItems} and char_length(${table.definitionVersion}) between 1 and 128 and ${table.answerFingerprint} ~ '^[a-f0-9]{64}$'`,
@@ -221,6 +244,7 @@ export const diagnosticResponses = pgTable(
     attemptId: uuid('attempt_id')
       .notNull()
       .references(() => diagnosticAttempts.id, { onDelete: 'cascade' }),
+    goalId: uuid('goal_id'),
     questionId: text('question_id').notNull(),
     objectiveId: uuid('objective_id')
       .notNull()
@@ -234,6 +258,16 @@ export const diagnosticResponses = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.attemptId, table.questionId] }),
+    foreignKey({
+      columns: [table.attemptId, table.goalId],
+      foreignColumns: [diagnosticAttempts.id, diagnosticAttempts.goalId],
+      name: 'diagnostic_responses_attempt_goal_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.objectiveId, table.goalId],
+      foreignColumns: [learningObjectives.id, learningObjectives.goalId],
+      name: 'diagnostic_responses_objective_goal_fk',
+    }).onDelete('restrict'),
     check(
       'diagnostic_responses_text_check',
       sql`char_length(${table.questionId}) between 1 and 128 and char_length(${table.selectedOptionId}) between 1 and 128 and char_length(${table.gradingVersion}) between 1 and 128`,
