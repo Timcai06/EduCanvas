@@ -1,21 +1,85 @@
-<!-- PR标题按 `类型: 做了什么` 格式写，如 feat: add lesson canvas。Squash合并后它就是main上的提交说明 -->
+## Description
 
-## 做了什么
+<!-- Brief description of what this PR does -->
 
-## 为什么
+## Type of Change
 
-## 怎么验证的
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Refactoring (no functional changes)
 
-<!-- 写你自己实际运行/测试的过程和结果，最好有截图。"agent说没问题"不算验证 -->
+## Invariants
 
-## 风险与未完成项
+<!-- What invariants does this change preserve? -->
 
-<!-- 没有就写"无" -->
+- [ ] Security boundaries remain closed
+- [ ] Data consistency maintained
+- [ ] API contracts preserved
+- [ ] No cross-tenant data leakage
 
-## 自查清单
+## Compatibility
 
-- [ ] 我自己读过一遍完整 diff，理解每一处改动
-- [ ] 本地验证通过
-- [ ] 没有提交密钥、`.env`、个人信息或大文件
-- [ ] 行为、接口或数据结构有变化时，已更新 `docs/` 对应文档
-- [ ] PR 标题符合 `类型: 做了什么` 格式
+- [ ] Backward compatible
+- [ ] Forward compatible
+- [ ] Requires migration
+- [ ] Requires documentation update
+
+## Database Changes
+
+- [ ] No database changes
+- [ ] Schema migration added
+- [ ] Data migration required
+- [ ] Rollback plan documented
+
+## Permissions
+
+- [ ] No permission changes
+- [ ] New permissions added (document scope)
+- [ ] Permissions removed (document impact)
+
+## Failure Injection
+
+<!-- How was this change tested under failure conditions? -->
+
+- [ ] Network failure scenarios
+- [ ] Database unavailability
+- [ ] Provider timeout/error
+- [ ] Invalid input handling
+
+## Evidence
+
+<!-- What evidence supports this change? -->
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] E2E tests added/updated
+- [ ] Manual testing performed
+
+## Fallback
+
+- [ ] Feature flag available
+- [ ] Rollback plan documented
+- [ ] No fallback needed
+
+## Testing
+
+<!-- Describe the tests you ran to verify your changes -->
+
+```bash
+# List test commands run
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+```
+
+## Checklist
+
+- [ ] My code follows the style guidelines of this project
+- [ ] I have performed a self-review of my own code
+- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have made corresponding changes to the documentation
+- [ ] My changes generate no new warnings
+- [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] New and existing unit tests pass locally with my changes
