@@ -17,7 +17,9 @@ import {
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { createFetchWebPageTool, type FetchedWebPage } from '../tools/web-page';
+import { createPlanNoteTool } from '../tools/plan-note';
 import { resolveWebSearchTool } from '../tools/web-search';
+import type { WebOperationArtifacts } from './general-artifact-tool';
 import { webGeneralSources } from './general-turn-persistence';
 
 const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
@@ -73,6 +75,7 @@ export class WebOperationSources {
 /** 组装Web General本次可用Tool；静态能力不包含需按Actor实时解析的Node能力。 */
 export function createGeneralToolKernel(
   operationSources: WebOperationSources,
+  operationArtifacts: WebOperationArtifacts,
 ): {
   kernel: ToolKernel;
   staticCapabilities: readonly string[];
@@ -83,6 +86,18 @@ export function createGeneralToolKernel(
   );
   const searchTool = resolveWebSearchTool();
   const localAdapters = [
+    /* 无副作用的表达型工具：让模型能把「接下来打算做什么」变成一次可见的
+       工具调用，而不必新开一条绕过输出闸门的推理通道。见 tools/plan-note.ts。 */
+    adaptAgentTool(createPlanNoteTool(), {
+      capability: 'agent.plan_note',
+      risk: 'l0',
+      effect: 'read',
+    }),
+    adaptAgentTool(operationArtifacts.createTool(), {
+      capability: 'artifact.create',
+      risk: 'l1',
+      effect: 'write',
+    }),
     adaptAgentTool(fetchTool, {
       capability: 'web.fetch',
       risk: 'l1',

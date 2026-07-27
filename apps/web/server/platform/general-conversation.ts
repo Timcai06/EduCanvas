@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   DrizzlePlatformConversationRepository,
+  DrizzlePlatformArtifactTurnReferenceRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
   type PlatformConversationSnapshot,
@@ -23,15 +24,22 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const conversations = new DrizzlePlatformConversationRepository();
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
+const artifactReferences = new DrizzlePlatformArtifactTurnReferenceRepository();
 
 export interface GeneralChatPageData {
   conversation: PlatformConversationSnapshot;
   initialMessages: readonly InitialChatMessageDTO[];
 }
 
-async function readActiveConversationId(): Promise<string | null> {
+/** 只读取并校验 HttpOnly 当前对话游标；不得把畸形 Cookie 传入数据库 UUID 查询。 */
+export async function readActiveConversationId(): Promise<string | null> {
   const value = (await cookies()).get(ACTIVE_CONVERSATION_COOKIE)?.value;
   return value && UUID.test(value) ? value : null;
+}
+
+/** HTTP 边界在访问 PostgreSQL UUID 列之前使用同一规范校验。 */
+export function isValidConversationId(value: string): boolean {
+  return UUID.test(value);
 }
 
 /** 仅在显式Server Action成功创建Conversation后写入当前对话游标。 */
@@ -46,6 +54,10 @@ export async function writeActiveConversationCookie(
     path: '/',
     maxAge: COOKIE_MAX_AGE_SECONDS,
   });
+}
+
+export async function clearActiveConversationCookie(): Promise<void> {
+  (await cookies()).delete(ACTIVE_CONVERSATION_COOKIE);
 }
 
 export async function createGeneralConversation(
@@ -97,6 +109,21 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
     conversationId: conversation.id,
     trustedSubjectId: identity.studentId,
   });
+  const referencedArtifacts = await artifactReferences.listForOperations({
+    conversationId: conversation.id,
+    trustedSubjectId: identity.studentId,
+    operationIds: messages.map((message) => message.operationId),
+  });
+  const artifactsByOperation = new Map<
+    string,
+    (typeof referencedArtifacts)[number]['artifact'][]
+  >();
+  for (const reference of referencedArtifacts) {
+    artifactsByOperation.set(reference.operationId, [
+      ...(artifactsByOperation.get(reference.operationId) ?? []),
+      reference.artifact,
+    ]);
+  }
   const citationsByMessage = new Map<string, typeof citations>();
   for (const citation of citations) {
     citationsByMessage.set(citation.assistantMessageId, [
@@ -114,6 +141,18 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       status: message.role === 'user' ? 'completed' : message.status,
       content: message.content,
       parts: message.parts,
+      artifacts:
+        message.role === 'assistant'
+          ? (artifactsByOperation.get(message.operationId) ?? []).map(
+              (artifact) => ({
+                id: artifact.id,
+                kind: artifact.kind,
+                title: artifact.title,
+                status: artifact.status,
+                latestVersion: artifact.latestVersion,
+              }),
+            )
+          : undefined,
       citations:
         message.role === 'assistant'
           ? (citationsByMessage.get(message.id) ?? []).map((citation) => ({

@@ -11,8 +11,22 @@ import type {
 } from './ports';
 
 /**
- * Model Run 审计生命周期：Prompt hash、provider result 投影与 AuditedModelRunLifecycle。
- * 只负责单次模型运行的账本登记与结算，不拥有主循环；主编排仍在 service.ts。
+ * Model Run 审计生命周期 — 单次模型运行的账本登记与结算。
+ *
+ * ## 职责
+ *
+ * 1. **start()** — 创建 Model Run 记录 + 计算 Prompt Hash（SHA256 规范化 JSON）
+ * 2. **settle()** — 结算运行的最终状态（succeeded/failed/cancelled）+ Provider 元数据
+ *
+ * ## Prompt Hash（canonicalize）
+ *
+ * 确定性规范化：对象 key 排序、undefined 值过滤、数组递归处理。
+ * 同一 Prompt 永远产生相同 hash → 用于识别重复请求和审计。
+ *
+ * ## Replay 拒绝
+ *
+ * M4 Continuation 接入前，绝不对遗留 running Model Run 重放供应商副作用。
+ * replayed=true 的 createOrGet 直接抛错。
  */
 
 export interface ModelRunContext {

@@ -1,3 +1,20 @@
+/**
+ * EduCanvas Gateway 进程入口 — 独立 HTTP 服务（端口 3200）。
+ *
+ * ## 职责
+ *
+ * Gateway 是 Web/TUI/Telegram/Node 等多入口的统一接入层：
+ * - 身份认证（session cookie / bearer / channel binding / node pairing）
+ * - 路由解析（Principal → Notebook/Conversation）
+ * - Operation 编排（幂等、取消、事件持久化）
+ * - Turn Runner 适配（调用 Web 教学 Turn Application 或通用 Agent Turn）
+ *
+ * ## 依赖装配
+ *
+ * 启动时一次性构造所有 Drizzle Repository 实现，注入到 GatewayService。
+ * 与 Web 进程共享同一个 PostgreSQL 数据库。
+ */
+
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';

@@ -1,6 +1,45 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
+const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+
+function notebookSidebar(page: Page) {
+  return page.getByRole('complementary', { name: '笔记本侧栏' });
+}
+
+async function openStudioInput(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
+  ).toBeVisible();
+  return studio;
+}
+
+async function openStudioOutput(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('ArrowDown');
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
+  ).toBeVisible();
+  return studio;
+}
+
+async function closeStudio(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  await expect(
+    page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
+  ).toHaveCount(0);
+}
 
 async function activeConversationId(page: Page) {
   return (await page.context().cookies()).find(
@@ -31,6 +70,9 @@ async function createNotebook(
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await expect(composer).toBeEnabled();
   await expect(composer).toHaveValue('');
+  await expect(
+    page.getByRole('region', { name: 'EduCanvas 技术栈' }),
+  ).toBeVisible();
 }
 
 async function waitForUnavailableTurn(page: Page) {
@@ -73,7 +115,7 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
 
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   /* 产品决策:多模态 Agent 是第一身份,不存在"K12 模式"入口(student-ui-spec) */
   await expect(page.getByRole('link', { name: 'K12 学习模式' })).toHaveCount(0);
@@ -89,18 +131,15 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
   ).toBeVisible();
   /* 当前Notebook出现在列表(本 spec 的 turn 被 mock,服务端不落
      消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
-  await expect(
-    page.getByRole('navigation', { name: '笔记本' }).getByText('未命名笔记本'),
-  ).toBeVisible();
+  await expect(notebookSidebar(page).getByText('未命名笔记本')).toBeVisible();
 
-  /* U2 v1:来源常驻区在侧栏可见 */
+  /* 当前 Notebook 的来源与输出属于 Studio，不再混入历史列表。 */
   await expect(
-    page
-      .getByRole('navigation', { name: '笔记本' })
-      .getByText('来源', { exact: true }),
-  ).toBeVisible();
+    notebookSidebar(page).getByText('来源', { exact: true }),
+  ).toHaveCount(0);
+  const studio = await openStudioInput(page);
   await expect(
-    page.getByRole('button', { name: '上传 PDF 来源' }),
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
   ).toBeVisible();
 
   const cookieNames = (await context.cookies())
@@ -108,6 +147,102 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
     .map((cookie) => cookie.name);
   expect(cookieNames).toContain('__Host-educanvas_anonymous_identity');
   expect(cookieNames).toContain('__Host-educanvas_active_conversation');
+});
+
+test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async ({ page }) => {
+  const artifactId = '10000000-0000-4000-8000-000000000001';
+  await page.route('**/api/v1/chat/turn', async (route) => {
+    const turnId = 'artifact-turn-e2e';
+    const messageId = 'artifact-assistant-e2e';
+    const frame = (type: string, data: Record<string, unknown>) =>
+      `event: ${type}\ndata: ${JSON.stringify({
+        type,
+        schemaVersion: '1',
+        turnId,
+        ...data,
+      })}\n\n`;
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      body: [
+        frame('turn.accepted', {
+          studentMessageId: 'artifact-student-e2e',
+          assistantMessageId: messageId,
+          replayed: false,
+        }),
+        frame('message.delta', {
+          messageId,
+          delta: '我已经开始生成，并会把结果留在这段回答下面。',
+        }),
+        frame('artifact.proposed', {
+          artifactId,
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '函数思维导图',
+        }),
+        frame('turn.completed', { messageId }),
+      ].join(''),
+    });
+  });
+  await page.route(`**/api/v1/chat/artifacts/${artifactId}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        artifact: {
+          id: artifactId,
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '函数思维导图',
+          status: 'active',
+          latestVersion: 1,
+          fromConversation: true,
+          createdAt: '2026-07-25T00:00:00.000Z',
+          updatedAt: '2026-07-25T00:01:00.000Z',
+        },
+        version: {
+          version: 1,
+          content: {
+            contentVersion: 1,
+            root: { id: 'root', label: '函数思维导图' },
+          },
+          media: null,
+        },
+        versions: [
+          {
+            version: 1,
+            generatedBy: 'e2e:fixture',
+            revisionInstruction: null,
+            createdAt: '2026-07-25T00:01:00.000Z',
+          },
+        ],
+        latestJob: {
+          id: '20000000-0000-4000-8000-000000000002',
+          status: 'succeeded',
+          progress: 100,
+          failureCode: null,
+        },
+      }),
+    }),
+  );
+
+  await page.goto('/');
+  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
+  await composer.fill('生成函数思维导图');
+  await composer.press('Enter');
+
+  const output = page.getByRole('button', { name: '打开产物：函数思维导图' });
+  await expect(output).toBeVisible();
+  await output.click();
+  const canvas = page.getByRole('region', { name: '产物Canvas' });
+  await expect(
+    canvas.getByRole('heading', { name: '函数思维导图' }),
+  ).toBeVisible();
+  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await output.click();
+  await expect(
+    canvas.getByRole('heading', { name: '函数思维导图' }),
+  ).toBeVisible();
 });
 
 test('笔记本可反复切换，并整体恢复各自的消息', async ({ page }) => {
@@ -126,7 +261,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   ).toBeVisible();
   await waitForUnavailableTurn(page);
 
-  const notebooks = page.getByRole('navigation', { name: '笔记本' });
+  const notebooks = notebookSidebar(page);
   const firstConversationContent = page
     .getByRole('region', { name: 'AI 对话' })
     .getByText(firstPrompt, { exact: true });
@@ -140,23 +275,20 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
     .getByRole('textbox', { name: '向 EduCanvas 提问' })
     .fill(secondPrompt);
   await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
+  /* 乐观消息先进入对话；此刻 GSAP 入场可能仍在过渡。切换后的可见性在下方验证。 */
   await expect(
-    page
-      .getByRole('region', { name: 'AI 对话' })
-      .getByText(secondPrompt, { exact: true }),
-  ).toBeVisible();
+    page.getByRole('region', { name: 'AI 对话' }),
+  ).toContainText(secondPrompt);
   await waitForUnavailableTurn(page);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: new RegExp(firstPrompt) })
     .click();
   let chat = page.getByRole('region', { name: 'AI 对话' });
   await expect(chat.getByText(firstPrompt, { exact: true })).toBeVisible();
   await expect(chat.getByText(secondPrompt, { exact: true })).toHaveCount(0);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: new RegExp(secondPrompt) })
     .click();
   chat = page.getByRole('region', { name: 'AI 对话' });
@@ -227,28 +359,28 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     });
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible({
+  let studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toBeVisible({
     timeout: 15_000,
   });
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  let studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  await closeStudio(page);
+  studio = await openStudioOutput(page);
   await expect(studio.getByText('第一本视觉导图')).toBeVisible();
-  await studio.getByRole('button', { name: '关闭' }).click();
+  await closeStudio(page);
 
   await createNotebook(
     page,
-    page
-      .getByRole('navigation', { name: '笔记本' })
-      .getByRole('button', { name: '新建笔记本' }),
+    notebookSidebar(page).getByRole('button', { name: '新建笔记本' }),
     page
       .getByRole('region', { name: 'AI 对话' })
       .getByText(firstPrompt, { exact: true }),
   );
-  await expect(page.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toHaveCount(0);
+  await closeStudio(page);
+  studio = await openStudioOutput(page);
   await expect(studio.getByText('第一本视觉导图')).toHaveCount(0);
-  await studio.getByRole('button', { name: '关闭' }).click();
+  await closeStudio(page);
   await expect(
     page.evaluate(async (artifactId) => {
       const response = await fetch(`/api/v1/chat/artifacts/${artifactId}`);
@@ -256,17 +388,14 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     }, firstArtifact.id),
   ).resolves.toBe(404);
 
-  await page
-    .getByRole('navigation', { name: '笔记本' })
+  await notebookSidebar(page)
     .getByRole('button', { name: /第一本：机器视觉资料/ })
     .click();
-  await expect(page.getByText('第一本视觉讲义.pdf')).toBeVisible();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  await expect(
-    page
-      .getByRole('dialog', { name: '当前笔记本的 Studio' })
-      .getByText('第一本视觉导图'),
-  ).toBeVisible();
+  studio = await openStudioInput(page);
+  await expect(studio.getByText('第一本视觉讲义.pdf')).toBeVisible();
+  await closeStudio(page);
+  studio = await openStudioOutput(page);
+  await expect(studio.getByText('第一本视觉导图')).toBeVisible();
 });
 
 test('Scripted：搜索并读取多个网页后，以稳定编号展示可打开的原文引用', async ({

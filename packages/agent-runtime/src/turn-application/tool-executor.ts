@@ -35,7 +35,27 @@ interface ToolBatchContext {
   modelRun: ModelRunContext | undefined;
 }
 
-/** @internal 将Agent Loop的调用批次绑定到可信Tool Kernel上下文与稳定executionId。 */
+/**
+ * @internal Turn 工具执行器 — 将 Agent Loop 的模型调用批次绑定到可信 ToolKernel。
+ *
+ * ## 架构
+ *
+ * ```
+ * Agent Loop (模型→工具调用) → TurnToolExecutor → ToolKernel → Adapter 实际执行
+ *                               │
+ *                               └─ 生成稳定 executionId = SHA256(operationId:round:callId)
+ * ```
+ *
+ * ## 失败安全
+ *
+ * 如果 toolKernel/policy/modelRun 任一缺失 → 直接返回 CAPABILITY_UNAVAILABLE。
+ * 这保证不会在配置不完整时执行工具（如 Profile 未声明工具策略）。
+ *
+ * ## Tool Call ID 映射
+ *
+ * `register()` 预分配 executionId，`execute()` 时按 round+callId 查找。
+ * 如果 execute 时找不到 — RUNTIME_FAILED（注册与执行之间的状态不一致）。
+ */
 export class TurnToolExecutor {
   private readonly callIds = new Map<string, string>();
 

@@ -10,13 +10,15 @@
 
 已经接通：
 
-- S0 空对话入口、S1 对话态，以及按需打开的桌面 Canvas 侧栏/移动端 Canvas 模态；Assets、Studio、Progress 使用互斥抽屉；
-- 匿名课程启动、新建、恢复和最近学习记录；
+- Web 用户名账号、昵称/私有头像、登录/退出、原子密码与 session 轮换，以及历史会话归档；
+  local 部署的 Agent/Notebook 归属仍固定为 `local:owner`，账号只提供资料与凭据走查；
+- S0 空对话入口、S1 对话态，以及按需打开的桌面 Canvas 侧栏/移动端 Canvas 模态；历史侧栏只切换 Notebook，当前 Notebook 的来源与产物统一进入 Studio 的“文件输入 / 内容输出”两级弧形轮盘；
+- 显式学习者声明、Notebook Goal、短诊断、匿名课程启动、新建、恢复和最近学习记录；
 - `POST /api/v1/learn/turn` 的 EduCanvas SSE、显式取消、失败收敛、消息历史与刷新恢复；
 - 通过 `@educanvas/model-gateway` 注入真实 OpenAI-compatible Provider；未配置 Provider 时明确返回 unavailable，不回退到脚本回答；
 - 两阶段 `answer -> tools -> synthesis` 教学轮次、生产工具 `getStudentState` / `retrieveKnowledge`、输入/流式输出安全 Gate，以及消息、Model Run、Tool Call、Turn lease 和安全决策账本；
 - 通用PDF/图片Asset上传、匿名所有权、不可变版本、PDF文本物化、多Part消息、真实资产抽屉与刷新恢复；
-- `/settings` 通信方式设置、provider-neutral Connections BFF、Telegram pending 授权与撤销；微信/QQ 无资格时明确 disabled；
+- 头像档案抽屉内的通信方式设置、provider-neutral Connections BFF、Telegram pending 授权与撤销；微信/QQ 无资格时明确 disabled，旧 `/settings` 只作兼容重定向；
 - K1 PostgreSQL FTS、Turn快照、候选白名单、防伪引用持久化、SSE事件和引用UI；
 - Canvas服务端判分后的受控状态推进；只有可信当前状态为`ASSESS`时才提交完成信号；
 - 阶段一预置 `classification_game` 的公开渲染、服务端私有判分、掌握度更新和 Progress 回显；受控 `quiz` Renderer 与 render-only `pipeline_flow` Renderer 也已注册。
@@ -36,14 +38,18 @@
 
 - `app/layout.tsx`：全站根布局、字体和默认元数据。
 - `app/page.tsx`：项目首页入口。
-- `app/learn/page.tsx`：加载匿名学习页快照，呈现课程启动页或学习工作区。
-- `app/learn/actions.ts`：课程启动、新建、恢复与 Canvas 提交的 Server Action 边界，只返回公开 DTO。
+- `app/learn/page.tsx`：在学习计划、无答案短诊断与学习工作区三种服务端状态间切换。
+- `app/learn/actions.ts`：计划创建、诊断、新建、恢复与 Canvas 提交的 Server Action 边界，只返回公开 DTO。
+- `server/study/`：代码内受信课程版本、Goal/诊断应用服务与浏览器安全投影。
 - `app/api/v1/learn/turn/route.ts`：校验同源请求和匿名身份，创建教学 Turn 并返回 SSE。
 - `app/api/v1/assets/route.ts`：校验同源请求和匿名身份，上传或列出当前主体拥有的Asset。
 - `app/api/v1/learn/turn/[turnId]/cancel/route.ts`：学生显式停止当前回答的接口。
 - `app/design-qa/`：受环境闸门保护的设计验收页面，不是生产课程入口。
-- `app/settings/page.tsx` 与 `app/api/v1/connections/`：通信方式 GUI 与同源、可信身份 BFF。
-- `app/globals.css`：「两支笔」设计 Token（黛青/朱砂、纸/砚墨双主题）、排版与 Canvas 样式；`app/effects.css` 只保存受控视觉效果参数。
+- `features/profile/profile-drawer.tsx`、`app/settings/page.tsx` 与 `app/api/v1/connections/`：头像入口内的通信方式 GUI、旧路由重定向与同源可信身份 BFF。
+- `app/login`、`app/register`、`app/api/v1/auth/` 与 `server/auth/`：Web 账号界面、
+  有界认证输入、版本化 scrypt、session 和 local-only 限流；生产共享限流仍是部署门禁。
+- `app/globals.css` 保存「两支笔」设计 Token 与全局基础样式，`app/conversation-content.css`
+  保存消息、来源与流式占位排版，`app/effects.css` 只保存受控视觉效果参数。
 
 ### 学生端功能
 
@@ -57,10 +63,12 @@
 - `features/canvas/canvas-panel.tsx`：桌面/移动端 Canvas 容器。
 - `features/canvas/canvas-registry.tsx`：`classification_game`、`quiz`、`pipeline_flow` 的静态 React Renderer 注册表。
 - `features/canvas/animation-shell.tsx`：受控动画播放、暂停、步进、速度和 reduced-motion。
-- `features/assets/asset-client.ts`、`asset-upload-panel.tsx`与`assets-drawer.tsx`：真实Asset上传、选择和资料抽屉。
-- `features/studio/studio-drawer.tsx`、`features/progress/progress-drawer.tsx`：产物和进度抽屉。
+- `features/assets/asset-client.ts`、`asset-upload-panel.tsx`与`assets-drawer.tsx`：真实Asset上传、选择和来源列表。
+- `features/studio/option-wheel*`、`studio-workspace.tsx`：基于 React Bits OptionWheel 改造的受控两级轮盘，以及当前 Notebook 输入/输出工作台；`studio-drawer.tsx`仍服务待退休的独立学习页。
+- `features/progress/progress-drawer.tsx`：学习进度抽屉。
 - `features/settings/connection-settings.tsx`：渠道 provider、pending/active/revoked 与撤销界面。
-- `features/learning/learning-contracts.ts`：学习页、Canvas 提交和 Progress 的浏览器公开 DTO。
+- `features/learning/learning-contracts.ts`：计划、诊断、学习页、Canvas 提交和 Progress 的浏览器公开 DTO。
+- `features/study/`：显式画像/目标表单和短诊断，不进行年龄或性格推断。
 
 ### 服务端组合根
 
@@ -94,7 +102,7 @@ make dev
 
 - [产品定义](../../docs/01-product/product-definition.md)
 - [学生端 UI 规格](../../docs/01-product/student-ui-spec.md)
-- [Canvas 与 GSAP](../../docs/02-architecture/canvas-and-gsap.md)
+- [统一 Canvas 工作面](../../docs/02-architecture/04-统一Canvas工作面.md)
 - [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)
 - [前端工程](../../docs/05-engineering/frontend.md)
 - [API 约定](../../docs/05-engineering/api-conventions.md)

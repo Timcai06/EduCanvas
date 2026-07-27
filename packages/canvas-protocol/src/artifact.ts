@@ -1,13 +1,36 @@
+/**
+ * Canvas Artifact — 受控内容白名单（ADR-0002）。
+ *
+ * ## 核心原则
+ *
+ * 模型输出结构化 Artifact → 白名单 Schema 校验 → 预注册 React 组件渲染。
+ * **绝不执行模型生成的任意 HTML/JS/GSAP 源码**。
+ *
+ * 这不是"让模型控制 UI"的通道 — 这是"模型填空、渲染器负责展示"的数据契约。
+ * 模型决定题目内容、选项、答案，但颜色、动画、布局完全由前端渲染器控制。
+ *
+ * ## Gredable vs Render-only
+ *
+ * | 类型 | 分类 | 说明 |
+ * |------|------|------|
+ * | quiz | gradable | 单选题，有正确答案，可判分 |
+ * | classification_game | gradable | 分类拖拽，有正确答案，可判分 |
+ * | pipeline_flow | render-only | 流程动画模板，只渲染不判分，无 GradingKey |
+ *
+ * ## 加入新类型检查清单
+ *
+ * 1. 在 `artifacts/` 中定义 paramsSchema
+ * 2. 在 `artifactSchema` 判别联合中注册
+ * 3. 如果是 gradable：同时注册到 `gradableArtifactSchema`
+ * 4. 在 `public-artifact.ts` 中定义公开投影（剥离答案字段）
+ * 5. 在 `grading.ts` 中定义 GradingKey 和判分逻辑
+ * 6. 在 `canvas-registry.tsx` 中注册 React Renderer
+ */
+
 import { z } from 'zod';
 import { classificationGameParamsSchema } from './artifacts/classification-game';
 import { quizParamsSchema } from './artifacts/quiz';
 import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
-
-// 受控 Canvas 协议（ADR-0002）：模型输出结构化 Artifact，经此白名单 Schema
-// 校验后由预注册 React 组件渲染。绝不执行模型生成的任意 HTML/JS/GSAP 源码。
-//
-// docs/02-architecture/canvas-and-gsap.md 规划了候选 Artifact 类型；当前联合实现
-// classification_game、quiz 和 render-only pipeline_flow，其余随组件逐个加入。
 
 /**
  * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
@@ -50,13 +73,13 @@ const pipelineFlowArtifactSchema = artifactBaseSchema
   })
   .strict();
 
-/** Existing persistence/grading path remains intentionally assessment-only. */
+/** 可判分的 Artifact 子集 — quiz + classification_game。pipeline_flow 不在此列。 */
 export const gradableArtifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
   quizArtifactSchema,
 ]);
 
-/** All human-rendered Artifact contracts, including render-only templates. */
+/** 所有可渲染的 Artifact 联合 — 包含 render-only 类型（pipeline_flow）。 */
 export const artifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
   quizArtifactSchema,

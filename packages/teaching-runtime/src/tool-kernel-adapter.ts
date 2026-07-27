@@ -1,3 +1,19 @@
+/**
+ * 教学 Tool → Tool Kernel Adapter 适配器。
+ *
+ * ## 为什么需要适配
+ *
+ * `RegisteredTeachingTool` 有自己的 handler 接口（`TeachingToolHandlerContext`），
+ * `ToolKernel` 期望的是 `ToolKernelAdapter` 接口（`ToolAdapterInvocationContext`）。
+ * 本模块的 `adaptTeachingTool()` 做这层适配 — 解包 Kernel 上下文，注入教学 Profile，
+ * 再调用教学 handler。
+ *
+ * ## 权限边界
+ *
+ * 教学状态白名单由 Profile 能力集（capabilities/approvedCapabilities）表达，
+ * 本 Adapter 只做上下文字段映射，不自行放宽 Kernel 授权。
+ */
+
 import {
   type ToolRiskLevel,
   type ToolKernelAdapter,

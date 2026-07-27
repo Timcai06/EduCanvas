@@ -31,6 +31,7 @@ const database = connection ? drizzle(connection, { schema }) : null;
 const ownerSubjectId = `anon:v1:${'a'.repeat(64)}`;
 const otherSubjectId = `anon:v1:${'b'.repeat(64)}`;
 const spaceId = '91000000-0000-4000-8000-000000000001';
+const otherSpaceId = '91000000-0000-4000-8000-000000000002';
 
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
@@ -68,13 +69,58 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
   beforeEach(async () => {
     await getDatabase().execute(sql`
       truncate table
+        object_deletion_outbox,
+        asset_processing_jobs,
+        asset_representations,
         agent_message_parts,
         chat_messages,
         asset_versions,
         assets,
-        lesson_sessions
+        lesson_sessions,
+        notebook_memberships,
+        spaces,
+        personal_agents,
+        platform_users
       restart identity cascade
     `);
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values([
+        { id: ownerSubjectId, kind: 'anonymous_compat', status: 'active' },
+        { id: otherSubjectId, kind: 'anonymous_compat', status: 'active' },
+      ]);
+    await getDatabase()
+      .insert(schema.spaces)
+      .values([
+        {
+          id: spaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Asset fixture',
+        },
+        {
+          id: otherSpaceId,
+          ownerSubjectId,
+          kind: 'notebook',
+          title: 'Other fixture',
+        },
+      ]);
+    await getDatabase()
+      .insert(schema.notebookMemberships)
+      .values([
+        {
+          notebookId: spaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+        {
+          notebookId: otherSpaceId,
+          userId: ownerSubjectId,
+          role: 'owner',
+          grantedByUserId: ownerSubjectId,
+        },
+      ]);
   });
 
   afterAll(async () => {
@@ -95,6 +141,20 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       created.descriptor.currentVersionId,
     );
     expect(JSON.stringify(created)).not.toContain('uploads/fixture');
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetRepresentations)
+        .orderBy(schema.assetRepresentations.kind),
+    ).resolves.toMatchObject([
+      { kind: 'original', status: 'ready' },
+      { kind: 'text', status: 'ready' },
+    ]);
+    await expect(
+      getDatabase().select().from(schema.assetProcessingJobs),
+    ).resolves.toMatchObject([
+      { kind: 'extract_text', status: 'succeeded', attempts: 1 },
+    ]);
 
     await expect(
       repository.listOwnedSpace({ ownerSubjectId, spaceId }),
@@ -151,6 +211,95 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         ],
       }),
     ).rejects.toBeInstanceOf(AssetAccessError);
+  });
+
+  it('对象存储键只经服务端所有权方法返回且跨主体拒绝', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: { assetId: created.descriptor.assetId, status: 'ready' },
+      version: { versionId: created.version!.versionId },
+    });
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      assetId: created.descriptor.assetId,
+      storageKey: 'uploads/fixture/vision.pdf',
+      extractedText: '图像分类模型会从像素中提取可比较的特征。',
+    });
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId: otherSpaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    expect(JSON.stringify(created)).not.toContain('uploads/fixture');
+  });
+
+  it('软删除只影响本主体资产并从公开列表隐藏', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+
+    await expect(
+      repository.tombstoneOwnedAsset({
+        ownerSubjectId: otherSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.tombstoneOwnedAsset({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      repository.listOwnedSpace({ ownerSubjectId, spaceId }),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).rejects.toBeInstanceOf(AssetAccessError);
+    await expect(
+      getDatabase().select().from(schema.objectDeletionOutbox),
+    ).resolves.toMatchObject([
+      {
+        objectKind: 'asset',
+        sourceType: 'asset_version',
+        storageKey: 'uploads/fixture/vision.pdf',
+        status: 'pending',
+      },
+    ]);
   });
 
   it('消息账本原子保存文本与资产引用并可从历史恢复', async () => {

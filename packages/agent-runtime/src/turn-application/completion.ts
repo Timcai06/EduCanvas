@@ -18,7 +18,19 @@ import type {
 } from './ports';
 import { settleTurnFailure, type TurnTerminalState } from './session';
 
-/** @internal 完成Output Guard、Profile领域提交、Lifecycle结算与公开完成终态。 */
+/**
+ * @internal Turn 完成管线 — 四步终态流程。
+ *
+ * ```
+ * 1. Output Guard finish → 检查是否有被 hold 的文本需要 block/emit
+ * 2. Profile finalize  → 领域服务最后复核答案 + 提交领域事实（如 citation markers）
+ * 3. Lifecycle settle  → 持久化答案内容 + 写入 completed 状态
+ * 4. yield turn.completed → 公开完成事件
+ * ```
+ *
+ * 每一步失败都可能导致 turn 变为 failed 而非 completed。
+ * Profile 可以在 finalize 中修改答案内容（如去敏感词），但不能删除全部内容。
+ */
 export async function* completeTurnApplication(input: {
   dependencies: TurnApplicationDependencies;
   command: TurnApplicationCommand;

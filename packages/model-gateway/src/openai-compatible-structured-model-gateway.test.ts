@@ -14,6 +14,7 @@ const config: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'model-primary', structured: 'model-structured' },
   timeoutMs: 5_000,
   maxOutputTokens: 2_000,
+  visionEnabled: false,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,
@@ -70,12 +71,40 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
       model: string;
       stream: boolean;
       response_format: { type: string };
+      thinking?: { type: string };
       messages: { role: string; content: string }[];
     };
     expect(parsed.model).toBe('model-structured');
     expect(parsed.stream).toBe(false);
     expect(parsed.response_format.type).toBe('json_object');
+    expect(parsed.thinking).toBeUndefined();
     expect(parsed.messages.at(-1)?.content).toContain('JSON Schema');
+  });
+
+  it('DeepSeek 结构化请求关闭 thinking，避免推理耗尽 JSON 输出预算', async () => {
+    let capturedBody = '';
+    const gateway = new OpenAICompatibleStructuredModelGateway(
+      { ...config, provider: 'deepseek' },
+      {
+        fetchImpl: fetchStub((init) => {
+          capturedBody = String(init.body);
+          return Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+          });
+        }),
+      },
+    );
+
+    await gateway.generateStructured(request);
+    const parsed = JSON.parse(capturedBody) as {
+      thinking?: { type?: string };
+    };
+    expect(parsed.thinking).toEqual({ type: 'disabled' });
   });
 
   it('内容不过调用方 Schema 时以 invalid_response 失败,不静默修复', async () => {

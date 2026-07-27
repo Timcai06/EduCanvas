@@ -5,6 +5,7 @@ vi.mock('server-only', () => ({}));
 const { drizzleRepo } = vi.hoisted(() => ({
   drizzleRepo: {
     createUploaded: vi.fn(),
+    createUploadedPending: vi.fn(),
     listOwnedSpace: vi.fn(),
   },
 }));
@@ -20,7 +21,7 @@ vi.mock('@educanvas/db', async () => {
   };
 });
 vi.mock('@/server/teaching/learning-session', () => ({
-  loadOwnedTeachingSession: vi.fn(),
+  loadOwnedTeachingGatewayTarget: vi.fn(),
 }));
 vi.mock('@/server/assets/asset-storage', () => ({
   storeAssetBytes: vi.fn(),
@@ -30,11 +31,17 @@ vi.mock('unpdf', () => ({
   extractText: vi.fn(),
   getDocumentProxy: vi.fn(),
 }));
+vi.mock('mammoth', () => ({
+  default: {
+    extractRawText: vi.fn(),
+  },
+}));
 
-import { loadOwnedTeachingSession } from '@/server/teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
 import { removeStoredAsset, storeAssetBytes } from './asset-storage';
 import { uploadOwnedAsset } from './asset-upload';
 import { extractText, getDocumentProxy } from 'unpdf';
+import mammoth from 'mammoth';
 
 const identity = {
   token: 'token',
@@ -75,17 +82,24 @@ describe('uploadOwnedAsset', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     drizzleRepo.createUploaded.mockReset();
+    drizzleRepo.createUploadedPending.mockReset();
     drizzleRepo.listOwnedSpace.mockReset();
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockReset?.();
+    (loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>).mockReset?.();
     (storeAssetBytes as ReturnType<typeof vi.fn>).mockReset?.();
     (removeStoredAsset as ReturnType<typeof vi.fn>).mockReset?.();
     (extractText as ReturnType<typeof vi.fn>).mockReset?.();
     (getDocumentProxy as ReturnType<typeof vi.fn>).mockReset?.();
+    vi.mocked(mammoth.extractRawText).mockReset();
 
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 'space-1',
-    });
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({ notebookId: 'space-1' });
     drizzleRepo.createUploaded.mockResolvedValue(snapshot('asset-1'));
+    drizzleRepo.createUploadedPending.mockResolvedValue({
+      snapshot: snapshot('asset-1'),
+      versionId: 'asset-1-v1',
+      jobId: 'job-1',
+    });
     vi.mocked(storeAssetBytes).mockResolvedValue({
       storageKey: 'assets/a',
       absolutePath: '/tmp/assets/a',
@@ -94,9 +108,9 @@ describe('uploadOwnedAsset', () => {
     vi.mocked(getDocumentProxy).mockResolvedValue({} as never);
   });
 
-  it('upload成功后返回持久化快照并写入解析文本', async () => {
-    vi.mocked(extractText).mockResolvedValue({ text: ' 课程资料   ' } as never);
-
+  it('可抽取类型落库为待解析并立即返回，不在请求内解析', async () => {
+    /* ADR-0025：上传响应时间与文件大小解耦。请求内不再调用抽取器，
+       所以这里断言 unpdf 完全没有被触碰。 */
     const result = await uploadOwnedAsset({
       identity,
       file: bytesFile(
@@ -108,22 +122,65 @@ describe('uploadOwnedAsset', () => {
     });
 
     expect(result).toMatchObject({ descriptor: { assetId: 'asset-1' } });
-    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerSubjectId: identity.studentId,
         spaceId: 'space-1',
         scope: 'space',
         kind: 'document',
         mimeType: 'application/pdf',
-        extractedText: '课程资料',
+      }),
+    );
+    expect(drizzleRepo.createUploaded).not.toHaveBeenCalled();
+    expect(getDocumentProxy).not.toHaveBeenCalled();
+  });
+
+  it('DOCX 同样走异步，不在请求内跑 mammoth', async () => {
+    const docxBytes = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml word/document.xml',
+    );
+
+    await uploadOwnedAsset({
+      identity,
+      file: new File([docxBytes], 'lesson.docx'),
+      scope: 'space',
+    });
+
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      }),
+    );
+    expect(mammoth.extractRawText).not.toHaveBeenCalled();
+  });
+
+  it('图片不需要抽取，仍然一次性写成 ready', async () => {
+    /* 为必然空转的类型建任务只会让队列和状态机变复杂。 */
+    await uploadOwnedAsset({
+      identity,
+      file: bytesFile(
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        'photo.png',
+        'image/png',
+      ),
+      scope: 'space',
+    });
+
+    expect(drizzleRepo.createUploadedPending).not.toHaveBeenCalled();
+    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'image',
+        extractedText: null,
+        outcome: { status: 'ready' },
       }),
     );
   });
 
   it('没有教学会话时直接返回会话未找到错误', async () => {
-    (loadOwnedTeachingSession as ReturnType<typeof vi.fn>).mockResolvedValue(
-      null,
-    );
+    (
+      loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(null);
 
     const promise = uploadOwnedAsset({
       identity,
@@ -154,6 +211,41 @@ describe('uploadOwnedAsset', () => {
     });
   });
 
+  it('Markdown 以 document 落库并排入解析队列', async () => {
+    drizzleRepo.createUploadedPending.mockResolvedValue({
+      snapshot: snapshot('asset-md', 'lesson.md'),
+      versionId: 'asset-md-v1',
+      jobId: 'job-md',
+    });
+
+    const result = await uploadOwnedAsset({
+      identity,
+      file: bytesFile(
+        [...new TextEncoder().encode('# 光合作用\r\n\r\n叶绿体')],
+        'lesson.md',
+        'text/markdown',
+      ),
+      scope: 'space',
+    });
+
+    expect(result.descriptor.assetId).toBe('asset-md');
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'document', mimeType: 'text/markdown' }),
+    );
+  });
+
+  it('无效 UTF-8 不再在上传时报错，由 worker 写入失败终态', async () => {
+    /* 行为变化：内容问题现在是解析任务的终态，不是上传响应的 4xx。
+       上传只负责「受理」，用户在来源列表看到失败原因。 */
+    await expect(
+      uploadOwnedAsset({
+        identity,
+        file: bytesFile([0xff, 0xfe, 0xfd], 'broken.txt', 'text/plain'),
+        scope: 'space',
+      }),
+    ).resolves.toBeDefined();
+  });
+
   it('0字节文件返回invalid_upload', async () => {
     const promise = uploadOwnedAsset({
       identity,
@@ -167,35 +259,8 @@ describe('uploadOwnedAsset', () => {
     });
   });
 
-  it('pdf解析失败会记录失败版本并返回pdf_text_unavailable', async () => {
-    const pdf = bytesFile(
-      [0x25, 0x50, 0x44, 0x46, 0x2d],
-      'note.pdf',
-      'application/pdf',
-    );
-    vi.mocked(extractText).mockResolvedValue({ text: '   ' } as never);
-
-    const result = uploadOwnedAsset({
-      identity,
-      file: pdf,
-      scope: 'space',
-    });
-
-    await expect(result).rejects.toMatchObject({
-      code: 'pdf_text_unavailable',
-      status: 422,
-    });
-    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
-      expect.objectContaining({
-        outcome: expect.objectContaining({ status: 'failed' }),
-      }),
-    );
-    expect(removeStoredAsset).not.toHaveBeenCalled();
-  });
-
   it('持久化失败时会清理已落地对象', async () => {
-    drizzleRepo.createUploaded.mockRejectedValue(new Error('db down'));
-    vi.mocked(extractText).mockResolvedValue({ text: '正文' } as never);
+    drizzleRepo.createUploadedPending.mockRejectedValue(new Error('db down'));
 
     const promise = uploadOwnedAsset({
       identity,

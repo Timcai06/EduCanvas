@@ -3,14 +3,30 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
+import {
+  JsonRequestValidationError,
+  jsonRequestErrorResponse,
+  readLimitedJsonRequest,
+} from '@/server/http/json-request';
 import {
   ARTIFACT_GENERATE_TASK,
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
+  getDb,
+  requireNotebookAccess,
 } from '@educanvas/db';
-import { audioOverviewMetadataSchema } from '@educanvas/canvas-protocol';
+import {
+  audioOverviewMetadataSchema,
+  NOTE_MARKDOWN_MAX_CHARS,
+  noteContentSchema,
+} from '@educanvas/canvas-protocol';
+import {
+  ArtifactResourceProjectionError,
+  projectOwnedArtifactResource,
+} from '@/server/canvas/artifact-resource-adapter';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -45,6 +61,12 @@ export async function GET(
     if (detail.artifact.spaceId !== conversation.spaceId) {
       throw new ArtifactOwnershipError();
     }
+    const access = await requireNotebookAccess(getDb(), {
+      notebookId: conversation.spaceId,
+      trustedSubjectId: identity.studentId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new ArtifactOwnershipError();
     const requestedVersion = new URL(request.url).searchParams.get('version');
     if (requestedVersion && !/^[1-9]\d*$/.test(requestedVersion)) {
       throw new ArtifactOwnershipError();
@@ -75,7 +97,14 @@ export async function GET(
       detail.artifact.kind === 'audio_overview' && selectedVersion
         ? audioOverviewMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
-    return Response.json({
+    const canvasResource = projectOwnedArtifactResource({
+      notebookId: conversation.spaceId,
+      artifact: detail.artifact,
+      version: selectedVersion,
+      latestJob: detail.latestJob,
+      accessRole: access.role,
+    });
+    return jsonResponse({
       artifact: {
         id: detail.artifact.id,
         kind: detail.artifact.kind,
@@ -116,23 +145,41 @@ export async function GET(
             failureCode: detail.latestJob.failureCode,
           }
         : null,
+      canvasResource,
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
       return jsonError(404, 'artifact_not_found', '产物不存在。');
     }
+    if (error instanceof ArtifactResourceProjectionError) {
+      const status = error.code === 'resource_not_found' ? 404 : error.status;
+      return jsonError(status, error.code, '这个产物暂时无法在Canvas中打开。');
+    }
     return jsonError(503, 'artifact_detail_unavailable', '暂时无法读取产物。');
   }
 }
 
-const reviseArtifactSchema = z
-  .object({
-    baseVersion: z.number().int().min(1),
-    instruction: z.string().trim().min(1).max(2_000),
-  })
-  .strict();
+const mutateArtifactSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('generate'),
+      baseVersion: z.number().int().min(1),
+      instruction: z.string().trim().min(1).max(2_000),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('save_note'),
+      baseVersion: z.number().int().min(1),
+      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS),
+    })
+    .strict(),
+]);
 
-/** Canvas 共创：显式修改要求进入同一 Artifact 的持久生成任务。 */
+/**
+ * Canvas 共创入口：AI 修改进入持久生成任务，笔记直接保存只追加不可变
+ * 版本。两种动作使用显式判别字段，禁止用正文前缀推断调用意图。
+ */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
@@ -151,11 +198,14 @@ export async function PATCH(
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, 'invalid_request', '请求格式不正确。');
+    body = await readLimitedJsonRequest(request);
+  } catch (error) {
+    if (error instanceof JsonRequestValidationError) {
+      return jsonRequestErrorResponse(error);
+    }
+    throw error;
   }
-  const parsed = reviseArtifactSchema.safeParse(body);
+  const parsed = mutateArtifactSchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '修改要求不正确。');
   }
@@ -168,10 +218,47 @@ export async function PATCH(
     });
     if (
       artifact.spaceId !== conversation.spaceId ||
-      !['mind_map', 'slides', 'flashcards'].includes(artifact.kind)
+      (parsed.data.action === 'save_note'
+        ? artifact.kind !== 'note'
+        : !['mind_map', 'slides', 'flashcards', 'note'].includes(artifact.kind))
     ) {
       throw new ArtifactOwnershipError();
     }
+
+    if (parsed.data.action === 'save_note') {
+      const currentVersion = await repository.getVersion({
+        artifactId,
+        version: parsed.data.baseVersion,
+        trustedSubjectId: identity.studentId,
+      });
+      const currentContent = noteContentSchema.parse(currentVersion.content);
+      const version = await repository.appendVersion({
+        artifactId,
+        trustedSubjectId: identity.studentId,
+        content: noteContentSchema.parse({
+          ...currentContent,
+          markdown: parsed.data.markdown,
+          generatedByModel: false,
+        }),
+        generatedBy: 'user:manual',
+        expectedLatestVersion: parsed.data.baseVersion,
+      });
+      return jsonResponse(
+        {
+          artifact: {
+            id: artifact.id,
+            kind: artifact.kind,
+            trustTier: artifact.trustTier,
+            title: artifact.title,
+            status: artifact.status,
+            latestVersion: version.version,
+          },
+          job: null,
+        },
+        { status: 200 },
+      );
+    }
+
     const created = await repository.createRevisionGenerationJob({
       artifactId,
       conversationId: conversation.id,
@@ -180,7 +267,7 @@ export async function PATCH(
       instruction: parsed.data.instruction,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
     });
-    return Response.json(
+    return jsonResponse(
       {
         artifact: {
           id: created.artifact.id,

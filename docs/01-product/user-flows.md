@@ -2,7 +2,7 @@
 
 - 状态：`draft`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-24
 
 ## 从任意表面继续同一个 Agent
 
@@ -16,12 +16,12 @@
 → 终态、Trace 与产物可从其他表面恢复
 ```
 
-Web、TUI 和 Gateway 路由已经落地并共享 Notebook/Conversation 权限边界。Web 是 K12 主入口；TUI 是高级第一方客户端。用户可从 Web `/settings` 或 TUI `/channels` 管理 provider-neutral 连接：Telegram 已有 pending/激活/撤销纵切但仍缺真实账号 live smoke，微信/QQ 在平台资格和凭据就绪前明确显示 disabled。
+Web、TUI 和 Gateway 路由已经落地并共享 Notebook/Conversation 权限边界。Web 是 K12 主入口；TUI 是高级第一方客户端。用户可从 Web 页头头像内的“通信方式”或 TUI `/channels` 管理 provider-neutral 连接；旧 `/settings` 只负责重定向到头像抽屉。Telegram 已有 pending/激活/撤销纵切但仍缺真实账号 live smoke，微信/QQ 在平台资格和凭据就绪前明确显示 disabled。
 
 ## 管理通信方式
 
 ```text
-用户从 Web 设置或 TUI /channels 查看可用渠道
+用户从 Web 头像档案抽屉或 TUI /channels 查看可用渠道
 → Gateway 返回 provider 能力和真实连接状态
 → 用户按 provider 支持情况授权或确认一次性连接码
 → 选择默认 Notebook 与允许范围
@@ -60,8 +60,12 @@ Web、TUI 和 Gateway 路由已经落地并共享 Notebook/Conversation 权限�
 ## 结构化课程
 
 ```text
-显式选择课程或接受教师任务
-→ 诊断已有理解
+显式填写年龄段、学段、声明来源、教学偏好与学习目标
+→ 服务端选择冻结版本的受信课程
+→ 为当前 Notebook 建立 Goal 与 6–12 节点目标图
+→ 浏览器展示不含答案和内部目标映射的短诊断
+→ 服务端确定性判分并写可信学习事件
+→ 展示优势 / 重点 / 待学习与下一目标
 → 讲解与示范
 → 练习
 → 服务端判分

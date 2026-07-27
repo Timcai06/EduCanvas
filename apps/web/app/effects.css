@@ -1,6 +1,6 @@
 /*
  * 墨色动效层：只定义视觉参数，不承担 Agent 或教学状态判断。
- * 黛青/朱砂均来自 globals.css 的语义 Token；运行生命周期由对应组件负责。
+ * 墨紫/朱砂均来自 globals.css 的语义 Token；运行生命周期由对应组件负责。
  */
 
 /* PixelBlast 不参与命中测试；页面级指针监听负责投影坐标，底层输入仍可操作。 */
@@ -52,7 +52,9 @@
  */
 .agent-busy-overlay {
   position: fixed;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 100vw;
+  height: 100dvh;
   z-index: 45;
   pointer-events: none;
   opacity: 0;
@@ -73,13 +75,18 @@
 }
 
 /*
- * 输入栏边框流动线：一条黛青光弧绕输入框边缘匀速流动（见下方 .ink-flow-line）。
+ * 输入栏边框流动线：一条墨紫光弧绕输入框边缘匀速流动（见下方 .ink-flow-line）。
  * isolate 建立独立层叠上下文，让流动线以 z-index:-1 落在卡片底色之上、正文之下。
- * 减少动态偏好下整线隐去，只留输入框自身的黛青聚焦描边（见 no-preference @media）。
+ * 减少动态偏好下整线隐去，只留输入框自身的墨紫聚焦描边（见 no-preference @media）。
  */
 .ink-flow-shell {
   position: relative;
   isolation: isolate;
+  transform-origin: center bottom;
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 260ms ease,
+    border-color 220ms ease;
 }
 
 /* 注册角度以便 conic-gradient 的旋转可被动画插值（裸自定义属性不可动画）。 */
@@ -90,7 +97,7 @@
 }
 
 /*
- * 沿框流动的黛青渐变线：一段亮弧在整圈 conic 渐变里匀速旋转，再用 mask 只保留
+ * 沿框流动的墨紫渐变线：一段亮弧在整圈 conic 渐变里匀速旋转，再用 mask 只保留
  * 1.5px 边框环，看起来像一条光线绕着输入框边缘流动。inset:-1px 让它压住卡片
  * 描边、读作「会发光的框」。z-index:-1 使其画在卡片底色之上、正文之下，边角
  * 无正文处才显形，绝不遮挡文字与图标。纯装饰、pointer-events:none、不承载状态。
@@ -115,7 +122,10 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0;
-  transition: opacity 320ms ease;
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    padding 220ms ease;
   pointer-events: none;
 }
 
@@ -133,7 +143,24 @@
   }
   .ink-flow-shell:focus-within .ink-flow-line {
     opacity: 1;
-    animation-duration: 3.2s;
+    padding: 2.5px;
+    filter: drop-shadow(
+      0 0 9px color-mix(in srgb, var(--color-accent) 74%, transparent)
+    );
+    animation-duration: 1.35s;
+  }
+  .ink-flow-shell:focus-within {
+    border-color: color-mix(
+      in srgb,
+      var(--color-cinnabar) 46%,
+      var(--color-accent)
+    );
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-accent) 18%, transparent),
+      0 18px 54px -18px color-mix(in srgb, var(--color-accent) 72%, transparent),
+      0 8px 26px -14px
+        color-mix(in srgb, var(--color-cinnabar) 58%, transparent);
+    transform: translateY(-3px) scale(1.018);
   }
 }
 

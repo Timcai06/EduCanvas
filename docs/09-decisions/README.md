@@ -17,6 +17,9 @@ ADR 只保存当前仍约束系统的少量重大决定。失效实现细节不�
 - [0019：模块化单体、Artifact 与持久任务](0019-modular-monolith-artifacts-and-durable-jobs.md)
 - [0020：第二代 Hybrid Ports Agent 架构](0020-第二代HybridPorts架构.md)
 - [0021：MCP 高风险意图与恢复边界](0021-MCP高风险意图与恢复边界.md)
+- [0022：学习者画像与学习计划可信边界](0022-学习者画像与学习计划可信边界.md)
+- [0023：Web 账号身份与会话边界](0023-Web账号身份与会话边界.md)
+- [0024：统一 Canvas 工作面与运行时分层](0024-统一Canvas工作面与运行时分层.md)
 
 ## 历史
 

@@ -11,8 +11,12 @@ const artifactRepo = {
   listVersionProvenance: vi.fn(),
   getVersion: vi.fn(),
   getArtifact: vi.fn(),
+  appendVersion: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
 };
+const { requireNotebookAccessMock } = vi.hoisted(() => ({
+  requireNotebookAccessMock: vi.fn(),
+}));
 
 vi.mock('@educanvas/db', async () => {
   const actual =
@@ -22,6 +26,8 @@ vi.mock('@educanvas/db', async () => {
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
     }),
+    getDb: vi.fn(() => ({})),
+    requireNotebookAccess: requireNotebookAccessMock,
   };
 });
 
@@ -82,13 +88,15 @@ function patchRequest(artifactId: string, body: string): Request {
 
 const detail = {
   artifact: {
-    id: validArtifact.id,
-    kind: validArtifact.kind,
-    status: validArtifact.status,
+    ...validArtifact,
     spaceId: conversation.spaceId,
     conversationId: null,
+    ownerSubjectId: identity.studentId,
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   latestVersion: {
+    id: '22222222-2222-4222-8222-222222222222',
+    artifactId: validArtifact.id,
     version: 1,
     content: { blocks: [] },
     metadata: {
@@ -115,6 +123,8 @@ const detail = {
     },
     objectKey: 'audio.mp3',
     checksum: 'a'.repeat(64),
+    generatedBy: 'model:artifact.generate:v1',
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   latestJob: {
     id: 'job-1',
@@ -143,7 +153,14 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.listVersionProvenance.mockReset();
     artifactRepo.getVersion.mockReset();
     artifactRepo.getArtifact.mockReset();
+    artifactRepo.appendVersion.mockReset();
     artifactRepo.createRevisionGenerationJob.mockReset();
+    requireNotebookAccessMock.mockReset();
+    requireNotebookAccessMock.mockResolvedValue({
+      notebookId: conversation.spaceId,
+      role: 'owner',
+      permissions: ['notebook.read'],
+    });
     artifactRepo.getArtifactDetail.mockResolvedValue(detail);
     artifactRepo.listVersionProvenance.mockResolvedValue([
       {
@@ -195,8 +212,16 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
         id: validArtifact.id,
         kind: validArtifact.kind,
       },
+      canvasResource: {
+        resourceId: validArtifact.id,
+        notebookId: conversation.spaceId,
+        renderer: { rendererId: 'artifact.mind-map' },
+      },
     });
     expect(payload.versions[0].version).toBe(1);
+    expect(JSON.stringify(payload)).not.toContain('audio.mp3');
+    expect(payload).not.toHaveProperty('objectKey');
+    expect(payload).not.toHaveProperty('checksum');
   });
 
   it('maps repository errors to 503', async () => {
@@ -209,6 +234,22 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_detail_unavailable' },
+    });
+  });
+
+  it('maps a cross-Notebook artifact to the same 404 as a missing artifact', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValue({
+      ...detail,
+      artifact: { ...detail.artifact, spaceId: 'other-notebook' },
+    });
+    const response = await GET(
+      getRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
     });
   });
 });
@@ -224,6 +265,7 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.listVersionProvenance.mockReset();
     artifactRepo.getVersion.mockReset();
     artifactRepo.getArtifact.mockReset();
+    artifactRepo.appendVersion.mockReset();
     artifactRepo.createRevisionGenerationJob.mockReset();
     artifactRepo.getArtifact.mockResolvedValue({
       ...validArtifact,
@@ -236,6 +278,15 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
       },
       job: { id: 'job-2', status: 'queued', progress: null, failureCode: null },
     });
+    artifactRepo.getVersion.mockResolvedValue({
+      version: 1,
+      content: {
+        contentVersion: 1,
+        markdown: '# 原笔记',
+        generatedByModel: true,
+      },
+    });
+    artifactRepo.appendVersion.mockResolvedValue({ version: 2 });
   });
 
   it('returns 403 for cross-origin requests before request validation', async () => {
@@ -248,7 +299,11 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
             'content-type': 'application/json',
             origin: 'https://evil.example',
           },
-          body: JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+          body: JSON.stringify({
+            action: 'generate',
+            baseVersion: 1,
+            instruction: '修订',
+          }),
         },
       ),
       params(validArtifact.id),
@@ -261,7 +316,11 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     const response = await PATCH(
       patchRequest(
         'bad-id',
-        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '修订',
+        }),
       ),
       params('bad-id'),
     );
@@ -289,7 +348,11 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     const response = await PATCH(
       patchRequest(
         validArtifact.id,
-        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '修订',
+        }),
       ),
       params(validArtifact.id),
     );
@@ -304,7 +367,11 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     const response = await PATCH(
       patchRequest(
         validArtifact.id,
-        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '修订',
+        }),
       ),
       params(validArtifact.id),
     );
@@ -327,13 +394,55 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     );
   });
 
+  it('returns 200 and appends a note version without a generation job', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'note',
+      spaceId: conversation.spaceId,
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'save_note',
+          baseVersion: 1,
+          markdown: '# 新笔记',
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      artifact: { latestVersion: 2 },
+      job: null,
+    });
+    expect(artifactRepo.appendVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactId: validArtifact.id,
+        expectedLatestVersion: 1,
+        generatedBy: 'user:manual',
+        content: expect.objectContaining({
+          markdown: '# 新笔记',
+          generatedByModel: false,
+        }),
+      }),
+    );
+    expect(artifactRepo.createRevisionGenerationJob).not.toHaveBeenCalled();
+  });
+
   it('maps artifact ownership mismatches to 404', async () => {
     artifactRepo.getArtifact.mockRejectedValue(new ArtifactOwnershipError());
 
     const response = await PATCH(
       patchRequest(
         validArtifact.id,
-        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '修订',
+        }),
       ),
       params(validArtifact.id),
     );
@@ -352,7 +461,11 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     const response = await PATCH(
       patchRequest(
         validArtifact.id,
-        JSON.stringify({ baseVersion: 1, instruction: '修订' }),
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '修订',
+        }),
       ),
       params(validArtifact.id),
     );

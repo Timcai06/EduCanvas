@@ -1,3 +1,24 @@
+/**
+ * Gateway 操作事件 — 一次 Operation 从创建到终态的所有公开事件。
+ *
+ * ## 事件类型
+ *
+ * | 事件 | 含义 |
+ * |------|------|
+ * | operation.accepted | Gateway 已接受请求，开始处理 |
+ * | message.started | 模型开始生成回答 |
+ * | message.delta | 流式文本增量 |
+ * | message.citation | 引用标注 |
+ * | tool.started / tool.completed / tool.failed | 工具调用生命周期 |
+ * | approval.required / approval.resolved | L2/L3 工具审批流程 |
+ * | operation.completed / operation.failed / operation.cancelled | Operation 终态 |
+ *
+ * ## 终态纪律
+ *
+ * 一个 Operation 只能以 completed、failed 或 cancelled 之一结束。
+ * 终态事件必须是事件流的最后一项，之后不能追加任何事件。
+ */
+
 import { z } from 'zod';
 import {
   gatewayJsonValueSchema,

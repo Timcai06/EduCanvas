@@ -36,7 +36,31 @@ export interface TurnLoopOutcome {
   outputGuardFailed: boolean;
 }
 
-/** @internal 流式投影唯一Agent Loop；只产生非终态公开事件并返回收敛材料。 */
+/**
+ * @internal 流式投影唯一 Agent Loop — 产出非终态公开事件并返回收敛材料。
+ *
+ * ## Output Guard 四态处理
+ *
+ * 每个 text_delta 在 yield 给客户端前经过 output guard 过滤：
+ *
+ * | Guard 返回 | 行为 |
+ * |-----------|------|
+ * | `hold` | 暂不发送，累积在 guard 内部缓冲区。不改变 answer |
+ * | `emit{ safeDeltas }` | 验证后追加到 answer 并 yield。最常见路径 |
+ * | `block{ publicContent, failureCode }` | 用预设安全文案替换被拦截内容，abort 模型运行 |
+ * | 异常 | outputGuardFailed=true，abort 模型运行 |
+ *
+ * ## 终态收敛
+ *
+ * Agent Loop 的四种终态映射为 TurnLoopOutcome：
+ *
+ * | Loop 事件 | Outcome |
+ * |-----------|---------|
+ * | `completed` | completed=true |
+ * | `failed` | modelFailure=error |
+ * | `tool.failed` | toolFailure=failure（含审批） |
+ * | `tool.result` | 正常 → 模型继续下一轮 |
+ */
 export async function* runTurnLoop(input: {
   dependencies: TurnApplicationDependencies;
   command: TurnApplicationCommand;
@@ -94,7 +118,7 @@ export async function* runTurnLoop(input: {
     executeTools: (calls, context) => tools.execute(calls, context),
   })) {
     if (event.type === 'model' && event.event.type === 'text_delta') {
-      if (outputBlocked || outputGuardFailed) continue;
+      if (outputBlocked || outputGuardFailed) continue; // 已拦截/异常 → 丢弃后续文本
       let guarded: TurnApplicationOutputGuardPushResult;
       try {
         guarded = input.outputGuard

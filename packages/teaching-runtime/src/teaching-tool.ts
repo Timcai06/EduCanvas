@@ -1,3 +1,18 @@
+/**
+ * 教学工具注册 — 定义教学领域 Tool 的类型擦除接口。
+ *
+ * ## RegisteredTeachingTool vs ToolKernelAdapter
+ *
+ * `RegisteredTeachingTool` 是本模块的"裸"教学工具定义 — 有 handler、Schema、name。
+ * 它不能直接执行。必须通过 `adaptTeachingTool()` 提升为 `ToolKernelAdapter`，
+ * 才能注册到 Tool Kernel 并参与授权/审批/幂等生命周期。
+ *
+ * ## 两个暴露级别
+ *
+ * - `model` — 工具会暴露给模型（在 tool_definitions 中发送）
+ * - `runtime` — 工具只在服务端执行，模型不知道它的存在
+ */
+
 import {
   type TeachingState,
   type TeachingTool,

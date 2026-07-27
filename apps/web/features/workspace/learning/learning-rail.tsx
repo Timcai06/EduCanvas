@@ -2,7 +2,6 @@
 
 import type { LearningSessionSummaryDTO } from '@/features/learning/learning-contracts';
 import {
-  CaretLeft,
   CaretRight,
   ChatCircleDots,
   MagnifyingGlass,
@@ -13,6 +12,7 @@ import {
   buildLearningSessionRailRows,
   getLearningRailCapabilities,
 } from './learning-rail-model';
+import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
 import { Sheet } from '../shared/sheet';
 
 interface LearningRailProps {
@@ -44,52 +44,25 @@ function SessionList({
     );
   }
 
-  return (
-    <nav aria-label="学习记录" className="space-y-1">
-      {buildLearningSessionRailRows(
-        sessions,
-        currentSessionId,
-        Boolean(onResumeSession),
-      ).map(({ session, current, resumable }) => {
-        const content = (
-          <>
-            <span className="block truncate text-sm font-medium text-ink">
-              {session.title}
-            </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-muted">
-              <span className="truncate">{session.courseTitle}</span>
-              {session.hasInterruptedTurn ? (
-                <span className="shrink-0 text-warn">待重试</span>
-              ) : null}
-            </span>
-          </>
-        );
-        const classes = `block w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
-          current ? 'bg-accent-soft' : 'hover:bg-surface'
-        }`;
+  const items: MarginaliaItem[] = buildLearningSessionRailRows(
+    sessions,
+    currentSessionId,
+    Boolean(onResumeSession),
+  ).map(({ session, resumable }) => ({
+    id: session.id,
+    title: session.title,
+    subtitle: session.courseTitle,
+    badge: session.hasInterruptedTurn ? '待重试' : undefined,
+    selectable: resumable,
+  }));
 
-        return resumable && onResumeSession ? (
-          <button
-            key={session.id}
-            type="button"
-            data-session-id={session.id}
-            onClick={() => onResumeSession(session.id)}
-            className={classes}
-          >
-            {content}
-          </button>
-        ) : (
-          <div
-            key={session.id}
-            data-session-id={session.id}
-            aria-current={current ? 'page' : undefined}
-            className={classes}
-          >
-            {content}
-          </div>
-        );
-      })}
-    </nav>
+  return (
+    <MarginaliaNav
+      ariaLabel="学习记录"
+      items={items}
+      activeId={currentSessionId}
+      onSelect={onResumeSession}
+    />
   );
 }
 
@@ -106,14 +79,19 @@ function RailContents(props: LearningRailProps) {
         <button
           type="button"
           onClick={props.onNewSession}
-          className="mb-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-line px-4 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="shine-sweep group mb-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-card transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
-          <Plus aria-hidden="true" size={17} weight="bold" />
+          <Plus
+            aria-hidden="true"
+            size={17}
+            weight="bold"
+            className="transition-transform group-hover:rotate-90"
+          />
           开始新学习
         </button>
       ) : null}
       {capabilities.showSearch ? (
-        <label className="mb-3 flex min-h-10 items-center gap-2 rounded-xl border border-line px-3 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+        <label className="ec-field mb-3 flex min-h-10 items-center gap-2 rounded-xl px-3 text-ink-muted">
           <MagnifyingGlass aria-hidden="true" size={17} />
           <span className="sr-only">搜索学习记录</span>
           <input
@@ -144,37 +122,37 @@ function RailContents(props: LearningRailProps) {
   );
 }
 
-/** Desktop stays collapsed by default; mobile history is a modal Sheet. */
+/**
+ * 桌面端保留一条常驻细栏（图标 + 记录数），点击不再原地撑开成挤占版面的
+ * 内联面板——那会露出又粗又贴边的原生滚动条——而是和窄屏一样弹出 Sheet 抽屉，
+ * 列表在抽屉内滚动、配细样式滚动条。窄屏开合仍由父组件的 mobileOpen 控制。
+ */
 export function LearningRail(props: LearningRailProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [deskOpen, setDeskOpen] = useState(false);
+  const open = deskOpen || props.mobileOpen;
 
-  const updateExpanded = (next: boolean) => {
-    setExpanded(next);
+  const close = () => {
+    setDeskOpen(false);
+    if (props.mobileOpen) props.onMobileClose();
   };
 
   return (
     <>
       <aside
         aria-label="学习记录侧栏"
-        className={`hidden min-h-0 shrink-0 border-r border-line/70 transition-[width] duration-200 lg:flex lg:flex-col ${
-          expanded ? 'w-72 px-3 pb-4' : 'w-16 items-center px-2'
-        }`}
+        className="hidden min-h-0 w-16 shrink-0 flex-col items-center border-r border-line/70 px-2 lg:flex"
       >
         <button
           type="button"
-          aria-expanded={expanded}
-          aria-label={expanded ? '收起学习记录' : '展开学习记录'}
-          onClick={() => updateExpanded(!expanded)}
+          aria-haspopup="dialog"
+          aria-expanded={deskOpen}
+          aria-label="打开学习记录"
+          onClick={() => setDeskOpen(true)}
           className="mb-3 grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          {expanded ? (
-            <CaretLeft aria-hidden="true" size={19} />
-          ) : (
-            <ChatCircleDots aria-hidden="true" size={21} />
-          )}
+          <ChatCircleDots aria-hidden="true" size={21} />
         </button>
-        {expanded ? <RailContents {...props} /> : null}
-        {!expanded && props.sessions.length > 0 ? (
+        {props.sessions.length > 0 ? (
           <span
             className="mt-1 grid size-8 place-items-center rounded-full bg-surface text-xs font-semibold text-ink-muted"
             title={`${props.sessions.length} 条学习记录`}
@@ -183,12 +161,10 @@ export function LearningRail(props: LearningRailProps) {
             {Math.min(props.sessions.length, 99)}
           </span>
         ) : null}
-        {!expanded ? (
-          <CaretRight aria-hidden="true" className="mt-auto mb-2" size={14} />
-        ) : null}
+        <CaretRight aria-hidden="true" className="mt-auto mb-2" size={14} />
       </aside>
-      {props.mobileOpen ? (
-        <Sheet label="学习记录" onClose={props.onMobileClose}>
+      {open ? (
+        <Sheet label="学习记录" eyebrow="Sessions" onClose={close}>
           <RailContents {...props} />
         </Sheet>
       ) : null}

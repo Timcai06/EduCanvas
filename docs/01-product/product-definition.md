@@ -2,8 +2,8 @@
 
 - 状态：`accepted`
 - 负责人：项目负责人
-- 最后验证时间：2026-07-19
-- 关键决策：[ADR-0015](../09-decisions/0015-education-centered-personal-agent-platform.md)
+- 最后验证时间：2026-07-25
+- 关键决策：[ADR-0015](../09-decisions/0015-education-centered-personal-agent-platform.md)、[ADR-0024](../09-decisions/0024-统一Canvas工作面与运行时分层.md)
 
 ## 一句话定义
 
@@ -19,14 +19,18 @@ EduCanvas 不复制 OpenClaw。它吸收 Gateway-first、多渠道和常驻 Agen
 
 每个用户拥有一个长期个人 Agent。Agent 可以在多个 Notebook 中工作：
 
-- **Sources**：资料、网页、搜索结果和长期知识；
+- **Sources**：Notebook 持有的资料、网页、搜索快照与多模态输入；
 - **Conversations**：Notebook 内的一条或多条对话；
-- **Studio**：生成的导图、Slides、音频、文档和交互 Artifact；
-- **Canvas**：Artifact 的富交互与版本共创表面；
+- **Artifacts**：用户或 Agent 生成的持久、版本化输出；
+- **Studio**：以“输入”和“输出”组织 Sources 与 Artifacts 的发现、创建和管理入口；
+- **Canvas**：打开来源、共创产物和呈现受控运行环境的统一工作面；
+- **Runtime**：在授权、配额和沙箱边界内生成媒体、运行应用、代码或实验的执行能力；
 - **Memory**：与用户相关、可解释且受权限控制的长期记忆；
 - **Profile / Skills**：当前专业行为和按需工作流。
 
-Web、TUI 或消息渠道只是访问同一个 Agent 的不同方式。切换 Notebook 必须整体切换 Sources、Conversations、Studio、Artifact 和相关记忆。
+Web、TUI 或消息渠道只是访问同一个 Agent 的不同方式。切换 Notebook 必须整体切换 Sources、Conversations、Artifacts、Studio、运行记录和相关记忆。
+
+Canvas 不是新的存储容器。来源仍由 Source 管线保存，产物仍由 Artifact 版本保存，代码或实验仍由 Runtime 记录保存；Canvas 只提供一致的阅读、编辑、运行控制和交接体验。渠道无法渲染完整 Canvas 时返回摘要、媒体或 Web 交接入口。
 
 每个自然人用户拥有自己的个人 Agent。家庭与班级协作通过共享 Notebook 和角色授权完成，而不是多人共用一个 Agent：
 
@@ -44,13 +48,14 @@ Web、TUI 或消息渠道只是访问同一个 Agent 的不同方式。切换 No
 - 通过追问、示例、图片、语音、Canvas 和练习帮助理解；
 - 使用服务端判分和可信学习事件，而不是让模型自行宣布掌握；
 - 在需要时进入结构化课程，提供诊断、练习、评价和补救；
+- 由学生或监护人显式声明学段与教学偏好，为 Notebook 建立可解释目标图，并用短诊断区分优势、重点与待学习内容；
 - 对未成年人、教师和家长角色执行不可绕过的权限与安全策略。
 
 同一个 Agent 也可以完成研究、创作、信息整理和个人任务。通用能力不能依赖课程状态，但其他 Profile 也不能绕过教育身份已有的安全限制。
 
 ## 交互表面
 
-- **Web**：完整教育客户端，承载 Chat、Sources、Studio、Canvas、多模态上传和复杂审批；
+- **Web**：完整教育客户端，承载 Chat、Studio、统一 Canvas、多模态输入输出和复杂审批；
 - **TUI**：正式第一方高级客户端，承载聊天、任务、运行状态、日志与工具审批；
 - **Channels**：微信、QQ、飞书、Telegram、Discord、短信、语音等远程入口；
 - **Nodes**：经配对的手机、电脑或设备能力宿主。
@@ -63,9 +68,10 @@ Web、TUI 或消息渠道只是访问同一个 Agent 的不同方式。切换 No
 2. **Notebook / Sources / Memory**：长期上下文与知识归属；
 3. **Agent Runtime**：唯一模型循环、Context Engine、工具策略、预算和 Trace；
 4. **Tools / Skills / Profiles**：通用行动和专业能力组合；
-5. **Artifacts / Studio / Canvas**：持久、版本化、可继续共创的产物；
-6. **Trusted Education Services**：判分、学习证据、掌握度、课程与未成年人安全；
-7. **Durable Workers**：不依赖客户端在线的摄取、生成和维护任务。
+5. **Sources / Artifacts / Studio / Canvas**：同一 Notebook 下可追溯的输入、输出与统一工作面；
+6. **Runtime Ports**：受控媒体生成、隔离 Web 应用以及未来代码和机器学习实验；
+7. **Trusted Education Services**：判分、学习证据、掌握度、课程与未成年人安全；
+8. **Durable Workers**：不依赖客户端在线的摄取、生成和维护任务。
 
 ## 信任边界
 
@@ -73,7 +79,8 @@ Web、TUI 或消息渠道只是访问同一个 Agent 的不同方式。切换 No
 - Agent 只能调用本轮获准的工具；
 - 模型、浏览器、渠道和设备不能直接写入成绩或掌握度；
 - 高风险动作必须支持明确审批、幂等和审计；
-- 模型代码不在主页面执行，探索型代码只能进入隔离沙箱；
+- 模型代码不在主页面执行；探索型应用进入隔离 Web Runtime，代码与机器学习进入独立 Compute Runtime；
+- Canvas 交互、沙箱输出和实验结果不能直接写入判分、掌握度或课程状态；
 - 不支持的媒体或设备能力必须诚实失败。
 
 ## 当前非目标

@@ -125,6 +125,72 @@ describeWithDatabase('Notebook privacy research fixture', () => {
     expect(contributor.agentId).not.toBe(owner.agentId);
   });
 
+  it('applies the same membership policy to Web conversation reads and writes', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const identities = new DrizzleGatewayIdentityRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'privacy:web-owner',
+      spaceKind: 'notebook',
+      spaceTitle: '共享 Web Notebook',
+      now,
+    });
+    const owner = await identities.getActive('privacy:web-owner');
+    const contributor = await identities.ensureRegistered({
+      trustedSubjectId: 'privacy:web-contributor',
+      now,
+    });
+    const viewer = await identities.ensureRegistered({
+      trustedSubjectId: 'privacy:web-viewer',
+      now,
+    });
+    if (!owner) throw new Error('Owner identity missing');
+    await getDatabase()
+      .insert(notebookMemberships)
+      .values([
+        {
+          notebookId: conversation.spaceId,
+          userId: contributor.userId,
+          role: 'contributor',
+          grantedByUserId: owner.userId,
+          grantedAt: now,
+        },
+        {
+          notebookId: conversation.spaceId,
+          userId: viewer.userId,
+          role: 'viewer',
+          grantedByUserId: owner.userId,
+          grantedAt: now,
+        },
+      ]);
+
+    await expect(
+      conversations.appendCompletedMessage({
+        conversationId: conversation.id,
+        trustedSubjectId: contributor.userId,
+        role: 'user',
+        content: '协作者消息',
+        now,
+      }),
+    ).resolves.toMatchObject({ content: '协作者消息' });
+    await expect(
+      conversations.listMessages({
+        conversationId: conversation.id,
+        trustedSubjectId: viewer.userId,
+      }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      conversations.appendCompletedMessage({
+        conversationId: conversation.id,
+        trustedSubjectId: viewer.userId,
+        role: 'user',
+        content: '只读成员不得写入',
+        now,
+      }),
+    ).rejects.toMatchObject({ code: 'conversation_not_found' });
+  });
+
   it('rejects a contributor Operation invoking the Notebook owner private Node', async () => {
     const conversations = new DrizzlePlatformConversationRepository(
       getDatabase(),

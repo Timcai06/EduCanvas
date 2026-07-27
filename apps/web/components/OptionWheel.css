@@ -1,0 +1,77 @@
+.react-bits-option-wheel {
+  --ow-text-color: #a6a6a6;
+  --ow-active-color: #ffffff;
+  --ow-font-size: 3rem;
+  --ow-inset: 80px;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+}
+
+.react-bits-option-wheel--dragging {
+  cursor: grabbing;
+}
+
+/* Each option is absolutely centered, then offset along the curve by the
+   rAF loop through transform/opacity/filter, so everything stays in step. */
+.react-bits-option-wheel__item {
+  position: absolute;
+  top: 50%;
+  left: var(--ow-inset);
+  white-space: nowrap;
+  font-size: min(var(--ow-font-size), 9vw);
+  line-height: 1;
+  font-weight: 200;
+  transform-origin: left center;
+  cursor: pointer;
+  will-change: transform, opacity, filter;
+  /* --ow-p goes 0 -> 1 as an option approaches the middle of the wheel */
+  color: color-mix(
+    in srgb,
+    var(--ow-active-color) calc(var(--ow-p, 0) * 100%),
+    var(--ow-text-color)
+  );
+}
+
+.react-bits-option-wheel--right .react-bits-option-wheel__item {
+  left: auto;
+  right: var(--ow-inset);
+  transform-origin: right center;
+  text-align: right;
+}
+
+.react-bits-option-wheel__item--selected {
+  font-weight: 500;
+}
+
+/* 空态占位仍要能被滚过，所以只弱化呈现，不 pointer-events: none —— 否则
+   指针会穿透到下层浮层，点击空态就变成关闭 Studio。 */
+.react-bits-option-wheel__item--disabled {
+  cursor: default;
+  font-style: italic;
+  opacity: 0.72;
+}
+
+/* 来源标题可以很长（PDF 文件名），必须在轮内截断而不是撑破浮层。
+   上限按 inset 两侧留白算，右侧轮的 inset 在右边，公式对称成立。 */
+.react-bits-option-wheel__label,
+.react-bits-option-wheel__secondary {
+  display: block;
+  max-width: calc(100% - var(--ow-inset) - 1rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.react-bits-option-wheel__secondary {
+  margin-top: 0.25em;
+  font-size: 0.42em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  opacity: 0.7;
+}

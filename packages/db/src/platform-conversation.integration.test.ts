@@ -50,7 +50,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
+      truncate table security_audit_events, object_deletion_outbox, lesson_sessions, conversation_message_citations, operation_sources, conversation_messages, agent_operations, conversations, spaces, asset_versions, assets
       restart identity cascade
     `);
   });
@@ -161,6 +161,56 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     ).rejects.toBeInstanceOf(PlatformConversationOwnershipError);
   });
 
+  it('重命名在同一事务同步Notebook和主Conversation且拒绝跨主体', async () => {
+    const repository = new DrizzlePlatformConversationRepository(getDatabase());
+    const conversation = await repository.create({
+      ownerSubjectId: 'rename-owner',
+      spaceKind: 'notebook',
+      spaceTitle: '未命名笔记本',
+      conversationTitle: '未命名笔记本',
+    });
+
+    const renamed = await repository.renameOwned({
+      conversationId: conversation.id,
+      trustedSubjectId: 'rename-owner',
+      title: '  分数函数复习  ',
+      now: new Date('2026-07-25T08:00:00.000Z'),
+    });
+    expect(renamed?.title).toBe('分数函数复习');
+    const [notebook] = await getDatabase()
+      .select({ title: schema.spaces.title })
+      .from(schema.spaces)
+      .where(eq(schema.spaces.id, conversation.spaceId))
+      .limit(1);
+    expect(notebook?.title).toBe('分数函数复习');
+    await expect(
+      getDatabase().select().from(schema.securityAuditEvents),
+    ).resolves.toMatchObject([
+      {
+        actorUserId: 'rename-owner',
+        eventType: 'notebook.renamed',
+        resourceType: 'notebook',
+        resourceId: conversation.spaceId,
+        outcome: 'succeeded',
+        metadata: { conversation_id: conversation.id },
+      },
+    ]);
+
+    await expect(
+      repository.renameOwned({
+        conversationId: conversation.id,
+        trustedSubjectId: 'rename-intruder',
+        title: '越权改名',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.getOwned({
+        conversationId: conversation.id,
+        trustedSubjectId: 'rename-owner',
+      }),
+    ).resolves.toMatchObject({ title: '分数函数复习' });
+  });
+
   it('通用Turn幂等持久化并在终态后恢复，不创建教学Session', async () => {
     const conversations = new DrizzlePlatformConversationRepository(
       getDatabase(),
@@ -180,6 +230,20 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     });
     expect(started.replayed).toBe(false);
     expect(started.assistantMessage.status).toBe('streaming');
+    const [operationIdentity] = await getDatabase()
+      .select({
+        actorUserId: schema.agentOperations.actorUserId,
+        agentId: schema.agentOperations.agentId,
+        notebookId: schema.agentOperations.notebookId,
+      })
+      .from(schema.agentOperations)
+      .where(eq(schema.agentOperations.id, started.turnId))
+      .limit(1);
+    expect(operationIdentity).toMatchObject({
+      actorUserId: 'general-turn-user',
+      notebookId: conversation.spaceId,
+    });
+    expect(operationIdentity?.agentId).toBeTruthy();
 
     await turns.settleTurn({
       conversationId: conversation.id,

@@ -3,14 +3,32 @@ import { loadOwnedGeneralConversation } from '@/server/platform/general-conversa
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import {
+  encodeTemporalCursor,
+  PaginationRequestError,
+  parseListPagination,
+} from '@/server/http/pagination';
+import {
+  JsonRequestValidationError,
+  jsonRequestErrorResponse,
+  readIdempotencyKey,
+  readLimitedJsonRequest,
+} from '@/server/http/json-request';
+import {
   AssetAccessError,
+  ArtifactIdempotencyConflictError,
   ARTIFACT_GENERATE_TASK,
   DrizzleAssetRepository,
+  DrizzleManualArtifactRepository,
   DrizzlePlatformArtifactRepository,
 } from '@educanvas/db';
 import { assetVersionReferenceSchema } from '@educanvas/agent-core';
+import {
+  NOTE_MARKDOWN_MAX_CHARS,
+  noteContentSchema,
+} from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -21,20 +39,22 @@ export const dynamic = 'force-dynamic';
  * 从本端点重建,浏览器刷新/断连后不依赖流的连续性。
  * 只返回公开投影字段,不包含版本内容与生成参数——那些按需经产物详情获取。
  */
-export async function GET(): Promise<Response> {
+export async function GET(request?: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
 
   try {
+    const pagination = parseListPagination(request);
     const repository = new DrizzlePlatformArtifactRepository();
-    const artifacts = await repository.listSpaceArtifacts({
+    const page = await repository.listSpaceArtifactsPage({
       spaceId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
+      ...pagination,
     });
-    return Response.json({
-      artifacts: artifacts.map((artifact) => ({
+    return jsonResponse({
+      artifacts: page.items.map((artifact) => ({
         id: artifact.id,
         kind: artifact.kind,
         trustTier: artifact.trustTier,
@@ -43,8 +63,12 @@ export async function GET(): Promise<Response> {
         latestVersion: artifact.latestVersion,
         updatedAt: artifact.updatedAt,
       })),
+      page: { nextCursor: encodeTemporalCursor(page.nextCursor) },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof PaginationRequestError) {
+      return jsonError(400, error.code, '分页参数不正确。');
+    }
     return jsonError(503, 'artifact_list_unavailable', '暂时无法读取产物。');
   }
 }
@@ -56,6 +80,13 @@ const createArtifactSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.enum(['mind_map', 'slides', 'flashcards']),
       title: titleSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('note'),
+      title: titleSchema,
+      markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS).optional(),
     })
     .strict(),
   z
@@ -82,15 +113,25 @@ export async function POST(request: Request): Promise<Response> {
   if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
 
   let body: unknown;
+  let idempotencyKey: string | null;
   try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, 'invalid_request', '请求格式不正确。');
+    idempotencyKey = readIdempotencyKey(request);
+    body = await readLimitedJsonRequest(request);
+  } catch (error) {
+    if (error instanceof JsonRequestValidationError) {
+      return jsonRequestErrorResponse(error);
+    }
+    throw error;
   }
   const parsed = createArtifactSchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '产物参数不正确。');
   }
+  const requestFingerprint = idempotencyKey
+    ? createHash('sha256')
+        .update(JSON.stringify(parsed.data), 'utf8')
+        .digest('hex')
+    : null;
 
   try {
     let params: Record<string, unknown> = {};
@@ -128,6 +169,45 @@ export async function POST(request: Request): Promise<Response> {
       }
       params = { selectedSources: parsed.data.sources };
     }
+
+    /* 用户直接新建空白笔记时，Artifact 与 v1 在同一事务落库，不产生
+       generation job；缺少 markdown 则仍按普通生成请求进入 Worker。 */
+    if (parsed.data.kind === 'note' && parsed.data.markdown !== undefined) {
+      const created =
+        await new DrizzleManualArtifactRepository().createWithInitialVersion({
+          spaceId: conversation.spaceId,
+          conversationId: conversation.id,
+          trustedSubjectId: identity.studentId,
+          kind: 'note',
+          trustTier: 'tier1',
+          title: parsed.data.title,
+          content: noteContentSchema.parse({
+            contentVersion: 1,
+            markdown: parsed.data.markdown,
+            sourceConversationId: conversation.id,
+            generatedByModel: false,
+          }),
+          generatedBy: 'user:manual',
+          idempotencyKey,
+          requestFingerprint,
+        });
+      return jsonResponse(
+        {
+          artifact: {
+            id: created.artifact.id,
+            kind: created.artifact.kind,
+            trustTier: created.artifact.trustTier,
+            title: created.artifact.title,
+            status: 'active',
+            latestVersion: 1,
+          },
+          job: null,
+          replayed: created.replayed,
+        },
+        { status: created.replayed ? 200 : 201 },
+      );
+    }
+
     const repository = new DrizzlePlatformArtifactRepository();
     const created = await repository.createArtifactWithGenerationJob({
       spaceId: conversation.spaceId,
@@ -138,8 +218,10 @@ export async function POST(request: Request): Promise<Response> {
       title: parsed.data.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
       params,
+      idempotencyKey,
+      requestFingerprint,
     });
-    return Response.json(
+    return jsonResponse(
       {
         artifact: {
           id: created.artifact.id,
@@ -150,10 +232,19 @@ export async function POST(request: Request): Promise<Response> {
           latestVersion: created.artifact.latestVersion,
         },
         job: { id: created.job.id, status: created.job.status },
+        replayed: created.replayed,
       },
-      { status: 201 },
+      { status: created.replayed ? 200 : 201 },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ArtifactIdempotencyConflictError) {
+      return jsonError(
+        409,
+        'idempotency_conflict',
+        '这个幂等键已用于不同的产物请求。',
+      );
+    }
     return jsonError(503, 'artifact_create_unavailable', '暂时无法创建产物。');
   }
 }
+import { createHash } from 'node:crypto';

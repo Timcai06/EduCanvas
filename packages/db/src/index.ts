@@ -5,13 +5,17 @@
 
 export { getDb } from './client';
 export * from './schema';
+export * from './schema/study';
 export {
   AssetAccessError,
   AssetPersistenceError,
+  ASSET_EXTRACT_TEXT_TASK,
   DrizzleAssetRepository,
+  type AssetAccessPolicy,
   type AssetSnapshot,
   type CreateUploadedAssetInput,
   type MaterializedAssetVersion,
+  type OwnedStoredAssetVersion,
 } from './asset-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
@@ -20,6 +24,15 @@ export {
   type PlatformConversationSnapshot,
   type PlatformMessageSnapshot,
 } from './conversation-platform-repository';
+export {
+  DrizzleWebAccountRepository,
+  WebCredentialChangedError,
+  WebUsernameTakenError,
+  type WebPasswordMaterial,
+  type WebUserCredentialSnapshot,
+  type WebUserProfileSnapshot,
+} from './web-account-repository';
+export { DrizzleWebSessionRepository } from './web-session-repository';
 export {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,
@@ -65,6 +78,7 @@ export {
 export { DrizzleGatewayConnectionRepository } from './gateway-connection-repository';
 export {
   ARTIFACT_GENERATE_TASK,
+  ArtifactIdempotencyConflictError,
   ArtifactJobLifecycleError,
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
@@ -77,6 +91,11 @@ export {
   type PlatformArtifactJob,
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';
+export {
+  DrizzlePlatformArtifactTurnReferenceRepository,
+  type PlatformArtifactTurnReference,
+} from './platform-artifact-turn-reference-repository';
+export { DrizzleManualArtifactRepository } from './manual-artifact-repository';
 export {
   ArtifactContentConflictError,
   DrizzleArtifactRepository,
@@ -104,6 +123,28 @@ export {
   type OwnedLearningSession,
   type OwnedLearningGatewayTarget,
 } from './learning-session-repository';
+export { DrizzleStudyPlanRepository } from './study-plan-repository';
+export {
+  DrizzleStudyBootstrapCompensator,
+  type DiscardUnplannedStudySessionInput,
+} from './study-bootstrap-compensator';
+export { DrizzleStudyDiagnosticRepository } from './study-diagnostic-repository';
+export {
+  DrizzleLearningActivityRepository,
+  type LearningActivityFacts,
+} from './learning-activity-repository';
+export {
+  DiagnosticAttemptConflictError,
+  StudyPlanNotFoundError,
+  type BootstrapStudyPlanInput,
+  type DiagnosticAttemptSnapshot,
+  type LearnerProfileSnapshot,
+  type PersistDiagnosticInput,
+  type PersistDiagnosticResult,
+  type StudyGoalSnapshot,
+  type StudyObjectiveSnapshot,
+  type StudyPlanSnapshot,
+} from './study-repository-contracts';
 export {
   ChatLifecycleError,
   ChatMessageIdConflictError,
@@ -288,3 +329,26 @@ export {
   type SessionSourceBindingSnapshot,
   type TurnSourceVersionSnapshot,
 } from './knowledge-retrieval-repository';
+export {
+  NotebookAccessNotFoundError,
+  requireNotebookAccess,
+  resolveNotebookAccess,
+  type NotebookAccessExecutor,
+  type NotebookAccessSnapshot,
+} from './notebook-access';
+export {
+  DrizzleSecurityAuditRepository,
+  appendSecurityAuditEvent,
+  type SecurityAuditEventInput,
+  type SecurityAuditOutcome,
+} from './security-audit-repository';
+export {
+  DrizzleObjectDeletionOutboxRepository,
+  MAX_OBJECT_DELETION_ATTEMPTS,
+  type ObjectDeletionClaim,
+} from './object-deletion-outbox-repository';
+export {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';

@@ -1,13 +1,42 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import type { NotebookPermission } from '@educanvas/gateway-core';
 import { getDb } from './client';
+import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
 import {
   artifactGenerationJobs,
   artifactVersions,
   artifacts,
-  spaces,
+  conversations,
 } from './schema';
+import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
+type DatabaseTransaction = Parameters<
+  Parameters<Database['transaction']>[0]
+>[0];
+type DatabaseExecutor = Database | DatabaseTransaction;
+
+async function requireArtifactNotebookAccess(
+  executor: DatabaseExecutor,
+  input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    permission: NotebookPermission;
+  },
+): Promise<void> {
+  await requireNotebookAccess(executor, {
+    notebookId: input.spaceId,
+    trustedSubjectId: input.trustedSubjectId,
+    requiredPermission: input.permission,
+  }).catch(() => {
+    throw new ArtifactOwnershipError();
+  });
+}
 
 /** 主体不拥有目标 Space/Artifact 时抛出;与查无此物同错,避免所有权探测。 */
 export class ArtifactOwnershipError extends Error {
@@ -26,6 +55,15 @@ export class ArtifactVersionConflictError extends Error {
   constructor() {
     super('产物版本写入冲突,请重试');
     this.name = 'ArtifactVersionConflictError';
+  }
+}
+
+export class ArtifactIdempotencyConflictError extends Error {
+  readonly code = 'artifact_idempotency_conflict';
+
+  constructor() {
+    super('相同幂等键已绑定不同的产物创建请求');
+    this.name = 'ArtifactIdempotencyConflictError';
   }
 }
 
@@ -137,14 +175,11 @@ export class DrizzlePlatformArtifactRepository {
     title: string;
     status?: Extract<ArtifactStatus, 'proposed' | 'active'>;
   }): Promise<PlatformArtifact> {
-    const [space] = await this.database
-      .select({ ownerSubjectId: spaces.ownerSubjectId })
-      .from(spaces)
-      .where(eq(spaces.id, input.spaceId))
-      .limit(1);
-    if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
-      throw new ArtifactOwnershipError();
-    }
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: input.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'artifact.write',
+    });
 
     const [row] = await this.database
       .insert(artifacts)
@@ -168,14 +203,14 @@ export class DrizzlePlatformArtifactRepository {
     const [row] = await this.database
       .select()
       .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.id, input.artifactId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(eq(artifacts.id, input.artifactId))
       .limit(1);
     if (!row) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: row.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     return toArtifact(row);
   }
 
@@ -184,15 +219,21 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformArtifact[]> {
+    const [conversation] = await this.database
+      .select({ spaceId: conversations.spaceId })
+      .from(conversations)
+      .where(eq(conversations.id, input.conversationId))
+      .limit(1);
+    if (!conversation) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: conversation.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     const rows = await this.database
       .select()
       .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.conversationId, input.conversationId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(and(eq(artifacts.conversationId, input.conversationId)))
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
       .limit(Math.min(input.limit ?? 50, 100));
     return rows.map(toArtifact);
@@ -204,18 +245,49 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
   }): Promise<readonly PlatformArtifact[]> {
+    return (await this.listSpaceArtifactsPage(input)).items;
+  }
+
+  async listSpaceArtifactsPage(input: {
+    spaceId: string;
+    trustedSubjectId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<PlatformArtifact>> {
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: input.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     const rows = await this.database
       .select()
       .from(artifacts)
       .where(
         and(
           eq(artifacts.spaceId, input.spaceId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+          input.cursor
+            ? or(
+                lt(artifacts.updatedAt, input.cursor.timestamp),
+                and(
+                  eq(artifacts.updatedAt, input.cursor.timestamp),
+                  lt(artifacts.id, input.cursor.id),
+                ),
+              )
+            : undefined,
         ),
       )
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
-      .limit(Math.min(input.limit ?? 50, 100));
-    return rows.map(toArtifact);
+      .limit(boundedPageLimit(input.limit) + 1);
+    const limit = boundedPageLimit(input.limit);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    return {
+      items: pageRows.map(toArtifact),
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.updatedAt, id: last.id }
+          : null,
+    };
   }
 
   /**
@@ -240,16 +312,21 @@ export class DrizzlePlatformArtifactRepository {
         const [artifact] = await tx
           .select({
             id: artifacts.id,
-            ownerSubjectId: artifacts.ownerSubjectId,
+            spaceId: artifacts.spaceId,
             latestVersion: artifacts.latestVersion,
           })
           .from(artifacts)
           .where(eq(artifacts.id, input.artifactId))
           .for('update')
           .limit(1);
-        if (!artifact || artifact.ownerSubjectId !== input.trustedSubjectId) {
+        if (!artifact) {
           throw new ArtifactOwnershipError();
         }
+        await requireArtifactNotebookAccess(tx, {
+          spaceId: artifact.spaceId,
+          trustedSubjectId: input.trustedSubjectId,
+          permission: 'artifact.write',
+        });
         if (
           input.expectedLatestVersion !== undefined &&
           artifact.latestVersion !== input.expectedLatestVersion
@@ -399,7 +476,7 @@ export class DrizzlePlatformArtifactRepository {
           id: artifactGenerationJobs.id,
           status: artifactGenerationJobs.status,
           startedAt: artifactGenerationJobs.startedAt,
-          owner: artifacts.ownerSubjectId,
+          spaceId: artifacts.spaceId,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -409,9 +486,14 @@ export class DrizzlePlatformArtifactRepository {
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .for('update', { of: artifactGenerationJobs })
         .limit(1);
-      if (!row || row.owner !== input.trustedSubjectId) {
+      if (!row) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: row.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
 
       const from = row.status as ArtifactJobStatus;
       if (!JOB_TRANSITIONS[from].includes(input.to)) {
@@ -444,17 +526,20 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
   }): Promise<PlatformArtifactJob> {
     const [row] = await this.database
-      .select({ job: artifactGenerationJobs })
+      .select({
+        job: artifactGenerationJobs,
+        spaceId: artifacts.spaceId,
+      })
       .from(artifactGenerationJobs)
       .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
-      .where(
-        and(
-          eq(artifactGenerationJobs.id, input.jobId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-        ),
-      )
+      .where(eq(artifactGenerationJobs.id, input.jobId))
       .limit(1);
     if (!row) throw new ArtifactOwnershipError();
+    await requireArtifactNotebookAccess(this.database, {
+      spaceId: row.spaceId,
+      trustedSubjectId: input.trustedSubjectId,
+      permission: 'notebook.read',
+    });
     return toJob(row.job);
   }
 
@@ -471,7 +556,7 @@ export class DrizzlePlatformArtifactRepository {
       const [row] = await tx
         .select({
           job: artifactGenerationJobs,
-          owner: artifacts.ownerSubjectId,
+          spaceId: artifacts.spaceId,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -481,9 +566,14 @@ export class DrizzlePlatformArtifactRepository {
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .for('update', { of: artifactGenerationJobs })
         .limit(1);
-      if (!row || row.owner !== input.trustedSubjectId) {
+      if (!row) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: row.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
       if (row.job.status !== 'running') {
         throw new ArtifactJobLifecycleError(row.job.status, 'running');
       }
@@ -520,21 +610,62 @@ export class DrizzlePlatformArtifactRepository {
     spaceId: string;
     conversationId: string;
     trustedSubjectId: string;
+    /** 仅 Agent Turn 创建时传入；用于把产物恢复到对应助手消息末尾。 */
+    operationId?: string | null;
     kind: string;
     trustTier: ArtifactTrustTier;
     title: string;
     taskIdentifier: string;
     params?: Record<string, unknown>;
     maxAttempts?: number;
-  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }> {
+    idempotencyKey?: string | null;
+    requestFingerprint?: string | null;
+  }): Promise<{
+    artifact: PlatformArtifact;
+    job: PlatformArtifactJob;
+    replayed: boolean;
+  }> {
     return await this.database.transaction(async (tx) => {
-      const [space] = await tx
-        .select({ ownerSubjectId: spaces.ownerSubjectId })
-        .from(spaces)
-        .where(eq(spaces.id, input.spaceId))
-        .limit(1);
-      if (!space || space.ownerSubjectId !== input.trustedSubjectId) {
+      if (Boolean(input.idempotencyKey) !== Boolean(input.requestFingerprint)) {
+        throw new ArtifactIdempotencyConflictError();
+      }
+      if (!(await ownsArtifactConversationScope(tx, input))) {
         throw new ArtifactOwnershipError();
+      }
+      if (input.idempotencyKey) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`artifact-create:${input.trustedSubjectId}:${input.idempotencyKey}`}, 0))`,
+        );
+        const [existing] = await tx
+          .select()
+          .from(artifacts)
+          .where(
+            and(
+              eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+              eq(artifacts.creationIdempotencyKey, input.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          if (
+            !input.requestFingerprint ||
+            existing.creationRequestFingerprint !== input.requestFingerprint
+          ) {
+            throw new ArtifactIdempotencyConflictError();
+          }
+          const [existingJob] = await tx
+            .select()
+            .from(artifactGenerationJobs)
+            .where(eq(artifactGenerationJobs.artifactId, existing.id))
+            .orderBy(desc(artifactGenerationJobs.createdAt))
+            .limit(1);
+          if (!existingJob) throw new ArtifactIdempotencyConflictError();
+          return {
+            artifact: toArtifact(existing),
+            job: toJob(existingJob),
+            replayed: true,
+          };
+        }
       }
 
       const [artifactRow] = await tx
@@ -547,6 +678,8 @@ export class DrizzlePlatformArtifactRepository {
           trustTier: input.trustTier,
           title: input.title,
           status: 'proposed',
+          creationIdempotencyKey: input.idempotencyKey ?? null,
+          creationRequestFingerprint: input.requestFingerprint ?? null,
         })
         .returning();
       const artifact = toArtifact(artifactRow!);
@@ -556,6 +689,7 @@ export class DrizzlePlatformArtifactRepository {
         .insert(artifactGenerationJobs)
         .values({
           artifactId: artifact.id,
+          operationId: input.operationId ?? null,
           params: input.params ?? {},
           queueJobKey,
         })
@@ -576,7 +710,7 @@ export class DrizzlePlatformArtifactRepository {
         )
       `);
 
-      return { artifact, job };
+      return { artifact, job, replayed: false };
     });
   }
 
@@ -602,12 +736,16 @@ export class DrizzlePlatformArtifactRepository {
         .limit(1);
       if (
         !artifactRow ||
-        artifactRow.ownerSubjectId !== input.trustedSubjectId ||
         artifactRow.conversationId !== input.conversationId ||
         artifactRow.status !== 'active'
       ) {
         throw new ArtifactOwnershipError();
       }
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: artifactRow.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
       if (artifactRow.latestVersion !== input.baseVersion) {
         throw new ArtifactRevisionConflictError('stale_version');
       }

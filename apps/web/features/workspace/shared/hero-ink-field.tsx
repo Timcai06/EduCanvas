@@ -6,7 +6,7 @@ import { useReducedMotion } from './use-reduced-motion';
 
 /*
  * 扉页「墨点场」：落地页背景的一层安静网点（PixelBlast / WebGL / three）。
- * 单色黛青、极低透明，只作纯材质暗示——极缓自漂移，**不响应鼠标**：关掉了液态跟随与
+ * 单色墨紫、极低透明，只作纯材质暗示——极缓自漂移，**不响应鼠标**：关掉了液态跟随与
  * 点击涟漪，向 Gemini/NotebookLM 那种沉静背景看齐，避免喧宾夺主、也顺带消除侧栏展开时
  * EffectComposer render target 缩放导致的闪烁（无 liquid/noise 时不建 composer，走朴素 renderer）。
  * aria-hidden、不承载信息、不拦截交互（pointer-events:none）。
@@ -18,8 +18,8 @@ const PixelBlast = dynamic(() => import('./pixel-blast'), { ssr: false });
 
 export function HeroInkField() {
   const reduced = useReducedMotion();
-  // 专用点色而非 --color-accent：亮色需喂更深的黛青墨抵消 shader 的提亮，见 globals.css
-  const ink = useCssVarColor('--hero-ink-dot', '#0e343d');
+  // 专用点色而非 --color-accent：亮色需喂更深的墨紫墨抵消 shader 的提亮，见 globals.css
+  const ink = useCssVarColor('--hero-ink-dot', '#2e1c46');
 
   if (reduced) return null;
 

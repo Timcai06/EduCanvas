@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type {
   CanvasSubmissionInput,
+  CreateStudyPlanInputDTO,
+  StudyActionResultDTO,
+  SubmitDiagnosticInputDTO,
   SubmitCanvasResultDTO,
 } from '@/features/learning/learning-contracts';
 import {
@@ -13,26 +16,66 @@ import {
   writeAnonymousIdentityCookie,
 } from '@/server/identity/anonymous-identity';
 import {
-  bootstrapAnonymousLesson,
-  hasActiveAnonymousLesson,
+  bootstrapStudyPlan,
+  loadOwnedStudyContext,
+  submitStudyDiagnostic,
+} from '@/server/study/study-service';
+import {
   progressFromSubmission,
   resumeOwnedAnonymousLesson,
   startNewAnonymousLesson,
   submitOwnedCanvas,
 } from '@/server/teaching/learning-session';
 
-/** 明确的用户动作负责创建Cookie；Server Component渲染绝不写Cookie。 */
-export async function startAnonymousLessonAction(): Promise<void> {
+/** 明确声明画像与目标后创建 Notebook；成功前绝不写匿名身份 Cookie。 */
+export async function createStudyPlanAction(
+  input: CreateStudyPlanInputDTO,
+): Promise<StudyActionResultDTO> {
   const existingIdentity = await readAnonymousIdentity();
   const identity =
     existingIdentity &&
     (!isEphemeralAnonymousIdentity(existingIdentity) ||
-      (await hasActiveAnonymousLesson(existingIdentity)))
+      (await loadOwnedStudyContext(existingIdentity)))
       ? existingIdentity
       : createAnonymousIdentity();
-  await bootstrapAnonymousLesson(identity);
+  try {
+    await bootstrapStudyPlan(identity, input);
+  } catch (error) {
+    const requestId = randomUUID();
+    console.error('学习计划创建失败', { requestId, error });
+    return {
+      status: 'error',
+      requestId,
+      message: '学习计划暂时无法创建，请稍后重试。',
+    };
+  }
   if (identity.studentId.startsWith('anon:')) {
     await writeAnonymousIdentityCookie(identity.token);
+  }
+  redirect('/learn');
+}
+
+/** 诊断提交只携带选择；答案键、目标映射和判分始终留在服务端。 */
+export async function submitDiagnosticAction(
+  input: SubmitDiagnosticInputDTO,
+): Promise<StudyActionResultDTO> {
+  const identity = await readAnonymousIdentity();
+  if (!identity) {
+    return { status: 'unauthorized', message: '请先建立学习计划。' };
+  }
+  try {
+    const outcome = await submitStudyDiagnostic(identity, input);
+    if (!outcome.ok) {
+      return { status: 'invalid', message: '诊断答案不完整，请重新检查。' };
+    }
+  } catch (error) {
+    const requestId = randomUUID();
+    console.error('学习诊断提交失败', { requestId, error });
+    return {
+      status: 'error',
+      requestId,
+      message: '诊断暂时无法提交，请稍后重试。',
+    };
   }
   redirect('/learn');
 }

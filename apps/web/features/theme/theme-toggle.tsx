@@ -5,7 +5,7 @@ import { useThemePreference, type ThemePreference } from './use-theme';
 
 /**
  * 三段主题控件：跟随系统 / 纸色亮 / 砚墨暗。走「两支笔」纸墨身份——tokens only、
- * 禁 text-white，选中态用黛青（accent），过渡在 reduced-motion 下取消。
+ * 禁 text-white，选中态用墨紫（accent），过渡在 reduced-motion 下取消。
  * 无障碍：每段 aria-pressed 表达当前选择，键盘可 Tab 到达并 focus-visible 焦点环，
  * 切换时经 aria-live 区播报当前主题。控件本身不解析系统明暗，只表达偏好。
  */

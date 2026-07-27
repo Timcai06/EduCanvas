@@ -1,3 +1,25 @@
+/**
+ * 教学输出安全门 — Provider 流式 delta 到浏览器之间的缓冲 Gate。
+ *
+ * ## 工作原理
+ *
+ * 模型输出是流式的，安全检测需要在**完整句子**上运行（而不是单个字/词）。
+ * Gate 缓冲 delta 直到检测到句末标点，然后对完整句执行 evaluateTeachingOutputText。
+ *
+ * ## 缓冲区策略
+ *
+ * - **完整句优先释放** — 遇到句末标点（。！？!?.\\n 等）才切分释放
+ * - **无标点长文本截断** — 缓冲区超过 384 字符时强制释放前段，保留后 128 字符作为上下文尾
+ * - **上下文尾** — 释放的文本末尾保留 128 字符，与新 delta 拼接后一起检测
+ *   （防止敏感内容被切在两段边界上漏检）
+ * - **命中后永久关闭** — 一旦 block，后续所有 push 返回 closed，不再处理
+ *
+ * ## 为什么不用模型做安全检测
+ *
+ * 同 teaching-core/safety-policy 的设计：
+ * 模型延迟高（200ms+）、结果不确定（不可审计）、可能被 prompt injection 绕过。
+ */
+
 import {
   K12_SAFETY_POLICY_VERSION,
   evaluateTeachingOutputText,
@@ -47,6 +69,7 @@ export type TeachingOutputSafetyGateFinishResult =
     }
   | Extract<TeachingOutputSafetyGatePushResult, { kind: 'blocked' | 'closed' }>;
 
+/** 句末分割正则 — 中文标点（。！？）、英文句号后跟空格/换行、换行符 */
 const SENTENCE_BOUNDARY =
   /(?:[。！？!?][\t ]*|\.(?=[\t \r\n])(?:[\t ]*)|\r?\n+)/u;
 

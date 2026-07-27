@@ -13,6 +13,7 @@ import {
   fetchArtifactDetail,
   pollArtifactUntilSettled,
   reviseArtifact,
+  saveNoteArtifact,
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
@@ -27,6 +28,8 @@ import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
+import { NoteRenderer } from './note-renderer';
+import type { NoteContent } from '@educanvas/canvas-protocol';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -42,11 +45,18 @@ export interface ConfirmArtifactOptions {
   openWhenReady?: boolean;
 }
 
+export interface ProposedArtifact {
+  artifactId: string;
+  kind: CreatableArtifactKind;
+  title: string;
+}
+
 export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
   flashcards: '闪卡',
   audio_overview: '音频概览',
+  note: '笔记',
 };
 
 /**
@@ -99,6 +109,53 @@ export function useArtifactGeneration() {
         }
       } catch {
         setGeneration({ phase: 'failed', kind, title });
+      }
+    },
+    [],
+  );
+
+  /**
+   * 接管 Agent 工具已经创建的后台任务。这里不再次 POST，避免一个模型工具调用
+   * 产生两份产物；只恢复现有 Artifact 的轮询与可选 Canvas 自动打开。
+   */
+  const observeProposedArtifact = useCallback(
+    async (
+      artifact: ProposedArtifact,
+      options: ConfirmArtifactOptions = {},
+    ) => {
+      pollAbort.current?.abort();
+      setGeneration({
+        phase: 'generating',
+        kind: artifact.kind,
+        artifactId: artifact.artifactId,
+        title: artifact.title,
+      });
+      try {
+        pollAbort.current = new AbortController();
+        const detail = await pollArtifactUntilSettled(artifact.artifactId, {
+          signal: pollAbort.current.signal,
+        });
+        const succeeded =
+          detail.artifact.latestVersion > 0 &&
+          detail.latestJob?.status !== 'failed';
+        setGeneration({
+          phase: succeeded ? 'ready' : 'failed',
+          kind: artifact.kind,
+          artifactId: artifact.artifactId,
+          title: detail.artifact.title,
+          detail,
+        });
+        if (succeeded && options.openWhenReady) {
+          setOpenDetail(detail);
+          setCanvasFull(false);
+        }
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          kind: artifact.kind,
+          artifactId: artifact.artifactId,
+          title: artifact.title,
+        });
       }
     },
     [],
@@ -167,6 +224,57 @@ export function useArtifactGeneration() {
     [],
   );
 
+  const createBlankNote = useCallback(async (title: string) => {
+    setGeneration({ phase: 'generating', kind: 'note', title });
+    try {
+      const created = await createArtifact('note', title, [], `# ${title}\n\n`);
+      const detail = await fetchArtifactDetail(created.artifact.id);
+      setGeneration({
+        phase: 'ready',
+        kind: 'note',
+        artifactId: created.artifact.id,
+        title,
+        detail,
+      });
+      setOpenDetail(detail);
+      setCanvasFull(false);
+    } catch {
+      setGeneration({ phase: 'failed', kind: 'note', title });
+    }
+  }, []);
+
+  const saveNote = useCallback(
+    async (detail: ArtifactDetail, markdown: string) => {
+      const baseVersion = detail.artifact.latestVersion;
+      setGeneration({
+        phase: 'generating',
+        kind: 'note',
+        artifactId: detail.artifact.id,
+        title: detail.artifact.title,
+      });
+      try {
+        await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
+        const updated = await fetchArtifactDetail(detail.artifact.id);
+        setOpenDetail(updated);
+        setGeneration({
+          phase: 'ready',
+          kind: 'note',
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+          detail: updated,
+        });
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          kind: 'note',
+          artifactId: detail.artifact.id,
+          title: detail.artifact.title,
+        });
+      }
+    },
+    [],
+  );
+
   const dismiss = useCallback(() => {
     pollAbort.current?.abort();
     setGeneration(null);
@@ -179,7 +287,10 @@ export function useArtifactGeneration() {
     setCanvasFull,
     beginConfirm,
     confirm,
+    observeProposedArtifact,
+    createBlankNote,
     revise,
+    saveNote,
     openArtifact,
     openArtifactVersion,
     closeCanvas: () => {
@@ -264,7 +375,11 @@ export function ArtifactStatusCard({
     >
       <span
         aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
+        className={`grid size-9 shrink-0 place-items-center rounded-xl ${
+          generation.phase === 'failed'
+            ? 'bg-cinnabar-soft text-cinnabar-strong'
+            : 'bg-accent-soft text-accent'
+        }`}
       >
         {generation.phase === 'generating' ? (
           <CircleNotch
@@ -283,7 +398,13 @@ export function ArtifactStatusCard({
         <span className="block truncate text-sm font-semibold text-ink">
           {generation.title}
         </span>
-        <span className="block text-xs text-ink-muted">
+        <span
+          className={`block text-xs ${
+            generation.phase === 'failed'
+              ? 'text-cinnabar-strong'
+              : 'text-ink-muted'
+          }`}
+        >
           {generation.phase === 'generating'
             ? '后台生成中…关闭页面也不会中断'
             : generation.phase === 'ready'
@@ -325,6 +446,7 @@ export function ArtifactCanvas({
   onClose,
   onSelectVersion,
   onRevise,
+  onSaveNote,
   revising = false,
 }: {
   detail: ArtifactDetail;
@@ -333,12 +455,13 @@ export function ArtifactCanvas({
   onClose: () => void;
   onSelectVersion: (version: number) => void;
   onRevise: (instruction: string) => void;
+  onSaveNote: (markdown: string) => void;
   revising?: boolean;
 }) {
   const [instruction, setInstruction] = useState('');
   const displayedVersion = detail.version?.version ?? 0;
   const isLatest = displayedVersion === detail.artifact.latestVersion;
-  const canRevise = ['mind_map', 'slides', 'flashcards'].includes(
+  const canRevise = ['mind_map', 'slides', 'flashcards', 'note'].includes(
     detail.artifact.kind,
   );
   const generating = isArtifactGenerating(detail, revising);
@@ -376,7 +499,7 @@ export function ArtifactCanvas({
               aria-label="Canvas版本"
               value={displayedVersion || ''}
               onChange={(event) => onSelectVersion(Number(event.target.value))}
-              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none transition-colors hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent"
             >
               {detail.versions.map((version) => (
                 <option key={version.version} value={version.version}>
@@ -410,6 +533,15 @@ export function ArtifactCanvas({
           ) : detail.artifact.kind === 'audio_overview' &&
             detail.version?.media ? (
             <AudioOverviewPlayer media={detail.version.media} />
+          ) : detail.artifact.kind === 'note' && detail.version ? (
+            <NoteRenderer
+              key={displayedVersion}
+              content={detail.version.content as NoteContent}
+              isLatest={isLatest}
+              readOnly={!isLatest}
+              onSave={onSaveNote}
+              saving={revising}
+            />
           ) : (
             <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
           )}
@@ -442,7 +574,7 @@ export function ArtifactCanvas({
                     : '请先切回最新版本再继续修改'
                 }
                 onChange={(event) => setInstruction(event.target.value)}
-                className="min-h-12 flex-1 resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:text-ink-faint"
+                className="ec-input min-h-12 flex-1 resize-none rounded-xl px-3 py-2 text-sm text-ink disabled:text-ink-faint"
               />
               <button
                 type="submit"

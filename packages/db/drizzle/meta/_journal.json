@@ -239,6 +239,48 @@
       "when": 1784736296205,
       "tag": "0033_crazy_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784860077130,
+      "tag": "0034_dapper_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784875436079,
+      "tag": "0035_curvy_justin_hammer",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785029968884,
+      "tag": "0036_empty_banshee",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785029985234,
+      "tag": "0037_aromatic_true_believers",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1785030405445,
+      "tag": "0038_mighty_shen",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785034688271,
+      "tag": "0039_little_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

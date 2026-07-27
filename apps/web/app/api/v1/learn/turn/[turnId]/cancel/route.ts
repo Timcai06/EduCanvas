@@ -3,6 +3,7 @@ import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   isTrustedSameOriginWrite,
   jsonError,
+  jsonResponse,
 } from '@/server/http/request-security';
 import { abortRegisteredTurn } from '@/server/http/turn-abort-registry';
 
@@ -33,7 +34,7 @@ export async function POST(
     }
 
     abortRegisteredTurn(turnId);
-    return Response.json(
+    return jsonResponse(
       {
         turnId,
         accepted: result.accepted,

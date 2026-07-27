@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
 import { SplitText } from 'gsap/SplitText';
 import { useRef } from 'react';
+import { TextType } from './text-type';
 
 gsap.registerPlugin(useGSAP, SplitText, DrawSVGPlugin);
 
@@ -14,30 +15,28 @@ gsap.registerPlugin(useGSAP, SplitText, DrawSVGPlugin);
  * 让大字持续「活着」而不喧宾夺主。SplitText 的 aria 兜底保留原文，
  * E2E 的 heading 断言不受切分影响；reduced-motion 下全部静态渲染、无持续动效。
  */
-export function HeroGreeting() {
+export function HeroGreeting({ nickname }: { nickname?: string | null }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const strokeRef = useRef<SVGPathElement>(null);
 
   useGSAP(
     () => {
-      const heading = headingRef.current;
+      const root = rootRef.current;
       const stroke = strokeRef.current;
-      if (!heading || !stroke) return;
+      if (!root || !stroke) return;
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: no-preference)', () => {
-        heading.classList.add('is-splitting');
-        const split = SplitText.create(heading, {
-          type: 'chars',
-          mask: 'chars',
-        });
-        /* 落字用 mask 遮住上冒的溢出；完成后换成无遮罩的普通切分承载持续呼吸，
-           否则呼吸的位移会被 mask 裁掉字顶。loopSplit 在 revert 时一并回收。 */
-        let loopSplit: SplitText | null = null;
+        const staticParts = Array.from(
+          root.querySelectorAll<HTMLElement>('.hero-greeting__static'),
+        );
+        const splits = staticParts.map((part) =>
+          SplitText.create(part, { type: 'chars' }),
+        );
+        const characters = splits.flatMap((split) => split.chars);
         const timeline = gsap.timeline();
         timeline
           .fromTo(
-            split.chars,
+            characters,
             { yPercent: 108, autoAlpha: 0 },
             {
               yPercent: 0,
@@ -47,10 +46,7 @@ export function HeroGreeting() {
               ease: 'power3.out',
               delay: 0.12,
               onComplete: () => {
-                split.revert();
-                heading.classList.remove('is-splitting');
-                loopSplit = SplitText.create(heading, { type: 'chars' });
-                loopSplit.chars.forEach((char, index) => {
+                characters.forEach((char, index) => {
                   const el = char as HTMLElement;
                   el.classList.add('hero-ink-char');
                   el.style.setProperty(
@@ -69,8 +65,7 @@ export function HeroGreeting() {
           );
         return () => {
           timeline.kill();
-          loopSplit?.revert();
-          split.revert();
+          splits.forEach((split) => split.revert());
         };
       });
       media.add('(prefers-reduced-motion: reduce)', () => {
@@ -84,10 +79,31 @@ export function HeroGreeting() {
   return (
     <div ref={rootRef} className="mb-9 px-4">
       <h1
-        ref={headingRef}
+        aria-label={
+          nickname ? `Hi ${nickname}，今天想学什么？` : '今天想学什么？'
+        }
         className="hero-ink-text text-[clamp(1.9rem,3vw,2.6rem)] leading-snug tracking-[0.01em] text-balance"
       >
-        今天想学点什么？
+        {nickname ? (
+          <>
+            <span aria-hidden="true" className="hero-greeting__static">
+              Hi{' '}
+            </span>
+            <TextType
+              text={nickname}
+              typingSpeed={82}
+              deletingSpeed={48}
+              pauseRange={{ min: 3_000, max: 5_000 }}
+            />
+            <span aria-hidden="true" className="hero-greeting__static">
+              ，今天想学什么？
+            </span>
+          </>
+        ) : (
+          <span aria-hidden="true" className="hero-greeting__static">
+            今天想学什么？
+          </span>
+        )}
       </h1>
       {/* 朱砂笔触下划线：宽度跟随文字盒，起笔重收笔轻 */}
       <svg

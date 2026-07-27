@@ -79,9 +79,14 @@ export interface GatewayOperationStorePort {
     operationId: string,
     afterSequence: number,
     actorUserId: string,
+    now?: Date,
   ): Promise<readonly GatewayOperationEvent[]>;
-  /** 取消鉴权用：返回归属与终态；操作不存在返回 null。 */
-  describe(operationId: string): Promise<GatewayOperationDescriptor | null>;
+  /** 取消鉴权用：按当前访问权返回归属与终态；不可访问时返回 null。 */
+  describe(
+    operationId: string,
+    actorUserId: string,
+    now?: Date,
+  ): Promise<GatewayOperationDescriptor | null>;
   /** 跨进程可见的取消请求；只写请求事实，不直接伪造 Operation 终态。 */
   requestCancellation(input: {
     operationId: string;

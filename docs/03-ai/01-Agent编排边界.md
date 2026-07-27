@@ -76,7 +76,9 @@ Profile allowlist
 
 Context 不是把 Notebook 全部数据拼成字符串。应用层应从 Profile/System、Notebook 摘要、最近完整消息、选中或检索命中的 Sources、Artifact 版本、相关学习者记忆和本轮多模态 Part 中按预算选择。
 
-历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。三条生产入口均使用统一预算和持久Context Snapshot；Web资产文本按不可变AssetVersion分段记录并保持不可信资料边界。历史窗口必须取最新N条后恢复正序，不能让长会话把当前消息挤出Context。
+历史消息不能注入 `system` 角色；来源必须经过所有权与候选白名单；Provider 支持原生媒体时不应先降级为文字描述。
+
+原生媒体输入的边界：Provider 能力由模型网关配置声明（`MODEL_GATEWAY_VISION`），与实际调用的网关同源，物化层据此要么产出原生片段、要么明确失败，不静默丢弃也不赌供应商容错。图片一律内联字节进入 Provider 请求，storage key 与任何可回源地址都不得出现在这条路径上。图片不占文本预算，因此在物化层单独限张数与总字节，超限报可操作的错误而不是截断——静默丢图会让模型基于不完整材料作答。同一轮的多张图片合并进一条消息，避免逐张占用 Context segment 名额把对话历史挤出去；该消息的 `segment.content` 必须与消息的文本投影逐字相等，Prompt 漂移守卫依赖这个等式。三条生产入口均使用统一预算和持久Context Snapshot；Web资产文本按不可变AssetVersion分段记录并保持不可信资料边界。历史窗口必须取最新N条后恢复正序，不能让长会话把当前消息挤出Context。
 
 ## 六、教育能力与可信事实
 

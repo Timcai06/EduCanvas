@@ -22,7 +22,7 @@ import { StudioDrawer } from '@/features/studio/studio-drawer';
 import { CANVAS_INTERACTION_SCHEMA_VERSION } from '@educanvas/canvas-protocol';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Sheet } from '../shared/sheet';
-import { EmptyChatHero } from './empty-chat-hero';
+import { EmptyChatHero } from '../shared/empty-chat-hero';
 import {
   PENDING_FIRST_MENU_ACTION_KEY,
   PENDING_FIRST_PROMPT_KEY,
@@ -335,7 +335,7 @@ function LearnWorkspaceSession({
       className="flex h-dvh flex-col bg-canvas text-ink"
     >
       <TopBar
-        courseTitle="人工智能通识 · 图像是怎么被认出来的"
+        courseTitle={initialData.study.topic}
         stageLabel={null}
         masteryPercent={progress?.masteryPercent ?? null}
         onOpenStudio={() => setDrawer('studio')}
@@ -540,7 +540,7 @@ function LearnWorkspaceSession({
       ) : null}
       {drawer === 'progress' ? (
         <Sheet label="学习进度" onClose={() => setDrawer(null)}>
-          <ProgressDrawer progress={progress} />
+          <ProgressDrawer progress={progress} study={initialData.study} />
         </Sheet>
       ) : null}
     </div>

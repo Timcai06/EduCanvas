@@ -4,7 +4,7 @@ import type {
   NormalizedModelError,
   TurnApplicationFailureCode,
 } from '@educanvas/agent-core';
-import { w3cTraceCarrierSchema } from '@educanvas/agent-core';
+import { modelMessageText, w3cTraceCarrierSchema } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
 import type {
   TurnApplicationCancellationPort,
@@ -15,9 +15,20 @@ import type {
 } from './ports';
 
 /**
- * Turn Application 的纯辅助逻辑：Trace/Cancellation 默认实现、Context 候选展开、
- * Model Message 映射、citation/delta 校验、failure code 映射与 executionId 派生。
- * 全部为纯函数或无副作用默认值，不触碰数据库或 Provider。
+ * Turn Application 纯辅助函数 — 无副作用，不触碰数据库或 Provider。
+ *
+ * ## 函数清单
+ *
+ * | 函数 | 用途 |
+ * |------|------|
+ * | `NOOP_TRACE` / `startTraceSafely` | Trace 遥测安全包装 — trace 端口故障不能影响业务终态 |
+ * | `NOOP_CANCELLATION` | 取消端口默认实现 — 永远不取消 |
+ * | `candidates` | 从 ContextPlan 展开所有候选 Segment |
+ * | `modelMessages` | Segment → ModelMessage 映射 + 防漂移校验 |
+ * | `validCitationMarkers` | 引用标记必须是正整数、升序、1-99 |
+ * | `validPublicDelta` / `validGuardDeltas` | 公开文本长度校验（1-16000 字符） |
+ * | `mapModelFailure` / `mapToolFailure` | 内部错误码 → 公开 TurnApplicationFailureCode |
+ * | `executionId` | SHA256(operationId:round:callId) — 确定性幂等 ID 生成 |
  */
 
 export const NOOP_TRACE: TurnApplicationTracePort = {
@@ -75,6 +86,7 @@ export const NOOP_CANCELLATION: TurnApplicationCancellationPort = {
   },
 };
 
+/** 从 ContextPlan 展开所有候选 Segment（profile + conversation + sources + memory） */
 export function candidates(plan: TurnApplicationContextPlan) {
   return [
     ...plan.profile,
@@ -84,6 +96,16 @@ export function candidates(plan: TurnApplicationContextPlan) {
   ];
 }
 
+/**
+ * Segment → ModelMessage 映射 + 防漂移校验。
+ *
+ * 每个入选的 Segment 必须在 candidates 中找到匹配的 candidate，
+ * 且 candidate.message.content 的 trim 结果必须与 segment.content 一致。
+ * 不一致 → Context Prompt Drift（候选在预算选择后被篡改）。
+ *
+ * synthesis 阶段可用独立的 synthesisMessage（更严格的系统指令），
+ * 省略时复用 answer 的 message。
+ */
 export function modelMessages(
   selected: readonly ContextSegment[],
   all: readonly TurnApplicationContextCandidate[],
@@ -96,7 +118,9 @@ export function modelMessages(
     const candidate = byId.get(segment.id);
     if (
       !candidate ||
-      candidate.message.content.trim() !== segment.content.trim() ||
+      /* 漂移检查比对文本投影：图片片段的字节不进 segment.content（那里只放
+         占位摘要供预算与审计），把 base64 计进来只会让这条守卫永远失败。 */
+      modelMessageText(candidate.message).trim() !== segment.content.trim() ||
       (segment.kind === 'profile' && candidate.message.role !== 'system') ||
       (segment.kind !== 'profile' && candidate.message.role === 'system') ||
       (candidate.synthesisMessage !== undefined &&

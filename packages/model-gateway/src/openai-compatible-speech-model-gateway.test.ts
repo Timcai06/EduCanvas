@@ -12,6 +12,7 @@ const configuration: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'text-model', speech: 'speech-model' },
   timeoutMs: 30_000,
   maxOutputTokens: 2_048,
+  visionEnabled: false,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,

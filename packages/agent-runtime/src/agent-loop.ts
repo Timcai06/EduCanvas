@@ -85,8 +85,39 @@ export type AgentLoopEvent<TDetail, TFailure> =
   | { type: 'tool.failed'; failure: TFailure };
 
 /**
- * 所有 Profile 共用的唯一模型/工具循环。Prompt、工具执行与领域副作用由调用方
- * 注入；圈数、跨圈文本预算、取消、强制 synthesis 和终态纪律只在这里实现。
+ * 通用 Agent Loop 引擎 — 与领域无关的模型/工具循环。
+ *
+ * ## 三段式结构
+ *
+ * 每个 turn 分三段执行：
+ *
+ * ### 段 1：Answer 循环（最多 maxToolRounds 轮）
+ * ```
+ * 模型生成 → 解析工具调用 → 执行工具 → 结果反馈给下一轮模型
+ * ```
+ * 每轮可以产出文本（stream 给用户）和/或工具调用。
+ * 跨轮共享 accumulatedResults，下一轮模型能看到之前所有的工具结果。
+ *
+ * ### 段 2：Synthesis 收尾
+ * 所有工具轮次结束后，用 synthesis prompt（无 tools）让模型生成最终总结。
+ * 这保证最后一句话一定是面向用户的自然语言，而不是工具调用。
+ *
+ * ### 段 3：终态纪律
+ * synthesis 之后不允许再出工具调用 → INVALID_MODEL_STREAM。
+ * 保证"模型不能无限循环调用工具"。
+ *
+ * ## 跨轮文本预算
+ *
+ * `textCharacters` 在 answer + synthesis 之间累积共享。
+ * 超过 MAX_RESPONSE_CHARACTERS 时 `validateModelRun` 返回 INVALID_MODEL_STREAM。
+ * 这是硬预算，防止单 turn 消耗过量 token。
+ *
+ * ## 注入点
+ *
+ * - `executeTools`: 调用方实现工具执行。Agent Loop 不关心工具怎么执行、
+ *   副作用怎么处理 — 它只负责"模型说调什么，就调什么，然后把结果传回去"。
+ * - `modelRunLifecycle`: 每次模型运行的前后钩子（开始记账/结算）。
+ *   Agent Loop 不关心账本存在哪里，只管按时调 start/settle。
  */
 export class AgentLoopEngine {
   constructor(private readonly modelGateway: TurnModelGateway) {}
@@ -94,15 +125,17 @@ export class AgentLoopEngine {
   async *stream<TDetail, TFailure, TModelRunContext = never>(
     command: AgentLoopCommand<TDetail, TFailure, TModelRunContext>,
   ): AsyncGenerator<AgentLoopEvent<TDetail, TFailure>> {
+    // 圈数钳位：最少 1 圈，最多 4 圈，截断异常值
     const maxToolRounds = Math.min(
       4,
       Math.max(1, Math.trunc(command.maxToolRounds)),
     );
     const accumulatedResults: ModelToolResult[] = [];
-    let textCharacters = 0;
-    let hadAnyText = false;
+    let textCharacters = 0; // 跨轮累积文本字符数，answer + synthesis 共享预算
+    let hadAnyText = false; // 之前是否产出过文本，决定 synthesis 前是否补空行
     let run = 0;
 
+    // ═══ 段 1：Answer 循环 — 模型 ↔ 工具交互 ═══
     for (let round = 1; round <= maxToolRounds; round += 1) {
       run += 1;
       const request: StreamTurnTextRequest = {
@@ -222,6 +255,7 @@ export class AgentLoopEngine {
       }
     }
 
+    // ═══ 段 2：Synthesis 收尾 — 无 tools 的最终总结 ═══
     run += 1;
     const synthesisRequest: StreamTurnTextRequest = {
       ...command.synthesis,

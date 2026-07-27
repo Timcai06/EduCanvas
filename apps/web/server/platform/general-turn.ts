@@ -6,16 +6,16 @@ import type {
   TurnApplicationEvent,
   TurnModelGateway,
 } from '@educanvas/agent-core';
-import {
-  TurnApplicationService,
-  type BuiltAssetContext,
-} from '@educanvas/agent-runtime';
+import { TurnApplicationService } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentTurnContextRepository,
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
-import { materializeAssetContextPlan } from '../assets/asset-materialization';
+import {
+  materializeAssetContextPlan,
+  type MaterializedAssetPlan,
+} from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
@@ -24,6 +24,7 @@ import {
   WebGeneralCancellation,
   WebGeneralLifecycle,
 } from './general-turn-lifecycle';
+import { WebOperationArtifacts } from './general-artifact-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import {
   createGeneralToolKernel,
@@ -47,7 +48,7 @@ export function beginGatewayGeneralTurnApplication(input: {
   route: GatewayResolvedRoute;
   identity: AnonymousIdentity;
   request: TeachingTurnRequestBody;
-  assetContext: BuiltAssetContext;
+  assetContext: MaterializedAssetPlan;
   signal: ModelAbortSignal;
   transportCapabilities: readonly string[];
 }): { events: AsyncIterable<TurnApplicationEvent> } {
@@ -63,13 +64,21 @@ export function beginGatewayGeneralTurnApplication(input: {
     spaceId: input.route.notebookId,
     operationId: input.operationId,
   });
-  const tools = createGeneralToolKernel(operationSources);
+  const operationArtifacts = new WebOperationArtifacts({
+    identity: input.identity,
+    conversationId: input.route.conversationId,
+    spaceId: input.route.notebookId,
+    operationId: input.operationId,
+  });
+  const tools = createGeneralToolKernel(operationSources, operationArtifacts);
   const runtime = resolveTurnModelRuntime();
   const service = new TurnApplicationService({
     lifecycle: new WebGeneralLifecycle(input.identity),
     profile: new WebGeneralProfile(
       input.assetContext,
       operationSources,
+      operationArtifacts,
+      input.request.outputPreference === 'canvas',
       tools.staticCapabilities,
       tools.nodeInvocations,
       input.route.membershipRole,
@@ -108,10 +117,13 @@ export async function prepareGatewayGeneralTurnContext(input: {
   identity: AnonymousIdentity;
   spaceId: string;
   request: TeachingTurnRequestBody;
-}): Promise<BuiltAssetContext> {
+}): Promise<MaterializedAssetPlan> {
   return materializeAssetContextPlan({
     identity: input.identity,
     spaceId: input.spaceId,
     parts: input.request.parts,
+    /* 能力与实际要调用的网关同源：未配置视觉的部署会在这里就明确拒绝图片，
+       而不是把整轮对话赌在供应商对未知片段的容错上。 */
+    nativeAssetKinds: resolveTurnModelRuntime()?.nativeAssetKinds ?? [],
   });
 }

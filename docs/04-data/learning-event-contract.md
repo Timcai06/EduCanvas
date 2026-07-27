@@ -2,8 +2,9 @@
 
 - 状态：`accepted`
 - 负责人：@Timcai06
-- 最后验证：2026-07-14
+- 最后验证：2026-07-24
 - 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
+- 学习计划边界：[ADR-0022](../09-decisions/0022-学习者画像与学习计划可信边界.md)
 
 ## 两层事件模型
 
@@ -34,6 +35,8 @@
 | `artifact_completed`    | 教学运行时   | 记录完成受控教学活动，不直接等同掌握 |
 
 `mastery_states`是这些事实计算出的当前投影，不是由客户端或模型直接写入的事件。
+
+`assessment_graded` 有两个可信入口：Canvas 私有判分键，以及结构化短诊断的受信课程定义。两者都必须从客户端原始选择重新判分，不能接收浏览器或模型提供的正确率。
 
 ## 客户端事件信封
 
@@ -82,6 +85,14 @@ quiz_answer_submitted
 → 使用服务端GradingKey判分
 → assessment_graded
 → 重算mastery_states
+```
+
+```text
+diagnosticSubmission(attemptId + choices)
+→ 校验学生、Session、Notebook Goal与冻结课程版本
+→ 使用服务端课程答案确定性判分
+→ 同一事务写Attempt/Responses与assessment_graded
+→ 重算mastery_states并投影strength/focus/not_started
 ```
 
 ```text

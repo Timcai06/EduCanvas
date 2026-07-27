@@ -18,7 +18,7 @@
 
 当前生产教学 Turn 由 `packages/agent-runtime` 的唯一 `TurnApplicationService` 与 `AgentLoopEngine` 执行；`packages/teaching-runtime` 只提供纯 Prompt、确定性安全 Gate、状态机、教学 Tool 定义与 Adapter。直答只产生一次 `answer` Model Run；请求工具时产生 `answer → Tool Kernel → synthesis` 两次 Model Run。旧教学 Orchestrator 和 Tool Executor 已删除；Prompt材料明确排除 Trace、运行期 signal 与 secret。
 
-`packages/model-gateway` 已实现native与AI SDK两种OpenAI-compatible Turn Adapter，以及原生结构化JSON和`/audio/speech` Adapter。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取`process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式Fallback和nightly live smoke；测试替身不能注册到生产组合根。
+`packages/model-gateway` 已实现native与AI SDK两种OpenAI-compatible Turn Adapter，以及原生结构化JSON和`/audio/speech` Adapter。DeepSeek Turn与结构化JSON请求都固定关闭thinking，避免不保留的推理内容消耗工具参数或Artifact JSON的输出预算。语音Adapter只接受`mp3`、最多3500字符、最多20 MiB响应，单次调用不做内部重试；超时、限流与异常响应直接收敛为稳定错误。它不直接读取`process.env`，环境配置由组合根显式注入。当前仍未实现跨用户日预算、显式Fallback和nightly live smoke；测试替身不能注册到生产组合根。
 
 ## 别名语义
 

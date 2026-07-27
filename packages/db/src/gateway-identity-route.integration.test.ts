@@ -169,7 +169,9 @@ describeWithDatabase(
         operationTerminalWriter: 'gateway',
         now,
       });
-      expect(await store.describe(operation.operationId)).toMatchObject({
+      expect(
+        await store.describe(operation.operationId, member.userId, now),
+      ).toMatchObject({
         status: 'running',
       });
       await store.append(

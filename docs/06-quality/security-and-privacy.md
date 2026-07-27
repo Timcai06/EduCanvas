@@ -25,6 +25,33 @@ Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie�
 
 该匿名 Cookie 机制只适用于当前 Web兼容主体。TUI、消息渠道和设备Node使用各自的Gateway session/绑定，不能复用或提交匿名Cookie主体。
 
+## Web 账号适配器
+
+- 首版用户名账号只保存版本化、参数受限的 `scrypt` 派生材料；密码限制为 8–128 个
+  Unicode 字符，登录未命中用户名时仍执行固定参数的虚拟验证，降低账号枚举信号；
+- 公共注册把 User、Personal Agent、Credentials、Profile 与首个 session 放在同一
+  PostgreSQL 事务；改密以旧凭据 compare-and-swap，并在同一事务撤销旧 session、
+  创建替代 session，原始 token 只在事务成功后写 HttpOnly Cookie；
+- local 部署的 Agent 与 Notebook 主体始终是 `local:owner`，不能因注册 Cookie
+  静默分叉 Web/TUI 数据；非 local 部署才允许注册 session 成为 Web 平台主体；
+- 认证 JSON、资料 JSON、头像与学习资料 multipart 都有解析前硬上限；缺失或伪造
+  `Content-Length` 时仍按实际读取字节中止。头像只接受 PNG/JPEG/WebP
+  magic bytes；数据库失败补偿删除新对象，替换后按受控 key 清理旧对象；
+- 本地认证失败窗口有固定容量，只用于单进程开发。生产必须由共享上游同时执行
+  per-account 与 per-IP 限流；缺少明确部署声明时认证路由 fail-closed；
+- 邮箱验证、账号找回、MFA、身份安全事件账本、TUI/Gateway 注册 session exchange 与
+  共享限流证据仍是生产门禁，详见 ADR-0023。
+
+## 学习者画像与短诊断
+
+- 年龄与学段只接受本人、监护人或学校的显式声明，不从文本、头像、声音、摄像头或行为推断；
+- 画像不保存出生日期、生物特征、人格、心理或自由文本能力标签；未知年龄默认采用未成年人策略；
+- 教学偏好是五个可修改闭集，只改变表达，不改变工具、数据、审批或安全权限；
+- 浏览器诊断题面不含正确答案和内部 Objective 映射，只提交 UUID attempt 与选项；
+- 服务端仓储根据受信课程重新判分，调用方提供的分数摘要不能成为事实；
+- `answerFingerprint` 只保存 SHA-256；归属失败统一不可见，不能探测他人 Goal、Session 或诊断；
+- `declaredByUserId` 与 `studentId` 分开审计。正式账号下的监护人/学校声明授权、导出、更正和删除仍是 production 门禁。
+
 ## Gateway、Channel 与 Node 安全
 
 - Gateway已实现云端控制平面边界与每用户逻辑隔离；一个自然人拥有自己的个人Agent，家庭与班级只共享显式授权的Notebook/资源，不共享Agent身份；

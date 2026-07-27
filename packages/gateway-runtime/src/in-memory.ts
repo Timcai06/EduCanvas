@@ -174,6 +174,7 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
     operationId: string,
     afterSequence: number,
     actorUserId: string,
+    _now?: Date,
   ): Promise<readonly GatewayOperationEvent[]> {
     const operation = this.operations.get(operationId);
     if (!operation) {
@@ -190,9 +191,11 @@ export class InMemoryGatewayOperationStore implements GatewayOperationStorePort 
 
   async describe(
     operationId: string,
+    actorUserId: string,
+    _now?: Date,
   ): Promise<GatewayOperationDescriptor | null> {
     const operation = this.operations.get(operationId);
-    if (!operation) return null;
+    if (!operation || operation.route.actorUserId !== actorUserId) return null;
     return {
       operationId,
       actorUserId: operation.route.actorUserId,

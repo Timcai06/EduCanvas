@@ -1,4 +1,4 @@
-import type { BuiltAssetContext } from '@educanvas/agent-runtime';
+import type { MaterializedAssetPlan } from '../assets/asset-materialization';
 import { TurnApplicationService } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
@@ -67,10 +67,11 @@ const request: TeachingTurnRequestBody = {
   text: '请总结这份资料',
   parts: [{ type: 'text', text: '请总结这份资料' }],
 };
-const assetContext: BuiltAssetContext = {
+const assetContext: MaterializedAssetPlan = {
   text: '',
   textSegments: [],
   nativeReferences: [],
+  nativeImages: [],
 };
 
 function begin(routeOverride: GatewayResolvedRoute): void {

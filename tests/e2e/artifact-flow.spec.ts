@@ -1,4 +1,40 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+
+async function openStudioInput(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
+  ).toBeVisible();
+  return studio;
+}
+
+async function openStudioOutput(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  const studio = page.getByRole('complementary', {
+    name: '当前笔记本的 Studio',
+  });
+  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+  await wheel.press('ArrowDown');
+  await wheel.press('Enter');
+  await expect(
+    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
+  ).toBeVisible();
+  return studio;
+}
+
+async function closeStudio(page: Page) {
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  await expect(
+    page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
+  ).toHaveCount(0);
+}
 
 /**
  * M1 验收场景:生成思维导图全链路
@@ -8,11 +44,11 @@ import { expect, test } from '@playwright/test';
 test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开', async ({
   page,
 }) => {
-  /* 与套件其余 spec 一致:reduced-motion 下交互确定性,动效由视觉基线覆盖 */
+  /* reduced-motion 下验证交互确定性；最终视觉由人工在真实页面验收。 */
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: '今天想学点什么？' }),
+    page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
 
   /* 入口页经 pending 菜单动作创建对话,工作台挂载后自动打开确认卡 */
@@ -38,8 +74,7 @@ test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开'
   /* 断连恢复读取面:刷新后产物仍在当前笔记本的 Studio 中 */
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  const studio = await openStudioOutput(page);
   await expect(studio.getByText('对话思维导图')).toBeVisible();
   await expect(studio.getByText('v1')).toBeVisible();
 });
@@ -112,8 +147,7 @@ test('Canvas 可在同一产物上跨轮生成新版本并查看历史', async (
   await expect(canvas.getByText('当前版本')).toBeVisible();
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
+  const studio = await openStudioOutput(page);
   await expect(studio.getByText('v2')).toBeVisible();
 });
 
@@ -127,11 +161,15 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   ).toHaveCount(0);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
-  await expect(page.getByRole('dialog', { name: '添加 PDF' })).toBeVisible();
+  await expect(
+    page.getByRole('dialog', { name: '添加文档来源' }),
+  ).toBeVisible();
   await expect(
     page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
   ).toBeVisible();
-  await expect(page.getByRole('navigation', { name: '笔记本' })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: '工作区主导航' }),
+  ).toBeVisible();
 });
 
 test('生成 Slides 全链路并可分页浏览', async ({ page }) => {
@@ -176,6 +214,58 @@ test('生成闪卡全链路:翻面自评且自评不上行', async ({ page }) =>
   await canvas.getByRole('button', { name: '记住了' }).click();
   await expect(canvas.getByText('本轮完成:记住 1 / 1')).toBeVisible();
   await expect(canvas.getByText('不影响学习进度记录')).toBeVisible();
+});
+
+test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  /* 空入口尚未建立 Notebook；打开一次真实上传入口完成本地身份与会话引导。 */
+  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('menuitem', { name: '上传文件' }).click();
+  await page
+    .getByRole('dialog', { name: '添加文档来源' })
+    .getByRole('button', { name: '关闭' })
+    .click();
+  const created = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/chat/artifacts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'note',
+        title: '未命名笔记',
+        markdown: '',
+      }),
+    });
+    return { ok: response.ok, status: response.status };
+  });
+  expect(created).toEqual({ ok: true, status: 201 });
+  const studio = await openStudioOutput(page);
+  const createdNote = studio.getByRole('option', { name: /^未命名笔记/ });
+  await expect(createdNote.getByText('v1', { exact: true })).toBeVisible();
+  await createdNote.click();
+
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await expect(canvas).toBeVisible();
+  await canvas.getByRole('button', { name: '编辑', exact: true }).click();
+  await canvas
+    .getByRole('textbox', { name: '笔记编辑区' })
+    .fill('# 勾股定理\n\n直角三角形满足 $a^2+b^2=c^2$。');
+  const versionSelect = canvas.getByRole('combobox', { name: 'Canvas版本' });
+  await expect(versionSelect).toHaveValue('2', { timeout: 10_000 });
+  await expect(canvas.getByText('勾股定理')).toBeVisible();
+
+  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.reload();
+  const outputStudio = await openStudioOutput(page);
+  const updatedNote = outputStudio.getByRole('option', {
+    name: /^未命名笔记/,
+  });
+  await expect(updatedNote.getByText('v2', { exact: true })).toBeVisible();
+  await updatedNote.click();
+  await expect(
+    page.getByRole('dialog', { name: '产物Canvas' }).getByText('勾股定理'),
+  ).toBeVisible();
 });
 
 test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', async ({ page }) => {
@@ -229,7 +319,12 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   });
 
   await page.reload();
-  await page.getByRole('checkbox', { name: '音频来源讲义.pdf' }).check();
+  const inputStudio = await openStudioInput(page);
+  const source = inputStudio.getByRole('option', {
+    name: /音频来源讲义\.pdf/,
+  });
+  await expect(source.getByText('已用于对话', { exact: true })).toBeVisible();
+  await closeStudio(page);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
   const confirm = page.getByRole('dialog', { name: '生成音频概览' });
@@ -266,9 +361,8 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
 
   await canvas.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Studio', exact: true }).click();
-  const studio = page.getByRole('dialog', { name: '当前笔记本的 Studio' });
-  await studio.getByText('来源音频概览').click();
+  const studio = await openStudioOutput(page);
+  await studio.getByRole('option', { name: /来源音频概览/ }).click();
   await expect(
     page
       .getByRole('dialog', { name: '产物Canvas' })

@@ -1,7 +1,7 @@
 # 数据设计
 
 - 状态：`draft`
-- 最后验证时间：2026-07-21
+- 最后验证时间：2026-07-24
 
 ## 数据原则
 
@@ -38,6 +38,11 @@ Gateway Operation 与通用/K12 Turn 复用同一个operation/turn ID，不创�
 - `learning_events`：严格领域事件信封的只追加事实；
 - `mastery_states`：学生×知识节点的掌握度投影；
 - `canvas_artifact_grading_keys`：与公开题面物理分离的私有判分键。
+- `learner_profiles`：显式年龄段、默认学段、声明人和固定闭集教学偏好；不保存出生日期、人格、生物特征或模型推断；
+- `learning_goals / learning_objectives`：Notebook 当前或历史目标与 6–12 节点冻结目标图；每个 Notebook 同时最多一个活动 Goal；
+- `diagnostic_attempts / diagnostic_responses`：不可变短诊断、答案 SHA-256 指纹、逐题选择与服务端判分；答案键不入表。
+
+详细所有权、幂等、公开投影与事务规则见[学习计划与诊断数据契约](02-学习计划与诊断.md)。
 
 ### 对话与Agent执行账本
 
@@ -86,8 +91,24 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 
 - `assets`：所有者、Space标识、Turn/Space范围、类型、来源和生命周期；
 - `asset_versions`：不可变内容版本、hash、私有storage key、解析文本和处理终态。
+- `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
+  派生对象引用，不复制Source正文；
+- `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码。
+  `extract_text` 已是真实队列（[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）：
+  上传在同一事务内写 `queued` 任务并调用 `graphile_worker.add_job`——队列与业务表同库，
+  因此不存在「任务已入队但资产不存在」的中间态；worker 只从 `queued/running` 推进终态，
+  重投因此幂等。失败码由 `@educanvas/asset-processing` 定义，只能追加不能改写含义；
+- `notebook_asset_bindings`：成员对Notebook来源的启用/停用事实流。按成员而非按
+  Notebook，是因为「这轮对话要不要带这份资料」是个人选择，多人笔记本里不应互相覆盖；
+  与`session_source_bindings`同一范式（追加事实 + `mutationId`幂等 + 取`sequence`最大者），
+  保留切换历史用于审计。不存notebookId——它由`assets.spaceId`唯一确定，denormalize只会引入漂移；
+- `object_deletion_outbox`：tombstone事务登记的私有对象删除意图，Worker使用
+  `FOR UPDATE SKIP LOCKED`领取、指数退避并幂等完成；
 
-当前限制：通用与K12路径都通过一等`spaces`/`conversations`校验Notebook归属；`lessonSession`只保留教学纵向状态，Asset归属使用关联Conversation的真实Space。`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权。worker 已每日 03:15 UTC 调度匿名数据库主体清理，但仍未通过对象删除Outbox删除磁盘/对象存储内容。
+当前限制：通用与K12路径都通过一等`spaces`/`conversations`校验Notebook归属；
+`lessonSession`只保留教学纵向状态，Asset归属使用关联Conversation的真实Space。
+`turn/space`目前主要是标签，缺少创建Turn绑定和长期升级授权。对象删除Outbox已覆盖
+Asset tombstone和本地文件适配器；Artifact、Avatar、S3兼容适配器与残留巡检尚待接入。
 
 ### 知识与引用
 
@@ -118,7 +139,8 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 Studio恢复。音频二进制不进PostgreSQL；Worker写对象后先保存key/checksum/metadata
 checkpoint，crash重投校验对象后继续append version。结构化Canvas修改会冻结
 `baseVersion + instruction`到新任务，Worker读取基线版本与Notebook对话后追加不可变版本；
-并发任务或过期基线以冲突拒绝。仍缺正式对象删除Outbox与S3兼容生产适配器。
+并发任务或过期基线以冲突拒绝。创建入口以可选幂等键和请求指纹阻止网络重试重复建档；
+仍缺Artifact媒体删除写入Outbox与S3兼容生产适配器。
 
 ## 当前通用对象模型
 
@@ -210,15 +232,21 @@ provider_file
 - 状态、答案和归属由服务端验证后才产生可信事件；
 - 完整回放后必须与在线投影一致。
 
+数据库复合外键同时约束Event的Session/Student、Diagnostic Attempt的Goal/Session/Student、
+Response的Attempt/Objective/Goal，以及Operation/Conversation/Notebook和Artifact
+Version/Generation Job作用域。迁移先建立复合唯一索引再增加外键，避免生成顺序导致
+空库迁移失败。`mastery_states`当前主键仍是学生+知识节点；课程目录版本进入长期并行
+运行前，必须以独立迁移扩展口径，不能复用同名节点静默覆盖。
+
 事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)和 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。五阶段课程与现有掌握度公式属于教育领域当前实现，不是通用 Agent 数据前置条件。
 
 ## 生产门禁
 
 以下是进入production前的要求，不代表当前已经部署：
 
-- 正式认证、租户/学校边界和授权审计；
+- 正式认证、租户/学校边界和全量授权审计（当前已有安全审计表及Notebook管理事件）；
 - 备份、PITR与恢复演练；
-- Transactional Outbox与对象删除残留巡检；
+- Artifact/Avatar对象删除Outbox接入与残留巡检；
 - 连接池、容量测试和慢查询治理；
 - 数据保留、导出、更正和删除流程；
 - Provider与Tool Trace脱敏、OpenTelemetry和SLO告警。

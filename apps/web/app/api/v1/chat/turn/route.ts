@@ -6,7 +6,10 @@ import {
   PlatformTurnOwnershipError,
 } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
+import {
+  NativeAssetBudgetError,
+  UnsupportedAssetModalityError,
+} from '@/server/assets/asset-materialization';
 import { beginWebGatewayTurn } from '@/server/gateway/web-turn';
 import {
   isTrustedSameOriginWrite,
@@ -69,7 +72,18 @@ export async function POST(request: Request): Promise<Response> {
       return jsonError(
         422,
         error.code,
-        '文件已保存，但当前模型还不能可靠理解这种内容；PDF文字资料可以直接用于对话。',
+        '文件已保存，但当前模型还不能读懂这种内容；文字资料可以直接用于对话。',
+      );
+    }
+    /* 与上一条分开：这里不是模型能力不足，而是本轮带的图片太多或太大，
+       告诉用户「减少几张」是可操作的，说「模型读不懂」会误导。 */
+    if (error instanceof NativeAssetBudgetError) {
+      return jsonError(
+        422,
+        error.code,
+        error.reason === 'count'
+          ? '一次最多带 4 张图片，请先取消勾选一些再发送。'
+          : '本轮图片总大小超出上限，请先取消勾选一些再发送。',
       );
     }
     return jsonError(503, 'turn_unavailable', 'AI 暂时无法回答，请稍后重试。');

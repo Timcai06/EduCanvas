@@ -1,23 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
-import {
-  notebookRoleAllows,
-  type NotebookPermission,
-} from '@educanvas/gateway-core';
+import type { NotebookPermission } from '@educanvas/gateway-core';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   assertOwnedReadyAssetParts,
   prepareStudentMessage,
 } from './message-parts';
+import { requireNotebookAccess } from './notebook-access';
 import {
   agentOperations,
+  assetVersions,
   conversationMessageCitations,
   conversationMessages,
   conversations,
-  notebookMemberships,
   operationSources,
-  assetVersions,
+  personalAgents,
   spaces,
 } from './schema';
 
@@ -136,45 +134,26 @@ async function requireConversationAccess(
   executor: DatabaseExecutor,
   conversationId: string,
   trustedSubjectId: string,
-  permission: NotebookPermission = 'conversation.reply',
+  requiredPermission: NotebookPermission = 'conversation.reply',
 ) {
   const [conversation] = await executor
     .select({
       id: conversations.id,
       spaceId: conversations.spaceId,
       status: conversations.status,
-      ownerSubjectId: conversations.ownerSubjectId,
-      membershipRole: notebookMemberships.role,
-      membershipExpiresAt: notebookMemberships.expiresAt,
-      membershipRevokedAt: notebookMemberships.revokedAt,
     })
     .from(conversations)
-    .leftJoin(
-      notebookMemberships,
-      and(
-        eq(notebookMemberships.notebookId, conversations.spaceId),
-        eq(notebookMemberships.userId, trustedSubjectId),
-      ),
-    )
     .where(eq(conversations.id, conversationId))
     .limit(1);
-  if (
-    !conversation ||
-    conversation.status !== 'active' ||
-    (conversation.ownerSubjectId !== trustedSubjectId &&
-      (conversation.membershipRole === null ||
-        conversation.membershipRevokedAt !== null ||
-        (conversation.membershipExpiresAt !== null &&
-          conversation.membershipExpiresAt <= new Date()) ||
-        !notebookRoleAllows(
-          conversation.membershipRole as Parameters<
-            typeof notebookRoleAllows
-          >[0],
-          permission,
-        )))
-  ) {
+  if (!conversation || conversation.status !== 'active') {
     throw new PlatformTurnOwnershipError();
   }
+  const access = await requireNotebookAccess(executor, {
+    notebookId: conversation.spaceId,
+    trustedSubjectId,
+    requiredPermission,
+  }).catch(() => null);
+  if (!access) throw new PlatformTurnOwnershipError();
   return conversation;
 }
 
@@ -308,8 +287,24 @@ export class DrizzlePlatformTurnRepository {
 
       const operationId = randomUUID();
       const traceId = randomUUID();
+      const [actorAgent] = await transaction
+        .select({ id: personalAgents.id })
+        .from(personalAgents)
+        .where(
+          and(
+            eq(personalAgents.userId, input.trustedSubjectId),
+            eq(personalAgents.status, 'active'),
+          ),
+        )
+        .limit(1);
+      if (!actorAgent) {
+        throw new PlatformTurnLifecycleError('当前主体缺少有效个人Agent');
+      }
       await transaction.insert(agentOperations).values({
         id: operationId,
+        actorUserId: input.trustedSubjectId,
+        agentId: actorAgent.id,
+        notebookId: conversation.spaceId,
         conversationId: input.conversationId,
         kind: 'turn',
         idempotencyKey: input.clientMessageId,

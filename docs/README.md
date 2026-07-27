@@ -9,7 +9,7 @@
 | `00-overview`           | 赛题、目标、范围、术语；官方原件归档在`references/` | 所有人           |
 | `00-overview/snapshots` | 已注明日期、停止维护的项目阶段快照                  | 历史核对         |
 | `01-product`            | 产品形态、用户流程、功能边界                        | 产品、设计、研发 |
-| `02-architecture`       | Gateway、总体架构、Canvas、GSAP协议                 | 前后端、架构     |
+| `02-architecture`       | Gateway、总体架构、统一 Canvas 与 Runtime 边界      | 前后端、架构     |
 | `03-ai`                 | 智能体、RAG、Embedding、模型路由                    | AI、后端         |
 | `04-data`               | PostgreSQL、学习数据、可信事件契约和掌握度事实源    | 后端、数据       |
 | `05-engineering`        | 前端、后端和API工程规范                             | 研发             |
@@ -29,8 +29,9 @@
 - 通用Chat、Assets、Agent Runtime、Artifact Runtime和Studio不得依赖教学状态机、掌握度或课程概念；
 - Web端采用Next.js、React和TypeScript；
 - UI使用可自由修改的Headless组件与自有设计系统；
-- 动画统一使用GSAP；
-- Canvas使用受控组件协议，不直接执行模型生成的任意代码；
+- 第一方Web状态与教学模板动画当前统一使用GSAP；隔离Runtime中的Motion/Three.js必须来自审计依赖包；
+- Canvas是同一Notebook内阅读Sources、共创Artifacts和呈现受控Runtime的统一工作面，不是新的事实源；
+- 可信结构化Artifact使用预注册Renderer；模型代码只能进入隔离Web/Compute Runtime，不能在主页面执行；
 - Web只作为第一方客户端和迁移期BFF，长期控制平面与Agent Runtime不依赖Next.js；
 - PostgreSQL是业务事实数据库，pgvector承载向量检索；
 - 所有普通对话只使用一个通用 `AgentLoopEngine`；K12通过Profile、Skills、Tools和可信领域服务接入；
@@ -48,6 +49,7 @@
 - 保持可用：真实Provider SSE、账本/取消/刷新恢复、服务端判分、可信学习投影、Notebook聚合、持久Artifact任务、Studio、导图/Slides/闪卡/音频和Canvas共创；
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
 - 已接通：通用PDF/图片/Link Asset、不可变版本和消息Part；通用网页实际读取快照、稳定编号、引用子集持久化/SSE/历史恢复/原网址导航；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
+- 已接通：显式年龄段/学段与闭集教学偏好、Notebook Goal和6–12节点目标图、无答案短诊断、可信三态目标进度，以及诊断事件/mastery原子写入；
 - 已确认的剩余缺口：原生图片/音视频模型输入、上传Asset统一摄取、Context摘要、长期学习者记忆、正式IdP、对象删除闭环和production治理；
 - Telegram只有官方协议Fixture，没有用户凭据下的live smoke；Node只有L0/L1白名单能力，没有高风险设备控制；
 - 当前证据支持本地模块化单体基线；正式认证、外部观测/SLO、受控live smoke、教学质量评测和production hardening完成前，不宣称production就绪；
@@ -81,7 +83,7 @@
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first 与第二代架构研究已经结档；统一内核已落地，当前 active 计划只承担入口一致性、最小人工对账、清理和验收收口。三类文档不能互相替代：
+`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first、第二代架构研究与 Web 自适应学习 P0/P1 基线都已经结档；当前核心阶段是[统一 Canvas 工作面](02-architecture/04-统一Canvas工作面.md)，并以 `10-planning/roadmap.md` 和 active plan 为准。三类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；

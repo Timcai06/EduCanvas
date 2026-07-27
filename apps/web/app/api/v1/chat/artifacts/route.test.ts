@@ -1,13 +1,20 @@
-import { ARTIFACT_GENERATE_TASK, AssetAccessError } from '@educanvas/db';
+import {
+  ARTIFACT_GENERATE_TASK,
+  ArtifactIdempotencyConflictError,
+  AssetAccessError,
+} from '@educanvas/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
 const artifactRepo = {
-  listSpaceArtifacts: vi.fn(),
+  listSpaceArtifactsPage: vi.fn(),
   createArtifactWithGenerationJob: vi.fn(),
   getArtifact: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
+};
+const manualArtifactRepo = {
+  createWithInitialVersion: vi.fn(),
 };
 const assetRepo = {
   materializeOwnedReferences: vi.fn(),
@@ -20,6 +27,9 @@ vi.mock('@educanvas/db', async () => {
     ...actual,
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
+    }),
+    DrizzleManualArtifactRepository: vi.fn(function () {
+      return manualArtifactRepo;
     }),
     DrizzleAssetRepository: vi.fn(function () {
       return assetRepo;
@@ -43,7 +53,7 @@ const identity = {
   studentId: `anon:v1:${'c'.repeat(64)}`,
 };
 const conversation = {
-  id: 'conversation-1',
+  id: '30000000-0000-4000-8000-000000000003',
   spaceId: 'space-1',
 };
 
@@ -102,11 +112,17 @@ describe('GET /api/v1/chat/artifacts', () => {
     vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(
       conversation as unknown as never,
     );
-    artifactRepo.listSpaceArtifacts.mockResolvedValue([]);
+    artifactRepo.listSpaceArtifactsPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
   });
 
   it('returns artifact list for active general conversation', async () => {
-    artifactRepo.listSpaceArtifacts.mockResolvedValue([validArtifact]);
+    artifactRepo.listSpaceArtifactsPage.mockResolvedValue({
+      items: [validArtifact],
+      nextCursor: null,
+    });
 
     const response = await GET();
     const payload = await response.json();
@@ -124,11 +140,16 @@ describe('GET /api/v1/chat/artifacts', () => {
           updatedAt: validArtifact.updatedAt,
         },
       ],
+      page: { nextCursor: null },
     });
-    expect(artifactRepo.listSpaceArtifacts).toHaveBeenCalledWith({
-      spaceId: conversation.spaceId,
-      trustedSubjectId: identity.studentId,
-    });
+    expect(artifactRepo.listSpaceArtifactsPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: conversation.spaceId,
+        trustedSubjectId: identity.studentId,
+        limit: 50,
+        cursor: null,
+      }),
+    );
   });
 
   it('returns 401 when conversation cannot be loaded', async () => {
@@ -143,7 +164,7 @@ describe('GET /api/v1/chat/artifacts', () => {
   });
 
   it('maps query errors to 503', async () => {
-    artifactRepo.listSpaceArtifacts.mockRejectedValue(new Error('db down'));
+    artifactRepo.listSpaceArtifactsPage.mockRejectedValue(new Error('db down'));
 
     const response = await GET();
 
@@ -163,6 +184,7 @@ describe('POST /api/v1/chat/artifacts', () => {
     );
     artifactRepo.getArtifact.mockReset?.();
     artifactRepo.createArtifactWithGenerationJob.mockReset();
+    manualArtifactRepo.createWithInitialVersion.mockReset();
     assetRepo.materializeOwnedReferences.mockReset();
     artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
       artifact: validArtifact,
@@ -172,6 +194,14 @@ describe('POST /api/v1/chat/artifacts', () => {
         progress: null,
         failureCode: null,
       },
+    });
+    manualArtifactRepo.createWithInitialVersion.mockResolvedValue({
+      artifact: {
+        ...validArtifact,
+        kind: 'note',
+        title: '课堂笔记',
+      },
+      version: { version: 1 },
     });
   });
 
@@ -195,6 +225,93 @@ describe('POST /api/v1/chat/artifacts', () => {
         params: {},
       }),
     );
+  });
+
+  it('passes a bounded idempotency key and returns a replay as 200', async () => {
+    artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
+      artifact: validArtifact,
+      job: {
+        id: 'jobs-1',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
+      replayed: true,
+    });
+    const response = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'artifact:create:1',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ replayed: true });
+    expect(artifactRepo.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'artifact:create:1',
+        requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+  });
+
+  it('rejects malformed or conflicting idempotency keys', async () => {
+    const malformed = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'contains spaces',
+      }),
+    );
+    expect(malformed.status).toBe(400);
+    artifactRepo.createArtifactWithGenerationJob.mockRejectedValue(
+      new ArtifactIdempotencyConflictError(),
+    );
+    const conflict = await POST(
+      postRequest(JSON.stringify({ kind: 'mind_map', title: '要点' }), {
+        'idempotency-key': 'artifact:create:conflict',
+      }),
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: 'idempotency_conflict' },
+    });
+  });
+
+  it('creates a manual note atomically without enqueueing a worker job', async () => {
+    const response = await POST(
+      postRequest(
+        JSON.stringify({
+          kind: 'note',
+          title: '课堂笔记',
+          markdown: '# 二次函数',
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      artifact: {
+        kind: 'note',
+        title: '课堂笔记',
+        status: 'active',
+        latestVersion: 1,
+      },
+      job: null,
+    });
+    expect(manualArtifactRepo.createWithInitialVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: conversation.spaceId,
+        conversationId: conversation.id,
+        trustedSubjectId: identity.studentId,
+        kind: 'note',
+        content: {
+          contentVersion: 1,
+          markdown: '# 二次函数',
+          sourceConversationId: conversation.id,
+          generatedByModel: false,
+        },
+        generatedBy: 'user:manual',
+      }),
+    );
+    expect(artifactRepo.createArtifactWithGenerationJob).not.toHaveBeenCalled();
   });
 
   it('rejects invalid json payload with 400', async () => {

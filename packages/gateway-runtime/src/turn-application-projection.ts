@@ -1,3 +1,19 @@
+/**
+ * Turn Application → Gateway 事件投影 — 有损传输映射。
+ *
+ * ## 为什么需要投影
+ *
+ * TurnApplicationEvent（agent-core）和 GatewayOperationEvent（gateway-core）
+ * 是两套独立的事件协议。Turn Application 聚焦教学/对话语义，
+ * Gateway 聚焦传输/路由语义。投影层做类型映射，不改变业务含义。
+ *
+ * ## 谁负责什么
+ *
+ * - 本模块：只做事件类型映射（turn.started → message.started 等）
+ * - GatewayOperationStore：负责序号分配、eventId 生成、持久化
+ * - Gateway Service：负责编排（幂等、取消、流控）
+ */
+
 import type { TurnApplicationEvent } from '@educanvas/agent-core';
 import {
   gatewayCapabilityNameSchema,

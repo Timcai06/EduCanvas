@@ -23,7 +23,32 @@ interface CachedExecution {
   settled: boolean;
 }
 
-/** 四类Tool Adapter的唯一注册、授权、幂等缓存与生命周期路由入口。 */
+/**
+ * Tool Kernel — 工具调用的唯一入口。
+ *
+ * ## 职责边界
+ *
+ * Kernel 不执行工具 — Adapter 执行。Kernel 负责：
+ * 1. **注册** — 启动时装载所有 Adapter，拒绝重复名称
+ * 2. **授权** — 根据 ToolKernelPolicyContext 检查每个 Adapter 的策略允许
+ * 3. **幂等** — 同一 executionId 的重复请求返回缓存结果（签名匹配）或拒绝（签名冲突）
+ * 4. **路由** — L0/L1 直接 invoke，L2/L3 未审批时走 prepareApproval 流程
+ *
+ * ## execute() 流程
+ *
+ * ```
+ * 查找 Adapter → 策略检查 → 参数校验 → 幂等检查 → 创建 Tool Call → 路由
+ *                                                                   ├─ L2/L3 未审批 → prepareApproval
+ *                                                                   └─ 其他 → invoke
+ * ```
+ *
+ * ## 幂等缓存
+ *
+ * 每个 executionId 缓存一次执行结果。重复请求：
+ * - 签名匹配 → 返回缓存结果（replayed=true）
+ * - 签名不匹配 → 拒绝（idempotency_conflict）
+ * - 达到 maxCachedExecutions → 驱逐最早已 settled 的条目
+ */
 export class ToolKernel {
   private readonly adapters = new Map<string, AnyToolKernelAdapter>();
   private readonly executions = new Map<string, CachedExecution>();

@@ -6,6 +6,7 @@ import {
   LinkSimple,
   SpinnerGap,
 } from '@phosphor-icons/react';
+import type { CanvasResource } from '@educanvas/canvas-protocol';
 
 export interface AssetItem {
   id: string;
@@ -16,6 +17,12 @@ export interface AssetItem {
   status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
   enabled: boolean;
   selectable: boolean;
+  /**
+   * 服务端授权后的统一资源描述。为 null 有两种情况：调用的是尚未附加该字段的
+   * 旧端点，或该资产的 MIME 没有对应 Renderer。两种情况下 UI 都必须退化为
+   * 「只读、无动作」，绝不能自行推断可以删除或下载。
+   */
+  resource: CanvasResource | null;
 }
 
 /**
@@ -31,13 +38,13 @@ export function AssetsDrawer({
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF会提取文字，当前模型暂不读取图片像素。
+        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF、Word、Markdown和TXT会提取文字；图片能否被直接读取取决于当前所用模型，不支持时发送会明确提示。
       </p>
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
           <p className="text-sm font-medium text-ink">还没有资料</p>
           <p className="mt-1 text-xs text-ink-muted">
-            上传图片、PDF或网页链接，建立这个笔记本自己的来源集合。
+            上传图片、文档或网页链接，建立这个笔记本自己的来源集合。
           </p>
         </div>
       ) : (
@@ -80,7 +87,7 @@ export function AssetsDrawer({
                       ? '图片'
                       : asset.kind === 'link'
                         ? '网页'
-                        : 'PDF'}{' '}
+                        : '文档'}{' '}
                     · {asset.scope === 'space' ? '笔记本来源' : '仅本轮'} ·{' '}
                     {asset.status === 'ready'
                       ? '已就绪'

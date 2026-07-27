@@ -1,4 +1,5 @@
 import type {
+  ModelMessage as AgentModelMessage,
   ModelFinishReason,
   ModelUsage,
   NormalizedModelError,
@@ -6,10 +7,16 @@ import type {
   TurnModelEvent,
 } from '@educanvas/agent-core';
 import {
+  modelMessageText,
   normalizeModelGatewayError,
   turnModelEventSchema,
 } from '@educanvas/agent-core';
-import { APICallError, type JSONValue, type ModelMessage } from 'ai';
+import {
+  APICallError,
+  type JSONValue,
+  type ModelMessage,
+  type UserModelMessage,
+} from 'ai';
 
 /** @internal 标记由SDK输出或Adapter投影违反稳定协议，不携带原始值。 */
 export class AiSdkProtocolError extends Error {
@@ -30,6 +37,36 @@ const toJsonValue = (value: unknown): JSONValue => {
   }
 };
 
+/**
+ * @internal 把稳定契约的 content 投影成 AI SDK 的用户消息内容。
+ * 纯字符串保持字符串形态，让既有请求的线上形状完全不变。
+ */
+function toAiSdkUserContent(
+  content: AgentModelMessage['content'],
+): UserModelMessage['content'] {
+  if (typeof content === 'string') return content;
+  return content.map((part) =>
+    part.type === 'text'
+      ? { type: 'text' as const, text: part.text }
+      : {
+          type: 'image' as const,
+          image: part.data,
+          mediaType: part.mimeType,
+        },
+  );
+}
+
+function assistantText(content: AgentModelMessage['content']): string {
+  if (typeof content === 'string') return content;
+  /* assistant 消息带非文本片段说明上游拼错了，宁可拒绝也不要静默丢内容。 */
+  if (content.some((part) => part.type !== 'text')) {
+    throw new AiSdkProtocolError();
+  }
+  return content
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('');
+}
+
 /** @internal AI SDK消息投影，只能在SDK Adapter内部消费。 */
 export interface AiSdkPrompt {
   instructions: string | undefined;
@@ -43,10 +80,12 @@ export function buildAiSdkPrompt(request: StreamAgentTextRequest): AiSdkPrompt {
   );
   const messages: ModelMessage[] = request.messages
     .filter((message) => message.role !== 'system')
-    .map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
+    .map((message) =>
+      message.role === 'assistant'
+        ? /* assistant 侧只可能是模型自己产出的文本；原生模态只从用户侧进入。 */
+          { role: 'assistant', content: assistantText(message.content) }
+        : { role: 'user', content: toAiSdkUserContent(message.content) },
+    );
   if (request.phase === 'synthesis' && request.toolResults.length === 0) {
     throw new AiSdkProtocolError();
   }
@@ -74,7 +113,7 @@ export function buildAiSdkPrompt(request: StreamAgentTextRequest): AiSdkPrompt {
     instructions:
       systemMessages.length === 0
         ? undefined
-        : systemMessages.map((message) => message.content).join('\n\n'),
+        : systemMessages.map(modelMessageText).join('\n\n'),
     messages,
   };
 }

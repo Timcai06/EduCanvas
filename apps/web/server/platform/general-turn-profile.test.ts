@@ -1,20 +1,23 @@
-import type { TurnApplicationCommand } from '@educanvas/agent-core';
-import type {
-  BuiltAssetContext,
-  TurnApplicationLifecycleSnapshot,
-} from '@educanvas/agent-runtime';
+import {
+  modelMessageText,
+  type TurnApplicationCommand,
+} from '@educanvas/agent-core';
+import type { TurnApplicationLifecycleSnapshot } from '@educanvas/agent-runtime';
+import type { MaterializedAssetPlan } from '../assets/asset-materialization';
 import type { NodeInvocationPersistencePort } from '@educanvas/node-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webGeneralTurns } from './general-turn-persistence';
+import type { WebOperationArtifacts } from './general-artifact-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import type { WebOperationSources } from './general-turn-tools';
 
 vi.mock('server-only', () => ({}));
 
-const assetContext: BuiltAssetContext = {
+const assetContext: MaterializedAssetPlan = {
   text: '',
   textSegments: [],
   nativeReferences: [],
+  nativeImages: [],
 };
 const command: TurnApplicationCommand = {
   protocol: 'educanvas.turn.v2',
@@ -60,10 +63,16 @@ function createProfile(input?: {
   nodeInvocations?: NodeInvocationPersistencePort;
   membershipRole?: 'owner' | 'editor' | 'contributor' | 'viewer';
   staticToolCapabilities?: readonly string[];
+  operationArtifacts?: WebOperationArtifacts;
+  preferCanvas?: boolean;
+  assetContext?: MaterializedAssetPlan;
 }) {
   return new WebGeneralProfile(
-    assetContext,
+    input?.assetContext ?? assetContext,
     { sourceCount: 0 } as unknown as WebOperationSources,
+    input?.operationArtifacts ??
+      ({ events: () => [] } as unknown as WebOperationArtifacts),
+    input?.preferCanvas ?? false,
     input?.staticToolCapabilities ?? ['web.fetch', 'web.search'],
     input?.nodeInvocations ?? createNodeInvocations(),
     input?.membershipRole ?? 'owner',
@@ -169,5 +178,79 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
 
     expect(plan.toolPolicy?.capabilities.actor).toContain('device.status');
     expect(plan.toolPolicy?.capabilities.notebook).toEqual([]);
+  });
+
+  it('把本轮真实创建的 Canvas 产物投影到终态事件', async () => {
+    const event = {
+      protocol: 'educanvas.turn.v2' as const,
+      operationId: command.operationId,
+      type: 'artifact.proposed' as const,
+      artifactId: 'artifact-1',
+      artifactKind: 'mind_map',
+      trustTier: 'tier1' as const,
+      title: '分数思维导图',
+    };
+    const profile = createProfile({
+      operationArtifacts: {
+        events: () => [event],
+      } as unknown as WebOperationArtifacts,
+    });
+
+    await expect(
+      profile.finalize({ command, turn, content: '已经开始生成。' }),
+    ).resolves.toEqual({
+      citationMarkers: [],
+      events: [event],
+    });
+  });
+
+  it('Canvas 偏好只强化本轮输出指令而不改变可信 Tool grant', async () => {
+    const normal = await createProfile().prepare({ command, turn });
+    const canvas = await createProfile({ preferCanvas: true }).prepare({
+      command,
+      turn,
+    });
+    const canvasSystemPrompt = canvas.context.profile[0]?.message.content ?? '';
+
+    expect(canvasSystemPrompt).toContain('必须调用 createCanvasArtifact');
+    expect(canvasSystemPrompt).toContain('不要用 ASCII 图');
+    expect(canvas.toolPolicy).toEqual(normal.toolPolicy);
+  });
+});
+
+describe('WebGeneralProfile 原生图片输入', () => {
+  const image = {
+    versionId: 'version-1',
+    mimeType: 'image/png' as const,
+    data: 'iVBORw0KGgo=',
+  };
+
+  it('把多张图片合并进一条消息，不逐张占用 segment 名额', async () => {
+    const plan = await createProfile({
+      assetContext: {
+        ...assetContext,
+        nativeImages: [image, { ...image, versionId: 'version-2' }],
+      },
+    }).prepare({ command, turn });
+
+    expect(plan.context.sourcesAndAssets).toHaveLength(1);
+    expect(plan.context.sourcesAndAssets[0]?.message.content).toHaveLength(3);
+  });
+
+  it('segment 文本与消息的文本投影逐字相等，否则会触发 Prompt 漂移守卫', async () => {
+    /* Turn Application 用 modelMessageText(message) === segment.content 检测漂移
+       （turn-application/helpers.ts）。这两处的占位符写法是绑定的。 */
+    const plan = await createProfile({
+      assetContext: { ...assetContext, nativeImages: [image] },
+    }).prepare({ command, turn });
+
+    const candidate = plan.context.sourcesAndAssets[0]!;
+    expect(modelMessageText(candidate.message)).toBe(candidate.segment.content);
+  });
+
+  it('没有原生图片时不产生任何额外 segment', async () => {
+    const plan = await createProfile().prepare({ command, turn });
+
+    expect(plan.context.sourcesAndAssets).toEqual([]);
   });
 });

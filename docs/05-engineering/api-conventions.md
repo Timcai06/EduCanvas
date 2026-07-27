@@ -10,6 +10,8 @@
 - ID不使用可猜测的连续整数暴露给客户端；
 - 分页默认使用Cursor；
 - 错误返回稳定错误码，不让前端解析错误文本；
+- 身份相关JSON响应统一使用`Cache-Control: private, no-store`、
+  `X-Content-Type-Options: nosniff`和`X-Request-Id`；
 - 写操作支持幂等键；
 - 长任务返回`job_id`；
 - 流式文本使用SSE，双向实时音频使用WebRTC或WebSocket。
@@ -19,6 +21,73 @@
 ### 内部 Turn Application v2
 
 第二代运行内核先定义 `educanvas.turn.v2` 的 transport-neutral 命令与事件。命令只接受服务端解析后的 Actor/Agent、Notebook/Conversation、Profile、入口、消息 Parts 和有效能力清单；浏览器、TUI、Channel、模型或 Provider 不能提交可信主体。ID 采用非空、最多 256 字符的 opaque ID，能力名最多 64 字符，消息复用 `agentMessageInputSchema` 的 32 Parts/64000 文本总长边界，能力清单最多 128 项且不得重复。
+
+### Canvas资源协议
+
+`@educanvas/canvas-protocol` 的 `CanvasResource` 是 Source 与 Artifact
+进入Canvas前共享的浏览器安全描述，不是新的持久化事实源。`notebookId`、允许动作和
+信任层只能由已鉴权的服务端Adapter投影；客户端提交的同名字段不能作为授权依据。
+协议不包含内容本体、对象存储键、私有判分键、动态组件、原始Prompt或Provider响应。
+
+资源ID最多128字符，标题最多300字符，MIME最多255字符，派生来源最多32项且不得重复；
+动作最多16项且不得重复。Tier 1不能依赖不受信Runtime；`web_sandbox`只对应Tier 2，
+`experiment`只对应Tier 3。候选学习事件必须同时满足Tier 1、能力标记和显式动作，
+最终仍由可信领域服务验证。尚未产出内容的processing/failed/unavailable资源可以没有
+版本；ready/archived资源必须引用真实不可变版本。只有Artifact拥有序号时才填写
+`sequence`，Source不能为满足统一协议伪造数字版本。
+
+Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtime和动作兼容性，
+不能携带React组件、URL或动态代码。资源不存在与跨Notebook无权访问统一映射为
+`resource_not_found`，公共错误不得包含堆栈、私有路径或Provider原文。
+
+当前Web兼容读取面以additive字段接入Adapter，不删除或改名原有字段：
+
+- `GET /api/v1/chat/conversations`、`/chat/assets`、`/chat/artifacts`保留原数组字段，
+  并新增`page.nextCursor`；`limit`范围为1..100，`cursor`是服务端编码的
+  `updatedAt/createdAt + id`稳定游标，非法值返回`invalid_pagination/400`；
+- `POST /api/v1/chat/artifacts`可选接收`Idempotency-Key`（1..128位受限标识）。
+  服务端保存规范化请求的SHA-256指纹；同键同请求安全重放返回200和`replayed:true`，
+  首次创建返回201，键复用到不同请求返回`idempotency_conflict/409`。Header不承载
+  Prompt、Credential或正文；
+
+- `GET /api/v1/canvas/resources/{resourceKind}/{resourceId}`返回
+  `{resource: CanvasResource}`，其中`resourceKind`只允许`source/artifact`。该接口
+  从服务端身份和当前Notebook解析授权范围，不接受客户端提交的归属或能力字段；
+  不存在、跨用户和跨Notebook统一返回`resource_not_found/404`；
+- `PATCH /api/v1/chat/assets/{assetId}`按`action`判别两类改动，它们的授权层级不同：
+  `set_enabled`改当前成员私有的来源绑定（`notebook.read`即可，viewer也能改自己的），
+  必须带客户端生成的`mutationId`，重放同一个`mutationId`返回既有事实而不写第二条，
+  也不翻转开关；`rename`改全体成员共见的展示名，需要`source.write`。
+  无权限与不存在一律回`asset_not_found/404`，不泄露「存在但你不能改」；
+- `GET /api/v1/chat/assets`继续返回`assets`分页，并为每一项附加`canvasResource`。
+  同时返回`enabled`：它是当前成员的绑定事实，没有绑定过时由服务端给默认值
+  （仅「已就绪的space级来源」为真）。默认值只放服务端——它决定下一轮真正带上哪些资料，
+  两端各算一次迟早漂移；
+  Notebook成员资格在整页范围内只解析一次；无法投影的历史资产（未知MIME）该字段为
+  `null`而不使整页失败，客户端必须把`null`当作「只读、无动作」，不得自行推断可删除或可下载。
+  单资源端点仍以`renderer_not_found`显式拒绝，两处语义差异是有意的；
+- `POST /api/v1/chat/assets`对可抽取文本的类型返回**已受理而非已就绪**的资产：
+  `status=processing`、`currentVersionId=null`，解析由 worker 异步完成
+  （[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）。
+  内容类问题（扫描件、编码错误）不再是上传响应的4xx，而是解析任务的终态，
+  客户端应轮询列表直到 `ready` 或 `failed`。图片等无需抽取的类型仍一次性返回 `ready`；
+- `GET /api/v1/chat/assets/{assetId}/preview`继续返回`preview`，并在完成当前主体与
+  Notebook归属校验后附加`canvasResource`。当前支持PDF、PNG/JPEG/WebP、Markdown、
+  TXT和DOCX；未知MIME由Adapter以`renderer_not_found`拒绝，不生成假预览；
+- `GET /api/v1/chat/artifacts/{artifactId}`继续返回`artifact/version/versions/latestJob`，
+  并附加`canvasResource`。`latestVersion=0`且任务仍在处理时`version=null`；
+  ready/archived投影必须引用真实版本，否则以`resource_invalid`拒绝；
+- 两个端点都不接受客户端提交的`notebookId/trustTier/allowedActions/rendererId`。
+  Source跨主体或跨Notebook仍使用既有`asset_not_found/404`兼容错误，Artifact使用
+  既有`artifact_not_found/404`；统一Canvas读取接口使用
+  `resource_not_found/404`。额外字段不改变现有Preview、Artifact Detail、消息末尾
+  Artifact或Studio消费者行为，Web Renderer Registry尚未迁移。
+
+成员权限以数据库中的有效Notebook成员关系为唯一依据：`notebook.read`控制资源读取，
+`source.write/artifact.write`控制创建与修改；Source删除仅允许owner/editor角色。
+owner可管理Notebook和成员，editor可读写内容但不能管理成员，
+contributor只读并可回复既有Conversation，viewer只读。客户端提供的owner、role、
+permission或action字段全部忽略。
 
 应用事件包含 `turn.started`、消息 delta/引用、Tool 生命周期、approval、Artifact 生命周期和 `turn.completed/failed/cancelled`。已知事件使用 strict Schema；Tool 完成事件只允许最多 1000 字符的安全摘要，不接受原始参数、输出、异常或 Secret。一个事件前缀必须以唯一 `turn.started` 开始、全部属于同一 Operation，终态出现后不得再有事件。
 
@@ -53,7 +122,8 @@ Artifact 生命周期事件已以 additive 方式定义（`schemaVersion=1`，�
   产物行、任务账本与graphile队列行同事务原子提交，生成在worker内异步执行；
 - `GET /api/v1/chat/artifacts/{artifactId}`：最新版本内容（结构化 JSONB；媒体
   版本只含受控读取URL和浏览器安全metadata）与最近生成任务状态，供轮询与
-  Canvas打开；私有`objectKey/checksum`不返回浏览器，越权与不存在同错404；
+  Canvas打开，并附加不含内容本体的`canvasResource`；私有`objectKey/checksum`
+  不返回浏览器，越权与不存在同错404；
 - `GET /api/v1/chat/artifacts/{artifactId}/audio`：按主体重新校验版本归属，完整
   SHA-256校验后返回`audio/mpeg`，支持单段HTTP Range；对象缺失、损坏与越权均
   不泄露私有key。
@@ -141,10 +211,15 @@ data: {"type":"turn.completed","schemaVersion":"1","turnId":"turn_x","messageId"
   "error": {
     "code": "COURSE_NOT_FOUND",
     "message": "课程不存在或无权访问",
-    "request_id": "req_xxx"
+    "requestId": "req_xxx"
   }
 }
 ```
+
+Web兼容API保留既有错误码大小写与字段，并以additive方式增加`requestId`；Gateway
+可以继续使用其标准大写错误码，但两者必须由服务端内部错误分类映射，客户端不得
+通过文案判断重试或授权分支。成功与失败的身份相关JSON响应都禁止被浏览器或中间
+代理缓存；二进制版本资源另行定义ETag、Range和缓存策略。
 
 ## 版本变化
 

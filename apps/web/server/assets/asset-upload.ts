@@ -1,10 +1,15 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { DrizzleAssetRepository, type AssetSnapshot } from '@educanvas/db';
-import { extractText, getDocumentProxy } from 'unpdf';
+import {
+  DrizzleAssetRepository,
+  type AssetSnapshot,
+  type CursorPage,
+  type TemporalIdCursor,
+} from '@educanvas/db';
+import { supportsTextExtraction } from '@educanvas/asset-processing';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { loadOwnedTeachingSession } from '../teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
   WebPageFetchError,
   fetchReadableWebPage,
@@ -15,8 +20,9 @@ import {
   storeAssetBytes,
   type StoredAssetObject,
 } from './asset-storage';
+import { detectAssetFile } from './asset-file-detection';
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_EXTRACTED_TEXT = 120_000;
 
 const assets = new DrizzleAssetRepository();
@@ -29,60 +35,14 @@ export class AssetUploadError extends Error {
       | 'file_too_large'
       | 'session_not_found'
       | 'pdf_text_unavailable'
+      | 'text_content_unavailable'
       | `link_${string}`,
     readonly status: number,
+    options?: { cause?: unknown },
   ) {
-    super(code);
+    super(code, options);
     this.name = 'AssetUploadError';
   }
-}
-
-interface DetectedFile {
-  kind: 'image' | 'document';
-  mimeType: string;
-  extension: string;
-}
-
-function detectFile(bytes: Uint8Array): DetectedFile | null {
-  if (
-    bytes.length >= 5 &&
-    bytes[0] === 0x25 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x44 &&
-    bytes[3] === 0x46 &&
-    bytes[4] === 0x2d
-  ) {
-    return { kind: 'document', mimeType: 'application/pdf', extension: 'pdf' };
-  }
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return { kind: 'image', mimeType: 'image/png', extension: 'png' };
-  }
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff
-  ) {
-    return { kind: 'image', mimeType: 'image/jpeg', extension: 'jpg' };
-  }
-  if (
-    bytes.length >= 12 &&
-    String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
-    String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
-  ) {
-    return { kind: 'image', mimeType: 'image/webp', extension: 'webp' };
-  }
-  return null;
 }
 
 function safeDisplayName(value: string): string {
@@ -94,27 +54,14 @@ function safeDisplayName(value: string): string {
   return [...(normalized || '未命名文件')].slice(0, 180).join('');
 }
 
-async function extractPdfText(bytes: Uint8Array): Promise<string> {
-  const pdf = await getDocumentProxy(bytes);
-  const result = await extractText(pdf, { mergePages: true });
-  const normalized = result.text
-    .normalize('NFC')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-  if (!normalized) {
-    throw new AssetUploadError('pdf_text_unavailable', 422);
-  }
-  return [...normalized].slice(0, MAX_EXTRACTED_TEXT).join('');
-}
-
 export async function uploadOwnedAsset(input: {
   identity: AnonymousIdentity;
   file: File;
   scope: 'turn' | 'space';
 }): Promise<AssetSnapshot> {
-  const session = await loadOwnedTeachingSession(input.identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return uploadOwnedAssetToSpace({ ...input, spaceId: session.id });
+  const target = await loadOwnedTeachingGatewayTarget(input.identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return uploadOwnedAssetToSpace({ ...input, spaceId: target.notebookId });
 }
 
 /** 平台级上传边界：调用方先完成Conversation/Space所有权校验，再传入可信spaceId。 */
@@ -136,12 +83,8 @@ export async function uploadOwnedAssetToSpace(input: {
   }
 
   const bytes = new Uint8Array(await input.file.arrayBuffer());
-  const detected = detectFile(bytes);
+  const detected = detectAssetFile(bytes, input.file.name);
   if (!detected) throw new AssetUploadError('unsupported_file_type', 415);
-  if (input.file.type && input.file.type.toLowerCase() !== detected.mimeType) {
-    throw new AssetUploadError('unsupported_file_type', 415);
-  }
-
   let stored: StoredAssetObject | null = null;
   try {
     stored = await storeAssetBytes({
@@ -150,39 +93,32 @@ export async function uploadOwnedAssetToSpace(input: {
       extension: detected.extension,
     });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
-    try {
-      const extractedText =
-        detected.kind === 'document' ? await extractPdfText(bytes) : null;
-      return await assets.createUploaded({
-        ownerSubjectId: input.identity.studentId,
-        spaceId: input.spaceId,
-        scope: input.scope,
-        kind: detected.kind,
-        displayName: safeDisplayName(input.file.name),
-        mimeType: detected.mimeType,
-        byteSize: bytes.byteLength,
-        contentHash,
-        storageKey: stored.storageKey,
-        extractedText,
-        outcome: { status: 'ready' },
-      });
-    } catch (error) {
-      if (!(error instanceof AssetUploadError)) throw error;
-      await assets.createUploaded({
-        ownerSubjectId: input.identity.studentId,
-        spaceId: input.spaceId,
-        scope: input.scope,
-        kind: detected.kind,
-        displayName: safeDisplayName(input.file.name),
-        mimeType: detected.mimeType,
-        byteSize: bytes.byteLength,
-        contentHash,
-        storageKey: stored.storageKey,
-        extractedText: null,
-        outcome: { status: 'failed', failureCode: error.code },
-      });
-      throw error;
+    const common = {
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      scope: input.scope,
+      kind: detected.kind,
+      displayName: safeDisplayName(input.file.name),
+      mimeType: detected.mimeType,
+      byteSize: bytes.byteLength,
+      contentHash,
+      storageKey: stored.storageKey,
+    };
+    /*
+     * 可抽取文本的类型走异步：落库为 processing 并入队，立即返回（ADR-0025）。
+     * 上传响应时间因此与文件大小解耦，用户先在来源列表看到「处理中」。
+     *
+     * 图片等无需抽取的类型没有等待的理由，仍然一次性写成 ready——为它们建一个
+     * 必然空转的任务只会让队列和状态机都变复杂。
+     */
+    if (supportsTextExtraction(detected.mimeType)) {
+      return (await assets.createUploadedPending(common)).snapshot;
     }
+    return await assets.createUploaded({
+      ...common,
+      extractedText: null,
+      outcome: { status: 'ready' },
+    });
   } catch (error) {
     if (stored && !(error instanceof AssetUploadError)) {
       await removeStoredAsset(stored).catch(() => undefined);
@@ -258,9 +194,9 @@ export async function persistFetchedWebPageAsset(input: {
 export async function listOwnedAssets(
   identity: AnonymousIdentity,
 ): Promise<readonly AssetSnapshot[]> {
-  const session = await loadOwnedTeachingSession(identity);
-  if (!session) throw new AssetUploadError('session_not_found', 404);
-  return listOwnedSpaceAssets(identity, session.id);
+  const target = await loadOwnedTeachingGatewayTarget(identity);
+  if (!target) throw new AssetUploadError('session_not_found', 404);
+  return listOwnedSpaceAssets(identity, target.notebookId);
 }
 
 export async function listOwnedSpaceAssets(
@@ -270,5 +206,17 @@ export async function listOwnedSpaceAssets(
   return assets.listOwnedSpace({
     ownerSubjectId: identity.studentId,
     spaceId,
+  });
+}
+
+export async function listOwnedSpaceAssetsPage(
+  identity: AnonymousIdentity,
+  spaceId: string,
+  input: { limit: number; cursor: TemporalIdCursor | null },
+): Promise<CursorPage<AssetSnapshot>> {
+  return assets.listAccessibleSpacePage({
+    ownerSubjectId: identity.studentId,
+    spaceId,
+    ...input,
   });
 }

@@ -1,3 +1,29 @@
+/**
+ * Turn Application 契约 — 跨入口（Web/TUI/Channel）的通用 Turn 协议。
+ *
+ * ## TurnApplicationCommand
+ *
+ * 所有入口（Web SSE、Gateway NDJSON、Telegram）统一使用此命令结构。
+ * actor/agent/notebook/conversation 必须由服务端路由解析，客户端不能直接构造。
+ *
+ * ## 14 种公开事件
+ *
+ * | 类别 | 事件 | 方向 |
+ * |------|------|------|
+ * | 生命周期 | turn.started, turn.completed, turn.failed, turn.cancelled | 服务端→客户端 |
+ * | 消息 | message.delta, message.citation | 服务端→客户端 |
+ * | 工具 | tool.started, tool.completed, tool.failed | 服务端→客户端 |
+ * | 审批 | approval.required | 服务端→客户端 |
+ * | Artifact | artifact.proposed, artifact.version_added, artifact.generation_progress, artifact.failed | 服务端→客户端 |
+ *
+ * ## 事件序列校验
+ *
+ * - 首事件必须是 turn.started
+ * - 终态事件（completed/failed/cancelled）必须是最后一项
+ * - 终态后不能有后续事件
+ * - 所有事件必须属于同一 operationId
+ */
+
 import { z } from 'zod';
 import { agentMessageInputSchema } from './message-contracts';
 

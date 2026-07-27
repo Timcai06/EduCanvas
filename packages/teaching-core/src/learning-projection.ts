@@ -1,3 +1,40 @@
+/**
+ * 学习投影 — 事件溯源模式的 CQRS 查询端。
+ *
+ * ## 概念
+ *
+ * "投影"(Projection) 是把事件流折叠(fold)成当前状态的纯函数。
+ * 给定一个种子（初始状态）+ 一条事件流 → 输出当前教学状态、掌握度、练习计数。
+ * 同一事件流总是产生相同投影 — 确定性保证可审计。
+ *
+ * ## 两种使用模式
+ *
+ * ### 增量投影 (`projectLearningEvent`)
+ * 在线使用 — 每收到一个可信事件就增量更新内存投影。
+ * 适用于 WebSocket/SSE 实时推送场景。
+ *
+ * ### 全量回放 (`replayLearningEvents`)
+ * 离线使用 — 从 EventStore 读取全部历史事件重新计算。
+ * 适用于学生重新登录、掌握度审计、策略变更后重新评估。
+ *
+ * **关键设计：两种模式共用同一投影路径** — `replayLearningEvents` 就是对 `projectLearningEvent`
+ * 的 reduce。不存在"线上算法"和"离线算法"的分叉，保证一致性。
+ *
+ * ## 课程图验证
+ *
+ * `nextNodeCourseConfigSchema` 在解析时进行拓扑排序 + 环检测，
+ * 拒绝自引用先修、不存在的先修节点、以及循环依赖。
+ *
+ * ## 双队列推荐 (`recommendNextNode`)
+ *
+ * 1. 当前节点未掌握 → CONTINUE_CURRENT（守住，不跳）
+ * 2. 有到期复习节点 → REVIEW（到期复习优先于新学）
+ * 3. 先修已就绪的新节点 → START_NEW
+ * 4. 有需要补修节点 → REVIEW（remediation）
+ * 5. 全部掌握 → COURSE_COMPLETE
+ * 6. 否则 → BLOCKED（先修未满足）
+ */
+
 import { z } from 'zod';
 import {
   domainLearningEventSchema,
@@ -105,6 +142,7 @@ const masterySnapshotSchema = z
     }
   });
 
+/** 创建零值掌握度快照 — 新知识点的初始状态。 */
 function emptyMastery(
   studentId: string,
   knowledgeNodeId: string,
@@ -123,6 +161,7 @@ function emptyMastery(
   };
 }
 
+/** 计算两个 ISO 日期之间的天数，null → 0（从未练习过） */
 function daysBetween(previousIso: string | null, currentIso: string): number {
   if (!previousIso) return 0;
   return Math.max(
@@ -132,6 +171,10 @@ function daysBetween(previousIso: string | null, currentIso: string): number {
   );
 }
 
+/**
+ * 按 misconceptionTags 的定义顺序排序误区集合。
+ * 保证日志和投影中误区标签顺序稳定、可复现。
+ */
 function sortMisconceptions(
   values: ReadonlySet<MisconceptionTag>,
 ): readonly MisconceptionTag[] {
@@ -380,6 +423,12 @@ export const nextNodeCourseConfigSchema = z
         }
       }
     });
+    /**
+     * 先修图环检测 — DFS 三色标记法。
+     * visiting（灰色）= 正在当前递归路径上 → 再次遇到 = 环
+     * visited（黑色）= 已完成探索，确认该节点出发无环
+     * 拒绝：自引用、不存在的先修节点、循环依赖
+     */
     const prerequisitesByNode = new Map(
       course.nodes.map((node) => [
         node.knowledgeNodeId,
@@ -507,6 +556,8 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
     ]),
   );
   const { enterThreshold, prerequisiteGate } = input.courseConfig.masteryConfig;
+
+  // 步骤 1：当前节点未掌握 → 守住不动。这是最高优先级，不能跳过去学别的。
   const currentMastery = masteryByNode.get(input.currentKnowledgeNodeId);
   if (!currentMastery || currentMastery.masteryScore < enterThreshold) {
     return {
@@ -516,6 +567,8 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
     };
   }
 
+  // 步骤 2：到期复习 — 在已掌握节点中找 nextReviewAt 最早且已到期的。
+  // 排除当前节点（已经在学了）。到期复习优先于学新节点。
   const now = new Date(input.now).getTime();
   const dueReview = input.courseConfig.nodes
     .flatMap((node, order) => {
@@ -530,6 +583,7 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
       return [{ node, order, mastery }];
     })
     .sort((left, right) => {
+      // 最早到期的排最前；到期日相同时按课程顺序
       const byDueDate =
         new Date(left.mastery.nextReviewAt ?? 0).getTime() -
         new Date(right.mastery.nextReviewAt ?? 0).getTime();
@@ -543,6 +597,7 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
     };
   }
 
+  // 步骤 3：找新节点 — 所有先修已达标(≥prerequisiteGate)且从未学过的。
   const isReady = (prerequisites: readonly string[]) =>
     prerequisites.every(
       (nodeId) =>
@@ -561,6 +616,8 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
     };
   }
 
+  // 步骤 4：补修 — 找已学过但未达标、且先修已就绪的节点（排除当前节点）。
+  // 与步骤 2 不同：步骤 2 是到期复习（分数够但要巩固），步骤 4 是补修（分数不够要重学）。
   const remediation = input.courseConfig.nodes.find((node) => {
     const mastery = masteryByNode.get(node.knowledgeNodeId);
     return (
@@ -578,6 +635,7 @@ export function recommendNextNode(rawInput: unknown): NextNodeRecommendation {
     };
   }
 
+  // 步骤 5：检查是否全部掌握 → COURSE_COMPLETE
   const allMastered = input.courseConfig.nodes.every(
     (node) =>
       (masteryByNode.get(node.knowledgeNodeId)?.masteryScore ?? 0) >=

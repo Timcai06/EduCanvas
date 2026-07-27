@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   assetDescriptorSchema,
+  assetOriginSchema,
   assetVersionDescriptorSchema,
   assetVersionReferenceSchema,
   canTransitionAssetStatus,
@@ -11,16 +12,43 @@ import {
   type AssetVersionDescriptor,
   type AssetVersionReference,
 } from '@educanvas/agent-core';
-import { and, desc, eq } from 'drizzle-orm';
+import type { NotebookMembershipRole } from '@educanvas/gateway-core';
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
 } from './internal/owned-asset-versions';
-import { assets, assetVersions } from './schema';
+import { requireNotebookAccess } from './notebook-access';
+import {
+  boundedPageLimit,
+  type CursorPage,
+  type TemporalIdCursor,
+} from './pagination';
+import {
+  assetProcessingJobs,
+  assetRepresentations,
+  assets,
+  assetVersions,
+  notebookAssetBindings,
+  objectDeletionOutbox,
+} from './schema';
 
 type Database = ReturnType<typeof getDb>;
+
+/** worker 任务注册表里的稳定标识；`域:动作` 命名与其他周期/业务任务一致。 */
+export const ASSET_EXTRACT_TEXT_TASK = 'assets:extract_text' as const;
 
 const OWNER_ID = /^.{1,160}$/u;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -37,6 +65,27 @@ export interface MaterializedAssetVersion {
   displayName: string;
   mimeType: string;
   byteSize: number;
+  extractedText: string | null;
+}
+
+export interface AssetAccessPolicy {
+  role: NotebookMembershipRole;
+}
+
+/**
+ * 仅供服务端对象存储 Adapter 使用的当前版本。
+ * storageKey 绝不能进入 AssetSnapshot、公共 API、模型 Context 或客户端状态。
+ */
+export interface OwnedStoredAssetVersion {
+  assetId: string;
+  versionId: string;
+  displayName: string;
+  mimeType: string;
+  byteSize: number;
+  contentHash: string;
+  origin: AssetOrigin;
+  createdAt: string;
+  storageKey: string;
   extractedText: string | null;
 }
 
@@ -132,6 +181,248 @@ export class DrizzleAssetRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  /**
+   * 落库一个等待异步解析的上传（ADR-0025）。
+   *
+   * 与 `createUploaded` 的关键差异：asset 与 version 都停在 `processing`，
+   * `currentVersionId` 保持为空（`assets_status_shape_check` 要求非 ready 状态
+   * 不得引用当前版本），同时写一条 `queued` 的解析任务。只有 worker 调用
+   * `settleTextExtraction` 之后，资产才会推进到 ready 或 failed。
+   *
+   * 入队在同一事务内完成：graphile-worker 的队列与业务表同库，
+   * `graphile_worker.add_job` 因此和业务写入是一个原子单元，不存在
+   * 「任务已入队但资产不存在」或「资产已建但任务丢了」的中间态。
+   * 这与 `platform-artifact-repository` 创建生成任务的做法一致。
+   */
+  async createUploadedPending(
+    input: Omit<CreateUploadedAssetInput, 'extractedText' | 'outcome'>,
+  ): Promise<{ snapshot: AssetSnapshot; versionId: string; jobId: string }> {
+    const validated = this.validateUploadInput(input);
+    const now = input.now ?? new Date();
+    const assetId = randomUUID();
+    const versionId = randomUUID();
+    const jobId = randomUUID();
+
+    return this.database.transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId: validated.spaceId,
+        trustedSubjectId: validated.ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => {
+        throw new AssetAccessError();
+      });
+      const [createdAsset] = await transaction
+        .insert(assets)
+        .values({
+          id: assetId,
+          ownerSubjectId: validated.ownerSubjectId,
+          spaceId: validated.spaceId,
+          scope: input.scope,
+          kind: input.kind,
+          origin: input.origin ?? 'upload',
+          displayName: validated.displayName,
+          mimeType: validated.mimeType,
+          status: 'processing',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const [createdVersion] = await transaction
+        .insert(assetVersions)
+        .values({
+          id: versionId,
+          assetId,
+          kind: input.kind,
+          mimeType: validated.mimeType,
+          byteSize: input.byteSize,
+          contentHash: input.contentHash,
+          status: 'processing',
+          storageKey: validated.storageKey,
+          extractedText: null,
+          failureCode: null,
+          createdAt: now,
+        })
+        .returning();
+      const queueJobKey = `asset-extract-text:${jobId}`;
+      await transaction.insert(assetProcessingJobs).values({
+        id: jobId,
+        assetVersionId: versionId,
+        kind: 'extract_text',
+        status: 'queued',
+        attempts: 0,
+        queueJobKey,
+        createdAt: now,
+      });
+      await transaction.execute(sql`
+        select graphile_worker.add_job(
+          ${ASSET_EXTRACT_TEXT_TASK},
+          payload := ${JSON.stringify({ jobId })}::json,
+          job_key := ${queueJobKey},
+          max_attempts := 3
+        )
+      `);
+      if (!createdAsset || !createdVersion) {
+        throw new AssetPersistenceError('Asset创建失败');
+      }
+      return {
+        snapshot: toSnapshot(createdAsset, createdVersion),
+        versionId,
+        jobId,
+      };
+    });
+  }
+
+  /**
+   * 供 worker 读取一个待解析任务的输入。
+   *
+   * 只返回解析所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
+   */
+  async loadPendingExtraction(input: {
+    jobId: string;
+  }): Promise<{ storageKey: string; mimeType: string } | null> {
+    const jobId = requireUuid(input.jobId);
+    const [row] = await this.database
+      .select({
+        storageKey: assetVersions.storageKey,
+        mimeType: assetVersions.mimeType,
+      })
+      .from(assetProcessingJobs)
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
+      )
+      .where(
+        and(
+          eq(assetProcessingJobs.id, jobId),
+          eq(assetProcessingJobs.kind, 'extract_text'),
+          inArray(assetProcessingJobs.status, ['queued', 'running']),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * 由 worker 写入解析终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的资产改回 processing。
+   */
+  async settleTextExtraction(input: {
+    jobId: string;
+    outcome:
+      | { status: 'ready'; extractedText: string }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    const jobId = requireUuid(input.jobId);
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [claimed] = await transaction
+        .update(assetProcessingJobs)
+        .set({
+          status: input.outcome.status === 'ready' ? 'succeeded' : 'failed',
+          attempts: sql`${assetProcessingJobs.attempts} + 1`,
+          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now})`,
+          completedAt: now,
+          failureCode:
+            input.outcome.status === 'failed'
+              ? requireText(input.outcome.failureCode, 'failureCode', 128)
+              : null,
+        })
+        .where(
+          and(
+            eq(assetProcessingJobs.id, jobId),
+            inArray(assetProcessingJobs.status, ['queued', 'running']),
+          ),
+        )
+        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+      if (!claimed) return false;
+
+      const outcome = input.outcome;
+      const ready = outcome.status === 'ready';
+      const [version] = await transaction
+        .update(assetVersions)
+        .set({
+          status: ready ? 'ready' : 'failed',
+          extractedText:
+            outcome.status === 'ready' ? outcome.extractedText.trim() : null,
+          failureCode: outcome.status === 'failed' ? outcome.failureCode : null,
+        })
+        .where(eq(assetVersions.id, claimed.assetVersionId))
+        .returning();
+      if (!version) throw new AssetPersistenceError('Asset版本不存在');
+
+      if (ready && version.extractedText) {
+        await transaction.insert(assetRepresentations).values({
+          assetVersionId: version.id,
+          kind: 'text',
+          mimeType: 'text/plain',
+          status: 'ready',
+          byteSize: Buffer.byteLength(version.extractedText, 'utf8'),
+          createdAt: now,
+        });
+      }
+      if (!canTransitionAssetStatus('processing', ready ? 'ready' : 'failed')) {
+        throw new AssetPersistenceError('Asset状态转换无效');
+      }
+      await transaction
+        .update(assets)
+        .set({
+          status: ready ? 'ready' : 'failed',
+          currentVersionId: ready ? version.id : null,
+          updatedAt: now,
+        })
+        .where(eq(assets.id, version.assetId));
+      return true;
+    });
+  }
+
+  private validateUploadInput(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    displayName: string;
+    mimeType: string;
+    storageKey: string;
+    byteSize: number;
+    contentHash: string;
+  }): {
+    ownerSubjectId: string;
+    spaceId: string;
+    displayName: string;
+    mimeType: string;
+    storageKey: string;
+  } {
+    const storageKey = requireText(input.storageKey, 'storageKey', 1_024);
+    if (/^https?:\/\//i.test(storageKey)) {
+      throw new AssetPersistenceError('storageKey不能是公开URL');
+    }
+    if (
+      !Number.isSafeInteger(input.byteSize) ||
+      input.byteSize < 0 ||
+      input.byteSize > 50 * 1024 * 1024
+    ) {
+      throw new AssetPersistenceError('byteSize超出允许范围');
+    }
+    if (!SHA256.test(input.contentHash)) {
+      throw new AssetPersistenceError('contentHash必须是小写SHA-256');
+    }
+    if (!canTransitionAssetStatus('pending', 'processing')) {
+      throw new AssetPersistenceError('Asset状态机不可用');
+    }
+    return {
+      ownerSubjectId: requireOwner(input.ownerSubjectId),
+      spaceId: requireUuid(input.spaceId),
+      displayName: requireText(input.displayName, 'displayName', 300),
+      mimeType: requireText(input.mimeType, 'mimeType', 255).toLowerCase(),
+      storageKey,
+    };
+  }
+
   async createUploaded(
     input: CreateUploadedAssetInput,
   ): Promise<AssetSnapshot> {
@@ -163,6 +454,14 @@ export class DrizzleAssetRepository {
     const versionStatus = input.outcome.status;
 
     return this.database.transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => {
+        throw new AssetAccessError();
+      });
       const [createdAsset] = await transaction
         .insert(assets)
         .values({
@@ -201,6 +500,40 @@ export class DrizzleAssetRepository {
       if (!createdAsset || !createdVersion) {
         throw new AssetPersistenceError('Asset或版本写入失败');
       }
+      await transaction.insert(assetRepresentations).values({
+        assetVersionId: versionId,
+        kind: 'original',
+        mimeType,
+        status: 'ready',
+        byteSize: input.byteSize,
+        createdAt: now,
+      });
+      const extractedText = input.extractedText?.trim() || null;
+      if (extractedText) {
+        await transaction.insert(assetRepresentations).values({
+          assetVersionId: versionId,
+          kind: 'text',
+          mimeType: 'text/plain',
+          status: 'ready',
+          byteSize: Buffer.byteLength(extractedText, 'utf8'),
+          createdAt: now,
+        });
+      }
+      if (input.kind === 'document') {
+        await transaction.insert(assetProcessingJobs).values({
+          assetVersionId: versionId,
+          kind: 'extract_text',
+          status: versionStatus === 'ready' ? 'succeeded' : 'failed',
+          attempts: 1,
+          failureCode:
+            versionStatus === 'failed'
+              ? requireText(input.outcome.failureCode, 'failureCode', 128)
+              : null,
+          startedAt: now,
+          completedAt: now,
+          createdAt: now,
+        });
+      }
 
       const nextAssetStatus = versionStatus === 'ready' ? 'ready' : 'failed';
       if (!canTransitionAssetStatus('processing', nextAssetStatus)) {
@@ -225,22 +558,167 @@ export class DrizzleAssetRepository {
     spaceId: string;
     limit?: number;
   }): Promise<readonly AssetSnapshot[]> {
+    return (await this.listAccessibleSpacePage(input)).items;
+  }
+
+  async listAccessibleSpacePage(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    limit?: number;
+    cursor?: TemporalIdCursor | null;
+  }): Promise<CursorPage<AssetSnapshot>> {
     const ownerSubjectId = requireOwner(input.ownerSubjectId);
     const spaceId = requireUuid(input.spaceId);
-    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    const limit = boundedPageLimit(input.limit);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
     const rows = await this.database
       .select({ asset: assets, version: assetVersions })
       .from(assets)
       .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
       .where(
         and(
-          eq(assets.ownerSubjectId, ownerSubjectId),
           eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+          input.cursor
+            ? or(
+                lt(assets.createdAt, input.cursor.timestamp),
+                and(
+                  eq(assets.createdAt, input.cursor.timestamp),
+                  lt(assets.id, input.cursor.id),
+                ),
+              )
+            : undefined,
         ),
       )
       .orderBy(desc(assets.createdAt), desc(assets.id))
-      .limit(limit);
-    return rows.map(({ asset, version }) => toSnapshot(asset, version));
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1)?.asset;
+    return {
+      items: pageRows.map(({ asset, version }) => toSnapshot(asset, version)),
+      nextCursor:
+        rows.length > limit && last
+          ? { timestamp: last.createdAt, id: last.id }
+          : null,
+    };
+  }
+
+  /**
+   * 读取单个主体和空间内的Asset状态投影；失败或处理中可以没有当前内容版本。
+   * 不返回storageKey，供状态类只读组合层使用。
+   */
+  async getOwnedSnapshot(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<AssetSnapshot> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const [row] = await this.database
+      .select({ asset: assets, version: assetVersions })
+      .from(assets)
+      .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    return toSnapshot(row.asset, row.version);
+  }
+
+  /** Canvas 动作策略只使用数据库成员角色与资源创建者，不接受客户端声明。 */
+  async getAccessPolicy(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<AssetAccessPolicy> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const access = await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => null);
+    if (!access) throw new AssetAccessError();
+    const [asset] = await this.database
+      .select({ id: assets.id })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .limit(1);
+    if (!asset) throw new AssetAccessError();
+    return { role: access.role };
+  }
+
+  /**
+   * 读取当前主体和空间内的已就绪对象存储版本。
+   * 调用边界：只允许服务端在完成身份与Notebook路由后读取，返回值不得序列化给客户端。
+   */
+  async loadOwnedCurrentStoredVersion(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<OwnedStoredAssetVersion> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const [row] = await this.database
+      .select({ asset: assets, version: assetVersions })
+      .from(assets)
+      .innerJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          eq(assets.status, 'ready'),
+          eq(assetVersions.status, 'ready'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    return {
+      assetId: row.asset.id,
+      versionId: row.version.id,
+      displayName: row.asset.displayName,
+      mimeType: row.version.mimeType,
+      byteSize: row.version.byteSize,
+      contentHash: row.version.contentHash,
+      origin: assetOriginSchema.parse(row.asset.origin),
+      createdAt: row.version.createdAt.toISOString(),
+      storageKey: row.version.storageKey,
+      extractedText: row.version.extractedText,
+    };
   }
 
   async materializeOwnedReferences(input: {
@@ -275,5 +753,258 @@ export class DrizzleAssetRepository {
       if (error instanceof OwnedAssetVersionError) throw new AssetAccessError();
       throw error;
     }
+  }
+
+  /**
+   * 将资产及版本收敛为tombstoned；保留storageKey供后续Outbox物理清理。
+   * 调用者必须传入服务端确认的主体与空间，跨主体请求统一返回false。
+   */
+  /**
+   * 读取某个成员在当前 Notebook 内的来源启停状态。
+   *
+   * 启停是成员私有事实：只要求 `notebook.read`，viewer 也能有自己的一份。
+   * 取值是每个 asset 下 sequence 最大的那条事实；从未切换过的 asset 不出现在
+   * 结果里，由调用方决定默认值（当前 UI 默认启用 space 级来源）。
+   */
+  async listSubjectAssetBindings(input: {
+    subjectId: string;
+    spaceId: string;
+  }): Promise<ReadonlyMap<string, boolean>> {
+    const subjectId = requireOwner(input.subjectId);
+    const spaceId = requireUuid(input.spaceId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: subjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const rows = await this.database
+      .selectDistinctOn(
+        [notebookAssetBindings.subjectId, notebookAssetBindings.assetId],
+        {
+          assetId: notebookAssetBindings.assetId,
+          enabled: notebookAssetBindings.enabled,
+        },
+      )
+      .from(notebookAssetBindings)
+      .innerJoin(assets, eq(assets.id, notebookAssetBindings.assetId))
+      .where(
+        and(
+          eq(notebookAssetBindings.subjectId, subjectId),
+          eq(assets.spaceId, spaceId),
+          ne(assets.status, 'tombstoned'),
+        ),
+      )
+      .orderBy(
+        notebookAssetBindings.subjectId,
+        notebookAssetBindings.assetId,
+        desc(notebookAssetBindings.sequence),
+      );
+    return new Map(rows.map((row) => [row.assetId, row.enabled]));
+  }
+
+  /**
+   * 追加一条启停事实。返回生效后的值。
+   *
+   * `mutationId` 让重放幂等：同一成员重复提交同一个 mutationId 时唯一索引冲突，
+   * 此时读回既有事实返回，而不是写第二条或报错——网络重试不该翻转开关。
+   */
+  async setSubjectAssetBinding(input: {
+    subjectId: string;
+    spaceId: string;
+    assetId: string;
+    enabled: boolean;
+    mutationId: string;
+  }): Promise<boolean | null> {
+    const subjectId = requireOwner(input.subjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const mutationId = requireText(input.mutationId, 'mutationId', 128);
+    return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: subjectId,
+        requiredPermission: 'notebook.read',
+      }).catch(() => null);
+      if (!access) return null;
+      const [owned] = await transaction
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .limit(1);
+      if (!owned) return null;
+
+      const [replayed] = await transaction
+        .select({ enabled: notebookAssetBindings.enabled })
+        .from(notebookAssetBindings)
+        .where(
+          and(
+            eq(notebookAssetBindings.subjectId, subjectId),
+            eq(notebookAssetBindings.mutationId, mutationId),
+          ),
+        )
+        .limit(1);
+      if (replayed) return replayed.enabled;
+
+      const [latest] = await transaction
+        .select({ sequence: notebookAssetBindings.sequence })
+        .from(notebookAssetBindings)
+        .where(
+          and(
+            eq(notebookAssetBindings.subjectId, subjectId),
+            eq(notebookAssetBindings.assetId, assetId),
+          ),
+        )
+        .orderBy(desc(notebookAssetBindings.sequence))
+        .limit(1);
+      await transaction.insert(notebookAssetBindings).values({
+        subjectId,
+        assetId,
+        sequence: (latest?.sequence ?? 0) + 1,
+        enabled: input.enabled,
+        mutationId,
+      });
+      return input.enabled;
+    });
+  }
+
+  /** 重命名是共享事实，按 `source.write` 授权；只改展示名，不动任何版本。 */
+  async renameOwnedAsset(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+    displayName: string;
+  }): Promise<boolean> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const displayName = requireText(input.displayName, 'displayName', 300);
+    return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+      }).catch(() => null);
+      if (!access) return false;
+      const updated = await transaction
+        .update(assets)
+        .set({ displayName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .returning({ id: assets.id });
+      return updated.length > 0;
+    });
+  }
+
+  async tombstoneOwnedAsset(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<boolean> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    const now = new Date();
+    return this.database.transaction(async (transaction) => {
+      const access = await requireNotebookAccess(transaction, {
+        notebookId: spaceId,
+        trustedSubjectId: ownerSubjectId,
+        requiredPermission: 'source.write',
+        now,
+      }).catch(() => null);
+      if (!access) return false;
+      const [owned] = await transaction
+        .select({ id: assets.id, createdBy: assets.ownerSubjectId })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, assetId),
+            eq(assets.spaceId, spaceId),
+            ne(assets.status, 'tombstoned'),
+          ),
+        )
+        .limit(1);
+      if (!owned) return false;
+      if (
+        owned.createdBy !== ownerSubjectId &&
+        access.role !== 'owner' &&
+        access.role !== 'editor'
+      ) {
+        return false;
+      }
+
+      const storedVersions = await transaction
+        .select({
+          id: assetVersions.id,
+          storageKey: assetVersions.storageKey,
+        })
+        .from(assetVersions)
+        .where(eq(assetVersions.assetId, assetId));
+      const derivedRepresentations = await transaction
+        .select({
+          id: assetRepresentations.id,
+          storageKey: assetRepresentations.derivedStorageKey,
+        })
+        .from(assetRepresentations)
+        .innerJoin(
+          assetVersions,
+          eq(assetVersions.id, assetRepresentations.assetVersionId),
+        )
+        .where(
+          and(
+            eq(assetVersions.assetId, assetId),
+            isNotNull(assetRepresentations.derivedStorageKey),
+          ),
+        );
+      const deletionEntries = [
+        ...storedVersions.map((version) => ({
+          objectKind: 'asset' as const,
+          storageKey: version.storageKey,
+          sourceType: 'asset_version' as const,
+          sourceId: version.id,
+          availableAt: now,
+        })),
+        ...derivedRepresentations.flatMap((representation) =>
+          representation.storageKey
+            ? [
+                {
+                  objectKind: 'asset' as const,
+                  storageKey: representation.storageKey,
+                  sourceType: 'asset_representation' as const,
+                  sourceId: representation.id,
+                  availableAt: now,
+                },
+              ]
+            : [],
+        ),
+      ];
+      if (deletionEntries.length > 0) {
+        await transaction
+          .insert(objectDeletionOutbox)
+          .values(deletionEntries)
+          .onConflictDoNothing();
+      }
+      await transaction
+        .update(assetVersions)
+        .set({ status: 'tombstoned' })
+        .where(eq(assetVersions.assetId, assetId));
+      await transaction
+        .update(assets)
+        .set({ status: 'tombstoned', tombstonedAt: now, updatedAt: now })
+        .where(eq(assets.id, assetId));
+      return true;
+    });
   }
 }

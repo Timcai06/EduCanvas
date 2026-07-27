@@ -48,6 +48,77 @@ describe('asset upload HTTP boundary', () => {
     expect((parsed as { file: File }).file.size).toBe(5);
   });
 
+  it('rejects an oversized declared body', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    const response = await parseAssetUploadRequest(
+      new Request('http://localhost/api/v1/assets', {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=test',
+          'content-length': String(11 * 1024 * 1024),
+        },
+        body,
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' }),
+    );
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(413);
+    await expect((response as Response).json()).resolves.toMatchObject({
+      error: { code: 'file_too_large' },
+    });
+  });
+
+  it('stops a chunked multipart body after the bounded limit', async () => {
+    const oversizedChunk = new Uint8Array(11 * 1024 * 1024);
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(oversizedChunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const response = await parseAssetUploadRequest(
+      new Request('http://localhost/api/v1/assets', {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=test',
+        },
+        body,
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' }),
+    );
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(413);
+    expect(cancelled).toBe(true);
+  });
+
+  it('maps malformed multipart data to a stable validation response', async () => {
+    const response = await parseAssetUploadRequest(
+      new Request('http://localhost/api/v1/assets', {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=test',
+        },
+        body: 'not-a-multipart-body',
+      }),
+    );
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(400);
+    await expect((response as Response).json()).resolves.toMatchObject({
+      error: { code: 'invalid_upload' },
+    });
+  });
+
   it('maps domain errors to stable public messages', async () => {
     const response = assetUploadErrorResponse(
       new AssetUploadError('file_too_large', 413),

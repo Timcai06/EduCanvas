@@ -16,7 +16,7 @@ import { useReducedMotion } from './use-reduced-motion';
 /*
  * Agent 工作态全屏氛围层：老师「落笔」思考到给出回复期间，视口四周浮起一圈
  * 呼吸流光（学 ego/Arc 的 agent 操作态语义——「此刻是 AI 的回合」），
- * 但配色走墨色（黛青为主、朱砂点睛），是我们自己的水墨而非彩虹霓虹。
+ * 但配色走墨色（墨紫为主、朱砂点睛），是我们自己的水墨而非彩虹霓虹。
  *
  * PulsingBorder 是边缘富集、中心透明的 shader（正好是「边框光」分布），pointer-events:none
  * 不挡交互。为省电：仅在 busy 时挂载 WebGL，退场淡出后卸载释放上下文；减少动态偏好下
@@ -84,9 +84,9 @@ export function AgentBusyOverlay({ active }: { active: boolean }) {
     getDocumentVisible,
     getServerDocumentVisible,
   );
-  const accent = useCssVarColor('--color-accent', '#31606c');
-  const accentStrong = useCssVarColor('--color-accent-strong', '#234c58');
-  const cinnabar = useCssVarColor('--color-cinnabar', '#bf4029');
+  const accent = useCssVarColor('--color-accent', '#6a4a86');
+  const accentStrong = useCssVarColor('--color-accent-strong', '#523368');
+  const cinnabar = useCssVarColor('--color-cinnabar', '#cf4429');
 
   /* 挂载晚于 active、卸载晚于 !active：退场先淡出再释放 WebGL 上下文。
      状态更新全部推到 rAF/timeout 异步回调里——既满足「effect 内不同步 setState」，

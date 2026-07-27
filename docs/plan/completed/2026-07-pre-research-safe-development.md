@@ -39,7 +39,7 @@
 ## 事实回写
 
 - 产品行为：[`../../01-product/student-ui-spec.md`](../../01-product/student-ui-spec.md)；
-- Canvas与GSAP：[`../../02-architecture/canvas-and-gsap.md`](../../02-architecture/canvas-and-gsap.md)；
+- 统一Canvas工作面：[`../../02-architecture/04-统一Canvas工作面.md`](../../02-architecture/04-统一Canvas工作面.md)；
 - 前端边界：[`../../05-engineering/frontend.md`](../../05-engineering/frontend.md)；
 - 测试基线：[`../../06-quality/testing-and-evaluation.md`](../../06-quality/testing-and-evaluation.md)；
 - 长期路线图：[`../../10-planning/roadmap.md`](../../10-planning/roadmap.md)。

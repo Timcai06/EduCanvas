@@ -43,7 +43,7 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - 当前支持 `openai-compatible` 和受部署策略约束的 `deepseek`；
 - DeepSeek 默认关闭，必须显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true`，且 staging/production 无条件拒绝；
 - staging/production 的通用 OpenAI-compatible endpoint 必须使用 HTTPS；DeepSeek endpoint 还必须匹配代码允许的官方主机；
-- DeepSeek 请求固定禁用 thinking，响应中的意外 `reasoning_content` 会被忽略，避免保留或转发 CoT。
+- DeepSeek Turn与结构化JSON请求固定禁用 thinking，响应中的意外 `reasoning_content` 会被忽略，避免保留或转发 CoT，也避免推理耗尽Artifact JSON的输出预算。
 
 公共工厂：
 
