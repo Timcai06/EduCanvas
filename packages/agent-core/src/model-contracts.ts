@@ -43,11 +43,24 @@ export const speechTaskAliases = ['speech.generate'] as const;
 export const speechTaskAliasSchema = z.enum(speechTaskAliases);
 export type SpeechTaskAlias = z.infer<typeof speechTaskAliasSchema>;
 
+/**
+ * 音频转录走独立 Port，输入为不可变音频字节而非文本。
+ * 转录结果是派生内容，不覆盖原始 Asset Version。
+ */
+export const audioTranscriptionTaskAliases = ['audio.transcribe'] as const;
+export const audioTranscriptionTaskAliasSchema = z.enum(
+  audioTranscriptionTaskAliases,
+);
+export type AudioTranscriptionTaskAlias = z.infer<
+  typeof audioTranscriptionTaskAliasSchema
+>;
+
 /** 平台已注册的任务别名；供应商模型ID不得作为任务别名进入业务代码。 */
 export const taskAliases = [
   ...streamingTaskAliases,
   ...structuredTaskAliases,
   ...speechTaskAliases,
+  ...audioTranscriptionTaskAliases,
 ] as const;
 export const taskAliasSchema = z.enum(taskAliases);
 export type TaskAlias = z.infer<typeof taskAliasSchema>;
@@ -58,6 +71,7 @@ export const modelAliases = [
   'fast',
   'structured',
   'speech',
+  'transcription',
 ] as const;
 export const modelAliasSchema = z.enum(modelAliases);
 export type ModelAlias = z.infer<typeof modelAliasSchema>;

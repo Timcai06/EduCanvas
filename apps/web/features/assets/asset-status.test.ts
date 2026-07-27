@@ -53,6 +53,15 @@ describe('来源处理状态文案', () => {
     );
   });
 
+  it('音频失败码映射为稳定的用户提示', () => {
+    expect(assetFailureMessage('audio_duration_exceeded')).toBe(
+      '音频时长超过60分钟',
+    );
+    expect(assetFailureMessage('audio_metadata_unavailable')).toBe(
+      '无法读取音频格式或时长',
+    );
+  });
+
   it('长时间处理中给出明确提示', () => {
     expect(
       assetProcessingMessage(

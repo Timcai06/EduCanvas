@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   LinkSimple,
   SpinnerGap,
+  Microphone,
 } from '@phosphor-icons/react';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import { assetFailureMessage, assetProcessingMessage } from './asset-status';
@@ -13,7 +14,7 @@ export interface AssetItem {
   id: string;
   versionId: string | null;
   label: string;
-  kind: 'image' | 'document' | 'link';
+  kind: 'image' | 'document' | 'link' | 'audio';
   scope: 'turn' | 'space';
   status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
   processing: {
@@ -47,7 +48,8 @@ export function AssetsDrawer({
   return (
     <div className="space-y-5">
       <p id="assets-availability" className="text-sm text-ink-muted">
-        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。PDF、Word、Markdown和TXT会提取文字；图片能否被直接读取取决于当前所用模型，不支持时发送会明确提示。
+        这些资料属于当前工作区；勾选决定下一轮使用哪些来源。
+        PDF、Word、Markdown和TXT会提取文字；音频会自动转录为文字；图片能否被直接读取取决于当前所用模型，不支持时发送会明确提示。
       </p>
       {assets.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
@@ -83,6 +85,8 @@ export function AssetsDrawer({
                     <LinkSimple size={18} />
                   ) : asset.kind === 'image' ? (
                     <ImageIcon size={18} />
+                  ) : asset.kind === 'audio' ? (
+                    <Microphone size={18} />
                   ) : (
                     <FilePdf size={18} />
                   )}
@@ -96,7 +100,9 @@ export function AssetsDrawer({
                       ? '图片'
                       : asset.kind === 'link'
                         ? '网页'
-                        : '文档'}{' '}
+                        : asset.kind === 'audio'
+                          ? '音频'
+                          : '文档'}{' '}
                     · {asset.scope === 'space' ? '笔记本来源' : '仅本轮'} ·{' '}
                     {asset.status === 'ready'
                       ? '已就绪'

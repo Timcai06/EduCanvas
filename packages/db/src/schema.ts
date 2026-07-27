@@ -920,6 +920,13 @@ export const assetVersions = pgTable(
     status: text('status').notNull(),
     storageKey: text('storage_key').notNull(),
     extractedText: text('extracted_text'),
+    /**
+     * 音频转录派生文本；与 extractedText 分离是因为来源不同
+     * （文本抽取 vs. Provider 转录），生命周期独立，审计需要分别追踪。
+     */
+    transcriptionText: text('transcription_text'),
+    /** 转录 Provider 审计元数据（ProviderCallMetadata JSON），不包含 Prompt 正文。 */
+    transcriptionMetadata: jsonb('transcription_metadata'),
     failureCode: text('failure_code'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -1048,7 +1055,7 @@ export const assetRepresentations = pgTable(
     ),
     check(
       'asset_representations_kind_check',
-      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail')`,
+      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail', 'transcription')`,
     ),
     check(
       'asset_representations_status_check',
@@ -1097,7 +1104,7 @@ export const assetProcessingJobs = pgTable(
     ),
     check(
       'asset_processing_jobs_kind_check',
-      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail')`,
+      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail', 'transcribe_audio')`,
     ),
     check(
       'asset_processing_jobs_status_check',

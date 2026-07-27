@@ -4,6 +4,7 @@ import {
   ASSET_EXTRACT_TEXT_TASK,
   ASSET_GENERATE_THUMBNAIL_TASK,
   ASSET_RENDER_PREVIEW_TASK,
+  ASSET_TRANSCRIBE_AUDIO_TASK,
 } from '@educanvas/db';
 import type { ContinuationTracePort } from '@educanvas/telemetry';
 import type { TaskList } from 'graphile-worker';
@@ -18,6 +19,7 @@ import { deleteObjectOutbox } from './delete-object-outbox.js';
 import { extractAssetTextTask } from './extract-asset-text.js';
 import { renderPreviewTask } from './render-preview.js';
 import { generateThumbnailTask } from './generate-thumbnail.js';
+import { transcribeAudioTask } from './transcribe-audio.js';
 
 /**
  * worker 的任务注册表。周期任务使用Graphile crontab兼容的 `域:动作` 命名;
@@ -32,6 +34,7 @@ export function createTaskList(input: {
     [ASSET_EXTRACT_TEXT_TASK]: extractAssetTextTask,
     [ASSET_RENDER_PREVIEW_TASK]: renderPreviewTask,
     [ASSET_GENERATE_THUMBNAIL_TASK]: generateThumbnailTask,
+    [ASSET_TRANSCRIBE_AUDIO_TASK]: transcribeAudioTask,
     [OPERATION_CONTINUATION_TASK]: createProductionContinueOperationTask(
       input.continuationTrace,
     ),

@@ -5,11 +5,11 @@ import {
   readBoundedMultipartFormData,
 } from '../http/bounded-multipart';
 import { jsonError } from '../http/request-security';
-import { AssetUploadError, MAX_UPLOAD_BYTES } from './asset-upload';
+import { AssetUploadError, MAX_AUDIO_UPLOAD_BYTES } from './asset-upload';
 
 const MAX_MULTIPART_OVERHEAD_BYTES = 256 * 1024;
 const MAX_MULTIPART_BODY_BYTES =
-  MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES;
+  MAX_AUDIO_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES;
 
 export type ParsedAssetUpload = {
   file: File;
@@ -49,9 +49,15 @@ export function assetUploadErrorResponse(error: AssetUploadError): Response {
   const message = (() => {
     switch (error.code) {
       case 'file_too_large':
-        return '文件不能超过10MB。';
+        return '文档和图片不能超过10MB，音频不能超过25MB。';
+      case 'audio_too_large':
+        return '音频不能超过25MB。';
+      case 'audio_duration_exceeded':
+        return '音频时长不能超过60分钟。';
+      case 'audio_metadata_unavailable':
+        return '无法验证音频格式或时长，请检查文件是否完整。';
       case 'unsupported_file_type':
-        return '目前只支持PDF、Word（.docx）、Markdown、TXT、PNG、JPEG和WebP。';
+        return '目前支持PDF、Word、Markdown、TXT、PNG、JPEG、WebP以及受支持的音频格式。';
       case 'pdf_text_unavailable':
         return '这个PDF没有可读取文本；扫描版PDF将在OCR能力上线后支持。';
       /* DOCX 抽取失败与纯文本解码失败共用此码，文案必须同时说得通。 */

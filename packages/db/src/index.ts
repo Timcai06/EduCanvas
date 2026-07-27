@@ -25,6 +25,13 @@ export {
   type DerivedAssetAttempt,
   type DerivedAssetJobKind,
 } from './asset-derived-processing-repository';
+export {
+  ASSET_TRANSCRIBE_AUDIO_TASK,
+  DrizzleAssetTranscriptionRepository,
+  type AudioTranscriptionAttempt,
+  type AudioTranscriptionMetadata,
+  type AudioTranscriptionOutcome,
+} from './asset-transcription-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
   DrizzlePlatformConversationRepository,

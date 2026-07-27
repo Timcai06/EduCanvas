@@ -46,6 +46,41 @@ const SOURCE_RENDERERS = {
     rendererId: 'source.docx',
     downloadable: false,
   },
+  'audio/mpeg': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/wav': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/ogg': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/flac': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/webm': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/mp4': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
+  'audio/x-m4a': {
+    representation: 'audio',
+    rendererId: 'source.audio',
+    downloadable: true,
+  },
 } as const satisfies Record<
   string,
   {

@@ -15,6 +15,7 @@
 
 import type { z } from 'zod';
 import type {
+  AudioTranscriptionTaskAlias,
   ModelAbortSignal,
   ModelAlias,
   ModelMessage,
@@ -66,6 +67,41 @@ export interface SpeechSynthesisResult {
   metadata: ProviderCallMetadata;
 }
 
+/** 音频转录支持的白名单格式；未列入的格式在上传时即被拒绝。 */
+export const supportedAudioTranscriptionMimeTypes = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/flac',
+  'audio/webm',
+  'audio/mp4',
+  'audio/x-m4a',
+] as const;
+
+export type SupportedAudioTranscriptionMimeType =
+  (typeof supportedAudioTranscriptionMimeTypes)[number];
+
+/** 音频转录请求。输入为不可变音频字节引用，不传 base64。 */
+export interface AudioTranscriptionRequest {
+  taskAlias: AudioTranscriptionTaskAlias;
+  modelAlias: 'transcription';
+  /** 服务端已读取的音频字节。 */
+  audioBytes: Uint8Array;
+  mimeType: SupportedAudioTranscriptionMimeType;
+  promptVersion: string;
+  traceId: string;
+  operationId: string;
+  signal?: ModelAbortSignal;
+}
+
+/** 音频转录结果。text 为派生内容，不覆盖原始 Asset Version。 */
+export interface AudioTranscriptionResult {
+  text: string;
+  language: string | null;
+  durationSeconds: number | null;
+  metadata: ProviderCallMetadata;
+}
+
 /** 正常Agent Turn使用的供应商无关Port。 */
 export interface TurnModelGateway {
   streamTurnText(
@@ -87,6 +123,17 @@ export interface SpeechModelGateway {
   ): Promise<SpeechSynthesisResult>;
 }
 
+/** 音频转录专用 Port；输入为音频字节，输出为文本与审计元数据。 */
+export interface AudioTranscriptionModelGateway {
+  transcribeAudio(
+    request: AudioTranscriptionRequest,
+  ): Promise<AudioTranscriptionResult>;
+}
+
 /** 组合根可提供的完整模型网关。 */
 export interface ModelGateway
-  extends TurnModelGateway, StructuredModelGateway, SpeechModelGateway {}
+  extends
+    TurnModelGateway,
+    StructuredModelGateway,
+    SpeechModelGateway,
+    AudioTranscriptionModelGateway {}

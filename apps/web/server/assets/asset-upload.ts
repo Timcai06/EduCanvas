@@ -7,7 +7,12 @@ import {
   type CursorPage,
   type TemporalIdCursor,
 } from '@educanvas/db';
-import { supportsTextExtraction } from '@educanvas/asset-processing';
+import {
+  AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
+  AudioInspectionError,
+  inspectSupportedAudioSource,
+  supportsTextExtraction,
+} from '@educanvas/asset-processing';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import {
@@ -23,6 +28,8 @@ import {
 import { detectAssetFile } from './asset-file-detection';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** 音频转录需要更多空间（Whisper API 限制 25MB） */
+export const MAX_AUDIO_UPLOAD_BYTES = AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES;
 const MAX_EXTRACTED_TEXT = 120_000;
 
 const assets = new DrizzleAssetRepository();
@@ -33,6 +40,9 @@ export class AssetUploadError extends Error {
       | 'invalid_upload'
       | 'unsupported_file_type'
       | 'file_too_large'
+      | 'audio_too_large'
+      | 'audio_duration_exceeded'
+      | 'audio_metadata_unavailable'
       | 'session_not_found'
       | 'pdf_text_unavailable'
       | 'text_content_unavailable'
@@ -74,17 +84,51 @@ export async function uploadOwnedAssetToSpace(input: {
   if (
     !Number.isSafeInteger(input.file.size) ||
     input.file.size <= 0 ||
-    input.file.size > MAX_UPLOAD_BYTES
+    input.file.size > MAX_AUDIO_UPLOAD_BYTES
   ) {
     throw new AssetUploadError(
-      input.file.size > MAX_UPLOAD_BYTES ? 'file_too_large' : 'invalid_upload',
-      input.file.size > MAX_UPLOAD_BYTES ? 413 : 400,
+      input.file.size > MAX_AUDIO_UPLOAD_BYTES
+        ? 'file_too_large'
+        : 'invalid_upload',
+      input.file.size > MAX_AUDIO_UPLOAD_BYTES ? 413 : 400,
     );
   }
-
   const bytes = new Uint8Array(await input.file.arrayBuffer());
   const detected = detectAssetFile(bytes, input.file.name);
   if (!detected) throw new AssetUploadError('unsupported_file_type', 415);
+
+  /* 音频文件使用独立的大小上限（Whisper API 25MB 限制），其他文件 10MB。 */
+  const maxBytes =
+    detected.kind === 'audio' ? MAX_AUDIO_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+  if (input.file.size > maxBytes) {
+    throw new AssetUploadError(
+      input.file.size > maxBytes
+        ? detected.kind === 'audio'
+          ? 'audio_too_large'
+          : 'file_too_large'
+        : 'invalid_upload',
+      input.file.size > maxBytes ? 413 : 400,
+    );
+  }
+  if (detected.kind === 'audio') {
+    try {
+      const inspected = await inspectSupportedAudioSource(bytes);
+      if (inspected.mimeType !== detected.mimeType) {
+        throw new AudioInspectionError('unsupported_audio_type');
+      }
+    } catch (error) {
+      if (error instanceof AudioInspectionError) {
+        if (error.code === 'audio_duration_exceeded') {
+          throw new AssetUploadError('audio_duration_exceeded', 422);
+        }
+        if (error.code === 'audio_input_too_large') {
+          throw new AssetUploadError('audio_too_large', 413);
+        }
+        throw new AssetUploadError('audio_metadata_unavailable', 422);
+      }
+      throw error;
+    }
+  }
   let stored: StoredAssetObject | null = null;
   try {
     stored = await storeAssetBytes({
@@ -105,13 +149,17 @@ export async function uploadOwnedAssetToSpace(input: {
       storageKey: stored.storageKey,
     };
     /*
-     * 可抽取文本的类型走异步：落库为 processing 并入队，立即返回（ADR-0010）。
-     * 上传响应时间因此与文件大小解耦，用户先在来源列表看到「处理中」。
+     * 可抽取文本的类型（PDF/DOCX/文本）和可转录音频走异步：落库为 processing 并入队，
+     * 立即返回（ADR-0010）。上传响应时间因此与文件大小解耦，用户先在来源列表看到
+     * 「处理中」。
      *
      * 图片等无需抽取的类型没有等待的理由，仍然一次性写成 ready——为它们建一个
      * 必然空转的任务只会让队列和状态机都变复杂。
      */
-    if (supportsTextExtraction(detected.mimeType)) {
+    if (
+      supportsTextExtraction(detected.mimeType) ||
+      detected.kind === 'audio'
+    ) {
       return (await assets.createUploadedPending(common)).snapshot;
     }
     return await assets.createUploaded({

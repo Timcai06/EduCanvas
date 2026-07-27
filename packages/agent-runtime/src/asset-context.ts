@@ -6,6 +6,8 @@ export interface MaterializedAssetInput {
   mimeType: string;
   byteSize: number;
   extractedText: string | null;
+  /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
+  transcriptionText: string | null;
 }
 
 export interface AgentInputCapabilities {
@@ -53,12 +55,19 @@ export function buildAssetContext(input: {
     return { text: '', textSegments: [], nativeReferences: [] };
   }
   const supportedNative = new Set(input.capabilities.nativeAssetKinds);
+  /**
+   * 音频的转录文本（transcriptionText）是与 extractedText 等价的文本来源，
+   * 只是来源不同（Provider 转录 vs. 文本抽取）。判断「有没有可用文本」时
+   * 两者都算。
+   */
   const unsupported = [
     ...new Set(
       input.assets
         .filter(
           (asset) =>
-            !asset.extractedText && !supportedNative.has(asset.reference.kind),
+            !asset.extractedText &&
+            !asset.transcriptionText &&
+            !supportedNative.has(asset.reference.kind),
         )
         .map((asset) => asset.reference.kind),
     ),
@@ -70,13 +79,20 @@ export function buildAssetContext(input: {
   const nativeReferences = input.assets
     .filter(
       (asset) =>
-        !asset.extractedText && supportedNative.has(asset.reference.kind),
+        !asset.extractedText &&
+        !asset.transcriptionText &&
+        supportedNative.has(asset.reference.kind),
     )
     .map((asset) => asset.reference);
   let remaining = normalizedLimit(input.maxTextCharacters);
   const textSegments: { reference: AssetVersionReference; text: string }[] = [];
   for (const asset of input.assets) {
-    const extractedText = asset.extractedText?.trim();
+    /**
+     * 优先使用 extractedText（PDF/DOCX/文本），其次使用 transcriptionText（音频）。
+     * 两者不会同时存在——音频不走文本抽取，文档不走转录。
+     */
+    const availableText = asset.extractedText ?? asset.transcriptionText;
+    const extractedText = availableText?.trim();
     if (!extractedText || remaining <= 0) continue;
     const excerpt = [...extractedText].slice(0, remaining).join('');
     remaining -= [...excerpt].length;

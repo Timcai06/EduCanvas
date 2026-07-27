@@ -49,6 +49,11 @@ import {
   enqueueDerivedAssetJob,
   getDerivedAssetJobKind,
 } from './asset-derived-processing-repository';
+import {
+  ASSET_TRANSCRIBE_AUDIO_TASK,
+  DrizzleAssetTranscriptionRepository,
+  type AudioTranscriptionOutcome,
+} from './asset-transcription-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -82,6 +87,8 @@ export interface MaterializedAssetVersion {
   mimeType: string;
   byteSize: number;
   extractedText: string | null;
+  /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
+  transcriptionText: string | null;
 }
 
 export interface AssetAccessPolicy {
@@ -103,13 +110,17 @@ export interface OwnedStoredAssetVersion {
   createdAt: string;
   storageKey: string;
   extractedText: string | null;
+  /** 音频转录派生文本。 */
+  transcriptionText: string | null;
+  /** 音频转录 Provider 审计元数据。 */
+  transcriptionMetadata: unknown;
 }
 
 export interface CreateUploadedAssetInput {
   ownerSubjectId: string;
   spaceId: string;
   scope: AssetScope;
-  kind: Extract<AssetKind, 'image' | 'document' | 'link'>;
+  kind: Extract<AssetKind, 'image' | 'document' | 'link' | 'audio'>;
   /** 缺省 upload;链接导入传 url_import,溯源与上传物理区分。 */
   origin?: Extract<AssetOrigin, 'upload' | 'url_import'>;
   displayName: string;
@@ -225,7 +236,10 @@ export class DrizzleAssetRepository {
       .where(
         and(
           inArray(assetVersions.assetId, [...assetIds]),
-          eq(assetProcessingJobs.kind, 'extract_text'),
+          inArray(assetProcessingJobs.kind, [
+            'extract_text',
+            'transcribe_audio',
+          ]),
         ),
       )
       .orderBy(
@@ -302,13 +316,22 @@ export class DrizzleAssetRepository {
           createdAt: now,
         })
         .returning();
-      const queueJobKey = `asset-extract-text:${jobId}`;
+      /**
+       * 音频走转录队列，其他可抽取文本类型走文本抽取队列。
+       * 两种 job 共用 asset_processing_jobs 表，kind 字段区分。
+       */
+      const isAudio = input.kind === 'audio';
+      const processingKind = isAudio ? 'transcribe_audio' : 'extract_text';
+      const taskName = isAudio
+        ? ASSET_TRANSCRIBE_AUDIO_TASK
+        : ASSET_EXTRACT_TEXT_TASK;
+      const queueJobKey = `asset-${processingKind}:${jobId}`;
       const [createdJob] = await transaction
         .insert(assetProcessingJobs)
         .values({
           id: jobId,
           assetVersionId: versionId,
-          kind: 'extract_text',
+          kind: processingKind,
           status: 'queued',
           attempts: 0,
           queueJobKey,
@@ -317,7 +340,7 @@ export class DrizzleAssetRepository {
         .returning();
       await transaction.execute(sql`
         select graphile_worker.add_job(
-          ${ASSET_EXTRACT_TEXT_TASK},
+          ${taskName},
           payload := ${JSON.stringify({ jobId })}::json,
           job_key := ${queueJobKey},
           max_attempts := 3
@@ -539,6 +562,37 @@ export class DrizzleAssetRepository {
     return new DrizzleAssetDerivedProcessingRepository(
       this.database,
     ).settleThumbnailGeneration(input);
+  }
+
+  /**
+   * 供 worker 读取一个待音频转录任务的输入。
+   *
+   * 只返回转录所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍转录。
+   */
+  async beginAudioTranscriptionAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetTranscriptionRepository(this.database).beginAttempt(
+      input,
+    );
+  }
+
+  /**
+   * 由 worker 写入音频转录终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把已就绪的 representation 改回去。
+   *
+   * 转录文本是派生内容，写入 transcriptionText 列而非 extractedText，
+   * 保证不覆盖原始 Asset Version 的文本抽取结果。
+   */
+  async settleAudioTranscription(input: {
+    jobId: string;
+    outcome: AudioTranscriptionOutcome;
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetTranscriptionRepository(this.database).settle(input);
   }
 
   private validateUploadInput(input: {
@@ -903,6 +957,8 @@ export class DrizzleAssetRepository {
       createdAt: row.version.createdAt.toISOString(),
       storageKey: row.version.storageKey,
       extractedText: row.version.extractedText,
+      transcriptionText: row.version.transcriptionText,
+      transcriptionMetadata: row.version.transcriptionMetadata,
     };
   }
 
@@ -932,6 +988,7 @@ export class DrizzleAssetRepository {
           mimeType: row.version.mimeType,
           byteSize: row.version.byteSize,
           extractedText: row.version.extractedText,
+          transcriptionText: row.version.transcriptionText,
         };
       });
     } catch (error) {

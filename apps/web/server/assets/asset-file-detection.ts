@@ -1,5 +1,7 @@
+import { detectSupportedAudioSource } from '@educanvas/asset-processing';
+
 export interface DetectedAssetFile {
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'audio';
   mimeType: string;
   extension: string;
 }
@@ -73,6 +75,10 @@ function detectBinaryFile(bytes: Uint8Array): DetectedAssetFile | null {
       };
     }
   }
+  const audio = detectSupportedAudioSource(bytes);
+  if (audio) {
+    return { kind: 'audio', ...audio };
+  }
   return null;
 }
 
@@ -92,6 +98,8 @@ export function detectAssetFile(
 ): DetectedAssetFile | null {
   const binary = detectBinaryFile(bytes);
   if (binary) return binary;
-  const text = TEXT_EXTENSIONS[fileExtension(fileName)];
-  return text ? { kind: 'document', ...text } : null;
+  const ext = fileExtension(fileName);
+  const text = TEXT_EXTENSIONS[ext];
+  if (text) return { kind: 'document', ...text };
+  return null;
 }

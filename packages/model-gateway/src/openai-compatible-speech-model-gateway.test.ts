@@ -16,6 +16,8 @@ const configuration: EnabledModelGatewayConfiguration = {
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,
+  transcriptionTimeoutMs: 120_000,
+  transcriptionMaxInputBytes: 25 * 1024 * 1024,
 };
 
 const request = {

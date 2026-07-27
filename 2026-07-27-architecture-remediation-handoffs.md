@@ -391,7 +391,7 @@ ready、重复投递、未知 MIME、损坏内容、大小超限、最终失败�
 
 ---
 
-## Prompt 7：音频 Source 与转录纵切
+## Prompt 7：音频 Source 与转录纵切（已完成）
 
 ```text
 你是 EduCanvas 音频输入能力纵切的资深全栈工程 Agent。
@@ -429,6 +429,27 @@ Worker 任务与 Source Preview。
 ```
 
 审查重点：Port 方向、MIME/时长策略、Provider 隔离和派生文本事实边界。
+
+### Prompt 7 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ `AudioTranscriptionModelGateway` 供应商无关 Port 与 OpenAI-compatible Adapter
+- ✅ 首批 MP3、WAV、Ogg、FLAC、WebM、M4A 容器魔术字和完整媒体元数据验证
+- ✅ 最大 25 MiB、最长 60 分钟；上传和 Worker 两端重复校验
+- ✅ `assets:transcribe_audio` durable task 与独立 ingestion Repository
+- ✅ processing Asset/Version 到 ready/failed 的幂等状态收敛
+- ✅ checksum、字节数、当前 processing Version、MIME 和时长复核
+- ✅ 转录文本上下文消费、音频预览、CanvasResource `source.audio` 服务端投影
+- ✅ Provider原始响应、Prompt、objectKey和堆栈不进入数据库转录元数据或浏览器响应
+- ✅ 正式0043迁移、Drizzle snapshot、fresh migration与0042→0043升级测试
+
+**明确未完成：**
+
+- ⏳ 真实Provider凭据下的live smoke；仓库测试只证明协议、边界和状态机
+- ⏳ 长期停留在processing任务的恢复扫描和用户主动重试入口
+- ⏳ 历史音频Source回填；本阶段不做无界回填
+- ⏳ 视频音轨、抽帧与摘要；必须等独立Prompt 11
 
 ---
 

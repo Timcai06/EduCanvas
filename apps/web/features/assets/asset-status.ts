@@ -27,6 +27,16 @@ export function assetFailureMessage(failureCode: string | null): string {
       return '暂不支持这种文件格式';
     case 'asset_processing_exhausted':
       return '处理服务多次尝试后仍未完成';
+    case 'unsupported_audio_type':
+      return '暂不支持这种音频格式';
+    case 'audio_input_too_large':
+      return '音频文件超过处理上限';
+    case 'audio_metadata_unavailable':
+      return '无法读取音频格式或时长';
+    case 'audio_duration_exceeded':
+      return '音频时长超过60分钟';
+    case 'invalid_response':
+      return '转录服务返回了无法使用的结果';
     default:
       return '文件处理失败';
   }

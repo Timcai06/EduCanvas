@@ -29,3 +29,7 @@ export {
   OpenAICompatibleSpeechModelGateway,
   type OpenAICompatibleSpeechModelGatewayOptions,
 } from './openai-compatible-speech-model-gateway';
+export {
+  OpenAICompatibleAudioTranscriptionModelGateway,
+  type OpenAICompatibleAudioTranscriptionModelGatewayOptions,
+} from './openai-compatible-audio-transcription-model-gateway';

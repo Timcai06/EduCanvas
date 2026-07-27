@@ -66,11 +66,14 @@ export {
   streamingTaskAliases,
   structuredTaskAliasSchema,
   structuredTaskAliases,
+  audioTranscriptionTaskAliasSchema,
+  audioTranscriptionTaskAliases,
   taskAliasSchema,
   taskAliases,
   turnModelEventSchema,
   turnModelPhaseSchema,
   turnModelPhases,
+  type AudioTranscriptionTaskAlias,
   type ModelAbortSignal,
   type ModelAlias,
   type ModelFinishReason,
@@ -92,6 +95,9 @@ export {
 } from './model-contracts';
 
 export type {
+  AudioTranscriptionModelGateway,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResult,
   ModelGateway,
   SpeechAudioFormat,
   SpeechModelGateway,
@@ -100,8 +106,11 @@ export type {
   StructuredModelGateway,
   StructuredModelRequest,
   StructuredModelResult,
+  SupportedAudioTranscriptionMimeType,
   TurnModelGateway,
 } from './model-gateway';
+
+export { supportedAudioTranscriptionMimeTypes } from './model-gateway';
 
 export {
   agentModelRunStatuses,

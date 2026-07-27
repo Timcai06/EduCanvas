@@ -49,4 +49,29 @@ describe('detectAssetFile', () => {
       ),
     ).toBeNull();
   });
+
+  it.each([
+    [[0x49, 0x44, 0x33], 'audio/mpeg'],
+    [[0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45], 'audio/wav'],
+    [[0x4f, 0x67, 0x67, 0x53], 'audio/ogg'],
+    [[0x66, 0x4c, 0x61, 0x43], 'audio/flac'],
+    [[0x1a, 0x45, 0xdf, 0xa3], 'audio/webm'],
+    [[0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70], 'audio/x-m4a'],
+  ] as const)('recognizes audio magic bytes for %s', (bytes, mimeType) => {
+    expect(detectAssetFile(new Uint8Array(bytes), 'renamed.bin')).toMatchObject(
+      {
+        kind: 'audio',
+        mimeType,
+      },
+    );
+  });
+
+  it('does not trust an audio filename extension', () => {
+    expect(
+      detectAssetFile(
+        new TextEncoder().encode('not an audio container'),
+        'renamed.mp3',
+      ),
+    ).toBeNull();
+  });
 });

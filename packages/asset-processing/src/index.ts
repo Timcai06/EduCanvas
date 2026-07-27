@@ -28,3 +28,16 @@ export {
   type AssetThumbnailFailureCode,
   type ThumbnailGenerationResult,
 } from './thumbnail-generation';
+
+export {
+  AUDIO_TRANSCRIPTION_MAX_DURATION_SECONDS,
+  AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
+  AudioInspectionError,
+  audioInspectionFailureCodes,
+  detectSupportedAudioSource,
+  inspectSupportedAudioSource,
+  supportedAudioSourceMimeTypes,
+  type AudioInspectionFailureCode,
+  type DetectedAudioSource,
+  type SupportedAudioSourceMimeType,
+} from './audio-inspection';

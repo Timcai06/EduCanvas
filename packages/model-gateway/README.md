@@ -2,7 +2,9 @@
 
 ## 这个包是什么
 
-`model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON与`/audio/speech`映射为 `@educanvas/agent-core` 的稳定Port，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
+`model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON、
+`/audio/speech`与`/audio/transcriptions`映射为 `@educanvas/agent-core` 的稳定Port，
+不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
 Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter。两种实现都
 终止在同一个 `TurnModelGateway` Port，供应商 SDK 类型不会进入领域层。
@@ -29,6 +31,8 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - 通过 `AbortSignal` 和内部 deadline 取消 fetch，异常响应会主动释放 body。
 - `SpeechModelGateway`只返回`audio/mpeg`字节与安全审计metadata；最多3500字符、
   20 MiB，且不在Adapter内自动重试。
+- `AudioTranscriptionModelGateway`只接收服务端验证的音频字节与MIME，只返回有界文本、
+  语言、可选Provider时长和安全审计metadata；Provider原始JSON止步于Adapter。
 
 ## 配置闸门
 
@@ -40,6 +44,9 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - 模型 ID 必须由环境变量显式给出，代码没有供应商型号默认值；
 - TTS需显式配置`MODEL_GATEWAY_SPEECH_MODEL`；voice缺省`alloy`且可由
   `MODEL_GATEWAY_SPEECH_VOICE`覆盖；DeepSeek配置禁止声明speech alias；
+- 转录需显式配置`MODEL_GATEWAY_TRANSCRIPTION_MODEL`；超时和输入字节上限由
+  `MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS`与
+  `MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES`约束，DeepSeek禁止声明转录alias；
 - 当前支持 `openai-compatible` 和受部署策略约束的 `deepseek`；
 - DeepSeek 默认关闭，必须显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true`，且 staging/production 无条件拒绝；
 - staging/production 的通用 OpenAI-compatible endpoint 必须使用 HTTPS；DeepSeek endpoint 还必须匹配代码允许的官方主机；
@@ -57,7 +64,7 @@ const gateway = createTurnModelGatewayFromEnvironment(environment);
 
 Gateway与Web组合根都通过公共工厂选择Turn Adapter，再把稳定Port交给唯一
 `TurnApplicationService + AgentLoopEngine`；Worker的结构化与语音任务继续使用原生专用
-Adapter。这里的“真实”表示生产代码使用网络Provider，而不是测试Gateway；是否能实际回答
+Adapter；音频转录由Worker通过独立Port调用。这里的“真实”表示生产代码使用网络Provider，而不是测试Gateway；是否能实际回答
 仍取决于部署环境、Endpoint、Key和模型配置，仓库内协议Fixture不能替代live smoke。
 
 ## 验证

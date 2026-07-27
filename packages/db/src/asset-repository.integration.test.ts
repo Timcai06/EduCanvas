@@ -8,6 +8,7 @@ import {
   DrizzleAssetDerivedProcessingRepository,
   getDerivedAssetJobKind,
 } from './asset-derived-processing-repository';
+import { DrizzleAssetTranscriptionRepository } from './asset-transcription-repository';
 import { AssetAccessError, DrizzleAssetRepository } from './asset-repository';
 import { DrizzleChatRepository } from './chat-repository';
 import * as schema from './schema';
@@ -299,6 +300,116 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         .from(schema.assetProcessingJobs)
         .where(sql`${schema.assetProcessingJobs.kind} <> 'extract_text'`),
     ).resolves.toEqual([]);
+  });
+
+  it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const transcriptionRepository = new DrizzleAssetTranscriptionRepository(
+      getDatabase(),
+    );
+    const created = await repository.createUploadedPending({
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'audio',
+      displayName: '课堂录音.wav',
+      mimeType: 'audio/wav',
+      byteSize: 128,
+      contentHash: '8'.repeat(64),
+      storageKey: 'uploads/fixture/lesson.wav',
+    });
+
+    expect(created.snapshot.descriptor).toMatchObject({
+      kind: 'audio',
+      status: 'processing',
+      currentVersionId: null,
+    });
+    await expect(
+      transcriptionRepository.beginAttempt({
+        jobId: created.jobId,
+        now: new Date('2026-07-27T10:00:00.000Z'),
+      }),
+    ).resolves.toEqual({
+      storageKey: 'uploads/fixture/lesson.wav',
+      mimeType: 'audio/wav',
+      byteSize: 128,
+      contentHash: '8'.repeat(64),
+    });
+    await expect(
+      transcriptionRepository.settle({
+        jobId: created.jobId,
+        outcome: {
+          status: 'ready',
+          transcriptionText: '今天学习一元二次方程。',
+          transcriptionMetadata: {
+            provider: 'openai-compatible',
+            resolvedModelId: 'whisper-1',
+            latencyMs: 123,
+            traceId: `asset-transcription:${created.jobId}`,
+            language: 'zh',
+            durationSeconds: 30,
+          },
+        },
+        now: new Date('2026-07-27T10:01:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      transcriptionRepository.settle({
+        jobId: created.jobId,
+        outcome: { status: 'failed', failureCode: 'duplicate' },
+      }),
+    ).resolves.toBe(false);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: {
+        status: 'ready',
+        currentVersionId: created.versionId,
+      },
+      processing: {
+        status: 'succeeded',
+        attempts: 1,
+        failureCode: null,
+      },
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.snapshot.descriptor.assetId,
+            versionId: created.versionId,
+            kind: 'audio',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        transcriptionText: '今天学习一元二次方程。',
+      }),
+    ]);
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${created.versionId}`,
+        ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: 'transcription',
+        mimeType: 'text/plain',
+        status: 'ready',
+        derivedStorageKey: null,
+        failureCode: null,
+      }),
+    ]);
   });
 
   it('派生预览只处理当前版本，重复结算幂等且删除进入Outbox', async () => {

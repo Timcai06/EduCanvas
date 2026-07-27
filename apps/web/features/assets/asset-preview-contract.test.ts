@@ -28,5 +28,33 @@ describe('assetPreviewSchema', () => {
         content: 'x'.repeat(120_001),
       }).success,
     ).toBe(false);
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'audio',
+        fileName: 'lesson.wav',
+        mimeType: 'audio/wav',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+        transcription: {
+          text: '课堂转录',
+          language: 'zh',
+          durationSeconds: 30,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'audio',
+        fileName: 'lesson.wav',
+        mimeType: 'audio/wav',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+        transcription: {
+          text: '课堂转录',
+          durationSeconds: 3_601,
+          providerResponse: { raw: true },
+        },
+      }).success,
+    ).toBe(false);
   });
 });

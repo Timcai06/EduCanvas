@@ -32,7 +32,7 @@ const assetResponseItemSchema = z.object({
   descriptor: z.object({
     assetId: z.string(),
     scope: z.enum(['turn', 'space']),
-    kind: z.enum(['image', 'document', 'link']),
+    kind: z.enum(['image', 'document', 'link', 'audio']),
     displayName: z.string(),
     status: z.enum(['pending', 'processing', 'ready', 'failed', 'tombstoned']),
     currentVersionId: z.string().nullable(),

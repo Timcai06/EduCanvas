@@ -1,8 +1,10 @@
 import type {
+  AudioTranscriptionModelGateway,
   SpeechModelGateway,
   StructuredModelGateway,
 } from '@educanvas/agent-core';
 import {
+  OpenAICompatibleAudioTranscriptionModelGateway,
   OpenAICompatibleSpeechModelGateway,
   OpenAICompatibleStructuredModelGateway,
   parseModelGatewayConfiguration,
@@ -30,6 +32,12 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
       process.env.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
     MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS:
       process.env.MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS,
+    MODEL_GATEWAY_TRANSCRIPTION_MODEL:
+      process.env.MODEL_GATEWAY_TRANSCRIPTION_MODEL,
+    MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS:
+      process.env.MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS,
+    MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES:
+      process.env.MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES,
     MODEL_GATEWAY_TIMEOUT_MS: process.env.MODEL_GATEWAY_TIMEOUT_MS,
     MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
       process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
@@ -56,4 +64,18 @@ export function resolveSpeechModelGateway(): SpeechModelGateway | null {
     return null;
   }
   return new OpenAICompatibleSpeechModelGateway(configuration);
+}
+
+export function resolveAudioTranscriptionModelGateway(): AudioTranscriptionModelGateway | null {
+  const configuration = parseModelGatewayConfiguration(
+    readModelGatewayEnvironment(),
+  );
+  if (
+    !configuration.enabled ||
+    configuration.provider !== 'openai-compatible' ||
+    !configuration.modelIds.transcription
+  ) {
+    return null;
+  }
+  return new OpenAICompatibleAudioTranscriptionModelGateway(configuration);
 }

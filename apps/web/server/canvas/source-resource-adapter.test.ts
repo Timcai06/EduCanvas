@@ -54,6 +54,13 @@ describe('Source CanvasResource adapter', () => {
       'document',
       'source.docx',
     ],
+    ['audio/mpeg', 'audio', 'source.audio'],
+    ['audio/wav', 'audio', 'source.audio'],
+    ['audio/ogg', 'audio', 'source.audio'],
+    ['audio/flac', 'audio', 'source.audio'],
+    ['audio/webm', 'audio', 'source.audio'],
+    ['audio/mp4', 'audio', 'source.audio'],
+    ['audio/x-m4a', 'audio', 'source.audio'],
   ] as const)('maps supported MIME %s', (mimeType, kind, rendererId) => {
     const resource = projectOwnedSourceResource({
       ...readySource,

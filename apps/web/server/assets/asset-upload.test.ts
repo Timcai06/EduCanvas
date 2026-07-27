@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-const { drizzleRepo } = vi.hoisted(() => ({
+const { drizzleRepo, inspectSupportedAudioSource } = vi.hoisted(() => ({
   drizzleRepo: {
     createUploaded: vi.fn(),
     createUploadedPending: vi.fn(),
     listOwnedSpace: vi.fn(),
   },
+  inspectSupportedAudioSource: vi.fn(),
 }));
 
 vi.mock('@educanvas/db', async () => {
@@ -36,12 +37,19 @@ vi.mock('mammoth', () => ({
     extractRawText: vi.fn(),
   },
 }));
+vi.mock('@educanvas/asset-processing', async () => {
+  const actual = await vi.importActual<
+    typeof import('@educanvas/asset-processing')
+  >('@educanvas/asset-processing');
+  return { ...actual, inspectSupportedAudioSource };
+});
 
 import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
 import { removeStoredAsset, storeAssetBytes } from './asset-storage';
 import { uploadOwnedAsset } from './asset-upload';
 import { extractText, getDocumentProxy } from 'unpdf';
 import mammoth from 'mammoth';
+import { AudioInspectionError } from '@educanvas/asset-processing';
 
 const identity = {
   token: 'token',
@@ -91,6 +99,12 @@ describe('uploadOwnedAsset', () => {
     (extractText as ReturnType<typeof vi.fn>).mockReset?.();
     (getDocumentProxy as ReturnType<typeof vi.fn>).mockReset?.();
     vi.mocked(mammoth.extractRawText).mockReset();
+    inspectSupportedAudioSource.mockReset();
+    inspectSupportedAudioSource.mockResolvedValue({
+      mimeType: 'audio/wav',
+      extension: 'wav',
+      durationSeconds: 30,
+    });
 
     (
       loadOwnedTeachingGatewayTarget as ReturnType<typeof vi.fn>
@@ -176,6 +190,49 @@ describe('uploadOwnedAsset', () => {
         outcome: { status: 'ready' },
       }),
     );
+  });
+
+  it('音频通过容器与时长检查后进入转录队列', async () => {
+    await uploadOwnedAsset({
+      identity,
+      file: bytesFile(
+        [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45],
+        'lesson.wav',
+        'application/octet-stream',
+      ),
+      scope: 'space',
+    });
+
+    expect(inspectSupportedAudioSource).toHaveBeenCalledOnce();
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'audio',
+        mimeType: 'audio/wav',
+      }),
+    );
+  });
+
+  it('音频超过时长上限时不写对象、不创建任务', async () => {
+    inspectSupportedAudioSource.mockRejectedValue(
+      new AudioInspectionError('audio_duration_exceeded'),
+    );
+
+    await expect(
+      uploadOwnedAsset({
+        identity,
+        file: bytesFile(
+          [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45],
+          'lesson.wav',
+          'audio/wav',
+        ),
+        scope: 'space',
+      }),
+    ).rejects.toMatchObject({
+      code: 'audio_duration_exceeded',
+      status: 422,
+    });
+    expect(storeAssetBytes).not.toHaveBeenCalled();
+    expect(drizzleRepo.createUploadedPending).not.toHaveBeenCalled();
   });
 
   it('没有教学会话时直接返回会话未找到错误', async () => {

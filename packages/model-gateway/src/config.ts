@@ -72,6 +72,9 @@ export const modelGatewayConfigurationErrorCodes = [
   'INVALID_SPEECH_VOICE',
   'INVALID_SPEECH_TIMEOUT',
   'INVALID_SPEECH_MAX_INPUT_CHARS',
+  'TRANSCRIPTION_UNSUPPORTED_PROVIDER',
+  'INVALID_TRANSCRIPTION_TIMEOUT',
+  'INVALID_TRANSCRIPTION_MAX_INPUT_BYTES',
 ] as const;
 
 export type ModelGatewayConfigurationErrorCode =
@@ -114,6 +117,8 @@ export interface EnabledModelGatewayConfiguration {
   speechVoice: string;
   speechTimeoutMs: number;
   speechMaxInputChars: number;
+  transcriptionTimeoutMs: number;
+  transcriptionMaxInputBytes: number;
 }
 
 export type ModelGatewayConfiguration =
@@ -299,11 +304,21 @@ export function parseModelGatewayConfiguration(
   if (speech !== undefined && provider !== 'openai-compatible') {
     throw new ModelGatewayConfigurationError('SPEECH_UNSUPPORTED_PROVIDER');
   }
+  const transcription = parseModelId(
+    environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MODEL,
+    false,
+  );
+  if (transcription !== undefined && provider !== 'openai-compatible') {
+    throw new ModelGatewayConfigurationError(
+      'TRANSCRIPTION_UNSUPPORTED_PROVIDER',
+    );
+  }
   const modelIds: EnabledModelGatewayConfiguration['modelIds'] = {
     primary,
     ...(fast === undefined ? {} : { fast }),
     ...(structured === undefined ? {} : { structured }),
     ...(speech === undefined ? {} : { speech }),
+    ...(transcription === undefined ? {} : { transcription }),
   };
 
   return {
@@ -343,6 +358,18 @@ export function parseModelGatewayConfiguration(
       3_500,
       { min: 80, max: 4_096 },
       'INVALID_SPEECH_MAX_INPUT_CHARS',
+    ),
+    transcriptionTimeoutMs: parseInteger(
+      environmentValues.MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS,
+      120_000,
+      { min: 5_000, max: 300_000 },
+      'INVALID_TRANSCRIPTION_TIMEOUT',
+    ),
+    transcriptionMaxInputBytes: parseInteger(
+      environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES,
+      25 * 1024 * 1024,
+      { min: 1024, max: 50 * 1024 * 1024 },
+      'INVALID_TRANSCRIPTION_MAX_INPUT_BYTES',
     ),
   };
 }

@@ -97,14 +97,18 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 ### 通用Asset
 
 - `assets`：所有者、Space标识、Turn/Space范围、类型、来源和生命周期；
-- `asset_versions`：不可变内容版本、hash、私有storage key、解析文本和处理终态。
-- `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
+- `asset_versions`：不可变原始内容版本、hash、私有storage key、解析/转录派生文本和处理终态；
+  `transcription_metadata`只保存经过校验的provider/model别名、耗时、trace、语言与本地
+  校验时长，不保存Provider响应、Prompt、密钥或堆栈。
+- `asset_representations`：只登记版本已具备的original/text/preview/thumbnail/transcription能力与
   派生对象引用，不复制Source正文；
-- `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码。
+- `asset_processing_jobs`：解析、预览、缩略图与音频转录任务的业务状态、尝试次数和稳定失败码。
   `extract_text` 已是真实队列（[ADR-0010](../09-decisions/0010-资产解析异步化与解析器归位.md)）：
   上传在同一事务内写 `queued` 任务并调用 `graphile_worker.add_job`——队列与业务表同库，
   因此不存在「任务已入队但资产不存在」的中间态；worker 只从 `queued/running` 推进终态，
   重投因此幂等。失败码由 `@educanvas/asset-processing` 定义，只能追加不能改写含义；
+  `transcribe_audio`与`extract_text`一样负责把初始`processing`版本推进到终态，
+  不复用只接受ready当前版本的preview/thumbnail派生领取逻辑；
 - `notebook_asset_bindings`：成员对Notebook来源的启用/停用事实流。按成员而非按
   Notebook，是因为「这轮对话要不要带这份资料」是个人选择，多人笔记本里不应互相覆盖；
   与`session_source_bindings`同一范式（追加事实 + `mutationId`幂等 + 取`sequence`最大者），

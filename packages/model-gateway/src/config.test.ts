@@ -173,6 +173,9 @@ describe('parseModelGatewayConfiguration', () => {
         MODEL_GATEWAY_FAST_MODEL: 'fast-explicit',
         MODEL_GATEWAY_SPEECH_MODEL: 'speech-explicit',
         MODEL_GATEWAY_SPEECH_VOICE: 'coral',
+        MODEL_GATEWAY_TRANSCRIPTION_MODEL: 'transcription-explicit',
+        MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS: '90000',
+        MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES: '10485760',
       }),
     ).toMatchObject({
       enabled: true,
@@ -180,10 +183,13 @@ describe('parseModelGatewayConfiguration', () => {
         primary: 'primary-explicit',
         fast: 'fast-explicit',
         speech: 'speech-explicit',
+        transcription: 'transcription-explicit',
       },
       speechVoice: 'coral',
       speechTimeoutMs: 60_000,
       speechMaxInputChars: 3_500,
+      transcriptionTimeoutMs: 90_000,
+      transcriptionMaxInputBytes: 10 * 1024 * 1024,
     });
   });
 
@@ -195,6 +201,20 @@ describe('parseModelGatewayConfiguration', () => {
     ).toThrowError(
       expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
         code: 'SPEECH_UNSUPPORTED_PROVIDER',
+      }),
+    );
+  });
+
+  it('DeepSeek 不接受 transcription alias', () => {
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({
+          MODEL_GATEWAY_TRANSCRIPTION_MODEL: 'whisper-model',
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'TRANSCRIPTION_UNSUPPORTED_PROVIDER',
       }),
     );
   });
