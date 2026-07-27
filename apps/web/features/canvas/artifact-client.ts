@@ -26,7 +26,7 @@ export interface ArtifactDetail {
   version: {
     version: number;
     content: unknown;
-    media: AudioOverviewMedia | null;
+    media: ArtifactMedia | null;
   } | null;
   versions: readonly {
     version: number;
@@ -66,6 +66,21 @@ export interface AudioOverviewMedia {
     latencyMs: number;
   };
 }
+
+export interface GeneratedImageMedia {
+  url: string;
+  contentVersion: 1;
+  contentType: 'image/png' | 'image/jpeg' | 'image/webp';
+  byteSize: number;
+  size: '512x512' | '1024x1024' | '1024x1536' | '1536x1024';
+  image: {
+    provider: string;
+    resolvedModelId: string;
+    latencyMs: number;
+  };
+}
+
+export type ArtifactMedia = AudioOverviewMedia | GeneratedImageMedia;
 
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
 
@@ -112,6 +127,27 @@ const audioOverviewMediaSchema = z.object({
   }),
 });
 
+const generatedImageMediaSchema = z
+  .object({
+    url: z.string(),
+    contentVersion: z.literal(1),
+    contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    byteSize: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 * 1024),
+    size: z.enum(['512x512', '1024x1024', '1024x1536', '1536x1024']),
+    image: z
+      .object({
+        provider: z.string().min(1).max(128),
+        resolvedModelId: z.string().min(1).max(256),
+        latencyMs: z.number().finite().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
 const artifactDetailSchema = z.object({
   artifact: artifactSummarySchema.extend({
     fromConversation: z.boolean(),
@@ -122,7 +158,9 @@ const artifactDetailSchema = z.object({
     .object({
       version: z.number().int().min(1),
       content: z.unknown(),
-      media: audioOverviewMediaSchema.nullable(),
+      media: z
+        .union([audioOverviewMediaSchema, generatedImageMediaSchema])
+        .nullable(),
     })
     .nullable(),
   versions: z.array(

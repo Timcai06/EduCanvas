@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Cards,
   Headphones,
+  Image,
   Note,
   PresentationChart,
   TreeStructure,
@@ -19,6 +20,7 @@ const KIND_PRESENTATION: Record<
   slides: { label: 'Slides', icon: PresentationChart },
   flashcards: { label: '闪卡', icon: Cards },
   audio_overview: { label: '音频概览', icon: Headphones },
+  generated_image: { label: '生成图片', icon: Image },
   note: { label: '笔记', icon: Note },
 };
 

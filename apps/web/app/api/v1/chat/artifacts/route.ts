@@ -41,6 +41,7 @@ const WEB_ARTIFACT_KINDS = [
   'flashcards',
   'note',
   'audio_overview',
+  'generated_image',
 ] as const;
 
 /**

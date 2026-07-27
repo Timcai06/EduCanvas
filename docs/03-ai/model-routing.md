@@ -1,18 +1,21 @@
 # 模型路由
 
 - 状态：`accepted`
-- 相关决策：[ADR-0003](../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)
-- 最后验证：2026-07-22
+- 相关决策：[ADR-0003](../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)、[ADR-0014](../09-decisions/0014-图像生成能力与产物信任边界.md)
+- 最后验证：2026-07-27
 
 ## 当前实现边界
 
-`packages/teaching-core` 已定义供应商无关的模型契约：
+`packages/agent-core` 已定义供应商无关的模型契约：
 
-- `TaskAlias`：`agent.turn`、`teaching.turn`、`artifact.generate`、`retrieval.query_rewrite`、`speech.generate`；
-- `ModelAlias`：`primary`、`fast`、`structured`、`speech`；
+- `TaskAlias`：`agent.turn`、`teaching.turn`、`artifact.generate`、`retrieval.query_rewrite`、`speech.generate`、`audio.transcribe`、`image.generate`、`retrieval.embed`；
+- `ModelAlias`：`primary`、`fast`、`structured`、`speech`、`transcription`、`image`、`embedding`；
 - `TurnModelGateway.streamTurnText()`：正常教学 Turn 的唯一模型入口；
 - `StructuredModelGateway.generateStructured()`：只允许 Artifact 和非 Turn 结构化任务；
 - `SpeechModelGateway.generateSpeech()`：只允许受限文本脚本转`audio/mpeg`二进制；
+- `AudioTranscriptionModelGateway.transcribeAudio()`：只接受已鉴权的不可变音频字节；
+- `ImageGenerationModelGateway.generateImage()`：只返回经魔术字节复核的白名单位图；
+- `EmbeddingModelGateway.embed()`：返回定长向量与完整向量身份（模型、版本、维度、指令）；
 - `TurnModelEvent`：`text_delta / tool_call / usage / completed / failed`；
 - `ProviderCallMetadata` 与 `NormalizedModelError`：用于稳定审计和错误收敛。
 
@@ -30,6 +33,9 @@
 | `artifact.generate`       | 仅受确认后的结构化 operation   | `structured`    |
 | `retrieval.query_rewrite` | 非 Turn 结构化辅助任务         | `fast`          |
 | `speech.generate`         | 仅`generateSpeech()`二进制输出 | `speech`        |
+| `audio.transcribe`        | 仅`transcribeAudio()`字节输入  | `transcription` |
+| `image.generate`          | 仅`generateImage()`位图输出    | `image`         |
+| `retrieval.embed`         | 仅`embed()`向量输出            | `embedding`     |
 
 供应商模型 ID、版本和区域只能出现在服务端路由配置、Provider Adapter 与审计结果中，不能进入教学 runtime、Web 组件、Prompt 业务分支或客户端请求。
 
@@ -61,6 +67,14 @@ thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型�
 `MODEL_GATEWAY_SPEECH_MODEL`显式配置，voice由
 `MODEL_GATEWAY_SPEECH_VOICE`配置；实现依据[OpenAI Audio API](https://platform.openai.com/docs/api-reference/audio/createSpeech)。
 
+图像输出采用OpenAI-compatible `POST /images/generations`的`b64_json`形态。Adapter
+先按字符集与长度上界拒绝畸形或超大base64，再按容器魔术字节确定真实MIME——供应商
+声称的格式不作为判据，因为渲染端只按白名单MIME展示。首批白名单为PNG/JPEG/WebP，
+尺寸限于`512x512`、`1024x1024`、`1024x1536`、`1536x1024`，单次固定1张；SVG等可携带
+脚本的矢量格式不在白名单内。响应中的`url`形态一律拒绝：内容事实必须自持在受控对象
+存储，不能依赖供应商临时链接的有效期。模型ID由`MODEL_GATEWAY_IMAGE_MODEL`显式配置，
+未配置时`generateCanvasImage`工具不注册，能力不进入五维交集（ADR-0014）。
+
 ## DeepSeek 开发边界
 
 - DeepSeek 在 local/development/shared-dev/test 默认关闭，只有显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true` 才可处理合成教学问题；staging/production 无条件拒绝；
@@ -76,6 +90,12 @@ thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型�
 - 已实现：环境allowlist、DeepSeek生产硬拒绝、显式模型ID、HTTPS校验、请求截止时间与取消，以及`native | ai-sdk`显式Turn Adapter选择；
 - 已实现（speech）：每个音频任务一次TTS调用、1–8项来源、3500字符输入、
   20 MiB输出上限，无适配器自动重试；字符数、模型、voice与耗时随Artifact版本审计；
+- 已实现（image）：每个图像任务一次生成调用、单张、尺寸闭集、默认8 MiB输出上限，
+  无适配器自动重试；对象写入后保存检查点避免崩溃恢复重复计费；provider、解析模型与
+  耗时随Artifact版本审计，Prompt全文只以≤500字符的净化摘要保留；
+- 已实现（embedding）：定长1536维、默认单批64条、8000字符/条上限；响应按`index`重排
+  并逐条校验维度与分量有限性，乱序或缺项整批拒绝；模型、版本、维度、指令与切块版本
+  随向量落库，缺任一项即无法判定向量可比较性（ADR-0015）；
 - 待实现：跨用户/日并发与成本预算、显式 Fallback；
 - 每个 alias 的允许模态、上下文窗口和最大输出约束；
 - response ID、解析模型、Prompt 版本、Token、耗时、错误码和结果状态审计；

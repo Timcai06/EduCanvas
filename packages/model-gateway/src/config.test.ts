@@ -218,4 +218,133 @@ describe('parseModelGatewayConfiguration', () => {
       }),
     );
   });
+
+  it('DeepSeek 不接受 image alias', () => {
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({ MODEL_GATEWAY_IMAGE_MODEL: 'image-model' }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'IMAGE_UNSUPPORTED_PROVIDER',
+      }),
+    );
+  });
+
+  it('未配置 image 模型时不产生 image 别名，配置后使用显式上限', () => {
+    const base = {
+      EDUCANVAS_DEPLOYMENT_ENV: 'production',
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_BASE_URL: 'https://provider.invalid/v1',
+      MODEL_GATEWAY_API_KEY: 'fixture',
+      MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
+    };
+
+    expect(parseModelGatewayConfiguration(base)).toMatchObject({
+      enabled: true,
+      modelIds: { primary: 'primary-explicit' },
+      imageTimeoutMs: 120_000,
+      imageMaxOutputBytes: 8 * 1024 * 1024,
+    });
+    expect(
+      (
+        parseModelGatewayConfiguration(base) as {
+          modelIds: Record<string, string>;
+        }
+      ).modelIds.image,
+    ).toBeUndefined();
+
+    expect(
+      parseModelGatewayConfiguration({
+        ...base,
+        MODEL_GATEWAY_IMAGE_MODEL: 'image-explicit',
+        MODEL_GATEWAY_IMAGE_TIMEOUT_MS: '90000',
+        MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES: '2097152',
+      }),
+    ).toMatchObject({
+      enabled: true,
+      modelIds: { primary: 'primary-explicit', image: 'image-explicit' },
+      imageTimeoutMs: 90_000,
+      imageMaxOutputBytes: 2 * 1024 * 1024,
+    });
+  });
+
+  it('DeepSeek 不接受 embedding alias', () => {
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({ MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model' }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'EMBEDDING_UNSUPPORTED_PROVIDER',
+      }),
+    );
+  });
+
+  it('配置 embedding 模型必须同时声明版本，否则向量无法判定可比较性', () => {
+    const base = {
+      EDUCANVAS_DEPLOYMENT_ENV: 'production',
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_BASE_URL: 'https://provider.invalid/v1',
+      MODEL_GATEWAY_API_KEY: 'fixture',
+      MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
+    };
+
+    /* 未启用向量检索的部署不被这个必填项卡住。 */
+    expect(parseModelGatewayConfiguration(base)).toMatchObject({
+      enabled: true,
+      embeddingModelVersion: null,
+      embeddingTimeoutMs: 60_000,
+      embeddingMaxBatch: 64,
+    });
+
+    expect(() =>
+      parseModelGatewayConfiguration({
+        ...base,
+        MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model',
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'MISSING_EMBEDDING_MODEL_VERSION',
+      }),
+    );
+
+    expect(
+      parseModelGatewayConfiguration({
+        ...base,
+        MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model',
+        MODEL_GATEWAY_EMBEDDING_MODEL_VERSION: '2026-05-01',
+        MODEL_GATEWAY_EMBEDDING_MAX_BATCH: '32',
+      }),
+    ).toMatchObject({
+      modelIds: { embedding: 'embed-model' },
+      embeddingModelVersion: '2026-05-01',
+      embeddingMaxBatch: 32,
+    });
+  });
+
+  it('越界的图像上限以稳定错误码拒绝', () => {
+    for (const [key, code] of [
+      ['MODEL_GATEWAY_IMAGE_TIMEOUT_MS', 'INVALID_IMAGE_TIMEOUT'],
+      [
+        'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
+        'INVALID_IMAGE_MAX_OUTPUT_BYTES',
+      ],
+    ] as const) {
+      expect(() =>
+        parseModelGatewayConfiguration({
+          EDUCANVAS_DEPLOYMENT_ENV: 'production',
+          MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_BASE_URL: 'https://provider.invalid/v1',
+          MODEL_GATEWAY_API_KEY: 'fixture',
+          MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
+          [key]: '999999999',
+        }),
+      ).toThrowError(
+        expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+          code,
+        }),
+      );
+    }
+  });
 });

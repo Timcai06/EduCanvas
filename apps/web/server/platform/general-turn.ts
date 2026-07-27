@@ -25,6 +25,7 @@ import {
   WebGeneralLifecycle,
 } from './general-turn-lifecycle';
 import { WebOperationArtifacts } from './general-artifact-tool';
+import { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import {
   createGeneralToolKernel,
@@ -70,7 +71,17 @@ export function beginGatewayGeneralTurnApplication(input: {
     spaceId: input.route.notebookId,
     operationId: input.operationId,
   });
-  const tools = createGeneralToolKernel(operationSources, operationArtifacts);
+  const operationImages = new WebOperationImageArtifacts({
+    identity: input.identity,
+    conversationId: input.route.conversationId,
+    spaceId: input.route.notebookId,
+    operationId: input.operationId,
+  });
+  const tools = createGeneralToolKernel(
+    operationSources,
+    operationArtifacts,
+    operationImages,
+  );
   const runtime = resolveTurnModelRuntime();
   const service = new TurnApplicationService({
     lifecycle: new WebGeneralLifecycle(input.identity),
@@ -78,6 +89,7 @@ export function beginGatewayGeneralTurnApplication(input: {
       input.assetContext,
       operationSources,
       operationArtifacts,
+      operationImages,
       input.request.outputPreference === 'canvas',
       tools.staticCapabilities,
       tools.nodeInvocations,

@@ -146,7 +146,14 @@ describe('GET /api/v1/chat/artifacts', () => {
       expect.objectContaining({
         spaceId: conversation.spaceId,
         trustedSubjectId: identity.studentId,
-        kinds: ['mind_map', 'slides', 'flashcards', 'note', 'audio_overview'],
+        kinds: [
+          'mind_map',
+          'slides',
+          'flashcards',
+          'note',
+          'audio_overview',
+          'generated_image',
+        ],
         limit: 50,
         cursor: null,
       }),

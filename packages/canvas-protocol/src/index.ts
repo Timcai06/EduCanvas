@@ -49,6 +49,11 @@ export {
   type AudioOverviewMetadata,
 } from './artifacts/audio-overview';
 export {
+  GENERATED_IMAGE_CONTENT_VERSION,
+  generatedImageMetadataSchema,
+  type GeneratedImageMetadata,
+} from './artifacts/generated-image';
+export {
   NOTE_MARKDOWN_MAX_CHARS,
   NOTE_CONTENT_VERSION,
   noteContentSchema,

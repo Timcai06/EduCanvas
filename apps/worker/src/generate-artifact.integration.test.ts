@@ -9,6 +9,7 @@ import path from 'node:path';
 import { LocalObjectStorage } from '@educanvas/agent-runtime';
 import {
   audioOverviewMetadataSchema,
+  generatedImageMetadataSchema,
   mindMapContentSchema,
 } from '@educanvas/canvas-protocol';
 import {
@@ -30,6 +31,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTaskList } from './tasks/index.js';
 
 const connectionString = process.env.TEST_DATABASE_URL!;
+/* 最小合法 PNG 容器头 + 填充；Adapter 只按魔术字节判定 MIME，不看供应商声明。 */
+const PNG_FIXTURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+]);
 const taskList = createTaskList({
   continuationTrace: {
     run(_input, callback) {
@@ -48,6 +53,7 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
   let providerBaseUrl = '';
   let objectStorageRoot = '';
   let speechCalls = 0;
+  let imageCalls = 0;
 
   beforeAll(async () => {
     await migrate(database, {
@@ -95,6 +101,19 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
         response.end(bytes);
         return;
       }
+      if (request.url === '/v1/images/generations') {
+        imageCalls += 1;
+        response.writeHead(200, {
+          'content-type': 'application/json',
+          'x-request-id': `image-${imageCalls}`,
+        });
+        response.end(
+          JSON.stringify({
+            data: [{ b64_json: PNG_FIXTURE.toString('base64') }],
+          }),
+        );
+        return;
+      }
       response.writeHead(404).end();
     });
     await new Promise<void>((resolve) =>
@@ -135,6 +154,7 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     process.env.MODEL_GATEWAY_PROVIDER = '';
     process.env.MODEL_GATEWAY_API_KEY = '';
     speechCalls = 0;
+    imageCalls = 0;
   });
 
   afterAll(async () => {
@@ -154,6 +174,7 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     process.env.MODEL_GATEWAY_STRUCTURED_MODEL = 'structured-fixture';
     process.env.MODEL_GATEWAY_SPEECH_MODEL = 'speech-fixture';
     process.env.MODEL_GATEWAY_SPEECH_VOICE = 'alloy';
+    process.env.MODEL_GATEWAY_IMAGE_MODEL = 'image-fixture';
   };
 
   const createReadyDocumentSource = async () => {
@@ -427,5 +448,136 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     expect(detail.artifact.latestVersion).toBe(1);
     expect(detail.latestVersion?.checksum).toBe(stored.checksum);
     expect(speechCalls).toBe(0);
+  });
+
+  it('图像生成→魔术字节复核→对象存储→tier2 版本完整落库', async () => {
+    enableFixtureProvider();
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '光合作用示意图',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: {
+        image: { prompt: '一张展示光合作用过程的示意图', size: '1024x1024' },
+      },
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('succeeded');
+    expect(detail.artifact).toMatchObject({
+      status: 'active',
+      latestVersion: 1,
+      trustTier: 'tier2',
+    });
+    expect(detail.latestVersion?.content).toBeNull();
+    expect(detail.latestVersion?.objectKey).toContain(created.job.id);
+    expect(detail.latestVersion?.checksum).toMatch(/^[a-f0-9]{64}$/);
+    const metadata = generatedImageMetadataSchema.parse(
+      detail.latestVersion?.metadata,
+    );
+    expect(metadata).toMatchObject({
+      contentType: 'image/png',
+      size: '1024x1024',
+      byteSize: PNG_FIXTURE.byteLength,
+      image: { resolvedModelId: 'image-fixture' },
+    });
+    /* 公开元数据不得携带对象键、Prompt 全文或 Provider 响应体。 */
+    expect(JSON.stringify(metadata)).not.toContain(
+      detail.latestVersion!.objectKey!,
+    );
+    expect(imageCalls).toBe(1);
+    const stored = await new LocalObjectStorage().readVerified(
+      detail.latestVersion!.objectKey!,
+      detail.latestVersion!.checksum!,
+    );
+    expect(stored.byteLength).toBe(metadata.byteSize);
+  });
+
+  it('未配置图像模型时以 image_not_configured 记账,不产生版本', async () => {
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '无网关图像',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '画一张电路图', size: '512x512' } },
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('failed');
+    expect(detail.latestJob?.failureCode).toBe('image_not_configured');
+    expect(detail.artifact.latestVersion).toBe(0);
+    expect(imageCalls).toBe(0);
+  });
+
+  it('图像 checkpoint 后重投只提交版本，不再次调用生成接口', async () => {
+    enableFixtureProvider();
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '恢复测试图像',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '画一张电路图', size: '512x512' } },
+    });
+    await repository.transitionGenerationJob({
+      jobId: created.job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 5,
+    });
+    const stored = await new LocalObjectStorage().put({
+      key: `artifacts/${created.artifact.id}/jobs/${created.job.id}/image.png`,
+      bytes: new Uint8Array(PNG_FIXTURE),
+      contentType: 'image/png',
+    });
+    await repository.updateGenerationJobCheckpoint({
+      jobId: created.job.id,
+      trustedSubjectId: owner,
+      checkpoint: {
+        kind: 'generated_image',
+        objectKey: stored.key,
+        checksum: stored.checksum,
+        metadata: generatedImageMetadataSchema.parse({
+          contentVersion: 1,
+          contentType: 'image/png',
+          byteSize: stored.sizeBytes,
+          size: '512x512',
+          image: {
+            provider: 'fixture',
+            resolvedModelId: 'image-fixture',
+            latencyMs: 1,
+          },
+        }),
+      },
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('succeeded');
+    expect(detail.artifact.latestVersion).toBe(1);
+    expect(detail.latestVersion?.checksum).toBe(stored.checksum);
+    expect(imageCalls).toBe(0);
   });
 });

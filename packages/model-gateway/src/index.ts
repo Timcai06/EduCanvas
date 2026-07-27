@@ -33,3 +33,7 @@ export {
   OpenAICompatibleAudioTranscriptionModelGateway,
   type OpenAICompatibleAudioTranscriptionModelGatewayOptions,
 } from './openai-compatible-audio-transcription-model-gateway';
+export {
+  OpenAICompatibleImageGenerationModelGateway,
+  type OpenAICompatibleImageGenerationModelGatewayOptions,
+} from './openai-compatible-image-generation-model-gateway';

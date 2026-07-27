@@ -22,6 +22,11 @@ const configuration: EnabledModelGatewayConfiguration = {
   speechMaxInputChars: 3_500,
   transcriptionTimeoutMs: 120_000,
   transcriptionMaxInputBytes: 25 * 1024 * 1024,
+  imageTimeoutMs: 120_000,
+  imageMaxOutputBytes: 8 * 1024 * 1024,
+  embeddingModelVersion: null,
+  embeddingTimeoutMs: 60_000,
+  embeddingMaxBatch: 64,
 };
 
 const audioBytes = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]);

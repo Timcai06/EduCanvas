@@ -162,6 +162,32 @@ describe('Artifact CanvasResource adapter', () => {
     });
   });
 
+  it('maps a generated image as tier2 without granting a runtime or regenerate', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: {
+        ...artifact,
+        kind: 'generated_image',
+        trustTier: 'tier2',
+      },
+      version,
+      latestJob: null,
+      accessRole: 'owner',
+    });
+
+    expect(resource).toMatchObject({
+      representation: { kind: 'image' },
+      renderer: { rendererId: 'artifact.generated-image' },
+      trustTier: 'tier2',
+      allowedActions: ['view'],
+      runtime: { kind: 'none' },
+      canProduceCandidateLearningEvents: false,
+    });
+    expect(JSON.stringify(resource)).not.toMatch(
+      /objectKey|raw prompt|providerBody|stack|queueJobKey/i,
+    );
+  });
+
   it('rejects cross-Notebook projection and ignores caller-shaped policy fields', () => {
     expect(() =>
       projectOwnedArtifactResource({

@@ -46,6 +46,14 @@ const ARTIFACT_RENDERERS = {
     rendererId: 'artifact.audio-overview',
     trustTier: 'tier2',
   },
+  /* 生成位图不是判分型白名单内容，因此固定 tier2；MIME 只作为渲染声明，
+     实际字节的格式由读取面按落库 metadata 回答，浏览器不参与判断。 */
+  generated_image: {
+    representation: 'image',
+    mimeType: 'image/png',
+    rendererId: 'artifact.generated-image',
+    trustTier: 'tier2',
+  },
 } as const satisfies Record<
   string,
   {
@@ -97,7 +105,9 @@ function projectActions(
   if (status !== 'ready') return [];
   if (accessRole === 'viewer') return ['view'];
   if (kind === 'note') return ['view', 'edit', 'regenerate'];
-  if (kind === 'audio_overview') return ['view'];
+  /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
+     这两类；不开放 regenerate 才与实际后端能力一致。 */
+  if (kind === 'audio_overview' || kind === 'generated_image') return ['view'];
   return ['view', 'regenerate'];
 }
 

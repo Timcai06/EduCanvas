@@ -17,9 +17,14 @@ import {
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import {
+  resolveImageGenerationModelGateway,
   resolveSpeechModelGateway,
   resolveStructuredModelGateway,
 } from '../model-runtime.js';
+import {
+  appendGeneratedImageVersion,
+  ImageArtifactGenerationFailure,
+} from './image-artifact-generation.js';
 import { generateAudioOverviewScript } from './audio-overview-generation.js';
 import { resolveArtifactGenerationIntent } from './artifact-generation-intent.js';
 import { generateMindMapContent } from './mind-map-generation.js';
@@ -281,6 +286,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       'slides',
       'flashcards',
       'audio_overview',
+      'generated_image',
       'note',
     ] as const;
     if (!(supportedKinds as readonly string[]).includes(artifact.kind)) {
@@ -311,6 +317,25 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       });
       helpers.logger.info(
         `音频产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
+      );
+      return;
+    }
+    if (artifact.kind === 'generated_image') {
+      const version = await appendGeneratedImageVersion({
+        artifact,
+        job,
+        subjectId: payload.subjectId,
+        artifacts,
+        gateway: resolveImageGenerationModelGateway(),
+      });
+      await artifacts.transitionGenerationJob({
+        jobId: payload.jobId,
+        trustedSubjectId: payload.subjectId,
+        to: 'succeeded',
+        progress: 100,
+      });
+      helpers.logger.info(
+        `图像产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
       );
       return;
     }
@@ -394,16 +419,26 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       `产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
     );
   } catch (error) {
-    helpers.logger.error(
-      `产物 ${payload.artifactId} 生成失败: ${(error as Error).message}`,
-    );
+    if (
+      error instanceof ModelGatewayInvocationError &&
+      error.normalized.retryable &&
+      helpers.job.attempts < helpers.job.max_attempts
+    ) {
+      /* 可重试的限流、超时与暂时不可用必须交回 Graphile 退避；提前结算 failed
+         会让任务失去恢复机会。原始 Provider 消息不写日志。 */
+      throw error;
+    }
     /* 已配置模型但调用失败:以稳定模型错误码记账,不静默回退规则大纲 */
     const code =
-      error instanceof ArtifactGenerationFailure
+      error instanceof ArtifactGenerationFailure ||
+      error instanceof ImageArtifactGenerationFailure
         ? error.code
         : error instanceof ModelGatewayInvocationError
-          ? `model_${error.normalized.code}`
+          ? error.normalized.retryable
+            ? 'model_attempts_exhausted'
+            : `model_${error.normalized.code}`
           : 'generation_failed';
+    helpers.logger.error(`产物 ${payload.artifactId} 生成失败: ${code}`);
     await failJob(code);
   }
 };

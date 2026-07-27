@@ -531,8 +531,17 @@ export function ArtifactCanvas({
               content={detail.version.content}
             />
           ) : detail.artifact.kind === 'audio_overview' &&
-            detail.version?.media ? (
+            detail.version?.media?.contentType === 'audio/mpeg' ? (
             <AudioOverviewPlayer media={detail.version.media} />
+          ) : detail.artifact.kind === 'generated_image' &&
+            detail.version?.media &&
+            detail.version.media.contentType.startsWith('image/') ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={detail.version.media.url}
+              alt={detail.artifact.title}
+              className="mx-auto max-h-full max-w-full rounded-2xl object-contain shadow-[var(--shadow-float)]"
+            />
           ) : detail.artifact.kind === 'note' && detail.version ? (
             <NoteRenderer
               key={displayedVersion}

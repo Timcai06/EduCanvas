@@ -20,6 +20,7 @@ import {
 } from '@educanvas/db';
 import {
   audioOverviewMetadataSchema,
+  generatedImageMetadataSchema,
   NOTE_MARKDOWN_MAX_CHARS,
   noteContentSchema,
 } from '@educanvas/canvas-protocol';
@@ -97,6 +98,23 @@ export async function GET(
       detail.artifact.kind === 'audio_overview' && selectedVersion
         ? audioOverviewMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
+    const imageMetadata =
+      detail.artifact.kind === 'generated_image' && selectedVersion
+        ? generatedImageMetadataSchema.safeParse(selectedVersion.metadata)
+        : null;
+    /* 媒体投影只暴露受控读取 URL 与公开 metadata；两类媒体互斥，由 kind 决定。 */
+    const media =
+      audioMetadata?.success === true
+        ? {
+            url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
+            ...audioMetadata.data,
+          }
+        : imageMetadata?.success === true
+          ? {
+              url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/image`,
+              ...imageMetadata.data,
+            }
+          : null;
     const canvasResource = projectOwnedArtifactResource({
       notebookId: conversation.spaceId,
       artifact: detail.artifact,
@@ -122,13 +140,7 @@ export async function GET(
         ? {
             version: selectedVersion.version,
             content: selectedVersion.content,
-            media:
-              audioMetadata?.success === true
-                ? {
-                    url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
-                    ...audioMetadata.data,
-                  }
-                : null,
+            media,
           }
         : null,
       versions: versions.map((version) => ({

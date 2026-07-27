@@ -13,6 +13,9 @@
  * | structured | artifact.generate | Artifact 生成（JSON Schema 约束） |
  * | structured | retrieval.query_rewrite | 检索查询改写 |
  * | speech | speech.generate | TTS 语音合成 |
+ * | transcription | audio.transcribe | 音频转录 |
+ * | image | image.generate | 教学配图生成 |
+ * | embedding | retrieval.embed | 检索向量化 |
  *
  * ## 模型别名（Model Alias）
  *
@@ -21,6 +24,9 @@
  * - fast: 快速轻量模型
  * - structured: 结构化输出专用
  * - speech: TTS 专用
+ * - transcription: 音频转录专用
+ * - image: 图像生成专用
+ * - embedding: 检索向量化专用
  */
 
 import { z } from 'zod';
@@ -55,12 +61,35 @@ export type AudioTranscriptionTaskAlias = z.infer<
   typeof audioTranscriptionTaskAliasSchema
 >;
 
+/**
+ * 图像生成走独立 Port，输出为受限二进制而非文本或 JSON。
+ * 生成结果是新的 Artifact Version 内容，不覆盖任何既有版本。
+ */
+export const imageGenerationTaskAliases = ['image.generate'] as const;
+export const imageGenerationTaskAliasSchema = z.enum(
+  imageGenerationTaskAliases,
+);
+export type ImageGenerationTaskAlias = z.infer<
+  typeof imageGenerationTaskAliasSchema
+>;
+
+/**
+ * 文本向量化走独立 Port。它既不是对话也不是结构化生成：输出是定长浮点向量，
+ * 且必须与产生它的模型、版本、维度和指令一起被审计，否则跨模型的向量会被
+ * 当成可比较的坐标，产生看似正常实则无意义的相似度。
+ */
+export const embeddingTaskAliases = ['retrieval.embed'] as const;
+export const embeddingTaskAliasSchema = z.enum(embeddingTaskAliases);
+export type EmbeddingTaskAlias = z.infer<typeof embeddingTaskAliasSchema>;
+
 /** 平台已注册的任务别名；供应商模型ID不得作为任务别名进入业务代码。 */
 export const taskAliases = [
   ...streamingTaskAliases,
   ...structuredTaskAliases,
   ...speechTaskAliases,
   ...audioTranscriptionTaskAliases,
+  ...imageGenerationTaskAliases,
+  ...embeddingTaskAliases,
 ] as const;
 export const taskAliasSchema = z.enum(taskAliases);
 export type TaskAlias = z.infer<typeof taskAliasSchema>;
@@ -72,6 +101,8 @@ export const modelAliases = [
   'structured',
   'speech',
   'transcription',
+  'image',
+  'embedding',
 ] as const;
 export const modelAliasSchema = z.enum(modelAliases);
 export type ModelAlias = z.infer<typeof modelAliasSchema>;

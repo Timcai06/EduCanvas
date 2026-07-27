@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createArtifact,
+  fetchArtifactDetail,
   reviseArtifact,
   saveNoteArtifact,
 } from './artifact-client';
@@ -62,5 +63,63 @@ describe('artifact client mutation contracts', () => {
       baseVersion: 2,
       instruction: '补充例题',
     });
+  });
+
+  it('图像详情只接受安全媒体投影，不需要Prompt或对象键', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            artifact: {
+              ...artifact,
+              kind: 'generated_image',
+              trustTier: 'tier2',
+              latestVersion: 1,
+              fromConversation: true,
+              createdAt: '2026-07-27T00:00:00.000Z',
+              updatedAt: '2026-07-27T00:01:00.000Z',
+            },
+            version: {
+              version: 1,
+              content: null,
+              media: {
+                url: `/api/v1/chat/artifacts/${artifact.id}/image`,
+                contentVersion: 1,
+                contentType: 'image/png',
+                byteSize: 4,
+                size: '1024x1024',
+                image: {
+                  provider: 'fixture',
+                  resolvedModelId: 'image-v1',
+                  latencyMs: 10,
+                },
+              },
+            },
+            versions: [
+              {
+                version: 1,
+                generatedBy: 'model:image.generate:canvas-image-v1',
+                revisionInstruction: null,
+                createdAt: '2026-07-27T00:01:00.000Z',
+              },
+            ],
+            latestJob: {
+              id: '20000000-0000-4000-8000-000000000002',
+              status: 'succeeded',
+              progress: 100,
+              failureCode: null,
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const detail = await fetchArtifactDetail(artifact.id);
+
+    expect(detail.version?.media?.contentType).toBe('image/png');
+    expect(detail.version?.media).not.toHaveProperty('prompt');
+    expect(detail.version?.media).not.toHaveProperty('objectKey');
   });
 });

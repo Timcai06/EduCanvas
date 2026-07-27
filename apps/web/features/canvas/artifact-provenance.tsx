@@ -58,7 +58,9 @@ export function ArtifactProvenanceStrip({
       {detail.artifact.fromConversation ? (
         <span className="text-ink-muted">· 由本对话生成</span>
       ) : null}
-      {detail.version?.media && detail.version.media.sourceCount > 0 ? (
+      {detail.version?.media &&
+      'sourceCount' in detail.version.media &&
+      detail.version.media.sourceCount > 0 ? (
         <span className="text-ink-muted">
           · 引用 {detail.version.media.sourceCount} 个来源
         </span>
