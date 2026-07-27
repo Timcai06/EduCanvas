@@ -40,7 +40,7 @@ function getAssetStorage(): Promise<LocalObjectStorage> {
 }
 
 /**
- * 异步抽取来源文本（ADR-0025）。
+ * 异步抽取来源文本（ADR-0010）。
  *
  * 幂等由仓储保证：`beginTextExtractionAttempt` 只领取 queued/running 的任务，
  * `settleTextExtraction` 也只从这两个状态推进，所以 graphile-worker 的重投

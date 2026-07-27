@@ -1,4 +1,4 @@
-# ADR-0017：统一 Agent Runtime 与 Notebook 上下文
+# ADR-0003：统一 Agent Runtime 与 Notebook 上下文
 
 - 状态：`accepted`
 - 日期：2026-07-19
@@ -20,6 +20,9 @@
 8. 历史实现中的固定 answer/synthesis 两阶段和固定两次模型调用只是兼容行为，不是长期 Runtime 契约；长期由显式 TurnBudget 限制模型运行、工具圈、耗时和资源。
 9. Notebook 可以是私人或共享资源域。共享 Notebook 只授予其 Sources、Conversations、Artifacts 和明确标记的 Notebook Memory，不继承成员个人 Agent 的私人 Memory、Credential、Node 或默认工具授权。
 10. 共享 Notebook 中的 Turn 同时记录 `actorUserId`、`agentId` 和 `notebookId`；Runtime 使用 Actor 权限与 Notebook 授权的交集装配 Context 和工具能力。
+11. Operation Event 是跨入口的控制事实，只有 Operation 的权威 writer 可以提交唯一终态；Turn Ledger 记录消息、Model、Tool 与 Context 执行事实，二者不能互相伪造终态。
+12. Learning Event 只能由可信教育领域服务写入；Context Snapshot、框架 checkpoint 和消息兼容投影都不是学习事实源。
+13. Context 装配、工具调用与 continuation 恢复时都必须重新验证可信身份和 Notebook Membership，不能沿用客户端声明或过期授权。
 
 ## 后果
 
@@ -43,3 +46,9 @@
 `AgentLoopEngine`现为唯一生产模型/工具循环；General、Teaching与Gateway Runner都只注入Profile/Prompt/工具回调。User/Personal Agent、Notebook Membership和Actor审计已落库，Web/TUI同路由与共享contributor/viewer权限已有测试。
 
 这里的“统一 Runtime”已经扩展到唯一生产Loop、唯一`TurnApplicationService`语义和共享五维Tool Policy Resolver，但不表示各入口能力已经完全相等。独立Gateway、Web General与Web Teaching仍保留小型组合Adapter；Gateway Asset/K12装配、Notebook摘要、Personal/Notebook Memory、统一预算与原生多模态仍是后续能力。未实现的 Memory 必须明确返回 unavailable，不能把目标能力写成当前事实。
+
+**2026-07-27 消息迁移边界**：`conversation_messages` 与 `chat_messages` 仍是两张事实表。
+统一消息历史只提供有界、稳定排序的兼容读取，不创建第三张消息事实表。新 K12 可见消息
+可以在同一事务中向 `conversation_messages` 写入确定性副本，但新副本创建默认关闭；
+切读、回填和旧表退役必须按 ADR-0013 的对账闸门推进。K12 lease、heartbeat 和取消等
+运行态继续由 `chat_messages` 持有，不能复制到平台消息投影。

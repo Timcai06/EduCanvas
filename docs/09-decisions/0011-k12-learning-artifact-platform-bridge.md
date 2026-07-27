@@ -1,4 +1,4 @@
-# ADR-0026：K12 学习产物与平台长期 Artifact 桥接
+# ADR-0011：K12 学习产物与平台长期 Artifact 桥接
 
 - 状态：`accepted`
 - 日期：2026-07-27
@@ -49,7 +49,7 @@ K12 学习纵切的 Canvas Artifact（quiz、classification_game、pipeline_flow
 - `canvas_artifacts` 继续作为不可变学习回放/判分快照
 - 判分键物理隔离，不进入平台版本或浏览器响应
 - 旧记录无需迁移，新路径原子创建
-- 符合 ADR-0019（Artifact 是一等公民）和 ADR-0024（Canvas 是统一工作面）的设计
+- 符合 ADR-0005（Artifact 是一等公民）和 ADR-0009（Canvas 是统一工作面）的设计
 
 ## 后果
 

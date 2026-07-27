@@ -136,7 +136,7 @@ export function ChatPanel({
   onOpenCanvas: () => void;
   onContinueText: () => void;
   onRetry: (assistantMessageId: string) => void;
-  /** 提供后,助手消息中的 ```html 代码块渲染为可点击的沙箱预览卡(ADR-0010 Tier 2)。 */
+  /** 提供后,助手消息中的 ```html 代码块渲染为可点击的沙箱预览卡(ADR-0004 Tier 2)。 */
   onPreviewHtml?: (request: HtmlPreviewRequest) => void;
   /** 通用对话产物按 ID 重开；Canvas 点击时重新读取最新版本和状态。 */
   onOpenArtifact?: (artifactId: string) => void;

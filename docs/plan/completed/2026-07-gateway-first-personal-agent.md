@@ -3,7 +3,7 @@
 - 状态：`completed`
 - 负责人：项目负责人
 - 完成时间：2026-07-19
-- 关键决策：[ADR-0015](../../09-decisions/0015-education-centered-personal-agent-platform.md)、[ADR-0016](../../09-decisions/0016-gateway-clients-channels-and-nodes.md)、[ADR-0017](../../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0018](../../09-decisions/0018-capability-trust-and-learning-evidence.md)、[ADR-0019](../../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)
+- 关键决策：[ADR-0001](../../09-decisions/0001-education-centered-personal-agent-platform.md)、[ADR-0002](../../09-decisions/0002-gateway-clients-channels-and-nodes.md)、[ADR-0003](../../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0004](../../09-decisions/0004-capability-trust-and-learning-evidence.md)、[ADR-0005](../../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)
 
 ## 目标与结果
 

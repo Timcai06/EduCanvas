@@ -3,7 +3,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
- * 覆盖 ADR-0012 的两个核心承诺:
+ * 覆盖 ADR-0005 的两个核心承诺:
  * 1. 任务即数据库行,worker 消费后完成(库 API 入队);
  * 2. `graphile_worker.add_job()` 是普通 SQL 函数,可以在任意数据库事务内
  *    与业务写入原子提交(SQL 入队)——这是选择 graphile-worker 的决定性理由。

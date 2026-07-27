@@ -114,7 +114,7 @@ async function startFixtureProvider(): Promise<{
 }
 
 /**
- * E2E 期间拉起真实 worker 进程(ADR-0012 的双进程形态必须被 E2E 覆盖,
+ * E2E 期间拉起真实 worker 进程(ADR-0005 的双进程形态必须被 E2E 覆盖,
  * 产物生成链路才是端到端而不是纸面)。worker 连接 E2E 隔离库并在启动时
  * 自迁移 graphile schema;退出由 globalSetup 返回的 teardown 负责。
  */

@@ -25,7 +25,7 @@ import {
  * | 格式 | Zod strict 解析，拒绝未知字段 |
  * | 阶段 | 所有事件的 phase 必须与请求一致 |
  * | 终态 | 恰有一个 completed/failed 事件 |
- * | 文本/工具互斥 | text_delta 不能在 tool_call 之后出现（ADR-0011：允许前导文本但不允许反向） |
+ * | 文本/工具互斥 | text_delta 不能在 tool_call 之后出现（事件契约允许前导文本但不允许反向） |
  * | 工具预算 | 每 turn 最多 4 个工具调用，参数最长 64KB |
  * | 文本预算 | 跨 answer/synthesis 累积不超过 128K 字符 |
  * | ID 唯一 | callId 不能重复标记 done |
@@ -55,7 +55,7 @@ interface ModelRunSuccess {
   metadata: ProviderCallMetadata;
   /** 本次运行是否产生过文本;工具路径用它决定 synthesis 前是否补空行衔接。 */
   hadText: boolean;
-  /** 本次运行累计的文本字符数;跨 answer/synthesis 共享回答长度预算(ADR-0011)。 */
+  /** 本次运行累计的文本字符数;跨 answer/synthesis 共享回答长度预算。 */
   textCharacters: number;
 }
 
@@ -140,7 +140,7 @@ async function* validateModelRun(
       if (event.type === 'text_delta') {
         /**
          * 文本与工具调用互斥：一旦出现过 tool_call，后续不允许再出 text_delta。
-         * ADR-0011：允许"文本 → 工具调用"（前导文本作为引言保留），
+         * 事件契约允许"文本 → 工具调用"（前导文本作为引言保留），
          * 但禁止"工具调用 → 文本"（工具结果未验证，后续文本不是可信回答）。
          */
         if (toolCallBuffers.size > 0) return invalidModelStream();
@@ -160,7 +160,7 @@ async function* validateModelRun(
          */
         if (request.tools.length === 0) return invalidModelStream();
         /*
-         * ADR-0011:允许"文本 → 工具调用"(前导文本保留为回答第一段);
+         * 事件契约允许"文本 → 工具调用"(前导文本保留为回答第一段);
          * 反向的"工具调用 → 文本"仍在上方 text_delta 分支判死——工具结果
          * 尚未验证,其后的文本不可能是可信回答。
          */

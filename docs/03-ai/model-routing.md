@@ -1,7 +1,7 @@
 # 模型路由
 
 - 状态：`accepted`
-- 相关决策：[ADR-0017](../09-decisions/0017-unified-runtime-and-notebook-context.md)、[ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)
+- 相关决策：[ADR-0003](../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)
 - 最后验证：2026-07-22
 
 ## 当前实现边界

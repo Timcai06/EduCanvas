@@ -10,7 +10,7 @@ import { CanvasArtifactRenderer } from './canvas-registry';
 
 /**
  * 判分型(Tier 1)Canvas 内容:受控 Renderer 注册表 + 判分反馈区。
- * 只接收服务端公开投影;模型不能注入 HTML、JavaScript 或 GSAP 源码(ADR-0010 Tier 1)。
+ * 只接收服务端公开投影;模型不能注入 HTML、JavaScript 或 GSAP 源码(ADR-0004 Tier 1)。
  * 分栏/全屏/dialog 语义由共享 CanvasHost 提供。
  */
 export function CanvasPanel({

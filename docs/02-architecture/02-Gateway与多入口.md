@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：项目负责人
 - 最后验证时间：2026-07-21
-- 关键决策：[ADR-0016](../09-decisions/0016-gateway-clients-channels-and-nodes.md)、[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
+- 关键决策：[ADR-0002](../09-decisions/0002-gateway-clients-channels-and-nodes.md)、[ADR-0004](../09-decisions/0004-capability-trust-and-learning-evidence.md)
 
 ## 定位与实现
 

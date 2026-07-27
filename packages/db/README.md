@@ -75,5 +75,5 @@ K1只支持服务端受控任务交付的纯文本/可解析PDF结果：数据�
 - [后端工程](../../docs/05-engineering/backend.md)：数据库在阶段架构中的服务边界。
 - [API约定](../../docs/05-engineering/api-conventions.md)：写入幂等、版本和错误返回要求。
 - [安全与隐私](../../docs/06-quality/security-and-privacy.md)：未成年人数据最小化与审计要求。
-- [ADR-0019](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)：继续采用Drizzle、PostgreSQL与模块化单体的当前决定。
+- [ADR-0005](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)：继续采用Drizzle、PostgreSQL与模块化单体的当前决定。
 - [关键决策历史](../../docs/09-decisions/decision-history.md)：阶段一数据库选型的压缩记录。

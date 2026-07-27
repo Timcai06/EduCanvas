@@ -12,7 +12,7 @@ type SelfMark = 'got' | 'missed';
 
 /**
  * 闪卡渲染器(自评式):点击翻面,"记住了/没记住"只存在于组件内存,
- * 刷新即清零——自评不是可信学习事实,绝不上行(ADR-0006 边界)。
+ * 刷新即清零——自评不是可信学习事实,绝不上行(ADR-0004 边界)。
  */
 export function FlashcardsRenderer({ content }: { content: unknown }) {
   const rootRef = useRef<HTMLDivElement>(null);

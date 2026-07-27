@@ -29,7 +29,7 @@ export const classificationItemSchema = z
 
 /**
  * 单局限定 2–4 类、2–12 项，兼顾“必须比较”与 K12 单屏任务时长；提示和反馈限定 200 字符，
- * 防止教学解释挤占交互区。跨字段校验保证每个答案都引用本局类别，见 Canvas 协议 ADR-0002。
+ * 防止教学解释挤占交互区。跨字段校验保证每个答案都引用本局类别，见 ADR-0004。
  */
 export const classificationGameParamsSchema = z
   .object({

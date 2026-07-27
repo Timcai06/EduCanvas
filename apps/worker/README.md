@@ -1,6 +1,6 @@
 # @educanvas/worker
 
-EduCanvas 的持久任务 worker 进程（[ADR-0019](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)）。与 Web 共享同一个 PostgreSQL 与全部 workspace 包，但独立进程运行——分钟级产物生成（导图/Slides/音频等）不能占用 HTTP 请求生命周期。
+EduCanvas 的持久任务 worker 进程（[ADR-0005](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)）。与 Web 共享同一个 PostgreSQL 与全部 workspace 包，但独立进程运行——分钟级产物生成（导图/Slides/音频等）不能占用 HTTP 请求生命周期。
 
 ## 包职责
 
@@ -43,6 +43,6 @@ make integration         # 含本包的 PostgreSQL 集成测试
 
 ## 改动前必读
 
-- [ADR-0019：模块化单体、Artifact 与持久任务](../../docs/09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)：部署形态、表职责与信任分层；
+- [ADR-0005：模块化单体、Artifact 与持久任务](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)：部署形态、表职责与信任分层；
 - [Gemini + NotebookLM 结档记录](../../docs/plan/completed/2026-07-gemini-notebooklm-replica.md)：持久 Artifact 与 Worker 的交付证据；
 - [后端工程约定](../../docs/05-engineering/backend.md)。

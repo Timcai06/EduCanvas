@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：项目负责人
 - 最后验证时间：2026-07-25
-- 关键决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)、[ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)、[ADR-0024](../09-decisions/0024-统一Canvas工作面与运行时分层.md)
+- 关键决策：[ADR-0004](../09-decisions/0004-capability-trust-and-learning-evidence.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)、[ADR-0009](../09-decisions/0009-统一Canvas工作面与运行时分层.md)
 - 当前事实：[系统架构现状](01-系统架构现状.md)
 - 执行计划：[统一 Canvas 工作面计划](../plan/active/2026-07-统一Canvas工作面.md)
 

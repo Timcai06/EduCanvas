@@ -1,5 +1,5 @@
 /**
- * Tier 2 沙箱探索型产物的纯逻辑层（ADR-0010）。
+ * Tier 2 沙箱探索型产物的纯逻辑层（ADR-0004）。
  *
  * 信任模型：模型生成的 HTML 只能进入无 `allow-same-origin` 的 sandboxed iframe，
  * 网络外联由文档级 CSP 兜底（sandbox 属性本身不拦截网络请求）。本模块只做

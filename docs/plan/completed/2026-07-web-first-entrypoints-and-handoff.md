@@ -3,7 +3,7 @@
 - 状态：`completed`
 - 负责人：项目负责人
 - 完成时间：2026-07-21
-- 关键决策：[ADR-0016](../../09-decisions/0016-gateway-clients-channels-and-nodes.md)
+- 关键决策：[ADR-0002](../../09-decisions/0002-gateway-clients-channels-and-nodes.md)
 
 ## 目标与结果
 
@@ -41,5 +41,5 @@
 
 - [核心用户流程](../../01-product/user-flows.md)
 - [学生端 UI 规格](../../01-product/student-ui-spec.md)
-- [Gateway、客户端、渠道与能力节点](../../09-decisions/0016-gateway-clients-channels-and-nodes.md)
+- [Gateway、客户端、渠道与能力节点](../../09-decisions/0002-gateway-clients-channels-and-nodes.md)
 - [项目路线图](../../10-planning/roadmap.md)

@@ -3,8 +3,8 @@
 - 状态：`accepted`
 - 负责人：@Timcai06
 - 最后验证：2026-07-24
-- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
-- 学习计划边界：[ADR-0022](../09-decisions/0022-学习者画像与学习计划可信边界.md)
+- 相关决策：[ADR-0004](../09-decisions/0004-capability-trust-and-learning-evidence.md)
+- 学习计划边界：[ADR-0007](../09-decisions/0007-学习者画像与学习计划可信边界.md)
 
 ## 两层事件模型
 

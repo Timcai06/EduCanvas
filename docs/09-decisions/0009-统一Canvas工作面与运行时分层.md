@@ -1,4 +1,4 @@
-# ADR-0024：统一 Canvas 工作面与运行时分层
+# ADR-0009：统一 Canvas 工作面与运行时分层
 
 - 状态：`accepted`
 - 日期：2026-07-25
@@ -64,3 +64,12 @@ Notebook 继续拥有事实；Studio 管理输入与输出；Canvas 依据统一
 - Tier 2/3 无法访问主页面 DOM、Cookie、Credential、宿主文件系统或可信学习事件写入口；
 - 每个持久产物和运行输出均能追溯来源、输入版本、生成或执行记录；
 - 取消、超时、失败和结果未知在 Web、TUI 与恢复路径上保持一致。
+
+## 实施状态（2026-07-27）
+
+`CanvasResource` 协议以及 Source/Artifact 服务端 Adapter 已定义并接入有界读取组合层；
+资源投影仍以 Source、Artifact 和 Operation 的既有事实为准，没有新增 Canvas 数据库
+聚合根。现有 Asset Preview、Artifact Detail、消息末尾 Artifact 和 Studio 兼容行为
+继续保留。Web Renderer Registry 尚未迁移到统一 Registry，隔离 Web Runtime 与
+`ExperimentRuntimePort` 也尚未完成，不能把协议和 Adapter 落地描述成整个 Canvas
+运行时已经完成。

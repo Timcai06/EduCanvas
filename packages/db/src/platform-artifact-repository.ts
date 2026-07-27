@@ -153,10 +153,10 @@ const isUniqueViolation = (error: unknown): boolean =>
   (error as { code?: string }).code === '23505';
 
 /**
- * 平台 Artifact 一等公民仓储(ADR-0012)。调用边界:
+ * 平台 Artifact 一等公民仓储(ADR-0005)。调用边界:
  * - 所有读写都要求可信主体(trustedSubjectId),所有权不匹配一律 ArtifactOwnershipError;
  * - 版本不可变:只提供 append,写入在事务内锁产物行并单调递增 latestVersion;
- * - trust tier 只在创建时确定,之后不可修改——层级迁移必须新建产物(ADR-0010 升级通道)。
+ * - trust tier 只在创建时确定,之后不可修改——层级迁移必须新建产物(ADR-0004 升级通道)。
  * 与 K12 `canvas_artifacts`(题面/判分键)无关,后者仍由 artifact-repository.ts 服务。
  */
 export class DrizzlePlatformArtifactRepository {
@@ -607,7 +607,7 @@ export class DrizzlePlatformArtifactRepository {
   }
 
   /**
-   * 提议产物并原子入队生成任务(ADR-0012 的核心承诺):产物行、任务账本行与
+   * 提议产物并原子入队生成任务(ADR-0005 的核心承诺):产物行、任务账本行与
    * graphile 队列行在同一事务提交,回滚则三者俱无。依赖 `graphile_worker`
    * schema 已由 worker 首次启动时自迁移建立;worker 从未启动过的环境会以
    * storage 异常诚实失败,不做静默降级。

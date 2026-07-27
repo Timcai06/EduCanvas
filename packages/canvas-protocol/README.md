@@ -45,5 +45,5 @@ pnpm lint                                            # 运行仓库现有lint任
 - [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)：模型通过哪些受控工具生成Canvas。
 - [数据设计](../../docs/04-data/data-design.md)：学习事件和Artifact如何持久化。
 - [安全与隐私](../../docs/06-quality/security-and-privacy.md)：为什么协议必须使用白名单和沙箱。
-- [ADR-0018](../../docs/09-decisions/0018-capability-trust-and-learning-evidence.md)：Canvas/Artifact 信任分层与可信学习证据边界。
+- [ADR-0004](../../docs/09-decisions/0004-capability-trust-and-learning-evidence.md)：Canvas/Artifact 信任分层与可信学习证据边界。
 - [关键决策历史](../../docs/09-decisions/decision-history.md)：早期受控 Canvas 决策的压缩记录。

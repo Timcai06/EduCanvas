@@ -68,7 +68,7 @@ const completeArtifact = {
   },
 } as const;
 
-describeWithDatabase('K12 Artifact 平台桥接（ADR-0026）', () => {
+describeWithDatabase('K12 Artifact 平台桥接（ADR-0011）', () => {
   beforeAll(async () => {
     await migrate(getDatabase(), {
       migrationsFolder: fileURLToPath(new URL('../drizzle', import.meta.url)),

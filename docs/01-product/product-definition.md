@@ -3,7 +3,7 @@
 - 状态：`accepted`
 - 负责人：项目负责人
 - 最后验证时间：2026-07-25
-- 关键决策：[ADR-0015](../09-decisions/0015-education-centered-personal-agent-platform.md)、[ADR-0024](../09-decisions/0024-统一Canvas工作面与运行时分层.md)
+- 关键决策：[ADR-0001](../09-decisions/0001-education-centered-personal-agent-platform.md)、[ADR-0009](../09-decisions/0009-统一Canvas工作面与运行时分层.md)
 
 ## 一句话定义
 

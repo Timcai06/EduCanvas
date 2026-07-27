@@ -40,7 +40,7 @@ Playwright已覆盖匿名Cookie隔离、生产`__Host-`属性、无会话Cookie�
 - 本地认证失败窗口有固定容量，只用于单进程开发。生产必须由共享上游同时执行
   per-account 与 per-IP 限流；缺少明确部署声明时认证路由 fail-closed；
 - 邮箱验证、账号找回、MFA、身份安全事件账本、TUI/Gateway 注册 session exchange 与
-  共享限流证据仍是生产门禁，详见 ADR-0023。
+  共享限流证据仍是生产门禁，详见 ADR-0008。
 
 ## 学习者画像与短诊断
 

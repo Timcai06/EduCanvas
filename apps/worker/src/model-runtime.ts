@@ -10,7 +10,7 @@ import {
 } from '@educanvas/model-gateway';
 
 /**
- * worker 是非对话模型任务的唯一调用方(ADR-0012)。与 Web 组合根同一纪律:
+ * worker 是非对话模型任务的唯一调用方(ADR-0005)。与 Web 组合根同一纪律:
  * 显式转交环境变量、未配置返回 null 由调用方诚实降级/失败,Key 不出适配器。
  */
 function readModelGatewayEnvironment(): ModelGatewayEnvironment {

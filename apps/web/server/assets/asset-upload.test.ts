@@ -110,7 +110,7 @@ describe('uploadOwnedAsset', () => {
   });
 
   it('可抽取类型落库为待解析并立即返回，不在请求内解析', async () => {
-    /* ADR-0025：上传响应时间与文件大小解耦。请求内不再调用抽取器，
+    /* ADR-0010：上传响应时间与文件大小解耦。请求内不再调用抽取器，
        所以这里断言 unpdf 完全没有被触碰。 */
     const result = await uploadOwnedAsset({
       identity,

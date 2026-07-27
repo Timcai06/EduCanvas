@@ -135,7 +135,7 @@ export async function ensurePreparedArtifact(
 }
 
 /**
- * K12 Artifact → 平台 Artifact 桥接（ADR-0026）。
+ * K12 Artifact → 平台 Artifact 桥接（ADR-0011）。
  *
  * 在同一事务内为 canvas_artifacts 行创建平台 artifacts + artifact_versions 长期身份，
  * 并回写 platformArtifactId / platformArtifactVersionId。幂等：已桥接则跳过。

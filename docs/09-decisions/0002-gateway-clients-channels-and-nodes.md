@@ -1,4 +1,4 @@
-# ADR-0016：Gateway、客户端、渠道与能力节点
+# ADR-0002：Gateway、客户端、渠道与能力节点
 
 - 状态：`accepted`
 - 日期：2026-07-19
@@ -62,3 +62,8 @@
 **Connections 控制面（2026-07-21，2026-07-25 入口更新）**：`gateway-core` 只公开 `telegram/wechat/qq` 产品级 provider、`pending/active/revoked` 状态与 external URL 授权，不公开 Adapter ID 或外部账号 ID。Gateway Client API、Web 同源 BFF 与 TUI `/channels` 复用同一个 `GatewayConnectionService` 和 PostgreSQL Repository；Web GUI 现并入页头头像档案抽屉，旧 `/settings` 仅重定向到该入口。Telegram 发起后创建十分钟 pending，官方 Bot 私聊只有携正确 `/start educanvas_<connectionId>` 才可原子激活；过期、重放、已被其他主体绑定均拒绝。微信/QQ 在正式资格和凭据缺失时为 disabled。撤销同时终止账号/线程 Binding 并保留 `revokedAt`，列表和撤销查询始终带可信 userId。
 
 **兼容投影边界（2026-07-23 更新）**：浏览器继续通过 Next.js BFF 和既有 SSE 使用统一 Runtime，这是第一方 Web 的有意兼容投影，不要求为了形式统一迁移到 Gateway 持久传输。独立Gateway runner、Web General与Web Teaching均已迁入`TurnApplicationService`并接通通用Context/Model Run审计；三条组合路径都通过共享Resolver解析可信五维Tool Policy，Web Teaching额外保留K12安全、状态与学习证据。独立Gateway仍未复用Web Tool/Asset和K12 Adapter，因此“同一Gateway协议/Notebook路由”不等于能力已经等价。后续收敛的是应用语义和可验证能力，不把替换浏览器传输本身列为架构债务。
+
+**2026-07-27 复核**：项目负责人确认继续保留第三方 Channel Adapter 与可选本地
+Capability Node。两者都不是默认启用能力：渠道必须通过正式平台资格、用户绑定和投递
+审计；Node 继续采用出站配对、可撤销和最小能力原则。未来扩展本地模型、GPU、IDE
+或设备写操作时，必须另行通过 ADR-0004 的风险、审批和审计边界。

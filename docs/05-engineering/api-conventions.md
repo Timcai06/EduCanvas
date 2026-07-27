@@ -68,7 +68,7 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
   单资源端点仍以`renderer_not_found`显式拒绝，两处语义差异是有意的；
 - `POST /api/v1/chat/assets`对可抽取文本的类型返回**已受理而非已就绪**的资产：
   `status=processing`、`currentVersionId=null`，解析由 worker 异步完成
-  （[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）。
+  （[ADR-0010](../09-decisions/0010-资产解析异步化与解析器归位.md)）。
   内容类问题（扫描件、编码错误）不再是上传响应的4xx，而是解析任务的终态，
   客户端应轮询列表直到 `ready` 或 `failed`。图片等无需抽取的类型仍一次性返回 `ready`；
 - `GET /api/v1/chat/assets/{assetId}/preview`继续返回`preview`，并在完成当前主体与
@@ -104,7 +104,7 @@ Web Route 只把受控 Runtime 事件映射为 EduCanvas SSE，不能透传 AI S
 - `turn.completed / turn.failed / turn.cancelled`。
 
 Artifact 生命周期事件已以 additive 方式定义（`schemaVersion=1`，旧浏览器按
-未知事件忽略，不需要整体协议升版；Artifact 事件的当前边界见 [ADR-0019](../09-decisions/0019-modular-monolith-artifacts-and-durable-jobs.md)：
+未知事件忽略，不需要整体协议升版；Artifact 事件的当前边界见 [ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)：
 
 - `artifact.proposed / artifact.created`：`{type,schemaVersion,turnId,artifactId,kind,trustTier,title}`；
 - `artifact.version_added`：`{type,schemaVersion,turnId,artifactId,version}`；

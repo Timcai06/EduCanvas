@@ -257,7 +257,7 @@ feat: 接入K12消息兼容双写
 - packages/db/src/platform-artifact-repository.ts
 - apps/web/server/canvas/artifact-resource-adapter.ts
 - packages/canvas-protocol/
-- ADR-0002、ADR-0012、ADR-0024
+- ADR-0004、ADR-0005、ADR-0009
 
 唯一目标：
 让未来 K12 创建的 Canvas Artifact 同时拥有平台长期 Artifact 身份，

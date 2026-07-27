@@ -105,7 +105,7 @@ export async function uploadOwnedAssetToSpace(input: {
       storageKey: stored.storageKey,
     };
     /*
-     * 可抽取文本的类型走异步：落库为 processing 并入队，立即返回（ADR-0025）。
+     * 可抽取文本的类型走异步：落库为 processing 并入队，立即返回（ADR-0010）。
      * 上传响应时间因此与文件大小解耦，用户先在来源列表看到「处理中」。
      *
      * 图片等无需抽取的类型没有等待的理由，仍然一次性写成 ready——为它们建一个

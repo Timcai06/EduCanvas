@@ -2,7 +2,7 @@
 
 EduCanvas 的第一方终端客户端。它只是 Gateway 的一扇窗口：不包含模型循环、
 教学逻辑或数据库访问，所有状态（会话、审批、事件恢复）都以 Gateway 为准，
-架构边界见 `docs/09-decisions/0016-gateway-clients-channels-and-nodes.md`。
+架构边界见 `docs/09-decisions/0002-gateway-clients-channels-and-nodes.md`。
 
 界面遵循「两支笔」设计语言（与 Web 同一套语义）：黛青是讲课的笔（Agent
 标识、常规活动），朱砂是批改的笔（审批、错误、需要注意的事）；对话是唯一
@@ -35,5 +35,5 @@ pnpm build            # 打包为 dist/index.js（bin: educanvas）
 ## 改动前必读
 
 - `docs/01-product/student-ui-spec.md`（产品语言与状态语义）
-- `docs/09-decisions/0016-gateway-clients-channels-and-nodes.md`（客户端边界）
+- `docs/09-decisions/0002-gateway-clients-channels-and-nodes.md`（客户端边界）
 - 颜色永远只是冗余强调：任何状态必须先由文字或符号表达，再上色。

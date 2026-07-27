@@ -776,7 +776,7 @@ export const conversationMessages = pgTable(
 
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
- * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 docs/04-data/data-design.md。
+ * 状态保留为 text 以允许状态机演进而不频繁改枚举，取舍见 docs/04-data/data-design.md。
  */
 export const lessonSessions = pgTable(
   'lesson_sessions',
@@ -792,7 +792,7 @@ export const lessonSessions = pgTable(
     knowledgeNodeId: text('knowledge_node_id'),
     // 状态机仍处早期演进期，text 避免每次新增教学分支都先修改数据库枚举。
     // 不设默认值：初始状态必须由 runtime 显式决定（新学生 DIAGNOSE、有掌握记录可直入 EXPLAIN），
-    // 让"跳过诊断"成为显式决策而非默认值副作用，见 ADR-0004。
+    // 让"跳过诊断"成为显式决策而非默认值副作用，见学习计划数据契约。
     state: text('state').notNull(),
     interruptedState: text('interrupted_state'),
     status: text('status').notNull().default('active'),
@@ -2254,7 +2254,7 @@ export const messageCitations = pgTable(
 
 /**
  * 保存已经白名单校验的 Artifact 快照，供学习过程回放、问题审计和协议兼容使用。
- * `params` 使用 JSONB 是因为不同 Artifact 的联合参数结构不同，但写入前仍必须通过 canvas-protocol；见 ADR-0002。
+ * `params` 使用 JSONB 是因为不同 Artifact 的联合参数结构不同，但写入前仍必须通过 canvas-protocol；见 ADR-0004 与 ADR-0009。
  */
 export const canvasArtifacts = pgTable(
   'canvas_artifacts',
@@ -2383,8 +2383,8 @@ export const masteryStates = pgTable(
 );
 
 /**
- * Artifact 一等公民（ADR-0012）。身份与信任层级在本表,内容进不可变版本表。
- * `trustTier` 使用 ADR-0010 的层级词汇:tier1=判分型白名单,tier2=沙箱探索型,
+ * Artifact 一等公民（ADR-0005）。身份与信任层级在本表,内容进不可变版本表。
+ * `trustTier` 使用 ADR-0004 的层级词汇:tier1=判分型白名单,tier2=沙箱探索型,
  * 判分与学习事件消费方必须先校验 tier。`kind` 只在库里限形状,合法产物类型
  * 集合由应用层 Registry 裁决——类型随 M2 逐个增加,不适合写死为库级枚举。
  * `latestVersion` 以计数器代替 current_version 外键,避免与版本表循环引用;
@@ -2465,7 +2465,7 @@ export const artifacts = pgTable(
 );
 
 /**
- * 产物生成任务账本(ADR-0012)。graphile_worker 表是队列实现细节,本表才是
+ * 产物生成任务账本(ADR-0005)。graphile_worker 表是队列实现细节,本表才是
  * 业务事实源:状态、进度、失败原因与溯源在此,经 `queueJobKey`(graphile 的
  * job_key,文本)与队列行松耦合关联——不用 bigint job id,因为队列行会被
  * 库自身的清理机制回收,而账本必须长期可审计。
@@ -2534,7 +2534,7 @@ export const artifactGenerationJobs = pgTable(
 );
 
 /**
- * 不可变产物版本(ADR-0012)。结构化产物内容进 `content`(JSONB),媒体产物进
+ * 不可变产物版本(ADR-0005)。结构化产物内容进 `content`(JSONB),媒体产物进
  * 对象存储、库里只留 `objectKey` + `checksum`(sha-256)——二者恰取其一由
  * 形状约束强制。版本号在产物内单调递增且唯一,仓储不提供 update/delete。
  */

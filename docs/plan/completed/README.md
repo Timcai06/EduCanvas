@@ -16,6 +16,6 @@
 | 2026-07-19 | [`2026-07-gemini-notebooklm-replica.md`](2026-07-gemini-notebooklm-replica.md)                         | 持久Artifact、轻产物、Notebook来源/引用、音频与Canvas共创交付；Runtime收口移交新计划   |
 | 2026-07-19 | [`2026-07-gateway-first-personal-agent.md`](2026-07-gateway-first-personal-agent.md)                   | Gateway协议/运行时、共享Notebook、Web、唯一Loop、TUI、Telegram与安全Node全部收口       |
 | 2026-07-21 | [`2026-07-web-first-entrypoints-and-handoff.md`](2026-07-web-first-entrypoints-and-handoff.md)         | Make入口、统一身份、一次性handoff、Connections、Web设置与TUI渠道管理收口               |
-| 2026-07-21 | [`2026-07-第二代架构研究.md`](2026-07-第二代架构研究.md)                                               | 源码研究、五类可复现fixture、唯一写者、反方评审与ADR-0020接受                          |
+| 2026-07-21 | [`2026-07-第二代架构研究.md`](2026-07-第二代架构研究.md)                                               | 源码研究、五类可复现fixture、唯一写者、反方评审与阶段架构决策接受                      |
 | 2026-07-23 | [`2026-07-第二代架构升级.md`](2026-07-第二代架构升级.md)                                               | 统一运行内核、跨入口合规、人工Effect对账与完整工程证据结档                             |
-| 2026-07-24 | [`2026-07-自适应学习基线.md`](2026-07-自适应学习基线.md)                                               | 显式画像、Notebook Goal、可信短诊断、三态进度与学习工作区结档                         |
+| 2026-07-24 | [`2026-07-自适应学习基线.md`](2026-07-自适应学习基线.md)                                               | 显式画像、Notebook Goal、可信短诊断、三态进度与学习工作区结档                          |

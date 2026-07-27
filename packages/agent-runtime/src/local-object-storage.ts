@@ -34,7 +34,7 @@ const sha256Hex = (bytes: Uint8Array): string =>
   createHash('sha256').update(bytes).digest('hex');
 
 /**
- * 本地文件系统对象存储适配器(ADR-0012 起步实现;S3 兼容适配器可替换)。
+ * 本地文件系统对象存储适配器(ADR-0005 起步实现;S3 兼容适配器可替换)。
  * - 写入走临时文件 + rename,同分区内原子,不留半写对象;
  * - 读取重算 sha-256,与写入时返回给调用方的校验和口径一致——损坏对象
  *   必须以 checksum_mismatch 暴露,绝不静默返回坏字节;

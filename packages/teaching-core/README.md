@@ -55,6 +55,6 @@ pnpm typecheck
 - [掌握度与误区规格](../../docs/03-ai/mastery-and-misconceptions.md)
 - [学习事件契约](../../docs/04-data/learning-event-contract.md)
 - [学习计划与诊断数据契约](../../docs/04-data/02-学习计划与诊断.md)
-- [ADR-0017：统一 Agent Runtime 与 Notebook 上下文](../../docs/09-decisions/0017-unified-runtime-and-notebook-context.md)
-- [ADR-0018：能力授权、Artifact 信任与学习证据](../../docs/09-decisions/0018-capability-trust-and-learning-evidence.md)
+- [ADR-0003：统一 Agent Runtime 与 Notebook 上下文](../../docs/09-decisions/0003-unified-runtime-and-notebook-context.md)
+- [ADR-0004：能力授权、Artifact 信任与学习证据](../../docs/09-decisions/0004-capability-trust-and-learning-evidence.md)
 - [关键决策历史](../../docs/09-decisions/decision-history.md)

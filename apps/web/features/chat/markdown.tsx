@@ -15,7 +15,7 @@ export interface HtmlPreviewRequest {
  * 助手消息的 Markdown 渲染层。安全边界：
  * - 不引入 rehype-raw,原始 HTML 一律不渲染(react-markdown 默认跳过);
  * - ```html 代码块不执行,而是渲染为"沙箱预览"产物卡,点击后由宿主决定
- *   在哪个面（Sheet/Canvas）里用 HtmlSandbox 执行——遵循 ADR-0010 Tier 2;
+ *   在哪个面（Sheet/Canvas）里用 HtmlSandbox 执行——遵循 ADR-0004 Tier 2;
  * - 链接强制 rel="noreferrer" 新窗口打开,不携带 referrer。
  */
 export function MessageMarkdown({

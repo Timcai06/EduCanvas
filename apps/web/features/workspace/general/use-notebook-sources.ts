@@ -86,7 +86,7 @@ export function useNotebookSources(input: {
   }, [applyAssets, endpoint, onError]);
 
   /*
-   * 解析改为异步后（ADR-0025），上传返回时资产仍可能处于 processing。
+   * 解析改为异步后（ADR-0010），上传返回时资产仍可能处于 processing。
    * 只在集合里确实存在待处理来源时轮询；刷新失败静默重试，因为网络抖动
    * 不会改变服务端解析事实，也不应覆盖更具体的上传或来源操作错误。
    */

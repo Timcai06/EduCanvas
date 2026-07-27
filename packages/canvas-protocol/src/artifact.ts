@@ -1,5 +1,5 @@
 /**
- * Canvas Artifact — 受控内容白名单（ADR-0002）。
+ * Canvas Artifact — 受控内容白名单（ADR-0004、ADR-0009）。
  *
  * ## 核心原则
  *
@@ -34,7 +34,7 @@ import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
 
 /**
  * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
- * 版本升级规则见 docs/09-decisions/0002-controlled-canvas.md。
+ * 版本升级规则见 docs/09-decisions/0009-统一Canvas工作面与运行时分层.md。
  */
 export const ARTIFACT_SCHEMA_VERSION = '1' as const;
 
@@ -50,7 +50,7 @@ const artifactBaseSchema = z.object({
 
 /**
  * Canvas 只接受白名单联合中的类型；判别联合让 `type` 同时决定参数结构和预注册渲染器。
- * 每个分支使用 strict 模式，防止未评审字段穿透到 UI，见 ADR-0002。
+ * 每个分支使用 strict 模式，防止未评审字段穿透到 UI，见 ADR-0004。
  */
 const classificationGameArtifactSchema = artifactBaseSchema
   .extend({
@@ -101,7 +101,7 @@ export type ArtifactValidation =
 
 /**
  * 在模型输出进入渲染层前执行完整服务端Artifact的规范白名单校验，并把 Zod 问题收敛成可展示、可记录的路径消息。
- * 调用方不得在失败时降级执行原始内容，安全边界见 docs/09-decisions/0002-controlled-canvas.md。
+ * 调用方不得在失败时降级执行原始内容，安全边界见 ADR-0004 与 ADR-0009。
  */
 export function validateArtifact(input: unknown): ArtifactValidation {
   const result = artifactSchema.safeParse(input);

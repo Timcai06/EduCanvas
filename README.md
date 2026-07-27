@@ -280,7 +280,7 @@ Canvas 按“产物是否进入可信学习事实”分层信任。Tier 1 判分
 - `quiz`：可判分；
 - `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-详见 [统一 Canvas 工作面](docs/02-architecture/04-统一Canvas工作面.md)、[ADR-0018](docs/09-decisions/0018-capability-trust-and-learning-evidence.md)和[ADR-0024](docs/09-decisions/0024-统一Canvas工作面与运行时分层.md)。
+详见 [统一 Canvas 工作面](docs/02-architecture/04-统一Canvas工作面.md)、[ADR-0004](docs/09-decisions/0004-capability-trust-and-learning-evidence.md)和[ADR-0009](docs/09-decisions/0009-统一Canvas工作面与运行时分层.md)。
 
 ### 可信 K12 课程状态
 

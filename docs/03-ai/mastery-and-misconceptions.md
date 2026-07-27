@@ -1,7 +1,7 @@
 # 掌握度模型与误区标注规格
 
 - 状态：`accepted`
-- 相关决策：[ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)
+- 相关决策：[ADR-0004](../09-decisions/0004-capability-trust-and-learning-evidence.md)
 - 本文档是实现依据；所有数值参数为初始默认值，放配置，待评测集校准。
 
 ## 掌握度公式（v1）

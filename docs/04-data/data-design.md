@@ -101,7 +101,7 @@ Web General物化文本Asset时保留逐`AssetVersion`片段，Context Snapshot�
 - `asset_representations`：只登记版本已具备的original/text/preview/thumbnail能力与
   派生对象引用，不复制Source正文；
 - `asset_processing_jobs`：解析、预览与缩略图任务的业务状态、尝试次数和稳定失败码。
-  `extract_text` 已是真实队列（[ADR-0025](../09-decisions/0025-资产解析异步化与解析器归位.md)）：
+  `extract_text` 已是真实队列（[ADR-0010](../09-decisions/0010-资产解析异步化与解析器归位.md)）：
   上传在同一事务内写 `queued` 任务并调用 `graphile_worker.add_job`——队列与业务表同库，
   因此不存在「任务已入队但资产不存在」的中间态；worker 只从 `queued/running` 推进终态，
   重投因此幂等。失败码由 `@educanvas/asset-processing` 定义，只能追加不能改写含义；
@@ -245,7 +245,7 @@ Version/Generation Job作用域。迁移先建立复合唯一索引再增加外�
 空库迁移失败。`mastery_states`当前主键仍是学生+知识节点；课程目录版本进入长期并行
 运行前，必须以独立迁移扩展口径，不能复用同名节点静默覆盖。
 
-事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)和 [ADR-0018](../09-decisions/0018-capability-trust-and-learning-evidence.md)。五阶段课程与现有掌握度公式属于教育领域当前实现，不是通用 Agent 数据前置条件。
+事件集合与信任提升规则见[学习事件契约](learning-event-contract.md)和 [ADR-0004](../09-decisions/0004-capability-trust-and-learning-evidence.md)。五阶段课程与现有掌握度公式属于教育领域当前实现，不是通用 Agent 数据前置条件。
 
 ## 生产门禁
 
