@@ -352,3 +352,15 @@ export {
   type CursorPage,
   type TemporalIdCursor,
 } from './pagination';
+export {
+  DrizzleUnifiedMessageHistoryRepository,
+  MessageHistoryAccessError,
+  type ListMessageHistoryInput,
+  type MessageHistoryCursor,
+  type MessageHistoryItem,
+  type MessageHistoryPage,
+  type MessageHistoryRole,
+  type MessageHistorySource,
+  type MessageHistoryStatus,
+  type UnifiedMessageHistoryPort,
+} from './unified-message-history';

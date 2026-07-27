@@ -32,6 +32,13 @@
 
 Gateway Operation 与通用/K12 Turn 复用同一个operation/turn ID，不创建平行运行账本。K12可见消息、知识引用与安全决策继续使用`chat_messages`及其教育外键；新模型、Context与Tool审计写统一Agent Ledger，旧`teaching_turn`模型记录只保留兼容读取。在删除旧形状前仍须保持additive migration和回放等价。
 
+双消息表迁移期由 `UnifiedMessageHistoryPort` 提供统一只读投影：服务端先按
+Conversation 所属 Notebook 校验有效成员权限，再以
+`lesson_sessions.conversation_id` 关联 K12 消息；两表按
+`created_at + source + message_id` 稳定归并并使用有界 keyset 游标。
+该投影不落库、不去重、不双写，也不是第三个消息事实源；现有
+`ChatRepository` 与 `PlatformTurnRepository` 写路径保持不变。
+
 ### K12垂直领域
 
 - `lesson_sessions`：教学状态、中断状态、课程范围、事件序号和乐观锁版本；
