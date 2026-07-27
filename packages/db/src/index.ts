@@ -17,6 +17,14 @@ export {
   type MaterializedAssetVersion,
   type OwnedStoredAssetVersion,
 } from './asset-repository';
+export {
+  ASSET_GENERATE_THUMBNAIL_TASK,
+  ASSET_RENDER_PREVIEW_TASK,
+  DrizzleAssetDerivedProcessingRepository,
+  getDerivedAssetJobKind,
+  type DerivedAssetAttempt,
+  type DerivedAssetJobKind,
+} from './asset-derived-processing-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
   DrizzlePlatformConversationRepository,

@@ -4,6 +4,10 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  DrizzleAssetDerivedProcessingRepository,
+  getDerivedAssetJobKind,
+} from './asset-derived-processing-repository';
 import { AssetAccessError, DrizzleAssetRepository } from './asset-repository';
 import { DrizzleChatRepository } from './chat-repository';
 import * as schema from './schema';
@@ -148,12 +152,17 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         .orderBy(schema.assetRepresentations.kind),
     ).resolves.toMatchObject([
       { kind: 'original', status: 'ready' },
+      { kind: 'preview', status: 'processing' },
       { kind: 'text', status: 'ready' },
     ]);
     await expect(
-      getDatabase().select().from(schema.assetProcessingJobs),
+      getDatabase()
+        .select()
+        .from(schema.assetProcessingJobs)
+        .orderBy(schema.assetProcessingJobs.kind),
     ).resolves.toMatchObject([
       { kind: 'extract_text', status: 'succeeded', attempts: 1 },
+      { kind: 'render_preview', status: 'queued', attempts: 0 },
     ]);
 
     await expect(
@@ -284,6 +293,124 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         completedAt: '2026-07-26T08:02:00.000Z',
       },
     });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetProcessingJobs)
+        .where(sql`${schema.assetProcessingJobs.kind} <> 'extract_text'`),
+    ).resolves.toEqual([]);
+  });
+
+  it('派生预览只处理当前版本，重复结算幂等且删除进入Outbox', async () => {
+    const assetsRepository = new DrizzleAssetRepository(getDatabase());
+    const derivedRepository = new DrizzleAssetDerivedProcessingRepository(
+      getDatabase(),
+    );
+    const created = await assetsRepository.createUploaded(readyPdf());
+    const [job] = await getDatabase()
+      .select()
+      .from(schema.assetProcessingJobs)
+      .where(sql`${schema.assetProcessingJobs.kind} = 'render_preview'`);
+    expect(job).toBeDefined();
+
+    await expect(
+      derivedRepository.beginPreviewRenderAttempt({
+        jobId: job!.id,
+        now: new Date('2026-07-27T08:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      storageKey: 'uploads/fixture/vision.pdf',
+      mimeType: 'application/pdf',
+      byteSize: 256,
+      contentHash: 'c'.repeat(64),
+    });
+    await expect(
+      derivedRepository.settlePreviewRender({
+        jobId: job!.id,
+        outcome: {
+          status: 'ready',
+          derivedStorageKey: `derived/preview/${job!.id}/fixture.html`,
+          checksum: 'f'.repeat(64),
+          byteSize: 128,
+        },
+        now: new Date('2026-07-27T08:01:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      derivedRepository.settlePreviewRender({
+        jobId: job!.id,
+        outcome: {
+          status: 'ready',
+          derivedStorageKey: `derived/preview/${job!.id}/fixture.html`,
+          checksum: 'f'.repeat(64),
+          byteSize: 128,
+        },
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      derivedRepository.settleThumbnailGeneration({
+        jobId: job!.id,
+        outcome: { status: 'failed', failureCode: 'wrong_kind' },
+      }),
+    ).resolves.toBe(false);
+
+    await assetsRepository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.objectDeletionOutbox)
+        .orderBy(schema.objectDeletionOutbox.sourceType),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'asset_representation',
+          storageKey: `derived/preview/${job!.id}/fixture.html`,
+          status: 'pending',
+        }),
+      ]),
+    );
+  });
+
+  it('图片创建缩略图任务，资产失效后旧版本任务取消', async () => {
+    expect(getDerivedAssetJobKind('image/png')).toBe('generate_thumbnail');
+    const assetsRepository = new DrizzleAssetRepository(getDatabase());
+    const derivedRepository = new DrizzleAssetDerivedProcessingRepository(
+      getDatabase(),
+    );
+    const created = await assetsRepository.createUploaded(
+      readyPdf({
+        kind: 'image',
+        displayName: 'diagram.png',
+        mimeType: 'image/png',
+        contentHash: '9'.repeat(64),
+        storageKey: 'uploads/fixture/diagram.png',
+        extractedText: null,
+      }),
+    );
+    const [job] = await getDatabase()
+      .select()
+      .from(schema.assetProcessingJobs)
+      .where(sql`${schema.assetProcessingJobs.kind} = 'generate_thumbnail'`);
+    expect(job).toBeDefined();
+
+    await assetsRepository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+    await expect(
+      derivedRepository.beginThumbnailGenerationAttempt({ jobId: job!.id }),
+    ).resolves.toBeNull();
+    await expect(
+      getDatabase()
+        .select({ status: schema.assetProcessingJobs.status })
+        .from(schema.assetProcessingJobs)
+        .where(sql`${schema.assetProcessingJobs.id} = ${job!.id}`),
+    ).resolves.toEqual([{ status: 'cancelled' }]);
   });
 
   it('对象存储键只经服务端所有权方法返回且跨主体拒绝', async () => {

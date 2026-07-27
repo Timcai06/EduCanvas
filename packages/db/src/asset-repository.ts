@@ -44,6 +44,11 @@ import {
   notebookAssetBindings,
   objectDeletionOutbox,
 } from './schema';
+import {
+  DrizzleAssetDerivedProcessingRepository,
+  enqueueDerivedAssetJob,
+  getDerivedAssetJobKind,
+} from './asset-derived-processing-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -235,7 +240,7 @@ export class DrizzleAssetRepository {
   }
 
   /**
-   * 落库一个等待异步解析的上传（ADR-0025）。
+   * 落库一个等待异步解析的上传（ADR-0010）。
    *
    * 与 `createUploaded` 的关键差异：asset 与 version 都停在 `processing`，
    * `currentVersionId` 保持为空（`assets_status_shape_check` 要求非 ready 状态
@@ -448,8 +453,92 @@ export class DrizzleAssetRepository {
           updatedAt: now,
         })
         .where(eq(assets.id, version.assetId));
+      const derivedKind = ready
+        ? getDerivedAssetJobKind(version.mimeType)
+        : null;
+      if (derivedKind) {
+        await enqueueDerivedAssetJob(transaction, {
+          assetVersionId: version.id,
+          kind: derivedKind,
+          now,
+        });
+      }
       return true;
     });
+  }
+
+  /**
+   * 供 worker 读取一个待渲染预览任务的输入。
+   *
+   * 只返回渲染所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍渲染。
+   */
+  async beginPreviewRenderAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).beginPreviewRenderAttempt(input);
+  }
+
+  /**
+   * 由 worker 写入预览渲染终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的 representation 改回去。
+   */
+  async settlePreviewRender(input: {
+    jobId: string;
+    outcome:
+      | {
+          status: 'ready';
+          derivedStorageKey: string;
+          checksum: string;
+          byteSize: number;
+        }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).settlePreviewRender(input);
+  }
+
+  /**
+   * 供 worker 读取一个待生成缩略图任务的输入。
+   *
+   * 只返回生成所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍生成。
+   */
+  async beginThumbnailGenerationAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).beginThumbnailGenerationAttempt(input);
+  }
+
+  /**
+   * 由 worker 写入缩略图生成终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的 representation 改回去。
+   */
+  async settleThumbnailGeneration(input: {
+    jobId: string;
+    outcome:
+      | {
+          status: 'ready';
+          derivedStorageKey: string;
+          checksum: string;
+          byteSize: number;
+        }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).settleThumbnailGeneration(input);
   }
 
   private validateUploadInput(input: {
@@ -624,6 +713,15 @@ export class DrizzleAssetRepository {
         .where(eq(assets.id, assetId))
         .returning();
       if (!updatedAsset) throw new AssetPersistenceError('Asset状态更新失败');
+      const derivedKind =
+        versionStatus === 'ready' ? getDerivedAssetJobKind(mimeType) : null;
+      if (derivedKind) {
+        await enqueueDerivedAssetJob(transaction, {
+          assetVersionId: versionId,
+          kind: derivedKind,
+          now,
+        });
+      }
       return toSnapshot(updatedAsset, createdVersion, processingJob);
     });
   }
