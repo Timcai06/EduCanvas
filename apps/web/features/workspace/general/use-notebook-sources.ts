@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   deleteAsset,
   loadAssets,
@@ -8,6 +8,10 @@ import {
   setAssetEnabled,
 } from '@/features/assets/asset-client';
 import type { AssetItem } from '@/features/assets/assets-drawer';
+import {
+  detectAssetStatusNotices,
+  type AssetStatusNotice,
+} from '@/features/assets/asset-status';
 
 /**
  * 当前 Notebook 的来源集合与其变更动作。
@@ -19,6 +23,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 export function useNotebookSources(input: {
   endpoint: string;
   onError: (message: string) => void;
+  onStatus?: (notice: AssetStatusNotice) => void;
 }): {
   assets: readonly AssetItem[];
   setAssets: React.Dispatch<React.SetStateAction<readonly AssetItem[]>>;
@@ -27,20 +32,46 @@ export function useNotebookSources(input: {
   rename: (asset: AssetItem, displayName: string) => void;
   remove: (asset: AssetItem) => void;
 } {
-  const { endpoint, onError } = input;
+  const { endpoint, onError, onStatus } = input;
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
+  const assetsRef = useRef<readonly AssetItem[]>([]);
+  const pollFailuresRef = useRef(0);
+
+  useEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
+
+  const applyAssets = useCallback(
+    (next: readonly AssetItem[], announce: boolean) => {
+      if (announce) {
+        for (const notice of detectAssetStatusNotices(
+          assetsRef.current,
+          next,
+        )) {
+          onStatus?.(notice);
+        }
+      }
+      assetsRef.current = next;
+      setAssets(next);
+    },
+    [onStatus],
+  );
 
   /* 启停已由服务端按成员持久化，刷新时不再用本地值覆盖服务端结果——
      否则在别处（或上一次失败的乐观更新）留下的陈旧开关会一直粘住。 */
   const refresh = useCallback(async () => {
-    setAssets(await loadAssets(endpoint, { enableSpaceByDefault: true }));
-  }, [endpoint]);
+    applyAssets(
+      await loadAssets(endpoint, { enableSpaceByDefault: true }),
+      true,
+    );
+    pollFailuresRef.current = 0;
+  }, [applyAssets, endpoint]);
 
   useEffect(() => {
     let active = true;
     void loadAssets(endpoint, { enableSpaceByDefault: true })
       .then((items) => {
-        if (active) setAssets(items);
+        if (active) applyAssets(items, false);
       })
       .catch((reason: unknown) => {
         if (active) {
@@ -52,7 +83,7 @@ export function useNotebookSources(input: {
     return () => {
       active = false;
     };
-  }, [endpoint, onError]);
+  }, [applyAssets, endpoint, onError]);
 
   /*
    * 解析改为异步后（ADR-0025），上传返回时资产仍可能处于 processing。
@@ -65,10 +96,15 @@ export function useNotebookSources(input: {
   useEffect(() => {
     if (!hasProcessingAsset) return;
     const timer = setInterval(() => {
-      void refresh().catch(() => undefined);
+      void refresh().catch(() => {
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current === 3) {
+          onError('暂时无法刷新来源处理进度，请检查网络后重试。');
+        }
+      });
     }, 2_000);
     return () => clearInterval(timer);
-  }, [hasProcessingAsset, refresh]);
+  }, [hasProcessingAsset, onError, refresh]);
 
   const patch = useCallback(
     (id: string, update: (asset: AssetItem) => AssetItem) => {

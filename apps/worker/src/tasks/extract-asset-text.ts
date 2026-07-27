@@ -42,31 +42,35 @@ function getAssetStorage(): Promise<LocalObjectStorage> {
 /**
  * 异步抽取来源文本（ADR-0025）。
  *
- * 幂等由仓储保证：`loadPendingExtraction` 只返回仍处于 queued/running 的任务，
+ * 幂等由仓储保证：`beginTextExtractionAttempt` 只领取 queued/running 的任务，
  * `settleTextExtraction` 也只从这两个状态推进，所以 graphile-worker 的重投
  * 不会把已经 ready 的资产改回去，也不会重复追加文本 representation。
  *
  * 失败分两类，处理方式刻意不同：
  * - **解析失败**（扫描件、编码错误）是确定性的，重试没有意义，直接写终态 failed，
  *   用户能立刻看到原因；
- * - **读取字节失败或未知异常**可能是瞬时的（磁盘、权限、竞态），抛出去交给
- *   graphile-worker 按 max_attempts 重试，不写终态。
+ * - **读取字节失败或未知异常**可能是瞬时的（磁盘、权限、竞态），先抛给
+ *   graphile-worker 退避重试；最后一次仍失败则写稳定的通用失败码。
  */
-export const extractAssetText_: Task = async (rawPayload) => {
+export const extractAssetText_: Task = async (rawPayload, helpers) => {
   const payload = payloadSchema.parse(rawPayload);
   const assets = new DrizzleAssetRepository();
-  const pending = await assets.loadPendingExtraction({ jobId: payload.jobId });
+  const pending = await assets.beginTextExtractionAttempt({
+    jobId: payload.jobId,
+  });
   /* 任务已终结（重复投递或已被人工处置）：安静退出，不当作错误。 */
   if (!pending) return;
 
-  const storage = await getAssetStorage();
-  const bytes = await storage.read(pending.storageKey);
-
-  let extractedText: string;
   try {
-    extractedText = await extractAssetText({
+    const storage = await getAssetStorage();
+    const bytes = await storage.read(pending.storageKey);
+    const extractedText = await extractAssetText({
       bytes,
       mimeType: pending.mimeType,
+    });
+    await assets.settleTextExtraction({
+      jobId: payload.jobId,
+      outcome: { status: 'ready', extractedText },
     });
   } catch (error) {
     if (error instanceof AssetExtractionError) {
@@ -76,13 +80,23 @@ export const extractAssetText_: Task = async (rawPayload) => {
       });
       return;
     }
+    /*
+     * Graphile 在领取任务时已把 helpers.job.attempts 加一。最后一次仍失败时，
+     * 不能只让队列永久失败而把业务账本留在 running；只落稳定失败码，不保存
+     * 原始异常、路径或堆栈。较早的尝试继续抛出，由 Graphile 按策略退避重试。
+     */
+    if (helpers.job.attempts >= helpers.job.max_attempts) {
+      await assets.settleTextExtraction({
+        jobId: payload.jobId,
+        outcome: {
+          status: 'failed',
+          failureCode: 'asset_processing_exhausted',
+        },
+      });
+      return;
+    }
     throw error;
   }
-
-  await assets.settleTextExtraction({
-    jobId: payload.jobId,
-    outcome: { status: 'ready', extractedText },
-  });
 };
 
 export { extractAssetText_ as extractAssetTextTask };

@@ -56,8 +56,19 @@ const SHA256 = /^[a-f0-9]{64}$/;
 export interface AssetSnapshot {
   descriptor: AssetDescriptor;
   version: AssetVersionDescriptor | null;
+  /** 浏览器安全的处理账本投影；不包含队列错误原文、堆栈或对象存储地址。 */
+  processing: AssetProcessingSnapshot | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssetProcessingSnapshot {
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  attempts: number;
+  failureCode: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface MaterializedAssetVersion {
@@ -145,6 +156,7 @@ function requireText(value: string, label: string, max: number): string {
 function toSnapshot(
   asset: typeof assets.$inferSelect,
   version: typeof assetVersions.$inferSelect | null,
+  processingJob: typeof assetProcessingJobs.$inferSelect | null = null,
 ): AssetSnapshot {
   return {
     descriptor: assetDescriptorSchema.parse({
@@ -168,6 +180,16 @@ function toSnapshot(
           status: version.status,
         })
       : null,
+    processing: processingJob
+      ? {
+          status: processingJob.status as AssetProcessingSnapshot['status'],
+          attempts: processingJob.attempts,
+          failureCode: processingJob.failureCode,
+          createdAt: processingJob.createdAt.toISOString(),
+          startedAt: processingJob.startedAt?.toISOString() ?? null,
+          completedAt: processingJob.completedAt?.toISOString() ?? null,
+        }
+      : null,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
   };
@@ -179,6 +201,37 @@ export class DrizzleAssetRepository {
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
+  }
+
+  private async loadLatestProcessingJobsByAssetIds(
+    assetIds: readonly string[],
+  ): Promise<ReadonlyMap<string, typeof assetProcessingJobs.$inferSelect>> {
+    if (assetIds.length === 0) return new Map();
+    const rows = await this.database
+      .select({
+        assetId: assetVersions.assetId,
+        job: assetProcessingJobs,
+      })
+      .from(assetProcessingJobs)
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
+      )
+      .where(
+        and(
+          inArray(assetVersions.assetId, [...assetIds]),
+          eq(assetProcessingJobs.kind, 'extract_text'),
+        ),
+      )
+      .orderBy(
+        desc(assetProcessingJobs.createdAt),
+        desc(assetProcessingJobs.id),
+      );
+    const latest = new Map<string, typeof assetProcessingJobs.$inferSelect>();
+    for (const row of rows) {
+      if (!latest.has(row.assetId)) latest.set(row.assetId, row.job);
+    }
+    return latest;
   }
 
   /**
@@ -245,15 +298,18 @@ export class DrizzleAssetRepository {
         })
         .returning();
       const queueJobKey = `asset-extract-text:${jobId}`;
-      await transaction.insert(assetProcessingJobs).values({
-        id: jobId,
-        assetVersionId: versionId,
-        kind: 'extract_text',
-        status: 'queued',
-        attempts: 0,
-        queueJobKey,
-        createdAt: now,
-      });
+      const [createdJob] = await transaction
+        .insert(assetProcessingJobs)
+        .values({
+          id: jobId,
+          assetVersionId: versionId,
+          kind: 'extract_text',
+          status: 'queued',
+          attempts: 0,
+          queueJobKey,
+          createdAt: now,
+        })
+        .returning();
       await transaction.execute(sql`
         select graphile_worker.add_job(
           ${ASSET_EXTRACT_TEXT_TASK},
@@ -262,11 +318,11 @@ export class DrizzleAssetRepository {
           max_attempts := 3
         )
       `);
-      if (!createdAsset || !createdVersion) {
+      if (!createdAsset || !createdVersion || !createdJob) {
         throw new AssetPersistenceError('Asset创建失败');
       }
       return {
-        snapshot: toSnapshot(createdAsset, createdVersion),
+        snapshot: toSnapshot(createdAsset, createdVersion, createdJob),
         versionId,
         jobId,
       };
@@ -280,29 +336,45 @@ export class DrizzleAssetRepository {
    * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
    * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
    */
-  async loadPendingExtraction(input: {
+  async beginTextExtractionAttempt(input: {
     jobId: string;
+    now?: Date;
   }): Promise<{ storageKey: string; mimeType: string } | null> {
     const jobId = requireUuid(input.jobId);
-    const [row] = await this.database
-      .select({
-        storageKey: assetVersions.storageKey,
-        mimeType: assetVersions.mimeType,
-      })
-      .from(assetProcessingJobs)
-      .innerJoin(
-        assetVersions,
-        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
-      )
-      .where(
-        and(
-          eq(assetProcessingJobs.id, jobId),
-          eq(assetProcessingJobs.kind, 'extract_text'),
-          inArray(assetProcessingJobs.status, ['queued', 'running']),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [claimed] = await transaction
+        .update(assetProcessingJobs)
+        .set({
+          status: 'running',
+          attempts: sql`${assetProcessingJobs.attempts} + 1`,
+          /*
+           * 裸 Date 放进 sql`` 会退化成平台本地字符串（如 GMT+0800），
+           * PostgreSQL 不保证能解析。ISO 字符串显式转 timestamptz，同时保留
+           * 第一次开始时间，确保跨时区和重试都稳定。
+           */
+          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now.toISOString()}::timestamptz)`,
+        })
+        .where(
+          and(
+            eq(assetProcessingJobs.id, jobId),
+            eq(assetProcessingJobs.kind, 'extract_text'),
+            inArray(assetProcessingJobs.status, ['queued', 'running']),
+          ),
+        )
+        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+      if (!claimed) return null;
+      const [version] = await transaction
+        .select({
+          storageKey: assetVersions.storageKey,
+          mimeType: assetVersions.mimeType,
+        })
+        .from(assetVersions)
+        .where(eq(assetVersions.id, claimed.assetVersionId))
+        .limit(1);
+      if (!version) throw new AssetPersistenceError('Asset版本不存在');
+      return version;
+    });
   }
 
   /**
@@ -326,8 +398,6 @@ export class DrizzleAssetRepository {
         .update(assetProcessingJobs)
         .set({
           status: input.outcome.status === 'ready' ? 'succeeded' : 'failed',
-          attempts: sql`${assetProcessingJobs.attempts} + 1`,
-          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now})`,
           completedAt: now,
           failureCode:
             input.outcome.status === 'failed'
@@ -519,20 +589,25 @@ export class DrizzleAssetRepository {
           createdAt: now,
         });
       }
+      let processingJob: typeof assetProcessingJobs.$inferSelect | null = null;
       if (input.kind === 'document') {
-        await transaction.insert(assetProcessingJobs).values({
-          assetVersionId: versionId,
-          kind: 'extract_text',
-          status: versionStatus === 'ready' ? 'succeeded' : 'failed',
-          attempts: 1,
-          failureCode:
-            versionStatus === 'failed'
-              ? requireText(input.outcome.failureCode, 'failureCode', 128)
-              : null,
-          startedAt: now,
-          completedAt: now,
-          createdAt: now,
-        });
+        const [createdProcessingJob] = await transaction
+          .insert(assetProcessingJobs)
+          .values({
+            assetVersionId: versionId,
+            kind: 'extract_text',
+            status: versionStatus === 'ready' ? 'succeeded' : 'failed',
+            attempts: 1,
+            failureCode:
+              versionStatus === 'failed'
+                ? requireText(input.outcome.failureCode, 'failureCode', 128)
+                : null,
+            startedAt: now,
+            completedAt: now,
+            createdAt: now,
+          })
+          .returning();
+        processingJob = createdProcessingJob ?? null;
       }
 
       const nextAssetStatus = versionStatus === 'ready' ? 'ready' : 'failed';
@@ -549,7 +624,7 @@ export class DrizzleAssetRepository {
         .where(eq(assets.id, assetId))
         .returning();
       if (!updatedAsset) throw new AssetPersistenceError('Asset状态更新失败');
-      return toSnapshot(updatedAsset, createdVersion);
+      return toSnapshot(updatedAsset, createdVersion, processingJob);
     });
   }
 
@@ -599,9 +674,14 @@ export class DrizzleAssetRepository {
       .orderBy(desc(assets.createdAt), desc(assets.id))
       .limit(limit + 1);
     const pageRows = rows.slice(0, limit);
+    const processingJobs = await this.loadLatestProcessingJobsByAssetIds(
+      pageRows.map(({ asset }) => asset.id),
+    );
     const last = pageRows.at(-1)?.asset;
     return {
-      items: pageRows.map(({ asset, version }) => toSnapshot(asset, version)),
+      items: pageRows.map(({ asset, version }) =>
+        toSnapshot(asset, version, processingJobs.get(asset.id) ?? null),
+      ),
       nextCursor:
         rows.length > limit && last
           ? { timestamp: last.createdAt, id: last.id }
@@ -641,7 +721,14 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!row) throw new AssetAccessError();
-    return toSnapshot(row.asset, row.version);
+    const processingJobs = await this.loadLatestProcessingJobsByAssetIds([
+      row.asset.id,
+    ]);
+    return toSnapshot(
+      row.asset,
+      row.version,
+      processingJobs.get(row.asset.id) ?? null,
+    );
   }
 
   /** Canvas 动作策略只使用数据库成员角色与资源创建者，不接受客户端声明。 */

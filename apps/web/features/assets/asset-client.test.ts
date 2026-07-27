@@ -90,6 +90,7 @@ describe('asset browser client', () => {
         kind: 'document',
         scope: 'space',
         status: 'ready',
+        processing: null,
         enabled: true,
         selectable: true,
         resource: null,

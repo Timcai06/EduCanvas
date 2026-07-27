@@ -213,6 +213,79 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ).rejects.toBeInstanceOf(AssetAccessError);
   });
 
+  it('异步解析按ISO时间领取并把处理账本推进到可公开终态', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const assetId = '92000000-0000-4000-8000-000000000001';
+    const versionId = '92000000-0000-4000-8000-000000000002';
+    const jobId = '92000000-0000-4000-8000-000000000003';
+    const startedAt = new Date('2026-07-26T08:01:39.806Z');
+    await getDatabase().insert(schema.assets).values({
+      id: assetId,
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      origin: 'upload',
+      displayName: '异步解析讲义.md',
+      mimeType: 'text/markdown',
+      status: 'processing',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    });
+    await getDatabase()
+      .insert(schema.assetVersions)
+      .values({
+        id: versionId,
+        assetId,
+        kind: 'document',
+        mimeType: 'text/markdown',
+        byteSize: 12,
+        contentHash: 'e'.repeat(64),
+        status: 'processing',
+        storageKey: 'uploads/fixture/async.md',
+        createdAt: startedAt,
+      });
+    await getDatabase().insert(schema.assetProcessingJobs).values({
+      id: jobId,
+      assetVersionId: versionId,
+      kind: 'extract_text',
+      status: 'queued',
+      attempts: 0,
+      createdAt: startedAt,
+    });
+
+    await expect(
+      repository.beginTextExtractionAttempt({ jobId, now: startedAt }),
+    ).resolves.toEqual({
+      storageKey: 'uploads/fixture/async.md',
+      mimeType: 'text/markdown',
+    });
+    await expect(
+      repository.settleTextExtraction({
+        jobId,
+        outcome: { status: 'ready', extractedText: '异步解析完成' },
+        now: new Date('2026-07-26T08:02:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: { status: 'ready', currentVersionId: versionId },
+      processing: {
+        status: 'succeeded',
+        attempts: 1,
+        failureCode: null,
+        startedAt: startedAt.toISOString(),
+        completedAt: '2026-07-26T08:02:00.000Z',
+      },
+    });
+  });
+
   it('对象存储键只经服务端所有权方法返回且跨主体拒绝', async () => {
     const repository = new DrizzleAssetRepository(getDatabase());
     const created = await repository.createUploaded(readyPdf());

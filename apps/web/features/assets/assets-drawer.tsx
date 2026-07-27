@@ -7,6 +7,7 @@ import {
   SpinnerGap,
 } from '@phosphor-icons/react';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
+import { assetFailureMessage, assetProcessingMessage } from './asset-status';
 
 export interface AssetItem {
   id: string;
@@ -15,6 +16,14 @@ export interface AssetItem {
   kind: 'image' | 'document' | 'link';
   scope: 'turn' | 'space';
   status: 'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
+  processing: {
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    attempts: number;
+    failureCode: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
   enabled: boolean;
   selectable: boolean;
   /**
@@ -92,8 +101,12 @@ export function AssetsDrawer({
                     {asset.status === 'ready'
                       ? '已就绪'
                       : asset.status === 'failed'
-                        ? '处理失败'
-                        : '处理中'}
+                        ? assetFailureMessage(
+                            asset.processing?.failureCode ?? null,
+                          )
+                        : assetProcessingMessage(
+                            asset.processing?.createdAt ?? null,
+                          )}
                   </span>
                 </span>
               </label>

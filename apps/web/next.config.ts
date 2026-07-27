@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     '@educanvas/agent-core',
     '@educanvas/agent-runtime',
+    '@educanvas/asset-processing',
     '@educanvas/canvas-protocol',
     '@educanvas/db',
     '@educanvas/teaching-core',

@@ -1,6 +1,10 @@
 import type { OptionWheelItem } from '@/components/OptionWheel';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { ArtifactSummary } from '@/features/canvas/artifact-client';
+import {
+  assetFailureMessage,
+  assetProcessingMessage,
+} from '@/features/assets/asset-status';
 
 export type StudioRoute = 'source-browse' | 'output-browse';
 
@@ -55,8 +59,10 @@ export function routeLabel(route: StudioRoute): string {
  */
 function assetStatus(asset: AssetItem): string {
   const status = asset.resource?.status ?? asset.status;
-  if (status === 'failed') return '处理失败';
+  if (status === 'failed') {
+    return assetFailureMessage(asset.processing?.failureCode ?? null);
+  }
   if (status === 'unavailable') return '不可用';
   if (status === 'ready') return asset.enabled ? '已用于对话' : '未使用';
-  return '处理中';
+  return assetProcessingMessage(asset.processing?.createdAt ?? null);
 }

@@ -73,6 +73,7 @@ function snapshot(id: string, displayName = 'note.pdf') {
       contentHash: 'a'.repeat(64),
       status: 'ready',
     },
+    processing: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
