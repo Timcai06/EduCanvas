@@ -295,6 +295,25 @@ feat: 接入K12消息兼容双写
 
 审查重点：事实边界、私有判分键、生命周期和旧记录兼容。
 
+### Prompt 4 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ 已绑定 Conversation/Notebook 的新 K12 产物在同一事务内创建 snapshot、private grading key、canonical Artifact 与 Version
+- ✅ `(platform_artifact_id, platform_artifact_version_id)` 成对约束，且复合外键保证 Version 属于目标 Artifact
+- ✅ 并发重试由事务级 advisory lock 串行化，不重复创建长期身份
+- ✅ Artifact Version 只保存浏览器安全投影，判分键继续物理隔离
+- ✅ 旧无关联 snapshot 保持可读，不做历史全量回填
+- ✅ 跨 Notebook 读取收敛为既有 ArtifactOwnershipError/404 边界
+- ✅ Web Renderer Registry 尚未迁移；Studio 在数据库分页前排除未注册 K12 类型
+- ✅ 空库迁移 11/11、桥接集成测试 9/9 通过
+
+**明确未完成：**
+
+- ⏳ Web Renderer Registry 对 quiz、classification_game、pipeline_flow 的消费与展示
+- ⏳ 历史 K12 snapshot 回填平台身份
+- ⏳ 没有 Conversation 的兼容 lesson_session 桥接
+
 ---
 
 ## Prompt 5：确认个人 Agent 基数与模板市场边界

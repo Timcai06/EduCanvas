@@ -13,6 +13,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -2268,6 +2269,15 @@ export const canvasArtifacts = pgTable(
     title: text('title').notNull(),
     // 这里只保存浏览器安全投影；答案必须进入canvas_artifact_grading_keys。
     params: jsonb('params').notNull(),
+    /**
+     * 可选的平台 Artifact 长期身份关联。新建 K12 Artifact 时由同一事务写入，
+     * 旧记录保持 NULL——不做无界回填。两列必须成对且 Version 必须属于该 Artifact。
+     */
+    platformArtifactId: uuid('platform_artifact_id').references(
+      () => artifacts.id,
+      { onDelete: 'set null' },
+    ),
+    platformArtifactVersionId: uuid('platform_artifact_version_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2276,6 +2286,18 @@ export const canvasArtifacts = pgTable(
     uniqueIndex('canvas_artifacts_session_artifact_unique').on(
       table.sessionId,
       table.artifactId,
+    ),
+    uniqueIndex('canvas_artifacts_platform_artifact_unique')
+      .on(table.platformArtifactId)
+      .where(sql`${table.platformArtifactId} is not null`),
+    foreignKey({
+      columns: [table.platformArtifactVersionId, table.platformArtifactId],
+      foreignColumns: [artifactVersions.id, artifactVersions.artifactId],
+      name: 'canvas_artifacts_platform_version_scope_fk',
+    }).onDelete('set null'),
+    check(
+      'canvas_artifacts_platform_link_pair_check',
+      sql`(${table.platformArtifactId} is null and ${table.platformArtifactVersionId} is null) or (${table.platformArtifactId} is not null and ${table.platformArtifactVersionId} is not null)`,
     ),
   ],
 );
@@ -2545,6 +2567,10 @@ export const artifactVersions = pgTable(
     uniqueIndex('artifact_versions_artifact_version_unique').on(
       table.artifactId,
       table.version,
+    ),
+    unique('artifact_versions_id_artifact_unique').on(
+      table.id,
+      table.artifactId,
     ),
     uniqueIndex('artifact_versions_generation_job_unique')
       .on(table.generationJobId)

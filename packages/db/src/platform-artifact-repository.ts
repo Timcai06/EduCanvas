@@ -244,6 +244,7 @@ export class DrizzlePlatformArtifactRepository {
     spaceId: string;
     trustedSubjectId: string;
     limit?: number;
+    kinds?: readonly string[];
   }): Promise<readonly PlatformArtifact[]> {
     return (await this.listSpaceArtifactsPage(input)).items;
   }
@@ -253,6 +254,8 @@ export class DrizzlePlatformArtifactRepository {
     trustedSubjectId: string;
     limit?: number;
     cursor?: TemporalIdCursor | null;
+    /** 消费端尚未注册的类型应在数据库分页前排除，避免产生不可打开的列表项。 */
+    kinds?: readonly string[];
   }): Promise<CursorPage<PlatformArtifact>> {
     await requireArtifactNotebookAccess(this.database, {
       spaceId: input.spaceId,
@@ -265,6 +268,9 @@ export class DrizzlePlatformArtifactRepository {
       .where(
         and(
           eq(artifacts.spaceId, input.spaceId),
+          input.kinds?.length
+            ? inArray(artifacts.kind, [...input.kinds])
+            : undefined,
           input.cursor
             ? or(
                 lt(artifacts.updatedAt, input.cursor.timestamp),

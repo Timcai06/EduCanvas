@@ -1,0 +1,6 @@
+ALTER TABLE "canvas_artifacts" ADD COLUMN "platform_artifact_id" uuid;--> statement-breakpoint
+ALTER TABLE "canvas_artifacts" ADD COLUMN "platform_artifact_version_id" uuid;--> statement-breakpoint
+ALTER TABLE "canvas_artifacts" ADD CONSTRAINT "canvas_artifacts_platform_artifact_id_artifacts_id_fk" FOREIGN KEY ("platform_artifact_id") REFERENCES "public"."artifacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "canvas_artifacts_platform_artifact_unique" ON "canvas_artifacts" USING btree ("platform_artifact_id") WHERE "canvas_artifacts"."platform_artifact_id" is not null;--> statement-breakpoint
+ALTER TABLE "artifact_versions" ADD CONSTRAINT "artifact_versions_id_artifact_unique" UNIQUE("id","artifact_id");--> statement-breakpoint
+ALTER TABLE "canvas_artifacts" ADD CONSTRAINT "canvas_artifacts_platform_link_pair_check" CHECK (("canvas_artifacts"."platform_artifact_id" is null and "canvas_artifacts"."platform_artifact_version_id" is null) or ("canvas_artifacts"."platform_artifact_id" is not null and "canvas_artifacts"."platform_artifact_version_id" is not null));

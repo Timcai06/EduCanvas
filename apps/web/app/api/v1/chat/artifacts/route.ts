@@ -34,6 +34,15 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// K12 桥接类型已有平台身份，但在 Web Renderer Registry 迁移前不进入 Studio 列表。
+const WEB_ARTIFACT_KINDS = [
+  'mind_map',
+  'slides',
+  'flashcards',
+  'note',
+  'audio_overview',
+] as const;
+
 /**
  * 断连恢复读取面(ADR-0012):SSE 只负责实时增量,产物的权威状态永远可以
  * 从本端点重建,浏览器刷新/断连后不依赖流的连续性。
@@ -51,6 +60,7 @@ export async function GET(request?: Request): Promise<Response> {
     const page = await repository.listSpaceArtifactsPage({
       spaceId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
+      kinds: WEB_ARTIFACT_KINDS,
       ...pagination,
     });
     return jsonResponse({
