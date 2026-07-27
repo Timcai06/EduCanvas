@@ -1503,11 +1503,11 @@ export const modelRuns = pgTable(
     ),
     check(
       'model_runs_operation_shape_check',
-      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.taskAlias} = 'teaching.turn') or (${table.operationKind} = 'agent_turn' and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ((${table.taskAlias} = 'agent.turn' and ${table.sessionId} is null and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null) or (${table.taskAlias} = 'teaching.turn' and ${table.sessionId} is not null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} = ${table.agentOperationId})))`,
+      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId}) or (${table.operationKind} = 'agent_turn' and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ((${table.sessionId} is null and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null) or (${table.sessionId} is not null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} = ${table.agentOperationId})))`,
     ),
     check(
       'model_runs_phase_check',
-      sql`${table.phase} in ('answer', 'synthesis')`,
+      sql`${table.phase} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'model_runs_status_check',
@@ -1516,7 +1516,7 @@ export const modelRuns = pgTable(
     check('model_runs_attempt_check', sql`${table.attempt} between 1 and 100`),
     check(
       'model_runs_text_check',
-      sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} in ('agent.turn', 'teaching.turn') and ${table.modelAlias} in ('primary', 'fast', 'structured', 'speech') and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
+      sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and ${table.modelAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
     ),
     check(
       'model_runs_usage_check',

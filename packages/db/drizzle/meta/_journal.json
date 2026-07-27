@@ -281,6 +281,13 @@
       "when": 1785034688271,
       "tag": "0039_little_dreaming_celestial",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785121853923,
+      "tag": "0040_brave_domino",
+      "breakpoints": true
     }
   ]
 }

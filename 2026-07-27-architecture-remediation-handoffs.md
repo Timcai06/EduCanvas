@@ -28,7 +28,7 @@
 
 ---
 
-## Prompt 1：解除 `model_runs` 对具体 Alias 的硬编码
+## Prompt 1：解除 `model_runs` 对具体 Alias 的硬编码（已完成）
 
 ```text
 你是 EduCanvas 数据库与模型运行审计主线的资深后端工程 Agent。
