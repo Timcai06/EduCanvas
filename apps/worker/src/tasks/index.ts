@@ -3,6 +3,7 @@ import {
   ARTIFACT_GENERATE_TASK,
   ASSET_EXTRACT_TEXT_TASK,
   ASSET_GENERATE_THUMBNAIL_TASK,
+  ASSET_PROCESS_VIDEO_TASK,
   ASSET_RENDER_PREVIEW_TASK,
   ASSET_TRANSCRIBE_AUDIO_TASK,
 } from '@educanvas/db';
@@ -23,6 +24,7 @@ import { deleteObjectOutbox } from './delete-object-outbox.js';
 import { extractAssetTextTask } from './extract-asset-text.js';
 import { renderPreviewTask } from './render-preview.js';
 import { generateThumbnailTask } from './generate-thumbnail.js';
+import { processVideoTask } from './process-video.js';
 import { transcribeAudioTask } from './transcribe-audio.js';
 
 /**
@@ -39,6 +41,7 @@ export function createTaskList(input: {
     [ASSET_RENDER_PREVIEW_TASK]: renderPreviewTask,
     [ASSET_GENERATE_THUMBNAIL_TASK]: generateThumbnailTask,
     [ASSET_TRANSCRIBE_AUDIO_TASK]: transcribeAudioTask,
+    [ASSET_PROCESS_VIDEO_TASK]: processVideoTask,
     [OPERATION_CONTINUATION_TASK]: createProductionContinueOperationTask(
       input.continuationTrace,
     ),

@@ -41,6 +41,7 @@ import {
   assetRepresentations,
   assets,
   assetVersions,
+  assetVideoKeyframes,
   notebookAssetBindings,
   objectDeletionOutbox,
 } from './schema';
@@ -54,6 +55,7 @@ import {
   DrizzleAssetTranscriptionRepository,
   type AudioTranscriptionOutcome,
 } from './asset-transcription-repository';
+import { ASSET_PROCESS_VIDEO_TASK } from './asset-video-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -114,13 +116,18 @@ export interface OwnedStoredAssetVersion {
   transcriptionText: string | null;
   /** 音频转录 Provider 审计元数据。 */
   transcriptionMetadata: unknown;
+  /** 浏览器预览组合层可用的安全派生状态；不含对象键、校验和或 Provider 数据。 */
+  derivedStatuses: readonly {
+    kind: 'transcription' | 'keyframes';
+    status: 'processing' | 'ready' | 'failed' | 'unavailable';
+  }[];
 }
 
 export interface CreateUploadedAssetInput {
   ownerSubjectId: string;
   spaceId: string;
   scope: AssetScope;
-  kind: Extract<AssetKind, 'image' | 'document' | 'link' | 'audio'>;
+  kind: Extract<AssetKind, 'image' | 'document' | 'link' | 'audio' | 'video'>;
   /** 缺省 upload;链接导入传 url_import,溯源与上传物理区分。 */
   origin?: Extract<AssetOrigin, 'upload' | 'url_import'>;
   displayName: string;
@@ -239,6 +246,7 @@ export class DrizzleAssetRepository {
           inArray(assetProcessingJobs.kind, [
             'extract_text',
             'transcribe_audio',
+            'process_video',
           ]),
         ),
       )
@@ -317,14 +325,22 @@ export class DrizzleAssetRepository {
         })
         .returning();
       /**
-       * 音频走转录队列，其他可抽取文本类型走文本抽取队列。
-       * 两种 job 共用 asset_processing_jobs 表，kind 字段区分。
+       * 音频走转录队列，视频走派生处理队列（探测→音轨转录→抽帧），
+       * 其他可抽取文本类型走文本抽取队列。三种 job 共用
+       * asset_processing_jobs 表，kind 字段区分。
        */
-      const isAudio = input.kind === 'audio';
-      const processingKind = isAudio ? 'transcribe_audio' : 'extract_text';
-      const taskName = isAudio
-        ? ASSET_TRANSCRIBE_AUDIO_TASK
-        : ASSET_EXTRACT_TEXT_TASK;
+      const processingKind =
+        input.kind === 'audio'
+          ? 'transcribe_audio'
+          : input.kind === 'video'
+            ? 'process_video'
+            : 'extract_text';
+      const taskName =
+        processingKind === 'transcribe_audio'
+          ? ASSET_TRANSCRIBE_AUDIO_TASK
+          : processingKind === 'process_video'
+            ? ASSET_PROCESS_VIDEO_TASK
+            : ASSET_EXTRACT_TEXT_TASK;
       const queueJobKey = `asset-${processingKind}:${jobId}`;
       const [createdJob] = await transaction
         .insert(assetProcessingJobs)
@@ -946,6 +962,24 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!row) throw new AssetAccessError();
+    const derivedStatuses =
+      row.asset.kind === 'video'
+        ? await this.database
+            .select({
+              kind: assetRepresentations.kind,
+              status: assetRepresentations.status,
+            })
+            .from(assetRepresentations)
+            .where(
+              and(
+                eq(assetRepresentations.assetVersionId, row.version.id),
+                inArray(assetRepresentations.kind, [
+                  'transcription',
+                  'keyframes',
+                ]),
+              ),
+            )
+        : [];
     return {
       assetId: row.asset.id,
       versionId: row.version.id,
@@ -959,6 +993,11 @@ export class DrizzleAssetRepository {
       extractedText: row.version.extractedText,
       transcriptionText: row.version.transcriptionText,
       transcriptionMetadata: row.version.transcriptionMetadata,
+      derivedStatuses: derivedStatuses.map((representation) => ({
+        kind: representation.kind as 'transcription' | 'keyframes',
+        status: representation.status as
+          'processing' | 'ready' | 'failed' | 'unavailable',
+      })),
     };
   }
 
@@ -1210,12 +1249,32 @@ export class DrizzleAssetRepository {
             isNotNull(assetRepresentations.derivedStorageKey),
           ),
         );
+      /* 关键帧与 representation 一样是派生对象，删除 Source 时必须一并进入
+         删除 outbox；漏掉它们会在对象存储里留下无人引用的孤儿帧。 */
+      const derivedKeyframes = await transaction
+        .select({
+          id: assetVideoKeyframes.id,
+          storageKey: assetVideoKeyframes.storageKey,
+        })
+        .from(assetVideoKeyframes)
+        .innerJoin(
+          assetVersions,
+          eq(assetVersions.id, assetVideoKeyframes.assetVersionId),
+        )
+        .where(eq(assetVersions.assetId, assetId));
       const deletionEntries = [
         ...storedVersions.map((version) => ({
           objectKind: 'asset' as const,
           storageKey: version.storageKey,
           sourceType: 'asset_version' as const,
           sourceId: version.id,
+          availableAt: now,
+        })),
+        ...derivedKeyframes.map((keyframe) => ({
+          objectKind: 'asset' as const,
+          storageKey: keyframe.storageKey,
+          sourceType: 'asset_video_keyframe' as const,
+          sourceId: keyframe.id,
           availableAt: now,
         })),
         ...derivedRepresentations.flatMap((representation) =>

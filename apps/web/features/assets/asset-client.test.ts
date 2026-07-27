@@ -98,6 +98,37 @@ describe('asset browser client', () => {
     ]);
   });
 
+  it('accepts a ready video without invalidating the complete asset list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          assets: [
+            {
+              descriptor: {
+                assetId: 'video-1',
+                scope: 'space',
+                kind: 'video',
+                displayName: '课堂录像.mp4',
+                status: 'ready',
+                currentVersionId: 'video-version-1',
+              },
+              version: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const [asset] = await loadAssets('/assets-fixture');
+
+    expect(asset).toMatchObject({
+      id: 'video-1',
+      kind: 'video',
+      selectable: true,
+    });
+  });
+
   it('keeps a canvas resource that passes protocol validation', async () => {
     vi.stubGlobal(
       'fetch',

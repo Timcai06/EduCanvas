@@ -453,7 +453,7 @@ Worker 任务与 Source Preview。
 
 ---
 
-## Prompt 8：图像生成 Artifact 纵切
+## Prompt 8：图像生成 Artifact 纵切（已完成）
 
 ```text
 你是 EduCanvas 图像生成能力纵切的资深全栈工程 Agent。
@@ -491,9 +491,25 @@ Artifact generation Worker、CanvasResource/Renderer Manifest 与现有 Artifact
 
 审查重点：5D policy、异步语义、对象存储、审计脱敏和 Artifact 复用。
 
+### Prompt 8 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ `ImageGenerationModelGateway` 独立 Port 与 OpenAI-compatible Adapter；只接受单张、闭集尺寸和 PNG/JPEG/WebP 魔术字节
+- ✅ `artifact.generate_image` 经 ToolKernel 五维策略显式注册，未配置模型时 fail closed
+- ✅ durable Artifact Job、对象存储 checkpoint、不可变 Version 和 `generated_image` CanvasResource
+- ✅ 图像字节读取先校验当前 Conversation/Notebook 和主体权限，跨 Notebook 统一 404
+- ✅ 浏览器详情、消息卡片、Studio 和 Canvas 只消费安全媒体投影；Prompt、Provider 原文、objectKey、checksum 与堆栈不进入响应
+- ✅ retryable Provider 错误交回 Graphile，确定性失败和耗尽使用稳定失败码
+
+**明确未完成：**
+
+- ⏳ 真实付费 Provider dogfood、成本告警与生产配额验证；自动化 fixture 不能替代线上验收
+- ⏳ 图像编辑、局部重绘和多图批量生成不属于本纵切
+
 ---
 
-## Prompt 9：pgvector 混合检索纵切
+## Prompt 9：pgvector 混合检索纵切（已完成）
 
 ```text
 你是 EduCanvas 检索与知识库主线的资深后端工程 Agent。
@@ -535,9 +551,24 @@ ingest-knowledge-document Worker、当前 tsvector 查询、Context Compiler 和
 
 审查重点：权限过滤顺序、回退、模型版本、回填成本和检索质量证据。
 
+### Prompt 9 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ 0044 正式安装 pgvector，新增 1536 维向量派生表、模型/版本/指令身份与运行账本，保留现有 tsvector/GIN
+- ✅ 摄取后异步创建并领取 embedding run；分批写入、幂等重投、模型升级和内容哈希漂移均有边界
+- ✅ 教学检索接入 FTS + vector RRF；权限范围由本轮冻结的 `turn_source_versions` 先收窄
+- ✅ 查询向量缺失、维度不符、向量未回填或 ANN 超时时退回 FTS；超时通过 SAVEPOINT 恢复同一事务
+- ✅ 固定正交向量 fixture 覆盖语义补回、混排、隔离、部分嵌入、上限和超时降级
+
+**明确未完成：**
+
+- ⏳ 不做无界历史回填；生产回填必须按 Document 有界入队并从运行账本观测进度
+- ⏳ 真实教材上的相关性阈值、召回指标和模型成本仍需 dogfood 后确定
+
 ---
 
-## Prompt 10：FK 与索引证据化审计修复
+## Prompt 10：FK 与索引证据化审计修复（已完成）
 
 ```text
 你是 EduCanvas PostgreSQL 数据完整性与性能审计 Agent。
@@ -575,9 +606,22 @@ ingest-knowledge-document Worker、当前 tsvector 查询、Context Compiler 和
 
 审查重点：删除语义、索引写放大、重复索引和生产数据升级锁风险。
 
+### Prompt 10 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ 对 114 条 FK 按领域生命周期审计；没有证据支持修改现有删除策略
+- ✅ 0045 删除 4 条被唯一索引覆盖的重复索引，只为 25 条有真实父表删除路径的 FK 补支撑索引
+- ✅ `docs/04-data/fk-index-audit.md` 保存关系清单、查询依据、EXPLAIN fixture 与生产升级锁风险
+- ✅ 集成测试持续检查缺失 FK 支撑索引、重复索引和关键删除语义
+
+**明确未完成：**
+
+- ⏳ 千万级生产表应用 0045 前仍需按部署规模决定迁移窗口或预建 concurrent index；隔离库通过不代表生产锁窗口已验证
+
 ---
 
-## Prompt 11：视频 Source 最小纵切
+## Prompt 11：视频 Source 最小纵切（已完成）
 
 仅在音频转录、资产派生任务和真实产品需求均已确认后执行。
 
@@ -612,6 +656,22 @@ ingest-knowledge-document Worker、当前 tsvector 查询、Context Compiler 和
 验证：diff-check、lint、typecheck、unit、DB/Worker integration、受限 fixture E2E。
 建议提交信息：feat: 接入视频来源处理流水线
 ```
+
+### Prompt 11 实施状态（2026-07-27）
+
+**已完成：**
+
+- ✅ 首批 MP4/QuickTime 服务端 brand sniff，50 MiB、20 分钟和 1080p 像素预算
+- ✅ Worker 通过固定 argv、单线程、硬超时的 ffprobe/ffmpeg 在临时目录探测、提取单声道音轨和 4 张关键帧
+- ✅ 音轨复用 `AudioTranscriptionModelGateway`；关键帧保存 checksum、算法版本、序号、时间点和 Source Version 关联
+- ✅ 元数据成功即允许版本 ready；转录与关键帧分别记录 ready/failed/unavailable，浏览器诚实展示部分成功
+- ✅ 视频列表、同源播放、转录预览、CanvasResource 和 Agent 文本上下文已接通；跨 Notebook 仍由服务端授权
+- ✅ 批量对象写入中途失败立即回收孤儿帧；删除 Source 时所有关键帧进入对象删除 outbox
+
+**明确未完成：**
+
+- ⏳ 单路派生没有独立“重新处理”动作；当前预览明确提示删除后重新上传，后续可增加受控重试入口
+- ⏳ 不包含时间线编辑、字幕编辑、WebM 视频和视觉内容理解/帧语义摘要
 
 ## 每阶段交回后的审查口令
 

@@ -1,7 +1,10 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES } from '@educanvas/asset-processing';
+import {
+  AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
+  VIDEO_SOURCE_MAX_INPUT_BYTES,
+} from '@educanvas/asset-processing';
 import {
   AssetAccessError,
   DrizzleAssetRepository,
@@ -28,6 +31,8 @@ const BINARY_PREVIEW_MIME_TYPES = new Set([
   'audio/webm',
   'audio/mp4',
   'audio/x-m4a',
+  'video/mp4',
+  'video/quicktime',
 ]);
 const transcriptionMetadataSchema = z
   .object({
@@ -212,6 +217,40 @@ export async function loadOwnedAssetPreviewDetail(input: {
       canvasResource,
     };
   }
+  if (
+    version.mimeType === 'video/mp4' ||
+    version.mimeType === 'video/quicktime'
+  ) {
+    const parsedMetadata = transcriptionMetadataSchema.safeParse(
+      version.transcriptionMetadata,
+    );
+    const transcriptionMeta = parsedMetadata.success
+      ? parsedMetadata.data
+      : null;
+    const derivativeStatus = new Map(
+      version.derivedStatuses.map((item) => [item.kind, item.status]),
+    );
+    return {
+      preview: {
+        kind: 'video',
+        fileName: version.displayName,
+        mimeType: version.mimeType,
+        fileUrl,
+        transcription: version.transcriptionText
+          ? {
+              text: version.transcriptionText.slice(0, 500_000),
+              language: transcriptionMeta?.language ?? null,
+              durationSeconds: transcriptionMeta?.durationSeconds ?? null,
+            }
+          : null,
+        derivatives: {
+          transcription: derivativeStatus.get('transcription') ?? 'unavailable',
+          keyframes: derivativeStatus.get('keyframes') ?? 'unavailable',
+        },
+      },
+      canvasResource,
+    };
+  }
   throw new AssetPreviewError('preview_unavailable', 422);
 }
 
@@ -231,7 +270,9 @@ export async function readOwnedAssetPreviewFile(input: {
   const bytes = await readStoredAssetBytes(version.storageKey);
   const maxBytes = version.mimeType.startsWith('audio/')
     ? AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES
-    : 10 * 1024 * 1024;
+    : version.mimeType.startsWith('video/')
+      ? VIDEO_SOURCE_MAX_INPUT_BYTES
+      : 10 * 1024 * 1024;
   if (
     bytes.byteLength !== version.byteSize ||
     bytes.byteLength > maxBytes ||

@@ -1088,7 +1088,7 @@ export const assetRepresentations = pgTable(
     ),
     check(
       'asset_representations_kind_check',
-      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail', 'transcription')`,
+      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail', 'transcription', 'keyframes')`,
     ),
     check(
       'asset_representations_status_check',
@@ -1101,6 +1101,67 @@ export const assetRepresentations = pgTable(
     check(
       'asset_representations_failure_shape_check',
       sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/**
+ * 视频关键帧派生物（ADR-0016）。
+ *
+ * 关键帧是派生内容而不是新的内容事实：原始 Asset Version 仍是唯一内容来源，
+ * 整表清空只会让视频失去预览帧，不改变任何转录、引用或学习事实。
+ *
+ * `algorithmVersion` 随行保存：抽帧策略变化后新旧帧不可比较，也不能就地覆盖。
+ * `(assetVersionId, algorithmVersion, ordinal)` 唯一使同一版本在不同算法下的帧
+ * 可以共存，让算法升级成为可回滚过程。
+ *
+ * 与 `asset_representations` 的分工：representation 记录「这个版本有没有关键帧、
+ * 处于什么状态」，本表记录「具体是哪几帧」。前者一个版本一行，无法表达 N 帧。
+ */
+export const assetVideoKeyframes = pgTable(
+  'asset_video_keyframes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    algorithmVersion: text('algorithm_version').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    timestampSeconds: doublePrecision('timestamp_seconds').notNull(),
+    storageKey: text('storage_key').notNull(),
+    checksum: text('checksum').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    mimeType: text('mime_type').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_video_keyframes_version_algorithm_ordinal_unique').on(
+      table.assetVersionId,
+      table.algorithmVersion,
+      table.ordinal,
+    ),
+    check('asset_video_keyframes_ordinal_check', sql`${table.ordinal} >= 1`),
+    check(
+      'asset_video_keyframes_timestamp_check',
+      sql`${table.timestampSeconds} >= 0`,
+    ),
+    check(
+      'asset_video_keyframes_size_check',
+      sql`${table.byteSize} > 0 and ${table.byteSize} <= 2097152`,
+    ),
+    check(
+      'asset_video_keyframes_hash_check',
+      sql`${table.checksum} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'asset_video_keyframes_storage_key_check',
+      sql`char_length(${table.storageKey}) between 1 and 1024 and ${table.storageKey} !~* '^https?://'`,
+    ),
+    check(
+      'asset_video_keyframes_shape_check',
+      sql`${table.algorithmVersion} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' and ${table.mimeType} = 'image/jpeg'`,
     ),
   ],
 );
@@ -1137,7 +1198,7 @@ export const assetProcessingJobs = pgTable(
     ),
     check(
       'asset_processing_jobs_kind_check',
-      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail', 'transcribe_audio')`,
+      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail', 'transcribe_audio', 'process_video')`,
     ),
     check(
       'asset_processing_jobs_status_check',
@@ -1199,7 +1260,7 @@ export const objectDeletionOutbox = pgTable(
     ),
     check(
       'object_deletion_outbox_source_check',
-      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'artifact_version', 'user_avatar')`,
+      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'asset_video_keyframe', 'artifact_version', 'user_avatar')`,
     ),
     check(
       'object_deletion_outbox_status_check',

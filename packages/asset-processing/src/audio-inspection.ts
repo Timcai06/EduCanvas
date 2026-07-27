@@ -1,4 +1,5 @@
 import { parseBuffer } from 'music-metadata';
+import { ISO_AUDIO_BRANDS, readIsoBaseMediaBrand } from './video-inspection';
 
 export const AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES = 25 * 1024 * 1024;
 export const AUDIO_TRANSCRIPTION_MAX_DURATION_SECONDS = 60 * 60;
@@ -94,7 +95,11 @@ export function detectSupportedAudioSource(
   if (bytesEqual(bytes, 0, [0x1a, 0x45, 0xdf, 0xa3])) {
     return { mimeType: 'audio/webm', extension: 'webm' };
   }
-  if (bytesEqual(bytes, 4, [0x66, 0x74, 0x79, 0x70])) {
+  /* ISO-BMFF 的 `ftyp` 同时出现在 M4A、MP4 和 MOV 里，只有主 brand 能区分。
+     早期实现把所有 ftyp 都当作 M4A，会让一段 MP4 视频被送进音频转录路径；
+     这里按 brand 收窄，未知 brand 一律不认领。 */
+  const brand = readIsoBaseMediaBrand(bytes);
+  if (brand !== null && ISO_AUDIO_BRANDS.has(brand)) {
     return { mimeType: 'audio/x-m4a', extension: 'm4a' };
   }
   return null;

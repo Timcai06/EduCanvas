@@ -37,6 +37,19 @@ export function assetFailureMessage(failureCode: string | null): string {
       return '音频时长超过60分钟';
     case 'invalid_response':
       return '转录服务返回了无法使用的结果';
+    case 'unsupported_video_type':
+      return '暂不支持这种视频格式';
+    case 'video_input_too_large':
+      return '视频文件超过处理上限';
+    case 'video_metadata_unavailable':
+    case 'video_probe_failed':
+      return '无法读取视频格式或媒体信息';
+    case 'video_duration_exceeded':
+      return '视频时长超过20分钟';
+    case 'video_resolution_exceeded':
+      return '视频分辨率超过1080p处理上限';
+    case 'video_toolchain_unavailable':
+      return '视频处理服务尚未配置';
     default:
       return '文件处理失败';
   }

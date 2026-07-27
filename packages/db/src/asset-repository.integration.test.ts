@@ -9,6 +9,7 @@ import {
   getDerivedAssetJobKind,
 } from './asset-derived-processing-repository';
 import { DrizzleAssetTranscriptionRepository } from './asset-transcription-repository';
+import { DrizzleAssetVideoRepository } from './asset-video-repository';
 import { AssetAccessError, DrizzleAssetRepository } from './asset-repository';
 import { DrizzleChatRepository } from './chat-repository';
 import * as schema from './schema';
@@ -75,6 +76,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     await getDatabase().execute(sql`
       truncate table
         object_deletion_outbox,
+        asset_video_keyframes,
         asset_processing_jobs,
         asset_representations,
         agent_message_parts,
@@ -408,6 +410,116 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         status: 'ready',
         derivedStorageKey: null,
         failureCode: null,
+      }),
+    ]);
+  });
+
+  it('视频部分成功推进当前版本，关键帧随Source删除进入Outbox', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const videoRepository = new DrizzleAssetVideoRepository(getDatabase());
+    const created = await repository.createUploadedPending({
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'video',
+      displayName: '课堂录像.mp4',
+      mimeType: 'video/mp4',
+      byteSize: 1_024,
+      contentHash: '7'.repeat(64),
+      storageKey: 'uploads/fixture/lesson.mp4',
+    });
+
+    await expect(
+      videoRepository.beginAttempt({ jobId: created.jobId }),
+    ).resolves.toMatchObject({
+      assetVersionId: created.versionId,
+      mimeType: 'video/mp4',
+      byteSize: 1_024,
+    });
+    await expect(
+      videoRepository.settleProcessed({
+        jobId: created.jobId,
+        outcome: {
+          durationSeconds: 120,
+          width: 1280,
+          height: 720,
+          transcription: {
+            status: 'ready',
+            text: '视频中的课堂讲解。',
+            metadata: {
+              provider: 'fixture',
+              resolvedModelId: 'transcription-v1',
+              latencyMs: 100,
+              traceId: `asset-video:${created.jobId}`,
+              language: 'zh',
+              durationSeconds: 120,
+            },
+          },
+          keyframes: {
+            status: 'ready',
+            algorithmVersion: 'fixture-v1',
+            frames: [
+              {
+                ordinal: 1,
+                timestampSeconds: 30,
+                storageKey: `assets/${created.versionId}/keyframes/frame.jpg`,
+                checksum: '6'.repeat(64),
+                byteSize: 256,
+              },
+            ],
+          },
+        },
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: {
+        kind: 'video',
+        status: 'ready',
+        currentVersionId: created.versionId,
+      },
+      processing: { status: 'succeeded' },
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.snapshot.descriptor.assetId,
+            versionId: created.versionId,
+            kind: 'video',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        transcriptionText: '视频中的课堂讲解。',
+      }),
+    ]);
+
+    await repository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.snapshot.descriptor.assetId,
+    });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.objectDeletionOutbox)
+        .where(
+          sql`${schema.objectDeletionOutbox.sourceType} = 'asset_video_keyframe'`,
+        ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        storageKey: `assets/${created.versionId}/keyframes/frame.jpg`,
+        status: 'pending',
       }),
     ]);
   });

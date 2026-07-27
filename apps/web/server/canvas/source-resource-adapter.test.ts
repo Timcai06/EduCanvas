@@ -61,6 +61,8 @@ describe('Source CanvasResource adapter', () => {
     ['audio/webm', 'audio', 'source.audio'],
     ['audio/mp4', 'audio', 'source.audio'],
     ['audio/x-m4a', 'audio', 'source.audio'],
+    ['video/mp4', 'video', 'source.video'],
+    ['video/quicktime', 'video', 'source.video'],
   ] as const)('maps supported MIME %s', (mimeType, kind, rendererId) => {
     const resource = projectOwnedSourceResource({
       ...readySource,

@@ -66,17 +66,20 @@ Renderer Manifest只声明Renderer ID/版本、表示类型、信任层、Runtim
   Notebook成员资格在整页范围内只解析一次；无法投影的历史资产（未知MIME）该字段为
   `null`而不使整页失败，客户端必须把`null`当作「只读、无动作」，不得自行推断可删除或可下载。
   单资源端点仍以`renderer_not_found`显式拒绝，两处语义差异是有意的；
-- `POST /api/v1/chat/assets`对可抽取文本和音频类型返回**已受理而非已就绪**的资产：
+- `POST /api/v1/chat/assets`对可抽取文本、音频和视频类型返回**已受理而非已就绪**的资产：
   `status=processing`、`currentVersionId=null`，解析由 worker 异步完成
   （[ADR-0010](../09-decisions/0010-资产解析异步化与解析器归位.md)）。
   内容类问题（扫描件、编码错误）不再是上传响应的4xx，而是解析任务的终态，
   客户端应轮询列表直到 `ready` 或 `failed`。音频首批支持MP3、WAV、Ogg、FLAC、
   WebM和M4A，必须通过服务端容器与元数据验证，最大25 MiB、最长60分钟；
   `audio_duration_exceeded`与`audio_metadata_unavailable`是稳定公开错误码。
+  视频首批只支持经brand识别的MP4/QuickTime，最大50 MiB、最长20分钟且像素总量
+  不超过1920×1080；时长和分辨率由Worker的ffprobe复核，不采信浏览器声明；
   图片等无需抽取的类型仍一次性返回 `ready`；
 - `GET /api/v1/chat/assets/{assetId}/preview`继续返回`preview`，并在完成当前主体与
   Notebook归属校验后附加`canvasResource`。当前支持PDF、PNG/JPEG/WebP、Markdown、
-  TXT、DOCX和已就绪音频；音频预览只暴露同源鉴权文件URL、转录文本、语言和本地校验时长。
+  TXT、DOCX和已就绪音频/视频；媒体预览只暴露同源鉴权文件URL、转录文本、语言、
+  本地校验时长和受限派生状态，不暴露对象键、路径或Provider响应。
   未知MIME由Adapter以`renderer_not_found`拒绝，不生成假预览；
 - `GET /api/v1/chat/artifacts/{artifactId}`继续返回`artifact/version/versions/latestJob`，
   并附加`canvasResource`。`latestVersion=0`且任务仍在处理时`version=null`；
@@ -131,6 +134,9 @@ Artifact 生命周期事件已以 additive 方式定义（`schemaVersion=1`，�
 - `GET /api/v1/chat/artifacts/{artifactId}/audio`：按主体重新校验版本归属，完整
   SHA-256校验后返回`audio/mpeg`，支持单段HTTP Range；对象缺失、损坏与越权均
   不泄露私有key。
+- `GET /api/v1/chat/artifacts/{artifactId}/image`：只读取当前Conversation所属
+  Notebook内的`generated_image`版本，完整SHA-256和字节数校验后返回白名单位图；
+  Prompt、Provider body、objectKey、checksum与堆栈不进入详情或字节响应。
 
 SSE `artifact.*` 事件保留为additive协议；当前生成进度经上述端点轮询，刷新
 后以列表/详情恢复，不依赖浏览器保持连接。

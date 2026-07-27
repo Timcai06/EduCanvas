@@ -60,7 +60,7 @@ describe('asset upload HTTP boundary', () => {
         method: 'POST',
         headers: {
           'content-type': 'multipart/form-data; boundary=test',
-          'content-length': String(26 * 1024 * 1024),
+          'content-length': String(51 * 1024 * 1024),
         },
         body,
         duplex: 'half',
@@ -75,7 +75,7 @@ describe('asset upload HTTP boundary', () => {
   });
 
   it('stops a chunked multipart body after the bounded limit', async () => {
-    const oversizedChunk = new Uint8Array(26 * 1024 * 1024);
+    const oversizedChunk = new Uint8Array(51 * 1024 * 1024);
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -128,7 +128,7 @@ describe('asset upload HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'file_too_large',
-        message: '文档和图片不能超过10MB，音频不能超过25MB。',
+        message: '文档和图片不能超过10MB，音频不能超过25MB，视频不能超过50MB。',
       },
     });
   });

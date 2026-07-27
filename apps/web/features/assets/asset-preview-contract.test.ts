@@ -56,5 +56,23 @@ describe('assetPreviewSchema', () => {
         },
       }).success,
     ).toBe(false);
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'video',
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+        transcription: {
+          text: '视频课堂转录',
+          language: 'zh',
+          durationSeconds: 120,
+        },
+        derivatives: {
+          transcription: 'ready',
+          keyframes: 'failed',
+        },
+      }).success,
+    ).toBe(true);
   });
 });

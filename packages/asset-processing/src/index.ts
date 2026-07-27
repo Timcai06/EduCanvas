@@ -30,6 +30,39 @@ export {
 } from './thumbnail-generation';
 
 export {
+  ISO_AUDIO_BRANDS,
+  VIDEO_SOURCE_MAX_DURATION_SECONDS,
+  VIDEO_SOURCE_MAX_INPUT_BYTES,
+  VIDEO_SOURCE_MAX_PIXELS,
+  VideoInspectionError,
+  assertVideoProcessingBudget,
+  assertVideoUploadBudget,
+  detectSupportedVideoSource,
+  readIsoBaseMediaBrand,
+  supportedVideoSourceMimeTypes,
+  videoInspectionFailureCodes,
+  type DetectedVideoSource,
+  type SupportedVideoSourceMimeType,
+  type VideoInspectionFailureCode,
+} from './video-inspection';
+
+export {
+  VIDEO_KEYFRAME_ALGORITHM_VERSION,
+  VIDEO_KEYFRAME_COUNT,
+  VideoProcessingError,
+  extractVideoAudioTrack,
+  extractVideoKeyframes,
+  probeVideoFile,
+  resolveVideoToolchain,
+  videoProcessingFailureCodes,
+  withVideoWorkspace,
+  type VideoKeyframe,
+  type VideoMetadata,
+  type VideoProcessingFailureCode,
+  type VideoToolchain,
+} from './video-processing';
+
+export {
   AUDIO_TRANSCRIPTION_MAX_DURATION_SECONDS,
   AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
   AudioInspectionError,

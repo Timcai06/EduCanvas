@@ -10,6 +10,7 @@ import {
 import {
   AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
   AudioInspectionError,
+  VIDEO_SOURCE_MAX_INPUT_BYTES,
   inspectSupportedAudioSource,
   supportsTextExtraction,
 } from '@educanvas/asset-processing';
@@ -30,6 +31,12 @@ import { detectAssetFile } from './asset-file-detection';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** 音频转录需要更多空间（Whisper API 限制 25MB） */
 export const MAX_AUDIO_UPLOAD_BYTES = AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES;
+/**
+ * 视频上限与 `asset_versions_size_check` 的库级字节上限同值：上传层放行超过它的
+ * 文件只会在落库时撞上约束，那是更晚也更难解释的失败。时长与分辨率无法从字节数
+ * 判断，必须等 Worker 用 ffprobe 判定（ADR-0016）。
+ */
+export const MAX_VIDEO_UPLOAD_BYTES = VIDEO_SOURCE_MAX_INPUT_BYTES;
 const MAX_EXTRACTED_TEXT = 120_000;
 
 const assets = new DrizzleAssetRepository();
@@ -41,6 +48,7 @@ export class AssetUploadError extends Error {
       | 'unsupported_file_type'
       | 'file_too_large'
       | 'audio_too_large'
+      | 'video_too_large'
       | 'audio_duration_exceeded'
       | 'audio_metadata_unavailable'
       | 'session_not_found'
@@ -81,33 +89,42 @@ export async function uploadOwnedAssetToSpace(input: {
   file: File;
   scope: 'turn' | 'space';
 }): Promise<AssetSnapshot> {
+  /* 读入字节前先按全局最大值粗筛，避免把超大文件读进内存再拒绝；
+     按类型的精确上限在识别出格式之后再判一次。 */
+  const absoluteMaxBytes = Math.max(
+    MAX_AUDIO_UPLOAD_BYTES,
+    MAX_VIDEO_UPLOAD_BYTES,
+  );
   if (
     !Number.isSafeInteger(input.file.size) ||
     input.file.size <= 0 ||
-    input.file.size > MAX_AUDIO_UPLOAD_BYTES
+    input.file.size > absoluteMaxBytes
   ) {
     throw new AssetUploadError(
-      input.file.size > MAX_AUDIO_UPLOAD_BYTES
-        ? 'file_too_large'
-        : 'invalid_upload',
-      input.file.size > MAX_AUDIO_UPLOAD_BYTES ? 413 : 400,
+      input.file.size > absoluteMaxBytes ? 'file_too_large' : 'invalid_upload',
+      input.file.size > absoluteMaxBytes ? 413 : 400,
     );
   }
   const bytes = new Uint8Array(await input.file.arrayBuffer());
   const detected = detectAssetFile(bytes, input.file.name);
   if (!detected) throw new AssetUploadError('unsupported_file_type', 415);
 
-  /* 音频文件使用独立的大小上限（Whisper API 25MB 限制），其他文件 10MB。 */
+  /* 音频用 Whisper 的 25MB 上限，视频用平台自己的 50MB 上限（也是
+     asset_versions 的库级字节上限），其他文件 10MB。 */
   const maxBytes =
-    detected.kind === 'audio' ? MAX_AUDIO_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+    detected.kind === 'audio'
+      ? MAX_AUDIO_UPLOAD_BYTES
+      : detected.kind === 'video'
+        ? MAX_VIDEO_UPLOAD_BYTES
+        : MAX_UPLOAD_BYTES;
   if (input.file.size > maxBytes) {
     throw new AssetUploadError(
-      input.file.size > maxBytes
-        ? detected.kind === 'audio'
-          ? 'audio_too_large'
-          : 'file_too_large'
-        : 'invalid_upload',
-      input.file.size > maxBytes ? 413 : 400,
+      detected.kind === 'audio'
+        ? 'audio_too_large'
+        : detected.kind === 'video'
+          ? 'video_too_large'
+          : 'file_too_large',
+      413,
     );
   }
   if (detected.kind === 'audio') {
@@ -158,7 +175,8 @@ export async function uploadOwnedAssetToSpace(input: {
      */
     if (
       supportsTextExtraction(detected.mimeType) ||
-      detected.kind === 'audio'
+      detected.kind === 'audio' ||
+      detected.kind === 'video'
     ) {
       return (await assets.createUploadedPending(common)).snapshot;
     }

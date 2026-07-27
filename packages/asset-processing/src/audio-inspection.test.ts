@@ -25,11 +25,25 @@ describe('audio source inspection', () => {
     [[0x4f, 0x67, 0x67, 0x53], 'audio/ogg'],
     [[0x66, 0x4c, 0x61, 0x43], 'audio/flac'],
     [[0x1a, 0x45, 0xdf, 0xa3], 'audio/webm'],
-    [[0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70], 'audio/x-m4a'],
+    /* `ftyp` 必须带音频主 brand（`M4A `）才被认领；裸 ftyp 与视频 brand
+       都属于其他容器，见 video-inspection.ts。 */
+    [
+      [0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20],
+      'audio/x-m4a',
+    ],
   ] as const)('detects %s as %s from magic bytes', (bytes, mimeType) => {
     expect(detectSupportedAudioSource(new Uint8Array(bytes))).toMatchObject({
       mimeType,
     });
+  });
+
+  it('不认领缺少音频 brand 的 ISO-BMFF 容器', () => {
+    /* 裸 ftyp 曾被当作 M4A，会让 MP4 视频误入音频转录路径。 */
+    expect(
+      detectSupportedAudioSource(
+        new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]),
+      ),
+    ).toBeNull();
   });
 
   it('does not accept a renamed arbitrary file', () => {

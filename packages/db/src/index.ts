@@ -32,6 +32,14 @@ export {
   type AudioTranscriptionMetadata,
   type AudioTranscriptionOutcome,
 } from './asset-transcription-repository';
+export {
+  ASSET_PROCESS_VIDEO_TASK,
+  DrizzleAssetVideoRepository,
+  type VideoKeyframeRecord,
+  type VideoProcessingAttempt,
+  type VideoProcessingOutcome,
+  type VideoTranscriptionMetadata,
+} from './asset-video-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
   DrizzlePlatformConversationRepository,

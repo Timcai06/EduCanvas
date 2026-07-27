@@ -56,7 +56,10 @@ describe('detectAssetFile', () => {
     [[0x4f, 0x67, 0x67, 0x53], 'audio/ogg'],
     [[0x66, 0x4c, 0x61, 0x43], 'audio/flac'],
     [[0x1a, 0x45, 0xdf, 0xa3], 'audio/webm'],
-    [[0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70], 'audio/x-m4a'],
+    [
+      [0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20],
+      'audio/x-m4a',
+    ],
   ] as const)('recognizes audio magic bytes for %s', (bytes, mimeType) => {
     expect(detectAssetFile(new Uint8Array(bytes), 'renamed.bin')).toMatchObject(
       {
@@ -71,6 +74,32 @@ describe('detectAssetFile', () => {
       detectAssetFile(
         new TextEncoder().encode('not an audio container'),
         'renamed.mp3',
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      [0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
+      'video/mp4',
+    ],
+    [
+      [0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20],
+      'video/quicktime',
+    ],
+  ] as const)('recognizes video magic bytes for %s', (bytes, mimeType) => {
+    /* MP4/MOV 与 M4A 共用 ftyp，只有主 brand 能区分；视频判定必须先于音频，
+       否则一段视频会被误收进音频转录路径。 */
+    expect(detectAssetFile(new Uint8Array(bytes), 'renamed.bin')).toMatchObject(
+      { kind: 'video', mimeType },
+    );
+  });
+
+  it('does not claim an ISO container without a known brand', () => {
+    expect(
+      detectAssetFile(
+        new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]),
+        'renamed.mp4',
       ),
     ).toBeNull();
   });

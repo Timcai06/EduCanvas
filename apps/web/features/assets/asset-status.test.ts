@@ -60,6 +60,12 @@ describe('来源处理状态文案', () => {
     expect(assetFailureMessage('audio_metadata_unavailable')).toBe(
       '无法读取音频格式或时长',
     );
+    expect(assetFailureMessage('video_duration_exceeded')).toBe(
+      '视频时长超过20分钟',
+    );
+    expect(assetFailureMessage('video_toolchain_unavailable')).toBe(
+      '视频处理服务尚未配置',
+    );
   });
 
   it('长时间处理中给出明确提示', () => {

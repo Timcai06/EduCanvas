@@ -81,6 +81,18 @@ const SOURCE_RENDERERS = {
     rendererId: 'source.audio',
     downloadable: true,
   },
+  /* 视频只作为来源展示：抽帧预览与音轨转录都是派生物，通过各自的受控读取面
+     获取，`objectKey` 与临时路径永远不进入资源投影（ADR-0016）。 */
+  'video/mp4': {
+    representation: 'video',
+    rendererId: 'source.video',
+    downloadable: true,
+  },
+  'video/quicktime': {
+    representation: 'video',
+    rendererId: 'source.video',
+    downloadable: true,
+  },
 } as const satisfies Record<
   string,
   {

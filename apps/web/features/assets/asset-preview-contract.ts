@@ -81,6 +81,39 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
         .optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('video'),
+      fileName: fileNameSchema,
+      mimeType: z.enum(['video/mp4', 'video/quicktime']),
+      fileUrl: fileUrlSchema,
+      transcription: z
+        .object({
+          text: z.string().max(500_000),
+          language: z.string().max(64).nullable().optional(),
+          durationSeconds: z
+            .number()
+            .finite()
+            .positive()
+            .max(3_600)
+            .nullable()
+            .optional(),
+        })
+        .nullable()
+        .optional(),
+      derivatives: z
+        .object({
+          transcription: z.enum([
+            'processing',
+            'ready',
+            'failed',
+            'unavailable',
+          ]),
+          keyframes: z.enum(['processing', 'ready', 'failed', 'unavailable']),
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 
 export type AssetPreview = z.infer<typeof assetPreviewSchema>;
