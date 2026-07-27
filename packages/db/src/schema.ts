@@ -47,6 +47,11 @@ const vector = (name: string, dimensions: number) =>
 
 // 阶段一模块化单体的现行表集。它同时包含通用 Agent/Asset/RAG 账本和 K12 纵切，
 // 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/data-design.md。
+//
+// 索引命名 `*_fk_idx` 专指「为外键强制查询兜底」的索引，不服务任何业务读取。
+// 父行删除时 PostgreSQL 会对每条被删行在子表上做等值探测；缺索引时该探测退化为
+// 顺序扫描，并在删除期间放大锁窗口。这类索引只在父表确实存在生产删除路径时才
+// 添加——判定依据与 EXPLAIN 证据见 docs/04-data/fk-index-audit.md。
 
 /** 正式平台主体；匿名兼容主体也使用服务端派生 ID，不保存原始 bearer。 */
 export const platformUsers = pgTable(
@@ -261,6 +266,7 @@ export const delegatedGrants = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
+    index('delegated_grants_notebook_fk_idx').on(table.notebookId),
     index('delegated_grants_grantee_active_idx').on(
       table.granteeUserId,
       table.expiresAt,
@@ -349,6 +355,12 @@ export const gatewayChannelThreadBindings = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
+    index('gateway_channel_thread_bindings_conversation_fk_idx').on(
+      table.conversationId,
+    ),
+    index('gateway_channel_thread_bindings_notebook_fk_idx').on(
+      table.notebookId,
+    ),
     uniqueIndex('gateway_channel_thread_external_unique').on(
       table.accountBindingId,
       table.externalThreadId,
@@ -386,6 +398,9 @@ export const gatewayHandoffTokens = pgTable(
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
   },
   (table) => [
+    index('gateway_handoff_tokens_conversation_fk_idx').on(
+      table.conversationId,
+    ),
     uniqueIndex('gateway_handoff_tokens_digest_unique').on(table.tokenDigest),
     index('gateway_handoff_tokens_user_expiry_idx').on(
       table.userId,
@@ -467,6 +482,7 @@ export const gatewayNodeInvocations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('gateway_node_invocations_operation_fk_idx').on(table.operationId),
     foreignKey({
       columns: [table.nodeId],
       foreignColumns: [gatewayNodePairings.nodeId],
@@ -580,6 +596,7 @@ export const agentOperations = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
+    index('agent_operations_notebook_fk_idx').on(table.notebookId),
     uniqueIndex('agent_operations_actor_conversation_idempotency_unique').on(
       table.conversationId,
       sql`coalesce(${table.actorUserId}, '')`,
@@ -641,10 +658,8 @@ export const gatewayOperationEvents = pgTable(
       table.operationId,
       table.sequence,
     ),
-    index('gateway_operation_events_resume_idx').on(
-      table.operationId,
-      table.sequence,
-    ),
+    /* 恢复读取直接复用 gateway_operation_events_sequence_unique：它的列与顺序
+       完全相同，再建一条非唯一副本只增加写放大，不改变任何查询计划。 */
     check(
       'gateway_operation_events_sequence_check',
       sql`${table.sequence} >= 0`,
@@ -680,6 +695,7 @@ export const gatewayApprovals = pgTable(
     reason: text('reason'),
   },
   (table) => [
+    index('gateway_approvals_operation_fk_idx').on(table.operationId),
     index('gateway_approvals_actor_status_idx').on(
       table.actorUserId,
       table.status,
@@ -829,6 +845,7 @@ export const lessonSessions = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('lesson_sessions_conversation_fk_idx').on(table.conversationId),
     uniqueIndex('lesson_sessions_active_scope_unique')
       .on(
         table.studentId,
@@ -891,6 +908,7 @@ export const assets = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('assets_current_version_fk_idx').on(table.currentVersionId),
     index('assets_owner_space_status_idx').on(
       table.ownerSubjectId,
       table.spaceId,
@@ -1017,6 +1035,7 @@ export const notebookAssetBindings = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('notebook_asset_bindings_asset_fk_idx').on(table.assetId),
     uniqueIndex('notebook_asset_bindings_subject_mutation_unique').on(
       table.subjectId,
       table.mutationId,
@@ -1026,11 +1045,8 @@ export const notebookAssetBindings = pgTable(
       table.assetId,
       table.sequence,
     ),
-    index('notebook_asset_bindings_latest_idx').on(
-      table.subjectId,
-      table.assetId,
-      table.sequence,
-    ),
+    /* 最新绑定读取复用 notebook_asset_bindings_subject_asset_sequence_unique：
+       列与顺序完全相同，重复索引只增加写放大。 */
     check(
       'notebook_asset_bindings_sequence_check',
       sql`${table.sequence} >= 1`,
@@ -1266,6 +1282,9 @@ export const conversationMessageCitations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('conversation_message_citations_source_fk_idx').on(
+      table.operationSourceId,
+    ),
     foreignKey({
       columns: [table.assistantMessageId],
       foreignColumns: [conversationMessages.id],
@@ -1280,9 +1299,8 @@ export const conversationMessageCitations = pgTable(
       table.assistantMessageId,
       table.operationSourceId,
     ),
-    index('conversation_message_citations_message_idx').on(
-      table.assistantMessageId,
-    ),
+    /* 按消息读取引用复用 conversation_message_citations_message_source_unique：
+       assistant_message_id 是它的左前缀，单列副本没有额外读取价值。 */
   ],
 );
 
@@ -1385,6 +1403,7 @@ export const agentMessageParts = pgTable(
     artifactKind: text('artifact_kind'),
   },
   (table) => [
+    index('agent_message_parts_asset_fk_idx').on(table.assetId),
     primaryKey({ columns: [table.messageId, table.partIndex] }),
     index('agent_message_parts_asset_version_idx').on(table.assetVersionId),
     check(
@@ -1433,6 +1452,7 @@ export const turnContextSnapshots = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('turn_context_snapshots_operation_fk_idx').on(table.agentOperationId),
     uniqueIndex('turn_context_snapshots_session_turn_unique').on(
       table.sessionId,
       table.turnId,
@@ -1514,6 +1534,10 @@ export const modelRuns = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('model_runs_assistant_message_fk_idx').on(table.assistantMessageId),
+    index('model_runs_conversation_message_fk_idx').on(
+      table.conversationMessageId,
+    ),
     uniqueIndex('model_runs_operation_phase_attempt_unique').on(
       table.operationKind,
       table.operationId,
@@ -1719,6 +1743,7 @@ export const toolApprovalIntents = pgTable(
     abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
   },
   (table) => [
+    index('tool_approval_intents_operation_fk_idx').on(table.operationId),
     uniqueIndex('tool_approval_intents_tool_call_unique').on(table.toolCallId),
     uniqueIndex('tool_approval_intents_adapter_resume_unique').on(
       table.adapterSource,
@@ -2235,11 +2260,8 @@ export const sessionSourceBindings = pgTable(
       table.sourceId,
       table.sequence,
     ),
-    index('session_source_bindings_latest_idx').on(
-      table.sessionId,
-      table.sourceId,
-      table.sequence,
-    ),
+    /* 最新绑定读取复用 session_source_bindings_session_source_sequence_unique：
+       列与顺序完全相同，重复索引只增加写放大。 */
     check(
       'session_source_bindings_sequence_check',
       sql`${table.sequence} >= 1`,
@@ -2342,6 +2364,7 @@ export const retrievalCandidates = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('retrieval_candidates_snapshot_fk_idx').on(table.turnSourceVersionId),
     uniqueIndex('retrieval_candidates_query_rank_unique').on(
       table.turnId,
       table.queryHash,
@@ -2408,6 +2431,7 @@ export const messageCitations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('message_citations_candidate_fk_idx').on(table.retrievalCandidateId),
     uniqueIndex('message_citations_message_ordinal_unique').on(
       table.assistantMessageId,
       table.ordinal,
@@ -2456,6 +2480,9 @@ export const canvasArtifacts = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('canvas_artifacts_platform_artifact_fk_idx').on(
+      table.platformArtifactId,
+    ),
     uniqueIndex('canvas_artifacts_session_artifact_unique').on(
       table.sessionId,
       table.artifactId,
@@ -2666,6 +2693,7 @@ export const artifactGenerationJobs = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
+    index('artifact_generation_jobs_operation_fk_idx').on(table.operationId),
     index('artifact_generation_jobs_artifact_created_idx').on(
       table.artifactId,
       table.createdAt,
@@ -2737,6 +2765,9 @@ export const artifactVersions = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('artifact_versions_created_by_operation_fk_idx').on(
+      table.createdByOperationId,
+    ),
     uniqueIndex('artifact_versions_artifact_version_unique').on(
       table.artifactId,
       table.version,

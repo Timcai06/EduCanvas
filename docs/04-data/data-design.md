@@ -233,6 +233,8 @@ provider_file
 
 匿名保留任务以`lesson_sessions.last_activity_at`与`conversations.last_activity_at`的主体级最大值共同判定；general-only主体也进入候选扫描。通用Citation/Source/Artifact/Message/Operation/Conversation/Space与K12账本、Asset均在同一可回滚逐表删除闭包中，任一表失败则整个主体不产生部分删除。
 
+删除闭包的性能与关系语义由[外键删除策略与索引审计](fk-index-audit.md)约束：只有确实存在生产删除路径的父表才为其外键补支撑索引，审计事实类关系不因方便而cascade。该审计的两条判定由`packages/db/src/fk-index-audit.integration.test.ts`固化，新增外键或删除路径时会自动复核。
+
 ## K12可信学习事实
 
 `learning_events`是事实源，`mastery_states`是投影。Canvas客户端事件、模型文字、工具原始输出都不能直接写入掌握度。

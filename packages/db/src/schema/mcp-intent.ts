@@ -54,6 +54,7 @@ export const mcpToolIntents = pgTable(
   },
   (table) => [
     uniqueIndex('mcp_tool_intents_tool_call_unique').on(table.toolCallId),
+    index('mcp_tool_intents_operation_fk_idx').on(table.operationId),
     index('mcp_tool_intents_status_expiry_idx').on(
       table.status,
       table.expiresAt,
