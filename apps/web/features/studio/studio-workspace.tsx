@@ -3,6 +3,7 @@
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useMemo, useRef, useState } from 'react';
+import GradualBlur from '@/components/GradualBlur';
 import OptionWheel from '@/components/OptionWheel';
 import { GENERATED_SOFT_CLICK } from '@/components/option-wheel-sound';
 import type { AssetItem } from '@/features/assets/assets-drawer';
@@ -181,7 +182,28 @@ export function StudioWorkspace({
   };
 
   return (
-    <div ref={rootRef} className="studio-cascade">
+    <div
+      ref={rootRef}
+      className={`studio-cascade${route ? ' studio-cascade--expanded' : ''}`}
+    >
+      {route ? (
+        <GradualBlur
+          target="parent"
+          position="right"
+          width="52rem"
+          strength={2.6}
+          divCount={8}
+          curve="bezier"
+          exponential
+          opacity={0.94}
+          zIndex={0}
+          responsive
+          mobileWidth="100%"
+          tabletWidth="44rem"
+          desktopWidth="52rem"
+          className="studio-cascade__gradual-blur"
+        />
+      ) : null}
       {centeredAsset ? (
         <div className="studio-cascade__actions">
           <StudioSourceActions
@@ -207,7 +229,7 @@ export function StudioWorkspace({
             onChange={(_index, item) => setCenteredId(item.id)}
             onSelect={(_index, item) => selectSecondary(item.id)}
             textColor="var(--color-ink-faint)"
-            activeColor="var(--color-ink)"
+            activeColor="var(--color-accent)"
             side="right"
             fontSize={2.05}
             spacing={1.5}
@@ -236,8 +258,8 @@ export function StudioWorkspace({
           items={ROOT_ITEMS}
           defaultSelected={0}
           onSelect={(index) => selectRoot(index)}
-          textColor="var(--color-ink-muted)"
-          activeColor="var(--color-ink)"
+          textColor="var(--color-ink-faint)"
+          activeColor="var(--color-accent)"
           side="right"
           fontSize={2.75}
           spacing={1.55}
