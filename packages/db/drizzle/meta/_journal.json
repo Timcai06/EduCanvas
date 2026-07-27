@@ -309,6 +309,13 @@
       "when": 1785139392089,
       "tag": "0043_audio_transcription_pipeline",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1785142500545,
+      "tag": "0044_pgvector_hybrid_retrieval",
+      "breakpoints": true
     }
   ]
 }

@@ -37,3 +37,8 @@ export {
   OpenAICompatibleImageGenerationModelGateway,
   type OpenAICompatibleImageGenerationModelGatewayOptions,
 } from './openai-compatible-image-generation-model-gateway';
+export {
+  EMBEDDING_INSTRUCTION_VERSION,
+  OpenAICompatibleEmbeddingModelGateway,
+  type OpenAICompatibleEmbeddingModelGatewayOptions,
+} from './openai-compatible-embedding-model-gateway';

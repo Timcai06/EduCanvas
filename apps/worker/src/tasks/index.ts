@@ -8,6 +8,10 @@ import {
 } from '@educanvas/db';
 import type { ContinuationTracePort } from '@educanvas/telemetry';
 import type { TaskList } from 'graphile-worker';
+import {
+  embedKnowledgeDocument,
+  KNOWLEDGE_EMBED_DOCUMENT_TASK,
+} from './embed-knowledge-document.js';
 import { generateArtifact } from './generate-artifact.js';
 import { ingestKnowledgeDocument } from './ingest-knowledge-document.js';
 import { purgeAnonymousSubjects } from './purge-anonymous-subjects.js';
@@ -39,6 +43,7 @@ export function createTaskList(input: {
       input.continuationTrace,
     ),
     'knowledge:ingest_document': ingestKnowledgeDocument,
+    [KNOWLEDGE_EMBED_DOCUMENT_TASK]: embedKnowledgeDocument,
     'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
     'maintenance:delete_object_outbox': deleteObjectOutbox,
     'maintenance:recover_operation_continuations':

@@ -345,6 +345,23 @@ export {
   type TurnSourceVersionSnapshot,
 } from './knowledge-retrieval-repository';
 export {
+  DrizzleKnowledgeHybridRetrieval,
+  HYBRID_LEXICAL_FALLBACK_VERSION,
+  HYBRID_RETRIEVER,
+  HYBRID_RETRIEVER_VERSION,
+  LEXICAL_RETRIEVER,
+  type EmbeddingIdentity,
+  type HybridRetrievalResult,
+} from './knowledge-hybrid-retrieval';
+export {
+  DrizzleKnowledgeEmbeddingRepository,
+  KnowledgeEmbeddingRunNotFoundError,
+  MAX_EMBEDDING_WRITE_BATCH,
+  type KnowledgeEmbeddingRunSnapshot,
+  type KnowledgeEmbeddingRunStatus,
+  type PendingEmbeddingChunk,
+} from './knowledge-embedding-repository';
+export {
   NotebookAccessNotFoundError,
   requireNotebookAccess,
   resolveNotebookAccess,

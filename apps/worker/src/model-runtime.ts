@@ -1,11 +1,15 @@
 import type {
   AudioTranscriptionModelGateway,
+  EmbeddingModelGateway,
   ImageGenerationModelGateway,
   SpeechModelGateway,
   StructuredModelGateway,
 } from '@educanvas/agent-core';
+import type { EmbeddingIdentity } from '@educanvas/db';
 import {
+  EMBEDDING_INSTRUCTION_VERSION,
   OpenAICompatibleAudioTranscriptionModelGateway,
+  OpenAICompatibleEmbeddingModelGateway,
   OpenAICompatibleImageGenerationModelGateway,
   OpenAICompatibleSpeechModelGateway,
   OpenAICompatibleStructuredModelGateway,
@@ -40,6 +44,13 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
       process.env.MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS,
     MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES:
       process.env.MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES,
+    MODEL_GATEWAY_EMBEDDING_MODEL: process.env.MODEL_GATEWAY_EMBEDDING_MODEL,
+    MODEL_GATEWAY_EMBEDDING_MODEL_VERSION:
+      process.env.MODEL_GATEWAY_EMBEDDING_MODEL_VERSION,
+    MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS:
+      process.env.MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS,
+    MODEL_GATEWAY_EMBEDDING_MAX_BATCH:
+      process.env.MODEL_GATEWAY_EMBEDDING_MAX_BATCH,
     MODEL_GATEWAY_IMAGE_MODEL: process.env.MODEL_GATEWAY_IMAGE_MODEL,
     MODEL_GATEWAY_IMAGE_TIMEOUT_MS: process.env.MODEL_GATEWAY_IMAGE_TIMEOUT_MS,
     MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES:
@@ -98,4 +109,39 @@ export function resolveImageGenerationModelGateway(): ImageGenerationModelGatewa
     return null;
   }
   return new OpenAICompatibleImageGenerationModelGateway(configuration);
+}
+
+function embeddingConfiguration() {
+  const configuration = parseModelGatewayConfiguration(
+    readModelGatewayEnvironment(),
+  );
+  return configuration.enabled &&
+    configuration.provider === 'openai-compatible' &&
+    configuration.modelIds.embedding &&
+    configuration.embeddingModelVersion
+    ? configuration
+    : null;
+}
+
+export function resolveEmbeddingModelGateway(): EmbeddingModelGateway | null {
+  const configuration = embeddingConfiguration();
+  return configuration
+    ? new OpenAICompatibleEmbeddingModelGateway(configuration)
+    : null;
+}
+
+/**
+ * 当前部署的语料侧向量身份。
+ *
+ * 它必须与适配器实际使用的模型、版本和指令逐字一致：写入端和检索端各自推导
+ * 身份会在指令升级时悄悄错位，让新向量永远匹配不上查询。
+ */
+export function resolveEmbeddingRuntimeIdentity(): EmbeddingIdentity | null {
+  const configuration = embeddingConfiguration();
+  if (!configuration) return null;
+  return {
+    embeddingModel: configuration.modelIds.embedding!,
+    embeddingModelVersion: configuration.embeddingModelVersion!,
+    instruction: `passage:${EMBEDDING_INSTRUCTION_VERSION}`,
+  };
 }

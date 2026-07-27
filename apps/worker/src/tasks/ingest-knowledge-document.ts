@@ -4,6 +4,7 @@ import {
 } from '@educanvas/db';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
+import { KNOWLEDGE_EMBED_DOCUMENT_TASK } from './embed-knowledge-document.js';
 
 const sourceSchema = z
   .object({
@@ -78,7 +79,12 @@ interface KnowledgeSourceRepository {
   }>;
   ingestDocument(input: IngestKnowledgeDocumentInput): Promise<{
     replayed: boolean;
-    document: { id: string; version: number };
+    document: {
+      id: string;
+      version: number;
+      parserVersion: string;
+      parseStatus: string;
+    };
   }>;
 }
 
@@ -95,6 +101,22 @@ export function createIngestKnowledgeDocumentTask(
     helpers.logger.info(
       `课程资料摄取完成,source=${source.id},document=${result.document.id},version=${result.document.version},replayed=${result.replayed}`,
     );
+
+    /* 向量化是派生步骤：ready 文档才值得嵌入，且 job_key 按文档冻结，
+       重复摄取同一版本不会重复排队。摄取本身不因向量化失败而失败——
+       没有向量只是让混合检索退回纯 FTS。 */
+    if (result.document.parseStatus === 'ready') {
+      await helpers.addJob(
+        KNOWLEDGE_EMBED_DOCUMENT_TASK,
+        {
+          documentId: result.document.id,
+          chunkingVersion: result.document.parserVersion,
+        },
+        /* 单次最多处理 8×64 个 chunk；文档上限 10,000，因此 25 次足以覆盖
+           最大合法文档并仍给瞬时 Provider 错误留出退避空间。 */
+        { jobKey: `knowledge-embed:${result.document.id}`, maxAttempts: 25 },
+      );
+    }
   };
 }
 

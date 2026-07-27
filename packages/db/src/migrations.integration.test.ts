@@ -77,6 +77,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'lesson_sessions', 'chat_messages', 'model_runs', 'tool_calls',
             'turn_safety_decisions', 'knowledge_sources',
             'knowledge_documents', 'knowledge_chunks',
+            'knowledge_chunk_embeddings', 'knowledge_embedding_runs',
             'session_source_bindings', 'turn_source_snapshots', 'turn_source_versions',
             'retrieval_candidates', 'message_citations',
             'assets', 'asset_versions', 'agent_message_parts',
@@ -97,8 +98,10 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'conversations',
         'diagnostic_attempts',
         'diagnostic_responses',
+        'knowledge_chunk_embeddings',
         'knowledge_chunks',
         'knowledge_documents',
+        'knowledge_embedding_runs',
         'knowledge_sources',
         'learner_profiles',
         'learning_goals',
@@ -169,6 +172,130 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       `;
       expect(statusDefault[0]).toMatchObject({ is_nullable: 'NO' });
       expect(statusDefault[0]?.column_default).toContain('now()');
+    });
+  });
+
+  it('从0043升级时additive装入pgvector并保留既有FTS事实', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0044_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+      const sourceId = '44000000-0000-4000-8000-000000000001';
+      const documentId = '44000000-0000-4000-8000-000000000002';
+      const chunkId = '44000000-0000-4000-8000-000000000003';
+      await connection`
+        insert into knowledge_sources (
+          id, grade_band, course_slug, source_key, title, source_type
+        ) values (
+          ${sourceId}, 'middle_school', 'vector-migration-course',
+          'approved-source', '审核教材', 'pdf'
+        )
+      `;
+      await connection`
+        insert into knowledge_documents (
+          id, source_id, version, content_hash, object_key,
+          parser_version, parse_status, parsed_at
+        ) values (
+          ${documentId}, ${sourceId}, 1, ${'c'.repeat(64)},
+          'courses/vector-migration/document-v1.pdf', 'pdf-text-v1',
+          'ready', now()
+        )
+      `;
+      await connection`
+        insert into knowledge_chunks (
+          id, document_id, chunk_index, content_hash, content
+        ) values (
+          ${chunkId}, ${documentId}, 0, ${'d'.repeat(64)},
+          '反向 传播 更新 权重'
+        )
+      `;
+      expect(
+        await connection`
+          select extname from pg_extension where extname = 'vector'
+        `,
+      ).toHaveLength(0);
+
+      await applyMigrationFile(
+        connection,
+        '0044_pgvector_hybrid_retrieval.sql',
+      );
+
+      /* 升级是纯增量：既有 chunk 与 FTS 命中不受影响。 */
+      expect(
+        await connection`
+          select id from knowledge_chunks
+          where search_vector @@ websearch_to_tsquery('simple', '反向 传播')
+        `,
+      ).toEqual([{ id: chunkId }]);
+      expect(
+        await connection`
+          select extname from pg_extension where extname = 'vector'
+        `,
+      ).toHaveLength(1);
+      expect(
+        await connection`
+          select indexname from pg_indexes
+          where schemaname = 'public'
+            and indexname in (
+              'knowledge_chunks_fts_idx',
+              'knowledge_chunk_embeddings_hnsw_idx'
+            )
+          order by indexname
+        `,
+      ).toEqual([
+        { indexname: 'knowledge_chunk_embeddings_hnsw_idx' },
+        { indexname: 'knowledge_chunks_fts_idx' },
+      ]);
+
+      /* 重复应用保持幂等：扩展声明用 IF NOT EXISTS，表创建由迁移账本控制。 */
+      await connection.unsafe('CREATE EXTENSION IF NOT EXISTS vector');
+
+      const vectorLiteral = `[${new Array<number>(1536)
+        .fill(0)
+        .map((_value, index) => (index === 0 ? 1 : 0))
+        .join(',')}]`;
+      await connection`
+        insert into knowledge_chunk_embeddings (
+          chunk_id, document_id, embedding_model, embedding_model_version,
+          dimensions, instruction, chunking_version, chunk_content_hash,
+          embedding
+        ) values (
+          ${chunkId}, ${documentId}, 'embed-fixture', '2026-05-01',
+          1536, 'passage:v1', 'pdf-text-v1', ${'d'.repeat(64)},
+          ${vectorLiteral}::vector
+        )
+      `;
+      /* 维度不符会撞上库级约束，而不是被静默写入索引列。 */
+      await expect(
+        connection`
+          insert into knowledge_chunk_embeddings (
+            chunk_id, document_id, embedding_model, embedding_model_version,
+            dimensions, instruction, chunking_version, chunk_content_hash,
+            embedding
+          ) values (
+            ${chunkId}, ${documentId}, 'embed-fixture', '2026-06-01',
+            8, 'passage:v1', 'pdf-text-v1', ${'d'.repeat(64)},
+            ${vectorLiteral}::vector
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+
+      /* 向量是派生物：删除向量不影响 chunk，反向由 cascade 外键保证。
+         chunk 本身由既有不可变触发器保护，无法直接删除，因此这里断言的是
+         关系语义（复合外键 + cascade）而不是执行一次删除。 */
+      await connection`delete from knowledge_chunk_embeddings`;
+      expect(
+        await connection`select id from knowledge_chunks where id = ${chunkId}`,
+      ).toEqual([{ id: chunkId }]);
+      expect(
+        await connection<{ confdeltype: string }[]>`
+          select confdeltype from pg_constraint
+          where conname = 'knowledge_chunk_embeddings_chunk_document_fk'
+        `,
+      ).toEqual([{ confdeltype: 'c' }]);
     });
   });
 
