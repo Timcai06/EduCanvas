@@ -158,7 +158,7 @@ feat: 增加统一消息历史投影
 
 ---
 
-## Prompt 3：K12 消息向平台消息的受控双写与对账
+## Prompt 3：K12 消息向平台消息的受控双写与对账（已完成）
 
 ```text
 你是 EduCanvas 消息迁移纵切的资深全栈工程 Agent。
@@ -210,6 +210,35 @@ feat: 接入K12消息兼容双写
 ```
 
 审查重点：原子性、幂等、关闭开关兼容、状态映射和隐私。
+
+### Prompt 3 迁移计划状态
+
+**已完成：**
+
+- ✅ 双写在同一数据库事务内完成（beginTeachingMessages 和 settleAssistantMessage）
+- ✅ 使用 chat_messages.id 派生的确定性 UUID 作为 conversation_messages.id，保证幂等
+- ✅ 不复制 lease、cancelRequestedAt、heartbeat 等运行态字段
+- ✅ conversation_messages 只保存平台可见消息事实
+- ✅ parts 使用已验证的 AgentMessagePart 格式
+- ✅ 通过 EDUCANVAS_K12_CONVERSATION_DUAL_WRITE 控制新副本创建，默认关闭
+- ✅ 已存在副本不受后续开关变化影响，settle 始终按 K12 源事实收敛
+- ✅ 关闭时旧行为完全不变
+- ✅ 增加最多 500 条/页的 keyset parity 对账，统计 missing/mismatch
+- ✅ 跨 Conversation、派生 ID 冲突和事务单边成功均 fail closed
+
+**未完成（后续阶段）：**
+
+- ⏳ 回填历史消息（Prompt 5 或专门回填任务）
+- ⏳ 切读路径到 conversation_messages 优先（Prompt 6）
+- ⏳ 停止双写（当切读完成后）
+- ⏳ 旧表 chat_messages 退役（最终阶段）
+- ⏳ 如需反向 orphan 统计，先增加可逆显式映射；当前返回 null，不伪造 0
+
+**技术决策：**
+
+- 使用 UUID v8 形状的 SHA-256 派生 ID，而非内容哈希，保证幂等且不依赖内容稳定性
+- 存在已验证 Agent Operation 时保留 operation_id；旧教学 Turn 继续允许 null
+- 对账在 TypeScript 中计算预期 ID，内部比较正文与 Part，但响应只返回计数和稳定游标
 
 ---
 

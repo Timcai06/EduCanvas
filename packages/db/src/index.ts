@@ -364,3 +364,13 @@ export {
   type MessageHistoryStatus,
   type UnifiedMessageHistoryPort,
 } from './unified-message-history';
+export { isK12ConversationDualWriteEnabled } from './k12-conversation-dual-write';
+export {
+  deterministicConversationMessageId,
+  K12ConversationDualWriteInvariantError,
+} from './k12-conversation-message-identity';
+export {
+  auditK12Parity,
+  type K12ParityAuditCursor,
+  type ParityAuditResult,
+} from './k12-conversation-parity';

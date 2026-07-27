@@ -33,6 +33,10 @@ import {
   loadMessageParts,
   prepareStudentMessage,
 } from './message-parts';
+import {
+  dualWriteBeginMessages,
+  isK12ConversationDualWriteEnabled,
+} from './k12-conversation-dual-write';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -503,13 +507,26 @@ async function beginTeachingMessages(
   const student = insertedMessages.find(
     (message) => message.role === 'student',
   );
-  if (
-    !student ||
-    !insertedMessages.some((message) => message.role === 'assistant')
-  ) {
+  const assistant = insertedMessages.find(
+    (message) => message.role === 'assistant',
+  );
+  if (!student || !assistant) {
     throw new TurnLedgerInvariantError('学生或老师消息写入失败');
   }
   await insertMessageParts(transaction, student.id, prepared.parts);
+
+  // K12 消息双写到 conversation_messages（同一事务，幂等）
+  if (isK12ConversationDualWriteEnabled() && session.conversationId) {
+    await dualWriteBeginMessages({
+      transaction,
+      sessionId: input.sessionId,
+      conversationId: session.conversationId,
+      operationId: input.turnId ?? null,
+      studentChatMessageId: student.id,
+      assistantChatMessageId: assistant.id,
+    });
+  }
+
   await transaction
     .update(lessonSessions)
     .set({
