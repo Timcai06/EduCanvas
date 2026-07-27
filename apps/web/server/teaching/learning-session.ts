@@ -194,38 +194,40 @@ export async function loadLearningPageData(
       )
       .map((message) => [message.turnId, message.clientMessageId]),
   );
+  const assistantMessages = history.messages.filter(
+    (message) => message.role === 'assistant',
+  );
+  const citationMap = await knowledgeRetrieval.listOwnedMessageCitationsBatch({
+    trustedStudentId: identity.studentId,
+    sessionId: snapshot.sessionId,
+    messages: assistantMessages.map((message) => ({
+      turnId: message.turnId,
+      assistantMessageId: message.id,
+    })),
+  });
   const citationsByMessage = new Map(
-    await Promise.all(
-      history.messages
-        .filter((message) => message.role === 'assistant')
-        .map(async (message) => {
-          const citations = await knowledgeRetrieval.listOwnedMessageCitations({
-            trustedStudentId: identity.studentId,
-            sessionId: snapshot.sessionId,
-            turnId: message.turnId,
-            assistantMessageId: message.id,
-          });
-          return [
-            message.id,
-            citations.map((citation) => {
-              const pageLabel = citation.pageStart
-                ? citation.pageEnd && citation.pageEnd !== citation.pageStart
-                  ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
-                  : ` · 第${citation.pageStart}页`
-                : '';
-              return {
-                id: citation.id,
-                marker: citation.ordinal,
-                sourceId: citation.sourceId,
-                documentId: citation.documentId,
-                chunkId: citation.chunkId,
-                label: `${citation.sourceTitle}${pageLabel}`,
-                pageStart: citation.pageStart,
-                pageEnd: citation.pageEnd,
-              };
-            }),
-          ] as const;
-        }),
+    [...citationMap].map(
+      ([messageId, citations]) =>
+        [
+          messageId,
+          citations.map((citation) => {
+            const pageLabel = citation.pageStart
+              ? citation.pageEnd && citation.pageEnd !== citation.pageStart
+                ? ` · 第${citation.pageStart}-${citation.pageEnd}页`
+                : ` · 第${citation.pageStart}页`
+              : '';
+            return {
+              id: citation.id,
+              marker: citation.ordinal,
+              sourceId: citation.sourceId,
+              documentId: citation.documentId,
+              chunkId: citation.chunkId,
+              label: `${citation.sourceTitle}${pageLabel}`,
+              pageStart: citation.pageStart,
+              pageEnd: citation.pageEnd,
+            };
+          }),
+        ] as const,
     ),
   );
   return {

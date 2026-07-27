@@ -123,7 +123,12 @@ export class GatewayNodeSessionAuth {
     const [payload, suppliedSignature, extra] = token.split('.');
     if (!payload || !suppliedSignature || extra !== undefined) return null;
     const expected = signature(payload, this.secret);
-    const supplied = Buffer.from(suppliedSignature, 'base64url');
+    let supplied: Buffer;
+    try {
+      supplied = Buffer.from(suppliedSignature, 'base64url');
+    } catch {
+      return null;
+    }
     if (
       supplied.length !== expected.length ||
       !timingSafeEqual(supplied, expected)

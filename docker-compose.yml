@@ -3,9 +3,9 @@ services:
     image: pgvector/pgvector:pg16
     container_name: educanvas-db
     environment:
-      POSTGRES_USER: educanvas
-      POSTGRES_PASSWORD: educanvas
-      POSTGRES_DB: educanvas
+      POSTGRES_USER: ${POSTGRES_USER:-educanvas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-educanvas}
+      POSTGRES_DB: ${POSTGRES_DB:-educanvas}
     ports:
       - '5432:5432'
     volumes:

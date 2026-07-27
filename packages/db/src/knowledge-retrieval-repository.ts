@@ -727,6 +727,130 @@ export class DrizzleKnowledgeRetrievalRepository {
     });
   }
 
+  /** 一次查询批量加载多条 assistant 消息的引用，避免 N+1。 */
+  async listOwnedMessageCitationsBatch(input: {
+    trustedStudentId: string;
+    sessionId: string;
+    messages: readonly {
+      turnId: string;
+      assistantMessageId: string;
+    }[];
+  }): Promise<Map<string, readonly MessageCitationSnapshot[]>> {
+    if (input.messages.length === 0) return new Map();
+    return this.database.transaction(async (transaction) => {
+      const messageIds = input.messages.map((m) => m.assistantMessageId);
+      const [owned] = await transaction
+        .select({ count: sql<number>`count(*)` })
+        .from(chatMessages)
+        .innerJoin(
+          lessonSessions,
+          eq(lessonSessions.id, chatMessages.sessionId),
+        )
+        .where(
+          and(
+            inArray(chatMessages.id, messageIds),
+            eq(chatMessages.sessionId, input.sessionId),
+            eq(chatMessages.role, 'assistant'),
+            eq(lessonSessions.studentId, input.trustedStudentId),
+          ),
+        );
+      if ((owned?.count ?? 0) !== messageIds.length) {
+        throw new KnowledgeAccessError();
+      }
+      const rows = await transaction
+        .select({
+          id: messageCitations.id,
+          assistantMessageId: messageCitations.assistantMessageId,
+          candidateId: retrievalCandidates.id,
+          ordinal: messageCitations.ordinal,
+          sourceId: knowledgeSources.id,
+          sourceTitle: knowledgeSources.title,
+          sourceStatus: knowledgeSources.status,
+          documentId: knowledgeDocuments.id,
+          documentVersion: knowledgeDocuments.version,
+          documentContentHash: knowledgeDocuments.contentHash,
+          documentStatus: knowledgeDocuments.parseStatus,
+          chunkId: knowledgeChunks.id,
+          chunkContentHash: knowledgeChunks.contentHash,
+          text: knowledgeChunks.content,
+          heading: knowledgeChunks.heading,
+          pageStart: knowledgeChunks.pageStart,
+          pageEnd: knowledgeChunks.pageEnd,
+          createdAt: messageCitations.createdAt,
+        })
+        .from(messageCitations)
+        .innerJoin(
+          retrievalCandidates,
+          eq(retrievalCandidates.id, messageCitations.retrievalCandidateId),
+        )
+        .innerJoin(
+          turnSourceVersions,
+          eq(turnSourceVersions.id, retrievalCandidates.turnSourceVersionId),
+        )
+        .innerJoin(
+          knowledgeSources,
+          eq(knowledgeSources.id, turnSourceVersions.sourceId),
+        )
+        .innerJoin(
+          knowledgeDocuments,
+          eq(knowledgeDocuments.id, turnSourceVersions.documentId),
+        )
+        .innerJoin(
+          knowledgeChunks,
+          eq(knowledgeChunks.id, retrievalCandidates.chunkId),
+        )
+        .where(
+          and(
+            eq(messageCitations.sessionId, input.sessionId),
+            inArray(messageCitations.assistantMessageId, messageIds),
+          ),
+        )
+        .orderBy(
+          asc(messageCitations.assistantMessageId),
+          asc(messageCitations.ordinal),
+        );
+      const grouped = new Map<string, MessageCitationSnapshot[]>();
+      for (const row of rows) {
+        const availability: MessageCitationSnapshot['availability'] =
+          row.sourceStatus === 'tombstoned' ||
+          row.documentStatus === 'tombstoned'
+            ? 'tombstoned'
+            : row.documentStatus === 'superseded'
+              ? 'superseded'
+              : 'available';
+        const snapshot: MessageCitationSnapshot = {
+          id: row.id,
+          assistantMessageId: row.assistantMessageId,
+          candidateId: row.candidateId,
+          ordinal: row.ordinal,
+          sourceId: row.sourceId,
+          sourceTitle: row.sourceTitle,
+          documentId: row.documentId,
+          documentVersion: row.documentVersion,
+          documentContentHash: row.documentContentHash,
+          chunkId: row.chunkId,
+          chunkContentHash: row.chunkContentHash,
+          heading: row.heading,
+          pageStart: row.pageStart,
+          pageEnd: row.pageEnd,
+          availability,
+          text: availability === 'available' ? row.text : null,
+          createdAt: row.createdAt.toISOString(),
+        };
+        const list = grouped.get(row.assistantMessageId);
+        if (list) {
+          list.push(snapshot);
+        } else {
+          grouped.set(row.assistantMessageId, [snapshot]);
+        }
+      }
+      for (const id of messageIds) {
+        if (!grouped.has(id)) grouped.set(id, []);
+      }
+      return grouped;
+    });
+  }
+
   private async loadOwnedCitations(
     transaction: DatabaseTransaction,
     input: { sessionId: string; turnId: string; assistantMessageId: string },

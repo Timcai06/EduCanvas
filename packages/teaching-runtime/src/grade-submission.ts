@@ -155,7 +155,8 @@ export class GradeCanvasSubmissionService {
           existingEvent.sessionId !== session.id ||
           existingEvent.studentId !== session.studentId ||
           existingEvent.knowledgeNodeId !== session.knowledgeNodeId ||
-          existingEvent.occurredAt !== event.occurredAt ||
+          new Date(existingEvent.occurredAt).getTime() !==
+            new Date(event.occurredAt).getTime() ||
           existingEvent.payload.artifactId !== event.artifactId ||
           existingEvent.payload.assessmentType !==
             gradingDecision.result.assessmentType ||
