@@ -41,6 +41,7 @@ export function CanvasHost({
 }) {
   const rootRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const fullscreenRef = useRef<HTMLButtonElement>(null);
   const [isCompact, setIsCompact] = useState(false);
   const isModal = isFull || isCompact;
 
@@ -59,21 +60,31 @@ export function CanvasHost({
     { scope: rootRef },
   );
 
+  // 打开时保存焦点来源并聚焦 Canvas；关闭时归还焦点。
   useEffect(() => {
     openerRef.current = document.activeElement as HTMLElement | null;
     rootRef.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       const opener = openerRef.current;
       queueMicrotask(() => opener?.focus());
     };
-  }, [onClose]);
+  }, []);
+
+  // Escape：优先执行最小退出动作——全屏时退出全屏，非全屏时关闭。
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (isFull && onToggleFull) {
+        onToggleFull();
+        queueMicrotask(() => fullscreenRef.current?.focus());
+      } else {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFull, onToggleFull, onClose]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 1023px)');
@@ -143,6 +154,7 @@ export function CanvasHost({
           </h2>
           {onToggleFull ? (
             <button
+              ref={fullscreenRef}
               type="button"
               onClick={onToggleFull}
               aria-label={isFull ? '退出全屏' : '全屏'}
