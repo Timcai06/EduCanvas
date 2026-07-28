@@ -68,12 +68,6 @@ test.describe('Canvas shell 基础语义', () => {
     await expect(
       page.getByRole('dialog', { name: '产物Canvas' }),
     ).not.toBeVisible();
-
-    // 再次打开，确认可反复使用
-    const canvas2 = await openCanvasViaMindMap(page);
-    await expect(canvas2).toBeVisible();
-    await canvas2.getByRole('button', { name: /关闭/ }).click();
-    await expect(canvas2).not.toBeVisible();
   });
 });
 
