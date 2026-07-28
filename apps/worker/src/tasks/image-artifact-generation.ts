@@ -95,6 +95,7 @@ export async function appendGeneratedImageVersion(input: {
       checksum: checkpoint.data.checksum,
       metadata: checkpoint.data.metadata,
       generatedBy: IMAGE_GENERATOR,
+      createdByOperationId: input.job.operationId,
       generationJobId: input.job.id,
     });
   }
@@ -184,6 +185,7 @@ export async function appendGeneratedImageVersion(input: {
     checksum: stored.checksum,
     metadata,
     generatedBy: IMAGE_GENERATOR,
+    createdByOperationId: input.job.operationId,
     generationJobId: input.job.id,
   });
 }
