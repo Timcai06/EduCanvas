@@ -151,6 +151,24 @@ describe('视觉Provider配置', () => {
     );
   });
 
+  it('思考开关默认关闭且可显式开启', () => {
+    expect(parseModelGatewayConfiguration(withVision())).toMatchObject({
+      visionProvider: { disableThinking: false },
+    });
+    expect(
+      parseModelGatewayConfiguration(
+        withVision({ MODEL_GATEWAY_VISION_DISABLE_THINKING: 'true' }),
+      ),
+    ).toMatchObject({ visionProvider: { disableThinking: true } });
+  });
+
+  it('思考开关只接受字面true/false', () => {
+    expectCode(
+      withVision({ MODEL_GATEWAY_VISION_DISABLE_THINKING: 'yes' }),
+      'INVALID_BOOLEAN',
+    );
+  });
+
   it('视觉Base URL的尾部斜杠被归一化', () => {
     const config = parseModelGatewayConfiguration(
       withVision({

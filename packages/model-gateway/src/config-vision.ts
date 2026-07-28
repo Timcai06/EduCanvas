@@ -24,6 +24,7 @@
 
 import {
   ModelGatewayConfigurationError,
+  parseBoolean,
   parseBoundedInteger,
   parseModelId,
   parseProviderApiKey,
@@ -46,6 +47,14 @@ export interface VisionProviderConfiguration {
    * 推理短，但上下文里的图片 token 开销高得多，两者的合理预算并不一致。
    */
   maxOutputTokens: number;
+  /**
+   * 是否对视觉请求固定关闭 thinking。
+   *
+   * 需要显式配置而非默认开启：该字段不属于 OpenAI 官方协议，发给不认识它的
+   * 供应商会整轮 400。实测 GLM-4.6V 系列默认开启思考，同一个问题开启时 31 个
+   * 输出 token 里 24 个是被丢弃的 reasoning，关闭后降到 2 个。
+   */
+  disableThinking: boolean;
 }
 
 /**
@@ -97,6 +106,9 @@ export function parseVisionProviderConfiguration(
       2_048,
       { min: 1, max: 65_536 },
       'INVALID_VISION_MAX_OUTPUT_TOKENS',
+    ),
+    disableThinking: parseBoolean(
+      environmentValues.MODEL_GATEWAY_VISION_DISABLE_THINKING,
     ),
   };
 }

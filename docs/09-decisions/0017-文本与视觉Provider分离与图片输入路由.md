@@ -81,14 +81,38 @@ EduCanvas 是多模态 K12 教学助手，拍照提问、看图解题是核心�
 - AI SDK Adapter 覆盖视觉 Provider。
 - 若后续引入 OCR/图像描述，它与视觉 Provider 是互补而非替代关系：前者服务扫描件 PDF 的文本层缺口（见 `text-extraction.ts`），后者服务需要像素细节的判分场景。
 
+## live smoke 实测结论（2026-07-28，GLM-4.6V-Flash）
+
+用真实凭据对 `https://open.bigmodel.cn/api/paas/v4` 实测，原先的两个开放问题都有了答案，并额外暴露一个实现缺陷。
+
+**图片输入本身可用。** 一张含红色圆形、蓝色矩形与算式 `7 + 5 = ?` 的 PNG，模型正确识别了形状、颜色，并 OCR 出算式且算对。请求用的是 `openai-compatible-protocol.ts` 已有的 data URI 投影，协议层无需改动。usage 布局与 DeepSeek V4 相同（挂在带 `finish_reason` 的最后一个 choice chunk 上，而非独立的 `choices=[]` chunk），既有解析已覆盖。
+
+**并发限制是真实的运营风险。** 4 次调用中 3 次首发返回 `429 该模型当前访问量过大`，平均重试 3–4 次（12s 递增退避）才成功；且测试时间为北京时间上午 10 点，并不在供应商标注的 15:00–18:00 高峰期。免费档在课堂并发下不足以支撑，正式课堂前需评估付费档或申请提额。适配器不做内部重试的既有约束在此不变——重试策略必须显式落在可审计的 model run/attempt 层。
+
+**图片与工具调用不应在同一轮。** 实测同轮请求时，模型返回的 `tool_calls[].function.arguments` 是把内部思考模板和占位符吐出来的垃圾内容：key 形如 `<tool_call>{function-name}调用完成…`，value 形如 `{arg-value-1}`。它**能**被 `JSON.parse` 成功解析——这比解析失败更隐蔽——但随后会被工具 Schema 的 `additionalProperties: false` 拒绝。既有防线因此有效（不会污染工具执行，只会诚实失败），但该轮对话作废。教学流程不应在携带图片的同一轮暴露工具。
+
+**暴露的实现缺陷：思考未关闭。** GLM-4.6V 默认开启思考模式，实测同一个问题在开启时 31 个输出 token 中有 24 个是随后被丢弃的 reasoning，关闭后降至 2 个；`max_tokens` 较小时最终回答会被思考完全挤空。而原实现只对 `provider === 'deepseek'` 发送 `thinking: { type: 'disabled' }`，视觉配置固定投影为 `openai-compatible`，因而从不关闭。EduCanvas 不保留 CoT，这些 token 花了钱又被丢弃。
+
+修复：新增 `MODEL_GATEWAY_VISION_DISABLE_THINKING` 与 `MODEL_GATEWAY_DISABLE_THINKING`，请求投影条件改为 `provider === 'deepseek' || config.disableThinking`。不默认开启是因为该字段不属于 OpenAI 官方协议，发给不认识它的供应商会整轮 400；视觉链路的开关不继承主 Provider 的声明，两者是不同供应商。
+
+**暴露的协议兼容缺陷：省略的 `finish_reason`。** 走完整 Gateway 的 live smoke 出现了更严重的症状——文本正确流出（图中算式答对为 `12`），但整轮终态是 `failed: invalid_response` 且 `usage` 为 null：学生看得到答案，该轮却被记为失败且没有计量。
+
+抓包定位到根因：OpenAI 与 DeepSeek 在未终止的 chunk 里显式发送 `"finish_reason": null`，而 GLM 直接**省略该字段**。原实现的判断是 `if (choice.finish_reason !== null)`，`undefined !== null` 成立，于是在第一个 delta 上就对 `undefined` 调用 `requiredString` 抛出 `SseProtocolError`。两种流形状都合法，因此 `undefined` 与 `null` 必须同样视为「本 chunk 未终止」。
+
+这个缺陷在既有代码里已经存在，只是此前只对接 DeepSeek 从未触发；`testing/openai-compatible-fixtures.ts` 的全部 fixture 也一律显式发 null，所以单元测试无法暴露它。回归用例已按真实抓包的流形状补入 `vision-turn-model-gateway.test.ts`。
+
+它同时说明一件事：Fixture 的形状本身就是一种假设。协议层对「字段缺失」与「字段为 null」的处理差异，只有真实供应商流才能证伪。
+
 ## 开放问题
 
-- 视觉 Provider 的并发上限与教学高峰期的关系尚未实测；免费档模型通常有并发限制，需在真实课堂量级下验证。
-- 一轮同时包含图片与工具调用时，视觉模型的工具调用可靠性未验证——当前 `MAX_NATIVE_IMAGES=4` 的预算下，工具圈行为需要单独的 live smoke 覆盖。
+- 付费档（GLM-4.6V-FlashX / GLM-4.6V）在同等并发下的 429 表现未测；是否需要为课堂场景切换档位待定。
+- 视觉链路的 usage 与成本尚未进入统一模型运行台账的聚合视图，跨 Provider 的成本归集口径未定。
 
 ## 验证方式
 
-- `packages/model-gateway/src/config-vision.test.ts`：解析、互斥、半配置失败、URL 安全校验、边界值。
-- `packages/model-gateway/src/vision-turn-model-gateway.test.ts`：视觉请求发往视觉端点并使用视觉 Key、三个 alias 都解析到视觉模型、不携带 DeepSeek 专属字段、配额独立于主 Provider。
+- `packages/model-gateway/src/config-vision.test.ts`：解析、互斥、半配置失败、URL 安全校验、边界值、思考开关。
+- `packages/model-gateway/src/vision-turn-model-gateway.test.ts`：视觉请求发往视觉端点并使用视觉 Key、三个 alias 都解析到视觉模型、思考开关的发送与不继承、配额独立于主 Provider。
 - `tooling/env-check.test.mjs`：半配置、互斥、Key 形状、staging/production HTTPS。
-- 待补：使用真实凭据的手动 live smoke，验证图片输入的真实协议、质量与失败行为（Fixture 不能替代）。
+- live smoke（2026-07-28）：见上节。修复后走完整 Gateway 复测通过——`text="12"`、
+  `usage={input:105, output:2, reasoning:0}`、`finish="stop"`、无 failed 事件，
+  `reasoning:0` 同时证明思考开关生效。结论已回写文档；重跑需真实凭据，不进 CI。

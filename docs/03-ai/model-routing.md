@@ -99,7 +99,16 @@ thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型�
 - 一轮最多 4 张原生图片、合计 8 MiB（`asset-materialization.ts`），超出明确失败：静默丢图
   会让模型基于不完整材料作答，比报错更糟；
 - 视觉链路当前固定走 native Adapter，`MODEL_GATEWAY_RUNTIME=ai-sdk` 尚未覆盖多 Provider
-  图片投影。
+  图片投影；
+- 思考开关由 `MODEL_GATEWAY_VISION_DISABLE_THINKING` 显式声明，不继承主 Provider。
+  该字段不属于 OpenAI 官方协议，发给不认识它的供应商会整轮 400，因此不默认开启；
+- **携带图片的一轮不应同时暴露工具**。2026-07-28 live smoke 实测 GLM-4.6V-Flash 在同轮
+  图片+工具请求中返回的 `arguments` 是内部思考模板与占位符，能被 `JSON.parse` 解析但
+  随后被工具 Schema 的 `additionalProperties: false` 拒绝——防线有效但该轮作废。
+
+2026-07-28 对 GLM-4.6V-Flash 的 live smoke 结论（详见 ADR-0017）：图片识别、OCR 与
+data URI 投影均按预期工作，usage 布局与 DeepSeek V4 一致已被既有解析覆盖；免费档并发
+限制真实存在（4 次调用 3 次首发 429，非高峰时段），正式课堂前需评估付费档或提额申请。
 
 当前 `packages/asset-processing` 没有 OCR 或图像描述能力，扫描件 PDF 的文本层缺口仍然
 存在；它与视觉 Provider 是互补关系，不是替代。

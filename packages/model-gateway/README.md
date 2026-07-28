@@ -67,6 +67,9 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
   据此决定 `nativeAssetKinds`，不要在调用方各自拼 `||`；
 - 视觉链路固定走 native Adapter，且所有 modelAlias 都投影到同一个视觉模型——否则
   `synthesis` 阶段按 `fast` 取模型会得到 undefined。
+- `MODEL_GATEWAY_VISION_DISABLE_THINKING` 控制是否发送 `thinking: { type: 'disabled' }`；
+  不继承主 Provider 的声明，两者是不同供应商。EduCanvas 不保留 CoT，默认开启思考的
+  模型会把输出预算花在随后被丢弃的 reasoning 上。
 
 公共工厂：
 

@@ -73,6 +73,11 @@ function projectVisionConfiguration(
     },
     timeoutMs: vision.timeoutMs,
     maxOutputTokens: vision.maxOutputTokens,
+    /*
+     * 思考开关取视觉 Provider 自己的声明，不继承主 Provider：两者是不同供应商，
+     * 主链路关不关思考与视觉模型是否默认开启思考无关。
+     */
+    disableThinking: vision.disableThinking,
     /* 投影后的配置自身就是视觉链路，置真避免下游再次尝试路由。 */
     visionEnabled: true,
     visionProvider: null,
