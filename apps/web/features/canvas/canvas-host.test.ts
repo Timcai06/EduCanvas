@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildCloseAriaLabel,
+  buildCanvasHostPositionClass,
   buildFullscreenAriaLabel,
+  CANVAS_CLOSE_BUTTON_CLASS,
+  CANVAS_CONTENT_FRAME_CLASS,
+  CANVAS_FULLSCREEN_BUTTON_CLASS,
+  CANVAS_TITLE_CLASS,
   handleCanvasEscape,
   resolveEscapeAction,
   scheduleFocusRestore,
@@ -142,5 +147,55 @@ describe('buildFullscreenAriaLabel', () => {
 
   it('非全屏时返回"全屏"', () => {
     expect(buildFullscreenAriaLabel(false)).toBe('全屏');
+  });
+});
+
+describe('CanvasHost 响应式布局契约', () => {
+  it('全屏覆盖四向安全区域并沿用现有 z-40 层级', () => {
+    const classes = buildCanvasHostPositionClass(true);
+
+    expect(classes).toContain('safe-area-inset-top');
+    expect(classes).toContain('safe-area-inset-right');
+    expect(classes).toContain('safe-area-inset-bottom');
+    expect(classes).toContain('safe-area-inset-left');
+    expect(classes).toContain('z-40');
+    expect(classes).not.toMatch(/z-\[(?:\d+)\]/);
+  });
+
+  it('窄屏固定覆盖，桌面恢复静态分栏且允许收缩', () => {
+    const classes = buildCanvasHostPositionClass(false);
+
+    expect(classes).toContain('fixed');
+    expect(classes).toContain('inset-0');
+    expect(classes).toContain('lg:static');
+    expect(classes).toContain('lg:min-w-0');
+    expect(classes).toContain('lg:flex-1');
+  });
+
+  it('宿主裁切溢出而不成为第二个滚动所有者', () => {
+    expect(CANVAS_CONTENT_FRAME_CLASS).toContain('min-h-0');
+    expect(CANVAS_CONTENT_FRAME_CLASS).toContain('overflow-hidden');
+    expect(CANVAS_CONTENT_FRAME_CLASS).not.toContain('overflow-y-auto');
+  });
+
+  it('长标题截断，两个操作按钮都不可被压缩', () => {
+    expect(CANVAS_TITLE_CLASS).toContain('truncate');
+    expect(CANVAS_TITLE_CLASS).toContain('min-w-0');
+    expect(CANVAS_CLOSE_BUTTON_CLASS).toContain('shrink-0');
+    expect(CANVAS_FULLSCREEN_BUTTON_CLASS).toContain('shrink-0');
+  });
+
+  it('布局契约只使用 design token，不含硬编码颜色', () => {
+    const classes = [
+      buildCanvasHostPositionClass(false),
+      buildCanvasHostPositionClass(true),
+      CANVAS_TITLE_CLASS,
+      CANVAS_CLOSE_BUTTON_CLASS,
+      CANVAS_FULLSCREEN_BUTTON_CLASS,
+      CANVAS_CONTENT_FRAME_CLASS,
+    ].join(' ');
+
+    expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+    expect(classes).not.toMatch(/rgb\(/);
   });
 });
