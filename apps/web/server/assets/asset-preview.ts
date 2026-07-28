@@ -70,6 +70,25 @@ async function loadStoredVersion(input: {
   }
 }
 
+async function loadAccessPolicy(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  assetId: string;
+}) {
+  try {
+    return await assets.getAccessPolicy({
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      assetId: input.assetId,
+    });
+  } catch (error) {
+    if (error instanceof AssetAccessError) {
+      throw new AssetPreviewError('asset_not_found', 404);
+    }
+    throw error;
+  }
+}
+
 /**
  * 返回浏览器可消费的预览描述；对象存储键只留在服务端。
  * 二进制文件通过同源、逐次鉴权的文件端点读取，文本只返回有界提取结果。
@@ -90,11 +109,7 @@ export async function loadOwnedAssetPreviewDetail(input: {
 }): Promise<{ preview: AssetPreview; canvasResource: CanvasResource }> {
   const [version, policy] = await Promise.all([
     loadStoredVersion(input),
-    assets.getAccessPolicy({
-      ownerSubjectId: input.identity.studentId,
-      spaceId: input.spaceId,
-      assetId: input.assetId,
-    }),
+    loadAccessPolicy(input),
   ]);
   const fileUrl = `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}/file`;
   const canvasResource = projectOwnedSourceResource({
