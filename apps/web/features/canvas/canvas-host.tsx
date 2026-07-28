@@ -147,7 +147,7 @@ export function CanvasHost({
       tabIndex={-1}
       className={`${
         isFull
-          ? 'fixed inset-0 z-40 p-0 lg:p-4'
+          ? 'fixed inset-0 z-40 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:p-4'
           : 'fixed inset-0 z-40 lg:static lg:z-auto lg:min-w-0 lg:flex-1 lg:p-3 lg:pl-0'
       } flex flex-col bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none`}
     >
@@ -171,12 +171,12 @@ export function CanvasHost({
             type="button"
             onClick={onClose}
             aria-label={buildCloseAriaLabel(closeAriaLabel, closeLabel)}
-            className="flex min-h-9 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex shrink-0 min-h-9 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {closeLabel}
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </section>
   );
