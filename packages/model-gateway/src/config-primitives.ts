@@ -62,6 +62,13 @@ export const modelGatewayConfigurationErrorCodes = [
   'INVALID_EMBEDDING_MODEL_VERSION',
   'INVALID_EMBEDDING_TIMEOUT',
   'INVALID_EMBEDDING_MAX_BATCH',
+  'MISSING_VISION_BASE_URL',
+  'INVALID_VISION_BASE_URL',
+  'MISSING_VISION_API_KEY',
+  'INVALID_VISION_API_KEY',
+  'INVALID_VISION_TIMEOUT',
+  'INVALID_VISION_MAX_OUTPUT_TOKENS',
+  'VISION_PROVIDER_CONFLICT',
 ] as const;
 
 export type ModelGatewayConfigurationErrorCode =
@@ -114,6 +121,71 @@ export const parseBoundedInteger = (
     throw new ModelGatewayConfigurationError(code);
   }
   return parsed;
+};
+
+/**
+ * 解析供应商 Base URL 的公共安全校验：拒绝内嵌凭据、查询串与片段，只允许
+ * http/https，且 staging/production 强制 https。
+ *
+ * 抽成原语而不是各处重写，是因为这几条是安全边界而非风格偏好：URL 里内嵌的
+ * user:password 会随请求泄漏到日志，query/hash 则可能把配置误当成端点覆写。
+ * 任一 Provider 漏掉一条都构成实际风险，因此只保留一份实现。
+ *
+ * Provider 特有的约束（如 DeepSeek 的 hostname 白名单）由调用方在此基础上追加。
+ */
+export const parseProviderBaseUrl = (
+  value: string | undefined,
+  environment: DeploymentEnvironment,
+  codes: {
+    missing: ModelGatewayConfigurationErrorCode;
+    invalid: ModelGatewayConfigurationErrorCode;
+  },
+): URL => {
+  const raw = trimmed(value);
+  if (raw === undefined) {
+    throw new ModelGatewayConfigurationError(codes.missing);
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ModelGatewayConfigurationError(codes.invalid);
+  }
+  if (
+    url.username !== '' ||
+    url.password !== '' ||
+    url.search !== '' ||
+    url.hash !== '' ||
+    !['http:', 'https:'].includes(url.protocol)
+  ) {
+    throw new ModelGatewayConfigurationError(codes.invalid);
+  }
+  if (
+    ['staging', 'production'].includes(environment) &&
+    url.protocol !== 'https:'
+  ) {
+    throw new ModelGatewayConfigurationError(codes.invalid);
+  }
+  return url;
+};
+
+/** API Key 只做形状校验：长度上界与可见 ASCII，避免把整串 secret 拼进错误消息。 */
+export const parseProviderApiKey = (
+  value: string | undefined,
+  codes: {
+    missing: ModelGatewayConfigurationErrorCode;
+    invalid: ModelGatewayConfigurationErrorCode;
+  },
+): string => {
+  const apiKey = trimmed(value);
+  if (apiKey === undefined) {
+    throw new ModelGatewayConfigurationError(codes.missing);
+  }
+  if (apiKey.length > 4_096 || !/^[\x21-\x7e]+$/.test(apiKey)) {
+    throw new ModelGatewayConfigurationError(codes.invalid);
+  }
+  return apiKey;
 };
 
 /**

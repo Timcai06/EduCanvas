@@ -2,8 +2,10 @@ import type { TurnModelGateway } from '@educanvas/agent-core';
 import { createAiSdkTurnModelGateway } from './ai-sdk-provider-factory';
 import {
   parseModelGatewayConfiguration,
+  type EnabledModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from './config';
+import { ModelGatewayConfigurationError } from './config-primitives';
 import {
   OpenAICompatibleTurnModelGateway,
   type OpenAICompatibleTurnModelGatewayOptions,
@@ -40,4 +42,61 @@ export function createTurnModelGatewayFromEnvironment(
   return config.runtime === 'ai-sdk'
     ? createAiSdkTurnModelGateway(config, options)
     : new OpenAICompatibleTurnModelGateway(config, options);
+}
+
+/**
+ * 把视觉 Provider 投影成一份完整的 Turn 配置。
+ *
+ * 视觉 Provider 只服务图片输入这一条链路，没有 primary/fast/structured 的档位
+ * 区分，因此所有 alias 都指向同一个视觉模型——否则 `synthesis` 阶段按 `fast`
+ * 取模型会取到 undefined，整轮静默失败。
+ *
+ * `provider` 固定为 `openai-compatible`：视觉 Provider 不是 DeepSeek，不能继承主
+ * 配置里 DeepSeek 专属的请求形态（如固定关闭 thinking）。
+ */
+function projectVisionConfiguration(
+  config: EnabledModelGatewayConfiguration,
+): EnabledModelGatewayConfiguration {
+  const vision = config.visionProvider;
+  if (vision === null) {
+    throw new ModelGatewayConfigurationError('MISSING_VISION_BASE_URL');
+  }
+  return {
+    ...config,
+    provider: 'openai-compatible',
+    baseUrl: vision.baseUrl,
+    apiKey: vision.apiKey,
+    modelIds: {
+      primary: vision.modelId,
+      fast: vision.modelId,
+      structured: vision.modelId,
+    },
+    timeoutMs: vision.timeoutMs,
+    maxOutputTokens: vision.maxOutputTokens,
+    /* 投影后的配置自身就是视觉链路，置真避免下游再次尝试路由。 */
+    visionEnabled: true,
+    visionProvider: null,
+  };
+}
+
+/**
+ * 构造承接图片输入的 Turn Provider；未配置独立视觉 Provider 时返回 null。
+ *
+ * 与主 Gateway 分开构造而不是在一个 Gateway 内部按模态分支：Adapter 持有 Base URL
+ * 与 Key，把两套凭据塞进同一个实例会让「这次请求用了哪个供应商」在审计里变得
+ * 不可判定（ADR-0017）。
+ *
+ * 视觉链路固定走 native Adapter：AI SDK Adapter 的 provider 抽象目前只按主配置
+ * 的 runtime 解析，尚未覆盖多 Provider 图片投影。
+ */
+export function createVisionTurnModelGatewayFromEnvironment(
+  environment: ModelGatewayEnvironment,
+  options: OpenAICompatibleTurnModelGatewayOptions = {},
+): TurnModelGateway | null {
+  const config = parseModelGatewayConfiguration(environment);
+  if (!config.enabled || config.visionProvider === null) return null;
+  return new OpenAICompatibleTurnModelGateway(
+    projectVisionConfiguration(config),
+    options,
+  );
 }

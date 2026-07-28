@@ -91,6 +91,37 @@ function validateBaseUrl(provider, deploymentEnvironment) {
   }
 }
 
+/**
+ * 视觉 Provider 的 URL 校验与主 Provider 同源，但不套用 DeepSeek 的 hostname
+ * 白名单：它本来就是另一家供应商。
+ */
+function validateVisionBaseUrl(deploymentEnvironment) {
+  const raw = value('MODEL_GATEWAY_VISION_BASE_URL');
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    fail('MODEL_GATEWAY_VISION_BASE_URL is not a valid URL');
+  }
+  if (
+    url.username !== '' ||
+    url.password !== '' ||
+    url.search !== '' ||
+    url.hash !== '' ||
+    !['http:', 'https:'].includes(url.protocol)
+  ) {
+    fail(
+      'MODEL_GATEWAY_VISION_BASE_URL must be http(s) without credentials, query, or fragment',
+    );
+  }
+  if (
+    ['staging', 'production'].includes(deploymentEnvironment) &&
+    url.protocol !== 'https:'
+  ) {
+    fail('MODEL_GATEWAY_VISION_BASE_URL must use https in staging/production');
+  }
+}
+
 const required = ['DATABASE_URL'];
 const provider = value('MODEL_GATEWAY_PROVIDER');
 const model = value('MODEL_GATEWAY_PRIMARY_MODEL');
@@ -162,6 +193,33 @@ validateInteger('MODEL_GATEWAY_TIMEOUT_MS', 1_000, 120_000);
 validateInteger('MODEL_GATEWAY_MAX_OUTPUT_TOKENS', 1, 65_536);
 validateInteger('MODEL_GATEWAY_SPEECH_TIMEOUT_MS', 1_000, 180_000);
 validateInteger('MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS', 80, 4_096);
+
+/*
+ * 视觉 Provider：配置了模型就必须给齐 Base URL 与 Key。半配置状态会让部署以为
+ * 图片可用，直到学生真传了一张图才在 Turn 中途失败（ADR-0017）。
+ */
+const visionModel = value('MODEL_GATEWAY_VISION_MODEL');
+if (visionModel) {
+  validateModelId('MODEL_GATEWAY_VISION_MODEL');
+  if (parseBoolean('MODEL_GATEWAY_VISION')) {
+    fail(
+      'MODEL_GATEWAY_VISION and MODEL_GATEWAY_VISION_MODEL are mutually exclusive',
+    );
+  }
+  const visionMissing = [];
+  requireValue('MODEL_GATEWAY_VISION_BASE_URL', visionMissing);
+  requireValue('MODEL_GATEWAY_VISION_API_KEY', visionMissing);
+  if (visionMissing.length > 0) {
+    fail(`missing vision provider values: ${visionMissing.join(', ')}`);
+  }
+  const visionKey = value('MODEL_GATEWAY_VISION_API_KEY');
+  if (visionKey.length > 4_096 || !/^[\x21-\x7e]+$/.test(visionKey)) {
+    fail('MODEL_GATEWAY_VISION_API_KEY has an invalid shape');
+  }
+  validateVisionBaseUrl(deploymentEnvironment);
+}
+validateInteger('MODEL_GATEWAY_VISION_TIMEOUT_MS', 5_000, 300_000);
+validateInteger('MODEL_GATEWAY_VISION_MAX_OUTPUT_TOKENS', 1, 65_536);
 
 console.log(
   `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}`,

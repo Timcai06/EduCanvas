@@ -1,8 +1,8 @@
 # 模型路由
 
 - 状态：`accepted`
-- 相关决策：[ADR-0003](../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)、[ADR-0014](../09-decisions/0014-图像生成能力与产物信任边界.md)
-- 最后验证：2026-07-27
+- 相关决策：[ADR-0003](../09-decisions/0003-unified-runtime-and-notebook-context.md)、[ADR-0005](../09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)、[ADR-0014](../09-decisions/0014-图像生成能力与产物信任边界.md)、[ADR-0017](../09-decisions/0017-文本与视觉Provider分离与图片输入路由.md)
+- 最后验证：2026-07-28
 
 ## 当前实现边界
 
@@ -75,10 +75,40 @@ thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型�
 存储，不能依赖供应商临时链接的有效期。模型ID由`MODEL_GATEWAY_IMAGE_MODEL`显式配置，
 未配置时`generateCanvasImage`工具不注册，能力不进入五维交集（ADR-0014）。
 
+## 图片输入与视觉 Provider
+
+图片输入不由主 Provider 承担：开发期主 Provider（DeepSeek）的官方能力表没有 vision 项，
+传入 `image_url` 片段会整轮 400。因此文本与视觉分属两个并列 Provider（ADR-0017）。
+
+- 视觉 Provider 由 `MODEL_GATEWAY_VISION_MODEL`、`_BASE_URL`、`_API_KEY` 声明；配置了
+  模型就必须给齐后两者，半配置在 `parseModelGatewayConfiguration()` 与 `env-check` 都
+  立即失败，不允许留到运行期；
+- 它与 `MODEL_GATEWAY_VISION=true`（主 Provider 自带读图）互斥。两者同时声明表示部署方
+  对图片走哪条链路持矛盾预期，直接拒绝而不是替它选一个；
+- `acceptsImageInput()` 是「本次部署能否接受图片」的唯一判据；物化层据此设置
+  `nativeAssetKinds`，未启用时 `buildAssetContext()` 对图片抛
+  `UnsupportedAgentInputModalityError`，明确拒绝而不是静默丢弃；
+- 路由发生在组合根：只有 `assetContext.nativeImages` 非空且视觉 Gateway 存在时才切换，
+  其余 Turn 一律走主 Gateway。视觉模型在纯文本推理、长上下文与工具调用上通常弱于同级
+  文本模型，无条件替换会让不含图片的教学主链路一起降级；
+- 主 Gateway 与视觉 Gateway 是两个独立实例。Adapter 持有 Base URL 与 Key，合并会让
+  「本次请求发往哪个供应商」在审计中不可判定；
+- 视觉 Provider 的所有 modelAlias 都投影到同一个视觉模型：视觉链路没有档位区分，只投影
+  `primary` 会让工具圈后的 `synthesis` 阶段按 `fast` 取到 undefined 而静默失败；
+- 视觉配置固定 `provider: 'openai-compatible'`，不继承 DeepSeek 专属的固定关闭 thinking；
+- 一轮最多 4 张原生图片、合计 8 MiB（`asset-materialization.ts`），超出明确失败：静默丢图
+  会让模型基于不完整材料作答，比报错更糟；
+- 视觉链路当前固定走 native Adapter，`MODEL_GATEWAY_RUNTIME=ai-sdk` 尚未覆盖多 Provider
+  图片投影。
+
+当前 `packages/asset-processing` 没有 OCR 或图像描述能力，扫描件 PDF 的文本层缺口仍然
+存在；它与视觉 Provider 是互补关系，不是替代。
+
 ## DeepSeek 开发边界
 
 - DeepSeek 在 local/development/shared-dev/test 默认关闭，只有显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true` 才可处理合成教学问题；staging/production 无条件拒绝；
-- 截至 2026-07-15，官方当前候选型号是 `deepseek-v4-flash` 与 `deepseek-v4-pro`；它们只允许写入部署配置，不能作为代码默认值。官方已公告旧 `deepseek-chat`、`deepseek-reasoner` 于 2026-07-24 15:59 UTC 停止服务，配置前需复核[最新模型公告](https://api-docs.deepseek.com/news/news260424/)；
+- 截至 2026-07-28，官方当前候选型号是 `deepseek-v4-flash` 与 `deepseek-v4-pro`；它们只允许写入部署配置，不能作为代码默认值。旧 `deepseek-chat`、`deepseek-reasoner` 已于 2026-07-24 15:59 UTC 停止服务，仓库内示例配置已同步改为 `deepseek-v4-flash`；配置前仍需复核[最新模型公告](https://api-docs.deepseek.com/news/news260424/)；
+- DeepSeek 官方能力表只列出 Json Output、Tool Calls、Chat Prefix Completion 与 FIM Completion，没有视觉输入；图片输入必须另配视觉 Provider（见上一节）；
 - OpenAI-compatible 流式适配启用 `stream_options.include_usage`，并正确处理末尾 `choices=[]` 的 usage chunk；
 - 因 EduCanvas 不保留 CoT，而 DeepSeek thinking 工具调用要求回放 `reasoning_content`，Adapter 固定发送 `thinking: { type: "disabled" }`；响应中意外出现的 `reasoning_content` 仍不转换、不持久化、不记录到日志，也不返回浏览器；
 - API Key 只进入服务端 secret，禁止 `NEXT_PUBLIC_*`、仓库 Fixture、日志和截图。
@@ -96,7 +126,10 @@ thinking关闭。供应商原始chunk、异常正文、推理内容和SDK类型�
 - 已实现（embedding）：定长1536维、默认单批64条、8000字符/条上限；响应按`index`重排
   并逐条校验维度与分量有限性，乱序或缺项整批拒绝；模型、版本、维度、指令与切块版本
   随向量落库，缺任一项即无法判定向量可比较性（ADR-0015）；
-- 待实现：跨用户/日并发与成本预算、显式 Fallback；
+- 已实现（vision）：独立视觉 Provider 的配置解析、与主 Provider 互斥校验、半配置立即失败、
+  按输入模态路由与独立 Gateway 实例；超时与输出上限独立于主 Provider（ADR-0017）；
+- 待实现：跨用户/日并发与成本预算、显式 Fallback；视觉链路的 usage 与成本进入统一台账聚合视图；
+  AI SDK Adapter 覆盖视觉 Provider；
 - 每个 alias 的允许模态、上下文窗口和最大输出约束；
 - response ID、解析模型、Prompt 版本、Token、耗时、错误码和结果状态审计；
 - 合成输入的手动/nightly live smoke，确定性 CI 继续只用 Fixture。
