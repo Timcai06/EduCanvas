@@ -21,11 +21,19 @@ function showRetryButton(
   status: string,
   onRetry: (() => void) | undefined,
 ): boolean {
-  return (status === 'failed' || status === 'unavailable') && onRetry !== undefined;
+  return (
+    (status === 'failed' || status === 'unavailable') && onRetry !== undefined
+  );
 }
 
 // 全部五种状态
-const ALL_STATUSES = ['loading', 'empty', 'failed', 'unavailable', 'denied'] as const;
+const ALL_STATUSES = [
+  'loading',
+  'empty',
+  'failed',
+  'unavailable',
+  'denied',
+] as const;
 
 describe('CanvasShellStatus 五种状态', () => {
   it('共五种状态：loading/empty/failed/unavailable/denied', () => {

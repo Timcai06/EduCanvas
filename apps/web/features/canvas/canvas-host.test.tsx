@@ -221,7 +221,6 @@ describe('z-index 仅使用现有层级', () => {
 describe('无硬编码品牌色', () => {
   it('背景色使用 design token', () => {
     // bg-surface, bg-canvas 是 token；不允许 #xxx 或 rgb()
-    const allowedTokens = ['bg-surface', 'bg-canvas', 'bg-transparent'];
     const sectionClasses =
       'bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none flex flex-col';
     const innerClasses =

@@ -14,11 +14,7 @@ import {
  * 重试完全由调用方提供，失败信息不得包含堆栈、对象键或 Provider 原始错误。
  */
 export type CanvasShellStatusKind =
-  | 'loading'
-  | 'empty'
-  | 'failed'
-  | 'unavailable'
-  | 'denied';
+  'loading' | 'empty' | 'failed' | 'unavailable' | 'denied';
 
 export interface CanvasShellStatusProps {
   status: CanvasShellStatusKind;
