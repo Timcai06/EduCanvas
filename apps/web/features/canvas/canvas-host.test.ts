@@ -34,7 +34,9 @@ describe('Escape handler', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
 
-    const handleKeyDown = (event: Pick<KeyboardEvent, 'key' | 'preventDefault'>) => {
+    const handleKeyDown = (
+      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
+    ) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       const action = resolveEscapeAction(true, true);
@@ -55,7 +57,9 @@ describe('Escape handler', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
 
-    const handleKeyDown = (event: Pick<KeyboardEvent, 'key' | 'preventDefault'>) => {
+    const handleKeyDown = (
+      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
+    ) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       const action = resolveEscapeAction(false, false);
@@ -75,7 +79,9 @@ describe('Escape handler', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
 
-    const handleKeyDown = (event: Pick<KeyboardEvent, 'key' | 'preventDefault'>) => {
+    const handleKeyDown = (
+      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
+    ) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       const action = resolveEscapeAction(true, true);
@@ -94,7 +100,10 @@ describe('Escape handler', () => {
   it('preventDefault 仅对 Escape 执行', () => {
     const preventDefault = vi.fn();
 
-    const handleWithPrevent = (event: { key: string; preventDefault: () => void }) => {
+    const handleWithPrevent = (event: {
+      key: string;
+      preventDefault: () => void;
+    }) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
     };
