@@ -101,12 +101,8 @@ test.describe('Canvas shell 响应式布局', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    const scrollWidth = await canvas.evaluate(
-      (el) => el.scrollWidth,
-    );
-    const clientWidth = await canvas.evaluate(
-      (el) => el.clientWidth,
-    );
+    const scrollWidth = await canvas.evaluate((el) => el.scrollWidth);
+    const clientWidth = await canvas.evaluate((el) => el.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
   });
 
@@ -115,12 +111,8 @@ test.describe('Canvas shell 响应式布局', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    const scrollWidth = await canvas.evaluate(
-      (el) => el.scrollWidth,
-    );
-    const clientWidth = await canvas.evaluate(
-      (el) => el.clientWidth,
-    );
+    const scrollWidth = await canvas.evaluate((el) => el.scrollWidth);
+    const clientWidth = await canvas.evaluate((el) => el.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
   });
 
@@ -141,9 +133,7 @@ test.describe('Canvas shell 滚动', () => {
     const canvas = await openCanvasViaMindMap(page);
 
     // 内容区（min-h-0 flex-1 overflow-y-auto）存在
-    const contentFrame = canvas.locator(
-      'div.min-h-0.flex-1.overflow-hidden',
-    );
+    const contentFrame = canvas.locator('div.min-h-0.flex-1.overflow-hidden');
     await expect(contentFrame).toBeAttached();
 
     // body 不应被 Canvas 打开而锁死（仅全屏/dialog 时应 hidden）
@@ -168,9 +158,7 @@ test.describe('Canvas shell 暗色模式', () => {
 });
 
 test.describe('Canvas shell reduced-motion', () => {
-  test('reduced-motion 下 Canvas 不依赖动画才能展示内容', async ({
-    page,
-  }) => {
+  test('reduced-motion 下 Canvas 不依赖动画才能展示内容', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
