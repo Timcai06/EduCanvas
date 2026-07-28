@@ -10,7 +10,12 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   buildCloseAriaLabel,
+  buildCanvasHostPositionClass,
   buildFullscreenAriaLabel,
+  CANVAS_CLOSE_BUTTON_CLASS,
+  CANVAS_CONTENT_FRAME_CLASS,
+  CANVAS_FULLSCREEN_BUTTON_CLASS,
+  CANVAS_TITLE_CLASS,
   handleCanvasEscape,
   scheduleFocusRestore,
 } from './canvas-host-utils';
@@ -145,24 +150,18 @@ export function CanvasHost({
       aria-modal={isModal || undefined}
       aria-busy={isPending}
       tabIndex={-1}
-      className={`${
-        isFull
-          ? 'fixed inset-0 z-40 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:p-4'
-          : 'fixed inset-0 z-40 lg:static lg:z-auto lg:min-w-0 lg:flex-1 lg:p-3 lg:pl-0'
-      } flex flex-col bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none`}
+      className={`${buildCanvasHostPositionClass(isFull)} flex flex-col bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none`}
     >
       <div className="flex min-h-0 flex-1 flex-col bg-canvas shadow-[var(--shadow-float)] lg:rounded-3xl lg:border lg:border-line">
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 lg:px-5">
-          <h2 className="font-display min-w-0 flex-1 truncate text-base font-semibold text-ink">
-            {title}
-          </h2>
+          <h2 className={CANVAS_TITLE_CLASS}>{title}</h2>
           {onToggleFull ? (
             <button
               ref={fullscreenRef}
               type="button"
               onClick={onToggleFull}
               aria-label={buildFullscreenAriaLabel(isFull)}
-              className="hidden min-h-9 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:flex"
+              className={CANVAS_FULLSCREEN_BUTTON_CLASS}
             >
               {buildFullscreenAriaLabel(isFull)}
             </button>
@@ -171,12 +170,12 @@ export function CanvasHost({
             type="button"
             onClick={onClose}
             aria-label={buildCloseAriaLabel(closeAriaLabel, closeLabel)}
-            className="flex shrink-0 min-h-9 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className={CANVAS_CLOSE_BUTTON_CLASS}
           >
             {closeLabel}
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className={CANVAS_CONTENT_FRAME_CLASS}>{children}</div>
       </div>
     </section>
   );
