@@ -61,13 +61,11 @@ test.describe('Canvas shell 基础语义', () => {
     // Escape 退出全屏
     await page.keyboard.press('Escape');
     // 全屏退出后，全屏按钮文字变为"全屏"
-    await expect(page.getByRole('button', { name: '全屏' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: '全屏' })).toBeVisible();
 
-    // 用关闭按钮关闭
-    await page.getByRole('button', { name: /关闭/ }).click();
-    await expect(
-      page.getByRole('dialog', { name: '产物Canvas' }),
-    ).not.toBeVisible();
+    // 用关闭按钮关闭（限定在 canvas 内查找，避免页面上其他"关闭"按钮）
+    await canvas.getByRole('button', { name: /关闭/ }).click();
+    await expect(canvas).not.toBeVisible();
   });
 });
 
