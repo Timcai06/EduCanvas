@@ -93,7 +93,7 @@ export interface StudentMessage extends ChatMessageBase {
  *
  * `label` 只来自服务端映射表，模型碰不到它，所以这里不可能显示内部标识或
  * 被模型影响的文字。参数与返回值一律不进入这个结构——判分类工具的返回值直接
- * 包含答案（docs/01-product/student-ui-spec.md）。
+ * 包含答案（docs/01-product/02-学生界面规范.md）。
  */
 export interface MessageToolStep {
   id: string;

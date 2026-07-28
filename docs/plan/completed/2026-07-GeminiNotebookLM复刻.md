@@ -4,7 +4,7 @@
 - 负责人：项目负责人
 - 完成时间：2026-07-19
 - 结档原因：M1–M4 与 UI U1–U4 已交付；视频经成本闸门顺延；原 PR-U5 被新的统一 Runtime 决策取代，不再以“先合并页面”继续开发
-- 后续计划：[Gateway-first 个人 Agent 架构收口](2026-07-gateway-first-personal-agent.md)（已完成）
+- 后续计划：[Gateway-first 个人 Agent 架构收口](2026-07-网关优先个人智能体.md)（已完成）
 
 ## 原目标
 
@@ -26,7 +26,7 @@
 - 通用服务端判分测验的私有判分载荷仍待设计；
 - 原生图片、音频和视频模型输入仍未接通；
 - `/learn` 没有直接并入 `/`。进一步代码审计确认，两页背后是两套 Agent Loop；只合并 UI 会固化重复架构，因此 PR-U5 取消，后续转入 Gateway-first 与统一 Runtime 迁移；
-- M5 外部生成式视频因最低可用成本、Preview 配额与来源失真风险顺延，决策摘要见[关键决策历史](../../09-decisions/decision-history.md)。
+- M5 外部生成式视频因最低可用成本、Preview 配额与来源失真风险顺延，决策摘要见[关键决策历史](../../09-decisions/00-决策历史.md)。
 
 ## 验收证据
 
@@ -49,8 +49,8 @@
 
 ## 已回写事实
 
-- [产品定义](../../01-product/product-definition.md)
+- [产品定义](../../01-product/01-产品定义.md)
 - [系统架构现状](../../02-architecture/01-系统架构现状.md)
-- [Agent 编排边界](../../03-ai/01-Agent编排边界.md)
+- [Agent 编排边界](../../03-ai/01-智能体编排边界.md)
 - [当前架构决策](../../09-decisions/README.md)
-- [关键决策历史](../../09-decisions/decision-history.md)
+- [关键决策历史](../../09-decisions/00-决策历史.md)

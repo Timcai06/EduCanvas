@@ -71,9 +71,9 @@ K1只支持服务端受控任务交付的纯文本/可解析PDF结果：数据�
 
 ## 改动前必读的 docs/ 文档
 
-- [数据设计](../../docs/04-data/data-design.md)：业务事实源、实体、事件和掌握度约束。
-- [后端工程](../../docs/05-engineering/backend.md)：数据库在阶段架构中的服务边界。
-- [API约定](../../docs/05-engineering/api-conventions.md)：写入幂等、版本和错误返回要求。
-- [安全与隐私](../../docs/06-quality/security-and-privacy.md)：未成年人数据最小化与审计要求。
-- [ADR-0005](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)：继续采用Drizzle、PostgreSQL与模块化单体的当前决定。
-- [关键决策历史](../../docs/09-decisions/decision-history.md)：阶段一数据库选型的压缩记录。
+- [数据设计](../../docs/04-data/02-数据设计.md)：业务事实源、实体、事件和掌握度约束。
+- [后端工程](../../docs/05-engineering/02-后端工程.md)：数据库在阶段架构中的服务边界。
+- [API约定](../../docs/05-engineering/01-接口约定.md)：写入幂等、版本和错误返回要求。
+- [安全与隐私](../../docs/06-quality/02-安全与隐私.md)：未成年人数据最小化与审计要求。
+- [ADR-0005](../../docs/09-decisions/0005-模块化单体产物与持久任务.md)：继续采用Drizzle、PostgreSQL与模块化单体的当前决定。
+- [关键决策历史](../../docs/09-decisions/00-决策历史.md)：阶段一数据库选型的压缩记录。

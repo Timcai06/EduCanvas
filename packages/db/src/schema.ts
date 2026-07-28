@@ -46,12 +46,12 @@ const vector = (name: string, dimensions: number) =>
   })(name);
 
 // 阶段一模块化单体的现行表集。它同时包含通用 Agent/Asset/RAG 账本和 K12 纵切，
-// 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/data-design.md。
+// 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/02-数据设计.md。
 //
 // 索引命名 `*_fk_idx` 专指「为外键强制查询兜底」的索引，不服务任何业务读取。
 // 父行删除时 PostgreSQL 会对每条被删行在子表上做等值探测；缺索引时该探测退化为
 // 顺序扫描，并在删除期间放大锁窗口。这类索引只在父表确实存在生产删除路径时才
-// 添加——判定依据与 EXPLAIN 证据见 docs/04-data/fk-index-audit.md。
+// 添加——判定依据与 EXPLAIN 证据见 docs/04-data/03-外键索引审计.md。
 
 /** 正式平台主体；匿名兼容主体也使用服务端派生 ID，不保存原始 bearer。 */
 export const platformUsers = pgTable(
@@ -809,7 +809,7 @@ export const conversationMessages = pgTable(
 
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
- * 状态保留为 text 以允许状态机演进而不频繁改枚举，取舍见 docs/04-data/data-design.md。
+ * 状态保留为 text 以允许状态机演进而不频繁改枚举，取舍见 docs/04-data/02-数据设计.md。
  */
 export const lessonSessions = pgTable(
   'lesson_sessions',
@@ -2583,7 +2583,7 @@ export const canvasArtifactGradingKeys = pgTable(
 /**
  * 只追加的学习事实流，作为掌握度重算和教学决策的可追溯输入；业务代码不得原地改写历史事件。
  * `occurredAt` 不设数据库默认值，以保存客户端实际发生时间；`payload` 用 JSONB 承载事件专属字段，
- * `schemaVersion` 用于消费端兼容演进，口径见 docs/04-data/data-design.md。
+ * `schemaVersion` 用于消费端兼容演进，口径见 docs/04-data/02-数据设计.md。
  */
 export const learningEvents = pgTable(
   'learning_events',
@@ -2622,7 +2622,7 @@ export const learningEvents = pgTable(
 /**
  * 每个“学生 × 知识节点”只有一行可计算掌握状态，复合主键防止同一口径出现多份当前值。
  * 分数用 real 支持连续更新，次数字段保留可解释证据，JSONB 标签允许误区分类逐步扩展；
- * `version` 已由Drizzle适配器用于并发更新的乐观锁，模型不得直接决定这些值，见 docs/04-data/data-design.md。
+ * `version` 已由Drizzle适配器用于并发更新的乐观锁，模型不得直接决定这些值，见 docs/04-data/02-数据设计.md。
  */
 export const masteryStates = pgTable(
   'mastery_states',

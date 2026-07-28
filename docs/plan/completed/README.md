@@ -10,12 +10,13 @@
 
 | 完成时间   | 计划                                                                                                   | 结果                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| 2026-07-15 | [`2026-07-pre-research-safe-development.md`](2026-07-pre-research-safe-development.md)                 | Chat-first收口、诚实AI边界、UX/文档治理与视觉基线                                      |
-| 2026-07-17 | [`2026-07-real-agent-learning-vertical-slice.md`](2026-07-real-agent-learning-vertical-slice.md)       | 真实Provider流式Turn、账本/取消/恢复、工具循环、检索引用、可信ASSESS推进与受控动画模板 |
-| 2026-07-17 | [`2026-07-platform-decoupling-runtime-hardening.md`](2026-07-platform-decoupling-runtime-hardening.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划                               |
-| 2026-07-19 | [`2026-07-gemini-notebooklm-replica.md`](2026-07-gemini-notebooklm-replica.md)                         | 持久Artifact、轻产物、Notebook来源/引用、音频与Canvas共创交付；Runtime收口移交新计划   |
-| 2026-07-19 | [`2026-07-gateway-first-personal-agent.md`](2026-07-gateway-first-personal-agent.md)                   | Gateway协议/运行时、共享Notebook、Web、唯一Loop、TUI、Telegram与安全Node全部收口       |
-| 2026-07-21 | [`2026-07-web-first-entrypoints-and-handoff.md`](2026-07-web-first-entrypoints-and-handoff.md)         | Make入口、统一身份、一次性handoff、Connections、Web设置与TUI渠道管理收口               |
+| 2026-07-15 | [`2026-07-前置研究安全开发.md`](2026-07-前置研究安全开发.md)                 | Chat-first收口、诚实AI边界、UX/文档治理与视觉基线                                      |
+| 2026-07-17 | [`2026-07-真实智能体学习纵切.md`](2026-07-真实智能体学习纵切.md)       | 真实Provider流式Turn、账本/取消/恢复、工具循环、检索引用、可信ASSESS推进与受控动画模板 |
+| 2026-07-17 | [`2026-07-平台解耦与运行时加固.md`](2026-07-平台解耦与运行时加固.md) | P0连续对话与P1通用数据骨架交付;P2–P5经目标重排移交新计划                               |
+| 2026-07-19 | [`2026-07-GeminiNotebookLM复刻.md`](2026-07-GeminiNotebookLM复刻.md)                         | 持久Artifact、轻产物、Notebook来源/引用、音频与Canvas共创交付；Runtime收口移交新计划   |
+| 2026-07-19 | [`2026-07-网关优先个人智能体.md`](2026-07-网关优先个人智能体.md)                   | Gateway协议/运行时、共享Notebook、Web、唯一Loop、TUI、Telegram与安全Node全部收口       |
+| 2026-07-21 | [`2026-07-Web优先入口与交接.md`](2026-07-Web优先入口与交接.md)         | Make入口、统一身份、一次性handoff、Connections、Web设置与TUI渠道管理收口               |
 | 2026-07-21 | [`2026-07-第二代架构研究.md`](2026-07-第二代架构研究.md)                                               | 源码研究、五类可复现fixture、唯一写者、反方评审与阶段架构决策接受                      |
 | 2026-07-23 | [`2026-07-第二代架构升级.md`](2026-07-第二代架构升级.md)                                               | 统一运行内核、跨入口合规、人工Effect对账与完整工程证据结档                             |
 | 2026-07-24 | [`2026-07-自适应学习基线.md`](2026-07-自适应学习基线.md)                                               | 显式画像、Notebook Goal、可信短诊断、三态进度与学习工作区结档                          |
+| 2026-07-24 | [`2026-07-账号、历史记录删除与用户资料.md`](2026-07-账号、历史记录删除与用户资料.md)                     | 本地账号、受控会话、资料/头像、密码变更与会话历史归档交付                              |
