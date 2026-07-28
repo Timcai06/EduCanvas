@@ -6,19 +6,29 @@ export class CanvasResourceOpenGate {
   #sequence = 0;
   #controller: AbortController | null = null;
 
-  begin(): { readonly token: number; readonly signal: AbortSignal } {
+  begin(scopeKey: string): {
+    readonly token: number;
+    readonly scopeKey: string;
+    readonly signal: AbortSignal;
+  } {
     this.#controller?.abort();
     this.#controller = new AbortController();
     this.#sequence += 1;
     return {
       token: this.#sequence,
+      scopeKey,
       signal: this.#controller.signal,
     };
   }
 
-  isCurrent(token: number): boolean {
+  isCurrent(
+    request: { readonly token: number; readonly scopeKey: string },
+    currentScopeKey: string,
+  ): boolean {
     return (
-      token === this.#sequence && this.#controller?.signal.aborted === false
+      request.token === this.#sequence &&
+      request.scopeKey === currentScopeKey &&
+      this.#controller?.signal.aborted === false
     );
   }
 

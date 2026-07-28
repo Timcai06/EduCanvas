@@ -1,11 +1,19 @@
 import type { CanvasResource } from '@educanvas/canvas-protocol';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from 'react';
 import {
   fetchCanvasResource,
   type CanvasResourceClientError,
 } from './canvas-resource-client';
 import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry';
 import { CanvasResourceOpenGate } from './canvas-resource-open-gate';
+import type { CanvasResourceRendererProps } from './canvas-resource-registry';
 
 export interface UseStudioOpenActions {
   readonly openSource: (assetId: string) => void;
@@ -40,7 +48,10 @@ function isAbortError(error: unknown): boolean {
  */
 export function useStudioOpenActions(input: {
   scopeKey: string;
-  onSourceValid: (resource: CanvasResource) => void;
+  onSourceValid: (
+    resource: CanvasResource,
+    Renderer: ComponentType<CanvasResourceRendererProps>,
+  ) => void;
   onArtifactValid: (resource: CanvasResource) => void;
 }): UseStudioOpenResult {
   const callbacksRef = useRef({
@@ -60,11 +71,12 @@ export function useStudioOpenActions(input: {
   const [validationError, setValidationError] =
     useState<CanvasResourceClientError | null>(null);
   const gateRef = useRef(new CanvasResourceOpenGate());
+  const currentScopeKeyRef = useRef(input.scopeKey);
   const lastRequestRef = useRef<OpenRequest | null>(null);
 
   const validate = useCallback(
     async (request: OpenRequest) => {
-      const activeRequest = gateRef.current.begin();
+      const activeRequest = gateRef.current.begin(input.scopeKey);
       lastRequestRef.current = request;
       setStateScopeKey(input.scopeKey);
       setPendingKind(request.resourceKind);
@@ -74,7 +86,10 @@ export function useStudioOpenActions(input: {
         const resource = await fetchCanvasResource(resourceKind, resourceId, {
           signal: activeRequest.signal,
         });
-        if (!gateRef.current.isCurrent(activeRequest.token)) return;
+        if (
+          !gateRef.current.isCurrent(activeRequest, currentScopeKeyRef.current)
+        )
+          return;
         const selection = selectWebCanvasResourceRenderer(resource);
         if (selection.kind === 'unavailable') {
           setPendingKind(null);
@@ -86,13 +101,16 @@ export function useStudioOpenActions(input: {
         }
         setPendingKind(null);
         if (resourceKind === 'source') {
-          callbacksRef.current.onSourceValid(resource);
+          callbacksRef.current.onSourceValid(resource, selection.Renderer);
         } else {
           callbacksRef.current.onArtifactValid(resource);
         }
       } catch (err: unknown) {
         if (
-          !gateRef.current.isCurrent(activeRequest.token) ||
+          !gateRef.current.isCurrent(
+            activeRequest,
+            currentScopeKeyRef.current,
+          ) ||
           isAbortError(err)
         )
           return;
@@ -133,14 +151,19 @@ export function useStudioOpenActions(input: {
     if (request) void validate(request);
   }, [validate]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    currentScopeKeyRef.current = input.scopeKey;
     const gate = gateRef.current;
     gate.cancel();
     lastRequestRef.current = null;
+  }, [input.scopeKey]);
+
+  useEffect(() => {
+    const gate = gateRef.current;
     return () => {
       gate.cancel();
     };
-  }, [input.scopeKey]);
+  }, []);
 
   const stateBelongsToCurrentScope = stateScopeKey === input.scopeKey;
   return {

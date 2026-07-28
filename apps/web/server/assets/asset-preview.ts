@@ -153,24 +153,24 @@ export async function loadOwnedAssetPreviewDetail(input: {
       canvasResource,
     };
   }
-  if (version.mimeType === 'text/markdown' && version.extractedText) {
+  if (version.mimeType === 'text/markdown') {
     return {
       preview: {
         kind: 'markdown',
         fileName: version.displayName,
         mimeType: 'text/markdown',
-        content: version.extractedText.slice(0, 120_000),
+        content: (version.extractedText ?? '').slice(0, 120_000),
       },
       canvasResource,
     };
   }
-  if (version.mimeType === 'text/plain' && version.extractedText) {
+  if (version.mimeType === 'text/plain') {
     return {
       preview: {
         kind: 'text',
         fileName: version.displayName,
         mimeType: 'text/plain',
-        content: version.extractedText.slice(0, 120_000),
+        content: (version.extractedText ?? '').slice(0, 120_000),
       },
       canvasResource,
     };

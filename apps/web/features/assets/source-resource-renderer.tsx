@@ -4,11 +4,12 @@ import { CanvasHost } from '@/features/canvas/canvas-host';
 import { CanvasShellStatus } from '@/features/canvas/canvas-shell-status';
 import { MessageMarkdown } from '@/features/chat/markdown';
 import dynamic from 'next/dynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import { resolveSourceRendererState } from './source-resource-renderer-state';
+import type { CanvasResourceRendererProps } from '../canvas/canvas-resource-registry';
 
 const PdfPreview = dynamic(
   () => import('./preview/pdf-preview').then((mod) => mod.PdfPreview),
@@ -25,11 +26,13 @@ import { DocxPreview } from './preview/docx-preview';
  */
 export function SourceResourceRenderer({
   resource,
+  Renderer,
   isFull,
   onToggleFull,
   onClose,
 }: {
   resource: CanvasResource;
+  Renderer: ComponentType<CanvasResourceRendererProps>;
   isFull: boolean;
   onToggleFull: () => void;
   onClose: () => void;
@@ -43,7 +46,7 @@ export function SourceResourceRenderer({
       isFull={isFull}
       onToggleFull={onToggleFull}
     >
-      <SourceResourceRendererBody resource={resource} />
+      <Renderer resource={resource} />
     </CanvasHost>
   );
 }
@@ -200,8 +203,11 @@ export function SourceResourceRendererContent({
                   </article>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
-                  转录处理中或暂不可用。
+                <div
+                  role="status"
+                  className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted"
+                >
+                  音频文字稿不可用；仍可播放原音频。
                 </div>
               )}
             </div>
@@ -232,8 +238,13 @@ export function SourceResourceRendererContent({
                   </article>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
-                  这个视频没有可用转录；仍可播放原视频。
+                <div
+                  role="status"
+                  className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted"
+                >
+                  {preview.derivatives.transcription === 'processing'
+                    ? '视频文字稿正在处理中；当前仍可播放原视频。'
+                    : '视频文字稿不可用；仍可播放原视频。'}
                 </div>
               )}
             </div>

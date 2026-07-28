@@ -7,6 +7,7 @@ import { SourceResourceRenderer } from '@/features/assets/source-resource-render
 import { useNotebookSources } from './use-notebook-sources';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { CanvasResourceOpenStatus } from '@/features/canvas/canvas-resource-open-status';
+import type { CanvasResourceRendererProps } from '@/features/canvas/canvas-resource-registry';
 import {
   ArtifactCanvas,
   ArtifactConfirmSheet,
@@ -31,7 +32,13 @@ import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from 'react';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
@@ -68,9 +75,10 @@ export function GeneralChatWorkspace({
   nickname?: string | null;
 }) {
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
-  const [sourceResource, setSourceResource] = useState<CanvasResource | null>(
-    null,
-  );
+  const [sourceResource, setSourceResource] = useState<{
+    readonly resource: CanvasResource;
+    readonly Renderer: ComponentType<CanvasResourceRendererProps>;
+  } | null>(null);
   const [sourcePreviewFull, setSourcePreviewFull] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
@@ -95,8 +103,8 @@ export function GeneralChatWorkspace({
   );
   const studioOpenActions = useStudioOpenActions({
     scopeKey: conversationId,
-    onSourceValid: (resource) => {
-      setSourceResource(resource);
+    onSourceValid: (resource, Renderer) => {
+      setSourceResource({ resource, Renderer });
       setSourcePreviewFull(false);
     },
     onArtifactValid: (resource) => {
@@ -454,8 +462,9 @@ export function GeneralChatWorkspace({
                 />
               ) : sourceResource ? (
                 <SourceResourceRenderer
-                  key={`${sourceResource.resourceId}:${sourceResource.version?.versionId ?? 'none'}`}
-                  resource={sourceResource}
+                  key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
+                  resource={sourceResource.resource}
+                  Renderer={sourceResource.Renderer}
                   isFull={sourcePreviewFull}
                   onToggleFull={() => setSourcePreviewFull((value) => !value)}
                   onClose={() => {
@@ -529,8 +538,9 @@ export function GeneralChatWorkspace({
       ) : null}
       {isLanding && sourceResource ? (
         <SourceResourceRenderer
-          key={`${sourceResource.resourceId}:${sourceResource.version?.versionId ?? 'none'}`}
-          resource={sourceResource}
+          key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
+          resource={sourceResource.resource}
+          Renderer={sourceResource.Renderer}
           isFull
           onToggleFull={() => undefined}
           onClose={() => {

@@ -7,7 +7,6 @@ import {
   TurnRateLimitError,
 } from '@educanvas/db';
 import { ModelGatewayConfigurationError } from '@educanvas/model-gateway';
-import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { UnsupportedAssetModalityError } from '@/server/assets/asset-materialization';
 import { beginTeachingGatewayTurn } from '@/server/gateway/teaching-turn';
@@ -15,7 +14,8 @@ import {
   isTrustedSameOriginWrite,
   jsonError,
 } from '@/server/http/request-security';
-import { createSseEventStream, sseResponse } from '@/server/http/sse';
+import { sseResponse } from '@/server/http/sse';
+import { createTeachingTurnEventStream } from '@/server/http/teaching-turn-stream';
 import {
   parseTeachingTurnRequest,
   TurnRequestValidationError,
@@ -23,16 +23,6 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-/**
- * 断开浏览器连接只停止写入响应，不把网络断开误当成学生点击“停止”。
- * 后台生成仍会完成持久化；显式停止必须调用 turn/:id/cancel。
- */
-export function createTeachingTurnEventStream(
-  events: AsyncIterable<TeachingTurnEvent>,
-): ReadableStream<Uint8Array> {
-  return createSseEventStream(events);
-}
 
 function validationErrorResponse(error: TurnRequestValidationError): Response {
   if (error.code === 'invalid_content_type') {
