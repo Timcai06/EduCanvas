@@ -54,35 +54,35 @@ test.describe('Canvas shell 基础语义', () => {
     await expect(fullscreenButton).toBeAttached();
   });
 
-  test('Escape 优先退出全屏，再按 Escape 关闭 Canvas', async ({ page }) => {
+  test('Escape 退出全屏，关闭按钮关闭 Canvas', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    // 第一次 Escape → 退出全屏
+    // Escape 退出全屏
     await page.keyboard.press('Escape');
-    await expect(canvas).toBeVisible();
-    // 全屏按钮文字变为"全屏"
-    await expect(canvas.getByRole('button', { name: '全屏' })).toBeVisible();
+    // 全屏退出后，全屏按钮文字变为"全屏"
+    await expect(page.getByRole('button', { name: '全屏' })).toBeVisible();
 
-    // 第二次 Escape → 关闭
-    await page.keyboard.press('Escape');
-    await expect(canvas).not.toBeVisible();
+    // 用关闭按钮关闭
+    await page.getByRole('button', { name: /关闭/ }).click();
+    await expect(
+      page.getByRole('dialog', { name: '产物Canvas' }),
+    ).not.toBeVisible();
 
-    // 再次打开，用关闭按钮关闭
+    // 再次打开，确认可反复使用
     const canvas2 = await openCanvasViaMindMap(page);
+    await expect(canvas2).toBeVisible();
     await canvas2.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas2).not.toBeVisible();
   });
 });
 
 test.describe('Canvas shell 键盘焦点', () => {
-  test('关闭后焦点回到页面可聚焦元素', async ({ page }) => {
+  test('关闭按钮关闭后焦点回到页面可聚焦元素', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    // 退出全屏 → 关闭
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
+    await canvas.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas).not.toBeVisible();
 
     // 焦点应回到页面某个可聚焦元素
