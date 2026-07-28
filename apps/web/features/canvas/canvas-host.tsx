@@ -11,16 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   buildCloseAriaLabel,
   buildFullscreenAriaLabel,
-  resolveEscapeAction,
+  handleCanvasEscape,
   scheduleFocusRestore,
 } from './canvas-host-utils';
-
-export {
-  buildCloseAriaLabel,
-  buildFullscreenAriaLabel,
-  resolveEscapeAction,
-  scheduleFocusRestore,
-};
 
 /**
  * 分栏 Canvas 的统一宿主外壳:桌面端在对话右侧作为分栏列展开,窄屏或全屏
@@ -86,15 +79,12 @@ export function CanvasHost({
   // Escape：优先执行最小退出动作——全屏时退出全屏，非全屏时关闭。
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      const action = resolveEscapeAction(isFull, onToggleFull !== undefined);
-      if (action === 'exit_fullscreen') {
-        onToggleFull!();
-        scheduleFocusRestore(fullscreenRef.current);
-      } else {
-        onClose();
-      }
+      handleCanvasEscape(event, {
+        isFull,
+        onClose,
+        onToggleFull,
+        fullscreenButton: fullscreenRef.current,
+      });
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildCloseAriaLabel,
   buildFullscreenAriaLabel,
+  handleCanvasEscape,
   resolveEscapeAction,
   scheduleFocusRestore,
 } from './canvas-host-utils';
@@ -23,9 +24,7 @@ describe('resolveEscapeAction', () => {
   });
 });
 
-// ── Escape handler (uses resolveEscapeAction) ──
-
-describe('Escape handler', () => {
+describe('handleCanvasEscape', () => {
   function mkEvent(key: string) {
     return { key, preventDefault: vi.fn() };
   }
@@ -33,22 +32,16 @@ describe('Escape handler', () => {
   it('全屏 Escape 只调用 onToggleFull，不调用 onClose', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
+    const event = mkEvent('Escape');
 
-    const handleKeyDown = (
-      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
-    ) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      const action = resolveEscapeAction(true, true);
-      if (action === 'exit_fullscreen') {
-        onToggleFull();
-        scheduleFocusRestore(null);
-      } else {
-        onClose();
-      }
-    };
-
-    handleKeyDown(mkEvent('Escape'));
+    expect(
+      handleCanvasEscape(event, {
+        isFull: true,
+        onClose,
+        onToggleFull,
+      }),
+    ).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(onToggleFull).toHaveBeenCalledOnce();
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -56,21 +49,16 @@ describe('Escape handler', () => {
   it('非全屏 Escape 只调用 onClose，不调用 onToggleFull', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
+    const event = mkEvent('Escape');
 
-    const handleKeyDown = (
-      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
-    ) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      const action = resolveEscapeAction(false, false);
-      if (action === 'exit_fullscreen') {
-        onToggleFull();
-      } else {
-        onClose();
-      }
-    };
-
-    handleKeyDown(mkEvent('Escape'));
+    expect(
+      handleCanvasEscape(event, {
+        isFull: false,
+        onClose,
+        onToggleFull,
+      }),
+    ).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
     expect(onToggleFull).not.toHaveBeenCalled();
   });
@@ -78,41 +66,33 @@ describe('Escape handler', () => {
   it('非 Escape 键不触发任何回调', () => {
     const onClose = vi.fn();
     const onToggleFull = vi.fn();
+    const event = mkEvent('Enter');
 
-    const handleKeyDown = (
-      event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
-    ) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      const action = resolveEscapeAction(true, true);
-      if (action === 'exit_fullscreen') {
-        onToggleFull();
-      } else {
-        onClose();
-      }
-    };
-
-    handleKeyDown(mkEvent('Enter'));
+    expect(
+      handleCanvasEscape(event, {
+        isFull: true,
+        onClose,
+        onToggleFull,
+      }),
+    ).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
     expect(onToggleFull).not.toHaveBeenCalled();
   });
 
-  it('preventDefault 仅对 Escape 执行', () => {
-    const preventDefault = vi.fn();
+  it('退出全屏后把焦点恢复到全屏按钮', async () => {
+    const focus = vi.fn();
+    const fullscreenButton = { focus } as unknown as HTMLElement;
 
-    const handleWithPrevent = (event: {
-      key: string;
-      preventDefault: () => void;
-    }) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-    };
+    handleCanvasEscape(mkEvent('Escape'), {
+      isFull: true,
+      onClose: vi.fn(),
+      onToggleFull: vi.fn(),
+      fullscreenButton,
+    });
+    await Promise.resolve();
 
-    handleWithPrevent({ key: 'Enter', preventDefault });
-    expect(preventDefault).not.toHaveBeenCalled();
-
-    handleWithPrevent({ key: 'Escape', preventDefault });
-    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledOnce();
   });
 });
 
