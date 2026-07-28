@@ -1,0 +1,13 @@
+{
+  "name": "@educanvas/voice-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Voice lab for reproducing sherpa-onnx native addon behavior",
+  "scripts": {
+    "test:native": "node test-native-addon.mjs"
+  },
+  "dependencies": {
+    "sherpa-onnx-node": "^1.13.4"
+  }
+}
