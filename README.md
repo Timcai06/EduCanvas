@@ -81,6 +81,11 @@ MODEL_GATEWAY_API_KEY=<your-key>
 MODEL_GATEWAY_PRIMARY_MODEL=<explicit-model-id>
 ```
 
+图片输入需要另配视觉 Provider：主 Provider 若是纯文本模型（如 DeepSeek），
+物化层会明确拒绝图片而不是静默丢弃。在 `.env` 中填写 `.env.example` 里的
+`MODEL_GATEWAY_VISION_*` 一组变量即可启用；详见
+[ADR-0017](docs/09-decisions/0017-文本与视觉Provider分离与图片输入路由.md)。
+
 ### 2. 安装、迁移和启动
 
 ```bash

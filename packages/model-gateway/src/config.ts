@@ -46,6 +46,8 @@ import {
   parseBoolean,
   parseBoundedInteger,
   parseModelId,
+  parseProviderApiKey,
+  parseProviderBaseUrl,
   trimmed,
   turnModelGatewayRuntimes,
   type DeploymentEnvironment,
@@ -53,6 +55,10 @@ import {
   type OpenAICompatibleProvider,
   type TurnModelGatewayRuntime,
 } from './config-primitives';
+import {
+  parseVisionProviderConfiguration,
+  type VisionProviderConfiguration,
+} from './config-vision';
 
 export {
   deploymentEnvironments,
@@ -92,6 +98,34 @@ export interface EnabledModelGatewayConfiguration extends MediaCapabilityLimits 
    * 由部署方按实际所选模型开启（`MODEL_GATEWAY_VISION=true`）。
    */
   visionEnabled: boolean;
+  /**
+   * 独立的视觉 Provider；未配置时为 null。主 Provider 只有文本能力时用它承接
+   * 图片输入，与 `visionEnabled` 互斥（ADR-0017）。
+   */
+  visionProvider: VisionProviderConfiguration | null;
+  /**
+   * 是否在请求体中固定发送 `thinking: { type: 'disabled' }`。
+   *
+   * DeepSeek 由协议已知必关，不依赖本字段。本字段供其他默认开启思考的
+   * OpenAI-compatible 供应商使用：EduCanvas 不保留 CoT，推理内容会白白吃掉
+   * 输出预算。不做默认开启是因为 OpenAI 等供应商不认识该字段会整轮 400。
+   */
+  disableThinking: boolean;
+}
+
+/**
+ * 本次部署能否接受图片输入——无论来自主 Provider 自身还是独立视觉 Provider。
+ *
+ * 物化层只关心「图片进不进得来」，不关心它最终走哪条链路，因此把两个配置来源
+ * 收敛成这一个判据，避免调用方各自拼 `||` 而漏掉其中一种。
+ */
+export function acceptsImageInput(
+  configuration: ModelGatewayConfiguration,
+): boolean {
+  return (
+    configuration.enabled &&
+    (configuration.visionEnabled || configuration.visionProvider !== null)
+  );
 }
 
 export type ModelGatewayConfiguration =
@@ -102,32 +136,11 @@ const parseBaseUrl = (
   environment: DeploymentEnvironment,
   provider: OpenAICompatibleProvider,
 ): string => {
-  const raw = trimmed(value);
-  if (raw === undefined) {
-    throw new ModelGatewayConfigurationError('MISSING_BASE_URL');
-  }
-
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
-  if (
-    url.username !== '' ||
-    url.password !== '' ||
-    url.search !== '' ||
-    url.hash !== '' ||
-    !['http:', 'https:'].includes(url.protocol)
-  ) {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
-  if (
-    ['staging', 'production'].includes(environment) &&
-    url.protocol !== 'https:'
-  ) {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
+  const url = parseProviderBaseUrl(value, environment, {
+    missing: 'MISSING_BASE_URL',
+    invalid: 'INVALID_BASE_URL',
+  });
+  /* DeepSeek 锁定官方 hostname：开发期误配成第三方中转会把 Key 送到非授权端点。 */
   if (
     provider === 'deepseek' &&
     (url.protocol !== 'https:' || url.hostname !== 'api.deepseek.com')
@@ -137,16 +150,11 @@ const parseBaseUrl = (
   return url.toString().replace(/\/$/, '');
 };
 
-const parseApiKey = (value: string | undefined): string => {
-  const apiKey = trimmed(value);
-  if (apiKey === undefined) {
-    throw new ModelGatewayConfigurationError('MISSING_API_KEY');
-  }
-  if (apiKey.length > 4_096 || !/^[\x21-\x7e]+$/.test(apiKey)) {
-    throw new ModelGatewayConfigurationError('INVALID_API_KEY');
-  }
-  return apiKey;
-};
+const parseApiKey = (value: string | undefined): string =>
+  parseProviderApiKey(value, {
+    missing: 'MISSING_API_KEY',
+    invalid: 'INVALID_API_KEY',
+  });
 
 /**
  * 从显式传入的环境记录解析配置；函数不会主动读取 process.env，便于组合根控制。
@@ -212,6 +220,7 @@ export function parseModelGatewayConfiguration(
     false,
   );
   const mediaAliases = parseMediaModelAliases(environmentValues, provider);
+  const visionEnabled = parseBoolean(environmentValues.MODEL_GATEWAY_VISION);
   const modelIds: EnabledModelGatewayConfiguration['modelIds'] = {
     primary,
     ...(fast === undefined ? {} : { fast }),
@@ -243,7 +252,16 @@ export function parseModelGatewayConfiguration(
       { min: 1, max: 65_536 },
       'INVALID_MAX_OUTPUT_TOKENS',
     ),
-    visionEnabled: parseBoolean(environmentValues.MODEL_GATEWAY_VISION),
+    visionEnabled,
+    visionProvider: parseVisionProviderConfiguration(
+      environmentValues,
+      environment,
+      visionEnabled,
+    ),
+    /* 主 Provider 自身的思考开关；视觉链路有独立的同名配置，见 config-vision.ts。 */
+    disableThinking: parseBoolean(
+      environmentValues.MODEL_GATEWAY_DISABLE_THINKING,
+    ),
     ...parseMediaCapabilityLimits(environmentValues, mediaAliases),
   };
 }
