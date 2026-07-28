@@ -83,6 +83,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare Graphile Worker schema
+        run: >-
+          pnpm --filter @educanvas/worker exec graphile-worker
+          --connection "$TEST_DATABASE_URL"
+          --schema-only
+
       - name: PostgreSQL integration tests
         run: pnpm test:integration
 

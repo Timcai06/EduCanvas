@@ -6,6 +6,16 @@ import {
   SpinnerGap,
   WarningCircle,
 } from '@phosphor-icons/react';
+import {
+  CANVAS_SHELL_COPY_CLASS,
+  canRetryCanvasShellStatus,
+  getCanvasShellStatusRole,
+  isCanvasShellStatusBusy,
+  resolveCanvasShellRetryLabel,
+  type CanvasShellStatusKind,
+} from './canvas-shell-status-contract';
+
+export type { CanvasShellStatusKind } from './canvas-shell-status-contract';
 
 /**
  * Canvas 外壳可展示的五种统一状态。
@@ -13,9 +23,6 @@ import {
  * 本组件是纯展示——不读取资源、不发请求、不判断权限。文案和是否需要
  * 重试完全由调用方提供，失败信息不得包含堆栈、对象键或 Provider 原始错误。
  */
-export type CanvasShellStatusKind =
-  'loading' | 'empty' | 'failed' | 'unavailable' | 'denied';
-
 export interface CanvasShellStatusProps {
   status: CanvasShellStatusKind;
   /** 面向用户的稳定标题，不展示内部错误码。 */
@@ -27,7 +34,11 @@ export interface CanvasShellStatusProps {
   retryLabel?: string;
 }
 
-const iconProps = { size: 32, weight: 'duotone' as const };
+const iconProps = {
+  size: 32,
+  weight: 'duotone' as const,
+  'aria-hidden': true,
+};
 
 function StatusIcon({ status }: { status: CanvasShellStatusKind }) {
   switch (status) {
@@ -60,12 +71,6 @@ function StatusIcon({ status }: { status: CanvasShellStatusKind }) {
   }
 }
 
-function statusRole(status: CanvasShellStatusKind): 'status' | 'alert' {
-  return status === 'failed' || status === 'unavailable' || status === 'denied'
-    ? 'alert'
-    : 'status';
-}
-
 /**
  * Canvas 外壳统一状态提示。
  *
@@ -80,20 +85,21 @@ export function CanvasShellStatus({
   onRetry,
   retryLabel = '重试',
 }: CanvasShellStatusProps) {
-  const showRetry =
-    (status === 'failed' || status === 'unavailable') && onRetry !== undefined;
+  const showRetry = canRetryCanvasShellStatus(status, onRetry);
 
   return (
     <div
-      role={statusRole(status)}
+      role={getCanvasShellStatusRole(status)}
       aria-label={title}
-      aria-busy={status === 'loading' || undefined}
+      aria-busy={isCanvasShellStatusBusy(status)}
       className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-8 text-center"
     >
       <StatusIcon status={status} />
-      <p className="font-display text-base font-semibold text-ink">{title}</p>
+      <p className="font-display min-w-0 max-w-sm break-words text-base font-semibold text-ink">
+        {title}
+      </p>
       {description ? (
-        <p className="max-w-sm text-sm text-ink-muted">{description}</p>
+        <p className={CANVAS_SHELL_COPY_CLASS}>{description}</p>
       ) : null}
       {showRetry ? (
         <button
@@ -101,7 +107,7 @@ export function CanvasShellStatus({
           onClick={onRetry}
           className="mt-1 flex min-h-9 items-center rounded-full px-4 text-sm text-accent transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          {retryLabel}
+          {resolveCanvasShellRetryLabel(retryLabel)}
         </button>
       ) : null}
     </div>
