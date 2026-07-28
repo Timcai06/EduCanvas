@@ -2,6 +2,7 @@
 
 export {
   ModelGatewayConfigurationError,
+  acceptsImageInput,
   deploymentEnvironments,
   modelGatewayConfigurationErrorCodes,
   openAICompatibleProviders,
@@ -16,11 +17,15 @@ export {
   type OpenAICompatibleProvider,
   type TurnModelGatewayRuntime,
 } from './config';
+export type { VisionProviderConfiguration } from './config-vision';
 export {
   OpenAICompatibleTurnModelGateway,
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
-export { createTurnModelGatewayFromEnvironment } from './turn-model-gateway-factory';
+export {
+  createTurnModelGatewayFromEnvironment,
+  createVisionTurnModelGatewayFromEnvironment,
+} from './turn-model-gateway-factory';
 export {
   OpenAICompatibleStructuredModelGateway,
   type OpenAICompatibleStructuredModelGatewayOptions,

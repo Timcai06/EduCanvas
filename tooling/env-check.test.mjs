@@ -62,7 +62,7 @@ describe('env-check', () => {
       providerEnv({
         MODEL_GATEWAY_PROVIDER: 'deepseek',
         MODEL_GATEWAY_BASE_URL: 'https://api.deepseek.com',
-        MODEL_GATEWAY_PRIMARY_MODEL: 'deepseek-chat',
+        MODEL_GATEWAY_PRIMARY_MODEL: 'deepseek-v4-flash',
       }),
     );
 
@@ -157,5 +157,94 @@ describe('env-check', () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /model provider openai-compatible/);
+  });
+
+  it('accepts a text provider paired with a separate vision provider', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_BASE_URL: 'https://vision.example.test/v4',
+          MODEL_GATEWAY_VISION_API_KEY: 'fixture-vision-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('rejects a half-configured vision provider', async () => {
+    const missingBaseUrl = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_API_KEY: 'fixture-vision-key',
+        }),
+      ),
+    );
+    const missingKey = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_BASE_URL: 'https://vision.example.test/v4',
+        }),
+      ),
+    );
+
+    assert.equal(missingBaseUrl.status, 1);
+    assert.match(missingBaseUrl.stderr, /missing vision provider values/);
+    assert.equal(missingKey.status, 1);
+    assert.match(missingKey.stderr, /missing vision provider values/);
+  });
+
+  it('rejects declaring both native vision and a separate vision provider', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_VISION: 'true',
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_BASE_URL: 'https://vision.example.test/v4',
+          MODEL_GATEWAY_VISION_API_KEY: 'fixture-vision-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /mutually exclusive/);
+  });
+
+  it('rejects a vision key without printing the supplied key', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_BASE_URL: 'https://vision.example.test/v4',
+          MODEL_GATEWAY_VISION_API_KEY: 'fixture-视觉密钥',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /VISION_API_KEY has an invalid shape/);
+    assert.doesNotMatch(result.stderr, /fixture-视觉密钥/);
+  });
+
+  it('requires https for a production vision endpoint', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          EDUCANVAS_DEPLOYMENT_ENV: 'production',
+          MODEL_GATEWAY_VISION_MODEL: 'vision/model-v1',
+          MODEL_GATEWAY_VISION_BASE_URL: 'http://vision.example.test/v4',
+          MODEL_GATEWAY_VISION_API_KEY: 'fixture-vision-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /VISION_BASE_URL must use https in staging\/production/,
+    );
   });
 });

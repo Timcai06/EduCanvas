@@ -109,6 +109,7 @@ const config: EnabledModelGatewayConfiguration = {
   timeoutMs: 1_000,
   maxOutputTokens: 2_048,
   visionEnabled: false,
+  visionProvider: null,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,

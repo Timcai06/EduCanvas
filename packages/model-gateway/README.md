@@ -15,7 +15,8 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - `openai-compatible-turn-model-gateway.ts` 只负责原生网络调用、SSE 生命周期、取消和稳定事件输出；
 - `ai-sdk-protocol.ts`、`ai-sdk-turn-model-gateway.ts` 与`ai-sdk-provider-factory.ts`
   分别负责SDK消息/事件投影、流生命周期和Provider构造；
-- `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析和 Adapter 选择；
+- `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析、Adapter 选择与视觉 Provider 投影；
+- `config-vision.ts` 只负责图片输入专用 Provider 的解析；它与主 Provider 不共享 Base URL 与 Key；
 - 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
 
 `tooling/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行
@@ -52,13 +53,31 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - staging/production 的通用 OpenAI-compatible endpoint 必须使用 HTTPS；DeepSeek endpoint 还必须匹配代码允许的官方主机；
 - DeepSeek Turn与结构化JSON请求固定禁用 thinking，响应中的意外 `reasoning_content` 会被忽略，避免保留或转发 CoT，也避免推理耗尽Artifact JSON的输出预算。
 
+### 视觉 Provider（ADR-0017）
+
+主 Provider 是纯文本模型时，图片输入由独立的视觉 Provider 承接：
+
+- 配置 `MODEL_GATEWAY_VISION_MODEL` 即声明视觉 Provider 存在，此时 `_BASE_URL` 与
+  `_API_KEY` 必填——半配置会让部署以为图片可用，直到运行期才失败；
+- 它与 `MODEL_GATEWAY_VISION=true`（主 Provider 自带读图）**互斥**，同时声明抛
+  `VISION_PROVIDER_CONFLICT`；
+- `MODEL_GATEWAY_VISION_TIMEOUT_MS` 与 `_MAX_OUTPUT_TOKENS` 独立于主 Provider：
+  读图任务图片 token 开销高但输出通常更短；
+- `acceptsImageInput(configuration)` 是「本次部署能否接受图片」的唯一判据，物化层
+  据此决定 `nativeAssetKinds`，不要在调用方各自拼 `||`；
+- 视觉链路固定走 native Adapter，且所有 modelAlias 都投影到同一个视觉模型——否则
+  `synthesis` 阶段按 `fast` 取模型会得到 undefined。
+
 公共工厂：
 
 ```ts
 const gateway = createTurnModelGatewayFromEnvironment(environment);
+const visionGateway = createVisionTurnModelGatewayFromEnvironment(environment);
 ```
 
-返回 `null` 表示该环境未启用真实模型，调用方必须进入明确 unavailable 状态。
+前者返回 `null` 表示该环境未启用真实模型，调用方必须进入明确 unavailable 状态；
+后者返回 `null` 表示没有独立视觉 Provider，调用方不得据此把图片发给主 Gateway。
+两者是独立实例：Adapter 持有凭据，合并会让审计无法判定请求发往哪个供应商。
 
 ## 当前接线状态
 
