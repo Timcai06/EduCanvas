@@ -1,0 +1,16 @@
+{
+  "gates": {
+    "lint": { "status": "pending" },
+    "typecheck": { "status": "pending" },
+    "unit": { "status": "pending" },
+    "db-integration": { "status": "pending" },
+    "worker-integration": { "status": "pending" },
+    "build": { "status": "pending" },
+    "e2e": { "status": "pending" },
+    "security": { "status": "pending" },
+    "contract": { "status": "pending" },
+    "eval": { "status": "pending" },
+    "provider-smoke": { "status": "pending" },
+    "release-evidence": { "status": "pending" }
+  }
+}

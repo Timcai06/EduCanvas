@@ -4,8 +4,27 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_evidence:
+        description: 'Validate release evidence pack'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -147,3 +166,23 @@ jobs:
           name: playwright-diagnostics
           path: output/playwright
           if-no-files-found: ignore
+
+  release-evidence:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true'
+    needs: [checks, integration, windows, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate release evidence pack
+        run: node scripts/validate-evidence.mjs

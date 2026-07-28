@@ -8,7 +8,7 @@
 
 ## 与现有文档体系的关系
 
-- [`../10-planning/roadmap.md`](../10-planning/roadmap.md)：跨阶段路线图和长期里程碑；
+- [`../10-planning/01-路线图.md`](../10-planning/01-路线图.md)：跨阶段路线图和长期里程碑；
 - `active/`：正在执行的阶段计划，同一目标只保留一个主计划；
 - `completed/`：完成或取消后经过压缩的收尾记录；
 - [`../09-decisions/`](../09-decisions/)：已经接受的重大技术取舍；
@@ -18,11 +18,20 @@
 
 ## 当前计划
 
-当前 active 计划是[统一 Canvas 工作面](active/2026-07-统一Canvas工作面.md)，
-按统一资源与 Renderer、来源工作面、多模态产物、隔离应用、代码/机器学习
-Runtime 和跨入口证据分期推进。
+当前有两份开发文件完全隔离、可以同时执行的 active 计划：
+
+- [画布运行时与实时语音主线](active/2026-07-画布运行时与实时语音主线.md)：
+  项目负责人负责统一资源与 Renderer 接入、媒体、Runtime、实时流式转录、
+  音频留存和跨入口；
+- [画布界面与可访问性优化](active/2026-07-画布界面与可访问性优化.md)：
+  协作开发者只负责 Canvas 外壳、状态展示和视觉/无障碍回归。
+
+两边各自提交独立 PR，全部合并后由 Codex 联合审计。语音产品接线仍须先通过
+ADR-0018、原生 addon 与热词实测门禁。
 
 [自适应学习基线](completed/2026-07-自适应学习基线.md) 已完成并归档。
+[账号、历史记录删除与用户资料](completed/2026-07-账号、历史记录删除与用户资料.md)
+已在 PR #192 完成交付并归档。
 第二代Hybrid Ports架构已[完成并结档](completed/2026-07-第二代架构升级.md)；
 Memory、教育质量、正式身份、渠道生产化、自动verifier与完整SLO继续分别立项；
 多模态输入输出和受控运行环境由当前统一 Canvas 计划承接。
@@ -30,7 +39,7 @@ Memory、教育质量、正式身份、渠道生产化、自动verifier与完整
 
 ## 命名规则
 
-- 新计划文件使用`YYYY-MM-中文主题.md`，例如`2026-07-第二代架构研究.md`；已有 completed 记录不为统一外观而批量重命名；
+- 新计划文件使用`YYYY-MM-中文主题.md`，例如`2026-07-第二代架构研究.md`；
 - 一个文件只描述一个可独立验收的阶段目标；
 - 状态只使用`draft`、`active`、`blocked`、`completed`、`cancelled`；
 - `active`计划必须有负责人和最后验证时间；
@@ -56,4 +65,4 @@ draft -> active -> completed
 
 单项自动化验证通过只更新 active 计划中的证据状态；只要完成终点仍有未验收能力，计划就继续留在`active/`。
 
-详细协作规则见[`../08-collaboration/documentation-rules.md`](../08-collaboration/documentation-rules.md)。新计划从[`_template.md`](_template.md)开始。
+详细协作规则见[`../08-collaboration/02-文档维护规则.md`](../08-collaboration/02-文档维护规则.md)。新计划从[`00-计划模板.md`](00-计划模板.md)开始。

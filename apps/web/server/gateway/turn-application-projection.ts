@@ -26,7 +26,7 @@ function safeFailureMessage(
  * Adapter、Node、MCP）传进来的标识形式不一致。
  *
  * 兜底刻意返回通用文案而不是原始标识：`artifact.create`、`filesystem.read_allowlisted`
- * 这类技术串直接透给学生会违反「界面零技术术语」（docs/01-product/student-ui-spec.md）。
+ * 这类技术串直接透给学生会违反「界面零技术术语」（docs/01-product/02-学生界面规范.md）。
  * 新增工具时如果忘了加映射，学生看到的是「正在使用工具」而不是内部名称。
  */
 const TOOL_LABELS: Readonly<Record<string, string>> = {

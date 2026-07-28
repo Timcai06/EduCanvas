@@ -52,5 +52,5 @@ pnpm test:tooling
 该实验在当时尚未授权生产迁移；随后阶段性“第二代 Hybrid Ports Agent 架构”决策
 明确了唯一写者与迁移边界，
 并落地生产 Tool Kernel 契约和持久 effect ledger。升级结档后，仍有效的约束已归入
-ADR-0003 与 ADR-0004，原阶段记录见[关键决策历史](../../09-decisions/decision-history.md)。
+ADR-0003 与 ADR-0004，原阶段记录见[关键决策历史](../../09-decisions/00-决策历史.md)。
 不能因 Kernel 类已经存在而把后续能力宣称为完成。

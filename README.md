@@ -33,7 +33,7 @@ EduCanvas 是一个**以教育能力为核心的通用个人 Agent 平台**。�
 | Sources/引用、Artifact/Studio、Worker、可信学习事实        | Asset 与 Source/Chunk 仍有迁移期双链         | production SLO、外部指标后端与对象删除闭环 |
 | 显式学习者画像、Notebook Goal/目标图、可信短诊断与三态进度 | P1 课程目录仍是代码内受信版本                | 教师课程发布与动态图推荐                   |
 
-当前事实以 [开发文档中心](docs/README.md)、已接受 ADR 与 Schema 为准；2026-07-16 的长篇技术报告已转为[历史快照](docs/00-overview/snapshots/2026-07-16-project-technical-report.md)，不再双重维护当前状态。
+当前事实以 [开发文档中心](docs/README.md)、已接受 ADR 与 Schema 为准；2026-07-16 的长篇技术报告已转为[历史快照](docs/00-overview/snapshots/01-2026年07月16日项目技术报告.md)，不再双重维护当前状态。
 
 ## 产品交互模型
 
@@ -84,7 +84,7 @@ MODEL_GATEWAY_PRIMARY_MODEL=<explicit-model-id>
 图片输入需要另配视觉 Provider：主 Provider 若是纯文本模型（如 DeepSeek），
 物化层会明确拒绝图片而不是静默丢弃。在 `.env` 中填写 `.env.example` 里的
 `MODEL_GATEWAY_VISION_*` 一组变量即可启用；详见
-[ADR-0017](docs/09-decisions/0017-文本与视觉Provider分离与图片输入路由.md)。
+[ADR-0017](docs/09-decisions/0017-文本与视觉提供商分离与图片输入路由.md)。
 
 ### 2. 安装、迁移和启动
 
@@ -114,7 +114,7 @@ Copy-Item .env.example .env
 pnpm env:check
 ```
 
-需要 DeepSeek 时，可参考 `.env.local.example.deepseek`，把变量合并到 `.env`，
+需要 DeepSeek 时，按 `.env.example` 中的 Model Gateway 说明修改本地 `.env`，
 再填写真实的 `MODEL_GATEWAY_API_KEY`。真实 Key 只放在本地 `.env`，不要提交。
 
 之后双击根目录的 `Start EduCanvas.cmd`。它会检查端口、准备数据库、按迁移文件
@@ -285,7 +285,7 @@ Canvas 按“产物是否进入可信学习事实”分层信任。Tier 1 判分
 - `quiz`：可判分；
 - `pipeline_flow`：render-only 受控 GSAP Timeline。
 
-详见 [统一 Canvas 工作面](docs/02-architecture/04-统一Canvas工作面.md)、[ADR-0004](docs/09-decisions/0004-capability-trust-and-learning-evidence.md)和[ADR-0009](docs/09-decisions/0009-统一Canvas工作面与运行时分层.md)。
+详见 [统一 Canvas 工作面](docs/02-architecture/04-统一画布工作面.md)、[ADR-0004](docs/09-decisions/0004-能力信任与学习证据.md)和[ADR-0009](docs/09-decisions/0009-统一画布工作面与运行时分层.md)。
 
 ### 可信 K12 课程状态
 
@@ -313,8 +313,8 @@ stateDiagram-v2
 
 ## 下一阶段
 
-[Gateway-first个人Agent计划](docs/plan/completed/2026-07-gateway-first-personal-agent.md)、
-[Web-first产品入口计划](docs/plan/completed/2026-07-web-first-entrypoints-and-handoff.md)、
+[Gateway-first个人Agent计划](docs/plan/completed/2026-07-网关优先个人智能体.md)、
+[Web-first产品入口计划](docs/plan/completed/2026-07-Web优先入口与交接.md)、
 [第二代架构研究](docs/plan/completed/2026-07-第二代架构研究.md)与
 [第二代架构升级](docs/plan/completed/2026-07-第二代架构升级.md)均已完成。
 下一阶段转向用户可见的功能与前端设计，优先级是：
@@ -326,26 +326,26 @@ stateDiagram-v2
    TUI保持同一Notebook与操作语义；
 5. 建立年龄、学科和任务分层的教学质量评测，再推进正式IdP与production hardening。
 
-此前的 Gemini + NotebookLM 产品体验计划已经[结档](docs/plan/completed/2026-07-gemini-notebooklm-replica.md)；持久 Artifact、Notebook 来源/引用、轻产物、音频和 Canvas 共创已成为当前基线。
+此前的 Gemini + NotebookLM 产品体验计划已经[结档](docs/plan/completed/2026-07-GeminiNotebookLM复刻.md)；持久 Artifact、Notebook 来源/引用、轻产物、音频和 Canvas 共创已成为当前基线。
 
 ## 文档入口
 
 | 内容                            | 入口                                                                                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 文档索引                        | [docs/README.md](docs/README.md)                                                                                                       |
-| 历史技术报告（2026-07-16 快照） | [docs/00-overview/snapshots/2026-07-16-project-technical-report.md](docs/00-overview/snapshots/2026-07-16-project-technical-report.md) |
-| 产品定义                        | [docs/01-product/product-definition.md](docs/01-product/product-definition.md)                                                         |
-| 学生 UI 规范                    | [docs/01-product/student-ui-spec.md](docs/01-product/student-ui-spec.md)                                                               |
+| 历史技术报告（2026-07-16 快照） | [docs/00-overview/snapshots/01-2026年07月16日项目技术报告.md](docs/00-overview/snapshots/01-2026年07月16日项目技术报告.md) |
+| 产品定义                        | [docs/01-product/01-产品定义.md](docs/01-product/01-产品定义.md)                                                         |
+| 学生 UI 规范                    | [docs/01-product/02-学生界面规范.md](docs/01-product/02-学生界面规范.md)                                                               |
 | 系统架构现状                    | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md)                                                     |
-| Gateway 与多入口                | [docs/02-architecture/02-Gateway与多入口.md](docs/02-architecture/02-Gateway与多入口.md)                                               |
+| Gateway 与多入口                | [docs/02-architecture/02-网关与多入口.md](docs/02-architecture/02-网关与多入口.md)                                               |
 | 第二代架构                      | [docs/02-architecture/03-第二代架构.md](docs/02-architecture/03-第二代架构.md)                                                         |
-| Agent 编排边界                  | [docs/03-ai/01-Agent编排边界.md](docs/03-ai/01-Agent编排边界.md)                                                                       |
+| Agent 编排边界                  | [docs/03-ai/01-智能体编排边界.md](docs/03-ai/01-智能体编排边界.md)                                                                       |
 | 架构研究索引                    | [docs/research/00-研究说明.md](docs/research/00-研究说明.md)                                                                           |
-| 数据设计                        | [docs/04-data/data-design.md](docs/04-data/data-design.md)                                                                             |
-| API/SSE                         | [docs/05-engineering/api-conventions.md](docs/05-engineering/api-conventions.md)                                                       |
-| 测试与安全                      | [docs/06-quality/testing-and-evaluation.md](docs/06-quality/testing-and-evaluation.md)                                                 |
+| 数据设计                        | [docs/04-data/02-数据设计.md](docs/04-data/02-数据设计.md)                                                                             |
+| API/SSE                         | [docs/05-engineering/01-接口约定.md](docs/05-engineering/01-接口约定.md)                                                       |
+| 测试与安全                      | [docs/06-quality/03-测试与评估.md](docs/06-quality/03-测试与评估.md)                                                 |
 | ADR                             | [docs/09-decisions/README.md](docs/09-decisions/README.md)                                                                             |
-| 路线图                          | [docs/10-planning/roadmap.md](docs/10-planning/roadmap.md)                                                                             |
+| 路线图                          | [docs/10-planning/01-路线图.md](docs/10-planning/01-路线图.md)                                                                             |
 
 ## 协作规则
 
@@ -355,4 +355,4 @@ stateDiagram-v2
 4. PR 必须记录真实验证命令和结果；
 5. 新能力不能用 Fixture 或 UI 文案伪装为已经接通。
 
-首次参与开发请阅读 [团队协作指南](docs/08-collaboration/team-guide.md)。
+首次参与开发请阅读 [团队协作指南](docs/08-collaboration/03-团队协作指南.md)。

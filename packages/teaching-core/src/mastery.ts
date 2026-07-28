@@ -10,7 +10,7 @@
  * - 误区惩罚（活跃误区 → 分数降低）
  * - 先修上限（前驱知识未掌握 → 当前分数被 cap）
  *
- * ## 公式（见 docs/03-ai/mastery-and-misconceptions.md）
+ * ## 公式（见 docs/03-ai/02-掌握度与误区.md）
  *
  * ```
  * score = previousWeight × recencyAdjustedPrevious + evidenceWeight × evidence

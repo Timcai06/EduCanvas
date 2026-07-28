@@ -1,6 +1,6 @@
 # EduCanvas — Agent 工作规则
 
-多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `docs/08-collaboration/team-guide.md`。
+多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `docs/08-collaboration/03-团队协作指南.md`。
 
 ## Git 规则（GitHub 分支保护已强制执行）
 
@@ -30,7 +30,7 @@ API Key、密码、Token、私钥、`.env` 真实配置、学生个人信息、�
 - 已有注释准确就保留，代码或文档演进后过时就立即修正；不要留下任务编号式注释代替长期设计说明
 - 新增`apps/*`或`packages/*`包时必须同时添加`README.md`，包含包职责、核心文件、常用命令和改动前必读文档
 - 往仓库根目录新增文件，或新增`apps/*`、`packages/*`、`docs/*`等顶层目录，必须先得到Code Owner（@Timcai06）批准
-- 详细规则见`docs/08-collaboration/documentation-rules.md`；重大约束变化仍需通过`docs/09-decisions/`中的ADR记录
+- 详细规则见`docs/08-collaboration/02-文档维护规则.md`；重大约束变化仍需通过`docs/09-decisions/`中的ADR记录
 
 ## 核心技术约定（详见 docs/，此处为速查）
 

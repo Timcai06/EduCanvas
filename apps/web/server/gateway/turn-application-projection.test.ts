@@ -147,7 +147,7 @@ describe('工具动作名投影', () => {
   });
 
   it('未知工具兜底为通用文案，绝不把内部标识透给学生', () => {
-    /* 界面零技术术语（docs/01-product/student-ui-spec.md）：新增工具忘了加
+    /* 界面零技术术语（docs/01-product/02-学生界面规范.md）：新增工具忘了加
        映射时，学生应看到「正在使用工具」而不是 filesystem.read_allowlisted。 */
     expect(label('some.unmapped_capability')).toBe('正在使用工具');
   });

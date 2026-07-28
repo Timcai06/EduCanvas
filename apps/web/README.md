@@ -4,7 +4,7 @@
 
 这是 EduCanvas 当前唯一的 Web 应用。它使用 Next.js App Router 同时承载 Chat-first 体验和阶段一 BFF/组合根，负责把通用 `@educanvas/agent-core`、Provider、Artifact、数据能力与 K12 `@educanvas/teaching-core` / `@educanvas/teaching-runtime` 组装成当前首个可运行纵切。
 
-共享协议、领域规则、应用用例和数据库定义不得复制到应用私有目录；项目继续采用模块化单体，边界依据 [ADR-0005](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)。local deployment 下 Web 与 TUI 使用同一个 `local:owner` 主体；其他未接正式 IdP 的环境仍使用受限匿名兼容身份，不能冒充正式用户认证。
+共享协议、领域规则、应用用例和数据库定义不得复制到应用私有目录；项目继续采用模块化单体，边界依据 [ADR-0005](../../docs/09-decisions/0005-模块化单体产物与持久任务.md)。local deployment 下 Web 与 TUI 使用同一个 `local:owner` 主体；其他未接正式 IdP 的环境仍使用受限匿名兼容身份，不能冒充正式用户认证。
 
 ## 当前实现边界
 
@@ -100,10 +100,10 @@ make dev
 
 ## 改动前必读
 
-- [产品定义](../../docs/01-product/product-definition.md)
-- [学生端 UI 规格](../../docs/01-product/student-ui-spec.md)
-- [统一 Canvas 工作面](../../docs/02-architecture/04-统一Canvas工作面.md)
-- [Agent 编排边界](../../docs/03-ai/01-Agent编排边界.md)
-- [前端工程](../../docs/05-engineering/frontend.md)
-- [API 约定](../../docs/05-engineering/api-conventions.md)
-- [ADR-0005：模块化单体、Artifact 与持久任务](../../docs/09-decisions/0005-modular-monolith-artifacts-and-durable-jobs.md)
+- [产品定义](../../docs/01-product/01-产品定义.md)
+- [学生端 UI 规格](../../docs/01-product/02-学生界面规范.md)
+- [统一 Canvas 工作面](../../docs/02-architecture/04-统一画布工作面.md)
+- [Agent 编排边界](../../docs/03-ai/01-智能体编排边界.md)
+- [前端工程](../../docs/05-engineering/03-前端工程.md)
+- [API 约定](../../docs/05-engineering/01-接口约定.md)
+- [ADR-0005：模块化单体、Artifact 与持久任务](../../docs/09-decisions/0005-模块化单体产物与持久任务.md)

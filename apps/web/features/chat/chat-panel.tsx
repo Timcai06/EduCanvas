@@ -117,7 +117,7 @@ function attachmentSummary(
  * 消息流是纯展示组件：所有可变状态（消息、Canvas开合、判分）由 LearnWorkspace 持有。
  * 老师消息不使用气泡而直接写在纸面上，学生消息是页面里唯一的「纸片」——
  * 视觉权重本身在表达「这是老师的课堂」；来源以旁注（marginalia）形式挂在
- * 回答末尾，与行内衬线注号 [n] 对应。设计依据见 docs/01-product/student-ui-spec.md。
+ * 回答末尾，与行内衬线注号 [n] 对应。设计依据见 docs/01-product/02-学生界面规范.md。
  */
 export function ChatPanel({
   messages,

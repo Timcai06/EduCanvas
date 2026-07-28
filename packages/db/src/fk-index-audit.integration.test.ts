@@ -30,7 +30,7 @@ const connection = testDatabaseUrl
  * 清单来自 `anonymous-data-lifecycle.ts`、`anonymous-study-data-lifecycle.ts` 与
  * `study-bootstrap-compensator.ts` 中的实际 `delete` 调用；新增删除路径时必须同步
  * 这里，否则新路径引入的顺序扫描不会被发现。判定依据见
- * docs/04-data/fk-index-audit.md。
+ * docs/04-data/03-外键索引审计.md。
  */
 const DELETED_PARENT_TABLES = [
   'agent_message_parts',

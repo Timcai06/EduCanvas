@@ -34,7 +34,7 @@ import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
 
 /**
  * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
- * 版本升级规则见 docs/09-decisions/0009-统一Canvas工作面与运行时分层.md。
+ * 版本升级规则见 docs/09-decisions/0009-统一画布工作面与运行时分层.md。
  */
 export const ARTIFACT_SCHEMA_VERSION = '1' as const;
 

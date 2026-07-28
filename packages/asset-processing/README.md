@@ -23,7 +23,7 @@ pnpm --filter @educanvas/asset-processing typecheck
 ## 改动前必读
 
 - [ADR-0010：资产解析异步化与解析器归位](../../docs/09-decisions/0010-资产解析异步化与解析器归位.md)
-- [数据设计](../../docs/04-data/data-design.md) 中 `asset_versions` 与 `asset_processing_jobs` 两节
+- [数据设计](../../docs/04-data/02-数据设计.md) 中 `asset_versions` 与 `asset_processing_jobs` 两节
 
 ## 两个容易踩的约束
 
