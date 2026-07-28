@@ -253,7 +253,16 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           }
         }
 
-        if (choice.finish_reason !== null) {
+        /*
+         * OpenAI 与 DeepSeek 在未终止的 chunk 里显式发送 `finish_reason: null`，
+         * 而 GLM 视觉模型直接省略该字段。两者都合法，因此 undefined 与 null 必须
+         * 同样视为「本 chunk 未终止」——只判 null 会让缺字段的流在第一个 delta 上
+         * 就对 undefined 调 requiredString 而整轮失败（文本已流出，终态却是 failed）。
+         */
+        if (
+          choice.finish_reason !== null &&
+          choice.finish_reason !== undefined
+        ) {
           providerFinishReason = requiredString(choice.finish_reason);
           if (providerFinishReason === 'tool_calls') {
             if (toolCalls.size === 0) throw new SseProtocolError();

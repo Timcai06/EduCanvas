@@ -103,6 +103,14 @@ export interface EnabledModelGatewayConfiguration extends MediaCapabilityLimits 
    * 图片输入，与 `visionEnabled` 互斥（ADR-0017）。
    */
   visionProvider: VisionProviderConfiguration | null;
+  /**
+   * 是否在请求体中固定发送 `thinking: { type: 'disabled' }`。
+   *
+   * DeepSeek 由协议已知必关，不依赖本字段。本字段供其他默认开启思考的
+   * OpenAI-compatible 供应商使用：EduCanvas 不保留 CoT，推理内容会白白吃掉
+   * 输出预算。不做默认开启是因为 OpenAI 等供应商不认识该字段会整轮 400。
+   */
+  disableThinking: boolean;
 }
 
 /**
@@ -249,6 +257,10 @@ export function parseModelGatewayConfiguration(
       environmentValues,
       environment,
       visionEnabled,
+    ),
+    /* 主 Provider 自身的思考开关；视觉链路有独立的同名配置，见 config-vision.ts。 */
+    disableThinking: parseBoolean(
+      environmentValues.MODEL_GATEWAY_DISABLE_THINKING,
     ),
     ...parseMediaCapabilityLimits(environmentValues, mediaAliases),
   };

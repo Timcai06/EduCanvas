@@ -57,6 +57,40 @@ async function captureRequest(
   };
 }
 
+/**
+ * GLM 视觉模型真实返回的流形状：未终止的 chunk 直接省略 `finish_reason`，
+ * 而不是像 OpenAI/DeepSeek 那样显式发 null。取自 2026-07-28 live smoke 抓包。
+ */
+const omittedFinishReasonChunks: readonly unknown[] = [
+  {
+    id: 'glm-fixture-response-id',
+    created: 1_785_206_627,
+    object: 'chat.completion.chunk',
+    model: 'vision-model-explicit',
+    choices: [{ index: 0, delta: { role: 'assistant', content: '12' } }],
+  },
+  {
+    id: 'glm-fixture-response-id',
+    created: 1_785_206_627,
+    object: 'chat.completion.chunk',
+    model: 'vision-model-explicit',
+    choices: [
+      {
+        index: 0,
+        finish_reason: 'stop',
+        delta: { role: 'assistant', content: '' },
+      },
+    ],
+    usage: {
+      prompt_tokens: 105,
+      completion_tokens: 2,
+      total_tokens: 107,
+      prompt_tokens_details: { cached_tokens: 0 },
+      completion_tokens_details: { reasoning_tokens: 0 },
+    },
+  },
+];
+
 describe('视觉Turn Gateway构造', () => {
   it('未配置视觉Provider时不构造视觉Gateway', () => {
     expect(
@@ -108,11 +142,74 @@ describe('视觉Turn Gateway构造', () => {
     },
   );
 
-  /* 视觉Provider不是DeepSeek，不能继承DeepSeek专属的固定关闭thinking。 */
-  it('视觉请求不携带DeepSeek专属的thinking字段', async () => {
+  /* 视觉Provider不是DeepSeek，不继承DeepSeek的固定关闭；未声明时不发该字段。 */
+  it('未声明关闭思考时视觉请求不携带thinking字段', async () => {
     const captured = await captureRequest(baseEnvironment);
 
     expect(captured.body).not.toHaveProperty('thinking');
+  });
+
+  /*
+   * live smoke 实测：GLM-4.6V 默认开启思考，同一个问题 31 个输出 token 里 24 个
+   * 是随后被丢弃的 reasoning。EduCanvas 不保留 CoT，因此部署方需要能关掉它。
+   */
+  it('声明关闭思考后视觉请求携带thinking.disabled', async () => {
+    const captured = await captureRequest({
+      ...baseEnvironment,
+      MODEL_GATEWAY_VISION_DISABLE_THINKING: 'true',
+    });
+
+    expect(captured.body).toMatchObject({ thinking: { type: 'disabled' } });
+  });
+
+  /* 两个供应商各自声明；主链路关不关思考与视觉模型的默认行为无关。 */
+  it('视觉思考开关不继承主Provider的声明', async () => {
+    const captured = await captureRequest({
+      ...baseEnvironment,
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_BASE_URL: 'https://provider.invalid/v1',
+      MODEL_GATEWAY_ALLOW_DEEPSEEK: undefined,
+      MODEL_GATEWAY_DISABLE_THINKING: 'true',
+    });
+
+    expect(captured.body).not.toHaveProperty('thinking');
+  });
+
+  /*
+   * 回归：省略 finish_reason 的流曾让文本正常流出、终态却是 failed 且 usage 丢失
+   * ——学生能看到答案，但该轮被记为失败且没有计量。live smoke 才暴露，Fixture
+   * 此前一律显式发 null 所以测不到。
+   */
+  it('未终止chunk省略finish_reason时仍正常完成并保留usage', async () => {
+    const gateway = createVisionTurnModelGatewayFromEnvironment(
+      baseEnvironment,
+      {
+        fetchImpl: (async () =>
+          createFixtureResponse(omittedFinishReasonChunks, {
+            splitEvery: 9,
+          })) as typeof fetch,
+        now: () => 100,
+      },
+    );
+    if (gateway === null) throw new Error('vision gateway 未构造');
+
+    const events = [];
+    for await (const event of gateway.streamTurnText(answerRequest)) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      'text_delta',
+      'usage',
+      'completed',
+    ]);
+    expect(events[0]).toMatchObject({ delta: '12' });
+    expect(events[1]).toMatchObject({
+      usage: { inputTokens: 105, outputTokens: 2, reasoningTokens: 0 },
+    });
+    expect(events[2]).toMatchObject({
+      metadata: { finishReason: 'stop', usage: { outputTokens: 2 } },
+    });
   });
 
   it('视觉Provider的超时与输出上限独立于主Provider', async () => {
