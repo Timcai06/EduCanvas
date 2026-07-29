@@ -24,6 +24,7 @@ import {
 
 const ARTIFACT_ID = '11111111-1111-4111-8111-111111111111';
 const JOB_ID = '22222222-2222-4222-8222-222222222222';
+const OPERATION_ID = '33333333-3333-4333-8333-333333333333';
 const SUBJECT_ID = 'student-1';
 const CHECKSUM = 'a'.repeat(64);
 const OBJECT_KEY = `artifacts/${ARTIFACT_ID}/jobs/${JOB_ID}/image.png`;
@@ -46,6 +47,7 @@ function createJob(overrides: Record<string, unknown> = {}) {
   return {
     id: JOB_ID,
     artifactId: ARTIFACT_ID,
+    operationId: OPERATION_ID,
     status: 'running' as const,
     progress: 5,
     failureCode: null,
@@ -125,6 +127,7 @@ describe('appendGeneratedImageVersion', () => {
       objectKey: OBJECT_KEY,
       checksum: CHECKSUM,
       generatedBy: IMAGE_GENERATOR,
+      createdByOperationId: OPERATION_ID,
       generationJobId: JOB_ID,
     });
     expect(appended.metadata).toEqual({

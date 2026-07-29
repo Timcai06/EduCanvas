@@ -97,6 +97,7 @@ async function appendAudioOverviewVersion(input: {
       checksum: checkpoint.data.checksum,
       metadata: checkpoint.data.metadata,
       generatedBy: AUDIO_GENERATOR,
+      createdByOperationId: input.job.operationId,
       generationJobId: input.job.id,
     });
   }
@@ -218,6 +219,7 @@ async function appendAudioOverviewVersion(input: {
     checksum: stored.checksum,
     metadata,
     generatedBy: AUDIO_GENERATOR,
+    createdByOperationId: input.job.operationId,
     generationJobId: input.job.id,
   });
 }
@@ -403,6 +405,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       trustedSubjectId: payload.subjectId,
       content,
       generatedBy,
+      createdByOperationId: job.operationId,
       generationJobId: payload.jobId,
       expectedLatestVersion:
         generationIntent.kind === 'revision'

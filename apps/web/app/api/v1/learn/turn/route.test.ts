@@ -11,7 +11,8 @@ vi.mock('@/server/gateway/teaching-turn', () => ({
 
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { beginTeachingGatewayTurn } from '@/server/gateway/teaching-turn';
-import { createTeachingTurnEventStream, POST } from './route';
+import { createTeachingTurnEventStream } from '@/server/http/teaching-turn-stream';
+import { POST } from './route';
 
 const identity = {
   token: 'a'.repeat(43),

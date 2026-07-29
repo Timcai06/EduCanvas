@@ -49,7 +49,7 @@ const WEB_ARTIFACT_KINDS = [
  * 从本端点重建,浏览器刷新/断连后不依赖流的连续性。
  * 只返回公开投影字段,不包含版本内容与生成参数——那些按需经产物详情获取。
  */
-export async function GET(request?: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   const conversation = await loadOwnedGeneralConversation(identity);

@@ -121,13 +121,16 @@ export interface PlatformArtifactVersion {
   metadata: unknown;
   objectKey: string | null;
   checksum: string | null;
+  createdByOperationId: string | null;
   generatedBy: string | null;
+  generationJobId: string | null;
   createdAt: string;
 }
 
 export interface PlatformArtifactJob {
   id: string;
   artifactId: string;
+  operationId: string | null;
   status: ArtifactJobStatus;
   progress: number | null;
   failureCode: string | null;
@@ -863,13 +866,16 @@ const toVersion = (row: VersionRow): PlatformArtifactVersion => ({
   metadata: row.metadata,
   objectKey: row.objectKey,
   checksum: row.checksum,
+  createdByOperationId: row.createdByOperationId,
   generatedBy: row.generatedBy,
+  generationJobId: row.generationJobId,
   createdAt: row.createdAt.toISOString(),
 });
 
 const toJob = (row: JobRow): PlatformArtifactJob => ({
   id: row.id,
   artifactId: row.artifactId,
+  operationId: row.operationId,
   status: row.status as ArtifactJobStatus,
   progress: row.progress,
   failureCode: row.failureCode,
