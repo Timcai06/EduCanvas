@@ -1,19 +1,20 @@
 'use client';
 
-import { ArrowRight, UserCircle } from '@phosphor-icons/react';
+import { ArrowRight, ArrowsClockwise, UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import {
-  type LearningActivity,
-  learningActivityResponseSchema,
-} from '@/features/profile/activity-contract';
+import { useEffect, useRef, useState } from 'react';
+import { type LearningActivity } from '@/features/profile/activity-contract';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
 import { Sheet } from '@/features/workspace/shared/sheet';
 import { AuroraInk } from './aurora-ink';
 import { CountUp } from './count-up';
+import {
+  fetchLearningActivity,
+  type ActivityLoadState,
+} from './learning-activity-loader';
 
 interface CurrentUser {
   nickname: string;
@@ -34,15 +35,20 @@ export function ProfileDrawer({
 }: {
   conversationId?: string;
   notebookTitle?: string | null;
-  /** 头像入口已读取的用户投影，用于避免抽屉首帧从“游客”跳到真实昵称。 */
+  /** 头像入口已读取的用户投影，用于避免抽屉首帧从"游客"跳到真实昵称。 */
   initialUser?: CurrentUser | null;
   onUserChange?: (user: { nickname: string; avatarAvailable: boolean }) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(initialUser);
-  const [activity, setActivity] = useState<LearningActivity | null>(null);
+  // 活动状态由 P03 loader 驱动：loading / ready / empty / failed
+  const [activityState, setActivityState] = useState<ActivityLoadState>({
+    kind: 'loading',
+  });
+  const activityAbortRef = useRef<AbortController | null>(null);
 
+  // ---- 用户信息加载 ----
   useEffect(() => {
     void fetch('/api/v1/me', { cache: 'no-store' })
       .then(async (response) =>
@@ -56,21 +62,59 @@ export function ProfileDrawer({
       .catch(() => undefined);
   }, []);
 
-  // 走正式接口 /api/v1/me/activity，按契约 schema 解析后展示可信统计。
+  // ---- 学习活动加载（P03 loader） ----
+  const loadActivity = () => {
+    activityAbortRef.current?.abort();
+    const controller = new AbortController();
+    activityAbortRef.current = controller;
+    // 重试必须立刻恢复 loading，避免失败提示在新请求期间继续显示。
+    setActivityState({ kind: 'loading' });
+
+    fetchLearningActivity(controller.signal).then((state) => {
+      if (!controller.signal.aborted) {
+        setActivityState(state);
+      }
+      if (activityAbortRef.current === controller) {
+        activityAbortRef.current = null;
+      }
+    });
+  };
+
+  // 抽屉打开时发起请求——逻辑直接内联在 effect body 中，避免 setState-in-effect 警告
   useEffect(() => {
-    void fetch('/api/v1/me/activity', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        const parsed = learningActivityResponseSchema.safeParse(body);
-        if (parsed.success) setActivity(parsed.data.activity);
-      })
-      .catch(() => undefined);
+    activityAbortRef.current?.abort();
+    const controller = new AbortController();
+    activityAbortRef.current = controller;
+    // 初始状态已是 loading，不需在此 setState
+
+    fetchLearningActivity(controller.signal).then((state) => {
+      if (!controller.signal.aborted) {
+        setActivityState(state);
+      }
+      if (activityAbortRef.current === controller) {
+        activityAbortRef.current = null;
+      }
+    });
+
+    return () => {
+      activityAbortRef.current?.abort();
+      activityAbortRef.current = null;
+    };
   }, []);
 
   const go = (path: string) => {
     router.push(path);
     onClose();
   };
+
+  // 从 activityState 中提取展示值
+  const activityValue = (): LearningActivity | null => {
+    if (activityState.kind === 'ready') return activityState.activity;
+    return null;
+  };
+  const isBusy = activityState.kind === 'loading';
+  const isFailed = activityState.kind === 'failed';
+  const isEmpty = activityState.kind === 'empty';
 
   return (
     <Sheet label="我的档案" eyebrow="Profile" stableHeight onClose={onClose}>
@@ -108,26 +152,57 @@ export function ProfileDrawer({
           </div>
         </div>
 
-        <div
-          data-sheet-item
-          aria-busy={activity === null}
-          className="grid min-h-[4.25rem] grid-cols-3 gap-2 rounded-2xl border border-line bg-surface/40 p-1"
-        >
-          <MiniStat
-            value={activity?.streakDays ?? null}
-            unit="天"
-            label="连续"
-          />
-          <MiniStat
-            value={activity?.activeDays ?? null}
-            unit="天"
-            label="活跃"
-          />
-          <MiniStat
-            value={activity?.masteryPercent ?? null}
-            unit="%"
-            label="掌握度"
-          />
+        {/* 学习活动统计区 */}
+        <div data-sheet-item>
+          <div
+            aria-busy={isBusy}
+            className="grid min-h-[4.25rem] grid-cols-3 gap-2 rounded-2xl border border-line bg-surface/40 p-1"
+          >
+            <MiniStat
+              value={activityValue()?.streakDays ?? null}
+              unit="天"
+              label="连续"
+            />
+            <MiniStat
+              value={activityValue()?.activeDays ?? null}
+              unit="天"
+              label="活跃"
+            />
+            <MiniStat
+              value={activityValue()?.masteryPercent ?? null}
+              unit="%"
+              label="掌握度"
+            />
+          </div>
+
+          {/* 失败状态：重试按钮 */}
+          {isFailed ? (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mt-2 flex items-center justify-between rounded-xl bg-warn/10 px-3 py-2 text-sm text-ink-muted"
+            >
+              <span>暂时无法加载学习活动</span>
+              <button
+                type="button"
+                onClick={loadActivity}
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/10 focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                <ArrowsClockwise aria-hidden="true" size={14} />
+                重试
+              </button>
+            </div>
+          ) : null}
+
+          {/* 空态：诚实展示 */}
+          {isEmpty ? (
+            <p
+              className="mt-2 text-center text-xs text-ink-muted"
+              aria-live="polite"
+            >
+              还没有学习记录
+            </p>
+          ) : null}
         </div>
 
         <button
