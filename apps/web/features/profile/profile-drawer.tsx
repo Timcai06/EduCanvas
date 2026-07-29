@@ -4,9 +4,7 @@ import { ArrowRight, ArrowsClockwise, UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import {
-  type LearningActivity,
-} from '@/features/profile/activity-contract';
+import { type LearningActivity } from '@/features/profile/activity-contract';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';

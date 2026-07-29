@@ -31,10 +31,6 @@ export async function GET(): Promise<Response> {
     });
   } catch {
     // 不泄露原始异常信息：不包含 error.message、stack、SQL、主体 ID
-    return jsonError(
-      500,
-      'activity_unavailable',
-      '暂时无法加载学习活动。',
-    );
+    return jsonError(500, 'activity_unavailable', '暂时无法加载学习活动。');
   }
 }

@@ -32,7 +32,11 @@ describe('getLearningActivity', () => {
 
   it('有主体时调用 Repository 并传递可信 facts 给日期派生', async () => {
     mockGetForStudent.mockResolvedValueOnce({
-      gradedActivityAt: ['2026-07-24T01:00:00+08:00', '2026-07-24T02:00:00+08:00', '2026-07-23T10:00:00+08:00'],
+      gradedActivityAt: [
+        '2026-07-24T01:00:00+08:00',
+        '2026-07-24T02:00:00+08:00',
+        '2026-07-23T10:00:00+08:00',
+      ],
       meanMasteryScore: 0.75,
       totalSessions: 5,
     });

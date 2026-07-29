@@ -45,7 +45,11 @@ function todayKey(now: Date, timeZone: string): string {
  */
 function addCalendarDays(dateKeyStr: string, delta: number): string {
   // 解析为 UTC 午夜，用 setUTCDate 做日历日加减（UTC 无夏令时）
-  const [y, m, d] = dateKeyStr.split('-').map(Number) as [number, number, number];
+  const [y, m, d] = dateKeyStr.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
   const utc = new Date(Date.UTC(y, m - 1, d));
   utc.setUTCDate(utc.getUTCDate() + delta);
   const yy = String(utc.getUTCFullYear());

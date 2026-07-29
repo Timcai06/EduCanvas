@@ -10,9 +10,20 @@ function activityJson(activeDays: number) {
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, '0');
     const day = String(d.getUTCDate()).padStart(2, '0');
-    days.push({ date: `${y}-${m}-${day}`, count: activeDays > 0 && i === 370 ? 1 : 0 });
+    days.push({
+      date: `${y}-${m}-${day}`,
+      count: activeDays > 0 && i === 370 ? 1 : 0,
+    });
   }
-  return { activity: { days, totalSessions: activeDays, activeDays, streakDays: activeDays, masteryPercent: null } };
+  return {
+    activity: {
+      days,
+      totalSessions: activeDays,
+      activeDays,
+      streakDays: activeDays,
+      masteryPercent: null,
+    },
+  };
 }
 
 afterEach(() => {
@@ -88,7 +99,10 @@ describe('fetchLearningActivity', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
       () =>
         new Promise((_resolve, reject) => {
-          const err = new DOMException('The user aborted a request.', 'AbortError');
+          const err = new DOMException(
+            'The user aborted a request.',
+            'AbortError',
+          );
           reject(err);
         }),
     );

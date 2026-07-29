@@ -124,10 +124,7 @@ describe('buildLearningActivity', () => {
       // UTC 2026-07-23T16:01:00Z = 上海 2026-07-24T00:01:00+08:00
       // UTC 2026-07-24T15:59:00Z = 上海 2026-07-24T23:59:00+08:00
       const activity = buildLearningActivity({
-        sessionActivityAt: [
-          '2026-07-23T16:01:00Z',
-          '2026-07-24T15:59:00Z',
-        ],
+        sessionActivityAt: ['2026-07-23T16:01:00Z', '2026-07-24T15:59:00Z'],
         masteryPercent: null,
         totalSessions: 2,
         now: NOW,

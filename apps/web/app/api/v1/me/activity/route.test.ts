@@ -93,7 +93,9 @@ describe('GET /api/v1/me/activity', () => {
 
   it('错误响应不含原始异常、堆栈、主体 ID', async () => {
     mockReadIdentity.mockResolvedValue({ studentId: 'pii-student-999' });
-    mockGetActivity.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:5432'));
+    mockGetActivity.mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:5432'),
+    );
     const res = await GET();
     const body = await res.json();
     const str = JSON.stringify(body);
