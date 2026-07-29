@@ -29,7 +29,7 @@ export async function GET(): Promise<Response> {
     return jsonResponse(parsed.data, {
       headers: { 'cache-control': 'private, no-store' },
     });
-  } catch (_error) {
+  } catch {
     // 不泄露原始异常信息：不包含 error.message、stack、SQL、主体 ID
     return jsonError(
       500,

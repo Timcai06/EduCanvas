@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type LearningActivity,
-  learningActivityResponseSchema,
 } from '@/features/profile/activity-contract';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
@@ -85,15 +84,18 @@ export function ProfileDrawer({
     });
   }, []);
 
-  // 抽屉打开时发起请求
+  // 抽屉打开时发起请求——组件 mount 时 fetch 数据是 React 的标准模式
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadActivity();
     return () => {
       // 组件卸载时取消
       activityAbortRef.current?.abort();
       activityAbortRef.current = null;
     };
-  }, [loadActivity]);
+    // loadActivity 依赖稳定（仅 capture ref），此 effect 只在 mount 执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const go = (path: string) => {
     router.push(path);
