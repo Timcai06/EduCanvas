@@ -73,26 +73,22 @@ test.describe('Canvas shell 键盘焦点', () => {
   test('关闭按钮关闭后焦点回到页面可聚焦元素', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
+    const opener = page.getByRole('button', { name: '打开', exact: true });
 
     await canvas.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas).not.toBeVisible();
-
-    // 焦点应回到页面某个可聚焦元素
-    const focused = page.locator(':focus');
-    await expect(focused).toBeAttached();
+    await expect(opener).toBeFocused();
   });
 
   test('全屏按钮可通过键盘 Tab 到达', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    // Tab 遍历工具栏，全屏按钮应在其中
-    await canvas.press('Escape'); // 先聚焦 section
-    // 重新触发，确认初始焦点不在全屏按钮
-    await expect(page.locator(':focus')).not.toHaveAttribute(
-      'aria-label',
-      '全屏',
-    );
+    await expect(canvas).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(
+      canvas.getByRole('button', { name: '退出全屏' }),
+    ).toBeFocused();
   });
 });
 
@@ -125,6 +121,114 @@ test.describe('Canvas shell 响应式布局', () => {
     await expect(canvas).toBeVisible();
     const closeButton = canvas.getByRole('button', { name: /关闭/ });
     await expect(closeButton).toBeVisible();
+  });
+});
+
+test.describe('Canvas shell 极端内容与失败状态', () => {
+  test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
+    const longTitle = '超长标题'.repeat(50);
+    const longLabel = '长内容'.repeat(40);
+    await page.route('**/api/v1/chat/artifacts/*', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (
+        request.method() !== 'GET' ||
+        !/^\/api\/v1\/chat\/artifacts\/[0-9a-f-]+$/i.test(pathname)
+      ) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      if (!response.ok()) {
+        await route.fulfill({ response });
+        return;
+      }
+      const payload = (await response.json()) as {
+        artifact?: { title?: string };
+        version?: {
+          content?: {
+            root?: {
+              children?: Array<{ id: string; label: string }>;
+            };
+          };
+        } | null;
+      };
+      if (payload.artifact) payload.artifact.title = longTitle;
+      if (payload.version?.content?.root) {
+        payload.version.content.root.children = Array.from(
+          { length: 12 },
+          (_, index) => ({
+            id: `long-${index + 1}`,
+            label: longLabel,
+          }),
+        );
+      }
+      await route.fulfill({ response, json: payload });
+    });
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const canvas = await openCanvasViaMindMap(page);
+    await expect(
+      canvas.getByRole('heading', { name: longTitle }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /关闭/ })).toBeVisible();
+    await expect(
+      canvas.getByRole('button', { name: '退出全屏' }),
+    ).toBeAttached();
+    await expect(canvas.getByText(longLabel).first()).toBeVisible();
+
+    const { scrollWidth, clientWidth } = await canvas.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
+  });
+
+  test('资源验证失败展示可重试的安全失败状态', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const canvas = await openCanvasViaMindMap(page);
+    await canvas.getByRole('button', { name: /关闭/ }).click();
+
+    await page.route(
+      '**/api/v1/canvas/resources/artifact/**',
+      async (route) => {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'resource_unavailable',
+              message: '暂时无法读取资源。',
+            },
+          }),
+        });
+      },
+    );
+    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+    const studio = page.getByRole('complementary', {
+      name: '当前笔记本的 Studio',
+    });
+    const wheel = studio.getByRole('listbox', {
+      name: '选择 Studio 能力',
+    });
+    await wheel.press('ArrowDown');
+    await wheel.press('Enter');
+    const failedResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/canvas/resources/artifact/') &&
+        response.status() === 503,
+    );
+    await studio.getByRole('option', { name: /对话思维导图/ }).click();
+    await failedResponse;
+
+    const statusSurface = page.getByLabel('Canvas 资源状态');
+    await expect(
+      statusSurface.getByRole('alert', { name: '无法打开资源' }),
+    ).toBeVisible();
+    await expect(
+      statusSurface.getByRole('button', { name: '重试' }),
+    ).toBeEnabled();
+    await expect(statusSurface).not.toContainText('resource_unavailable');
   });
 });
 
