@@ -36,7 +36,7 @@ U12 的真实 Adapter、服务端与浏览器行为验证，不能把 contract/p
 | R25  | 跨实例消息与不透明 origin            | 同页面旧 iframe 或恶意 sibling Window 发送形状合法的 Runtime 消息                           | sandbox 消息 `origin` 同为 `"null"` | `event.source` 或 channel nonce 不匹配即拒绝，目标实例状态不变   | U10（消息契约）+U12（浏览器 smoke） | U10 / U12 | contract_pass / runtime_pending        |
 | R26  | 跨实例消息与不透明 origin            | Runtime reload 后重放旧实例的 channel nonce 和终态消息                                      | 新实例已创建                        | 旧 nonce 已失效；重放被拒绝且不污染新实例终态                    | U10（重放单测）+U12（reload smoke） | U10 / U12 | contract_pass / runtime_pending        |
 | R27  | 服务端权限重校验                     | 浏览器 Host 伪造 Notebook ID、Artifact Version ID 或 run/cancel 动作                        | 客户端已通过本地 UI 校验            | 服务端重新解析身份和归属并拒绝越权，不返回目标是否存在           | U12（服务端集成/E2E）               | U12       | proposed                               |
-| R28  | 非合作负载与宿主可用性               | Runtime 执行无限循环或持续内存增长，且不响应取消消息                                        | Browser Runtime 已启动              | 宿主仍可响应并销毁实例；无法证明时阻断 U12 并升级隔离方案        | U12（受控浏览器压力 smoke）         | U12       | proposed                               |
+| R28  | 非合作负载与宿主可用性               | Runtime 执行无限循环或持续内存增长，且不响应取消消息                                        | Browser Runtime 已启动              | 宿主仍可响应并销毁实例；无法证明时阻断 U12 并升级隔离方案        | U12（受控浏览器压力 smoke）         | U12       | blocked：缺少可强制终止的隔离边界      |
 
 ## 责任映射与 U09 限制
 
@@ -49,3 +49,7 @@ U12 的真实 Adapter、服务端与浏览器行为验证，不能把 contract/p
 - U10/U11 的 `contract_pass` / `policy_pass` 只表示 schema、状态机或策略守卫已有自动化证据。
 - 带 `runtime_pending` / `adapter_pending` 的条目必须等待 U12，不得标记运行时 PASS。
 - U11 已将配额、并发、超时固化为可执行策略；这些值仍不是硬 CPU/内存隔离保证。
+- U12 实现前复审确认当前仓库只有同页 `srcdoc` iframe，没有独立 Runtime origin/process、
+  受控 bootstrap 或其他可强制终止的 DOM Runtime。R28 因此按本矩阵规则进入 blocked；
+  在更强隔离方案被接受并落地前，其余 U12 runtime 场景继续保持 pending，不得以契约测试
+  或普通 iframe smoke 替代。
