@@ -3,7 +3,7 @@
 import { ArrowRight, ArrowsClockwise, UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   type LearningActivity,
 } from '@/features/profile/activity-contract';
@@ -65,36 +65,42 @@ export function ProfileDrawer({
   }, []);
 
   // ---- 学习活动加载（P03 loader） ----
-  const loadActivity = useCallback(() => {
-    // 取消上次请求
+  const loadActivity = () => {
     activityAbortRef.current?.abort();
     const controller = new AbortController();
     activityAbortRef.current = controller;
-    setActivityState({ kind: 'loading' });
+    // 初始状态已是 loading，不需在此 setState
 
     fetchLearningActivity(controller.signal).then((state) => {
-      // 只有当前请求的结果才写入状态（防止旧响应覆盖新请求）
       if (!controller.signal.aborted) {
         setActivityState(state);
       }
-      // 如果当前 ref 仍是这个 controller，清除（请求已结束）
       if (activityAbortRef.current === controller) {
         activityAbortRef.current = null;
       }
     });
-  }, []);
+  };
 
-  // 抽屉打开时发起请求——组件 mount 时 fetch 数据是 React 的标准模式
+  // 抽屉打开时发起请求——逻辑直接内联在 effect body 中，避免 setState-in-effect 警告
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadActivity();
+    activityAbortRef.current?.abort();
+    const controller = new AbortController();
+    activityAbortRef.current = controller;
+    // 初始状态已是 loading，不需在此 setState
+
+    fetchLearningActivity(controller.signal).then((state) => {
+      if (!controller.signal.aborted) {
+        setActivityState(state);
+      }
+      if (activityAbortRef.current === controller) {
+        activityAbortRef.current = null;
+      }
+    });
+
     return () => {
-      // 组件卸载时取消
       activityAbortRef.current?.abort();
       activityAbortRef.current = null;
     };
-    // loadActivity 依赖稳定（仅 capture ref），此 effect 只在 mount 执行一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const go = (path: string) => {
