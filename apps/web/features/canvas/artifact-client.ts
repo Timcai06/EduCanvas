@@ -4,6 +4,10 @@
  */
 
 import { z } from 'zod';
+import {
+  canvasResourceActionSchema,
+  type CanvasResourceAction,
+} from '@educanvas/canvas-protocol';
 
 export interface ArtifactSummary {
   id: string;
@@ -41,10 +45,14 @@ export interface ArtifactDetail {
     progress: number | null;
     failureCode: string | null;
   } | null;
+  canvasResource?: {
+    allowedActions: readonly CanvasResourceAction[];
+  };
 }
 
 export interface AudioOverviewMedia {
   url: string;
+  downloadUrl?: string;
   contentVersion: 1;
   contentType: 'audio/mpeg';
   byteSize: number;
@@ -69,6 +77,7 @@ export interface AudioOverviewMedia {
 
 export interface GeneratedImageMedia {
   url: string;
+  downloadUrl?: string;
   contentVersion: 1;
   contentType: 'image/png' | 'image/jpeg' | 'image/webp';
   byteSize: number;
@@ -103,33 +112,41 @@ const artifactMutationResponseSchema = z.object({
   job: artifactJobSchema.pick({ id: true }).nullable(),
 });
 
-const audioOverviewMediaSchema = z.object({
-  url: z.string(),
-  contentVersion: z.literal(1),
-  contentType: z.literal('audio/mpeg'),
-  byteSize: z.number().int().nonnegative(),
-  transcript: z.string(),
-  sourceCount: z.number().int().nonnegative(),
-  script: z.object({
-    generator: z.string(),
-    provider: z.string().nullable(),
-    resolvedModelId: z.string().nullable(),
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-    latencyMs: z.number().int().nonnegative(),
-  }),
-  speech: z.object({
-    provider: z.string(),
-    resolvedModelId: z.string(),
-    voice: z.string(),
-    inputCharacters: z.number().int().nonnegative(),
-    latencyMs: z.number().int().nonnegative(),
-  }),
-});
+const audioOverviewMediaSchema = z
+  .object({
+    url: z.string(),
+    downloadUrl: z.string().optional(),
+    contentVersion: z.literal(1),
+    contentType: z.literal('audio/mpeg'),
+    byteSize: z.number().int().nonnegative(),
+    transcript: z.string(),
+    sourceCount: z.number().int().nonnegative(),
+    script: z
+      .object({
+        generator: z.string(),
+        provider: z.string().nullable(),
+        resolvedModelId: z.string().nullable(),
+        inputTokens: z.number().int().nonnegative(),
+        outputTokens: z.number().int().nonnegative(),
+        latencyMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+    speech: z
+      .object({
+        provider: z.string(),
+        resolvedModelId: z.string(),
+        voice: z.string(),
+        inputCharacters: z.number().int().nonnegative(),
+        latencyMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
 
 const generatedImageMediaSchema = z
   .object({
     url: z.string(),
+    downloadUrl: z.string().optional(),
     contentVersion: z.literal(1),
     contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
     byteSize: z
@@ -177,6 +194,12 @@ const artifactDetailSchema = z.object({
       failureCode: z.string().nullable(),
     })
     .nullable(),
+  canvasResource: z
+    .object({
+      allowedActions: z.array(canvasResourceActionSchema).max(16),
+    })
+    .strict()
+    .optional(),
 });
 
 async function parseJsonOrThrow<T>(
@@ -334,4 +357,21 @@ export async function pollArtifactUntilSettled(
     detail = await fetchArtifactDetail(artifactId);
   }
   return detail;
+}
+
+export async function deleteArtifact(
+  artifactId: string,
+): Promise<{ deleted: boolean }> {
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const code = body?.error?.code ?? 'artifact_delete_failed';
+    throw new Error(code);
+  }
+  return response.json();
 }

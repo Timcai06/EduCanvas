@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createArtifact,
+  deleteArtifact,
   fetchArtifactDetail,
   reviseArtifact,
   saveNoteArtifact,
@@ -121,5 +122,22 @@ describe('artifact client mutation contracts', () => {
     expect(detail.version?.media?.contentType).toBe('image/png');
     expect(detail.version?.media).not.toHaveProperty('prompt');
     expect(detail.version?.media).not.toHaveProperty('objectKey');
+  });
+
+  it('删除产物依赖浏览器同源凭据且不伪造 Origin 头', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ deleted: true }), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deleteArtifact(artifact.id)).resolves.toEqual({
+      deleted: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/chat/artifacts/${artifact.id}`,
+      { method: 'DELETE' },
+    );
   });
 });

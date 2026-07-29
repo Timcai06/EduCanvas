@@ -159,7 +159,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['audio'],
       trustTiers: ['tier2'],
       runtimeKinds: ['none'],
-      supportedActions: ['view'],
+      supportedActions: ['view', 'download', 'delete'],
     },
   },
   {
@@ -171,7 +171,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['image'],
       trustTiers: ['tier2'],
       runtimeKinds: ['none'],
-      supportedActions: ['view'],
+      supportedActions: ['view', 'download', 'delete'],
     },
   },
 ];

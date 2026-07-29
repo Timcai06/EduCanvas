@@ -66,7 +66,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
 
   beforeEach(async () => {
     await database!.execute(
-      sql`truncate table artifact_versions, artifact_generation_jobs, artifacts, notebook_memberships, spaces, personal_agents, platform_users restart identity cascade`,
+      sql`truncate table object_deletion_outbox, artifact_versions, artifact_generation_jobs, artifacts, notebook_memberships, spaces, personal_agents, platform_users restart identity cascade`,
     );
     await database!.insert(schema.platformUsers).values([
       { id: owner, kind: 'registered', status: 'active' },
@@ -305,6 +305,66 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         trustedSubjectId: stranger,
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+  });
+
+  it('归档媒体产物与对象删除意图原子落库且不再出现在 Studio', async () => {
+    const artifact = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '待删除图像',
+      status: 'active',
+    });
+    const version = await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      objectKey: `artifacts/${artifact.id}/image.png`,
+      checksum: 'a'.repeat(64),
+      metadata: {
+        contentVersion: 1,
+        contentType: 'image/png',
+        byteSize: 4,
+        size: '1024x1024',
+        image: {
+          provider: 'fixture',
+          resolvedModelId: 'image-v1',
+          latencyMs: 10,
+        },
+      },
+    });
+
+    await expect(
+      repository.archiveOwnedArtifact({
+        artifactId: artifact.id,
+        trustedSubjectId: owner,
+        notebookId: spaceId,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      repository.archiveOwnedArtifact({
+        artifactId: artifact.id,
+        trustedSubjectId: owner,
+        notebookId: spaceId,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.listSpaceArtifacts({
+        spaceId,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toEqual([]);
+
+    const entries = await database!.select().from(schema.objectDeletionOutbox);
+    expect(entries).toMatchObject([
+      {
+        objectKind: 'artifact',
+        sourceType: 'artifact_version',
+        sourceId: version.id,
+        storageKey: `artifacts/${artifact.id}/image.png`,
+        status: 'pending',
+      },
+    ]);
   });
 
   it('版本单调递增,首个版本使产物转为 active,版本列表按新到旧', async () => {

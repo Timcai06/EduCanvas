@@ -28,6 +28,8 @@ import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
+import { GeneratedImageViewer } from './generated-image-viewer';
+import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
 import { NoteRenderer } from './note-renderer';
 import type { NoteContent } from '@educanvas/canvas-protocol';
 
@@ -444,6 +446,7 @@ export function ArtifactCanvas({
   isFull,
   onToggleFull,
   onClose,
+  onDeleted,
   onSelectVersion,
   onRevise,
   onSaveNote,
@@ -453,6 +456,7 @@ export function ArtifactCanvas({
   isFull: boolean;
   onToggleFull: () => void;
   onClose: () => void;
+  onDeleted: (artifactId: string) => void;
   onSelectVersion: (version: number) => void;
   onRevise: (instruction: string) => void;
   onSaveNote: (markdown: string) => void;
@@ -467,20 +471,6 @@ export function ArtifactCanvas({
   const generating = isArtifactGenerating(detail, revising);
   /* 生成中且当前展示的最新版还没有内容:显示骨架而非空态文案 */
   const showSkeleton = generating && isLatest && !detail.version;
-  const versionLabel = (version: {
-    version: number;
-    revisionInstruction: string | null;
-  }): string => {
-    const latest =
-      version.version === detail.artifact.latestVersion ? ' · 最新' : '';
-    const origin =
-      version.version === 1
-        ? '初始生成'
-        : version.revisionInstruction
-          ? `你的修改：${version.revisionInstruction.slice(0, 24)}`
-          : '共创修改';
-    return `v${version.version}${latest} · ${origin}`;
-  };
   return (
     <CanvasHost
       ariaLabel="产物Canvas"
@@ -492,26 +482,12 @@ export function ArtifactCanvas({
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <ArtifactProvenanceStrip detail={detail} revising={revising} />
-        <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2.5">
-          <label className="flex items-center gap-2 text-xs text-ink-muted">
-            <span>版本</span>
-            <select
-              aria-label="Canvas版本"
-              value={displayedVersion || ''}
-              onChange={(event) => onSelectVersion(Number(event.target.value))}
-              className="max-w-56 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-medium text-ink outline-none transition-colors hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {detail.versions.map((version) => (
-                <option key={version.version} value={version.version}>
-                  {versionLabel(version)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="text-xs text-ink-muted">
-            {isLatest ? '当前版本' : '历史只读版本'}
-          </span>
-        </div>
+        <ArtifactCanvasToolbar
+          detail={detail}
+          displayedVersion={displayedVersion}
+          onSelectVersion={onSelectVersion}
+          onDeleted={onDeleted}
+        />
         <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
           {showSkeleton ? (
             <ArtifactGeneratingSkeleton />
@@ -532,15 +508,21 @@ export function ArtifactCanvas({
             />
           ) : detail.artifact.kind === 'audio_overview' &&
             detail.version?.media?.contentType === 'audio/mpeg' ? (
-            <AudioOverviewPlayer media={detail.version.media} />
+            <AudioOverviewPlayer
+              media={detail.version.media}
+              allowedActions={detail.canvasResource?.allowedActions}
+            />
           ) : detail.artifact.kind === 'generated_image' &&
             detail.version?.media &&
+            'size' in detail.version.media &&
             detail.version.media.contentType.startsWith('image/') ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={detail.version.media.url}
-              alt={detail.artifact.title}
-              className="mx-auto max-h-full max-w-full rounded-2xl object-contain shadow-[var(--shadow-float)]"
+            <GeneratedImageViewer
+              title={detail.artifact.title}
+              media={
+                detail.version
+                  .media as import('./artifact-client').GeneratedImageMedia
+              }
+              allowedActions={detail.canvasResource?.allowedActions}
             />
           ) : detail.artifact.kind === 'note' && detail.version ? (
             <NoteRenderer

@@ -56,7 +56,8 @@ export async function GET(
   }
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
-  if (!(await loadOwnedGeneralConversation(identity))) {
+  const conversation = await loadOwnedGeneralConversation(identity);
+  if (!conversation) {
     return jsonError(401, 'unauthorized', '请先开始对话。');
   }
 
@@ -66,6 +67,12 @@ export async function GET(
         artifactId,
         trustedSubjectId: identity.studentId,
       });
+    if (detail.artifact.spaceId !== conversation.spaceId) {
+      return jsonError(404, 'artifact_not_found', '音频产物不存在。');
+    }
+    if (detail.artifact.status === 'archived') {
+      return jsonError(404, 'artifact_not_found', '音频产物不存在。');
+    }
     const version = detail.latestVersion;
     const metadata = audioOverviewMetadataSchema.safeParse(version?.metadata);
     if (
