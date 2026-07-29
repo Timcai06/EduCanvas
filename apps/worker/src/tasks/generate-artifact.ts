@@ -90,7 +90,8 @@ async function appendAudioOverviewVersion(input: {
         cause: error,
       });
     }
-    return input.artifacts.appendVersion({
+    return input.artifacts.appendVersionAndCompleteGenerationJob({
+      jobId: input.job.id,
       artifactId: input.artifact.id,
       trustedSubjectId: input.subjectId,
       objectKey: checkpoint.data.objectKey,
@@ -98,7 +99,6 @@ async function appendAudioOverviewVersion(input: {
       metadata: checkpoint.data.metadata,
       generatedBy: AUDIO_GENERATOR,
       createdByOperationId: input.job.operationId,
-      generationJobId: input.job.id,
     });
   }
 
@@ -212,7 +212,8 @@ async function appendAudioOverviewVersion(input: {
     await storage.delete(stored.key).catch(() => undefined);
     throw error;
   }
-  return input.artifacts.appendVersion({
+  return input.artifacts.appendVersionAndCompleteGenerationJob({
+    jobId: input.job.id,
     artifactId: input.artifact.id,
     trustedSubjectId: input.subjectId,
     objectKey: stored.key,
@@ -220,7 +221,6 @@ async function appendAudioOverviewVersion(input: {
     metadata,
     generatedBy: AUDIO_GENERATOR,
     createdByOperationId: input.job.operationId,
-    generationJobId: input.job.id,
   });
 }
 
@@ -237,12 +237,23 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
   const turns = new DrizzlePlatformTurnRepository();
 
   const failJob = async (code: string) => {
-    await artifacts.transitionGenerationJob({
-      jobId: payload.jobId,
-      trustedSubjectId: payload.subjectId,
-      to: 'failed',
-      failureCode: code,
-    });
+    try {
+      await artifacts.transitionGenerationJob({
+        jobId: payload.jobId,
+        trustedSubjectId: payload.subjectId,
+        to: 'failed',
+        failureCode: code,
+      });
+      return;
+    } catch (error) {
+      if (error instanceof ArtifactJobLifecycleError) {
+        helpers.logger.warn(
+          `任务 ${payload.jobId} 无法写 failed(${code}),已进入终态 ${error.message}`,
+        );
+        return;
+      }
+      throw error;
+    }
   };
 
   try {
@@ -271,12 +282,22 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       trustedSubjectId: payload.subjectId,
     });
     if (existingVersion) {
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'succeeded',
-        progress: 100,
-      });
+      try {
+        await artifacts.transitionGenerationJob({
+          jobId: payload.jobId,
+          trustedSubjectId: payload.subjectId,
+          to: 'succeeded',
+          progress: 100,
+        });
+      } catch (error) {
+        if (error instanceof ArtifactJobLifecycleError) {
+          helpers.logger.warn(
+            `任务 ${payload.jobId} 已不是 running,恢复路径跳过 succeeded`,
+          );
+          return;
+        }
+        throw error;
+      }
       helpers.logger.info(
         `产物 ${payload.artifactId} 已有版本 v${existingVersion.version},恢复任务终态`,
       );
@@ -311,12 +332,6 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         subjectId: payload.subjectId,
         artifacts,
       });
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'succeeded',
-        progress: 100,
-      });
       helpers.logger.info(
         `音频产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
       );
@@ -329,12 +344,6 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         subjectId: payload.subjectId,
         artifacts,
         gateway: resolveImageGenerationModelGateway(),
-      });
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'succeeded',
-        progress: 100,
       });
       helpers.logger.info(
         `图像产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
@@ -400,23 +409,17 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             ? await generateFlashcardsContent(generatorInput)
             : await generateNoteContent(generatorInput);
 
-    const version = await artifacts.appendVersion({
+    const version = await artifacts.appendVersionAndCompleteGenerationJob({
+      jobId: payload.jobId,
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
       content,
       generatedBy,
       createdByOperationId: job.operationId,
-      generationJobId: payload.jobId,
       expectedLatestVersion:
         generationIntent.kind === 'revision'
           ? generationIntent.baseVersion
           : undefined,
-    });
-    await artifacts.transitionGenerationJob({
-      jobId: payload.jobId,
-      trustedSubjectId: payload.subjectId,
-      to: 'succeeded',
-      progress: 100,
     });
     helpers.logger.info(
       `产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,

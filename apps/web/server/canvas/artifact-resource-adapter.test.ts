@@ -409,4 +409,88 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.allowedActions).toEqual(['view']);
     expect(resource.status).toBe('archived');
   });
+
+  it('失败终态带版本时不投影为 ready', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, latestVersion: 1 },
+      version: {
+        ...version,
+        createdAt: '2026-07-25T00:01:00.000Z',
+      },
+      latestJob: {
+        ...runningJob,
+        status: 'failed',
+        failureCode: 'timeout',
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.status).toBe('failed');
+    expect(resource.version).toMatchObject({
+      versionId: version.id,
+      sequence: version.version,
+    });
+  });
+
+  it('cancelled 终态不投影 ready', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, latestVersion: 1 },
+      version,
+      latestJob: {
+        ...runningJob,
+        status: 'cancelled',
+        failureCode: 'client_cancelled',
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.status).toBe('failed');
+    expect(resource.allowedActions).toEqual([]);
+  });
+
+  it('不能从未知 job 状态猜测 ready', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, latestVersion: 1 },
+      version,
+      latestJob: {
+        ...runningJob,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        status: 'outcome_unknown' as any,
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.status).toBe('unavailable');
+  });
+
+  it('可恢复对账结果直接进入失败/不可用，不吞并投影', () => {
+    expect(
+      projectOwnedArtifactResource({
+        notebookId,
+        artifact: { ...artifact, latestVersion: 1 },
+        version,
+        latestJob: {
+          ...runningJob,
+          status: 'failed' as never,
+          failureCode: 'artifact_version_checkpoint_missing',
+        },
+        accessRole: 'owner',
+      }).status,
+    ).toBe('failed');
+    expect(
+      projectOwnedArtifactResource({
+        notebookId,
+        artifact: { ...artifact, latestVersion: 0 },
+        version: null,
+        latestJob: {
+          ...runningJob,
+          status: 'outcome_unknown' as never,
+        },
+        accessRole: 'owner',
+      }).status,
+    ).toBe('unavailable');
+  });
 });

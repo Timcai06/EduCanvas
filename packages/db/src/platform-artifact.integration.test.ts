@@ -8,6 +8,7 @@ import {
   ArtifactJobLifecycleError,
   ArtifactIdempotencyConflictError,
   ArtifactOwnershipError,
+  ArtifactVersionConflictError,
   DrizzlePlatformArtifactRepository,
 } from './platform-artifact-repository';
 import { DrizzleManualArtifactRepository } from './manual-artifact-repository';
@@ -501,7 +502,6 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       }),
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
 
-    /* queued 不能直接 succeeded */
     await expect(
       repository.transitionGenerationJob({
         jobId: job.id,
@@ -510,13 +510,26 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       }),
     ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
 
-    const running = await repository.transitionGenerationJob({
+    const firstRunning = await repository.transitionGenerationJob({
       jobId: job.id,
       trustedSubjectId: owner,
       to: 'running',
       progress: 10,
     });
-    expect(running.status).toBe('running');
+    expect(firstRunning).toMatchObject({
+      status: 'running',
+      progress: 10,
+    });
+    const duplicateRunning = await repository.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 12,
+    });
+    expect(duplicateRunning).toMatchObject({
+      status: 'running',
+      progress: 12,
+    });
 
     const resumed = await repository.transitionGenerationJob({
       jobId: job.id,
@@ -554,6 +567,219 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         jobId: job.id,
         trustedSubjectId: owner,
         to: 'cancelled',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+  });
+
+  it('queued 与 running 能一次性收敛为 cancelled, terminal 后拒绝再次转移', async () => {
+    const artifact = await createArtifact();
+    const queued = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+
+    const queuedCancelled = await repository.transitionGenerationJob({
+      jobId: queued.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+    expect(queuedCancelled.status).toBe('cancelled');
+
+    const running = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+    const runningState = await repository.transitionGenerationJob({
+      jobId: running.id,
+      trustedSubjectId: owner,
+      to: 'running',
+    });
+    expect(runningState.status).toBe('running');
+    const runningCancelled = await repository.transitionGenerationJob({
+      jobId: running.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+    expect(runningCancelled.status).toBe('cancelled');
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: running.id,
+        trustedSubjectId: owner,
+        to: 'succeeded',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+  });
+
+  it('running 任务可重放为 running 以支持恢复 checkpoint,其余状态不允许', async () => {
+    const artifact = await createArtifact();
+    const running = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+    const queued = await repository.transitionGenerationJob({
+      jobId: running.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 4,
+    });
+    expect(queued.status).toBe('running');
+
+    await expect(
+      repository.updateGenerationJobCheckpoint({
+        jobId: running.id,
+        trustedSubjectId: owner,
+        checkpoint: { stage: 'object_stored' },
+      }),
+    ).resolves.not.toThrow();
+
+    const done = await repository.transitionGenerationJob({
+      jobId: running.id,
+      trustedSubjectId: owner,
+      to: 'succeeded',
+      progress: 100,
+    });
+    expect(done.status).toBe('succeeded');
+
+    await expect(
+      repository.updateGenerationJobCheckpoint({
+        jobId: running.id,
+        trustedSubjectId: owner,
+        checkpoint: { stage: 'invalid_after_terminal' },
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+  });
+
+  it('同一生成任务只允许追加一版; 同一个 generationJobId 二次追加会被幂等拒绝', async () => {
+    const artifact = await createArtifact();
+    const job = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+
+    const first = await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { nodes: [{ id: 'root', label: '第一版' }] },
+      generationJobId: job.id,
+    });
+    expect(first.version).toBe(1);
+
+    await expect(
+      repository.appendVersion({
+        artifactId: artifact.id,
+        trustedSubjectId: owner,
+        content: { nodes: [{ id: 'root', label: '重复版' }] },
+        generationJobId: job.id,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactVersionConflictError);
+
+    await expect(
+      repository.listVersions({
+        artifactId: artifact.id,
+        trustedSubjectId: owner,
+      }),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('并发终态写入只有一个能成功, 另一个被生命周期约束拒绝', async () => {
+    const artifact = await createArtifact();
+    const job = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+    await repository.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+    });
+
+    const concurrentTerminalWrites = await Promise.allSettled([
+      repository.transitionGenerationJob({
+        jobId: job.id,
+        trustedSubjectId: owner,
+        to: 'succeeded',
+        progress: 100,
+      }),
+      repository.transitionGenerationJob({
+        jobId: job.id,
+        trustedSubjectId: owner,
+        to: 'failed',
+        failureCode: 'manual_race',
+      }),
+    ]);
+
+    const failedCount = concurrentTerminalWrites.filter(
+      (result) => result.status === 'rejected',
+    ).length;
+    expect(failedCount).toBe(1);
+
+    const terminal = await repository.getGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+    });
+    expect(['succeeded', 'failed']).toContain(terminal.status);
+  });
+
+  it('failed/cancelled 终态不能再恢复为 running 或 succeeded', async () => {
+    const artifact = await createArtifact();
+    const failed = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+    await repository.transitionGenerationJob({
+      jobId: failed.id,
+      trustedSubjectId: owner,
+      to: 'running',
+    });
+    await repository.transitionGenerationJob({
+      jobId: failed.id,
+      trustedSubjectId: owner,
+      to: 'failed',
+      failureCode: 'source_missing',
+    });
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: failed.id,
+        trustedSubjectId: owner,
+        to: 'running',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: failed.id,
+        trustedSubjectId: owner,
+        to: 'succeeded',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+
+    const cancelled = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'mind_map' },
+    });
+    await repository.transitionGenerationJob({
+      jobId: cancelled.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: cancelled.id,
+        trustedSubjectId: owner,
+        to: 'running',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: cancelled.id,
+        trustedSubjectId: owner,
+        to: 'succeeded',
       }),
     ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
   });

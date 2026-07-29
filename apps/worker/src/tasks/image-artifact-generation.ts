@@ -88,7 +88,8 @@ export async function appendGeneratedImageVersion(input: {
         cause: error,
       });
     }
-    return input.artifacts.appendVersion({
+    return input.artifacts.appendVersionAndCompleteGenerationJob({
+      jobId: input.job.id,
       artifactId: input.artifact.id,
       trustedSubjectId: input.subjectId,
       objectKey: checkpoint.data.objectKey,
@@ -96,7 +97,6 @@ export async function appendGeneratedImageVersion(input: {
       metadata: checkpoint.data.metadata,
       generatedBy: IMAGE_GENERATOR,
       createdByOperationId: input.job.operationId,
-      generationJobId: input.job.id,
     });
   }
 
@@ -178,7 +178,8 @@ export async function appendGeneratedImageVersion(input: {
     await storage.delete(stored.key).catch(() => undefined);
     throw error;
   }
-  return input.artifacts.appendVersion({
+  return input.artifacts.appendVersionAndCompleteGenerationJob({
+    jobId: input.job.id,
     artifactId: input.artifact.id,
     trustedSubjectId: input.subjectId,
     objectKey: stored.key,
@@ -186,6 +187,5 @@ export async function appendGeneratedImageVersion(input: {
     metadata,
     generatedBy: IMAGE_GENERATOR,
     createdByOperationId: input.job.operationId,
-    generationJobId: input.job.id,
   });
 }

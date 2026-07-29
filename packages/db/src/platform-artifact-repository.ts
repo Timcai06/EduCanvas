@@ -350,6 +350,22 @@ export class DrizzlePlatformArtifactRepository {
           throw new ArtifactRevisionConflictError('stale_version');
         }
 
+        if (input.generationJobId) {
+          const [existingVersion] = await tx
+            .select()
+            .from(artifactVersions)
+            .where(
+              and(
+                eq(artifactVersions.artifactId, input.artifactId),
+                eq(artifactVersions.generationJobId, input.generationJobId),
+              ),
+            )
+            .limit(1);
+          if (existingVersion) {
+            throw new ArtifactVersionConflictError();
+          }
+        }
+
         const nextVersion = artifact.latestVersion + 1;
         const [version] = await tx
           .insert(artifactVersions)
@@ -373,6 +389,130 @@ export class DrizzlePlatformArtifactRepository {
             updatedAt: sql`now()`,
           })
           .where(eq(artifacts.id, input.artifactId));
+        return toVersion(version!);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new ArtifactVersionConflictError();
+      throw error;
+    }
+  }
+
+  /**
+   * 追加不可变版本并原子落成功终态；先持有 job 行锁，若任务不在 running，
+   * 整个写入回滚，不产生“版本已写但终态未写”。
+   */
+  async appendVersionAndCompleteGenerationJob(input: {
+    jobId: string;
+    artifactId: string;
+    trustedSubjectId: string;
+    content?: unknown;
+    metadata?: Record<string, unknown> | null;
+    objectKey?: string;
+    checksum?: string;
+    generatedBy?: string | null;
+    createdByOperationId?: string | null;
+    /** Canvas 共创的乐观并发基线；首版生成不传。 */
+    expectedLatestVersion?: number;
+    progress?: number | null;
+  }): Promise<PlatformArtifactVersion> {
+    try {
+      return await this.database.transaction(async (tx) => {
+        const [artifact] = await tx
+          .select({
+            id: artifacts.id,
+            spaceId: artifacts.spaceId,
+            latestVersion: artifacts.latestVersion,
+          })
+          .from(artifacts)
+          .where(eq(artifacts.id, input.artifactId))
+          .for('update')
+          .limit(1);
+        if (!artifact) {
+          throw new ArtifactOwnershipError();
+        }
+        await requireArtifactNotebookAccess(tx, {
+          spaceId: artifact.spaceId,
+          trustedSubjectId: input.trustedSubjectId,
+          permission: 'artifact.write',
+        });
+
+        const [job] = await tx
+          .select({
+            id: artifactGenerationJobs.id,
+            status: artifactGenerationJobs.status,
+            startedAt: artifactGenerationJobs.startedAt,
+          })
+          .from(artifactGenerationJobs)
+          .where(
+            and(
+              eq(artifactGenerationJobs.id, input.jobId),
+              eq(artifactGenerationJobs.artifactId, input.artifactId),
+            ),
+          )
+          .for('update', { of: artifactGenerationJobs })
+          .limit(1);
+        if (!job) {
+          throw new ArtifactOwnershipError();
+        }
+        if (job.status !== 'running') {
+          throw new ArtifactJobLifecycleError(job.status, 'succeeded');
+        }
+
+        if (
+          input.expectedLatestVersion !== undefined &&
+          artifact.latestVersion !== input.expectedLatestVersion
+        ) {
+          throw new ArtifactRevisionConflictError('stale_version');
+        }
+
+        const [existingVersion] = await tx
+          .select()
+          .from(artifactVersions)
+          .where(
+            and(
+              eq(artifactVersions.artifactId, input.artifactId),
+              eq(artifactVersions.generationJobId, input.jobId),
+            ),
+          )
+          .limit(1);
+        if (existingVersion) {
+          throw new ArtifactVersionConflictError();
+        }
+
+        const nextVersion = artifact.latestVersion + 1;
+        const [version] = await tx
+          .insert(artifactVersions)
+          .values({
+            artifactId: input.artifactId,
+            version: nextVersion,
+            content: input.content ?? null,
+            metadata: input.metadata ?? null,
+            objectKey: input.objectKey ?? null,
+            checksum: input.checksum ?? null,
+            generatedBy: input.generatedBy ?? null,
+            createdByOperationId: input.createdByOperationId ?? null,
+            generationJobId: input.jobId,
+          })
+          .returning();
+        await tx
+          .update(artifacts)
+          .set({
+            latestVersion: nextVersion,
+            status: 'active',
+            updatedAt: sql`now()`,
+          })
+          .where(eq(artifacts.id, input.artifactId));
+        await tx
+          .update(artifactGenerationJobs)
+          .set({
+            status: 'succeeded',
+            progress: input.progress ?? 100,
+            failureCode: null,
+            startedAt: job.startedAt,
+            completedAt: sql`now()`,
+          })
+          .where(eq(artifactGenerationJobs.id, input.jobId));
+
         return toVersion(version!);
       });
     } catch (error) {

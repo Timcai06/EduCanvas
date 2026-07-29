@@ -60,10 +60,12 @@ function createJob(overrides: Record<string, unknown> = {}) {
 
 function createRepository() {
   return {
-    appendVersion: vi.fn().mockResolvedValue({ version: 1 }),
+    appendVersionAndCompleteGenerationJob: vi
+      .fn()
+      .mockResolvedValue({ version: 1 }),
     updateGenerationJobCheckpoint: vi.fn().mockResolvedValue(undefined),
   } as unknown as DrizzlePlatformArtifactRepository & {
-    appendVersion: ReturnType<typeof vi.fn>;
+    appendVersionAndCompleteGenerationJob: ReturnType<typeof vi.fn>;
     updateGenerationJobCheckpoint: ReturnType<typeof vi.fn>;
   };
 }
@@ -121,14 +123,18 @@ describe('appendGeneratedImageVersion', () => {
         prompt: '画一张光合作用示意图',
       }),
     );
-    const appended = artifacts.appendVersion.mock.calls[0]![0];
+    expect(
+      artifacts.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledTimes(1);
+    const appended =
+      artifacts.appendVersionAndCompleteGenerationJob.mock.calls[0]![0];
     expect(appended).toMatchObject({
+      jobId: JOB_ID,
       artifactId: ARTIFACT_ID,
       objectKey: OBJECT_KEY,
       checksum: CHECKSUM,
       generatedBy: IMAGE_GENERATOR,
       createdByOperationId: OPERATION_ID,
-      generationJobId: JOB_ID,
     });
     expect(appended.metadata).toEqual({
       contentVersion: 1,
@@ -175,7 +181,9 @@ describe('appendGeneratedImageVersion', () => {
     expect(gateway.generateImage).not.toHaveBeenCalled();
     expect(storage.put).not.toHaveBeenCalled();
     expect(storage.readVerified).toHaveBeenCalledWith(OBJECT_KEY, CHECKSUM);
-    expect(artifacts.appendVersion).toHaveBeenCalledTimes(1);
+    expect(
+      artifacts.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it('检查点对象丢失时以稳定失败码终结，不静默重新生成', async () => {
@@ -294,7 +302,9 @@ describe('appendGeneratedImageVersion', () => {
       }),
     ).rejects.toThrow('ledger_unavailable');
     expect(storage.delete).toHaveBeenCalledWith(OBJECT_KEY);
-    expect(artifacts.appendVersion).not.toHaveBeenCalled();
+    expect(
+      artifacts.appendVersionAndCompleteGenerationJob,
+    ).not.toHaveBeenCalled();
   });
 
   it('公开元数据不保存完整 Prompt 或其摘要', async () => {
@@ -310,7 +320,9 @@ describe('appendGeneratedImageVersion', () => {
       gateway: createGateway(),
     });
 
-    const metadata = artifacts.appendVersion.mock.calls[0]![0].metadata;
+    const metadata =
+      artifacts.appendVersionAndCompleteGenerationJob.mock.calls[0]![0]
+        .metadata;
     expect(metadata).not.toHaveProperty('prompt');
     expect(metadata).not.toHaveProperty('promptSummary');
   });

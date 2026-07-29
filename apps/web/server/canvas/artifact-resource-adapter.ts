@@ -144,8 +144,16 @@ function projectStatus(
   if (job?.status === 'queued' || job?.status === 'running') {
     return 'processing';
   }
-  if (version) return 'ready';
+  if (
+    job &&
+    !['queued', 'running', 'succeeded', 'failed', 'cancelled'].includes(
+      job.status as string,
+    )
+  ) {
+    return 'unavailable';
+  }
   if (job?.status === 'failed' || job?.status === 'cancelled') return 'failed';
+  if (version) return 'ready';
   return 'unavailable';
 }
 

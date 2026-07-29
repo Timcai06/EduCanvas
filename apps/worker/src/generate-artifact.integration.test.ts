@@ -23,7 +23,9 @@ import {
   conversations,
   notebookMemberships,
   platformUsers,
+  artifactVersions,
 } from '@educanvas/db';
+import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { runOnce } from 'graphile-worker';
@@ -49,11 +51,12 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
   const owner = 'subject-artifact-chain';
   let spaceId = '';
   let conversationId = '';
-  let providerServer: Server;
+  let providerServer: Server | null = null;
   let providerBaseUrl = '';
-  let objectStorageRoot = '';
+  let objectStorageRoot: string | null = null;
   let speechCalls = 0;
   let imageCalls = 0;
+  let imageGenerationDelayMs = 0;
 
   beforeAll(async () => {
     await migrate(database, {
@@ -68,57 +71,76 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     );
     process.env.OBJECT_STORAGE_ROOT = objectStorageRoot;
     providerServer = createServer((request, response) => {
-      if (request.url === '/v1/chat/completions') {
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(
-          JSON.stringify({
-            id: 'script-response-1',
-            model: 'structured-fixture',
-            choices: [
-              {
-                finish_reason: 'stop',
-                message: {
-                  content: JSON.stringify({
-                    script:
-                      '欢迎收听来源概览。神经网络由多层神经元组成，训练通过误差更新权重。请回到原始资料核对。',
-                  }),
+      const handle = async () => {
+        if (request.url === '/v1/chat/completions') {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(
+            JSON.stringify({
+              id: 'script-response-1',
+              model: 'structured-fixture',
+              choices: [
+                {
+                  finish_reason: 'stop',
+                  message: {
+                    content: JSON.stringify({
+                      script:
+                        '欢迎收听来源概览。神经网络由多层神经元组成，训练通过误差更新权重。请回到原始资料核对。',
+                    }),
+                  },
                 },
-              },
-            ],
-            usage: { prompt_tokens: 20, completion_tokens: 15 },
-          }),
-        );
-        return;
-      }
-      if (request.url === '/v1/audio/speech') {
-        speechCalls += 1;
-        const bytes = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0]);
-        response.writeHead(200, {
-          'content-type': 'audio/mpeg',
-          'content-length': String(bytes.byteLength),
-          'x-request-id': `speech-${speechCalls}`,
-        });
-        response.end(bytes);
-        return;
-      }
-      if (request.url === '/v1/images/generations') {
-        imageCalls += 1;
-        response.writeHead(200, {
-          'content-type': 'application/json',
-          'x-request-id': `image-${imageCalls}`,
-        });
-        response.end(
-          JSON.stringify({
-            data: [{ b64_json: PNG_FIXTURE.toString('base64') }],
-          }),
-        );
-        return;
-      }
-      response.writeHead(404).end();
+              ],
+              usage: { prompt_tokens: 20, completion_tokens: 15 },
+            }),
+          );
+          return;
+        }
+        if (request.url === '/v1/audio/speech') {
+          speechCalls += 1;
+          const bytes = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0]);
+          response.writeHead(200, {
+            'content-type': 'audio/mpeg',
+            'content-length': String(bytes.byteLength),
+            'x-request-id': `speech-${speechCalls}`,
+          });
+          response.end(bytes);
+          return;
+        }
+        if (request.url === '/v1/images/generations') {
+          imageCalls += 1;
+          if (imageGenerationDelayMs > 0) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, imageGenerationDelayMs),
+            );
+          }
+          response.writeHead(200, {
+            'content-type': 'application/json',
+            'x-request-id': `image-${imageCalls}`,
+          });
+          response.end(
+            JSON.stringify({
+              data: [{ b64_json: PNG_FIXTURE.toString('base64') }],
+            }),
+          );
+          return;
+        }
+        response.writeHead(404).end();
+      };
+
+      void handle().catch(() => {
+        if (!response.writableEnded) {
+          response.writeHead(500).end('provider error');
+        }
+      });
     });
-    await new Promise<void>((resolve) =>
-      providerServer.listen(0, '127.0.0.1', resolve),
-    );
+    await new Promise<void>((resolve) => {
+      if (!providerServer) {
+        throw new Error('fixture provider 初始化失败');
+      }
+      providerServer.listen(0, '127.0.0.1', resolve);
+    });
+    if (!providerServer) {
+      throw new Error('fixture provider 初始化失败');
+    }
     const address = providerServer.address();
     if (!address || typeof address === 'string') {
       throw new Error('fixture provider 未监听 TCP 端口');
@@ -155,13 +177,18 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     process.env.MODEL_GATEWAY_API_KEY = '';
     speechCalls = 0;
     imageCalls = 0;
+    imageGenerationDelayMs = 0;
   });
 
   afterAll(async () => {
-    await new Promise<void>((resolve, reject) =>
-      providerServer.close((error) => (error ? reject(error) : resolve())),
-    );
-    await rm(objectStorageRoot, { recursive: true, force: true });
+    if (providerServer) {
+      await new Promise<void>((resolve, reject) =>
+        providerServer!.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+    if (objectStorageRoot) {
+      await rm(objectStorageRoot, { recursive: true, force: true });
+    }
     delete process.env.OBJECT_STORAGE_ROOT;
   });
 
@@ -196,6 +223,14 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
       versionId: source.version!.versionId,
       kind: 'document' as const,
     };
+  };
+
+  const countVersions = async (artifactId: string) => {
+    const rows = await database
+      .select()
+      .from(artifactVersions)
+      .where(eq(artifactVersions.artifactId, artifactId));
+    return rows.length;
   };
 
   it('产物/账本/队列三行同事务落库,runOnce 消费后版本 v1 通过公开 Schema', async () => {
@@ -448,6 +483,76 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     expect(detail.artifact.latestVersion).toBe(1);
     expect(detail.latestVersion?.checksum).toBe(stored.checksum);
     expect(speechCalls).toBe(0);
+    expect(await countVersions(created.artifact.id)).toBe(1);
+  });
+
+  it('版本已落库但 job 仍运行时重投直接收敛,不重复计费且不新增版本', async () => {
+    enableFixtureProvider();
+    const source = await createReadyDocumentSource();
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'audio_overview',
+      trustTier: 'tier2',
+      title: '恢复路径验证音频',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { selectedSources: [source] },
+    });
+
+    await repository.transitionGenerationJob({
+      jobId: created.job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 5,
+    });
+
+    const recovered = await new LocalObjectStorage().put({
+      key: `artifacts/${created.artifact.id}/jobs/${created.job.id}/overview.mp3`,
+      bytes: new Uint8Array([0x49, 0x44, 0x33, 4, 0]),
+      contentType: 'audio/mpeg',
+    });
+    await repository.appendVersion({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+      objectKey: recovered.key,
+      checksum: recovered.checksum,
+      metadata: {
+        contentVersion: 1,
+        contentType: 'audio/mpeg',
+        byteSize: recovered.sizeBytes,
+        transcript: '既有 checkpoint 对应内容',
+        sourceCount: 1,
+        script: {
+          generator: 'fixture:recovery',
+          provider: 'fixture',
+          resolvedModelId: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          latencyMs: 0,
+        },
+        speech: {
+          provider: 'fixture',
+          resolvedModelId: 'speech-fixture',
+          voice: 'alloy',
+          inputCharacters: 8,
+          latencyMs: 1,
+        },
+      },
+      generatedBy: 'model:speech.generate:audio-overview-v1',
+      generationJobId: created.job.id,
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('succeeded');
+    expect(detail.artifact.latestVersion).toBe(1);
+    expect(await countVersions(created.artifact.id)).toBe(1);
+    expect(speechCalls).toBe(0);
   });
 
   it('图像生成→魔术字节复核→对象存储→tier2 版本完整落库', async () => {
@@ -579,5 +684,180 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     expect(detail.artifact.latestVersion).toBe(1);
     expect(detail.latestVersion?.checksum).toBe(stored.checksum);
     expect(imageCalls).toBe(0);
+    expect(await countVersions(created.artifact.id)).toBe(1);
+  });
+
+  it('queued 任务取消后不会触发 Provider 调用', async () => {
+    enableFixtureProvider();
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: 'queued 已取消',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '不会执行的图像', size: '1024x1024' } },
+    });
+    await repository.transitionGenerationJob({
+      jobId: created.job.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('cancelled');
+    expect(await countVersions(created.artifact.id)).toBe(0);
+    expect(imageCalls).toBe(0);
+  });
+
+  it('running 与 cancel 竞争只能收敛到单一终态，不会出现 succeeded', async () => {
+    enableFixtureProvider();
+    imageGenerationDelayMs = 120;
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: 'running 竞争 cancel',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '并发取消', size: '1024x1024' } },
+    });
+
+    const runTask = runOnce({ connectionString, taskList });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await repository.transitionGenerationJob({
+      jobId: created.job.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+      progress: null,
+    });
+    await expect(runTask).resolves.toBeUndefined();
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(detail.latestJob?.status).toBe('cancelled');
+    expect(detail.latestJob?.failureCode).toBeNull();
+    expect(detail.latestJob?.status).not.toBe('succeeded');
+    expect(await countVersions(created.artifact.id)).toBe(0);
+
+    imageGenerationDelayMs = 0;
+  });
+
+  it('终态任务再次投递保持幂等，不新增版本且不重复Provider调用', async () => {
+    enableFixtureProvider();
+    const created = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '成功终态重投幂等',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '测试幂等终态', size: '1024x1024' } },
+    });
+
+    await runOnce({ connectionString, taskList });
+
+    const first = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(first.latestJob?.status).toBe('succeeded');
+    expect(await countVersions(created.artifact.id)).toBe(1);
+    expect(imageCalls).toBe(1);
+
+    await runOnce({ connectionString, taskList });
+
+    const second = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(second.latestJob?.status).toBe('succeeded');
+    expect(await countVersions(created.artifact.id)).toBe(1);
+    expect(imageCalls).toBe(1);
+  });
+
+  it('failed/cancelled 终态重复投递不新增版本', async () => {
+    const unsupported = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'story_book',
+      trustTier: 'tier1',
+      title: '失败重投幂等',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+    });
+
+    await runOnce({ connectionString, taskList });
+    const first = await repository.getArtifactDetail({
+      artifactId: unsupported.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(first.latestJob?.status).toBe('failed');
+    expect(first.artifact.latestVersion).toBe(0);
+    expect(
+      await repository.listVersions({
+        artifactId: unsupported.artifact.id,
+        trustedSubjectId: owner,
+      }),
+    ).toHaveLength(0);
+
+    await runOnce({ connectionString, taskList });
+    const second = await repository.getArtifactDetail({
+      artifactId: unsupported.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(second.latestJob?.status).toBe('failed');
+    expect(
+      await repository.listVersions({
+        artifactId: unsupported.artifact.id,
+        trustedSubjectId: owner,
+      }),
+    ).toHaveLength(0);
+
+    const cancelled = await repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '取消重投',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+      params: { image: { prompt: '不会执行', size: '1024x1024' } },
+    });
+    await repository.transitionGenerationJob({
+      jobId: cancelled.job.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+    await runOnce({ connectionString, taskList });
+    const cancelledDetail = await repository.getArtifactDetail({
+      artifactId: cancelled.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(cancelledDetail.latestJob?.status).toBe('cancelled');
+    expect(
+      await repository.listVersions({
+        artifactId: cancelled.artifact.id,
+        trustedSubjectId: owner,
+      }),
+    ).toHaveLength(0);
+
+    await runOnce({ connectionString, taskList });
+    expect(
+      await repository.listVersions({
+        artifactId: cancelled.artifact.id,
+        trustedSubjectId: owner,
+      }),
+    ).toHaveLength(0);
   });
 });
