@@ -78,7 +78,7 @@ describe('GET /api/v1/me/activity', () => {
     expect(res.status).toBe(200);
     expect(mockReadIdentity).toHaveBeenCalled();
     expect(mockGetActivity).toHaveBeenCalled();
-    expect(mockGetActivity.mock.calls[0][0]).toBe('s1');
+    expect(mockGetActivity.mock.calls[0]?.[0]).toBe('s1');
   });
 
   it('契约输出异常返回 activity_contract_violation', async () => {
