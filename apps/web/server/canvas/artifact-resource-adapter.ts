@@ -158,11 +158,18 @@ function projectActions(
   if (!hasVersion) return [];
   if (status === 'processing' || status === 'archived') return ['view'];
   if (status !== 'ready') return [];
-  if (accessRole === 'viewer') return ['view'];
+  if (accessRole === 'viewer' || accessRole === 'contributor') {
+    /* 只读角色可查看和下载媒体产物，但不可删除。 */
+    if (kind === 'audio_overview' || kind === 'generated_image')
+      return ['view', 'download'];
+    return ['view'];
+  }
   if (kind === 'note') return ['view', 'edit', 'regenerate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
-     这两类；不开放 regenerate 才与实际后端能力一致。 */
-  if (kind === 'audio_overview' || kind === 'generated_image') return ['view'];
+     这两类；不开放 regenerate 才与实际后端能力一致。
+     删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
+  if (kind === 'audio_overview' || kind === 'generated_image')
+    return ['view', 'download', 'delete'];
   return ['view', 'regenerate'];
 }
 

@@ -52,6 +52,7 @@ async function findWorkspaceRoot(): Promise<string> {
 
 class LocalDeletionAdapter implements ObjectDeleter {
   private assetStorage: Promise<LocalObjectStorage> | null = null;
+  private artifactStorage: Promise<LocalObjectStorage> | null = null;
 
   private getAssetStorage(): Promise<LocalObjectStorage> {
     this.assetStorage ??= (async () => {
@@ -63,14 +64,27 @@ class LocalDeletionAdapter implements ObjectDeleter {
     return this.assetStorage;
   }
 
+  private getArtifactStorage(): Promise<LocalObjectStorage> {
+    this.artifactStorage ??= (async () => {
+      const root = process.env.OBJECT_STORAGE_ROOT
+        ? path.resolve(process.env.OBJECT_STORAGE_ROOT)
+        : path.join(await findWorkspaceRoot(), 'uploads', 'artifacts');
+      return new LocalObjectStorage(root);
+    })();
+    return this.artifactStorage;
+  }
+
   async delete(claim: ObjectDeletionClaim): Promise<void> {
-    if (claim.objectKind !== 'asset') {
+    if (claim.objectKind === 'asset') {
+      await (await this.getAssetStorage()).delete(claim.storageKey);
+    } else if (claim.objectKind === 'artifact') {
+      await (await this.getArtifactStorage()).delete(claim.storageKey);
+    } else {
       throw new ObjectStorageError(
         'invalid_key',
         '当前删除适配器不支持此对象类型',
       );
     }
-    await (await this.getAssetStorage()).delete(claim.storageKey);
   }
 }
 

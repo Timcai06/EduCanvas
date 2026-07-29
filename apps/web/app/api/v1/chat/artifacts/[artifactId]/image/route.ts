@@ -48,6 +48,9 @@ export async function GET(
     if (detail.artifact.spaceId !== conversation.spaceId) {
       return jsonError(404, 'artifact_not_found', '图像产物不存在。');
     }
+    if (detail.artifact.status === 'archived') {
+      return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+    }
     const version = detail.latestVersion;
     const metadata = generatedImageMetadataSchema.safeParse(version?.metadata);
     if (

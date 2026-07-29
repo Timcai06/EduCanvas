@@ -62,6 +62,9 @@ export async function GET(
     if (detail.artifact.spaceId !== conversation.spaceId) {
       throw new ArtifactOwnershipError();
     }
+    if (detail.artifact.status === 'archived') {
+      return jsonError(404, 'artifact_not_found', '产物不存在。');
+    }
     const access = await requireNotebookAccess(getDb(), {
       notebookId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
@@ -102,19 +105,6 @@ export async function GET(
       detail.artifact.kind === 'generated_image' && selectedVersion
         ? generatedImageMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
-    /* 媒体投影只暴露受控读取 URL 与公开 metadata；两类媒体互斥，由 kind 决定。 */
-    const media =
-      audioMetadata?.success === true
-        ? {
-            url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
-            ...audioMetadata.data,
-          }
-        : imageMetadata?.success === true
-          ? {
-              url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/image`,
-              ...imageMetadata.data,
-            }
-          : null;
     const canvasResource = projectOwnedArtifactResource({
       notebookId: conversation.spaceId,
       artifact: detail.artifact,
@@ -122,6 +112,31 @@ export async function GET(
       latestJob: detail.latestJob,
       accessRole: access.role,
     });
+    const canDownload = canvasResource.allowedActions.includes('download');
+    /* 媒体投影只暴露受控读取 URL 与公开 metadata；两类媒体互斥，由 kind 决定。
+       download URL 仅在服务端授权后包含，UI 据此决定是否显示下载按钮。 */
+    const media =
+      audioMetadata?.success === true
+        ? {
+            url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
+            ...(canDownload
+              ? {
+                  downloadUrl: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/download`,
+                }
+              : {}),
+            ...audioMetadata.data,
+          }
+        : imageMetadata?.success === true
+          ? {
+              url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/image`,
+              ...(canDownload
+                ? {
+                    downloadUrl: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/download`,
+                  }
+                : {}),
+              ...imageMetadata.data,
+            }
+          : null;
     return jsonResponse({
       artifact: {
         id: detail.artifact.id,
@@ -305,5 +320,46 @@ export async function PATCH(
       'artifact_revision_unavailable',
       '暂时无法修改产物。',
     );
+  }
+}
+
+/**
+ * 授权删除：同源校验 → 身份 → Notebook.write → 归档 + 删除意图。
+ * viewer 无权删除；服务端不信任浏览器提交的 allowedActions。
+ * 删除后所有读取面立即拒绝，后台物理删除通过 durable outbox 完成。
+ * 重复删除幂等返回不可见状态。
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ artifactId: string }> },
+): Promise<Response> {
+  if (!isTrustedSameOriginWrite(request)) {
+    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+  }
+  const { artifactId } = await params;
+  if (!UUID_PATTERN.test(artifactId)) {
+    return jsonError(404, 'artifact_not_found', '产物不存在。');
+  }
+  const identity = await readAnonymousIdentity();
+  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  const conversation = await loadOwnedGeneralConversation(identity);
+  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+
+  try {
+    const repository = new DrizzlePlatformArtifactRepository();
+    const archived = await repository.archiveOwnedArtifact({
+      artifactId,
+      trustedSubjectId: identity.studentId,
+      notebookId: conversation.spaceId,
+    });
+    if (!archived) {
+      return jsonError(404, 'artifact_not_found', '产物不存在。');
+    }
+    return jsonResponse({ deleted: true }, { status: 200 });
+  } catch (error) {
+    if (error instanceof ArtifactOwnershipError) {
+      return jsonError(404, 'artifact_not_found', '产物不存在。');
+    }
+    return jsonError(503, 'artifact_delete_unavailable', '暂时无法删除产物。');
   }
 }

@@ -87,6 +87,10 @@ export function GeneralChatWorkspace({
     [],
   );
   const artifactFlow = useArtifactGeneration();
+  const handleArtifactDeleted = (artifactId: string) => {
+    artifactFlow.closeCanvas();
+    setStudioItems((items) => items.filter((item) => item.id !== artifactId));
+  };
   const [canvasSelected, setCanvasSelected] = useState(false);
   const handleArtifactProposed = useAgentArtifactEvents({
     canvasSelected,
@@ -440,6 +444,7 @@ export function GeneralChatWorkspace({
                     artifactFlow.setCanvasFull((value) => !value)
                   }
                   onClose={artifactFlow.closeCanvas}
+                  onDeleted={handleArtifactDeleted}
                   onSelectVersion={(version) =>
                     void artifactFlow.openArtifactVersion(
                       artifactFlow.openDetail!.artifact.id,
@@ -521,6 +526,7 @@ export function GeneralChatWorkspace({
           isFull
           onToggleFull={() => undefined}
           onClose={artifactFlow.closeCanvas}
+          onDeleted={handleArtifactDeleted}
           onSelectVersion={(version) =>
             void artifactFlow.openArtifactVersion(
               artifactFlow.openDetail!.artifact.id,
