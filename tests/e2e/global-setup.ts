@@ -142,6 +142,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
         MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
         MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
+        /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
+           默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
+        ASSET_STORAGE_ROOT: objectStorageRoot,
         OBJECT_STORAGE_ROOT: objectStorageRoot,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

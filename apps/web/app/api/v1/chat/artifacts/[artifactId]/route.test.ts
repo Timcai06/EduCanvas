@@ -13,6 +13,7 @@ const artifactRepo = {
   getArtifact: vi.fn(),
   appendVersion: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
+  archiveOwnedArtifact: vi.fn(),
 };
 const { requireNotebookAccessMock } = vi.hoisted(() => ({
   requireNotebookAccessMock: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock('@/server/platform/general-conversation', () => ({
 
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
-import { GET, PATCH } from './route';
+import { GET, PATCH, DELETE } from './route';
 
 const identity = {
   token: 'token',
@@ -161,6 +162,8 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
       role: 'owner',
       permissions: ['notebook.read'],
     });
+    artifactRepo.archiveOwnedArtifact.mockReset();
+    artifactRepo.archiveOwnedArtifact.mockResolvedValue(true);
     artifactRepo.getArtifactDetail.mockResolvedValue(detail);
     artifactRepo.listVersionProvenance.mockResolvedValue([
       {
@@ -247,6 +250,21 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
       params(validArtifact.id),
     );
 
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+  });
+
+  it('returns 404 for archived artifacts', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValue({
+      ...detail,
+      artifact: { ...detail.artifact, status: 'archived' },
+    });
+    const response = await GET(
+      getRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_not_found' },
@@ -474,5 +492,141 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_revision_unavailable' },
     });
+  });
+});
+
+function deleteRequest(artifactId: string): Request {
+  return new Request(`http://localhost/api/v1/chat/artifacts/${artifactId}`, {
+    method: 'DELETE',
+    headers: { origin: 'http://localhost' },
+  });
+}
+
+describe('DELETE /api/v1/chat/artifacts/[artifactId]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(readAnonymousIdentity).mockResolvedValue(identity);
+    vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(
+      conversation as unknown as never,
+    );
+    requireNotebookAccessMock.mockReset();
+    requireNotebookAccessMock.mockResolvedValue({
+      notebookId: conversation.spaceId,
+      role: 'owner',
+      permissions: ['notebook.read', 'notebook.write'],
+    });
+    artifactRepo.archiveOwnedArtifact.mockReset();
+    artifactRepo.archiveOwnedArtifact.mockResolvedValue(true);
+  });
+
+  it('returns 403 for cross-origin requests', async () => {
+    const response = await DELETE(
+      new Request(
+        `http://localhost/api/v1/chat/artifacts/${validArtifact.id}`,
+        {
+          method: 'DELETE',
+          headers: { origin: 'https://evil.example' },
+        },
+      ),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 404 for invalid artifact ids', async () => {
+    const response = await DELETE(
+      deleteRequest('not-uuid'),
+      params('not-uuid'),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('returns 401 when identity missing', async () => {
+    vi.mocked(readAnonymousIdentity).mockResolvedValue(null);
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it('archives artifact and returns success', async () => {
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ deleted: true });
+    expect(artifactRepo.archiveOwnedArtifact).toHaveBeenCalledWith({
+      artifactId: validArtifact.id,
+      trustedSubjectId: identity.studentId,
+      notebookId: conversation.spaceId,
+    });
+  });
+
+  it('returns 404 for viewer without notebook.write', async () => {
+    requireNotebookAccessMock.mockResolvedValueOnce({
+      notebookId: conversation.spaceId,
+      role: 'viewer',
+      permissions: ['notebook.read'],
+    });
+    artifactRepo.archiveOwnedArtifact.mockResolvedValueOnce(false);
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('returns 404 for cross-notebook artifact', async () => {
+    artifactRepo.archiveOwnedArtifact.mockResolvedValueOnce(false);
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('is idempotent for already-archived artifacts', async () => {
+    artifactRepo.archiveOwnedArtifact.mockResolvedValueOnce(false);
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('maps ownership errors to 404', async () => {
+    artifactRepo.archiveOwnedArtifact.mockRejectedValueOnce(
+      new ArtifactOwnershipError(),
+    );
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('maps generic errors to 503', async () => {
+    artifactRepo.archiveOwnedArtifact.mockRejectedValueOnce(
+      new Error('db down'),
+    );
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_delete_unavailable' },
+    });
+  });
+
+  it('does not expose storageKey, checksum, or stack in responses', async () => {
+    const response = await DELETE(
+      deleteRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    const body = await response.text();
+    expect(body).not.toMatch(/storageKey|checksum|stack|objectKey/i);
   });
 });

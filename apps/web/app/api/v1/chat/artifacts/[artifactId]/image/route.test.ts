@@ -240,4 +240,16 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/image', () => {
       error: { code: 'artifact_not_found' },
     });
   });
+
+  it('returns 404 for archived artifacts', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...artifactDetail,
+      artifact: { ...artifactDetail.artifact, status: 'archived' },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    expect(objectStorage.readVerified).not.toHaveBeenCalled();
+  });
 });

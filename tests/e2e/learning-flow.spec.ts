@@ -67,10 +67,9 @@ async function ensureConversationUi(page: Page) {
   const progressTrigger = page.getByRole('button', { name: /学习进度/ });
   if (await progressTrigger.isVisible()) return;
   const composer = page.getByPlaceholder('向 EduCanvas 提问');
+  await expect(composer).toBeVisible();
   await composer.fill('继续学习并查看进度。');
-  const send = page.getByRole('button', { name: '发送' });
-  await expect(send).toBeEnabled();
-  await send.click();
+  await composer.press('Enter');
   await expect(aiUnavailableMessage(page)).toBeVisible();
 }
 
