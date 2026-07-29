@@ -184,6 +184,50 @@ test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async 
       ].join(''),
     });
   });
+  await page.route(
+    `**/api/v1/canvas/resources/artifact/${artifactId}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          resource: {
+            schemaVersion: 1,
+            resourceId: artifactId,
+            notebookId: '30000000-0000-4000-8000-000000000003',
+            resourceKind: 'artifact',
+            title: '函数思维导图',
+            status: 'ready',
+            version: {
+              versionId: '40000000-0000-4000-8000-000000000004',
+              sequence: 1,
+              checksum: null,
+            },
+            representation: {
+              kind: 'structured',
+              mimeType: 'application/vnd.educanvas.mind-map+json',
+              byteSize: null,
+            },
+            renderer: {
+              rendererId: 'artifact.mind-map',
+              rendererVersion: 1,
+            },
+            trustTier: 'tier1',
+            allowedActions: ['view', 'regenerate'],
+            canProduceCandidateLearningEvents: false,
+            provenance: {
+              origin: 'agent_generated',
+              createdBy: 'agent',
+              createdAt: '2026-07-25T00:01:00.000Z',
+              sourceResourceIds: [],
+              operationId: null,
+              generator: null,
+            },
+            runtime: { kind: 'none' },
+          },
+        }),
+      }),
+  );
   await page.route(`**/api/v1/chat/artifacts/${artifactId}`, (route) =>
     route.fulfill({
       status: 200,
@@ -276,9 +320,9 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
     .fill(secondPrompt);
   await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
   /* 乐观消息先进入对话；此刻 GSAP 入场可能仍在过渡。切换后的可见性在下方验证。 */
-  await expect(
-    page.getByRole('region', { name: 'AI 对话' }),
-  ).toContainText(secondPrompt);
+  await expect(page.getByRole('region', { name: 'AI 对话' })).toContainText(
+    secondPrompt,
+  );
   await waitForUnavailableTurn(page);
 
   await notebookSidebar(page)
