@@ -1,3 +1,5 @@
+import type { ModelAbortSignal } from './model-contracts';
+
 /**
  * Provider-, DOM-, and persistence-free boundary for executing one immutable
  * artifact version. The implementation owns sandbox transport, never an Agent loop.
@@ -40,7 +42,7 @@ export type WebRuntimeEvent =
 export interface WebRuntimeExecutionRequest {
   readonly artifact: WebRuntimeArtifactVersionReference;
   readonly resources: WebRuntimeResourceLimits;
-  readonly signal: AbortSignal;
+  readonly signal: ModelAbortSignal;
 }
 
 export interface WebRuntimePort {
