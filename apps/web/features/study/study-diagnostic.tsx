@@ -5,7 +5,8 @@ import type {
   StudyActionResultDTO,
   StudyDiagnosticDTO,
 } from '@/features/learning/learning-contracts';
-import { ArrowRight, CheckCircle } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, CheckCircle } from '@phosphor-icons/react';
+import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
 import { TopBar } from '../workspace/learning/top-bar';
 
@@ -44,6 +45,13 @@ export function StudyDiagnostic({ data }: { data: StudyDiagnosticDTO }) {
         masteryPercent={null}
       />
       <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:py-12">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeft aria-hidden="true" size={16} />
+          返回对话
+        </Link>
         <div className="mb-8">
           <p className="text-sm font-semibold text-accent-strong">
             {answeredCount}/{data.diagnostic.questions.length} 已完成

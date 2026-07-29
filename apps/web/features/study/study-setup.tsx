@@ -6,8 +6,9 @@ import type {
   StudyActionResultDTO,
 } from '@/features/learning/learning-contracts';
 import { useGSAP } from '@gsap/react';
-import { ArrowRight, CaretDown } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, CaretDown } from '@phosphor-icons/react';
 import gsap from 'gsap';
+import Link from 'next/link';
 import { useRef, useState, useTransition } from 'react';
 import { TopBar } from '../workspace/learning/top-bar';
 import { OptionWheel } from './option-wheel';
@@ -182,6 +183,13 @@ export function StudySetup() {
     <main ref={rootRef} className="min-h-dvh bg-canvas text-ink">
       <TopBar courseTitle="" stageLabel={null} masteryPercent={null} quiet />
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col justify-center gap-8 px-5 py-10">
+        <Link
+          href="/"
+          className="unfold-item inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeft aria-hidden="true" size={16} />
+          返回对话
+        </Link>
         <header className="unfold-item">
           <p className="mb-3 text-sm font-semibold tracking-wide text-accent-strong">
             建立你的学习 Notebook

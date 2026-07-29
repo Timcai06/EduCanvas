@@ -2,7 +2,7 @@
 
 import { switchConversationAction } from '@/app/actions';
 import LineSidebar from '@/components/LineSidebar';
-import { PencilSimple, Plus, Trash } from '@phosphor-icons/react';
+import { PencilSimple, Plus, Trash, X } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import {
@@ -207,15 +207,23 @@ export function ConversationSidebar({
         } fixed inset-y-0 left-0 lg:static lg:inset-auto lg:translate-x-0`}
       >
         <div className="flex h-full w-72 flex-col lg:w-[var(--sidebar-width)]">
-          <div className="px-3 pt-3 pb-1.5">
+          <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
             <button
               ref={firstActionRef}
               type="button"
               onClick={onNewNotebook}
-              className="flex min-h-10 w-full items-center gap-2.5 rounded-full bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="flex min-h-10 flex-1 items-center gap-2.5 rounded-full bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Plus aria-hidden="true" size={16} weight="bold" />
               新建笔记本
+            </button>
+            <button
+              type="button"
+              aria-label="收起笔记本侧栏"
+              onClick={closeAndRestoreFocus}
+              className="grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <X aria-hidden="true" size={18} weight="bold" />
             </button>
           </div>
           <p className="px-5 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
