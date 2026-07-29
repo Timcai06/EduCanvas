@@ -244,3 +244,12 @@ export {
   type ObjectStoragePort,
   type StoredObject,
 } from './object-storage-contracts';
+
+export type {
+  WebRuntimeArtifactVersionReference,
+  WebRuntimeEvent,
+  WebRuntimeExecutionRequest,
+  WebRuntimeFailureCode,
+  WebRuntimePort,
+  WebRuntimeResourceLimits,
+} from './web-runtime-port';
