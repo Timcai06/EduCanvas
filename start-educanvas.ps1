@@ -23,7 +23,7 @@ function Write-Step($Message) {
 
 function Load-DotEnv($Path) {
   if (-not (Test-Path -LiteralPath $Path)) {
-    throw ".env not found: $Path"
+    return
   }
 
   # This parser intentionally handles only KEY=value lines. It avoids invoking a
@@ -40,7 +40,11 @@ function Load-DotEnv($Path) {
       ) {
         $Value = $Value.Substring(1, $Value.Length - 2)
       }
-      [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
+      # Shell/CI values win. Callers load .env.local before .env so the local
+      # override also wins without evaluating either file as PowerShell.
+      if ($null -eq [Environment]::GetEnvironmentVariable($Name, 'Process')) {
+        [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
+      }
     }
   }
 }
@@ -180,7 +184,12 @@ function Start-EduCanvas([int]$GatewayPort) {
   throw "EduCanvas did not become ready. Full logs: $LogPath"
 }
 
-Load-DotEnv (Join-Path $ProjectRoot '.env')
+$EnvPath = Join-Path $ProjectRoot '.env'
+if (-not (Test-Path -LiteralPath $EnvPath)) {
+  throw ".env not found: $EnvPath"
+}
+Load-DotEnv (Join-Path $ProjectRoot '.env.local')
+Load-DotEnv $EnvPath
 if (-not (Test-Command 'node')) { throw 'node.exe is not available in PATH.' }
 if (-not (Test-Command 'pnpm')) { throw 'pnpm is not available in PATH.' }
 Write-Step 'Checking local environment...'

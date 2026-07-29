@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm dev:core",
+    "dev": "node tooling/local-orchestrator.mjs web",
     "dev:core": "turbo dev --filter=@educanvas/web --filter=@educanvas/worker --filter=@educanvas/gateway",
     "dev:all": "pnpm dev:core",
     "build": "turbo build",
