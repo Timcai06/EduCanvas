@@ -124,6 +124,59 @@ describe('artifact client mutation contracts', () => {
     expect(detail.version?.media).not.toHaveProperty('objectKey');
   });
 
+  it('从完整 CanvasResource 投影中只读取浏览器需要的操作权限', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            artifact: {
+              ...artifact,
+              fromConversation: true,
+              createdAt: '2026-07-27T00:00:00.000Z',
+              updatedAt: '2026-07-27T00:01:00.000Z',
+            },
+            version: {
+              version: 2,
+              content: { contentVersion: 1, markdown: '# 课堂笔记' },
+              media: null,
+            },
+            versions: [
+              {
+                version: 2,
+                generatedBy: 'manual:note',
+                revisionInstruction: null,
+                createdAt: '2026-07-27T00:01:00.000Z',
+              },
+            ],
+            latestJob: null,
+            canvasResource: {
+              resourceId: `artifact:${artifact.id}:v2`,
+              notebookId: '30000000-0000-4000-8000-000000000003',
+              resourceType: 'artifact',
+              rendererId: 'educanvas.artifact.note',
+              rendererVersion: 1,
+              representation: {
+                kind: 'structured',
+                mimeType: 'application/json',
+              },
+              trustTier: 'tier1',
+              runtime: { kind: 'react' },
+              allowedActions: ['view', 'download', 'delete'],
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const detail = await fetchArtifactDetail(artifact.id);
+
+    expect(detail.canvasResource).toEqual({
+      allowedActions: ['view', 'download', 'delete'],
+    });
+  });
+
   it('删除产物依赖浏览器同源凭据且不伪造 Origin 头', async () => {
     const fetchMock = vi
       .fn()

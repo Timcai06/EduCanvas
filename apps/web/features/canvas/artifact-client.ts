@@ -198,7 +198,6 @@ const artifactDetailSchema = z.object({
     .object({
       allowedActions: z.array(canvasResourceActionSchema).max(16),
     })
-    .strict()
     .optional(),
 });
 

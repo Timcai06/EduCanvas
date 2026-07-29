@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
 
@@ -304,6 +307,16 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
     .where(eq(conversations.id, conversationId))
     .limit(1);
   if (!conversation) throw new Error('E2E 会话行不存在');
+  const sourceBytes = await readFile(
+    path.resolve('tests/fixtures/sample-1page.pdf'),
+  );
+  const storageKey = `e2e/${conversation.id}/audio-source.pdf`;
+  const storedPath = path.resolve(
+    'output/playwright/object-storage',
+    storageKey,
+  );
+  await mkdir(path.dirname(storedPath), { recursive: true });
+  await writeFile(storedPath, sourceBytes);
   await new DrizzleAssetRepository().createUploaded({
     ownerSubjectId: conversation.ownerSubjectId,
     spaceId: conversation.spaceId,
@@ -311,9 +324,9 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
     kind: 'document',
     displayName: '音频来源讲义.pdf',
     mimeType: 'application/pdf',
-    byteSize: 128,
-    contentHash: 'b'.repeat(64),
-    storageKey: `e2e/${conversation.id}/audio-source.pdf`,
+    byteSize: sourceBytes.byteLength,
+    contentHash: createHash('sha256').update(sourceBytes).digest('hex'),
+    storageKey,
     extractedText: '神经网络由多层神经元组成，训练通过误差更新权重。',
     outcome: { status: 'ready' },
   });
@@ -338,8 +351,9 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   const canvas = page.getByRole('dialog', { name: '产物Canvas' });
   const audio = canvas.locator('audio[aria-label="播放音频概览"]');
   await expect(audio).toBeVisible();
-  await canvas.getByText('查看文字稿').click();
-  await expect(canvas.getByText(/神经网络由多层神经元组成/)).toBeVisible();
+  await expect(canvas.getByLabel('音频文字稿')).toContainText(
+    '神经网络由多层神经元组成',
+  );
 
   const sourceUrl = await audio.getAttribute('src');
   expect(sourceUrl).toBeTruthy();
