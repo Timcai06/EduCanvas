@@ -160,7 +160,7 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'audio', mimeType: 'audio/mpeg' },
       renderer: { rendererId: 'artifact.audio-overview' },
       trustTier: 'tier2',
-      allowedActions: ['view'],
+      allowedActions: ['view', 'download', 'delete'],
       runtime: { kind: 'none' },
     });
   });
@@ -266,7 +266,7 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'image' },
       renderer: { rendererId: 'artifact.generated-image' },
       trustTier: 'tier2',
-      allowedActions: ['view'],
+      allowedActions: ['view', 'download', 'delete'],
       runtime: { kind: 'none' },
       canProduceCandidateLearningEvents: false,
       provenance: {
@@ -321,5 +321,92 @@ describe('Artifact CanvasResource adapter', () => {
     });
 
     expect(resource.allowedActions).toEqual(['view']);
+  });
+
+  it('grants download and delete for media artifacts with owner role', () => {
+    const audioResource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'owner',
+    });
+    expect(audioResource.allowedActions).toEqual([
+      'view',
+      'download',
+      'delete',
+    ]);
+
+    const imageResource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'generated_image', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'owner',
+    });
+    expect(imageResource.allowedActions).toEqual([
+      'view',
+      'download',
+      'delete',
+    ]);
+  });
+
+  it('grants download and delete for media artifacts with editor role', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'editor',
+    });
+    expect(resource.allowedActions).toEqual(['view', 'download', 'delete']);
+  });
+
+  it('grants download but not delete for media artifacts with viewer role', () => {
+    const audioResource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'viewer',
+    });
+    expect(audioResource.allowedActions).toEqual(['view', 'download']);
+
+    const imageResource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'generated_image', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'viewer',
+    });
+    expect(imageResource.allowedActions).toEqual(['view', 'download']);
+  });
+
+  it('grants download but not delete for media artifacts with contributor role', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
+      version,
+      latestJob: null,
+      accessRole: 'contributor',
+    });
+    expect(resource.allowedActions).toEqual(['view', 'download']);
+  });
+
+  it('restricts media actions to view-only when archived', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: {
+        ...artifact,
+        kind: 'audio_overview',
+        trustTier: 'tier2',
+        status: 'archived',
+      },
+      version,
+      latestJob: null,
+      accessRole: 'owner',
+    });
+    expect(resource.allowedActions).toEqual(['view']);
+    expect(resource.status).toBe('archived');
   });
 });

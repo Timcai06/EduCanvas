@@ -228,6 +228,7 @@ describe('webCanvasResourceRegistry', () => {
             byteSize: null,
           },
           trustTier: 'tier2',
+          allowedActions: ['view', 'download', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -243,6 +244,7 @@ describe('webCanvasResourceRegistry', () => {
             byteSize: null,
           },
           trustTier: 'tier2',
+          allowedActions: ['view', 'download', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import type { NotebookPermission } from '@educanvas/gateway-core';
 import { getDb } from './client';
 import { requireNotebookAccess } from './notebook-access';
@@ -13,6 +13,7 @@ import {
   artifacts,
   conversations,
 } from './schema';
+import { archiveOwnedArtifactTransaction } from './platform-artifact-archive';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
@@ -236,7 +237,12 @@ export class DrizzlePlatformArtifactRepository {
     const rows = await this.database
       .select()
       .from(artifacts)
-      .where(and(eq(artifacts.conversationId, input.conversationId)))
+      .where(
+        and(
+          eq(artifacts.conversationId, input.conversationId),
+          ne(artifacts.status, 'archived'),
+        ),
+      )
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
       .limit(Math.min(input.limit ?? 50, 100));
     return rows.map(toArtifact);
@@ -271,6 +277,7 @@ export class DrizzlePlatformArtifactRepository {
       .where(
         and(
           eq(artifacts.spaceId, input.spaceId),
+          ne(artifacts.status, 'archived'),
           input.kinds?.length
             ? inArray(artifacts.kind, [...input.kinds])
             : undefined,
@@ -808,6 +815,19 @@ export class DrizzlePlatformArtifactRepository {
 
       return { artifact: toArtifact(artifactRow), job: toJob(jobRow!) };
     });
+  }
+
+  /**
+   * 归档产物并原子登记对象删除意图。状态变化与删除 outbox 位于同一事务，
+   * 保证后台物理删除不会遗漏已归档产物的版本对象。
+   * 重复归档幂等：已归档产物直接返回 false。
+   */
+  async archiveOwnedArtifact(input: {
+    artifactId: string;
+    trustedSubjectId: string;
+    notebookId: string;
+  }): Promise<boolean> {
+    return archiveOwnedArtifactTransaction(this.database, input);
   }
 
   /** 产物详情:最新版本内容与最近一次生成任务,供轮询与 Canvas 打开使用。 */
