@@ -3,10 +3,11 @@
 import { startNewGeneralChatAction } from '@/app/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
-
-import { SourcePreviewPanel } from '@/features/assets/source-preview-panel';
+import { SourceResourceRenderer } from '@/features/assets/source-resource-renderer';
 import { useNotebookSources } from './use-notebook-sources';
-import { resolveSourcePreview } from './source-preview-selection';
+import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
+import { CanvasResourceOpenStatus } from '@/features/canvas/canvas-resource-open-status';
+import type { CanvasResourceRendererProps } from '@/features/canvas/canvas-resource-registry';
 import {
   ArtifactCanvas,
   ArtifactConfirmSheet,
@@ -23,10 +24,7 @@ import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { useSidebarState } from './use-sidebar-state';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
-import {
-  useAgentTurn,
-  type AgentTurnClientOptions,
-} from '@/features/chat/use-teaching-turn';
+import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { StudioOverlay } from '@/features/studio/studio-overlay';
@@ -34,7 +32,13 @@ import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from 'react';
 import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
@@ -50,26 +54,14 @@ import {
   isArtifactRevisionInProgress,
   selectAudioArtifactSources,
 } from './general-artifact-selection';
+import type { CanvasResource } from '@educanvas/canvas-protocol';
+import {
+  GENERAL_ASSET_ENDPOINT,
+  GENERAL_MENU_ACTIONS,
+  GENERAL_TURN_OPTIONS,
+} from './general-chat-config';
 
 gsap.registerPlugin(useGSAP, Flip);
-
-const ASSET_ENDPOINT = '/api/v1/chat/assets';
-const GENERAL_TURN_OPTIONS: AgentTurnClientOptions = {
-  endpoint: '/api/v1/chat/turn',
-  assistantLabel: 'AI',
-  cancelEndpoint: (turnId) =>
-    `/api/v1/chat/turn/${encodeURIComponent(turnId)}/cancel`,
-};
-const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
-  'upload_file',
-  'upload_image',
-  'add_link',
-  'create_mind_map',
-  'create_slides',
-  'create_flashcards',
-  'create_audio_overview',
-  'create_note',
-];
 
 export function GeneralChatWorkspace({
   initialMessages,
@@ -83,11 +75,10 @@ export function GeneralChatWorkspace({
   nickname?: string | null;
 }) {
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
-  /*
-   * 只保存选择键，不保存来源快照。异步解析轮询会替换 assets 中的对象；
-   * 若保留点击时的 processing 快照，面板会永远看不到后续 ready 状态。
-   */
-  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
+  const [sourceResource, setSourceResource] = useState<{
+    readonly resource: CanvasResource;
+    readonly Renderer: ComponentType<CanvasResourceRendererProps>;
+  } | null>(null);
   const [sourcePreviewFull, setSourcePreviewFull] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFull, setPreviewFull] = useState(false);
@@ -110,6 +101,16 @@ export function GeneralChatWorkspace({
   const [sourceNotice, setSourceNotice] = useState<AssetStatusNotice | null>(
     null,
   );
+  const studioOpenActions = useStudioOpenActions({
+    scopeKey: conversationId,
+    onSourceValid: (resource, Renderer) => {
+      setSourceResource({ resource, Renderer });
+      setSourcePreviewFull(false);
+    },
+    onArtifactValid: (resource) => {
+      void artifactFlow.openArtifact(resource.resourceId);
+    },
+  });
   const mainRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
@@ -120,7 +121,7 @@ export function GeneralChatWorkspace({
   const pendingToolsConsumed = useRef(false);
 
   const sources = useNotebookSources({
-    endpoint: ASSET_ENDPOINT,
+    endpoint: GENERAL_ASSET_ENDPOINT,
     onError: setError,
     onStatus: setSourceNotice,
   });
@@ -240,7 +241,6 @@ export function GeneralChatWorkspace({
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
   const isLanding = turn.messages.length === 0;
   const notebookSources = assets.filter((asset) => asset.scope === 'space');
-  const previewAsset = resolveSourcePreview(assets, previewAssetId);
   const composerTools = [
     { id: 'canvas' as const, label: 'Canvas', selected: canvasSelected },
   ];
@@ -317,8 +317,10 @@ export function GeneralChatWorkspace({
                       generation={artifactFlow.generation}
                       onOpen={() => {
                         const artifactId = artifactFlow.generation?.artifactId;
-                        if (artifactId)
-                          void artifactFlow.openArtifact(artifactId);
+                        if (artifactId) {
+                          setSourceResource(null);
+                          studioOpenActions.actions.openArtifact(artifactId);
+                        }
                       }}
                       onDismiss={artifactFlow.dismiss}
                       dismissable={!revisingOpenArtifact}
@@ -371,15 +373,15 @@ export function GeneralChatWorkspace({
                     onContinueText={() => undefined}
                     onRetry={(messageId) => turn.retry(messageId)}
                     onPreviewHtml={({ source }) => {
-                      setPreviewAssetId(null);
+                      setSourceResource(null);
                       setSourcePreviewFull(false);
                       setPreviewHtml(source);
                     }}
                     onOpenArtifact={(artifactId) => {
-                      setPreviewAssetId(null);
+                      setSourceResource(null);
                       setSourcePreviewFull(false);
                       setPreviewHtml(null);
-                      void artifactFlow.openArtifact(artifactId);
+                      studioOpenActions.actions.openArtifact(artifactId);
                     }}
                     assistantLabel="AI"
                   />
@@ -391,8 +393,10 @@ export function GeneralChatWorkspace({
                       generation={artifactFlow.generation}
                       onOpen={() => {
                         const artifactId = artifactFlow.generation?.artifactId;
-                        if (artifactId)
-                          void artifactFlow.openArtifact(artifactId);
+                        if (artifactId) {
+                          setSourceResource(null);
+                          studioOpenActions.actions.openArtifact(artifactId);
+                        }
                       }}
                       onDismiss={artifactFlow.dismiss}
                       dismissable={!revisingOpenArtifact}
@@ -420,7 +424,15 @@ export function GeneralChatWorkspace({
                   />
                 </div>
               </div>
-              {artifactFlow.openDetail ? (
+              {studioOpenActions.pendingKind ||
+              studioOpenActions.validationError ? (
+                <CanvasResourceOpenStatus
+                  pendingKind={studioOpenActions.pendingKind}
+                  error={studioOpenActions.validationError}
+                  onRetry={studioOpenActions.retry}
+                  onClose={studioOpenActions.close}
+                />
+              ) : artifactFlow.openDetail ? (
                 <ArtifactCanvas
                   detail={artifactFlow.openDetail}
                   isFull={artifactFlow.canvasFull}
@@ -448,21 +460,15 @@ export function GeneralChatWorkspace({
                   }
                   revising={revisingOpenArtifact}
                 />
-              ) : previewAsset ? (
-                <SourcePreviewPanel
-                  key={`${previewAsset.id}:${previewAsset.selectable}`}
-                  asset={previewAsset}
+              ) : sourceResource ? (
+                <SourceResourceRenderer
+                  key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
+                  resource={sourceResource.resource}
+                  Renderer={sourceResource.Renderer}
                   isFull={sourcePreviewFull}
                   onToggleFull={() => setSourcePreviewFull((value) => !value)}
                   onClose={() => {
-                    setPreviewAssetId(null);
-                    setSourcePreviewFull(false);
-                  }}
-                  onDeleted={(assetId) => {
-                    setAssets((current) =>
-                      current.filter((asset) => asset.id !== assetId),
-                    );
-                    setPreviewAssetId(null);
+                    setSourceResource(null);
                     setSourcePreviewFull(false);
                   }}
                 />
@@ -489,14 +495,14 @@ export function GeneralChatWorkspace({
                 setStudioOpen(false);
                 artifactFlow.closeCanvas();
                 setPreviewHtml(null);
-                setPreviewAssetId(asset.id);
-                setSourcePreviewFull(false);
+                setSourceResource(null);
+                studioOpenActions.actions.openSource(asset.id);
               }}
               onOpenOutput={(artifactId) => {
                 setStudioOpen(false);
-                setPreviewAssetId(null);
+                setSourceResource(null);
                 setSourcePreviewFull(false);
-                void artifactFlow.openArtifact(artifactId);
+                studioOpenActions.actions.openArtifact(artifactId);
               }}
               onToggleSource={sources.toggle}
               onRenameSource={sources.rename}
@@ -530,21 +536,15 @@ export function GeneralChatWorkspace({
           revising={revisingOpenArtifact}
         />
       ) : null}
-      {isLanding && previewAsset ? (
-        <SourcePreviewPanel
-          key={`${previewAsset.id}:${previewAsset.selectable}`}
-          asset={previewAsset}
+      {isLanding && sourceResource ? (
+        <SourceResourceRenderer
+          key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
+          resource={sourceResource.resource}
+          Renderer={sourceResource.Renderer}
           isFull
           onToggleFull={() => undefined}
           onClose={() => {
-            setPreviewAssetId(null);
-            setSourcePreviewFull(false);
-          }}
-          onDeleted={(assetId) => {
-            setAssets((current) =>
-              current.filter((asset) => asset.id !== assetId),
-            );
-            setPreviewAssetId(null);
+            setSourceResource(null);
             setSourcePreviewFull(false);
           }}
         />
@@ -573,7 +573,7 @@ export function GeneralChatWorkspace({
       ) : null}
       <GeneralAssetEntrySheets
         active={assetPanel}
-        endpoint={ASSET_ENDPOINT}
+        endpoint={GENERAL_ASSET_ENDPOINT}
         onClose={() => setAssetPanel(null)}
         onAdded={(asset) => {
           setAssets((current) => [

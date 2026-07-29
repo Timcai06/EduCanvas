@@ -1,7 +1,9 @@
 import 'server-only';
 
 import {
+  audioOverviewMetadataSchema,
   canvasResourceSchema,
+  generatedImageMetadataSchema,
   type CanvasRepresentationKind,
   type CanvasResource,
   type CanvasResourceAction,
@@ -14,6 +16,59 @@ import type {
   PlatformArtifactVersion,
 } from '@educanvas/db';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
+
+function projectMediaGenerator(
+  kind: string,
+  metadata: unknown,
+): CanvasResource['provenance']['generator'] {
+  if (kind === 'audio_overview') {
+    const parsed = audioOverviewMetadataSchema.safeParse(metadata);
+    if (!parsed.success) return null;
+    return {
+      provider: parsed.data.speech.provider,
+      model: parsed.data.speech.resolvedModelId,
+      promptSummary: null,
+    };
+  }
+  if (kind === 'generated_image') {
+    const parsed = generatedImageMetadataSchema.safeParse(metadata);
+    if (!parsed.success) return null;
+    return {
+      provider: parsed.data.image.provider,
+      model: parsed.data.image.resolvedModelId,
+      promptSummary: null,
+    };
+  }
+  return null;
+}
+
+function projectSourceResourceIds(
+  kind: string,
+  version: PlatformArtifactVersion | null,
+  job: PlatformArtifactJob | null,
+): string[] {
+  if (
+    kind !== 'audio_overview' ||
+    !version?.generationJobId ||
+    version.generationJobId !== job?.id
+  ) {
+    return [];
+  }
+  const selectedSources = job.params.selectedSources;
+  if (!Array.isArray(selectedSources)) return [];
+  return [
+    ...new Set(
+      selectedSources.flatMap((reference) =>
+        typeof reference === 'object' &&
+        reference !== null &&
+        'assetId' in reference &&
+        typeof reference.assetId === 'string'
+          ? [reference.assetId]
+          : [],
+      ),
+    ),
+  ];
+}
 
 const ARTIFACT_RENDERERS = {
   mind_map: {
@@ -175,9 +230,13 @@ export function projectOwnedArtifactResource(input: {
       createdBy:
         input.version?.generatedBy === 'user:manual' ? 'user' : 'agent',
       createdAt: input.version?.createdAt ?? input.artifact.createdAt,
-      sourceResourceIds: [],
-      operationId: null,
-      generator: null,
+      sourceResourceIds: projectSourceResourceIds(
+        kind,
+        input.version,
+        input.latestJob,
+      ),
+      operationId: input.version?.createdByOperationId ?? null,
+      generator: projectMediaGenerator(kind, input.version?.metadata),
     },
     runtime: { kind: 'none' },
   });

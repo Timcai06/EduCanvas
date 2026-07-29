@@ -120,7 +120,9 @@ jobs:
         run: pnpm --filter @educanvas/node-host test
 
   e2e:
-    needs: [checks, integration, windows]
+    # Windows remains an independent required check, but it does not produce
+    # artifacts or state consumed by the Linux browser suite.
+    needs: [checks, integration]
     runs-on: ubuntu-latest
     services:
       postgres:

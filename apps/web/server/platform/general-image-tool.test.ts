@@ -36,6 +36,7 @@ const artifact: PlatformArtifact = {
 const job: PlatformArtifactJob = {
   id: '2bd08cb5-5a36-444f-b76f-f31cbd44eef9',
   artifactId: artifact.id,
+  operationId: 'operation-1',
   status: 'queued',
   progress: null,
   failureCode: null,

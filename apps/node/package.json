@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx src/index.ts run",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/index.js",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
