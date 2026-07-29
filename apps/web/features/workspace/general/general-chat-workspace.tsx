@@ -253,6 +253,15 @@ export function GeneralChatWorkspace({
   }, []);
   const selectedAudioSources = selectAudioArtifactSources(notebookSources);
   const revisingOpenArtifact = isArtifactRevisionInProgress(artifactFlow);
+  const resourceOpenStatus =
+    studioOpenActions.pendingKind || studioOpenActions.validationError ? (
+      <CanvasResourceOpenStatus
+        pendingKind={studioOpenActions.pendingKind}
+        error={studioOpenActions.validationError}
+        onRetry={studioOpenActions.retry}
+        onClose={studioOpenActions.close}
+      />
+    ) : null;
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
@@ -428,14 +437,8 @@ export function GeneralChatWorkspace({
                   />
                 </div>
               </div>
-              {studioOpenActions.pendingKind ||
-              studioOpenActions.validationError ? (
-                <CanvasResourceOpenStatus
-                  pendingKind={studioOpenActions.pendingKind}
-                  error={studioOpenActions.validationError}
-                  onRetry={studioOpenActions.retry}
-                  onClose={studioOpenActions.close}
-                />
+              {resourceOpenStatus ? (
+                resourceOpenStatus
               ) : artifactFlow.openDetail ? (
                 <ArtifactCanvas
                   detail={artifactFlow.openDetail}
@@ -518,6 +521,7 @@ export function GeneralChatWorkspace({
       </div>
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={turn.busy} />
+      {isLanding ? resourceOpenStatus : null}
       {isLanding && artifactFlow.openDetail ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
            否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */
