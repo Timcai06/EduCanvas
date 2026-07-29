@@ -25,6 +25,7 @@
 ## 安全与测试入口
 
 - [持久 Web Runtime 安全测试矩阵（U09）](06-quality/05-持久Web Runtime安全测试矩阵.md)
+- [持久 Web Runtime 依赖与资源策略（U11）](06-quality/06-Web Runtime依赖与资源策略.md)
 
 ## 已接受的架构方向
 
