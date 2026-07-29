@@ -1,6 +1,6 @@
 # 持久 Web Runtime 依赖与资源策略
 
-- 状态：`proposed`
+- 状态：`accepted / policy guard implemented`
 - 日期：2026-07-29
 - 适用范围：U11 的 package-private 守卫；尚未接入任何 Runtime Adapter
 
