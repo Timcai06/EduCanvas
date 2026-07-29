@@ -1,5 +1,8 @@
 models/
+models
 *.onnx
 *.wav
 *.tar.bz2
 node_modules/
+results/
+fixtures/generated/

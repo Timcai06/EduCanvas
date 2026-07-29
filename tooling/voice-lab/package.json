@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Voice lab for reproducing sherpa-onnx native addon behavior",
+  "description": "Voice lab for reproducible sherpa-onnx native and WASM comparisons",
   "scripts": {
-    "test:native": "node test-native-addon.mjs"
+    "test:native": "node run-compare.mjs --engine native",
+    "test:wasm": "node run-compare.mjs --engine wasm",
+    "test:compare": "node run-compare.mjs --engine both",
+    "test:hotwords": "node run-compare.mjs --engine wasm --fixture fixtures/generated/bagging-boosting.wav --hotwords fixtures/hotwords-bagging-boosting.txt"
   },
   "dependencies": {
-    "sherpa-onnx-node": "^1.13.4"
+    "sherpa-onnx": "1.13.4",
+    "sherpa-onnx-node": "1.13.4"
   }
 }
