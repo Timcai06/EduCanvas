@@ -27,6 +27,8 @@ import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
+import { useDropFiles } from '@/features/composer/use-drop-files';
+import { uploadAsset } from '@/features/assets/asset-client';
 import { StudioOverlay } from '@/features/studio/studio-overlay';
 import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
@@ -198,6 +200,20 @@ export function GeneralChatWorkspace({
     queueMicrotask(() => send(prompt));
   }, [send]);
 
+  const dropFiles = useDropFiles();
+
+  const handleAddFiles = useCallback(
+    (incoming: FileList | File[]) => {
+      dropFiles.addFiles(incoming);
+      for (const file of Array.from(incoming)) {
+        uploadAsset({ file, scope: 'turn' })
+          .then(() => void refreshAssets().catch(() => undefined))
+          .catch(() => setError('文件上传失败，请重试'));
+      }
+    },
+    [dropFiles, setError, refreshAssets],
+  );
+
   const handleMenuAction = useCallback(
     (action: PlusMenuActionId) => {
       if (action === 'upload_file') setAssetPanel('document');
@@ -360,6 +376,10 @@ export function GeneralChatWorkspace({
                   toolChips={composerTools}
                   onToolAction={handleToolAction}
                   variant="landing"
+                  pendingFiles={dropFiles.files}
+                  onAddFiles={handleAddFiles}
+                  onRemoveFile={dropFiles.removeFile}
+                  rejectedMessage={dropFiles.rejected}
                 />
               </div>
             </EmptyChatHero>
@@ -434,6 +454,10 @@ export function GeneralChatWorkspace({
                     availableMenuActions={GENERAL_MENU_ACTIONS}
                     toolChips={composerTools}
                     onToolAction={handleToolAction}
+                    pendingFiles={dropFiles.files}
+                    onAddFiles={handleAddFiles}
+                    onRemoveFile={dropFiles.removeFile}
+                    rejectedMessage={dropFiles.rejected}
                   />
                 </div>
               </div>
