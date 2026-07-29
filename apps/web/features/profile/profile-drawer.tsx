@@ -67,7 +67,8 @@ export function ProfileDrawer({
     activityAbortRef.current?.abort();
     const controller = new AbortController();
     activityAbortRef.current = controller;
-    // 初始状态已是 loading，不需在此 setState
+    // 重试必须立刻恢复 loading，避免失败提示在新请求期间继续显示。
+    setActivityState({ kind: 'loading' });
 
     fetchLearningActivity(controller.signal).then((state) => {
       if (!controller.signal.aborted) {

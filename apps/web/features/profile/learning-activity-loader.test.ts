@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import type { LearningActivity } from './activity-contract';
 import { fetchLearningActivity } from './learning-activity-loader';
 
-function activityJson(activeDays: number) {
+function activityJson(activeDays: number): { activity: LearningActivity } {
   const days: Array<{ date: string; count: number }> = [];
   // 生成 371 个有效日期（从 371 天前到今天）
   for (let i = 0; i < 371; i++) {
@@ -50,6 +51,22 @@ describe('fetchLearningActivity', () => {
     const controller = new AbortController();
     const state = await fetchLearningActivity(controller.signal);
     expect(state.kind).toBe('empty');
+  });
+
+  it('有历史 session 或掌握度时，activeDays=0 仍如实返回 ready', async () => {
+    const body = activityJson(0);
+    body.activity.totalSessions = 4;
+    body.activity.masteryPercent = 72;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(body), { status: 200 }),
+    );
+
+    const state = await fetchLearningActivity(new AbortController().signal);
+    expect(state).toMatchObject({ kind: 'ready' });
+    if (state.kind === 'ready') {
+      expect(state.activity.totalSessions).toBe(4);
+      expect(state.activity.masteryPercent).toBe(72);
+    }
   });
 
   it('failed：HTTP 非 200 返回失败', async () => {
@@ -112,16 +129,40 @@ describe('fetchLearningActivity', () => {
     expect(state.kind).toBe('loading');
   });
 
-  it('后发请求不被旧响应覆盖', async () => {
+  it('后发请求隔离：已 abort 的旧请求即使晚到也不产生可提交状态', async () => {
+    let resolveOldResponse: ((response: Response) => void) | undefined;
+    let resolveNewResponse: ((response: Response) => void) | undefined;
+    const oldResponse = new Promise<Response>((resolve) => {
+      resolveOldResponse = resolve;
+    });
+    const newResponse = new Promise<Response>((resolve) => {
+      resolveNewResponse = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => oldResponse)
+      .mockImplementationOnce(() => newResponse);
+
+    const controller1 = new AbortController();
     const controller2 = new AbortController();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    const oldRequest = fetchLearningActivity(controller1.signal);
+    controller1.abort();
+    const newRequest = fetchLearningActivity(controller2.signal);
+
+    resolveNewResponse!(
       new Response(JSON.stringify(activityJson(10)), { status: 200 }),
     );
-    const state2 = await fetchLearningActivity(controller2.signal);
+    const state2 = await newRequest;
     expect(state2.kind).toBe('ready');
     if (state2.kind === 'ready') {
       expect(state2.activity.activeDays).toBe(10);
     }
+
+    // 模拟 fetch 无视 abort 而迟到返回；loader 必须拒绝它，不能让旧值覆盖新值。
+    resolveOldResponse!(
+      new Response(JSON.stringify(activityJson(1)), { status: 200 }),
+    );
+    await expect(oldRequest).resolves.toEqual({ kind: 'loading' });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('单次调用只产生一次 fetch', async () => {

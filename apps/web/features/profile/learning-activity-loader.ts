@@ -18,7 +18,7 @@ const FAILED_MESSAGE = '暂时无法加载学习活动';
  * - 固定请求 GET /api/v1/me/activity，cache: no-store
  * - 接受 AbortSignal，组件卸载后取消
  * - 用 learningActivityResponseSchema 校验成功响应
- * - activeDays=0 算 empty，不算 failed
+ * - 三项学习事实都为空时才算 empty；历史会话或掌握度仍应如实展示
  * - 非 2xx / JSON 解析 / schema 失败 / 网络失败 → failed
  * - Abort 不覆盖新请求结果，也不显示 failed
  * - retry 由调用方显式触发，loader 不做自动重试
@@ -57,8 +57,12 @@ export async function fetchLearningActivity(
     }
 
     const { activity } = parsed.data;
-    // activeDays=0 是 empty，不是 ready
-    if (activity.activeDays === 0) {
+    // 没有窗口内判分事件不等于没有档案事实：历史 session 或掌握度投影仍值得展示。
+    if (
+      activity.activeDays === 0 &&
+      activity.totalSessions === 0 &&
+      activity.masteryPercent === null
+    ) {
       return { kind: 'empty' };
     }
 
