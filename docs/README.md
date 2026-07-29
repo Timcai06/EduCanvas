@@ -22,6 +22,10 @@
 | `research`              | 源码研究、能力盘点、实验与待决假设                  | 架构、研发       |
 | `templates`             | 新文档模板                                          | 所有人           |
 
+## 安全与测试入口
+
+- [持久 Web Runtime 安全测试矩阵（U09）](06-quality/05-持久Web Runtime安全测试矩阵.md)
+
 ## 已接受的架构方向
 
 - EduCanvas是以教育能力为核心的通用个人Agent平台；Agent是产品主体，Web/TUI/渠道是交互表面；
