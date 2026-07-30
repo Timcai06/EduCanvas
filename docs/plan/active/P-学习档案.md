@@ -1,11 +1,13 @@
 # 学习档案活动可靠性优化
 
+- 任务分配名：`P 学习档案`
 - 状态：`active`
 - 负责人：协作开发者
 - 代码审核与最终验收：Cai
-- 最后验证时间：2026-07-29
-- 并行计划：[画布运行时与实时语音主线](2026-07-画布运行时与实时语音主线.md)
-- 并行计划：[画布界面与可访问性优化](2026-07-画布界面与可访问性优化.md)
+- 最后验证时间：2026-07-30
+- 下一领取任务：`P04`，完成直接组件证据后再执行 `P05`
+- 并行计划：[画布运行时与实时语音主线](UV-画布语音.md)
+- 已完成计划：[画布界面与可访问性优化](../completed/F-画布界面.md)
 
 ## 一、目标
 
@@ -48,9 +50,10 @@
 - `apps/web/app/api/v1/me/activity/route.ts`
 - `apps/web/app/api/v1/me/activity/route.test.ts`
 - `apps/web/features/profile/profile-drawer.tsx`
+- `apps/web/features/profile/profile-activity-view-model.ts`
+- `apps/web/features/profile/profile-activity-view-model.test.ts`
 - `apps/web/features/profile/learning-activity-loader.ts`
 - `apps/web/features/profile/learning-activity-loader.test.ts`
-- `apps/web/features/profile/profile-drawer.test.tsx`
 - `tests/e2e/profile-activity.spec.ts`
 - 本计划文件
 
@@ -322,12 +325,14 @@ rtk git diff --check
 ### P04：档案抽屉有限状态、可访问性与重试
 
 - 依赖：P02、P03
-- 文件边界：`profile-drawer.tsx`、`profile-drawer.test.tsx`
+- 文件边界：`profile-drawer.tsx`、`profile-activity-view-model.ts` 及其 `.test.ts`
 
 任务提示词：
 
 ```text
-把 P03 loader 接入 ProfileDrawer，只改活动统计区域和对应测试。
+现有 Vitest 没有 DOM 组件测试环境，不新增临时 React 测试依赖。把活动区的四态展示、
+aria-busy、固定文案和可重试语义提取为纯 view model，由 `.test.ts` 直接证明；
+ProfileDrawer 只消费该模型。实际 DOM、键盘和 retry 由 P05 Playwright 验证。
 
 要求：
 - 打开时进入 loading，并在卸载时 Abort；
@@ -343,9 +348,9 @@ rtk git diff --check
 
 完成标准：
 
-- loading、ready、empty、failed 四态都有行为断言；
+- loading、ready、empty、failed 四态都有纯状态/投影断言；
 - 请求失败后不存在永久 busy；
-- Retry 可键盘聚焦，Enter/Space 只触发一次请求；
+- Retry 的启用条件与动作投影可由纯测试证明；真实键盘行为留给 P05；
 - 卸载后不提交旧请求状态；
 - 测试断言用户可见行为，不使用大面积 snapshot；
 - ProfileDrawer 公共 props 无变化。
@@ -353,9 +358,9 @@ rtk git diff --check
 验证命令：
 
 ```text
-rtk pnpm --dir apps/web exec vitest run features/profile/profile-drawer.test.tsx features/profile/learning-activity-loader.test.ts
+rtk pnpm --dir apps/web exec vitest run features/profile/profile-activity-view-model.test.ts features/profile/learning-activity-loader.test.ts
 rtk pnpm --dir apps/web typecheck
-rtk pnpm exec prettier --check apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-drawer.test.tsx
+rtk pnpm exec prettier --check apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-activity-view-model.ts apps/web/features/profile/profile-activity-view-model.test.ts
 rtk git diff --check
 ```
 
@@ -370,7 +375,7 @@ rtk git diff --check
 新增独立 profile Activity E2E，并完成整线验证和 PR 交付。
 
 E2E 使用 Playwright route interception 返回合成 Activity 响应，不连接真实学生数据，
-不依赖 F/S 新接口。覆盖：
+不依赖 UV/F 新接口。覆盖：
 - Activity 成功后统计可见且 busy 结束；
 - 第一次返回 500 时出现安全失败提示；
 - 点击重试后返回合法响应并恢复统计；
@@ -378,7 +383,7 @@ E2E 使用 Playwright route interception 返回合成 Activity 响应，不连�
 - 320px 窄屏不产生横向页面溢出，重试按钮可键盘操作。
 
 随后运行目标测试、Web 全量 test/typecheck、lint、Prettier 和 diff 检查。只更新本计划
-验证台账，创建独立 PR，不能合并，也不能为解决冲突修改 F/S 文件。
+验证台账，创建独立 PR，不能自行合并，也不能为解决冲突修改 UV/F 文件。
 ```
 
 完成标准：
@@ -396,7 +401,7 @@ rtk pnpm exec playwright test tests/e2e/profile-activity.spec.ts
 rtk pnpm --dir apps/web test
 rtk pnpm --dir apps/web typecheck
 rtk pnpm lint
-rtk pnpm exec prettier --check apps/web/server/profile/learning-activity.ts apps/web/server/profile/learning-activity.test.ts apps/web/server/profile/learning-activity-service.ts apps/web/server/profile/learning-activity-service.test.ts apps/web/app/api/v1/me/activity/route.ts apps/web/app/api/v1/me/activity/route.test.ts apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-drawer.test.tsx apps/web/features/profile/learning-activity-loader.ts apps/web/features/profile/learning-activity-loader.test.ts tests/e2e/profile-activity.spec.ts docs/plan/active/2026-07-学习档案活动可靠性优化.md
+rtk pnpm exec prettier --check apps/web/server/profile/learning-activity.ts apps/web/server/profile/learning-activity.test.ts apps/web/server/profile/learning-activity-service.ts apps/web/server/profile/learning-activity-service.test.ts apps/web/app/api/v1/me/activity/route.ts apps/web/app/api/v1/me/activity/route.test.ts apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-activity-view-model.ts apps/web/features/profile/profile-activity-view-model.test.ts apps/web/features/profile/learning-activity-loader.ts apps/web/features/profile/learning-activity-loader.test.ts tests/e2e/profile-activity.spec.ts docs/plan/active/P-学习档案.md
 rtk git diff --check
 rtk git diff --name-status
 rtk git status --short
@@ -414,7 +419,7 @@ rtk git status --short
 - 是否保持服务端身份单源且不接受浏览器指定主体；
 - 是否没有把异常降级为 200 空数据或伪造成功；
 - 是否没有泄露错误正文、堆栈、SQL、主体或 Secret；
-- 是否严格保持与 F/S 文件集合零交集；
+- 是否严格保持与 UV/F 文件集合零交集；
 - 是否实际运行规定命令并如实记录未运行项。
 
 ## 八、最终联合审计
@@ -422,7 +427,7 @@ rtk git status --short
 P 线 PR 合并前，由 Codex：
 
 1. 获取 F、S、P 三条线最新分支与 PR 文件清单；
-2. 要求 P 线开发文件与 F/S 开发文件交集为零；
+2. 要求 P 线开发文件与 UV/F 开发文件交集为零；
 3. 复跑两种 `TZ` 下的日期单测、Activity Route 测试、Profile Drawer 测试和目标 E2E；
 4. 检查 Activity Repository、schema 和可信事件写入路径没有被修改；
 5. 检查失败响应与 UI 不含主体、异常正文、堆栈或内部字段；
@@ -431,26 +436,26 @@ P 线 PR 合并前，由 Codex：
 
 ## 九、风险与停止条件
 
-| 风险                          | 处理                                           |
-| ----------------------------- | ---------------------------------------------- |
-| 真实需求变成“每用户可选时区”  | 停止；这需要账户契约与数据设计，另开计划       |
-| 需要修改 Activity schema      | 停止；由 Codex 判断是否另开兼容任务            |
-| 发现 Repository 事实口径错误  | 只报告证据；不在本计划修改 DB                  |
-| React 测试基础设施不足        | 先测试纯 loader；不得新增依赖，报告 Codex 决定 |
-| E2E 环境不可用                | 保留 spec 和确切阻塞证据，不得伪报通过         |
-| F/S 分支意外修改 Profile 文件 | 标记`BLOCKED`，先由 Codex 重划所有权           |
-| 预存工作区改动与本计划无关    | 保留，不暂存、不还原、不纳入 PR                |
+| 风险                           | 处理                                           |
+| ------------------------------ | ---------------------------------------------- |
+| 真实需求变成“每用户可选时区”   | 停止；这需要账户契约与数据设计，另开计划       |
+| 需要修改 Activity schema       | 停止；由 Codex 判断是否另开兼容任务            |
+| 发现 Repository 事实口径错误   | 只报告证据；不在本计划修改 DB                  |
+| 没有 DOM 组件测试环境          | 提取纯 view model；DOM/键盘行为由 P05 E2E 验证 |
+| E2E 环境不可用                 | 保留 spec 和确切阻塞证据，不得伪报通过         |
+| UV/F 分支意外修改 Profile 文件 | 标记`BLOCKED`，先由 Codex 重划所有权           |
+| 预存工作区改动与本计划无关     | 保留，不暂存、不还原、不纳入 PR                |
 
 ## 十、验证台账
 
-| 任务                | 状态      | 证据                         |
-| ------------------- | --------- | ---------------------------- |
-| P00 基线与所有权    | `pending` | 待协作开发者执行，Codex 复核 |
-| P01 日期与时区      | `pending` | 待执行                       |
-| P02 服务与 Route    | `pending` | 待执行                       |
-| P03 Activity Loader | `pending` | 待执行                       |
-| P04 抽屉状态与重试  | `pending` | 待执行                       |
-| P05 E2E 与收口      | `pending` | 待执行                       |
+| 任务                | 状态      | 证据                                                                                        |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| P00 基线与所有权    | `PASS`    | PR #245 已合入主线；当前实现文件与 UV/F 边界无交集                                          |
+| P01 日期与时区      | `PASS`    | `learning-activity.test.ts` 覆盖 Asia/Shanghai、进程 TZ 隔离和 New York 夏令时边界          |
+| P02 服务与 Route    | `PASS`    | service/route 测试覆盖无身份、可信主体、500、契约异常、no-store 与安全错误投影              |
+| P03 Activity Loader | `PASS`    | 10 条 loader 测试覆盖 ready/empty/failed/Abort、旧响应隔离和单次 fetch                      |
+| P04 抽屉状态与重试  | `PARTIAL` | `profile-drawer.tsx` 已接入四态、取消和重试；缺纯 view-model 测试与 P05 的真实 DOM/键盘证据 |
+| P05 E2E 与收口      | `PENDING` | `tests/e2e/profile-activity.spec.ts` 不存在；不得以 account-flow 或其它页面测试替代         |
 
 ## 十一、回退方式
 
@@ -458,4 +463,4 @@ P 线 PR 合并前，由 Codex：
 - P02 只回退服务/Route 的错误边界与测试，成功响应契约不变；
 - P03-P04 可一起回退到现有一次性 fetch，服务端和完整档案页不受影响；
 - P05 只删除独立 E2E 和计划台账更新；
-- 任一回退都不得回退 F/S 合并内容或用户预存改动。
+- 任一回退都不得回退 UV/F 合并内容或用户预存改动。
