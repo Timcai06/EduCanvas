@@ -1,10 +1,12 @@
 # 画布运行时与实时语音主线
 
+- 任务分配名：`UV 画布语音`
 - 状态：`active`
 - 负责人：项目负责人
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
-- 最后验证时间：2026-07-28
+- 最后验证时间：2026-07-30
+- 下一领取任务：`U12-R0`；语音侧保持 `V02 BLOCKED`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -14,7 +16,7 @@
 
 本计划是项目负责人负责的主线：未完成的 Canvas 资源接入、持久 Runtime、
 Experiment Runtime、跨入口与实时语音输入。它与朋友负责的
-[画布界面与可访问性优化](2026-07-画布界面与可访问性优化.md)同时开发，
+[画布界面与可访问性优化](../completed/F-画布界面.md)此前与本计划并行开发，
 开发期间没有代码文件交集；只有双方 PR 都合并后才进入最终联合审计。
 
 阶段完成时应同时具备：
@@ -70,7 +72,7 @@ Experiment Runtime、跨入口与实时语音输入。它与朋友负责的
 - `apps/web/features/canvas/canvas-shell-status.test.tsx`
 - `tests/e2e/canvas-shell-visual.spec.ts`
 - `docs/06-quality/04-视觉回归.md`
-- `docs/plan/active/2026-07-画布界面与可访问性优化.md`
+- `docs/plan/completed/F-画布界面.md`
 
 主线若发现必须修改其中任一文件，应先停止相应任务；不能通过复制组件或移动文件绕过
 所有权。朋友协作线也不得修改本计划列出的协议、registry、server、Runtime、语音、
@@ -693,11 +695,14 @@ CPU/时长/输出上限和安全错误。只定义契约，不写 iframe 或执�
 #### U12：最小持久隔离 Runtime Adapter
 
 - 依赖：U10、U11
-- 状态：`BLOCK / R28 隔离门禁未满足`
-- 阻塞原因：当前仓库只有同页 `srcdoc` iframe 预览，没有独立 Runtime origin/process、
-  受控 bootstrap 或其他可强制终止的 DOM Runtime 边界；同页 iframe 无法证明恶意死循环
-  或持续内存增长时宿主仍可响应并销毁实例。U11 又明确禁止 Worker，且改用 Worker 会缩窄
-  当前 HTML/React/Three 的 DOM Runtime 范围。必须先选择并接受更强隔离方案，再恢复实现。
+- 状态：`PARTIAL / REVIEW_REQUIRED`
+- 当前事实：分支 `feat/20260729-u12-origin-runtime` 已实现独立 `apps/web-runtime`、
+  Runtime routes、`web_runtime_runs` 账本、服务端权威 bootstrap/terminal 边界和
+  `tests/e2e/web-runtime-stress.spec.ts`。因此“仓库没有独立 Runtime”的旧结论已经失效。
+- 未完成门禁：实现尚未合入主线，且没有
+  `tests/e2e/web-runtime-composition.spec.ts`。必须用真实 Web、独立 Runtime 进程和
+  PostgreSQL 跑通 bootstrap、terminal、跨主体/Notebook 拒绝、取消/崩溃清理及 R28，
+  才能由 Codex 判定 PASS。压力 spec 或单元测试不能替代 composition 证据。
 - 文件边界：独立 Runtime adapter、Canvas 最小组合、测试
 - 可并行：V15-V17
 
@@ -712,6 +717,51 @@ CPU/时长/输出上限和安全错误。只定义契约，不写 iframe 或执�
 - DOM/同源/网络/导航/依赖逃逸、超限、取消和错误协议有自动化负例；
 - reload 后引用同一不可变版本，reduced-motion 可用；
 - Web test/typecheck/build 和受控浏览器 smoke 通过。
+
+**U12 收尾原子顺序：**
+
+```text
+U12-R0 分支对齐
+  → U12-R1 composition 编排
+  → U12-R2 权威 bootstrap/terminal 与拒绝矩阵
+  → U12-R3 进程取消、崩溃和 R28
+  → U12-R4 全量验证与 Codex 审计
+```
+
+- `U12-R0`：只读比较 `feat/20260729-u12-origin-runtime`、最新 `origin/main` 和保留 stash。
+  保留 PR #250 的 CI 可信度门禁，不把旧 workflow、Playwright 配置或共享 E2E 覆盖回去。
+- `U12-R1`：新增正式 `playwright.runtime-composition.config.ts` 与
+  `tests/e2e/web-runtime-composition.spec.ts`；启动真实 Web、独立 `apps/web-runtime`
+  和隔离 PostgreSQL，禁止用 mock server 或同页 `srcdoc` 冒充 composition。
+- `U12-R2`：证明同一主体/Notebook/Artifact Version 可以 bootstrap 且只产生一个权威
+  terminal；跨主体、跨 Notebook、伪造 version/hash、terminal-before-bootstrap、
+  重复 terminal 与终态后消息必须 fail closed。
+- `U12-R3`：证明取消、Runtime 崩溃、Web reload 和非合作 CPU/内存负载后进程可回收，
+  Host 仍可响应；所有子进程必须由 composition teardown 清理，不能遗留端口或 PID。
+- `U12-R4`：运行 DB integration、Runtime/Web 单元与 typecheck、tooling、production build、
+  composition 和 R28；任何数据库/端口环境阻塞必须记为 BLOCKED，不能用单元测试替代。
+
+**交给开发 Agent 的提示词：**
+
+```text
+只执行 U12 当前指定的一个 R 子任务。所有 shell 命令以 rtk 开头，不创建临时 worktree，
+不触碰 UI worktree，不开始 U13。先读取 AGENTS.md、ADR-0019、U10/U11 契约和本 U12
+现状，再比较最新 origin/main 与 feat/20260729-u12-origin-runtime。
+
+硬门禁：
+- 保留 PR #250 的 failOnFlakyTests、forbidOnly、Worker 日志审计、对象存储 fixture 和
+  CI concurrency；旧 stash 中冲突的 CI/Playwright 文件不得整份覆盖；
+- composition 必须使用真实 Web + 独立 Runtime 进程 + 独立 PostgreSQL；
+- 不允许同页 srcdoc、mock Runtime 或只有 stress spec 的替代证据；
+- Host/Runtime 消息继续使用 U10 版本化协议，依赖和资源上限继续使用 U11；
+- 不泄露 Cookie、Credential、prompt、Source 私有内容、objectKey、宿主路径或 stack；
+- 一个文件接近 400 行即评估拆分，禁止产生超过 600 行的手写源码；
+- 不 git add/commit/push/merge，完成后交给 Codex 审计。
+
+回报必须列出：任务编号、基线 SHA、修改文件单一职责、每条验收标准对应测试、实际命令
+与退出码、未运行项、安全边界、残余风险、回退方式、git diff --check/name-status/status。
+不得自行宣布 U12 PASS。
+```
 
 ### S4：实验与跨入口
 
@@ -864,7 +914,7 @@ renderer 不负责执行或修改 Run。
 
 #### U21：双方 PR 联合审计、全量门禁与归档
 
-- 依赖：U20、朋友协作线 F00-F05 已合并
+- 依赖：U20；F00-F05 已合并并归档
 - 文件边界：canonical 文档、ADR、计划索引和归档文件；不再改功能代码
 - 可并行：否
 
@@ -917,7 +967,7 @@ Codex 审核报告固定格式：
 ## 八、阶段验收条件
 
 - [ ] U00-U21、V01-V17 全部获得 Codex PASS；
-- [ ] 朋友协作线 F00-F05 全部获得 Codex PASS，且双方开发 diff 没有文件交集；
+- [x] F00-F05 全部获得 Codex PASS，且开发期与 UV 主线文件无交集；
 - [ ] ADR-0018 与音频同意 ADR 均 accepted，未验证项没有被隐去；
 - [ ] Source/Artifact/Runtime/Experiment/Voice 在身份和 Notebook 边界上没有旁路；
 - [ ] 语音能力默认关闭，缺模型、缺同意、缺删除 Worker 时不能进入产品；
@@ -929,7 +979,9 @@ Codex 审核报告固定格式：
 
 ## 九、验证台账
 
-**基线 Commit：** `39a0c5fb5a5c81fcbffd54899764ac64e2cdf944` (2026-07-28)
+**历史起始基线：** `39a0c5fb5a5c81fcbffd54899764ac64e2cdf944` (2026-07-28)。
+2026-07-30 的现状审计已改用最新主线与独立 U12 分支；领取任务时仍须重新记录
+`origin/main`，不得把历史基线当作当前 HEAD。
 
 **S0 状态：** Canvas 子线 passed（U00/U01），语音 V01 passed、V02-V03 blocked；S0 整体
 未通过，Canvas 后续任务可按依赖图独立推进。
@@ -941,10 +993,10 @@ Codex 审核报告固定格式：
 V08-V11 的依赖推进，因此 S2 整体尚未收口。
 
 **S3 状态：** U09-U11 passed；ADR-0019、版本化消息/Port 契约、依赖白名单、CSP 与
-资源策略均已通过 Codex 安全复审。U12 在实现前复审中被 R28 阻断：仓库没有独立
-Runtime origin/process 或受控 bootstrap，同页 `srcdoc` iframe 无法证明非合作死循环与
-内存压力下宿主仍可响应并强制销毁实例。语音 V12-V17 同时受 V02-V11 前置门槛阻塞，
-因此 S3 整体未通过，不得进入 U13 或对外开放 Runtime/语音入口。
+资源策略均已通过 Codex 安全复审。U12 已有独立 origin/process 实现分支和压力用例，
+但尚未合入主线，也缺真实 Web + Runtime + PostgreSQL composition spec，因此保持
+PARTIAL / REVIEW_REQUIRED。语音 V12-V17 同时受 V02-V11 前置门槛阻塞；S3 整体未通过，
+不得进入 U13 或对外开放 Runtime/语音入口。
 
 | S0 任务 | Codex 结论 | 证据                                                                                                                                   |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -972,7 +1024,7 @@ Runtime origin/process 或受控 bootstrap，同页 `srcdoc` iframe 无法证明
 | U09     | `PASS`     | ADR-0019 与 28 条安全负例经 Codex 技术复审，补齐服务端权威边界、不透明 origin 的实例凭据、既有协议上界、统一 `cancelled`/failure code 语义及非合作负载门禁；项目负责人 @Timcai06 于 2026-07-29 accepted，U10/U11 解锁并可并行。                                                                                                                                         |
 | U10     | `PASS`     | `WebRuntimePort` 与 v1 消息契约已定义；Host/Sandbox 方向、channel/runtime/Notebook/Artifact Version/hash、连续 sequence、单一终态与取消竞态均 fail closed。错误面只允许稳定码，不接收 prompt、Source、objectKey、stack 等自由字段；状态快照冻结。Canvas protocol 87/87、Agent core 36/36、两侧 typecheck、tooling 55/55 与 lint 通过。                                  |
 | U11     | `PASS`     | 首批依赖锁定为仓库已安装的 React 19.2.7、React DOM 19.2.7、GSAP 3.15.0、Three 0.185.1；未知、typo、范围、tag、URL 与重复依赖均拒绝。策略固定 network none、iframe 仅 allow-scripts、严格 CSP、512 KiB 输入、64 KiB 消息、1 MiB 输出、30 秒、2 并发、8 队列与 30 msg/s；明确不宣称硬 CPU/内存隔离。相关测试已包含在 Canvas protocol 87/87，tooling/typecheck/lint 通过。 |
-| U12     | `BLOCK`    | 三路独立复审确认仓库仅有同页 `srcdoc` 预览，没有独立 Runtime origin/process、受控 bootstrap 或可强制终止的 DOM Runtime。按 ADR-0019 的 R28 门禁，同页 iframe 不能以取消或卸载证明恶意死循环/内存压力下宿主仍可响应；Worker 又与 U11 的 `worker-src 'none'` 及 DOM Runtime 范围冲突。实现 worktree 保持 clean，未接入不安全的假 Runtime。                                |
+| U12     | `PARTIAL`  | `feat/20260729-u12-origin-runtime` 已有独立 `apps/web-runtime`、运行账本、routes、bootstrap/terminal 边界和压力 spec；但实现未合入主线，且缺 `web-runtime-composition.spec.ts` 对真实 Web + Runtime + PostgreSQL 的完整验收，不能宣告 PASS。                                                                                                                            |
 
 | 能力                       | 当前状态  | 当前证据                                                                                                                               | 完成任务                    |
 | -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
@@ -980,7 +1032,7 @@ Runtime origin/process 或受控 bootstrap，同页 `srcdoc` iframe 无法证明
 | Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                     | 已有，U01 防回归            |
 | Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过               | U02-U05 passed              |
 | 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环   | U06-U08 passed              |
-| 持久 Web Runtime           | `blocked` | ADR-0019、U10 消息/Port 契约与 U11 策略已通过；R28 证明同页 `srcdoc` 不足，仓库尚无独立 origin/process 或可强制终止的 DOM Runtime 边界 | U09-U11 passed；U12 blocked |
+| 持久 Web Runtime           | `partial` | ADR-0019、U10/U11 已通过；独立 Runtime 实现分支已存在，但未合入且缺真实 composition 证据                                               | U09-U11 passed；U12 partial |
 | Experiment Runtime         | `pending` | 未发现 ExperimentRuntimePort                                                                                                           | U13-U16                     |
 | TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                         | U17-U19                     |
 | WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 缺目标热词 before/after 证据，模型与 WAV 仅保存在本地且被忽略              | V02-V03                     |
