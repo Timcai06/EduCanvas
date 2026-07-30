@@ -3,7 +3,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {
   ArtifactJobLifecycleError,
   ArtifactIdempotencyConflictError,
@@ -98,6 +106,24 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       trustTier: 'tier1',
       title: '思维导图',
     });
+
+  it('详情读取使用单一可重复读快照，避免拼接旧 Artifact 与新 Version', async () => {
+    const artifact = await createArtifact();
+    const transactionSpy = vi.spyOn(database!, 'transaction');
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+    });
+
+    expect(detail.artifact.latestVersion).toBe(0);
+    expect(detail.latestVersion).toBeNull();
+    expect(transactionSpy).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'repeatable read',
+      accessMode: 'read only',
+    });
+    transactionSpy.mockRestore();
+  });
 
   it('创建产物要求主体拥有 Space,越权与不存在同错', async () => {
     await expect(

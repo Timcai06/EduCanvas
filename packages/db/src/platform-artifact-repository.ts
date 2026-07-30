@@ -979,24 +979,42 @@ export class DrizzlePlatformArtifactRepository {
     latestVersion: PlatformArtifactVersion | null;
     latestJob: PlatformArtifactJob | null;
   }> {
-    const artifact = await this.getArtifact(input);
-    const [versionRow] = await this.database
-      .select()
-      .from(artifactVersions)
-      .where(eq(artifactVersions.artifactId, artifact.id))
-      .orderBy(desc(artifactVersions.version))
-      .limit(1);
-    const [jobRow] = await this.database
-      .select()
-      .from(artifactGenerationJobs)
-      .where(eq(artifactGenerationJobs.artifactId, artifact.id))
-      .orderBy(desc(artifactGenerationJobs.createdAt))
-      .limit(1);
-    return {
-      artifact,
-      latestVersion: versionRow ? toVersion(versionRow) : null,
-      latestJob: jobRow ? toJob(jobRow) : null,
-    };
+    return this.database.transaction(
+      async (tx) => {
+        const [artifactRow] = await tx
+          .select()
+          .from(artifacts)
+          .where(eq(artifacts.id, input.artifactId))
+          .limit(1);
+        if (!artifactRow) throw new ArtifactOwnershipError();
+        await requireArtifactNotebookAccess(tx, {
+          spaceId: artifactRow.spaceId,
+          trustedSubjectId: input.trustedSubjectId,
+          permission: 'notebook.read',
+        });
+
+        const [versionRow] = await tx
+          .select()
+          .from(artifactVersions)
+          .where(eq(artifactVersions.artifactId, artifactRow.id))
+          .orderBy(desc(artifactVersions.version))
+          .limit(1);
+        const [jobRow] = await tx
+          .select()
+          .from(artifactGenerationJobs)
+          .where(eq(artifactGenerationJobs.artifactId, artifactRow.id))
+          .orderBy(desc(artifactGenerationJobs.createdAt))
+          .limit(1);
+        return {
+          artifact: toArtifact(artifactRow),
+          latestVersion: versionRow ? toVersion(versionRow) : null,
+          latestJob: jobRow ? toJob(jobRow) : null,
+        };
+      },
+      // Worker 在同一事务提交 Version 与 latestVersion；详情读取必须共享快照，
+      // 否则 READ COMMITTED 可拼出旧 Artifact 与新 Version 的不可能聚合。
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
   }
 }
 
