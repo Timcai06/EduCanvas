@@ -15,6 +15,7 @@ import {
   CANVAS_CLOSE_BUTTON_CLASS,
   CANVAS_CONTENT_FRAME_CLASS,
   CANVAS_FULLSCREEN_BUTTON_CLASS,
+  CANVAS_HOST_LAYOUT_CLASS,
   CANVAS_TITLE_CLASS,
   handleCanvasEscape,
   scheduleFocusRestore,
@@ -150,7 +151,7 @@ export function CanvasHost({
       aria-modal={isModal || undefined}
       aria-busy={isPending}
       tabIndex={-1}
-      className={`${buildCanvasHostPositionClass(isFull)} flex flex-col bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none`}
+      className={`${buildCanvasHostPositionClass(isFull)} ${CANVAS_HOST_LAYOUT_CLASS}`}
     >
       <div className="flex min-h-0 flex-1 flex-col bg-canvas shadow-[var(--shadow-float)] lg:rounded-3xl lg:border lg:border-line">
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 lg:px-5">

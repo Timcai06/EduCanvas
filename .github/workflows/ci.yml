@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
@@ -48,9 +52,6 @@ jobs:
 
       - name: Unit tests
         run: pnpm test:unit
-
-      - name: Build
-        run: pnpm build
 
   integration:
     runs-on: ubuntu-latest

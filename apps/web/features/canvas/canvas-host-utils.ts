@@ -41,11 +41,15 @@ export const CANVAS_FULLSCREEN_BUTTON_CLASS =
 export const CANVAS_CLOSE_BUTTON_CLASS =
   'flex min-h-9 shrink-0 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 
+export const CANVAS_HOST_LAYOUT_CLASS =
+  'flex min-h-0 flex-col overflow-hidden bg-surface/60 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none';
+
 /**
  * Host 只裁切外层溢出，具体滚动由各 Renderer 的内容容器持有，
  * 避免宿主与消费者同时出现纵向滚动条。
  */
-export const CANVAS_CONTENT_FRAME_CLASS = 'min-h-0 flex-1 overflow-hidden';
+export const CANVAS_CONTENT_FRAME_CLASS =
+  'flex min-h-0 flex-1 flex-col overflow-hidden';
 
 export function buildCanvasHostPositionClass(isFull: boolean): string {
   return isFull

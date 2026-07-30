@@ -488,7 +488,11 @@ export function ArtifactCanvas({
           onSelectVersion={onSelectVersion}
           onDeleted={onDeleted}
         />
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+        <div
+          role="region"
+          aria-label="Canvas 内容"
+          className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5"
+        >
           {showSkeleton ? (
             <ArtifactGeneratingSkeleton />
           ) : detail.artifact.kind === 'mind_map' && detail.version ? (

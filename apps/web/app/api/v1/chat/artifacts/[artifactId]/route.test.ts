@@ -227,6 +227,45 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     expect(payload).not.toHaveProperty('checksum');
   });
 
+  it('returns a queued artifact before its first immutable version exists', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValue({
+      ...detail,
+      artifact: {
+        ...detail.artifact,
+        latestVersion: 0,
+      },
+      latestVersion: null,
+      latestJob: {
+        id: 'job-queued',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
+    });
+    artifactRepo.listVersionProvenance.mockResolvedValue([]);
+
+    const response = await GET(
+      new Request(`http://localhost/api/v1/chat/artifacts/${validArtifact.id}`),
+      params(validArtifact.id),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      artifact: {
+        id: validArtifact.id,
+        latestVersion: 0,
+      },
+      version: null,
+      versions: [],
+      latestJob: {
+        id: 'job-queued',
+        status: 'queued',
+      },
+    });
+    expect(payload).not.toHaveProperty('canvasResource');
+  });
+
   it('maps repository errors to 503', async () => {
     artifactRepo.getArtifactDetail.mockRejectedValue(new Error('db'));
     const response = await GET(

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { createE2eWorkerLogAudit } from '../../tooling/e2e-worker-log-audit.mjs';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -125,6 +126,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await rm(objectStorageRoot, { recursive: true, force: true });
   await mkdir(objectStorageRoot, { recursive: true });
   const fixtureProvider = await startFixtureProvider();
+  const workerLogAudit = createE2eWorkerLogAudit();
 
   const worker: ChildProcess = spawn(
     'pnpm',
@@ -157,12 +159,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       30_000,
     );
     worker.stdout?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
       if (chunk.toString().includes('已启动')) {
         clearTimeout(timeout);
         resolve();
       }
     });
     worker.stderr?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
       process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
     });
     worker.on('exit', (code) => {
@@ -199,5 +203,6 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       ),
     );
     await rm(objectStorageRoot, { recursive: true, force: true });
+    workerLogAudit.assertClean();
   };
 }
