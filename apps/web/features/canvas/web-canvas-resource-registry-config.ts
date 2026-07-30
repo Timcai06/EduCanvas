@@ -174,6 +174,18 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       supportedActions: ['view', 'download', 'delete'],
     },
   },
+  {
+    rendererId: 'artifact.dom-exploration',
+    manifest: {
+      manifestVersion: 1,
+      rendererId: 'artifact.dom-exploration',
+      rendererVersion: 1,
+      representations: ['interactive_app'],
+      trustTiers: ['tier2'],
+      runtimeKinds: ['web_sandbox'],
+      supportedActions: ['view', 'run', 'cancel'],
+    },
+  },
 ];
 
 export type WebRendererComponentMap = Record<

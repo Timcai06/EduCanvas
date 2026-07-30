@@ -15,7 +15,12 @@ function detail(latestJob: ArtifactDetail['latestJob']): ArtifactDetail {
       createdAt: '2026-07-20T06:00:00.000Z',
       updatedAt: '2026-07-20T06:00:00.000Z',
     },
-    version: { version: 1, content: {}, media: null },
+    version: {
+      id: '00000000-0000-4000-8000-000000000001',
+      version: 1,
+      content: {},
+      media: null,
+    },
     versions: [],
     latestJob,
   };

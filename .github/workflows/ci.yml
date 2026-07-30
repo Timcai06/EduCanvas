@@ -120,10 +120,32 @@ jobs:
       - name: Windows unit smoke
         run: pnpm --filter @educanvas/node-host test
 
+  runtime-pressure:
+    needs: [checks]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: R28 OOPIF pressure gate
+        run: pnpm test:e2e:runtime-pressure
+
   e2e:
     # Windows remains an independent required check, but it does not produce
     # artifacts or state consumed by the Linux browser suite.
-    needs: [checks, integration]
+    needs: [checks, integration, runtime-pressure]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -165,6 +187,9 @@ jobs:
       - name: Build production application
         run: pnpm build
 
+      - name: Persistent Web Runtime composition
+        run: pnpm test:e2e:runtime-composition
+
       - name: Browser E2E
         run: pnpm exec playwright test
 
@@ -178,7 +203,7 @@ jobs:
 
   release-evidence:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true'
-    needs: [checks, integration, windows, e2e]
+    needs: [checks, integration, windows, runtime-pressure, e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

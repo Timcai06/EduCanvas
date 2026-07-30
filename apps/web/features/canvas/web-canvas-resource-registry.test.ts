@@ -8,6 +8,7 @@ vi.mock('./canvas-resource-renderers', () => ({
   NoteResourceRenderer: () => null,
   AudioOverviewResourceRenderer: () => null,
   GeneratedImageResourceRenderer: () => null,
+  DomExplorationResourceRenderer: () => null,
   SourcePdfResourceRenderer: () => null,
   SourceImageResourceRenderer: () => null,
   SourceMarkdownResourceRenderer: () => null,
@@ -64,7 +65,7 @@ afterEach(() => {
 
 describe('webCanvasResourceRegistry', () => {
   it('registry 不为空且已冻结', () => {
-    expect(webCanvasResourceRegistry.size).toBe(13);
+    expect(webCanvasResourceRegistry.size).toBe(14);
   });
 
   describe('Source rendererId 选择', () => {

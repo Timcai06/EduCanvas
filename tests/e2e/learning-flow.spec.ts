@@ -419,7 +419,7 @@ test('Stop 调用取消端点，内联重试使用新的 clientMessageId', async
   );
 });
 
-test('S0 只显示品牌、问候与 Composer，不暗示学习状态或产物', async ({
+test('@ui S0 只显示品牌、问候与 Composer，不暗示学习状态或产物', async ({
   page,
 }) => {
   await openLearningWorkspace(page);
@@ -438,7 +438,7 @@ test('S0 只显示品牌、问候与 Composer，不暗示学习状态或产物',
   await expect(page.getByText('练习', { exact: true })).toHaveCount(0);
 });
 
-test('Learning Rail 桌面默认折叠，移动端以模态学习记录打开', async ({
+test('@ui Learning Rail 桌面默认折叠，移动端以模态学习记录打开', async ({
   page,
 }) => {
   await startLearning(page);
@@ -538,7 +538,7 @@ test('首次进入时保留「+」菜单动作并直接打开受控 Canvas', asy
   await expect(aiUnavailableMessage(page)).toHaveCount(0);
 });
 
-test('桌面分隔条暴露当前比例并支持键盘调整', async ({ page }) => {
+test('@ui 桌面分隔条暴露当前比例并支持键盘调整', async ({ page }) => {
   await startLearning(page);
   await openCanvasFromChat(page);
 
@@ -555,7 +555,7 @@ test('桌面分隔条暴露当前比例并支持键盘调整', async ({ page }) 
   await expect(separator).toHaveAttribute('aria-valuetext', '对话区域占 43%');
 });
 
-test('移动 Canvas 使用模态语义、隔离背景并约束焦点', async ({ page }) => {
+test('@ui 移动 Canvas 使用模态语义、隔离背景并约束焦点', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await startLearning(page);
   const plusTrigger = page.getByRole('button', {
@@ -604,7 +604,7 @@ test('移动 Canvas 使用模态语义、隔离背景并约束焦点', async ({ 
   await expect(plusTrigger).toBeFocused();
 });
 
-test('320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
+test('@ui 320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openLearningWorkspace(page);
   await expect(
@@ -627,7 +627,7 @@ test('320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
   ).toBe(true);
 });
 
-test('Canvas 与抽屉通过 Escape 关闭并归还焦点', async ({ page }) => {
+test('@ui Canvas 与抽屉通过 Escape 关闭并归还焦点', async ({ page }) => {
   await startLearning(page);
   const plusTrigger = page.getByRole('button', {
     name: '添加上下文或创建内容',

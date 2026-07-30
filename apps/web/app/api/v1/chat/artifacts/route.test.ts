@@ -157,6 +157,7 @@ describe('GET /api/v1/chat/artifacts', () => {
           'note',
           'audio_overview',
           'generated_image',
+          'dom_exploration',
         ],
         limit: 50,
         cursor: null,

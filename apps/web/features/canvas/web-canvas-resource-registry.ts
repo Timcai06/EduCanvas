@@ -13,6 +13,7 @@ import {
   NoteResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
+  DomExplorationResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,
@@ -40,6 +41,7 @@ const COMPONENT_MAP: Record<
   'artifact.note': NoteResourceRenderer,
   'artifact.audio-overview': AudioOverviewResourceRenderer,
   'artifact.generated-image': GeneratedImageResourceRenderer,
+  'artifact.dom-exploration': DomExplorationResourceRenderer,
 };
 
 /**

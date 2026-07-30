@@ -29,6 +29,7 @@ import { FlashcardsRenderer } from './flashcards-renderer';
 import { SlidesRenderer } from './slides-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
 import { GeneratedImageViewer } from './generated-image-viewer';
+import { PersistentWebRuntime } from './persistent-web-runtime';
 import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
 import { NoteRenderer } from './note-renderer';
 import type { NoteContent } from '@educanvas/canvas-protocol';
@@ -536,6 +537,12 @@ export function ArtifactCanvas({
               readOnly={!isLatest}
               onSave={onSaveNote}
               saving={revising}
+            />
+          ) : detail.artifact.kind === 'dom_exploration' && detail.version ? (
+            <PersistentWebRuntime
+              key={detail.version.id}
+              artifactId={detail.artifact.id}
+              artifactVersionId={detail.version.id}
             />
           ) : (
             <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
