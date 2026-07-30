@@ -7,8 +7,12 @@ import {
   StopCircle,
   X,
 } from '@phosphor-icons/react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
+
+const subscribeToHydration = () => () => undefined;
+const getHydratedSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 export interface ContextChip {
   id: string;
@@ -61,6 +65,11 @@ export function Composer({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerSnapshot,
+  );
   const isLanding = variant === 'landing';
   const hasText = value.trim().length > 0;
   const hasPayload = hasText || chips.length > 0;
@@ -117,7 +126,9 @@ export function Composer({
         <textarea
           ref={textareaRef}
           value={value}
-          disabled={busy}
+          /* SSR 已经会显示输入框；在 React 接管事件前保持 disabled，避免首次
+             Enter 被原生 textarea 消费却没有触发提交。 */
+          disabled={busy || !hydrated}
           rows={1}
           aria-label="向 EduCanvas 提问"
           placeholder={isLanding ? '向 EduCanvas 提问' : '继续对话…'}
