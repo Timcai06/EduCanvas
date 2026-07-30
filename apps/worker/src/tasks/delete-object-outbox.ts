@@ -75,11 +75,12 @@ class LocalDeletionAdapter implements ObjectDeleter {
   }
 
   async delete(claim: ObjectDeletionClaim): Promise<void> {
-    if (claim.objectKind === 'asset') {
+    if (claim.objectKind === 'asset' || claim.objectKind === 'avatar') {
       await (await this.getAssetStorage()).delete(claim.storageKey);
     } else if (claim.objectKind === 'artifact') {
       await (await this.getArtifactStorage()).delete(claim.storageKey);
     } else {
+      // 未知 objectKind：fail closed，不删除任何文件
       throw new ObjectStorageError(
         'invalid_key',
         '当前删除适配器不支持此对象类型',
@@ -106,10 +107,14 @@ export function createDeleteObjectOutboxTask(
           error instanceof ObjectStorageError
             ? error.code
             : 'object_delete_failed';
-        await repository.fail(claim.id, {
-          failureCode,
-          attempt: claim.attempt,
-        });
+        try {
+          await repository.fail(claim.id, {
+            failureCode,
+            attempt: claim.attempt,
+          });
+        } catch {
+          // fail 自身失败时不能中断循环，剩余 claim 仍需处理
+        }
       }
     }
     helpers.logger.info(
