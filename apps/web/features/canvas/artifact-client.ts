@@ -28,6 +28,7 @@ export interface ArtifactProvenance {
 export interface ArtifactDetail {
   artifact: ArtifactSummary & ArtifactProvenance;
   version: {
+    id: string;
     version: number;
     content: unknown;
     media: ArtifactMedia | null;
@@ -173,6 +174,7 @@ const artifactDetailSchema = z.object({
   }),
   version: z
     .object({
+      id: z.string().uuid(),
       version: z.number().int().min(1),
       content: z.unknown(),
       media: z

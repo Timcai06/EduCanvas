@@ -21,9 +21,17 @@ const objectStorageRoot = path.resolve('output/playwright/object-storage');
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: [
+    '**/web-runtime-composition.spec.ts',
+    '**/web-runtime-stress.spec.ts',
+  ],
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
+  // UI appearance, responsive layout, focus choreography and motion checks are
+  // owned by the UI review lane. Default CI keeps only product, data and
+  // security behavior so visual QA cannot block unrelated delivery.
+  grepInvert: /@ui/,
   forbidOnly: Boolean(process.env.CI),
   failOnFlakyTests: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

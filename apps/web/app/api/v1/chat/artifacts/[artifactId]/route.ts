@@ -158,6 +158,7 @@ export async function GET(
       },
       version: selectedVersion
         ? {
+            id: selectedVersion.id,
             version: selectedVersion.version,
             content: selectedVersion.content,
             media,

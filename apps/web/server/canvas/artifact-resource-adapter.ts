@@ -109,6 +109,12 @@ const ARTIFACT_RENDERERS = {
     rendererId: 'artifact.generated-image',
     trustTier: 'tier2',
   },
+  dom_exploration: {
+    representation: 'interactive_app',
+    mimeType: 'application/vnd.educanvas.dom-exploration+json',
+    rendererId: 'artifact.dom-exploration',
+    trustTier: 'tier2',
+  },
 } as const satisfies Record<
   string,
   {
@@ -170,8 +176,9 @@ function projectActions(
     /* 只读角色可查看和下载媒体产物，但不可删除。 */
     if (kind === 'audio_overview' || kind === 'generated_image')
       return ['view', 'download'];
-    return ['view'];
+    return kind === 'dom_exploration' ? ['view', 'run', 'cancel'] : ['view'];
   }
+  if (kind === 'dom_exploration') return ['view', 'run', 'cancel'];
   if (kind === 'note') return ['view', 'edit', 'regenerate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
      这两类；不开放 regenerate 才与实际后端能力一致。
@@ -253,7 +260,16 @@ export function projectOwnedArtifactResource(input: {
       operationId: input.version?.createdByOperationId ?? null,
       generator: projectMediaGenerator(kind, input.version?.metadata),
     },
-    runtime: { kind: 'none' },
+    runtime:
+      kind === 'dom_exploration'
+        ? {
+            kind: 'web_sandbox',
+            protocolVersion: 1,
+            maxDurationMs: 30_000,
+            maxOutputBytes: 1024 * 1024,
+            network: 'none',
+          }
+        : { kind: 'none' },
   });
   if (!parsed.success) {
     throw new ArtifactResourceProjectionError('resource_invalid', 422);

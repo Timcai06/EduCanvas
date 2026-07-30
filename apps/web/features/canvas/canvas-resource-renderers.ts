@@ -64,6 +64,7 @@ const FlashcardsResourceRenderer = ArtifactCompatibilityRenderer;
 const NoteResourceRenderer = ArtifactCompatibilityRenderer;
 const AudioOverviewResourceRenderer = ArtifactCompatibilityRenderer;
 const GeneratedImageResourceRenderer = ArtifactCompatibilityRenderer;
+const DomExplorationResourceRenderer = ArtifactCompatibilityRenderer;
 
 export {
   MindMapResourceRenderer,
@@ -72,6 +73,7 @@ export {
   NoteResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
+  DomExplorationResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,

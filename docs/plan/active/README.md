@@ -5,7 +5,7 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 
 | 分配文件                      | 负责人     | 当前状态                                                       | 与其它线的关系                       |
 | ----------------------------- | ---------- | -------------------------------------------------------------- | ------------------------------------ |
-| [UV 画布语音](UV-画布语音.md) | 项目负责人 | U00-U11 已通过；U12 实现待 composition 验收；V02 仍阻塞        | 与 P/O/A 的产品文件解耦              |
+| [UV 画布语音](UV-画布语音.md) | 项目负责人 | U00-U12 已通过；下一任务 U13；V02 仍阻塞                       | 与 P/O/A 的产品文件解耦              |
 | [P 学习档案](P-学习档案.md)   | 协作开发者 | P00-P03 已落地；P04 缺 view-model 证据；P05 独立 E2E 未完成    | 不修改 Canvas、Runtime、语音或账号   |
 | [O 删除队列](O-删除队列.md)   | 协作开发者 | 待补 avatar 删除、过期 claim 恢复和真实并发证据                | 不修改 Canvas、Runtime、语音或账号   |
 | [A 账号会话](A-账号会话.md)   | 协作开发者 | 账号事务主体已存在；待补 session helper、logout 和直接集成证据 | 不修改 Canvas、Runtime、Worker 或 UI |
@@ -13,8 +13,9 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 [F 画布界面](../completed/F-画布界面.md)的 F00-F05 已完成并归档，不再作为
 待分配任务。四份 active 计划分别提交独立 PR，全部合并后由 Codex 做跨线审计。
 
-语音产品接线仍受 ADR-0018 与 V02 目标热词 before/after 实测门禁约束；U12 必须先完成
-真实 Web + Runtime + PostgreSQL composition 证据，不能仅凭单元测试进入 U13。
+语音产品接线仍受 ADR-0018 与 V02 目标热词 before/after 实测门禁约束；Canvas 侧 U12
+已经以真实 Web + 独立 Runtime + PostgreSQL composition 和 R28 压力证据通过，U13
+现已解锁。
 
 历史阶段见[`../completed/README.md`](../completed/README.md)。计划完成或取消时按
 [计划生命周期](../README.md)回写事实并归档。

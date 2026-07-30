@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-07-30
-- 下一领取任务：`U12-R0`；语音侧保持 `V02 BLOCKED`
+- 下一领取任务：`U13`；语音侧保持 `V02 BLOCKED`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -695,14 +695,13 @@ CPU/时长/输出上限和安全错误。只定义契约，不写 iframe 或执�
 #### U12：最小持久隔离 Runtime Adapter
 
 - 依赖：U10、U11
-- 状态：`PARTIAL / REVIEW_REQUIRED`
-- 当前事实：分支 `feat/20260729-u12-origin-runtime` 已实现独立 `apps/web-runtime`、
-  Runtime routes、`web_runtime_runs` 账本、服务端权威 bootstrap/terminal 边界和
-  `tests/e2e/web-runtime-stress.spec.ts`。因此“仓库没有独立 Runtime”的旧结论已经失效。
-- 未完成门禁：实现尚未合入主线，且没有
-  `tests/e2e/web-runtime-composition.spec.ts`。必须用真实 Web、独立 Runtime 进程和
-  PostgreSQL 跑通 bootstrap、terminal、跨主体/Notebook 拒绝、取消/崩溃清理及 R28，
-  才能由 Codex 判定 PASS。压力 spec 或单元测试不能替代 composition 证据。
+- 状态：`PASS`
+- 当前事实：独立 `apps/web-runtime`、Runtime routes、`web_runtime_runs` 账本、
+  服务端权威 bootstrap/terminal 边界、真实 composition 和 R28 压力门禁均已实现。
+  `tests/e2e/web-runtime-composition.spec.ts` 使用真实 Web、独立 Runtime 进程和隔离
+  PostgreSQL 验证不可变 Artifact Version、跨主体 404、bootstrap 一次性领取、
+  terminal-before-bootstrap 与重复 terminal 拒绝；R28 另行验证非合作 CPU/内存负载下
+  Host 响应、OOPIF 回收与干净替换。
 - 文件边界：独立 Runtime adapter、Canvas 最小组合、测试
 - 可并行：V15-V17
 
@@ -992,11 +991,10 @@ Codex 审核报告固定格式：
 以及 Operation 终态、取消、重试耗尽、checkpoint 与重复投递恢复均已复核。语音子线仍按
 V08-V11 的依赖推进，因此 S2 整体尚未收口。
 
-**S3 状态：** U09-U11 passed；ADR-0019、版本化消息/Port 契约、依赖白名单、CSP 与
-资源策略均已通过 Codex 安全复审。U12 已有独立 origin/process 实现分支和压力用例，
-但尚未合入主线，也缺真实 Web + Runtime + PostgreSQL composition spec，因此保持
-PARTIAL / REVIEW_REQUIRED。语音 V12-V17 同时受 V02-V11 前置门槛阻塞；S3 整体未通过，
-不得进入 U13 或对外开放 Runtime/语音入口。
+**S3 状态：** Canvas 子线 U09-U12 passed；ADR-0019、版本化消息/Port 契约、依赖白名单、
+CSP、资源策略、独立 origin/process Runtime、真实 Web + Runtime + PostgreSQL
+composition 与 R28 压力门禁均已通过。U13 已解锁。语音 V12-V17 同时受 V02-V11
+前置门槛阻塞，因此 S3 整体仍未通过，语音入口继续保持关闭。
 
 | S0 任务 | Codex 结论 | 证据                                                                                                                                   |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1019,26 +1017,26 @@ PARTIAL / REVIEW_REQUIRED。语音 V12-V17 同时受 V02-V11 前置门槛阻塞�
 | U07     | `PASS`     | Codex 复审并修正媒体 manifest 动作契约、contributor 只读投影、归档列表过滤、并发删除锁、下载 byteSize 校验及删除后的本地列表失效；图像使用 figure/figcaption 与公开元数据 alt text，音频文字稿始终可读；下载和删除均在服务端重新授权，归档与 deletion outbox 同事务。Web 539/539、Worker 91/91、DB unit 21/21、tooling 55/55、完整 PostgreSQL integration、22 workspace typecheck 与 lint 均通过。                                                                                                                                                                                                 |
 | U08     | `PASS`     | Codex 真实 PostgreSQL 复审发现并修复媒体 helper 与外层对同一 generation job 二次追加版本的问题；音频、图像及结构化产物现统一通过 `appendVersionAndCompleteGenerationJob` 在单一事务中写不可变版本并结算 succeeded，版本来源固定绑定已锁定的 jobId。queued/running/terminal 状态、取消竞争、retry exhausted、existingVersion、音频/图像 checkpoint、重复投递及 unknown 浏览器投影均有证据，取消竞争测试不再吞 Worker 异常。Worker unit 99/99、Worker integration 35/35、DB integration 202/202、Web adapter 18/18、tooling 55/55 及 DB/Worker/Web typecheck 通过；独立复审无剩余 HIGH/MEDIUM 问题。 |
 
-| S3 任务 | Codex 结论 | 证据                                                                                                                                                                                                                                                                                                                                                                    |
-| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U09     | `PASS`     | ADR-0019 与 28 条安全负例经 Codex 技术复审，补齐服务端权威边界、不透明 origin 的实例凭据、既有协议上界、统一 `cancelled`/failure code 语义及非合作负载门禁；项目负责人 @Timcai06 于 2026-07-29 accepted，U10/U11 解锁并可并行。                                                                                                                                         |
-| U10     | `PASS`     | `WebRuntimePort` 与 v1 消息契约已定义；Host/Sandbox 方向、channel/runtime/Notebook/Artifact Version/hash、连续 sequence、单一终态与取消竞态均 fail closed。错误面只允许稳定码，不接收 prompt、Source、objectKey、stack 等自由字段；状态快照冻结。Canvas protocol 87/87、Agent core 36/36、两侧 typecheck、tooling 55/55 与 lint 通过。                                  |
-| U11     | `PASS`     | 首批依赖锁定为仓库已安装的 React 19.2.7、React DOM 19.2.7、GSAP 3.15.0、Three 0.185.1；未知、typo、范围、tag、URL 与重复依赖均拒绝。策略固定 network none、iframe 仅 allow-scripts、严格 CSP、512 KiB 输入、64 KiB 消息、1 MiB 输出、30 秒、2 并发、8 队列与 30 msg/s；明确不宣称硬 CPU/内存隔离。相关测试已包含在 Canvas protocol 87/87，tooling/typecheck/lint 通过。 |
-| U12     | `PARTIAL`  | `feat/20260729-u12-origin-runtime` 已有独立 `apps/web-runtime`、运行账本、routes、bootstrap/terminal 边界和压力 spec；但实现未合入主线，且缺 `web-runtime-composition.spec.ts` 对真实 Web + Runtime + PostgreSQL 的完整验收，不能宣告 PASS。                                                                                                                            |
+| S3 任务 | Codex 结论 | 证据                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U09     | `PASS`     | ADR-0019 与 28 条安全负例经 Codex 技术复审，补齐服务端权威边界、不透明 origin 的实例凭据、既有协议上界、统一 `cancelled`/failure code 语义及非合作负载门禁；项目负责人 @Timcai06 于 2026-07-29 accepted，U10/U11 解锁并可并行。                                                                                                                                                       |
+| U10     | `PASS`     | `WebRuntimePort` 与 v1 消息契约已定义；Host/Sandbox 方向、channel/runtime/Notebook/Artifact Version/hash、连续 sequence、单一终态与取消竞态均 fail closed。错误面只允许稳定码，不接收 prompt、Source、objectKey、stack 等自由字段；状态快照冻结。Canvas protocol 87/87、Agent core 36/36、两侧 typecheck、tooling 55/55 与 lint 通过。                                                |
+| U11     | `PASS`     | 首批依赖锁定为仓库已安装的 React 19.2.7、React DOM 19.2.7、GSAP 3.15.0、Three 0.185.1；未知、typo、范围、tag、URL 与重复依赖均拒绝。策略固定 network none、iframe 仅 allow-scripts、严格 CSP、512 KiB 输入、64 KiB 消息、1 MiB 输出、30 秒、2 并发、8 队列与 30 msg/s；明确不宣称硬 CPU/内存隔离。相关测试已包含在 Canvas protocol 87/87，tooling/typecheck/lint 通过。               |
+| U12     | `PASS`     | 独立 `apps/web-runtime`、运行账本、受控 routes 与 Canvas 组合已完成；真实 Web + 独立 Runtime + PostgreSQL composition 3/3、R28 非合作 CPU/内存压力 2/2、DB integration 5/5、Runtime 8/8、Canvas protocol 87/87、Web 583/583、tooling 62/62、相关 typecheck、lint 与 production webpack build 通过。bootstrap 只领一次，terminal 必须在 bootstrap 后写入且首终态胜出；跨主体统一 404。 |
 
-| 能力                       | 当前状态  | 当前证据                                                                                                                               | 完成任务                    |
-| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                        | 已有，U01 防回归            |
-| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                     | 已有，U01 防回归            |
-| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过               | U02-U05 passed              |
-| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环   | U06-U08 passed              |
-| 持久 Web Runtime           | `partial` | ADR-0019、U10/U11 已通过；独立 Runtime 实现分支已存在，但未合入且缺真实 composition 证据                                               | U09-U11 passed；U12 partial |
-| Experiment Runtime         | `pending` | 未发现 ExperimentRuntimePort                                                                                                           | U13-U16                     |
-| TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                         | U17-U19                     |
-| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 缺目标热词 before/after 证据，模型与 WAV 仅保存在本地且被忽略              | V02-V03                     |
-| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用 | V04-V09、V12-V13、V16-V17   |
-| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                   | V10-V15                     |
-| 联合发布证据               | `pending` | 尚未执行                                                                                                                               | U20-U21                     |
+| 能力                       | 当前状态  | 当前证据                                                                                                                               | 完成任务                  |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                        | 已有，U01 防回归          |
+| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                     | 已有，U01 防回归          |
+| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过               | U02-U05 passed            |
+| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环   | U06-U08 passed            |
+| 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                        | U09-U12 passed            |
+| Experiment Runtime         | `pending` | 未发现 ExperimentRuntimePort                                                                                                           | U13-U16                   |
+| TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                         | U17-U19                   |
+| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 缺目标热词 before/after 证据，模型与 WAV 仅保存在本地且被忽略              | V02-V03                   |
+| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用 | V04-V09、V12-V13、V16-V17 |
+| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                   | V10-V15                   |
+| 联合发布证据               | `pending` | 尚未执行                                                                                                                               | U20-U21                   |
 
 ### 已确认的代码事实明细
 

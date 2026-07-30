@@ -42,6 +42,7 @@ const WEB_ARTIFACT_KINDS = [
   'note',
   'audio_overview',
   'generated_image',
+  'dom_exploration',
 ] as const;
 
 /**

@@ -30,7 +30,12 @@ function detail(
 ): ArtifactDetail {
   return {
     artifact: { ...base, ...overrides.artifact },
-    version: overrides.version ?? { version: 2, content: {}, media: null },
+    version: overrides.version ?? {
+      id: '00000000-0000-4000-8000-000000000002',
+      version: 2,
+      content: {},
+      media: null,
+    },
     versions: overrides.versions ?? [
       {
         version: 2,
@@ -82,6 +87,7 @@ const cases: { label: string; detail: ArtifactDetail; revising: boolean }[] = [
     detail: detail({
       artifact: { kind: 'audio_overview', title: '光合作用音频概览' },
       version: {
+        id: '00000000-0000-4000-8000-000000000001',
         version: 1,
         content: null,
         media: {
