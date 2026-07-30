@@ -245,13 +245,25 @@ rtk rg -n "objectDeletionOutbox|delete_object_outbox|archiveOwnedArtifactTransac
 
 ## 七、验证台账
 
-| 任务                | 状态      | 证据 |
-| ------------------- | --------- | ---- |
-| O00 基线与所有权    | `PENDING` | 待补 |
-| O01 Outbox 仓储收口 | `PENDING` | 待补 |
-| O02 worker 删除路径 | `PENDING` | 待补 |
-| O03 并发与恢复证据  | `PENDING` | 待补 |
-| O04 台账与收口      | `PENDING` | 待补 |
+| 任务                | 状态      | 证据                                                                 |
+| ------------------- | --------- | -------------------------------------------------------------------- |
+| O00 基线与所有权    | `PASS`    | PR #258; HEAD=98008a7; 5 缺口已记录                                  |
+| O01 Outbox 仓储收口 | `PASS`    | PR #259; claimBatch 租约恢复 + sourceType 补齐; 11 integration tests |
+| O02 worker 删除路径 | `PASS`    | PR #260; avatar 路由 + fail 保护; 8 tests                            |
+| O03 并发与恢复证据  | `PASS`    | 本 commit; 证据见下                                                  |
+| O04 台账与收口      | `PENDING` | 待补                                                                 |
+
+### O03 已有证据
+
+| 需求              | 证据位置                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 并发 claim 互斥   | O01 `object-deletion-outbox-repository.integration.test.ts`: "并发 claim 对同一行只有一个成功"                                                                   |
+| 租约过期恢复      | O01 `object-deletion-outbox-repository.integration.test.ts`: "租约过期 processing 行被 claimBatch 恢复领取"                                                      |
+| 活跃租约保护      | O01 `object-deletion-outbox-repository.integration.test.ts`: "未过期 processing 行不被 claimBatch 领取"                                                          |
+| cron 注册一致     | `maintenance-tasks.test.ts`: "维护计划可被Graphile解析且任务身份与批次固定" — 验证 `maintenance:delete_object_outbox` / `object-deletion-outbox` / `{limit:100}` |
+| outbox 写入原子   | `platform-artifact.integration.test.ts`: archive 后验证 `object_deletion_outbox` 有记录                                                                          |
+| 资产 outbox 覆盖  | `asset-repository.integration.test.ts`: 验证 `sourceType = asset_video_keyframe` 可正确写入                                                                      |
+| worker 抽象可注入 | O02 `delete-object-outbox.test.ts`: 8 tests 通过接口注入 repository + deleter                                                                                    |
 
 ## 八、Codex 审核标准
 
