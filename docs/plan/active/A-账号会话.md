@@ -245,26 +245,27 @@ rtk rg -n "prepareWebSession|createWebSession|writeWebSessionCookie|revokeCurren
 
 ## 七、验证台账
 
-| 任务                    | 状态      | 证据 |
-| ----------------------- | --------- | ---- |
-| A00 基线与所有权        | `PASS` | HEAD=origin/main=42f0731, clean worktree, 见下方事实表 |
-| A01 session helper 收口 | `PENDING` | 待补 |
-| A02 路由原子边界        | `PENDING` | 待补 |
-| A03 改密与并发撤销      | `PENDING` | 待补 |
-| A04 台账与收口          | `PENDING` | 待补 |
+| 任务                    | 状态      | 证据                                                   |
+| ----------------------- | --------- | ------------------------------------------------------ |
+| A00 基线与所有权        | `PASS`    | HEAD=origin/main=42f0731, clean worktree, 见下方事实表 |
+| A01 session helper 收口 | `PENDING` | 待补                                                   |
+| A02 路由原子边界        | `PENDING` | 待补                                                   |
+| A03 改密与并发撤销      | `PENDING` | 待补                                                   |
+| A04 台账与收口          | `PENDING` | 待补                                                   |
 
 ### A00 审计事实（2026-07-30）
 
-| 文件 | 行数 | 关键事实 |
-|------|------|----------|
-| `apps/web/server/auth/session.ts` | 107 | `prepareWebSession` 生成 32 字节 token → sha256 hash，raw token 不落库；`createWebSession` 事务后由调用方写 Cookie；`revokeCurrentWebSession` 先 revoke DB 再 delete cookie；**无测试文件** |
-| `packages/db/src/web-session-repository.ts` | 67 | `create` 接受 tokenHash + expiresAt；`findActiveRegisteredUserIdByTokenHash` JOIN platformUsers 校验 kind=registered + status=active + 未过期 + 未 revoked；`revokeByTokenHash` 仅 UPDATE 未 revoked 的行（幂等）；**无集成测试文件** |
-| `apps/web/app/api/v1/auth/login/route.ts` | 76 | same-origin + rate-limit + JSON 校验 → authenticate → reset failures → createSession + writeCookie；失败分 AccountError/其他；**有 route.test.ts** |
-| `apps/web/app/api/v1/auth/logout/route.ts` | 26 | same-origin → revokeCurrentWebSession；失败 catch-all 返回 503；**无 route.test.ts** |
-| `apps/web/app/api/v1/auth/register/route.ts` | 102 | same-origin + rate-limit + JSON 校验 → prepareWebSession（token 在内存）→ registerAndCreateSession(tokenHash) → writeCookie(token)；**有 route.test.ts** |
-| `apps/web/server/auth/account-repository.ts` | — | WebAccountRepository：authenticate / registerAndCreateSession / changePasswordAndRotateSession；**有 .test.ts** |
+| 文件                                         | 行数 | 关键事实                                                                                                                                                                                                                              |
+| -------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/server/auth/session.ts`            | 107  | `prepareWebSession` 生成 32 字节 token → sha256 hash，raw token 不落库；`createWebSession` 事务后由调用方写 Cookie；`revokeCurrentWebSession` 先 revoke DB 再 delete cookie；**无测试文件**                                           |
+| `packages/db/src/web-session-repository.ts`  | 67   | `create` 接受 tokenHash + expiresAt；`findActiveRegisteredUserIdByTokenHash` JOIN platformUsers 校验 kind=registered + status=active + 未过期 + 未 revoked；`revokeByTokenHash` 仅 UPDATE 未 revoked 的行（幂等）；**无集成测试文件** |
+| `apps/web/app/api/v1/auth/login/route.ts`    | 76   | same-origin + rate-limit + JSON 校验 → authenticate → reset failures → createSession + writeCookie；失败分 AccountError/其他；**有 route.test.ts**                                                                                    |
+| `apps/web/app/api/v1/auth/logout/route.ts`   | 26   | same-origin → revokeCurrentWebSession；失败 catch-all 返回 503；**无 route.test.ts**                                                                                                                                                  |
+| `apps/web/app/api/v1/auth/register/route.ts` | 102  | same-origin + rate-limit + JSON 校验 → prepareWebSession（token 在内存）→ registerAndCreateSession(tokenHash) → writeCookie(token)；**有 route.test.ts**                                                                              |
+| `apps/web/server/auth/account-repository.ts` | —    | WebAccountRepository：authenticate / registerAndCreateSession / changePasswordAndRotateSession；**有 .test.ts**                                                                                                                       |
 
 **缺口汇总**：
+
 - `session.test.ts` — 不存在，`prepareWebSession`/`createWebSession`/`writeWebSessionCookie`/`revokeCurrentWebSession`/`readRegisteredSessionIdentity` 零单元测试
 - `web-session-repository.integration.test.ts` — 不存在，`create`/`findActiveRegisteredUserIdByTokenHash`/`revokeByTokenHash` 零集成测试
 - `logout/route.test.ts` — 不存在，退出幂等/并发/Cookie 写入失败边界零测试
