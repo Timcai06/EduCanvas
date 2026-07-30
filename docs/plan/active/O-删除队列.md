@@ -245,13 +245,37 @@ rtk rg -n "objectDeletionOutbox|delete_object_outbox|archiveOwnedArtifactTransac
 
 ## 七、验证台账
 
-| 任务                | 状态      | 证据 |
-| ------------------- | --------- | ---- |
-| O00 基线与所有权    | `PENDING` | 待补 |
-| O01 Outbox 仓储收口 | `PENDING` | 待补 |
-| O02 worker 删除路径 | `PENDING` | 待补 |
-| O03 并发与恢复证据  | `PENDING` | 待补 |
-| O04 台账与收口      | `PENDING` | 待补 |
+| 任务                | 状态      | 证据                                                   |
+| ------------------- | --------- | ------------------------------------------------------ |
+| O00 基线与所有权    | `PASS`    | HEAD=origin/main=98008a7, clean worktree, 见下方事实表 |
+| O01 Outbox 仓储收口 | `PENDING` | 待补                                                   |
+| O02 worker 删除路径 | `PENDING` | 待补                                                   |
+| O03 并发与恢复证据  | `PENDING` | 待补                                                   |
+| O04 台账与收口      | `PENDING` | 待补                                                   |
+
+### O00 审计事实（2026-07-30）
+
+| 文件                                   | 行     | 事实                                                                                                     |
+| -------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| `object-deletion-outbox-repository.ts` | 34-79  | `claimBatch` 只查 `pending` 行，用 `FOR UPDATE SKIP LOCKED`；**不恢复卡在 `processing` 的崩溃遗留行**    |
+| `object-deletion-outbox-repository.ts` | 82-91  | `complete` 只推进 `processing` 行（幂等）；无返回值确认                                                  |
+| `object-deletion-outbox-repository.ts` | 94-114 | `fail` 超过 MAX(10) 次 → `failed` 终态；否则退回 `pending` 带退避延迟                                    |
+| `object-deletion-outbox-repository.ts` | 9-20   | `ObjectDeletionClaim.sourceType` 联合缺 `asset_video_keyframe`，schema 允许但 TS 类型未覆盖              |
+| `delete-object-outbox.ts`              | 77-88  | `delete()`：asset→资产根，artifact→产物根；avatar 落入 else → `invalid_key` 永久失败；**无 artifact 根** |
+| `delete-object-outbox.ts`              | 99-113 | catch 块中 `repository.fail()` 若抛异常 → for 循环中断，剩余 claim 孤儿                                  |
+| `delete-object-outbox.ts`              | 38-51  | `findWorkspaceRoot()` 与 `extract-asset-text.ts` 重复实现                                                |
+| `worker-config.ts`                     | 3      | cron `* * * * * maintenance:delete_object_outbox`，每分钟一次                                            |
+| `platform-artifact-archive.ts`         | 81     | 归档事务内写 `objectDeletionOutbox`，与业务原子                                                          |
+
+**缺口汇总**：
+
+1. **processing 无租约恢复** — worker 崩溃后 `processing` 行永远卡住
+2. **avatar 被 worker 拒绝** — repository 允许 avatar 但 `delete()` 抛 `invalid_key`
+3. **`asset_video_keyframe` 缺 TS 覆盖** — schema check 允许但 `sourceType` 联合无此值
+4. **`fail()` 在 catch 块中无保护** — fail 抛异常 → 循环中断，剩余 claim 孤儿
+5. **`findWorkspaceRoot()` 重复** — 两个 worker 任务各有一份
+
+**文件交集检查**：本计划 12 个边界文件与 A/UV/P 三条线无交集。
 
 ## 八、Codex 审核标准
 
