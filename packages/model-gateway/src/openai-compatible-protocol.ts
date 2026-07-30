@@ -253,5 +253,15 @@ export const buildRequestBody = (
           },
         })),
   tool_choice: request.tools.length === 0 ? 'none' : 'auto',
-  ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
+  /*
+   * EduCanvas 不保留 CoT，因此对所有声明支持该开关的供应商固定关闭 thinking：
+   * 推理内容既会消耗工具参数与最终文本的输出预算，又必须被丢弃。
+   *
+   * 不能无条件发送——OpenAI 等供应商不认识 `thinking` 字段会整轮 400，所以由
+   * 配置显式声明而不是猜测。DeepSeek 是协议已知的必关项；其他供应商（如承接
+   * 图片输入的 GLM 视觉模型，默认开启思考）由部署方按实测行为开启。
+   */
+  ...(config.provider === 'deepseek' || config.disableThinking
+    ? { thinking: { type: 'disabled' } }
+    : {}),
 });

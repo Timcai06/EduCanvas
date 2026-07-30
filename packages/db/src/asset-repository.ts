@@ -41,9 +41,21 @@ import {
   assetRepresentations,
   assets,
   assetVersions,
+  assetVideoKeyframes,
   notebookAssetBindings,
   objectDeletionOutbox,
 } from './schema';
+import {
+  DrizzleAssetDerivedProcessingRepository,
+  enqueueDerivedAssetJob,
+  getDerivedAssetJobKind,
+} from './asset-derived-processing-repository';
+import {
+  ASSET_TRANSCRIBE_AUDIO_TASK,
+  DrizzleAssetTranscriptionRepository,
+  type AudioTranscriptionOutcome,
+} from './asset-transcription-repository';
+import { ASSET_PROCESS_VIDEO_TASK } from './asset-video-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -56,8 +68,19 @@ const SHA256 = /^[a-f0-9]{64}$/;
 export interface AssetSnapshot {
   descriptor: AssetDescriptor;
   version: AssetVersionDescriptor | null;
+  /** 浏览器安全的处理账本投影；不包含队列错误原文、堆栈或对象存储地址。 */
+  processing: AssetProcessingSnapshot | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssetProcessingSnapshot {
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  attempts: number;
+  failureCode: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface MaterializedAssetVersion {
@@ -66,6 +89,8 @@ export interface MaterializedAssetVersion {
   mimeType: string;
   byteSize: number;
   extractedText: string | null;
+  /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
+  transcriptionText: string | null;
 }
 
 export interface AssetAccessPolicy {
@@ -87,13 +112,22 @@ export interface OwnedStoredAssetVersion {
   createdAt: string;
   storageKey: string;
   extractedText: string | null;
+  /** 音频转录派生文本。 */
+  transcriptionText: string | null;
+  /** 音频转录 Provider 审计元数据。 */
+  transcriptionMetadata: unknown;
+  /** 浏览器预览组合层可用的安全派生状态；不含对象键、校验和或 Provider 数据。 */
+  derivedStatuses: readonly {
+    kind: 'transcription' | 'keyframes';
+    status: 'processing' | 'ready' | 'failed' | 'unavailable';
+  }[];
 }
 
 export interface CreateUploadedAssetInput {
   ownerSubjectId: string;
   spaceId: string;
   scope: AssetScope;
-  kind: Extract<AssetKind, 'image' | 'document' | 'link'>;
+  kind: Extract<AssetKind, 'image' | 'document' | 'link' | 'audio' | 'video'>;
   /** 缺省 upload;链接导入传 url_import,溯源与上传物理区分。 */
   origin?: Extract<AssetOrigin, 'upload' | 'url_import'>;
   displayName: string;
@@ -145,6 +179,7 @@ function requireText(value: string, label: string, max: number): string {
 function toSnapshot(
   asset: typeof assets.$inferSelect,
   version: typeof assetVersions.$inferSelect | null,
+  processingJob: typeof assetProcessingJobs.$inferSelect | null = null,
 ): AssetSnapshot {
   return {
     descriptor: assetDescriptorSchema.parse({
@@ -168,6 +203,16 @@ function toSnapshot(
           status: version.status,
         })
       : null,
+    processing: processingJob
+      ? {
+          status: processingJob.status as AssetProcessingSnapshot['status'],
+          attempts: processingJob.attempts,
+          failureCode: processingJob.failureCode,
+          createdAt: processingJob.createdAt.toISOString(),
+          startedAt: processingJob.startedAt?.toISOString() ?? null,
+          completedAt: processingJob.completedAt?.toISOString() ?? null,
+        }
+      : null,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
   };
@@ -181,8 +226,43 @@ export class DrizzleAssetRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  private async loadLatestProcessingJobsByAssetIds(
+    assetIds: readonly string[],
+  ): Promise<ReadonlyMap<string, typeof assetProcessingJobs.$inferSelect>> {
+    if (assetIds.length === 0) return new Map();
+    const rows = await this.database
+      .select({
+        assetId: assetVersions.assetId,
+        job: assetProcessingJobs,
+      })
+      .from(assetProcessingJobs)
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
+      )
+      .where(
+        and(
+          inArray(assetVersions.assetId, [...assetIds]),
+          inArray(assetProcessingJobs.kind, [
+            'extract_text',
+            'transcribe_audio',
+            'process_video',
+          ]),
+        ),
+      )
+      .orderBy(
+        desc(assetProcessingJobs.createdAt),
+        desc(assetProcessingJobs.id),
+      );
+    const latest = new Map<string, typeof assetProcessingJobs.$inferSelect>();
+    for (const row of rows) {
+      if (!latest.has(row.assetId)) latest.set(row.assetId, row.job);
+    }
+    return latest;
+  }
+
   /**
-   * 落库一个等待异步解析的上传（ADR-0025）。
+   * 落库一个等待异步解析的上传（ADR-0010）。
    *
    * 与 `createUploaded` 的关键差异：asset 与 version 都停在 `processing`，
    * `currentVersionId` 保持为空（`assets_status_shape_check` 要求非 ready 状态
@@ -244,29 +324,49 @@ export class DrizzleAssetRepository {
           createdAt: now,
         })
         .returning();
-      const queueJobKey = `asset-extract-text:${jobId}`;
-      await transaction.insert(assetProcessingJobs).values({
-        id: jobId,
-        assetVersionId: versionId,
-        kind: 'extract_text',
-        status: 'queued',
-        attempts: 0,
-        queueJobKey,
-        createdAt: now,
-      });
+      /**
+       * 音频走转录队列，视频走派生处理队列（探测→音轨转录→抽帧），
+       * 其他可抽取文本类型走文本抽取队列。三种 job 共用
+       * asset_processing_jobs 表，kind 字段区分。
+       */
+      const processingKind =
+        input.kind === 'audio'
+          ? 'transcribe_audio'
+          : input.kind === 'video'
+            ? 'process_video'
+            : 'extract_text';
+      const taskName =
+        processingKind === 'transcribe_audio'
+          ? ASSET_TRANSCRIBE_AUDIO_TASK
+          : processingKind === 'process_video'
+            ? ASSET_PROCESS_VIDEO_TASK
+            : ASSET_EXTRACT_TEXT_TASK;
+      const queueJobKey = `asset-${processingKind}:${jobId}`;
+      const [createdJob] = await transaction
+        .insert(assetProcessingJobs)
+        .values({
+          id: jobId,
+          assetVersionId: versionId,
+          kind: processingKind,
+          status: 'queued',
+          attempts: 0,
+          queueJobKey,
+          createdAt: now,
+        })
+        .returning();
       await transaction.execute(sql`
         select graphile_worker.add_job(
-          ${ASSET_EXTRACT_TEXT_TASK},
+          ${taskName},
           payload := ${JSON.stringify({ jobId })}::json,
           job_key := ${queueJobKey},
           max_attempts := 3
         )
       `);
-      if (!createdAsset || !createdVersion) {
+      if (!createdAsset || !createdVersion || !createdJob) {
         throw new AssetPersistenceError('Asset创建失败');
       }
       return {
-        snapshot: toSnapshot(createdAsset, createdVersion),
+        snapshot: toSnapshot(createdAsset, createdVersion, createdJob),
         versionId,
         jobId,
       };
@@ -280,29 +380,45 @@ export class DrizzleAssetRepository {
    * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
    * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
    */
-  async loadPendingExtraction(input: {
+  async beginTextExtractionAttempt(input: {
     jobId: string;
+    now?: Date;
   }): Promise<{ storageKey: string; mimeType: string } | null> {
     const jobId = requireUuid(input.jobId);
-    const [row] = await this.database
-      .select({
-        storageKey: assetVersions.storageKey,
-        mimeType: assetVersions.mimeType,
-      })
-      .from(assetProcessingJobs)
-      .innerJoin(
-        assetVersions,
-        eq(assetVersions.id, assetProcessingJobs.assetVersionId),
-      )
-      .where(
-        and(
-          eq(assetProcessingJobs.id, jobId),
-          eq(assetProcessingJobs.kind, 'extract_text'),
-          inArray(assetProcessingJobs.status, ['queued', 'running']),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [claimed] = await transaction
+        .update(assetProcessingJobs)
+        .set({
+          status: 'running',
+          attempts: sql`${assetProcessingJobs.attempts} + 1`,
+          /*
+           * 裸 Date 放进 sql`` 会退化成平台本地字符串（如 GMT+0800），
+           * PostgreSQL 不保证能解析。ISO 字符串显式转 timestamptz，同时保留
+           * 第一次开始时间，确保跨时区和重试都稳定。
+           */
+          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now.toISOString()}::timestamptz)`,
+        })
+        .where(
+          and(
+            eq(assetProcessingJobs.id, jobId),
+            eq(assetProcessingJobs.kind, 'extract_text'),
+            inArray(assetProcessingJobs.status, ['queued', 'running']),
+          ),
+        )
+        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+      if (!claimed) return null;
+      const [version] = await transaction
+        .select({
+          storageKey: assetVersions.storageKey,
+          mimeType: assetVersions.mimeType,
+        })
+        .from(assetVersions)
+        .where(eq(assetVersions.id, claimed.assetVersionId))
+        .limit(1);
+      if (!version) throw new AssetPersistenceError('Asset版本不存在');
+      return version;
+    });
   }
 
   /**
@@ -326,8 +442,6 @@ export class DrizzleAssetRepository {
         .update(assetProcessingJobs)
         .set({
           status: input.outcome.status === 'ready' ? 'succeeded' : 'failed',
-          attempts: sql`${assetProcessingJobs.attempts} + 1`,
-          startedAt: sql`coalesce(${assetProcessingJobs.startedAt}, ${now})`,
           completedAt: now,
           failureCode:
             input.outcome.status === 'failed'
@@ -378,8 +492,123 @@ export class DrizzleAssetRepository {
           updatedAt: now,
         })
         .where(eq(assets.id, version.assetId));
+      const derivedKind = ready
+        ? getDerivedAssetJobKind(version.mimeType)
+        : null;
+      if (derivedKind) {
+        await enqueueDerivedAssetJob(transaction, {
+          assetVersionId: version.id,
+          kind: derivedKind,
+          now,
+        });
+      }
       return true;
     });
+  }
+
+  /**
+   * 供 worker 读取一个待渲染预览任务的输入。
+   *
+   * 只返回渲染所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍渲染。
+   */
+  async beginPreviewRenderAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).beginPreviewRenderAttempt(input);
+  }
+
+  /**
+   * 由 worker 写入预览渲染终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的 representation 改回去。
+   */
+  async settlePreviewRender(input: {
+    jobId: string;
+    outcome:
+      | {
+          status: 'ready';
+          derivedStorageKey: string;
+          checksum: string;
+          byteSize: number;
+        }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).settlePreviewRender(input);
+  }
+
+  /**
+   * 供 worker 读取一个待生成缩略图任务的输入。
+   *
+   * 只返回生成所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍生成。
+   */
+  async beginThumbnailGenerationAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).beginThumbnailGenerationAttempt(input);
+  }
+
+  /**
+   * 由 worker 写入缩略图生成终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把一个已 ready 的 representation 改回去。
+   */
+  async settleThumbnailGeneration(input: {
+    jobId: string;
+    outcome:
+      | {
+          status: 'ready';
+          derivedStorageKey: string;
+          checksum: string;
+          byteSize: number;
+        }
+      | { status: 'failed'; failureCode: string };
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetDerivedProcessingRepository(
+      this.database,
+    ).settleThumbnailGeneration(input);
+  }
+
+  /**
+   * 供 worker 读取一个待音频转录任务的输入。
+   *
+   * 只返回转录所需的最小事实：storageKey 与 MIME。它不经过公共 API，
+   * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍转录。
+   */
+  async beginAudioTranscriptionAttempt(input: { jobId: string; now?: Date }) {
+    return new DrizzleAssetTranscriptionRepository(this.database).beginAttempt(
+      input,
+    );
+  }
+
+  /**
+   * 由 worker 写入音频转录终态。
+   *
+   * 不接受 ownerSubjectId：worker 是系统主体，授权已经在上传时完成，作用域由
+   * jobId 唯一确定。只允许从 `queued`/`running` 推进，重复投递因此是幂等的——
+   * 任务已终结时直接返回 false，不会把已就绪的 representation 改回去。
+   *
+   * 转录文本是派生内容，写入 transcriptionText 列而非 extractedText，
+   * 保证不覆盖原始 Asset Version 的文本抽取结果。
+   */
+  async settleAudioTranscription(input: {
+    jobId: string;
+    outcome: AudioTranscriptionOutcome;
+    now?: Date;
+  }): Promise<boolean> {
+    return new DrizzleAssetTranscriptionRepository(this.database).settle(input);
   }
 
   private validateUploadInput(input: {
@@ -519,20 +748,25 @@ export class DrizzleAssetRepository {
           createdAt: now,
         });
       }
+      let processingJob: typeof assetProcessingJobs.$inferSelect | null = null;
       if (input.kind === 'document') {
-        await transaction.insert(assetProcessingJobs).values({
-          assetVersionId: versionId,
-          kind: 'extract_text',
-          status: versionStatus === 'ready' ? 'succeeded' : 'failed',
-          attempts: 1,
-          failureCode:
-            versionStatus === 'failed'
-              ? requireText(input.outcome.failureCode, 'failureCode', 128)
-              : null,
-          startedAt: now,
-          completedAt: now,
-          createdAt: now,
-        });
+        const [createdProcessingJob] = await transaction
+          .insert(assetProcessingJobs)
+          .values({
+            assetVersionId: versionId,
+            kind: 'extract_text',
+            status: versionStatus === 'ready' ? 'succeeded' : 'failed',
+            attempts: 1,
+            failureCode:
+              versionStatus === 'failed'
+                ? requireText(input.outcome.failureCode, 'failureCode', 128)
+                : null,
+            startedAt: now,
+            completedAt: now,
+            createdAt: now,
+          })
+          .returning();
+        processingJob = createdProcessingJob ?? null;
       }
 
       const nextAssetStatus = versionStatus === 'ready' ? 'ready' : 'failed';
@@ -549,7 +783,16 @@ export class DrizzleAssetRepository {
         .where(eq(assets.id, assetId))
         .returning();
       if (!updatedAsset) throw new AssetPersistenceError('Asset状态更新失败');
-      return toSnapshot(updatedAsset, createdVersion);
+      const derivedKind =
+        versionStatus === 'ready' ? getDerivedAssetJobKind(mimeType) : null;
+      if (derivedKind) {
+        await enqueueDerivedAssetJob(transaction, {
+          assetVersionId: versionId,
+          kind: derivedKind,
+          now,
+        });
+      }
+      return toSnapshot(updatedAsset, createdVersion, processingJob);
     });
   }
 
@@ -599,9 +842,14 @@ export class DrizzleAssetRepository {
       .orderBy(desc(assets.createdAt), desc(assets.id))
       .limit(limit + 1);
     const pageRows = rows.slice(0, limit);
+    const processingJobs = await this.loadLatestProcessingJobsByAssetIds(
+      pageRows.map(({ asset }) => asset.id),
+    );
     const last = pageRows.at(-1)?.asset;
     return {
-      items: pageRows.map(({ asset, version }) => toSnapshot(asset, version)),
+      items: pageRows.map(({ asset, version }) =>
+        toSnapshot(asset, version, processingJobs.get(asset.id) ?? null),
+      ),
       nextCursor:
         rows.length > limit && last
           ? { timestamp: last.createdAt, id: last.id }
@@ -641,7 +889,14 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!row) throw new AssetAccessError();
-    return toSnapshot(row.asset, row.version);
+    const processingJobs = await this.loadLatestProcessingJobsByAssetIds([
+      row.asset.id,
+    ]);
+    return toSnapshot(
+      row.asset,
+      row.version,
+      processingJobs.get(row.asset.id) ?? null,
+    );
   }
 
   /** Canvas 动作策略只使用数据库成员角色与资源创建者，不接受客户端声明。 */
@@ -707,6 +962,24 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!row) throw new AssetAccessError();
+    const derivedStatuses =
+      row.asset.kind === 'video'
+        ? await this.database
+            .select({
+              kind: assetRepresentations.kind,
+              status: assetRepresentations.status,
+            })
+            .from(assetRepresentations)
+            .where(
+              and(
+                eq(assetRepresentations.assetVersionId, row.version.id),
+                inArray(assetRepresentations.kind, [
+                  'transcription',
+                  'keyframes',
+                ]),
+              ),
+            )
+        : [];
     return {
       assetId: row.asset.id,
       versionId: row.version.id,
@@ -718,6 +991,13 @@ export class DrizzleAssetRepository {
       createdAt: row.version.createdAt.toISOString(),
       storageKey: row.version.storageKey,
       extractedText: row.version.extractedText,
+      transcriptionText: row.version.transcriptionText,
+      transcriptionMetadata: row.version.transcriptionMetadata,
+      derivedStatuses: derivedStatuses.map((representation) => ({
+        kind: representation.kind as 'transcription' | 'keyframes',
+        status: representation.status as
+          'processing' | 'ready' | 'failed' | 'unavailable',
+      })),
     };
   }
 
@@ -747,6 +1027,7 @@ export class DrizzleAssetRepository {
           mimeType: row.version.mimeType,
           byteSize: row.version.byteSize,
           extractedText: row.version.extractedText,
+          transcriptionText: row.version.transcriptionText,
         };
       });
     } catch (error) {
@@ -968,12 +1249,32 @@ export class DrizzleAssetRepository {
             isNotNull(assetRepresentations.derivedStorageKey),
           ),
         );
+      /* 关键帧与 representation 一样是派生对象，删除 Source 时必须一并进入
+         删除 outbox；漏掉它们会在对象存储里留下无人引用的孤儿帧。 */
+      const derivedKeyframes = await transaction
+        .select({
+          id: assetVideoKeyframes.id,
+          storageKey: assetVideoKeyframes.storageKey,
+        })
+        .from(assetVideoKeyframes)
+        .innerJoin(
+          assetVersions,
+          eq(assetVersions.id, assetVideoKeyframes.assetVersionId),
+        )
+        .where(eq(assetVersions.assetId, assetId));
       const deletionEntries = [
         ...storedVersions.map((version) => ({
           objectKind: 'asset' as const,
           storageKey: version.storageKey,
           sourceType: 'asset_version' as const,
           sourceId: version.id,
+          availableAt: now,
+        })),
+        ...derivedKeyframes.map((keyframe) => ({
+          objectKind: 'asset' as const,
+          storageKey: keyframe.storageKey,
+          sourceType: 'asset_video_keyframe' as const,
+          sourceId: keyframe.id,
           availableAt: now,
         })),
         ...derivedRepresentations.flatMap((representation) =>

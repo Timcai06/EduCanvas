@@ -105,6 +105,10 @@ function postRequest(
   });
 }
 
+function getRequest(): Request {
+  return new Request('http://localhost/api/v1/chat/artifacts');
+}
+
 describe('GET /api/v1/chat/artifacts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -124,7 +128,7 @@ describe('GET /api/v1/chat/artifacts', () => {
       nextCursor: null,
     });
 
-    const response = await GET();
+    const response = await GET(getRequest());
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -146,6 +150,14 @@ describe('GET /api/v1/chat/artifacts', () => {
       expect.objectContaining({
         spaceId: conversation.spaceId,
         trustedSubjectId: identity.studentId,
+        kinds: [
+          'mind_map',
+          'slides',
+          'flashcards',
+          'note',
+          'audio_overview',
+          'generated_image',
+        ],
         limit: 50,
         cursor: null,
       }),
@@ -155,7 +167,7 @@ describe('GET /api/v1/chat/artifacts', () => {
   it('returns 401 when conversation cannot be loaded', async () => {
     vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(null as never);
 
-    const response = await GET();
+    const response = await GET(getRequest());
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
@@ -166,7 +178,7 @@ describe('GET /api/v1/chat/artifacts', () => {
   it('maps query errors to 503', async () => {
     artifactRepo.listSpaceArtifactsPage.mockRejectedValue(new Error('db down'));
 
-    const response = await GET();
+    const response = await GET(getRequest());
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({

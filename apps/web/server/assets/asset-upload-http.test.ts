@@ -60,7 +60,7 @@ describe('asset upload HTTP boundary', () => {
         method: 'POST',
         headers: {
           'content-type': 'multipart/form-data; boundary=test',
-          'content-length': String(11 * 1024 * 1024),
+          'content-length': String(51 * 1024 * 1024),
         },
         body,
         duplex: 'half',
@@ -75,7 +75,7 @@ describe('asset upload HTTP boundary', () => {
   });
 
   it('stops a chunked multipart body after the bounded limit', async () => {
-    const oversizedChunk = new Uint8Array(11 * 1024 * 1024);
+    const oversizedChunk = new Uint8Array(51 * 1024 * 1024);
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -126,7 +126,28 @@ describe('asset upload HTTP boundary', () => {
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'file_too_large', message: '文件不能超过10MB。' },
+      error: {
+        code: 'file_too_large',
+        message: '文档和图片不能超过10MB，音频不能超过25MB，视频不能超过50MB。',
+      },
     });
+  });
+
+  it('maps audio validation failures without exposing parser errors', async () => {
+    const response = assetUploadErrorResponse(
+      new AssetUploadError('audio_duration_exceeded', 422, {
+        cause: new Error('/private/audio.wav'),
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    const responseText = await response.clone().text();
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'audio_duration_exceeded',
+        message: '音频时长不能超过60分钟。',
+      },
+    });
+    expect(responseText).not.toContain('/private/audio.wav');
   });
 });

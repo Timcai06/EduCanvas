@@ -16,9 +16,18 @@ export const config: EnabledModelGatewayConfiguration = {
   timeoutMs: 1_000,
   maxOutputTokens: 2_048,
   visionEnabled: false,
+  visionProvider: null,
+  disableThinking: false,
   speechVoice: 'alloy',
   speechTimeoutMs: 60_000,
   speechMaxInputChars: 3_500,
+  transcriptionTimeoutMs: 120_000,
+  transcriptionMaxInputBytes: 25 * 1024 * 1024,
+  imageTimeoutMs: 120_000,
+  imageMaxOutputBytes: 8 * 1024 * 1024,
+  embeddingModelVersion: null,
+  embeddingTimeoutMs: 60_000,
+  embeddingMaxBatch: 64,
 };
 
 export const answerRequest: StreamAgentTextRequest = {

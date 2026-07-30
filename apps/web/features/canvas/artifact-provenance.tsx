@@ -16,7 +16,7 @@ export { isArtifactGenerating };
  * Canvas 溯源条：让产物"从对话中生长出来"这件事被看见。
  * 交代三件事——它是什么、从哪来、当前状态；不编造触发问题，只呈现可信事实
  * （由本笔记本对话生成、最近生成任务的真实状态）。设计依据见
- * docs/01-product/student-ui-spec.md「Canvas 溯源」。
+ * docs/01-product/02-学生界面规范.md「Canvas 溯源」。
  */
 
 const KIND_META: Record<string, { label: string; Icon: Icon }> = {
@@ -58,7 +58,9 @@ export function ArtifactProvenanceStrip({
       {detail.artifact.fromConversation ? (
         <span className="text-ink-muted">· 由本对话生成</span>
       ) : null}
-      {detail.version?.media && detail.version.media.sourceCount > 0 ? (
+      {detail.version?.media &&
+      'sourceCount' in detail.version.media &&
+      detail.version.media.sourceCount > 0 ? (
         <span className="text-ink-muted">
           · 引用 {detail.version.media.sourceCount} 个来源
         </span>

@@ -1,5 +1,10 @@
+import {
+  detectSupportedAudioSource,
+  detectSupportedVideoSource,
+} from '@educanvas/asset-processing';
+
 export interface DetectedAssetFile {
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'audio' | 'video';
   mimeType: string;
   extension: string;
 }
@@ -73,6 +78,16 @@ function detectBinaryFile(bytes: Uint8Array): DetectedAssetFile | null {
       };
     }
   }
+  /* 视频必须先于音频判定：MP4、MOV 与 M4A 共用 `ftyp` 魔术字，只有主 brand
+     能区分它们，先判音频会把一段视频误收进转录路径。 */
+  const video = detectSupportedVideoSource(bytes);
+  if (video) {
+    return { kind: 'video', ...video };
+  }
+  const audio = detectSupportedAudioSource(bytes);
+  if (audio) {
+    return { kind: 'audio', ...audio };
+  }
   return null;
 }
 
@@ -92,6 +107,8 @@ export function detectAssetFile(
 ): DetectedAssetFile | null {
   const binary = detectBinaryFile(bytes);
   if (binary) return binary;
-  const text = TEXT_EXTENSIONS[fileExtension(fileName)];
-  return text ? { kind: 'document', ...text } : null;
+  const ext = fileExtension(fileName);
+  const text = TEXT_EXTENSIONS[ext];
+  if (text) return { kind: 'document', ...text };
+  return null;
 }

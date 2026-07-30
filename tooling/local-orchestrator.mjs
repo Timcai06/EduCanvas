@@ -3,6 +3,9 @@
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import process from 'node:process';
+import { loadWorkspaceEnvFiles } from './workspace-env.mjs';
+
+loadWorkspaceEnvFiles();
 
 const SUPPORTED_PROFILES = new Set(['all', 'web', 'tui', 'status']);
 const profile = process.argv[2];

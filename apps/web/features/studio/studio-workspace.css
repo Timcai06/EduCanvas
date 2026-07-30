@@ -5,6 +5,32 @@
   pointer-events: none;
 }
 
+/* React Bits 的多层遮罩负责从左到右逐级增加模糊；外层只补纸色和入场，
+   避免组件挂载首帧直接以满强度出现。 */
+.studio-cascade__gradual-blur {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-canvas) 32%, transparent) 24%,
+    color-mix(in srgb, var(--color-card) 66%, transparent) 62%,
+    color-mix(in srgb, var(--color-card) 82%, transparent) 100%
+  );
+  animation: studio-gradual-blur-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes studio-gradual-blur-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .studio-cascade__wheel {
   position: absolute;
   inset-block: 0;
@@ -102,6 +128,10 @@
 }
 
 @media (max-width: 760px) {
+  .studio-cascade__gradual-blur {
+    background: color-mix(in srgb, var(--color-card) 84%, transparent);
+  }
+
   .studio-cascade__wheel--primary {
     right: -1rem;
     width: 17rem;
@@ -127,7 +157,23 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .studio-cascade__gradual-blur {
+    animation-duration: 0.12s;
+    animation-timing-function: linear;
+  }
+
   .studio-cascade__wheel {
     will-change: auto;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .studio-cascade__gradual-blur {
+    background: var(--color-card);
+  }
+
+  .studio-cascade__gradual-blur .gradual-blur-inner > div {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }

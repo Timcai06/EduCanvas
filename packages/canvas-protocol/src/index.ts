@@ -49,6 +49,11 @@ export {
   type AudioOverviewMetadata,
 } from './artifacts/audio-overview';
 export {
+  GENERATED_IMAGE_CONTENT_VERSION,
+  generatedImageMetadataSchema,
+  type GeneratedImageMetadata,
+} from './artifacts/generated-image';
+export {
   NOTE_MARKDOWN_MAX_CHARS,
   NOTE_CONTENT_VERSION,
   noteContentSchema,
@@ -93,3 +98,32 @@ export {
   type CanvasResourceError,
   type CanvasResourceErrorCode,
 } from './resource-errors';
+export {
+  WEB_RUNTIME_PROTOCOL_VERSION,
+  createWebRuntimeSession,
+  hostToSandboxMessageSchema,
+  reduceWebRuntimeMessage,
+  sandboxToHostMessageSchema,
+  webRuntimeBindingSchema,
+  webRuntimeFailureCodeSchema,
+  webRuntimeFailureCodes,
+  webRuntimeMessageSchema,
+  webRuntimePreflightResultSchema,
+  webRuntimePreflightFailureCodeSchema,
+  webRuntimePreflightFailureCodes,
+  webRuntimePreflightStatusSchema,
+  webRuntimeMessageDirectionSchema,
+  webRuntimeMessageDirections,
+  type HostToSandboxMessage,
+  type SandboxToHostMessage,
+  type WebRuntimeBinding,
+  type WebRuntimeFailureCode,
+  type WebRuntimeMessage,
+  type WebRuntimePreflightResult,
+  type WebRuntimePreflightFailureCode,
+  type WebRuntimePreflightStatus,
+  type WebRuntimeMessageDirection,
+  type WebRuntimeSessionState,
+  type WebRuntimeTerminalType,
+  type WebRuntimeValidationResult,
+} from './web-runtime-contract';

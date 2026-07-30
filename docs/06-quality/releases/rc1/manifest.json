@@ -1,0 +1,57 @@
+{
+  "$schema": "./manifest.schema.json",
+  "release": "rc1",
+  "version": "0.1.0-rc1",
+  "status": "pending",
+  "baseline": {
+    "sha": "3d1b654890a20a3d985558049efb38c9bce9616d",
+    "branch": "main",
+    "timestamp": "2026-07-27T00:00:00Z"
+  },
+  "migration": {
+    "version": 0,
+    "fresh": { "status": "pending", "timestamp": "" },
+    "upgrade": { "status": "pending", "timestamp": "" }
+  },
+  "gates": {
+    "lint": { "status": "pending", "timestamp": "", "output": "" },
+    "typecheck": { "status": "pending", "timestamp": "", "output": "" },
+    "unit": { "status": "pending", "timestamp": "", "output": "", "total": 0, "passed": 0 },
+    "db-integration": { "status": "pending", "timestamp": "", "output": "", "total": 0, "passed": 0 },
+    "worker-integration": { "status": "pending", "timestamp": "", "output": "" },
+    "build": { "status": "pending", "timestamp": "", "output": "" },
+    "e2e": { "status": "pending", "timestamp": "", "output": "" },
+    "security": { "status": "pending", "timestamp": "", "output": "" },
+    "contract": { "status": "pending", "timestamp": "", "output": "" },
+    "eval": { "status": "pending", "timestamp": "", "output": "" },
+    "provider-smoke": { "status": "pending", "timestamp": "", "output": "" },
+    "release-evidence": { "status": "pending", "timestamp": "", "output": "" }
+  },
+  "provider": {
+    "config": {},
+    "summary": ""
+  },
+  "eval": {
+    "retrieval": { "status": "pending", "baseline": {} },
+    "tool-artifact": { "status": "pending", "baseline": {} },
+    "teaching-safety": { "status": "pending", "baseline": {} }
+  },
+  "budget": {
+    "cost": { "limit": 0, "actual": 0, "status": "pending" },
+    "latency": { "p95_limit_ms": 0, "p95_actual_ms": 0, "status": "pending" },
+    "error_rate": { "limit": 0, "actual": 0, "status": "pending" }
+  },
+  "risks": [],
+  "signoffs": {
+    "security": { "signed": false, "by": "", "timestamp": "" },
+    "product": { "signed": false, "by": "", "timestamp": "" },
+    "engineering": { "signed": false, "by": "", "timestamp": "" }
+  },
+  "evidence": {
+    "baseline": "evidence/baseline.json",
+    "gates": "evidence/gates.json",
+    "eval": "evidence/eval.json",
+    "dogfood": "evidence/dogfood.json",
+    "drills": "evidence/drills.json"
+  }
+}

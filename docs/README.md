@@ -22,6 +22,11 @@
 | `research`              | 源码研究、能力盘点、实验与待决假设                  | 架构、研发       |
 | `templates`             | 新文档模板                                          | 所有人           |
 
+## 安全与测试入口
+
+- [持久 Web Runtime 安全测试矩阵（U09）](06-quality/05-持久Web Runtime安全测试矩阵.md)
+- [持久 Web Runtime 依赖与资源策略（U11）](06-quality/06-Web Runtime依赖与资源策略.md)
+
 ## 已接受的架构方向
 
 - EduCanvas是以教育能力为核心的通用个人Agent平台；Agent是产品主体，Web/TUI/渠道是交互表面；
@@ -69,13 +74,13 @@
 1. 功能PR修改了行为，就更新对应功能文档；
 2. 接口、数据表或事件结构变化，就更新工程或数据文档；
 3. 改变重大技术选择，先新增或替换当前ADR；
-4. 文档只写当前事实，关键历史压缩进入`09-decisions/decision-history.md`；
+4. 文档只写当前事实，关键历史压缩进入`09-decisions/00-决策历史.md`；
 5. 未确定内容明确写入“开放问题”，不能伪装成结论。
 
 ## 命名与事实分层
 
-- 一个主题目录内需要阅读顺序的文档使用`数字-中文主题.md`，例如`01-系统架构现状.md`；标准、产品名和代码术语可以保留英文，如`02-Gateway与多入口.md`；
-- 计划文件使用`YYYY-MM-中文主题.md`，日期表达计划批次，中文主题表达目标；
+- 一个主题目录内需要阅读顺序的文档使用`数字-中文主题.md`，例如`01-系统架构现状.md`；标准、产品名和代码术语可以保留英文，如`02-网关与多入口.md`；
+- active 计划使用`任务线代号-中文短名.md`，例如`UV-画布语音.md`；日期与完整目标写在文档内，completed 历史可保留原有日期名；
 - `accepted` canonical 文档只记录稳定边界和已验证现状；
 - `proposed` 架构文档记录目标、开放问题和决策门，不写成已经实现；
 - `research` 记录事实、推断、实验和反例，不替代 ADR；
@@ -83,7 +88,7 @@
 
 ## 路线图与执行计划
 
-`10-planning/roadmap.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first、第二代架构研究与 Web 自适应学习 P0/P1 基线都已经结档；当前核心阶段是[统一 Canvas 工作面](02-architecture/04-统一Canvas工作面.md)，并以 `10-planning/roadmap.md` 和 active plan 为准。三类文档不能互相替代：
+`10-planning/01-路线图.md`是跨阶段、相对稳定的路线图；`plan/`是短期执行工作区；`research/`保存研究证据。Gateway-first、Web-first、第二代架构研究与 Web 自适应学习 P0/P1 基线都已经结档；当前任务按 [active 计划索引](plan/active/README.md)分配，已完成的 [F 画布界面](plan/completed/F-画布界面.md)不再占用 active 名额，Canvas 稳定边界见[统一 Canvas 工作面](02-architecture/04-统一画布工作面.md)。三类文档不能互相替代：
 
 - 路线图说明阶段目标、依赖和长期交付边界；
 - `plan/active/`只存正在执行且有明确验收条件的阶段计划；
@@ -93,4 +98,4 @@
 
 计划目录的命名、状态和归档流程见[`plan/README.md`](plan/README.md)。
 
-首次参与开发请先阅读[`08-collaboration/team-guide.md`](08-collaboration/team-guide.md)；本地启动优先使用仓库根目录`Makefile`提供的`make setup`、`make dev`和`make check`入口。
+首次参与开发请先阅读[`08-collaboration/03-团队协作指南.md`](08-collaboration/03-团队协作指南.md)；本地启动优先使用仓库根目录`Makefile`提供的`make setup`、`make dev`和`make check`入口。

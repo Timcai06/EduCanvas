@@ -171,6 +171,18 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     });
   });
 
+  it('returns 404 when artifact belongs to another Notebook', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...artifactDetail,
+      artifact: { ...artifactDetail.artifact, spaceId: 'another-space' },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    expect(objectStorage.readVerified).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when artifact is not available for playback', async () => {
     artifactRepo.getArtifactDetail.mockResolvedValue({
       ...artifactDetail,
@@ -262,5 +274,17 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_not_found' },
     });
+  });
+
+  it('returns 404 for archived artifacts', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...artifactDetail,
+      artifact: { ...artifactDetail.artifact, status: 'archived' },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    expect(objectStorage.readVerified).not.toHaveBeenCalled();
   });
 });

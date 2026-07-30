@@ -81,7 +81,7 @@ export interface ToolLifecycleEvent extends TurnEventBase {
 }
 
 /**
- * Artifact 生命周期事件(ADR-0012)。additive 加入 schemaVersion=1:
+ * Artifact 生命周期事件(ADR-0005)。additive 加入 schemaVersion=1:
  * 旧浏览器按未知事件忽略,不需要整体协议升版。生产者随 M1 PR-J5 接线,
  * 断连恢复走 GET /api/v1/chat/artifacts,不依赖流的连续性。
  */

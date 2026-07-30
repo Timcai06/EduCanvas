@@ -17,9 +17,14 @@ import {
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import {
+  resolveImageGenerationModelGateway,
   resolveSpeechModelGateway,
   resolveStructuredModelGateway,
 } from '../model-runtime.js';
+import {
+  appendGeneratedImageVersion,
+  ImageArtifactGenerationFailure,
+} from './image-artifact-generation.js';
 import { generateAudioOverviewScript } from './audio-overview-generation.js';
 import { resolveArtifactGenerationIntent } from './artifact-generation-intent.js';
 import { generateMindMapContent } from './mind-map-generation.js';
@@ -85,14 +90,15 @@ async function appendAudioOverviewVersion(input: {
         cause: error,
       });
     }
-    return input.artifacts.appendVersion({
+    return input.artifacts.appendVersionAndCompleteGenerationJob({
+      jobId: input.job.id,
       artifactId: input.artifact.id,
       trustedSubjectId: input.subjectId,
       objectKey: checkpoint.data.objectKey,
       checksum: checkpoint.data.checksum,
       metadata: checkpoint.data.metadata,
       generatedBy: AUDIO_GENERATOR,
-      generationJobId: input.job.id,
+      createdByOperationId: input.job.operationId,
     });
   }
 
@@ -206,14 +212,15 @@ async function appendAudioOverviewVersion(input: {
     await storage.delete(stored.key).catch(() => undefined);
     throw error;
   }
-  return input.artifacts.appendVersion({
+  return input.artifacts.appendVersionAndCompleteGenerationJob({
+    jobId: input.job.id,
     artifactId: input.artifact.id,
     trustedSubjectId: input.subjectId,
     objectKey: stored.key,
     checksum: stored.checksum,
     metadata,
     generatedBy: AUDIO_GENERATOR,
-    generationJobId: input.job.id,
+    createdByOperationId: input.job.operationId,
   });
 }
 
@@ -230,12 +237,23 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
   const turns = new DrizzlePlatformTurnRepository();
 
   const failJob = async (code: string) => {
-    await artifacts.transitionGenerationJob({
-      jobId: payload.jobId,
-      trustedSubjectId: payload.subjectId,
-      to: 'failed',
-      failureCode: code,
-    });
+    try {
+      await artifacts.transitionGenerationJob({
+        jobId: payload.jobId,
+        trustedSubjectId: payload.subjectId,
+        to: 'failed',
+        failureCode: code,
+      });
+      return;
+    } catch (error) {
+      if (error instanceof ArtifactJobLifecycleError) {
+        helpers.logger.warn(
+          `任务 ${payload.jobId} 无法写 failed(${code}),已进入终态 ${error.message}`,
+        );
+        return;
+      }
+      throw error;
+    }
   };
 
   try {
@@ -264,12 +282,22 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       trustedSubjectId: payload.subjectId,
     });
     if (existingVersion) {
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'succeeded',
-        progress: 100,
-      });
+      try {
+        await artifacts.transitionGenerationJob({
+          jobId: payload.jobId,
+          trustedSubjectId: payload.subjectId,
+          to: 'succeeded',
+          progress: 100,
+        });
+      } catch (error) {
+        if (error instanceof ArtifactJobLifecycleError) {
+          helpers.logger.warn(
+            `任务 ${payload.jobId} 已不是 running,恢复路径跳过 succeeded`,
+          );
+          return;
+        }
+        throw error;
+      }
       helpers.logger.info(
         `产物 ${payload.artifactId} 已有版本 v${existingVersion.version},恢复任务终态`,
       );
@@ -281,6 +309,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       'slides',
       'flashcards',
       'audio_overview',
+      'generated_image',
       'note',
     ] as const;
     if (!(supportedKinds as readonly string[]).includes(artifact.kind)) {
@@ -303,14 +332,21 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         subjectId: payload.subjectId,
         artifacts,
       });
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'succeeded',
-        progress: 100,
-      });
       helpers.logger.info(
         `音频产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
+      );
+      return;
+    }
+    if (artifact.kind === 'generated_image') {
+      const version = await appendGeneratedImageVersion({
+        artifact,
+        job,
+        subjectId: payload.subjectId,
+        artifacts,
+        gateway: resolveImageGenerationModelGateway(),
+      });
+      helpers.logger.info(
+        `图像产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
       );
       return;
     }
@@ -373,37 +409,42 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             ? await generateFlashcardsContent(generatorInput)
             : await generateNoteContent(generatorInput);
 
-    const version = await artifacts.appendVersion({
+    const version = await artifacts.appendVersionAndCompleteGenerationJob({
+      jobId: payload.jobId,
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
       content,
       generatedBy,
-      generationJobId: payload.jobId,
+      createdByOperationId: job.operationId,
       expectedLatestVersion:
         generationIntent.kind === 'revision'
           ? generationIntent.baseVersion
           : undefined,
     });
-    await artifacts.transitionGenerationJob({
-      jobId: payload.jobId,
-      trustedSubjectId: payload.subjectId,
-      to: 'succeeded',
-      progress: 100,
-    });
     helpers.logger.info(
       `产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
     );
   } catch (error) {
-    helpers.logger.error(
-      `产物 ${payload.artifactId} 生成失败: ${(error as Error).message}`,
-    );
+    if (
+      error instanceof ModelGatewayInvocationError &&
+      error.normalized.retryable &&
+      helpers.job.attempts < helpers.job.max_attempts
+    ) {
+      /* 可重试的限流、超时与暂时不可用必须交回 Graphile 退避；提前结算 failed
+         会让任务失去恢复机会。原始 Provider 消息不写日志。 */
+      throw error;
+    }
     /* 已配置模型但调用失败:以稳定模型错误码记账,不静默回退规则大纲 */
     const code =
-      error instanceof ArtifactGenerationFailure
+      error instanceof ArtifactGenerationFailure ||
+      error instanceof ImageArtifactGenerationFailure
         ? error.code
         : error instanceof ModelGatewayInvocationError
-          ? `model_${error.normalized.code}`
+          ? error.normalized.retryable
+            ? 'model_attempts_exhausted'
+            : `model_${error.normalized.code}`
           : 'generation_failed';
+    helpers.logger.error(`产物 ${payload.artifactId} 生成失败: ${code}`);
     await failJob(code);
   }
 };

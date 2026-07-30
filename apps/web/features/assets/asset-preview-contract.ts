@@ -50,6 +50,70 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
       warnings: z.array(z.string()).optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('audio'),
+      fileName: fileNameSchema,
+      mimeType: z.enum([
+        'audio/mpeg',
+        'audio/wav',
+        'audio/ogg',
+        'audio/flac',
+        'audio/webm',
+        'audio/mp4',
+        'audio/x-m4a',
+      ]),
+      fileUrl: fileUrlSchema,
+      /** 转录文本是派生内容，不覆盖原始 Asset Version。 */
+      transcription: z
+        .object({
+          text: z.string().max(500_000),
+          language: z.string().max(64).nullable().optional(),
+          durationSeconds: z
+            .number()
+            .finite()
+            .positive()
+            .max(3_600)
+            .nullable()
+            .optional(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('video'),
+      fileName: fileNameSchema,
+      mimeType: z.enum(['video/mp4', 'video/quicktime']),
+      fileUrl: fileUrlSchema,
+      transcription: z
+        .object({
+          text: z.string().max(500_000),
+          language: z.string().max(64).nullable().optional(),
+          durationSeconds: z
+            .number()
+            .finite()
+            .positive()
+            .max(3_600)
+            .nullable()
+            .optional(),
+        })
+        .nullable()
+        .optional(),
+      derivatives: z
+        .object({
+          transcription: z.enum([
+            'processing',
+            'ready',
+            'failed',
+            'unavailable',
+          ]),
+          keyframes: z.enum(['processing', 'ready', 'failed', 'unavailable']),
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 
 export type AssetPreview = z.infer<typeof assetPreviewSchema>;

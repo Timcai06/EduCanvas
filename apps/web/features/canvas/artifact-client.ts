@@ -4,6 +4,10 @@
  */
 
 import { z } from 'zod';
+import {
+  canvasResourceActionSchema,
+  type CanvasResourceAction,
+} from '@educanvas/canvas-protocol';
 
 export interface ArtifactSummary {
   id: string;
@@ -26,7 +30,7 @@ export interface ArtifactDetail {
   version: {
     version: number;
     content: unknown;
-    media: AudioOverviewMedia | null;
+    media: ArtifactMedia | null;
   } | null;
   versions: readonly {
     version: number;
@@ -41,10 +45,14 @@ export interface ArtifactDetail {
     progress: number | null;
     failureCode: string | null;
   } | null;
+  canvasResource?: {
+    allowedActions: readonly CanvasResourceAction[];
+  };
 }
 
 export interface AudioOverviewMedia {
   url: string;
+  downloadUrl?: string;
   contentVersion: 1;
   contentType: 'audio/mpeg';
   byteSize: number;
@@ -67,6 +75,22 @@ export interface AudioOverviewMedia {
   };
 }
 
+export interface GeneratedImageMedia {
+  url: string;
+  downloadUrl?: string;
+  contentVersion: 1;
+  contentType: 'image/png' | 'image/jpeg' | 'image/webp';
+  byteSize: number;
+  size: '512x512' | '1024x1024' | '1024x1536' | '1536x1024';
+  image: {
+    provider: string;
+    resolvedModelId: string;
+    latencyMs: number;
+  };
+}
+
+export type ArtifactMedia = AudioOverviewMedia | GeneratedImageMedia;
+
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
 
 const artifactSummarySchema = z.object({
@@ -88,29 +112,58 @@ const artifactMutationResponseSchema = z.object({
   job: artifactJobSchema.pick({ id: true }).nullable(),
 });
 
-const audioOverviewMediaSchema = z.object({
-  url: z.string(),
-  contentVersion: z.literal(1),
-  contentType: z.literal('audio/mpeg'),
-  byteSize: z.number().int().nonnegative(),
-  transcript: z.string(),
-  sourceCount: z.number().int().nonnegative(),
-  script: z.object({
-    generator: z.string(),
-    provider: z.string().nullable(),
-    resolvedModelId: z.string().nullable(),
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-    latencyMs: z.number().int().nonnegative(),
-  }),
-  speech: z.object({
-    provider: z.string(),
-    resolvedModelId: z.string(),
-    voice: z.string(),
-    inputCharacters: z.number().int().nonnegative(),
-    latencyMs: z.number().int().nonnegative(),
-  }),
-});
+const audioOverviewMediaSchema = z
+  .object({
+    url: z.string(),
+    downloadUrl: z.string().optional(),
+    contentVersion: z.literal(1),
+    contentType: z.literal('audio/mpeg'),
+    byteSize: z.number().int().nonnegative(),
+    transcript: z.string(),
+    sourceCount: z.number().int().nonnegative(),
+    script: z
+      .object({
+        generator: z.string(),
+        provider: z.string().nullable(),
+        resolvedModelId: z.string().nullable(),
+        inputTokens: z.number().int().nonnegative(),
+        outputTokens: z.number().int().nonnegative(),
+        latencyMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+    speech: z
+      .object({
+        provider: z.string(),
+        resolvedModelId: z.string(),
+        voice: z.string(),
+        inputCharacters: z.number().int().nonnegative(),
+        latencyMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const generatedImageMediaSchema = z
+  .object({
+    url: z.string(),
+    downloadUrl: z.string().optional(),
+    contentVersion: z.literal(1),
+    contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    byteSize: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 * 1024),
+    size: z.enum(['512x512', '1024x1024', '1024x1536', '1536x1024']),
+    image: z
+      .object({
+        provider: z.string().min(1).max(128),
+        resolvedModelId: z.string().min(1).max(256),
+        latencyMs: z.number().finite().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
 
 const artifactDetailSchema = z.object({
   artifact: artifactSummarySchema.extend({
@@ -122,7 +175,9 @@ const artifactDetailSchema = z.object({
     .object({
       version: z.number().int().min(1),
       content: z.unknown(),
-      media: audioOverviewMediaSchema.nullable(),
+      media: z
+        .union([audioOverviewMediaSchema, generatedImageMediaSchema])
+        .nullable(),
     })
     .nullable(),
   versions: z.array(
@@ -139,6 +194,11 @@ const artifactDetailSchema = z.object({
       failureCode: z.string().nullable(),
     })
     .nullable(),
+  canvasResource: z
+    .object({
+      allowedActions: z.array(canvasResourceActionSchema).max(16),
+    })
+    .optional(),
 });
 
 async function parseJsonOrThrow<T>(
@@ -296,4 +356,21 @@ export async function pollArtifactUntilSettled(
     detail = await fetchArtifactDetail(artifactId);
   }
   return detail;
+}
+
+export async function deleteArtifact(
+  artifactId: string,
+): Promise<{ deleted: boolean }> {
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const code = body?.error?.code ?? 'artifact_delete_failed';
+    throw new Error(code);
+  }
+  return response.json();
 }

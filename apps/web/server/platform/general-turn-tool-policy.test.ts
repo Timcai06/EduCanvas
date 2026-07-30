@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IMAGE_GENERATION_CAPABILITY } from './general-image-tool';
 import {
   resolveWebGeneralToolPolicy,
   type ResolveWebGeneralToolPolicyInput,
@@ -38,6 +39,32 @@ describe('Web General Tool Policy', () => {
       expect(policy.capabilities.channel).toEqual(availableTools);
     },
   );
+
+  it('未注册的图像生成能力在任何维度都拿不到授权', () => {
+    /* 部署未配置图像模型时能力根本不在 available 集合里；即使伪造的 grant
+       声称拥有它，交集也必须为空，模型因此看不到 generateCanvasImage。 */
+    const policy = resolve({
+      actorCapabilities: [...availableTools, IMAGE_GENERATION_CAPABILITY],
+      environmentCapabilities: [...availableTools, IMAGE_GENERATION_CAPABILITY],
+    });
+
+    for (const dimension of Object.values(policy.capabilities)) {
+      expect(dimension).not.toContain(IMAGE_GENERATION_CAPABILITY);
+    }
+  });
+
+  it('部署确实注册图像生成能力后才进入五维交集', () => {
+    const withImage = [...availableTools, IMAGE_GENERATION_CAPABILITY];
+    const policy = resolve({
+      availableCapabilities: withImage,
+      actorCapabilities: withImage,
+      environmentCapabilities: withImage,
+    });
+
+    for (const dimension of Object.values(policy.capabilities)) {
+      expect(dimension).toContain(IMAGE_GENERATION_CAPABILITY);
+    }
+  });
 
   it('viewer membership fail closed', () => {
     const policy = resolve({ membershipRole: 'viewer' });

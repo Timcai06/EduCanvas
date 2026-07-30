@@ -132,6 +132,73 @@ export function SourcePreviewPanel({
             <pre className="mx-auto max-w-3xl whitespace-pre-wrap break-words rounded-2xl bg-card p-5 font-mono text-sm leading-6 text-ink shadow-[var(--shadow-float)]">
               {preview.content}
             </pre>
+          ) : preview.kind === 'audio' ? (
+            <div className="m-4 space-y-4">
+              <audio
+                controls
+                src={preview.fileUrl}
+                className="w-full"
+                preload="metadata"
+              >
+                您的浏览器不支持音频播放。
+              </audio>
+              {preview.transcription ? (
+                <div className="rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
+                  <p className="mb-2 text-xs font-medium text-ink-muted">
+                    转录文本
+                    {preview.transcription.language
+                      ? ` · ${preview.transcription.language}`
+                      : ''}
+                    {preview.transcription.durationSeconds
+                      ? ` · ${Math.round(preview.transcription.durationSeconds)}秒`
+                      : ''}
+                  </p>
+                  <article className="text-sm leading-6 text-ink">
+                    <MessageMarkdown text={preview.transcription.text} />
+                  </article>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+                  转录处理中或暂不可用。
+                </div>
+              )}
+            </div>
+          ) : preview.kind === 'video' ? (
+            <div className="m-4 space-y-4">
+              <video
+                controls
+                src={preview.fileUrl}
+                className="max-h-[70vh] w-full rounded-2xl bg-black"
+                preload="metadata"
+              >
+                您的浏览器不支持视频播放。
+              </video>
+              {preview.transcription ? (
+                <div className="rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
+                  <p className="mb-2 text-xs font-medium text-ink-muted">
+                    视频转录
+                    {preview.transcription.language
+                      ? ` · ${preview.transcription.language}`
+                      : ''}
+                    {preview.transcription.durationSeconds
+                      ? ` · ${Math.round(preview.transcription.durationSeconds)}秒`
+                      : ''}
+                  </p>
+                  <article className="text-sm leading-6 text-ink">
+                    <MessageMarkdown text={preview.transcription.text} />
+                  </article>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+                  这个视频没有可用转录；仍可播放原视频。
+                </div>
+              )}
+              {preview.derivatives.keyframes === 'failed' ? (
+                <div className="rounded-2xl border border-cinnabar/25 bg-cinnabar-soft p-4 text-sm text-cinnabar">
+                  关键帧提取失败，但不影响视频播放和已有转录。当前还没有单独重试入口；需要时可删除后重新上传。
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="m-4 rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
               暂不支持预览此来源。

@@ -20,11 +20,22 @@ import type {
 } from '../assets/asset-materialization';
 import { extractCitationMarkers } from '../teaching/citation-markers';
 import type { WebOperationArtifacts } from './general-artifact-tool';
+import {
+  IMAGE_GENERATION_CAPABILITY,
+  type WebOperationImageArtifacts,
+} from './general-image-tool';
 import { webGeneralTurns } from './general-turn-persistence';
 import { resolveWebGeneralToolPolicy } from './general-turn-tool-policy';
 import type { WebOperationSources } from './general-turn-tools';
 
-const PROMPT_VERSION = 'general-chat-v7';
+const PROMPT_VERSION = 'general-chat-v8';
+
+/**
+ * 图像工具说明只在本轮确实注册了该能力时才拼进 System Prompt。
+ * 未配置图像模型的部署里模型看不到工具，也不应从 Prompt 里读到「你可以画图」，
+ * 否则它会先答应再失败。
+ */
+const IMAGE_TOOL_GUIDANCE = `用户明确要求画图、示意图或插图时，用 generateCanvasImage 在 Canvas 中生成配图；它只用于教学配图，不用于判分或练习。返回 proposed 同样只表示后台开始生成，必须诚实告知仍在生成，也不要描述你并没有看到的画面细节。`;
 const GENERAL_MAX_TOOL_ROUNDS = 3;
 const GENERAL_SYSTEM_PROMPT = `你是 EduCanvas，一位以教育能力为特色的通用个人 Agent。
 默认不要假定用户是学生，不要主动读取或评价学习状态，也不要把对话强行改造成课程。
@@ -80,6 +91,7 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
     private readonly assetContext: MaterializedAssetPlan,
     private readonly operationSources: WebOperationSources,
     private readonly operationArtifacts: WebOperationArtifacts,
+    private readonly operationImages: WebOperationImageArtifacts,
     private readonly preferCanvas: boolean,
     private readonly staticToolCapabilities: readonly string[],
     private readonly nodeInvocations: NodeInvocationPersistencePort,
@@ -87,11 +99,17 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
   ) {}
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
-    const systemPrompt = this.preferCanvas
+    const basePrompt = this.staticToolCapabilities.includes(
+      IMAGE_GENERATION_CAPABILITY,
+    )
       ? `${GENERAL_SYSTEM_PROMPT}
+${IMAGE_TOOL_GUIDANCE}`
+      : GENERAL_SYSTEM_PROMPT;
+    const systemPrompt = this.preferCanvas
+      ? `${basePrompt}
 
 本轮用户已在界面明确选择 Canvas 输出。只要请求可以合理表达为思维导图、Slides、闪卡或笔记，你必须调用 createCanvasArtifact；不要用 ASCII 图、Markdown 图或“没有 Canvas”替代。若请求确实不适合这四类产物，才解释限制并继续文字回答。`
-      : GENERAL_SYSTEM_PROMPT;
+      : basePrompt;
     const history = await webGeneralTurns.listMessages({
       conversationId: input.command.notebook.conversationId,
       trustedSubjectId: input.command.actor.actorId,
@@ -132,11 +150,11 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
     });
     return {
       context: {
-        profileVersion: 'web-general-v5',
+        profileVersion: 'web-general-v6',
         profile: [
           {
             segment: {
-              id: 'profile:web-general-v5',
+              id: 'profile:web-general-v6',
               kind: 'profile' as const,
               content: systemPrompt,
               priority: 100,
@@ -209,7 +227,10 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
         input.content,
         this.operationSources.sourceCount,
       ),
-      events: this.operationArtifacts.events(),
+      events: [
+        ...this.operationArtifacts.events(),
+        ...this.operationImages.events(),
+      ],
     };
   }
 }

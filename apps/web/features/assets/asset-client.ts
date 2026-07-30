@@ -16,6 +16,14 @@ interface AssetResponseItem {
     currentVersionId: string | null;
   };
   version: { versionId: string } | null;
+  processing?: {
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    attempts: number;
+    failureCode: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
   canvasResource?: unknown;
   enabled?: boolean | null;
 }
@@ -24,12 +32,22 @@ const assetResponseItemSchema = z.object({
   descriptor: z.object({
     assetId: z.string(),
     scope: z.enum(['turn', 'space']),
-    kind: z.enum(['image', 'document', 'link']),
+    kind: z.enum(['image', 'document', 'link', 'audio', 'video']),
     displayName: z.string(),
     status: z.enum(['pending', 'processing', 'ready', 'failed', 'tombstoned']),
     currentVersionId: z.string().nullable(),
   }),
   version: z.object({ versionId: z.string() }).nullable(),
+  processing: z
+    .object({
+      status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+      attempts: z.number().int().nonnegative(),
+      failureCode: z.string().nullable(),
+      createdAt: z.string(),
+      startedAt: z.string().nullable(),
+      completedAt: z.string().nullable(),
+    })
+    .nullish(),
   /* 旧端点不返回该字段；这里只保证形状可选，内容一律交给协议校验器判定。 */
   canvasResource: z.unknown().nullish(),
   /* 成员私有的启停绑定。旧端点不返回时退回本地默认，见 toItem。 */
@@ -55,6 +73,7 @@ function toItem(
     kind: asset.descriptor.kind,
     scope: asset.descriptor.scope,
     status: asset.descriptor.status,
+    processing: asset.processing ?? null,
     /* 服务端给出启停就以它为准——它决定下一轮真正带上哪些资料，两端各算一次会漂移。
        只有尚未附加该字段的旧端点才退回本地默认。 */
     enabled:

@@ -1,6 +1,6 @@
 # EduCanvas — Agent 工作规则
 
-多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `docs/08-collaboration/team-guide.md`。
+多模态K12人工智能通识课教学助手（浙江省大学生人工智能竞赛 JBGS-2026-02）。所有产品、架构、AI、数据设计文档在 `docs/`，入口是 `docs/README.md`；面向人的协作指南是 `docs/08-collaboration/03-团队协作指南.md`。
 
 ## Git 规则（GitHub 分支保护已强制执行）
 
@@ -30,13 +30,13 @@ API Key、密码、Token、私钥、`.env` 真实配置、学生个人信息、�
 - 已有注释准确就保留，代码或文档演进后过时就立即修正；不要留下任务编号式注释代替长期设计说明
 - 新增`apps/*`或`packages/*`包时必须同时添加`README.md`，包含包职责、核心文件、常用命令和改动前必读文档
 - 往仓库根目录新增文件，或新增`apps/*`、`packages/*`、`docs/*`等顶层目录，必须先得到Code Owner（@Timcai06）批准
-- 详细规则见`docs/08-collaboration/documentation-rules.md`；重大约束变化仍需通过`docs/09-decisions/`中的ADR记录
+- 详细规则见`docs/08-collaboration/02-文档维护规则.md`；重大约束变化仍需通过`docs/09-decisions/`中的ADR记录
 
 ## 核心技术约定（详见 docs/，此处为速查）
 
 - Web：Next.js + React + TypeScript，Headless 组件 + 自有设计系统
 - 动画统一使用 GSAP：`@gsap/react` + `useGSAP()`，独立 scope，卸载时回收 Timeline，不在 SSR 阶段执行
-- Canvas 采用分层信任模型（ADR-0010）：判分型 Artifact 走白名单 Schema + 预注册 React 组件 + 服务端判分；探索型产物只能在无 same-origin、禁网络的 sandboxed iframe 中运行且不产生可信学习事件。**主页面绝不直接执行模型生成的任意 HTML/JS/GSAP 源码**
+- Canvas 采用分层信任模型（ADR-0004、ADR-0009）：判分型 Artifact 走白名单 Schema + 预注册 React 组件 + 服务端判分；探索型产物只能在无 same-origin、禁网络的 sandboxed iframe 中运行且不产生可信学习事件。**主页面绝不直接执行模型生成的任意 HTML/JS/GSAP 源码**
 - 教学领域逻辑集中在 `packages/teaching-core`：状态机、掌握度、可信领域事件和Port不得复制到Next.js Route Handler、Drizzle查询或模型适配器中
 - 教学用例编排集中在 `packages/teaching-runtime`；浏览器只从 `@educanvas/canvas-protocol` 读取公开Artifact，包含答案的逻辑只能从服务端入口导入
 - PostgreSQL 是业务事实源，pgvector 承载向量检索；当前技术栈没有 Redis，引入前需新增 ADR

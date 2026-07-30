@@ -15,6 +15,7 @@ import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
 import { chatMessages, lessonSessions, modelRuns } from './schema';
 import { loadMessageParts } from './message-parts';
+import { dualWriteSettleAssistant } from './k12-conversation-dual-write';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -555,6 +556,14 @@ export class DrizzleChatRepository {
           .update(lessonSessions)
           .set({ lastActivityAt: now, updatedAt: now })
           .where(eq(lessonSessions.id, input.sessionId));
+
+        // 开关只控制 begin；已有平台副本必须跨部署切换继续收敛。
+        await dualWriteSettleAssistant({
+          transaction,
+          sessionId: input.sessionId,
+          assistantChatMessageId: input.assistantMessageId,
+        });
+
         return { message: toSnapshot(updated), transitioned: true };
       }
       const existing = await this.requireAssistantMessage(

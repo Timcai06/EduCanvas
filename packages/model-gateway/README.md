@@ -2,7 +2,9 @@
 
 ## 这个包是什么
 
-`model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON与`/audio/speech`映射为 `@educanvas/agent-core` 的稳定Port，不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
+`model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON、
+`/audio/speech`与`/audio/transcriptions`映射为 `@educanvas/agent-core` 的稳定Port，
+不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
 Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter。两种实现都
 终止在同一个 `TurnModelGateway` Port，供应商 SDK 类型不会进入领域层。
@@ -13,7 +15,8 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - `openai-compatible-turn-model-gateway.ts` 只负责原生网络调用、SSE 生命周期、取消和稳定事件输出；
 - `ai-sdk-protocol.ts`、`ai-sdk-turn-model-gateway.ts` 与`ai-sdk-provider-factory.ts`
   分别负责SDK消息/事件投影、流生命周期和Provider构造；
-- `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析和 Adapter 选择；
+- `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析、Adapter 选择与视觉 Provider 投影；
+- `config-vision.ts` 只负责图片输入专用 Provider 的解析；它与主 Provider 不共享 Base URL 与 Key；
 - 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
 
 `tooling/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行
@@ -29,6 +32,8 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - 通过 `AbortSignal` 和内部 deadline 取消 fetch，异常响应会主动释放 body。
 - `SpeechModelGateway`只返回`audio/mpeg`字节与安全审计metadata；最多3500字符、
   20 MiB，且不在Adapter内自动重试。
+- `AudioTranscriptionModelGateway`只接收服务端验证的音频字节与MIME，只返回有界文本、
+  语言、可选Provider时长和安全审计metadata；Provider原始JSON止步于Adapter。
 
 ## 配置闸门
 
@@ -40,24 +45,48 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - 模型 ID 必须由环境变量显式给出，代码没有供应商型号默认值；
 - TTS需显式配置`MODEL_GATEWAY_SPEECH_MODEL`；voice缺省`alloy`且可由
   `MODEL_GATEWAY_SPEECH_VOICE`覆盖；DeepSeek配置禁止声明speech alias；
+- 转录需显式配置`MODEL_GATEWAY_TRANSCRIPTION_MODEL`；超时和输入字节上限由
+  `MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS`与
+  `MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES`约束，DeepSeek禁止声明转录alias；
 - 当前支持 `openai-compatible` 和受部署策略约束的 `deepseek`；
 - DeepSeek 默认关闭，必须显式设置 `MODEL_GATEWAY_ALLOW_DEEPSEEK=true`，且 staging/production 无条件拒绝；
 - staging/production 的通用 OpenAI-compatible endpoint 必须使用 HTTPS；DeepSeek endpoint 还必须匹配代码允许的官方主机；
 - DeepSeek Turn与结构化JSON请求固定禁用 thinking，响应中的意外 `reasoning_content` 会被忽略，避免保留或转发 CoT，也避免推理耗尽Artifact JSON的输出预算。
 
+### 视觉 Provider（ADR-0017）
+
+主 Provider 是纯文本模型时，图片输入由独立的视觉 Provider 承接：
+
+- 配置 `MODEL_GATEWAY_VISION_MODEL` 即声明视觉 Provider 存在，此时 `_BASE_URL` 与
+  `_API_KEY` 必填——半配置会让部署以为图片可用，直到运行期才失败；
+- 它与 `MODEL_GATEWAY_VISION=true`（主 Provider 自带读图）**互斥**，同时声明抛
+  `VISION_PROVIDER_CONFLICT`；
+- `MODEL_GATEWAY_VISION_TIMEOUT_MS` 与 `_MAX_OUTPUT_TOKENS` 独立于主 Provider：
+  读图任务图片 token 开销高但输出通常更短；
+- `acceptsImageInput(configuration)` 是「本次部署能否接受图片」的唯一判据，物化层
+  据此决定 `nativeAssetKinds`，不要在调用方各自拼 `||`；
+- 视觉链路固定走 native Adapter，且所有 modelAlias 都投影到同一个视觉模型——否则
+  `synthesis` 阶段按 `fast` 取模型会得到 undefined。
+- `MODEL_GATEWAY_VISION_DISABLE_THINKING` 控制是否发送 `thinking: { type: 'disabled' }`；
+  不继承主 Provider 的声明，两者是不同供应商。EduCanvas 不保留 CoT，默认开启思考的
+  模型会把输出预算花在随后被丢弃的 reasoning 上。
+
 公共工厂：
 
 ```ts
 const gateway = createTurnModelGatewayFromEnvironment(environment);
+const visionGateway = createVisionTurnModelGatewayFromEnvironment(environment);
 ```
 
-返回 `null` 表示该环境未启用真实模型，调用方必须进入明确 unavailable 状态。
+前者返回 `null` 表示该环境未启用真实模型，调用方必须进入明确 unavailable 状态；
+后者返回 `null` 表示没有独立视觉 Provider，调用方不得据此把图片发给主 Gateway。
+两者是独立实例：Adapter 持有凭据，合并会让审计无法判定请求发往哪个供应商。
 
 ## 当前接线状态
 
 Gateway与Web组合根都通过公共工厂选择Turn Adapter，再把稳定Port交给唯一
 `TurnApplicationService + AgentLoopEngine`；Worker的结构化与语音任务继续使用原生专用
-Adapter。这里的“真实”表示生产代码使用网络Provider，而不是测试Gateway；是否能实际回答
+Adapter；音频转录由Worker通过独立Port调用。这里的“真实”表示生产代码使用网络Provider，而不是测试Gateway；是否能实际回答
 仍取决于部署环境、Endpoint、Key和模型配置，仓库内协议Fixture不能替代live smoke。
 
 ## 验证

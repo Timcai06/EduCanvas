@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
@@ -184,6 +187,50 @@ test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async 
       ].join(''),
     });
   });
+  await page.route(
+    `**/api/v1/canvas/resources/artifact/${artifactId}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          resource: {
+            schemaVersion: 1,
+            resourceId: artifactId,
+            notebookId: '30000000-0000-4000-8000-000000000003',
+            resourceKind: 'artifact',
+            title: '函数思维导图',
+            status: 'ready',
+            version: {
+              versionId: '40000000-0000-4000-8000-000000000004',
+              sequence: 1,
+              checksum: null,
+            },
+            representation: {
+              kind: 'structured',
+              mimeType: 'application/vnd.educanvas.mind-map+json',
+              byteSize: null,
+            },
+            renderer: {
+              rendererId: 'artifact.mind-map',
+              rendererVersion: 1,
+            },
+            trustTier: 'tier1',
+            allowedActions: ['view', 'regenerate'],
+            canProduceCandidateLearningEvents: false,
+            provenance: {
+              origin: 'agent_generated',
+              createdBy: 'agent',
+              createdAt: '2026-07-25T00:01:00.000Z',
+              sourceResourceIds: [],
+              operationId: null,
+              generator: null,
+            },
+            runtime: { kind: 'none' },
+          },
+        }),
+      }),
+  );
   await page.route(`**/api/v1/chat/artifacts/${artifactId}`, (route) =>
     route.fulfill({
       status: 200,
@@ -230,9 +277,15 @@ test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('生成函数思维导图');
   await composer.press('Enter');
+  await expect
+    .poll(() => activeConversationId(page), {
+      message: '发送入口提示词后应建立服务端权威的活动会话',
+      timeout: 15_000,
+    })
+    .toBeTruthy();
 
   const output = page.getByRole('button', { name: '打开产物：函数思维导图' });
-  await expect(output).toBeVisible();
+  await expect(output).toBeVisible({ timeout: 15_000 });
   await output.click();
   const canvas = page.getByRole('region', { name: '产物Canvas' });
   await expect(
@@ -276,9 +329,9 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
     .fill(secondPrompt);
   await page.getByRole('textbox', { name: '向 EduCanvas 提问' }).press('Enter');
   /* 乐观消息先进入对话；此刻 GSAP 入场可能仍在过渡。切换后的可见性在下方验证。 */
-  await expect(
-    page.getByRole('region', { name: 'AI 对话' }),
-  ).toContainText(secondPrompt);
+  await expect(page.getByRole('region', { name: 'AI 对话' })).toContainText(
+    secondPrompt,
+  );
   await waitForUnavailableTurn(page);
 
   await notebookSidebar(page)
@@ -336,6 +389,16 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     .limit(1);
   if (!conversation) throw new Error('第一本笔记本行不存在');
 
+  const sourceBytes = await readFile(
+    path.resolve('tests/fixtures/sample-1page.pdf'),
+  );
+  const storageKey = `e2e/${conversation.id}/notebook-source.pdf`;
+  const storedPath = path.resolve(
+    'output/playwright/object-storage',
+    storageKey,
+  );
+  await mkdir(path.dirname(storedPath), { recursive: true });
+  await writeFile(storedPath, sourceBytes);
   await new dbModule.DrizzleAssetRepository().createUploaded({
     ownerSubjectId: conversation.ownerSubjectId,
     spaceId: conversation.spaceId,
@@ -343,9 +406,9 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     kind: 'document',
     displayName: '第一本视觉讲义.pdf',
     mimeType: 'application/pdf',
-    byteSize: 128,
-    contentHash: 'c'.repeat(64),
-    storageKey: `e2e/${conversation.id}/notebook-source.pdf`,
+    byteSize: sourceBytes.byteLength,
+    contentHash: createHash('sha256').update(sourceBytes).digest('hex'),
+    storageKey,
     extractedText: '卷积神经网络可以提取图像特征。',
     outcome: { status: 'ready' },
   });

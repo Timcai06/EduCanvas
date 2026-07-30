@@ -13,6 +13,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -27,8 +28,30 @@ const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => 'tsvector',
 });
 
+/**
+ * pgvector 定长向量列。
+ *
+ * 维度写死在列类型里是 pgvector 建索引的前提，也让「换模型换维度」必须经过一次
+ * 显式迁移与全量重嵌入，而不是靠改配置悄悄产生不可比较的混合空间。平台维度常量
+ * 在 `@educanvas/agent-core` 的 `PLATFORM_EMBEDDING_DIMENSIONS`，两处必须一致。
+ *
+ * 驱动侧以 pgvector 的文本字面量 `[a,b,c]` 传输：postgres-js 没有向量类型编码器，
+ * 文本形式是唯一稳定且不依赖驱动扩展的表示。
+ */
+const vector = (name: string, dimensions: number) =>
+  customType<{ data: number[]; driverData: string }>({
+    dataType: () => `vector(${dimensions})`,
+    toDriver: (value: number[]) => `[${value.join(',')}]`,
+    fromDriver: (value: string) => JSON.parse(value) as number[],
+  })(name);
+
 // 阶段一模块化单体的现行表集。它同时包含通用 Agent/Asset/RAG 账本和 K12 纵切，
-// 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/data-design.md。
+// 物理同库不代表领域同层；目标边界与迁移顺序见 docs/04-data/02-数据设计.md。
+//
+// 索引命名 `*_fk_idx` 专指「为外键强制查询兜底」的索引，不服务任何业务读取。
+// 父行删除时 PostgreSQL 会对每条被删行在子表上做等值探测；缺索引时该探测退化为
+// 顺序扫描，并在删除期间放大锁窗口。这类索引只在父表确实存在生产删除路径时才
+// 添加——判定依据与 EXPLAIN 证据见 docs/04-data/03-外键索引审计.md。
 
 /** 正式平台主体；匿名兼容主体也使用服务端派生 ID，不保存原始 bearer。 */
 export const platformUsers = pgTable(
@@ -243,6 +266,7 @@ export const delegatedGrants = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
+    index('delegated_grants_notebook_fk_idx').on(table.notebookId),
     index('delegated_grants_grantee_active_idx').on(
       table.granteeUserId,
       table.expiresAt,
@@ -331,6 +355,12 @@ export const gatewayChannelThreadBindings = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
+    index('gateway_channel_thread_bindings_conversation_fk_idx').on(
+      table.conversationId,
+    ),
+    index('gateway_channel_thread_bindings_notebook_fk_idx').on(
+      table.notebookId,
+    ),
     uniqueIndex('gateway_channel_thread_external_unique').on(
       table.accountBindingId,
       table.externalThreadId,
@@ -368,6 +398,9 @@ export const gatewayHandoffTokens = pgTable(
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
   },
   (table) => [
+    index('gateway_handoff_tokens_conversation_fk_idx').on(
+      table.conversationId,
+    ),
     uniqueIndex('gateway_handoff_tokens_digest_unique').on(table.tokenDigest),
     index('gateway_handoff_tokens_user_expiry_idx').on(
       table.userId,
@@ -449,6 +482,7 @@ export const gatewayNodeInvocations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('gateway_node_invocations_operation_fk_idx').on(table.operationId),
     foreignKey({
       columns: [table.nodeId],
       foreignColumns: [gatewayNodePairings.nodeId],
@@ -562,6 +596,7 @@ export const agentOperations = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
+    index('agent_operations_notebook_fk_idx').on(table.notebookId),
     uniqueIndex('agent_operations_actor_conversation_idempotency_unique').on(
       table.conversationId,
       sql`coalesce(${table.actorUserId}, '')`,
@@ -623,10 +658,8 @@ export const gatewayOperationEvents = pgTable(
       table.operationId,
       table.sequence,
     ),
-    index('gateway_operation_events_resume_idx').on(
-      table.operationId,
-      table.sequence,
-    ),
+    /* 恢复读取直接复用 gateway_operation_events_sequence_unique：它的列与顺序
+       完全相同，再建一条非唯一副本只增加写放大，不改变任何查询计划。 */
     check(
       'gateway_operation_events_sequence_check',
       sql`${table.sequence} >= 0`,
@@ -662,6 +695,7 @@ export const gatewayApprovals = pgTable(
     reason: text('reason'),
   },
   (table) => [
+    index('gateway_approvals_operation_fk_idx').on(table.operationId),
     index('gateway_approvals_actor_status_idx').on(
       table.actorUserId,
       table.status,
@@ -775,7 +809,7 @@ export const conversationMessages = pgTable(
 
 /**
  * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
- * 状态保留为 text 以允许状态机在早期演进而不频繁改枚举，取舍见 ADR-0003 与 docs/04-data/data-design.md。
+ * 状态保留为 text 以允许状态机演进而不频繁改枚举，取舍见 docs/04-data/02-数据设计.md。
  */
 export const lessonSessions = pgTable(
   'lesson_sessions',
@@ -791,7 +825,7 @@ export const lessonSessions = pgTable(
     knowledgeNodeId: text('knowledge_node_id'),
     // 状态机仍处早期演进期，text 避免每次新增教学分支都先修改数据库枚举。
     // 不设默认值：初始状态必须由 runtime 显式决定（新学生 DIAGNOSE、有掌握记录可直入 EXPLAIN），
-    // 让"跳过诊断"成为显式决策而非默认值副作用，见 ADR-0004。
+    // 让"跳过诊断"成为显式决策而非默认值副作用，见学习计划数据契约。
     state: text('state').notNull(),
     interruptedState: text('interrupted_state'),
     status: text('status').notNull().default('active'),
@@ -811,6 +845,7 @@ export const lessonSessions = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('lesson_sessions_conversation_fk_idx').on(table.conversationId),
     uniqueIndex('lesson_sessions_active_scope_unique')
       .on(
         table.studentId,
@@ -873,6 +908,7 @@ export const assets = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('assets_current_version_fk_idx').on(table.currentVersionId),
     index('assets_owner_space_status_idx').on(
       table.ownerSubjectId,
       table.spaceId,
@@ -919,6 +955,13 @@ export const assetVersions = pgTable(
     status: text('status').notNull(),
     storageKey: text('storage_key').notNull(),
     extractedText: text('extracted_text'),
+    /**
+     * 音频转录派生文本；与 extractedText 分离是因为来源不同
+     * （文本抽取 vs. Provider 转录），生命周期独立，审计需要分别追踪。
+     */
+    transcriptionText: text('transcription_text'),
+    /** 转录 Provider 审计元数据（ProviderCallMetadata JSON），不包含 Prompt 正文。 */
+    transcriptionMetadata: jsonb('transcription_metadata'),
     failureCode: text('failure_code'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -992,6 +1035,7 @@ export const notebookAssetBindings = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('notebook_asset_bindings_asset_fk_idx').on(table.assetId),
     uniqueIndex('notebook_asset_bindings_subject_mutation_unique').on(
       table.subjectId,
       table.mutationId,
@@ -1001,11 +1045,8 @@ export const notebookAssetBindings = pgTable(
       table.assetId,
       table.sequence,
     ),
-    index('notebook_asset_bindings_latest_idx').on(
-      table.subjectId,
-      table.assetId,
-      table.sequence,
-    ),
+    /* 最新绑定读取复用 notebook_asset_bindings_subject_asset_sequence_unique：
+       列与顺序完全相同，重复索引只增加写放大。 */
     check(
       'notebook_asset_bindings_sequence_check',
       sql`${table.sequence} >= 1`,
@@ -1047,7 +1088,7 @@ export const assetRepresentations = pgTable(
     ),
     check(
       'asset_representations_kind_check',
-      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail')`,
+      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail', 'transcription', 'keyframes')`,
     ),
     check(
       'asset_representations_status_check',
@@ -1060,6 +1101,67 @@ export const assetRepresentations = pgTable(
     check(
       'asset_representations_failure_shape_check',
       sql`(${table.status} = 'failed' and ${table.failureCode} is not null) or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+  ],
+);
+
+/**
+ * 视频关键帧派生物（ADR-0016）。
+ *
+ * 关键帧是派生内容而不是新的内容事实：原始 Asset Version 仍是唯一内容来源，
+ * 整表清空只会让视频失去预览帧，不改变任何转录、引用或学习事实。
+ *
+ * `algorithmVersion` 随行保存：抽帧策略变化后新旧帧不可比较，也不能就地覆盖。
+ * `(assetVersionId, algorithmVersion, ordinal)` 唯一使同一版本在不同算法下的帧
+ * 可以共存，让算法升级成为可回滚过程。
+ *
+ * 与 `asset_representations` 的分工：representation 记录「这个版本有没有关键帧、
+ * 处于什么状态」，本表记录「具体是哪几帧」。前者一个版本一行，无法表达 N 帧。
+ */
+export const assetVideoKeyframes = pgTable(
+  'asset_video_keyframes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetVersionId: uuid('asset_version_id')
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: 'cascade' }),
+    algorithmVersion: text('algorithm_version').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    timestampSeconds: doublePrecision('timestamp_seconds').notNull(),
+    storageKey: text('storage_key').notNull(),
+    checksum: text('checksum').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    mimeType: text('mime_type').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_video_keyframes_version_algorithm_ordinal_unique').on(
+      table.assetVersionId,
+      table.algorithmVersion,
+      table.ordinal,
+    ),
+    check('asset_video_keyframes_ordinal_check', sql`${table.ordinal} >= 1`),
+    check(
+      'asset_video_keyframes_timestamp_check',
+      sql`${table.timestampSeconds} >= 0`,
+    ),
+    check(
+      'asset_video_keyframes_size_check',
+      sql`${table.byteSize} > 0 and ${table.byteSize} <= 2097152`,
+    ),
+    check(
+      'asset_video_keyframes_hash_check',
+      sql`${table.checksum} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'asset_video_keyframes_storage_key_check',
+      sql`char_length(${table.storageKey}) between 1 and 1024 and ${table.storageKey} !~* '^https?://'`,
+    ),
+    check(
+      'asset_video_keyframes_shape_check',
+      sql`${table.algorithmVersion} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' and ${table.mimeType} = 'image/jpeg'`,
     ),
   ],
 );
@@ -1096,7 +1198,7 @@ export const assetProcessingJobs = pgTable(
     ),
     check(
       'asset_processing_jobs_kind_check',
-      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail')`,
+      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail', 'transcribe_audio', 'process_video')`,
     ),
     check(
       'asset_processing_jobs_status_check',
@@ -1158,7 +1260,7 @@ export const objectDeletionOutbox = pgTable(
     ),
     check(
       'object_deletion_outbox_source_check',
-      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'artifact_version', 'user_avatar')`,
+      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'asset_video_keyframe', 'artifact_version', 'user_avatar')`,
     ),
     check(
       'object_deletion_outbox_status_check',
@@ -1241,6 +1343,9 @@ export const conversationMessageCitations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('conversation_message_citations_source_fk_idx').on(
+      table.operationSourceId,
+    ),
     foreignKey({
       columns: [table.assistantMessageId],
       foreignColumns: [conversationMessages.id],
@@ -1255,9 +1360,8 @@ export const conversationMessageCitations = pgTable(
       table.assistantMessageId,
       table.operationSourceId,
     ),
-    index('conversation_message_citations_message_idx').on(
-      table.assistantMessageId,
-    ),
+    /* 按消息读取引用复用 conversation_message_citations_message_source_unique：
+       assistant_message_id 是它的左前缀，单列副本没有额外读取价值。 */
   ],
 );
 
@@ -1360,6 +1464,7 @@ export const agentMessageParts = pgTable(
     artifactKind: text('artifact_kind'),
   },
   (table) => [
+    index('agent_message_parts_asset_fk_idx').on(table.assetId),
     primaryKey({ columns: [table.messageId, table.partIndex] }),
     index('agent_message_parts_asset_version_idx').on(table.assetVersionId),
     check(
@@ -1408,6 +1513,7 @@ export const turnContextSnapshots = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('turn_context_snapshots_operation_fk_idx').on(table.agentOperationId),
     uniqueIndex('turn_context_snapshots_session_turn_unique').on(
       table.sessionId,
       table.turnId,
@@ -1489,6 +1595,10 @@ export const modelRuns = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('model_runs_assistant_message_fk_idx').on(table.assistantMessageId),
+    index('model_runs_conversation_message_fk_idx').on(
+      table.conversationMessageId,
+    ),
     uniqueIndex('model_runs_operation_phase_attempt_unique').on(
       table.operationKind,
       table.operationId,
@@ -1503,11 +1613,11 @@ export const modelRuns = pgTable(
     ),
     check(
       'model_runs_operation_shape_check',
-      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId} and ${table.taskAlias} = 'teaching.turn') or (${table.operationKind} = 'agent_turn' and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ((${table.taskAlias} = 'agent.turn' and ${table.sessionId} is null and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null) or (${table.taskAlias} = 'teaching.turn' and ${table.sessionId} is not null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} = ${table.agentOperationId})))`,
+      sql`(${table.operationKind} = 'teaching_turn' and ${table.sessionId} is not null and ${table.agentOperationId} is null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} is not null and ${table.operationId} = ${table.turnId}) or (${table.operationKind} = 'agent_turn' and ${table.agentOperationId} is not null and ${table.operationId} = ${table.agentOperationId} and ((${table.sessionId} is null and ${table.assistantMessageId} is null and ${table.conversationMessageId} is not null and ${table.turnId} is null) or (${table.sessionId} is not null and ${table.assistantMessageId} is not null and ${table.conversationMessageId} is null and ${table.turnId} = ${table.agentOperationId})))`,
     ),
     check(
       'model_runs_phase_check',
-      sql`${table.phase} in ('answer', 'synthesis')`,
+      sql`${table.phase} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'model_runs_status_check',
@@ -1516,7 +1626,7 @@ export const modelRuns = pgTable(
     check('model_runs_attempt_check', sql`${table.attempt} between 1 and 100`),
     check(
       'model_runs_text_check',
-      sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} in ('agent.turn', 'teaching.turn') and ${table.modelAlias} in ('primary', 'fast', 'structured', 'speech') and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
+      sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and ${table.modelAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
     ),
     check(
       'model_runs_usage_check',
@@ -1694,6 +1804,7 @@ export const toolApprovalIntents = pgTable(
     abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
   },
   (table) => [
+    index('tool_approval_intents_operation_fk_idx').on(table.operationId),
     uniqueIndex('tool_approval_intents_tool_call_unique').on(table.toolCallId),
     uniqueIndex('tool_approval_intents_adapter_resume_unique').on(
       table.adapterSource,
@@ -2033,6 +2144,155 @@ export const knowledgeChunks = pgTable(
   ],
 );
 
+/**
+ * 平台向量维度。与 `@educanvas/agent-core` 的 `PLATFORM_EMBEDDING_DIMENSIONS`
+ * 同值；此处不 import 常量，是为了让 Schema 与迁移 SQL 保持自包含可读。
+ */
+const EMBEDDING_DIMENSIONS = 1536;
+
+/**
+ * 切块向量派生表（ADR-0015）。
+ *
+ * chunk 仍是不可变内容事实，向量只是它的派生物：删除全部向量不改变任何引用、
+ * 判分或历史候选，只让检索退回纯 FTS。因此本表可以被整表重建，而
+ * `knowledge_chunks` 不可以。
+ *
+ * 唯一键包含模型、版本和指令：同一 chunk 在不同模型/版本/指令下的向量可以共存，
+ * 使模型升级成为「先写新向量、再切读、最后清旧向量」的可回滚过程，而不是一次
+ * 破坏性覆盖。
+ *
+ * `chunkContentHash` 冗余自 chunk：它让「向量对应的文本是否已经变了」成为一次
+ * 等值比较，而不需要重新读正文；内容漂移的向量会被检索直接排除。
+ */
+export const knowledgeChunkEmbeddings = pgTable(
+  'knowledge_chunk_embeddings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /* 只声明复合外键：它已蕴含 chunk_id 的引用完整性，再加一条单列外键只会
+       产生同一约束的两份检查开销。 */
+    chunkId: uuid('chunk_id').notNull(),
+    /** 冗余文档 ID，供复合外键证明向量与 chunk 属于同一文档。 */
+    documentId: uuid('document_id').notNull(),
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingModelVersion: text('embedding_model_version').notNull(),
+    dimensions: integer('dimensions').notNull(),
+    /** 用途与指令版本，例如 `passage:v1`；与 query 侧指令必须配套使用。 */
+    instruction: text('instruction').notNull(),
+    /** 切块版本取自 knowledge_documents.parser_version；切块规则变化即换空间。 */
+    chunkingVersion: text('chunking_version').notNull(),
+    chunkContentHash: text('chunk_content_hash').notNull(),
+    embedding: vector('embedding', EMBEDDING_DIMENSIONS).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_chunk_embeddings_identity_unique').on(
+      table.chunkId,
+      table.embeddingModel,
+      table.embeddingModelVersion,
+      table.instruction,
+    ),
+    index('knowledge_chunk_embeddings_document_idx').on(
+      table.documentId,
+      table.embeddingModel,
+      table.embeddingModelVersion,
+    ),
+    /* HNSW + cosine：检索侧统一用 `<=>`，与写入时的归一化假设保持一致。
+       lists/probes 类参数属于 IVF，HNSW 无需预先知道数据规模，更适合会持续
+       增量摄取的教材库。 */
+    index('knowledge_chunk_embeddings_hnsw_idx').using(
+      'hnsw',
+      sql`${table.embedding} vector_cosine_ops`,
+    ),
+    foreignKey({
+      columns: [table.chunkId, table.documentId],
+      foreignColumns: [knowledgeChunks.id, knowledgeChunks.documentId],
+      name: 'knowledge_chunk_embeddings_chunk_document_fk',
+    }).onDelete('cascade'),
+    check(
+      'knowledge_chunk_embeddings_dimensions_check',
+      sql`${table.dimensions} = ${sql.raw(String(EMBEDDING_DIMENSIONS))}`,
+    ),
+    check(
+      'knowledge_chunk_embeddings_hash_check',
+      sql`${table.chunkContentHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'knowledge_chunk_embeddings_identity_shape_check',
+      sql`${table.embeddingModel} ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$' and ${table.embeddingModelVersion} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' and ${table.instruction} ~ '^[a-z]+:[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' and ${table.chunkingVersion} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`,
+    ),
+  ],
+);
+
+/**
+ * 文档级向量化运行账本（ADR-0015）。
+ *
+ * 没有它，一个持续失败的文档只会表现为「检索结果比预期少」——混合检索会安静地
+ * 退回 FTS，运维看不到任何信号。本表让每个 (文档, 向量身份) 的终态可查询，
+ * 并给重试与回填一个明确的边界。
+ *
+ * 它只记录状态与计数，不保存教材正文、查询原文或供应商响应。
+ */
+export const knowledgeEmbeddingRuns = pgTable(
+  'knowledge_embedding_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingModelVersion: text('embedding_model_version').notNull(),
+    instruction: text('instruction').notNull(),
+    status: text('status').notNull().default('queued'),
+    /** 已成功写入向量的 chunk 数；用于回填进度与部分成功的诚实表达。 */
+    embeddedChunkCount: integer('embedded_chunk_count').notNull().default(0),
+    totalChunkCount: integer('total_chunk_count').notNull(),
+    failureCode: text('failure_code'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_embedding_runs_identity_unique').on(
+      table.documentId,
+      table.embeddingModel,
+      table.embeddingModelVersion,
+      table.instruction,
+    ),
+    index('knowledge_embedding_runs_status_updated_idx').on(
+      table.status,
+      table.updatedAt,
+      table.id,
+    ),
+    check(
+      'knowledge_embedding_runs_status_check',
+      sql`${table.status} in ('queued', 'running', 'ready', 'failed')`,
+    ),
+    check(
+      'knowledge_embedding_runs_count_check',
+      sql`${table.totalChunkCount} >= 0 and ${table.embeddedChunkCount} between 0 and ${table.totalChunkCount}`,
+    ),
+    check(
+      'knowledge_embedding_runs_failure_shape_check',
+      sql`(${table.status} = 'failed' and ${table.failureCode} ~ '^[a-z][a-z0-9_]{0,127}$') or (${table.status} <> 'failed' and ${table.failureCode} is null)`,
+    ),
+    check(
+      'knowledge_embedding_runs_lifecycle_shape_check',
+      sql`(${table.status} = 'queued' and ${table.startedAt} is null and ${table.completedAt} is null) or (${table.status} = 'running' and ${table.startedAt} is not null and ${table.completedAt} is null) or (${table.status} in ('ready', 'failed') and ${table.startedAt} is not null and ${table.completedAt} is not null)`,
+    ),
+    check(
+      'knowledge_embedding_runs_identity_shape_check',
+      sql`${table.embeddingModel} ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$' and ${table.embeddingModelVersion} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' and ${table.instruction} ~ '^[a-z]+:[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'`,
+    ),
+  ],
+);
+
 /** Session对课程source的启用/停用事实流；同一mutation重放不得产生第二条事实。 */
 export const sessionSourceBindings = pgTable(
   'session_source_bindings',
@@ -2061,11 +2321,8 @@ export const sessionSourceBindings = pgTable(
       table.sourceId,
       table.sequence,
     ),
-    index('session_source_bindings_latest_idx').on(
-      table.sessionId,
-      table.sourceId,
-      table.sequence,
-    ),
+    /* 最新绑定读取复用 session_source_bindings_session_source_sequence_unique：
+       列与顺序完全相同，重复索引只增加写放大。 */
     check(
       'session_source_bindings_sequence_check',
       sql`${table.sequence} >= 1`,
@@ -2168,6 +2425,7 @@ export const retrievalCandidates = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('retrieval_candidates_snapshot_fk_idx').on(table.turnSourceVersionId),
     uniqueIndex('retrieval_candidates_query_rank_unique').on(
       table.turnId,
       table.queryHash,
@@ -2234,6 +2492,7 @@ export const messageCitations = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('message_citations_candidate_fk_idx').on(table.retrievalCandidateId),
     uniqueIndex('message_citations_message_ordinal_unique').on(
       table.assistantMessageId,
       table.ordinal,
@@ -2253,7 +2512,7 @@ export const messageCitations = pgTable(
 
 /**
  * 保存已经白名单校验的 Artifact 快照，供学习过程回放、问题审计和协议兼容使用。
- * `params` 使用 JSONB 是因为不同 Artifact 的联合参数结构不同，但写入前仍必须通过 canvas-protocol；见 ADR-0002。
+ * `params` 使用 JSONB 是因为不同 Artifact 的联合参数结构不同，但写入前仍必须通过 canvas-protocol；见 ADR-0004 与 ADR-0009。
  */
 export const canvasArtifacts = pgTable(
   'canvas_artifacts',
@@ -2268,14 +2527,38 @@ export const canvasArtifacts = pgTable(
     title: text('title').notNull(),
     // 这里只保存浏览器安全投影；答案必须进入canvas_artifact_grading_keys。
     params: jsonb('params').notNull(),
+    /**
+     * 可选的平台 Artifact 长期身份关联。新建 K12 Artifact 时由同一事务写入，
+     * 旧记录保持 NULL——不做无界回填。两列必须成对且 Version 必须属于该 Artifact。
+     */
+    platformArtifactId: uuid('platform_artifact_id').references(
+      () => artifacts.id,
+      { onDelete: 'set null' },
+    ),
+    platformArtifactVersionId: uuid('platform_artifact_version_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    index('canvas_artifacts_platform_artifact_fk_idx').on(
+      table.platformArtifactId,
+    ),
     uniqueIndex('canvas_artifacts_session_artifact_unique').on(
       table.sessionId,
       table.artifactId,
+    ),
+    uniqueIndex('canvas_artifacts_platform_artifact_unique')
+      .on(table.platformArtifactId)
+      .where(sql`${table.platformArtifactId} is not null`),
+    foreignKey({
+      columns: [table.platformArtifactVersionId, table.platformArtifactId],
+      foreignColumns: [artifactVersions.id, artifactVersions.artifactId],
+      name: 'canvas_artifacts_platform_version_scope_fk',
+    }).onDelete('set null'),
+    check(
+      'canvas_artifacts_platform_link_pair_check',
+      sql`(${table.platformArtifactId} is null and ${table.platformArtifactVersionId} is null) or (${table.platformArtifactId} is not null and ${table.platformArtifactVersionId} is not null)`,
     ),
   ],
 );
@@ -2300,7 +2583,7 @@ export const canvasArtifactGradingKeys = pgTable(
 /**
  * 只追加的学习事实流，作为掌握度重算和教学决策的可追溯输入；业务代码不得原地改写历史事件。
  * `occurredAt` 不设数据库默认值，以保存客户端实际发生时间；`payload` 用 JSONB 承载事件专属字段，
- * `schemaVersion` 用于消费端兼容演进，口径见 docs/04-data/data-design.md。
+ * `schemaVersion` 用于消费端兼容演进，口径见 docs/04-data/02-数据设计.md。
  */
 export const learningEvents = pgTable(
   'learning_events',
@@ -2339,7 +2622,7 @@ export const learningEvents = pgTable(
 /**
  * 每个“学生 × 知识节点”只有一行可计算掌握状态，复合主键防止同一口径出现多份当前值。
  * 分数用 real 支持连续更新，次数字段保留可解释证据，JSONB 标签允许误区分类逐步扩展；
- * `version` 已由Drizzle适配器用于并发更新的乐观锁，模型不得直接决定这些值，见 docs/04-data/data-design.md。
+ * `version` 已由Drizzle适配器用于并发更新的乐观锁，模型不得直接决定这些值，见 docs/04-data/02-数据设计.md。
  */
 export const masteryStates = pgTable(
   'mastery_states',
@@ -2361,8 +2644,8 @@ export const masteryStates = pgTable(
 );
 
 /**
- * Artifact 一等公民（ADR-0012）。身份与信任层级在本表,内容进不可变版本表。
- * `trustTier` 使用 ADR-0010 的层级词汇:tier1=判分型白名单,tier2=沙箱探索型,
+ * Artifact 一等公民（ADR-0005）。身份与信任层级在本表,内容进不可变版本表。
+ * `trustTier` 使用 ADR-0004 的层级词汇:tier1=判分型白名单,tier2=沙箱探索型,
  * 判分与学习事件消费方必须先校验 tier。`kind` 只在库里限形状,合法产物类型
  * 集合由应用层 Registry 裁决——类型随 M2 逐个增加,不适合写死为库级枚举。
  * `latestVersion` 以计数器代替 current_version 外键,避免与版本表循环引用;
@@ -2443,7 +2726,7 @@ export const artifacts = pgTable(
 );
 
 /**
- * 产物生成任务账本(ADR-0012)。graphile_worker 表是队列实现细节,本表才是
+ * 产物生成任务账本(ADR-0005)。graphile_worker 表是队列实现细节,本表才是
  * 业务事实源:状态、进度、失败原因与溯源在此,经 `queueJobKey`(graphile 的
  * job_key,文本)与队列行松耦合关联——不用 bigint job id,因为队列行会被
  * 库自身的清理机制回收,而账本必须长期可审计。
@@ -2471,6 +2754,7 @@ export const artifactGenerationJobs = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
+    index('artifact_generation_jobs_operation_fk_idx').on(table.operationId),
     index('artifact_generation_jobs_artifact_created_idx').on(
       table.artifactId,
       table.createdAt,
@@ -2512,7 +2796,7 @@ export const artifactGenerationJobs = pgTable(
 );
 
 /**
- * 不可变产物版本(ADR-0012)。结构化产物内容进 `content`(JSONB),媒体产物进
+ * 不可变产物版本(ADR-0005)。结构化产物内容进 `content`(JSONB),媒体产物进
  * 对象存储、库里只留 `objectKey` + `checksum`(sha-256)——二者恰取其一由
  * 形状约束强制。版本号在产物内单调递增且唯一,仓储不提供 update/delete。
  */
@@ -2542,9 +2826,16 @@ export const artifactVersions = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('artifact_versions_created_by_operation_fk_idx').on(
+      table.createdByOperationId,
+    ),
     uniqueIndex('artifact_versions_artifact_version_unique').on(
       table.artifactId,
       table.version,
+    ),
+    unique('artifact_versions_id_artifact_unique').on(
+      table.id,
+      table.artifactId,
     ),
     uniqueIndex('artifact_versions_generation_job_unique')
       .on(table.generationJobId)

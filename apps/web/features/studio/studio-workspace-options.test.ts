@@ -11,6 +11,7 @@ function source(overrides: Partial<AssetItem> = {}): AssetItem {
     kind: 'document',
     scope: 'space',
     status: 'ready',
+    processing: null,
     enabled: true,
     selectable: true,
     resource: null,
@@ -61,7 +62,7 @@ describe('itemsForRoute', () => {
     });
 
     expect(itemsForRoute('source-browse', [stale], [])[0]?.secondary).toBe(
-      '处理失败',
+      '文件处理失败',
     );
   });
 

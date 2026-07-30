@@ -146,7 +146,13 @@ function toTurnSourceSnapshot(
   return { ...row, createdAt: row.createdAt.toISOString() };
 }
 
-async function assertOwnedTurn(
+/**
+ * 校验 Turn 归属。
+ *
+ * `@internal` 包内复用：任何检索路径都必须先过这一关，权限判定在召回之前，
+ * 不允许先检索再过滤。
+ */
+export async function assertOwnedTurn(
   transaction: DatabaseTransaction,
   input: { trustedStudentId: string; sessionId: string; turnId: string },
 ): Promise<void> {
@@ -220,7 +226,13 @@ function latestBindingQuery(
     .as('latest_source_bindings');
 }
 
-async function loadCandidates(
+/**
+ * 读取本轮已持久化的候选证据。
+ *
+ * `@internal` 包内复用：混合检索复用它以保证两条检索路径返回完全相同的证据形状，
+ * 避免两处各写一份 join 后慢慢漂移。不从包入口导出。
+ */
+export async function loadCandidates(
   transaction: DatabaseTransaction,
   input: {
     sessionId: string;

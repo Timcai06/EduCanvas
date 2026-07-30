@@ -4,6 +4,12 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  DrizzleAssetDerivedProcessingRepository,
+  getDerivedAssetJobKind,
+} from './asset-derived-processing-repository';
+import { DrizzleAssetTranscriptionRepository } from './asset-transcription-repository';
+import { DrizzleAssetVideoRepository } from './asset-video-repository';
 import { AssetAccessError, DrizzleAssetRepository } from './asset-repository';
 import { DrizzleChatRepository } from './chat-repository';
 import * as schema from './schema';
@@ -70,6 +76,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     await getDatabase().execute(sql`
       truncate table
         object_deletion_outbox,
+        asset_video_keyframes,
         asset_processing_jobs,
         asset_representations,
         agent_message_parts,
@@ -148,12 +155,17 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         .orderBy(schema.assetRepresentations.kind),
     ).resolves.toMatchObject([
       { kind: 'original', status: 'ready' },
+      { kind: 'preview', status: 'processing' },
       { kind: 'text', status: 'ready' },
     ]);
     await expect(
-      getDatabase().select().from(schema.assetProcessingJobs),
+      getDatabase()
+        .select()
+        .from(schema.assetProcessingJobs)
+        .orderBy(schema.assetProcessingJobs.kind),
     ).resolves.toMatchObject([
       { kind: 'extract_text', status: 'succeeded', attempts: 1 },
+      { kind: 'render_preview', status: 'queued', attempts: 0 },
     ]);
 
     await expect(
@@ -211,6 +223,417 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         ],
       }),
     ).rejects.toBeInstanceOf(AssetAccessError);
+  });
+
+  it('异步解析按ISO时间领取并把处理账本推进到可公开终态', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const assetId = '92000000-0000-4000-8000-000000000001';
+    const versionId = '92000000-0000-4000-8000-000000000002';
+    const jobId = '92000000-0000-4000-8000-000000000003';
+    const startedAt = new Date('2026-07-26T08:01:39.806Z');
+    await getDatabase().insert(schema.assets).values({
+      id: assetId,
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      origin: 'upload',
+      displayName: '异步解析讲义.md',
+      mimeType: 'text/markdown',
+      status: 'processing',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    });
+    await getDatabase()
+      .insert(schema.assetVersions)
+      .values({
+        id: versionId,
+        assetId,
+        kind: 'document',
+        mimeType: 'text/markdown',
+        byteSize: 12,
+        contentHash: 'e'.repeat(64),
+        status: 'processing',
+        storageKey: 'uploads/fixture/async.md',
+        createdAt: startedAt,
+      });
+    await getDatabase().insert(schema.assetProcessingJobs).values({
+      id: jobId,
+      assetVersionId: versionId,
+      kind: 'extract_text',
+      status: 'queued',
+      attempts: 0,
+      createdAt: startedAt,
+    });
+
+    await expect(
+      repository.beginTextExtractionAttempt({ jobId, now: startedAt }),
+    ).resolves.toEqual({
+      storageKey: 'uploads/fixture/async.md',
+      mimeType: 'text/markdown',
+    });
+    await expect(
+      repository.settleTextExtraction({
+        jobId,
+        outcome: { status: 'ready', extractedText: '异步解析完成' },
+        now: new Date('2026-07-26T08:02:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: { status: 'ready', currentVersionId: versionId },
+      processing: {
+        status: 'succeeded',
+        attempts: 1,
+        failureCode: null,
+        startedAt: startedAt.toISOString(),
+        completedAt: '2026-07-26T08:02:00.000Z',
+      },
+    });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetProcessingJobs)
+        .where(sql`${schema.assetProcessingJobs.kind} <> 'extract_text'`),
+    ).resolves.toEqual([]);
+  });
+
+  it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const transcriptionRepository = new DrizzleAssetTranscriptionRepository(
+      getDatabase(),
+    );
+    const created = await repository.createUploadedPending({
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'audio',
+      displayName: '课堂录音.wav',
+      mimeType: 'audio/wav',
+      byteSize: 128,
+      contentHash: '8'.repeat(64),
+      storageKey: 'uploads/fixture/lesson.wav',
+    });
+
+    expect(created.snapshot.descriptor).toMatchObject({
+      kind: 'audio',
+      status: 'processing',
+      currentVersionId: null,
+    });
+    await expect(
+      transcriptionRepository.beginAttempt({
+        jobId: created.jobId,
+        now: new Date('2026-07-27T10:00:00.000Z'),
+      }),
+    ).resolves.toEqual({
+      storageKey: 'uploads/fixture/lesson.wav',
+      mimeType: 'audio/wav',
+      byteSize: 128,
+      contentHash: '8'.repeat(64),
+    });
+    await expect(
+      transcriptionRepository.settle({
+        jobId: created.jobId,
+        outcome: {
+          status: 'ready',
+          transcriptionText: '今天学习一元二次方程。',
+          transcriptionMetadata: {
+            provider: 'openai-compatible',
+            resolvedModelId: 'whisper-1',
+            latencyMs: 123,
+            traceId: `asset-transcription:${created.jobId}`,
+            language: 'zh',
+            durationSeconds: 30,
+          },
+        },
+        now: new Date('2026-07-27T10:01:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      transcriptionRepository.settle({
+        jobId: created.jobId,
+        outcome: { status: 'failed', failureCode: 'duplicate' },
+      }),
+    ).resolves.toBe(false);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: {
+        status: 'ready',
+        currentVersionId: created.versionId,
+      },
+      processing: {
+        status: 'succeeded',
+        attempts: 1,
+        failureCode: null,
+      },
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.snapshot.descriptor.assetId,
+            versionId: created.versionId,
+            kind: 'audio',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        transcriptionText: '今天学习一元二次方程。',
+      }),
+    ]);
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${created.versionId}`,
+        ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: 'transcription',
+        mimeType: 'text/plain',
+        status: 'ready',
+        derivedStorageKey: null,
+        failureCode: null,
+      }),
+    ]);
+  });
+
+  it('视频部分成功推进当前版本，关键帧随Source删除进入Outbox', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const videoRepository = new DrizzleAssetVideoRepository(getDatabase());
+    const created = await repository.createUploadedPending({
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'video',
+      displayName: '课堂录像.mp4',
+      mimeType: 'video/mp4',
+      byteSize: 1_024,
+      contentHash: '7'.repeat(64),
+      storageKey: 'uploads/fixture/lesson.mp4',
+    });
+
+    await expect(
+      videoRepository.beginAttempt({ jobId: created.jobId }),
+    ).resolves.toMatchObject({
+      assetVersionId: created.versionId,
+      mimeType: 'video/mp4',
+      byteSize: 1_024,
+    });
+    await expect(
+      videoRepository.settleProcessed({
+        jobId: created.jobId,
+        outcome: {
+          durationSeconds: 120,
+          width: 1280,
+          height: 720,
+          transcription: {
+            status: 'ready',
+            text: '视频中的课堂讲解。',
+            metadata: {
+              provider: 'fixture',
+              resolvedModelId: 'transcription-v1',
+              latencyMs: 100,
+              traceId: `asset-video:${created.jobId}`,
+              language: 'zh',
+              durationSeconds: 120,
+            },
+          },
+          keyframes: {
+            status: 'ready',
+            algorithmVersion: 'fixture-v1',
+            frames: [
+              {
+                ordinal: 1,
+                timestampSeconds: 30,
+                storageKey: `assets/${created.versionId}/keyframes/frame.jpg`,
+                checksum: '6'.repeat(64),
+                byteSize: 256,
+              },
+            ],
+          },
+        },
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.getOwnedSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      descriptor: {
+        kind: 'video',
+        status: 'ready',
+        currentVersionId: created.versionId,
+      },
+      processing: { status: 'succeeded' },
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.snapshot.descriptor.assetId,
+            versionId: created.versionId,
+            kind: 'video',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        transcriptionText: '视频中的课堂讲解。',
+      }),
+    ]);
+
+    await repository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.snapshot.descriptor.assetId,
+    });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.objectDeletionOutbox)
+        .where(
+          sql`${schema.objectDeletionOutbox.sourceType} = 'asset_video_keyframe'`,
+        ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        storageKey: `assets/${created.versionId}/keyframes/frame.jpg`,
+        status: 'pending',
+      }),
+    ]);
+  });
+
+  it('派生预览只处理当前版本，重复结算幂等且删除进入Outbox', async () => {
+    const assetsRepository = new DrizzleAssetRepository(getDatabase());
+    const derivedRepository = new DrizzleAssetDerivedProcessingRepository(
+      getDatabase(),
+    );
+    const created = await assetsRepository.createUploaded(readyPdf());
+    const [job] = await getDatabase()
+      .select()
+      .from(schema.assetProcessingJobs)
+      .where(sql`${schema.assetProcessingJobs.kind} = 'render_preview'`);
+    expect(job).toBeDefined();
+
+    await expect(
+      derivedRepository.beginPreviewRenderAttempt({
+        jobId: job!.id,
+        now: new Date('2026-07-27T08:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      storageKey: 'uploads/fixture/vision.pdf',
+      mimeType: 'application/pdf',
+      byteSize: 256,
+      contentHash: 'c'.repeat(64),
+    });
+    await expect(
+      derivedRepository.settlePreviewRender({
+        jobId: job!.id,
+        outcome: {
+          status: 'ready',
+          derivedStorageKey: `derived/preview/${job!.id}/fixture.html`,
+          checksum: 'f'.repeat(64),
+          byteSize: 128,
+        },
+        now: new Date('2026-07-27T08:01:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      derivedRepository.settlePreviewRender({
+        jobId: job!.id,
+        outcome: {
+          status: 'ready',
+          derivedStorageKey: `derived/preview/${job!.id}/fixture.html`,
+          checksum: 'f'.repeat(64),
+          byteSize: 128,
+        },
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      derivedRepository.settleThumbnailGeneration({
+        jobId: job!.id,
+        outcome: { status: 'failed', failureCode: 'wrong_kind' },
+      }),
+    ).resolves.toBe(false);
+
+    await assetsRepository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.objectDeletionOutbox)
+        .orderBy(schema.objectDeletionOutbox.sourceType),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'asset_representation',
+          storageKey: `derived/preview/${job!.id}/fixture.html`,
+          status: 'pending',
+        }),
+      ]),
+    );
+  });
+
+  it('图片创建缩略图任务，资产失效后旧版本任务取消', async () => {
+    expect(getDerivedAssetJobKind('image/png')).toBe('generate_thumbnail');
+    const assetsRepository = new DrizzleAssetRepository(getDatabase());
+    const derivedRepository = new DrizzleAssetDerivedProcessingRepository(
+      getDatabase(),
+    );
+    const created = await assetsRepository.createUploaded(
+      readyPdf({
+        kind: 'image',
+        displayName: 'diagram.png',
+        mimeType: 'image/png',
+        contentHash: '9'.repeat(64),
+        storageKey: 'uploads/fixture/diagram.png',
+        extractedText: null,
+      }),
+    );
+    const [job] = await getDatabase()
+      .select()
+      .from(schema.assetProcessingJobs)
+      .where(sql`${schema.assetProcessingJobs.kind} = 'generate_thumbnail'`);
+    expect(job).toBeDefined();
+
+    await assetsRepository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+    await expect(
+      derivedRepository.beginThumbnailGenerationAttempt({ jobId: job!.id }),
+    ).resolves.toBeNull();
+    await expect(
+      getDatabase()
+        .select({ status: schema.assetProcessingJobs.status })
+        .from(schema.assetProcessingJobs)
+        .where(sql`${schema.assetProcessingJobs.id} = ${job!.id}`),
+    ).resolves.toEqual([{ status: 'cancelled' }]);
   });
 
   it('对象存储键只经服务端所有权方法返回且跨主体拒绝', async () => {

@@ -100,6 +100,7 @@ export const learningGoals = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index('learning_goals_notebook_fk_idx').on(table.notebookId),
     uniqueIndex('learning_goals_notebook_active_unique')
       .on(table.notebookId)
       .where(sql`${table.status} = 'active'`),
@@ -220,6 +221,7 @@ export const diagnosticAttempts = pgTable(
       table.id,
       table.goalId,
     ),
+    index('diagnostic_attempts_session_fk_idx').on(table.sessionId),
     foreignKey({
       columns: [table.goalId, table.studentId],
       foreignColumns: [learningGoals.id, learningGoals.studentId],
@@ -258,6 +260,7 @@ export const diagnosticResponses = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.attemptId, table.questionId] }),
+    index('diagnostic_responses_objective_fk_idx').on(table.objectiveId),
     foreignKey({
       columns: [table.attemptId, table.goalId],
       foreignColumns: [diagnosticAttempts.id, diagnosticAttempts.goalId],

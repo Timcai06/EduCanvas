@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { createE2eWorkerLogAudit } from '../../tooling/e2e-worker-log-audit.mjs';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -114,7 +115,7 @@ async function startFixtureProvider(): Promise<{
 }
 
 /**
- * E2E 期间拉起真实 worker 进程(ADR-0012 的双进程形态必须被 E2E 覆盖,
+ * E2E 期间拉起真实 worker 进程(ADR-0005 的双进程形态必须被 E2E 覆盖,
  * 产物生成链路才是端到端而不是纸面)。worker 连接 E2E 隔离库并在启动时
  * 自迁移 graphile schema;退出由 globalSetup 返回的 teardown 负责。
  */
@@ -125,6 +126,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await rm(objectStorageRoot, { recursive: true, force: true });
   await mkdir(objectStorageRoot, { recursive: true });
   const fixtureProvider = await startFixtureProvider();
+  const workerLogAudit = createE2eWorkerLogAudit();
 
   const worker: ChildProcess = spawn(
     'pnpm',
@@ -142,6 +144,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
         MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
         MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
+        /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
+           默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
+        ASSET_STORAGE_ROOT: objectStorageRoot,
         OBJECT_STORAGE_ROOT: objectStorageRoot,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -154,12 +159,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       30_000,
     );
     worker.stdout?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
       if (chunk.toString().includes('已启动')) {
         clearTimeout(timeout);
         resolve();
       }
     });
     worker.stderr?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
       process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
     });
     worker.on('exit', (code) => {
@@ -196,5 +203,6 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       ),
     );
     await rm(objectStorageRoot, { recursive: true, force: true });
+    workerLogAudit.assertClean();
   };
 }

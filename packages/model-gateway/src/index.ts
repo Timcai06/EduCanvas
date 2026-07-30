@@ -2,6 +2,7 @@
 
 export {
   ModelGatewayConfigurationError,
+  acceptsImageInput,
   deploymentEnvironments,
   modelGatewayConfigurationErrorCodes,
   openAICompatibleProviders,
@@ -16,11 +17,15 @@ export {
   type OpenAICompatibleProvider,
   type TurnModelGatewayRuntime,
 } from './config';
+export type { VisionProviderConfiguration } from './config-vision';
 export {
   OpenAICompatibleTurnModelGateway,
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
-export { createTurnModelGatewayFromEnvironment } from './turn-model-gateway-factory';
+export {
+  createTurnModelGatewayFromEnvironment,
+  createVisionTurnModelGatewayFromEnvironment,
+} from './turn-model-gateway-factory';
 export {
   OpenAICompatibleStructuredModelGateway,
   type OpenAICompatibleStructuredModelGatewayOptions,
@@ -29,3 +34,16 @@ export {
   OpenAICompatibleSpeechModelGateway,
   type OpenAICompatibleSpeechModelGatewayOptions,
 } from './openai-compatible-speech-model-gateway';
+export {
+  OpenAICompatibleAudioTranscriptionModelGateway,
+  type OpenAICompatibleAudioTranscriptionModelGatewayOptions,
+} from './openai-compatible-audio-transcription-model-gateway';
+export {
+  OpenAICompatibleImageGenerationModelGateway,
+  type OpenAICompatibleImageGenerationModelGatewayOptions,
+} from './openai-compatible-image-generation-model-gateway';
+export {
+  EMBEDDING_INSTRUCTION_VERSION,
+  OpenAICompatibleEmbeddingModelGateway,
+  type OpenAICompatibleEmbeddingModelGatewayOptions,
+} from './openai-compatible-embedding-model-gateway';

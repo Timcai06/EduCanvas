@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { repo } = vi.hoisted(() => ({
   repo: {
-    loadPendingExtraction: vi.fn(),
+    beginTextExtractionAttempt: vi.fn(),
     settleTextExtraction: vi.fn(),
   },
 }));
@@ -33,8 +33,10 @@ import { extractAssetTextTask } from './extract-asset-text';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 
-function run() {
-  return extractAssetTextTask({ jobId: JOB_ID }, {} as never);
+function run(attempts = 1, maxAttempts = 3) {
+  return extractAssetTextTask({ jobId: JOB_ID }, {
+    job: { attempts, max_attempts: maxAttempts },
+  } as never);
 }
 
 describe('assets:extract_text', () => {
@@ -44,7 +46,7 @@ describe('assets:extract_text', () => {
 
   it('已终结的任务安静退出，不重复解析', async () => {
     /* graphile-worker 的重投会再次到达；重跑解析会重复追加 representation。 */
-    repo.loadPendingExtraction.mockResolvedValue(null);
+    repo.beginTextExtractionAttempt.mockResolvedValue(null);
 
     await run();
 
@@ -53,7 +55,7 @@ describe('assets:extract_text', () => {
   });
 
   it('成功时写入 ready 终态', async () => {
-    repo.loadPendingExtraction.mockResolvedValue({
+    repo.beginTextExtractionAttempt.mockResolvedValue({
       storageKey: 'assets/a',
       mimeType: 'application/pdf',
     });
@@ -69,7 +71,7 @@ describe('assets:extract_text', () => {
   });
 
   it('解析失败是确定性的，写终态而不是抛给队列重试', async () => {
-    repo.loadPendingExtraction.mockResolvedValue({
+    repo.beginTextExtractionAttempt.mockResolvedValue({
       storageKey: 'assets/a',
       mimeType: 'application/pdf',
     });
@@ -85,7 +87,7 @@ describe('assets:extract_text', () => {
   });
 
   it('读取字节失败可能是瞬时的，抛给队列重试而不是写终态', async () => {
-    repo.loadPendingExtraction.mockResolvedValue({
+    repo.beginTextExtractionAttempt.mockResolvedValue({
       storageKey: 'assets/a',
       mimeType: 'application/pdf',
     });
@@ -93,5 +95,26 @@ describe('assets:extract_text', () => {
 
     await expect(run()).rejects.toThrow('EACCES');
     expect(repo.settleTextExtraction).not.toHaveBeenCalled();
+  });
+
+  it('最后一次未知失败写安全终态，不把业务任务永久留在处理中', async () => {
+    repo.beginTextExtractionAttempt.mockResolvedValue({
+      storageKey: 'assets/a',
+      mimeType: 'application/pdf',
+    });
+    read.mockRejectedValue(new Error('包含本地路径的私有错误'));
+
+    await run(3, 3);
+
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'failed',
+        failureCode: 'asset_processing_exhausted',
+      },
+    });
+    expect(JSON.stringify(repo.settleTextExtraction.mock.calls)).not.toContain(
+      '包含本地路径',
+    );
   });
 });

@@ -34,12 +34,22 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// K12 桥接类型已有平台身份，但在 Web Renderer Registry 迁移前不进入 Studio 列表。
+const WEB_ARTIFACT_KINDS = [
+  'mind_map',
+  'slides',
+  'flashcards',
+  'note',
+  'audio_overview',
+  'generated_image',
+] as const;
+
 /**
- * 断连恢复读取面(ADR-0012):SSE 只负责实时增量,产物的权威状态永远可以
+ * 断连恢复读取面(ADR-0005):SSE 只负责实时增量,产物的权威状态永远可以
  * 从本端点重建,浏览器刷新/断连后不依赖流的连续性。
  * 只返回公开投影字段,不包含版本内容与生成参数——那些按需经产物详情获取。
  */
-export async function GET(request?: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   const conversation = await loadOwnedGeneralConversation(identity);
@@ -51,6 +61,7 @@ export async function GET(request?: Request): Promise<Response> {
     const page = await repository.listSpaceArtifactsPage({
       spaceId: conversation.spaceId,
       trustedSubjectId: identity.studentId,
+      kinds: WEB_ARTIFACT_KINDS,
       ...pagination,
     });
     return jsonResponse({
@@ -100,7 +111,7 @@ const createArtifactSchema = z.discriminatedUnion('kind', [
 
 /**
  * 产物提议 + 用户确认后的创建入口:产物行、任务账本与队列行同事务原子提交
- * (ADR-0012)。生成进度经 GET 列表/详情轮询获取;worker 未启动过的环境会
+ * (ADR-0005)。生成进度经 GET 列表/详情轮询获取;worker 未启动过的环境会
  * 诚实失败,不静默降级为同步生成。
  */
 export async function POST(request: Request): Promise<Response> {

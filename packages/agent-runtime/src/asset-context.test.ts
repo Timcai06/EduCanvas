@@ -14,6 +14,7 @@ const document = {
   mimeType: 'application/pdf',
   byteSize: 100,
   extractedText: '可信引用的正文',
+  transcriptionText: null,
 };
 
 describe('通用Asset输入物化', () => {
@@ -46,6 +47,7 @@ describe('通用Asset输入物化', () => {
             displayName: '照片.png',
             mimeType: 'image/png',
             extractedText: null,
+            transcriptionText: null,
           },
         ],
         capabilities: { nativeAssetKinds: [] },
@@ -60,6 +62,7 @@ describe('通用Asset输入物化', () => {
       displayName: '照片.png',
       mimeType: 'image/png',
       extractedText: null,
+      transcriptionText: null,
     };
     expect(
       buildAssetContext({
@@ -70,6 +73,36 @@ describe('通用Asset输入物化', () => {
       text: '',
       textSegments: [],
       nativeReferences: [image.reference],
+    });
+  });
+
+  it('使用转录文本作为音频的可用文本来源', () => {
+    const audio = {
+      reference: {
+        assetId: 'asset-2',
+        versionId: 'version-2',
+        kind: 'audio' as const,
+      },
+      displayName: '录音.mp3',
+      mimeType: 'audio/mpeg',
+      byteSize: 1000,
+      extractedText: null,
+      transcriptionText: '转录得到的文本内容',
+    };
+    expect(
+      buildAssetContext({
+        assets: [audio],
+        capabilities: { nativeAssetKinds: [] },
+      }),
+    ).toEqual({
+      text: expect.stringContaining('转录得到的文本内容'),
+      textSegments: [
+        {
+          reference: audio.reference,
+          text: expect.stringContaining('转录得到的文本内容'),
+        },
+      ],
+      nativeReferences: [],
     });
   });
 });

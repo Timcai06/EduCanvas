@@ -24,6 +24,7 @@
   position: absolute;
   top: 50%;
   left: var(--ow-inset);
+  max-width: calc(100% - var(--ow-inset) - 1rem);
   white-space: nowrap;
   font-size: min(var(--ow-font-size), 9vw);
   line-height: 1;
@@ -59,11 +60,12 @@
 }
 
 /* 来源标题可以很长（PDF 文件名），必须在轮内截断而不是撑破浮层。
-   上限按 inset 两侧留白算，右侧轮的 inset 在右边，公式对称成立。 */
+   可用宽度约束属于条目本身；若在其子元素上再次扣除 inset，短标题也会
+   按自身固有宽度重复扣减，右侧“来源”最终只剩一个汉字宽。 */
 .react-bits-option-wheel__label,
 .react-bits-option-wheel__secondary {
   display: block;
-  max-width: calc(100% - var(--ow-inset) - 1rem);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }

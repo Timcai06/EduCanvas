@@ -4,7 +4,7 @@ import { pipelineFlowSlotSchema } from './artifacts/pipeline-flow';
 /**
  * Canvas 交互事件 — 客户端到服务端的不可信输入。
  *
- * ## 与领域事件的区别（ADR-0006）
+ * ## 与领域事件的区别（ADR-0004）
  *
  * | 维度 | Canvas 交互事件（本文件） | 领域事件（teaching-core） |
  * |------|--------------------------|---------------------------|

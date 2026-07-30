@@ -1,13 +1,14 @@
-import type {
-  AgentModelRunLedgerPort,
-  AgentModelRunProviderResult,
-  AgentModelRunSnapshot,
-  AgentModelRunStatus,
-  AgentModelRunTerminalStatus,
-  CreateAgentModelRunInput,
-  ModelAlias,
-  StreamingTaskAlias,
-  TurnModelPhase,
+import {
+  modelAliasSchema,
+  streamingTaskAliasSchema,
+  turnModelPhaseSchema,
+  type AgentModelRunLedgerPort,
+  type AgentModelRunProviderResult,
+  type AgentModelRunSnapshot,
+  type AgentModelRunStatus,
+  type AgentModelRunTerminalStatus,
+  type CreateAgentModelRunInput,
+  type StreamingTaskAlias,
 } from '@educanvas/agent-core';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
@@ -28,6 +29,16 @@ type DatabaseExecutor = Database | DatabaseTransaction;
 type ConcreteCreateInput = CreateAgentModelRunInput & { now?: Date };
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const taskMessageLedger = {
+  'agent.turn': 'conversation',
+  'teaching.turn': 'teaching',
+} as const satisfies Record<StreamingTaskAlias, 'conversation' | 'teaching'>;
+
+function messageLedgerForTaskAlias(
+  taskAlias: StreamingTaskAlias,
+): 'conversation' | 'teaching' {
+  return taskMessageLedger[taskAlias];
+}
 
 export class AgentModelRunOwnershipError extends Error {
   readonly code = 'agent_model_run_not_found';
@@ -57,20 +68,28 @@ export class AgentModelRunLifecycleError extends Error {
 }
 
 function toSnapshot(row: typeof modelRuns.$inferSelect): AgentModelRunSnapshot {
+  const taskAlias = streamingTaskAliasSchema.safeParse(row.taskAlias);
+  const modelAlias = modelAliasSchema.safeParse(row.modelAlias);
+  const phase = turnModelPhaseSchema.safeParse(row.phase);
+  const expectedLedger = taskAlias.success
+    ? messageLedgerForTaskAlias(taskAlias.data)
+    : null;
   if (
     row.operationKind !== 'agent_turn' ||
     !row.agentOperationId ||
-    (row.taskAlias === 'agent.turn' &&
+    !taskAlias.success ||
+    !modelAlias.success ||
+    !phase.success ||
+    (expectedLedger === 'conversation' &&
       (row.sessionId !== null ||
         row.assistantMessageId !== null ||
         row.turnId !== null ||
         row.conversationMessageId === null)) ||
-    (row.taskAlias === 'teaching.turn' &&
+    (expectedLedger === 'teaching' &&
       (row.sessionId === null ||
         row.assistantMessageId === null ||
         row.turnId !== row.agentOperationId ||
-        row.conversationMessageId !== null)) ||
-    !['agent.turn', 'teaching.turn'].includes(row.taskAlias)
+        row.conversationMessageId !== null))
   ) {
     throw new AgentModelRunLifecycleError('Model Run不是有效agent_turn形状');
   }
@@ -78,11 +97,11 @@ function toSnapshot(row: typeof modelRuns.$inferSelect): AgentModelRunSnapshot {
     id: row.id,
     operationId: row.agentOperationId,
     assistantMessageId: row.conversationMessageId ?? row.assistantMessageId!,
-    phase: row.phase as TurnModelPhase,
+    phase: phase.data,
     attempt: row.attempt,
     traceId: row.traceId,
-    taskAlias: row.taskAlias as StreamingTaskAlias,
-    modelAlias: row.modelAlias as ModelAlias,
+    taskAlias: taskAlias.data,
+    modelAlias: modelAlias.data,
     promptVersion: row.promptVersion,
     promptHash: row.promptHash,
     provider: row.provider,
@@ -114,9 +133,9 @@ function validateCreateInput(input: ConcreteCreateInput): number {
     !UUID_PATTERN.test(input.assistantMessageId) ||
     input.actorId.length < 1 ||
     input.actorId.length > 160 ||
-    !['answer', 'synthesis'].includes(input.phase) ||
-    !['agent.turn', 'teaching.turn'].includes(input.taskAlias) ||
-    !['primary', 'fast', 'structured', 'speech'].includes(input.modelAlias) ||
+    !turnModelPhaseSchema.safeParse(input.phase).success ||
+    !streamingTaskAliasSchema.safeParse(input.taskAlias).success ||
+    !modelAliasSchema.safeParse(input.modelAlias).success ||
     input.promptVersion.length < 1 ||
     input.promptVersion.length > 128 ||
     !/^[a-f0-9]{64}$/.test(input.promptHash) ||
@@ -139,7 +158,7 @@ function immutableFieldsMatch(
     row.operationKind === 'agent_turn' &&
     row.agentOperationId === input.operationId &&
     row.operationId === input.operationId &&
-    (input.taskAlias === 'teaching.turn'
+    (messageLedgerForTaskAlias(input.taskAlias) === 'teaching'
       ? row.sessionId !== null &&
         row.assistantMessageId === input.assistantMessageId &&
         row.turnId === input.operationId &&
@@ -301,7 +320,7 @@ export class DrizzleAgentModelRunRepository implements AgentModelRunLedgerPort {
         )
         .limit(1);
       const message =
-        input.taskAlias === 'teaching.turn'
+        messageLedgerForTaskAlias(input.taskAlias) === 'teaching'
           ? teachingMessage
           : conversationMessage;
       if (!message) throw new AgentModelRunOwnershipError();
@@ -340,7 +359,7 @@ export class DrizzleAgentModelRunRepository implements AgentModelRunLedgerPort {
           operationId: input.operationId,
           operationKind: 'agent_turn',
           agentOperationId: input.operationId,
-          ...(input.taskAlias === 'teaching.turn'
+          ...(messageLedgerForTaskAlias(input.taskAlias) === 'teaching'
             ? {
                 sessionId: teachingMessage!.sessionId,
                 assistantMessageId: input.assistantMessageId,

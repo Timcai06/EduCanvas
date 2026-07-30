@@ -66,11 +66,20 @@ export {
   streamingTaskAliases,
   structuredTaskAliasSchema,
   structuredTaskAliases,
+  audioTranscriptionTaskAliasSchema,
+  audioTranscriptionTaskAliases,
+  embeddingTaskAliasSchema,
+  embeddingTaskAliases,
+  imageGenerationTaskAliasSchema,
+  imageGenerationTaskAliases,
   taskAliasSchema,
   taskAliases,
   turnModelEventSchema,
   turnModelPhaseSchema,
   turnModelPhases,
+  type AudioTranscriptionTaskAlias,
+  type EmbeddingTaskAlias,
+  type ImageGenerationTaskAlias,
   type ModelAbortSignal,
   type ModelAlias,
   type ModelFinishReason,
@@ -92,6 +101,18 @@ export {
 } from './model-contracts';
 
 export type {
+  AudioTranscriptionModelGateway,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResult,
+  EmbeddingDescriptor,
+  EmbeddingModelGateway,
+  EmbeddingPurpose,
+  EmbeddingRequest,
+  EmbeddingResult,
+  GeneratedImage,
+  ImageGenerationModelGateway,
+  ImageGenerationRequest,
+  ImageGenerationResult,
   ModelGateway,
   SpeechAudioFormat,
   SpeechModelGateway,
@@ -100,7 +121,18 @@ export type {
   StructuredModelGateway,
   StructuredModelRequest,
   StructuredModelResult,
+  SupportedAudioTranscriptionMimeType,
+  SupportedGeneratedImageMimeType,
+  SupportedGeneratedImageSize,
   TurnModelGateway,
+} from './model-gateway';
+
+export {
+  PLATFORM_EMBEDDING_DIMENSIONS,
+  embeddingPurposes,
+  supportedAudioTranscriptionMimeTypes,
+  supportedGeneratedImageMimeTypes,
+  supportedGeneratedImageSizes,
 } from './model-gateway';
 
 export {
@@ -212,3 +244,12 @@ export {
   type ObjectStoragePort,
   type StoredObject,
 } from './object-storage-contracts';
+
+export type {
+  WebRuntimeArtifactVersionReference,
+  WebRuntimeEvent,
+  WebRuntimeExecutionRequest,
+  WebRuntimeFailureCode,
+  WebRuntimePort,
+  WebRuntimeResourceLimits,
+} from './web-runtime-port';

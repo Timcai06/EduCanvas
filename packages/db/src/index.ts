@@ -17,6 +17,29 @@ export {
   type MaterializedAssetVersion,
   type OwnedStoredAssetVersion,
 } from './asset-repository';
+export {
+  ASSET_GENERATE_THUMBNAIL_TASK,
+  ASSET_RENDER_PREVIEW_TASK,
+  DrizzleAssetDerivedProcessingRepository,
+  getDerivedAssetJobKind,
+  type DerivedAssetAttempt,
+  type DerivedAssetJobKind,
+} from './asset-derived-processing-repository';
+export {
+  ASSET_TRANSCRIBE_AUDIO_TASK,
+  DrizzleAssetTranscriptionRepository,
+  type AudioTranscriptionAttempt,
+  type AudioTranscriptionMetadata,
+  type AudioTranscriptionOutcome,
+} from './asset-transcription-repository';
+export {
+  ASSET_PROCESS_VIDEO_TASK,
+  DrizzleAssetVideoRepository,
+  type VideoKeyframeRecord,
+  type VideoProcessingAttempt,
+  type VideoProcessingOutcome,
+  type VideoTranscriptionMetadata,
+} from './asset-video-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
   DrizzlePlatformConversationRepository,
@@ -330,6 +353,23 @@ export {
   type TurnSourceVersionSnapshot,
 } from './knowledge-retrieval-repository';
 export {
+  DrizzleKnowledgeHybridRetrieval,
+  HYBRID_LEXICAL_FALLBACK_VERSION,
+  HYBRID_RETRIEVER,
+  HYBRID_RETRIEVER_VERSION,
+  LEXICAL_RETRIEVER,
+  type EmbeddingIdentity,
+  type HybridRetrievalResult,
+} from './knowledge-hybrid-retrieval';
+export {
+  DrizzleKnowledgeEmbeddingRepository,
+  KnowledgeEmbeddingRunNotFoundError,
+  MAX_EMBEDDING_WRITE_BATCH,
+  type KnowledgeEmbeddingRunSnapshot,
+  type KnowledgeEmbeddingRunStatus,
+  type PendingEmbeddingChunk,
+} from './knowledge-embedding-repository';
+export {
   NotebookAccessNotFoundError,
   requireNotebookAccess,
   resolveNotebookAccess,
@@ -352,3 +392,25 @@ export {
   type CursorPage,
   type TemporalIdCursor,
 } from './pagination';
+export {
+  DrizzleUnifiedMessageHistoryRepository,
+  MessageHistoryAccessError,
+  type ListMessageHistoryInput,
+  type MessageHistoryCursor,
+  type MessageHistoryItem,
+  type MessageHistoryPage,
+  type MessageHistoryRole,
+  type MessageHistorySource,
+  type MessageHistoryStatus,
+  type UnifiedMessageHistoryPort,
+} from './unified-message-history';
+export { isK12ConversationDualWriteEnabled } from './k12-conversation-dual-write';
+export {
+  deterministicConversationMessageId,
+  K12ConversationDualWriteInvariantError,
+} from './k12-conversation-message-identity';
+export {
+  auditK12Parity,
+  type K12ParityAuditCursor,
+  type ParityAuditResult,
+} from './k12-conversation-parity';

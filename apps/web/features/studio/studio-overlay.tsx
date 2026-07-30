@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { X } from '@phosphor-icons/react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * Studio 的透明浮层。它只为 OptionWheel 与动作气泡提供定位空间，不绘制面板、
@@ -14,12 +15,22 @@ export function StudioOverlay({
   children: React.ReactNode;
 }) {
   const rootRef = useRef<HTMLElement>(null);
+  const closeAndRestoreFocus = useCallback(() => {
+    onClose();
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[aria-controls="notebook-studio-layer"]',
+        )
+        ?.focus();
+    });
+  }, [onClose]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      onClose();
+      closeAndRestoreFocus();
     };
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -35,7 +46,7 @@ export function StudioOverlay({
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [onClose]);
+  }, [closeAndRestoreFocus, onClose]);
 
   return (
     <aside
@@ -44,6 +55,14 @@ export function StudioOverlay({
       aria-label="当前笔记本的 Studio"
       className="pointer-events-none fixed right-0 top-16 z-30 h-[min(34rem,calc(100dvh-4rem))] w-full max-w-[58rem] overflow-visible"
     >
+      <button
+        type="button"
+        aria-label="关闭 Studio"
+        onClick={closeAndRestoreFocus}
+        className="pointer-events-auto absolute right-4 top-2 flex size-9 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <X aria-hidden="true" size={18} weight="bold" />
+      </button>
       {children}
     </aside>
   );

@@ -11,6 +11,7 @@ import {
   Headphones,
   Slideshow,
   PresentationChart,
+  Image,
   type Icon,
 } from '@phosphor-icons/react';
 
@@ -37,6 +38,7 @@ const kindIcons: Record<string, Icon> = {
   slides: Slideshow,
   flashcards: Cards,
   audio_overview: Headphones,
+  generated_image: Image,
 };
 
 /**

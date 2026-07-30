@@ -19,7 +19,13 @@
  *
  * - deepseek: 仅本地/开发环境可用，staging/production 禁止
  * - openai-compatible: 全环境可用
- * - speech 仅 openai-compatible provider 支持（DeepSeek 无 TTS）
+ * - speech / transcription / image / embedding 仅 openai-compatible provider 支持（DeepSeek 无这些能力）
+ *
+ * ## 文件职责
+ *
+ * 本文件只负责核心 Provider 路由：环境、Provider、Runtime、Base URL、Key 与文本
+ * 模型别名。媒体能力（语音、转录、图像）的别名与配额解析在 `config-media.ts`；
+ * 两者共享的错误码与解析原语在 `config-primitives.ts`。
  *
  * ## 安全
  *
@@ -27,64 +33,45 @@
  */
 
 import type { ModelAlias } from '@educanvas/agent-core';
+import {
+  parseMediaCapabilityLimits,
+  parseMediaModelAliases,
+  type MediaCapabilityLimits,
+} from './config-media';
+import {
+  deploymentEnvironments,
+  isOneOf,
+  ModelGatewayConfigurationError,
+  openAICompatibleProviders,
+  parseBoolean,
+  parseBoundedInteger,
+  parseModelId,
+  parseProviderApiKey,
+  parseProviderBaseUrl,
+  trimmed,
+  turnModelGatewayRuntimes,
+  type DeploymentEnvironment,
+  type ModelGatewayEnvironment,
+  type OpenAICompatibleProvider,
+  type TurnModelGatewayRuntime,
+} from './config-primitives';
+import {
+  parseVisionProviderConfiguration,
+  type VisionProviderConfiguration,
+} from './config-vision';
 
-export const deploymentEnvironments = [
-  'local',
-  'development',
-  'shared-dev',
-  'test',
-  'staging',
-  'production',
-] as const;
-
-export type DeploymentEnvironment = (typeof deploymentEnvironments)[number];
-
-/** 当前 OpenAI-compatible Adapter 家族的配置闭集，不是平台级 Provider Registry。 */
-export const openAICompatibleProviders = [
-  'deepseek',
-  'openai-compatible',
-] as const;
-
-export type OpenAICompatibleProvider =
-  (typeof openAICompatibleProviders)[number];
-
-/** Turn Provider Adapter 的显式生产实现；native始终保留为默认回滚路径。 */
-export const turnModelGatewayRuntimes = ['native', 'ai-sdk'] as const;
-
-/** Turn Provider Adapter实现类型；只能由服务端组合根配置。 */
-export type TurnModelGatewayRuntime = (typeof turnModelGatewayRuntimes)[number];
-
-export const modelGatewayConfigurationErrorCodes = [
-  'INVALID_ENVIRONMENT',
-  'INVALID_PROVIDER',
-  'INVALID_RUNTIME',
-  'DEEPSEEK_FORBIDDEN',
-  'INVALID_BOOLEAN',
-  'MISSING_BASE_URL',
-  'INVALID_BASE_URL',
-  'MISSING_API_KEY',
-  'INVALID_API_KEY',
-  'MISSING_PRIMARY_MODEL',
-  'INVALID_MODEL_ID',
-  'INVALID_TIMEOUT',
-  'INVALID_MAX_OUTPUT_TOKENS',
-  'SPEECH_UNSUPPORTED_PROVIDER',
-  'INVALID_SPEECH_VOICE',
-  'INVALID_SPEECH_TIMEOUT',
-  'INVALID_SPEECH_MAX_INPUT_CHARS',
-] as const;
-
-export type ModelGatewayConfigurationErrorCode =
-  (typeof modelGatewayConfigurationErrorCodes)[number];
-
-/** 配置异常只暴露稳定码，不能把 secret 或原始环境变量拼入消息。 */
-export class ModelGatewayConfigurationError extends Error {
-  override readonly name = 'ModelGatewayConfigurationError';
-
-  constructor(readonly code: ModelGatewayConfigurationErrorCode) {
-    super(code);
-  }
-}
+export {
+  deploymentEnvironments,
+  ModelGatewayConfigurationError,
+  modelGatewayConfigurationErrorCodes,
+  openAICompatibleProviders,
+  turnModelGatewayRuntimes,
+  type DeploymentEnvironment,
+  type ModelGatewayConfigurationErrorCode,
+  type ModelGatewayEnvironment,
+  type OpenAICompatibleProvider,
+  type TurnModelGatewayRuntime,
+} from './config-primitives';
 
 export interface DisabledModelGatewayConfiguration {
   enabled: false;
@@ -92,7 +79,7 @@ export interface DisabledModelGatewayConfiguration {
   reason: 'not_configured' | 'deepseek_not_enabled';
 }
 
-export interface EnabledModelGatewayConfiguration {
+export interface EnabledModelGatewayConfiguration extends MediaCapabilityLimits {
   enabled: true;
   environment: DeploymentEnvironment;
   provider: OpenAICompatibleProvider;
@@ -111,109 +98,49 @@ export interface EnabledModelGatewayConfiguration {
    * 由部署方按实际所选模型开启（`MODEL_GATEWAY_VISION=true`）。
    */
   visionEnabled: boolean;
-  speechVoice: string;
-  speechTimeoutMs: number;
-  speechMaxInputChars: number;
+  /**
+   * 独立的视觉 Provider；未配置时为 null。主 Provider 只有文本能力时用它承接
+   * 图片输入，与 `visionEnabled` 互斥（ADR-0017）。
+   */
+  visionProvider: VisionProviderConfiguration | null;
+  /**
+   * 是否在请求体中固定发送 `thinking: { type: 'disabled' }`。
+   *
+   * DeepSeek 由协议已知必关，不依赖本字段。本字段供其他默认开启思考的
+   * OpenAI-compatible 供应商使用：EduCanvas 不保留 CoT，推理内容会白白吃掉
+   * 输出预算。不做默认开启是因为 OpenAI 等供应商不认识该字段会整轮 400。
+   */
+  disableThinking: boolean;
+}
+
+/**
+ * 本次部署能否接受图片输入——无论来自主 Provider 自身还是独立视觉 Provider。
+ *
+ * 物化层只关心「图片进不进得来」，不关心它最终走哪条链路，因此把两个配置来源
+ * 收敛成这一个判据，避免调用方各自拼 `||` 而漏掉其中一种。
+ */
+export function acceptsImageInput(
+  configuration: ModelGatewayConfiguration,
+): boolean {
+  return (
+    configuration.enabled &&
+    (configuration.visionEnabled || configuration.visionProvider !== null)
+  );
 }
 
 export type ModelGatewayConfiguration =
   DisabledModelGatewayConfiguration | EnabledModelGatewayConfiguration;
-
-export type ModelGatewayEnvironment = Readonly<
-  Record<string, string | undefined>
->;
-
-const isOneOf = <Value extends string>(
-  value: string,
-  candidates: readonly Value[],
-): value is Value => candidates.includes(value as Value);
-
-const trimmed = (value: string | undefined): string | undefined => {
-  const result = value?.trim();
-  return result === undefined || result.length === 0 ? undefined : result;
-};
-
-const parseBoolean = (value: string | undefined): boolean => {
-  if (value === undefined || value === '') return false;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  throw new ModelGatewayConfigurationError('INVALID_BOOLEAN');
-};
-
-const parseInteger = (
-  value: string | undefined,
-  fallback: number,
-  bounds: { min: number; max: number },
-  code: ModelGatewayConfigurationErrorCode,
-): number => {
-  if (value === undefined || value.trim() === '') return fallback;
-  const parsed = Number(value);
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < bounds.min ||
-    parsed > bounds.max
-  ) {
-    throw new ModelGatewayConfigurationError(code);
-  }
-  return parsed;
-};
-
-const parseModelId = (
-  value: string | undefined,
-  required: boolean,
-): string | undefined => {
-  const modelId = trimmed(value);
-  if (modelId === undefined) {
-    if (required) {
-      throw new ModelGatewayConfigurationError('MISSING_PRIMARY_MODEL');
-    }
-    return undefined;
-  }
-  if (modelId.length > 256 || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(modelId)) {
-    throw new ModelGatewayConfigurationError('INVALID_MODEL_ID');
-  }
-  return modelId;
-};
-
-const parseSpeechVoice = (value: string | undefined): string => {
-  const voice = trimmed(value) ?? 'alloy';
-  if (voice.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(voice)) {
-    throw new ModelGatewayConfigurationError('INVALID_SPEECH_VOICE');
-  }
-  return voice;
-};
 
 const parseBaseUrl = (
   value: string | undefined,
   environment: DeploymentEnvironment,
   provider: OpenAICompatibleProvider,
 ): string => {
-  const raw = trimmed(value);
-  if (raw === undefined) {
-    throw new ModelGatewayConfigurationError('MISSING_BASE_URL');
-  }
-
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
-  if (
-    url.username !== '' ||
-    url.password !== '' ||
-    url.search !== '' ||
-    url.hash !== '' ||
-    !['http:', 'https:'].includes(url.protocol)
-  ) {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
-  if (
-    ['staging', 'production'].includes(environment) &&
-    url.protocol !== 'https:'
-  ) {
-    throw new ModelGatewayConfigurationError('INVALID_BASE_URL');
-  }
+  const url = parseProviderBaseUrl(value, environment, {
+    missing: 'MISSING_BASE_URL',
+    invalid: 'INVALID_BASE_URL',
+  });
+  /* DeepSeek 锁定官方 hostname：开发期误配成第三方中转会把 Key 送到非授权端点。 */
   if (
     provider === 'deepseek' &&
     (url.protocol !== 'https:' || url.hostname !== 'api.deepseek.com')
@@ -222,6 +149,12 @@ const parseBaseUrl = (
   }
   return url.toString().replace(/\/$/, '');
 };
+
+const parseApiKey = (value: string | undefined): string =>
+  parseProviderApiKey(value, {
+    missing: 'MISSING_API_KEY',
+    invalid: 'INVALID_API_KEY',
+  });
 
 /**
  * 从显式传入的环境记录解析配置；函数不会主动读取 process.env，便于组合根控制。
@@ -273,13 +206,7 @@ export function parseModelGatewayConfiguration(
     };
   }
 
-  const apiKey = trimmed(environmentValues.MODEL_GATEWAY_API_KEY);
-  if (apiKey === undefined) {
-    throw new ModelGatewayConfigurationError('MISSING_API_KEY');
-  }
-  if (apiKey.length > 4_096 || !/^[\x21-\x7e]+$/.test(apiKey)) {
-    throw new ModelGatewayConfigurationError('INVALID_API_KEY');
-  }
+  const apiKey = parseApiKey(environmentValues.MODEL_GATEWAY_API_KEY);
   const primary = parseModelId(
     environmentValues.MODEL_GATEWAY_PRIMARY_MODEL,
     true,
@@ -292,18 +219,13 @@ export function parseModelGatewayConfiguration(
     environmentValues.MODEL_GATEWAY_STRUCTURED_MODEL,
     false,
   );
-  const speech = parseModelId(
-    environmentValues.MODEL_GATEWAY_SPEECH_MODEL,
-    false,
-  );
-  if (speech !== undefined && provider !== 'openai-compatible') {
-    throw new ModelGatewayConfigurationError('SPEECH_UNSUPPORTED_PROVIDER');
-  }
+  const mediaAliases = parseMediaModelAliases(environmentValues, provider);
+  const visionEnabled = parseBoolean(environmentValues.MODEL_GATEWAY_VISION);
   const modelIds: EnabledModelGatewayConfiguration['modelIds'] = {
     primary,
     ...(fast === undefined ? {} : { fast }),
     ...(structured === undefined ? {} : { structured }),
-    ...(speech === undefined ? {} : { speech }),
+    ...mediaAliases,
   };
 
   return {
@@ -318,31 +240,28 @@ export function parseModelGatewayConfiguration(
     ),
     apiKey,
     modelIds,
-    timeoutMs: parseInteger(
+    timeoutMs: parseBoundedInteger(
       environmentValues.MODEL_GATEWAY_TIMEOUT_MS,
       30_000,
       { min: 1_000, max: 120_000 },
       'INVALID_TIMEOUT',
     ),
-    maxOutputTokens: parseInteger(
+    maxOutputTokens: parseBoundedInteger(
       environmentValues.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
       2_048,
       { min: 1, max: 65_536 },
       'INVALID_MAX_OUTPUT_TOKENS',
     ),
-    visionEnabled: parseBoolean(environmentValues.MODEL_GATEWAY_VISION),
-    speechVoice: parseSpeechVoice(environmentValues.MODEL_GATEWAY_SPEECH_VOICE),
-    speechTimeoutMs: parseInteger(
-      environmentValues.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
-      60_000,
-      { min: 1_000, max: 180_000 },
-      'INVALID_SPEECH_TIMEOUT',
+    visionEnabled,
+    visionProvider: parseVisionProviderConfiguration(
+      environmentValues,
+      environment,
+      visionEnabled,
     ),
-    speechMaxInputChars: parseInteger(
-      environmentValues.MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS,
-      3_500,
-      { min: 80, max: 4_096 },
-      'INVALID_SPEECH_MAX_INPUT_CHARS',
+    /* 主 Provider 自身的思考开关；视觉链路有独立的同名配置，见 config-vision.ts。 */
+    disableThinking: parseBoolean(
+      environmentValues.MODEL_GATEWAY_DISABLE_THINKING,
     ),
+    ...parseMediaCapabilityLimits(environmentValues, mediaAliases),
   };
 }

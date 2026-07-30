@@ -1,11 +1,17 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+import {
+  AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
+  VIDEO_SOURCE_MAX_INPUT_BYTES,
+} from '@educanvas/asset-processing';
 import {
   AssetAccessError,
   DrizzleAssetRepository,
   type OwnedStoredAssetVersion,
 } from '@educanvas/db';
 import mammoth from 'mammoth';
+import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { projectOwnedSourceResource } from '../canvas/source-resource-adapter';
 import { readStoredAssetBytes } from './asset-storage';
@@ -18,7 +24,22 @@ const BINARY_PREVIEW_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/webp',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/flac',
+  'audio/webm',
+  'audio/mp4',
+  'audio/x-m4a',
+  'video/mp4',
+  'video/quicktime',
 ]);
+const transcriptionMetadataSchema = z
+  .object({
+    language: z.string().max(64).nullable(),
+    durationSeconds: z.number().finite().positive().max(3_600),
+  })
+  .passthrough();
 
 export class AssetPreviewError extends Error {
   constructor(
@@ -37,6 +58,25 @@ async function loadStoredVersion(input: {
 }): Promise<OwnedStoredAssetVersion> {
   try {
     return await assets.loadOwnedCurrentStoredVersion({
+      ownerSubjectId: input.identity.studentId,
+      spaceId: input.spaceId,
+      assetId: input.assetId,
+    });
+  } catch (error) {
+    if (error instanceof AssetAccessError) {
+      throw new AssetPreviewError('asset_not_found', 404);
+    }
+    throw error;
+  }
+}
+
+async function loadAccessPolicy(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  assetId: string;
+}) {
+  try {
+    return await assets.getAccessPolicy({
       ownerSubjectId: input.identity.studentId,
       spaceId: input.spaceId,
       assetId: input.assetId,
@@ -69,11 +109,7 @@ export async function loadOwnedAssetPreviewDetail(input: {
 }): Promise<{ preview: AssetPreview; canvasResource: CanvasResource }> {
   const [version, policy] = await Promise.all([
     loadStoredVersion(input),
-    assets.getAccessPolicy({
-      ownerSubjectId: input.identity.studentId,
-      spaceId: input.spaceId,
-      assetId: input.assetId,
-    }),
+    loadAccessPolicy(input),
   ]);
   const fileUrl = `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}/file`;
   const canvasResource = projectOwnedSourceResource({
@@ -117,24 +153,24 @@ export async function loadOwnedAssetPreviewDetail(input: {
       canvasResource,
     };
   }
-  if (version.mimeType === 'text/markdown' && version.extractedText) {
+  if (version.mimeType === 'text/markdown') {
     return {
       preview: {
         kind: 'markdown',
         fileName: version.displayName,
         mimeType: 'text/markdown',
-        content: version.extractedText.slice(0, 120_000),
+        content: (version.extractedText ?? '').slice(0, 120_000),
       },
       canvasResource,
     };
   }
-  if (version.mimeType === 'text/plain' && version.extractedText) {
+  if (version.mimeType === 'text/plain') {
     return {
       preview: {
         kind: 'text',
         fileName: version.displayName,
         mimeType: 'text/plain',
-        content: version.extractedText.slice(0, 120_000),
+        content: (version.extractedText ?? '').slice(0, 120_000),
       },
       canvasResource,
     };
@@ -159,6 +195,77 @@ export async function loadOwnedAssetPreviewDetail(input: {
       canvasResource,
     };
   }
+  if (
+    version.mimeType === 'audio/mpeg' ||
+    version.mimeType === 'audio/wav' ||
+    version.mimeType === 'audio/ogg' ||
+    version.mimeType === 'audio/flac' ||
+    version.mimeType === 'audio/webm' ||
+    version.mimeType === 'audio/mp4' ||
+    version.mimeType === 'audio/x-m4a'
+  ) {
+    /**
+     * 转录文本是派生内容，存储在 transcriptionText 列。
+     * transcriptionMetadata 只包含仓储白名单重建的安全审计子集，
+     * 不包含 Provider response id、Prompt 正文或原始供应商响应体。
+     */
+    const parsedMetadata = transcriptionMetadataSchema.safeParse(
+      version.transcriptionMetadata,
+    );
+    const transcriptionMeta = parsedMetadata.success
+      ? parsedMetadata.data
+      : null;
+    return {
+      preview: {
+        kind: 'audio' as const,
+        fileName: version.displayName,
+        mimeType: version.mimeType,
+        fileUrl,
+        transcription: version.transcriptionText
+          ? {
+              text: version.transcriptionText.slice(0, 500_000),
+              language: transcriptionMeta?.language ?? null,
+              durationSeconds: transcriptionMeta?.durationSeconds ?? null,
+            }
+          : null,
+      },
+      canvasResource,
+    };
+  }
+  if (
+    version.mimeType === 'video/mp4' ||
+    version.mimeType === 'video/quicktime'
+  ) {
+    const parsedMetadata = transcriptionMetadataSchema.safeParse(
+      version.transcriptionMetadata,
+    );
+    const transcriptionMeta = parsedMetadata.success
+      ? parsedMetadata.data
+      : null;
+    const derivativeStatus = new Map(
+      version.derivedStatuses.map((item) => [item.kind, item.status]),
+    );
+    return {
+      preview: {
+        kind: 'video',
+        fileName: version.displayName,
+        mimeType: version.mimeType,
+        fileUrl,
+        transcription: version.transcriptionText
+          ? {
+              text: version.transcriptionText.slice(0, 500_000),
+              language: transcriptionMeta?.language ?? null,
+              durationSeconds: transcriptionMeta?.durationSeconds ?? null,
+            }
+          : null,
+        derivatives: {
+          transcription: derivativeStatus.get('transcription') ?? 'unavailable',
+          keyframes: derivativeStatus.get('keyframes') ?? 'unavailable',
+        },
+      },
+      canvasResource,
+    };
+  }
   throw new AssetPreviewError('preview_unavailable', 422);
 }
 
@@ -176,9 +283,15 @@ export async function readOwnedAssetPreviewFile(input: {
     throw new AssetPreviewError('preview_unavailable', 422);
   }
   const bytes = await readStoredAssetBytes(version.storageKey);
+  const maxBytes = version.mimeType.startsWith('audio/')
+    ? AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES
+    : version.mimeType.startsWith('video/')
+      ? VIDEO_SOURCE_MAX_INPUT_BYTES
+      : 10 * 1024 * 1024;
   if (
     bytes.byteLength !== version.byteSize ||
-    bytes.byteLength > 10 * 1024 * 1024
+    bytes.byteLength > maxBytes ||
+    createHash('sha256').update(bytes).digest('hex') !== version.contentHash
   ) {
     throw new AssetPreviewError('preview_unavailable', 422);
   }

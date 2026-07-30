@@ -25,6 +25,7 @@ import {
   WebGeneralLifecycle,
 } from './general-turn-lifecycle';
 import { WebOperationArtifacts } from './general-artifact-tool';
+import { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import {
   createGeneralToolKernel,
@@ -70,14 +71,35 @@ export function beginGatewayGeneralTurnApplication(input: {
     spaceId: input.route.notebookId,
     operationId: input.operationId,
   });
-  const tools = createGeneralToolKernel(operationSources, operationArtifacts);
+  const operationImages = new WebOperationImageArtifacts({
+    identity: input.identity,
+    conversationId: input.route.conversationId,
+    spaceId: input.route.notebookId,
+    operationId: input.operationId,
+  });
+  const tools = createGeneralToolKernel(
+    operationSources,
+    operationArtifacts,
+    operationImages,
+  );
   const runtime = resolveTurnModelRuntime();
+  /**
+   * 只有本轮真的带了原生图片才切到视觉 Provider：视觉模型通常在纯文本推理、
+   * 长上下文和工具调用上弱于主模型，无条件替换会让绝大多数不含图片的教学 Turn
+   * 一起降级（ADR-0017）。未配置视觉 Provider 时 nativeImages 恒为空，物化层
+   * 已在更早的位置明确拒绝过图片。
+   */
+  const modelGateway =
+    input.assetContext.nativeImages.length > 0 && runtime?.visionGateway
+      ? runtime.visionGateway
+      : (runtime?.gateway ?? unavailableModelGateway);
   const service = new TurnApplicationService({
     lifecycle: new WebGeneralLifecycle(input.identity),
     profile: new WebGeneralProfile(
       input.assetContext,
       operationSources,
       operationArtifacts,
+      operationImages,
       input.request.outputPreference === 'canvas',
       tools.staticCapabilities,
       tools.nodeInvocations,
@@ -85,7 +107,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     ),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
-    modelGateway: runtime?.gateway ?? unavailableModelGateway,
+    modelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),
     trace: getWebTelemetryRuntime().turnTrace,

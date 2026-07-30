@@ -17,6 +17,7 @@ import {
   defineTeachingTool,
 } from '@educanvas/teaching-runtime';
 import { z } from 'zod';
+import { retrieveTeachingEvidence } from './knowledge-retrieval-runtime';
 
 const studentStateOutputSchema = z
   .object({
@@ -116,7 +117,9 @@ const retrieveKnowledgeTool = defineTeachingTool({
       sessionId: context.sessionId,
       turnId: context.turnId,
     });
-    const result = await repository.retrieveFts({
+    /* 混合检索在词法基础上叠加语义召回；未配置向量能力、查询向量生成失败或
+       ANN 超时都会自动退回纯 FTS，工具输出形状不变（ADR-0015）。 */
+    const result = await retrieveTeachingEvidence({
       trustedStudentId: context.studentId,
       sessionId: context.sessionId,
       turnId: context.turnId,

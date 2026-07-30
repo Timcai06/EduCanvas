@@ -10,7 +10,7 @@
  * - 误区惩罚（活跃误区 → 分数降低）
  * - 先修上限（前驱知识未掌握 → 当前分数被 cap）
  *
- * ## 公式（ADR-0005 确认）
+ * ## 公式（见 docs/03-ai/02-掌握度与误区.md）
  *
  * ```
  * score = previousWeight × recencyAdjustedPrevious + evidenceWeight × evidence
@@ -94,7 +94,7 @@ export type MasteryConfig = z.infer<typeof masteryConfigSchema>;
 /** 默认掌握度策略的稳定版本；事件同时保存完整参数以支持确定性历史回放。 */
 export const DEFAULT_MASTERY_POLICY_VERSION = 'mastery-v1' as const;
 
-/** ADR-0005确认的初始默认值；试点后通过配置整体替换。 */
+/** 当前掌握度模型的初始默认值；试点后通过配置整体替换。 */
 export const defaultMasteryConfig: Readonly<MasteryConfig> = Object.freeze(
   masteryConfigSchema.parse({
     recencyDecayRate: 0.035,
@@ -154,7 +154,7 @@ export interface MasteryCalculation {
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
 
-/** 根据ADR-0005的确定性公式计算掌握度及全部解释因子。 */
+/** 根据当前确定性公式计算掌握度及全部解释因子。 */
 export function calculateMastery(
   rawInput: MasteryInput,
   config: Readonly<MasteryConfig> = defaultMasteryConfig,

@@ -24,6 +24,8 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
+  forbidOnly: Boolean(process.env.CI),
+  failOnFlakyTests: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   outputDir: 'output/playwright/test-results',
   reporter: [
@@ -57,6 +59,9 @@ export default defineConfig({
       EDUCANVAS_ENABLE_DESIGN_QA: 'true',
       MODEL_GATEWAY_PROVIDER: '',
       MODEL_GATEWAY_API_KEY: '',
+      /* E2E 的原始 Asset 与 Worker 派生物共用同一个隔离根；否则 Web 读取
+         默认 uploads、Worker 读取 OBJECT_STORAGE_ROOT，会让真实预览链断开。 */
+      ASSET_STORAGE_ROOT: objectStorageRoot,
       OBJECT_STORAGE_ROOT: objectStorageRoot,
     },
     reuseExistingServer: false,

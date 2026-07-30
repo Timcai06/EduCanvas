@@ -1,7 +1,9 @@
 import 'server-only';
 
 import {
+  audioOverviewMetadataSchema,
   canvasResourceSchema,
+  generatedImageMetadataSchema,
   type CanvasRepresentationKind,
   type CanvasResource,
   type CanvasResourceAction,
@@ -14,6 +16,59 @@ import type {
   PlatformArtifactVersion,
 } from '@educanvas/db';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
+
+function projectMediaGenerator(
+  kind: string,
+  metadata: unknown,
+): CanvasResource['provenance']['generator'] {
+  if (kind === 'audio_overview') {
+    const parsed = audioOverviewMetadataSchema.safeParse(metadata);
+    if (!parsed.success) return null;
+    return {
+      provider: parsed.data.speech.provider,
+      model: parsed.data.speech.resolvedModelId,
+      promptSummary: null,
+    };
+  }
+  if (kind === 'generated_image') {
+    const parsed = generatedImageMetadataSchema.safeParse(metadata);
+    if (!parsed.success) return null;
+    return {
+      provider: parsed.data.image.provider,
+      model: parsed.data.image.resolvedModelId,
+      promptSummary: null,
+    };
+  }
+  return null;
+}
+
+function projectSourceResourceIds(
+  kind: string,
+  version: PlatformArtifactVersion | null,
+  job: PlatformArtifactJob | null,
+): string[] {
+  if (
+    kind !== 'audio_overview' ||
+    !version?.generationJobId ||
+    version.generationJobId !== job?.id
+  ) {
+    return [];
+  }
+  const selectedSources = job.params.selectedSources;
+  if (!Array.isArray(selectedSources)) return [];
+  return [
+    ...new Set(
+      selectedSources.flatMap((reference) =>
+        typeof reference === 'object' &&
+        reference !== null &&
+        'assetId' in reference &&
+        typeof reference.assetId === 'string'
+          ? [reference.assetId]
+          : [],
+      ),
+    ),
+  ];
+}
 
 const ARTIFACT_RENDERERS = {
   mind_map: {
@@ -44,6 +99,14 @@ const ARTIFACT_RENDERERS = {
     representation: 'audio',
     mimeType: 'audio/mpeg',
     rendererId: 'artifact.audio-overview',
+    trustTier: 'tier2',
+  },
+  /* 生成位图不是判分型白名单内容，因此固定 tier2；MIME 只作为渲染声明，
+     实际字节的格式由读取面按落库 metadata 回答，浏览器不参与判断。 */
+  generated_image: {
+    representation: 'image',
+    mimeType: 'image/png',
+    rendererId: 'artifact.generated-image',
     trustTier: 'tier2',
   },
 } as const satisfies Record<
@@ -81,8 +144,16 @@ function projectStatus(
   if (job?.status === 'queued' || job?.status === 'running') {
     return 'processing';
   }
-  if (version) return 'ready';
+  if (
+    job &&
+    !['queued', 'running', 'succeeded', 'failed', 'cancelled'].includes(
+      job.status as string,
+    )
+  ) {
+    return 'unavailable';
+  }
   if (job?.status === 'failed' || job?.status === 'cancelled') return 'failed';
+  if (version) return 'ready';
   return 'unavailable';
 }
 
@@ -95,9 +166,18 @@ function projectActions(
   if (!hasVersion) return [];
   if (status === 'processing' || status === 'archived') return ['view'];
   if (status !== 'ready') return [];
-  if (accessRole === 'viewer') return ['view'];
+  if (accessRole === 'viewer' || accessRole === 'contributor') {
+    /* 只读角色可查看和下载媒体产物，但不可删除。 */
+    if (kind === 'audio_overview' || kind === 'generated_image')
+      return ['view', 'download'];
+    return ['view'];
+  }
   if (kind === 'note') return ['view', 'edit', 'regenerate'];
-  if (kind === 'audio_overview') return ['view'];
+  /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
+     这两类；不开放 regenerate 才与实际后端能力一致。
+     删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
+  if (kind === 'audio_overview' || kind === 'generated_image')
+    return ['view', 'download', 'delete'];
   return ['view', 'regenerate'];
 }
 
@@ -165,9 +245,13 @@ export function projectOwnedArtifactResource(input: {
       createdBy:
         input.version?.generatedBy === 'user:manual' ? 'user' : 'agent',
       createdAt: input.version?.createdAt ?? input.artifact.createdAt,
-      sourceResourceIds: [],
-      operationId: null,
-      generator: null,
+      sourceResourceIds: projectSourceResourceIds(
+        kind,
+        input.version,
+        input.latestJob,
+      ),
+      operationId: input.version?.createdByOperationId ?? null,
+      generator: projectMediaGenerator(kind, input.version?.metadata),
     },
     runtime: { kind: 'none' },
   });

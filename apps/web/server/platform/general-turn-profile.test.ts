@@ -8,6 +8,7 @@ import type { NodeInvocationPersistencePort } from '@educanvas/node-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webGeneralTurns } from './general-turn-persistence';
 import type { WebOperationArtifacts } from './general-artifact-tool';
+import type { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import type { WebOperationSources } from './general-turn-tools';
 
@@ -64,6 +65,7 @@ function createProfile(input?: {
   membershipRole?: 'owner' | 'editor' | 'contributor' | 'viewer';
   staticToolCapabilities?: readonly string[];
   operationArtifacts?: WebOperationArtifacts;
+  operationImages?: WebOperationImageArtifacts;
   preferCanvas?: boolean;
   assetContext?: MaterializedAssetPlan;
 }) {
@@ -72,6 +74,8 @@ function createProfile(input?: {
     { sourceCount: 0 } as unknown as WebOperationSources,
     input?.operationArtifacts ??
       ({ events: () => [] } as unknown as WebOperationArtifacts),
+    input?.operationImages ??
+      ({ events: () => [] } as unknown as WebOperationImageArtifacts),
     input?.preferCanvas ?? false,
     input?.staticToolCapabilities ?? ['web.fetch', 'web.search'],
     input?.nodeInvocations ?? createNodeInvocations(),

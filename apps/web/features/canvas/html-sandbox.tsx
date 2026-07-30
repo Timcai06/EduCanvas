@@ -7,7 +7,7 @@ import {
 } from './sandbox-preview';
 
 /**
- * Tier 2 沙箱执行面（ADR-0010）。模型 HTML 只在这里运行：
+ * Tier 2 沙箱执行面（ADR-0004）。模型 HTML 只在这里运行：
  * 无 same-origin、无网络（文档级 CSP）、无弹窗与顶层导航。
  * v1 是纯展示型沙箱，不建立 postMessage 桥；沙箱内交互不产生任何可信学习事件。
  */

@@ -20,6 +20,11 @@ import { createFetchWebPageTool, type FetchedWebPage } from '../tools/web-page';
 import { createPlanNoteTool } from '../tools/plan-note';
 import { resolveWebSearchTool } from '../tools/web-search';
 import type { WebOperationArtifacts } from './general-artifact-tool';
+import {
+  IMAGE_GENERATION_CAPABILITY,
+  isImageGenerationConfigured,
+  type WebOperationImageArtifacts,
+} from './general-image-tool';
 import { webGeneralSources } from './general-turn-persistence';
 
 const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
@@ -76,6 +81,7 @@ export class WebOperationSources {
 export function createGeneralToolKernel(
   operationSources: WebOperationSources,
   operationArtifacts: WebOperationArtifacts,
+  operationImages: WebOperationImageArtifacts,
 ): {
   kernel: ToolKernel;
   staticCapabilities: readonly string[];
@@ -109,6 +115,17 @@ export function createGeneralToolKernel(
             capability: 'web.search',
             risk: 'l0',
             effect: 'read',
+          }),
+        ]
+      : []),
+    /* 图像生成默认不注册：未配置图像模型的部署里能力根本不存在，五维交集
+       因此自然拒绝，模型也看不到这个工具，不会声称自己能画图。 */
+    ...(isImageGenerationConfigured()
+      ? [
+          adaptAgentTool(operationImages.createTool(), {
+            capability: IMAGE_GENERATION_CAPABILITY,
+            risk: 'l1',
+            effect: 'write',
           }),
         ]
       : []),

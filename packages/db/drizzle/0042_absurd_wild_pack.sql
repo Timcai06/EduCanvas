@@ -1,0 +1,1 @@
+ALTER TABLE "canvas_artifacts" ADD CONSTRAINT "canvas_artifacts_platform_version_scope_fk" FOREIGN KEY ("platform_artifact_version_id","platform_artifact_id") REFERENCES "public"."artifact_versions"("id","artifact_id") ON DELETE set null ON UPDATE no action;

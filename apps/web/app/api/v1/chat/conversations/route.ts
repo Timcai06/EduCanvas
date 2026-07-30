@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** 笔记本列表:当前一对一投影返回主Conversation公开字段，不返回消息内容。 */
-export async function GET(request?: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonResponse({ conversations: [] });
   try {

@@ -9,7 +9,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
  *
  * 为什么动作不放进滚轮条目里：滚轮是 `role="listbox"`，option 内部嵌可聚焦的
  * 破坏性按钮会破坏 listbox 的键盘与读屏语义。气泡是独立的 `role="group"`，
- * 滚轮保持纯导航。设计约束见 docs/01-product/student-ui-spec.md（Studio 不用
+ * 滚轮保持纯导航。设计约束见 docs/01-product/02-学生界面规范.md（Studio 不用
  * dialog、遮罩或焦点陷阱），所以重命名用内联输入、删除用两步确认而不是弹窗。
  *
  * 可见动作一律来自服务端授权过的 `resource.allowedActions`；没有资源描述时

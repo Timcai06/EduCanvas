@@ -50,7 +50,7 @@ async function loadContext() {
   return conversation ? { identity, conversation } : null;
 }
 
-export async function GET(request?: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const context = await loadContext();
   if (!context) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {

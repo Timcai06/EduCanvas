@@ -3,9 +3,15 @@
 import * as pdfjs from 'pdfjs-dist';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** pdf.js worker 从 CDN 加载，避免 bundler 复杂度 */
-pdfjs.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs';
+/*
+ * Worker 必须和当前 pdfjs-dist API 保持完全相同的版本。此前固定引用 CDN
+ * 4.9.155、应用却安装 6.1.200，任何正常 PDF 都会因版本不匹配而加载失败。
+ * 交给 Next.js 打包依赖内的 worker，同时避免外网/CDN 可用性影响私有文件预览。
+ */
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 /**
  * 使用 pdf.js 逐页渲染 PDF 的客户端预览组件。
@@ -52,7 +58,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
         await renderPage(1, doc);
       } catch {
         if (!cancelled) {
-          setError('PDF 文件可能已损坏或为扫描件（无文本层），无法预览。');
+          setError('PDF 预览加载失败，请稍后重试或重新上传文件。');
         }
       }
     };

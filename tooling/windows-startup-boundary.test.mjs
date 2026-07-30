@@ -42,6 +42,12 @@ describe('Windows startup boundary', () => {
       launcher,
       /SetEnvironmentVariable\(\$Name, \$Value, 'Process'\)/,
     );
+    assert.match(launcher, /GetEnvironmentVariable\(\$Name, 'Process'\)/);
+    assert.ok(
+      launcher.indexOf("Join-Path $ProjectRoot '.env.local'") <
+        launcher.lastIndexOf('Load-DotEnv $EnvPath'),
+      '.env.local must be loaded before .env so local values take precedence',
+    );
     assert.doesNotMatch(launcher, /Invoke-Expression/);
   });
 

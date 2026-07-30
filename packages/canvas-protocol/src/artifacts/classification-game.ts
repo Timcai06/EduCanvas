@@ -16,7 +16,7 @@ export const classificationCategorySchema = z
 
 /**
  * 待分类项目保持短标签并仅允许内联 emoji：20 字符避免卡片变成正文，8 字符为组合 emoji 留余量，
- * 同时不引入待审核的外部图片地址。资源边界见 docs/06-quality/security-and-privacy.md。
+ * 同时不引入待审核的外部图片地址。资源边界见 docs/06-quality/02-安全与隐私.md。
  */
 export const classificationItemSchema = z
   .object({
@@ -29,7 +29,7 @@ export const classificationItemSchema = z
 
 /**
  * 单局限定 2–4 类、2–12 项，兼顾“必须比较”与 K12 单屏任务时长；提示和反馈限定 200 字符，
- * 防止教学解释挤占交互区。跨字段校验保证每个答案都引用本局类别，见 Canvas 协议 ADR-0002。
+ * 防止教学解释挤占交互区。跨字段校验保证每个答案都引用本局类别，见 ADR-0004。
  */
 export const classificationGameParamsSchema = z
   .object({

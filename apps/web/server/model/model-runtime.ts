@@ -1,7 +1,9 @@
 import 'server-only';
 
 import {
+  acceptsImageInput,
   createTurnModelGatewayFromEnvironment,
+  createVisionTurnModelGatewayFromEnvironment,
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
@@ -26,6 +28,16 @@ function readModelGatewayEnvironment(): ModelGatewayEnvironment {
     MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
       process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
     MODEL_GATEWAY_VISION: process.env.MODEL_GATEWAY_VISION,
+    MODEL_GATEWAY_DISABLE_THINKING: process.env.MODEL_GATEWAY_DISABLE_THINKING,
+    MODEL_GATEWAY_VISION_MODEL: process.env.MODEL_GATEWAY_VISION_MODEL,
+    MODEL_GATEWAY_VISION_BASE_URL: process.env.MODEL_GATEWAY_VISION_BASE_URL,
+    MODEL_GATEWAY_VISION_API_KEY: process.env.MODEL_GATEWAY_VISION_API_KEY,
+    MODEL_GATEWAY_VISION_TIMEOUT_MS:
+      process.env.MODEL_GATEWAY_VISION_TIMEOUT_MS,
+    MODEL_GATEWAY_VISION_MAX_OUTPUT_TOKENS:
+      process.env.MODEL_GATEWAY_VISION_MAX_OUTPUT_TOKENS,
+    MODEL_GATEWAY_VISION_DISABLE_THINKING:
+      process.env.MODEL_GATEWAY_VISION_DISABLE_THINKING,
   };
 }
 
@@ -34,6 +46,11 @@ export interface ResolvedTurnModelRuntime {
   provider: string;
   /** 当前 Provider 能直接消费、无需转成文本的输入模态。 */
   nativeAssetKinds: readonly AssetKind[];
+  /**
+   * 承接图片输入的独立 Provider；主 Provider 自带读图能力或未配置视觉时为 null。
+   * 调用方按本轮是否真的含图片选择，不能无条件替换主 Gateway（ADR-0017）。
+   */
+  visionGateway: TurnModelGateway | null;
 }
 
 /**
@@ -52,6 +69,9 @@ export function resolveTurnModelRuntime(
     gateway,
     provider: configuration.provider,
     /* 能力来自与 gateway 同一份配置，避免物化层与 Adapter 各持一份判断。 */
-    nativeAssetKinds: configuration.visionEnabled ? (['image'] as const) : [],
+    nativeAssetKinds: acceptsImageInput(configuration)
+      ? (['image'] as const)
+      : [],
+    visionGateway: createVisionTurnModelGatewayFromEnvironment(environment),
   };
 }
