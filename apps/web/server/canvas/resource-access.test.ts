@@ -38,11 +38,8 @@ vi.mock('@educanvas/db', () => ({
   getDb: vi.fn(),
 }));
 
-const {
-  CanvasResourceAccessError,
-  loadOwnedCanvasResource,
-  projectOwnedSourceResources,
-} = await import('./resource-access');
+const { loadOwnedCanvasResource, projectOwnedSourceResources } =
+  await import('./resource-access');
 
 const identity = { token: 'test-token', studentId: 'user-1' };
 const notebookId = '20000000-0000-4000-8000-000000000002';

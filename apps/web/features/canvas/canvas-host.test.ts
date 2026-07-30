@@ -6,6 +6,7 @@ import {
   CANVAS_CLOSE_BUTTON_CLASS,
   CANVAS_CONTENT_FRAME_CLASS,
   CANVAS_FULLSCREEN_BUTTON_CLASS,
+  CANVAS_HOST_LAYOUT_CLASS,
   CANVAS_TITLE_CLASS,
   handleCanvasEscape,
   resolveEscapeAction,
@@ -173,6 +174,9 @@ describe('CanvasHost 响应式布局契约', () => {
   });
 
   it('宿主裁切溢出而不成为第二个滚动所有者', () => {
+    expect(CANVAS_HOST_LAYOUT_CLASS).toContain('min-h-0');
+    expect(CANVAS_HOST_LAYOUT_CLASS).toContain('overflow-hidden');
+    expect(CANVAS_CONTENT_FRAME_CLASS).toContain('flex-col');
     expect(CANVAS_CONTENT_FRAME_CLASS).toContain('min-h-0');
     expect(CANVAS_CONTENT_FRAME_CLASS).toContain('overflow-hidden');
     expect(CANVAS_CONTENT_FRAME_CLASS).not.toContain('overflow-y-auto');

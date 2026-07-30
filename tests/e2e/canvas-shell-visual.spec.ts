@@ -148,7 +148,11 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         version?: {
           content?: {
             root?: {
-              children?: Array<{ id: string; label: string }>;
+              children?: Array<{
+                id: string;
+                label: string;
+                children?: Array<{ id: string; label: string }>;
+              }>;
             };
           };
         } | null;
@@ -156,10 +160,14 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       if (payload.artifact) payload.artifact.title = longTitle;
       if (payload.version?.content?.root) {
         payload.version.content.root.children = Array.from(
-          { length: 12 },
+          { length: 8 },
           (_, index) => ({
             id: `long-${index + 1}`,
             label: longLabel,
+            children: Array.from({ length: 3 }, (_, childIndex) => ({
+              id: `long-${index + 1}-${childIndex + 1}`,
+              label: `嵌套长内容 ${index + 1}-${childIndex + 1}`,
+            })),
           }),
         );
       }
@@ -182,6 +190,23 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       clientWidth: element.clientWidth,
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
+
+    const contentScroller = canvas.getByRole('region', {
+      name: 'Canvas 内容',
+    });
+    await expect(contentScroller).toBeVisible();
+    const overflow = await contentScroller.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        overflowY: style.overflowY,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        bodyOverflow: document.body.style.overflow,
+      };
+    });
+    expect(overflow.overflowY).toBe('auto');
+    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
+    expect(overflow.bodyOverflow).toBe('hidden');
   });
 
   test('资源验证失败展示可重试的安全失败状态', async ({ page }) => {
@@ -229,20 +254,6 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       statusSurface.getByRole('button', { name: '重试' }),
     ).toBeEnabled();
     await expect(statusSurface).not.toContainText('resource_unavailable');
-  });
-});
-
-test.describe('Canvas shell 滚动', () => {
-  test('Canvas 内容区可独立滚动，无双滚动条', async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    const canvas = await openCanvasViaMindMap(page);
-
-    // 内容区（min-h-0 flex-1 overflow-y-auto）存在
-    const contentFrame = canvas.locator('div.min-h-0.flex-1.overflow-hidden');
-    await expect(contentFrame).toBeAttached();
-
-    // body 不应被 Canvas 打开而锁死（仅全屏/dialog 时应 hidden）
-    // 对话→生成的 Canvas 默认为 dialog → body overflow hidden
   });
 });
 

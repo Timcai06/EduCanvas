@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
@@ -380,6 +383,16 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     .limit(1);
   if (!conversation) throw new Error('第一本笔记本行不存在');
 
+  const sourceBytes = await readFile(
+    path.resolve('tests/fixtures/sample-1page.pdf'),
+  );
+  const storageKey = `e2e/${conversation.id}/notebook-source.pdf`;
+  const storedPath = path.resolve(
+    'output/playwright/object-storage',
+    storageKey,
+  );
+  await mkdir(path.dirname(storedPath), { recursive: true });
+  await writeFile(storedPath, sourceBytes);
   await new dbModule.DrizzleAssetRepository().createUploaded({
     ownerSubjectId: conversation.ownerSubjectId,
     spaceId: conversation.spaceId,
@@ -387,9 +400,9 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     kind: 'document',
     displayName: '第一本视觉讲义.pdf',
     mimeType: 'application/pdf',
-    byteSize: 128,
-    contentHash: 'c'.repeat(64),
-    storageKey: `e2e/${conversation.id}/notebook-source.pdf`,
+    byteSize: sourceBytes.byteLength,
+    contentHash: createHash('sha256').update(sourceBytes).digest('hex'),
+    storageKey,
     extractedText: '卷积神经网络可以提取图像特征。',
     outcome: { status: 'ready' },
   });
