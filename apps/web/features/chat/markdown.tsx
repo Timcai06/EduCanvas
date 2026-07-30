@@ -4,8 +4,8 @@ import { isPreviewableHtml } from '@/features/canvas/sandbox-preview';
 import { CodeBlock, Play } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { isCitationAnchor, linkifyCitationMarkers } from './citation-links';
+import { mathRemarkPlugins, mathRehypePlugins } from './math-markdown';
 
 export interface HtmlPreviewRequest {
   source: string;
@@ -41,7 +41,8 @@ export function MessageMarkdown({
   return (
     <div className="chat-prose min-w-0">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={mathRemarkPlugins}
+        rehypePlugins={mathRehypePlugins}
         components={{
           a: ({ href, children }) => {
             if (isCitationAnchor(href)) {
