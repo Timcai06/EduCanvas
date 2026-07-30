@@ -105,14 +105,19 @@ export async function GET(
       detail.artifact.kind === 'generated_image' && selectedVersion
         ? generatedImageMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
-    const canvasResource = projectOwnedArtifactResource({
-      notebookId: conversation.spaceId,
-      artifact: detail.artifact,
-      version: selectedVersion,
-      latestJob: detail.latestJob,
-      accessRole: access.role,
-    });
-    const canDownload = canvasResource.allowedActions.includes('download');
+    /* queued/running 产物在首版落库前仍是合法详情。轮询客户端需要读取
+       latestJob，但此时不存在可渲染的不可变版本，因此不构造 CanvasResource。 */
+    const canvasResource = selectedVersion
+      ? projectOwnedArtifactResource({
+          notebookId: conversation.spaceId,
+          artifact: detail.artifact,
+          version: selectedVersion,
+          latestJob: detail.latestJob,
+          accessRole: access.role,
+        })
+      : null;
+    const canDownload =
+      canvasResource?.allowedActions.includes('download') ?? false;
     /* 媒体投影只暴露受控读取 URL 与公开 metadata；两类媒体互斥，由 kind 决定。
        download URL 仅在服务端授权后包含，UI 据此决定是否显示下载按钮。 */
     const media =
@@ -172,7 +177,7 @@ export async function GET(
             failureCode: detail.latestJob.failureCode,
           }
         : null,
-      canvasResource,
+      ...(canvasResource ? { canvasResource } : {}),
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {

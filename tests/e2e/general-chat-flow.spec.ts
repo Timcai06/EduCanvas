@@ -277,9 +277,15 @@ test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('生成函数思维导图');
   await composer.press('Enter');
+  await expect
+    .poll(() => activeConversationId(page), {
+      message: '发送入口提示词后应建立服务端权威的活动会话',
+      timeout: 15_000,
+    })
+    .toBeTruthy();
 
   const output = page.getByRole('button', { name: '打开产物：函数思维导图' });
-  await expect(output).toBeVisible();
+  await expect(output).toBeVisible({ timeout: 15_000 });
   await output.click();
   const canvas = page.getByRole('region', { name: '产物Canvas' });
   await expect(
