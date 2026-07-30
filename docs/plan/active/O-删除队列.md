@@ -245,13 +245,24 @@ rtk rg -n "objectDeletionOutbox|delete_object_outbox|archiveOwnedArtifactTransac
 
 ## 七、验证台账
 
-| 任务                | 状态      | 证据 |
-| ------------------- | --------- | ---- |
-| O00 基线与所有权    | `PENDING` | 待补 |
-| O01 Outbox 仓储收口 | `PENDING` | 待补 |
-| O02 worker 删除路径 | `PENDING` | 待补 |
-| O03 并发与恢复证据  | `PENDING` | 待补 |
-| O04 台账与收口      | `PENDING` | 待补 |
+| 任务                | 状态      | 证据                                                                           |
+| ------------------- | --------- | ------------------------------------------------------------------------------ |
+| O00 基线与所有权    | `PASS`    | PR #258; HEAD=98008a7; 5 缺口已记录                                            |
+| O01 Outbox 仓储收口 | `PASS`    | 本 PR; claimBatch 租约恢复 + complete/fail 带 attempt 防重入 + sourceType 补齐 |
+| O02 worker 删除路径 | `PASS`    | 本 PR; avatar 路由 + object_not_found 幂等 complete + fail 错误日志            |
+| O03 并发与恢复证据  | `PENDING` | 待补 — 需真双 worker 并发测试 + 租约恢复端到端验证                             |
+| O04 台账与收口      | `PENDING` | 待补                                                                           |
+
+### O01-O02 本轮修复（替代原 PR #259/#260）
+
+| 问题                               | 修复                                                              |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| complete/fail 缺 attempt 防重入    | WHERE 条件增加 `attempts = ?`，旧 worker 无法推进已被重新领取的行 |
+| object_not_found 当作失败重试      | 映射为幂等 complete（目标已达成）                                 |
+| 并发测试可两个都 false             | 改用 XOR 断言 `firstHas !== secondHas`                            |
+| fail 失败被吞掉                    | catch 块记录 `helpers.logger.error`，保留失败计数                 |
+| sourceType 缺 asset_video_keyframe | 已补齐                                                            |
+| claimBatch 只查 pending            | 增加租约过期 processing 行恢复                                    |
 
 ## 八、Codex 审核标准
 

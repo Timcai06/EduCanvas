@@ -24,7 +24,7 @@ const payloadSchema = z
 
 interface OutboxRepository {
   claimBatch(input: { limit: number }): Promise<readonly ObjectDeletionClaim[]>;
-  complete(id: string): Promise<void>;
+  complete(id: string, attempt: number): Promise<void>;
   fail(
     id: string,
     input: { failureCode: string; attempt: number },
@@ -75,7 +75,7 @@ class LocalDeletionAdapter implements ObjectDeleter {
   }
 
   async delete(claim: ObjectDeletionClaim): Promise<void> {
-    if (claim.objectKind === 'asset') {
+    if (claim.objectKind === 'asset' || claim.objectKind === 'avatar') {
       await (await this.getAssetStorage()).delete(claim.storageKey);
     } else if (claim.objectKind === 'artifact') {
       await (await this.getArtifactStorage()).delete(claim.storageKey);
@@ -96,24 +96,47 @@ export function createDeleteObjectOutboxTask(
     const { limit } = payloadSchema.parse(payload);
     const claims = await repository.claimBatch({ limit });
     let completed = 0;
+    let failed = 0;
     for (const claim of claims) {
       try {
         await deleter.delete(claim);
-        await repository.complete(claim.id);
+        await repository.complete(claim.id, claim.attempt);
         completed += 1;
       } catch (error) {
+        // 对象已不存在 = 删除目标已达成，幂等 complete
+        if (
+          error instanceof ObjectStorageError &&
+          error.code === 'object_not_found'
+        ) {
+          try {
+            await repository.complete(claim.id, claim.attempt);
+            completed += 1;
+          } catch (completeError) {
+            helpers.logger.error(
+              `对象不存在幂等complete失败:${String(completeError).slice(0, 200)}`,
+            );
+          }
+          continue;
+        }
         const failureCode =
           error instanceof ObjectStorageError
             ? error.code
             : 'object_delete_failed';
-        await repository.fail(claim.id, {
-          failureCode,
-          attempt: claim.attempt,
-        });
+        try {
+          await repository.fail(claim.id, {
+            failureCode,
+            attempt: claim.attempt,
+          });
+          failed += 1;
+        } catch (failError) {
+          helpers.logger.error(
+            `Outbox fail写入失败,claim=${claim.id}:${String(failError).slice(0, 200)}`,
+          );
+        }
       }
     }
     helpers.logger.info(
-      `对象删除Outbox处理完成,claimed=${claims.length},completed=${completed}`,
+      `对象删除Outbox处理完成,claimed=${claims.length},completed=${completed},failed=${failed}`,
     );
   };
 }
