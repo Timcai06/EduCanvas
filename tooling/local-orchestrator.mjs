@@ -23,6 +23,9 @@ if (!Number.isInteger(gatewayPort) || gatewayPort < 1 || gatewayPort > 65_535) {
   throw new Error('EDUCANVAS_GATEWAY_PORT 必须是 1..65535 的整数');
 }
 
+process.env.PORT = String(port);
+process.env.EDUCANVAS_GATEWAY_PORT = String(gatewayPort);
+
 const webUrl = `http://127.0.0.1:${port}`;
 const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
 const children = new Set();

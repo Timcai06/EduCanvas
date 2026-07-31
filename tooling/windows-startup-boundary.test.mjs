@@ -4,8 +4,15 @@ import { describe, it } from 'node:test';
 
 const launcher = readFileSync('start-educanvas.ps1', 'utf8');
 const orchestrator = readFileSync('tooling/local-orchestrator.mjs', 'utf8');
+const webPackage = JSON.parse(readFileSync('apps/web/package.json', 'utf8'));
 
 describe('Windows startup boundary', () => {
+  it('uses the Webpack dev compiler for Windows-safe Unicode diagnostics', () => {
+    // Remove this pin after upgrading beyond Next 16.2.10 and re-verifying
+    // Unicode-bearing diagnostics with Turbopack on Windows.
+    assert.equal(webPackage.scripts.dev, 'next dev --webpack');
+  });
+
   it('keeps Windows-only startup concerns explicit and parameterized', () => {
     // The launcher owns Docker, migration caching, port checks, and logs;
     // the actual Web/Gateway/Worker process remains the shared dev command.

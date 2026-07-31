@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+
+const orchestrator = readFileSync('tooling/local-orchestrator.mjs', 'utf8');
 
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {
@@ -36,4 +39,12 @@ test('status reports stopped services without starting processes', async () => {
   assert.equal(result.code, 1);
   assert.match(result.stdout, /Gateway\s+stopped/);
   assert.match(result.stdout, /Web\s+stopped/);
+});
+
+test('propagates resolved default ports to spawned core services', () => {
+  assert.match(orchestrator, /process\.env\.PORT = String\(port\)/);
+  assert.match(
+    orchestrator,
+    /process\.env\.EDUCANVAS_GATEWAY_PORT = String\(gatewayPort\)/,
+  );
 });
