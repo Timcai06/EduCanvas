@@ -5,7 +5,7 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 
 | 分配文件                      | 负责人     | 当前状态                                    | 与其它线的关系                     |
 | ----------------------------- | ---------- | ------------------------------------------- | ---------------------------------- |
-| [UV 画布语音](UV-画布语音.md) | 项目负责人 | U00-U13 已通过；下一任务 U14；V02 仍阻塞    | 与 O 的产品文件解耦                |
+| [UV 画布语音](UV-画布语音.md) | 项目负责人 | U00-U12 已通过；U13 待修订；V02 仍阻塞      | 与 O 的产品文件解耦                |
 | [O 删除队列](O-删除队列.md)   | 协作开发者 | O00-O02 已通过；下一任务 O03，随后 O04 收口 | 不修改 Canvas、Runtime、语音或账号 |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)和
@@ -13,8 +13,8 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 O 线完成 O03/O04 后再由 Codex 做跨线审计。
 
 语音产品接线仍受 ADR-0018 与 V02 目标热词 before/after 实测门禁约束；Canvas 侧 U12
-已经以真实 Web + 独立 Runtime + PostgreSQL composition 和 R28 压力证据通过，U13
-契约也已落地；下一项是 U14 CPU Experiment Adapter。
+已经以真实 Web + 独立 Runtime + PostgreSQL composition 和 R28 压力证据通过。U13
+初版契约已经落地但复审结论为 `REVISE`；修订通过前不得开始 U14 CPU Experiment Adapter。
 
 历史阶段见[`../completed/README.md`](../completed/README.md)。计划完成或取消时按
 [计划生命周期](../README.md)回写事实并归档。
