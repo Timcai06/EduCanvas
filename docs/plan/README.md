@@ -21,12 +21,11 @@
 当前任务以 [`active/README.md`](active/README.md) 为唯一分配索引：
 
 - [UV 画布语音](active/UV-画布语音.md)；
-- [P 学习档案](active/P-学习档案.md)；
-- [O 删除队列](active/O-删除队列.md)；
-- [A 账号会话](active/A-账号会话.md)。
+- [O 删除队列](active/O-删除队列.md)。
 
-四条线各自提交独立 PR，全部合并后由 Codex 联合审计。[F 画布界面](completed/F-画布界面.md)
-已完成归档。语音产品接线仍须先通过 ADR-0018 与目标热词实测门禁。
+[A 账号会话](completed/A-账号会话.md)、[P 学习档案](completed/P-学习档案.md)和
+[F 画布界面](completed/F-画布界面.md)已完成归档。O 线完成 O03/O04 后再由 Codex
+联合审计。语音产品接线仍须先通过 ADR-0018 与目标热词实测门禁。
 
 [自适应学习基线](completed/2026-07-自适应学习基线.md) 已完成并归档。
 [账号、历史记录删除与用户资料](completed/2026-07-账号、历史记录删除与用户资料.md)

@@ -1,13 +1,13 @@
 # 学习档案活动可靠性优化
 
 - 任务分配名：`P 学习档案`
-- 状态：`active`
+- 状态：`completed`
 - 负责人：协作开发者
 - 代码审核与最终验收：Cai
-- 最后验证时间：2026-07-30
-- 下一领取任务：`P04`，完成直接组件证据后再执行 `P05`
-- 并行计划：[画布运行时与实时语音主线](UV-画布语音.md)
-- 已完成计划：[画布界面与可访问性优化](../completed/F-画布界面.md)
+- 最后验证时间：2026-08-01
+- 下一领取任务：无；P00-P05 已完成并归档
+- 并行计划：[画布运行时与实时语音主线](../active/UV-画布语音.md)
+- 已完成计划：[画布界面与可访问性优化](F-画布界面.md)
 
 ## 一、目标
 
@@ -401,7 +401,7 @@ rtk pnpm exec playwright test tests/e2e/profile-activity.spec.ts
 rtk pnpm --dir apps/web test
 rtk pnpm --dir apps/web typecheck
 rtk pnpm lint
-rtk pnpm exec prettier --check apps/web/server/profile/learning-activity.ts apps/web/server/profile/learning-activity.test.ts apps/web/server/profile/learning-activity-service.ts apps/web/server/profile/learning-activity-service.test.ts apps/web/app/api/v1/me/activity/route.ts apps/web/app/api/v1/me/activity/route.test.ts apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-activity-view-model.ts apps/web/features/profile/profile-activity-view-model.test.ts apps/web/features/profile/learning-activity-loader.ts apps/web/features/profile/learning-activity-loader.test.ts tests/e2e/profile-activity.spec.ts docs/plan/active/P-学习档案.md
+rtk pnpm exec prettier --check apps/web/server/profile/learning-activity.ts apps/web/server/profile/learning-activity.test.ts apps/web/server/profile/learning-activity-service.ts apps/web/server/profile/learning-activity-service.test.ts apps/web/app/api/v1/me/activity/route.ts apps/web/app/api/v1/me/activity/route.test.ts apps/web/features/profile/profile-drawer.tsx apps/web/features/profile/profile-activity-view-model.ts apps/web/features/profile/profile-activity-view-model.test.ts apps/web/features/profile/learning-activity-loader.ts apps/web/features/profile/learning-activity-loader.test.ts tests/e2e/profile-activity.spec.ts docs/plan/completed/P-学习档案.md
 rtk git diff --check
 rtk git diff --name-status
 rtk git status --short
@@ -448,14 +448,14 @@ P 线 PR 合并前，由 Codex：
 
 ## 十、验证台账
 
-| 任务                | 状态      | 证据                                                                                        |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| P00 基线与所有权    | `PASS`    | PR #245 已合入主线；当前实现文件与 UV/F 边界无交集                                          |
-| P01 日期与时区      | `PASS`    | `learning-activity.test.ts` 覆盖 Asia/Shanghai、进程 TZ 隔离和 New York 夏令时边界          |
-| P02 服务与 Route    | `PASS`    | service/route 测试覆盖无身份、可信主体、500、契约异常、no-store 与安全错误投影              |
-| P03 Activity Loader | `PASS`    | 10 条 loader 测试覆盖 ready/empty/failed/Abort、旧响应隔离和单次 fetch                      |
-| P04 抽屉状态与重试  | `PARTIAL` | `profile-drawer.tsx` 已接入四态、取消和重试；缺纯 view-model 测试与 P05 的真实 DOM/键盘证据 |
-| P05 E2E 与收口      | `PENDING` | `tests/e2e/profile-activity.spec.ts` 不存在；不得以 account-flow 或其它页面测试替代         |
+| 任务                | 状态   | 证据                                                                                       |
+| ------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| P00 基线与所有权    | `PASS` | PR #245 已合入主线；当前实现文件与 UV/F 边界无交集                                         |
+| P01 日期与时区      | `PASS` | `learning-activity.test.ts` 覆盖 Asia/Shanghai、进程 TZ 隔离和 New York 夏令时边界         |
+| P02 服务与 Route    | `PASS` | service/route 测试覆盖无身份、可信主体、500、契约异常、no-store 与安全错误投影             |
+| P03 Activity Loader | `PASS` | 10 条 loader 测试覆盖 ready/empty/failed/Abort、旧响应隔离和单次 fetch                     |
+| P04 抽屉状态与重试  | `PASS` | PR #264；纯 view model 与 17 条相邻测试覆盖四态、重试投影及不可变边界                      |
+| P05 E2E 与收口      | `PASS` | PR #265；独立 spec 通过稳定深链验证成功投影、失败脱敏与重试恢复，Codex 无重试复跑 3 次全绿 |
 
 ## 十一、回退方式
 

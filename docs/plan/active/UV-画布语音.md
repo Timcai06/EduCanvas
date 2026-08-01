@@ -5,8 +5,8 @@
 - 负责人：项目负责人
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
-- 最后验证时间：2026-07-30
-- 下一领取任务：`U13`；语音侧保持 `V02 BLOCKED`
+- 最后验证时间：2026-08-01
+- 下一领取任务：`U14`；语音侧保持 `V02 BLOCKED`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -767,6 +767,7 @@ U12-R0 分支对齐
 #### U13：ExperimentRuntimePort 与 Run 契约
 
 - 依赖：U12
+- 状态：`PASS`
 - 文件边界：核心 Port、Run/输入/输出/provenance schema 与测试
 - 可并行：V17
 
@@ -993,8 +994,12 @@ V08-V11 的依赖推进，因此 S2 整体尚未收口。
 
 **S3 状态：** Canvas 子线 U09-U12 passed；ADR-0019、版本化消息/Port 契约、依赖白名单、
 CSP、资源策略、独立 origin/process Runtime、真实 Web + Runtime + PostgreSQL
-composition 与 R28 压力门禁均已通过。U13 已解锁。语音 V12-V17 同时受 V02-V11
+composition 与 R28 压力门禁均已通过。语音 V12-V17 同时受 V02-V11
 前置门槛阻塞，因此 S3 整体仍未通过，语音入口继续保持关闭。
+
+**S4 状态：** U13 已通过并定义权威 `ExperimentRuntimePort`、Run/输入/输出/provenance、
+资源上界和闭合状态机；下一任务 U14。U14-U18 与联合验收仍未实现，不能把契约落地
+描述成可执行实验能力。
 
 | S0 任务 | Codex 结论 | 证据                                                                                                                                   |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1024,6 +1029,10 @@ composition 与 R28 压力门禁均已通过。U13 已解锁。语音 V12-V17 �
 | U11     | `PASS`     | 首批依赖锁定为仓库已安装的 React 19.2.7、React DOM 19.2.7、GSAP 3.15.0、Three 0.185.1；未知、typo、范围、tag、URL 与重复依赖均拒绝。策略固定 network none、iframe 仅 allow-scripts、严格 CSP、512 KiB 输入、64 KiB 消息、1 MiB 输出、30 秒、2 并发、8 队列与 30 msg/s；明确不宣称硬 CPU/内存隔离。相关测试已包含在 Canvas protocol 87/87，tooling/typecheck/lint 通过。               |
 | U12     | `PASS`     | 独立 `apps/web-runtime`、运行账本、受控 routes 与 Canvas 组合已完成；真实 Web + 独立 Runtime + PostgreSQL composition 3/3、R28 非合作 CPU/内存压力 2/2、DB integration 5/5、Runtime 8/8、Canvas protocol 87/87、Web 583/583、tooling 62/62、相关 typecheck、lint 与 production webpack build 通过。bootstrap 只领一次，terminal 必须在 bootstrap 后写入且首终态胜出；跨主体统一 404。 |
 
+| S4 任务 | Codex 结论 | 证据                                                                                                                                                                                                      |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U13     | `PASS`     | commit `bfa88cc`；`ExperimentRuntimePort`、Run/输入/输出/provenance schema、有限资源预算、闭合终态与非法 network/GPU/image/shell 拒绝已落地；2026-08-01 Agent Core 16 files/109 tests 与 typecheck 通过。 |
+
 | 能力                       | 当前状态  | 当前证据                                                                                                                               | 完成任务                  |
 | -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                        | 已有，U01 防回归          |
@@ -1031,7 +1040,7 @@ composition 与 R28 压力门禁均已通过。U13 已解锁。语音 V12-V17 �
 | Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过               | U02-U05 passed            |
 | 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环   | U06-U08 passed            |
 | 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                        | U09-U12 passed            |
-| Experiment Runtime         | `pending` | 未发现 ExperimentRuntimePort                                                                                                           | U13-U16                   |
+| Experiment Runtime         | `partial` | U13 权威 Port 与 Run 契约已落地；尚无 U14 CPU Adapter、U15 Renderer 或 U16 可复现 smoke                                                | U13 passed；U14-U16 待做  |
 | TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                         | U17-U19                   |
 | WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 缺目标热词 before/after 证据，模型与 WAV 仅保存在本地且被忽略              | V02-V03                   |
 | 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用 | V04-V09、V12-V13、V16-V17 |
