@@ -1,11 +1,28 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { resolveWebDevCommand } from './web-dev-command.mjs';
 
 const launcher = readFileSync('start-educanvas.ps1', 'utf8');
 const orchestrator = readFileSync('tooling/local-orchestrator.mjs', 'utf8');
 
 describe('Windows startup boundary', () => {
+  it('uses the Webpack dev compiler for Windows-safe Unicode diagnostics', () => {
+    assert.deepEqual(resolveWebDevCommand('win32'), {
+      command: 'pnpm',
+      args: ['exec', 'next', 'dev', '--webpack'],
+      shell: true,
+    });
+  });
+
+  it('keeps the default Turbopack compiler on non-Windows platforms', () => {
+    assert.deepEqual(resolveWebDevCommand('darwin'), {
+      command: 'pnpm',
+      args: ['exec', 'next', 'dev'],
+      shell: false,
+    });
+  });
+
   it('keeps Windows-only startup concerns explicit and parameterized', () => {
     // The launcher owns Docker, migration caching, port checks, and logs;
     // the actual Web/Gateway/Worker process remains the shared dev command.
