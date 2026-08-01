@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import process from 'node:process';
+import { applyResolvedLocalPorts } from './local-orchestrator-config.mjs';
 import { loadWorkspaceEnvFiles } from './workspace-env.mjs';
 
 loadWorkspaceEnvFiles();
@@ -14,17 +15,7 @@ if (!profile || !SUPPORTED_PROFILES.has(profile)) {
   process.exit(2);
 }
 
-const port = Number(process.env.PORT ?? '3101');
-const gatewayPort = Number(process.env.EDUCANVAS_GATEWAY_PORT ?? '3200');
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-  throw new Error('PORT 必须是 1..65535 的整数');
-}
-if (!Number.isInteger(gatewayPort) || gatewayPort < 1 || gatewayPort > 65_535) {
-  throw new Error('EDUCANVAS_GATEWAY_PORT 必须是 1..65535 的整数');
-}
-
-process.env.PORT = String(port);
-process.env.EDUCANVAS_GATEWAY_PORT = String(gatewayPort);
+const { port, gatewayPort } = applyResolvedLocalPorts(process.env);
 
 const webUrl = `http://127.0.0.1:${port}`;
 const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;

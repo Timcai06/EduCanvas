@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-
-const orchestrator = readFileSync('tooling/local-orchestrator.mjs', 'utf8');
+import { applyResolvedLocalPorts } from './local-orchestrator-config.mjs';
 
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {
@@ -42,9 +40,23 @@ test('status reports stopped services without starting processes', async () => {
 });
 
 test('propagates resolved default ports to spawned core services', () => {
-  assert.match(orchestrator, /process\.env\.PORT = String\(port\)/);
-  assert.match(
-    orchestrator,
-    /process\.env\.EDUCANVAS_GATEWAY_PORT = String\(gatewayPort\)/,
-  );
+  const env = {};
+  assert.deepEqual(applyResolvedLocalPorts(env), {
+    port: 3101,
+    gatewayPort: 3200,
+  });
+  assert.equal(env.PORT, '3101');
+  assert.equal(env.EDUCANVAS_GATEWAY_PORT, '3200');
+});
+
+test('preserves validated custom ports for spawned core services', () => {
+  const env = { PORT: '4101', EDUCANVAS_GATEWAY_PORT: '4200' };
+  assert.deepEqual(applyResolvedLocalPorts(env), {
+    port: 4101,
+    gatewayPort: 4200,
+  });
+  assert.deepEqual(env, {
+    PORT: '4101',
+    EDUCANVAS_GATEWAY_PORT: '4200',
+  });
 });
