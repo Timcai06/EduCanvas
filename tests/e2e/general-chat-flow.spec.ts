@@ -248,6 +248,7 @@ test('Agent产物留在对应回答末尾并可反复打开同一Canvas', async 
           updatedAt: '2026-07-25T00:01:00.000Z',
         },
         version: {
+          id: '40000000-0000-4000-8000-000000000004',
           version: 1,
           content: {
             contentVersion: 1,
