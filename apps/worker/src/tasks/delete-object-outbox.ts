@@ -111,9 +111,9 @@ export function createDeleteObjectOutboxTask(
           try {
             await repository.complete(claim.id, claim.attempt);
             completed += 1;
-          } catch (completeError) {
+          } catch {
             helpers.logger.error(
-              `对象不存在幂等complete失败:${String(completeError).slice(0, 200)}`,
+              `object_delete_complete_failed claim=${claim.id}`,
             );
           }
           continue;
@@ -128,9 +128,9 @@ export function createDeleteObjectOutboxTask(
             attempt: claim.attempt,
           });
           failed += 1;
-        } catch (failError) {
+        } catch {
           helpers.logger.error(
-            `Outbox fail写入失败,claim=${claim.id}:${String(failError).slice(0, 200)}`,
+            `object_delete_fail_record_failed claim=${claim.id}`,
           );
         }
       }

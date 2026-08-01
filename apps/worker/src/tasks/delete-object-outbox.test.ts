@@ -115,7 +115,7 @@ describe('delete object outbox task', () => {
     } as never);
 
     expect(errorLog).toHaveBeenCalledWith(
-      expect.stringContaining('对象不存在幂等complete失败'),
+      expect.stringContaining('object_delete_complete_failed claim='),
     );
   });
 
@@ -140,7 +140,9 @@ describe('delete object outbox task', () => {
 
     expect(repository.fail).toHaveBeenCalledTimes(2);
     expect(errorLog).toHaveBeenCalledWith(
-      expect.stringContaining('Outbox fail写入失败,claim=10000000'),
+      expect.stringContaining(
+        'object_delete_fail_record_failed claim=10000000',
+      ),
     );
   });
 

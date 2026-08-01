@@ -247,7 +247,7 @@ rtk rg -n "objectDeletionOutbox|delete_object_outbox|archiveOwnedArtifactTransac
 
 | 任务                | 状态      | 证据                                                                           |
 | ------------------- | --------- | ------------------------------------------------------------------------------ |
-| O00 基线与所有权    | `PASS`    | PR #258; HEAD=98008a7; 5 缺口已记录                                            |
+| O00 基线与所有权    | `PASS`    | 本计划“基线与所有权”章节；5 个初始缺口已记录                                   |
 | O01 Outbox 仓储收口 | `PASS`    | 本 PR; claimBatch 租约恢复 + complete/fail 带 attempt 防重入 + sourceType 补齐 |
 | O02 worker 删除路径 | `PASS`    | 本 PR; avatar 路由 + object_not_found 幂等 complete + fail 错误日志            |
 | O03 并发与恢复证据  | `PENDING` | 待补 — 需真双 worker 并发测试 + 租约恢复端到端验证                             |

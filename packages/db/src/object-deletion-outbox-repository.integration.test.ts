@@ -79,6 +79,16 @@ describeWithDatabase(
 
     const repo = new DrizzleObjectDeletionOutboxRepository(getDatabase());
 
+    async function claimSeed(
+      seedId: string,
+      input: { now?: Date; leaseTimeoutMs?: number } = {},
+    ) {
+      const claims = await repo.claimBatch({ limit: 200, ...input });
+      const claim = claims.find((candidate) => candidate.id === seedId);
+      expect(claim).toBeDefined();
+      return claim!;
+    }
+
     it('claimBatch 领取 pending 行返回 attempt', async () => {
       const seed = await seedPending({ storageKey: 'claim-test' });
 
@@ -91,9 +101,7 @@ describeWithDatabase(
 
     it('complete 传入匹配 attempt 推进为 completed', async () => {
       const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const c = await claimSeed(seed.id);
 
       await repo.complete(c.id, c.attempt);
 
@@ -106,9 +114,7 @@ describeWithDatabase(
 
     it('complete 传入错误 attempt 不推进（防旧 worker 重入）', async () => {
       const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const c = await claimSeed(seed.id);
 
       // 用错误的 attempt 调用 complete
       await repo.complete(c.id, c.attempt + 99);
@@ -123,18 +129,14 @@ describeWithDatabase(
 
     it('重复 complete 不抛异常', async () => {
       const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const c = await claimSeed(seed.id);
       await repo.complete(c.id, c.attempt);
       await repo.complete(c.id, c.attempt);
     });
 
     it('fail 传入匹配 attempt 退回 pending', async () => {
       const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const c = await claimSeed(seed.id);
 
       await repo.fail(c.id, {
         failureCode: 'object_not_found',
@@ -154,9 +156,7 @@ describeWithDatabase(
 
     it('fail 传入错误 attempt 不推进', async () => {
       const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const c = await claimSeed(seed.id);
 
       await repo.fail(c.id, {
         failureCode: 'test',
@@ -171,14 +171,15 @@ describeWithDatabase(
     });
 
     it('超过 MAX_ATTEMPTS 次 fail 后进入终态 failed', async () => {
-      const seed = await seedPending();
-      const [claim] = await repo.claimBatch({ limit: 1 });
-      expect(claim).toBeDefined();
-      const c = claim!;
+      const seed = await seedPending({
+        attempts: MAX_OBJECT_DELETION_ATTEMPTS - 1,
+      });
+      const c = await claimSeed(seed.id);
+      expect(c.attempt).toBe(MAX_OBJECT_DELETION_ATTEMPTS);
 
       await repo.fail(c.id, {
         failureCode: 'object_delete_failed',
-        attempt: MAX_OBJECT_DELETION_ATTEMPTS,
+        attempt: c.attempt,
       });
 
       const [row] = await getDatabase()
