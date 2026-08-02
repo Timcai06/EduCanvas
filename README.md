@@ -35,6 +35,10 @@
   <sub>浙江省大学生人工智能竞赛 JBGS-2026-02 · 多模态 K12 人工智能通识课教学助手对话智能体</sub>
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme/learning-canvas-zine-v1.png" width="38%" alt="A learning canvas connects source material, dialogue, and interactive practice">
+</p>
+
 ## 不止是问答机器人
 
 <table>
