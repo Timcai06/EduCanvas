@@ -269,6 +269,8 @@ export {
   experimentRunSchema,
   experimentRunStatusSchema,
   experimentRunStatuses,
+  experimentRunTerminalStatusSchema,
+  experimentRunTerminalStatuses,
   MAX_EXPERIMENT_DURATION_MS,
   MAX_EXPERIMENT_LOG_BYTES,
   MAX_EXPERIMENT_MEMORY_MIB,

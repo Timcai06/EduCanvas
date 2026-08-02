@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-08-01
-- 下一领取任务：`U13 修订`；语音侧保持 `V02 BLOCKED`
+- 下一领取任务：`U14`；语音侧保持 `V02 BLOCKED`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -767,7 +767,7 @@ U12-R0 分支对齐
 #### U13：ExperimentRuntimePort 与 Run 契约
 
 - 依赖：U12
-- 状态：`REVISE`
+- 状态：`PASS`
 - 文件边界：核心 Port、Run/输入/输出/provenance schema 与测试
 - 可并行：V17
 
@@ -997,10 +997,11 @@ CSP、资源策略、独立 origin/process Runtime、真实 Web + Runtime + Post
 composition 与 R28 压力门禁均已通过。语音 V12-V17 同时受 V02-V11
 前置门槛阻塞，因此 S3 整体仍未通过，语音入口继续保持关闭。
 
-**S4 状态：** U13 初版 `ExperimentRuntimePort` 已合入，但复审为 `REVISE`：终态结果与
-provenance 仍接受非终态、终态事件缺少最终结果/provenance、依赖版本允许 tag、日志 Artifact
-引用缺少平台 byteSize 上界，且权威契约文件需要按职责拆分。修订通过前不得开始 U14；
-U14-U18 与联合验收仍未实现，不能把契约落地描述成可执行实验能力。
+**S4 状态：** U13 的 `ExperimentRuntimePort` 与 Run 契约已通过复审：终态结果与
+provenance 只接受 succeeded/failed/cancelled，终态事件携带并校验最终 result/provenance，
+依赖使用精确 SemVer，日志 Artifact 引用受平台 byteSize 上界约束；数据契约与 streaming Port
+已按职责拆分并保留原公开导入路径。U14 已解锁；U14-U18 与联合验收仍未实现，不能把契约落地
+描述成可执行实验能力。
 
 | S0 任务 | Codex 结论 | 证据                                                                                                                                   |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1030,9 +1031,9 @@ U14-U18 与联合验收仍未实现，不能把契约落地描述成可执行实
 | U11     | `PASS`     | 首批依赖锁定为仓库已安装的 React 19.2.7、React DOM 19.2.7、GSAP 3.15.0、Three 0.185.1；未知、typo、范围、tag、URL 与重复依赖均拒绝。策略固定 network none、iframe 仅 allow-scripts、严格 CSP、512 KiB 输入、64 KiB 消息、1 MiB 输出、30 秒、2 并发、8 队列与 30 msg/s；明确不宣称硬 CPU/内存隔离。相关测试已包含在 Canvas protocol 87/87，tooling/typecheck/lint 通过。               |
 | U12     | `PASS`     | 独立 `apps/web-runtime`、运行账本、受控 routes 与 Canvas 组合已完成；真实 Web + 独立 Runtime + PostgreSQL composition 3/3、R28 非合作 CPU/内存压力 2/2、DB integration 5/5、Runtime 8/8、Canvas protocol 87/87、Web 583/583、tooling 62/62、相关 typecheck、lint 与 production webpack build 通过。bootstrap 只领一次，terminal 必须在 bootstrap 后写入且首终态胜出；跨主体统一 404。 |
 
-| S4 任务 | Codex 结论 | 证据                                                                                                                                                                                               |
-| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U13     | `REVISE`   | commit `bfa88cc` 的初版契约已落地，Agent Core 16 files/109 tests 与 typecheck 通过；但复审确认终态 schema、终态事件载荷、精确依赖版本、日志 Artifact byteSize 上界和模块拆分仍需修订，未解锁 U14。 |
+| S4 任务 | Codex 结论 | 证据                                                                                                                                                                                                             |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U13     | `PASS`     | 初版契约的复审缺口已修订：终态 result/provenance、终态事件完整性、精确 SemVer、日志 Artifact 上界和模块职责拆分均有回归覆盖；Agent Core 16 files/121 tests、typecheck、Prettier 与 diff check 通过，U14 已解锁。 |
 
 | 能力                       | 当前状态  | 当前证据                                                                                                                               | 完成任务                  |
 | -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
@@ -1041,7 +1042,7 @@ U14-U18 与联合验收仍未实现，不能把契约落地描述成可执行实
 | Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过               | U02-U05 passed            |
 | 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环   | U06-U08 passed            |
 | 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                        | U09-U12 passed            |
-| Experiment Runtime         | `partial` | U13 初版 Port 与 Run 契约已落地但待修订；尚无 U14 CPU Adapter、U15 Renderer 或 U16 可复现 smoke                                        | U13 revise；U14-U16 待做  |
+| Experiment Runtime         | `partial` | U13 Port 与 Run 契约已通过；尚无 U14 CPU Adapter、U15 Renderer 或 U16 可复现 smoke                                                     | U13 passed；U14-U16 待做  |
 | TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                         | U17-U19                   |
 | WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 缺目标热词 before/after 证据，模型与 WAV 仅保存在本地且被忽略              | V02-V03                   |
 | 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用 | V04-V09、V12-V13、V16-V17 |

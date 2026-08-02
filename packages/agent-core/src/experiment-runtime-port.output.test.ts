@@ -4,6 +4,7 @@ import {
   experimentProvenanceSchema,
   experimentRunEventSchema,
   experimentRunResultSchema,
+  MAX_EXPERIMENT_LOG_BYTES,
   rejectsCustomImageOrShell,
   rejectsGpuCapability,
   rejectsNetworkCapability,
@@ -31,6 +32,43 @@ const VALID_OUTPUT = {
   byteSize: 2048,
 };
 const NOW = '2026-07-30T12:00:00.000Z';
+
+function makeProvenance(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: 'run-1',
+    codeVersionId: 'code-v1',
+    codeHash: SHA256,
+    environmentId: 'cpu-py3.11',
+    dependencies: [VALID_DEP],
+    inputs: [
+      {
+        mountName: 'data',
+        artifactId: 'art-1',
+        artifactVersionId: 'ver-1',
+        checksum: SHA256,
+      },
+    ],
+    randomSeed: 42,
+    resourceBudget: VALID_BUDGET,
+    startedAt: NOW,
+    finishedAt: NOW,
+    terminalStatus: 'succeeded',
+    failureCode: null,
+    outputs: [VALID_OUTPUT],
+    ...overrides,
+  };
+}
+
+function makeSucceededResult(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: 'run-1',
+    status: 'succeeded',
+    failureCode: null,
+    outputs: [VALID_OUTPUT],
+    logs: [],
+    ...overrides,
+  };
+}
 
 /* ── Tests ────────────────────────────────────────────────────────────────── */
 
@@ -125,6 +163,18 @@ describe('Output references (U13-E)', () => {
       }).success,
     ).toBe(false);
   });
+
+  it.each(['queued', 'running'])('rejects non-terminal %s result', (status) => {
+    expect(
+      experimentRunResultSchema.safeParse({
+        runId: 'r1',
+        status,
+        failureCode: null,
+        outputs: [],
+        logs: [],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('Log entries (U13-E)', () => {
@@ -184,50 +234,40 @@ describe('Log entries (U13-E)', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects an Artifact reference larger than the platform log limit', () => {
+    expect(
+      experimentRunResultSchema.safeParse({
+        runId: 'r1',
+        status: 'succeeded',
+        failureCode: null,
+        outputs: [],
+        logs: [
+          {
+            kind: 'artifact_ref',
+            artifactId: 'art-1',
+            artifactVersionId: 'ver-1',
+            mimeType: 'text/plain',
+            checksum: SHA256,
+            byteSize: MAX_EXPERIMENT_LOG_BYTES + 1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('Provenance (U13-F)', () => {
   it('accepts complete provenance record', () => {
-    expect(
-      experimentProvenanceSchema.safeParse({
-        runId: 'run-1',
-        codeVersionId: 'code-v1',
-        codeHash: SHA256,
-        environmentId: 'cpu-py3.11',
-        dependencies: [VALID_DEP],
-        inputs: [
-          {
-            mountName: 'data',
-            artifactId: 'art-1',
-            artifactVersionId: 'ver-1',
-            checksum: SHA256,
-          },
-        ],
-        randomSeed: 42,
-        resourceBudget: VALID_BUDGET,
-        startedAt: NOW,
-        finishedAt: NOW,
-        terminalStatus: 'succeeded',
-        outputs: [VALID_OUTPUT],
-      }).success,
-    ).toBe(true);
+    expect(experimentProvenanceSchema.safeParse(makeProvenance()).success).toBe(
+      true,
+    );
   });
 
   it('rejects unknown fields (strict)', () => {
     expect(
       experimentProvenanceSchema.safeParse({
-        runId: 'run-1',
-        codeVersionId: 'code-v1',
-        codeHash: SHA256,
-        environmentId: 'cpu-py3.11',
-        dependencies: [VALID_DEP],
-        inputs: [],
-        randomSeed: 42,
-        resourceBudget: VALID_BUDGET,
-        startedAt: NOW,
-        finishedAt: null,
-        terminalStatus: 'queued',
-        outputs: [],
+        ...makeProvenance({ outputs: [] }),
         hostPath: '/tmp/sandbox',
       }).success,
     ).toBe(false);
@@ -236,18 +276,7 @@ describe('Provenance (U13-F)', () => {
   it('rejects objectKey in provenance', () => {
     expect(
       experimentProvenanceSchema.safeParse({
-        runId: 'run-1',
-        codeVersionId: 'code-v1',
-        codeHash: SHA256,
-        environmentId: 'cpu-py3.11',
-        dependencies: [],
-        inputs: [],
-        randomSeed: 42,
-        resourceBudget: VALID_BUDGET,
-        startedAt: NOW,
-        finishedAt: null,
-        terminalStatus: 'queued',
-        outputs: [],
+        ...makeProvenance({ outputs: [] }),
         objectKey: 's3://bucket',
       }).success,
     ).toBe(false);
@@ -256,20 +285,40 @@ describe('Provenance (U13-F)', () => {
   it('rejects secret in provenance', () => {
     expect(
       experimentProvenanceSchema.safeParse({
-        runId: 'run-1',
-        codeVersionId: 'code-v1',
-        codeHash: SHA256,
-        environmentId: 'cpu-py3.11',
-        dependencies: [],
-        inputs: [],
-        randomSeed: 42,
-        resourceBudget: VALID_BUDGET,
-        startedAt: NOW,
-        finishedAt: null,
-        terminalStatus: 'queued',
-        outputs: [],
+        ...makeProvenance({ outputs: [] }),
         secret: 'api-key',
       }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['queued', NOW],
+    ['running', NOW],
+    ['succeeded', null],
+  ])(
+    'rejects non-terminal or unfinished provenance',
+    (terminalStatus, finishedAt) => {
+      expect(
+        experimentProvenanceSchema.safeParse(
+          makeProvenance({ terminalStatus, finishedAt }),
+        ).success,
+      ).toBe(false);
+    },
+  );
+
+  it('rejects failure-code and output combinations that contradict terminal state', () => {
+    expect(
+      experimentProvenanceSchema.safeParse(
+        makeProvenance({ failureCode: 'execution_failed' }),
+      ).success,
+    ).toBe(false);
+    expect(
+      experimentProvenanceSchema.safeParse(
+        makeProvenance({
+          terminalStatus: 'failed',
+          failureCode: 'execution_failed',
+        }),
+      ).success,
     ).toBe(false);
   });
 });
@@ -291,11 +340,12 @@ describe('ExperimentRunEvent (streaming protocol)', () => {
     ).toBe(true);
   });
 
-  it('accepts failed event with failureCode', () => {
+  it('accepts a terminal event with final result and provenance', () => {
     expect(
       experimentRunEventSchema.safeParse({
-        type: 'failed',
-        failureCode: 'experiment_timeout',
+        type: 'succeeded',
+        result: makeSucceededResult(),
+        provenance: makeProvenance(),
       }).success,
     ).toBe(true);
   });
@@ -310,6 +360,23 @@ describe('ExperimentRunEvent (streaming protocol)', () => {
     expect(experimentRunEventSchema.safeParse({ type: 'failed' }).success).toBe(
       false,
     );
+  });
+
+  it('rejects terminal evidence for another run or status', () => {
+    expect(
+      experimentRunEventSchema.safeParse({
+        type: 'succeeded',
+        result: makeSucceededResult(),
+        provenance: makeProvenance({ runId: 'other-run' }),
+      }).success,
+    ).toBe(false);
+    expect(
+      experimentRunEventSchema.safeParse({
+        type: 'succeeded',
+        result: makeSucceededResult(),
+        provenance: makeProvenance({ terminalStatus: 'failed' }),
+      }).success,
+    ).toBe(false);
   });
 });
 
