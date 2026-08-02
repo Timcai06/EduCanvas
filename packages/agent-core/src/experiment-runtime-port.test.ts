@@ -127,6 +127,17 @@ describe('ExperimentRun schema (U13-B)', () => {
     expect(experimentRunSchema.safeParse(input).success).toBe(false);
   });
 
+  it.each(['1.26', '1.26.4.1', 'v1.26.4', '2026.07'])(
+    'rejects non-exact SemVer dependency version %s',
+    (version) => {
+      const input = {
+        ...makeValidRun(),
+        dependencies: [{ name: 'numpy', version }],
+      };
+      expect(experimentRunSchema.safeParse(input).success).toBe(false);
+    },
+  );
+
   it('rejects dependency URL', () => {
     const input = {
       ...makeValidRun(),
