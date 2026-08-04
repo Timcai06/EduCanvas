@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Voice lab for reproducible sherpa-onnx native and WASM comparisons",
   "scripts": {
+    "test": "node test-v02-r.mjs",
     "test:native": "node run-compare.mjs --engine native",
     "test:wasm": "node run-compare.mjs --engine wasm",
     "test:compare": "node run-compare.mjs --engine both",
