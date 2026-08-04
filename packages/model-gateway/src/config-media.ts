@@ -31,6 +31,8 @@ export interface MediaModelAliases {
   embedding?: string;
 }
 
+export type MediaCapability = keyof MediaModelAliases;
+
 /** 媒体能力的运行配额；即使对应别名未配置也会带默认值，便于类型完整。 */
 export interface MediaCapabilityLimits {
   speechVoice: string;
@@ -62,6 +64,19 @@ const parseSpeechVoice = (value: string | undefined): string => {
   return voice;
 };
 
+const defaultMediaCapabilityLimits: MediaCapabilityLimits = {
+  speechVoice: 'alloy',
+  speechTimeoutMs: 60_000,
+  speechMaxInputChars: 3_500,
+  transcriptionTimeoutMs: 120_000,
+  transcriptionMaxInputBytes: 25 * 1024 * 1024,
+  imageTimeoutMs: 120_000,
+  imageMaxOutputBytes: 8 * 1024 * 1024,
+  embeddingModelVersion: null,
+  embeddingTimeoutMs: 60_000,
+  embeddingMaxBatch: 64,
+};
+
 /**
  * 解析媒体模型别名。主 Provider 不支持的别名不产生，能力归属交给
  * `config-capability.ts` 的 per-capability 解析（ADR-0021）：DeepSeek 主配置下
@@ -81,7 +96,13 @@ export function parseMediaModelAliases(
 
   const result: MediaModelAliases = {};
   for (const [alias, rawValue] of aliases) {
-    const modelId = parseModelId(rawValue, false);
+    let modelId: string | undefined;
+    try {
+      modelId = parseModelId(rawValue, false);
+    } catch (error) {
+      if (error instanceof ModelGatewayConfigurationError) continue;
+      throw error;
+    }
     if (modelId === undefined) continue;
     if (provider !== 'openai-compatible') continue;
     result[alias] = modelId;
@@ -112,65 +133,120 @@ function parseEmbeddingModelVersion(
   return version;
 }
 
-/** 解析媒体能力配额。上下界是防御异常部署配置的硬边界，不是性能调优旋钮。 */
+/**
+ * 严格解析单一能力的运行配额。能力字段非法时返回 null，让组合根只关闭该能力；
+ * 主文本配置不得因为一个媒体上限或 voice 拼错而整体失败（ADR-0021）。
+ */
+export function parseMediaCapabilityLimitProjection(
+  environmentValues: ModelGatewayEnvironment,
+  capability: MediaCapability,
+  modelConfigured: boolean,
+): Partial<MediaCapabilityLimits> | null {
+  try {
+    switch (capability) {
+      case 'speech':
+        return {
+          speechVoice: parseSpeechVoice(
+            environmentValues.MODEL_GATEWAY_SPEECH_VOICE,
+          ),
+          speechTimeoutMs: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
+            defaultMediaCapabilityLimits.speechTimeoutMs,
+            { min: 1_000, max: 180_000 },
+            'INVALID_SPEECH_TIMEOUT',
+          ),
+          speechMaxInputChars: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS,
+            defaultMediaCapabilityLimits.speechMaxInputChars,
+            { min: 80, max: 4_096 },
+            'INVALID_SPEECH_MAX_INPUT_CHARS',
+          ),
+        };
+      case 'transcription':
+        return {
+          transcriptionTimeoutMs: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS,
+            defaultMediaCapabilityLimits.transcriptionTimeoutMs,
+            { min: 5_000, max: 300_000 },
+            'INVALID_TRANSCRIPTION_TIMEOUT',
+          ),
+          transcriptionMaxInputBytes: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES,
+            defaultMediaCapabilityLimits.transcriptionMaxInputBytes,
+            { min: 1024, max: 50 * 1024 * 1024 },
+            'INVALID_TRANSCRIPTION_MAX_INPUT_BYTES',
+          ),
+        };
+      case 'image':
+        return {
+          imageTimeoutMs: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_IMAGE_TIMEOUT_MS,
+            defaultMediaCapabilityLimits.imageTimeoutMs,
+            { min: 5_000, max: 300_000 },
+            'INVALID_IMAGE_TIMEOUT',
+          ),
+          imageMaxOutputBytes: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES,
+            defaultMediaCapabilityLimits.imageMaxOutputBytes,
+            { min: 1024, max: 20 * 1024 * 1024 },
+            'INVALID_IMAGE_MAX_OUTPUT_BYTES',
+          ),
+        };
+      case 'embedding':
+        return {
+          embeddingModelVersion: parseEmbeddingModelVersion(
+            environmentValues.MODEL_GATEWAY_EMBEDDING_MODEL_VERSION,
+            modelConfigured,
+          ),
+          embeddingTimeoutMs: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS,
+            defaultMediaCapabilityLimits.embeddingTimeoutMs,
+            { min: 1_000, max: 180_000 },
+            'INVALID_EMBEDDING_TIMEOUT',
+          ),
+          embeddingMaxBatch: parseBoundedInteger(
+            environmentValues.MODEL_GATEWAY_EMBEDDING_MAX_BATCH,
+            defaultMediaCapabilityLimits.embeddingMaxBatch,
+            { min: 1, max: 256 },
+            'INVALID_EMBEDDING_MAX_BATCH',
+          ),
+        };
+    }
+  } catch (error) {
+    if (error instanceof ModelGatewayConfigurationError) return null;
+    throw error;
+  }
+}
+
+/**
+ * 主配置只承载文本路由与各能力的默认/有效投影。非法媒体字段在这里退回默认值，
+ * 随后由 `resolveCapabilityGatewayConfiguration()` 严格解析并关闭对应能力。
+ */
 export function parseMediaCapabilityLimits(
   environmentValues: ModelGatewayEnvironment,
   aliases: MediaModelAliases,
 ): MediaCapabilityLimits {
   return {
-    embeddingModelVersion: parseEmbeddingModelVersion(
-      environmentValues.MODEL_GATEWAY_EMBEDDING_MODEL_VERSION,
+    ...defaultMediaCapabilityLimits,
+    ...(parseMediaCapabilityLimitProjection(
+      environmentValues,
+      'speech',
+      aliases.speech !== undefined,
+    ) ?? {}),
+    ...(parseMediaCapabilityLimitProjection(
+      environmentValues,
+      'transcription',
+      aliases.transcription !== undefined,
+    ) ?? {}),
+    ...(parseMediaCapabilityLimitProjection(
+      environmentValues,
+      'image',
+      aliases.image !== undefined,
+    ) ?? {}),
+    ...(parseMediaCapabilityLimitProjection(
+      environmentValues,
+      'embedding',
       aliases.embedding !== undefined,
-    ),
-    embeddingTimeoutMs: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS,
-      60_000,
-      { min: 1_000, max: 180_000 },
-      'INVALID_EMBEDDING_TIMEOUT',
-    ),
-    /* 批量上限同时约束单次供应商请求体和 Worker 单批持锁时间。 */
-    embeddingMaxBatch: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_EMBEDDING_MAX_BATCH,
-      64,
-      { min: 1, max: 256 },
-      'INVALID_EMBEDDING_MAX_BATCH',
-    ),
-    speechVoice: parseSpeechVoice(environmentValues.MODEL_GATEWAY_SPEECH_VOICE),
-    speechTimeoutMs: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_SPEECH_TIMEOUT_MS,
-      60_000,
-      { min: 1_000, max: 180_000 },
-      'INVALID_SPEECH_TIMEOUT',
-    ),
-    speechMaxInputChars: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_SPEECH_MAX_INPUT_CHARS,
-      3_500,
-      { min: 80, max: 4_096 },
-      'INVALID_SPEECH_MAX_INPUT_CHARS',
-    ),
-    transcriptionTimeoutMs: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_TRANSCRIPTION_TIMEOUT_MS,
-      120_000,
-      { min: 5_000, max: 300_000 },
-      'INVALID_TRANSCRIPTION_TIMEOUT',
-    ),
-    transcriptionMaxInputBytes: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES,
-      25 * 1024 * 1024,
-      { min: 1024, max: 50 * 1024 * 1024 },
-      'INVALID_TRANSCRIPTION_MAX_INPUT_BYTES',
-    ),
-    imageTimeoutMs: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_IMAGE_TIMEOUT_MS,
-      120_000,
-      { min: 5_000, max: 300_000 },
-      'INVALID_IMAGE_TIMEOUT',
-    ),
-    imageMaxOutputBytes: parseBoundedInteger(
-      environmentValues.MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES,
-      8 * 1024 * 1024,
-      { min: 1024, max: 20 * 1024 * 1024 },
-      'INVALID_IMAGE_MAX_OUTPUT_BYTES',
-    ),
+    ) ?? {}),
   };
 }

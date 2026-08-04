@@ -30,6 +30,7 @@
  */
 
 import type { EnabledModelGatewayConfiguration } from './config';
+import { parseMediaCapabilityLimitProjection } from './config-media';
 import {
   isOneOf,
   ModelGatewayConfigurationError,
@@ -174,20 +175,6 @@ export type CapabilityConfiguration =
   | { kind: 'overridden'; override: CapabilityOverrideConfiguration }
   | { kind: 'disabled' };
 
-/** override 中独立声明的超时投影到主配置的能力专属配额字段。 */
-const capabilityTimeoutField: Record<
-  OverrideCapability,
-  | 'speechTimeoutMs'
-  | 'transcriptionTimeoutMs'
-  | 'imageTimeoutMs'
-  | 'embeddingTimeoutMs'
-> = {
-  speech: 'speechTimeoutMs',
-  transcription: 'transcriptionTimeoutMs',
-  image: 'imageTimeoutMs',
-  embedding: 'embeddingTimeoutMs',
-};
-
 /** override 中独立声明的模型别名在主配置中的字段名。 */
 const capabilityModelField: Record<
   OverrideCapability,
@@ -224,11 +211,23 @@ export function resolveCapabilityGatewayConfiguration(
 
   if (capabilityConfiguration.kind === 'disabled') return null;
 
+  const model =
+    capabilityConfiguration.kind === 'overridden'
+      ? capabilityConfiguration.override.model
+      : primaryConfiguration.modelIds[capabilityModelField[capability]];
+  if (!model) return null;
+
+  /* voice、输入/输出上限、embedding version 等也属于能力配置组。
+   * 任一非法只关闭当前能力，绝不能沿用主配置中的默认值伪装可用。 */
+  const limitProjection = parseMediaCapabilityLimitProjection(
+    environmentValues,
+    capability,
+    true,
+  );
+  if (limitProjection === null) return null;
+
   if (capabilityConfiguration.kind === 'inherited') {
-    /* 继承主 Provider 时，模型别名必须在主配置中存在，否则能力不存在。 */
-    return primaryConfiguration.modelIds[capabilityModelField[capability]]
-      ? primaryConfiguration
-      : null;
+    return { ...primaryConfiguration, ...limitProjection };
   }
 
   /* override：把独立 Provider/模型/端点/凭据/超时投影进主配置，
@@ -243,7 +242,7 @@ export function resolveCapabilityGatewayConfiguration(
       ...primaryConfiguration.modelIds,
       [capabilityModelField[capability]]: override.model,
     },
-    [capabilityTimeoutField[capability]]: override.timeoutMs,
+    ...limitProjection,
   };
   return overrideConfiguration;
 }
@@ -281,7 +280,15 @@ export function parseCapabilityConfiguration(
     return { kind: 'disabled' };
   }
 
-  const modelId = parseModelId(environmentValues[keys.model], false);
+  let modelId: string | undefined;
+  try {
+    modelId = parseModelId(environmentValues[keys.model], false);
+  } catch (error) {
+    if (error instanceof ModelGatewayConfigurationError) {
+      return { kind: 'disabled' };
+    }
+    throw error;
+  }
   if (modelId === undefined) return { kind: 'disabled' };
 
   /* 配置组完整性：模型与 Base URL、Key 必须同组出现，不允许隐式拼接主凭据。 */

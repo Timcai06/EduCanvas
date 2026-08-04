@@ -85,6 +85,17 @@ describe('parseCapabilityConfiguration', () => {
     expect(result).toEqual({ kind: 'disabled' });
   });
 
+  it('非法模型 ID 只关闭当前能力', () => {
+    expect(
+      parseCapabilityConfiguration(
+        speechOverride({ MODEL_GATEWAY_SPEECH_MODEL: '非法 模型' }),
+        'speech',
+        'openai-compatible',
+        'local',
+      ),
+    ).toEqual({ kind: 'disabled' });
+  });
+
   it('声明了 override 却缺 Base URL 时关闭能力', () => {
     const result = parseCapabilityConfiguration(
       speechOverride({ MODEL_GATEWAY_SPEECH_BASE_URL: undefined }),

@@ -62,6 +62,27 @@ const targetDeployment = (): ModelGatewayEnvironment =>
   });
 
 describe('C04 跨能力验收', () => {
+  it('DeepSeek 文本与独立 Vision Provider 可并存且凭据不混合', () => {
+    const primary = resolvePrimary(
+      deepSeekPrimary({
+        MODEL_GATEWAY_VISION_MODEL: 'vision-model',
+        MODEL_GATEWAY_VISION_BASE_URL: 'https://vision.invalid/v1',
+        MODEL_GATEWAY_VISION_API_KEY: 'vision-fixture-key',
+      }),
+    );
+
+    expect(primary).toMatchObject({
+      provider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      modelIds: { primary: 'deepseek-text-model' },
+      visionProvider: {
+        baseUrl: 'https://vision.invalid/v1',
+        apiKey: 'vision-fixture-key',
+        modelId: 'vision-model',
+      },
+    });
+  });
+
   it('目标部署：DeepSeek 文本 + 独立 Speech/Transcription，其余能力关闭', () => {
     const environment = targetDeployment();
     const primary = resolvePrimary(environment);

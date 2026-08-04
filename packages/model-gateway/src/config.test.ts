@@ -292,16 +292,15 @@ describe('parseModelGatewayConfiguration', () => {
       embeddingMaxBatch: 64,
     });
 
-    expect(() =>
+    expect(
       parseModelGatewayConfiguration({
         ...base,
         MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model',
       }),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'MISSING_EMBEDDING_MODEL_VERSION',
-      }),
-    );
+    ).toMatchObject({
+      enabled: true,
+      embeddingModelVersion: null,
+    });
 
     expect(
       parseModelGatewayConfiguration({
@@ -317,15 +316,12 @@ describe('parseModelGatewayConfiguration', () => {
     });
   });
 
-  it('越界的图像上限以稳定错误码拒绝', () => {
-    for (const [key, code] of [
-      ['MODEL_GATEWAY_IMAGE_TIMEOUT_MS', 'INVALID_IMAGE_TIMEOUT'],
-      [
-        'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
-        'INVALID_IMAGE_MAX_OUTPUT_BYTES',
-      ],
+  it('越界的图像上限不拖垮主文本配置', () => {
+    for (const key of [
+      'MODEL_GATEWAY_IMAGE_TIMEOUT_MS',
+      'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
     ] as const) {
-      expect(() =>
+      expect(
         parseModelGatewayConfiguration({
           EDUCANVAS_DEPLOYMENT_ENV: 'production',
           MODEL_GATEWAY_PROVIDER: 'openai-compatible',
@@ -334,11 +330,10 @@ describe('parseModelGatewayConfiguration', () => {
           MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
           [key]: '999999999',
         }),
-      ).toThrowError(
-        expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-          code,
-        }),
-      );
+      ).toMatchObject({
+        enabled: true,
+        modelIds: { primary: 'primary-explicit' },
+      });
     }
   });
 });

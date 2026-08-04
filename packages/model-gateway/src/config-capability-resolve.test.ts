@@ -151,4 +151,76 @@ describe('resolveCapabilityGatewayConfiguration', () => {
       resolveCapabilityGatewayConfiguration(environment, 'speech', primary),
     ).toBeNull();
   });
+
+  it.each([
+    [
+      'speech',
+      'MODEL_GATEWAY_SPEECH_MODEL',
+      'speech-model',
+      'MODEL_GATEWAY_SPEECH_VOICE',
+      'bad voice',
+    ],
+    [
+      'transcription',
+      'MODEL_GATEWAY_TRANSCRIPTION_MODEL',
+      'transcription-model',
+      'MODEL_GATEWAY_TRANSCRIPTION_MAX_INPUT_BYTES',
+      '999999999',
+    ],
+    [
+      'image',
+      'MODEL_GATEWAY_IMAGE_MODEL',
+      'image-model',
+      'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
+      '999999999',
+    ],
+    [
+      'embedding',
+      'MODEL_GATEWAY_EMBEDDING_MODEL',
+      'embedding-model',
+      'MODEL_GATEWAY_EMBEDDING_MAX_BATCH',
+      '999999999',
+    ],
+  ] as const)(
+    '%s 配额非法时只关闭该能力，主文本配置保持 enabled',
+    (capability, modelKey, model, invalidKey, invalidValue) => {
+      const environment = primaryEnvironment({
+        [modelKey]: model,
+        ...(capability === 'embedding'
+          ? { MODEL_GATEWAY_EMBEDDING_MODEL_VERSION: 'v1' }
+          : {}),
+        [invalidKey]: invalidValue,
+      });
+      const primary = resolvePrimary(environment);
+      expect(primary).not.toBeNull();
+      expect(primary?.modelIds.primary).toBe('primary-model');
+      expect(
+        resolveCapabilityGatewayConfiguration(environment, capability, primary),
+      ).toBeNull();
+    },
+  );
+
+  it('embedding 缺模型版本时只关闭 embedding，不拖垮文本配置', () => {
+    const environment = primaryEnvironment({
+      MODEL_GATEWAY_EMBEDDING_MODEL: 'embedding-model',
+    });
+    const primary = resolvePrimary(environment);
+    expect(primary).not.toBeNull();
+    expect(primary?.modelIds.primary).toBe('primary-model');
+    expect(
+      resolveCapabilityGatewayConfiguration(environment, 'embedding', primary),
+    ).toBeNull();
+  });
+
+  it('非法媒体模型 ID 只关闭当前能力，不拖垮文本配置', () => {
+    const environment = primaryEnvironment({
+      MODEL_GATEWAY_SPEECH_MODEL: '非法 模型',
+    });
+    const primary = resolvePrimary(environment);
+    expect(primary).not.toBeNull();
+    expect(primary?.modelIds.primary).toBe('primary-model');
+    expect(
+      resolveCapabilityGatewayConfiguration(environment, 'speech', primary),
+    ).toBeNull();
+  });
 });
