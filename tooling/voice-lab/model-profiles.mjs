@@ -1,7 +1,8 @@
-/** Official sherpa-onnx transducer profiles used by the bounded V02-S study. */
+/** Official sherpa-onnx profiles used by the bounded V02-S/V02-T studies. */
 
 const PROFILES = Object.freeze({
   current: Object.freeze({
+    architecture: 'transducer',
     id: 'current-bilingual-fp32',
     directory: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     encoder: 'encoder-epoch-99-avg-1.onnx',
@@ -33,6 +34,7 @@ const PROFILES = Object.freeze({
     }),
   }),
   'small-bilingual-fp32': Object.freeze({
+    architecture: 'transducer',
     id: 'small-bilingual-fp32',
     directory:
       'sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16',
@@ -64,6 +66,34 @@ const PROFILES = Object.freeze({
         'bcae393dbc5611be5ffa4c7ae0841558978a5a4f484008cb9dff3a2cc97ebe01',
     }),
   }),
+  'paraformer-bilingual-int8': Object.freeze({
+    architecture: 'paraformer',
+    id: 'paraformer-bilingual-int8',
+    directory: 'sherpa-onnx-streaming-paraformer-bilingual-zh-en-int8',
+    encoder: 'encoder.int8.onnx',
+    decoder: 'decoder.int8.onnx',
+    tokens: 'tokens.txt',
+    modelingUnit: null,
+    decodingMethod: 'greedy_search',
+    maxActivePaths: 4,
+    supportsHotwords: false,
+    languageScope: 'zh-en',
+    license: 'Apache-2.0',
+    modelBytes: 237202501,
+    source:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2',
+    sourceRevision: 'asr-models',
+    archiveSha256:
+      '5462a1fce42693deae572af1e8c4687124b12aa85fe61ff4d3168bb5280e205f',
+    hashes: Object.freeze({
+      encoder:
+        '81a70226a8934e6ed92aa1d4fc486b428b5398e2f2619ed4897b7294cab90e9a',
+      decoder:
+        'f3cca9f77bb9d93c8fcbfb63ae617b6b1ee96818df3aa3b151c40658fe38594f',
+      tokens:
+        '59aba8873a2ed1e122c25fee421e25f283b63290efbde85c1f01a853d83cb6e6',
+    }),
+  }),
 });
 
 export function getModelProfile(name) {
@@ -75,21 +105,26 @@ export function listModelProfiles() {
 }
 
 export function requiredModelFiles(profile) {
-  return [
-    profile.encoder,
-    profile.decoder,
-    profile.joiner,
-    profile.tokens,
-    profile.bpeVocab,
-  ];
+  return profile.architecture === 'paraformer'
+    ? [profile.encoder, profile.decoder, profile.tokens]
+    : [
+        profile.encoder,
+        profile.decoder,
+        profile.joiner,
+        profile.tokens,
+        profile.bpeVocab,
+      ];
 }
 
 export function expectedRequiredModelHashes(profile) {
-  return Object.freeze({
+  const hashes = {
     [profile.encoder]: profile.hashes.encoder,
     [profile.decoder]: profile.hashes.decoder,
-    [profile.joiner]: profile.hashes.joiner,
     [profile.tokens]: profile.hashes.tokens,
-    [profile.bpeVocab]: profile.hashes.bpeVocab,
-  });
+  };
+  if (profile.architecture !== 'paraformer') {
+    hashes[profile.joiner] = profile.hashes.joiner;
+    hashes[profile.bpeVocab] = profile.hashes.bpeVocab;
+  }
+  return Object.freeze(hashes);
 }

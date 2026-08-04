@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-08-04
-- 下一领取任务：`V02-T`；`U19` 等待 `V17`，语音业务接线仍保持关闭
+- 下一领取任务：无；V02-T 已实证阻塞，需先决定新的模型/热词路线；`U19` 等待 `V17`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -238,6 +238,14 @@ before 已正确识别术语，不得因无法制造 before 错误而判失败�
 - 模型权重不超过 250 MiB、RTF 不高于 0.5、峰值 RSS 不超过 1.5 GiB；
 - 进程、错误与证据不含绝对路径、原始音频或模型字节；
 - 只有全部门槛通过才可修订 V02 为 PASS 并解锁 V03，否则保持 `BLOCKED_MODEL`。
+
+正式结果（2026-08-04）：官方 streaming Paraformer bilingual INT8 在 Node 22/24 的 baseline
+各 3/3 稳定命中 `BAGGING`/`BOOSTING`，但归一化 WER 均为 0.6667。RTF
+0.2246–0.2479、峰值 RSS 806,448–961,984 KiB、权重 237,202,501 bytes 均在资源门槛内。
+当前 sherpa-onnx 1.13.4 在线 Paraformer 仅支持 `greedy_search`，而热词要求
+`modified_beam_search`，6/6 after capability probe 均以
+`hotwords_not_supported_by_profile` 明确失败。结论为 `BLOCKED_MODEL`，
+`blockerCode=hotword_mode_unsupported`；V02 保持阻塞，V03 未解锁。
 
 #### V03：回写语音可行性证据与能力门禁
 
@@ -1015,8 +1023,8 @@ Codex 审核报告固定格式：
 2026-07-30 的现状审计已改用最新主线与独立 U12 分支；领取任务时仍须重新记录
 `origin/main`，不得把历史基线当作当前 HEAD。
 
-**S0 状态：** Canvas 子线 passed（U00/U01），语音 V01 passed、V02 `BLOCKED_MODEL`、V02-T
-pending、V03 blocked；S0 整体
+**S0 状态：** Canvas 子线 passed（U00/U01），语音 V01 passed、V02/V02-T
+`BLOCKED_MODEL`、V03 blocked；S0 整体
 未通过，Canvas 后续任务可按依赖图独立推进。
 
 **S1 状态：** Canvas 子线 passed（U02-U05）；语音任务仍受 V02-V03 阻塞，不得提前进入 V04。
@@ -1043,14 +1051,14 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 不执行 Runtime，也不发送正文、Prompt、对象键或长期链接。S4 的 Canvas 子线已完成，阶段出口
 仍等待语音 V17。
 
-| S0 任务 | Codex 结论      | 证据                                                                                                                                                                                                                                                                                 |
-| ------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| U00     | `PASS`          | 基线事实、提交与验证映射已复核                                                                                                                                                                                                                                                       |
-| U01     | `PASS`          | Canvas protocol 58/58、Web 385/385、两侧 typecheck 通过；资源访问边界测试覆盖身份与 Notebook 参数                                                                                                                                                                                    |
-| V01     | `PASS`          | 相同 16 kHz WAV、100 ms 分块、1.5 秒尾静音下，Node 22/24 WASM SIMD 均 4/4 非空、RTF 约 0.12；原生 Node 20/22/24 均 0/4，故否决原生路线                                                                                                                                               |
-| V02     | `BLOCKED_MODEL` | 项目负责人真人录音 72 次正式矩阵已完成且无崩溃。current 模型 after 未同时识别 `BAGGING`/`BOOSTING` 且权重 356,862,456 bytes 超过 250 MiB；small 模型在 before/after 均含两个术语，但没有热词增益，且完整句转录仍有大量错误。证据见 `tooling/voice-lab/evidence/v02-s-summary.json`。 |
-| V02-T   | `PENDING`       | 只允许评估 ADR 目标模型或一个官方流式双语候选，并以术语召回、整句 WER、RTF、RSS、体积和 before/after 不回退为产品门槛；不得接入业务。                                                                                                                                                |
-| V03     | `BLOCK`         | 依赖 V02-T 给出可接受模型并将 V02 收口为 PASS；产品语音门禁保持关闭。                                                                                                                                                                                                                |
+| S0 任务 | Codex 结论      | 证据                                                                                                                                                                                                                                          |
+| ------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U00     | `PASS`          | 基线事实、提交与验证映射已复核                                                                                                                                                                                                                |
+| U01     | `PASS`          | Canvas protocol 58/58、Web 385/385、两侧 typecheck 通过；资源访问边界测试覆盖身份与 Notebook 参数                                                                                                                                             |
+| V01     | `PASS`          | 相同 16 kHz WAV、100 ms 分块、1.5 秒尾静音下，Node 22/24 WASM SIMD 均 4/4 非空、RTF 约 0.12；原生 Node 20/22/24 均 0/4，故否决原生路线                                                                                                        |
+| V02     | `BLOCKED_MODEL` | V02-S 的 Zipformer 候选未同时满足术语、完整句质量与体积门槛；V02-T 的 Paraformer INT8 完整句 WER 0.6667 且不支持当前热词解码路径。证据见 `tooling/voice-lab/evidence/v02-s-summary.json` 与 `tooling/voice-lab/evidence/v02-t-summary.json`。 |
+| V02-T   | `BLOCKED_MODEL` | Node 22/24 baseline 各 3/3 稳定；RTF/RSS/体积通过，但 6/6 hotword probe 以 `hotwords_not_supported_by_profile` 失败，未达到产品门槛。                                                                                                         |
+| V03     | `BLOCK`         | 依赖 V02-T 给出可接受模型并将 V02 收口为 PASS；产品语音门禁保持关闭。                                                                                                                                                                         |
 
 | S1 任务 | Codex 结论 | 证据                                                                                                                                                                                                        |
 | ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1090,7 +1098,7 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 | 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                                                      | U09-U12 passed             |
 | Experiment Runtime         | `passed`  | U13 Port/Run 契约、U14 隔离 CPU Adapter、U15 有界 Renderer 与 U16 可复现实验 smoke 已通过；测试 fixture 不伪装成生产数据源，Renderer 仍未接入缺少真实来源的 registry | U13-U16 passed             |
 | TUI/渠道 Canvas            | `passed`  | Gateway 提供按 bearer 主体和 Notebook 重新授权的 CanvasResource 目录；TUI `/canvas` 使用一次性交接，Telegram 按可信绑定输出有界摘要且不执行 Runtime                  | U17-U18 passed；U19 待 V17 |
-| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD；V02-S 真人录音 72 次矩阵得到 `BLOCKED_MODEL`：current 模型术语与体积失败，small 模型虽含术语但整句质量和热词增益不足                           | V02-T、V03                 |
+| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD；V02-S 的 Zipformer 与 V02-T 的 Paraformer INT8 均未同时满足完整转录质量和热词能力门槛                                                          | 新模型/热词路线决策、V03   |
 | 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用                               | V04-V09、V12-V13、V16-V17  |
 | 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                                                 | V10-V15                    |
 | 联合发布证据               | `pending` | 尚未执行                                                                                                                                                             | U20-U21                    |
@@ -1129,6 +1137,6 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 - 模型: sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20
 - 方法: 相同官方 WAV、16 kHz 校验、100 ms 分块、1.5 秒尾部静音与 inputFinished()
 - 结果: 原生在三个 Node 均 0.wav–3.wav 空文本；WASM 在 Node 22/24 均 4/4 非空、RTF 约 0.12，选择 WASM SIMD 路线
-- 阻塞: V02-S 真人录音 72 次矩阵结论为 `BLOCKED_MODEL`；先执行 V02-T 模型策略修订。V03、V04-V09、V12-V13、V16-V17 全部 blocked
+- 阻塞: V02-S/V02-T 均为 `BLOCKED_MODEL`；需先决定新的模型/热词路线。V03、V04-V09、V12-V13、V16-V17 全部 blocked
 
 不得在此表记录密钥、原始音频、学生数据、未授权教材或不可复现的口头结论。

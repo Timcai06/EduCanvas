@@ -213,25 +213,65 @@ before/after 对同一 profile、Node 和 fixture 只允许热词文件不同。
 下一步是计划中的 V02-T：继续使用同一真人录音，评估 ADR 指定模型或一个许可明确的官方
 流式双语候选，并将基础识别质量与热词增益拆成独立门槛。不得在 V02-T 通过前接入业务。
 
+## V02-T：Paraformer INT8 模型策略实验
+
+V02-T 评估 sherpa-onnx 官方发布的
+`sherpa-onnx-streaming-paraformer-bilingual-zh-en` INT8 权重。归档 SHA-256 为
+`5462a1fce42693deae572af1e8c4687124b12aa85fe61ff4d3168bb5280e205f`，实际所需权重与
+tokens 共 237,202,501 bytes；runner 还会逐文件验证 encoder、decoder 和 tokens 的 SHA-256。
+模型、归档、真人 WAV 和逐次结果仍全部留在被忽略目录。
+
+正式矩阵沿用 V02-S 的真人录音，固定 WASM、100 ms 分块、1.5 秒尾静音，并在 Node
+22.23.1 与 24.18.0 上各运行 3 轮 baseline 和 3 轮 hotword capability probe。摘要见
+`evidence/v02-t-summary.json`。
+
+结果：
+
+- 两个 Node 的 baseline 各 3/3 稳定，`BAGGING`/`BOOSTING` 召回率均为 100%；
+- baseline 归一化 WER 均为 0.6667，高于 0.35 门槛；
+- baseline RTF 为 0.2246–0.2479，峰值 RSS 为 806,448–961,984 KiB，模型体积、速度和内存
+  均在门槛内；
+- 当前 sherpa-onnx 1.13.4 的在线 Paraformer 实现只支持 `greedy_search`，而 hotwords 配置要求
+  `modified_beam_search`。因此 6/6 probe 均以稳定码
+  `hotwords_not_supported_by_profile` 失败，未伪装为空转录或成功。
+
+最终 verdict 为 `BLOCKED_MODEL`，`blockerCode=hotword_mode_unsupported`。基础质量与
+热词能力均未通过产品门槛，V02 不改为 PASS，V03 不解锁。
+
+复现：
+
+```bash
+cd tooling/voice-lab
+npm test
+npm run test:v02-t -- \
+  --node22 models/node-v22.23.1-darwin-arm64/bin/node \
+  --node24 /path/to/node-v24.18.0/bin/node
+npm run summarize:v02-t
+```
+
 ## 推荐与门禁
 
 证据支持 **WASM SIMD 作为后续产品路线**：它在仓库支持的 Node 22/24 上均为 4/4 非空，
 RTF 约 0.12，满足本 fixture 范围内的实时性；Node 20 仅作兼容实验，也为 4/4 非空。
 原生 addon 在 Node 20/22/24 均为 0/4，虽更快但已被否决为产品路线。V01 因此 `PASS`；
-V02 已完成真人录音、双模型、双 Node 的 72 次受控 before/after，
-但现有候选未同时满足术语、完整句质量与资源门槛，V02 = `BLOCKED_MODEL`，
+V02-S 与 V02-T 已完成真人录音下的受控证据；现有 Zipformer 候选未同时满足术语和整句质量，
+Paraformer INT8 又不支持当前热词解码路径且整句 WER 超限。V02 = `BLOCKED_MODEL`，
 V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-0018 的 `accepted` 状态。
 
 ## 文件
 
 - `run-compare.mjs`：统一 runner 和 JSON 证据（自动记录 SHA-256 哈希）
-- `model-profiles.mjs`：V02-S 预声明的官方模型、权重文件、语言范围与许可
+- `model-profiles.mjs`：V02-S/V02-T 预声明的官方模型、权重文件、语言范围、许可与能力
 - `prepare-v02-s-model.mjs`：验证两个 profile 的文件哈希并安全准备共享 `bpe.vocab`
 - `v02-s-fixture-manifest.mjs`：真人 fixture 来源、授权、文本、格式和哈希的唯一 schema
 - `run-v02-s-matrix.mjs`：固定 Node/profile/score/repetition 的 72 次正式矩阵
 - `generate-v02-s-summary.mjs`：从被忽略的原始结果生成有界 V02-S 证据摘要
 - `evidence/v02-s-summary.json`：不含音频、模型或绝对路径的正式矩阵摘要
 - `v02-s-evaluation.mjs`：跨 Node 候选门槛与稳定 verdict
+- `run-v02-t-matrix.mjs`：固定 Node 和 repetition 的 Paraformer baseline/capability 矩阵
+- `generate-v02-t-summary.mjs`：从被忽略的逐次结果生成 V02-T 有界摘要
+- `v02-t-evaluation.mjs`：术语、WER、资源、热词能力与解锁门槛
+- `evidence/v02-t-summary.json`：不含音频、模型或绝对路径的 V02-T 正式摘要
 - `fixtures/hotwords-bagging-boosting.txt`：UTF-8 热词词表
 - `fixtures/hotwords-v02-s.txt`：符合官方 English/BPE 规范的全大写 V02-S 热词词表
 - `fixtures/hotwords-official-test.txt`：harness 验证用热词词表
