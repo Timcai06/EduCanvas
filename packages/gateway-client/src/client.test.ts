@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { GatewayBootstrapClient, GatewayClient } from './client';
 
+/**
+ * Gateway 客户端测试从三类安全边界验证行为：
+ * 1) 引导阶段不将 token/userId 放到 URL；
+ * 2) 会话 API 不把会话信息泄露到请求 URL 或 body；
+ * 3) 流式/回合恢复路径仅消费 NDJSON 与状态变更字段。
+ */
+
 describe('GatewayClient', () => {
   const canvasResource = {
     schemaVersion: 1,

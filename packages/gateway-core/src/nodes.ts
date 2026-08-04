@@ -17,6 +17,11 @@ export const gatewayNodeStatuses = [
 ] as const;
 export const gatewayNodeStatusSchema = z.enum(gatewayNodeStatuses);
 
+/**
+ * Node pairing 是一次性能力协商通道：
+ * - 请求含有效期窗口与公钥；
+ * - 成功配对后只允许白名单能力调用，避免任意能力入侵节点执行面。
+ */
 export const gatewayNodePairingRequestSchema = z
   .object({
     pairingRequestId: gatewayOpaqueIdSchema,

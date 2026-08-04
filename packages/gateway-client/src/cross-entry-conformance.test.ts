@@ -5,6 +5,10 @@ import {
 } from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
 import { GatewayClient } from './client';
 
+/**
+ * 交叉入口合规测试：客户端只提交公共请求体，trust 边界字段（principal/profile）
+ * 在服务端解析，不允许通过公开端点透传。
+ */
 describe('GatewayClient跨入口合规', () => {
   it('不失真地消费共享NDJSON且请求体不携带可信身份或Profile', async () => {
     let body: Record<string, unknown> | undefined;

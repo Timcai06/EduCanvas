@@ -28,6 +28,13 @@ const connections = new DrizzleGatewayConnectionRepository();
 const deliveries = new DrizzleGatewayDeliveryRepository();
 const artifacts = new DrizzlePlatformArtifactRepository();
 
+/**
+ * 从 Web 侧 binding 与 artifact 权限入口安全加载 artifact 投影：
+ * - 先验证笔记本读权限（trustedSubjectId）
+ * - 再核对 artifact 所属 notebook 一致性
+ * - 通过 canvas-protocol projectOwnedArtifactResource 生成跨端可展示资源
+ * - 无权限/归属不一致返回 null（fail-closed，不抛错）
+ */
 async function loadTelegramArtifactResource(input: {
   userId: string;
   notebookId: string;
@@ -59,6 +66,11 @@ function required(name: string): string {
   return value;
 }
 
+/**
+ * 将 gateway 入站 envelope 发给网关内部入口，拿到可重放的事件流（NDJSON）。
+ * - 非 2xx 直接抛错，避免将网关错误细节回传到 channel
+ * - 每行按 schema parse，确保后续逻辑仅处理已校验事件
+ */
 async function gatewayEvents(
   baseUrl: string,
   token: string,
@@ -88,6 +100,10 @@ async function gatewayEvents(
     .map((line) => gatewayOperationEventSchema.parse(JSON.parse(line)));
 }
 
+/**
+ * 解析 Telegram 更新中的用户与会话 ID；
+ * 仅接受数字型 Telegram id，避免污染绑定查找与回执路由。
+ */
 function telegramIds(raw: unknown): { userId: string; chatId: string } | null {
   if (!raw || typeof raw !== 'object') return null;
   const message = (raw as { message?: unknown }).message;
@@ -104,6 +120,13 @@ function telegramIds(raw: unknown): { userId: string; chatId: string } | null {
     : null;
 }
 
+/**
+ * 处理单条 Telegram 更新：
+ * - 识别并完成 pairing 激活（activation）流程（成功/失败通知）
+ * - 未绑定场景直接静默返回
+ * - 已绑定场景转发到网关，拿到事件并回写 delivery
+ * - 回写失败会更新 delivery 状态为 failed，供上游可观测与重试
+ */
 async function processUpdate(input: {
   raw: unknown;
   botToken: string;
@@ -201,6 +224,12 @@ async function processUpdate(input: {
   }
 }
 
+/**
+ * 长轮询主循环（telegram getUpdates）：
+ * - 使用 offset 做幂等性递增，避免重复处理
+ * - 失败响应直接抛错退出，依赖外部进程管理重启策略
+ * - 处理成功后写入 update_id + 1 作为下一轮起点
+ */
 async function run(): Promise<void> {
   const botToken = required('TELEGRAM_BOT_TOKEN');
   const gatewayUrl = required('EDUCANVAS_GATEWAY_URL');
@@ -243,6 +272,12 @@ async function run(): Promise<void> {
   }
 }
 
+/**
+ * 入口命令：
+ * - run: 启动 Telegram 通道消费循环
+ * - bind: 写入私有 binding（用户/会话绑定）
+ * - validate-fixture: 本地读取 fixture 文件验证 normalize 输出（调试/测试工具）
+ */
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'bind') {

@@ -3,13 +3,18 @@ import type { CanvasResource } from '@educanvas/canvas-protocol';
 import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 
 export interface TelegramCanvasDeliveryContext {
+  /** 操作者绑定到的学习者用户ID。 */
   readonly userId: string;
+  /** 目标 notebook（笔记本）ID，用于校验资源归属。 */
   readonly notebookId: string;
 }
 
 export type TelegramCanvasResourceLoader = (input: {
+  /** 调用方已通过绑定校验的用户ID。 */
   readonly userId: string;
+  /** 事件所属 notebook ID。 */
   readonly notebookId: string;
+  /** 需要投影的 artifact ID。 */
   readonly artifactId: string;
 }) => Promise<CanvasResource | null>;
 

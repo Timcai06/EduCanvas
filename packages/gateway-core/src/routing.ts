@@ -62,6 +62,10 @@ const rolePermissions: Record<
   viewer: ['notebook.read'],
 };
 
+/**
+ * 权限枚举是小型静态策略表，用于服务端路由时进行确定性判定。
+ * 任何新增角色必须同时声明对应 `notebookRoleAllows` 语义。
+ */
 export function permissionsForNotebookRole(
   role: NotebookMembershipRole,
 ): readonly NotebookPermission[] {
@@ -73,6 +77,20 @@ export function notebookRoleAllows(
   permission: NotebookPermission,
 ): boolean {
   return rolePermissions[role].includes(permission);
+}
+
+/**
+ * 成员身份有效性核验：未撤销且未过期才算 active，其他时间点一律拒绝生成路由。
+ */
+export function isNotebookMembershipActive(
+  membership: NotebookMembership,
+  now: Date,
+): boolean {
+  const nowIso = now.toISOString();
+  return (
+    membership.revokedAt === null &&
+    (membership.expiresAt === null || membership.expiresAt > nowIso)
+  );
 }
 
 export const notebookMembershipSchema = z
@@ -110,17 +128,6 @@ export const notebookMembershipSchema = z
   });
 
 export type NotebookMembership = z.infer<typeof notebookMembershipSchema>;
-
-export function isNotebookMembershipActive(
-  membership: NotebookMembership,
-  now: Date,
-): boolean {
-  const nowIso = now.toISOString();
-  return (
-    membership.revokedAt === null &&
-    (membership.expiresAt === null || membership.expiresAt > nowIso)
-  );
-}
 
 export const delegatedGrantKinds = [
   'education.teacher',

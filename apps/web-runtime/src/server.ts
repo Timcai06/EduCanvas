@@ -3,10 +3,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { renderHostPage, renderHostScript } from './host-page';
 import type { WebRuntimeConfig } from './config';
 
+/** runId in bootstrap payload follows UUID v4-like 36-char format. */
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** bootstrapToken is fixed length for short-lived capability checks. */
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
+/**
+ * Add security headers shared by success/error responses.
+ * `cache-control: no-store` ensures bootstrap/host outputs are not cached.
+ */
 function headers(response: ServerResponse): void {
   response.setHeader('cache-control', 'no-store');
   response.setHeader('referrer-policy', 'no-referrer');
@@ -24,6 +30,10 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
+/**
+ * Read raw request body with hard size cap (8KiB).
+ * This path is bootstrap-only, so large bodies are rejected before parse.
+ */
 async function body(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -36,6 +46,10 @@ async function body(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
+/**
+ * Validate bootstrap envelope shape and token formats without throwing.
+ * Returns normalized typed value only when keys and formats are exact-match.
+ */
 function bootstrapInput(
   value: unknown,
 ): { runId: string; bootstrapToken: string } | null {
@@ -56,6 +70,14 @@ function bootstrapInput(
   };
 }
 
+/**
+ * Build runtime HTTP handler:
+ * - GET /health: liveness + isolation contract marker
+ * - GET /host: host shell page (with strict CSP)
+ * - GET /host.js: static bootstrap script
+ * - POST /api/bootstrap: claim run content by one-time token
+ * Any non-expected input is collapsed to resource_not_found to avoid leaking details.
+ */
 export function createWebRuntimeHandler(
   config: WebRuntimeConfig,
   repository: Pick<
