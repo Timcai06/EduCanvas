@@ -2,7 +2,9 @@
 
 import { switchConversationAction } from '@/app/actions';
 import LineSidebar from '@/components/LineSidebar';
-import { PencilSimple, Plus, Trash, X } from '@phosphor-icons/react';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListSkeleton } from '@/components/ui/skeleton';
+import { BookOpen, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import {
@@ -50,6 +52,10 @@ export function ConversationSidebar({
   const router = useRouter();
   const firstActionRef = useRef<HTMLButtonElement>(null);
   const [items, setItems] = useState<readonly NotebookListItem[]>([]);
+  const [listStatus, setListStatus] = useState<'loading' | 'ready' | 'failed'>(
+    'loading',
+  );
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [isSwitchPending, startSwitchTransition] = useTransition();
@@ -159,23 +165,25 @@ export function ConversationSidebar({
   };
 
   useEffect(() => {
-    let active = true;
-    void fetch('/api/v1/chat/conversations')
-      .then(async (response) =>
-        response.ok
-          ? ((await response.json()) as {
-              conversations: NotebookListItem[];
-            })
-          : { conversations: [] },
-      )
-      .then((data) => {
-        if (active) setItems(data.conversations);
+    const controller = new AbortController();
+    void fetch('/api/v1/chat/conversations', { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('conversation_list_unavailable');
+        return (await response.json()) as {
+          conversations: NotebookListItem[];
+        };
       })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [activeConversationId, open]);
+      .then((data) => {
+        setItems(data.conversations);
+        setListStatus('ready');
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return;
+        setListStatus('failed');
+      });
+    return () => controller.abort();
+  }, [activeConversationId, open, reloadToken]);
 
   const groups = groupNotebooksByRecency(items, new Date());
 
@@ -230,7 +238,28 @@ export function ConversationSidebar({
             Notebooks
           </p>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {groups.length > 0 ? (
+            {listStatus === 'loading' ? (
+              <ListSkeleton />
+            ) : listStatus === 'failed' ? (
+              <EmptyState
+                compact
+                title="暂时无法读取笔记本"
+                description="网络恢复后重试，不会影响当前对话。"
+                icon={<BookOpen size={18} />}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setListStatus('loading');
+                      setReloadToken((value) => value + 1);
+                    }}
+                    className="min-h-9 rounded-full border border-line bg-card px-4 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    重新加载
+                  </button>
+                }
+              />
+            ) : groups.length > 0 ? (
               <div className="flex flex-col gap-1">
                 {groups.map((group) => {
                   const groupActiveIndex = group.items.findIndex(
@@ -321,18 +350,12 @@ export function ConversationSidebar({
                 })}
               </div>
             ) : (
-              <div className="px-5 py-10 text-center">
-                <span
-                  aria-hidden="true"
-                  className="mx-auto mb-3 block h-px w-10 bg-line"
-                />
-                <p className="text-sm font-medium text-ink-muted">
-                  还没有笔记本
-                </p>
-                <p className="mt-1 text-xs leading-5 text-ink-faint">
-                  新建一个，开始你的第一次对话
-                </p>
-              </div>
+              <EmptyState
+                compact
+                title="还没有笔记本"
+                description="新建一个，开始你的第一次对话。"
+                icon={<BookOpen size={18} />}
+              />
             )}
           </div>
         </div>

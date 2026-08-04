@@ -6,6 +6,7 @@ import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useMemo, useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { CanvasSurface } from './canvas-surface';
 
 gsap.registerPlugin(useGSAP);
 
@@ -67,9 +68,9 @@ export function SlidesRenderer({ content }: { content: unknown }) {
         if (event.key === 'ArrowLeft') go(-1);
       }}
     >
-      <div
+      <CanvasSurface
         data-slide-body
-        className="flex min-h-0 flex-1 flex-col justify-center rounded-2xl border border-line/70 bg-surface/50 px-8 py-6"
+        className="flex min-h-0 flex-1 flex-col justify-center"
       >
         <h3 className="font-display text-xl font-semibold tracking-[-0.02em] text-ink">
           {slide.title}
@@ -79,7 +80,7 @@ export function SlidesRenderer({ content }: { content: unknown }) {
             {slide.bullets.map((bullet, bulletIndex) => (
               <li
                 key={bulletIndex}
-                className="flex items-start gap-2.5 text-[15px] leading-6 text-ink-muted"
+                className="flex items-start gap-2.5 text-body leading-6 text-ink-muted"
               >
                 <span
                   aria-hidden="true"
@@ -90,7 +91,7 @@ export function SlidesRenderer({ content }: { content: unknown }) {
             ))}
           </ul>
         ) : null}
-      </div>
+      </CanvasSurface>
       <div className="flex shrink-0 items-center justify-between pt-3">
         <button
           type="button"

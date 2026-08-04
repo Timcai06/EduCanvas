@@ -8,6 +8,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useMemo, useRef } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { CanvasSurface } from './canvas-surface';
 
 gsap.registerPlugin(useGSAP);
 
@@ -53,15 +54,15 @@ export function MindMapRenderer({ content }: { content: unknown }) {
   }
 
   return (
-    <div ref={rootRef} className="min-w-0" data-mind-map>
+    <CanvasSurface ref={rootRef} className="min-w-0" data-mind-map>
       <MindMapBranch node={parsed.data.root} depth={0} />
-    </div>
+    </CanvasSurface>
   );
 }
 
 const DEPTH_STYLES = [
   'text-lg font-semibold text-ink',
-  'text-[15px] font-medium text-ink',
+  'text-body font-medium text-ink',
   'text-sm text-ink-muted',
   /* 最深层节点仍是可读内容，用 ink-muted 保 AA；层级差由左缩进承载而非更淡的字色 */
   'text-sm text-ink-muted',

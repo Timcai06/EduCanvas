@@ -14,7 +14,7 @@
   background: color-mix(in srgb, var(--color-surface) 78%, transparent);
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--color-card) 72%, transparent) inset,
-    var(--shadow-sm);
+    var(--shadow-float);
   backdrop-filter: blur(12px);
 }
 

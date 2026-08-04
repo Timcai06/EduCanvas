@@ -157,6 +157,16 @@ Token 定义在 `app/globals.css` 的 `@theme {}`（纸面亮态静态值）与
 - 真实技术品牌 logo（Next.js、Docker 等）走 `react-icons/si`（Simple Icons）——
   Phosphor 不收录品牌标识，这是唯一的非 Phosphor 例外。
 - 禁止用 emoji 充当图标。
+- `components.json` 的 `iconLibrary: lucide` 仅是 shadcn CLI 元数据，运行时代码不得据此
+  引入 Lucide；新增基础件仍使用 Phosphor 或不含图标。
+
+### 共享状态与 Canvas 表面
+
+- `components/ui/empty-state.tsx` 统一无数据/失败状态的标题、说明、图标和动作层级。
+- `components/ui/skeleton.tsx` 统一列表加载骨架；加载、空数据、失败必须是三种独立状态，
+  不得把请求失败伪装为「暂无数据」。
+- `features/canvas/canvas-surface.tsx` 统一 Tier 1 Canvas 的纸面、描边、圆角和交互焦点；
+  Slides、Flashcards、Mind Map 只在内容布局上保留差异。
 
 ### 招牌氛围件（不承载信息）
 
@@ -243,12 +253,8 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 
 ### 已接受的债
 
-| 项                                                                                                                                                             | 位置                                            | 为什么接受                                                    | 处理时机                            |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- | ----------------------------------- |
-| PillNav 投影用 Tailwind 默认 `--shadow-sm`（纯黑）而非墨色系                                                                                                   | `components/PillNav.css`                        | R1 零视觉变化原则；差异极小                                   | R3 基础件落地时迁回墨色投影         |
-| OptionWheel/LineSidebar CSS 内含 React Bits 原生 hex 兜底默认值                                                                                                | `components/OptionWheel.css`、`LineSidebar.css` | 所有调用方都经 props 注入 token，画面上不出现；改动无视觉收益 | 组件重写或 R3 清理时                |
-| Canvas 渲染器（slides/flashcards/mind-map）用 `text-[15px]` 任意值                                                                                             | `features/canvas/*.tsx`                         | R3 才做渲染器容器统一，届时一并归字级                         | R3                                  |
-| `components.json` 声明的 lucide 未实际使用（shadcn 脚手架默认值）                                                                                              | `components.json`                               | 全站零 lucide 引用，无视觉影响                                | R3 引入 shadcn 基础件时裁决图标接线 |
-| shadcn/ui 已配置但 `components/ui/` 为空                                                                                                                       | `apps/web/components/ui/`                       | 属 R3 范围                                                    | R3                                  |
-| 字级微调合并：PillNav 0.79rem、Studio 输入 0.8rem → `--text-note`(0.8125rem)；Studio 提示 0.68rem → `--text-overline`(0.6875rem)；时长 0.2s→220ms、0.26s→300ms | 对应 CSS                                        | 差异 ≤0.32px / ≤40ms，不可感知；合并才能形成 scale            | 已在本轮执行，记录备查              |
-| react-grab / react-scan / react-doctor 开发工具未安装                                                                                                          | 全 app                                          | 待用户确认引入开发依赖                                        | 下一轮开工前确认                    |
+| 项                                                                                                                                                             | 位置                                            | 为什么接受                                                    | 处理时机               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| OptionWheel/LineSidebar CSS 内含 React Bits 原生 hex 兜底默认值                                                                                                | `components/OptionWheel.css`、`LineSidebar.css` | 所有调用方都经 props 注入 token，画面上不出现；改动无视觉收益 | 组件重写或 R3 清理时   |
+| 字级微调合并：PillNav 0.79rem、Studio 输入 0.8rem → `--text-note`(0.8125rem)；Studio 提示 0.68rem → `--text-overline`(0.6875rem)；时长 0.2s→220ms、0.26s→300ms | 对应 CSS                                        | 差异 ≤0.32px / ≤40ms，不可感知；合并才能形成 scale            | 已在本轮执行，记录备查 |
+| react-grab / react-scan / react-doctor 开发工具未安装                                                                                                          | 全 app                                          | 待用户确认引入开发依赖                                        | 下一轮开工前确认       |
