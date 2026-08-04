@@ -1,9 +1,13 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  DrizzleObjectDeletionOutboxRepository,
+  OBJECT_DELETION_LEASE_TIMEOUT_MS,
+} from './object-deletion-outbox-repository';
 import {
   DrizzleAssetDerivedProcessingRepository,
   getDerivedAssetJobKind,
@@ -771,5 +775,72 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     expect(
       history.messages.find((message) => message.role === 'student')?.parts,
     ).toEqual(parts);
+  });
+
+  it('tombstone 写入的资产 outbox 行并发 claim 只有一个 worker 领取', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+    await repository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+
+    const workerA = new DrizzleObjectDeletionOutboxRepository(getDatabase());
+    const workerB = new DrizzleObjectDeletionOutboxRepository(getDatabase());
+    const [claimsA, claimsB] = await Promise.all([
+      workerA.claimBatch({ limit: 10 }),
+      workerB.claimBatch({ limit: 10 }),
+    ]);
+    const key = 'uploads/fixture/vision.pdf';
+    const aHas = claimsA.some((c) => c.storageKey === key);
+    const bHas = claimsB.some((c) => c.storageKey === key);
+    expect(aHas !== bHas).toBe(true);
+  });
+
+  it('资产 outbox 行租约过期前不被抢占，过期后恢复且旧 attempt 失效', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(readyPdf());
+    await repository.tombstoneOwnedAsset({
+      ownerSubjectId,
+      spaceId,
+      assetId: created.descriptor.assetId,
+    });
+
+    const repo = new DrizzleObjectDeletionOutboxRepository(getDatabase());
+    const now = new Date();
+    /* worker A 领取并开始处理（模拟正在删除）。 */
+    const first = await repo.claimBatch({ limit: 10, now });
+    const claim = first.find(
+      (c) => c.storageKey === 'uploads/fixture/vision.pdf',
+    );
+    expect(claim).toBeDefined();
+    expect(claim!.attempt).toBe(1);
+
+    /* worker B 在租约未过期时领取不到该行。 */
+    const recent = new Date(now.getTime() + 30_000);
+    const second = await repo.claimBatch({ limit: 10, now: recent });
+    expect(
+      second.some((c) => c.storageKey === 'uploads/fixture/vision.pdf'),
+    ).toBe(false);
+
+    /* 租约过期后 worker B 可恢复领取，attempt 递增防旧 worker 重入。 */
+    const expired = new Date(
+      now.getTime() + OBJECT_DELETION_LEASE_TIMEOUT_MS + 60_000,
+    );
+    const third = await repo.claimBatch({ limit: 10, now: expired });
+    const recovered = third.find(
+      (c) => c.storageKey === 'uploads/fixture/vision.pdf',
+    );
+    expect(recovered).toBeDefined();
+    expect(recovered!.attempt).toBe(2);
+
+    /* 旧 worker（attempt 1）不能推进已被重新领取的行。 */
+    await repo.complete(claim!.id, claim!.attempt);
+    const [row] = await getDatabase()
+      .select({ status: schema.objectDeletionOutbox.status })
+      .from(schema.objectDeletionOutbox)
+      .where(eq(schema.objectDeletionOutbox.id, claim!.id));
+    expect(row?.status).toBe('processing');
   });
 });
