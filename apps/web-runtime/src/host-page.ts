@@ -8,7 +8,7 @@ import {
 /**
  * In-browser host script for web-runtime:
  * - receives bootstrap messages from web app (postMessage)
- * - requests signed bootstrap content from `/api/bootstrap`
+ * - claims one-time bootstrap content from `/api/bootstrap`
  * - creates an iframe `sandbox` with `credentialless` and srcdoc payload
  * - forwards runtime bridge events back to web app with sequence + binding checks
  * - enforces lightweight budget checks and terminal state transitions

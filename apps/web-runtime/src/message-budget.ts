@@ -11,7 +11,7 @@ export interface RuntimeMessageBudgetState {
   readonly rateWindowStarted: number;
   /** 当前窗口内已接收消息条数。 */
   readonly rateWindowMessages: number;
-  /** 当前窗口内累计输出字节数。 */
+  /** 当前运行会话累计输出字节数；跨速率窗口持续累积。 */
   readonly outputBytes: number;
 }
 

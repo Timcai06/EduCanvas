@@ -15,7 +15,7 @@ export const TELEGRAM_CANVAS_SUMMARY_MAX_CHARS = 600;
 
 /**
  * Telegram 只获得有界资源摘要，不接收正文、对象地址或 bearer 深链。
- * 交互式 Runtime 必须回到受控 Web 环境；本投影只返回“状态可见性”。
+ * 交互式 Runtime 必须回到受控 Web 环境；本投影只返回有界标题与状态摘要。
  * 该约束使任意 Telegram 渠道都不会把执行路径误传达为已完成。
  */
 export function projectTelegramCanvasResource(input: {

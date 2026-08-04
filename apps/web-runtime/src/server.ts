@@ -74,7 +74,7 @@ function bootstrapInput(
  * Build runtime HTTP handler:
  * - GET /health: liveness + isolation contract marker
  * - GET /host: host shell page (with strict CSP)
- * - GET /host.js: immutable bootstrap script
+ * - GET /host.js: static bootstrap script
  * - POST /api/bootstrap: claim run content by one-time token
  * Any non-expected input is collapsed to resource_not_found to avoid leaking details.
  */

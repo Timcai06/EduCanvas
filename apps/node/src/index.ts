@@ -32,7 +32,7 @@ const capabilities: GatewayCapabilityManifest = {
 
 const configSchema = z
   .object({
-    /** 网关服务地址（必须是绝对 HTTPS/HTTP URL）。 */
+    /** 网关服务的绝对 URL；当前 schema 只校验 URL 形态。 */
     gatewayUrl: z.string().url(),
     /** 设备所属用户标识。 */
     userId: z.string().min(1),
@@ -42,7 +42,7 @@ const configSchema = z
     token: z.string().min(32),
     /** 配置过期时间，采用 RFC3339 格式，用于本地判断失效边界。 */
     expiresAt: z.string().datetime({ offset: true }),
-    /** ed25519 私钥 PEM，用于签名相关能力证明。 */
+    /** ed25519 私钥 PEM；当前模块仅负责安全持久化保存。 */
     privateKey: z.string().min(32),
     /** 网关端 pairing 回写的完整记录。 */
     pairing: gatewayNodePairingRecordSchema,
@@ -75,7 +75,7 @@ async function loadConfig() {
 }
 
 /**
- * 发起带授权头的网关 JSON 请求；失败时走统一失败关闭路径（不吞掉鉴权错误细节）。
+ * 发起带授权头的网关 JSON 请求；失败时只保留 HTTP 状态码并丢弃响应体。
  */
 async function requestJson(
   url: string,

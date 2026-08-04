@@ -63,7 +63,7 @@ const rolePermissions: Record<
 };
 
 /**
- * 权限枚举是“静态策略表”，用于在服务端路由时 O(1) 判定。
+ * 权限枚举是小型静态策略表，用于服务端路由时进行确定性判定。
  * 任何新增角色必须同时声明对应 `notebookRoleAllows` 语义。
  */
 export function permissionsForNotebookRole(

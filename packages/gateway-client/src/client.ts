@@ -25,7 +25,7 @@ import {
 import { z } from 'zod';
 
 /**
- * 客户端侧的职责仅限：校验入参、发起 HTTPS 调用、解析回包并保持边界。
+ * 客户端侧的职责仅限：校验入参、发起 HTTP(S) 调用、解析回包并保持边界。
  * 所有会话建立、鉴权强制、路由决策都在网关服务端完成。
  */
 const bootstrapResponseSchema = z
@@ -349,7 +349,7 @@ export class GatewayClient {
    * 解析策略：
    * - JSON 按行解析 NDJSON，允许最后一条无换行；
    * - 缓冲区上限 1_000_000 字节，防止恶意超长帧；
-   * - 每条 event 都经过 schema 校验，顺序错误直接抛异常中断消费。
+   * - 每条 event 都经过 schema 校验；无效 JSON 或 schema 不匹配会抛异常中断消费。
    */
   async *streamTurn(
     request: GatewayClientTurnRequest,

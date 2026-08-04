@@ -195,7 +195,7 @@ export function normalizeTelegramUpdate(
 
 /**
  * Telegram 下发正文按 Telegram sendMessage 长度与换行边界分包。
- * 选择 4,096 的 cap 是为避免未来客户端 API 限制变化带来单条过长失败；
+ * 使用固定 4,096 字符上限；若通道限制变化，必须同步调整实现与测试；
  * 无内容时返回空数组，避免发送空消息。
  */
 export function telegramTextChunks(

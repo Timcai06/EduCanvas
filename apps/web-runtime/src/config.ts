@@ -54,7 +54,8 @@ function conservativeRegistrableHost(hostname: string): string {
  *
  * 1) Ports are ignored intentionally in site matching.
  * 2) localhost and IP literals keep exact host for testability.
- * 3) For normal hostnames we keep the registrable suffix.
+ * 3) For normal hostnames we use a conservative last-two-label approximation;
+ *    this is not a Public Suffix List parser, so deployment hostnames must avoid ambiguous suffixes.
  */
 export function schemefulSite(value: URL): string {
   return `${value.protocol}//${conservativeRegistrableHost(value.hostname)}`;
