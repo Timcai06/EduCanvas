@@ -1,11 +1,11 @@
 # 模型能力独立 Provider 配置
 
 - 任务分配名：`C 模型配置`
-- 状态：`active`
+- 状态：`review`
 - 负责人：项目负责人
 - 代码审核与最终验收：Codex
 - 依赖决策：[ADR-0021](../../09-decisions/0021-模型能力独立Provider与继承规则.md)
-- 当前领取任务：`C00`
+- 当前领取任务：无；`C00-C04` 等待 Codex 最终 CI 与合并复审
 
 ## 一、目标
 
@@ -15,6 +15,21 @@ Provider 默认实现，但配置语义也受统一框架约束；未配置媒�
 明确支持该能力时整组继承，否则只关闭该能力。
 
 ## 二、原子任务
+
+### 配置事实矩阵（C00）
+
+| 能力          | Provider/模型来源                                                               | 未配置时语义                             | 组合根                               |
+| ------------- | ------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------ |
+| text          | 主 `MODEL_GATEWAY_PROVIDER`、Base URL、Key、primary/fast/structured             | 主 Provider 未配置则 Agent 模型能力关闭  | Web/Gateway 既有 Turn 组合           |
+| vision        | ADR-0017 的 `MODEL_GATEWAY_VISION_*` 独立配置                                   | 未配置则图片输入关闭；旧变量保持兼容     | Web 图片输入路由                     |
+| speech        | `MODEL_GATEWAY_SPEECH_PROVIDER/MODEL/BASE_URL/API_KEY/TIMEOUT_MS`               | 主 Provider 支持且有模型时继承，否则关闭 | Worker `resolveSpeechModelGateway()` |
+| transcription | `MODEL_GATEWAY_TRANSCRIPTION_PROVIDER/MODEL/BASE_URL/API_KEY/TIMEOUT_MS`        | 同上                                     | Worker 一次性音频转录                |
+| image         | `MODEL_GATEWAY_IMAGE_PROVIDER/MODEL/BASE_URL/API_KEY/TIMEOUT_MS`                | 同上；关闭时 Web 不注册图像工具          | Web 能力判定 + Worker 图像生成       |
+| embedding     | `MODEL_GATEWAY_EMBEDDING_PROVIDER/MODEL/BASE_URL/API_KEY/TIMEOUT_MS` + 模型版本 | 同上；关闭时检索诚实降级为纯词法         | Web/Worker 检索与摄取                |
+
+负例统一语义：未知 Provider、非法模型、半配置、非法 URL/Key、越界 timeout/配额和缺失
+embedding 版本都只关闭对应媒体能力；主文本配置保持可用。`env:check` 仍以非零退出暴露部署
+错误，但不得打印 Key、带凭据 URL 或原始异常。
 
 ### C00：配置事实与命名冻结
 
@@ -49,7 +64,17 @@ Provider 默认实现，但配置语义也受统一框架约束；未配置媒�
 - 覆盖 DeepSeek 文本 + 独立 Speech/Transcription 的目标部署；
 - 相关 test/typecheck/env-check/tooling 通过并由 Codex 最终复审。
 
-## 三、任务提示词
+## 三、验证台账
+
+| 任务 | 当前结论          | 证据                                                                                  |
+| ---- | ----------------- | ------------------------------------------------------------------------------------- |
+| C00  | `REVIEW_REQUIRED` | 本文配置事实矩阵、继承规则与负例语义                                                  |
+| C01  | `REVIEW_REQUIRED` | `config-capability.ts` 及解析/隔离测试                                                |
+| C02  | `REVIEW_REQUIRED` | Web/Worker 共用 `resolveCapabilityGatewayConfiguration()`                             |
+| C03  | `REVIEW_REQUIRED` | `.env.example`、`env-check.mjs`、模型路由文档                                         |
+| C04  | `REVIEW_REQUIRED` | text/vision/speech/transcription/image/embedding 跨能力验收；最终结果以 Codex/CI 为准 |
+
+## 四、任务提示词
 
 ```text
 只执行 C 模型配置计划当前领取的一个原子任务。先读 AGENTS.md、CLAUDE.md、ADR-0017、

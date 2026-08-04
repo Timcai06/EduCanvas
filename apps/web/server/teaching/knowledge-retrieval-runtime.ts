@@ -15,14 +15,19 @@ import {
   EMBEDDING_INSTRUCTION_VERSION,
   OpenAICompatibleEmbeddingModelGateway,
   parseModelGatewayConfiguration,
+  resolveCapabilityGatewayConfiguration,
+  type EnabledModelGatewayConfiguration,
 } from '@educanvas/model-gateway';
 
 /**
  * Web 组合根只显式转交向量检索所需的环境变量；与其他模型入口同一纪律，
  * API Key 不出 `packages/model-gateway`。
+ *
+ * 能力可用性统一由 `resolveCapabilityGatewayConfiguration()` 判定（ADR-0021）：
+ * embedding 可继承主 Provider 或走独立 override；能力级错误只关闭该能力。
  */
-function embeddingConfiguration() {
-  const configuration = parseModelGatewayConfiguration({
+function embeddingConfiguration(): EnabledModelGatewayConfiguration | null {
+  const primaryConfiguration = parseModelGatewayConfiguration({
     EDUCANVAS_DEPLOYMENT_ENV: process.env.EDUCANVAS_DEPLOYMENT_ENV,
     MODEL_GATEWAY_PROVIDER: process.env.MODEL_GATEWAY_PROVIDER,
     MODEL_GATEWAY_ALLOW_DEEPSEEK: process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
@@ -36,9 +41,31 @@ function embeddingConfiguration() {
       process.env.MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS,
     MODEL_GATEWAY_EMBEDDING_MAX_BATCH:
       process.env.MODEL_GATEWAY_EMBEDDING_MAX_BATCH,
+    MODEL_GATEWAY_EMBEDDING_PROVIDER:
+      process.env.MODEL_GATEWAY_EMBEDDING_PROVIDER,
+    MODEL_GATEWAY_EMBEDDING_BASE_URL:
+      process.env.MODEL_GATEWAY_EMBEDDING_BASE_URL,
+    MODEL_GATEWAY_EMBEDDING_API_KEY:
+      process.env.MODEL_GATEWAY_EMBEDDING_API_KEY,
   });
-  return configuration.enabled &&
-    configuration.provider === 'openai-compatible' &&
+  const configuration = resolveCapabilityGatewayConfiguration(
+    {
+      MODEL_GATEWAY_EMBEDDING_MODEL: process.env.MODEL_GATEWAY_EMBEDDING_MODEL,
+      MODEL_GATEWAY_EMBEDDING_MODEL_VERSION:
+        process.env.MODEL_GATEWAY_EMBEDDING_MODEL_VERSION,
+      MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS:
+        process.env.MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS,
+      MODEL_GATEWAY_EMBEDDING_PROVIDER:
+        process.env.MODEL_GATEWAY_EMBEDDING_PROVIDER,
+      MODEL_GATEWAY_EMBEDDING_BASE_URL:
+        process.env.MODEL_GATEWAY_EMBEDDING_BASE_URL,
+      MODEL_GATEWAY_EMBEDDING_API_KEY:
+        process.env.MODEL_GATEWAY_EMBEDDING_API_KEY,
+    },
+    'embedding',
+    primaryConfiguration.enabled ? primaryConfiguration : null,
+  );
+  return configuration &&
     configuration.modelIds.embedding &&
     configuration.embeddingModelVersion
     ? configuration

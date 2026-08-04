@@ -12,7 +12,10 @@ import {
   type PlatformArtifact,
   type PlatformArtifactJob,
 } from '@educanvas/db';
-import { parseModelGatewayConfiguration } from '@educanvas/model-gateway';
+import {
+  parseModelGatewayConfiguration,
+  resolveCapabilityGatewayConfiguration,
+} from '@educanvas/model-gateway';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 
@@ -61,16 +64,20 @@ interface ImageArtifactRepository {
 /**
  * 判断当前部署是否真的具备图像生成能力。
  *
- * 策略默认拒绝：只有同时满足「模型网关已启用」「Provider 支持图像」「显式配置
- * 了 image 模型别名」时，能力才会进入 ToolKernel 的可用集合，从而进入五维交集。
- * 少配任何一项都不注册工具——宁可模型看不到这个工具，也不要让它声称能画图后
- * 在 Worker 里以 `image_not_configured` 失败。
+ * 策略默认拒绝：只有同时满足「模型网关已启用」「图像能力可用」时，能力才会
+ * 进入 ToolKernel 的可用集合，从而进入五维交集。少配任何一项都不注册工具——
+ * 宁可模型看不到这个工具，也不要让它声称能画图后在 Worker 里以
+ * `image_not_configured` 失败。
+ *
+ * 能力可用性统一由 `resolveCapabilityGatewayConfiguration()` 判定：继承主
+ * Provider 或独立 override 均可；能力级配置错误只关闭该能力，不影响文本
+ * Agent（ADR-0021）。
  *
  * 环境变量只在服务端读取，Key 不出 `packages/model-gateway`。
  */
 export function isImageGenerationConfigured(): boolean {
   try {
-    const configuration = parseModelGatewayConfiguration({
+    const primaryConfiguration = parseModelGatewayConfiguration({
       EDUCANVAS_DEPLOYMENT_ENV: process.env.EDUCANVAS_DEPLOYMENT_ENV,
       MODEL_GATEWAY_PROVIDER: process.env.MODEL_GATEWAY_PROVIDER,
       MODEL_GATEWAY_ALLOW_DEEPSEEK: process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
@@ -78,11 +85,25 @@ export function isImageGenerationConfigured(): boolean {
       MODEL_GATEWAY_API_KEY: process.env.MODEL_GATEWAY_API_KEY,
       MODEL_GATEWAY_PRIMARY_MODEL: process.env.MODEL_GATEWAY_PRIMARY_MODEL,
       MODEL_GATEWAY_IMAGE_MODEL: process.env.MODEL_GATEWAY_IMAGE_MODEL,
+      MODEL_GATEWAY_IMAGE_PROVIDER: process.env.MODEL_GATEWAY_IMAGE_PROVIDER,
+      MODEL_GATEWAY_IMAGE_BASE_URL: process.env.MODEL_GATEWAY_IMAGE_BASE_URL,
+      MODEL_GATEWAY_IMAGE_API_KEY: process.env.MODEL_GATEWAY_IMAGE_API_KEY,
     });
     return (
-      configuration.enabled &&
-      configuration.provider === 'openai-compatible' &&
-      Boolean(configuration.modelIds.image)
+      resolveCapabilityGatewayConfiguration(
+        {
+          MODEL_GATEWAY_IMAGE_MODEL: process.env.MODEL_GATEWAY_IMAGE_MODEL,
+          MODEL_GATEWAY_IMAGE_PROVIDER:
+            process.env.MODEL_GATEWAY_IMAGE_PROVIDER,
+          MODEL_GATEWAY_IMAGE_BASE_URL:
+            process.env.MODEL_GATEWAY_IMAGE_BASE_URL,
+          MODEL_GATEWAY_IMAGE_API_KEY: process.env.MODEL_GATEWAY_IMAGE_API_KEY,
+          MODEL_GATEWAY_IMAGE_TIMEOUT_MS:
+            process.env.MODEL_GATEWAY_IMAGE_TIMEOUT_MS,
+        },
+        'image',
+        primaryConfiguration.enabled ? primaryConfiguration : null,
+      ) !== null
     );
   } catch {
     /* 配置本身非法时同样不开放能力；配置错误码由既有 env:check 路径暴露。 */

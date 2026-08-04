@@ -193,42 +193,37 @@ describe('parseModelGatewayConfiguration', () => {
     });
   });
 
-  it('DeepSeek 不接受 speech alias，避免把不支持的端点当可用', () => {
-    expect(() =>
-      parseModelGatewayConfiguration(
-        deepSeekEnvironment({ MODEL_GATEWAY_SPEECH_MODEL: 'tts-model' }),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'SPEECH_UNSUPPORTED_PROVIDER',
-      }),
+  it('DeepSeek 主 Provider 下 speech alias 不产生别名且不整组失败（ADR-0021）', () => {
+    const configuration = parseModelGatewayConfiguration(
+      deepSeekEnvironment({ MODEL_GATEWAY_SPEECH_MODEL: 'tts-model' }),
     );
+    expect(configuration.enabled).toBe(true);
+    expect(
+      (configuration as { modelIds: Record<string, string> }).modelIds.speech,
+    ).toBeUndefined();
   });
 
-  it('DeepSeek 不接受 transcription alias', () => {
-    expect(() =>
-      parseModelGatewayConfiguration(
-        deepSeekEnvironment({
-          MODEL_GATEWAY_TRANSCRIPTION_MODEL: 'whisper-model',
-        }),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'TRANSCRIPTION_UNSUPPORTED_PROVIDER',
+  it('DeepSeek 主 Provider 下 transcription alias 不产生别名且不整组失败', () => {
+    const configuration = parseModelGatewayConfiguration(
+      deepSeekEnvironment({
+        MODEL_GATEWAY_TRANSCRIPTION_MODEL: 'whisper-model',
       }),
     );
+    expect(configuration.enabled).toBe(true);
+    expect(
+      (configuration as { modelIds: Record<string, string> }).modelIds
+        .transcription,
+    ).toBeUndefined();
   });
 
-  it('DeepSeek 不接受 image alias', () => {
-    expect(() =>
-      parseModelGatewayConfiguration(
-        deepSeekEnvironment({ MODEL_GATEWAY_IMAGE_MODEL: 'image-model' }),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'IMAGE_UNSUPPORTED_PROVIDER',
-      }),
+  it('DeepSeek 主 Provider 下 image alias 不产生别名且不整组失败', () => {
+    const configuration = parseModelGatewayConfiguration(
+      deepSeekEnvironment({ MODEL_GATEWAY_IMAGE_MODEL: 'image-model' }),
     );
+    expect(configuration.enabled).toBe(true);
+    expect(
+      (configuration as { modelIds: Record<string, string> }).modelIds.image,
+    ).toBeUndefined();
   });
 
   it('未配置 image 模型时不产生 image 别名，配置后使用显式上限', () => {
@@ -269,16 +264,15 @@ describe('parseModelGatewayConfiguration', () => {
     });
   });
 
-  it('DeepSeek 不接受 embedding alias', () => {
-    expect(() =>
-      parseModelGatewayConfiguration(
-        deepSeekEnvironment({ MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model' }),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'EMBEDDING_UNSUPPORTED_PROVIDER',
-      }),
+  it('DeepSeek 主 Provider 下 embedding alias 不产生别名且不整组失败', () => {
+    const configuration = parseModelGatewayConfiguration(
+      deepSeekEnvironment({ MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model' }),
     );
+    expect(configuration.enabled).toBe(true);
+    expect(
+      (configuration as { modelIds: Record<string, string> }).modelIds
+        .embedding,
+    ).toBeUndefined();
   });
 
   it('配置 embedding 模型必须同时声明版本，否则向量无法判定可比较性', () => {
@@ -298,16 +292,15 @@ describe('parseModelGatewayConfiguration', () => {
       embeddingMaxBatch: 64,
     });
 
-    expect(() =>
+    expect(
       parseModelGatewayConfiguration({
         ...base,
         MODEL_GATEWAY_EMBEDDING_MODEL: 'embed-model',
       }),
-    ).toThrowError(
-      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-        code: 'MISSING_EMBEDDING_MODEL_VERSION',
-      }),
-    );
+    ).toMatchObject({
+      enabled: true,
+      embeddingModelVersion: null,
+    });
 
     expect(
       parseModelGatewayConfiguration({
@@ -323,15 +316,12 @@ describe('parseModelGatewayConfiguration', () => {
     });
   });
 
-  it('越界的图像上限以稳定错误码拒绝', () => {
-    for (const [key, code] of [
-      ['MODEL_GATEWAY_IMAGE_TIMEOUT_MS', 'INVALID_IMAGE_TIMEOUT'],
-      [
-        'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
-        'INVALID_IMAGE_MAX_OUTPUT_BYTES',
-      ],
+  it('越界的图像上限不拖垮主文本配置', () => {
+    for (const key of [
+      'MODEL_GATEWAY_IMAGE_TIMEOUT_MS',
+      'MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES',
     ] as const) {
-      expect(() =>
+      expect(
         parseModelGatewayConfiguration({
           EDUCANVAS_DEPLOYMENT_ENV: 'production',
           MODEL_GATEWAY_PROVIDER: 'openai-compatible',
@@ -340,11 +330,10 @@ describe('parseModelGatewayConfiguration', () => {
           MODEL_GATEWAY_PRIMARY_MODEL: 'primary-explicit',
           [key]: '999999999',
         }),
-      ).toThrowError(
-        expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
-          code,
-        }),
-      );
+      ).toMatchObject({
+        enabled: true,
+        modelIds: { primary: 'primary-explicit' },
+      });
     }
   });
 });
