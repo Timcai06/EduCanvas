@@ -1,9 +1,22 @@
 /** Reproducible V01/V02: native Node addon versus Node-hosted WASM. */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, normalize, relative } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+} from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
+
+function sha256(filePath) {
+  if (!existsSync(filePath)) return null;
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,27 +32,39 @@ const fixtures = args.fixture
   : ['0.wav', '1.wav', '2.wav', '3.wav'];
 const engines = args.engine === 'both' ? ['native', 'wasm'] : [args.engine];
 const hotwordsPath = args.hotwords ? resolveLocal(args.hotwords) : '';
+const singleFixturePath =
+  fixtures.length === 1 ? resolveFixturePath(fixtures[0]) : null;
 
-if (!existsSync(modelDir)) fail(`Model directory is missing: ${modelDir}`);
+if (!existsSync(modelDir)) fail('Model directory is missing.');
 if (!engines.every((engine) => engine === 'native' || engine === 'wasm'))
   fail('--engine must be native, wasm, or both');
 if (args.hotwords && !existsSync(hotwordsPath))
-  fail(`Hotword configuration is missing: ${hotwordsPath}`);
+  fail('Hotword configuration is missing.');
 
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   command: process.argv.slice(2),
   environment: {
     node: process.version,
     platform: process.platform,
     arch: process.arch,
   },
+  hashes: {
+    fixture: singleFixturePath ? sha256(singleFixturePath) : null,
+    encoder: sha256(join(modelDir, 'encoder-epoch-99-avg-1.onnx')),
+    decoder: sha256(join(modelDir, 'decoder-epoch-99-avg-1.onnx')),
+    joiner: sha256(join(modelDir, 'joiner-epoch-99-avg-1.onnx')),
+    tokens: sha256(join(modelDir, 'tokens.txt')),
+    bpeVocab: sha256(join(modelDir, 'bpe.vocab')),
+    hotwords: args.hotwords ? sha256(hotwordsPath) : null,
+  },
   model: relative(here, modelDir),
+  modelingUnit: 'cjkchar+bpe',
+  decodingMethod: 'modified_beam_search',
+  maxActivePaths: 4,
   chunkMilliseconds: args.chunkMs,
   tailSilenceSeconds: args.tailSeconds,
-  hotwords: args.hotwords
-    ? { path: args.hotwords, score: args.hotwordsScore }
-    : null,
+  hotwordsScore: args.hotwords ? args.hotwordsScore : null,
   runs: [],
 };
 for (const engine of engines) {
@@ -58,20 +83,19 @@ process.exitCode = report.runs.some((run) => run.error || !run.nonEmptyText)
   : 0;
 
 function runFixture(api, engine, fixture) {
-  const wavPath = fixture.includes('/')
-    ? resolveLocal(fixture)
-    : join(modelDir, 'test_wavs', fixture);
+  const wavPath = resolveFixturePath(fixture);
   const started = performance.now();
   const base = {
     engine,
     fixture,
+    fixtureSha256: sha256(wavPath),
     node: process.version,
     packageVersion: api.version,
     packageGitSha: api.gitSha1,
     packageGitDate: api.gitDate,
   };
   try {
-    if (!existsSync(wavPath)) throw new Error(`Fixture is missing: ${wavPath}`);
+    if (!existsSync(wavPath)) throw new Error(`Fixture is missing: ${fixture}`);
     const initStarted = performance.now();
     const recognizer = api.createRecognizer(makeConfig());
     const initMilliseconds = round(performance.now() - initStarted);
@@ -144,12 +168,10 @@ function makeConfig() {
       numThreads: 2,
       provider: 'cpu',
       debug: 0,
-      modelingUnit: args.hotwords ? 'cjkchar+bpe' : 'cjkchar',
-      bpeVocab: args.hotwords ? join(modelDir, 'bpe.vocab') : '',
+      modelingUnit: 'cjkchar+bpe',
+      bpeVocab: join(modelDir, 'bpe.vocab'),
     },
-    // sherpa rejects hotword files with greedy_search; this is an API precondition,
-    // not a post-recognition text replacement.
-    decodingMethod: args.hotwords ? 'modified_beam_search' : 'greedy_search',
+    decodingMethod: 'modified_beam_search',
     maxActivePaths: 4,
     hotwordsFile: hotwordsPath,
     hotwordsScore: args.hotwordsScore,
@@ -213,9 +235,18 @@ function parseArgs(argv) {
   return parsed;
 }
 function resolveLocal(path) {
-  if (isAbsolute(path))
-    throw new Error('Absolute paths are intentionally rejected.');
-  return join(here, path);
+  if (isAbsolute(path)) fail('Absolute paths are intentionally rejected.');
+  const resolved = resolve(here, path);
+  const local = relative(here, resolved);
+  if (local === '..' || local.startsWith('../') || isAbsolute(local)) {
+    fail('Paths outside voice-lab are intentionally rejected.');
+  }
+  return resolved;
+}
+function resolveFixturePath(fixture) {
+  return fixture.includes('/')
+    ? resolveLocal(fixture)
+    : join(modelDir, 'test_wavs', fixture);
 }
 function round(value) {
   return Number(value.toFixed(4));
