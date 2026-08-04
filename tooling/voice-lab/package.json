@@ -5,6 +5,10 @@
   "type": "module",
   "description": "Voice lab for reproducible sherpa-onnx native and WASM comparisons",
   "scripts": {
+    "test": "node test-v02-r.mjs && node --test test-v02-s-evaluation.mjs test-v02-s-fixture-manifest.mjs",
+    "prepare:v02-s-model": "node prepare-v02-s-model.mjs",
+    "test:v02-s": "node run-v02-s-matrix.mjs",
+    "summarize:v02-s": "node generate-v02-s-summary.mjs",
     "test:native": "node run-compare.mjs --engine native",
     "test:wasm": "node run-compare.mjs --engine wasm",
     "test:compare": "node run-compare.mjs --engine both",

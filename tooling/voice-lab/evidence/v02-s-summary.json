@@ -1,0 +1,396 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-S",
+  "fixture": {
+    "sourceKind": "project-owner-recording",
+    "usageAuthorization": "local-evaluation-only",
+    "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+    "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+    "sampleRate": 16000,
+    "channels": 1,
+    "encoding": "pcm_s16le"
+  },
+  "nodes": ["v22.23.1", "v24.18.0"],
+  "controls": {
+    "engine": "wasm",
+    "decodingMethod": "modified_beam_search",
+    "maxActivePaths": 4,
+    "chunkMilliseconds": 100,
+    "tailSilenceSeconds": 1.5,
+    "scores": [1.5, 2, 3.5],
+    "repetitions": 3
+  },
+  "models": {
+    "current": {
+      "id": "current-bilingual-fp32",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2",
+      "license": "Apache-2.0",
+      "languageScope": "zh-en",
+      "modelBytes": 356862456,
+      "hashes": {
+        "encoder": "709f0ed53a734b7942f170127e7547b566cb29c4afc5e67719f314c3d63ccb10",
+        "decoder": "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d",
+        "joiner": "5f2adc585dd1bec6421c8bb8660d2a73fc8b9ceb24491ef51399ba2a2f0fc31b",
+        "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+        "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+      }
+    },
+    "small-bilingual-fp32": {
+      "id": "small-bilingual-fp32",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2",
+      "license": "Apache-2.0",
+      "languageScope": "zh-en",
+      "modelBytes": 115256102,
+      "hashes": {
+        "encoder": "21b820759ba8a2792838748cdc5a14690fe2010bcb6b370f62e71c87ffeefd84",
+        "decoder": "89be509a83175261695bdef5fd1c7b9ab1129a663d1284e7ba9f8507b21e0906",
+        "joiner": "bcbcf0cc1b449bc32b7777084ab5a65d1199b822e2aae149d3a43adc9f4b5775",
+        "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+        "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+      }
+    }
+  },
+  "groups": [
+    {
+      "node": "v22.23.1",
+      "profile": "current",
+      "score": 1.5,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1224,
+        "max": 0.1303
+      },
+      "peakRssKiBRange": {
+        "min": 930688,
+        "max": 1319104
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "current",
+      "score": 2,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1211,
+        "max": 0.1296
+      },
+      "peakRssKiBRange": {
+        "min": 989184,
+        "max": 1221584
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "current",
+      "score": 3.5,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1224,
+        "max": 0.1298
+      },
+      "peakRssKiBRange": {
+        "min": 988944,
+        "max": 1240800
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-fp32",
+      "score": 1.5,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0692,
+        "max": 0.0737
+      },
+      "peakRssKiBRange": {
+        "min": 767600,
+        "max": 781920
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-fp32",
+      "score": 2,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0676,
+        "max": 0.0835
+      },
+      "peakRssKiBRange": {
+        "min": 590400,
+        "max": 783984
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-fp32",
+      "score": 3.5,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0682,
+        "max": 0.0713
+      },
+      "peakRssKiBRange": {
+        "min": 768384,
+        "max": 783232
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current",
+      "score": 1.5,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1176,
+        "max": 0.132
+      },
+      "peakRssKiBRange": {
+        "min": 1049632,
+        "max": 1304624
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current",
+      "score": 2,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1168,
+        "max": 0.1191
+      },
+      "peakRssKiBRange": {
+        "min": 1195344,
+        "max": 1401056
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current",
+      "score": 3.5,
+      "beforeCorrect": [false, false, false],
+      "afterCorrect": [false, false, false],
+      "baselineCapable": false,
+      "hotwordCorrected": false,
+      "limitsPassed": false,
+      "beforeTexts": [
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "afterTexts": [
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS",
+        "BACK IN A BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIOUS WHY BOASTING REDUCED HIS BUYERS"
+      ],
+      "rtfRange": {
+        "min": 0.1174,
+        "max": 0.132
+      },
+      "peakRssKiBRange": {
+        "min": 1017488,
+        "max": 1266112
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-fp32",
+      "score": 1.5,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0666,
+        "max": 0.0759
+      },
+      "peakRssKiBRange": {
+        "min": 825248,
+        "max": 845520
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-fp32",
+      "score": 2,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0674,
+        "max": 0.0735
+      },
+      "peakRssKiBRange": {
+        "min": 820400,
+        "max": 851792
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-fp32",
+      "score": 3.5,
+      "beforeCorrect": [true, true, true],
+      "afterCorrect": [true, true, true],
+      "baselineCapable": true,
+      "hotwordCorrected": false,
+      "limitsPassed": true,
+      "beforeTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "afterTexts": [
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES",
+        "BAGGING AND BOOSTING ARTY CLASSING SEMBLE METHODS BEGGING REDUCES VERIAS WHY BOTH TO HIM REDUCED HIS BIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0705,
+        "max": 0.0918
+      },
+      "peakRssKiBRange": {
+        "min": 544368,
+        "max": 846720
+      }
+    }
+  ],
+  "verdict": "BLOCKED_MODEL",
+  "blockerCode": "target_terms_not_corrected",
+  "selectedProfile": null,
+  "selectedScore": null,
+  "v03Unlocked": false
+}

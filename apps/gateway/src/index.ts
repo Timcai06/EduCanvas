@@ -45,6 +45,7 @@ import {
   GatewayNodeSessionAuth,
 } from './client-auth';
 import { GatewayObservability } from './observability';
+import { GatewayCanvasResourceService } from './canvas-resource-service';
 import { getGatewayTelemetryRuntime } from './telemetry';
 
 function loadWorkspaceEnvFiles(): void {
@@ -116,6 +117,7 @@ const server = createServer(
           operations: operationStore,
           handoffs: new DrizzleGatewayHandoffRepository(),
           connections,
+          canvasResources: new GatewayCanvasResourceService(),
         }
       : null,
     nodeTransport:

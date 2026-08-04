@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@educanvas/channel-telegram": "workspace:*",
+    "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
     "@educanvas/gateway-core": "workspace:*"
   },

@@ -16,6 +16,12 @@ import {
   type GatewayHandoffCredential,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
+import {
+  canvasResourceKindSchema,
+  canvasResourceSchema,
+  type CanvasResource,
+  type CanvasResourceKind,
+} from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
 const bootstrapResponseSchema = z
@@ -188,6 +194,38 @@ export class GatewayClient {
     );
     if (!response.ok) throw await parseError(response);
     return directorySchema.parse(await response.json()).conversations;
+  }
+
+  /**
+   * 列出服务端按当前 bearer 主体与 Notebook 重新授权后的 CanvasResource。
+   * 客户端传入的 notebookId 只是选择器，不是访问凭据。
+   */
+  async listCanvasResources(
+    notebookId: string,
+  ): Promise<readonly CanvasResource[]> {
+    const url = new URL(`${this.baseUrl}/v1/client/canvas-resources`);
+    url.searchParams.set('notebookId', notebookId);
+    const response = await this.fetcher(url, { headers: this.headers() });
+    if (!response.ok) throw await parseError(response);
+    return z
+      .object({ resources: z.array(canvasResourceSchema).max(100) })
+      .strict()
+      .parse(await response.json()).resources;
+  }
+
+  async getCanvasResource(input: {
+    notebookId: string;
+    resourceKind: CanvasResourceKind;
+    resourceId: string;
+  }): Promise<CanvasResource> {
+    const resourceKind = canvasResourceKindSchema.parse(input.resourceKind);
+    const url = new URL(
+      `${this.baseUrl}/v1/client/canvas-resources/${resourceKind}/${encodeURIComponent(input.resourceId)}`,
+    );
+    url.searchParams.set('notebookId', input.notebookId);
+    const response = await this.fetcher(url, { headers: this.headers() });
+    if (!response.ok) throw await parseError(response);
+    return canvasResourceSchema.parse(await response.json());
   }
 
   /**
