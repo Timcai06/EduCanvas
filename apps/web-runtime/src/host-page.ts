@@ -5,6 +5,14 @@ import {
   MAX_RUNTIME_OUTPUT_BYTES,
 } from './message-budget';
 
+/**
+ * In-browser host script for web-runtime:
+ * - receives bootstrap messages from web app (postMessage)
+ * - requests signed bootstrap content from `/api/bootstrap`
+ * - creates an iframe `sandbox` with `credentialless` and srcdoc payload
+ * - forwards runtime bridge events back to web app with sequence + binding checks
+ * - enforces lightweight budget checks and terminal state transitions
+ */
 const hostScript = String.raw`
 (() => {
   "use strict";
@@ -147,6 +155,10 @@ const hostScript = String.raw`
 })();`;
 
 export function renderHostPage(config: WebRuntimeConfig): string {
+  /**
+   * Host page is intentionally minimal: only mount container + bridge loader.
+   * `data-web-origin` is the parent allowlist for message targetOrigin checks.
+   */
   return `<!doctype html>
 <html lang="zh-CN" data-web-origin="${config.webOrigin}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="no-referrer"><title>EduCanvas Runtime</title></head>
@@ -154,6 +166,13 @@ export function renderHostPage(config: WebRuntimeConfig): string {
 </html>`;
 }
 
+/**
+ * Return compiled host bootstrap script string.
+ *
+ * The returned script is served as-is from `/host.js` and must match CSP
+ * assumptions in `/host` response. Changes here should keep the runtime contract:
+ * bootstrap -> activate -> message relay -> terminal states.
+ */
 export function renderHostScript(): string {
   return hostScript;
 }

@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { gatewayOpaqueIdSchema, gatewayTimestampSchema } from './common';
 import { gatewayFailureCodeSchema } from './events';
 
+/**
+ * 投递回执是跨服务端可观测的“发送状态轨迹”：
+ * 仅表示投递通道结果，不替代 operation 本身的成功/失败语义。
+ */
 export const gatewayDeliveryStatuses = [
   'pending',
   'sent',

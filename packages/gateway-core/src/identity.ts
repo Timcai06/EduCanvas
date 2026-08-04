@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { gatewayOpaqueIdSchema, gatewayTimestampSchema } from './common';
 
+/**
+ * 连接端/主体模型用于统一“谁在发起/谁接收”：
+ * role/transport/adapterId 与 principal 共同构成后续鉴权与审计输入。
+ */
 export const gatewayConnectionRoles = [
   'client',
   'channel',
