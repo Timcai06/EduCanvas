@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-08-04
-- 下一领取任务：无；`U19` 等待 `V17`，语音侧保持 `V02 BLOCKED`
+- 下一领取任务：`V02-T`；`U19` 等待 `V17`，语音业务接线仍保持关闭
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -32,21 +32,21 @@ Experiment Runtime、跨入口与实时语音输入。它与朋友负责的
 
 以下事实来自 2026-07-28 的源码核对，不允许 DeepSeek 把它们当成待从零实现的任务。
 
-| 事实                                                                      | 当前证据                                                                                                                             | 结论                                      |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Canvas 统一资源协议已存在                                                 | `packages/canvas-protocol/src/resource.ts:1-235`                                                                                     | 保持兼容，不重定义                        |
-| Renderer manifest 与兼容判定已存在                                        | `packages/canvas-protocol/src/renderer-manifest.ts:10-68`                                                                            | 不再创建第二套 manifest                   |
-| Source 投影已覆盖 PDF、图片、文本、DOCX、音视频                           | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`                                                                   | 从 Web 消费和真实页面补缺口               |
-| Artifact 投影已覆盖结构化与媒体产物                                       | `apps/web/server/canvas/artifact-resource-adapter.ts:18-65,114-187`                                                                  | 不重写服务端投影                          |
-| 统一资源读取会复核身份、Notebook 和归属                                   | `apps/web/server/canvas/resource-access.ts:1-177`、`apps/web/app/api/v1/canvas/resources/[resourceKind]/[resourceId]/route.ts:21-54` | 权限语义必须保持                          |
-| Web 主 Canvas 仍消费旧 `PublicArtifact`                                   | `apps/web/features/canvas/canvas-panel.tsx:7-53`                                                                                     | 这是当前 Canvas 第一真实缺口              |
-| Web 静态 registry 仍只注册三类旧产物                                      | `apps/web/features/canvas/canvas-registry.tsx:349-360`                                                                               | 需要迁移组合层，不是重做协议              |
-| 轻量 HTML 消息预览已有 CSP 和 iframe 限制                                 | `apps/web/features/canvas/sandbox-preview.ts:1-75`                                                                                   | P3 做持久、版本化 Runtime，不复制轻量预览 |
-| 图像 Provider、校验和、checkpoint 和恢复已存在                            | `apps/worker/src/tasks/image-artifact-generation.ts:17-188`                                                                          | 先审计闭环，只补实证缺口                  |
-| 当前音频 Port 只有整段一次性转录                                          | `packages/agent-core/src/model-gateway.ts:191-196`                                                                                   | 新流式 Port 与其并列，不替换              |
-| Composer 的语音按钮仍被禁用                                               | `apps/web/features/composer/composer.tsx:165-174`                                                                                    | 产品接线尚未开始                          |
-| 对象硬删除已有 Outbox 模式                                                | `packages/db/src/object-deletion-outbox-repository.ts`、`apps/worker/src/tasks/delete-object-outbox.ts`                              | 音频删除复用模式，不另造调度系统          |
-| ADR-0018 已 accepted；WASM SIMD 路线已由 V01 选择，热词、真麦克风仍未验证 | `docs/09-decisions/0018-实时语音输入选型与流式识别边界.md`                                                                           | V02-V03 仍是产品接线硬门槛                |
+| 事实                                                                            | 当前证据                                                                                                                             | 结论                                      |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Canvas 统一资源协议已存在                                                       | `packages/canvas-protocol/src/resource.ts:1-235`                                                                                     | 保持兼容，不重定义                        |
+| Renderer manifest 与兼容判定已存在                                              | `packages/canvas-protocol/src/renderer-manifest.ts:10-68`                                                                            | 不再创建第二套 manifest                   |
+| Source 投影已覆盖 PDF、图片、文本、DOCX、音视频                                 | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`                                                                   | 从 Web 消费和真实页面补缺口               |
+| Artifact 投影已覆盖结构化与媒体产物                                             | `apps/web/server/canvas/artifact-resource-adapter.ts:18-65,114-187`                                                                  | 不重写服务端投影                          |
+| 统一资源读取会复核身份、Notebook 和归属                                         | `apps/web/server/canvas/resource-access.ts:1-177`、`apps/web/app/api/v1/canvas/resources/[resourceKind]/[resourceId]/route.ts:21-54` | 权限语义必须保持                          |
+| Web 主 Canvas 仍消费旧 `PublicArtifact`                                         | `apps/web/features/canvas/canvas-panel.tsx:7-53`                                                                                     | 这是当前 Canvas 第一真实缺口              |
+| Web 静态 registry 仍只注册三类旧产物                                            | `apps/web/features/canvas/canvas-registry.tsx:349-360`                                                                               | 需要迁移组合层，不是重做协议              |
+| 轻量 HTML 消息预览已有 CSP 和 iframe 限制                                       | `apps/web/features/canvas/sandbox-preview.ts:1-75`                                                                                   | P3 做持久、版本化 Runtime，不复制轻量预览 |
+| 图像 Provider、校验和、checkpoint 和恢复已存在                                  | `apps/worker/src/tasks/image-artifact-generation.ts:17-188`                                                                          | 先审计闭环，只补实证缺口                  |
+| 当前音频 Port 只有整段一次性转录                                                | `packages/agent-core/src/model-gateway.ts:191-196`                                                                                   | 新流式 Port 与其并列，不替换              |
+| Composer 的语音按钮仍被禁用                                                     | `apps/web/features/composer/composer.tsx:165-174`                                                                                    | 产品接线尚未开始                          |
+| 对象硬删除已有 Outbox 模式                                                      | `packages/db/src/object-deletion-outbox-repository.ts`、`apps/worker/src/tasks/delete-object-outbox.ts`                              | 音频删除复用模式，不另造调度系统          |
+| ADR-0018 已 accepted；WASM SIMD 路线已由 V01 选择，真人录音矩阵暴露模型质量缺口 | `tooling/voice-lab/evidence/v02-s-summary.json`、`docs/09-decisions/0018-实时语音输入选型与流式识别边界.md`                          | V02-T/V03 仍是产品接线硬门槛              |
 
 如果实现时发现表中事实已经变化，先停止当前任务，由 Codex 更新本表与依赖图，
 不能由 DeepSeek自行扩大任务。
@@ -128,7 +128,7 @@ Experiment Runtime、跨入口与实时语音输入。它与朋友负责的
 
 | 阶段                           | 串行主线                                                    | 可同时开发的支线                                                          | 阶段出口                      |
 | ------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------- |
-| S0 基线与语音可行性            | U00 → V01 → V02 → V03                                       | U01 可在 V01-V03 期间独立进行                                             | V03 回写实证并通过，U01 通过  |
+| S0 基线与语音可行性            | U00 → V01 → V02 → V02-T → V03                               | U01 可在 V01-V03 期间独立进行                                             | V03 回写实证并通过，U01 通过  |
 | S1 Web Canvas 与语音核心       | U02 → U03 → U04；V04 → V05                                  | U05 可与 U04 并行；V06、V07 可在 V05 后并行；Canvas 与 Voice 两线互相并行 | U05、V05、V06、V07 通过       |
 | S2 媒体闭环与语音 Adapter/数据 | U06 → U07；V08 → V09；V10 → V11                             | U08 与 U07 并行；V10-V11 可与 V08-V09 并行                                | U07、U08、V09、V11 通过       |
 | S3 产品接线与持久 Runtime      | V12 → V13 → V16 → V17；V14 → V15 → V17；U09 → U10/U11 → U12 | V12 可与 V14、U09 并行；U10 与 U11 并行                                   | V17、U12 通过，能力仍默认关闭 |
@@ -143,7 +143,7 @@ U00 ─┬─ U01 ─ U02 ─ U03 ─┬─ U04 ─ U05 ─ U06 ─┬─ U07 �
      │                    │                           └─ U11 ─┴─ U12
      │                    └──────────────────────────── U13 ─ U14 ─ U15 ─ U16 ─┬─ U17
      │                                                                        └─ U18
-     └─ V01 ─ V02 ─ V03 ─ V04 ─┬─ V05 ─┬─ V08 ─ V09 ─ V12 ─ V13 ─ V16 ─┐
+     └─ V01 ─ V02 ─ V02-T ─ V03 ─ V04 ─┬─ V05 ─┬─ V08 ─ V09 ─ V12 ─ V13 ─ V16 ─┐
                                 ├─ V06 ─┘                                ├─ V17
                                 └─ V07 ──────────────────────────────────┤
                  V03 ─ V10 ─ V11 ─ V14 ─ V15 ───────────────────────────┘
@@ -211,9 +211,37 @@ RTF、命令与退出码；模型权重及 WAV 不提交。以仓库支持的 No
 - 进程不崩溃，热词不存在/格式错误会显式失败；
 - 脚本与说明可由另一台 arm64 Mac 按步骤复现。
 
+正式结果（2026-08-04）：项目负责人真人录音矩阵 72/72 完成且无崩溃，但结论为
+`BLOCKED_MODEL`。当前 2023 双语模型未同时纠正两个目标术语且模型体积超过门槛；small
+模型在 before 已包含两个目标术语，因此不满足“热词纠正”条件，且完整句存在大量错误。
+证据只提交有界 JSON 摘要，原始录音、模型和逐次结果均不进入 Git。
+
+#### V02-T：流式双语模型策略修订
+
+- 依赖：V02-S 得出 `BLOCKED_MODEL`
+- 文件边界：`tooling/voice-lab/`、ADR-0018、本计划验证台账；不得接业务
+- 可并行：U01
+
+```text
+以项目负责人已授权的同一真人录音和固定 Node 22/24 环境，对 ADR-0018 指定模型或一个
+官方发布、许可明确、可本地 WASM/ONNX 流式运行的双语候选做受控验证。不得降低为 TTS，
+不得提交音频或模型。把“基础识别质量”和“热词带来的增益”拆成两个独立指标：模型若
+before 已正确识别术语，不得因无法制造 before 错误而判失败；但 after 不得降低术语召回
+或整句质量。记录来源、许可、完整模型哈希、模型体积、RTF、峰值 RSS、逐次 transcript、
+目标词召回和归一化 WER。若没有候选达到门槛，维持 BLOCKED_MODEL，禁止进入 V03。
+```
+
+完成标准：
+
+- 两个 Node 版本各 3 次稳定运行，目标词 `BAGGING`/`BOOSTING` 召回率均为 100%；
+- 归一化整句 WER 不高于 0.35，after 不劣于 before；若 before 漏词，after 必须产生可重复增益；
+- 模型权重不超过 250 MiB、RTF 不高于 0.5、峰值 RSS 不超过 1.5 GiB；
+- 进程、错误与证据不含绝对路径、原始音频或模型字节；
+- 只有全部门槛通过才可修订 V02 为 PASS 并解锁 V03，否则保持 `BLOCKED_MODEL`。
+
 #### V03：回写语音可行性证据与能力门禁
 
-- 依赖：V02
+- 依赖：V02-T 通过并将 V02 收口为 PASS
 - 文件边界：ADR-0018、本计划
 - 可并行：U01
 
@@ -987,7 +1015,8 @@ Codex 审核报告固定格式：
 2026-07-30 的现状审计已改用最新主线与独立 U12 分支；领取任务时仍须重新记录
 `origin/main`，不得把历史基线当作当前 HEAD。
 
-**S0 状态：** Canvas 子线 passed（U00/U01），语音 V01 passed、V02-V03 blocked；S0 整体
+**S0 状态：** Canvas 子线 passed（U00/U01），语音 V01 passed、V02 `BLOCKED_MODEL`、V02-T
+pending、V03 blocked；S0 整体
 未通过，Canvas 后续任务可按依赖图独立推进。
 
 **S1 状态：** Canvas 子线 passed（U02-U05）；语音任务仍受 V02-V03 阻塞，不得提前进入 V04。
@@ -1014,13 +1043,14 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 不执行 Runtime，也不发送正文、Prompt、对象键或长期链接。S4 的 Canvas 子线已完成，阶段出口
 仍等待语音 V17。
 
-| S0 任务 | Codex 结论 | 证据                                                                                                                                        |
-| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| U00     | `PASS`     | 基线事实、提交与验证映射已复核                                                                                                              |
-| U01     | `PASS`     | Canvas protocol 58/58、Web 385/385、两侧 typecheck 通过；资源访问边界测试覆盖身份与 Notebook 参数                                           |
-| V01     | `PASS`     | 相同 16 kHz WAV、100 ms 分块、1.5 秒尾静音下，Node 22/24 WASM SIMD 均 4/4 非空、RTF 约 0.12；原生 Node 20/22/24 均 0/4，故否决原生路线      |
-| V02     | `BLOCK`    | V02-S 双模型、Node 22/24、固定 score、哈希与跨 Node 判定工具已就绪；等待项目负责人真人 MP4 与本地测试授权后运行 72 次正式矩阵。V03 未解锁。 |
-| V03     | `BLOCK`    | 依赖 V02；产品语音门禁保持关闭                                                                                                              |
+| S0 任务 | Codex 结论      | 证据                                                                                                                                                                                                                                                                                 |
+| ------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| U00     | `PASS`          | 基线事实、提交与验证映射已复核                                                                                                                                                                                                                                                       |
+| U01     | `PASS`          | Canvas protocol 58/58、Web 385/385、两侧 typecheck 通过；资源访问边界测试覆盖身份与 Notebook 参数                                                                                                                                                                                    |
+| V01     | `PASS`          | 相同 16 kHz WAV、100 ms 分块、1.5 秒尾静音下，Node 22/24 WASM SIMD 均 4/4 非空、RTF 约 0.12；原生 Node 20/22/24 均 0/4，故否决原生路线                                                                                                                                               |
+| V02     | `BLOCKED_MODEL` | 项目负责人真人录音 72 次正式矩阵已完成且无崩溃。current 模型 after 未同时识别 `BAGGING`/`BOOSTING` 且权重 356,862,456 bytes 超过 250 MiB；small 模型在 before/after 均含两个术语，但没有热词增益，且完整句转录仍有大量错误。证据见 `tooling/voice-lab/evidence/v02-s-summary.json`。 |
+| V02-T   | `PENDING`       | 只允许评估 ADR 目标模型或一个官方流式双语候选，并以术语召回、整句 WER、RTF、RSS、体积和 before/after 不回退为产品门槛；不得接入业务。                                                                                                                                                |
+| V03     | `BLOCK`         | 依赖 V02-T 给出可接受模型并将 V02 收口为 PASS；产品语音门禁保持关闭。                                                                                                                                                                                                                |
 
 | S1 任务 | Codex 结论 | 证据                                                                                                                                                                                                        |
 | ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1051,19 +1081,19 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 | U17     | `PASS`     | 公共非 Web 判定与 Gateway CanvasResource 目录已接线；TUI `/canvas` 按 bearer 主体和当前 Notebook 重新授权，切换 Notebook 清空缓存，文本保留受控读取边界，其余资源只签发两分钟一次性 Conversation 交接。Canvas protocol、Gateway、Gateway Client 与 TUI 目标测试及 typecheck 通过。                                  |
 | U18     | `PASS`     | Telegram 实际投递链按可信账号/线程绑定重新读取 Artifact CanvasResource，processing/ready/failed/unavailable/archived 与 Runtime 降级均有测试；摘要不超过 600 字符，不投影正文、Prompt、provenance、对象键或 bearer URL。Channel 与 Telegram 目标测试及 typecheck 通过。                                             |
 
-| 能力                       | 当前状态  | 当前证据                                                                                                                                                                       | 完成任务                   |
-| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
-| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                                                                | 已有，U01 防回归           |
-| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                                                             | 已有，U01 防回归           |
-| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过                                                       | U02-U05 passed             |
-| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环                                           | U06-U08 passed             |
-| 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                                                                | U09-U12 passed             |
-| Experiment Runtime         | `passed`  | U13 Port/Run 契约、U14 隔离 CPU Adapter、U15 有界 Renderer 与 U16 可复现实验 smoke 已通过；测试 fixture 不伪装成生产数据源，Renderer 仍未接入缺少真实来源的 registry           | U13-U16 passed             |
-| TUI/渠道 Canvas            | `passed`  | Gateway 提供按 bearer 主体和 Notebook 重新授权的 CanvasResource 目录；TUI `/canvas` 使用一次性交接，Telegram 按可信绑定输出有界摘要且不执行 Runtime                            | U17-U18 passed；U19 待 V17 |
-| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 已完成受控 before/after，harness 对官方 WAV 有可重复影响，但 Bagging/Boosting 在预声明 score 下未纠正，V02 BLOCKED | V02-V03                    |
-| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用                                         | V04-V09、V12-V13、V16-V17  |
-| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                                                           | V10-V15                    |
-| 联合发布证据               | `pending` | 尚未执行                                                                                                                                                                       | U20-U21                    |
+| 能力                       | 当前状态  | 当前证据                                                                                                                                                             | 完成任务                   |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                                                      | 已有，U01 防回归           |
+| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                                                   | 已有，U01 防回归           |
+| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过                                             | U02-U05 passed             |
+| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环                                 | U06-U08 passed             |
+| 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                                                      | U09-U12 passed             |
+| Experiment Runtime         | `passed`  | U13 Port/Run 契约、U14 隔离 CPU Adapter、U15 有界 Renderer 与 U16 可复现实验 smoke 已通过；测试 fixture 不伪装成生产数据源，Renderer 仍未接入缺少真实来源的 registry | U13-U16 passed             |
+| TUI/渠道 Canvas            | `passed`  | Gateway 提供按 bearer 主体和 Notebook 重新授权的 CanvasResource 目录；TUI `/canvas` 使用一次性交接，Telegram 按可信绑定输出有界摘要且不执行 Runtime                  | U17-U18 passed；U19 待 V17 |
+| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD；V02-S 真人录音 72 次矩阵得到 `BLOCKED_MODEL`：current 模型术语与体积失败，small 模型虽含术语但整句质量和热词增益不足                           | V02-T、V03                 |
+| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用                               | V04-V09、V12-V13、V16-V17  |
+| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                                                 | V10-V15                    |
+| 联合发布证据               | `pending` | 尚未执行                                                                                                                                                             | U20-U21                    |
 
 ### 已确认的代码事实明细
 
@@ -1084,14 +1114,14 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 
 ### 语音可行性状态
 
-| 能力         | ADR 状态 | 代码状态                     | 阻塞原因                                       |
-| ------------ | -------- | ---------------------------- | ---------------------------------------------- |
-| WASM SIMD    | accepted | **路线已选定，产品 blocked** | Node 22/24 4/4 非空、RTF 约 0.12；仍待 V02-V03 |
-| 原生 addon   | accepted | **否决**                     | Node 20/22/24 均 0/4 空文本                    |
-| 热词         | accepted | blocked                      | 缺有效 Bagging/Boosting before/after fixture   |
-| 真麦克风     | accepted | 未验证                       | 未测试                                         |
-| 长时间连续流 | accepted | 未验证                       | 未测试                                         |
-| 并发         | accepted | 未验证                       | 未测试                                         |
+| 能力         | ADR 状态 | 代码状态                         | 阻塞原因                                                 |
+| ------------ | -------- | -------------------------------- | -------------------------------------------------------- |
+| WASM SIMD    | accepted | **执行引擎已选定，产品 blocked** | V02-S 已完成真人录音矩阵；当前模型组合未达到产品质量门槛 |
+| 原生 addon   | accepted | **否决**                         | Node 20/22/24 均 0/4 空文本                              |
+| 热词         | accepted | blocked                          | 真人 before/after 已完成，但候选模型未满足产品门槛       |
+| 真麦克风     | accepted | 部分验证                         | 已用负责人真人录音；实时浏览器采集与课堂噪声仍未测试     |
+| 长时间连续流 | accepted | 未验证                           | 未测试                                                   |
+| 并发         | accepted | 未验证                           | 未测试                                                   |
 
 **V01 验证详情（路线选择）**:
 
@@ -1099,6 +1129,6 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 - 模型: sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20
 - 方法: 相同官方 WAV、16 kHz 校验、100 ms 分块、1.5 秒尾部静音与 inputFinished()
 - 结果: 原生在三个 Node 均 0.wav–3.wav 空文本；WASM 在 Node 22/24 均 4/4 非空、RTF 约 0.12，选择 WASM SIMD 路线
-- 阻塞: V02 已完成受控 before/after，当前模型/fixture/预声明 score 未达到目标术语纠正验收标准；V03、V04-V09、V12-V13、V16-V17 全部 blocked
+- 阻塞: V02-S 真人录音 72 次矩阵结论为 `BLOCKED_MODEL`；先执行 V02-T 模型策略修订。V03、V04-V09、V12-V13、V16-V17 全部 blocked
 
 不得在此表记录密钥、原始音频、学生数据、未授权教材或不可复现的口头结论。

@@ -118,11 +118,11 @@ node run-compare.mjs --engine wasm --fixture 0.wav \
   --hotwords fixtures/does-not-exist.txt
 ```
 
-## V02-S：路线重选实验（预声明，尚未运行正式矩阵）
+## V02-S：路线重选实验（正式矩阵已完成）
 
 V02-R 的 TTS fixture 没有提供可验证的真实目标术语发音，因此不能继续作为唯一验收证据。
 V02-S 改用项目负责人本人录制且明确授权用于本地测试的真人语音。正式音频仍被 `.gitignore`
-排除；在记录来源、授权、格式和 SHA-256 前不得运行正式矩阵。
+排除；正式矩阵使用 manifest 固定来源、授权、格式和 SHA-256，manifest 本身也只保留在本地。
 
 固定朗读文本：
 
@@ -200,13 +200,26 @@ before/after 对同一 profile、Node 和 fixture 只允许热词文件不同。
 允许的最终判定只有：`PASS_CANDIDATE`、`BLOCKED_FIXTURE`、`BLOCKED_MODEL` 或
 `REVISE_STRATEGY`。任何候选结果都需 Codex 复核，V03 在此之前保持锁定。
 
+### 2026-08-04 正式结果
+
+72 次正式运行全部完成且无崩溃，摘要见 `evidence/v02-s-summary.json`：
+
+- `current-bilingual-fp32` 的 after 没有同时正确识别 `BAGGING` 与 `BOOSTING`，且模型权重
+  356,862,456 bytes，超过 250 MiB 门槛；
+- `small-bilingual-fp32` 的 before/after 均稳定包含两个目标术语，因此没有热词纠正增益；
+  完整句仍存在大量替换错误，不能把仅命中两个词包装成产品质量通过；
+- 最终 verdict 为 `BLOCKED_MODEL`，`blockerCode=target_terms_not_corrected`，V03 未解锁。
+
+下一步是计划中的 V02-T：继续使用同一真人录音，评估 ADR 指定模型或一个许可明确的官方
+流式双语候选，并将基础识别质量与热词增益拆成独立门槛。不得在 V02-T 通过前接入业务。
+
 ## 推荐与门禁
 
 证据支持 **WASM SIMD 作为后续产品路线**：它在仓库支持的 Node 22/24 上均为 4/4 非空，
 RTF 约 0.12，满足本 fixture 范围内的实时性；Node 20 仅作兼容实验，也为 4/4 非空。
 原生 addon 在 Node 20/22/24 均为 0/4，虽更快但已被否决为产品路线。V01 因此 `PASS`；
-V02 已完成受控、单变量 before/after，harness 配置对官方 WAV 解码有可重复影响，
-但 Bagging/Boosting 在 score 1.5/2.0/3.5 下均未纠正，V02 = `BLOCKED`，
+V02 已完成真人录音、双模型、双 Node 的 72 次受控 before/after，
+但现有候选未同时满足术语、完整句质量与资源门槛，V02 = `BLOCKED_MODEL`，
 V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-0018 的 `accepted` 状态。
 
 ## 文件
@@ -217,6 +230,7 @@ V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-00
 - `v02-s-fixture-manifest.mjs`：真人 fixture 来源、授权、文本、格式和哈希的唯一 schema
 - `run-v02-s-matrix.mjs`：固定 Node/profile/score/repetition 的 72 次正式矩阵
 - `generate-v02-s-summary.mjs`：从被忽略的原始结果生成有界 V02-S 证据摘要
+- `evidence/v02-s-summary.json`：不含音频、模型或绝对路径的正式矩阵摘要
 - `v02-s-evaluation.mjs`：跨 Node 候选门槛与稳定 verdict
 - `fixtures/hotwords-bagging-boosting.txt`：UTF-8 热词词表
 - `fixtures/hotwords-v02-s.txt`：符合官方 English/BPE 规范的全大写 V02-S 热词词表
