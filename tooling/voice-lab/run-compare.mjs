@@ -69,14 +69,19 @@ const report = {
     fixture: singleFixturePath ? sha256(singleFixturePath) : null,
     encoder: sha256(join(modelDir, modelProfile.encoder)),
     decoder: sha256(join(modelDir, modelProfile.decoder)),
-    joiner: sha256(join(modelDir, modelProfile.joiner)),
+    joiner: modelProfile.joiner
+      ? sha256(join(modelDir, modelProfile.joiner))
+      : null,
     tokens: sha256(join(modelDir, modelProfile.tokens)),
-    bpeVocab: sha256(join(modelDir, modelProfile.bpeVocab)),
+    bpeVocab: modelProfile.bpeVocab
+      ? sha256(join(modelDir, modelProfile.bpeVocab))
+      : null,
     hotwords: args.hotwords ? sha256(hotwordsPath) : null,
   },
   modelProfile: modelProfile.id,
   model: relative(here, modelDir),
   modelSource: modelProfile.source,
+  modelSourceRevision: modelProfile.sourceRevision ?? null,
   modelLicense: modelProfile.license,
   modelLanguageScope: modelProfile.languageScope,
   modelBytes: requiredModelFiles(modelProfile).reduce(
@@ -84,8 +89,10 @@ const report = {
     0,
   ),
   modelingUnit: modelProfile.modelingUnit,
-  decodingMethod: 'modified_beam_search',
-  maxActivePaths: 4,
+  modelArchitecture: modelProfile.architecture,
+  modelSupportsHotwords: modelProfile.supportsHotwords ?? true,
+  decodingMethod: modelProfile.decodingMethod ?? 'modified_beam_search',
+  maxActivePaths: modelProfile.maxActivePaths ?? 4,
   chunkMilliseconds: args.chunkMs,
   tailSilenceSeconds: args.tailSeconds,
   hotwordsScore: args.hotwords ? args.hotwordsScore : null,
@@ -120,6 +127,9 @@ function runFixture(api, engine, fixture) {
   };
   try {
     if (!existsSync(wavPath)) throw new Error(`Fixture is missing: ${fixture}`);
+    if (args.hotwords && modelProfile.supportsHotwords === false) {
+      throw new Error('hotwords_not_supported_by_profile');
+    }
     const initStarted = performance.now();
     const recognizer = api.createRecognizer(makeConfig());
     const initMilliseconds = round(performance.now() - initStarted);
@@ -181,23 +191,31 @@ function runFixture(api, engine, fixture) {
 }
 
 function makeConfig() {
+  const modelConfig = {
+    tokens: join(modelDir, modelProfile.tokens),
+    numThreads: 2,
+    provider: 'cpu',
+    debug: 0,
+  };
+  if (modelProfile.architecture === 'paraformer') {
+    modelConfig.paraformer = {
+      encoder: join(modelDir, modelProfile.encoder),
+      decoder: join(modelDir, modelProfile.decoder),
+    };
+  } else {
+    modelConfig.transducer = {
+      encoder: join(modelDir, modelProfile.encoder),
+      decoder: join(modelDir, modelProfile.decoder),
+      joiner: join(modelDir, modelProfile.joiner),
+    };
+    modelConfig.modelingUnit = modelProfile.modelingUnit;
+    modelConfig.bpeVocab = join(modelDir, modelProfile.bpeVocab);
+  }
   return {
     featConfig: { sampleRate: 16000, featureDim: 80 },
-    modelConfig: {
-      transducer: {
-        encoder: join(modelDir, modelProfile.encoder),
-        decoder: join(modelDir, modelProfile.decoder),
-        joiner: join(modelDir, modelProfile.joiner),
-      },
-      tokens: join(modelDir, modelProfile.tokens),
-      numThreads: 2,
-      provider: 'cpu',
-      debug: 0,
-      modelingUnit: modelProfile.modelingUnit,
-      bpeVocab: join(modelDir, modelProfile.bpeVocab),
-    },
-    decodingMethod: 'modified_beam_search',
-    maxActivePaths: 4,
+    modelConfig,
+    decodingMethod: modelProfile.decodingMethod ?? 'modified_beam_search',
+    maxActivePaths: modelProfile.maxActivePaths ?? 4,
     hotwordsFile: hotwordsPath,
     hotwordsScore: args.hotwordsScore,
   };

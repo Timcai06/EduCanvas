@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-T",
+  "fixture": {
+    "sourceKind": "project-owner-recording",
+    "usageAuthorization": "local-evaluation-only",
+    "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+    "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+    "sampleRate": 16000,
+    "channels": 1,
+    "encoding": "pcm_s16le"
+  },
+  "nodes": ["v22.23.1", "v24.18.0"],
+  "controls": {
+    "engine": "wasm",
+    "profile": "paraformer-bilingual-int8",
+    "decodingMethod": "greedy_search",
+    "maxActivePaths": 4,
+    "chunkMilliseconds": 100,
+    "tailSilenceSeconds": 1.5,
+    "hotwordsScore": 3.5,
+    "repetitions": 3
+  },
+  "model": {
+    "id": "paraformer-bilingual-int8",
+    "architecture": "paraformer",
+    "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2",
+    "sourceRevision": "asr-models",
+    "archiveSha256": "5462a1fce42693deae572af1e8c4687124b12aa85fe61ff4d3168bb5280e205f",
+    "license": "Apache-2.0",
+    "languageScope": "zh-en",
+    "supportsHotwords": false,
+    "modelBytes": 237202501,
+    "fileSha256": {
+      "encoderSha256": "81a70226a8934e6ed92aa1d4fc486b428b5398e2f2619ed4897b7294cab90e9a",
+      "decoderSha256": "f3cca9f77bb9d93c8fcbfb63ae617b6b1ee96818df3aa3b151c40658fe38594f",
+      "vocabularySha256": "59aba8873a2ed1e122c25fee421e25f283b63290efbde85c1f01a853d83cb6e6"
+    }
+  },
+  "groups": [
+    {
+      "node": "v22.23.1",
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": false,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": false,
+        "hotwordCapabilityPassed": false,
+        "stable": true,
+        "baselineTermsComplete": true,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": false,
+        "hotwordGainRequired": false,
+        "hotwordGainObserved": false,
+        "beforeRecall": [1, 1, 1],
+        "afterRecall": [0, 0, 0],
+        "beforeWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "afterWer": [1, 1, 1],
+        "beforeTexts": [
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy",
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy",
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy"
+        ],
+        "afterTexts": ["", "", ""],
+        "errors": {
+          "before": [null, null, null],
+          "after": [
+            "hotwords_not_supported_by_profile",
+            "hotwords_not_supported_by_profile",
+            "hotwords_not_supported_by_profile"
+          ]
+        },
+        "rtfRange": {
+          "min": 0.2246,
+          "max": 0.2259
+        },
+        "peakRssKiBRange": {
+          "min": 806448,
+          "max": 929616
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": false,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": false,
+        "hotwordCapabilityPassed": false,
+        "stable": true,
+        "baselineTermsComplete": true,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": false,
+        "hotwordGainRequired": false,
+        "hotwordGainObserved": false,
+        "beforeRecall": [1, 1, 1],
+        "afterRecall": [0, 0, 0],
+        "beforeWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "afterWer": [1, 1, 1],
+        "beforeTexts": [
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy",
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy",
+          "our teclclass assiexsemble message bagging reduces variance while boosting rereduce spy"
+        ],
+        "afterTexts": ["", "", ""],
+        "errors": {
+          "before": [null, null, null],
+          "after": [
+            "hotwords_not_supported_by_profile",
+            "hotwords_not_supported_by_profile",
+            "hotwords_not_supported_by_profile"
+          ]
+        },
+        "rtfRange": {
+          "min": 0.2317,
+          "max": 0.2479
+        },
+        "peakRssKiBRange": {
+          "min": 821424,
+          "max": 961984
+        }
+      }
+    }
+  ],
+  "verdict": "BLOCKED_MODEL",
+  "blockerCode": "hotword_mode_unsupported",
+  "selectedProfile": null,
+  "selectedScore": null,
+  "v02Passed": false,
+  "v03Unlocked": false
+}
