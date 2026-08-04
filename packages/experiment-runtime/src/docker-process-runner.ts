@@ -126,7 +126,10 @@ export async function runDockerContainer(
 
   let proc: DockerChildProcess;
   try {
-    proc = dockerPort.dockerRun({ command, signal });
+    // This layer is the single authority for timeout/cancel arbitration. If
+    // the same signal is also passed to Node spawn, its AbortError can win the
+    // race and incorrectly turn a user cancellation into spawn_error.
+    proc = dockerPort.dockerRun({ command });
   } catch {
     await dockerPort.dockerRmForce({ containerName });
     return { exitCode: 1, terminationReason: 'spawn_error', quotaType: null };

@@ -6,11 +6,7 @@
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { vi } from 'vitest';
-import type {
-  ExperimentRun,
-  ExperimentRunEvent,
-  ModelAbortSignal,
-} from '@educanvas/agent-core';
+import type { ExperimentRun, ExperimentRunEvent } from '@educanvas/agent-core';
 import type {
   DockerChildProcess,
   DockerProcessPort,
@@ -109,7 +105,6 @@ export class MockDockerProcess extends EventEmitter {
 export interface MockDockerPort extends DockerProcessPort {
   readonly runCalls: {
     command: readonly string[];
-    signal?: ModelAbortSignal;
   }[];
   readonly rmCalls: string[];
   readonly process: MockDockerProcess;
@@ -122,7 +117,6 @@ export interface MockDockerPort extends DockerProcessPort {
 export function makeMockDockerPort(): MockDockerPort {
   const runCalls: {
     command: readonly string[];
-    signal?: ModelAbortSignal;
   }[] = [];
   const rmCalls: string[] = [];
   const process = new MockDockerProcess();
@@ -131,7 +125,7 @@ export function makeMockDockerPort(): MockDockerPort {
     rmCalls,
     process,
     dockerRun(options) {
-      runCalls.push({ command: options.command, signal: options.signal });
+      runCalls.push({ command: options.command });
       return process;
     },
     dockerRmForce(options) {

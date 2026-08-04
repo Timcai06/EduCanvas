@@ -183,6 +183,7 @@ describe('runDockerContainer', () => {
     const result = await resultPromise;
     expect(result.terminationReason).toBe('user_cancel');
     expect(port.rmCalls).toContain('exp-test');
+    expect(port.runCalls[0]).not.toHaveProperty('signal');
   });
 
   it('reports timeout and cleans up when the duration budget elapses', async () => {

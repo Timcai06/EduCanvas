@@ -6,7 +6,6 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { type Readable } from 'node:stream';
-import type { ModelAbortSignal } from '@educanvas/agent-core';
 
 /**
  * Minimal surface the adapter needs from a docker run child process.
@@ -22,7 +21,6 @@ export interface DockerChildProcess {
 
 export interface DockerRunOptions {
   readonly command: readonly string[];
-  readonly signal?: ModelAbortSignal;
 }
 
 export interface DockerRmForceOptions {
@@ -65,16 +63,12 @@ function dockerRmForceDefault(
 
 export function createDefaultDockerProcessPort(): DockerProcessPort {
   return {
-    dockerRun({ command, signal }) {
+    dockerRun({ command }) {
       if (command.length === 0) {
         throw new Error('Docker command is empty');
       }
-      // ModelAbortSignal is structurally compatible with AbortSignal for
-      // spawn's needs (addEventListener on 'abort'); the composition root
-      // passes a real AbortSignal in practice.
       return spawn(command[0]!, command.slice(1), {
         stdio: ['ignore', 'pipe', 'pipe'],
-        signal: signal as AbortSignal | undefined,
         detached: false,
       });
     },
