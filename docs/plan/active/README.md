@@ -8,10 +8,10 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [UV 画布语音](UV-画布语音.md) | 项目负责人 | U00-U18 已通过；U19 等待 V17；V02 BLOCKED_MODEL | 与 O 的产品文件解耦                |
 | [O 删除队列](O-删除队列.md)   | sky-k111   | O00-O02 已通过；O03 PENDING；O04 PENDING        | 不修改 Canvas、Runtime、语音或账号 |
 | [KM 知识记忆](KM-知识记忆.md) | 项目负责人 | K00、M00 待开始                                 | 与 UV/O 解耦；K/M 顺序执行         |
-| [C 模型配置](C-模型配置.md)   | 项目负责人 | C00 待开始                                      | 可与 UV/O/KM 并行                  |
 
-[F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)和
-[P 学习档案](../completed/P-学习档案.md)均已完成并归档，不再作为待分配任务。
+[F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
+[P 学习档案](../completed/P-学习档案.md)和[C 模型配置](../completed/C-模型配置.md)均已完成并归档，
+不再作为待分配任务。
 O 线完成 O03/O04 后再由 Codex 做跨线审计。
 
 ## 状态说明

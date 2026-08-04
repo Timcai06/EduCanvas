@@ -1,11 +1,11 @@
 # 模型能力独立 Provider 配置
 
 - 任务分配名：`C 模型配置`
-- 状态：`review`
+- 状态：`completed`
 - 负责人：项目负责人
 - 代码审核与最终验收：Codex
 - 依赖决策：[ADR-0021](../../09-decisions/0021-模型能力独立Provider与继承规则.md)
-- 当前领取任务：无；`C00-C04` 等待 Codex 最终 CI 与合并复审
+- 当前领取任务：无；`C00-C04` 已由 Codex 复审并随 PR #274 合并
 
 ## 一、目标
 
@@ -66,13 +66,13 @@ embedding 版本都只关闭对应媒体能力；主文本配置保持可用。`
 
 ## 三、验证台账
 
-| 任务 | 当前结论          | 证据                                                                                  |
-| ---- | ----------------- | ------------------------------------------------------------------------------------- |
-| C00  | `REVIEW_REQUIRED` | 本文配置事实矩阵、继承规则与负例语义                                                  |
-| C01  | `REVIEW_REQUIRED` | `config-capability.ts` 及解析/隔离测试                                                |
-| C02  | `REVIEW_REQUIRED` | Web/Worker 共用 `resolveCapabilityGatewayConfiguration()`                             |
-| C03  | `REVIEW_REQUIRED` | `.env.example`、`env-check.mjs`、模型路由文档                                         |
-| C04  | `REVIEW_REQUIRED` | text/vision/speech/transcription/image/embedding 跨能力验收；最终结果以 Codex/CI 为准 |
+| 任务 | 最终结论 | 证据                                                                                      |
+| ---- | -------- | ----------------------------------------------------------------------------------------- |
+| C00  | `PASS`   | 本文配置事实矩阵、继承规则与负例语义                                                      |
+| C01  | `PASS`   | `config-capability.ts` 及解析、隔离、非法能力配置不拖垮主文本的测试                       |
+| C02  | `PASS`   | Web/Worker 共用 `resolveCapabilityGatewayConfiguration()`                                 |
+| C03  | `PASS`   | `.env.example`、`env-check.mjs`、模型路由文档                                             |
+| C04  | `PASS`   | 六类能力验收、DeepSeek 文本与独立 Vision 组合证据；PR #274 全量 CI 通过并合并为 `27f2d81` |
 
 ## 四、任务提示词
 
