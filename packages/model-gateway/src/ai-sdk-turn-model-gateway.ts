@@ -51,6 +51,8 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
       return;
     }
 
+    // 外部取消与超时都汇总到同一个 controller；该层不保证继续返回“可恢复”失败，
+    // 一旦触发就是本次 run 的最终控制流终止。
     const startedAt = this.now();
     const controller = new AbortController();
     let timedOut = false;
@@ -62,6 +64,8 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
     }, this.options.timeoutMs);
 
     try {
+      // 供应商 SDK 对象不越过该适配器：prompt 与 tool schema 在这里重建，
+      // 只向下游提供经过本层约束的模型输入。
       const prompt = buildAiSdkPrompt(request);
       const tools = Object.fromEntries(
         request.tools.map((definition) => [
@@ -87,6 +91,7 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
       let toolCallCount = 0;
       for await (const part of result.fullStream) {
         if (part.type === 'text-delta') {
+          // 非协议定义的字段不会直接下发给 runtime；全部转换为 TurnEvent 或失败码。
           yield parseAiSdkEvent({
             type: 'text_delta',
             phase: request.phase,
@@ -181,6 +186,7 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         retryable: false,
       });
     } catch (error) {
+      // 捕获 AI SDK/网络/JSON 等异物后统一走 normalizeAiSdkError，统一错误边界。
       const normalized = normalizeAiSdkError(
         error,
         request.signal,

@@ -363,3 +363,10 @@ export const turnModelEventSchema = z.discriminatedUnion('type', [
 
 /** 每次调用必须且只能以completed或failed结束。 */
 export type TurnModelEvent = z.infer<typeof turnModelEventSchema>;
+
+/* 以上事件与请求 contract 是 runtime 校验层的硬边界：
+ * 流中任何字段变化都必须经过 schema 重放，无法通过类型断言跳过。
+ * 这也决定了终态判断、usage 对齐、模型元数据一致性都应在这之前完成。 */
+
+/* ModelAbortSignal 的最小接口故意与 DOM/Node AbortSignal 对齐，目的是允许
+ * Worker/Runtime 复用同一取消语义；任何实现只需保证 aborted/事件监听即可。 */
