@@ -50,8 +50,8 @@
 .logo-loop--scale-hover .logo-loop__node,
 .logo-loop--scale-hover .logo-loop__item img {
   transition:
-    color 220ms ease,
-    transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    color var(--duration-fast) ease,
+    transform var(--duration-standard) var(--ease-spring);
 }
 
 .logo-loop--scale-hover .logo-loop__item:hover .logo-loop__node,

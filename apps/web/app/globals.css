@@ -65,6 +65,52 @@
   --shadow-card-hover:
     0 2px 4px rgb(72 60 34 / 0.06), 0 16px 40px rgb(72 60 34 / 0.14);
   --shadow-sheet: 0 8px 40px rgb(58 48 26 / 0.22);
+
+  /*
+   * 字级阶梯：讲义排版的字号 token（Tailwind v4 同步生成 text-* 工具类）。
+   * 跟随父级的相对字级（em）是排版力学，保持原样不进 token。详见 DESIGN.md 第 3 节。
+   */
+  --text-overline: 0.6875rem;
+  --text-overline--line-height: 1.4;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-note: 0.8125rem;
+  --text-note--line-height: 1.5;
+  --text-body: 1rem;
+  --text-lead: 1.15rem;
+  --text-lead--line-height: 1.45;
+  --text-title: 1.3rem;
+  --text-title--line-height: 1.45;
+  --text-wheel: 1.9rem;
+
+  /*
+   * 间距阶梯：4px 基。只 token 化「意图」；组件精调值与散文 em 节奏保持原样。
+   * 详见 DESIGN.md 第 4 节。
+   */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /*
+   * 动效时长与缓动：手写 CSS 经 var() 消费；GSAP 侧在 R2 统一对齐。
+   * 无限循环的氛围动画参数（aurora 20s、hero 呼吸 4.8s 等）是效果内在值，不入 token。
+   * 缓动不覆写 Tailwind 默认 ease-out/ease-in-out 工具类。详见 DESIGN.md 第 6 节。
+   */
+  --duration-instant: 120ms;
+  --duration-micro: 160ms;
+  --duration-fast: 220ms;
+  --duration-standard: 300ms;
+  --duration-emphasis: 420ms;
+  --duration-slow: 520ms;
+  --duration-hero: 900ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /*
@@ -217,7 +263,7 @@ html {
 }
 @media (prefers-reduced-motion: no-preference) {
   .shine-sweep:hover::after {
-    animation: shine-sweep 0.9s ease;
+    animation: shine-sweep var(--duration-hero) ease;
   }
 }
 @keyframes shine-sweep {
@@ -240,7 +286,7 @@ html {
   z-index: -1;
   border-radius: inherit;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--duration-standard) ease;
   background: radial-gradient(
     16rem 16rem at var(--spot-x, 50%) var(--spot-y, 50%),
     color-mix(in srgb, var(--color-accent) 22%, transparent),
@@ -309,7 +355,7 @@ html {
   left: var(--ow-inset);
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: var(--ow-font-size, 1.9rem);
+  font-size: var(--ow-font-size, var(--text-wheel));
   line-height: 1;
   font-weight: 300;
   transform-origin: left center;
@@ -346,8 +392,8 @@ html {
         )
         border-box;
     transition:
-      background 0.2s ease,
-      box-shadow 0.2s ease;
+      background var(--duration-fast) ease,
+      box-shadow var(--duration-fast) ease;
   }
   .ec-input::placeholder {
     color: var(--color-ink-faint);

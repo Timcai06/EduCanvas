@@ -3,6 +3,7 @@
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useEffect, useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 /**
  * 旁注导航（灵感来源：React Bits「LineSidebar」，改造为「两支笔」的页边批注身份）。
@@ -132,7 +133,7 @@ export function MarginaliaNav({
           {
             autoAlpha: 1,
             x: 0,
-            duration: 0.28,
+            duration: motionDuration('standard'),
             stagger: 0.03,
             ease: 'power2.out',
           },

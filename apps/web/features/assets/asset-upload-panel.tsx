@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useRef, useState } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 import { uploadAsset } from './asset-client';
 import type { AssetItem } from './assets-drawer';
 
@@ -53,7 +54,7 @@ export function AssetUploadPanel({
           {
             autoAlpha: 1,
             y: 0,
-            duration: 0.38,
+            duration: motionDuration('emphasis'),
             stagger: 0.055,
             ease: 'power2.out',
           },

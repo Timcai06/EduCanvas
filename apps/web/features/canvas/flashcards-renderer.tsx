@@ -5,6 +5,7 @@ import { useGSAP } from '@gsap/react';
 import { ArrowCounterClockwise, Check, X } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useMemo, useRef, useState } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -31,7 +32,12 @@ export function FlashcardsRenderer({ content }: { content: unknown }) {
         gsap.fromTo(
           '[data-flashcard]',
           { autoAlpha: 0, y: 10 },
-          { autoAlpha: 1, y: 0, duration: 0.26, ease: 'power2.out' },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: motionDuration('standard'),
+            ease: 'power2.out',
+          },
         );
       });
       return () => media.revert();

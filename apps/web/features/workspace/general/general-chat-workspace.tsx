@@ -27,6 +27,7 @@ import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
+import { motionDuration } from '@/features/theme/motion';
 import { StudioOverlay } from '@/features/studio/studio-overlay';
 import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { useGSAP } from '@gsap/react';
@@ -272,7 +273,7 @@ export function GeneralChatWorkspace({
         if (flipState && !isLanding) {
           flipStateRef.current = null;
           Flip.from(flipState, {
-            duration: 0.6,
+            duration: motionDuration('slow'),
             ease: 'power3.inOut',
             scale: false,
           });

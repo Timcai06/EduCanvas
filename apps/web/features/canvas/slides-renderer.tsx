@@ -5,6 +5,7 @@ import { useGSAP } from '@gsap/react';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useMemo, useRef, useState } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -27,7 +28,12 @@ export function SlidesRenderer({ content }: { content: unknown }) {
         gsap.fromTo(
           '[data-slide-body]',
           { autoAlpha: 0, x: 14 },
-          { autoAlpha: 1, x: 0, duration: 0.28, ease: 'power2.out' },
+          {
+            autoAlpha: 1,
+            x: 0,
+            duration: motionDuration('standard'),
+            ease: 'power2.out',
+          },
         );
       });
       return () => media.revert();

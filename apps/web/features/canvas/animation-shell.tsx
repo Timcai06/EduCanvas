@@ -10,6 +10,7 @@ import {
   Play,
 } from '@phosphor-icons/react';
 import gsap from 'gsap';
+import { motionDuration } from '@/features/theme/motion';
 import {
   useCallback,
   useEffect,
@@ -141,7 +142,7 @@ export function AnimationShell({
       );
       const timeline = gsap.timeline({
         paused: true,
-        defaults: { duration: 0.42, ease: 'power2.out' },
+        defaults: { duration: motionDuration('emphasis'), ease: 'power2.out' },
         onComplete: () => {
           if (!active) return;
           setCurrentStep(Math.max(steps.length - 1, 0));
@@ -167,13 +168,16 @@ export function AnimationShell({
         timeline.addLabel(`step-${index}`);
         const previousCard = cards[index - 1];
         if (index > 0 && previousCard) {
-          timeline.to(previousCard, { opacity: 0.82, duration: 0.2 });
+          timeline.to(previousCard, {
+            opacity: 0.82,
+            duration: motionDuration('fast'),
+          });
         }
         const previousConnector = connectors[index - 1];
         if (index > 0 && previousConnector) {
           timeline.to(
             previousConnector,
-            { opacity: 1, scaleX: 1, duration: 0.32 },
+            { opacity: 1, scaleX: 1, duration: motionDuration('standard') },
             '<',
           );
         }

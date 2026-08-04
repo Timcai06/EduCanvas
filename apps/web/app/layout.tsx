@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import 'katex/dist/katex.min.css';
 
 import '@fontsource-variable/inter';
-/* 衬线显示字体只引入实际使用的字重；fontsource 按 unicode-range 分块，浏览器按需下载 */
+/* 衬线字体只引入用到的字重（400/600）。
+   fontsource 按 unicode-range 分块，浏览器按需下载。 */
 import '@fontsource/noto-serif-sc/400.css';
 import '@fontsource/noto-serif-sc/600.css';
 import './globals.css';

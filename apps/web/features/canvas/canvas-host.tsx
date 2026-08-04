@@ -4,6 +4,7 @@ import {
   getFocusableElements,
   makeWorkspaceBackgroundInert,
 } from '@/features/workspace/shared/modal-focus';
+import { motionDuration } from '@/features/theme/motion';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
@@ -65,7 +66,7 @@ export function CanvasHost({
         gsap.from(rootRef.current, {
           x: 32,
           autoAlpha: 0,
-          duration: 0.32,
+          duration: motionDuration('standard'),
           ease: 'power2.out',
         });
       });

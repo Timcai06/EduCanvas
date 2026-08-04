@@ -15,7 +15,8 @@
     color-mix(in srgb, var(--color-card) 66%, transparent) 62%,
     color-mix(in srgb, var(--color-card) 82%, transparent) 100%
   );
-  animation: studio-gradual-blur-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: studio-gradual-blur-in var(--duration-emphasis)
+    var(--ease-emphasis) both;
   will-change: opacity, transform;
 }
 
@@ -52,10 +53,10 @@
 
 .studio-cascade__hint {
   position: absolute;
-  right: 1.5rem;
-  bottom: 1.25rem;
+  right: var(--space-6);
+  bottom: var(--space-5);
   color: var(--color-ink-faint);
-  font-size: 0.68rem;
+  font-size: var(--text-overline);
   pointer-events: none;
 }
 
@@ -84,15 +85,15 @@
 .studio-actions__button {
   display: grid;
   place-items: center;
-  min-width: 2rem;
-  min-height: 2rem;
-  padding: 0 0.5rem;
+  min-width: var(--space-8);
+  min-height: var(--space-8);
+  padding: 0 var(--space-2);
   border-radius: 9999px;
   color: var(--color-ink-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-caption);
   transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
+    background-color var(--duration-micro) ease,
+    color var(--duration-micro) ease;
 }
 
 .studio-actions__button--wide {
@@ -120,10 +121,10 @@
 
 .studio-actions__input {
   min-width: 11rem;
-  padding: 0 0.5rem;
+  padding: 0 var(--space-2);
   color: var(--color-ink);
   background: transparent;
-  font-size: 0.8rem;
+  font-size: var(--text-note);
   outline: none;
 }
 
@@ -133,7 +134,7 @@
   }
 
   .studio-cascade__wheel--primary {
-    right: -1rem;
+    right: calc(-1 * var(--space-4));
     width: 17rem;
   }
 
@@ -143,22 +144,22 @@
   }
 
   .studio-cascade__hint {
-    right: 0.75rem;
+    right: var(--space-3);
     max-width: 16rem;
     text-align: right;
   }
 
   /* 窄屏放不下两轮 + 气泡的横排，气泡改挂在轮组上方。 */
   .studio-cascade__actions {
-    top: 1rem;
-    right: 0.75rem;
+    top: var(--space-4);
+    right: var(--space-3);
     transform: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .studio-cascade__gradual-blur {
-    animation-duration: 0.12s;
+    animation-duration: var(--duration-instant);
     animation-timing-function: linear;
   }
 

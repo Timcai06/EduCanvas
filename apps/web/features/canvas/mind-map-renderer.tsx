@@ -7,6 +7,7 @@ import {
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useMemo, useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -32,7 +33,7 @@ export function MindMapRenderer({ content }: { content: unknown }) {
           {
             autoAlpha: 1,
             x: 0,
-            duration: 0.3,
+            duration: motionDuration('standard'),
             stagger: 0.04,
             ease: 'power2.out',
           },

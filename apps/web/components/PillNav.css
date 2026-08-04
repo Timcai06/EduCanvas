@@ -48,7 +48,7 @@
   color: var(--color-ink-muted);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--color-card) 64%, transparent)
     inset;
-  font-size: 0.79rem;
+  font-size: var(--text-note);
   font-weight: 650;
   line-height: 1;
   text-decoration: none;

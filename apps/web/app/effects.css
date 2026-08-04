@@ -58,7 +58,7 @@
   z-index: 45;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 520ms ease;
+  transition: opacity var(--duration-slow) ease;
 }
 
 .agent-busy-overlay[data-shown='true'] {
@@ -84,9 +84,9 @@
   isolation: isolate;
   transform-origin: center bottom;
   transition:
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 260ms ease,
-    border-color 220ms ease;
+    transform var(--duration-standard) var(--ease-enter),
+    box-shadow var(--duration-standard) ease,
+    border-color var(--duration-fast) ease;
 }
 
 /* 注册角度以便 conic-gradient 的旋转可被动画插值（裸自定义属性不可动画）。 */
@@ -123,9 +123,9 @@
   mask-composite: exclude;
   opacity: 0;
   transition:
-    opacity 220ms ease,
-    filter 220ms ease,
-    padding 220ms ease;
+    opacity var(--duration-fast) ease,
+    filter var(--duration-fast) ease,
+    padding var(--duration-fast) ease;
   pointer-events: none;
 }
 

@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react';
 import { X } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useCallback, useEffect, useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 import {
   getFocusableElements,
   makeWorkspaceBackgroundInert,
@@ -82,24 +83,35 @@ export function Sheet({
           .fromTo(
             overlayRef.current,
             { autoAlpha: 0 },
-            { autoAlpha: 1, duration: 0.25 },
+            { autoAlpha: 1, duration: motionDuration('fast') },
           )
           .fromTo(
             panelRef.current,
             { ...panelFrom, autoAlpha: 0 },
-            { xPercent: 0, yPercent: 0, y: 0, autoAlpha: 1, duration: 0.5 },
+            {
+              xPercent: 0,
+              yPercent: 0,
+              y: 0,
+              autoAlpha: 1,
+              duration: motionDuration('slow'),
+            },
             0,
           )
           .fromTo(
             accentRef.current,
             { scaleY: 0 },
-            { scaleY: 1, duration: 0.55 },
+            { scaleY: 1, duration: motionDuration('slow') },
             0.16,
           )
           .fromTo(
             staggerTargets,
             { autoAlpha: 0, y: 16 },
-            { autoAlpha: 1, y: 0, duration: 0.45, stagger: 0.06 },
+            {
+              autoAlpha: 1,
+              y: 0,
+              duration: motionDuration('emphasis'),
+              stagger: 0.06,
+            },
             0.18,
           );
         timelineRef.current = timeline;
