@@ -92,6 +92,14 @@ export {
   type CanvasRendererManifest,
 } from './renderer-manifest';
 export {
+  canvasNonWebOpenModes,
+  canvasNonWebUnavailableReasons,
+  projectCanvasResourceForNonWeb,
+  type CanvasNonWebOpenMode,
+  type CanvasNonWebProjection,
+  type CanvasNonWebUnavailableReason,
+} from './non-web-projection';
+export {
   canvasResourceErrorCodes,
   canvasResourceErrorCodeSchema,
   canvasResourceErrorSchema,

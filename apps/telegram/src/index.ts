@@ -11,16 +11,47 @@ import {
   DrizzleGatewayChannelBindingRepository,
   DrizzleGatewayConnectionRepository,
   DrizzleGatewayDeliveryRepository,
+  DrizzlePlatformArtifactRepository,
+  getDb,
+  requireNotebookAccess,
 } from '@educanvas/db';
+import { projectOwnedArtifactResource } from '@educanvas/canvas-protocol/server';
 import {
   gatewayOperationEventSchema,
   type GatewayInboundEnvelope,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
+import { telegramCanvasSummaries } from './canvas-delivery';
 
 const bindings = new DrizzleGatewayChannelBindingRepository();
 const connections = new DrizzleGatewayConnectionRepository();
 const deliveries = new DrizzleGatewayDeliveryRepository();
+const artifacts = new DrizzlePlatformArtifactRepository();
+
+async function loadTelegramArtifactResource(input: {
+  userId: string;
+  notebookId: string;
+  artifactId: string;
+}) {
+  const access = await requireNotebookAccess(getDb(), {
+    notebookId: input.notebookId,
+    trustedSubjectId: input.userId,
+    requiredPermission: 'notebook.read',
+  }).catch(() => null);
+  if (!access) return null;
+  const detail = await artifacts.getArtifactDetail({
+    artifactId: input.artifactId,
+    trustedSubjectId: input.userId,
+  });
+  if (detail.artifact.spaceId !== input.notebookId) return null;
+  return projectOwnedArtifactResource({
+    notebookId: input.notebookId,
+    artifact: detail.artifact,
+    version: detail.latestVersion,
+    latestJob: detail.latestJob,
+    accessRole: access.role,
+  });
+}
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -111,6 +142,7 @@ async function processUpdate(input: {
     : null;
   const normalized = normalizeTelegramUpdate(input.raw, binding);
   if (!normalized.ok) return;
+  if (!binding) return;
   const events = await gatewayEvents(
     input.gatewayUrl,
     input.gatewayToken,
@@ -126,6 +158,14 @@ async function processUpdate(input: {
   });
   if (delivery.replayed) return;
   let chunks = telegramTextChunks(events);
+  chunks = [
+    ...chunks,
+    ...(await telegramCanvasSummaries(
+      events,
+      { userId: binding.userId, notebookId: binding.notebookId },
+      loadTelegramArtifactResource,
+    )),
+  ];
   if (
     chunks.length === 0 &&
     events.some((event) => event.type === 'operation.failed')

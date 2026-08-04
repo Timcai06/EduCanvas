@@ -9,8 +9,10 @@ import {
   gatewayProtocolVersion,
   type GatewayInboundEnvelope,
 } from '@educanvas/gateway-core';
+import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 import { readBearerToken } from '../client-auth';
+import { GatewayCanvasResourceError } from '../canvas-resource-service';
 import {
   HANDLED,
   UNHANDLED,
@@ -136,6 +138,91 @@ export async function handleClientRoutes(
       writeJson(response, 200, {
         operations: await client.operations.listRecent(identity.userId),
       });
+      return HANDLED;
+    }
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/v1/client/canvas-resources'
+    ) {
+      if (!client.canvasResources) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const notebookId = gatewayOpaqueIdSchema.safeParse(
+        url.searchParams.get('notebookId'),
+      );
+      if (!notebookId.success) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      try {
+        writeJson(response, 200, {
+          resources: await client.canvasResources.list({
+            trustedSubjectId: identity.userId,
+            notebookId: notebookId.data,
+          }),
+        });
+      } catch (error) {
+        if (error instanceof GatewayCanvasResourceError) {
+          writeJson(response, error.status, { error: { code: error.code } });
+          return HANDLED;
+        }
+        throw error;
+      }
+      return HANDLED;
+    }
+
+    const canvasResourceMatch =
+      request.method === 'GET'
+        ? url.pathname.match(
+            /^\/v1\/client\/canvas-resources\/(source|artifact)\/([^/]+)$/,
+          )
+        : null;
+    if (canvasResourceMatch) {
+      if (!client.canvasResources) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const notebookId = gatewayOpaqueIdSchema.safeParse(
+        url.searchParams.get('notebookId'),
+      );
+      const resourceKind = canvasResourceKindSchema.safeParse(
+        canvasResourceMatch[1],
+      );
+      let decodedResourceId: string | null = null;
+      try {
+        decodedResourceId = decodeURIComponent(canvasResourceMatch[2]!);
+      } catch {
+        // 非法 percent encoding 与其他无效选择器使用同一个 400 形状。
+      }
+      const resourceId = gatewayOpaqueIdSchema.safeParse(decodedResourceId);
+      if (!notebookId.success || !resourceKind.success || !resourceId.success) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      try {
+        writeJson(
+          response,
+          200,
+          await client.canvasResources.get({
+            trustedSubjectId: identity.userId,
+            notebookId: notebookId.data,
+            resourceKind: resourceKind.data,
+            resourceId: resourceId.data,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof GatewayCanvasResourceError) {
+          writeJson(response, error.status, { error: { code: error.code } });
+          return HANDLED;
+        }
+        throw error;
+      }
       return HANDLED;
     }
 

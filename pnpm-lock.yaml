@@ -30,6 +30,9 @@ importers:
       '@educanvas/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:../../packages/canvas-protocol
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -107,6 +110,9 @@ importers:
 
   apps/telegram:
     dependencies:
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:../../packages/canvas-protocol
       '@educanvas/channel-telegram':
         specifier: workspace:*
         version: link:../../packages/channel-telegram
@@ -141,6 +147,9 @@ importers:
 
   apps/tui:
     dependencies:
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:../../packages/canvas-protocol
       '@educanvas/gateway-client':
         specifier: workspace:*
         version: link:../../packages/gateway-client
@@ -482,6 +491,9 @@ importers:
 
   packages/channel-telegram:
     dependencies:
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:../canvas-protocol
       '@educanvas/gateway-core':
         specifier: workspace:*
         version: link:../gateway-core
@@ -557,6 +569,9 @@ importers:
 
   packages/gateway-client:
     dependencies:
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:../canvas-protocol
       '@educanvas/gateway-core':
         specifier: workspace:*
         version: link:../gateway-core

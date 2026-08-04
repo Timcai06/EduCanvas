@@ -48,3 +48,15 @@ export {
   type WebRuntimePolicyErrorCode,
   type WebRuntimePolicyValidation,
 } from './web-runtime-policy';
+export {
+  projectOwnedSourceResource,
+  SourceResourceProjectionError,
+  type SourceResourceProjectionInput,
+} from './source-resource-projection';
+export {
+  ArtifactResourceProjectionError,
+  projectOwnedArtifactResource,
+  type ArtifactProjectionArtifact,
+  type ArtifactProjectionJob,
+  type ArtifactProjectionVersion,
+} from './artifact-resource-projection';
