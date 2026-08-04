@@ -4,9 +4,15 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import {
+  getModelProfile,
+  listModelProfiles,
+  expectedRequiredModelHashes,
+  requiredModelFiles,
+} from './model-profiles.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 let passed = 0;
@@ -29,7 +35,12 @@ function sha256(filePath) {
 
 function run(cmd) {
   try {
-    return JSON.parse(execSync(cmd, { encoding: 'utf8', cwd: here }));
+    return JSON.parse(
+      execFileSync(process.execPath, nodeArgs(cmd), {
+        encoding: 'utf8',
+        cwd: here,
+      }),
+    );
   } catch (err) {
     const stdout = err.stdout?.toString?.() ?? '';
     try {
@@ -42,7 +53,7 @@ function run(cmd) {
 
 function runExitCode(cmd, env = {}) {
   try {
-    execSync(cmd, {
+    execFileSync(process.execPath, nodeArgs(cmd), {
       encoding: 'utf8',
       cwd: here,
       stdio: 'pipe',
@@ -54,13 +65,65 @@ function runExitCode(cmd, env = {}) {
   }
 }
 
+function nodeArgs(command) {
+  const parts = command.split(' ');
+  if (parts.shift() !== 'node') throw new Error('expected_node_command');
+  return parts;
+}
+
 console.log('V02-R2 Test Suite\n');
+
+// --- Test 0: V02-S model profiles are bounded and explicit ---
+console.log('Test 0: V02-S model profiles');
+{
+  const names = listModelProfiles();
+  assert(names.length === 2, 'exactly two predeclared profiles');
+  assert(names.includes('current'), 'current profile exists');
+  assert(
+    names.includes('small-bilingual-fp32'),
+    'small bilingual profile exists',
+  );
+  for (const name of names) {
+    const profile = getModelProfile(name);
+    assert(profile !== null, `${name} resolves`);
+    assert(profile.license === 'Apache-2.0', `${name} license is explicit`);
+    assert(profile.modelBytes > 0, `${name} model size is explicit`);
+    assert(
+      profile.source.startsWith(
+        'https://github.com/k2-fsa/sherpa-onnx/releases/',
+      ),
+      `${name} uses an official release URL`,
+    );
+    assert(
+      requiredModelFiles(profile).length === 5,
+      `${name} declares all required files`,
+    );
+    assert(
+      /^[a-f0-9]{64}$/.test(profile.archiveSha256),
+      `${name} archive hash is explicit`,
+    );
+    assert(
+      Object.values(expectedRequiredModelHashes(profile)).every((hash) =>
+        /^[a-f0-9]{64}$/.test(hash),
+      ),
+      `${name} required file hashes are explicit`,
+    );
+  }
+  assert(getModelProfile('not-declared') === null, 'unknown profile rejected');
+}
 
 // --- Test 1: Before JSON has null hotwords/score ---
 console.log('Test 1: Before JSON structure');
 {
   const data = run('node run-compare.mjs --engine wasm --fixture 0.wav');
   assert(data.schemaVersion === 2, 'schemaVersion is 2');
+  assert(
+    data.modelProfile === 'current-bilingual-fp32',
+    'default profile recorded',
+  );
+  assert(data.modelLicense === 'Apache-2.0', 'model license recorded');
+  assert(data.modelBytes > 0, 'required model byte size recorded');
+  assert(data.runs[0].peakRssKiB > 0, 'peak RSS is recorded');
   assert(data.hotwordsScore === null, 'hotwordsScore is null for before');
   assert(data.hashes.hotwords === null, 'hotwords hash is null for before');
   assert(data.hashes.encoder !== null, 'encoder hash present');
@@ -79,6 +142,15 @@ console.log('Test 1: Before JSON structure');
     'decodingMethod is modified_beam_search',
   );
   assert(data.maxActivePaths === 4, 'maxActivePaths is 4');
+}
+
+// --- Test 5b: Unknown model profile fails without a stack ---
+console.log('\nTest 5b: Unknown model profile failure');
+{
+  const code = runExitCode(
+    'node run-compare.mjs --engine wasm --model-profile not-declared --fixture 0.wav',
+  );
+  assert(code === 2, 'unknown model profile exits with code 2');
 }
 
 // --- Test 2: After JSON has hotwords SHA-256 ---
@@ -158,11 +230,11 @@ console.log('\nTest 6: Invalid score failure');
 // --- Test 7: Summary schema validation ---
 console.log('\nTest 7: Summary schema');
 {
-  assert(
-    runExitCode('node generate-summary.mjs') === 0,
-    'strict summary generator succeeds for the complete matrix',
-  );
   const summaryPath = join(here, 'evidence', 'v02-r-summary.json');
+  assert(
+    existsSync(summaryPath),
+    'committed V02-R summary exists without ignored raw results',
+  );
   if (existsSync(summaryPath)) {
     const summary = JSON.parse(readFileSync(summaryPath, 'utf8'));
     assert(summary.schemaVersion === 2, 'summary schemaVersion is 2');

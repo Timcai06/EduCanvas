@@ -118,6 +118,88 @@ node run-compare.mjs --engine wasm --fixture 0.wav \
   --hotwords fixtures/does-not-exist.txt
 ```
 
+## V02-S：路线重选实验（预声明，尚未运行正式矩阵）
+
+V02-R 的 TTS fixture 没有提供可验证的真实目标术语发音，因此不能继续作为唯一验收证据。
+V02-S 改用项目负责人本人录制且明确授权用于本地测试的真人语音。正式音频仍被 `.gitignore`
+排除；在记录来源、授权、格式和 SHA-256 前不得运行正式矩阵。
+
+固定朗读文本：
+
+> Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.
+
+官方 sherpa-onnx 热词文档规定 English/BPE 热词使用大写形式，因此 V02-S 使用新的
+`fixtures/hotwords-v02-s.txt`，内容为 `BAGGING` 和 `BOOSTING`。旧的
+`hotwords-bagging-boosting.txt` 保留，只用于复现已经提交的 V02-R 证据。
+
+### 模型与许可
+
+正式矩阵只允许以下两个 profile；不得运行后再增加有利模型：
+
+| profile                | 作用         | 语言     | 权重 | 官方来源                                                                                                                                                                  | 许可       |
+| ---------------------- | ------------ | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `current`              | 当前产品候选 | 中英双语 | FP32 | [bilingual 2023-02-20](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2)             | Apache-2.0 |
+| `small-bilingual-fp32` | 双语替代候选 | 中英双语 | FP32 | [small bilingual 2023-02-16](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2) | Apache-2.0 |
+
+二者均为 sherpa-onnx 官方文档列出的中英双语 streaming transducer。热词只在
+`modified_beam_search` 下使用。仅英语模型不能满足 EduCanvas 的双语课堂范围，因此不列入正式候选。
+
+下载后必须先核对归档 SHA-256；不得用同名但内容不同的权重替代：
+
+| profile                | archive SHA-256                                                    |
+| ---------------------- | ------------------------------------------------------------------ |
+| `current`              | `27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8` |
+| `small-bilingual-fp32` | `2b7c63322b32e5e0f2526043a1103366119ca58dd615cd7105a37c01db9553d7` |
+
+small bilingual 官方归档不含 `bpe.vocab`。准备脚本会先验证它与 current profile 的
+`bpe.model`、`tokens.txt` 分别字节一致，再从 current profile 复制已验证的
+`bpe.vocab`；任一哈希不符都会显式失败：
+
+```bash
+cd tooling/voice-lab
+node prepare-v02-s-model.mjs
+```
+
+本地 Node 22 工具链固定为官方 `node-v22.23.1-darwin-arm64.tar.gz`，归档 SHA-256 为
+`ef28d8fab2c0e4314522d4bb1b7173270aa3937e93b92cb7de79c112ac1fa953`。Node 二进制和
+模型一样只放在被忽略的 `models/`，不提交仓库。
+
+### 正式控制变量和门槛
+
+| 参数                 | 预声明值                                           |
+| -------------------- | -------------------------------------------------- |
+| engine               | `wasm`                                             |
+| Node                 | 22.23.1、24.18.0                                   |
+| decodingMethod       | `modified_beam_search`                             |
+| maxActivePaths       | 4                                                  |
+| chunkMs              | 100                                                |
+| tailSeconds          | 1.5                                                |
+| hotwords             | `BAGGING`、`BOOSTING`                              |
+| hotwordsScore        | 1.5、2.0、3.5                                      |
+| repetitions          | 每个 profile/Node/score 的 before 和 after 各 3 次 |
+| 目标术语门槛         | after 必须在 3/3 中同时出现 BAGGING 与 BOOSTING    |
+| 热词纠正门槛         | before 至少漏一个目标词，after 达到目标术语门槛    |
+| RTF 上限             | 0.5                                                |
+| 所需模型文件大小上限 | 250 MiB                                            |
+| 峰值 RSS 上限        | 1.5 GiB                                            |
+
+before/after 对同一 profile、Node 和 fixture 只允许热词文件不同。若 before 已在 3/3 中正确包含
+两个术语，只能记为 `BASELINE_CAPABLE`，不能伪称热词完成纠正。正式矩阵全部完成前不做路线结论。
+候选通过还要求同一 profile、同一 hotwordsScore 在 Node 22.23.1 与 24.18.0 上都达到
+`hotwordCorrected`；单一 Node 或单一偶发结果不能产生 `PASS_CANDIDATE`。
+
+正式矩阵只能在以下 manifest 落盘后启动：`fixtures/v02-s-human.json`。它必须包含本人录制、
+仅限 EduCanvas 本地测试且不随 Git 发布的明确授权，固定朗读文本、16 kHz 单声道 PCM、相对
+音频路径和 SHA-256。matrix runner 与 summary generator 共享同一个严格校验模块；音频本体继续
+留在被忽略的 `fixtures/generated/`。
+
+模型准备完成后的基础设施 smoke（不是目标词正式证据）显示 small bilingual FP32 能在 Node
+22.23.1 与 24.18.0 上解码官方 `test_wavs/0.wav`，RTF 分别为 0.0867、0.0831；这只证明第二
+候选可执行，不能替代真人 fixture 的 before/after 结论。
+
+允许的最终判定只有：`PASS_CANDIDATE`、`BLOCKED_FIXTURE`、`BLOCKED_MODEL` 或
+`REVISE_STRATEGY`。任何候选结果都需 Codex 复核，V03 在此之前保持锁定。
+
 ## 推荐与门禁
 
 证据支持 **WASM SIMD 作为后续产品路线**：它在仓库支持的 Node 22/24 上均为 4/4 非空，
@@ -130,7 +212,14 @@ V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-00
 ## 文件
 
 - `run-compare.mjs`：统一 runner 和 JSON 证据（自动记录 SHA-256 哈希）
+- `model-profiles.mjs`：V02-S 预声明的官方模型、权重文件、语言范围与许可
+- `prepare-v02-s-model.mjs`：验证两个 profile 的文件哈希并安全准备共享 `bpe.vocab`
+- `v02-s-fixture-manifest.mjs`：真人 fixture 来源、授权、文本、格式和哈希的唯一 schema
+- `run-v02-s-matrix.mjs`：固定 Node/profile/score/repetition 的 72 次正式矩阵
+- `generate-v02-s-summary.mjs`：从被忽略的原始结果生成有界 V02-S 证据摘要
+- `v02-s-evaluation.mjs`：跨 Node 候选门槛与稳定 verdict
 - `fixtures/hotwords-bagging-boosting.txt`：UTF-8 热词词表
+- `fixtures/hotwords-v02-s.txt`：符合官方 English/BPE 规范的全大写 V02-S 热词词表
 - `fixtures/hotwords-official-test.txt`：harness 验证用热词词表
 - `generate-summary.mjs`：从 results/ 生成 evidence/v02-r-summary.json
 - `test-v02-r.mjs`：V02-R2 测试套件

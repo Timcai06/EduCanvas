@@ -1,6 +1,12 @@
 /** Reproducible V01/V02: native Node addon versus Node-hosted WASM. */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {
   dirname,
   isAbsolute,
@@ -12,6 +18,12 @@ import {
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import {
+  getModelProfile,
+  listModelProfiles,
+  expectedRequiredModelHashes,
+  requiredModelFiles,
+} from './model-profiles.mjs';
 
 function sha256(filePath) {
   if (!existsSync(filePath)) return null;
@@ -20,13 +32,16 @@ function sha256(filePath) {
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
+const args = parseArgs(process.argv.slice(2));
+const modelProfile = getModelProfile(args.modelProfile);
+if (!modelProfile) {
+  fail(
+    `Unknown model profile. Expected one of: ${listModelProfiles().join(', ')}`,
+  );
+}
 const modelDir = process.env.VOICE_LAB_MODEL_DIR
   ? normalize(process.env.VOICE_LAB_MODEL_DIR)
-  : join(
-      here,
-      'models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
-    );
-const args = parseArgs(process.argv.slice(2));
+  : join(here, 'models', modelProfile.directory);
 const fixtures = args.fixture
   ? [args.fixture]
   : ['0.wav', '1.wav', '2.wav', '3.wav'];
@@ -36,6 +51,7 @@ const singleFixturePath =
   fixtures.length === 1 ? resolveFixturePath(fixtures[0]) : null;
 
 if (!existsSync(modelDir)) fail('Model directory is missing.');
+validateModelFiles();
 if (!engines.every((engine) => engine === 'native' || engine === 'wasm'))
   fail('--engine must be native, wasm, or both');
 if (args.hotwords && !existsSync(hotwordsPath))
@@ -51,15 +67,23 @@ const report = {
   },
   hashes: {
     fixture: singleFixturePath ? sha256(singleFixturePath) : null,
-    encoder: sha256(join(modelDir, 'encoder-epoch-99-avg-1.onnx')),
-    decoder: sha256(join(modelDir, 'decoder-epoch-99-avg-1.onnx')),
-    joiner: sha256(join(modelDir, 'joiner-epoch-99-avg-1.onnx')),
-    tokens: sha256(join(modelDir, 'tokens.txt')),
-    bpeVocab: sha256(join(modelDir, 'bpe.vocab')),
+    encoder: sha256(join(modelDir, modelProfile.encoder)),
+    decoder: sha256(join(modelDir, modelProfile.decoder)),
+    joiner: sha256(join(modelDir, modelProfile.joiner)),
+    tokens: sha256(join(modelDir, modelProfile.tokens)),
+    bpeVocab: sha256(join(modelDir, modelProfile.bpeVocab)),
     hotwords: args.hotwords ? sha256(hotwordsPath) : null,
   },
+  modelProfile: modelProfile.id,
   model: relative(here, modelDir),
-  modelingUnit: 'cjkchar+bpe',
+  modelSource: modelProfile.source,
+  modelLicense: modelProfile.license,
+  modelLanguageScope: modelProfile.languageScope,
+  modelBytes: requiredModelFiles(modelProfile).reduce(
+    (total, filename) => total + fileSize(join(modelDir, filename)),
+    0,
+  ),
+  modelingUnit: modelProfile.modelingUnit,
   decodingMethod: 'modified_beam_search',
   maxActivePaths: 4,
   chunkMilliseconds: args.chunkMs,
@@ -139,6 +163,7 @@ function runFixture(api, engine, fixture) {
       initMilliseconds,
       decodeMilliseconds,
       rtf: round(decodeMilliseconds / (audioSeconds * 1000)),
+      peakRssKiB: process.resourceUsage().maxRSS,
       elapsedMilliseconds: round(performance.now() - started),
       text,
       nonEmptyText: text.trim().length > 0,
@@ -160,16 +185,16 @@ function makeConfig() {
     featConfig: { sampleRate: 16000, featureDim: 80 },
     modelConfig: {
       transducer: {
-        encoder: join(modelDir, 'encoder-epoch-99-avg-1.onnx'),
-        decoder: join(modelDir, 'decoder-epoch-99-avg-1.onnx'),
-        joiner: join(modelDir, 'joiner-epoch-99-avg-1.onnx'),
+        encoder: join(modelDir, modelProfile.encoder),
+        decoder: join(modelDir, modelProfile.decoder),
+        joiner: join(modelDir, modelProfile.joiner),
       },
-      tokens: join(modelDir, 'tokens.txt'),
+      tokens: join(modelDir, modelProfile.tokens),
       numThreads: 2,
       provider: 'cpu',
       debug: 0,
-      modelingUnit: 'cjkchar+bpe',
-      bpeVocab: join(modelDir, 'bpe.vocab'),
+      modelingUnit: modelProfile.modelingUnit,
+      bpeVocab: join(modelDir, modelProfile.bpeVocab),
     },
     decodingMethod: 'modified_beam_search',
     maxActivePaths: 4,
@@ -210,6 +235,7 @@ function acceptAndDecode(api, recognizer, stream, sampleRate, samples) {
 function parseArgs(argv) {
   const parsed = {
     engine: 'both',
+    modelProfile: 'current',
     chunkMs: 100,
     tailSeconds: 1.5,
     hotwordsScore: 1.5,
@@ -217,6 +243,7 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const [option, value] = [argv[index], argv[index + 1]];
     if (option === '--engine') parsed.engine = value;
+    else if (option === '--model-profile') parsed.modelProfile = value;
     else if (option === '--fixture') parsed.fixture = value;
     else if (option === '--hotwords') parsed.hotwords = value;
     else if (option === '--output') parsed.output = value;
@@ -250,6 +277,22 @@ function resolveFixturePath(fixture) {
 }
 function round(value) {
   return Number(value.toFixed(4));
+}
+function fileSize(filePath) {
+  if (!existsSync(filePath)) return 0;
+  return statSync(filePath).size;
+}
+function validateModelFiles() {
+  for (const [filename, expectedHash] of Object.entries(
+    expectedRequiredModelHashes(modelProfile),
+  )) {
+    const actualHash = sha256(join(modelDir, filename));
+    if (actualHash === null)
+      fail(`Required model file is missing: ${filename}`);
+    if (actualHash !== expectedHash) {
+      fail(`Required model file hash mismatch: ${filename}`);
+    }
+  }
 }
 function fail(message) {
   console.error(message);
