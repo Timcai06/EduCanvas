@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-08-04
-- 下一领取任务：`U15`；语音侧保持 `V02 BLOCKED`
+- 下一领取任务：`U16`；语音侧保持 `V02 BLOCKED`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -805,7 +805,7 @@ schema 明确拒绝 GPU、自定义镜像、宿主路径、未声明输入和默
 #### U15：实验 Canvas renderer
 
 - 依赖：U14
-- 状态：`PENDING（已解锁）`
+- 状态：`PASS`
 - 文件边界：Canvas experiment renderer、props/测试
 - 可并行：V17
 
@@ -824,6 +824,7 @@ renderer 不负责执行或修改 Run。
 #### U16：可复现实验 smoke
 
 - 依赖：U15
+- 状态：`PENDING（已解锁）`
 - 文件边界：一个最小实验 fixture、运行说明、质量证据
 - 可并行：V17
 
@@ -999,10 +1000,12 @@ CSP、资源策略、独立 origin/process Runtime、真实 Web + Runtime + Post
 composition 与 R28 压力门禁均已通过。语音 V12-V17 同时受 V02-V11
 前置门槛阻塞，因此 S3 整体仍未通过，语音入口继续保持关闭。
 
-**S4 状态：** U13 契约与 U14 无网络 CPU Adapter 已通过复审。Adapter 仅运行固定 digest 的
+**S4 状态：** U13 契约、U14 无网络 CPU Adapter 与 U15 实验 Canvas Renderer 已通过复审。Adapter 仅运行固定 digest 的
 Python CPU 环境，使用 Docker `--network none`、只读文件系统、降权能力、资源预算、输入
 checksum 材料化、输出复核、单终态收敛与强制容器清理；不在 Docker 不可用时降级伪装隔离。
-U15 已解锁；U15-U18 与联合验收仍未实现，不能把 Canvas 展示或完整实验纵切描述为完成。
+Renderer 只消费严格、有界且与终态 provenance 一致的浏览器安全视图模型，覆盖代码、输入、
+配置、预算、有限日志、表格/图表输出和完整 provenance，不执行 Run，也不暴露对象键、宿主路径或堆栈。
+当前尚无生产 `artifact.experiment` 数据源，因此 Renderer 未伪接入 registry；U16 已解锁，完整实验纵切仍需 U16 smoke 证明。
 
 | S0 任务 | Codex 结论 | 证据                                                                                                                                   |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1036,20 +1039,21 @@ U15 已解锁；U15-U18 与联合验收仍未实现，不能把 Canvas 展示或
 | ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U13     | `PASS`     | 初版契约的复审缺口已修订：终态 result/provenance、终态事件完整性、精确 SemVer、日志 Artifact 上界和模块职责拆分均有回归覆盖；Agent Core 16 files/121 tests、typecheck、Prettier 与 diff check 通过，U14 已解锁。                                      |
 | U14     | `PASS`     | 固定 digest Python CPU Adapter 已实现网络/权限/文件系统隔离、输入哈希材料化、资源和输出上限、单终态与清理；Experiment Runtime 94/94（含 5 个真实 Docker smoke）、Agent Core 121/121、Tooling 66/66、24 workspace typecheck 与 lint 通过，U15 已解锁。 |
+| U15     | `PASS`     | 新增严格有界的实验 Canvas 视图模型与纯展示 Renderer；状态、终态/provenance 一致性、代码/日志/表格/图表截断、安全失败、键盘操作和无生产假接线由 17 条相邻测试覆盖；Web 658/658、24 workspace typecheck、lint 与 Tooling 通过，U16 已解锁。             |
 
-| 能力                       | 当前状态  | 当前证据                                                                                                                                                                       | 完成任务                     |
-| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                                                                | 已有，U01 防回归             |
-| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                                                             | 已有，U01 防回归             |
-| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过                                                       | U02-U05 passed               |
-| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环                                           | U06-U08 passed               |
-| 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                                                                | U09-U12 passed               |
-| Experiment Runtime         | `partial` | U13 Port/Run 契约和 U14 隔离 CPU Adapter 已通过；尚无 U15 Renderer 或 U16 可复现 smoke                                                                                         | U13-U14 passed；U15-U16 待做 |
-| TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                                                                 | U17-U19                      |
-| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 已完成受控 before/after，harness 对官方 WAV 有可重复影响，但 Bagging/Boosting 在预声明 score 下未纠正，V02 BLOCKED | V02-V03                      |
-| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用                                         | V04-V09、V12-V13、V16-V17    |
-| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                                                           | V10-V15                      |
-| 联合发布证据               | `pending` | 尚未执行                                                                                                                                                                       | U20-U21                      |
+| 能力                       | 当前状态  | 当前证据                                                                                                                                                                       | 完成任务                  |
+| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| CanvasResource/manifest    | `passed`  | `packages/canvas-protocol/src/resource.ts:1-296`<br>`renderer-manifest.ts:1-69`                                                                                                | 已有，U01 防回归          |
+| Source/Artifact 服务端投影 | `passed`  | `apps/web/server/canvas/source-resource-adapter.ts:13-103,177-235`<br>`artifact-resource-adapter.ts:18-65,114-187`                                                             | 已有，U01 防回归          |
+| Web 统一 registry/打开     | `passed`  | Source/Artifact 统一 endpoint、registry、CanvasHost 与兼容 adapter 已接线；旧 PublicArtifact 判分路径保持独立且 E2E 通过                                                       | U02-U05 passed            |
+| 媒体生成闭环               | `passed`  | U06-U08 已确认图像/音频 Provider、版本、元数据、净化 provenance、受控读取、文本等价/下载删除、原子终态及 checkpoint/重复投递恢复闭环                                           | U06-U08 passed            |
+| 持久 Web Runtime           | `passed`  | ADR-0019、独立 Runtime、运行账本、受控组合、真实 PostgreSQL composition 与 R28 压力门禁均已通过                                                                                | U09-U12 passed            |
+| Experiment Runtime         | `partial` | U13 Port/Run 契约、U14 隔离 CPU Adapter 与 U15 有界 Renderer 已通过；尚无 U16 可复现实验 smoke，Renderer 也未在缺少真实数据源时伪接入生产 registry                             | U13-U15 passed；U16 待做  |
+| TUI/渠道 Canvas            | `pending` | 未发现统一 CanvasResource 消费                                                                                                                                                 | U17-U19                   |
+| WASM SIMD 流式识别与热词   | `blocked` | V01 已选定 WASM SIMD：Node 22/24 4/4 非空、RTF 约 0.12；V02 已完成受控 before/after，harness 对官方 WAV 有可重复影响，但 Bagging/Boosting 在预声明 score 下未纠正，V02 BLOCKED | V02-V03                   |
+| 流式 Port/Gateway/UI       | `pending` | `packages/agent-core/src/model-gateway.ts:191-196` 只有一次性转录 Port<br>`apps/web/features/composer/composer.tsx:165-174` 按钮被禁用                                         | V04-V09、V12-V13、V16-V17 |
+| 音频同意与可靠删除         | `pending` | `packages/db/src/object-deletion-outbox-repository.ts` 有通用 outbox，缺音频专用契约                                                                                           | V10-V15                   |
+| 联合发布证据               | `pending` | 尚未执行                                                                                                                                                                       | U20-U21                   |
 
 ### 已确认的代码事实明细
 
