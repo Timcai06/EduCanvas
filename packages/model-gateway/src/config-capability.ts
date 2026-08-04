@@ -29,6 +29,7 @@
  * 强制 https；API Key 只做形状校验。错误路径不携带 secret。
  */
 
+import type { EnabledModelGatewayConfiguration } from './config';
 import {
   isOneOf,
   ModelGatewayConfigurationError,
@@ -172,6 +173,80 @@ export type CapabilityConfiguration =
   | { kind: 'inherited' }
   | { kind: 'overridden'; override: CapabilityOverrideConfiguration }
   | { kind: 'disabled' };
+
+/** override 中独立声明的超时投影到主配置的能力专属配额字段。 */
+const capabilityTimeoutField: Record<
+  OverrideCapability,
+  | 'speechTimeoutMs'
+  | 'transcriptionTimeoutMs'
+  | 'imageTimeoutMs'
+  | 'embeddingTimeoutMs'
+> = {
+  speech: 'speechTimeoutMs',
+  transcription: 'transcriptionTimeoutMs',
+  image: 'imageTimeoutMs',
+  embedding: 'embeddingTimeoutMs',
+};
+
+/** override 中独立声明的模型别名在主配置中的字段名。 */
+const capabilityModelField: Record<
+  OverrideCapability,
+  'speech' | 'transcription' | 'image' | 'embedding'
+> = {
+  speech: 'speech',
+  transcription: 'transcription',
+  image: 'image',
+  embedding: 'embedding',
+};
+
+/**
+ * 组合根的统一能力路由解析：给定环境与能力名，产出该能力最终生效的
+ * Gateway 配置（继承主 Provider 或独立 override 投影），能力不可用时为 null。
+ *
+ * Web 与 Worker 组合根都调用本函数，保证同一套解析语义；Provider SDK 类型、
+ * 原始响应与 Secret 仍然止于 `packages/model-gateway`。
+ *
+ * @param environmentValues 显式转交的环境变量（组合根决定转交面）。
+ */
+export function resolveCapabilityGatewayConfiguration(
+  environmentValues: ModelGatewayEnvironment,
+  capability: OverrideCapability,
+  primaryConfiguration: EnabledModelGatewayConfiguration | null,
+): EnabledModelGatewayConfiguration | null {
+  if (primaryConfiguration === null) return null;
+
+  const capabilityConfiguration = parseCapabilityConfiguration(
+    environmentValues,
+    capability,
+    primaryConfiguration.provider,
+    primaryConfiguration.environment,
+  );
+
+  if (capabilityConfiguration.kind === 'disabled') return null;
+
+  if (capabilityConfiguration.kind === 'inherited') {
+    /* 继承主 Provider 时，模型别名必须在主配置中存在，否则能力不存在。 */
+    return primaryConfiguration.modelIds[capabilityModelField[capability]]
+      ? primaryConfiguration
+      : null;
+  }
+
+  /* override：把独立 Provider/模型/端点/凭据/超时投影进主配置，
+   * 构造期供应商归属唯一确定，审计可判定（ADR-0021 §4 同 ADR-0017 理由）。 */
+  const override = capabilityConfiguration.override;
+  const overrideConfiguration: EnabledModelGatewayConfiguration = {
+    ...primaryConfiguration,
+    provider: override.provider,
+    baseUrl: override.baseUrl,
+    apiKey: override.apiKey,
+    modelIds: {
+      ...primaryConfiguration.modelIds,
+      [capabilityModelField[capability]]: override.model,
+    },
+    [capabilityTimeoutField[capability]]: override.timeoutMs,
+  };
+  return overrideConfiguration;
+}
 
 /**
  * 解析单种媒体能力的 Provider 归属。

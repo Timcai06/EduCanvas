@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   parseCapabilityConfiguration,
   primaryProviderSupportsCapability,
+  resolveCapabilityGatewayConfiguration,
   type CapabilityConfiguration,
   type OverrideCapability,
 } from './config-capability';
+import {
+  parseModelGatewayConfiguration,
+  type EnabledModelGatewayConfiguration,
+} from './config';
 import type { ModelGatewayEnvironment } from './config-primitives';
 
 const speechOverride = (

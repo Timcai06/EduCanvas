@@ -63,47 +63,27 @@ const parseSpeechVoice = (value: string | undefined): string => {
 };
 
 /**
- * 解析媒体模型别名。任一别名配置在非 `openai-compatible` Provider 上都立即失败：
- * 静默忽略会让部署以为能力可用，直到运行时才在 Worker 里报错。
+ * 解析媒体模型别名。主 Provider 不支持的别名不产生，能力归属交给
+ * `config-capability.ts` 的 per-capability 解析（ADR-0021）：DeepSeek 主配置下
+ * 声明 speech 别名不再整组抛错，而是该能力关闭，除非显式配置了独立 override。
+ * 整组失败会让一个媒体端点的配置错误拖垮文本 Agent，与 ADR-0021 语义相反。
  */
 export function parseMediaModelAliases(
   environmentValues: ModelGatewayEnvironment,
   provider: OpenAICompatibleProvider,
 ): MediaModelAliases {
-  const aliases: readonly [
-    keyof MediaModelAliases,
-    string | undefined,
-    ModelGatewayConfigurationErrorCode,
-  ][] = [
-    [
-      'speech',
-      environmentValues.MODEL_GATEWAY_SPEECH_MODEL,
-      'SPEECH_UNSUPPORTED_PROVIDER',
-    ],
-    [
-      'transcription',
-      environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MODEL,
-      'TRANSCRIPTION_UNSUPPORTED_PROVIDER',
-    ],
-    [
-      'image',
-      environmentValues.MODEL_GATEWAY_IMAGE_MODEL,
-      'IMAGE_UNSUPPORTED_PROVIDER',
-    ],
-    [
-      'embedding',
-      environmentValues.MODEL_GATEWAY_EMBEDDING_MODEL,
-      'EMBEDDING_UNSUPPORTED_PROVIDER',
-    ],
+  const aliases: readonly [keyof MediaModelAliases, string | undefined][] = [
+    ['speech', environmentValues.MODEL_GATEWAY_SPEECH_MODEL],
+    ['transcription', environmentValues.MODEL_GATEWAY_TRANSCRIPTION_MODEL],
+    ['image', environmentValues.MODEL_GATEWAY_IMAGE_MODEL],
+    ['embedding', environmentValues.MODEL_GATEWAY_EMBEDDING_MODEL],
   ];
 
   const result: MediaModelAliases = {};
-  for (const [alias, rawValue, unsupportedCode] of aliases) {
+  for (const [alias, rawValue] of aliases) {
     const modelId = parseModelId(rawValue, false);
     if (modelId === undefined) continue;
-    if (provider !== 'openai-compatible') {
-      throw new ModelGatewayConfigurationError(unsupportedCode);
-    }
+    if (provider !== 'openai-compatible') continue;
     result[alias] = modelId;
   }
   return result;

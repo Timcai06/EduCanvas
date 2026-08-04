@@ -22,6 +22,7 @@ export {
   overrideCapabilities,
   parseCapabilityConfiguration,
   primaryProviderSupportsCapability,
+  resolveCapabilityGatewayConfiguration,
   type CapabilityConfiguration,
   type CapabilityOverrideConfiguration,
   type OverrideCapability,
