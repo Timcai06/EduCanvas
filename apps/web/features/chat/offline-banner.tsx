@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react';
 import { WifiSlash } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 import { OFFLINE_BANNER_TEXT } from './connection-status';
 
 gsap.registerPlugin(useGSAP);
@@ -23,7 +24,7 @@ export function OfflineBanner() {
         gsap.from(rootRef.current, {
           autoAlpha: 0,
           y: -6,
-          duration: 0.3,
+          duration: motionDuration('standard'),
           ease: 'power2.out',
         });
       });

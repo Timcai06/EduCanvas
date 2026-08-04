@@ -8,6 +8,7 @@ import { SealStamp } from '@/features/workspace/shared/two-pen-marks';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -63,13 +64,18 @@ export function ProgressDrawer({
         timeline.from('.path-node', {
           opacity: 0,
           x: -6,
-          duration: 0.35,
+          duration: motionDuration('standard'),
           ease: 'power2.out',
           stagger: 0.08,
         });
         timeline.from(
           '.path-connector',
-          { scaleY: 0, duration: 0.3, ease: 'power1.out', stagger: 0.08 },
+          {
+            scaleY: 0,
+            duration: motionDuration('standard'),
+            ease: 'power1.out',
+            stagger: 0.08,
+          },
           0.1,
         );
       });

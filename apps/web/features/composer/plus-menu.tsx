@@ -17,6 +17,7 @@ import {
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -153,7 +154,13 @@ export function PlusMenu({
         timeline.fromTo(
           menu,
           { opacity: 0, y: 8, scale: 0.97 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power3.out' },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: motionDuration('fast'),
+            ease: 'power3.out',
+          },
         );
         timeline.fromTo(
           rows,
@@ -161,7 +168,7 @@ export function PlusMenu({
           {
             opacity: 1,
             y: 0,
-            duration: 0.18,
+            duration: motionDuration('fast'),
             stagger: 0.025,
             ease: 'power1.out',
           },

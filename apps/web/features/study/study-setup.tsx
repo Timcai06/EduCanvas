@@ -13,6 +13,7 @@ import { useRef, useState, useTransition } from 'react';
 import { TopBar } from '../workspace/learning/top-bar';
 import { OptionWheel } from './option-wheel';
 import { celebrate } from '@/features/celebrate/ink-splash';
+import { motionDuration } from '@/features/theme/motion';
 
 gsap.registerPlugin(useGSAP);
 
@@ -167,7 +168,7 @@ export function StudySetup() {
         gsap.to('.unfold-item', {
           opacity: 1,
           y: 0,
-          duration: 0.5,
+          duration: motionDuration('slow'),
           ease: 'power2.out',
           stagger: 0.07,
         });

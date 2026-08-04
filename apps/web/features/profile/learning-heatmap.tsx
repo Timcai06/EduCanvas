@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
 import type { LearningActivityDay } from '@/features/profile/activity-contract';
+import { motionDuration } from '@/features/theme/motion';
 
 /**
  * 学习热力图：GitHub 贡献图的教学版。过去约一年、每格一天，按当天「判分事件数」取五档
@@ -79,7 +80,7 @@ export function LearningHeatmap({
           autoAlpha: 0,
           scale: 0.4,
           transformOrigin: 'center',
-          duration: 0.4,
+          duration: motionDuration('emphasis'),
           ease: 'power2.out',
           stagger: { amount: 1.1, from: 'start' },
         });

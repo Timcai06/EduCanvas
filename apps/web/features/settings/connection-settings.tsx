@@ -11,6 +11,7 @@ import {
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useEffect, useRef, useState } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 import { ConnectionAuthorization } from './connection-settings-authorization';
 import { ConnectionList } from './connection-settings-list';
 import { ConnectionProviderGrid } from './connection-settings-provider-grid';
@@ -65,7 +66,7 @@ export function ConnectionSettings({
         gsap.from('[data-settings-section]', {
           autoAlpha: 0,
           y: 12,
-          duration: 0.4,
+          duration: motionDuration('emphasis'),
           stagger: 0.08,
           ease: 'power2.out',
         });
