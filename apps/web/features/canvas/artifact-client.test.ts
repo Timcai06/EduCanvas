@@ -82,6 +82,7 @@ describe('artifact client mutation contracts', () => {
               updatedAt: '2026-07-27T00:01:00.000Z',
             },
             version: {
+              id: '50000000-0000-4000-8000-000000000001',
               version: 1,
               content: null,
               media: {
@@ -137,6 +138,7 @@ describe('artifact client mutation contracts', () => {
               updatedAt: '2026-07-27T00:01:00.000Z',
             },
             version: {
+              id: '50000000-0000-4000-8000-000000000002',
               version: 2,
               content: { contentVersion: 1, markdown: '# 课堂笔记' },
               media: null,

@@ -1,6 +1,13 @@
-import type { TurnModelGateway } from '@educanvas/agent-core';
+import {
+  ModelGatewayInvocationError,
+  type TurnModelGateway,
+} from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
-import { AgentLoopEngine } from './agent-loop';
+import {
+  AgentLoopEngine,
+  type AgentLoopCommand,
+  type AgentLoopEvent,
+} from './agent-loop';
 
 function metadata(
   request: Parameters<TurnModelGateway['streamTurnText']>[0],
@@ -24,6 +31,42 @@ function metadata(
     latencyMs: 1,
     traceId: request.traceId,
   } as const;
+}
+
+function command(
+  overrides: Partial<AgentLoopCommand<never, never, { id: number }>> = {},
+): AgentLoopCommand<never, never, { id: number }> {
+  return {
+    traceId: 'trace:retry',
+    turnId: 'turn:retry',
+    maxToolRounds: 1,
+    answer: {
+      taskAlias: 'agent.turn',
+      modelAlias: 'primary',
+      promptVersion: 'test-v1',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    },
+    synthesis: {
+      taskAlias: 'agent.turn',
+      modelAlias: 'primary',
+      promptVersion: 'test-v1',
+      messages: [{ role: 'user', content: 'test' }],
+    },
+    async executeTools() {
+      return { ok: true, results: [] };
+    },
+    ...overrides,
+  };
+}
+
+async function collect(
+  engine: AgentLoopEngine,
+  input: AgentLoopCommand<never, never, { id: number }>,
+): Promise<AgentLoopEvent<never, never>[]> {
+  const events: AgentLoopEvent<never, never>[] = [];
+  for await (const event of engine.stream(input)) events.push(event);
+  return events;
 }
 
 describe('AgentLoopEngine', () => {
@@ -107,5 +150,128 @@ describe('AgentLoopEngine', () => {
       1,
     );
     expect(events.filter((event) => event.type === 'failed')).toHaveLength(0);
+  });
+
+  it('retries a clean transient failure and audits every provider attempt', async () => {
+    let calls = 0;
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        calls += 1;
+        if (calls < 3) {
+          throw new ModelGatewayInvocationError({
+            code: 'rate_limit',
+            retryable: true,
+          });
+        }
+        yield {
+          type: 'text_delta',
+          phase: request.phase,
+          delta: '重试成功',
+        };
+        yield {
+          type: 'completed',
+          phase: request.phase,
+          metadata: metadata(request, 'stop'),
+        };
+      },
+    };
+    const waits: number[] = [];
+    const starts: number[] = [];
+    const settlements: boolean[] = [];
+    const events = await collect(
+      new AgentLoopEngine(gateway, {
+        random: () => 0,
+        async wait(ms) {
+          waits.push(ms);
+          return true;
+        },
+      }),
+      command({
+        modelRunLifecycle: {
+          async start() {
+            const context = { id: starts.length + 1 };
+            starts.push(context.id);
+            return context;
+          },
+          async settle({ outcome }) {
+            settlements.push(outcome.ok);
+          },
+        },
+      }),
+    );
+
+    expect(calls).toBe(3);
+    expect(waits).toEqual([1_000, 2_000]);
+    expect(starts).toEqual([1, 2, 3]);
+    expect(settlements).toEqual([false, false, true]);
+    expect(events.filter((event) => event.type === 'model.retry')).toHaveLength(
+      2,
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+  });
+
+  it('does not retry after any provider event has already been projected', async () => {
+    let calls = 0;
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        calls += 1;
+        yield {
+          type: 'text_delta',
+          phase: request.phase,
+          delta: '不可重复的部分输出',
+        };
+        throw new ModelGatewayInvocationError({
+          code: 'unavailable',
+          retryable: true,
+        });
+      },
+    };
+    const events = await collect(
+      new AgentLoopEngine(gateway, {
+        random: () => 0,
+        async wait() {
+          throw new Error('wait must not be called');
+        },
+      }),
+      command(),
+    );
+
+    expect(calls).toBe(1);
+    expect(events.filter((event) => event.type === 'model.retry')).toHaveLength(
+      0,
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      code: 'MODEL_GATEWAY_FAILED',
+    });
+  });
+
+  it('cancels during retry backoff without another provider call', async () => {
+    let calls = 0;
+    const gateway: TurnModelGateway = {
+      async *streamTurnText() {
+        calls += 1;
+        throw new ModelGatewayInvocationError({
+          code: 'timeout',
+          retryable: true,
+        });
+      },
+    };
+    const events = await collect(
+      new AgentLoopEngine(gateway, {
+        random: () => 0,
+        async wait() {
+          return false;
+        },
+      }),
+      command(),
+    );
+
+    expect(calls).toBe(1);
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      code: 'MODEL_ABORTED',
+      error: { code: 'aborted', retryable: false },
+    });
   });
 });

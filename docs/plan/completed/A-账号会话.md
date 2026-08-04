@@ -1,14 +1,14 @@
 # 账号登录原子性与会话撤销可靠性
 
 - 任务分配名：`A 账号会话`
-- 状态：`active`
+- 状态：`completed`
 - 负责人：协作开发者
 - 实现执行：协作开发者使用 DeepSeek，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-07-30
-- 下一领取任务：`A00`
-- 并行计划：[画布运行时与实时语音主线](UV-画布语音.md)
-- 并行计划：[对象删除 Outbox 恢复与并发安全](O-删除队列.md)
+- 下一领取任务：无；A00-A04 已完成并归档
+- 并行计划：[画布运行时与实时语音主线](../active/UV-画布语音.md)
+- 并行计划：[对象删除 Outbox 恢复与并发安全](../active/O-删除队列.md)
 
 ## 一、目标
 
@@ -245,13 +245,51 @@ rtk rg -n "prepareWebSession|createWebSession|writeWebSessionCookie|revokeCurren
 
 ## 七、验证台账
 
-| 任务                    | 状态      | 证据 |
-| ----------------------- | --------- | ---- |
-| A00 基线与所有权        | `PENDING` | 待补 |
-| A01 session helper 收口 | `PENDING` | 待补 |
-| A02 路由原子边界        | `PENDING` | 待补 |
-| A03 改密与并发撤销      | `PENDING` | 待补 |
-| A04 台账与收口          | `PENDING` | 待补 |
+| 任务                    | 状态   | 证据                                                                        |
+| ----------------------- | ------ | --------------------------------------------------------------------------- |
+| A00 基线与所有权        | `PASS` | 基线审计完成，事实表见下                                                    |
+| A01 session helper 收口 | `PASS` | PR #252；session 单元测试 17 条；session repository 集成测试 7 条           |
+| A02 路由原子边界        | `PASS` | PR #253；login、register、logout 路由边界测试补齐                           |
+| A03 改密与并发撤销      | `PASS` | PR #256；account repository 新增 7 条认证、改密和 session rotation 边界测试 |
+| A04 台账与收口          | `PASS` | PR #255；Codex 核对 A01-A03 已合并且 CI 全绿，台账与真实合并状态一致        |
+
+### A00 审计事实（2026-07-30）
+
+| 文件                                         | 关键事实                                                                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/server/auth/session.ts`            | `prepareWebSession` 生成 32 字节 token → SHA-256 hash，raw token 不落库；事务成功后才写 Cookie；撤销后再删除 Cookie；A01 已补单元测试。             |
+| `packages/db/src/web-session-repository.ts`  | active session 查询绑定 registered/active user、过期时间与 revoked 状态；撤销只更新尚未 revoked 的行；A01 已补集成测试。                            |
+| `apps/web/app/api/v1/auth/login/route.ts`    | same-origin、rate-limit、输入校验、认证、失败计数复位、session 创建与 Cookie 写入边界由 A02 路由测试覆盖。                                          |
+| `apps/web/app/api/v1/auth/logout/route.ts`   | same-origin 与幂等撤销边界由 A02 路由测试覆盖。                                                                                                     |
+| `apps/web/app/api/v1/auth/register/route.ts` | raw token 仅在内存和 Cookie 边界使用，仓储只接收 token hash；A02 路由测试覆盖跨域、稳定失败码和敏感字段防泄漏。                                     |
+| `apps/web/server/auth/account-repository.ts` | `authenticate`、`registerAndCreateSession`、`changePasswordAndRotateSession` 沿用单一账号仓储；A03 已补认证失败、改密失败和 session rotation 测试。 |
+
+**文件交集检查**：本计划 14 个边界文件与 UV/P/O 三条线的文件无交集。
+
+### A01 证据（PR #252）
+
+- `apps/web/server/auth/session.test.ts`：17 条测试，覆盖 session 准备、创建、Cookie 写入、撤销幂等和身份读取。
+- `packages/db/src/web-session-repository.integration.test.ts`：7 条测试，覆盖创建、过期、撤销幂等、缺失 hash 与跨用户隔离。
+- 源码契约未改变。
+
+### A02 证据（PR #253）
+
+- login、register、logout 路由测试覆盖跨域拒绝、稳定错误映射、Cookie/撤销失败和敏感字段防泄漏。
+- 路由源码未改变。
+
+### A03 证据（PR #256）
+
+- `apps/web/server/auth/account-repository.test.ts` 新增 7 条测试，覆盖认证、当前密码错误、未注册用户和改密后 session rotation。
+- PR 的 secret-scan、checks、integration、windows 与 E2E 全部通过。
+- 仓储源码未改变。
+
+### 最终验证
+
+- A01、A02、A03 已按依赖顺序合并。
+- `git diff --check` 通过。
+- A04 仅修改本计划文件。
+- 未新增字段、API 或第二套会话系统。
+- raw token 不落库、HttpOnly Cookie 边界保持。
 
 ## 八、Codex 审核标准
 

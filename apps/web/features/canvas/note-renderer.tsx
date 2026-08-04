@@ -1,9 +1,12 @@
 'use client';
 
 import type { NoteContent } from '@educanvas/canvas-protocol';
+import {
+  mathRemarkPlugins,
+  mathRehypePlugins,
+} from '@/features/chat/math-markdown';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import {
   ArrowCounterClockwise,
   Check,
@@ -212,7 +215,10 @@ export function NoteRenderer({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <article className="prose prose-sm max-w-none dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={mathRemarkPlugins}
+                  rehypePlugins={mathRehypePlugins}
+                >
                   {markdown}
                 </ReactMarkdown>
               </article>
@@ -234,7 +240,10 @@ export function NoteRenderer({
         ) : (
           <div className="h-full overflow-y-auto p-4">
             <article className="prose prose-sm max-w-none dark:prose-invert">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown
+                remarkPlugins={mathRemarkPlugins}
+                rehypePlugins={mathRehypePlugins}
+              >
                 {markdown}
               </ReactMarkdown>
             </article>

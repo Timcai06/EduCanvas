@@ -414,3 +414,11 @@ export {
   type K12ParityAuditCursor,
   type ParityAuditResult,
 } from './k12-conversation-parity';
+export {
+  DrizzleWebRuntimeRunRepository,
+  WebRuntimeAdmissionError,
+  WebRuntimeRunNotFoundError,
+  WEB_RUNTIME_BOOTSTRAP_TTL_MS,
+  type ClaimedWebRuntimeBootstrap,
+  type WebRuntimeRunSnapshot,
+} from './web-runtime-run-repository';

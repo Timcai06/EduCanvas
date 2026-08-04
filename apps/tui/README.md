@@ -11,7 +11,9 @@ EduCanvas 的第一方终端客户端。它只是 Gateway 的一扇窗口：不�
 
 ## 核心文件
 
-- `src/index.ts` — 命令入口与交互式 REPL（对话、`/notebooks`、`/approve`、`/channels` 等）
+- `src/index.ts` — 命令入口与交互式 REPL（对话、`/notebooks`、`/approve`、`/channels`、`/canvas` 等）
+- `src/canvas-command.ts` — 当前 Notebook 的 CanvasResource 目录与一次性 Web 交接编排
+- `src/canvas-client.ts` / `src/canvas-renderer.ts` — 非 Web 安全判定、受控文本读取边界和有界终端投影
 - `src/channels.ts` — provider-neutral 连接列表、编号解析与两支笔状态渲染
 - `src/home.ts` — 产品首页（连接状态、笔记本列表、可回看的近期操作、上手提示）
 - `src/input-box.ts` / `src/input-model.ts` — 带框输入区：raw mode 按键循环与可单测的纯视图逻辑（CJK 光标窗口、斜杠补全、多行编辑）
@@ -37,3 +39,12 @@ pnpm build            # 打包为 dist/index.js（bin: educanvas）
 - `docs/01-product/02-学生界面规范.md`（产品语言与状态语义）
 - `docs/09-decisions/0002-网关客户端渠道与能力节点.md`（客户端边界）
 - 颜色永远只是冗余强调：任何状态必须先由文字或符号表达，再上色。
+
+## Canvas 资源边界
+
+`/canvas` 通过已认证 Gateway session 列出当前 Notebook 的公共
+`CanvasResource`。客户端提交的 Notebook ID 只是选择器，Gateway 必须按 bearer
+主体重新校验成员资格。`/canvas <编号>` 对当前不能在终端安全呈现的资源只签发两分钟
+有效的一次性 Conversation 交接并打开 Web；URL 不携带资源正文、对象键或长期身份。
+交互式 Web/Experiment Runtime 永远不在 TUI 进程中执行。切换 Notebook 会清空本地
+目录缓存，旧条目不能跨 Notebook 复用。

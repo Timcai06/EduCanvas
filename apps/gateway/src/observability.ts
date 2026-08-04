@@ -126,6 +126,9 @@ export function gatewayRouteLabel(method: string, pathname: string): string {
     return 'client.approval.decision';
   }
   if (pathname === '/v1/client/operations') return 'client.operations';
+  if (pathname.startsWith('/v1/client/canvas-resources')) {
+    return 'client.canvas_resources';
+  }
   if (/^\/v1\/client\/operations\/[^/]+\/events$/.test(pathname)) {
     return 'client.operation.events';
   }

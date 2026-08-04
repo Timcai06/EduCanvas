@@ -69,6 +69,12 @@ export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
 
 export type AgentLoopEvent<TDetail, TFailure> =
   | { type: 'model'; run: number; event: TurnModelEvent }
+  | {
+      type: 'model.retry';
+      run: number;
+      attempt: number;
+      error: NormalizedModelError;
+    }
   | { type: 'tool.started'; run: number; call: ParsedToolCall }
   | { type: 'tool.result'; run: number; result: AgentLoopToolSuccess<TDetail> }
   | { type: 'completed'; modelRunCount: number }
@@ -83,6 +89,62 @@ export type AgentLoopEvent<TDetail, TFailure> =
       error: NormalizedModelError;
     }
   | { type: 'tool.failed'; failure: TFailure };
+
+const MAX_MODEL_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1_000;
+const RETRY_MAX_DELAY_MS = 8_000;
+
+const RETRYABLE_ERROR_CODES = new Set<NormalizedModelError['code']>([
+  'rate_limit',
+  'unavailable',
+  'timeout',
+]);
+
+const retryableError = (error: NormalizedModelError): boolean =>
+  error.retryable && RETRYABLE_ERROR_CODES.has(error.code);
+
+const retryDelayMs = (
+  retryIndex: number,
+  error: NormalizedModelError,
+  random: () => number,
+): number => {
+  const requested = error.retryAfterMs ?? RETRY_BASE_DELAY_MS * 2 ** retryIndex;
+  const capped = Math.min(requested, RETRY_MAX_DELAY_MS);
+  const jitter = random() * capped * 0.3;
+  return Math.round(capped + jitter);
+};
+
+const waitForRetry = (
+  ms: number,
+  signal: ModelAbortSignal | undefined,
+): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (isAborted(signal)) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    const finish = (completed: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(completed);
+    };
+    const onAbort = () => finish(false);
+    const timer = setTimeout(() => finish(true), ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
+export interface AgentLoopRetryDependencies {
+  random(): number;
+  wait(ms: number, signal: ModelAbortSignal | undefined): Promise<boolean>;
+}
+
+const defaultRetryDependencies: AgentLoopRetryDependencies = {
+  random: Math.random,
+  wait: waitForRetry,
+};
 
 /**
  * 通用 Agent Loop 引擎 — 与领域无关的模型/工具循环。
@@ -112,6 +174,12 @@ export type AgentLoopEvent<TDetail, TFailure> =
  * 超过 MAX_RESPONSE_CHARACTERS 时 `validateModelRun` 返回 INVALID_MODEL_STREAM。
  * 这是硬预算，防止单 turn 消耗过量 token。
  *
+ * ## 模型调用重试
+ *
+ * 当模型返回 rate_limit / unavailable / timeout 且 retryable=true 时，
+ * Agent Loop 自动指数退避重试，最多 MAX_MODEL_RETRIES 次。
+ * 重试期间 yield model.retry 事件通知上层编排；公开 UI 是否展示由应用协议决定。
+ *
  * ## 注入点
  *
  * - `executeTools`: 调用方实现工具执行。Agent Loop 不关心工具怎么执行、
@@ -120,7 +188,10 @@ export type AgentLoopEvent<TDetail, TFailure> =
  *   Agent Loop 不关心账本存在哪里，只管按时调 start/settle。
  */
 export class AgentLoopEngine {
-  constructor(private readonly modelGateway: TurnModelGateway) {}
+  constructor(
+    private readonly modelGateway: TurnModelGateway,
+    private readonly retryDependencies: AgentLoopRetryDependencies = defaultRetryDependencies,
+  ) {}
 
   async *stream<TDetail, TFailure, TModelRunContext = never>(
     command: AgentLoopCommand<TDetail, TFailure, TModelRunContext>,
@@ -147,55 +218,97 @@ export class AgentLoopEngine {
         signal: command.signal,
       };
       let modelRun: TModelRunContext | undefined;
-      try {
-        modelRun = await command.modelRunLifecycle?.start({ run, request });
-      } catch {
-        yield {
-          type: 'failed',
-          code: 'RUNTIME_FAILED',
-          error: { code: 'unknown', retryable: true },
-        };
-        return;
-      }
-      const iterator = validateModelRun(
-        this.modelGateway,
-        request,
-        textCharacters,
-      )[Symbol.asyncIterator]();
-      let separatorPending = hadAnyText;
-      let outcome;
-      while (true) {
-        const step = await iterator.next();
-        if (step.done) {
-          outcome = step.value;
-          break;
-        }
-        if (separatorPending && step.value.type === 'text_delta') {
-          separatorPending = false;
+      let outcome!: ModelRunResult;
+      for (let attempt = 0; attempt <= MAX_MODEL_RETRIES; attempt += 1) {
+        if (attempt > 0) {
+          if (isAborted(command.signal)) {
+            yield {
+              type: 'failed',
+              code: 'MODEL_ABORTED',
+              error: { code: 'aborted', retryable: false },
+            };
+            return;
+          }
+          if (outcome.ok) break;
+          const err = outcome.error;
+          const delay = retryDelayMs(
+            attempt - 1,
+            err,
+            this.retryDependencies.random,
+          );
           yield {
-            type: 'model',
+            type: 'model.retry',
             run,
-            event: { type: 'text_delta', phase: 'answer', delta: '\n\n' },
+            attempt,
+            error: err,
           };
+          if (!(await this.retryDependencies.wait(delay, command.signal))) {
+            yield {
+              type: 'failed',
+              code: 'MODEL_ABORTED',
+              error: { code: 'aborted', retryable: false },
+            };
+            return;
+          }
         }
-        yield { type: 'model', run, event: step.value };
-      }
-      try {
-        if (modelRun !== undefined) {
-          await command.modelRunLifecycle?.settle({
-            run,
-            request,
-            context: modelRun,
-            outcome,
-          });
+        try {
+          modelRun = await command.modelRunLifecycle?.start({ run, request });
+        } catch {
+          yield {
+            type: 'failed',
+            code: 'RUNTIME_FAILED',
+            error: { code: 'unknown', retryable: true },
+          };
+          return;
         }
-      } catch {
-        yield {
-          type: 'failed',
-          code: 'RUNTIME_FAILED',
-          error: { code: 'unknown', retryable: true },
-        };
-        return;
+        const iterator = validateModelRun(
+          this.modelGateway,
+          request,
+          textCharacters,
+        )[Symbol.asyncIterator]();
+        let separatorPending = hadAnyText;
+        let emittedEvent = false;
+        while (true) {
+          const step = await iterator.next();
+          if (step.done) {
+            outcome = step.value;
+            break;
+          }
+          emittedEvent = true;
+          if (separatorPending && step.value.type === 'text_delta') {
+            separatorPending = false;
+            yield {
+              type: 'model',
+              run,
+              event: { type: 'text_delta', phase: 'answer', delta: '\n\n' },
+            };
+          }
+          yield { type: 'model', run, event: step.value };
+        }
+        try {
+          if (modelRun !== undefined) {
+            await command.modelRunLifecycle?.settle({
+              run,
+              request,
+              context: modelRun,
+              outcome,
+            });
+          }
+        } catch {
+          yield {
+            type: 'failed',
+            code: 'RUNTIME_FAILED',
+            error: { code: 'unknown', retryable: true },
+          };
+          return;
+        }
+        if (
+          outcome.ok ||
+          emittedEvent ||
+          !retryableError(outcome.error) ||
+          attempt === MAX_MODEL_RETRIES
+        )
+          break;
       }
       if (!outcome.ok) {
         yield { type: 'failed', code: outcome.code, error: outcome.error };
@@ -267,73 +380,118 @@ export class AgentLoopEngine {
       signal: command.signal,
     };
     let synthesisModelRun: TModelRunContext | undefined;
-    try {
-      synthesisModelRun = await command.modelRunLifecycle?.start({
-        run,
-        request: synthesisRequest,
-      });
-    } catch {
+    let synthesisOutcome!: ModelRunResult;
+    for (let attempt = 0; attempt <= MAX_MODEL_RETRIES; attempt += 1) {
+      if (attempt > 0) {
+        if (isAborted(command.signal)) {
+          yield {
+            type: 'failed',
+            code: 'MODEL_ABORTED',
+            error: { code: 'aborted', retryable: false },
+          };
+          return;
+        }
+        if (synthesisOutcome.ok) break;
+        const err = synthesisOutcome.error;
+        const delay = retryDelayMs(
+          attempt - 1,
+          err,
+          this.retryDependencies.random,
+        );
+        yield {
+          type: 'model.retry',
+          run,
+          attempt,
+          error: err,
+        };
+        if (!(await this.retryDependencies.wait(delay, command.signal))) {
+          yield {
+            type: 'failed',
+            code: 'MODEL_ABORTED',
+            error: { code: 'aborted', retryable: false },
+          };
+          return;
+        }
+      }
+      try {
+        synthesisModelRun = await command.modelRunLifecycle?.start({
+          run,
+          request: synthesisRequest,
+        });
+      } catch {
+        yield {
+          type: 'failed',
+          code: 'RUNTIME_FAILED',
+          error: { code: 'unknown', retryable: true },
+        };
+        return;
+      }
+      const iterator = validateModelRun(
+        this.modelGateway,
+        synthesisRequest,
+        textCharacters,
+      )[Symbol.asyncIterator]();
+      let separatorPending = hadAnyText;
+      let emittedEvent = false;
+      while (true) {
+        const step = await iterator.next();
+        if (step.done) {
+          synthesisOutcome = step.value;
+          break;
+        }
+        emittedEvent = true;
+        if (separatorPending && step.value.type === 'text_delta') {
+          separatorPending = false;
+          yield {
+            type: 'model',
+            run,
+            event: { type: 'text_delta', phase: 'synthesis', delta: '\n\n' },
+          };
+        }
+        yield { type: 'model', run, event: step.value };
+      }
+      try {
+        if (synthesisModelRun !== undefined) {
+          await command.modelRunLifecycle?.settle({
+            run,
+            request: synthesisRequest,
+            context: synthesisModelRun,
+            outcome: synthesisOutcome,
+          });
+        }
+      } catch {
+        yield {
+          type: 'failed',
+          code: 'RUNTIME_FAILED',
+          error: { code: 'unknown', retryable: true },
+        };
+        return;
+      }
+      if (
+        synthesisOutcome.ok ||
+        emittedEvent ||
+        !retryableError(synthesisOutcome.error) ||
+        attempt === MAX_MODEL_RETRIES
+      )
+        break;
+    }
+    if (!synthesisOutcome.ok) {
       yield {
         type: 'failed',
-        code: 'RUNTIME_FAILED',
-        error: { code: 'unknown', retryable: true },
+        code: synthesisOutcome.code,
+        error: synthesisOutcome.error,
       };
       return;
     }
-    const iterator = validateModelRun(
-      this.modelGateway,
-      synthesisRequest,
-      textCharacters,
-    )[Symbol.asyncIterator]();
-    let separatorPending = hadAnyText;
-    while (true) {
-      const step = await iterator.next();
-      if (step.done) {
-        try {
-          if (synthesisModelRun !== undefined) {
-            await command.modelRunLifecycle?.settle({
-              run,
-              request: synthesisRequest,
-              context: synthesisModelRun,
-              outcome: step.value,
-            });
-          }
-        } catch {
-          yield {
-            type: 'failed',
-            code: 'RUNTIME_FAILED',
-            error: { code: 'unknown', retryable: true },
-          };
-          return;
-        }
-        if (!step.value.ok) {
-          yield {
-            type: 'failed',
-            code: step.value.code,
-            error: step.value.error,
-          };
-          return;
-        }
-        if (step.value.toolCalls.length > 0) {
-          yield {
-            type: 'failed',
-            code: 'INVALID_MODEL_STREAM',
-            error: { code: 'invalid_response', retryable: false },
-          };
-          return;
-        }
-        yield { type: 'completed', modelRunCount: run };
-        return;
-      }
-      if (separatorPending && step.value.type === 'text_delta') {
-        separatorPending = false;
-        yield {
-          type: 'model',
-          run,
-          event: { type: 'text_delta', phase: 'synthesis', delta: '\n\n' },
-        };
-      }
-      yield { type: 'model', run, event: step.value };
+    if (synthesisOutcome.toolCalls.length > 0) {
+      yield {
+        type: 'failed',
+        code: 'INVALID_MODEL_STREAM',
+        error: { code: 'invalid_response', retryable: false },
+      };
+      return;
     }
+    yield { type: 'completed', modelRunCount: run };
+    return;
   }
 }

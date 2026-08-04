@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 2,
+  "evidenceDate": "2026-08-04",
+  "environment": {
+    "node": "v25.8.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "model": "models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
+  "modelHashes": {
+    "encoder": "709f0ed53a734b7942f170127e7547b566cb29c4afc5e67719f314c3d63ccb10",
+    "decoder": "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d",
+    "joiner": "5f2adc585dd1bec6421c8bb8660d2a73fc8b9ceb24491ef51399ba2a2f0fc31b",
+    "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+    "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+  },
+  "fixtureHashes": {
+    "bagging-boosting.wav": "ffc9b89e889451ce76222d9e9fa95d227be6e88fdec85bbc305dceb5b8ff1879",
+    "bagging-boosting-fast.wav": "a8d4d7ee519fcc6974f2e8648e58ddbb6cae669f917f34e9713a722a2ede12ff",
+    "bagging-boosting-slow.wav": "f6d7f5359f880f751e5fe0fdbb22b1c9283a06b271802b1a4dd871aa6ba6bd07",
+    "bagging-boosting-en.wav": "4551ac4096fcd91600c90354c48b279ff6ddf03309eff4aa54b62b6d369457e3"
+  },
+  "hotwordHashes": {
+    "baggingBoosting": "7ef081be5689e01c8b0fb41547897de85d000826e087a0b263b5eabde28bebf4",
+    "officialHarness": "d88882d7f30e689b6ec24043a9839611cd3276c5b11a523d67c51ca49de6964d"
+  },
+  "preDeclaredMatrix": [
+    {
+      "id": 1,
+      "fixture": "bagging-boosting.wav",
+      "voice": "Tingting",
+      "rate": 80,
+      "scores": [1.5, 2, 3.5]
+    },
+    {
+      "id": 4,
+      "fixture": "bagging-boosting-fast.wav",
+      "voice": "Tingting",
+      "rate": 120,
+      "scores": [1.5, 2, 3.5]
+    },
+    {
+      "id": 7,
+      "fixture": "bagging-boosting-slow.wav",
+      "voice": "Tingting",
+      "rate": 50,
+      "scores": [1.5, 2, 3.5]
+    },
+    {
+      "id": 10,
+      "fixture": "bagging-boosting-en.wav",
+      "voice": "Samantha",
+      "rate": 80,
+      "scores": [1.5, 2, 3.5]
+    }
+  ],
+  "results": [
+    {
+      "matrixId": 1,
+      "fixture": "bagging-boosting.wav",
+      "voice": "Tingting",
+      "rate": 80,
+      "score": 1.5,
+      "beforeTranscript": "不仅是两种集成学习方法",
+      "afterTranscript": "不仅是两种集成学习方法",
+      "beforeRtfRange": [0.153, 0.1574],
+      "afterRtfRange": [0.1522, 0.1569],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 1,
+      "fixture": "bagging-boosting.wav",
+      "voice": "Tingting",
+      "rate": 80,
+      "score": 2,
+      "beforeTranscript": "不仅是两种集成学习方法",
+      "afterTranscript": "不仅是两种集成学习方法",
+      "beforeRtfRange": [0.151, 0.1618],
+      "afterRtfRange": [0.1533, 0.1605],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 1,
+      "fixture": "bagging-boosting.wav",
+      "voice": "Tingting",
+      "rate": 80,
+      "score": 3.5,
+      "beforeTranscript": "不仅是两种集成学习方法",
+      "afterTranscript": "不仅是两种集成学习方法",
+      "beforeRtfRange": [0.1532, 0.161],
+      "afterRtfRange": [0.1552, 0.16],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 4,
+      "fixture": "bagging-boosting-fast.wav",
+      "voice": "Tingting",
+      "rate": 120,
+      "score": 1.5,
+      "beforeTranscript": "和不仅是两种集成学习方法",
+      "afterTranscript": "和不仅是两种集成学习方法",
+      "beforeRtfRange": [0.159, 0.161],
+      "afterRtfRange": [0.1567, 0.1606],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 4,
+      "fixture": "bagging-boosting-fast.wav",
+      "voice": "Tingting",
+      "rate": 120,
+      "score": 2,
+      "beforeTranscript": "和不仅是两种集成学习方法",
+      "afterTranscript": "和不仅是两种集成学习方法",
+      "beforeRtfRange": [0.1604, 0.1621],
+      "afterRtfRange": [0.1633, 0.1667],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 4,
+      "fixture": "bagging-boosting-fast.wav",
+      "voice": "Tingting",
+      "rate": 120,
+      "score": 3.5,
+      "beforeTranscript": "和不仅是两种集成学习方法",
+      "afterTranscript": "和不仅是两种集成学习方法",
+      "beforeRtfRange": [0.1587, 0.1649],
+      "afterRtfRange": [0.1572, 0.1609],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 7,
+      "fixture": "bagging-boosting-slow.wav",
+      "voice": "Tingting",
+      "rate": 50,
+      "score": 1.5,
+      "beforeTranscript": "和不行是两种集成学习方法",
+      "afterTranscript": "和不行是两种集成学习方法",
+      "beforeRtfRange": [0.1482, 0.1504],
+      "afterRtfRange": [0.1479, 0.1517],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 7,
+      "fixture": "bagging-boosting-slow.wav",
+      "voice": "Tingting",
+      "rate": 50,
+      "score": 2,
+      "beforeTranscript": "和不行是两种集成学习方法",
+      "afterTranscript": "和不行是两种集成学习方法",
+      "beforeRtfRange": [0.1474, 0.1493],
+      "afterRtfRange": [0.1474, 0.1505],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 7,
+      "fixture": "bagging-boosting-slow.wav",
+      "voice": "Tingting",
+      "rate": 50,
+      "score": 3.5,
+      "beforeTranscript": "和不行是两种集成学习方法",
+      "afterTranscript": "和不行是两种集成学习方法",
+      "beforeRtfRange": [0.1473, 0.1528],
+      "afterRtfRange": [0.1473, 0.1515],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 10,
+      "fixture": "bagging-boosting-en.wav",
+      "voice": "Samantha",
+      "rate": 80,
+      "score": 1.5,
+      "beforeTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "afterTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "beforeRtfRange": [0.1582, 0.1615],
+      "afterRtfRange": [0.1587, 0.1618],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 10,
+      "fixture": "bagging-boosting-en.wav",
+      "voice": "Samantha",
+      "rate": 80,
+      "score": 2,
+      "beforeTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "afterTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "beforeRtfRange": [0.1593, 0.1648],
+      "afterRtfRange": [0.1586, 0.1626],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    },
+    {
+      "matrixId": 10,
+      "fixture": "bagging-boosting-en.wav",
+      "voice": "Samantha",
+      "rate": 80,
+      "score": 3.5,
+      "beforeTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "afterTranscript": "TWO ON SAMBLE LEARNING METHODS",
+      "beforeRtfRange": [0.1589, 0.1615],
+      "afterRtfRange": [0.1586, 0.1608],
+      "runs": 3,
+      "consistent": true,
+      "outputUnchanged": true,
+      "targetTermsCorrected": false
+    }
+  ],
+  "harnessVerification": {
+    "fixture": "test_wavs/0.wav",
+    "fixtureSha256": "7d93384ca14702cc584a7a33fe2fed92e89e708549161cb12ea38c916882103b",
+    "score": 3.5,
+    "before": "昨天是 MONDAY TODAY IS LIBR THE DAY AFTER TOMORROW是星期三",
+    "after": "昨天是 MONDAY TODAY IS LIVE AFTER TOMORROW是星期三",
+    "changed": true
+  },
+  "verdict": "BLOCKED",
+  "blockerCode": "target_terms_not_corrected",
+  "v03Unlocked": false
+}

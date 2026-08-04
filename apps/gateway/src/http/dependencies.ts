@@ -16,6 +16,7 @@ import type {
 } from '../client-auth';
 import type { GatewayEffectReconciliationControl } from '../effect-reconciliation-control';
 import type { GatewayObservability } from '../observability';
+import type { GatewayCanvasResourceService } from '../canvas-resource-service';
 
 /**
  * Gateway HTTP handler 的依赖类型：Client / Node / Internal 三种传输各自的能力面。
@@ -42,6 +43,7 @@ export interface GatewayClientTransport {
   >;
   handoffs: Pick<DrizzleGatewayHandoffRepository, 'issue'>;
   connections: Pick<GatewayConnectionService, 'list' | 'connect' | 'revoke'>;
+  canvasResources?: Pick<GatewayCanvasResourceService, 'list' | 'get'>;
 }
 
 export interface GatewayNodeTransport {

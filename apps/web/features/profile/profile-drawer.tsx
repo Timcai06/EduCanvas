@@ -4,7 +4,6 @@ import { ArrowRight, ArrowsClockwise, UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { type LearningActivity } from '@/features/profile/activity-contract';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
@@ -15,6 +14,7 @@ import {
   fetchLearningActivity,
   type ActivityLoadState,
 } from './learning-activity-loader';
+import { toActivityViewModel } from './profile-activity-view-model';
 
 interface CurrentUser {
   nickname: string;
@@ -107,14 +107,8 @@ export function ProfileDrawer({
     onClose();
   };
 
-  // 从 activityState 中提取展示值
-  const activityValue = (): LearningActivity | null => {
-    if (activityState.kind === 'ready') return activityState.activity;
-    return null;
-  };
-  const isBusy = activityState.kind === 'loading';
-  const isFailed = activityState.kind === 'failed';
-  const isEmpty = activityState.kind === 'empty';
+  // 通过纯 view model 统一活动区投影，不由 React 组件自行推导
+  const activityView = toActivityViewModel(activityState);
 
   return (
     <Sheet label="我的档案" eyebrow="Profile" stableHeight onClose={onClose}>
@@ -155,34 +149,26 @@ export function ProfileDrawer({
         {/* 学习活动统计区 */}
         <div data-sheet-item>
           <div
-            aria-busy={isBusy}
+            aria-busy={activityView.isBusy}
             className="grid min-h-[4.25rem] grid-cols-3 gap-2 rounded-2xl border border-line bg-surface/40 p-1"
           >
+            <MiniStat value={activityView.streakDays} unit="天" label="连续" />
+            <MiniStat value={activityView.activeDays} unit="天" label="活跃" />
             <MiniStat
-              value={activityValue()?.streakDays ?? null}
-              unit="天"
-              label="连续"
-            />
-            <MiniStat
-              value={activityValue()?.activeDays ?? null}
-              unit="天"
-              label="活跃"
-            />
-            <MiniStat
-              value={activityValue()?.masteryPercent ?? null}
+              value={activityView.masteryPercent}
               unit="%"
               label="掌握度"
             />
           </div>
 
-          {/* 失败状态：重试按钮 */}
-          {isFailed ? (
+          {/* 失败状态：重试按钮 — 文案由 view model 统一提供 */}
+          {activityView.isFailed ? (
             <div
               role="alert"
               aria-live="polite"
               className="mt-2 flex items-center justify-between rounded-xl bg-warn/10 px-3 py-2 text-sm text-ink-muted"
             >
-              <span>暂时无法加载学习活动</span>
+              <span>{activityView.message}</span>
               <button
                 type="button"
                 onClick={loadActivity}
@@ -194,13 +180,13 @@ export function ProfileDrawer({
             </div>
           ) : null}
 
-          {/* 空态：诚实展示 */}
-          {isEmpty ? (
+          {/* 空态：诚实展示 — 文案由 view model 统一提供 */}
+          {activityView.isEmpty ? (
             <p
               className="mt-2 text-center text-xs text-ink-muted"
               aria-live="polite"
             >
-              还没有学习记录
+              {activityView.message}
             </p>
           ) : null}
         </div>

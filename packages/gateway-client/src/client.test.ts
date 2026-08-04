@@ -2,6 +2,34 @@ import { describe, expect, it } from 'vitest';
 import { GatewayBootstrapClient, GatewayClient } from './client';
 
 describe('GatewayClient', () => {
+  const canvasResource = {
+    schemaVersion: 1,
+    resourceId: 'source:1',
+    notebookId: 'notebook:1',
+    resourceKind: 'source',
+    title: '笔记',
+    status: 'ready',
+    version: {
+      versionId: 'version:1',
+      sequence: null,
+      checksum: 'a'.repeat(64),
+    },
+    representation: { kind: 'text', mimeType: 'text/plain', byteSize: 8 },
+    renderer: { rendererId: 'source.text', rendererVersion: 1 },
+    trustTier: 'tier1',
+    allowedActions: ['view'],
+    canProduceCandidateLearningEvents: false,
+    provenance: {
+      origin: 'upload',
+      createdBy: 'user',
+      createdAt: '2026-08-04T00:00:00.000Z',
+      sourceResourceIds: [],
+      operationId: null,
+      generator: null,
+    },
+    runtime: { kind: 'none' },
+  };
+
   it('uses the loopback onboarding endpoint without sending a user id', async () => {
     let seenBody: BodyInit | null | undefined;
     const session = await new GatewayBootstrapClient(
@@ -86,6 +114,45 @@ describe('GatewayClient', () => {
       operationId: 'operation:1',
       status: 'completed',
     });
+  });
+
+  it('lists Canvas resources within an authenticated Notebook selection', async () => {
+    let seenUrl = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        seenUrl = String(input);
+        return Response.json({ resources: [canvasResource] });
+      },
+    );
+    await expect(client.listCanvasResources('notebook:1')).resolves.toEqual([
+      canvasResource,
+    ]);
+    expect(seenUrl).toBe(
+      'http://127.0.0.1:3200/v1/client/canvas-resources?notebookId=notebook%3A1',
+    );
+  });
+
+  it('loads one Canvas resource without putting the session token in the URL', async () => {
+    let seenUrl = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        seenUrl = String(input);
+        return Response.json(canvasResource);
+      },
+    );
+    await expect(
+      client.getCanvasResource({
+        notebookId: 'notebook:1',
+        resourceKind: 'source',
+        resourceId: 'source:1',
+      }),
+    ).resolves.toEqual(canvasResource);
+    expect(seenUrl).toContain('/canvas-resources/source/source%3A1');
+    expect(seenUrl).not.toContain('t'.repeat(32));
   });
 
   it('creates a handoff without putting the conversation or session in the URL', async () => {

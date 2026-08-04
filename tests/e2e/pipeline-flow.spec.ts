@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('desktop playback, pause points and keyboard stay inside the template', async ({
+test('@ui desktop playback, pause points and keyboard stay inside the template', async ({
   page,
 }) => {
   await page.goto('/design-qa/pipeline-flow');
@@ -57,7 +57,7 @@ test('desktop playback, pause points and keyboard stay inside the template', asy
   await expect(page.getByText(completionMessage)).toHaveCount(0);
 });
 
-test('mobile controls remain usable without horizontal overflow', async ({
+test('@ui mobile controls remain usable without horizontal overflow', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -75,7 +75,7 @@ test('mobile controls remain usable without horizontal overflow', async ({
   await expect(page.getByLabel('播放速度')).toBeVisible();
 });
 
-test('reduced motion advances synchronously and exposes the preference', async ({
+test('@ui reduced motion advances synchronously and exposes the preference', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });

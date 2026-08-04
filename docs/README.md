@@ -26,6 +26,7 @@
 
 - [持久 Web Runtime 安全测试矩阵（U09）](06-quality/05-持久Web Runtime安全测试矩阵.md)
 - [持久 Web Runtime 依赖与资源策略（U11）](06-quality/06-Web Runtime依赖与资源策略.md)
+- [可复现实验 Smoke（U16）](06-quality/07-可复现实验Smoke.md)
 
 ## 已接受的架构方向
 
@@ -44,7 +45,9 @@
 - 状态机、掌握度与可信学习事件集中在`packages/teaching-core`，不依赖Web、数据库或模型供应商；
 - `packages/teaching-runtime`只保留K12 Profile、Workflow和领域应用能力，不再拥有独立模型循环；
 - Canvas交互事件必须经服务端验证后才能提升为影响掌握度的可信领域事件；
-- Embedding空间必须记录模型、版本、维度、指令和切块版本。
+- Embedding空间必须记录模型、版本、维度、指令和切块版本；
+- Personal Memory 面向所有已认证个人用户开放，三层 Memory 没有隐式提升（ADR-0020）；
+- 模型能力按 text/vision/speech/transcription/image/embedding 独立配置 Provider 是已接受的目标；当前除 Vision 外尚未完成统一解析与组合（ADR-0021）。
 
 这些条目说明开发必须遵守的目标边界，不等于所有能力均已落地。
 
@@ -55,7 +58,7 @@
 - 测试替身：Scripted Model Gateway仅用于确定性契约测试，不能导入生产组合根；真实Adapter的CI仍使用官方格式Fixture，不调用外部模型；
 - 已接通：通用PDF/图片/Link Asset、不可变版本和消息Part；通用网页实际读取快照、稳定编号、引用子集持久化/SSE/历史恢复/原网址导航；K1 PostgreSQL FTS、Turn快照、候选白名单、引用持久化/SSE/UI；Canvas判分后的受控ASSESS状态推进；
 - 已接通：显式年龄段/学段与闭集教学偏好、Notebook Goal和6–12节点目标图、无答案短诊断、可信三态目标进度，以及诊断事件/mastery原子写入；
-- 已确认的剩余缺口：原生图片/音视频模型输入、上传Asset统一摄取、Context摘要、长期学习者记忆、正式IdP、对象删除闭环和production治理；
+- 已确认的剩余缺口：实时语音输入、通用产品知识/Notebook RAG、上传 Asset 到 K12 知识链的统一摄取、Context 摘要、三层长期 Memory、正式 IdP、对象删除闭环和 production 治理；
 - Telegram只有官方协议Fixture，没有用户凭据下的live smoke；Node只有L0/L1白名单能力，没有高风险设备控制；
 - 当前证据支持本地模块化单体基线；正式认证、外部观测/SLO、受控live smoke、教学质量评测和production hardening完成前，不宣称production就绪；
 - `draft`文档中的独立服务和生产基础设施是演进目标，不能作为当前部署事实。

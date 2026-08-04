@@ -21,6 +21,8 @@
     "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker --concurrency=1",
     "pretest:e2e": "pnpm build",
     "test:e2e": "playwright test",
+    "test:e2e:runtime-composition": "playwright test --config playwright.runtime-composition.config.ts",
+    "test:e2e:runtime-pressure": "playwright test --config playwright.runtime.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "typecheck": "turbo typecheck",
     "db:up": "docker compose up -d",

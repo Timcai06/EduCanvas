@@ -35,7 +35,7 @@ async function openCanvasViaMindMap(page: Page) {
   return canvas;
 }
 
-test.describe('Canvas shell 基础语义', () => {
+test.describe('@ui Canvas shell 基础语义', () => {
   test('Canvas 以 dialog role 打开，有关闭和全屏按钮', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
@@ -69,7 +69,7 @@ test.describe('Canvas shell 基础语义', () => {
   });
 });
 
-test.describe('Canvas shell 键盘焦点', () => {
+test.describe('@ui Canvas shell 键盘焦点', () => {
   test('关闭按钮关闭后焦点回到页面可聚焦元素', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
@@ -92,7 +92,7 @@ test.describe('Canvas shell 键盘焦点', () => {
   });
 });
 
-test.describe('Canvas shell 响应式布局', () => {
+test.describe('@ui Canvas shell 响应式布局', () => {
   test('桌面端无横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -124,7 +124,7 @@ test.describe('Canvas shell 响应式布局', () => {
   });
 });
 
-test.describe('Canvas shell 极端内容与失败状态', () => {
+test.describe('@ui Canvas shell 极端内容与失败状态', () => {
   test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
     const longTitle = '超长标题'.repeat(50);
     const longLabel = '长内容'.repeat(40);
@@ -257,7 +257,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
   });
 });
 
-test.describe('Canvas shell 暗色模式', () => {
+test.describe('@ui Canvas shell 暗色模式', () => {
   test('Canvas 在暗色模式下可正常展示', async ({ page }) => {
     await page.emulateMedia({
       reducedMotion: 'reduce',
@@ -273,7 +273,7 @@ test.describe('Canvas shell 暗色模式', () => {
   });
 });
 
-test.describe('Canvas shell reduced-motion', () => {
+test.describe('@ui Canvas shell reduced-motion', () => {
   test('reduced-motion 下 Canvas 不依赖动画才能展示内容', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);

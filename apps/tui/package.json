@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/gateway-client": "workspace:*",
     "@educanvas/gateway-core": "workspace:*"
   },
