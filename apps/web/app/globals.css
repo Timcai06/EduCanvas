@@ -204,44 +204,6 @@ html {
 }
 
 /*
- * 水墨极光（灵感：React Bits「Aurora」流光背景，改成两支笔的墨紫/朱砂低饱和版）。
- * 几团高斯模糊色斑极缓漂移，只作氛围、pointer-events:none、不承载信息；reduced-motion 下停帧。
- */
-@keyframes aurora-drift {
-  0%,
-  100% {
-    transform: translate(-8%, -6%) scale(1);
-  }
-  33% {
-    transform: translate(7%, 5%) scale(1.18);
-  }
-  66% {
-    transform: translate(-5%, 9%) scale(1.06);
-  }
-}
-.aurora-ink {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.aurora-ink > span {
-  position: absolute;
-  width: 42%;
-  aspect-ratio: 1;
-  border-radius: 9999px;
-  filter: blur(52px);
-  opacity: 0.42;
-  will-change: transform;
-  animation: aurora-drift 20s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .aurora-ink > span {
-    animation: none;
-  }
-}
-
-/*
  * 扫光（灵感：React Bits「ShinyText」），一道柔光斜掠过主按钮。悬停触发一次，reduced-motion 下不触发。
  */
 .shine-sweep {
