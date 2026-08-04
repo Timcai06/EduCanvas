@@ -108,6 +108,9 @@ export async function appendGeneratedImageVersion(input: {
     throw new ImageArtifactGenerationFailure('image_not_configured');
   }
 
+  /* Gateway 只接受已校验的提示词和 size；如果后端返回非 schema 兼容结果，
+   * 本任务不尝试自修复，只回退为稳定失败码。 */
+
   let generated;
   try {
     generated = await input.gateway.generateImage({

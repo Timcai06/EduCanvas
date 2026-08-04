@@ -430,6 +430,8 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       error.normalized.retryable &&
       helpers.job.attempts < helpers.job.max_attempts
     ) {
+      /* 只对重试窗口抛错；失败到达终态时必须落稳定码，禁止把 provider 异常正文
+         或请求参数写进 artifact 领域日志。 */
       /* 可重试的限流、超时与暂时不可用必须交回 Graphile 退避；提前结算 failed
          会让任务失去恢复机会。原始 Provider 消息不写日志。 */
       throw error;

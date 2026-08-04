@@ -56,6 +56,8 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
       return;
     }
 
+    // buildRequestBody 是单向边界：先把已校验请求投影为 OpenAI-compatible 形状，
+    // 任何原始 SDK 对象、Prompt 细节和内部调试字段都不会经过该边界穿透。
     let body: string;
     try {
       body = JSON.stringify(buildRequestBody(request, this.config, modelId));
@@ -68,6 +70,8 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
     }
 
     const startedAt = this.now();
+    // 取消语义：外部 signal 仅控制“允许继续推进”，内部 timeout 只在本次调用内生效，
+    // 统一由同一个 controller 上抛出以保证 fetch 与 SSE 读取都立即终止。
     const controller = new AbortController();
     let timedOut = false;
     const onExternalAbort = () => controller.abort();
@@ -97,6 +101,7 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           signal: controller.signal,
         },
       );
+      // HTTP 失败不保留响应体；只映射状态码与 Retry-After 到稳定错误码。
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
         const normalized = errorForHttpResponse(response, this.now());
@@ -324,6 +329,8 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
         yield { type: 'completed', phase: request.phase, metadata };
       }
     } catch (error) {
+      // 非 HTTP 通道的异常统一映射到稳定错误码，拒绝把 fetch/network/SDK
+      // 细节上抛为上层行为决策输入。
       const normalized: NormalizedModelError = timedOut
         ? { code: 'timeout', retryable: true }
         : request.signal?.aborted === true ||

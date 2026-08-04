@@ -104,6 +104,10 @@ function resolveMediaConfiguration(
   );
 }
 
+/* worker 侧不手工构造请求体或解析 provider 原始响应：
+   所有 schema 校验、密钥拼接、错误归一化都必须在 model-gateway 层完成，
+   这确保 Worker 任务只有稳定错误码和可审计元数据。 */
+
 export function resolveStructuredModelGateway(): StructuredModelGateway | null {
   const configuration = readPrimaryConfiguration();
   if (!configuration) return null;

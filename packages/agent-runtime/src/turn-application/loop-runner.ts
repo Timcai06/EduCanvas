@@ -76,6 +76,8 @@ export async function* runTurnLoop(input: {
     dependencies.modelRunLedger,
     { command, turn, cancellation: input.cancellation },
   );
+  /* 统一走一套 AgentLoopEngine，避免领域层按不同策略重造循环；
+     同一命令中的模型重试、取消和终态只在这一层归一。 */
   const tools = new TurnToolExecutor(
     command,
     prepared.toolPolicy,
@@ -117,6 +119,8 @@ export async function* runTurnLoop(input: {
     modelRunLifecycle: modelLifecycle,
     executeTools: (calls, context) => tools.execute(calls, context),
   })) {
+    // 输出治理一旦标记失败/拦截，继续读取模型事件仅用于消耗，不再产生副作用；
+    // 这是一种“只进不退”的终止语义，避免后续 tool.completed 与 guard 状态脱节。
     if (event.type === 'model' && event.event.type === 'text_delta') {
       if (outputBlocked || outputGuardFailed) continue; // 已拦截/异常 → 丢弃后续文本
       let guarded: TurnApplicationOutputGuardPushResult;
