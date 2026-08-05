@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 
 const envPath = process.argv[2] ?? '.env';
 if (!existsSync(envPath)) {
@@ -243,6 +244,56 @@ validateInteger('MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES', 1024, 20 * 1024 * 1024);
 validateInteger('MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS', 1_000, 180_000);
 validateInteger('MODEL_GATEWAY_EMBEDDING_MAX_BATCH', 1, 256);
 
+/*
+ * 实时流式转录（sherpa WASM 本地草稿，ADR-0018 / V09-D）：与 MODEL_GATEWAY_*
+ * 的 Provider 配置分域，独立前缀。默认关闭；显式启用时必须给齐 profile 与
+ * 模型目录（无隐式默认目录），否则视为配置错误直接 fail——否则部署会以为
+ * 语音可用，直到运行时闸门才拒绝。这里只打印安全摘要，不打印路径内容。
+ */
+const streamingEnabledRaw = value('STREAMING_TRANSCRIPTION_ENABLED');
+let streamingSummary = 'streaming=disabled';
+if (streamingEnabledRaw !== '') {
+  if (streamingEnabledRaw !== 'true' && streamingEnabledRaw !== 'false') {
+    fail('STREAMING_TRANSCRIPTION_ENABLED must be true or false');
+  }
+  if (streamingEnabledRaw === 'true') {
+    const streamingMissing = [];
+    requireValue('STREAMING_TRANSCRIPTION_PROFILE', streamingMissing);
+    requireValue('STREAMING_TRANSCRIPTION_MODEL_DIR', streamingMissing);
+    if (streamingMissing.length > 0) {
+      fail(
+        `missing streaming transcription values: ${streamingMissing.join(', ')}`,
+      );
+    }
+    validateInteger(
+      'STREAMING_TRANSCRIPTION_SESSION_TIMEOUT_MS',
+      1_000,
+      600_000,
+    );
+    const streamingProfile = value('STREAMING_TRANSCRIPTION_PROFILE');
+    // profile 白名单以 manifest 为唯一事实源，避免与配置解析层双份漂移。
+    const sherpaManifest = JSON.parse(
+      readFileSync(
+        new URL('./sherpa-model-manifest.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    if (!Object.hasOwn(sherpaManifest.profiles, streamingProfile)) {
+      fail('STREAMING_TRANSCRIPTION_PROFILE is not in the manifest whitelist');
+    }
+    if (!isAbsolute(value('STREAMING_TRANSCRIPTION_MODEL_DIR'))) {
+      fail('STREAMING_TRANSCRIPTION_MODEL_DIR must be an absolute path');
+    }
+    const streamingHotwordsPath = value(
+      'STREAMING_TRANSCRIPTION_HOTWORDS_PATH',
+    );
+    if (streamingHotwordsPath !== '' && !isAbsolute(streamingHotwordsPath)) {
+      fail('STREAMING_TRANSCRIPTION_HOTWORDS_PATH must be an absolute path');
+    }
+    streamingSummary = `streaming=enabled profile=${streamingProfile}`;
+  }
+}
+
 /* 媒体能力状态（ADR-0021）：声明 override 必须配置组完整，否则只关该能力。 */
 const capabilityStates = {};
 for (const capability of ['SPEECH', 'TRANSCRIPTION', 'IMAGE', 'EMBEDDING']) {
@@ -293,5 +344,5 @@ const capabilitySummary = Object.entries(capabilityStates)
   .map(([capability, state]) => `${capability.toLowerCase()}=${state}`)
   .join(' ');
 console.log(
-  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}`,
+  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}; ${streamingSummary}`,
 );

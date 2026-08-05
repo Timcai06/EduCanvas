@@ -62,3 +62,17 @@ export {
   type SherpaStreamingTranscriptionLogEntry,
   type SherpaStreamingTranscriptionLogLabel,
 } from './sherpa-streaming-transcription-gateway';
+export {
+  resolveSherpaStreamingTranscriptionGateway,
+  validateSherpaHotwordsText,
+  type SherpaStreamingGatewayDependencies,
+  type SherpaStreamingResolution,
+  type SherpaStreamingUnavailableReason,
+} from './sherpa-streaming-gateway-resolver';
+export {
+  parseSherpaStreamingConfiguration,
+  sherpaStreamingProfiles,
+  type EnabledSherpaStreamingConfiguration,
+  type SherpaStreamingConfiguration,
+  type SherpaStreamingProfile,
+} from './sherpa-streaming-config';

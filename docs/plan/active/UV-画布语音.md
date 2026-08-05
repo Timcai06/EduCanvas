@@ -6,7 +6,7 @@
 - 实现执行：项目负责人使用 DeepSeek，每次只领取一个已解锁的原子任务
 - 代码审核与阶段验收：Codex
 - 最后验证时间：2026-08-05
-- 下一领取任务：V09/V15 可并行；`U19` 等待 `V17`
+- 下一领取任务：`V12`；`V16` 等待 `V13`，`U19` 等待 `V17`
 - 路线图：[路线图](../../10-planning/01-路线图.md)
 - Canvas 架构：[统一画布工作面](../../02-architecture/04-统一画布工作面.md)
 - Canvas 决策：[ADR-0009](../../09-decisions/0009-统一画布工作面与运行时分层.md)
@@ -535,6 +535,14 @@ provenance、成本/模型元数据、checksum、checkpoint、重试/取消与 c
 
 #### V09：模型获取、配置和组合闸门
 
+- 状态：`PASS`（Codex 修复真实安装与资源清理缺陷后复核通过）
+- 证据（2026-08-05）：
+  - manifest：`tooling/sherpa-model-manifest.json`——480ms/1920ms 官方 release URL、archive 与文件级 SHA-256、bpe.vocab 派生值、decodingMethod/modelingUnit/maxActivePaths，只读白名单，未知 profile 显式拒绝；
+  - 获取脚本：`tooling/sherpa-model-fetch.mjs` + `bpe-vocab-export.mjs`——支持 GitHub Release 有界 HTTPS 跳转；先校验 archive 文件，再派生并校验 `bpe.vocab`，避免新安装在派生前失败；dry-run 零网络零写入，staging 安全解压、失败清理、原子安装与幂等均有测试；
+  - 配置：`packages/model-gateway/src/sherpa-streaming-config.ts`——`STREAMING_TRANSCRIPTION_*` 默认关闭、模型与热词路径必须显式使用绝对路径；
+  - 组合闸门：`packages/model-gateway/src/sherpa-streaming-gateway-resolver.ts`——fail-closed，全部 unavailable 分支有测试，校验失败时 SDK/recognizer 零创建；
+  - 真实 factory：`packages/model-gateway/src/sherpa-streaming-recognizer-factory.ts`——sherpa-onnx 1.13.4 WASM 最小适配、SDK 类型留在内部；`createStream` 失败会释放已创建 recognizer；
+  - 验证：model-gateway 267/267、模型获取/环境检查 40/40、完整 PostgreSQL integration 通过；全仓 typecheck、lint、tooling、`pnpm env:check`、Prettier 与 `git diff --check` 通过。真实模型识别证据沿用受控实验；模型权重仍不进入 Git。
 - 依赖：V08
 - 文件边界：`tooling/`、环境变量示例、model-gateway config/composition 与测试
 - 可并行：U06-U08、V10-V11
@@ -1061,12 +1069,12 @@ V10 已解锁；产品能力仍默认关闭，不能把风险接受误写成发�
 **S2 状态：** 媒体子线 U06-U08 passed；Provider/版本/投影、文本等价、受控下载与可靠删除，
 以及 Operation 终态、取消、重试耗尽、checkpoint 与重复投递恢复均已复核。语音 V10-V11
 passed：同意证明、十二个月上限、七天留存、不可变审计事实、并发撤回与物理删除保护已由
-真实 PostgreSQL 验证；S2 仍等待 V08-V09，因此尚未收口。
+真实 PostgreSQL 验证；V08 Adapter 与 V09 模型获取/组合闸门也已复核，S2 收口。
 
 **S3 状态：** Canvas 子线 U09-U12 passed；ADR-0019、版本化消息/Port 契约、依赖白名单、
 CSP、资源策略、独立 origin/process Runtime、真实 Web + Runtime + PostgreSQL
-composition 与 R28 压力门禁均已通过。语音 V12-V17 仍等待 V04-V11 的正常前置任务，
-因此 S3 整体尚未通过，语音入口继续保持关闭。
+composition 与 R28 压力门禁均已通过。语音侧 V14/V15 已完成留存访问、删除意图与硬删除
+恢复闭环；下一步从 V12 开始 Gateway 接线，S3 尚未通过，语音入口继续保持关闭。
 
 **S4 状态：** U13 契约、U14 无网络 CPU Adapter 与 U15 实验 Canvas Renderer 已通过复审。Adapter 仅运行固定 digest 的
 Python CPU 环境，使用 Docker `--network none`、只读文件系统、降权能力、资源预算、输入
@@ -1110,6 +1118,7 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 | V10     | `PASS`     | Codex 完成技术与合规边界复审并修订 ADR-0022；项目负责人于 2026-08-05 接受。实时处理、本地留存、云端转录三项分别授权；普通录音按产品政策作为敏感数据处理；所有非 adult/unknown 暂按需监护人同意；delegated_grants 不能证明监护关系；原始音频只允许本人/已验证监护人读取；留存音频复用 asset_version 与既有删除 Outbox。V11 已解锁，V14/V15/V16 继续等待各自正常前置依赖。                                                                                                                                                                                                                           |
 | V11     | `PASS`     | 新增独立同意证明方式与受控证明引用，self/guardian 形态由数据库约束；同意默认且最多十二个月、音频最多七天。留存创建锁定 active consent，避免与撤回并发穿透；同意/留存身份与期限不可变、禁止物理删除且用户/版本外键 restrict。DB unit 26/26、V11 integration 16/16、完整 PostgreSQL integration 246/246、DB typecheck、24 workspace typecheck、lint 与 tooling 通过。                                                                                                                                                                                                                                |
 | V14     | `PASS`     | 留存 Repository 已实现本人/已验证监护人读取、同事务审计、撤回/到期扫描与 durable 删除意图。Codex 修复跨主体/非音频版本绑定及冲突回显越权，撤回后所有主体立即 fail closed，并使用数据库时钟判定同意；V14 集成 24/24，干净隔离库完整 DB integration 270/270、DB unit 26/26、typecheck 与 tooling 通过。                                                                                                                                                                                                                                                                                              |
+| V15     | `PASS`     | 复用既有删除 Outbox 完成撤回/到期音频的真实硬删除、对象不存在幂等、退避、租约恢复、并发单领取与第 10 次失败终态。Codex 增加测试数据库后缀硬门禁，修复 `processing + attempts=100` 再领取会违反约束并回滚整批的问题：上限行现在原子收敛为可发现的 `failed`，同批健康行继续领取。13 条 V15 真实 PostgreSQL + 隔离对象存储测试、Worker integration 全量、DB integration 275/275、DB unit 51/51、Worker unit 106/106、typecheck、lint 与 tooling 通过；集成测试拆为场景与共享环境两个单职责文件。                                                                                                      |
 
 | S3 任务 | Codex 结论 | 证据                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1137,8 +1146,8 @@ U17/U18 已完成：TUI 通过 bearer 鉴权 Gateway 读取当前 Notebook 的�
 | Experiment Runtime         | `passed`  | U13 Port/Run 契约、U14 隔离 CPU Adapter、U15 有界 Renderer 与 U16 可复现实验 smoke 已通过；测试 fixture 不伪装成生产数据源，Renderer 仍未接入缺少真实来源的 registry | U13-U16 passed             |
 | TUI/渠道 Canvas            | `passed`  | Gateway 提供按 bearer 主体和 Notebook 重新授权的 CanvasResource 目录；TUI `/canvas` 使用一次性交接，Telegram 按可信绑定输出有界摘要且不执行 Runtime                  | U17-U18 passed；U19 待 V17 |
 | WASM SIMD 流式识别与热词   | `passed`  | V01 已选定 WASM SIMD；本地与云端的专业术语质量缺口由负责人明确接受为非阻塞风险，原始证据仍保留                                                                       | V04-V09                    |
-| 流式 Port/Gateway/UI       | `partial` | V04-V07 的领域契约、reducer、分段策略和 envelope 已通过；Adapter、配置、Gateway 与 UI 尚未接线                                                                       | V08-V09、V12-V13、V16-V17  |
-| 音频同意与可靠删除         | `partial` | V10 ADR 与 V11 数据约束已通过；Repository/API 与 Outbox 消费仍待 V14-V15                                                                                             | V14-V15                    |
+| 流式 Port/Gateway/UI       | `partial` | V04-V09 的领域契约、reducer、分段策略、Adapter、模型配置与组合闸门已通过；Gateway 与 UI 尚未接线                                                                     | V12-V13、V16-V17           |
+| 音频同意与可靠删除         | `passed`  | V10/V11/V14/V15 已完成同意、留存 Repository、审计、删除意图与可靠硬删除闭环                                                                                          | —                          |
 | 联合发布证据               | `pending` | 尚未执行                                                                                                                                                             | U20-U21                    |
 
 ### 已确认的代码事实明细
