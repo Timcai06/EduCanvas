@@ -40,6 +40,7 @@
 | [10-RAGFlow价值挖掘](./10-RAGFlow价值挖掘.md)               | 可直接使用的部分：deepdoc 积木 + naive_merge 评估       | 三期     |
 | [11-LlamaIndex价值挖掘](./11-LlamaIndex价值挖掘.md)         | MarkdownNodeParser + SentenceSplitter 抽取，rrf-v2 借鉴 | 四期     |
 | [12-KM K线调研报告](./12-KM%20K线调研报告.md)               | 给项目负责人的拍板报告（4 个决策点 + 推进顺序）         | 收口     |
+| [13-调研成果与KM任务映射](./13-调研成果与KM任务映射.md)     | 调研成果 → KM 任务映射表（完成/缺口/阻塞点）            | 收口     |
 
 ## 背景与边界
 
