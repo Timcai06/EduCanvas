@@ -6,6 +6,15 @@ if (!process.env.TEST_DATABASE_URL) {
   );
 }
 
+const databaseName = decodeURIComponent(
+  new URL(process.env.TEST_DATABASE_URL).pathname.slice(1),
+);
+if (!databaseName.endsWith('_integration') && !databaseName.endsWith('_test')) {
+  throw new Error(
+    '集成测试数据库名必须以_integration或_test结尾，拒绝连接非测试数据库',
+  );
+}
+
 export default defineConfig({
   test: {
     include: ['src/**/*.integration.test.ts'],

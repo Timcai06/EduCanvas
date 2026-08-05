@@ -146,6 +146,45 @@ describe('delete object outbox task', () => {
     );
   });
 
+  it('失败日志只含稳定字段，不泄漏 storageKey/路径/异常原文', async () => {
+    const errorLog = vi.fn();
+    const infoLog = vi.fn();
+    const repository = {
+      claimBatch: vi.fn().mockResolvedValue([assetClaim]),
+      complete: vi.fn(),
+      fail: vi.fn(async () => {
+        throw new Error('db private stack');
+      }),
+    };
+    const deleter = {
+      delete: vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            `storage_unavailable: /var/private/uploads/${assetClaim.storageKey}`,
+          ),
+        ),
+    };
+    const task = createDeleteObjectOutboxTask(repository, deleter);
+
+    await task({ limit: 20 }, {
+      logger: { info: infoLog, error: errorLog },
+    } as never);
+
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `object_delete_fail_record_failed claim=${assetClaim.id} kind=asset attempt=1`,
+      ),
+    );
+    const allLogs = [...infoLog.mock.calls, ...errorLog.mock.calls]
+      .flat()
+      .join('\n');
+    expect(allLogs).not.toContain(assetClaim.storageKey);
+    expect(allLogs).not.toContain('/var/private/uploads');
+    expect(allLogs).not.toContain('db private stack');
+    expect(allLogs).not.toContain('storage_unavailable:');
+  });
+
   it('支持 artifact 类型的对象删除', async () => {
     const repository = {
       claimBatch: vi.fn().mockResolvedValue([artifactClaim]),

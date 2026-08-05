@@ -362,4 +362,115 @@ describe('env-check', () => {
     assert.equal(withVersion.status, 0, withVersion.stderr);
     assert.match(withVersion.stdout, /embedding=overridden/);
   });
+
+  it('实时流式默认关闭，摘要为 streaming=disabled', async () => {
+    const result = runEnvCheck(await writeEnv(providerEnv({})));
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /streaming=disabled/);
+  });
+
+  it('实时流式显式启用但缺模型目录 → fail（无隐式默认目录）', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'true',
+          STREAMING_TRANSCRIPTION_PROFILE: '480ms',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /missing streaming transcription values: STREAMING_TRANSCRIPTION_MODEL_DIR/,
+    );
+  });
+
+  it('实时流式启用且配置完整 → 摘要含 profile，不打印路径', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'true',
+          STREAMING_TRANSCRIPTION_PROFILE: '1920ms',
+          STREAMING_TRANSCRIPTION_MODEL_DIR: '/very/secret/models/1920ms',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /streaming=enabled profile=1920ms/);
+    assert.doesNotMatch(result.stdout, /\/very\/secret/);
+  });
+
+  it('实时流式模型目录必须是绝对路径', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'true',
+          STREAMING_TRANSCRIPTION_PROFILE: '480ms',
+          STREAMING_TRANSCRIPTION_MODEL_DIR: 'models/480ms',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /STREAMING_TRANSCRIPTION_MODEL_DIR must be an absolute path/,
+    );
+  });
+
+  it('实时流式热词文件必须是绝对路径', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'true',
+          STREAMING_TRANSCRIPTION_PROFILE: '480ms',
+          STREAMING_TRANSCRIPTION_MODEL_DIR: '/models/480ms',
+          STREAMING_TRANSCRIPTION_HOTWORDS_PATH: 'hotwords.txt',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /STREAMING_TRANSCRIPTION_HOTWORDS_PATH must be an absolute path/,
+    );
+  });
+
+  it('实时流式 profile 不在白名单 → fail', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'true',
+          STREAMING_TRANSCRIPTION_PROFILE: '960ms',
+          STREAMING_TRANSCRIPTION_MODEL_DIR: '/models/960ms',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /STREAMING_TRANSCRIPTION_PROFILE is not in the manifest whitelist/,
+    );
+  });
+
+  it('实时流式 ENABLED 非布尔 → fail', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          STREAMING_TRANSCRIPTION_ENABLED: 'yes',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /STREAMING_TRANSCRIPTION_ENABLED must be true or false/,
+    );
+  });
 });

@@ -13,6 +13,7 @@
     "@ai-sdk/openai-compatible": "3.0.14",
     "@educanvas/agent-core": "workspace:*",
     "ai": "7.0.34",
+    "sherpa-onnx": "1.13.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

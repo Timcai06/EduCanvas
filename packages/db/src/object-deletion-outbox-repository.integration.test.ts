@@ -45,6 +45,7 @@ async function seedPending(
     status?: string;
     claimedAt?: Date;
     attempts?: number;
+    availableAt?: Date;
   } = {},
 ) {
   const [row] = await getDatabase()
@@ -56,7 +57,7 @@ async function seedPending(
       sourceId: randomUUID(),
       status: input.status ?? 'pending',
       attempts: input.attempts ?? 0,
-      availableAt: new Date(),
+      availableAt: input.availableAt ?? new Date(),
       claimedAt: input.claimedAt ?? null,
     })
     .returning();
@@ -208,6 +209,39 @@ describeWithDatabase(
       // 旧 worker 用 attempt 3 调用 complete/fail 会被拒绝
     });
 
+    it('attempts 已达 schema 上限的过期行收敛为 failed，不阻塞同批领取', async () => {
+      const expired = new Date(
+        Date.now() - OBJECT_DELETION_LEASE_TIMEOUT_MS - 60_000,
+      );
+      const poisoned = await seedPending({
+        storageKey: `attempt-ceiling-${randomUUID()}`,
+        status: 'processing',
+        claimedAt: expired,
+        attempts: 100,
+      });
+      const healthy = await seedPending({
+        storageKey: `attempt-healthy-${randomUUID()}`,
+      });
+
+      const claims = await repo.claimBatch({ limit: 200 });
+      expect(claims.some((claim) => claim.id === healthy.id)).toBe(true);
+      expect(claims.some((claim) => claim.id === poisoned.id)).toBe(false);
+
+      const [terminal] = await getDatabase()
+        .select({
+          status: objectDeletionOutbox.status,
+          attempts: objectDeletionOutbox.attempts,
+          failureCode: objectDeletionOutbox.failureCode,
+        })
+        .from(objectDeletionOutbox)
+        .where(eq(objectDeletionOutbox.id, poisoned.id));
+      expect(terminal).toEqual({
+        status: 'failed',
+        attempts: 100,
+        failureCode: 'object_delete_attempts_exhausted',
+      });
+    });
+
     it('未过期 processing 行不被 claimBatch 领取', async () => {
       const recentLease = new Date(Date.now() - 30_000);
       const seed = await seedPending({
@@ -254,6 +288,76 @@ describeWithDatabase(
       const claim = claims.find((c) => c.id === row.id);
       expect(claim).toBeDefined();
       expect(claim!.sourceType).toBe('asset_video_keyframe');
+    });
+
+    it('availableAt 未到期的 pending 行不能被领取（F-5）', async () => {
+      const future = new Date(Date.now() + 60 * 60 * 1_000);
+      const seed = await seedPending({
+        storageKey: 'available-future',
+        availableAt: future,
+      });
+
+      const claims = await repo.claimBatch({ limit: 5 });
+      const found = claims.find((c) => c.id === seed.id);
+      expect(found).toBeUndefined();
+
+      const [row] = await getDatabase()
+        .select({
+          status: objectDeletionOutbox.status,
+          attempts: objectDeletionOutbox.attempts,
+        })
+        .from(objectDeletionOutbox)
+        .where(eq(objectDeletionOutbox.id, seed.id));
+      // 未被改动，仍是 pending 且 attempt 未递增
+      expect(row?.status).toBe('pending');
+      expect(row?.attempts).toBe(0);
+    });
+
+    it('availableAt 到期后 pending 行可被领取（F-6）', async () => {
+      const seed = await seedPending({
+        storageKey: 'available-expire',
+        availableAt: new Date(Date.now() + 60 * 60 * 1_000),
+      });
+      await getDatabase()
+        .update(objectDeletionOutbox)
+        .set({ availableAt: new Date(Date.now() - 1_000) })
+        .where(eq(objectDeletionOutbox.id, seed.id));
+
+      const claims = await repo.claimBatch({ limit: 5 });
+      const claim = claims.find((c) => c.id === seed.id);
+      expect(claim).toBeDefined();
+      expect(claim!.attempt).toBe(1);
+    });
+
+    it('failed 终态行不再被领取（F-14）', async () => {
+      // lifecycle check 要求 failed 行 failureCode 非空且 claimedAt/completedAt 为空，
+      // 因此先以 pending 插入再整体更新为合法 failed 终态。
+      const seed = await seedPending({ storageKey: 'terminal-failed' });
+      await getDatabase()
+        .update(objectDeletionOutbox)
+        .set({
+          status: 'failed',
+          failureCode: 'object_delete_failed',
+          claimedAt: null,
+          completedAt: null,
+        })
+        .where(eq(objectDeletionOutbox.id, seed.id));
+
+      const claims = await repo.claimBatch({ limit: 5 });
+      const found = claims.find((c) => c.id === seed.id);
+      expect(found).toBeUndefined();
+    });
+
+    it('completed 终态行不再被领取（F-15）', async () => {
+      const seed = await seedPending({ storageKey: 'terminal-completed' });
+      await getDatabase()
+        .update(objectDeletionOutbox)
+        .set({ status: 'completed', completedAt: new Date() })
+        .where(eq(objectDeletionOutbox.id, seed.id));
+
+      const claims = await repo.claimBatch({ limit: 5 });
+      const found = claims.find((c) => c.id === seed.id);
+      expect(found).toBeUndefined();
     });
   },
 );
