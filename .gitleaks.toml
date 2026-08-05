@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Published sherpa-onnx model SHA-256 checksums"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b''',
+  '''db6f51551762e40e549166fe041ea3e45464370b595e9ad23f06478ec3794fbb''',
+]
