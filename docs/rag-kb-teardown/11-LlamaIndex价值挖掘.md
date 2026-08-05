@@ -141,6 +141,32 @@ MarkdownNodeParser（按标题切节，带 header_path）
 | P1     | 检索后处理（块补洞）设计：RankedChunk 连续性判断零成本，作为不改变检索语义的后处理                                              | rrf-v1 现状确认      |
 | P2     | rrf-v2 评估：多查询×多路融合（query expansion + RRF），含账本语义扩展方案                                                       | Code Owner 拍板      |
 
-## 八、一句话总结
+## 八、P0 实测结论：MarkdownNodeParser 中文分块质量（2026-08-05 追加）
 
-> LlamaIndex 与 RAGFlow 正好互补：**RAGFlow 给 deepdoc（PDF 深度解析），LlamaIndex 给 MarkdownNodeParser（标题分块 + header_path）**——合起来就是 K 线分块器的完整拼图。检索侧我们的 rrf-v1 与它同公式且更强，只借两个思想：多查询×多路融合（rrf-v2 候选）和块补洞（后处理）。抽取方式与 RAGFlow 一致：ast 取纯逻辑，不引框架。
+> 验证方法：行级原样切片提取 `get_nodes_from_node`（`file/markdown.py:50-107`，保留原始缩进，`_build_node_from_split` 替换为 `(text, header_path)` 元组函数），torch_sm120 环境（Python 3.11）实跑。与 [10](./10-RAGFlow价值挖掘.md) §七 的 naive_merge 模块同环境、可复现。
+
+### 实测结果
+
+| 测试项                                      | 结果                                                                                                    |
+| :------------------------------------------ | :------------------------------------------------------------------------------------------------------ |
+| 提取成功                                    | ✅ 方法体原样切片，仅替换 pydantic 外壳（_mk 元组函数）                                                 |
+| 真实文档切分                                | ✅ 文档维护规则.md（1515 字符）→ 7 个 section，header_path 全部正确（顶层 `''`、二级 `'文档维护规则'`） |
+| 代码块保护                                  | ✅ 代码块内 `# 注释` 未被当标题（` ``` ` 行 toggle）                                                    |
+| H1→H3 跳级归位                              | ✅ `顶级/二级/三级` → `顶级` → `''`，标题栈 pop 逻辑正确                                                |
+| 长 section 问题                             | ⚠️ **确认**：2000 字符长 section 保持原样（无 chunk_size 切分），必须与合并器组合                       |
+| 组合方案（标题切节 + naive_merge 节内合并） | ✅ 7 个 section → 14 个 chunk（128 tokens），全部在预算内                                               |
+
+### 落地注意点（实测发现）
+
+1. **header_path 传播**：naive_merge 会把标题行 `# 长章节` 合并进第一个子 chunk 的正文（实测确认），但 header_path 元数据来自 MarkdownNodeParser——**组合后必须把 section 的 header_path 传播到每个子 chunk**（映射到我们 schema 的 heading 列）
+2. **tokenizer 口径**：本节测试用 cl100k_base（naive_merge 自带），落地时替换为我们模型 tokenizer（与 [10](./10-RAGFlow价值挖掘.md) §七 适配点 3 一致）
+3. **提取方式修正**：ast.unparse 重建会破坏嵌套缩进（实测踩坑），**改用行级切片 + 最小替换**更稳——验证脚本保留在会话临时目录
+
+### P0 完成 → 行动清单更新
+
+- ✅ P0 MarkdownNodeParser 抽取与中文分块质量实测（本节）
+- ⬜ P0 与 RAGFlow naive_merge 各跑一轮中文分块质量对比，决定节内合并用哪个（下一步）
+
+## 九、一句话总结
+
+> LlamaIndex 与 RAGFlow 正好互补：**RAGFlow 给 deepdoc（PDF 深度解析），LlamaIndex 给 MarkdownNodeParser（标题分块 + header_path）**——合起来就是 K 线分块器的完整拼图。检索侧我们的 rrf-v1 与它同公式且更强，只借两个思想：多查询×多路融合（rrf-v2 候选）和块补洞（后处理）。抽取方式与 RAGFlow 一致：取纯逻辑，不引框架。
