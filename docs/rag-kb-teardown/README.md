@@ -37,6 +37,7 @@
 | [07-对EduCanvas的借鉴分析](./07-对EduCanvas的借鉴分析.md)   | 与现有底座逐项对比，可借鉴/不适用清单             | T8       |
 | [08-RAGFlow解析与分块对标](./08-RAGFlow解析与分块对标.md)   | RAGFlow 15 种分块模板 + 检索编排源码级对标        | 二期     |
 | [09-LlamaIndex父子分块对标](./09-LlamaIndex父子分块对标.md) | 父子分块设计源码级对标 + 效果诚实评估             | 二期     |
+| [10-RAGFlow价值挖掘](./10-RAGFlow价值挖掘.md)               | 可直接使用的部分：deepdoc 积木 + naive_merge 评估 | 三期     |
 
 ## 背景与边界
 
