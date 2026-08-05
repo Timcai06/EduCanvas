@@ -94,7 +94,6 @@ export class OpenAICompatibleAudioTranscriptionModelGateway implements AudioTran
       const formData = new FormData();
       formData.set('model', modelId);
       formData.set('file', file);
-      formData.set('response_format', 'json');
 
       let response: Response;
       try {

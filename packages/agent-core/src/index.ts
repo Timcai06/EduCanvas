@@ -255,6 +255,63 @@ export type {
 } from './web-runtime-port';
 
 export {
+  MAX_PCM_CHUNK_BYTES,
+  MAX_STREAMING_TRANSCRIPTION_TEXT_LENGTH,
+  STREAMING_TRANSCRIPTION_CHANNELS,
+  STREAMING_TRANSCRIPTION_PCM_ENCODING,
+  STREAMING_TRANSCRIPTION_SAMPLE_RATE_HZ,
+  StreamingTranscriptionStateError,
+  isStreamingTranscriptionTerminalEvent,
+  streamingTranscriptionEventSchema,
+  streamingTranscriptionFailureCodeSchema,
+  streamingTranscriptionFailureCodes,
+  streamingTranscriptionPcmChunkSchema,
+  streamingTranscriptionProtocolVersion,
+  validateStreamingTranscriptionEventSequence,
+  type StreamingTranscriptionEvent,
+  type StreamingTranscriptionFailureCode,
+  type StreamingTranscriptionPcmChunk,
+} from './streaming-transcription-contracts';
+
+export type {
+  StreamingTranscriptionGateway,
+  StreamingTranscriptionRequest,
+  StreamingTranscriptionSession,
+} from './streaming-transcription-port';
+
+export {
+  applyStreamingTranscriptionEvent,
+  createStreamingTranscriptionSnapshot,
+  type StreamingTranscriptionEventType,
+  type StreamingTranscriptionSegmentState,
+  type StreamingTranscriptionSnapshot,
+} from './streaming-transcription-reducer';
+
+export {
+  STREAMING_TRANSCRIPTION_TAIL_SILENCE_BYTES,
+  STREAMING_TRANSCRIPTION_TAIL_SILENCE_SECONDS,
+  applyStreamingTranscriptionCancel,
+  applyStreamingTranscriptionChunk,
+  applyStreamingTranscriptionEndpoint,
+  applyStreamingTranscriptionFinish,
+  createStreamingSegmentationSnapshot,
+  type StreamingSegmentationPhase,
+  type StreamingSegmentationSnapshot,
+  type StreamingSegmentationTailChunk,
+} from './streaming-transcription-segmentation-policy';
+
+export {
+  streamingTranscriptionClientMessageSchema,
+  streamingTranscriptionServerMessageSchema,
+  toStreamingTranscriptionPcmChunk,
+  validateStreamingTranscriptionClientMessageSequence,
+  validateStreamingTranscriptionServerMessageSequence,
+  type StreamingTranscriptionClientMessage,
+  type StreamingTranscriptionClientMessageType,
+  type StreamingTranscriptionServerMessage,
+} from './streaming-transcription-envelope';
+
+export {
   canTransitionExperimentRunStatus,
   experimentDependencySchema,
   experimentFailureCodeSchema,

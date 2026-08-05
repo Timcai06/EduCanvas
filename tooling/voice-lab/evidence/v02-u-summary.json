@@ -1,0 +1,649 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-U",
+  "fixture": {
+    "sourceKind": "project-owner-recording",
+    "usageAuthorization": "local-evaluation-only",
+    "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+    "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+    "sampleRate": 16000,
+    "channels": 1,
+    "encoding": "pcm_s16le"
+  },
+  "nodes": ["v22.23.1", "v24.18.0"],
+  "controls": {
+    "engine": "wasm",
+    "decodingMethod": "modified_beam_search",
+    "maxActivePaths": 4,
+    "chunkMilliseconds": 100,
+    "tailSilenceSeconds": 1.5,
+    "scores": [1.5, 2, 3.5],
+    "repetitions": 3
+  },
+  "models": {
+    "current-bilingual-int8": {
+      "id": "current-bilingual-int8",
+      "quantization": "int8",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2",
+      "archiveSha256": "27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8",
+      "license": "Apache-2.0",
+      "languageScope": "zh-en",
+      "modelBytes": 198283357,
+      "hashes": {
+        "encoder": "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b",
+        "decoder": "1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa",
+        "joiner": "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0",
+        "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+        "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+      }
+    },
+    "small-bilingual-int8": {
+      "id": "small-bilingual-int8",
+      "quantization": "int8",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2",
+      "archiveSha256": "2b7c63322b32e5e0f2526043a1103366119ca58dd615cd7105a37c01db9553d7",
+      "license": "Apache-2.0",
+      "languageScope": "zh-en",
+      "modelBytes": 49764899,
+      "hashes": {
+        "encoder": "db6f51551762e40e549166fe041ea3e45464370b595e9ad23f06478ec3794fbb",
+        "decoder": "4b618d383af304cfae281dbf0a53e8bf442c2f0502256cd5694bd6567ebdd834",
+        "joiner": "bdda356d6f9b8c2d7cee9ee0e26075fa537490f7fd06520be408d287073667b9",
+        "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+        "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+      }
+    }
+  },
+  "groups": [
+    {
+      "node": "v22.23.1",
+      "profile": "current-bilingual-int8",
+      "score": 1.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": false,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0, 0, 0],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [0.8, 0.8, 0.8],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.1338,
+          "max": 0.1368
+        },
+        "peakRssKiBRange": {
+          "min": 715328,
+          "max": 894128
+        }
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "current-bilingual-int8",
+      "score": 2,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0.5, 0.5, 0.5],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.134,
+          "max": 0.1376
+        },
+        "peakRssKiBRange": {
+          "min": 892208,
+          "max": 895360
+        }
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "current-bilingual-int8",
+      "score": 3.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0.5, 0.5, 0.5],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.1349,
+          "max": 0.1359
+        },
+        "peakRssKiBRange": {
+          "min": 893040,
+          "max": 894400
+        }
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-int8",
+      "score": 1.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0727,
+          "max": 0.0736
+        },
+        "peakRssKiBRange": {
+          "min": 598256,
+          "max": 599456
+        }
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-int8",
+      "score": 2,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0728,
+          "max": 0.0744
+        },
+        "peakRssKiBRange": {
+          "min": 597216,
+          "max": 599728
+        }
+      }
+    },
+    {
+      "node": "v22.23.1",
+      "profile": "small-bilingual-int8",
+      "score": 3.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0728,
+          "max": 0.0742
+        },
+        "peakRssKiBRange": {
+          "min": 596960,
+          "max": 600192
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current-bilingual-int8",
+      "score": 1.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": false,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0, 0, 0],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [0.8, 0.8, 0.8],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.1371,
+          "max": 0.1417
+        },
+        "peakRssKiBRange": {
+          "min": 873040,
+          "max": 963168
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current-bilingual-int8",
+      "score": 2,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0.5, 0.5, 0.5],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.137,
+          "max": 0.1395
+        },
+        "peakRssKiBRange": {
+          "min": 958352,
+          "max": 962048
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "current-bilingual-int8",
+      "score": 3.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": false,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [0.5, 0.5, 0.5],
+        "beforeWer": [0.8, 0.8, 0.8],
+        "afterWer": [
+          0.6666666666666666, 0.6666666666666666, 0.6666666666666666
+        ],
+        "beforeTexts": [
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "afterTexts": [
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS",
+          "BACK IN BOOSTING ART CLASSIC ASSEMBLE METHOD BEGGING REDUCES VARIANCE WHY BOASTING REDUCES BUYERS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.1349,
+          "max": 0.1378
+        },
+        "peakRssKiBRange": {
+          "min": 947152,
+          "max": 961632
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-int8",
+      "score": 1.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0707,
+          "max": 0.0711
+        },
+        "peakRssKiBRange": {
+          "min": 691584,
+          "max": 693664
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-int8",
+      "score": 2,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0707,
+          "max": 0.0734
+        },
+        "peakRssKiBRange": {
+          "min": 691184,
+          "max": 694048
+        }
+      }
+    },
+    {
+      "node": "v24.18.0",
+      "profile": "small-bilingual-int8",
+      "score": 3.5,
+      "evaluation": {
+        "passed": false,
+        "resourcesPassed": true,
+        "baselineResourcesPassed": true,
+        "afterResourcesPassed": true,
+        "hotwordCapabilityPassed": true,
+        "stable": true,
+        "baselineTermsComplete": false,
+        "baselineQualityPassed": false,
+        "afterTermsComplete": true,
+        "afterQualityPassed": false,
+        "afterNotWorse": true,
+        "hotwordGainRequired": true,
+        "hotwordGainObserved": true,
+        "beforeRecall": [0, 0, 0],
+        "afterRecall": [1, 1, 1],
+        "beforeWer": [
+          0.9333333333333333, 0.9333333333333333, 0.9333333333333333
+        ],
+        "afterWer": [
+          0.7333333333333333, 0.7333333333333333, 0.7333333333333333
+        ],
+        "beforeTexts": [
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES",
+          "BAG C BEGGING REDUCES VERAS FIRES"
+        ],
+        "afterTexts": [
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS",
+          "BAGGING AND BOOSTING A CLASS BEGGING REDUCES VERAS"
+        ],
+        "errors": {
+          "before": [null, null, null],
+          "after": [null, null, null]
+        },
+        "rtfRange": {
+          "min": 0.0719,
+          "max": 0.074
+        },
+        "peakRssKiBRange": {
+          "min": 610192,
+          "max": 694144
+        }
+      }
+    }
+  ],
+  "verdict": "BLOCKED_MODEL",
+  "blockerCode": "candidate_quality_gate_failed",
+  "selectedProfile": null,
+  "selectedScore": null,
+  "v02Passed": false,
+  "v03Unlocked": false
+}
