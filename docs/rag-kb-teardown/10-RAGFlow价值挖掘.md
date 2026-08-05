@@ -21,14 +21,14 @@
 
 **来源**（`/home/hzlgou/ragflow`，commit `47a4ab1`，Apache-2.0）：
 
-| 能力                           | 源码位置                                                                         | 价值                                                                                   |
-| :----------------------------- | :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
-| PDF 深度解析（布局识别 11 类） | `deepdoc/vision/layout_recognizer.py`                                            | 文本型 PDF 正文提取                                                                    |
-| OCR（扫描件/乱码回退）         | `deepdoc/vision/ocr.py`                                                          | 扫描件处理                                                                             |
-| 表格结构识别（TSR）            | `deepdoc/vision/table_structure_recognizer.py`                                   | 表格转 HTML，citation 可溯源                                                           |
-| XGBoost 跨页段落拼接           | `deepdoc/parser/pdf_parser.py`（模型 `rag/res/deepdoc/updown_concat_xgb.model`） | 跨页文本还原                                                                           |
-| Markdown 元素化解析            | `deepdoc/parser/markdown_parser.py`                                              | header/fence/list/blockquote，保留结构——**正好对应我们 K 线语料（docs/ 全 markdown）** |
-| 输出格式                       | `(sections, tables)` 元组，带 `@@页码\t坐标##` 位置标签                          | 喂给我们已有的 `pageStart/pageEnd` citation 字段                                       |
+| 能力                           | 源码位置                                                                                                     | 价值                                                                                   |
+| :----------------------------- | :----------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
+| PDF 深度解析（布局识别 11 类） | `deepdoc/vision/layout_recognizer.py`                                                                        | 文本型 PDF 正文提取                                                                    |
+| OCR（扫描件/乱码回退）         | `deepdoc/vision/ocr.py`                                                                                      | 扫描件处理                                                                             |
+| 表格结构识别（TSR）            | `deepdoc/vision/table_structure_recognizer.py`                                                               | 表格转 HTML，citation 可溯源                                                           |
+| XGBoost 跨页段落拼接           | `deepdoc/parser/pdf_parser.py:100`（模型经 HF `InfiniFlow/text_concat_xgb_v1.0` **运行时下载**，不在仓库内） | 跨页文本还原                                                                           |
+| Markdown 元素化解析            | `deepdoc/parser/markdown_parser.py`                                                                          | header/fence/list/blockquote，保留结构——**正好对应我们 K 线语料（docs/ 全 markdown）** |
+| 输出格式                       | `(sections, tables)` 元组，带 `@@页码\t坐标##` 位置标签                                                      | 喂给我们已有的 `pageStart/pageEnd` citation 字段                                       |
 
 **接入方式**：作为独立 Python 服务（解析归 Python 生态，`docs/05-engineering/02-后端工程.md:101` 已约定），接进现有摄取 worker 链路。
 
@@ -115,3 +115,40 @@
 - ⚠️ **必须改造两点**：
   1. token 计数函数替换为我们模型 tokenizer（适配点 3）
   2. 标题分块依赖解析层配合（适配点 1）——deepdoc Markdown 元素化传标题 section，或自研标题感知分块
+
+## 八、P0 合规核查结论（2026-08-05 追加）
+
+> 验证方法：双 agent 独立核查（一个做 ONNX 二进制取证 + GitHub/HF API，另一个用 HF API 直接复核）+ 本地源码交叉验证。证据分级：直接证据（API 原始响应/二进制内嵌）/ 间接推断（第三方博客）。
+
+### 结论：deepdoc 全套权重可在 EduCanvas（开源、可商用自托管）中使用，无 NC 组件
+
+| 模型文件                               | 来源判定                                                            | 许可                                                                                    |
+| :------------------------------------- | :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------- |
+| `det.onnx` / `rec.onnx` / `ocr.res`    | PaddleOCR PP-OCR 系 ONNX 化（二进制内嵌 "Model from PaddlePaddle"） | PaddleOCR 官方 Apache-2.0；HF 卡声明 apache-2.0                                         |
+| `layout.onnx` + laws/manual/paper 变体 | YOLOv10 架构，InfiniFlow 自训                                       | HF 卡声明 apache-2.0（⚠️ 训练生态 AGPL，见风险）                                        |
+| `tsr.onnx`                             | Ultralytics YOLOv8.1.18 训练，数据 PubTables-1M（二进制内嵌元数据） | **内嵌 `license: "Apache-2.0"`**；数据集 CDLA-Permissive-2.0（商用可用需署名）          |
+| `updown_concat_xgb.model`              | InfiniFlow 自训 XGBoost（33 维特征）                                | 经 HF `InfiniFlow/text_concat_xgb_v1.0` 运行时下载（**不在仓库内**），卡声明 apache-2.0 |
+
+**关键事实（直接证据）**：
+
+- `InfiniFlow/deepdoc` 模型卡 license 字段 = `apache-2.0`（HF API cardData + README frontmatter 双确认）
+- 权重文件实为 **8 个**（det/rec/ocr.res/layout×4/tsr），无独立 LICENSE 文件（HF 常见做法，但保留单方声明的不确定性）
+- 上游 PP-OCRv4 系列 HF 卡均声明 apache-2.0；`PP-OCRv3_det` 卡 license 字段为空（None）但项目级 Apache-2.0 可覆盖
+
+### ⚠️ 风险敞口（需 Code Owner 知悉）
+
+1. **AGPL 训练生态争议**：layout/tsr 由 YOLOv10（THU-MIG，AGPL-3.0）与 Ultralytics YOLOv8 工具链（AGPL-3.0）产出。AGPL 文本未对权重归属表态（"输出仅在内容上构成 covered work 时才被本许可证覆盖"）——"权重=衍生作品"是法律争议，无明确 NC/AGPL 声明落在权重文件上。**RAGFlow 生态及众多商用产品均按 Apache-2.0 使用**；如法务从严，备选：PP-StructureV3 / Docling（MIT）/ MinerU（Apache-2.0）
+2. **单方声明**：deepdoc 的 Apache-2.0 是 InfiniFlow 单方声明（卡片 frontmatter），仓库无独立 LICENSE 文件佐证
+3. **bce 系列不在本次范围**：RAGFlow 默认 embedding/rerank 模型（bce-embedding-base_v1 等）上游许可未核实（BAAI 原版 401），若推广"无 NC"结论需另行核实——**但我们的 embedding 走自有 gateway（1536 维），不涉及**
+
+### 需遵守的义务
+
+1. Apache-2.0 再分发义务：保留版权声明与许可证副本（EduCanvas 自身 Apache-2.0，天然兼容）
+2. 数据集署名：tsr.onnx 训练数据 PubTables-1M（CDLA-Permissive-2.0，需署名）——建议在模型清单文档中记录
+3. 模型卡正文无训练数据披露（第三方 CSDN 称含 PubTables-1M/DocV3 等约 500 万样本，**未获官方证实，谨慎引用**）
+
+### P0 完成 → 行动清单更新
+
+- ✅ P0 合规检查完成（结论：可用，含 2 个风险敞口 + 2 个义务）
+- P1 分块器评估完成（见 §七）
+- 下一步：P1 设计解析服务接入链路（谁触发、怎么入队、结果怎么落库）
