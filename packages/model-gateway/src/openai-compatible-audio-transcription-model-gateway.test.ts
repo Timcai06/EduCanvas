@@ -54,6 +54,12 @@ describe('OpenAICompatibleAudioTranscriptionModelGateway', () => {
           }),
         );
         expect(init?.body).toBeInstanceOf(FormData);
+        const body = init?.body as FormData;
+        expect(body.get('model')).toBe('whisper-1');
+        expect(body.get('file')).toBeInstanceOf(File);
+        // JSON 是 OpenAI-compatible 转录端点的默认响应；省略这个可选字段，
+        // 可兼容只接受 file + model 的供应商，同时仍由下方响应校验守住边界。
+        expect(body.has('response_format')).toBe(false);
         return new Response(
           JSON.stringify({ text: '你好世界', language: 'zh', duration: 2.5 }),
           {

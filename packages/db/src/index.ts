@@ -296,6 +296,36 @@ export {
   MAX_MCP_INTENT_RECONCILIATION_BATCH,
 } from './mcp-intent-reconciler';
 export { mcpToolIntents } from './schema/mcp-intent';
+export {
+  audioConsentProofMethods,
+  audioConsentPurposes,
+  audioConsents,
+  audioRetentions,
+} from './schema/audio-consent';
+export {
+  AUDIO_RETENTION_GUARDIAN_PROOF_POLICIES,
+  AudioRetentionAccessError,
+  AudioRetentionConsentError,
+  AudioRetentionPeriodError,
+  AudioRetentionPersistenceError,
+  audioRetentionAuditReasonCodes,
+  type AudioRetentionAccessRole,
+  type AudioRetentionGuardianProofPolicy,
+  type AudioRetentionRevokeResult,
+  type AudioRetentionScanResult,
+  type AudioRetentionStatus,
+  type AudioRetentionSummary,
+  type CreateAudioRetentionInput,
+  type ReadAudioRetentionInput,
+} from './audio-retention-types';
+export {
+  AUDIO_RETENTION_MAX_BATCH,
+  AUDIO_RETENTION_READ_EVENT_TYPE,
+  AUDIO_RETENTION_RESOURCE_TYPE,
+  AudioRetentionRepository,
+  type AudioRetentionRepositoryOptions,
+} from './audio-retention-repository';
+export { enqueueDeletionIntents } from './audio-retention-lifecycle';
 export { toolEffectReconciliations } from './schema/tool-effect-reconciliation';
 export {
   DrizzleTurnSafetyDecisionRepository,

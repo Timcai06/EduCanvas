@@ -56,3 +56,9 @@ export {
   OpenAICompatibleEmbeddingModelGateway,
   type OpenAICompatibleEmbeddingModelGatewayOptions,
 } from './openai-compatible-embedding-model-gateway';
+export {
+  SherpaStreamingTranscriptionGateway,
+  type SherpaStreamingTranscriptionGatewayOptions,
+  type SherpaStreamingTranscriptionLogEntry,
+  type SherpaStreamingTranscriptionLogLabel,
+} from './sherpa-streaming-transcription-gateway';

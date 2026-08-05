@@ -59,6 +59,10 @@ export class ArtifactVersionConflictError extends Error {
   }
 }
 
+/**
+ * 幂等键已存在但请求指纹不一致。同一键只能绑定同一个创建请求，
+ * 否则客户端复用键重放会静默拿到另一请求的结果，必须显式拒绝。
+ */
 export class ArtifactIdempotencyConflictError extends Error {
   readonly code = 'artifact_idempotency_conflict';
 
@@ -170,6 +174,11 @@ export class DrizzlePlatformArtifactRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  /**
+   * 创建产物空壳（不含版本内容），供后续 appendVersion / 生成任务填充。
+   * 权限由 requireArtifactNotebookAccess 校验 artifact.write；仅写 artifacts 行，
+   * 不触碰对象存储；无权限或 Notebook 不存在时抛 ArtifactOwnershipError。
+   */
   async createArtifact(input: {
     spaceId: string;
     conversationId?: string | null;
@@ -200,6 +209,10 @@ export class DrizzlePlatformArtifactRepository {
     return toArtifact(row!);
   }
 
+  /**
+   * 按 id 读产物元数据。先查行、行不存在直接抛 ArtifactOwnershipError，
+   * 再校验 notebook.read——查无此物与无权同错，避免客户端探测资源是否存在。
+   */
   async getArtifact(input: {
     artifactId: string;
     trustedSubjectId: string;
@@ -218,6 +231,10 @@ export class DrizzlePlatformArtifactRepository {
     return toArtifact(row);
   }
 
+  /**
+   * 列出某次会话产生的未归档产物。先经 conversation 行解析其 spaceId 再验权；
+   * 会话不存在或无权访问一律 ArtifactOwnershipError，防止探测会话归属。
+   */
   async listConversationArtifacts(input: {
     conversationId: string;
     trustedSubjectId: string;
@@ -521,6 +538,11 @@ export class DrizzlePlatformArtifactRepository {
     }
   }
 
+  /**
+   * 产物的全部版本（含归档前版本），按版本号降序。所有权校验复用 getArtifact；
+   * 返回的行含 objectKey 等内部字段，仅供服务端消费，浏览器可见形状由
+   * canvas-protocol 的投影层裁剪。
+   */
   async listVersions(input: {
     artifactId: string;
     trustedSubjectId: string;
@@ -575,6 +597,10 @@ export class DrizzlePlatformArtifactRepository {
     }));
   }
 
+  /**
+   * 按版本号读单版本。版本不存在同样抛 ArtifactOwnershipError（查无此物同错）；
+   * 返回含 objectKey 的完整行，仅限服务端消费，浏览器投影由 canvas-protocol 裁剪。
+   */
   async getVersion(input: {
     artifactId: string;
     version: number;
@@ -595,6 +621,10 @@ export class DrizzlePlatformArtifactRepository {
     return toVersion(row);
   }
 
+  /**
+   * 为已有产物手动创建生成任务账本行（不入队、queueJobKey 可空），供编排方
+   * 自行把任务交给队列或直接推进状态机；所有权校验复用 getArtifact。
+   */
   async createGenerationJob(input: {
     artifactId: string;
     trustedSubjectId: string;

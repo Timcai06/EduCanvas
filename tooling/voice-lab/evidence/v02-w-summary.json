@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-W",
+  "generatedAt": "2026-08-05T04:49:36.672Z",
+  "runtime": {
+    "node": "v24.18.0"
+  },
+  "provider": "openai-compatible",
+  "providerName": "SiliconFlow",
+  "resolvedModelId": "TeleAI/TeleSpeechASR",
+  "fixture": {
+    "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+    "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+    "repetitions": 3
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "provider": "openai-compatible",
+      "resolvedModelId": "TeleAI/TeleSpeechASR",
+      "transcript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "wer": 0.3333333333333333,
+      "baggingRecall": 0.5,
+      "boostingRecall": 0.5,
+      "latencyMs": 2134,
+      "language": null,
+      "durationSeconds": null,
+      "fixtureSha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+      "exitCode": 0,
+      "errorCode": null
+    },
+    {
+      "repetition": 2,
+      "provider": "openai-compatible",
+      "resolvedModelId": "TeleAI/TeleSpeechASR",
+      "transcript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "wer": 0.3333333333333333,
+      "baggingRecall": 0.5,
+      "boostingRecall": 0.5,
+      "latencyMs": 1859,
+      "language": null,
+      "durationSeconds": null,
+      "fixtureSha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+      "exitCode": 0,
+      "errorCode": null
+    },
+    {
+      "repetition": 3,
+      "provider": "openai-compatible",
+      "resolvedModelId": "TeleAI/TeleSpeechASR",
+      "transcript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "wer": 0.3333333333333333,
+      "baggingRecall": 0.5,
+      "boostingRecall": 0.5,
+      "latencyMs": 2341,
+      "language": null,
+      "durationSeconds": null,
+      "fixtureSha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+      "exitCode": 0,
+      "errorCode": null
+    }
+  ],
+  "latencyRange": {
+    "min": 1859,
+    "max": 2341
+  },
+  "noFailure": true,
+  "allNonEmpty": true,
+  "qualityPassed": true,
+  "termsComplete": false,
+  "stable": true,
+  "authorization": {
+    "paid": true,
+    "externalAudioUpload": true
+  },
+  "verdict": "BLOCKED_MODEL_OR_PROVIDER",
+  "blockerCode": "telespeech_quality_gate_failed",
+  "v02Passed": false,
+  "v03Unlocked": false
+}
