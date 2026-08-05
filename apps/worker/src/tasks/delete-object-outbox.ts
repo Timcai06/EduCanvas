@@ -88,6 +88,16 @@ class LocalDeletionAdapter implements ObjectDeleter {
   }
 }
 
+/**
+ * 后台删除 cron 任务（graphile-worker 周期性调用）。消费 objectDeletionOutbox：
+ * - 幂等：claimBatch 单写者领取 + complete/fail 必须携带匹配 attempt；对象已不存在
+ *   （object_not_found）视为删除目标已达成，直接 complete；
+ * - 失败写入 fail 并按 attempt 指数退避重试，超过 MAX_OBJECT_DELETION_ATTEMPTS
+ *   进入终态 failed，仅记录 failureCode，不抛给调度器造成队列堆积；
+ * - 删除失败不回滚已归档产物：归档是用户可见的业务事实（数据已“删除”），
+ *   物理对象清理只是资源回收，重试即可；恢复产物会让已删除数据重新出现，
+ *   违背删除承诺。
+ */
 export function createDeleteObjectOutboxTask(
   repository: OutboxRepository = new DrizzleObjectDeletionOutboxRepository(),
   deleter: ObjectDeleter = new LocalDeletionAdapter(),

@@ -79,6 +79,7 @@ const report = {
     hotwords: args.hotwords ? sha256(hotwordsPath) : null,
   },
   modelProfile: modelProfile.id,
+  modelQuantization: modelProfile.quantization ?? null,
   model: relative(here, modelDir),
   modelSource: modelProfile.source,
   modelSourceRevision: modelProfile.sourceRevision ?? null,
@@ -164,7 +165,14 @@ function runFixture(api, engine, fixture) {
     const audioSeconds = wave.samples.length / wave.sampleRate;
     const text = result.text ?? '';
     stream.free?.();
-    recognizer.free?.();
+    // sherpa-onnx 1.13.4 的 WASM 在 int8 zipformer 权重上调用
+    // recognizer.free() 会挂起（emscripten worker 死锁，FP32 正常，
+    // native addon 也无此问题）。结果已取出，不释放只把内存回收推迟到
+    // 进程退出，由 OS 兜底，不影响矩阵证据或指标；这是 runner 层面的
+    // workaround，不是证据过滤。
+    if (!(engine === 'wasm' && modelProfile.quantization === 'int8')) {
+      recognizer.free?.();
+    }
     return {
       ...base,
       sampleRate: wave.sampleRate,

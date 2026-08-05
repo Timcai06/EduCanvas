@@ -66,6 +66,69 @@ const PROFILES = Object.freeze({
         'bcae393dbc5611be5ffa4c7ae0841558978a5a4f484008cb9dff3a2cc97ebe01',
     }),
   }),
+  'current-bilingual-int8': Object.freeze({
+    architecture: 'transducer',
+    id: 'current-bilingual-int8',
+    directory: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
+    encoder: 'encoder-epoch-99-avg-1.int8.onnx',
+    decoder: 'decoder-epoch-99-avg-1.int8.onnx',
+    joiner: 'joiner-epoch-99-avg-1.int8.onnx',
+    tokens: 'tokens.txt',
+    bpeVocab: 'bpe.vocab',
+    modelingUnit: 'cjkchar+bpe',
+    languageScope: 'zh-en',
+    license: 'Apache-2.0',
+    modelBytes: 198283357,
+    quantization: 'int8',
+    source:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2',
+    archiveSha256:
+      '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
+    hashes: Object.freeze({
+      encoder:
+        '8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b',
+      decoder:
+        '1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa',
+      joiner:
+        '1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0',
+      tokens:
+        'a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3',
+      bpeVocab:
+        'd0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029',
+    }),
+  }),
+  'small-bilingual-int8': Object.freeze({
+    architecture: 'transducer',
+    id: 'small-bilingual-int8',
+    directory:
+      'sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16',
+    encoder: 'encoder-epoch-99-avg-1.int8.onnx',
+    decoder: 'decoder-epoch-99-avg-1.int8.onnx',
+    joiner: 'joiner-epoch-99-avg-1.int8.onnx',
+    tokens: 'tokens.txt',
+    bpeVocab: 'bpe.vocab',
+    modelingUnit: 'cjkchar+bpe',
+    languageScope: 'zh-en',
+    license: 'Apache-2.0',
+    modelBytes: 49764899,
+    quantization: 'int8',
+    source:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2',
+    archiveSha256:
+      '2b7c63322b32e5e0f2526043a1103366119ca58dd615cd7105a37c01db9553d7',
+    hashes: Object.freeze({
+      encoder:
+        'db6f51551762e40e549166fe041ea3e45464370b595e9ad23f06478ec3794fbb',
+      decoder:
+        '4b618d383af304cfae281dbf0a53e8bf442c2f0502256cd5694bd6567ebdd834',
+      joiner:
+        'bdda356d6f9b8c2d7cee9ee0e26075fa537490f7fd06520be408d287073667b9',
+      tokens:
+        'a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3',
+      bpeVocab:
+        'd0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029',
+    }),
+  }),
   'paraformer-bilingual-int8': Object.freeze({
     architecture: 'paraformer',
     id: 'paraformer-bilingual-int8',

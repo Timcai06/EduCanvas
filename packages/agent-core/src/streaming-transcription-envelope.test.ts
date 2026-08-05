@@ -4,8 +4,13 @@ import {
   streamingTranscriptionProtocolVersion,
 } from './streaming-transcription-contracts';
 import {
+  applyStreamingTranscriptionChunk,
+  createStreamingSegmentationSnapshot,
+} from './streaming-transcription-segmentation-policy';
+import {
   streamingTranscriptionClientMessageSchema,
   streamingTranscriptionServerMessageSchema,
+  toStreamingTranscriptionPcmChunk,
   validateStreamingTranscriptionClientMessageSequence,
   validateStreamingTranscriptionServerMessageSequence,
   type StreamingTranscriptionClientMessage,
@@ -39,6 +44,7 @@ const chunkMessage = (
     ...base,
     type: 'chunk',
     sequence,
+    chunkSequence: Math.max(0, sequence - 1),
     sampleRate: 16_000,
     channels: 1,
     encoding: 'pcm_s16le',
@@ -104,6 +110,43 @@ describe('client envelope Schema（start/chunk/finish/cancel）', () => {
     expect(
       streamingTranscriptionClientMessageSchema.parse(cancelMessage(2)),
     ).toEqual(cancelMessage(2));
+  });
+
+  it('首个 envelope chunk 显式映射为 V06 sequence 0', () => {
+    const message = streamingTranscriptionClientMessageSchema.parse(
+      chunkMessage(1),
+    );
+    if (message.type !== 'chunk') throw new Error('期望 chunk');
+    const pcmChunk = toStreamingTranscriptionPcmChunk(message);
+    expect(pcmChunk.sequence).toBe(0);
+    expect(() =>
+      applyStreamingTranscriptionChunk(
+        createStreamingSegmentationSnapshot('operation:1', 'segment:1'),
+        pcmChunk,
+      ),
+    ).not.toThrow();
+  });
+
+  it('拒绝缺失、重复或跳号的 chunkSequence', () => {
+    expect(() =>
+      streamingTranscriptionClientMessageSchema.parse({
+        ...chunkMessage(1),
+        chunkSequence: undefined,
+      }),
+    ).toThrow();
+    expect(
+      validateStreamingTranscriptionClientMessageSequence([
+        startMessage(),
+        chunkMessage(1, { chunkSequence: 1 }),
+      ]),
+    ).toBe(false);
+    expect(
+      validateStreamingTranscriptionClientMessageSequence([
+        startMessage(),
+        chunkMessage(1),
+        chunkMessage(2, { chunkSequence: 0 }),
+      ]),
+    ).toBe(false);
   });
 
   it('start 只接受受控音频格式，拒绝非法采样率/声道/编码', () => {

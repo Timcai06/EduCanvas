@@ -89,13 +89,13 @@ export function createStreamingTranscriptionSnapshot(
 function combineText(
   segments: readonly StreamingTranscriptionSegmentState[],
 ): string {
-  let text = '';
-  for (const segment of segments) {
-    if (segment.status !== 'failed') {
-      text += segment.text;
-    }
-  }
-  return text;
+  // segment 是独立识别单元，组合时必须保留词边界。直接字符串相加会让
+  // `Bagging` + `and boosting` 变成 `Baggingand boosting`，破坏双语输入。
+  // 空文本（例如只有 endpoint 的 segment）不产生多余分隔符。
+  return segments
+    .filter((segment) => segment.status !== 'failed' && segment.text.length > 0)
+    .map((segment) => segment.text)
+    .join(' ');
 }
 
 /** 幂等判定：同 segment 同 sequence 同 type 同 payload 视为同一事件重放。 */

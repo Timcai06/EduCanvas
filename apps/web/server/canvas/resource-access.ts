@@ -24,6 +24,12 @@ import {
   SourceResourceProjectionError,
 } from './source-resource-adapter';
 
+/**
+ * 统一可预期的资源读取错误。404 同时掩盖“资源不存在 / 跨 Notebook / 无权访问”，
+ * 防止客户端探测资源存在性；422/503 保留投影层给出的稳定错误码和状态。
+ * 数据库等未知异常不包装为本类，由路由统一归一化为 503 resource_unavailable；
+ * 本类只携带可安全返回浏览器的 code 与 status。
+ */
 export class CanvasResourceAccessError extends Error {
   constructor(
     readonly code: CanvasResourceErrorCode,
@@ -180,7 +186,9 @@ export async function projectOwnedSourceResources(input: {
 }
 
 /**
- * 统一资源读取边界：可信身份与当前Notebook来自服务端会话，客户端只能选择资源种类和ID。
+ * 统一资源读取边界：可信身份与当前Notebook来自服务端会话，客户端只能选择
+ * 资源种类和 ID。跨用户、跨 Notebook 与不存在的资源统一返回 404
+ * （resource_not_found），避免暴露任何资源存在性信息。
  */
 export async function loadOwnedCanvasResource(input: {
   identity: AnonymousIdentity;

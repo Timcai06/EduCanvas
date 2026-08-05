@@ -40,6 +40,13 @@ export class DrizzleObjectDeletionOutboxRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  /**
+   * 领取一批待删除行。事务内 FOR UPDATE SKIP LOCKED 保证多 worker 不重复领取；
+   * attempts+1 与 status=processing 同事务写入，租约超时的 processing 行可被
+   * 其他 worker 重新领取（原 worker 视为崩溃，旧 attempt 不再被接受）。
+   * 按 availableAt、id 升序稳定领取已到期条目，不对失败行额外提权。
+   * 这里只更新 outbox 行，不触碰对象存储。
+   */
   async claimBatch(input: {
     limit?: number;
     now?: Date;

@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-V",
+  "generatedAt": "2026-08-05T03:50:58.436Z",
+  "runtime": {
+    "generatorNode": "v25.8.1",
+    "localDraftNodes": ["v24.18.0"],
+    "cloudFinalNodes": ["v24.18.0"]
+  },
+  "fixture": {
+    "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+    "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+    "repetitions": 3
+  },
+  "hashes": {
+    "localProfile": "small-bilingual-int8",
+    "localModelBytes": 49764899,
+    "localModelHashes": {
+      "encoder": "db6f51551762e40e549166fe041ea3e45464370b595e9ad23f06478ec3794fbb",
+      "decoder": "4b618d383af304cfae281dbf0a53e8bf442c2f0502256cd5694bd6567ebdd834",
+      "joiner": "bdda356d6f9b8c2d7cee9ee0e26075fa537490f7fd06520be408d287073667b9",
+      "tokens": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+      "bpeVocab": "d0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029"
+    }
+  },
+  "localDraft": {
+    "profile": "small-bilingual-int8",
+    "evaluation": {
+      "passed": true,
+      "allNonEmpty": true,
+      "stable": true,
+      "resourcesPassed": true,
+      "texts": [
+        "BAG C BEGGING REDUCES VERAS FIRES",
+        "BAG C BEGGING REDUCES VERAS FIRES",
+        "BAG C BEGGING REDUCES VERAS FIRES"
+      ],
+      "rtfRange": {
+        "min": 0.0715,
+        "max": 0.0727
+      },
+      "peakRssKiBRange": {
+        "min": 690496,
+        "max": 692640
+      },
+      "wers": [0.9333333333333333, 0.9333333333333333, 0.9333333333333333]
+    }
+  },
+  "cloudFinal": {
+    "scope": "real-provider",
+    "provider": "openai-compatible",
+    "resolvedModelId": "FunAudioLLM/SenseVoiceSmall",
+    "evaluation": {
+      "passed": false,
+      "noFailure": true,
+      "stable": true,
+      "termsComplete": false,
+      "qualityPassed": true,
+      "texts": [
+        "Baggging and boosting are teaclastic assemble methods.Begging reduces variance, while boosting reduces bias.",
+        "Baggging and boosting are teaclastic assemble methods.Begging reduces variance, while boosting reduces bias.",
+        "Baggging and boosting are teaclastic assemble methods.Begging reduces variance, while boosting reduces bias."
+      ],
+      "recalls": [0.5, 0.5, 0.5],
+      "wers": [0.3333333333333333, 0.3333333333333333, 0.3333333333333333],
+      "latencyMs": {
+        "min": 506,
+        "max": 975
+      },
+      "errors": [null, null, null]
+    }
+  },
+  "combined": {
+    "passed": false,
+    "cloudNotWorse": false
+  },
+  "authorization": {
+    "paid": true,
+    "externalAudioUpload": true
+  },
+  "unconfigured": {
+    "verdict": "BLOCKED",
+    "blockerCode": "transcription_provider_not_configured"
+  },
+  "failures": {
+    "provider_not_configured": {
+      "exitCode": 0,
+      "errorCode": "transcription_provider_not_configured"
+    },
+    "audio_file_missing": {
+      "exitCode": 2,
+      "errorCode": "audio_file_missing"
+    },
+    "fixture_sha256_mismatch": {
+      "exitCode": 2,
+      "errorCode": "fixture_sha256_mismatch"
+    },
+    "expected_sha256_required": {
+      "exitCode": 2,
+      "errorCode": "expected_sha256_required"
+    },
+    "invalid_expected_sha256": {
+      "exitCode": 2,
+      "errorCode": "invalid_expected_sha256"
+    },
+    "audio_path_outside_fixture_root": {
+      "exitCode": 2,
+      "errorCode": "audio_path_outside_fixture_root"
+    },
+    "empty_audio": {
+      "exitCode": 2,
+      "errorCode": "empty_audio"
+    },
+    "unsupported_mime": {
+      "exitCode": 2,
+      "errorCode": "unsupported_mime"
+    },
+    "audio_too_large": {
+      "exitCode": 1,
+      "errorCode": "output_limit"
+    },
+    "provider_unauthorized_401": {
+      "exitCode": 1,
+      "errorCode": "invalid_response"
+    },
+    "provider_forbidden_403": {
+      "exitCode": 1,
+      "errorCode": "invalid_response"
+    },
+    "provider_rate_limit_429": {
+      "exitCode": 1,
+      "errorCode": "rate_limit"
+    },
+    "provider_server_error_500": {
+      "exitCode": 1,
+      "errorCode": "unavailable"
+    },
+    "timeout": {
+      "exitCode": 1,
+      "errorCode": "timeout"
+    },
+    "invalid_json": {
+      "exitCode": 1,
+      "errorCode": "invalid_response"
+    },
+    "empty_transcript": {
+      "exitCode": 1,
+      "errorCode": "invalid_response"
+    },
+    "abort_signal": {
+      "exitCode": 1,
+      "errorCode": "aborted"
+    }
+  },
+  "failuresPassed": true,
+  "verdict": "BLOCKED_MODEL_OR_PROVIDER",
+  "blockerCode": "cloud_final_quality_gate_failed",
+  "v02Passed": false,
+  "v03Unlocked": false
+}

@@ -303,6 +303,7 @@ export {
 export {
   streamingTranscriptionClientMessageSchema,
   streamingTranscriptionServerMessageSchema,
+  toStreamingTranscriptionPcmChunk,
   validateStreamingTranscriptionClientMessageSequence,
   validateStreamingTranscriptionServerMessageSequence,
   type StreamingTranscriptionClientMessage,

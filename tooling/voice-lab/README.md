@@ -249,14 +249,146 @@ npm run test:v02-t -- \
 npm run summarize:v02-t
 ```
 
+## V02-U：int8 双候选准入实验
+
+V02-U 在 V02-S/V02-T 的 `BLOCKED_MODEL` 后继续寻找官方候选。官方 streaming
+中英双语模型只有已测的 3 个，无 2024-2026 新双语发布；唯一技术上可准入的选项是
+两个 zipformer 官方归档内自带的 **int8 量化权重**（int8 只改权重精度，解码路径不变，
+仍支持 `modified_beam_search` + hotwords）。因此 V02-U 准入恰好 2 个候选，均未新增下载：
+
+| profile                  | 来源（同一官方归档）                                                       | 许可       | 必需文件总大小            | 准入 |
+| ------------------------ | -------------------------------------------------------------------------- | ---------- | ------------------------- | ---- |
+| `current-bilingual-int8` | `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2`       | Apache-2.0 | 198,283,357 B = 189.1 MiB | 准入 |
+| `small-bilingual-int8`   | `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2` | Apache-2.0 | 49,764,899 B = 47.5 MiB   | 准入 |
+
+rejected（未下载、未测试）：`paraformer-bilingual-int8`（V02-T 已实证仅 `greedy_search`，
+不支持 hotwords）、两个 FP32 变体（`current` 356 MiB 超 250 MiB 门槛且 V02-S 热词纠正无效；
+`small` V02-S 无热词增益且整句 WER 高）。
+
+### 冻结矩阵
+
+与 V02-S/T 相同的真人录音（SHA-256 见 `fixtures/v02-u-human.json`）、期望文本与
+16 kHz 单声道格式；Node 22.23.1 与 24.18.0；100 ms 分块、1.5 s 尾静音；
+hotwords score 1.5 / 2.0 / 3.5；每个 profile/Node/score 的 before 和 after 各 3 次，
+共 72 次运行。before/after 唯一差异是 `fixtures/hotwords-v02-s.txt`（`BAGGING`、`BOOSTING`）。
+矩阵与门槛常量在 `v02-u-evaluation.mjs` 中运行前冻结，runner 启动时强制校验
+Node 版本与录音哈希，杜绝运行后替换录音或改动参数。
+
+### 能力预检（全部通过）
+
+最短官方 fixture（`test_wavs/0.wav`）上两个候选均产生非空流式文本；after 运行记录
+hotwords SHA-256 而 before 为 null，证明热词文件确实进入解码器；before/after 均为
+`modified_beam_search` + `maxActivePaths=4`，解码方式一致；热词文件缺失显式 exit 2，
+不支持模式显式报 `hotwords_not_supported_by_profile`。
+
+发现并规避的 runner 缺陷：sherpa-onnx 1.13.4 的 WASM 在 int8 zipformer 权重上调用
+`recognizer.free()` 会挂起（emscripten worker 死锁，FP32 正常）。`run-compare.mjs` 对
+int8 profile 跳过 `recognizer.free()`（结果已取出，内存由进程退出回收），FP32/paraformer
+路径行为不变，见代码内注释。
+
+### 正式结果（2026-08-05，Apple Silicon arm64）
+
+72 次正式运行全部完成、无崩溃，摘要见 `evidence/v02-u-summary.json`：
+
+- `current-bilingual-int8`：before 目标词召回 0/3，after 最高召回 0.5（只纠正一个词），
+  WER before 0.80 → after 0.667；RTF 0.134–0.142、峰值 RSS ≤ 963 MiB，资源达标但整句质量超限。
+- `small-bilingual-int8`：before 目标词召回 0/3，**after 3/3 均召回 100% 且两 Node 可重复**，
+  证明热词纠正机制在 int8 zipformer 上有效；但 WER 0.933 → 0.733，整句替换/截断错误远超
+  0.35 门槛；RTF 0.071–0.074、峰值 RSS ≤ 694 MiB，资源达标。
+
+### 判定
+
+最终 verdict 为 `BLOCKED_MODEL`，`blockerCode=candidate_quality_gate_failed`，
+`selectedProfile=null`、`selectedScore=null`、`v02Passed=false`、`v03Unlocked=false`。
+失败主因是**整句基础识别质量**：两个 int8 候选的 WER（最小 0.667）均远高于 0.35 门槛，
+热词只能纠正目标词，不能弥补模型的基础转录错误。`small-bilingual-int8` 的热词可重复增益
+是正面证据，但不足以单独支撑产品门槛。V03 不解锁。
+
+## V02-V：本地草稿 + 云端终稿双路径验证
+
+V02-V 验证「本地低延迟草稿 + 云端高质量终稿」双路径是否构成新的解锁路线：
+localDraft 用 small-bilingual-int8 WASM（实时草稿，不要求终稿质量）；cloudFinal 复用
+**现有** `AudioTranscriptionModelGateway`（`apps/worker/src/model-runtime.ts` 的
+`resolveAudioTranscriptionModelGateway()`），通过独立 `MODEL_GATEWAY_TRANSCRIPTION_*`
+配置。验证入口不拼接 Provider HTTP 请求、不解析原始响应，Provider SDK/错误归一化
+全部留在 `packages/model-gateway`。
+
+### 验证入口与安全边界
+
+`apps/worker/tooling/v02v-transcribe.ts`（tsx 直接运行）：
+
+- 调用 `resolveAudioTranscriptionModelGateway()`，未配置时稳定返回
+  `verdict=BLOCKED` / `blockerCode=transcription_provider_not_configured`；
+- CLI 只接收相对音频路径，绝对路径拒绝；输出 JSON 只含
+  `schemaVersion/provider/resolvedModelId/transcript/latencyMs/language/durationSeconds/fixtureSha256/稳定错误码`；
+- API Key 只来自环境变量，绝不打印或写入 JSON/日志；错误只输出归一化稳定码
+  （`ModelGatewayInvocationError.normalized.code`），原始响应、错误 body、stack 丢弃。
+
+### 矩阵与结果（2026-08-05）
+
+固定真人录音（SHA-256 见 `fixtures/v02-u-human.json`），localDraft 与 cloudFinal 各 3 次，
+另有未配置场景与 17 项失败行为。摘要见 `evidence/v02-v-summary.json`：
+
+- localDraft：3/3 非空、稳定，RTF 0.0745、峰值 RSS ≤ 692 MiB，全部满足草稿门槛；
+- cloudFinal：经独立 `MODEL_GATEWAY_TRANSCRIPTION_*` 配置调用 SiliconFlow
+  `FunAudioLLM/SenseVoiceSmall`，同一授权录音真实上传 3 次；3/3 输出稳定，
+  WER=0.3333、术语召回 50%、延迟 506–975 ms，`scope=real-provider`；
+- 三次都将两处 `Bagging` 分别识别为 `Baggging` 与 `Begging`，因此基础 WER
+  虽通过 ≤0.35 门槛，目标术语 100% 召回门槛仍失败；
+- 失败行为 17/17 符合预期：缺配置/缺文件/哈希不匹配/缺少或非法预期哈希/
+  越出受控 fixture 根目录/空音频/不支持 MIME/超限/
+  401/403/429/5xx/timeout/invalid JSON/空 transcript/AbortSignal，稳定码逐一映射。
+
+结论 `BLOCKED_MODEL_OR_PROVIDER`，`blockerCode=cloud_final_quality_gate_failed`：
+真实 Provider 链路、稳定性、延迟与基础 WER 已有证据，但专业术语门槛未通过，
+因此 V02 不 PASS、V03 不解锁。授权变量只在本次真实调用中临时启用；runner
+不做自动重试，三次预声明调用后停止，避免隐藏失败与重复计费。
+
+## V02-W：TeleSpeechASR 真实终稿对照实验
+
+V02-W 用与 V02-V **完全相同**的授权真人录音（`fixtures/generated/v02-s-human.wav`，
+SHA-256 见 `evidence/v02-w-summary.json`）、参考文本、3 次调用和质量门槛，对照测试
+SiliconFlow `TeleAI/TeleSpeechASR` 能否作为「本地 WASM 草稿 + 云端高质量终稿」路线的
+cloudFinal。只测原始模型能力：不使用 prompt、热词、语言提示或后处理。
+
+复用现有验证入口 `apps/worker/tooling/v02v-transcribe.ts`（经
+`resolveAudioTranscriptionModelGateway()` 调用，Key 只来自环境变量，输出只含稳定
+字段）；normalization / WER / 术语召回复用 `v02-u-evaluation.mjs` 同一套实现。
+运行前由 `run-v02-w.mjs` 执行调用前门禁：fixture 路径受控于 generated 目录、
+SHA-256 精确匹配、模型恰好 `TeleAI/TeleSpeechASR`、次数恰好 3、Base URL hostname
+为 `api.siliconflow.cn`、两个授权变量均为 1、无自动重试循环、输出目录独立于
+`results/v02-v`。任一失败都在首次网络请求前停止；固定计数循环恰好调用 3 次，
+失败不补跑、无第四次请求。
+
+### 矩阵与结果（2026-08-05）
+
+| #   | transcript                                                                                                   | Bagging 召回 | Boosting 召回 | WER    | 延迟    |
+| --- | ------------------------------------------------------------------------------------------------------------ | ------------ | ------------- | ------ | ------- |
+| 1   | Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers. | 50%          | 50%           | 0.3333 | 2134 ms |
+| 2   | 同上（三次输出逐字一致）                                                                                     | 50%          | 50%           | 0.3333 | 1859 ms |
+| 3   | 同上（三次输出逐字一致）                                                                                     | 50%          | 50%           | 0.3333 | 2341 ms |
+
+三次均成功、非空、稳定，归一化 WER=0.3333 ≤ 0.35，延迟 1859–2341 ms；但参考句中
+`Bagging` 与 `Boosting` 各出现两次，终稿都只正确一次，按出现次数召回均为 50%。Codex
+复审修正了“全文出现过一次即算 100%”的指标漏洞。`evidence/v02-w-summary.json`：
+`verdict=BLOCKED_MODEL_OR_PROVIDER`、`blockerCode=telespeech_quality_gate_failed`、
+`v02Passed=false`、`v03Unlocked=false`。基础 WER 虽恰好压线，后半句仍有
+`begging`/`bursting`/`buyers` 替换错误，因此不能作为高质量 cloudFinal 接受。
+
 ## 推荐与门禁
 
 证据支持 **WASM SIMD 作为后续产品路线**：它在仓库支持的 Node 22/24 上均为 4/4 非空，
 RTF 约 0.12，满足本 fixture 范围内的实时性；Node 20 仅作兼容实验，也为 4/4 非空。
 原生 addon 在 Node 20/22/24 均为 0/4，虽更快但已被否决为产品路线。V01 因此 `PASS`；
-V02-S 与 V02-T 已完成真人录音下的受控证据；现有 Zipformer 候选未同时满足术语和整句质量，
-Paraformer INT8 又不支持当前热词解码路径且整句 WER 超限。V02 = `BLOCKED_MODEL`，
-V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-0018 的 `accepted` 状态。
+V02-S 与 V02-T 已完成真人录音下的受控证据；V02-U 证明两个官方 int8 变体的整句质量
+仍无法满足 WER 门槛（`small-bilingual-int8` 的热词纠正可重复有效但不足以通过）；
+V02-V 已使用 SiliconFlow `FunAudioLLM/SenseVoiceSmall` 完成 3 次真人录音真实 smoke：
+输出稳定、WER=0.3333，但 `Bagging` 术语召回仅 50%。V02-W 已使用 SiliconFlow
+`TeleAI/TeleSpeechASR` 完成同一录音 3 次真实终稿：3/3 成功、WER=0.3333、延迟
+1859–2341 ms，但参考句中两次 `Bagging`/`Boosting` 均只正确一次，按出现次数召回各
+50%，verdict=`BLOCKED_MODEL_OR_PROVIDER`。双路径仍是 `proposed`，V03 未解锁。
+V02 = `BLOCKED_MODEL`，V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，
+也不修改 ADR-0018 的 `accepted` 状态。
 
 ## 文件
 
@@ -272,10 +404,28 @@ V03 仍 `BLOCK`，不得接入流式 Port、Gateway 或 UI，也不修改 ADR-00
 - `generate-v02-t-summary.mjs`：从被忽略的逐次结果生成 V02-T 有界摘要
 - `v02-t-evaluation.mjs`：术语、WER、资源、热词能力与解锁门槛
 - `evidence/v02-t-summary.json`：不含音频、模型或绝对路径的 V02-T 正式摘要
+- `v02-u-fixture-manifest.mjs`：V02-U 真人 fixture 唯一 schema
+- `run-v02-u-matrix.mjs`：固定 Node/profile/score/repetition 的 72 次 int8 正式矩阵
+- `generate-v02-u-summary.mjs`：从被忽略的逐次结果生成 V02-U 有界摘要
+- `v02-u-evaluation.mjs`：V02-U 冻结矩阵常量、WER/召回/稳定性/增益判定与解锁门槛
+- `test-v02-u-evaluation.mjs`、`test-v02-u-fixture-manifest.mjs`：V02-U 判定与 schema 测试
+- `evidence/v02-u-summary.json`：不含音频、模型或绝对路径的 V02-U 正式摘要
+- `v02-v-evaluation.mjs`：V02-V 冻结矩阵与 localDraft/cloudFinal/组合门槛
+- `run-v02-v-matrix.mjs`：localDraft 3 次 + cloudFinal fixture/真实 Provider 链路 + 17 项失败行为矩阵
+- `generate-v02-v-summary.mjs`：从被忽略的逐次结果生成有界 V02-V 摘要
+- `test-v02-v-evaluation.mjs`：V02-V 门槛、失败行为与摘要有界断言
+- `fixtures/v02v-fixture-server.mjs`：本地 127.0.0.1 OpenAI-compatible mock（成功/失败场景）
+- `evidence/v02-v-summary.json`：不含音频、模型或绝对路径的 V02-V 正式摘要
+- `v02-w-evaluation.mjs`：V02-W 冻结常量与三次终稿判定（复用 V02-U normalization/WER/召回算法）
+- `run-v02-w.mjs`：调用前门禁 + 恰好 3 次 TeleSpeechASR 真实转录（无自动重试）
+- `generate-v02-w-summary.mjs`：从被忽略的逐次结果生成有界 V02-W 摘要
+- `test-v02-w.mjs`：V02-W 门槛、防覆盖与摘要有界断言（14 项覆盖）
+- `evidence/v02-w-summary.json`：不含音频、模型或绝对路径的 V02-W 正式摘要
+- `apps/worker/tooling/v02v-transcribe.ts`：双路径 cloudFinal 受控验证入口（tsx 运行）
 - `fixtures/hotwords-bagging-boosting.txt`：UTF-8 热词词表
 - `fixtures/hotwords-v02-s.txt`：符合官方 English/BPE 规范的全大写 V02-S 热词词表
 - `fixtures/hotwords-official-test.txt`：harness 验证用热词词表
 - `generate-summary.mjs`：从 results/ 生成 evidence/v02-r-summary.json
-- `test-v02-r.mjs`：V02-R2 测试套件
+- `test-v02-r.mjs`：V02-R2 手动模型 smoke；需要被忽略的 current 模型与 WAV，使用 `npm run test:v02-r` 显式执行，不进入干净 checkout 的默认测试
 - `evidence/v02-r-summary.json`：精简证据摘要（被忽略）
 - `test-native-addon.mjs`：历史 V01 最小复现，保留用于比较

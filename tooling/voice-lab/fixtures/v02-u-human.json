@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "sourceKind": "project-owner-recording",
+  "usageAuthorization": "local-evaluation-only",
+  "authorizationStatement": "该录音由我本人录制，允许仅用于 EduCanvas 本地 V02-U 测试证据，不随 Git 仓库发布。",
+  "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+  "audioFile": "fixtures/generated/v02-s-human.wav",
+  "sha256": "7c09702fea55705d69643bf87e4673c247c1068462ad68dbd357735f9256c216",
+  "sampleRate": 16000,
+  "channels": 1,
+  "encoding": "pcm_s16le"
+}

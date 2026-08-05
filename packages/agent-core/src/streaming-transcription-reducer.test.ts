@@ -141,8 +141,8 @@ describe('多 segment 严格隔离与组合顺序', () => {
     expect(first.text).toBe('老师你好');
     expect(second.status).toBe('active');
     expect(second.text).toBe('贝叶斯定理');
-    // 组合文本按首次出现顺序拼接，且 final 不覆盖其他 segment。
-    expect(snapshot.combinedText).toBe('老师你好贝叶斯定理');
+    // 组合文本按首次出现顺序保留 segment 边界，且 final 不覆盖其他 segment。
+    expect(snapshot.combinedText).toBe('老师你好 贝叶斯定理');
   });
 
   it('一个 segment 终态后，另一个 segment 仍可继续', () => {
@@ -151,11 +151,23 @@ describe('多 segment 严格隔离与组合顺序', () => {
       partial('segment:2', 0, '第二段'),
       finalEvent('segment:2', 1, '第二段终稿'),
     ]);
-    expect(snapshot.combinedText).toBe('第一段第二段终稿');
+    expect(snapshot.combinedText).toBe('第一段 第二段终稿');
     expect(
       (snapshot.segments[1] as NonNullable<(typeof snapshot.segments)[number]>)
         .status,
     ).toBe('final');
+  });
+
+  it('英文 segment 之间保留稳定词边界', () => {
+    const snapshot = applyAll(op('operation:1'), [
+      finalEvent('segment:1', 0, 'Bagging'),
+      finalEvent('segment:2', 0, 'and boosting'),
+    ]);
+    expect(snapshot.combinedText).toBe('Bagging and boosting');
+    expect(snapshot.segments.map((segment) => segment.text)).toEqual([
+      'Bagging',
+      'and boosting',
+    ]);
   });
 
   it('endpoint 只影响本 segment，不阻塞其他 segment 的 partial', () => {

@@ -39,6 +39,7 @@ import {
   streamingTranscriptionProtocolVersion,
   validateStreamingTranscriptionEventSequence,
   type StreamingTranscriptionEvent,
+  type StreamingTranscriptionPcmChunk,
 } from './streaming-transcription-contracts';
 
 /**
@@ -106,6 +107,8 @@ export const streamingTranscriptionClientMessageSchema = z.discriminatedUnion(
       .object({
         ...clientMessageBase,
         type: z.literal('chunk'),
+        /** PCM 分片自己的连续序号，从 0 开始；与 envelope sequence 分域。 */
+        chunkSequence: safeNonNegativeIntegerSchema,
         ...audioFormatFields,
         pcmBytes: pcmBytesSchema,
       })
@@ -131,6 +134,29 @@ export type StreamingTranscriptionClientMessage = z.infer<
 
 export type StreamingTranscriptionClientMessageType =
   StreamingTranscriptionClientMessage['type'];
+
+type StreamingTranscriptionChunkMessage = Extract<
+  StreamingTranscriptionClientMessage,
+  { type: 'chunk' }
+>;
+
+/**
+ * 把传输层 chunk 显式投影为 V04 PCM 分片。message sequence 包含 start 等
+ * 控制消息，不能直接冒充分片序号；V08 必须通过本函数取得 chunkSequence。
+ */
+export function toStreamingTranscriptionPcmChunk(
+  message: StreamingTranscriptionChunkMessage,
+): StreamingTranscriptionPcmChunk {
+  return {
+    operationId: message.operationId,
+    segmentId: message.segmentId,
+    sequence: message.chunkSequence,
+    sampleRate: message.sampleRate,
+    channels: message.channels,
+    encoding: message.encoding,
+    pcmBytes: message.pcmBytes,
+  };
+}
 
 /**
  * server → client 消息：直接复用 V04 事件 schema
@@ -162,6 +188,7 @@ export function validateStreamingTranscriptionClientMessageSequence(
   const first = messages[0]!;
   if (first.type !== 'start') return false;
   let terminalActionSeen = false;
+  let expectedChunkSequence = 0;
   for (let index = 0; index < messages.length; index += 1) {
     // 循环边界保证索引不越界，noUncheckedIndexedAccess 下的访问是安全的。
     const message = messages[index]!;
@@ -171,6 +198,10 @@ export function validateStreamingTranscriptionClientMessageSequence(
     // 终态动作后任何消息（chunk/finish/cancel）一律拒绝。
     if (terminalActionSeen) return false;
     if (message.type === 'start' && index !== 0) return false;
+    if (message.type === 'chunk') {
+      if (message.chunkSequence !== expectedChunkSequence) return false;
+      expectedChunkSequence += 1;
+    }
     if (message.type === 'finish' || message.type === 'cancel') {
       terminalActionSeen = true;
     }
