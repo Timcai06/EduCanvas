@@ -165,7 +165,47 @@ MarkdownNodeParser（按标题切节，带 header_path）
 ### P0 完成 → 行动清单更新
 
 - ✅ P0 MarkdownNodeParser 抽取与中文分块质量实测（本节）
-- ⬜ P0 与 RAGFlow naive_merge 各跑一轮中文分块质量对比，决定节内合并用哪个（下一步）
+- ✅ P0 与 RAGFlow naive_merge 中文分块质量对比，**节内合并方案已定**（见 §八·续）
+
+## 八·续、节内合并方案定案：SentenceSplitter（2026-08-05 追加）
+
+> 验证方法：行级原样切片提取 SentenceSplitter 五个方法（`_split/_merge/_postprocess_chunks/_token_size/_get_splits_by_fns`，sentence.py:198-345），注入自定义 tokenizer（cl100k_base）与中文分句函数（按 `。！？!?；;` 切分），与 naive_merge 同环境同口径（chunk=128 tokens）实跑对比。
+
+### 对比结果（同一中文语料）
+
+| 测试项                         | naive_merge                      | SentenceSplitter       | 胜者                 |
+| :----------------------------- | :------------------------------- | :--------------------- | :------------------- |
+| 常规段落/列表/代码块（短文本） | 各 1 chunk，无超预算             | 同左                   | 平                   |
+| 真实文档片段（跨 chunk）       | 2 chunks，**1 悬挂句**           | 2 chunks，**0 悬挂句** | **SentenceSplitter** |
+| 超长段落（跨多 chunk）         | 3 chunks，**2 悬挂句**           | 4 chunks，**0 悬挂句** | **SentenceSplitter** |
+| 超长无标点文本                 | 7 chunks，chunk 尾裸切（`'\n'`） | 8 chunks，字符窗口切   | 平（都退化）         |
+
+### 关键差异（实跑坐实）
+
+1. **悬挂句**：naive_merge 按 token 预算硬切，句号不是强制断点（实测 `…只在该计划维护\n收尾阶段逐项记录…` 从句子中间切断）；SentenceSplitter 的"句子偏好"（完整句即使超限也强塞，sentence.py:296-299）保住句子完整性
+2. **overlap 语义**：naive_merge 尾部字符百分比（20%→4 chunks）；SentenceSplitter 整句级 overlap（3 chunks）——句子级更自然
+3. **退化场景**：超长无标点文本两者都退化为字符窗口切分，平手
+
+### 决策
+
+> **节内合并用 SentenceSplitter**（句子偏好 + 句子级 overlap 更适合中文文档）。
+> naive_merge 的"反引号自定义分隔符"模式保留为"按结构切"的补充能力（如按章节标记强制切分）。
+
+### 抽取注意点（实测踩坑记录）
+
+1. 原方法在 class 内（def 4 空格、方法体 8 空格），转顶层函数需**统一减 4 空格**（只减 8 空格行会缩进错乱）
+2. `self.chunk_overlap` 是属性，转裸函数后 **`_merge` 签名需显式补 `chunk_overlap` 参数**（曾漏加报 NameError）
+3. `self._get_splits_by_fns` 等自引用逐个替换，漏一个就 NameError——用 `re.sub` 批量处理 `def xxx(self,` 签名最稳
+4. 验证脚本保留在会话临时目录（`$CLAUDE_JOB_DIR/tmp/p1-verify/`），可复现
+
+### K 线分块器最终拼图（三个来源已全部实测）
+
+| 环节                            | 方案                                            | 来源                                     |
+| :------------------------------ | :---------------------------------------------- | :--------------------------------------- |
+| PDF/扫描件/表格解析             | deepdoc（OCR/布局/TSR）                         | RAGFlow（[10](./10-RAGFlow价值挖掘.md)） |
+| Markdown 标题切节 + header_path | MarkdownNodeParser（~60 行）                    | LlamaIndex（本节）                       |
+| 节内句子合并                    | SentenceSplitter（~180 行，注入我们 tokenizer） | LlamaIndex（本节）                       |
+| 按结构强制切分（补充）          | naive_merge 反引号分隔符模式                    | RAGFlow（[10](./10-RAGFlow价值挖掘.md)） |
 
 ## 九、一句话总结
 
