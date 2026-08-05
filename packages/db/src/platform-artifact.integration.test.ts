@@ -1,8 +1,12 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
+import {
+  DrizzleObjectDeletionOutboxRepository,
+  OBJECT_DELETION_LEASE_TIMEOUT_MS,
+} from './object-deletion-outbox-repository';
 import {
   afterAll,
   beforeAll,
@@ -837,5 +841,119 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       failureCode: 'provider_timeout',
     });
     expect(failed.failureCode).toBe('provider_timeout');
+  });
+
+  it('归档产物写入的 outbox 行并发 claim 只有一个 worker 领取', async () => {
+    const artifact = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '并发删除目标',
+      status: 'active',
+    });
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      objectKey: `artifacts/${artifact.id}/concurrent.png`,
+      checksum: 'b'.repeat(64),
+      metadata: {
+        contentVersion: 1,
+        contentType: 'image/png',
+        byteSize: 4,
+        size: '1024x1024',
+        image: {
+          provider: 'fixture',
+          resolvedModelId: 'image-v1',
+          latencyMs: 10,
+        },
+      },
+    });
+    await repository.archiveOwnedArtifact({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      notebookId: spaceId,
+    });
+
+    /* 两个独立 worker 实例并发领取：FOR UPDATE SKIP LOCKED 必须保证恰好一个成功。 */
+    const workerA = new DrizzleObjectDeletionOutboxRepository(database!);
+    const workerB = new DrizzleObjectDeletionOutboxRepository(database!);
+    const [claimsA, claimsB] = await Promise.all([
+      workerA.claimBatch({ limit: 10 }),
+      workerB.claimBatch({ limit: 10 }),
+    ]);
+    const key = `artifacts/${artifact.id}/concurrent.png`;
+    const aHas = claimsA.some((c) => c.storageKey === key);
+    const bHas = claimsB.some((c) => c.storageKey === key);
+    expect(aHas !== bHas).toBe(true);
+  });
+
+  it('归档产物 outbox 行租约未过期不被抢占，过期后恢复且 attempt 递增', async () => {
+    const artifact = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: owner,
+      kind: 'generated_image',
+      trustTier: 'tier2',
+      title: '租约恢复目标',
+      status: 'active',
+    });
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      objectKey: `artifacts/${artifact.id}/lease.png`,
+      checksum: 'c'.repeat(64),
+      metadata: {
+        contentVersion: 1,
+        contentType: 'image/png',
+        byteSize: 4,
+        size: '1024x1024',
+        image: {
+          provider: 'fixture',
+          resolvedModelId: 'image-v1',
+          latencyMs: 10,
+        },
+      },
+    });
+    await repository.archiveOwnedArtifact({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      notebookId: spaceId,
+    });
+
+    const repo = new DrizzleObjectDeletionOutboxRepository(database!);
+    const now = new Date();
+    /* worker A 领取并开始处理（模拟正在删除）。 */
+    const first = await repo.claimBatch({ limit: 10, now });
+    const claim = first.find(
+      (c) => c.storageKey === `artifacts/${artifact.id}/lease.png`,
+    );
+    expect(claim).toBeDefined();
+    expect(claim!.attempt).toBe(1);
+
+    /* worker B 在租约未过期时领取不到该行。 */
+    const recent = new Date(now.getTime() + 30_000);
+    const second = await repo.claimBatch({ limit: 10, now: recent });
+    expect(
+      second.some((c) => c.storageKey === `artifacts/${artifact.id}/lease.png`),
+    ).toBe(false);
+
+    /* 租约过期（超过 5 分钟）后 worker B 可恢复领取，attempt 递增防旧 worker 重入。 */
+    const expired = new Date(
+      now.getTime() + OBJECT_DELETION_LEASE_TIMEOUT_MS + 60_000,
+    );
+    const third = await repo.claimBatch({ limit: 10, now: expired });
+    const recovered = third.find(
+      (c) => c.storageKey === `artifacts/${artifact.id}/lease.png`,
+    );
+    expect(recovered).toBeDefined();
+    expect(recovered!.attempt).toBe(2);
+
+    /* 旧 worker（attempt 1）不能推进已被重新领取的行。 */
+    await repo.complete(claim!.id, claim!.attempt);
+    const [row] = await database!
+      .select({ status: schema.objectDeletionOutbox.status })
+      .from(schema.objectDeletionOutbox)
+      .where(eq(schema.objectDeletionOutbox.id, claim!.id));
+    expect(row?.status).toBe('processing');
   });
 });
