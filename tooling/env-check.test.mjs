@@ -247,4 +247,119 @@ describe('env-check', () => {
       /VISION_BASE_URL must use https in staging\/production/,
     );
   });
+
+  it('accepts a complete speech override and reports its state', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_SPEECH_MODEL: 'speech/model-v1',
+          MODEL_GATEWAY_SPEECH_BASE_URL: 'https://speech.example.test/v1',
+          MODEL_GATEWAY_SPEECH_API_KEY: 'fixture-speech-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /speech=overridden/);
+    assert.match(result.stdout, /transcription=disabled/);
+  });
+
+  it('rejects a half-configured speech override without printing the key', async () => {
+    const secret = 'fixture-secret-never-log';
+    const missingBaseUrl = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_SPEECH_MODEL: 'speech/model-v1',
+          MODEL_GATEWAY_SPEECH_API_KEY: secret,
+        }),
+      ),
+    );
+    const missingModel = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_SPEECH_BASE_URL: 'https://speech.example.test/v1',
+          MODEL_GATEWAY_SPEECH_API_KEY: secret,
+        }),
+      ),
+    );
+
+    assert.equal(missingBaseUrl.status, 1);
+    assert.match(missingBaseUrl.stderr, /missing SPEECH override values/);
+    assert.equal(missingModel.status, 1);
+    assert.match(missingModel.stderr, /missing SPEECH override values/);
+    assert.doesNotMatch(missingBaseUrl.stderr, new RegExp(secret));
+    assert.doesNotMatch(missingModel.stderr, new RegExp(secret));
+  });
+
+  it('rejects an invalid capability provider', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_IMAGE_PROVIDER: 'not-a-provider',
+          MODEL_GATEWAY_IMAGE_MODEL: 'image/model-v1',
+          MODEL_GATEWAY_IMAGE_BASE_URL: 'https://image.example.test/v1',
+          MODEL_GATEWAY_IMAGE_API_KEY: 'fixture-image-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /MODEL_GATEWAY_IMAGE_PROVIDER is not valid/);
+  });
+
+  it('accepts capability overrides under a DeepSeek primary provider', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_PROVIDER: 'deepseek',
+          MODEL_GATEWAY_ALLOW_DEEPSEEK: 'true',
+          MODEL_GATEWAY_BASE_URL: 'https://api.deepseek.com',
+          MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_SPEECH_MODEL: 'speech/model-v1',
+          MODEL_GATEWAY_SPEECH_BASE_URL: 'https://speech.example.test/v1',
+          MODEL_GATEWAY_SPEECH_API_KEY: 'fixture-speech-key',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /speech=overridden/);
+  });
+
+  it('requires a model version when embedding is configured', async () => {
+    const missingVersion = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_EMBEDDING_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_EMBEDDING_MODEL: 'embed/model-v1',
+          MODEL_GATEWAY_EMBEDDING_BASE_URL: 'https://embed.example.test/v1',
+          MODEL_GATEWAY_EMBEDDING_API_KEY: 'fixture-embed-key',
+        }),
+      ),
+    );
+
+    assert.equal(missingVersion.status, 1);
+    assert.match(
+      missingVersion.stderr,
+      /MODEL_GATEWAY_EMBEDDING_MODEL_VERSION is required/,
+    );
+
+    const withVersion = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_EMBEDDING_PROVIDER: 'openai-compatible',
+          MODEL_GATEWAY_EMBEDDING_MODEL: 'embed/model-v1',
+          MODEL_GATEWAY_EMBEDDING_BASE_URL: 'https://embed.example.test/v1',
+          MODEL_GATEWAY_EMBEDDING_API_KEY: 'fixture-embed-key',
+          MODEL_GATEWAY_EMBEDDING_MODEL_VERSION: '2026-05-01',
+        }),
+      ),
+    );
+
+    assert.equal(withVersion.status, 0, withVersion.stderr);
+    assert.match(withVersion.stdout, /embedding=overridden/);
+  });
 });

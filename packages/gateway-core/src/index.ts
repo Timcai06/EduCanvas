@@ -1,4 +1,7 @@
-/** Pure, versioned control-plane contracts for EduCanvas Gateway. */
+/**
+ * Pure, versioned control-plane contracts for EduCanvas Gateway.
+ * 仅导出协议层定义（schema/type/错误码），不承载实现细节，以免形成依赖污染。
+ */
 
 export * from './capabilities';
 export * from './channels';

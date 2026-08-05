@@ -12,6 +12,7 @@ import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
+import { motionDuration } from '@/features/theme/motion';
 import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
@@ -79,7 +80,12 @@ function AnimatedMessage({
         gsap.fromTo(
           root,
           { autoAlpha: 0, y: 8 },
-          { autoAlpha: 1, y: 0, duration: 0.34, ease: 'power2.out' },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: motionDuration('standard'),
+            ease: 'power2.out',
+          },
         );
       });
       media.add('(prefers-reduced-motion: reduce)', () => {

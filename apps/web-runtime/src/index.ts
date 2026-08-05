@@ -2,9 +2,15 @@ import { createServer } from 'node:http';
 import { readWebRuntimeConfig } from './config';
 import { createWebRuntimeHandler } from './server';
 
+/** Parse env and build HTTP handler; startup logs machine-readable event for supervisors. */
 const config = readWebRuntimeConfig();
 const server = createServer(createWebRuntimeHandler(config));
 
+/**
+ * Start isolated runtime process listener.
+ * On success we print a structured boot event consumed by orchestration tooling.
+ * On SIGINT/SIGTERM we close server then exit to avoid dangling sockets.
+ */
 server.listen(config.port, config.host, () => {
   process.stdout.write(
     `${JSON.stringify({

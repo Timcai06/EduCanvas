@@ -9,6 +9,7 @@ import {
   VideoCamera,
 } from '@phosphor-icons/react';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
+import { EmptyState } from '@/components/ui/empty-state';
 import { assetFailureMessage, assetProcessingMessage } from './asset-status';
 
 export interface AssetItem {
@@ -53,12 +54,11 @@ export function AssetsDrawer({
         PDF、Word、Markdown和TXT会提取文字；音频和视频会尝试转录为文字；图片能否被直接读取取决于当前所用模型，不支持时发送会明确提示。
       </p>
       {assets.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-line bg-surface/60 px-5 py-8 text-center">
-          <p className="text-sm font-medium text-ink">还没有资料</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            上传图片、文档或网页链接，建立这个笔记本自己的来源集合。
-          </p>
-        </div>
+        <EmptyState
+          title="还没有资料"
+          description="上传图片、文档或网页链接，建立这个笔记本自己的来源集合。"
+          icon={<FilePdf size={18} />}
+        />
       ) : (
         <ul className="space-y-2">
           {assets.map((asset) => (

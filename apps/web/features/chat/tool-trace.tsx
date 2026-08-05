@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react';
 import { CheckCircle, Circle, WarningCircle } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
+import { motionDuration } from '@/features/theme/motion';
 import type { MessageToolStep } from './messages';
 
 gsap.registerPlugin(useGSAP);
@@ -27,7 +28,7 @@ export function ToolTrace({ steps }: { steps: readonly MessageToolStep[] }) {
         gsap.from('[data-tool-step]:last-child', {
           autoAlpha: 0,
           x: -6,
-          duration: 0.28,
+          duration: motionDuration('standard'),
           ease: 'power2.out',
         });
       });

@@ -186,6 +186,9 @@ const defaultRetryDependencies: AgentLoopRetryDependencies = {
  *   副作用怎么处理 — 它只负责"模型说调什么，就调什么，然后把结果传回去"。
  * - `modelRunLifecycle`: 每次模型运行的前后钩子（开始记账/结算）。
  *   Agent Loop 不关心账本存在哪里，只管按时调 start/settle。
+ *
+ * 本文件是系统唯一的 Agent Loop 实现入口；任何领域/工具层不得创建第二套
+ * answer→tool→synthesis 的模型循环，避免重复 side effect 与无法解释的账本切片。
  */
 export class AgentLoopEngine {
   constructor(
@@ -207,6 +210,8 @@ export class AgentLoopEngine {
     let run = 0;
 
     // ═══ 段 1：Answer 循环 — 模型 ↔ 工具交互 ═══
+    // 任何一次调用要么产出唯一终态(run结束/失败/取消)，要么抛到上游，
+    // 不允许在内部吞掉失败后继续“假成功”推进。
     for (let round = 1; round <= maxToolRounds; round += 1) {
       run += 1;
       const request: StreamTurnTextRequest = {
@@ -219,6 +224,8 @@ export class AgentLoopEngine {
       };
       let modelRun: TModelRunContext | undefined;
       let outcome!: ModelRunResult;
+      // 重试循环只覆盖 validateModelRun 未通过后的临时失败；一旦命令已被取消或
+      // 已收到终态，当前 run 即终止，不会再触发额外工具副作用。
       for (let attempt = 0; attempt <= MAX_MODEL_RETRIES; attempt += 1) {
         if (attempt > 0) {
           if (isAborted(command.signal)) {

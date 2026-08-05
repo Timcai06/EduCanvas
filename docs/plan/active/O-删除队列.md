@@ -5,8 +5,8 @@
 - 负责人：sky-k111
 - 实现执行：sky-k111 使用 DeepSeek，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
-- 最后验证时间：2026-07-30
-- 下一领取任务：`O03`，完成并发与恢复证据后执行 `O04`
+- 最后验证时间：2026-08-04
+- 下一领取任务：无 — O00-O04 全部完成，待 Codex 最终审核
 - 并行计划：[画布运行时与实时语音主线](UV-画布语音.md)
 - 已完成计划：[账号登录原子性与会话撤销可靠性](../completed/A-账号会话.md)
 
@@ -250,8 +250,8 @@ rtk rg -n "objectDeletionOutbox|delete_object_outbox|archiveOwnedArtifactTransac
 | O00 基线与所有权    | `PASS`    | 本计划“基线与所有权”章节；5 个初始缺口已记录                                   |
 | O01 Outbox 仓储收口 | `PASS`    | 本 PR; claimBatch 租约恢复 + complete/fail 带 attempt 防重入 + sourceType 补齐 |
 | O02 worker 删除路径 | `PASS`    | 本 PR; avatar 路由 + object_not_found 幂等 complete + fail 错误日志            |
-| O03 并发与恢复证据  | `PENDING` | 待补 — 需真双 worker 并发测试 + 租约恢复端到端验证                             |
-| O04 台账与收口      | `PENDING` | 待补                                                                           |
+| O03 并发与恢复证据  | `待 Codex 审核` | 本 PR（#276）; 业务事务写入的产物/资产 outbox 行并发 claim XOR + 租约恢复端到端 + crontab 注册表一致性，5 个用例；db 集成 230/230、worker 集成 35/35 |
+| O04 台账与收口      | `待 Codex 审核` | 本 PR; 台账逐项对应证据，diff 只含本计划文件                                          |
 
 ### O01-O02 本轮修复（替代原 PR #259/#260）
 

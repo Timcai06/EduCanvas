@@ -5,14 +5,28 @@ import {
 } from '@educanvas/gateway-core';
 import { z } from 'zod';
 
+/**
+ * 适配器输入是 Telegram Bot API 的原始消息：字段会被截断、重复或伪造。
+ * 所有 schema 校验都在这里先行，任何不满足的更新都在 transport 层被挡掉。
+ */
 const telegramUserSchema = z.object({
   id: z.number().int(),
   is_bot: z.boolean(),
 });
+
+/**
+ * Telegram chat 结构仅用于接入层安全判断（如仅允许私聊）；
+ * 不把 `type` 之外的字段扩展到上层，以避免不必要的供应商耦合。
+ */
 const telegramChatSchema = z.object({
   id: z.number().int(),
   type: z.string(),
 });
+
+/**
+ * 消息主体限制到文本路径：不支持媒体、转发、签名附件等扩展内容。
+ * 这是“输入面最小化”策略之一，复杂媒体由专用通道处理。
+ */
 const telegramMessageSchema = z.object({
   message_id: z.number().int().nonnegative(),
   message_thread_id: z.number().int().positive().optional(),
@@ -21,11 +35,18 @@ const telegramMessageSchema = z.object({
   date: z.number().int().nonnegative(),
   text: z.string().max(4_096).optional(),
 });
+
+/**
+ * 仅接受基本更新壳；更新 ID 仍用于幂等 key，但不会被外部信任，最后一层再绑定服务端会话。
+ */
 const telegramUpdateSchema = z.object({
   update_id: z.number().int().nonnegative(),
   message: telegramMessageSchema.optional(),
 });
 
+/**
+ * 绑定由服务端仓储查询后注入，避免将外部用户 ID/会话 ID 直接作为可信身份来源。
+ */
 export interface TelegramPrivateBinding {
   accountBindingId: string;
   threadBindingId: string;
@@ -58,7 +79,8 @@ export interface TelegramConnectionActivation {
 
 /**
  * 只从 Telegram 私聊 `/start educanvas_<uuid>` 提取一次性连接确认。
- * 返回值仍不是授权结论；Adapter 必须交给服务端 pending 仓储校验到期、重放与归属。
+ * 返回值仍不是授权结论；Adapter 只负责识别“启动意图”，
+ * 授权、超时、归属校验留给服务端 pending 绑定记录。
  */
 export function readTelegramConnectionActivation(
   raw: unknown,
@@ -88,6 +110,13 @@ export function readTelegramConnectionActivation(
     : null;
 }
 
+/**
+ * 将一条 Telegram 私聊文本更新标准化为网关入站信封。
+ * 约束：
+ * - 仅 private + 非 bot + 有文本 + 已绑定用户/会话才能入站；
+ * - 使用 update_id 作为幂等键，防止重复交付；
+ * - principal/capabilities/routeHint 仅携带服务端可验证字段。
+ */
 export function normalizeTelegramUpdate(
   raw: unknown,
   binding: TelegramPrivateBinding | null,
@@ -164,6 +193,11 @@ export function normalizeTelegramUpdate(
   };
 }
 
+/**
+ * Telegram 下发正文按 Telegram sendMessage 长度与换行边界分包。
+ * 使用固定 4,096 字符上限；若通道限制变化，必须同步调整实现与测试；
+ * 无内容时返回空数组，避免发送空消息。
+ */
 export function telegramTextChunks(
   events: readonly GatewayOperationEvent[],
 ): readonly string[] {
@@ -187,6 +221,13 @@ export function telegramTextChunks(
   return chunks;
 }
 
+/**
+ * 调用 Bot API 发送文本。
+ * 行为边界：
+ * - 默认使用全局 fetch，可注入 mock/fetcher 便于测试；
+ * - 不向 Telegram 注入 parse_mode，避免客户端富文本行为差异；
+ * - 非 2xx 状态直接失败并不泄露响应体。
+ */
 export async function sendTelegramText(input: {
   botToken: string;
   chatId: string;

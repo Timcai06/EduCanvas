@@ -97,6 +97,8 @@ export const transcribeAudioTask: Task = async (rawPayload, helpers) => {
       operationId: payload.jobId,
     });
 
+    /* 转录网关只返回文本+审计元数据；原始音频响应与供应商错误堆栈不入业务落库，
+       避免跨 Worker/浏览器边界泄露内部调用细节。 */
     await assets.settle({
       jobId: payload.jobId,
       outcome: {

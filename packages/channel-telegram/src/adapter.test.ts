@@ -7,6 +7,13 @@ import {
   type TelegramPrivateBinding,
 } from './adapter';
 
+/**
+ * Telegram 适配器测试关注“边界先行”：
+ * 1) 入站 update 必须通过标准化和配对校验；
+ * 2) 不把连接握手当做授权；
+ * 3) 下行发送仅做 transport 安全约束（分包/无 parse_mode）。
+ */
+
 const binding: TelegramPrivateBinding = {
   accountBindingId: 'binding:account',
   threadBindingId: 'binding:thread',

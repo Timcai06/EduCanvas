@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 import { telegramCanvasSummaries } from './canvas-delivery';
 
+/**
+ * canvas 投影摘要测试：关注两件事
+ * 1) artifactId 去重后只加载一次
+ * 2) 投影阶段异常不阻断主文本响应
+ */
 const eventBase = {
   protocol: 'gateway.v1' as const,
   eventId: 'event:1',

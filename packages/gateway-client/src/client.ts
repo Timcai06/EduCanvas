@@ -24,6 +24,10 @@ import {
 } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
+/**
+ * 客户端侧的职责仅限：校验入参、发起 HTTP(S) 调用、解析回包并保持边界。
+ * 所有会话建立、鉴权强制、路由决策都在网关服务端完成。
+ */
 const bootstrapResponseSchema = z
   .object({
     userId: z.string().min(1),
@@ -73,6 +77,10 @@ export class GatewayClientError extends Error {
   }
 }
 
+/**
+ * 统一入口 URL 规范化：去掉末尾斜杠、拒绝内嵌 credential（user:pass@host）。
+ * 这样可防止凭据被日志/代理记录到 URL 上。
+ */
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value);
   if (
@@ -85,6 +93,10 @@ function normalizeBaseUrl(value: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
+/**
+ * 统一错误解析：读取网关报文里的 code（长度上限）作为机器可读错误码。
+ * 失败体不直接透传，避免把上游诊断细节带入客户端异常文本。
+ */
 async function parseError(response: Response): Promise<GatewayClientError> {
   let code = 'GATEWAY_REQUEST_FAILED';
   try {
@@ -135,6 +147,10 @@ export type GatewayPendingApproval = z.infer<typeof pendingApprovalSchema>;
 export type GatewayRecentOperation = z.infer<typeof recentOperationSchema>;
 export type GatewayCancelResult = z.infer<typeof cancelResultSchema>;
 
+/**
+ * bootstrap/onboard 只用于换取短期 session token。
+ * 客户端层不承担任何用户绑定或凭据派发校验，交给服务端统一决策。
+ */
 export class GatewayBootstrapClient {
   private readonly baseUrl: string;
 
@@ -170,6 +186,10 @@ export class GatewayBootstrapClient {
   }
 }
 
+/**
+ * GatewayClient 所有请求都依赖固定 session token。
+ * token 只允许通过 Authorization 头传输，不允许进入 URL、body 或日志中间件默认可见区。
+ */
 export class GatewayClient {
   private readonly baseUrl: string;
 
@@ -325,6 +345,11 @@ export class GatewayClient {
    * 流式发起一轮对话。`options.signal` 中止本地读流（离开实时视图）；
    * 真正取消服务端操作请用 `cancelOperation`，其 `operation.cancelled`
    * 会经本流回来。二者独立：signal 只影响本地，不触达服务端。
+   *
+   * 解析策略：
+   * - JSON 按行解析 NDJSON，允许最后一条无换行；
+   * - 缓冲区上限 1_000_000 字节，防止恶意超长帧；
+   * - 每条 event 都经过 schema 校验；无效 JSON 或 schema 不匹配会抛异常中断消费。
    */
   async *streamTurn(
     request: GatewayClientTurnRequest,

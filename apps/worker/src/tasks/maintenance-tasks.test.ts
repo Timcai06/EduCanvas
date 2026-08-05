@@ -1,6 +1,7 @@
 import { parseCrontab } from 'graphile-worker';
 import { describe, expect, it, vi } from 'vitest';
 import { workerCrontab } from '../worker-config.js';
+import { createTaskList } from './index.js';
 import { createIngestKnowledgeDocumentTask } from './ingest-knowledge-document.js';
 import { createPurgeAnonymousSubjectsTask } from './purge-anonymous-subjects.js';
 import { createRecoverOperationContinuationsTask } from './recover-operation-continuations.js';
@@ -38,6 +39,19 @@ describe('受控后台任务边界', () => {
         }),
       ]),
     );
+  });
+
+  it('crontab 声明的维护任务都在任务注册表中存在', () => {
+    const crontabTasks = parseCrontab(workerCrontab).map((item) => item.task);
+    const registeredTasks = createTaskList({
+      continuationTrace: {} as never,
+    });
+    for (const task of crontabTasks) {
+      expect(
+        registeredTasks,
+        `crontab 任务 ${task} 未注册到 createTaskList`,
+      ).toHaveProperty(task);
+    }
   });
 
   it('continuation恢复只转发受控批次并记录低基数健康状态', async () => {

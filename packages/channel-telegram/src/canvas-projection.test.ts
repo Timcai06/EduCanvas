@@ -4,6 +4,12 @@ import {
   TELEGRAM_CANVAS_SUMMARY_MAX_CHARS,
 } from './canvas-projection';
 
+/**
+ * Canvas 投影测试聚焦两个点：
+ * 1) 在 Telegram 这类非 Web 通道上不泄漏可执行或敏感字段；
+ * 2) 保持状态语义一致且输出长度始终受限。
+ */
+
 function resource(overrides: Record<string, unknown> = {}) {
   return {
     schemaVersion: 1,

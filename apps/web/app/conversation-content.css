@@ -37,16 +37,16 @@
 }
 
 .chat-prose h1 {
-  font-size: 1.3rem;
+  font-size: var(--text-title);
 }
 
 .chat-prose h2 {
-  font-size: 1.15rem;
+  font-size: var(--text-lead);
 }
 
 .chat-prose h3,
 .chat-prose h4 {
-  font-size: 1rem;
+  font-size: var(--text-body);
 }
 
 .chat-prose ul,
@@ -166,9 +166,9 @@
 .chat-prose__code-block pre {
   margin: 0;
   overflow-x: auto;
-  padding: 0.9rem 1rem;
+  padding: 0.9rem var(--space-4);
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 0.8125rem;
+  font-size: var(--text-note);
   line-height: 1.6;
 }
 
@@ -176,7 +176,7 @@
   position: absolute;
   top: 0.45rem;
   right: 0.8rem;
-  font-size: 0.6875rem;
+  font-size: var(--text-overline);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-ink-faint);
@@ -197,7 +197,7 @@
   display: inline-flex;
   align-items: baseline;
   gap: 0.4em;
-  font-size: 0.8125rem;
+  font-size: var(--text-note);
   line-height: 1.7;
   color: var(--color-ink-muted);
   text-decoration: none;

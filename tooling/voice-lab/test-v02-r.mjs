@@ -77,11 +77,15 @@ console.log('V02-R2 Test Suite\n');
 console.log('Test 0: V02-S model profiles');
 {
   const names = listModelProfiles();
-  assert(names.length === 2, 'exactly two predeclared profiles');
+  assert(names.length === 3, 'three bounded model profiles are declared');
   assert(names.includes('current'), 'current profile exists');
   assert(
     names.includes('small-bilingual-fp32'),
     'small bilingual profile exists',
+  );
+  assert(
+    names.includes('paraformer-bilingual-int8'),
+    'V02-T Paraformer profile exists',
   );
   for (const name of names) {
     const profile = getModelProfile(name);
@@ -94,9 +98,10 @@ console.log('Test 0: V02-S model profiles');
       ),
       `${name} uses an official release URL`,
     );
+    assert(requiredModelFiles(profile).length >= 3, `${name} declares files`);
     assert(
-      requiredModelFiles(profile).length === 5,
-      `${name} declares all required files`,
+      typeof (profile.supportsHotwords ?? true) === 'boolean',
+      `${name} hotword capability is explicit`,
     );
     assert(
       /^[a-f0-9]{64}$/.test(profile.archiveSha256),

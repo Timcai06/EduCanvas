@@ -131,6 +131,7 @@ async function* validateModelRun(
   let hasText = false;
 
   try {
+    // 先验边界：所有供应商事件都要经过统一 schema 验证；失败即直接 invalidModelStream，不做字段补全。
     for await (const rawEvent of gateway.streamTurnText(request)) {
       const parsed = turnModelEventSchema.safeParse(rawEvent);
       if (!parsed.success || terminalSeen) return invalidModelStream();
@@ -213,10 +214,13 @@ async function* validateModelRun(
       }
     }
   } catch (error) {
+    // 网关抛出的任何异物都必须降到统一归一化错误码；避免上层把 SDK/HTTP 细节
+    // 当作可观察分支处理导致跨运行时行为分歧。
     return modelFailure(normalizeModelGatewayError(error, request.signal));
   }
 
   // ═══ 流结束后 — 终态验证 ═══
+  // 缺终态事件等同于未完成的供应商协议：不允许流式成功返回。
   if (!terminalSeen) return invalidModelStream();
   if (terminalError !== null) return modelFailure(terminalError);
   if (
