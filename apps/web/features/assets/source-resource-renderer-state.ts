@@ -3,7 +3,14 @@ import type { CanvasResourceClientErrorKind } from '../canvas/canvas-resource-cl
 import type { AssetPreview } from './asset-preview-contract';
 
 export type SourceRendererState =
-  'loading' | 'empty' | 'ready' | 'failed' | 'unavailable' | 'denied';
+  | 'loading'
+  | 'empty'
+  | 'ready'
+  | 'failed'
+  | 'unavailable'
+  | 'forbidden'
+  | 'not_found'
+  | 'offline';
 
 export interface SourceRendererStateInfo {
   readonly state: SourceRendererState;
@@ -50,8 +57,8 @@ export function resolveSourceRendererState(
 
   if (!resource.allowedActions.includes('view')) {
     return {
-      state: 'denied',
-      error: 'denied',
+      state: 'forbidden',
+      error: 'forbidden',
       errorMessage: '没有权限预览这个来源。',
     };
   }

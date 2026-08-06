@@ -97,7 +97,7 @@ describe('fetchCanvasResource', () => {
     ).rejects.toMatchObject({ kind: 'unavailable' });
   });
 
-  it('401 返回 denied', async () => {
+  it('401 返回 forbidden', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 })),
@@ -105,10 +105,10 @@ describe('fetchCanvasResource', () => {
 
     await expect(
       fetchCanvasResource('source', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ).rejects.toMatchObject({ kind: 'denied' });
+    ).rejects.toMatchObject({ kind: 'forbidden' });
   });
 
-  it('403 返回 denied', async () => {
+  it('403 返回 forbidden', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 })),
@@ -116,10 +116,10 @@ describe('fetchCanvasResource', () => {
 
     await expect(
       fetchCanvasResource('source', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ).rejects.toMatchObject({ kind: 'denied' });
+    ).rejects.toMatchObject({ kind: 'forbidden' });
   });
 
-  it('404 返回 unavailable', async () => {
+  it('404 返回 not_found', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response('not found', { status: 404 })),
@@ -127,10 +127,10 @@ describe('fetchCanvasResource', () => {
 
     await expect(
       fetchCanvasResource('source', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ).rejects.toMatchObject({ kind: 'unavailable' });
+    ).rejects.toMatchObject({ kind: 'not_found' });
   });
 
-  it('422 返回 unavailable', async () => {
+  it('422 返回 failed', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response('unprocessable', { status: 422 })),
@@ -138,7 +138,7 @@ describe('fetchCanvasResource', () => {
 
     await expect(
       fetchCanvasResource('source', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ).rejects.toMatchObject({ kind: 'unavailable' });
+    ).rejects.toMatchObject({ kind: 'failed' });
   });
 
   it('503 返回 unavailable', async () => {
@@ -152,7 +152,7 @@ describe('fetchCanvasResource', () => {
     ).rejects.toMatchObject({ kind: 'unavailable' });
   });
 
-  it('AbortError 原样交给调用方处理，不误报为 denied', async () => {
+  it('AbortError 原样交给调用方处理，不误报为错误', async () => {
     const abortError = new DOMException(
       'The operation was aborted.',
       'AbortError',
@@ -224,7 +224,7 @@ describe('fetchCanvasResource', () => {
     ).rejects.toMatchObject({ kind: 'failed' });
   });
 
-  it('网络错误返回 failed', async () => {
+  it('网络错误返回 offline', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
@@ -232,7 +232,7 @@ describe('fetchCanvasResource', () => {
 
     await expect(
       fetchCanvasResource('source', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-    ).rejects.toMatchObject({ kind: 'failed' });
+    ).rejects.toMatchObject({ kind: 'offline' });
   });
 
   it('传入 AbortSignal 并在 fetch 中使用', async () => {
