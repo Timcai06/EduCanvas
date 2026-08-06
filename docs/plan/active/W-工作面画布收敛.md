@@ -6,7 +6,7 @@
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
-- 当前领取任务：`W03`
+- 当前领取任务：`W05`
 - 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[Q 质量观测成本](Q-质量观测成本.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[UV 画布语音](UV-画布语音.md)
@@ -311,7 +311,7 @@ type WorkspaceSurface =
 | W02 职责拆分          | `PENDING` | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（**待 Codex 审核后才可标 PASS**） |
 | W03 诚实失败          | `PENDING` | 六种错误语义统一（`canvas/resource-error.ts` + `CanvasShellStatus` 7 态，Retry 只对 failed/unavailable/offline 开放）；asset-client/canvas-resource-client 错误带 kind；useNotebookSources 结构化错误 + `LatestRequestGuard` 竞态保护；失败转空/吞错 3 处修复；error matrix：resource-error 15 + asset 12 + canvas-client 14 + CanvasShellStatus 渲染 7 + 竞态 3 测试；lint/typecheck/**951 测试**/build 全绿，无静默 `catch {}`（**待 Codex 审核后才可标 PASS**） |
 | W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
-| W05 静态边界          | `PENDING` | ESLint negative fixtures                                                                                                                                |
+| W05 静态边界          | `PENDING` | 门禁 A：ESLint `no-restricted-imports` 限定 `features/**` 禁 server/db/schema/server-only + 6 negative fixtures；门禁 C：共享组件移 `components/`（9 处 import）清除 Renderer 反向依赖；门禁 B：feature 公开入口以 allowlist 收口（**Issue #296** 负责人拍板，限期 W 线收口前/下季度）；ADR-0023 + `03-前端工程.md` 回写；lint/typecheck/957 测试/build 全绿（**待 Codex 审核后才可标 PASS**） |
 | W06 多端与性能        | `PENDING` | Playwright、bundle/perf evidence                                                                                                                        |
 | W07 收口              | `PENDING` | full Web CI、删除清单                                                                                                                                   |
 

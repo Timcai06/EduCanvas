@@ -32,6 +32,7 @@ ADR 只保存当前仍约束系统的少量重大决定。失效实现细节不�
 - [0020：Personal与Notebook长期记忆边界](0020-Personal与Notebook长期记忆边界.md)
 - [0021：模型能力独立Provider与继承规则](0021-模型能力独立Provider与继承规则.md)
 - [0022：未成年人音频留存的监护人单独同意边界](0022-音频留存监护人单独同意边界.md)
+- [0023：Web features 静态边界](0023-Web-features静态边界.md)
 
 ## 历史
 

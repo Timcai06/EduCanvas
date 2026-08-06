@@ -21,7 +21,7 @@ import { ProgressDrawer } from '@/features/progress/progress-drawer';
 import { StudioDrawer } from '@/features/studio/studio-drawer';
 import { CANVAS_INTERACTION_SCHEMA_VERSION } from '@educanvas/canvas-protocol';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
-import { Sheet } from '../shared/sheet';
+import { Sheet } from '@/components/sheet';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
 import {
   PENDING_FIRST_MENU_ACTION_KEY,

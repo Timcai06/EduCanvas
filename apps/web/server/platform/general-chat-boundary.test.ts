@@ -25,7 +25,7 @@ describe('默认通用Chat产品边界', () => {
       source('./general-turn.ts'),
       source('./general-turn-profile.ts'),
     ].join('\n');
-    expect(turn).toContain('createTurnApplication');
+    expect(turn).toContain('createWebTurnApplication');
     expect(turn).not.toContain('new TurnApplicationService');
     expect(turn).toContain('默认不要假定用户是学生');
     expect(turn).toContain('以教育能力为特色的通用个人 Agent');

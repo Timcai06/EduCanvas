@@ -4,7 +4,7 @@ import type {
   ProgressDTO,
   StudyProgressDTO,
 } from '@/features/learning/learning-contracts';
-import { SealStamp } from '@/features/workspace/shared/two-pen-marks';
+import { SealStamp } from '@/components/two-pen-marks';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
