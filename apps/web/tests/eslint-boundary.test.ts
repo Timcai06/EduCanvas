@@ -1,5 +1,5 @@
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
  * W05 静态边界门禁 negative fixtures。
@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
  * 用真实 eslint.config.mjs 对「features/** 路径的代码片段」lint，断言违规导入
  * 被 no-restricted-imports 拦截、合法导入（如 @/app/actions server actions）放行。
  */
+/* ESLint 每次 lintText 会加载完整配置（约 2s），全量并发时默认 5s 超时不够。 */
+vi.setConfig({ testTimeout: 20_000 });
 const eslint = new ESLint({
   overrideConfigFile: 'eslint.config.mjs',
 });
