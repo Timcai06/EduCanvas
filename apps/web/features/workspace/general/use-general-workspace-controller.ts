@@ -42,6 +42,7 @@ import {
   PENDING_GENERAL_CANVAS_KEY,
 } from './general-chat-entry';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
+import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -119,6 +120,18 @@ export function useGeneralWorkspaceController(options: {
       void artifactFlow.openArtifact(resource.resourceId);
     },
   });
+
+  /* Artifact 详情新打开时同步 surface：`artifactFlow.confirm`（openWhenReady）与
+     `observeProposedArtifact` 只在 artifactFlow 内部 setOpenDetail，不会 dispatch
+     surface；这里补上单一资源打开语义，避免 openDetail 有值但 surface 未进入 artifact。 */
+  const prevOpenDetailRef = useRef<ArtifactDetail | null>(null);
+  useEffect(() => {
+    const detail = artifactFlow.openDetail;
+    if (shouldOpenArtifactSurface(prevOpenDetailRef.current, detail)) {
+      workspace.openArtifact(detail.artifact.id);
+    }
+    prevOpenDetailRef.current = detail;
+  }, [artifactFlow.openDetail, workspace]);
 
   const flipStateRef = useRef<Flip.FlipState | null>(null);
   const pendingConsumed = useRef(false);
