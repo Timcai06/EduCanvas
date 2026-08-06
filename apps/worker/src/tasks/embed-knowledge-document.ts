@@ -11,8 +11,9 @@ import {
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import {
-  resolveEmbeddingModelGateway,
-  resolveEmbeddingRuntimeIdentity,
+  createWorkerModelRuntime,
+  readModelGatewayEnvironment,
+  type WorkerModelRuntime,
 } from '../model-runtime.js';
 
 /** 队列任务名；`域:动作` 与其余 Graphile 任务保持一致。 */
@@ -107,16 +108,24 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
     const repository =
       dependencies?.repository ??
       (new DrizzleKnowledgeEmbeddingRepository() as unknown as EmbeddingRepositoryPort);
-    const runtime =
+    // R03：embedding gateway 与 identity 共享同一已验证配置（惰性一次解析）。
+    let workerRuntime: WorkerModelRuntime | null = null;
+    const getRuntime = (): WorkerModelRuntime => {
+      if (workerRuntime === null) {
+        workerRuntime = createWorkerModelRuntime(readModelGatewayEnvironment());
+      }
+      return workerRuntime;
+    };
+    const identity =
       dependencies?.identity === undefined
-        ? resolveEmbeddingRuntimeIdentity()
+        ? getRuntime().embeddingIdentity
         : dependencies.identity;
     const gateway =
       dependencies?.gateway === undefined
-        ? resolveEmbeddingModelGateway()
+        ? getRuntime().embedding
         : dependencies.gateway;
 
-    if (!runtime) {
+    if (!identity) {
       helpers.logger.warn(
         `文档 ${payload.documentId} 未配置向量身份，跳过向量化`,
       );
@@ -127,14 +136,14 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
        记住额外一步，也让历史回填任务可以只投递同一种 payload。 */
     await repository.createOrGetRun({
       documentId: payload.documentId,
-      identity: runtime,
+      identity,
     });
 
     if (!gateway) {
       /* 未配置向量能力：登记终态失败而不是静默成功，让运维能查到原因。 */
       await settleQuietly(repository, {
         documentId: payload.documentId,
-        identity: runtime,
+        identity,
         failureCode: FAILURE_CODES.notConfigured,
       });
       helpers.logger.warn(
@@ -145,7 +154,7 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
 
     const run = await repository.beginRun({
       documentId: payload.documentId,
-      identity: runtime,
+      identity,
     });
     if (!run) {
       helpers.logger.info(
@@ -162,13 +171,13 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
       for (let batch = 0; batch < MAX_BATCHES_PER_ATTEMPT; batch += 1) {
         const pending = await repository.listPendingChunks({
           documentId: payload.documentId,
-          identity: runtime,
+          identity,
           limit: batchSize,
         });
         if (pending.length === 0) {
           await repository.settleRun({
             documentId: payload.documentId,
-            identity: runtime,
+            identity,
             outcome: { status: 'ready' },
           });
           helpers.logger.info(`文档 ${payload.documentId} 向量化完成`);
@@ -190,7 +199,7 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
 
         await repository.writeEmbeddings({
           documentId: payload.documentId,
-          identity: runtime,
+          identity,
           chunkingVersion: payload.chunkingVersion,
           embeddings: pending.map((chunk, index) => ({
             chunkId: chunk.chunkId,
@@ -209,7 +218,7 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
         if (attempts < maxAttempts) throw error;
         await repository.settleRun({
           documentId: payload.documentId,
-          identity: runtime,
+          identity,
           outcome: { status: 'failed', failureCode: FAILURE_CODES.exhausted },
         });
         helpers.logger.error(`文档 ${payload.documentId} 向量化批次重试耗尽`);
@@ -219,7 +228,7 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
       if (terminal) {
         await repository.settleRun({
           documentId: payload.documentId,
-          identity: runtime,
+          identity,
           outcome: { status: 'failed', failureCode: terminal },
         });
         helpers.logger.error(
@@ -230,7 +239,7 @@ export function createEmbedKnowledgeDocumentTask(dependencies?: {
       if (attempts >= maxAttempts) {
         await repository.settleRun({
           documentId: payload.documentId,
-          identity: runtime,
+          identity,
           outcome: { status: 'failed', failureCode: FAILURE_CODES.exhausted },
         });
         helpers.logger.error(`文档 ${payload.documentId} 向量化重试耗尽`);

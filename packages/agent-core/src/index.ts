@@ -312,6 +312,11 @@ export {
 } from './streaming-transcription-envelope';
 
 export {
+  StreamingTranscriptionClientMessageSequenceTracker,
+  StreamingTranscriptionEventSequenceTracker,
+} from './streaming-transcription-sequence-tracker';
+
+export {
   canTransitionExperimentRunStatus,
   experimentDependencySchema,
   experimentFailureCodeSchema,
@@ -352,3 +357,34 @@ export {
   type ExperimentRunTerminalStatus,
   type ExperimentRuntimePort,
 } from './experiment-runtime-port';
+
+export {
+  MAX_AUTHORIZED_TERMS,
+  MAX_CONTEXT_WORDS_PER_TERM,
+  MAX_CONTEXT_WORD_LENGTH,
+  MAX_EDIT_DISTANCE,
+  MAX_REPLACEMENTS,
+  MAX_TERM_LENGTH,
+  MAX_TRANSCRIPT_LENGTH,
+  TranscriptTermCorrectionError,
+  applyTranscriptReplacements,
+  authorizedTermSchema,
+  correctTranscript,
+  transcriptCasePolicies,
+  transcriptCasePolicySchema,
+  transcriptCorrectionErrorCodes,
+  transcriptCorrectionErrorCodeSchema,
+  transcriptReplacementSchema,
+  transcriptTermCorrectionInputSchema,
+  transcriptTermCorrectionProtocolVersion,
+  transcriptTermCorrectionResultSchema,
+  transcriptUnchangedReasonSchema,
+  transcriptUnchangedReasons,
+  type AuthorizedTerm,
+  type TranscriptCasePolicy,
+  type TranscriptCorrectionErrorCode,
+  type TranscriptReplacement,
+  type TranscriptTermCorrectionInput,
+  type TranscriptTermCorrectionResult,
+  type TranscriptUnchangedReason,
+} from './transcript-term-correction';

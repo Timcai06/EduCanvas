@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Node baseline gate
+        run: pnpm node:gate
+
       - name: Lint
         run: pnpm lint
 

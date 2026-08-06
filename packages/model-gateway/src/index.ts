@@ -32,7 +32,9 @@ export {
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
 export {
+  createTurnModelGateway,
   createTurnModelGatewayFromEnvironment,
+  createVisionTurnModelGateway,
   createVisionTurnModelGatewayFromEnvironment,
 } from './turn-model-gateway-factory';
 export {
@@ -62,3 +64,17 @@ export {
   type SherpaStreamingTranscriptionLogEntry,
   type SherpaStreamingTranscriptionLogLabel,
 } from './sherpa-streaming-transcription-gateway';
+export {
+  resolveSherpaStreamingTranscriptionGateway,
+  validateSherpaHotwordsText,
+  type SherpaStreamingGatewayDependencies,
+  type SherpaStreamingResolution,
+  type SherpaStreamingUnavailableReason,
+} from './sherpa-streaming-gateway-resolver';
+export {
+  parseSherpaStreamingConfiguration,
+  sherpaStreamingProfiles,
+  type EnabledSherpaStreamingConfiguration,
+  type SherpaStreamingConfiguration,
+  type SherpaStreamingProfile,
+} from './sherpa-streaming-config';

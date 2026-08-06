@@ -6,15 +6,19 @@ import {
   type TurnApplicationEvent,
 } from '@educanvas/agent-core';
 import {
-  gatewayProtocolVersion,
-  type GatewayOperationEvent,
-} from '@educanvas/gateway-core';
-import { projectTurnApplicationEventToGateway } from '@educanvas/gateway-runtime';
+  projectTurnApplicationEventToGateway,
+  type GatewayEventPayload,
+} from '@educanvas/gateway-runtime';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import {
   gatewayToLegacy,
   projectTurnApplicationEventToWeb,
 } from './turn-application-projection';
+import {
+  collect,
+  eventsOf,
+  makeGatewayEvent,
+} from './turn-application-projection-test-helpers';
 
 const operationId = 'operation:golden';
 const occurredAt = '2026-07-21T08:00:00.000Z';
@@ -27,33 +31,21 @@ const started: TurnApplicationEvent = {
   replayed: false,
 };
 
-async function* eventsOf<T>(events: readonly T[]): AsyncGenerator<T> {
-  yield* events;
-}
-
-async function collect<T>(events: AsyncIterable<T>): Promise<T[]> {
-  const collected: T[] = [];
-  for await (const event of events) collected.push(event);
-  return collected;
-}
-
+/**
+ * Golden parity：同一 TurnApplicationEvent 脚本分别走
+ * projectTurnApplicationEventToWeb 与 projectTurnApplicationEventToGateway →
+ * gatewayToLegacy 两条路径，终态必须逐字段等价。
+ */
 async function expectParity(script: readonly TurnApplicationEvent[]) {
   const web = script
     .map((event) => projectTurnApplicationEventToWeb(event))
     .filter((event): event is TeachingTurnEvent => event !== null);
   const gateway = script.map((event, sequence) => {
-    const payload = projectTurnApplicationEventToGateway(event, {
-      actorUserId: 'user:1',
-      occurredAt,
-    });
-    return {
-      protocol: gatewayProtocolVersion,
-      eventId: `event:${sequence}`,
-      operationId,
-      sequence,
-      occurredAt,
-      ...payload,
-    } as GatewayOperationEvent;
+    const payload: GatewayEventPayload = projectTurnApplicationEventToGateway(
+      event,
+      { actorUserId: 'user:1', occurredAt },
+    );
+    return makeGatewayEvent(sequence, payload, operationId);
   });
   expect(await collect(gatewayToLegacy(eventsOf(gateway)))).toEqual(web);
 }

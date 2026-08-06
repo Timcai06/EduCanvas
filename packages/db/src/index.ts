@@ -4,8 +4,26 @@
  */
 
 export { getDb } from './client';
-export * from './schema';
-export * from './schema/study';
+// schema 表只按需显式导出（R04 起不再 `export *` 全量泄漏）；新表不得加入默认入口，
+// 应经 `@educanvas/db/internal` / `@educanvas/db/testing` 获取，见 src/import-boundary.test.ts。
+// getDb 与默认入口保留的 17 个 schema 表（本块 14 个 + mcpToolIntents / audioConsents /
+// audioRetentions）仍是暂时兼容出口（遗留生产/测试引用），实际移除属于 R06/R08。
+export {
+  agentOperations,
+  artifactVersions,
+  assets,
+  assetVersions,
+  conversations,
+  gatewayApprovals,
+  gatewayOperationEvents,
+  notebookMemberships,
+  objectDeletionOutbox,
+  operationContinuations,
+  platformUsers,
+  securityAuditEvents,
+  spaces,
+  toolApprovalIntents,
+} from './schema';
 export {
   AssetAccessError,
   AssetPersistenceError,
@@ -296,12 +314,7 @@ export {
   MAX_MCP_INTENT_RECONCILIATION_BATCH,
 } from './mcp-intent-reconciler';
 export { mcpToolIntents } from './schema/mcp-intent';
-export {
-  audioConsentProofMethods,
-  audioConsentPurposes,
-  audioConsents,
-  audioRetentions,
-} from './schema/audio-consent';
+export { audioConsents, audioRetentions } from './schema/audio-consent';
 export {
   AUDIO_RETENTION_GUARDIAN_PROOF_POLICIES,
   AudioRetentionAccessError,
@@ -326,7 +339,6 @@ export {
   type AudioRetentionRepositoryOptions,
 } from './audio-retention-repository';
 export { enqueueDeletionIntents } from './audio-retention-lifecycle';
-export { toolEffectReconciliations } from './schema/tool-effect-reconciliation';
 export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,

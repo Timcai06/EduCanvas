@@ -480,4 +480,110 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       }),
     ).rejects.toBeInstanceOf(AgentTurnContextOwnershipError);
   });
+
+  it('多 Asset 版本按消息内顺序全量落账，账本可重建本轮完整图集（R02）', async () => {
+    const fixture = await createContextFixture('multi-asset');
+    const second = await createReadyAsset({
+      actorId: fixture.actorId,
+      spaceId: (
+        await getDatabase()
+          .select({ notebookId: schema.agentOperations.notebookId })
+          .from(schema.agentOperations)
+          .where(eq(schema.agentOperations.id, fixture.operationId))
+          .limit(1)
+      )[0]!.notebookId as string,
+      label: 'selected-second',
+    });
+    const third = await createReadyAsset({
+      actorId: fixture.actorId,
+      spaceId: (
+        await getDatabase()
+          .select({ notebookId: schema.agentOperations.notebookId })
+          .from(schema.agentOperations)
+          .where(eq(schema.agentOperations.id, fixture.operationId))
+          .limit(1)
+      )[0]!.notebookId as string,
+      label: 'selected-third',
+    });
+    const repository = new DrizzleAgentTurnContextRepository(getDatabase());
+    const material = {
+      builderVersion: 'agent-context-v2',
+      includedMessageIds: fixture.includedMessageIds,
+      selectedAssetVersionIds: [
+        fixture.selectedAssetVersionIds[0]!,
+        second,
+        third,
+      ],
+      omittedMessageCount: 1,
+      characterCount: 200,
+    };
+    const created = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material,
+    });
+    expect(created.snapshot.selectedAssetVersionIds).toEqual(
+      material.selectedAssetVersionIds,
+    );
+    const readBack = await repository.get({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+    });
+    expect(readBack?.selectedAssetVersionIds).toEqual(
+      material.selectedAssetVersionIds,
+    );
+    expect(readBack?.contextHash).toBe(created.snapshot.contextHash);
+  });
+
+  it('多 Asset 清单中任一路越权即整体拒绝，不部分写入（R02 fail closed）', async () => {
+    const fixture = await createContextFixture('mixed-ownership');
+    const repository = new DrizzleAgentTurnContextRepository(getDatabase());
+    await expect(
+      repository.createOrGet({
+        operationId: fixture.operationId,
+        actorId: fixture.actorId,
+        material: {
+          builderVersion: 'agent-context-v2',
+          includedMessageIds: fixture.includedMessageIds,
+          selectedAssetVersionIds: [
+            fixture.selectedAssetVersionIds[0]!,
+            fixture.otherNotebookAssetVersionId,
+          ],
+          omittedMessageCount: 0,
+          characterCount: 80,
+        },
+      }),
+    ).rejects.toBeInstanceOf(AgentTurnContextOwnershipError);
+    const readBack = await repository.get({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+    });
+    expect(readBack).toBeNull();
+  });
+
+  it('历史单 Asset Snapshot（单元素数组）可原样读回（R02 兼容）', async () => {
+    const fixture = await createContextFixture('legacy-single');
+    const repository = new DrizzleAgentTurnContextRepository(getDatabase());
+    const material = {
+      builderVersion: 'agent-context-v2',
+      includedMessageIds: fixture.includedMessageIds,
+      selectedAssetVersionIds: [fixture.selectedAssetVersionIds[0]!],
+      omittedMessageCount: 2,
+      characterCount: 60,
+    };
+    const created = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material,
+    });
+    const readBack = await repository.get({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+    });
+    expect(readBack?.selectedAssetVersionIds).toEqual(
+      material.selectedAssetVersionIds,
+    );
+    expect(readBack?.selectedAssetVersionIds).toHaveLength(1);
+    expect(readBack).toEqual(created.snapshot);
+  });
 });

@@ -78,7 +78,8 @@ function nativeImageCandidates(
         content: modelMessageText(message),
         priority: 95,
         required: true,
-        assetVersionId: images[0]!.versionId,
+        // 按消息内实际顺序登记全部 Asset Version，账本才能重建本轮完整图集。
+        assetVersionIds: images.map((image) => image.versionId),
       },
       message,
     },

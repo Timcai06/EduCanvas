@@ -123,7 +123,7 @@ export function createDeleteObjectOutboxTask(
             completed += 1;
           } catch {
             helpers.logger.error(
-              `object_delete_complete_failed claim=${claim.id}`,
+              `object_delete_complete_failed claim=${claim.id} kind=${claim.objectKind} attempt=${claim.attempt}`,
             );
           }
           continue;
@@ -140,7 +140,7 @@ export function createDeleteObjectOutboxTask(
           failed += 1;
         } catch {
           helpers.logger.error(
-            `object_delete_fail_record_failed claim=${claim.id}`,
+            `object_delete_fail_record_failed claim=${claim.id} kind=${claim.objectKind} attempt=${claim.attempt}`,
           );
         }
       }

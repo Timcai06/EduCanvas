@@ -1,10 +1,19 @@
 {
   "name": "@educanvas/db",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./internal": "./src/internal/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "lint": "prettier --check \"src/**/*.ts\" \"drizzle.config.ts\" \"vitest*.config.ts\"",
     "test": "vitest run --config vitest.config.ts",
@@ -24,7 +33,7 @@
   "devDependencies": {
     "@educanvas/teaching-runtime": "workspace:*",
     "@opentelemetry/api": "1.9.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^22.20.1",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
