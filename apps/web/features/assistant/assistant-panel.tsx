@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  ChatCircleText,
-  PaperPlaneTilt,
-  X,
-} from '@phosphor-icons/react';
+import { ChatCircleText, PaperPlaneTilt, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
@@ -33,148 +29,172 @@ function useAssistantStream() {
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
-  const send = useCallback(async (text: string) => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    const userBubble: Bubble = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      text: text.trim(),
-      status: 'completed',
-    };
-    const assistantBubble: Bubble = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      text: '',
-      status: 'pending',
-    };
-    setBubbles((prev) => [...prev, userBubble, assistantBubble]);
+  const send = useCallback(
+    async (text: string) => {
+      if (!text.trim() || busy) return;
+      setBusy(true);
+      const userBubble: Bubble = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        text: text.trim(),
+        status: 'completed',
+      };
+      const assistantBubble: Bubble = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: '',
+        status: 'pending',
+      };
+      setBubbles((prev) => [...prev, userBubble, assistantBubble]);
 
-    const ac = new AbortController();
-    controller.current = ac;
+      const ac = new AbortController();
+      controller.current = ac;
 
-    try {
-      const response = await fetch('/api/v1/assistant/turn', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ clientMessageId: crypto.randomUUID(), text: text.trim() }),
-        signal: ac.signal,
-      });
-
-      if (!response.ok) {
-        let errorMsg = '抱歉，暂时无法处理。';
-        try {
-          const err = await response.json();
-          if (err?.error?.message) errorMsg = err.error.message;
-        } catch {}
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === assistantBubble.id
-              ? { ...b, text: errorMsg, status: 'failed' }
-              : b,
-          ),
-        );
-        setBusy(false);
-        return;
-      }
-
-      const contentType = response.headers.get('content-type') ?? '';
-
-      if (contentType.includes('text/event-stream')) {
-        // 聊天 / 生成导图：SSE 流式
-        let streamedText = '';
-        await consumeTeachingTurnResponse(response, (event: TeachingTurnEvent) => {
-          if (event.type === 'message.delta') {
-            streamedText += event.delta;
-            setBubbles((prev) =>
-              prev.map((b) =>
-                b.id === assistantBubble.id
-                  ? { ...b, text: streamedText, status: 'streaming' }
-                  : b,
-              ),
-            );
-          }
-          if (event.type === 'turn.completed') {
-            setBubbles((prev) =>
-              prev.map((b) =>
-                b.id === assistantBubble.id ? { ...b, status: 'completed' } : b,
-              ),
-            );
-          }
-          if (event.type === 'turn.failed') {
-            setBubbles((prev) =>
-              prev.map((b) =>
-                b.id === assistantBubble.id
-                  ? { ...b, text: streamedText || event.message || '处理失败', status: 'failed' }
-                  : b,
-              ),
-            );
-          }
+      try {
+        const response = await fetch('/api/v1/assistant/turn', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            clientMessageId: crypto.randomUUID(),
+            text: text.trim(),
+          }),
+          signal: ac.signal,
         });
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === assistantBubble.id && b.status === 'streaming'
-              ? { ...b, status: 'completed' }
-              : b,
-          ),
-        );
-      } else {
-        // 管理操作：JSON 直接返回
-        const data = await response.json();
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === assistantBubble.id
-              ? { ...b, text: data.message ?? '完成', status: 'completed' }
-              : b,
-          ),
-        );
 
-        // 需要刷新页面的操作
-        if (data.action === 'created' || data.action === 'renamed' || data.action === 'deleted' || data.action === 'switched') {
-          setTimeout(() => window.location.reload(), 800);
-        }
-
-        // 打开产物：存 sessionStorage 后刷新
-        if (data.action === 'open_artifact' && data.artifactId) {
-          sessionStorage.setItem(
-            'educanvas.assistant_open_artifact',
-            data.artifactId,
+        if (!response.ok) {
+          let errorMsg = '抱歉，暂时无法处理。';
+          try {
+            const err = await response.json();
+            if (err?.error?.message) errorMsg = err.error.message;
+          } catch {}
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === assistantBubble.id
+                ? { ...b, text: errorMsg, status: 'failed' }
+                : b,
+            ),
           );
-          setTimeout(() => window.location.reload(), 300);
+          setBusy(false);
+          return;
         }
 
-        // 打开面板：存 sessionStorage 后刷新
-        if (data.action === 'open_panel' && data.panel) {
-          sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
-          setTimeout(() => window.location.reload(), 300);
-        }
+        const contentType = response.headers.get('content-type') ?? '';
 
-        // 产物创建：存 sessionStorage 后刷新，让 workspace 接管
-        if (data.action === 'artifact_created' && data.artifact) {
-          sessionStorage.setItem(
-            'educanvas.assistant_artifact',
-            JSON.stringify(data.artifact),
+        if (contentType.includes('text/event-stream')) {
+          // 聊天 / 生成导图：SSE 流式
+          let streamedText = '';
+          await consumeTeachingTurnResponse(
+            response,
+            (event: TeachingTurnEvent) => {
+              if (event.type === 'message.delta') {
+                streamedText += event.delta;
+                setBubbles((prev) =>
+                  prev.map((b) =>
+                    b.id === assistantBubble.id
+                      ? { ...b, text: streamedText, status: 'streaming' }
+                      : b,
+                  ),
+                );
+              }
+              if (event.type === 'turn.completed') {
+                setBubbles((prev) =>
+                  prev.map((b) =>
+                    b.id === assistantBubble.id
+                      ? { ...b, status: 'completed' }
+                      : b,
+                  ),
+                );
+              }
+              if (event.type === 'turn.failed') {
+                setBubbles((prev) =>
+                  prev.map((b) =>
+                    b.id === assistantBubble.id
+                      ? {
+                          ...b,
+                          text: streamedText || event.message || '处理失败',
+                          status: 'failed',
+                        }
+                      : b,
+                  ),
+                );
+              }
+            },
           );
-          setTimeout(() => window.location.reload(), 800);
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === assistantBubble.id && b.status === 'streaming'
+                ? { ...b, status: 'completed' }
+                : b,
+            ),
+          );
+        } else {
+          // 管理操作：JSON 直接返回
+          const data = await response.json();
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === assistantBubble.id
+                ? { ...b, text: data.message ?? '完成', status: 'completed' }
+                : b,
+            ),
+          );
+
+          // 需要刷新页面的操作
+          if (
+            data.action === 'created' ||
+            data.action === 'renamed' ||
+            data.action === 'deleted' ||
+            data.action === 'switched'
+          ) {
+            setTimeout(() => window.location.reload(), 800);
+          }
+
+          // 打开产物：存 sessionStorage 后刷新
+          if (data.action === 'open_artifact' && data.artifactId) {
+            sessionStorage.setItem(
+              'educanvas.assistant_open_artifact',
+              data.artifactId,
+            );
+            setTimeout(() => window.location.reload(), 300);
+          }
+
+          // 打开面板：存 sessionStorage 后刷新
+          if (data.action === 'open_panel' && data.panel) {
+            sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
+            setTimeout(() => window.location.reload(), 300);
+          }
+
+          // 产物创建：存 sessionStorage 后刷新，让 workspace 接管
+          if (data.action === 'artifact_created' && data.artifact) {
+            sessionStorage.setItem(
+              'educanvas.assistant_artifact',
+              JSON.stringify(data.artifact),
+            );
+            setTimeout(() => window.location.reload(), 800);
+          }
         }
+        setBusy(false);
+      } catch {
+        if (!ac.signal.aborted) {
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === assistantBubble.id && b.status !== 'completed'
+                ? {
+                    ...b,
+                    text: b.text || '连接中断，请重试。',
+                    status: 'failed',
+                  }
+                : b,
+            ),
+          );
+        }
+        setBusy(false);
+      } finally {
+        if (controller.current === ac) controller.current = null;
       }
-      setBusy(false);
-    } catch {
-      if (!ac.signal.aborted) {
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === assistantBubble.id && b.status !== 'completed'
-              ? { ...b, text: b.text || '连接中断，请重试。', status: 'failed' }
-              : b,
-          ),
-        );
-      }
-      setBusy(false);
-    } finally {
-      if (controller.current === ac) controller.current = null;
-    }
-  }, [busy]);
+    },
+    [busy],
+  );
 
   return { bubbles, busy, send } as const;
 }
@@ -286,9 +306,7 @@ export function AssistantPanel() {
           height: 48,
           borderRadius: '50%',
           border: 'none',
-          background: open
-            ? 'var(--color-surface)'
-            : 'var(--color-accent)',
+          background: open ? 'var(--color-surface)' : 'var(--color-accent)',
           color: open ? 'var(--color-ink)' : '#fff',
           boxShadow: '0 2px 12px rgba(106, 74, 134, 0.25)',
           cursor: 'pointer',
@@ -300,7 +318,11 @@ export function AssistantPanel() {
           zIndex: 1000,
         }}
       >
-        {open ? <X size={22} weight="bold" /> : <ChatCircleText size={22} weight="bold" />}
+        {open ? (
+          <X size={22} weight="bold" />
+        ) : (
+          <ChatCircleText size={22} weight="bold" />
+        )}
       </button>
 
       {/* 弹出面板 */}
@@ -332,7 +354,8 @@ export function AssistantPanel() {
               alignItems: 'center',
               gap: 8,
               padding: '12px 16px',
-              borderBottom: '1px solid var(--color-border, rgba(106,74,134,0.1))',
+              borderBottom:
+                '1px solid var(--color-border, rgba(106,74,134,0.1))',
               fontSize: '0.875rem',
               fontWeight: 500,
               color: 'var(--color-accent)',
@@ -423,9 +446,7 @@ export function AssistantPanel() {
                 borderRadius: '50%',
                 border: 'none',
                 background:
-                  input.trim() && !busy
-                    ? 'var(--color-accent)'
-                    : 'transparent',
+                  input.trim() && !busy ? 'var(--color-accent)' : 'transparent',
                 color:
                   input.trim() && !busy ? '#fff' : 'var(--color-ink-faint)',
                 cursor: input.trim() && !busy ? 'pointer' : 'default',

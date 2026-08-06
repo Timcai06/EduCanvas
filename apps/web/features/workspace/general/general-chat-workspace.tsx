@@ -261,7 +261,12 @@ export function GeneralChatWorkspace({
           void artifactFlow.observeProposedArtifact(
             {
               artifactId: artifact.id,
-              kind: artifact.kind as 'mind_map' | 'slides' | 'flashcards' | 'audio_overview' | 'note',
+              kind: artifact.kind as
+                | 'mind_map'
+                | 'slides'
+                | 'flashcards'
+                | 'audio_overview'
+                | 'note',
               title: artifact.title,
             },
             { openWhenReady: true },
@@ -271,6 +276,7 @@ export function GeneralChatWorkspace({
     } catch {
       // 格式异常，静默忽略
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifactFlow.observeProposedArtifact]);
 
   // 桌面小助手请求打开已有产物
@@ -278,12 +284,15 @@ export function GeneralChatWorkspace({
   useEffect(() => {
     if (assistantOpenArtifactConsumed.current) return;
     assistantOpenArtifactConsumed.current = true;
-    const artifactId = sessionStorage.getItem('educanvas.assistant_open_artifact');
+    const artifactId = sessionStorage.getItem(
+      'educanvas.assistant_open_artifact',
+    );
     if (!artifactId) return;
     sessionStorage.removeItem('educanvas.assistant_open_artifact');
     queueMicrotask(() => {
       void artifactFlow.openArtifact(artifactId);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifactFlow.openArtifact]);
 
   const online = useOnlineStatus();

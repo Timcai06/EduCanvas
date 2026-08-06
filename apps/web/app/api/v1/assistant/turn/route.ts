@@ -368,7 +368,7 @@ export async function POST(request: Request): Promise<Response> {
       default:
         return jsonResponse({ message: CAPABILITY_MESSAGE });
     }
-  } catch (error) {
+  } catch {
     return jsonError(500, 'assistant_error', '操作失败，请重试。');
   }
 }
