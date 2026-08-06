@@ -12,9 +12,9 @@ import {
   DrizzleGatewayConnectionRepository,
   DrizzleGatewayDeliveryRepository,
   DrizzlePlatformArtifactRepository,
-  getDb,
   requireNotebookAccess,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import { projectOwnedArtifactResource } from '@educanvas/canvas-protocol/server';
 import {
   gatewayOperationEventSchema,

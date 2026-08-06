@@ -1,5 +1,5 @@
 import type { BuiltAssetContext } from '@educanvas/agent-runtime';
-import { TurnApplicationService } from '@educanvas/agent-runtime';
+import { createTurnApplication } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentToolCallRepository,
@@ -24,7 +24,7 @@ import { WebTeachingProfile } from './turn-application/profile';
 
 vi.mock('server-only', () => ({}));
 vi.mock('@educanvas/agent-runtime', () => ({
-  TurnApplicationService: vi.fn(),
+  createTurnApplication: vi.fn(),
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
@@ -116,7 +116,7 @@ function expectNoRuntimeComposition(): void {
   expect(WebTeachingProfile).not.toHaveBeenCalled();
   expect(WebTeachingCancellation).not.toHaveBeenCalled();
   expect(getWebTelemetryRuntime).not.toHaveBeenCalled();
-  expect(TurnApplicationService).not.toHaveBeenCalled();
+  expect(createTurnApplication).not.toHaveBeenCalled();
 }
 
 beforeEach(() => {

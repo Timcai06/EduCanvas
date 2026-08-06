@@ -1,15 +1,15 @@
 # Turn Runtime、数据事实与公共边界收敛
 
 - 任务分配名：`R 运行时收敛`
-- 状态：`active`
+- 状态：`completed`
 - 负责人：项目负责人
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
-- 当前领取任务：`R00`
-- 并行计划：[W 工作面画布](W-工作面画布收敛.md)、[Q 质量观测成本](Q-质量观测成本.md)
-- 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
-- 关联计划：[UV 画布语音](UV-画布语音.md)、[KM 知识记忆](KM-知识记忆.md)
+- 当前领取任务：无（R00-R08 已完成并通过 Codex 复核）
+- 并行计划：[W 工作面画布](../active/W-工作面画布收敛.md)、[Q 质量观测成本](../active/Q-质量观测成本.md)
+- 后续出口：[G 产品发布闭环](../active/G-产品发布闭环.md)
+- 关联计划：[UV 画布语音](../active/UV-画布语音.md)、[KM 知识记忆](../active/KM-知识记忆.md)
 
 ## 一、目标
 
@@ -165,10 +165,9 @@ rtk git status --short
 rtk rg -n "new TurnApplicationService|AgentLoopEngine|PlatformTurn|ChatRepository|ModelRun|ToolCall|export \* from './schema'|getDb" apps packages
 ```
 
-### R00 盘点台账（2026-08-06，结论 `REVIEW_REQUIRED`）
+### R00 盘点台账（2026-08-06，最终结论 `PASS`）
 
-R00 为只读盘点，本台账只记录代码事实，不宣布 PASS。结论 `REVIEW_REQUIRED`，等待 Codex
-复核后解锁 R01；无 BLOCKED 项。
+R00 为只读盘点，本台账只记录代码事实；Codex 复核后最终结论 `PASS`，无 BLOCKED 项。
 
 #### R00.1 基线记录
 
@@ -396,13 +395,13 @@ Gateway transport → GatewayService → GatewayAgentTurnRunner.run (apps/gatewa
 | Web Runtime Run（`web_runtime_runs`）                                                           | DrizzleWebRuntimeRunRepository（唯一）                                                                                                                                     | worker                                                                                                   | 唯一权威                                                                                              |
 | 平台对话（`conversations`）                                                                     | conversation-platform-repository / platform-turn-repository / gateway-directory / learning-session-active-lifecycle（同链）                                                | 路由、history                                                                                            | 同链多入口，非双写                                                                                    |
 
-#### R00.8 结论与待复核项
+#### R00.8 最终复核结论
 
-- 结论：`REVIEW_REQUIRED`（R00 为只读盘点，不宣布 PASS，无 BLOCKED）。
+- 结论：`PASS`（R00 为只读盘点，无 BLOCKED）。
 - 第二节"已经确认的代码事实"逐项核对全部成立；新增三项事实：
   `legacyToGateway` 无任何调用点、`projectTurnApplicationEventToWeb` 无生产调用点、
   `audited-model-gateway.ts` 无生产调用点（均为 R07/R03 删除候选）。
-- 待 Codex 复核：R00.7 权威矩阵"唯一写入者"判定、R00.6 R02/R03 可并行结论、R00.5 删除路径清单。
+- Codex 复核确认：R00.7 权威矩阵、R00.6 并行边界和 R00.5 删除候选可作为后续任务基线。
 
 ### R01：Node 运行时与类型基线统一
 
@@ -446,7 +445,7 @@ Gateway transport → GatewayService → GatewayAgentTurnRunner.run (apps/gatewa
 - 数据库账本可重建本轮模型实际可见 Asset 集合；
 - 不通过拆成大量 required Segment 挤掉对话历史来规避问题。
 
-### R02 台账（2026-08-06，结论 `REVIEW_REQUIRED`）
+### R02 台账（2026-08-06，最终结论 `PASS`）
 
 #### R02.1 基线记录
 
@@ -525,12 +524,10 @@ Gateway transport → GatewayService → GatewayAgentTurnRunner.run (apps/gatewa
 | prettier（改动文件）                                                              | 全过                              |
 | `git diff --check`                                                                | 干净                              |
 
-#### R02.7 结论
+#### R02.7 最终复核结论
 
-- 结论：`REVIEW_REQUIRED`，无 BLOCKED。
-- 待 Codex 复核：`MAX_ASSET_VERSIONS_PER_SEGMENT = 32` 取值；`assetVersionId` 兼容字段的
-  收口期限（建议随 R05）；并发 R01/R03 与 R02 合并时 `pnpm-lock.yaml` 与 `package.json`
-  可能产生冲突，需按依赖顺序合并。
+- 结论：`PASS`，无 BLOCKED。Codex 接受 `MAX_ASSET_VERSIONS_PER_SEGMENT = 32` 的有界值；
+  `assetVersionId` 单值写法继续作为兼容输入，新增多图写入只使用数组契约。
 
 ### R03：模型配置单次解析与显式注入
 
@@ -556,11 +553,11 @@ Gateway transport → GatewayService → GatewayAgentTurnRunner.run (apps/gatewa
 - Secret 不离开 model-gateway 边界；
 - Web、Gateway、Worker 使用相同配置对象语义。
 
-### R03 台账（2026-08-06，结论 `REVIEW_REQUIRED`）
+### R03 台账（2026-08-06，最终结论 `PASS`）
 
 R03 实现「模型配置单次解析与显式注入」：Factory 改为接收已验证配置对象，
 Web/Worker 组合根收敛为 parse-once，spy/注入测试锁定单次解析与能力降级。
-结论 `REVIEW_REQUIRED`，等待 Codex 复核；无 BLOCKED 项。
+结论 `PASS`（Codex 复核）；无 BLOCKED 项。
 
 #### R03.1 配置对象所有者与生命周期
 
@@ -605,13 +602,11 @@ Web/Worker 组合根收敛为 parse-once，spy/注入测试锁定单次解析与
   四包 typecheck 通过；`pnpm test:tooling` 98/98；`git diff --check` 干净。
 - 禁止全局可变缓存：测试只计数纯函数调用，无模块级缓存参与。
 
-#### R03.5 已知边界（REVIEW_REQUIRED 项）
+#### R03.5 已知边界与后续责任
 
-- Web General 路径一次 Turn 内 `resolveTurnModelRuntime()` 被调用两次
-  （`apps/web/server/platform/general-turn.ts:138` 物化层与 `:85` 应用服务），每次调用各解析一次；
-  Teaching 路径（`learning-turn.ts:111`）为单次。`general-turn.ts` 不在 R03 文件边界内，
-  未改动。建议 R06「唯一 Turn Application 组合工厂」把 runtime 提升为 Turn 级单例，届时
-  Web General 达到「每 Turn 只解析一次」。
+- R06 收口后，Web General 在 `beginWebGatewayTurn` 中只调用一次
+  `resolveTurnModelRuntime()`，同一对象同时传给 Asset 物化与 Turn Application；General 入口不再
+  自行解析。Teaching 路径同样为每 Turn 一次。
 - worker 既有 `resolve*` 未迁移到 `createWorkerModelRuntime`（`apps/worker/src/tasks/**` 不在
   R03 文件边界内），当前每个 `resolve*` 单次解析、任务级入口已就绪，迁移留待后续。
 
@@ -649,14 +644,11 @@ Web/Worker 组合根收敛为 parse-once，spy/注入测试锁定单次解析与
 
 ### R04 台账（2026-08-07，结论 `PASS`）
 
-R04 实现「`@educanvas/db` 公共出口收口」：默认入口收口第一阶段完成——稳定 Repository /
-Port Adapter / 公开类型保持为主出口，schema 表从 `export *` 全量泄漏改为按需显式导出；
-getDb 与 17 个指定 schema 表仍是暂时兼容出口（遗留生产/测试引用），实际移除属于
-R06/R08。新增受控 subpath `@educanvas/db/internal`（getDb / schema 全量 / 迁移辅助，
-迁移目标）与 `@educanvas/db/testing`（测试专用）；新增 `src/import-boundary.test.ts`
-静态门禁锁定全仓导入形态（含动态 import 禁令）。
-结论 `PASS`（Codex 复核）：第一阶段出口收口和新增依赖门禁已完成；既有出口的迁移
-边界明确归属 R06/R08，无 BLOCKED 项。
+R04 实现「`@educanvas/db` 公共出口收口」：稳定 Repository / Port Adapter / 公开类型保持
+为默认出口，schema 表从 `export *` 全量泄漏改为按需显式导出。R08 最终复核把 10 个
+服务端组合点的 `getDb` 迁到受控 `@educanvas/db/internal`，并从默认入口移除底层连接；
+测试使用 `@educanvas/db/testing`。静态门禁只允许获准组合点从 internal 导入单一 `getDb`
+符号，拒绝新增 subpath、动态 import、namespace 与深路径绕过。结论 `PASS`，无 BLOCKED 项。
 
 #### R04.1 基线记录
 
@@ -671,7 +663,7 @@ R06/R08。新增受控 subpath `@educanvas/db/internal`（getDb / schema 全量 
   - `packages/db/src/internal/index.ts`、`packages/db/src/testing/index.ts`（新增 subpath 入口）
   - `packages/db/src/import-boundary.test.ts`（新增静态门禁，10 条断言）
   - `packages/db/README.md`（入口边界说明）
-  - `docs/plan/active/R-运行时事实收敛.md`（本台账）
+  - `docs/plan/completed/R-运行时事实收敛.md`（本台账）
 
 #### R04.2 全量引用盘点（allowlist / denylist）
 
@@ -698,8 +690,9 @@ allowlist（默认入口保留的生产符号，116 个，代表性清单）：
   DEFAULT_ASSISTANT_LEASE_MS、ARTIFACT_GENERATE_TASK、MAX_MCP_INTENT_RECONCILIATION_BATCH 等；
 - 公开类型：AssetSnapshot、PlatformTurnSnapshot、PlatformArtifact、ModelRunSnapshot、
   EmbeddingIdentity、CursorPage、TemporalIdCursor 等；
-- 遗留项：`getDb`（生产 10 文件，见下）与 17 个 schema 表（测试引用）——R05/R06/R08
-  迁移前保留，门禁锁定不得新增。
+- 基线遗留项：`getDb`（生产 10 文件，见下）与 17 个 schema 表（测试引用）。R08 已把
+  10 个生产调用迁入 internal allowlist 并从默认入口移除 `getDb`；schema 表继续按需显式
+  导出且生产引用为 0。
 
 denylist（默认入口拒绝新增依赖）：
 
@@ -709,15 +702,15 @@ gatewayOperationEvents / mcpToolIntents / notebookMemberships / objectDeletionOu
 operationContinuations / platformUsers / securityAuditEvents / spaces /
 toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker、apps/web、packages/db
   集成测试）；默认入口按需显式保留（兼容测试），新增表一律禁止加入默认入口；
-- `getDb`：生产引用基线 10 文件（允许减少、禁止新增）——apps/gateway/src/index.ts、
+- `getDb` 基线为以下 10 个生产文件，R08 已全部改从 internal subpath 单符号导入——apps/gateway/src/index.ts、
   apps/gateway/src/canvas-resource-service.ts、apps/telegram/src/index.ts、
   apps/web/app/api/v1/chat/artifacts/[artifactId]/route.ts、[artifactId]/download/route.ts、
   apps/web/server/canvas/resource-access.ts、apps/web/server/study/study-service.ts、
   apps/web/server/teaching/knowledge-retrieval-runtime.ts、apps/web/server/teaching/learning-session.ts、
   apps/web/server/teaching/teaching-tools.ts；
-- subpath 形态：`@educanvas/db/schema`、`@educanvas/db/internal`、`@educanvas/db/testing`、
-  `@educanvas/db/src/*` —— 生产代码一律拒绝；`@educanvas/db/schema` 同时无 exports 映射，
-  解析期即失败（双保险）；
+- subpath 形态：生产代码只允许上述 10 个获准服务端组合点从
+  `@educanvas/db/internal` 导入单一 `getDb`；`testing`、`schema`、其它 internal 符号与
+  `@educanvas/db/src/*` 一律拒绝；
 - 绕过包入口的 `packages/db/src/*` 相对路径：生产代码一律拒绝（现仅 tests/e2e 使用）。
 
 本次移除的旧出口（全仓无引用证据，兼容迁移说明见 R04.4）：
@@ -729,19 +722,20 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 #### R04.3 文件职责（收口后入口结构）
 
 - 默认入口 `src/index.ts`：稳定 Repository / Port Adapter / 公开类型 + 17 个按需 schema
-  表（测试兼容）+ getDb（遗留）；
+  表（测试兼容），不导出 `getDb`；
 - `src/internal/index.ts`（`@educanvas/db/internal`）：getDb、schema 全量、schema/study
-  全量 —— 底层通道与迁移目标，生产业务代码禁止，供 db 内部基础设施与迁移/运维脚本使用；
+  全量 —— 底层通道；生产只允许静态门禁列出的组合点导入单一 `getDb`，其余供 db 内部
+  基础设施与迁移/运维脚本使用；
 - `src/testing/index.ts`（`@educanvas/db/testing`）：同 internal 能力，测试专用定位；
 - `src/import-boundary.test.ts`：静态门禁，11 条断言（exports 结构、无 `export *` 泄漏、
-  生产 subpath 禁令、测试 schema 禁令、getDb 基线、schema 表 denylist、namespace 导入
+  生产 internal allowlist、测试 schema 禁令、默认入口 getDb 禁令、schema 表 denylist、namespace 导入
   禁令、动态 import/vi.mock 禁令、深路径禁令、subpath 端到端可用、扫描器自检）。
 
 #### R04.4 兼容策略
 
-- 有引用的旧出口一律保留：getDb（10 生产文件）与 17 个 schema 表（测试引用）继续从默认
-  入口导出；生产 getDb 引用由 R05/R06 迁移到 Repository/Port 构造，schema 表测试引用在
-  R08 收口时迁往 `@educanvas/db/testing`，迁移完成后才允许从默认入口移除；
+- `getDb` 已从默认入口移除；10 个尚未具备应用级 Repository 的服务端组合点经精确
+  internal allowlist 使用，后续可继续减量但不得新增。17 个 schema 表仅为既有测试兼容
+  显式导出，生产引用基线为 0，新表不得加入默认入口；
 - 无引用旧出口本次即移除（study 全量导出、3 个无引用表）；需要底层 schema 时改从
   `@educanvas/db/internal` / `@educanvas/db/testing` 导入；
 - exports 未映射的 subpath（如 `@educanvas/db/schema`）在解析期即失败，静态门禁提供
@@ -751,16 +745,16 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 
 #### R04.5 验收标准 → 测试映射
 
-| 验收（R04 目标）                                | 测试                                                                                                                                      |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 默认入口只导出稳定 Repository/类型              | 门禁「默认入口不再全量泄漏 schema」（无 `export *`）＋显式导出清单                                                                        |
-| getDb/schema 的新增依赖受控，历史出口有迁移边界 | 门禁「getDb 基线不增」＋「生产代码禁止任何 subpath」＋「internal/testing 端到端可用」；既有 getDb 与指定 schema 兼容出口留待 R06/R08 移除 |
-| Web feature / Gateway / 领域包不直接依赖 schema | 门禁「生产代码不新增 schema 表符号依赖」（17 表 denylist，基线 0）                                                                        |
-| 静态门禁拒绝 schema/testing 与新增 getDb 依赖   | 门禁「生产代码禁止任何 subpath」＋exports 无 schema 映射（解析期失败）＋getDb 基线不增                                                    |
-| 生产组合根向 Repository/Port 迁移               | 门禁「getDb 生产引用不超出 R04 基线」锁定 R05/R06 的减量方向                                                                              |
-| 没有几十个临时 re-export 掩盖超级出口           | 新增入口仅 2 个小文件；默认入口移除 2 个 `export *` 与 3 个无引用符号                                                                     |
-| 生产代码不得绕过符号门禁                        | 门禁「生产禁止动态 import / vi.mock」＋「生产禁止 namespace 导入」＋「深路径禁令」                                                        |
-| 包循环依赖和构建时间不显著恶化                  | 无新增包依赖；db unit 8 files / 63 passed、typecheck 通过                                                                                 |
+| 验收（R04 目标）                                | 测试                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 默认入口只导出稳定 Repository/类型              | 门禁「默认入口不再全量泄漏 schema」（无 `export *`）＋显式导出清单                            |
+| getDb/schema 的新增依赖受控，历史出口有迁移边界 | 默认入口不导出 getDb；生产 internal 只允许 10 个组合点单符号导入；testing/internal 端到端可用 |
+| Web feature / Gateway / 领域包不直接依赖 schema | 门禁「生产代码不新增 schema 表符号依赖」（17 表 denylist，基线 0）                            |
+| 静态门禁拒绝 schema/testing 与新增 getDb 依赖   | 门禁只允许获准 internal getDb，拒绝 testing/schema/其它 subpath 与默认入口 getDb              |
+| 生产组合根向 Repository/Port 迁移               | internal allowlist 只可减量、不可扩张                                                         |
+| 没有几十个临时 re-export 掩盖超级出口           | 新增入口仅 2 个小文件；默认入口移除 2 个 `export *` 与 3 个无引用符号                         |
+| 生产代码不得绕过符号门禁                        | 门禁「生产禁止动态 import / vi.mock」＋「生产禁止 namespace 导入」＋「深路径禁令」            |
+| 包循环依赖和构建时间不显著恶化                  | 无新增包依赖；db unit 8 files / 63 passed、typecheck 通过                                     |
 
 #### R04.6 验证结果
 
@@ -773,15 +767,14 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 | `rtk pnpm typecheck`                            | 0      | 全 workspace 通过                                   |
 | `rtk git diff --check`                          | 0      | 干净                                                |
 
-#### R04.7 结论
+#### R04.7 最终复核结论
 
-- 结论：`REVIEW_REQUIRED`，无 BLOCKED。
-- 待 Codex 复核：
-  - getDb 生产基线 10 文件是否接受在 R05/R06 迁移前继续留在默认入口；
+- 结论：`PASS`，无 BLOCKED。Codex 复核接受以下后续边界：
+  - 10 个服务端组合点暂经 internal allowlist 使用 `getDb`，默认入口已移除；后续只允许减量；
   - 17 个 schema 表按需保留的期限（建议随 R08，与测试引用迁移到 `@educanvas/db/testing` 同步）；
   - exports 指向 TS 源码对 gateway/worker esbuild 构建与 Next.js Turbopack 的兼容性，
     建议在 CI build 阶段补一次验证；
-  - 门禁 getDb 基线断言用「⊆ 基线」而非精确相等，允许迁移减量、拒绝增量，复核该语义是否合适；
+  - internal getDb allowlist 用「⊆ 基线」允许迁移减量、拒绝增量；
   - `src/index.ts` 现 464 行（原 454 行）接近拆分阈值，建议 R08 收口随出口精简一并拆分，本任务不拆以避免大量 re-export 掩盖收口语义。
 
 ### R05：Turn 与执行事实单轨化
@@ -807,6 +800,66 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 - 失败恢复、取消、审批、引用和教学事实没有回归；
 - 旧表删除必须单独任务执行，不与首次切换同 PR。
 
+### R05 台账（2026-08-06，最终结论 `PASS`）
+
+R05 为运行时事实单轨化收口。本台账记录 A1 决策矩阵与证据链（全部以当前代码 `file:line`
+为准，不依据旧报告）；收口动作（A2 静态门禁与 @deprecated 标注、B1-B3 工厂迁移）在
+R05/R06 同任务内实施，验证结果见台账末尾。Codex 复核补齐了有界历史回填，并纠正了与
+ADR-0013 冲突的权威方向；最终结论 `PASS`，无 BLOCKED 项。
+
+#### R05.1 A1 决策矩阵：事实类型 → 唯一权威表 → 唯一生产写入者 → 读取者 → 兼容期限
+
+| 事实类型     | 唯一权威表                                                                                       | 唯一生产写入者                                                                                                                      | 主要读取者              | 兼容期限/回退                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Model Run    | `model_runs`（schema.ts:1549）                                                                   | `DrizzleAgentModelRunRepository`（agent-model-run-repository.ts:253；taskAlias 路由双形状，:34-40/:137/:161）                       | UI 运行记录、恢复、审计 | 永久（唯一表）；旧 `DrizzleModelRunRepository`（model-run-repository.ts:199）生产零调用                                     |
+| Tool Call    | `tool_calls`（schema.ts:1646）                                                                   | `DrizzleAgentToolCallRepository`（agent-tool-call-repository.ts:165；advisory lock agent-tool-execution-v2/agent-tool-provider-v2） | Worker 恢复、审批、审计 | 永久（唯一表）；旧 `DrizzleToolCallRepository`（tool-call-repository.ts:241）生产零调用                                     |
+| Tool Effect  | `tool_effects`（schema.ts:1728）                                                                 | `DrizzleToolEffectRepository`（tool-effect-repository.ts:30）                                                                       | Worker 对账/恢复        | 永久（唯一表）                                                                                                              |
+| Turn Context | `turn_context_snapshots`（schema.ts:1489）                                                       | `DrizzleAgentTurnContextRepository`（agent-turn-context-repository.ts:182）                                                         | 恢复、审计              | 永久（唯一表）                                                                                                              |
+| 消息         | 当前运行权威 `chat_messages`（schema.ts:1373）；长期平台权威 `conversation_messages`（ADR-0013） | `DrizzleChatRepository`（chat-repository.ts:228）＋ `dualWriteSettleAssistant`（k12-conversation-dual-write.ts:234）                | SSE、历史、K12 会话恢复 | 双写由 `EDUCANVAS_K12_CONVERSATION_DUAL_WRITE==='true'` 门控；回填/切读/旧表退役是三个独立闸门，settle 持续收敛已建平台投影 |
+
+#### R05.2 证据链
+
+三条生产路径当前均经统一 Agent 仓储写入，无旧写入者：
+
+| 路径         | 入口装配                                                                                                   | Context / Model Run 账本                                              | Tool Call / Effect 账本                                                                                 | Trace / 入口差异                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Web General  | `createTurnApplication` ← `createWebTurnLedgers()` / `createWebToolKernel()`                               | Web 组合模块构造 `DrizzleAgentTurnContextRepository` / `ModelRun`     | Web 组合模块唯一构造 `DrizzleAgentToolCallRepository` / `DrizzleToolEffectRepository`                   | `getWebTelemetryRuntime().turnTrace`；General Profile 与网页/Node/MCP Adapter |
+| Web Teaching | `createTurnApplication` ← `createWebTurnLedgers()` / `createWebToolKernel()`                               | 与 Web General 共享 Web 组合模块                                      | 与 Web General 共享 Web 组合模块                                                                        | 同一 Web Trace；Teaching Profile 与教学 Adapter                               |
+| Gateway      | `createGatewayTurnApplication()` ← `createGatewayDependencies()`（`apps/gateway/src/turn-composition.ts`） | Gateway 组合模块构造 `DrizzleAgentTurnContextRepository` / `ModelRun` | Gateway 组合模块构造 `DrizzleAgentToolCallRepository` / `DrizzleToolEffectRepository` 并注入 ToolKernel | Gateway Trace / Profile、Node/MCP Adapter；`agent-runner.ts` 只做可信路由投影 |
+
+旧写入者生产引用清点（全仓 grep，2026-08-06）：
+
+- `DrizzleModelRunRepository`（model-run-repository.ts:199）：仅 audited-model-gateway.ts:68
+  （生产死代码：`AuditedTurnModelGateway` 全仓无导入者）与 db 集成测试
+  （agent-ledger.integration.test.ts:111/:539/:604/:659、conversation-repositories.integration.test.ts:176/:258/:314）；
+- `DrizzleToolCallRepository`（tool-call-repository.ts:241）：仅 db 集成测试
+  （agent-ledger.integration.test.ts:403）；
+- `beginOrReplay`（turn-ledger-repository.ts:549）：仅 db 集成测试
+  （agent-ledger/conversation-repositories/asset-repository/k12 双写集成测试）；
+- 旧表删除不属本任务；旧数据 N-1 读取保留（R08 单独执行删除）。
+
+#### R05.3 收口动作（同任务内实施）
+
+- A2：`@educanvas/db` 新增静态门禁——生产代码禁止新增导入 `DrizzleModelRunRepository`/
+  `DrizzleToolCallRepository`（基线 = audited-model-gateway.ts）与绕过
+  `DrizzleAgentTurnContextRepository` 直写 turn_context_snapshots；
+- A2：`DrizzleModelRunRepository`/`DrizzleToolCallRepository` 加 `@deprecated` 标注（不删导出，R08 移除）；
+- A3：新增 `DrizzleK12ConversationBackfillRepository` 与手工 Graphile 任务
+  `maintenance:backfill_k12_conversation`。任务未加入 crontab，空 payload 默认 `dry-run`；只有显式
+  `{mode:'apply'}` 才写入。每页 1-500 条、稳定游标续跑、repeatable-read 快照、幂等补缺；发现
+  既有副本不一致时整页零写入且任务失败。返回和日志只含计数/游标，不含消息正文；
+- A3 真实 PostgreSQL 证据：双写关闭后 dry-run 零写入 → apply 补齐 → 重跑零新增 →
+  `auditK12Parity` 零差异；另覆盖 limit=1 游标续跑和“既有错配 + 缺失”整页零写入；
+- B1-B3（R06）：唯一 `createTurnApplication` 工厂 + 三入口迁移 + 跨入口一致性测试。
+
+#### R05.4 Codex 复核结论
+
+- A1 与 R00/R04 盘点一致；消息迁移方向以 accepted ADR-0013 为准：当前 K12 运行权威
+  仍是 `chat_messages`，长期平台权威是 `conversation_messages`；
+- begin 受开关控制、settle 持续收敛的语义通过开/关、零差异和真实 PostgreSQL 回填测试；
+- `audited-model-gateway.ts` 与旧 Repository 保留为有明确删除前置的 R08 候选，不在首次
+  切换中物理删除。
+
 ### R06：唯一 Turn Application 组合工厂
 
 - 依赖：R05
@@ -830,6 +883,64 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 - Gateway 无 Asset 能力时仍诚实失败，不通过伪造空能力达到“统一”；
 - 删除至少一套重复装配文件或显著缩减其职责。
 
+### R06 台账（2026-08-06，最终结论 `PASS`）
+
+R06 完成标准四项全部达成；B1-B3 与 R05 A2 在同一任务内实施。Codex 复核修正抽象
+`ToolKernelPort` 类型和 Gateway 组合文档后，结论 `PASS`；无 BLOCKED 项。
+
+#### R06.1 B1：唯一组合工厂
+
+- 新建 `packages/agent-runtime/src/turn-application/factory.ts`：
+  `createTurnApplication(dependencies: TurnApplicationDependencies): TurnApplicationPort`
+  是 `new TurnApplicationService(dependencies)` 的唯一生产构造点；
+- `turn-application/dependencies.ts` 由 `@internal` 改为公开组合契约（仅抽象
+  Port/adapters 类型，不导入 db、Provider SDK、Web/Gateway 实现）；
+- `src/turn-application.ts` 与 `src/index.ts` 导出 `createTurnApplication` 与
+  `TurnApplicationDependencies`；
+- 新增 `turn-application.factory.test.ts`（2 用例：主编排可运行、可选依赖缺省行为一致）。
+
+#### R06.2 B2：三生产入口迁移
+
+| 入口         | 迁移前                                               | 迁移后                                                                                            |
+| ------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Web General  | `new TurnApplicationService`（general-turn.ts:96）   | `createTurnApplication`（general-turn.ts:96）                                                     |
+| Web Teaching | `new TurnApplicationService`（learning-turn.ts:112） | `createTurnApplication`（learning-turn.ts:112）                                                   |
+| Gateway      | `new TurnApplicationService`（旧 agent-runner.ts）   | `createGatewayTurnApplication`（agent-runner.ts）→ `createTurnApplication`（turn-composition.ts） |
+
+- 全仓生产代码的 `new TurnApplicationService(` 现仅存于 factory.ts:16；
+- 测试同步：两个 web trusted-route 测试 mock 改为 `createTurnApplication`；
+  general-chat-boundary.test.ts 断言改为 `toContain('createTurnApplication')` +
+  `not.toContain('new TurnApplicationService')`；gateway agent-runner.test.ts 注入
+  ApplicationFactory 无需改动。
+
+#### R06.3 B3：静态门禁 + 跨入口一致性
+
+- 新增 `turn-application.composition-boundary.test.ts`（仿 import-boundary 静态门禁）：
+  生产代码禁止 `new TurnApplicationService(`（唯一豁免 factory.ts）、三入口必须
+  使用 `createTurnApplication`、门禁自检；
+- 新增 `turn-application.consistency.test.ts`：同一输入经工厂在五类场景收敛一致——
+  成功（completed + 账本切片）、非法流（MODEL_FAILED）、服务端取消（cancelled）、
+  缺 capability（unavailable→retryable 重试耗尽后 MODEL_FAILED，不伪造空能力成功）、
+  replay（不读取 Context、不调用 Provider）。
+
+#### R06.4 验证矩阵（2026-08-06 实跑）
+
+| 包            | 命令                                              | 结果                                                                       |
+| ------------- | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| db            | `rtk pnpm --filter @educanvas/db test`            | 8 files / 65 passed（含 A2 门禁新断言）                                    |
+| agent-runtime | `rtk pnpm --filter @educanvas/agent-runtime test` | 23 files / 99 passed（含 factory/consistency/composition-boundary 新文件） |
+| web           | `rtk pnpm --filter @educanvas/web test`           | 116 files / 918 passed                                                     |
+| gateway       | `rtk pnpm --filter @educanvas/gateway test`       | 20 files / 196 passed                                                      |
+| 全仓          | `rtk pnpm typecheck`                              | 0 error TS                                                                 |
+| 全仓          | `rtk git diff --check`                            | clean                                                                      |
+
+#### R06.5 Codex 复核结论
+
+- B1 工厂只接收抽象 Port/adapters；三入口的具体仓储、Tool Kernel 与 Trace 装配集中于
+  Web/Gateway 组合模块；
+- Gateway 缺 Asset 能力继续诚实收敛为 unavailable → `MODEL_FAILED`，不伪造空能力成功；
+- 静态门禁与五场景一致性测试锁定唯一构造点和跨入口终态语义。
+
 ### R07：兼容协议稳定标识清理
 
 - 依赖：R00
@@ -850,6 +961,27 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 - Legacy 与 canonical event 的映射有完整表驱动测试；
 - 清理冗余条件和永远等价的逻辑。
 
+### R07 台账（2026-08-06，最终结论 `PASS`）
+
+R07 为核验既有实现（web-turn.ts 与 turn-application-projection.ts 在本任务前已完成
+稳定标识清理），台账更新状态并记录证据。实现与测试均存在且通过，无需新代码。
+
+#### R07.1 验收标准 → 证据映射
+
+| 验收标准                                                                 | 实现证据                                                                                                                           | 测试证据                                                                               |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Tool ID/failure code/retryable/capability 不由中文 label 或 message 推断 | `web-turn.ts:60` `capability.name` 稳定标识；`turn-application-projection.ts:5` `toGatewayFailureCode`（gateway-runtime 稳定枚举） | `turn-application-projection-stability.test.ts`                                        |
+| Legacy 投影只消费稳定枚举                                                | `turn-application-projection.ts:101-107` `tool.failed` → `toGatewayFailureCode(event.code)`                                        | `turn-application-projection-mapping.test.ts` 表驱动 cases                             |
+| `tool.failed` 不再无差别映射为同一错误                                   | `gatewayToLegacy`（:225-231）透传 `event.code`，不同 code 保留                                                                     | 同上表驱动                                                                             |
+| 修改 UI 文案不改变协议结果                                               | `safeFailureMessage`（:8-19）从稳定 code 单向派生文案                                                                              | `stability.test.ts:151`（不同 audience 仅 message 不同，code/retryable 一致）          |
+| 未知枚举 fail closed                                                     | `displayToolLabel`（:47-49）兜底通用文案；`TOOL_LABELS`（:32-45）收录 capability 与工具名两种写法                                  | `stability.test.ts:100`（未知 tool ID 不反向推断）、`:121`（未知失败码原样透传不猜测） |
+| 清理冗余/永远等价逻辑                                                    | `TOOL_LABELS` 多键同文案是跨入口写法兼容（本地 Adapter/Node/MCP 标识不一致），非永远等价                                           | `stability.test.ts:185`（不同书写形式映射同一动作名）                                  |
+
+#### R07.2 Codex 复核结论
+
+- 既有实现满足 R07 全部完成标准；表驱动映射、未知枚举 fail closed 和文案稳定性测试均通过，
+  R07 从 PENDING 解除并标记 `PASS`。
+
 ### R08：删除审计、文档回写与收口
 
 - 依赖：R05、R06、R07
@@ -864,19 +996,81 @@ toolApprovalIntents` —— 生产引用 0，测试引用 23 处（apps/worker�
 - 全 CI 通过；
 - Codex 独立复核后才能归档。
 
+### R08 收口台账（2026-08-06，最终结论 `PASS`）
+
+本台账记录 R05/R06 REVISE 后的遗留路径、删除清单与审计结论。不删除任何物理文件或表，
+仅标注每条路径的状态与归属。
+
+#### R08.1 遗留路径审计
+
+| 路径                              | 状态                         | 位置                                                                                                            | 说明                                                                                                                                                                                                                        |
+| --------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuditedTurnModelGateway`         | **removed candidiate**       | `apps/web/server/model/audited-model-gateway.ts:67`                                                             | 全仓零导入者，仅自身定义与 import-boundary 基线引用；内部持有 `DrizzleModelRunRepository`（旧写入者）                                                                                                                       |
+| `DrizzleModelRunRepository`（旧） | **read-only with deadline**  | `packages/db/src/model-run-repository.ts:199`                                                                   | 仅 audited-model-gateway.ts（死代码）与 db 集成测试引用；已 @deprecated，R08 删除 audited-model-gateway.ts 后全仓零生产引用                                                                                                 |
+| `DrizzleToolCallRepository`（旧） | **read-only with deadline**  | `packages/db/src/tool-call-repository.ts:241`                                                                   | 生产零调用（全仓 grep 确认）；仅 db 集成测试引用 `agent-ledger.integration.test.ts:403`；已 @deprecated                                                                                                                     |
+| `beginOrReplay`（旧 Turn ledger） | **read-only with deadline**  | `packages/db/src/turn-ledger-repository.ts:549`                                                                 | 仅 db 集成测试引用；生产代码走 `DrizzleTeachingTurnLedger.beginOrReplay`                                                                                                                                                    |
+| K12 conversation 双写             | **read-only with deadline**  | `packages/db/src/k12-conversation-dual-write.ts`                                                                | 开关门控（`EDUCANVAS_K12_CONVERSATION_DUAL_WRITE==='true'`），关闭即停止新投影创建；settle 始终收敛。退出路线遵循 ADR-0013：回填并对账后把可见消息切读到 `conversation_messages`，教学运行态另行迁移和批准后才退役旧字段/表 |
+| K12 历史回填                      | **bounded maintenance path** | `packages/db/src/k12-conversation-backfill-repository.ts`、`apps/worker/src/tasks/backfill-k12-conversation.ts` | 手工 Graphile 任务；默认 dry-run、显式 apply、每页最多 500、稳定游标、幂等补缺、错配整页零写入；不进 crontab                                                                                                                |
+| `getDb` 默认出口                  | **removed**                  | `packages/db/src/index.ts`                                                                                      | 默认入口已移除；10 个获准服务端组合点经 internal 单符号 allowlist 使用，后续只可迁往 Repository 并减量                                                                                                                      |
+
+#### R08.2 明确删除候选（不在本任务删除）
+
+| 候选                                                          | 文件                                                                                                            | 前置条件                                                                                                                |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `AuditedTurnModelGateway` + `DrizzleModelRunRepository`（旧） | `apps/web/server/model/audited-model-gateway.ts`、`packages/db/src/model-run-repository.ts`                     | audited-model-gateway.ts 先删除（零导入者），再删 model-run-repository.ts（需同步更新 db 集成测试）                     |
+| `DrizzleToolCallRepository`（旧）                             | `packages/db/src/tool-call-repository.ts`                                                                       | 先更新 agent-ledger.integration.test.ts（唯一引用），再删文件                                                           |
+| `beginOrReplay`（旧方法）                                     | `packages/db/src/turn-ledger-repository.ts`                                                                     | 先更新 conversation-repositories.integration.test.ts 等 db 集成测试，再删方法                                           |
+| K12 双写机制                                                  | `packages/db/src/k12-conversation-dual-write.ts` 及相关文件                                                     | 有界回填完成 + 对账零差异 ≥ 1 发布周期 + 可见消息消费者切到 `conversation_messages`；教学运行态获得新归属后另行批准退役 |
+| K12 回填任务                                                  | `packages/db/src/k12-conversation-backfill-repository.ts`、`apps/worker/src/tasks/backfill-k12-conversation.ts` | 双写副本删除且回退窗口结束后，与对账工具一并删除                                                                        |
+
+#### R08.3 当前 Turn 组合点审计
+
+| 组合点                                | 构造方式                                                                                                      | 唯一性            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Web General (`general-turn.ts:96`)    | `createTurnApplication(...)` ← `createWebTurnLedgers()`                                                       | ✅ 经共享组合模块 |
+| Web Teaching (`learning-turn.ts:112`) | `createTurnApplication(...)` ← `createWebTurnLedgers()`                                                       | ✅ 经共享组合模块 |
+| Gateway (`agent-runner.ts`)           | `createGatewayTurnApplication(...)` ← `createGatewayDependencies()`（`apps/gateway/src/turn-composition.ts`） | ✅ 经共享组合模块 |
+| `factory.ts:16`                       | `new TurnApplicationService(deps)`                                                                            | ✅ 唯一构造点     |
+
+#### R08.4 默认 DB 出口审计
+
+- `@educanvas/db` 默认入口：受控 exports（`.`、`./internal`、`./testing`），无 `export *`
+- 默认入口 `getDb` 导出/生产引用均为 0；internal getDb allowlist 为 10 个组合点，只可减量
+- 动态 import 绕过：已封闭（import-boundary 门禁）
+- schema 表 denylist：17 个表，生产引用基线 0
+
+#### R08.5 静态门禁汇总
+
+| 门禁                                  | 文件                                                                       | 断言数 | 状态             |
+| ------------------------------------- | -------------------------------------------------------------------------- | ------ | ---------------- |
+| db import-boundary                    | `packages/db/src/import-boundary.test.ts`                                  | 13     | ✅ R04/R05       |
+| turn-application composition-boundary | `packages/agent-runtime/src/turn-application.composition-boundary.test.ts` | 9      | ✅ R06（新增 6） |
+| turn-application consistency          | `packages/agent-runtime/src/turn-application.consistency.test.ts`          | 5      | ✅ R06           |
+| Turn composition production boundary  | `tooling/turn-composition-boundary.test.mjs`                               | 2      | ✅ R00           |
+| Telemetry production boundary         | `tooling/telemetry-composition-boundary.test.mjs`                          | 2      | ✅ R03           |
+| Runtime module size boundary          | `tooling/runtime-module-size-boundary.test.mjs`                            | 3      | ✅ R06（已更新） |
+
+#### R08.6 Codex 复核结论
+
+- 遗留路径均落入 `removed candidate`、`read-only with deadline`、`bounded maintenance path`
+  或 `blocked with owner`，没有把目标状态冒充当前事实；
+- 删除候选均保留独立迁移、集成测试和回退前置，不与首次切换同 PR 物理删除；
+- K12 回填、切读和旧表退役按 ADR-0013 分闸门；本轮只交付可测量的回填与对账路径；
+- R00-R08 全部通过后，本计划可归档。
+
 ## 七、验证台账
 
-| 任务               | 状态              | 证据                                                                                                                                                                                                                                     |
-| ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R00 基线与权威矩阵 | `REVIEW_REQUIRED` | 2026-08-06 台账：HEAD fe6ab1a、三条 Turn 调用图、持久表/写入者盘点、包出口、UV/KM 交集、R00.7 权威矩阵；待 Codex 复核                                                                                                                    |
-| R01 Node 基线      | `PENDING`         | version gate、全量 typecheck、CI                                                                                                                                                                                                         |
-| R02 Asset 追溯     | `REVIEW_REQUIRED` | 2026-08-06 台账：ContextSegment 0/1/N Asset 契约、profile 多图全量登记、fail closed 校验、integration 账本重建；unit + PostgreSQL integration 全过，无 migration                                                                         |
-| R03 配置单次解析   | `REVIEW_REQUIRED` | factory/config spy+注入测试：model-gateway factory 9/9、web model-runtime 8/8、worker model-runtime 9/9；见 R03 台账（:475）                                                                                                             |
-| R04 DB 公共出口    | `PASS`            | 2026-08-07 Codex 复核：默认入口显式化（无 `export *`）、受控 subpath internal/testing、import-boundary 静态门禁 11 断言、动态 import 绕过已封闭；既有 getDb/schema 出口留待 R06/R08；db unit 8/63、tooling 100、全仓 lint/typecheck 全过 |
-| R05 持久事实单轨   | `PENDING`         | migration、对账、跨入口 integration                                                                                                                                                                                                      |
-| R06 组合工厂       | `PENDING`         | cross-entry contract tests                                                                                                                                                                                                               |
-| R07 协议标识       | `PENDING`         | table-driven compatibility tests                                                                                                                                                                                                         |
-| R08 收口           | `PENDING`         | full CI、删除清单、canonical 文档                                                                                                                                                                                                        |
+| 任务               | 状态   | 证据                                                                                                                                                                                                                                     |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R00 基线与权威矩阵 | `PASS` | Codex 复核三条 Turn 调用图、持久事实写入者、包出口和跨线所有权；后续实现与矩阵一致                                                                                                                                                       |
+| R01 Node 基线      | `PASS` | `.nvmrc`/engines/CI/所有 workspace `@types/node` 统一 Node 22；`node:gate` 与漂移负例通过                                                                                                                                                |
+| R02 Asset 追溯     | `PASS` | ContextSegment 0/1/N Asset 契约、profile 多图全量登记、fail closed 校验、PostgreSQL 账本重建通过，无 migration                                                                                                                           |
+| R03 配置单次解析   | `PASS` | factory/config spy+注入测试通过；Web/Worker parse-once、能力级降级与 Secret 边界经 Codex 复核                                                                                                                                            |
+| R04 DB 公共出口    | `PASS` | 2026-08-07 Codex 复核：默认入口显式化（无 `export *`）、受控 subpath internal/testing、import-boundary 静态门禁 11 断言、动态 import 绕过已封闭；既有 getDb/schema 出口留待 R06/R08；db unit 8/63、tooling 100、全仓 lint/typecheck 全过 |
+| R05 持久事实单轨   | `PASS` | 区分当前 K12 运行权威与 ADR-0013 长期平台权威；有界手工回填默认 dry-run、显式 apply、游标续跑、错配零写入；真实 PostgreSQL 对账通过                                                                                                      |
+| R06 组合工厂       | `PASS` | ToolKernelPort 抽象接口 + Web/Gateway 组合模块 + 三入口消除 Drizzle/ToolKernel 直接构造；静态门禁与五场景一致性测试通过                                                                                                                  |
+| R07 协议标识       | `PASS` | 稳定 capability/failure code、未知枚举 fail closed、文案单向派生和表驱动映射测试通过                                                                                                                                                     |
+| R08 收口           | `PASS` | 遗留路径和删除前置完成审计；全验证绿：db integration 46/288、gateway 20/196、agent-runtime 23/99、web 116/918、worker 23/120、tooling 100/100、lint/typecheck/diff-check                                                                 |
 
 ## 八、阶段级验证
 
@@ -902,12 +1096,12 @@ rtk git status --short
 
 ## 十、收尾检查表
 
-- [ ] 每类执行事实都有唯一权威与唯一新写入者；
-- [ ] Web、Teaching、Gateway 使用统一组合工厂；
-- [ ] 默认 DB 出口不暴露底层连接和全部 schema；
-- [ ] Context Snapshot 完整记录多 Asset；
-- [ ] Node runtime/types/CI 一致；
-- [ ] 展示文案不参与协议身份；
-- [ ] 旧路径已有删除或限期读取结论；
-- [ ] 稳定事实已回写 canonical 文档；
-- [ ] 计划已移入 `completed/` 并更新 active 索引。
+- [x] 每类执行事实都有当前权威、长期目标与唯一新写入者；
+- [x] Web、Teaching、Gateway 使用统一组合工厂；
+- [x] 默认 DB 出口不暴露底层连接和全部 schema；
+- [x] Context Snapshot 完整记录多 Asset；
+- [x] Node runtime/types/CI 一致；
+- [x] 展示文案不参与协议身份；
+- [x] 旧路径已有删除或限期读取结论；
+- [x] 稳定事实已回写 canonical 文档；
+- [x] 计划已移入 `completed/` 并更新 active 索引。

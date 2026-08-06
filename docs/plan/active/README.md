@@ -11,7 +11,8 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [W 工作面画布](W-工作面画布收敛.md) | 项目负责人 | W00 产出物完成，待 Codex 审核（不替 Codex 宣布 PASS）               | 与 R 不重叠 Web server；与 Q 独立  |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
-[P 学习档案](../completed/P-学习档案.md)和[C 模型配置](../completed/C-模型配置.md)均已完成并归档，
+[P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)和
+[R 运行时收敛](../completed/R-运行时事实收敛.md)均已完成并归档，
 不再作为待分配任务。
 O 线完成 O03/O04 后再由 Codex 做跨线审计。
 
