@@ -67,6 +67,8 @@ class FakeAudioContext implements AudioContextLike {
   readonly processors: FakeScriptProcessor[] = [];
   resumeCalls = 0;
   closeCalls = 0;
+  /** 非空时 resume 返回挂起 promise，由测试手动 resolve（竞争时序用）。 */
+  resumeGate: { resolve: () => void } | null = null;
   constructor(
     readonly sampleRate: number,
     public state: 'suspended' | 'running' | 'closed' = 'running',
@@ -86,6 +88,11 @@ class FakeAudioContext implements AudioContextLike {
   }
   resume(): Promise<void> {
     this.resumeCalls += 1;
+    if (this.resumeGate !== null) {
+      return new Promise<void>((resolve) => {
+        this.resumeGate!.resolve = resolve;
+      });
+    }
     this.state = 'running';
     return Promise.resolve();
   }
@@ -100,11 +107,18 @@ class FakeMediaDevices implements MediaDevicesLike {
   getUserMediaCalls = 0;
   streams: FakeStream[] = [];
   error: Error | null = null;
+  /** 非空时 getUserMedia 返回挂起 promise，由测试手动 resolve（竞争时序用）。 */
+  gate: { resolve: (stream: MediaStreamLike) => void } | null = null;
   async getUserMedia(): Promise<MediaStreamLike> {
     this.getUserMediaCalls += 1;
     if (this.error !== null) throw this.error;
     const stream = new FakeStream([new FakeTrack()]);
     this.streams.push(stream);
+    if (this.gate !== null) {
+      return new Promise<MediaStreamLike>((resolve) => {
+        this.gate!.resolve = resolve;
+      });
+    }
     return stream;
   }
 }
@@ -458,6 +472,25 @@ describe('失败路径（V16 必测）', () => {
     h.fire([filled(1601, 0.1)]);
     expect(delivered).toBe(1);
   });
+
+  it('单次回调含多个满块时，首个 consumer 抛错后不再交付同一批后续块', async () => {
+    let delivered = 0;
+    const h = await makeHarness({
+      chunkBytes: 64, // targetSamples = 32
+      onChunk: () => {
+        delivered += 1;
+        if (delivered === 1) throw new Error('boom');
+      },
+    });
+    // 16k 直通 161 输入 → 161 输出 → 5 个满块（32×5=160）+ 1 残留。
+    // 一次回调内 flushChunks 循环切出 5 块：第一个抛错后必须立即停止。
+    h.fire([filled(161, 0.1)]);
+    expect(delivered).toBe(1);
+    expect(h.capture.state).toBe('failed');
+    expect(h.failures).toEqual(['CONSUMER_FAILED']);
+    expect(h.devices.streams[0]!.tracks[0]!.stopCalls).toBe(1);
+    expect(h.context.closeCalls).toBe(1);
+  });
 });
 
 // ── start 期间竞争 ─────────────────────────────────────────────────
@@ -495,6 +528,47 @@ describe('start 期间 stop/cancel 竞争（V16 必测）', () => {
     h.capture.stop();
     await expect(pending).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
     expect(h.capture.state).toBe('failed');
+  });
+
+  it('cleanup 在 getUserMedia 等待期间调用：start 不得重启麦克风', async () => {
+    const devices = new FakeMediaDevices();
+    devices.gate = { resolve: () => undefined };
+    const h = await makeHarness({ devices, autoStart: false });
+    const pending = h.capture.start(); // getUserMedia 挂起
+    h.capture.cleanup(); // 终态 stopped
+    expect(h.capture.state).toBe('stopped');
+    // 迟到的流在 cleanup 之后才到达。
+    devices.gate!.resolve(devices.streams[0]!);
+    const result = await pending;
+    expect(result).toEqual({ status: 'cancelled' });
+    // 终态不被覆盖为 recording，context 从未创建，迟到 track 被停掉。
+    expect(h.capture.state).toBe('stopped');
+    expect(h.context.closeCalls).toBe(0);
+    expect(devices.streams[0]!.tracks[0]!.stopCalls).toBe(1);
+  });
+
+  it('cleanup 在 resume 等待期间调用：迟到的 context 被关闭', async () => {
+    const context = new FakeAudioContext(16000, 'suspended');
+    context.resumeGate = { resolve: () => undefined };
+    const devices = new FakeMediaDevices();
+    const h = await makeHarness({
+      devices,
+      autoStart: false,
+      audioContextFactory: () => context,
+    });
+    const pending = h.capture.start();
+    // 让 getUserMedia 完成、start 进入 resume 挂起点。
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(context.resumeCalls).toBe(1);
+    h.capture.cleanup(); // 终态 stopped（此时 context 已创建）
+    expect(h.capture.state).toBe('stopped');
+    context.resumeGate!.resolve();
+    const result = await pending;
+    expect(result).toEqual({ status: 'cancelled' });
+    expect(h.capture.state).toBe('stopped');
+    expect(context.closeCalls).toBe(1); // 迟到创建的 context 已关闭
+    expect(devices.streams[0]!.tracks[0]!.stopCalls).toBe(1);
   });
 });
 

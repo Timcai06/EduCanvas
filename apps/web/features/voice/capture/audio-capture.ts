@@ -200,8 +200,10 @@ export function createAudioCapture(
   let pending: number[] = [];
   let pendingStart = 0;
 
-  /** 交付一个满/尾 chunk；consumer 抛错则终止采集。 */
-  function deliver(samples: Float32Array): void {
+  /** 交付一个满/尾 chunk；consumer 抛错则终止采集。返回 false 表示
+   *  本次交付失败（已进入终态），调用方必须立即停止后续交付。 */
+  function deliver(samples: Float32Array): boolean {
+    if (settled) return false;
     const pcmBytes = float32ToPcm16Le(samples);
     const chunk: AudioPcmChunk = { sequence, pcmBytes };
     sequence += 1;
@@ -209,15 +211,19 @@ export function createAudioCapture(
       deps.onChunk(chunk);
     } catch {
       fail('CONSUMER_FAILED');
+      return false;
     }
+    return true;
   }
 
-  /** 把 pending 中满 chunk 切出交付。 */
+  /** 把 pending 中满 chunk 切出交付；首个失败立即停止同一批剩余块。 */
   function flushChunks(): void {
     while (pending.length - pendingStart >= targetSamples) {
       const samples = pending.slice(pendingStart, pendingStart + targetSamples);
       pendingStart += targetSamples;
-      deliver(Float32Array.from(samples));
+      // 一次音频回调可能切出多个满块：第一个 consumer 抛错已进入 failed，
+      // 必须立刻终止，不得继续交付同一回调产生的后续 PCM。
+      if (!deliver(Float32Array.from(samples))) return;
     }
     // 周期压缩已消费前缀，把数组长度压回有界（≤ 4096 + 一个 chunk），
     // 防止长时间会话数组首部被已消费元素占据而持续增长。
@@ -281,7 +287,10 @@ export function createAudioCapture(
     }
   }
 
-  /** 进入终态（幂等）并清理；failed 时通知稳定码。 */
+  /** 进入终态（幂等）并清理；failed 时通知稳定码。
+   *  任何终态都终止进行中的 start 流程（置 startCancelled），否则
+   *  getUserMedia/resume 等待期间到达的终态会让 start 继续创建
+   *  AudioContext 并进入 recording（麦克风被重新启动）。 */
   function settle(
     next: AudioCaptureState,
     failureCode?: AudioCaptureFailureCode,
@@ -289,6 +298,7 @@ export function createAudioCapture(
     if (settled) return;
     settled = true;
     state = next;
+    startCancelled = true;
     releaseResources();
     if (next === 'failed' && failureCode !== undefined) {
       deps.onFailure?.(failureCode);
@@ -298,6 +308,26 @@ export function createAudioCapture(
   /** 采集异常路径：终止并清理（consumer 抛错、start 内部失败共用）。 */
   function fail(code: AudioCaptureFailureCode): void {
     settle('failed', code);
+  }
+
+  /** 放弃进行中的启动：停掉迟到获得的 track、关闭迟到创建的 context。
+   *  若终态已由 stop/cancel/cleanup 提前收敛（settle 已执行），这里只
+   *  释放绕过 settle 的迟到资源；否则收敛为 cancelled。幂等。 */
+  function abandonLateStart(): { status: 'cancelled' } {
+    if (context !== null) {
+      void context.close().catch(() => {
+        // 迟到创建的 context：settle 可能已清理过其他资源，这里单独关闭。
+      });
+      context = null;
+    }
+    if (stream !== null) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+      stream = null;
+    }
+    settle('cancelled');
+    return { status: 'cancelled' };
   }
 
   async function start(): Promise<
@@ -315,9 +345,9 @@ export function createAudioCapture(
       fail(code);
       throw new AudioCaptureError(code);
     }
-    if (startCancelled) {
-      settle('cancelled');
-      return { status: 'cancelled' };
+    // 等待期间可能已被 stop/cancel/cleanup 终态化：立即放弃，不启动。
+    if (startCancelled || settled) {
+      return abandonLateStart();
     }
     // 阶段 2：创建并连线 AudioContext。工厂抛错、resume 失败、节点创建
     // 失败与非法 sampleRate（RangeError）统一映射 AUDIO_CONTEXT_FAILED，
@@ -328,9 +358,9 @@ export function createAudioCapture(
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
-      if (startCancelled) {
-        settle('cancelled');
-        return { status: 'cancelled' };
+      // resume 等待期间同样可能已被终态化：关闭迟到创建的 context。
+      if (startCancelled || settled) {
+        return abandonLateStart();
       }
       sourceNode = ctx.createMediaStreamSource(stream);
       // 输入声道声明 2：MediaStreamAudioSourceNode 的声道数随流变化，
