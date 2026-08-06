@@ -292,6 +292,54 @@ export async function handleClientRoutes(
       return HANDLED;
     }
 
+    // V12：实时语音 WebSocket 握手 ticket。用短时（60 秒）单次使用的 ticket
+    // 替代把长时 session bearer 放进 Sec-WebSocket-Protocol（避免长时凭证
+    // 进入代理/网关/诊断日志）；Notebook 在此由服务端重新绑定校验。
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/v1/client/streaming-transcription/tickets'
+    ) {
+      if (!client.streamingTickets) {
+        writeJson(response, 503, {
+          error: { code: 'STREAMING_TRANSCRIPTION_UNAVAILABLE' },
+        });
+        return HANDLED;
+      }
+      const body = z
+        .object({ notebookId: gatewayOpaqueIdSchema })
+        .strict()
+        .parse(await readJsonBody(request));
+      if (!client.checkNotebookAccess) {
+        writeJson(response, 503, {
+          error: { code: 'STREAMING_TRANSCRIPTION_UNAVAILABLE' },
+        });
+        return HANDLED;
+      }
+      let allowed = false;
+      try {
+        allowed = await client.checkNotebookAccess({
+          notebookId: body.notebookId,
+          trustedSubjectId: identity.userId,
+        });
+      } catch {
+        allowed = false;
+      }
+      if (!allowed) {
+        // Notebook 不存在/无成员资格统一 404，不泄露差异。
+        writeJson(response, 404, { error: { code: 'NOT_FOUND' } });
+        return HANDLED;
+      }
+      writeJson(
+        response,
+        201,
+        client.streamingTickets.issue({
+          userId: identity.userId,
+          notebookId: body.notebookId,
+        }),
+      );
+      return HANDLED;
+    }
+
     const cancelMatch =
       request.method === 'POST'
         ? url.pathname.match(

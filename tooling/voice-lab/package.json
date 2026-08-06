@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "description": "Voice lab for reproducible sherpa-onnx native and WASM comparisons",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
-    "test": "node --test test-v02-s-evaluation.mjs test-v02-s-fixture-manifest.mjs test-v02-t-evaluation.mjs test-v02-u-evaluation.mjs test-v02-u-fixture-manifest.mjs test-v02-v-evaluation.mjs test-v02-w.mjs",
+    "test": "node --test --experimental-strip-types test-v02-s-evaluation.mjs test-v02-s-fixture-manifest.mjs test-v02-t-evaluation.mjs test-v02-u-evaluation.mjs test-v02-u-fixture-manifest.mjs test-v02-v-evaluation.mjs test-v02-w.mjs test-v02-x.mjs",
     "test:v02-r": "node test-v02-r.mjs",
     "prepare:v02-s-model": "node prepare-v02-s-model.mjs",
     "test:v02-s": "node run-v02-s-matrix.mjs",
@@ -18,6 +21,8 @@
     "summarize:v02-v": "node generate-v02-v-summary.mjs",
     "test:v02-w": "node run-v02-w.mjs",
     "summarize:v02-w": "node generate-v02-w-summary.mjs",
+    "test:v02-x": "node --test --experimental-strip-types test-v02-x.mjs",
+    "summarize:v02-x": "node --experimental-strip-types generate-v02-x-summary.mjs",
     "test:native": "node run-compare.mjs --engine native",
     "test:wasm": "node run-compare.mjs --engine wasm",
     "test:compare": "node run-compare.mjs --engine both",
