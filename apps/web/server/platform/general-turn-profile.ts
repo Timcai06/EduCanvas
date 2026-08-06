@@ -3,6 +3,7 @@ import 'server-only';
 import {
   extractAgentMessageText,
   modelMessageText,
+  TURN_USAGE_BUDGET_TEMPLATES,
   type ModelInputPart,
 } from '@educanvas/agent-core';
 import type {
@@ -214,6 +215,8 @@ ${IMAGE_TOOL_GUIDANCE}`
         modelAlias: 'primary' as const,
         promptVersion: PROMPT_VERSION,
         maxToolRounds: GENERAL_MAX_TOOL_ROUNDS,
+        // Q03：通用 Turn 预算模板（服务端冻结，LOOP 阶段强制执行）。
+        usageBudget: TURN_USAGE_BUDGET_TEMPLATES['agent.turn'],
       },
       // command.capabilities 是传输/渲染协商，不是 Tool grant。
       toolPolicy,

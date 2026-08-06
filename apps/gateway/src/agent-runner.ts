@@ -6,6 +6,7 @@ import type {
   ModelAbortSignal,
   TurnApplicationCommand,
   TurnModelGateway,
+  TurnUsageBudgetLedgerPort,
   ToolEffectLedgerPort,
 } from '@educanvas/agent-core';
 import {
@@ -22,6 +23,7 @@ import {
   DrizzlePlatformTurnRepository,
   DrizzleToolApprovalIntentRepository,
   DrizzleToolEffectRepository,
+  DrizzleTurnUsageBudgetLedger,
 } from '@educanvas/db';
 import type {
   GatewayInboundEnvelope,
@@ -85,6 +87,7 @@ interface GatewayApplicationDependencies {
   turns: GatewayTurnRepositoryPort;
   contextLedger: AgentTurnContextLedgerPort;
   modelRunLedger: AgentModelRunLedgerPort;
+  usageBudgetLedger: TurnUsageBudgetLedgerPort;
   toolCallLedger: AgentToolCallLedgerPort;
   toolEffectLedger: ToolEffectLedgerPort;
   nodeInvocations: NodeInvocationPersistencePort;
@@ -97,6 +100,7 @@ function productionDependencies(): GatewayApplicationDependencies {
     turns: new DrizzlePlatformTurnRepository(),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
+    usageBudgetLedger: new DrizzleTurnUsageBudgetLedger(),
     toolCallLedger: new DrizzleAgentToolCallRepository(),
     toolEffectLedger: new DrizzleToolEffectRepository(),
     nodeInvocations: new DrizzleGatewayNodeRepository(),
@@ -145,6 +149,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
               ),
               contextLedger: dependenciesOrFactory.contextLedger,
               modelRunLedger: dependenciesOrFactory.modelRunLedger,
+              usageBudgetLedger: dependenciesOrFactory.usageBudgetLedger,
               modelGateway: dependenciesOrFactory.modelGateway,
               toolKernel: new ToolKernel(
                 toolAdapters,

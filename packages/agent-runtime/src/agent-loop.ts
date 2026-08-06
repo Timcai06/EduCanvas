@@ -1,8 +1,10 @@
 import type {
+  BudgetBreachReason,
   ModelAbortSignal,
   ModelMessage,
   ModelToolDefinition,
   ModelToolResult,
+  ModelUsage,
   NormalizedModelError,
   StreamTurnTextRequest,
   TurnModelEvent,
@@ -48,6 +50,34 @@ export interface AgentLoopModelRunLifecycle<TContext> {
   }): Promise<void>;
 }
 
+/**
+ * Turn 使用预算执行器端口（Q03）— 服务端在 LOOP 阶段强制执行预算。
+ * Agent Loop 不关心预算如何记账，只管在固定检查点调用；超预算时
+ * 必须以 BUDGET_EXCEEDED 终态终止，不得伪装为成功。
+ */
+export interface AgentLoopUsageBudgetPort {
+  /** 每次模型调用尝试前（含重试）。返回 reason 表示超预算。 */
+  checkBeforeModelCall(input: {
+    run: number;
+    attempt: number;
+    request: StreamTurnTextRequest;
+  }): BudgetBreachReason | null;
+  /** usage 事件到达时记账（最后一次到达为准）。 */
+  observeUsage(usage: ModelUsage): void;
+  /** 每次 run 收敛后（成功）复查累计量。 */
+  checkAfterModelRun(input: {
+    run: number;
+    ok: boolean;
+    textCharacters: number;
+  }): BudgetBreachReason | null;
+  /** 每批工具执行前投影检查。 */
+  checkBeforeToolExecution(input: {
+    calls: readonly { callId: string; tool: string }[];
+  }): BudgetBreachReason | null;
+  /** 工具结果落地（喂回模型前）：计数并按截断协议处理超限结果。 */
+  observeToolResult(result: ModelToolResult): ModelToolResult;
+}
+
 export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
   traceId: string;
   turnId: string;
@@ -56,6 +86,7 @@ export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
   maxToolRounds: number;
   signal?: ModelAbortSignal;
   modelRunLifecycle?: AgentLoopModelRunLifecycle<TModelRunContext>;
+  usageBudget?: AgentLoopUsageBudgetPort;
   executeTools(
     calls: readonly ParsedToolCall[],
     context: {
@@ -78,16 +109,25 @@ export type AgentLoopEvent<TDetail, TFailure> =
   | { type: 'tool.started'; run: number; call: ParsedToolCall }
   | { type: 'tool.result'; run: number; result: AgentLoopToolSuccess<TDetail> }
   | { type: 'completed'; modelRunCount: number }
-  | {
-      type: 'failed';
-      code:
-        | 'MODEL_GATEWAY_FAILED'
-        | 'MODEL_ABORTED'
-        | 'INVALID_MODEL_STREAM'
-        | 'DUPLICATE_TOOL_CALL_ID'
-        | 'RUNTIME_FAILED';
-      error: NormalizedModelError;
-    }
+  | (
+      | {
+          type: 'failed';
+          code:
+            | 'MODEL_GATEWAY_FAILED'
+            | 'MODEL_ABORTED'
+            | 'INVALID_MODEL_STREAM'
+            | 'DUPLICATE_TOOL_CALL_ID'
+            | 'RUNTIME_FAILED';
+          error: NormalizedModelError;
+        }
+      | {
+          type: 'failed';
+          code: 'BUDGET_EXCEEDED';
+          /** 超预算的具体维度，供账本/Trace/指标使用。 */
+          budgetReason: BudgetBreachReason;
+          error: NormalizedModelError;
+        }
+    )
   | { type: 'tool.failed'; failure: TFailure };
 
 const MAX_MODEL_RETRIES = 3;
@@ -113,6 +153,21 @@ const retryDelayMs = (
   const jitter = random() * capped * 0.3;
   return Math.round(capped + jitter);
 };
+
+/** Q03：超预算的稳定终态事件（retryable=false，重试只会重复烧预算）。 */
+const budgetExceededEvent = (
+  budgetReason: BudgetBreachReason,
+): {
+  type: 'failed';
+  code: 'BUDGET_EXCEEDED';
+  budgetReason: BudgetBreachReason;
+  error: NormalizedModelError;
+} => ({
+  type: 'failed',
+  code: 'BUDGET_EXCEEDED',
+  budgetReason,
+  error: { code: 'unknown', retryable: false },
+});
 
 const waitForRetry = (
   ms: number,
@@ -259,6 +314,16 @@ export class AgentLoopEngine {
           }
         }
         try {
+          // 每次尝试都计入模型调用与时间预算：重试不能绕过预算。
+          const budgetReason = command.usageBudget?.checkBeforeModelCall({
+            run,
+            attempt,
+            request,
+          });
+          if (budgetReason) {
+            yield budgetExceededEvent(budgetReason);
+            return;
+          }
           modelRun = await command.modelRunLifecycle?.start({ run, request });
         } catch {
           yield {
@@ -282,6 +347,9 @@ export class AgentLoopEngine {
             break;
           }
           emittedEvent = true;
+          if (step.value.type === 'usage') {
+            command.usageBudget?.observeUsage(step.value.usage);
+          }
           if (separatorPending && step.value.type === 'text_delta') {
             separatorPending = false;
             yield {
@@ -323,6 +391,16 @@ export class AgentLoopEngine {
       }
       hadAnyText = hadAnyText || outcome.hadText;
       textCharacters = outcome.textCharacters;
+      // 成功收敛后复查累计量：输入/输出 token、成本与时间。
+      const afterRunReason = command.usageBudget?.checkAfterModelRun({
+        run,
+        ok: true,
+        textCharacters,
+      });
+      if (afterRunReason) {
+        yield budgetExceededEvent(afterRunReason);
+        return;
+      }
       if (outcome.toolCalls.length === 0) {
         yield { type: 'completed', modelRunCount: run };
         return;
@@ -333,6 +411,14 @@ export class AgentLoopEngine {
           code: 'MODEL_ABORTED',
           error: { code: 'aborted', retryable: false },
         };
+        return;
+      }
+      // 工具执行前投影检查：已执行 + 本批待执行。
+      const beforeToolsReason = command.usageBudget?.checkBeforeToolExecution({
+        calls: outcome.toolCalls,
+      });
+      if (beforeToolsReason) {
+        yield budgetExceededEvent(beforeToolsReason);
         return;
       }
       for (const call of outcome.toolCalls) {
@@ -370,7 +456,11 @@ export class AgentLoopEngine {
           };
           return;
         }
-        accumulatedResults.push(result.modelResult);
+        // 截断协议：超限的工具结果在喂回模型前被替换为稳定截断副本。
+        accumulatedResults.push(
+          command.usageBudget?.observeToolResult(result.modelResult) ??
+            result.modelResult,
+        );
         yield { type: 'tool.result', run, result };
       }
     }
@@ -421,6 +511,16 @@ export class AgentLoopEngine {
         }
       }
       try {
+        // 与 answer 段一致：每次尝试都计入预算，重试不能绕过。
+        const budgetReason = command.usageBudget?.checkBeforeModelCall({
+          run,
+          attempt,
+          request: synthesisRequest,
+        });
+        if (budgetReason) {
+          yield budgetExceededEvent(budgetReason);
+          return;
+        }
         synthesisModelRun = await command.modelRunLifecycle?.start({
           run,
           request: synthesisRequest,
@@ -447,6 +547,9 @@ export class AgentLoopEngine {
           break;
         }
         emittedEvent = true;
+        if (step.value.type === 'usage') {
+          command.usageBudget?.observeUsage(step.value.usage);
+        }
         if (separatorPending && step.value.type === 'text_delta') {
           separatorPending = false;
           yield {
@@ -488,6 +591,15 @@ export class AgentLoopEngine {
         code: synthesisOutcome.code,
         error: synthesisOutcome.error,
       };
+      return;
+    }
+    const afterSynthesisReason = command.usageBudget?.checkAfterModelRun({
+      run,
+      ok: true,
+      textCharacters: synthesisOutcome.textCharacters,
+    });
+    if (afterSynthesisReason) {
+      yield budgetExceededEvent(afterSynthesisReason);
       return;
     }
     if (synthesisOutcome.toolCalls.length > 0) {

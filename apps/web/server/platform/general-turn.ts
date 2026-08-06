@@ -10,6 +10,7 @@ import { TurnApplicationService } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentTurnContextRepository,
+  DrizzleTurnUsageBudgetLedger,
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
@@ -107,6 +108,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     ),
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
+    usageBudgetLedger: new DrizzleTurnUsageBudgetLedger(),
     modelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),

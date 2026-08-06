@@ -40,6 +40,7 @@ import {
   DrizzleAgentTurnContextRepository,
   DrizzleStudyPlanRepository,
   DrizzleToolEffectRepository,
+  DrizzleTurnUsageBudgetLedger,
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
@@ -114,6 +115,7 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile,
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
+    usageBudgetLedger: new DrizzleTurnUsageBudgetLedger(),
     modelGateway: runtime?.gateway ?? unavailableModelGateway,
     toolKernel: new ToolKernel(
       adapters,
