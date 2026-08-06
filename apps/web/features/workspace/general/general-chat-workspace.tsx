@@ -1,23 +1,17 @@
 'use client';
 
-import { startNewGeneralChatAction } from '@/app/actions';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
-import { OfflineBanner } from '@/features/chat/offline-banner';
 import { ArtifactConfirmSheet } from '@/features/canvas/artifact-generation-flow';
 import { CanvasResourceOpenStatus } from '@/features/canvas/canvas-resource-open-status';
-import { StudioOverlay } from '@/features/studio/studio-overlay';
-import { StudioWorkspace } from '@/features/studio/studio-workspace';
 import { motionDuration } from '@/features/theme/motion';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { useRef } from 'react';
 import { useSidebarState } from './use-sidebar-state';
-import { ConversationSidebar } from './conversation-sidebar';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
-import { GeneralWorkspaceHeader } from './general-workspace-header';
-import { ConversationPane } from './conversation-pane';
+import { GeneralWorkspaceLayout } from './general-workspace-layout';
 import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { useGeneralWorkspaceController } from './use-general-workspace-controller';
 import { GENERAL_ASSET_ENDPOINT } from './general-chat-config';
@@ -25,11 +19,12 @@ import { GENERAL_ASSET_ENDPOINT } from './general-chat-config';
 gsap.registerPlugin(useGSAP, Flip);
 
 /**
- * 组合层（W02）：请求、会话恢复与状态转换已收敛到 `useGeneralWorkspaceController`，
- * 工作面渲染收敛到 `ConversationPane` + `WorkspaceSurfaceSlot`。本组件只负责：
+ * 组合层（W02）：请求、会话恢复与状态转换收敛在 `useGeneralWorkspaceController`；
+ * 页面框架收敛在 `GeneralWorkspaceLayout`；工作面渲染收敛在 `ConversationPane` +
+ * `WorkspaceSurfaceSlot`。本组件只负责：
  * - 创建 DOM 引用并注入控制器；
  * - 播放落地 → 对话的输入坞 Flip 位移；
- * - 组装 header / sidebar / main / studio overlay / sheets 的布局。
+ * - 渲染不属于页面框架的全屏层（Agent 氛围、落地全屏工作面、sheets、无障碍播报）。
  */
 export function GeneralChatWorkspace({
   initialMessages,
@@ -54,7 +49,6 @@ export function GeneralChatWorkspace({
     scrollRef,
     nearBottom,
   });
-  const { surface } = ctrl;
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
@@ -94,77 +88,15 @@ export function GeneralChatWorkspace({
 
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
-      <GeneralWorkspaceHeader
+      <GeneralWorkspaceLayout
+        ctrl={ctrl}
         notebookTitle={notebookTitle}
         conversationId={conversationId}
         sidebarOpen={sidebarOpen}
-        studioOpen={surface.type === 'studio'}
         onToggleSidebar={toggleSidebar}
-        onOpenStudio={() => {
-          if (surface.type === 'studio') {
-            ctrl.workspace.closeStudio();
-            return;
-          }
-          ctrl.openStudio();
-        }}
+        mainRef={mainRef}
+        resourceOpenStatus={resourceOpenStatus}
       />
-
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <ConversationSidebar
-          open={sidebarOpen}
-          onClose={toggleSidebar}
-          activeConversationId={conversationId}
-          onNewNotebook={() => void startNewGeneralChatAction()}
-        />
-        <main
-          ref={mainRef}
-          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-        >
-          {!ctrl.online ? (
-            <div className="relative z-10 shrink-0 pt-1">
-              <OfflineBanner />
-            </div>
-          ) : null}
-          {ctrl.isLanding ? (
-            <ConversationPane {...ctrl.conversationPaneProps} isLanding />
-          ) : (
-            <div className="relative z-10 flex min-h-0 flex-1">
-              <ConversationPane
-                {...ctrl.conversationPaneProps}
-                isLanding={false}
-              />
-              {resourceOpenStatus ? (
-                resourceOpenStatus
-              ) : (
-                <WorkspaceSurfaceSlot
-                  {...ctrl.surfaceSlotProps}
-                  fullscreen={false}
-                />
-              )}
-            </div>
-          )}
-        </main>
-        {surface.type === 'studio' ? (
-          <StudioOverlay onClose={() => ctrl.workspace.closeStudio()}>
-            <StudioWorkspace
-              assets={ctrl.notebookSources}
-              outputs={ctrl.studioItems}
-              onOpenSource={(asset) => {
-                ctrl.workspace.closeStudio();
-                ctrl.artifactFlow.closeCanvas();
-                ctrl.studioOpenActions.actions.openSource(asset.id);
-              }}
-              onOpenOutput={(artifactId) => {
-                ctrl.workspace.closeStudio();
-                ctrl.studioOpenActions.actions.openArtifact(artifactId);
-              }}
-              onToggleSource={ctrl.sources.toggle}
-              onRenameSource={ctrl.sources.rename}
-              onDeleteSource={ctrl.sources.remove}
-            />
-          </StudioOverlay>
-        ) : null}
-      </div>
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={ctrl.turn.busy} />
       {ctrl.isLanding ? resourceOpenStatus : null}
