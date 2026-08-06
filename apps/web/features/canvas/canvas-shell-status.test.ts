@@ -15,14 +15,16 @@ import {
  * DOM 渲染验证依赖 F04 E2E；这里测试类型守卫和状态映射逻辑。
  */
 
-describe('CanvasShellStatus 五种状态', () => {
-  it('共五种状态：loading/empty/failed/unavailable/denied', () => {
+describe('CanvasShellStatus 状态集（W03 六种错误语义 + loading）', () => {
+  it('共七种状态：loading/empty/failed/unavailable/forbidden/not_found/offline', () => {
     expect(CANVAS_SHELL_STATUSES).toEqual([
       'loading',
       'empty',
       'failed',
       'unavailable',
-      'denied',
+      'forbidden',
+      'not_found',
+      'offline',
     ]);
   });
 });
@@ -33,34 +35,35 @@ describe('status→role 映射', () => {
     expect(getCanvasShellStatusRole('empty')).toBe('status');
   });
 
-  it('failed/unavailable/denied 使用 role="alert"', () => {
+  it('六种错误语义使用 role="alert"', () => {
     expect(getCanvasShellStatusRole('failed')).toBe('alert');
     expect(getCanvasShellStatusRole('unavailable')).toBe('alert');
-    expect(getCanvasShellStatusRole('denied')).toBe('alert');
+    expect(getCanvasShellStatusRole('forbidden')).toBe('alert');
+    expect(getCanvasShellStatusRole('not_found')).toBe('alert');
+    expect(getCanvasShellStatusRole('offline')).toBe('alert');
   });
 });
 
-describe('重试按钮可见性', () => {
-  it('failed 且有 onRetry 时显示重试按钮', () => {
-    expect(canRetryCanvasShellStatus('failed', () => undefined)).toBe(true);
+describe('重试按钮可见性（Retry 只对可重试错误开放）', () => {
+  it('failed/unavailable/offline 且有 onRetry 时显示重试按钮', () => {
+    const cb = () => undefined;
+    expect(canRetryCanvasShellStatus('failed', cb)).toBe(true);
+    expect(canRetryCanvasShellStatus('unavailable', cb)).toBe(true);
+    expect(canRetryCanvasShellStatus('offline', cb)).toBe(true);
   });
 
-  it('unavailable 且有 onRetry 时显示重试按钮', () => {
-    expect(canRetryCanvasShellStatus('unavailable', () => undefined)).toBe(
-      true,
-    );
-  });
-
-  it('loading/empty/denied 即使有 onRetry 也不显示', () => {
+  it('loading/empty/forbidden/not_found 即使有 onRetry 也不显示', () => {
     const cb = () => undefined;
     expect(canRetryCanvasShellStatus('loading', cb)).toBe(false);
     expect(canRetryCanvasShellStatus('empty', cb)).toBe(false);
-    expect(canRetryCanvasShellStatus('denied', cb)).toBe(false);
+    expect(canRetryCanvasShellStatus('forbidden', cb)).toBe(false);
+    expect(canRetryCanvasShellStatus('not_found', cb)).toBe(false);
   });
 
-  it('failed 但无 onRetry 时不显示重试按钮', () => {
+  it('可重试错误但无 onRetry 时不显示重试按钮', () => {
     expect(canRetryCanvasShellStatus('failed', undefined)).toBe(false);
     expect(canRetryCanvasShellStatus('unavailable', undefined)).toBe(false);
+    expect(canRetryCanvasShellStatus('offline', undefined)).toBe(false);
   });
 });
 

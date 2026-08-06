@@ -5,6 +5,11 @@ import {
 } from './asset-preview-contract';
 import { z } from 'zod';
 import { validateCanvasResource } from '@educanvas/canvas-protocol';
+import {
+  ResourceClientError,
+  classifyHttpStatus,
+  isAbortError,
+} from '../canvas/resource-error';
 
 interface AssetResponseItem {
   descriptor: {
@@ -101,17 +106,45 @@ async function publicError(
   return fallback;
 }
 
+/* W03：网络层失败（fetch 抛 TypeError 等）统一捕获为 offline；取消（AbortError）不算失败。 */
+async function resourceFetch(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (cause: unknown) {
+    if (isAbortError(cause)) throw cause;
+    throw new ResourceClientError(
+      'offline',
+      '网络连接不可用，请检查网络后重试。',
+    );
+  }
+}
+
+/* 按 HTTP status 归类结构化错误；message 优先取服务端稳定文案。 */
+async function clientError(
+  response: Response,
+  fallback: string,
+): Promise<ResourceClientError> {
+  return new ResourceClientError(
+    classifyHttpStatus(response.status),
+    await publicError(response, fallback),
+  );
+}
+
 export async function loadAssets(
   endpoint = '/api/v1/assets',
   options: { enableSpaceByDefault?: boolean } = {},
 ): Promise<readonly AssetItem[]> {
-  const response = await fetch(endpoint, { cache: 'no-store' });
-  if (!response.ok)
-    throw new Error(await publicError(response, '暂时无法读取资料。'));
+  const response = await resourceFetch(endpoint, { cache: 'no-store' });
+  if (!response.ok) throw await clientError(response, '暂时无法读取资料。');
   const parsed = z
     .object({ assets: z.array(assetResponseItemSchema) })
     .safeParse(await response.json());
-  if (!parsed.success) throw new Error('资料响应格式不正确。');
+  if (!parsed.success) {
+    throw new ResourceClientError('failed', '资料响应格式不正确。');
+  }
   return parsed.data.assets.map((asset) => toItem(asset, options));
 }
 
@@ -122,7 +155,9 @@ async function parseAssetMutationResponse(
   const parsed = z
     .object({ asset: assetResponseItemSchema })
     .safeParse(await response.json());
-  if (!parsed.success) throw new Error(invalidMessage);
+  if (!parsed.success) {
+    throw new ResourceClientError('failed', invalidMessage);
+  }
   return toItem(parsed.data.asset);
 }
 
@@ -132,7 +167,7 @@ async function parseAssetMutationOrThrow(
   invalidMessage: string,
 ): Promise<AssetItem> {
   if (!response.ok) {
-    throw new Error(await publicError(response, fallback));
+    throw await clientError(response, fallback);
   }
   return parseAssetMutationResponse(response, invalidMessage);
 }
@@ -145,12 +180,12 @@ export async function uploadAsset(input: {
   const form = new FormData();
   form.set('file', input.file);
   form.set('scope', input.scope);
-  const response = await fetch(input.endpoint ?? '/api/v1/assets', {
+  const response = await resourceFetch(input.endpoint ?? '/api/v1/assets', {
     method: 'POST',
     body: form,
   });
   if (!response.ok) {
-    throw new Error(await publicError(response, '文件上传暂时不可用。'));
+    throw await clientError(response, '文件上传暂时不可用。');
   }
   return parseAssetMutationResponse(response, '上传响应格式不正确。');
 }
@@ -159,11 +194,14 @@ export async function importLinkAsset(input: {
   url: string;
   endpoint?: string;
 }): Promise<AssetItem> {
-  const response = await fetch(input.endpoint ?? '/api/v1/chat/assets/link', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url: input.url }),
-  });
+  const response = await resourceFetch(
+    input.endpoint ?? '/api/v1/chat/assets/link',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: input.url }),
+    },
+  );
   return parseAssetMutationOrThrow(
     response,
     '暂时无法导入链接。',
@@ -183,7 +221,7 @@ export async function setAssetEnabled(input: {
   enabled: boolean;
   mutationId: string;
 }): Promise<boolean> {
-  const response = await fetch(
+  const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}`,
     {
       method: 'PATCH',
@@ -196,12 +234,14 @@ export async function setAssetEnabled(input: {
     },
   );
   if (!response.ok) {
-    throw new Error(await publicError(response, '暂时无法更新来源。'));
+    throw await clientError(response, '暂时无法更新来源。');
   }
   const parsed = z
     .object({ enabled: z.boolean() })
     .safeParse(await response.json());
-  if (!parsed.success) throw new Error('来源更新响应格式不正确。');
+  if (!parsed.success) {
+    throw new ResourceClientError('failed', '来源更新响应格式不正确。');
+  }
   return parsed.data.enabled;
 }
 
@@ -210,7 +250,7 @@ export async function renameAsset(input: {
   assetId: string;
   displayName: string;
 }): Promise<string> {
-  const response = await fetch(
+  const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(input.assetId)}`,
     {
       method: 'PATCH',
@@ -222,38 +262,42 @@ export async function renameAsset(input: {
     },
   );
   if (!response.ok) {
-    throw new Error(await publicError(response, '暂时无法重命名来源。'));
+    throw await clientError(response, '暂时无法重命名来源。');
   }
   const parsed = z
     .object({ displayName: z.string() })
     .safeParse(await response.json());
-  if (!parsed.success) throw new Error('来源更新响应格式不正确。');
+  if (!parsed.success) {
+    throw new ResourceClientError('failed', '来源更新响应格式不正确。');
+  }
   return parsed.data.displayName;
 }
 
 /** 读取当前Notebook内的来源预览；响应契约不会暴露对象存储地址。 */
 export async function loadAssetPreview(assetId: string): Promise<AssetPreview> {
-  const response = await fetch(
+  const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(assetId)}/preview`,
     { cache: 'no-store' },
   );
   if (!response.ok) {
-    throw new Error(await publicError(response, '暂时无法预览这个来源。'));
+    throw await clientError(response, '暂时无法预览这个来源。');
   }
   const parsed = z
     .object({ preview: assetPreviewSchema })
     .safeParse(await response.json());
-  if (!parsed.success) throw new Error('来源预览响应格式不正确。');
+  if (!parsed.success) {
+    throw new ResourceClientError('failed', '来源预览响应格式不正确。');
+  }
   return parsed.data.preview;
 }
 
 /** 软删除当前Notebook内的来源；服务端仍保留审计状态和后续物理清理依据。 */
 export async function deleteAsset(assetId: string): Promise<void> {
-  const response = await fetch(
+  const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(assetId)}`,
     { method: 'DELETE' },
   );
   if (!response.ok) {
-    throw new Error(await publicError(response, '暂时无法删除这个来源。'));
+    throw await clientError(response, '暂时无法删除这个来源。');
   }
 }
