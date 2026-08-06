@@ -35,8 +35,8 @@ vi.mock('@educanvas/db', () => ({
     getArtifactDetail = mockGetArtifactDetail;
   },
   requireNotebookAccess: mockRequireNotebookAccess,
-  getDb: vi.fn(),
 }));
+vi.mock('@educanvas/db/internal', () => ({ getDb: vi.fn() }));
 
 const { loadOwnedCanvasResource, projectOwnedSourceResources } =
   await import('./resource-access');

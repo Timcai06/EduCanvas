@@ -123,7 +123,7 @@ export function SourceResourceRendererContent({
           (stateInfo.errorMessage ?? '加载失败。')}
         {stateInfo.state === 'unavailable' &&
           (stateInfo.errorMessage ?? '来源不可用。')}
-        {stateInfo.state === 'denied' && '没有权限预览这个来源。'}
+        {stateInfo.state === 'forbidden' && '没有权限预览这个来源。'}
         {stateInfo.state === 'empty' && '这个来源没有可预览内容。'}
       </div>
 
@@ -135,10 +135,10 @@ export function SourceResourceRendererContent({
         >
           <div className="m-4 h-52 animate-pulse rounded-2xl bg-surface-strong" />
         </div>
-      ) : stateInfo.state === 'failed' || stateInfo.state === 'denied' ? (
+      ) : stateInfo.state === 'failed' || stateInfo.state === 'forbidden' ? (
         <CanvasShellStatus
           status={stateInfo.state}
-          title={stateInfo.state === 'denied' ? '无权访问' : '加载失败'}
+          title={stateInfo.state === 'forbidden' ? '无权访问' : '加载失败'}
           description={stateInfo.errorMessage ?? '暂时无法预览这个来源。'}
           onRetry={stateInfo.state === 'failed' ? onRetry : undefined}
           retryLabel="重试"

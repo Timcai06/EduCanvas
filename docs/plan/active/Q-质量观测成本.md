@@ -7,7 +7,7 @@
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
 - 当前领取任务：`Q00`
-- 并行计划：[R 运行时收敛](R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
+- 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[KM 知识记忆](KM-知识记忆.md)
 
@@ -31,15 +31,15 @@
 
 ## 二、已经确认的代码事实
 
-| 事实 | 代码位置 | 本计划处理 |
-| --- | --- | --- |
-| 混合检索使用冻结 Source、FTS、pgvector、RRF 和版本化候选 | `packages/db/src/knowledge-hybrid-retrieval.ts` | 保留安全设计，补质量评测 |
-| Embedding 和向量失败会静默退回 FTS | `apps/web/server/teaching/knowledge-retrieval-runtime.ts` 等 | 增加稳定内部降级原因 |
-| Telemetry 支持 OTLP Trace 和 health，但失败可退回 NOOP | `packages/telemetry/src/**` | 增加指标、健康与 SLO |
-| Agent Loop 预算主要是字符、工具数量和固定轮数 | `packages/agent-runtime/src/agent-loop.ts`、`turn-engine.ts` | 建立 token/cost budget |
-| 默认 E2E 只有 Desktop Chromium，排除 `@ui`，CI retry=1 | `playwright.config.ts` | 测试真实性报告与门禁 |
-| CI 有 secret scan、unit、integration、runtime pressure、E2E | `.github/workflows/ci.yml` | 保留并补缺口 |
-| Actions 使用主版本 tag，未完整 SHA pin | `.github/workflows/**` | 供应链加固 |
+| 事实                                                        | 代码位置                                                     | 本计划处理               |
+| ----------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ |
+| 混合检索使用冻结 Source、FTS、pgvector、RRF 和版本化候选    | `packages/db/src/knowledge-hybrid-retrieval.ts`              | 保留安全设计，补质量评测 |
+| Embedding 和向量失败会静默退回 FTS                          | `apps/web/server/teaching/knowledge-retrieval-runtime.ts` 等 | 增加稳定内部降级原因     |
+| Telemetry 支持 OTLP Trace 和 health，但失败可退回 NOOP      | `packages/telemetry/src/**`                                  | 增加指标、健康与 SLO     |
+| Agent Loop 预算主要是字符、工具数量和固定轮数               | `packages/agent-runtime/src/agent-loop.ts`、`turn-engine.ts` | 建立 token/cost budget   |
+| 默认 E2E 只有 Desktop Chromium，排除 `@ui`，CI retry=1      | `playwright.config.ts`                                       | 测试真实性报告与门禁     |
+| CI 有 secret scan、unit、integration、runtime pressure、E2E | `.github/workflows/ci.yml`                                   | 保留并补缺口             |
+| Actions 使用主版本 tag，未完整 SHA pin                      | `.github/workflows/**`                                       | 供应链加固               |
 
 ## 三、绝对文件边界
 

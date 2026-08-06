@@ -8,7 +8,9 @@
  * 新代码应直接从 `@educanvas/agent-runtime` 包入口导入。
  */
 
+export { createTurnApplication } from './turn-application/factory';
 export { TurnApplicationService } from './turn-application/service';
+export type { TurnApplicationDependencies } from './turn-application/dependencies';
 export type {
   TurnApplicationCancellationHandle,
   TurnApplicationCancellationPort,
@@ -28,4 +30,5 @@ export type {
   TurnApplicationToolPolicy,
   TurnApplicationTracePort,
   TurnApplicationTraceSpan,
+  ToolKernelPort,
 } from './turn-application/ports';

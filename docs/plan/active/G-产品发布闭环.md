@@ -7,7 +7,7 @@
 - 代码审核与最终验收：Codex；试点结论需人工负责人签字
 - 最后验证时间：2026-08-06
 - 当前领取任务：`G00`
-- 前置计划：[R 运行时收敛](R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)、
+- 前置计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)、
   [Q 质量观测成本](Q-质量观测成本.md)
 - 关联计划：[KM 知识记忆](KM-知识记忆.md)、[UV 画布语音](UV-画布语音.md)
 
@@ -331,16 +331,16 @@ G00 → G01 → G02
 
 ## 七、验证台账
 
-| 任务 | 状态 | 证据 |
-| --- | --- | --- |
-| G00 产品冻结 | `PENDING` | product brief、priority map |
-| G01 指标与协议 | `PENDING` | pilot protocol、metric mapping |
-| G02 状态诚实化 | `PENDING` | capability state audit |
-| G03 核心闭环 | `PENDING` | E2E + controlled live smoke |
-| G04 真实试点 | `PENDING` | signed pilot report |
-| G05 生产演练 | `PENDING` | backup/recovery/security evidence |
-| G06 独立审查 | `PENDING` | review + release artifact |
-| G07 阶段结论 | `PENDING` | release decision record |
+| 任务           | 状态      | 证据                              |
+| -------------- | --------- | --------------------------------- |
+| G00 产品冻结   | `PENDING` | product brief、priority map       |
+| G01 指标与协议 | `PENDING` | pilot protocol、metric mapping    |
+| G02 状态诚实化 | `PENDING` | capability state audit            |
+| G03 核心闭环   | `PENDING` | E2E + controlled live smoke       |
+| G04 真实试点   | `PENDING` | signed pilot report               |
+| G05 生产演练   | `PENDING` | backup/recovery/security evidence |
+| G06 独立审查   | `PENDING` | review + release artifact         |
+| G07 阶段结论   | `PENDING` | release decision record           |
 
 ## 八、阶段级验证
 

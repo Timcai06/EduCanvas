@@ -2,12 +2,12 @@
 
 - 任务分配名：`W 工作面画布`
 - 状态：`active`
-- 负责人：项目负责人
+- 负责人：hzlgou
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
-- 当前领取任务：`W00`
-- 并行计划：[R 运行时收敛](R-运行时事实收敛.md)、[Q 质量观测成本](Q-质量观测成本.md)
+- 当前领取任务：`W03`
+- 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[Q 质量观测成本](Q-质量观测成本.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[UV 画布语音](UV-画布语音.md)
 
@@ -31,15 +31,15 @@
 
 ## 二、已经确认的代码事实
 
-| 事实 | 代码位置 | 本计划处理 |
-| --- | --- | --- |
-| `GeneralChatWorkspace` 聚合大量 state/ref/effect 和多个工作面 | `apps/web/features/workspace/general/general-chat-workspace.tsx` | 建立状态机并拆分职责 |
-| 多个 handler 通过手工 `setX(null)` 保证互斥 | 同上及相邻 hooks | 用判别联合收口 |
-| Artifact 列表/Asset 刷新存在失败转空或吞错路径 | Workspace 与 Studio 相关文件 | 诚实失败 |
-| Source Renderer 已进入 Registry | `apps/web/features/canvas/**` | 保留 |
-| Artifact Registry 仍使用 `ArtifactCompatibilityRenderer` | `canvas-resource-renderers.ts` | 迁移真实 Renderer |
-| Web ESLint 只有 Next 默认规则 | `apps/web/eslint.config.mjs` | 增加边界规则 |
-| 默认 E2E 排除 `@ui` 且只有 Desktop Chromium | `playwright.config.ts` | 建立稳定 UI/移动端验证 lane |
+| 事实                                                          | 代码位置                                                         | 本计划处理                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `GeneralChatWorkspace` 聚合大量 state/ref/effect 和多个工作面 | `apps/web/features/workspace/general/general-chat-workspace.tsx` | 建立状态机并拆分职责        |
+| 多个 handler 通过手工 `setX(null)` 保证互斥                   | 同上及相邻 hooks                                                 | 用判别联合收口              |
+| Artifact 列表/Asset 刷新存在失败转空或吞错路径                | Workspace 与 Studio 相关文件                                     | 诚实失败                    |
+| Source Renderer 已进入 Registry                               | `apps/web/features/canvas/**`                                    | 保留                        |
+| Artifact Registry 仍使用 `ArtifactCompatibilityRenderer`      | `canvas-resource-renderers.ts`                                   | 迁移真实 Renderer           |
+| Web ESLint 只有 Next 默认规则                                 | `apps/web/eslint.config.mjs`                                     | 增加边界规则                |
+| 默认 E2E 排除 `@ui` 且只有 Desktop Chromium                   | `playwright.config.ts`                                           | 建立稳定 UI/移动端验证 lane |
 
 ## 三、绝对文件边界
 
@@ -304,16 +304,16 @@ type WorkspaceSurface =
 
 ## 七、验证台账
 
-| 任务 | 状态 | 证据 |
-| --- | --- | --- |
-| W00 状态基线 | `PENDING` | 状态转换表、入口矩阵 |
-| W01 Surface 模型 | `PENDING` | reducer tests |
-| W02 职责拆分 | `PENDING` | component/hook tests、行数对比 |
-| W03 诚实失败 | `PENDING` | error matrix tests |
-| W04 Artifact Registry | `PENDING` | renderer contract + E2E |
-| W05 静态边界 | `PENDING` | ESLint negative fixtures |
-| W06 多端与性能 | `PENDING` | Playwright、bundle/perf evidence |
-| W07 收口 | `PENDING` | full Web CI、删除清单 |
+| 任务                  | 状态      | 证据                                                                                                                                                    |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W00 状态基线          | `PASS`    | [状态转换表、入口矩阵](../02-architecture/04-统一画布工作面-W00基线.md)（基线 `ccf5309`，行号已抽查验证；经 Codex 审核通过，PR #287）                     |
+| W01 Surface 模型      | `PASS`    | `workspace-surface.ts` 判别联合 + reducer；12 个纯函数测试全绿；characterization 先固定 5 处互斥链行为并消除其不一致（经 Codex 审核通过，PR #287）       |
+| W02 职责拆分          | `PENDING` | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（**待 Codex 审核后才可标 PASS**） |
+| W03 诚实失败          | `PENDING` | 六种错误语义统一（`canvas/resource-error.ts` + `CanvasShellStatus` 7 态，Retry 只对 failed/unavailable/offline 开放）；asset-client/canvas-resource-client 错误带 kind；useNotebookSources 结构化错误 + `LatestRequestGuard` 竞态保护；失败转空/吞错 3 处修复；error matrix：resource-error 15 + asset 12 + canvas-client 14 + CanvasShellStatus 渲染 7 + 竞态 3 测试；lint/typecheck/**951 测试**/build 全绿，无静默 `catch {}`（**待 Codex 审核后才可标 PASS**） |
+| W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
+| W05 静态边界          | `PENDING` | ESLint negative fixtures                                                                                                                                |
+| W06 多端与性能        | `PENDING` | Playwright、bundle/perf evidence                                                                                                                        |
+| W07 收口              | `PENDING` | full Web CI、删除清单                                                                                                                                   |
 
 ## 八、阶段级验证
 

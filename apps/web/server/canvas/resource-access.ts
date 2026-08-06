@@ -5,10 +5,10 @@ import {
   ArtifactOwnershipError,
   DrizzleAssetRepository,
   DrizzlePlatformArtifactRepository,
-  getDb,
   requireNotebookAccess,
   type AssetSnapshot,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import type {
   CanvasResource,
   CanvasResourceErrorCode,
