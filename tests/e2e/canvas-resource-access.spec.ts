@@ -17,8 +17,10 @@ async function activeConversationId(page: Page): Promise<string> {
   return value;
 }
 
+/* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
+   移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
 function notebookSidebar(page: Page) {
-  return page.getByRole('complementary', { name: '笔记本侧栏' });
+  return page.locator('aside[aria-label="笔记本侧栏"]');
 }
 
 async function openNotebookSidebar(page: Page) {
@@ -279,6 +281,14 @@ test('统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用户与版
   ).toBe(200);
 });
 
+/* CanvasHost 窄屏自动 compact：教学 Canvas 桌面为 region、窄屏为 dialog
+   （canvas-host.tsx role={isModal ? 'dialog' : 'region'}）。两态兼容定位。 */
+function teachingCanvas(page: Page) {
+  return page
+    .getByRole('region', { name: '教学Canvas' })
+    .or(page.getByRole('dialog', { name: '教学Canvas' }));
+}
+
 async function completeVisibleArtifact(canvas: Locator) {
   const completedGroups = new Set<string>();
   const choices = canvas.getByRole('radio');
@@ -310,13 +320,15 @@ test('旧 PublicArtifact 判分提交仍走原可信链', async ({ page }) => {
   await openLearningWorkspace(page);
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('请打开互动演示，让我动手试试。');
+  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
   await composer.press('Enter');
   await expect(
     page.getByText('AI 老师暂时无法连接，请稍后重试。'),
   ).toBeVisible();
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /打开互动演示/ }).click();
-  const canvas = page.getByRole('region', { name: '教学Canvas' });
+  const canvas = teachingCanvas(page);
   const submit = await completeVisibleArtifact(canvas);
   await submit.click();
   await expect(canvas.getByRole('status').first()).toContainText('本次答对');
