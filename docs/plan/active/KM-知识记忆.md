@@ -2,7 +2,7 @@
 
 - 任务分配名：`KM 知识记忆`
 - 状态：`active`
-- 负责人：项目负责人
+- 负责人：hzlgou
 - 代码审核与最终验收：Codex
 - 依赖决策：[ADR-0020](../../09-decisions/0020-Personal与Notebook长期记忆边界.md)
 - 当前领取任务：`K00`
