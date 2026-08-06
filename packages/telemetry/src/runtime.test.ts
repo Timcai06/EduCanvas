@@ -50,6 +50,10 @@ describe('OTLP telemetry runtime lifecycle', () => {
     });
 
     expect(() => span.end('completed')).not.toThrow();
+    // Q04：初始 ready 状态在构造时即投影到 exporter health gauge。
+    expect(runtime.metrics.snapshot().gauges).toEqual({
+      'telemetry_exporter_health{status=ready}': 1,
+    });
     await runtime.forceFlush();
 
     // 官方 OTLP exporter 会对 503 做有界重试；这里冻结“确实尝试导出”，
@@ -58,6 +62,10 @@ describe('OTLP telemetry runtime lifecycle', () => {
     expect(runtime.health()).toEqual({
       status: 'degraded',
       failureCode: 'export_failed',
+    });
+    // Q04：degraded 转移同步翻转 gauge，旧 ready 点被覆盖。
+    expect(runtime.metrics.snapshot().gauges).toEqual({
+      'telemetry_exporter_health{status=degraded}': 1,
     });
     await runtime.shutdown();
   });

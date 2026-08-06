@@ -15,9 +15,9 @@ import {
   ArtifactOwnershipError,
   ArtifactRevisionConflictError,
   DrizzlePlatformArtifactRepository,
-  getDb,
   requireNotebookAccess,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import {
   audioOverviewMetadataSchema,
   generatedImageMetadataSchema,

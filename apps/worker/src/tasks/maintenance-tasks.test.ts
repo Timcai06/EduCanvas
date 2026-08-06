@@ -1,3 +1,4 @@
+import { NOOP_METRICS } from '@educanvas/telemetry';
 import { parseCrontab } from 'graphile-worker';
 import { describe, expect, it, vi } from 'vitest';
 import { workerCrontab } from '../worker-config.js';
@@ -45,6 +46,7 @@ describe('受控后台任务边界', () => {
     const crontabTasks = parseCrontab(workerCrontab).map((item) => item.task);
     const registeredTasks = createTaskList({
       continuationTrace: {} as never,
+      metrics: NOOP_METRICS,
     });
     for (const task of crontabTasks) {
       expect(

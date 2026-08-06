@@ -296,9 +296,13 @@ describe('Runtime module size boundary', () => {
   });
 
   it('keeps one explicit Web Teaching Turn Application composition root', () => {
-    const compositionRoots = WEB_TEACHING_TURN_MODULES.filter((path) =>
-      readFileSync(path, 'utf8').includes('new TurnApplicationService('),
+    const teachingEntry = readFileSync(WEB_TEACHING_TURN_ENTRY, 'utf8');
+    const sharedComposition = readFileSync(
+      'apps/web/server/turn-composition.ts',
+      'utf8',
     );
-    assert.deepEqual(compositionRoots, [WEB_TEACHING_TURN_ENTRY]);
+    assert.match(teachingEntry, /createWebTurnApplication\(/);
+    assert.match(sharedComposition, /createTurnApplication\(/);
+    assert.doesNotMatch(teachingEntry, /new TurnApplicationService\(/);
   });
 });

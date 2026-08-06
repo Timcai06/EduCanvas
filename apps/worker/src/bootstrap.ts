@@ -55,6 +55,7 @@ export async function prepareWorkerBootstrap(
       telemetry,
       taskList: taskModule.createTaskList({
         continuationTrace: telemetry.continuationTrace,
+        metrics: telemetry.metrics,
       }),
     };
   } catch (error) {

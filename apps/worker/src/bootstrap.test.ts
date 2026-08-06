@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
   ContinuationTracePort,
+  MetricsPort,
   TelemetryEnvironment,
 } from '@educanvas/telemetry';
 import { prepareWorkerBootstrap } from './bootstrap';
@@ -14,9 +15,16 @@ describe('worker bootstrap ordering', () => {
         return callback();
       },
     };
+    const metrics: MetricsPort = {
+      increment: vi.fn(),
+      record: vi.fn(),
+      set: vi.fn(),
+      snapshot: vi.fn(),
+    };
     const telemetry = {
       continuationTrace,
       turnTrace: {} as never,
+      metrics,
       health: vi.fn(),
       forceFlush: vi.fn(),
       shutdown: vi.fn(),
@@ -47,9 +55,13 @@ describe('worker bootstrap ordering', () => {
       async loadTaskModule() {
         order.push('tasks.module');
         return {
-          createTaskList(input: { continuationTrace: ContinuationTracePort }) {
+          createTaskList(input: {
+            continuationTrace: ContinuationTracePort;
+            metrics: MetricsPort;
+          }) {
             order.push('tasks.create');
             expect(input.continuationTrace).toBe(continuationTrace);
+            expect(input.metrics).toBe(metrics);
             return taskList;
           },
         } as never;

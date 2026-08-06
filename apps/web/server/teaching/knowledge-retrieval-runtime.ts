@@ -7,10 +7,10 @@ import {
 } from '@educanvas/agent-core';
 import {
   DrizzleKnowledgeHybridRetrieval,
-  getDb,
   type EmbeddingIdentity,
   type HybridRetrievalResult,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import {
   EMBEDDING_INSTRUCTION_VERSION,
   OpenAICompatibleEmbeddingModelGateway,
@@ -18,6 +18,7 @@ import {
   resolveCapabilityGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
 } from '@educanvas/model-gateway';
+import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
 
 /**
  * Web 组合根只显式转交向量检索所需的环境变量；与其他模型入口同一纪律，
@@ -150,7 +151,9 @@ export async function retrieveTeachingEvidence(input: {
       })
     : null;
 
-  return new DrizzleKnowledgeHybridRetrieval(getDb()).retrieveHybrid({
+  const result = await new DrizzleKnowledgeHybridRetrieval(
+    getDb(),
+  ).retrieveHybrid({
     trustedStudentId: input.trustedStudentId,
     sessionId: input.sessionId,
     turnId: input.turnId,
@@ -160,4 +163,9 @@ export async function retrieveTeachingEvidence(input: {
     queryEmbedding,
     embeddingIdentity: identity,
   });
+  // Q04：检索 SLI —— 向量命中 / 词法回退只记录模式，不记录查询正文。
+  getWebTelemetryRuntime().metrics.increment('retrieval_mode_total', {
+    mode: result.vectorApplied ? 'vector' : 'lexical',
+  });
+  return result;
 }

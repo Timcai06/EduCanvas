@@ -27,10 +27,10 @@ vi.mock('@educanvas/db', async () => {
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
     }),
-    getDb: vi.fn(() => ({})),
     requireNotebookAccess: requireNotebookAccessMock,
   };
 });
+vi.mock('@educanvas/db/internal', () => ({ getDb: vi.fn(() => ({})) }));
 
 vi.mock('@/server/identity/anonymous-identity', () => ({
   readAnonymousIdentity: vi.fn(),

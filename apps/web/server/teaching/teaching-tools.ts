@@ -4,8 +4,8 @@ import {
   DrizzleKnowledgeRetrievalRepository,
   DrizzleMasteryRepository,
   DrizzleSessionRepository,
-  getDb,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import type { ToolKernelAdapter } from '@educanvas/agent-runtime';
 import {
   isToolAllowed,

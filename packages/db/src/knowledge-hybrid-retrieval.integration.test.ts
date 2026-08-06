@@ -270,11 +270,40 @@ describeWithDatabase('pgvector 混合检索', () => {
     });
     await seedCorpus('dl-fallback', sessionId);
 
-    const result = await freezeAndRetrieve({ studentId, sessionId, turnId });
+    const result = await freezeAndRetrieve({
+      studentId,
+      sessionId,
+      turnId,
+      /* 调用方什么都没提供：向量与身份都缺 → not_configured，而不是
+         身份缺失导致的 invalid_configuration（半配置）。 */
+      identity: null,
+    });
 
     expect(result.retriever).toBe(LEXICAL_RETRIEVER);
     expect(result.retrieverVersion).toBe(HYBRID_LEXICAL_FALLBACK_VERSION);
     expect(result.vectorApplied).toBe(false);
+    expect(result.degradationReason).toBe('not_configured');
+    expect(labelsOf(result.candidates)).toEqual(['lexical']);
+  });
+
+  it('只有查询向量没有身份时标记 invalid_configuration 并退回词法', async () => {
+    const { sessionId, turnId } = await seedSessionAndTurn({
+      studentId,
+      courseSlug: 'dl-half-config',
+    });
+    await seedCorpus('dl-half-config', sessionId);
+
+    const result = await freezeAndRetrieve({
+      studentId,
+      sessionId,
+      turnId,
+      queryEmbedding: QUERY_VECTOR,
+      identity: null,
+    });
+
+    expect(result.retriever).toBe(LEXICAL_RETRIEVER);
+    expect(result.vectorApplied).toBe(false);
+    expect(result.degradationReason).toBe('invalid_configuration');
     expect(labelsOf(result.candidates)).toEqual(['lexical']);
   });
 
@@ -356,8 +385,34 @@ describeWithDatabase('pgvector 混合检索', () => {
       queryEmbedding: QUERY_VECTOR,
     });
 
-    /* 向量路仍然执行了，只是旧版本向量全部落选，结果收敛为纯词法命中。 */
+    /* 向量路仍然执行了，只是旧版本向量全部落选，结果收敛为纯词法命中；
+       语料有嵌入但身份不匹配（模型升级后未重嵌入）是长期隐性降级，必须
+       以 invalid_configuration 标记。 */
     expect(result.vectorApplied).toBe(true);
+    expect(result.degradationReason).toBe('invalid_configuration');
+    expect(labelsOf(result.candidates)).toEqual(['lexical']);
+  });
+
+  it('语料完全未嵌入时标记 corpus_not_embedded 并按词法回退，FTS 结果仍可用', async () => {
+    const { sessionId, turnId } = await seedSessionAndTurn({
+      studentId,
+      courseSlug: 'dl-no-embed',
+    });
+    await seedCorpus('dl-no-embed', sessionId);
+    /* 不写任何 embedding：模拟语料入库后嵌入管线从未运行。 */
+
+    const result = await freezeAndRetrieve({
+      studentId,
+      sessionId,
+      turnId,
+      queryEmbedding: QUERY_VECTOR,
+    });
+
+    expect(result.retriever).toBe(LEXICAL_RETRIEVER);
+    expect(result.retrieverVersion).toBe(HYBRID_LEXICAL_FALLBACK_VERSION);
+    expect(result.vectorApplied).toBe(false);
+    expect(result.degradationReason).toBe('corpus_not_embedded');
+    /* 用户仍获得 FTS 结果（Q02 要求：降级不断供）。 */
     expect(labelsOf(result.candidates)).toEqual(['lexical']);
   });
 
@@ -398,6 +453,7 @@ describeWithDatabase('pgvector 混合检索', () => {
 
     expect(result.retriever).toBe(LEXICAL_RETRIEVER);
     expect(result.vectorApplied).toBe(false);
+    expect(result.degradationReason).toBe('invalid_dimensions');
     expect(labelsOf(result.candidates)).toEqual(['lexical']);
   });
 
@@ -513,6 +569,7 @@ describeWithDatabase('pgvector 混合检索', () => {
 
       expect(result.retriever).toBe(LEXICAL_RETRIEVER);
       expect(result.vectorApplied).toBe(false);
+      expect(result.degradationReason).toBe('vector_query_timeout');
       expect(labelsOf(result.candidates)).toEqual(['lexical']);
     } finally {
       releaseLock();

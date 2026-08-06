@@ -14,6 +14,7 @@ import type {
   GatewayClientSessionAuth,
   GatewayNodeSessionAuth,
 } from '../client-auth';
+import type { TelemetryRuntime } from '@educanvas/telemetry';
 import type { GatewayEffectReconciliationControl } from '../effect-reconciliation-control';
 import type { GatewayObservability } from '../observability';
 import type { GatewayCanvasResourceService } from '../canvas-resource-service';
@@ -73,4 +74,6 @@ export interface GatewayHttpDependencies {
   clientTransport?: GatewayClientTransport | null;
   nodeTransport?: GatewayNodeTransport | null;
   observability?: GatewayObservability;
+  /** Q04：遥测健康与指标快照随 internal metrics 端点暴露；缺省时 telemetry=null。 */
+  telemetry?: TelemetryRuntime | null;
 }
