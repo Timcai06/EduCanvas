@@ -3,22 +3,20 @@
 import { startNewGeneralChatAction } from '@/app/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
-import { SourceResourceRenderer } from '@/features/assets/source-resource-renderer';
 import { useNotebookSources } from './use-notebook-sources';
 import { useWorkspaceSurface } from './use-workspace-surface';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { CanvasResourceOpenStatus } from '@/features/canvas/canvas-resource-open-status';
 import type { CanvasResourceRendererProps } from '@/features/canvas/canvas-resource-registry';
 import {
-  ArtifactCanvas,
   ArtifactConfirmSheet,
   useArtifactGeneration,
 } from '@/features/canvas/artifact-generation-flow';
 import {
   fetchNotebookArtifacts,
+  type ArtifactDetail,
   type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
-import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { useSidebarState } from './use-sidebar-state';
@@ -48,6 +46,10 @@ import {
   ConversationPane,
   type ConversationPaneProps,
 } from './conversation-pane';
+import {
+  WorkspaceSurfaceSlot,
+  type WorkspaceSurfaceSlotProps,
+} from './workspace-surface-slot';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
@@ -299,6 +301,27 @@ export function GeneralChatWorkspace({
     onDismissStatusCard: artifactFlow.dismiss,
   } satisfies Omit<ConversationPaneProps, 'isLanding'>;
 
+  /* W02：对话态分栏与 landing 全屏共用同一组槽位 props（只差 fullscreen）。 */
+  const surfaceSlotProps = {
+    surface,
+    sourceDetail,
+    artifactDetail: artifactFlow.openDetail,
+    artifactCanvasFull: artifactFlow.canvasFull,
+    revisingOpenArtifact,
+    onToggleFullSurface: () => workspace.dispatch({ type: 'toggleFull' }),
+    onToggleFullArtifact: () =>
+      artifactFlow.setCanvasFull((value) => !value),
+    onCloseSurface: () => workspace.dispatch({ type: 'close' }),
+    onCloseArtifact: closeArtifactCanvas,
+    onDeletedArtifact: handleArtifactDeleted,
+    onSelectArtifactVersion: (artifactId: string, version: number) =>
+      void artifactFlow.openArtifactVersion(artifactId, version),
+    onReviseArtifact: (detail: ArtifactDetail, instruction: string) =>
+      void artifactFlow.revise(detail, instruction),
+    onSaveNote: (detail: ArtifactDetail, markdown: string) =>
+      void artifactFlow.saveNote(detail, markdown),
+  } satisfies Omit<WorkspaceSurfaceSlotProps, 'fullscreen'>;
+
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
     () => {
@@ -368,52 +391,12 @@ export function GeneralChatWorkspace({
               />
               {resourceOpenStatus ? (
                 resourceOpenStatus
-              ) : surface.type === 'artifact' && artifactFlow.openDetail ? (
-                <ArtifactCanvas
-                  detail={artifactFlow.openDetail}
-                  isFull={artifactFlow.canvasFull}
-                  onToggleFull={() =>
-                    artifactFlow.setCanvasFull((value) => !value)
-                  }
-                  onClose={closeArtifactCanvas}
-                  onDeleted={handleArtifactDeleted}
-                  onSelectVersion={(version) =>
-                    void artifactFlow.openArtifactVersion(
-                      artifactFlow.openDetail!.artifact.id,
-                      version,
-                    )
-                  }
-                  onRevise={(instruction) =>
-                    void artifactFlow.revise(
-                      artifactFlow.openDetail!,
-                      instruction,
-                    )
-                  }
-                  onSaveNote={(markdown) =>
-                    void artifactFlow.saveNote(
-                      artifactFlow.openDetail!,
-                      markdown,
-                    )
-                  }
-                  revising={revisingOpenArtifact}
+              ) : (
+                <WorkspaceSurfaceSlot
+                  {...surfaceSlotProps}
+                  fullscreen={false}
                 />
-              ) : surface.type === 'source' && sourceDetail ? (
-                <SourceResourceRenderer
-                  key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
-                  resource={sourceDetail.resource}
-                  Renderer={sourceDetail.Renderer}
-                  isFull={surface.full}
-                  onToggleFull={() => workspace.dispatch({ type: 'toggleFull' })}
-                  onClose={() => workspace.dispatch({ type: 'close' })}
-                />
-              ) : surface.type === 'html' ? (
-                <HtmlPreviewPanel
-                  source={surface.source}
-                  isFull={surface.full}
-                  onToggleFull={() => workspace.dispatch({ type: 'toggleFull' })}
-                  onClose={() => workspace.dispatch({ type: 'close' })}
-                />
-              ) : null}
+              )}
             </div>
           )}
         </main>
@@ -441,39 +424,10 @@ export function GeneralChatWorkspace({
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={turn.busy} />
       {isLanding ? resourceOpenStatus : null}
-      {isLanding && surface.type === 'artifact' && artifactFlow.openDetail ? (
+      {isLanding ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
            否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */
-        <ArtifactCanvas
-          detail={artifactFlow.openDetail}
-          isFull
-          onToggleFull={() => undefined}
-          onClose={closeArtifactCanvas}
-          onDeleted={handleArtifactDeleted}
-          onSelectVersion={(version) =>
-            void artifactFlow.openArtifactVersion(
-              artifactFlow.openDetail!.artifact.id,
-              version,
-            )
-          }
-          onRevise={(instruction) =>
-            void artifactFlow.revise(artifactFlow.openDetail!, instruction)
-          }
-          onSaveNote={(markdown) =>
-            void artifactFlow.saveNote(artifactFlow.openDetail!, markdown)
-          }
-          revising={revisingOpenArtifact}
-        />
-      ) : null}
-      {isLanding && surface.type === 'source' && sourceDetail ? (
-        <SourceResourceRenderer
-          key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
-          resource={sourceDetail.resource}
-          Renderer={sourceDetail.Renderer}
-          isFull
-          onToggleFull={() => undefined}
-          onClose={() => workspace.dispatch({ type: 'close' })}
-        />
+        <WorkspaceSurfaceSlot {...surfaceSlotProps} fullscreen />
       ) : null}
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
