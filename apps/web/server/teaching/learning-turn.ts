@@ -28,9 +28,7 @@ import type {
   TurnApplicationCommand,
   TurnApplicationEvent,
 } from '@educanvas/agent-core';
-import {
-  type BuiltAssetContext,
-} from '@educanvas/agent-runtime';
+import { type BuiltAssetContext } from '@educanvas/agent-runtime';
 import { DrizzleStudyPlanRepository } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
