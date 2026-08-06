@@ -19,10 +19,10 @@ import {
   type CreatableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
+import { resolveArtifactContentView } from './artifact-content-view';
 import {
   ArtifactGeneratingSkeleton,
   ArtifactProvenanceStrip,
-  isArtifactGenerating,
 } from './artifact-provenance';
 import { MindMapRenderer } from './mind-map-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
@@ -469,9 +469,8 @@ export function ArtifactCanvas({
   const canRevise = ['mind_map', 'slides', 'flashcards', 'note'].includes(
     detail.artifact.kind,
   );
-  const generating = isArtifactGenerating(detail, revising);
-  /* 生成中且当前展示的最新版还没有内容:显示骨架而非空态文案 */
-  const showSkeleton = generating && isLatest && !detail.version;
+  /* W04：内容分发收敛到纯函数，组件只消费结果（契约由 characterization 钉住）。 */
+  const contentView = resolveArtifactContentView(detail, revising);
   return (
     <CanvasHost
       ariaLabel="产物Canvas"
@@ -494,55 +493,48 @@ export function ArtifactCanvas({
           aria-label="Canvas 内容"
           className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5"
         >
-          {showSkeleton ? (
+          {contentView.kind === 'skeleton' ? (
             <ArtifactGeneratingSkeleton />
-          ) : detail.artifact.kind === 'mind_map' && detail.version ? (
+          ) : contentView.kind === 'mind_map' ? (
             <MindMapRenderer
-              key={displayedVersion}
-              content={detail.version.content}
+              key={contentView.key}
+              content={contentView.content}
             />
-          ) : detail.artifact.kind === 'slides' && detail.version ? (
+          ) : contentView.kind === 'slides' ? (
             <SlidesRenderer
-              key={displayedVersion}
-              content={detail.version.content}
+              key={contentView.key}
+              content={contentView.content}
             />
-          ) : detail.artifact.kind === 'flashcards' && detail.version ? (
+          ) : contentView.kind === 'flashcards' ? (
             <FlashcardsRenderer
-              key={displayedVersion}
-              content={detail.version.content}
+              key={contentView.key}
+              content={contentView.content}
             />
-          ) : detail.artifact.kind === 'audio_overview' &&
-            detail.version?.media?.contentType === 'audio/mpeg' ? (
-            <AudioOverviewPlayer
-              media={detail.version.media}
-              allowedActions={detail.canvasResource?.allowedActions}
-            />
-          ) : detail.artifact.kind === 'generated_image' &&
-            detail.version?.media &&
-            'size' in detail.version.media &&
-            detail.version.media.contentType.startsWith('image/') ? (
-            <GeneratedImageViewer
-              title={detail.artifact.title}
-              media={
-                detail.version
-                  .media as import('./artifact-client').GeneratedImageMedia
-              }
-              allowedActions={detail.canvasResource?.allowedActions}
-            />
-          ) : detail.artifact.kind === 'note' && detail.version ? (
+          ) : contentView.kind === 'note' ? (
             <NoteRenderer
-              key={displayedVersion}
-              content={detail.version.content as NoteContent}
-              isLatest={isLatest}
-              readOnly={!isLatest}
+              key={contentView.key}
+              content={contentView.content as NoteContent}
+              isLatest={contentView.isLatest}
+              readOnly={!contentView.isLatest}
               onSave={onSaveNote}
               saving={revising}
             />
-          ) : detail.artifact.kind === 'dom_exploration' && detail.version ? (
+          ) : contentView.kind === 'audio_overview' ? (
+            <AudioOverviewPlayer
+              media={contentView.media}
+              allowedActions={contentView.allowedActions}
+            />
+          ) : contentView.kind === 'generated_image' ? (
+            <GeneratedImageViewer
+              title={contentView.title}
+              media={contentView.media}
+              allowedActions={contentView.allowedActions}
+            />
+          ) : contentView.kind === 'dom_exploration' ? (
             <PersistentWebRuntime
-              key={detail.version.id}
+              key={contentView.versionId}
               artifactId={detail.artifact.id}
-              artifactVersionId={detail.version.id}
+              artifactVersionId={contentView.versionId}
             />
           ) : (
             <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
