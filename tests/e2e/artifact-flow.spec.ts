@@ -296,9 +296,11 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
     return current.id;
   });
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-  const [{ DrizzleAssetRepository, conversations, getDb }, { eq }] =
+  // getDb 自 R 线起只从 internal subpath 导出（`@educanvas/db/internal`），默认入口不承载。
+  const [{ DrizzleAssetRepository, conversations }, { getDb }, { eq }] =
     await Promise.all([
       import('../../packages/db/src/index.ts'),
+      import('../../packages/db/src/internal/index.ts'),
       import('../../packages/db/node_modules/drizzle-orm/index.js'),
     ]);
   const [conversation] = await getDb()
