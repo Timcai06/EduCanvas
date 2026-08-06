@@ -331,7 +331,7 @@ Q00
 | --- | --- | --- |
 | Q00 指标冻结 | `PENDING` | metric contract |
 | Q01 RAG eval | `PENDING` | frozen dataset + report |
-| Q02 降级观测 | `PENDING` | reason matrix + telemetry tests |
+| Q02 降级观测 | `PENDING` | 9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；待验收 |
 | Q03 Turn budget | `PENDING` | budget tests + ledger evidence |
 | Q04 SLO/Runbook | `PENDING` | metrics + fault injection |
 | Q05 测试真实性 | `PENDING` | CI summary + browser/coverage/bundle |

@@ -1,4 +1,7 @@
-import { PLATFORM_EMBEDDING_DIMENSIONS } from '@educanvas/agent-core';
+import {
+  PLATFORM_EMBEDDING_DIMENSIONS,
+  type RetrievalDegradationReason,
+} from '@educanvas/agent-core';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
@@ -66,6 +69,12 @@ export interface HybridRetrievalResult {
   retrieverVersion: string;
   /** 向量路是否真的参与了本次融合，供调用方与诊断区分「无向量」与「向量无命中」。 */
   vectorApplied: boolean;
+  /**
+   * 降级原因（Q02）：null 表示本次没有可观测的降级；非 null 时是低基数稳定
+   * reason，可作 Trace/metric/health 标签。只携带原因，绝不携带 query 正文、
+   * embedding 或供应商响应。
+   */
+  degradationReason: RetrievalDegradationReason | null;
   candidates: readonly RetrievalCandidateEvidence[];
 }
 
@@ -78,6 +87,99 @@ interface RankedChunk {
 
 const boundedPool = (limit: number): number =>
   Math.min(limit * POOL_MULTIPLIER, MAX_POOL_SIZE);
+
+/**
+ * 把向量子查询的异常归为低基数 reason（Q02）。
+ *
+ * 只读取驱动错误上的 SQLSTATE 与消息，且只做模式匹配，绝不把异常正文写入
+ * 返回值或账本。超时（57014 / statement timeout）与扩展缺失是两类可稳定识别
+ * 的降级；其余一律归入 `fallback_fts`，避免引入高基数错误文本标签。
+ */
+export function classifyVectorQueryError(
+  error: unknown,
+): RetrievalDegradationReason {
+  /* catch 子句可能接到任意 throw 值（undefined、字符串、null），非对象一律
+     视为不可分类的未归类异常。
+     Drizzle 嵌套事务（savepoint）内语句失败时，驱动会抛包装错误
+     { query, params, cause }——真正的 SQLSTATE 在 cause 链上。必须解包后再
+     匹配，否则 57014（statement timeout）会被误归为 fallback_fts。 */
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== 'object' || current === null) {
+      break;
+    }
+    const record = current as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    const code = typeof record.code === 'string' ? record.code : '';
+    const message = typeof record.message === 'string' ? record.message : '';
+    if (code === '57014' || message.includes('statement timeout')) {
+      return 'vector_query_timeout';
+    }
+    if (
+      (code === '42704' && message.includes('vector')) ||
+      message.includes('pgvector') ||
+      message.includes('extension "vector"')
+    ) {
+      return 'extension_unavailable';
+    }
+    current = record.cause;
+  }
+  return 'fallback_fts';
+}
+
+/**
+ * 本轮冻结语料的嵌入状态（Q02 探针，仅在向量路执行完但零命中时运行）。
+ *
+ * 区分两种「向量零命中」：
+ * - 完全未嵌入（any=false）→ corpus_not_embedded，向量路无内容可跑，本次
+ *   按词法回退诚实标记；
+ * - 有嵌入但身份不匹配（any=true, withIdentity=false）→ invalid_configuration，
+ *   向量路执行过但全部被身份过滤（如模型升级后语料未按新身份重嵌入），属于
+ *   长期隐性降级，必须可观测。
+ *
+ * 探针失败不抛给调用方：观测不得改变检索结果（与遥测旁路原则一致）。
+ */
+async function corpusEmbeddingStatus(
+  transaction: DatabaseTransaction,
+  input: {
+    sessionId: string;
+    turnId: string;
+    identity: EmbeddingIdentity;
+  },
+): Promise<{ any: boolean; withIdentity: boolean }> {
+  const rows = await transaction.execute<{
+    any_embedded: boolean;
+    with_identity: boolean;
+  }>(sql`
+    select
+      exists(
+        select 1
+        from knowledge_chunk_embeddings e
+        join knowledge_chunks kc on kc.id = e.chunk_id and kc.document_id = e.document_id
+        join turn_source_versions ts on ts.document_id = kc.document_id
+        where ts.session_id = ${input.sessionId} and ts.turn_id = ${input.turnId}
+        limit 1
+      ) as any_embedded,
+      exists(
+        select 1
+        from knowledge_chunk_embeddings e
+        join knowledge_chunks kc on kc.id = e.chunk_id and kc.document_id = e.document_id
+        join turn_source_versions ts on ts.document_id = kc.document_id
+        where ts.session_id = ${input.sessionId} and ts.turn_id = ${input.turnId}
+          and e.embedding_model = ${input.identity.embeddingModel}
+          and e.embedding_model_version = ${input.identity.embeddingModelVersion}
+          and e.instruction = ${input.identity.instruction}
+        limit 1
+      ) as with_identity
+  `);
+  return {
+    any: rows[0]!.any_embedded,
+    withIdentity: rows[0]!.with_identity,
+  };
+}
 
 /**
  * 归一化 RRF 分数到 [0,1]。
@@ -266,13 +368,27 @@ export class DrizzleKnowledgeHybridRetrieval {
       throw new TypeError('混合检索limit必须为1-50的整数');
     }
     /* 维度不符一律拒绝而不是截断：截断出的向量语义无法解释，比没有向量更糟。 */
-    const queryEmbedding =
-      input.queryEmbedding &&
-      input.queryEmbedding.length === PLATFORM_EMBEDDING_DIMENSIONS &&
-      input.queryEmbedding.every((component) => Number.isFinite(component))
-        ? input.queryEmbedding
-        : null;
+    const rawEmbedding = input.queryEmbedding ?? null;
     const identity = input.embeddingIdentity ?? null;
+
+    /* 输入侧降级分类（Q02）：调用方没有提供可用的向量能力时，原因必须是
+       低基数 reason，而不是只有「没有向量」这一不可区分的布尔。 */
+    let degradationReason: RetrievalDegradationReason | null = null;
+    let queryEmbedding: readonly number[] | null = null;
+    if (rawEmbedding !== null && identity !== null) {
+      if (
+        rawEmbedding.length === PLATFORM_EMBEDDING_DIMENSIONS &&
+        rawEmbedding.every((component) => Number.isFinite(component))
+      ) {
+        queryEmbedding = rawEmbedding;
+      } else {
+        degradationReason = 'invalid_dimensions';
+      }
+    } else if (rawEmbedding !== null || identity !== null) {
+      degradationReason = 'invalid_configuration';
+    } else {
+      degradationReason = 'not_configured';
+    }
     const vectorRequested = queryEmbedding !== null && identity !== null;
 
     const queryHash = hashKnowledgeText(query);
@@ -319,10 +435,45 @@ export class DrizzleKnowledgeHybridRetrieval {
             return ranked;
           });
           vectorApplied = true;
-        } catch {
-          /* 超时或扩展缺失：降级为纯词法。异常细节不进入返回值与账本。 */
+        } catch (cause) {
+          /* 超时、扩展缺失或未归类错误：降级为纯词法。异常细节不进入返回值
+             与账本，只归类为低基数 reason。 */
+          degradationReason = classifyVectorQueryError(cause);
           vector = [];
           vectorApplied = false;
+        }
+      }
+
+      /* 向量路执行完但零命中：探针区分「语料完全未嵌入」与「身份不匹配」，
+         两类都是需要长期观测的隐性降级。探针自带 savepoint + 500ms 预算：
+         即使 embeddings 表被重嵌入任务锁住，也不能拖慢 Turn；失败即放弃
+         分类，不影响本次结果（观测不得进入学生路径）。 */
+      if (vectorRequested && vectorApplied && vector.length === 0 && identity) {
+        try {
+          const status = await transaction.transaction(
+            async (probeTransaction) => {
+              await probeTransaction.execute(
+                sql`set local statement_timeout = 500`,
+              );
+              const probe = await corpusEmbeddingStatus(probeTransaction, {
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                identity,
+              });
+              await probeTransaction.execute(
+                sql`set local statement_timeout = 0`,
+              );
+              return probe;
+            },
+          );
+          if (!status.any) {
+            degradationReason = 'corpus_not_embedded';
+            vectorApplied = false;
+          } else if (!status.withIdentity) {
+            degradationReason = 'invalid_configuration';
+          }
+        } catch {
+          // 观测不得进入学生路径。
         }
       }
 
@@ -345,6 +496,7 @@ export class DrizzleKnowledgeHybridRetrieval {
           retriever,
           retrieverVersion: effectiveVersion,
           vectorApplied,
+          degradationReason,
           candidates: existing,
         };
       }
@@ -357,6 +509,7 @@ export class DrizzleKnowledgeHybridRetrieval {
           retriever,
           retrieverVersion: effectiveVersion,
           vectorApplied,
+          degradationReason,
           candidates: [],
         };
       }
@@ -383,6 +536,7 @@ export class DrizzleKnowledgeHybridRetrieval {
         retriever,
         retrieverVersion: effectiveVersion,
         vectorApplied,
+        degradationReason,
         candidates: await loadCandidates(transaction, {
           sessionId: input.sessionId,
           turnId: input.turnId,
