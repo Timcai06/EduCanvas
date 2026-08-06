@@ -307,7 +307,7 @@ type WorkspaceSurface =
 | 任务                  | 状态      | 证据                                                                                                                                                    |
 | --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | W00 状态基线          | `PENDING` | [状态转换表、入口矩阵](../02-architecture/04-统一画布工作面-W00基线.md)（基线 `ccf5309`，行号已抽查验证；产出物已完成，**待 Codex 审核后才可标 PASS**） |
-| W01 Surface 模型      | `PENDING` | reducer tests                                                                                                                                           |
+| W01 Surface 模型      | `PENDING` | `workspace-surface.ts` 判别联合 + reducer；12 个纯函数测试全绿；characterization 先固定 5 处互斥链行为并消除其不一致（**待 Codex 审核后才可标 PASS**）  |
 | W02 职责拆分          | `PENDING` | component/hook tests、行数对比                                                                                                                          |
 | W03 诚实失败          | `PENDING` | error matrix tests                                                                                                                                      |
 | W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
