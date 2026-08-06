@@ -136,6 +136,97 @@ Q00
 - 明确哪些是 CI gate、趋势指标和人工评审；
 - 不把 Trace span 数量写成用户价值指标。
 
+### Q00 指标契约 v1（2026-08-06 冻结）
+
+> 契约说明：
+>
+> - 分类：`G`=CI gate（发布阻塞）、`T`=趋势指标（只观测、暂不阻塞）、`M`=人工评审（Codex/负责人抽查）；
+> - 现状：`HAS`=现有数据面可直接采集（给出代码位置）、`BUILD`=采集点尚未存在，由标注任务建设；
+> - 阈值策略：Q00 只冻结定义、分母、采集点和版本；**数值基线由各任务用真实数据实测后回填**（Q01 冻结评测集、Q05 覆盖率基线、Q03 成本基线），不预先伪造数值。回填时按"基线 × 保留系数"或"发布门槛 = 基线，只防回归"两种方式之一记录；
+> - 指标 label 一律低基数，禁止用户 ID、Prompt、正文、URL query、对象路径、Secret 或高基数原始错误（计划第四节硬边界）；
+> - 不设"Trace span 数量"类指标（span 数不是用户价值）。
+
+#### Retrieval（冻结评测集上的离线指标，Q01 建立）
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| Recall@10 / Recall@20 | 每 query 命中相关 chunk 数 / 该 query 相关 chunk 总数，按 query 平均 | `tooling/evals/**`（BUILD，Q01） | eval-dataset-v1 | Q01 实测基线回填 | G |
+| MRR@10 | 首个相关候选的 1/rank，按 query 平均 | 同上 | eval-dataset-v1 | 基线回填 | G |
+| nDCG@10 | DCG/IDCG（相关分按证据与 query 匹配度 0/1） | 同上 | eval-dataset-v1 | 基线回填 | G |
+| citation precision | 回答中引用落在相关候选内的引用数 / 回答全部引用数 | 同上（离线判分） | eval-dataset-v1 | 基线回填 | G |
+| 无答案拒答率 | 无答案 query 正确拒答数 / 无答案 query 总数 | 同上 | eval-dataset-v1 | 基线回填 | G |
+| 检索延迟 p50/p95 | 检索耗时分位数（含 vector + fuse） | 同上（harness 计时）；线上 `BUILD`（Q02） | eval-dataset-v1 | 基线回填 | T |
+| 检索 fallback 率 | vectorApplied=false 的检索数 / 检索总数 | `retrieveHybrid` 返回结构已含 `vectorApplied`（`packages/db/src/knowledge-hybrid-retrieval.ts:61-70`，HAS）；落指标 `BUILD`（Q02） | contract-v1 | 基线回填 | T |
+
+#### Answer
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| evidence coverage | 回答主张中可被检索证据支持的主张数 / 主张总数 | 离线判分（Q01 harness 扩展） | eval-dataset-v1 | 基线回填 | M |
+| unsupported claim rate | 无证据支持的主张数 / 主张总数 | 同上 | eval-dataset-v1 | 基线回填 | G |
+| 引用可打开率 | 引用投影为 available 的引用数 / 回答引用总数 | 投影 `available/superseded/tombstoned`（`packages/db/src/knowledge-retrieval-repository.ts:796-802`，HAS） | contract-v1 | 基线回填 | T |
+
+#### Runtime
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| Turn success rate | completed 的 turn 数 / 终态 turn 总数（completed+failed+cancelled） | lifecycle settle 三态（`packages/agent-runtime/src/turn-application/ports.ts:59`，HAS）；落指标 `BUILD`（Q04） | contract-v1 | 基线回填 | G |
+| 取消成功率 | cancelled（经 cancellation 端口二次确认）turn 数 / (cancelled+failed) turn 数 | `turn-application/session.ts:82-91`（HAS） | contract-v1 | 基线回填 | T |
+| outcome_unknown 率 | 工具调用 outcome_unknown 数 / 工具调用总数 | `AgentToolCallStatus`（`packages/agent-core/src/tool-call-ledger.ts:9,15`，HAS） | contract-v1 | 基线回填 | T |
+| 检索异常率 | 检索抛错或 fused 空结果次数 / 检索总数 | fused 空：`knowledge-hybrid-retrieval.ts:352-362`（HAS）；异常计数 `BUILD`（Q02） | contract-v1 | 基线回填 | T |
+| 失败码分布 | 各 `TurnApplicationFailureCode` 计数 | 12 个失败码（`packages/agent-core/src/turn-application-contracts.ts:98-111`，HAS） | contract-v1 | 无固定阈值，异常跳变人工评审 | T/M |
+
+#### Latency
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| TTFT | 模型首 token 耗时 | 指标名已定义 `model_first_token_latency_ms`（`packages/teaching-runtime/src/observability.ts:34-46`，定义 HAS，调用点 `BUILD`（Q04）） | contract-v1 | 基线回填 | T |
+| Turn total | 整个 turn 耗时 | `teaching_turn_latency_ms` 同名处理 | contract-v1 | 基线回填 | T |
+| Tool duration | 单次工具调用耗时 | 现状无采集（`BUILD`，Q04） | contract-v1 | 基线回填 | T |
+| Retrieval duration | 单次检索耗时 | 现状无采集（`BUILD`，Q02） | contract-v1 | 基线回填 | T |
+
+#### Cost
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| input/output token（含 cacheHit/reasoning） | 每 turn 累加值 | `ModelUsage` 已落账（`packages/agent-core/src/model-run-ledger.ts:56-59`，HAS） | contract-v1 | Q03 预算模板回填 | G |
+| model calls / turn | ledger 记录模型调用次数 | 同 HAS；预算检查在 `turn-engine.ts`（现状为字符/轮数硬上限） | contract-v1 | Q03 预算模板回填 | G |
+| embedding units | embedding 调用次数与 token | usage 现状不外发（`openai-compatible-embedding-model-gateway.ts:153-154`，`BUILD`，Q03） | contract-v1 | 基线回填 | T |
+| 估算货币成本 | 服务端按 token × 单价估算（`estimated` 标记） | 现状无估算路径（`BUILD`，Q03；provider 自报不可信，必须服务端保守估算） | contract-v1 | Q03 预算模板回填 | G |
+
+#### UI / Test 真实性
+
+| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
+| --- | --- | --- | --- | --- | --- |
+| retry count | 各 e2e 用例 retry 次数 | `playwright.config.ts:37`（retries=CI?1:0）已存在，报告汇总 `BUILD`（Q05） | contract-v1 | 无限 retry 禁止（Q05） | G |
+| flaky count | 重试后通过的用例数 | `failOnFlakyTests` 已启用（`playwright.config.ts:35`，HAS） | contract-v1 | 发布门槛内不允许 flaky | G |
+| browser/device matrix | 覆盖的浏览器/视口集合 | 现状仅 Desktop Chromium（`playwright.config.ts:55-60`）；第二浏览器或移动 viewport `BUILD`（Q05） | contract-v1 | Q05 建成后 ≥2 环境 | G |
+| coverage 率 | 核心包语句/分支覆盖率（排除生成代码与纯类型） | 现状无 coverage 配置（`BUILD`，Q05；先真实基线后设阈值） | contract-v1 | Q05 基线回填 | G |
+| bundle/route size | 产物与路由体积 | 现状无检查（`BUILD`，Q05） | contract-v1 | Q05 基线回填 | G |
+
+#### Privacy（禁止采集字段与保留期）
+
+- 禁止采集：用户 ID、Prompt 正文、回答正文、URL query、对象路径、Secret、Provider body、Embedding 向量、高基数原始错误文本（计划第四节 + `turn-trace-adapter.ts` 白名单语义已有先例）；
+- 允许采集：低基数标识（operationId/traceId、稳定 reason/code、模型与版本、turn 终态）、聚合数字（token 计数、耗时、计数）；
+- 保留期：指标时序数据与评测报告的保留策略由 Q04 运维文档规定；RAG 评测集版本变更必须产生新报告，**不得覆盖旧结论**（计划第九节）。
+
+#### 契约版本与回填记录
+
+- 本契约版本：`v1`（2026-08-06 冻结）；
+- 各数值阈值回填时在此小节登记 `（任务号，日期，基线数据，阈值数值）`；
+- 任何指标定义变更必须 bump 契约版本并记录变更原因，禁止静默修改。
+
+**Q01 回填登记（2026-08-06，数据集 eval-dataset-v1，报告 `tooling/evals/reports/rag-eval-v1-2026-08-06.json`，二次运行指标完全一致）：**
+
+- Recall@10 / Recall@20（hybrid）：**1.0 / 1.0**；MRR@10：**0.844**；nDCG@10：**0.891**。阈值（G）：发布门槛 = 基线，只防回归（Recall@10 ≥ 0.9、MRR@10 ≥ 0.75）；
+- Recall@10 / Recall@20（纯 FTS）：**0.75 / 0.75**；MRR@10：**0.813**；nDCG@10：**0.732**。基线事实：FTS 为全词 AND 语义（`websearch_to_tsquery simple`），部分重叠/同义词必然零命中，词法侧天花板由查询词表决定（见报告 findings.ftsAndSemantics）；阈值（T，趋势）不设硬门槛，记录回归对比；
+- fallback（向量不可用）：指标与纯 FTS 完全一致（等价性断言成立），retriever 如实标记 `postgres_fts` + `rrf-fallback-v1`；
+- 检索延迟（hybrid，本地评测库）：**p50 ≈ 6.9ms，p95 ≈ 15.6ms**（n=150）。阈值（T）：趋势指标，Q02 线上采集后再定线上阈值；
+- 检索 fallback 率：评测中为 0（三配置均为显式指定，不产生意外降级）；线上阈值 Q02 采集后回填；
+- 无答案拒答率（词法路）：**1.0**（q4/q8 在 FTS 与 fallback 下均空候选）；hybrid 路按 ADR-0015 设计无阈值返回平局候选（拒答语义由上层 agent 层承担）——此为基线事实而非缺陷；
+- citation precision / evidence coverage / unsupported claim rate / 引用可打开率：Q01 未扩展回答判分（答案层需真实模型），**留待 Q02 之后**评估，此处不登记数值；
+- 基线发现（记录而非缺陷）：① hybrid 向量路无绝对相似度阈值（ADR-0015 文档化行为）；② 陈旧向量排除生效（q10 零词面查询下 c1 不出现在向量路）；③ 注入 chunk 存在不影响正常查询排序（q7 答案仍居首）。
+
 ### Q01：RAG 冻结评测集与可复现 Harness
 
 - 依赖：Q00
@@ -329,8 +420,8 @@ Q00
 
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
-| Q00 指标冻结 | `PENDING` | metric contract |
-| Q01 RAG eval | `PENDING` | frozen dataset + report |
+| Q00 指标冻结 | `PENDING` | metric contract v1（2026-08-06 写入本计划，待验收） |
+| Q01 RAG eval | `PENDING` | frozen dataset v1 + harness 可复现（reports/rag-eval-v1-2026-08-06.json，含 hybrid limit 5/10/20 扫描；两次运行质量指标逐项一致；待验收） |
 | Q02 降级观测 | `PENDING` | reason matrix + telemetry tests |
 | Q03 Turn budget | `PENDING` | budget tests + ledger evidence |
 | Q04 SLO/Runbook | `PENDING` | metrics + fault injection |
