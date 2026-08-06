@@ -8,8 +8,8 @@ import {
   DrizzleSessionRepository,
   DrizzleStudyBootstrapCompensator,
   DrizzleStudyPlanRepository,
-  getDb,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import type { LessonSessionSnapshot } from '@educanvas/teaching-core';
 import type { GradeCanvasSubmissionOutcome } from '@educanvas/teaching-runtime';
 import type {
