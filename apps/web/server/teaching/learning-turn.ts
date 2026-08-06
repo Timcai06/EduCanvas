@@ -29,7 +29,6 @@ import type {
   TurnApplicationEvent,
 } from '@educanvas/agent-core';
 import {
-  createTurnApplication,
   type BuiltAssetContext,
 } from '@educanvas/agent-runtime';
 import { DrizzleStudyPlanRepository } from '@educanvas/db';
