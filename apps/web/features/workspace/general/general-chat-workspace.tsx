@@ -12,7 +12,6 @@ import type { CanvasResourceRendererProps } from '@/features/canvas/canvas-resou
 import {
   ArtifactCanvas,
   ArtifactConfirmSheet,
-  ArtifactStatusCard,
   useArtifactGeneration,
 } from '@/features/canvas/artifact-generation-flow';
 import {
@@ -20,13 +19,11 @@ import {
   type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
-import { ChatPanel } from '@/features/chat/chat-panel';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { useSidebarState } from './use-sidebar-state';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
-import { Composer } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import { motionDuration } from '@/features/theme/motion';
 import { StudioOverlay } from '@/features/studio/studio-overlay';
@@ -47,8 +44,11 @@ import {
   PENDING_GENERAL_CANVAS_KEY,
 } from './general-chat-entry';
 import { ConversationSidebar } from './conversation-sidebar';
+import {
+  ConversationPane,
+  type ConversationPaneProps,
+} from './conversation-pane';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
-import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
@@ -59,7 +59,6 @@ import {
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import {
   GENERAL_ASSET_ENDPOINT,
-  GENERAL_MENU_ACTIONS,
   GENERAL_TURN_OPTIONS,
 } from './general-chat-config';
 
@@ -271,6 +270,35 @@ export function GeneralChatWorkspace({
       />
     ) : null;
 
+  /* W02：landing 与对话共享同一组 ConversationPane props（两态只差 isLanding）。 */
+  const conversationPaneProps = {
+    nickname,
+    messages: turn.messages,
+    busy: turn.busy,
+    stopAvailable: turn.stopAvailable,
+    statusText: turn.statusText ?? error ?? sourceNotice?.message ?? null,
+    statusTone: (!turn.busy && (error || sourceNotice?.tone === 'error')
+      ? 'error'
+      : 'info') as 'info' | 'error',
+    generation: artifactFlow.generation,
+    revisingOpenArtifact,
+    composerTools,
+    composerDockRef,
+    scrollRef,
+    nearBottomRef: nearBottom,
+    onSend: send,
+    onStop: () => void turn.stop(),
+    onMenuAction: handleMenuAction,
+    onToolAction: handleToolAction,
+    onRetry: (messageId: string) => turn.retry(messageId),
+    onPreviewHtml: (source: string) => workspace.openHtml(source),
+    onOpenArtifact: (artifactId: string) =>
+      studioOpenActions.actions.openArtifact(artifactId),
+    onOpenStatusCard: (artifactId: string) =>
+      studioOpenActions.actions.openArtifact(artifactId),
+    onDismissStatusCard: artifactFlow.dismiss,
+  } satisfies Omit<ConversationPaneProps, 'isLanding'>;
+
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
     () => {
@@ -331,115 +359,13 @@ export function GeneralChatWorkspace({
             </div>
           ) : null}
           {isLanding ? (
-            <EmptyChatHero as="section" nickname={nickname}>
-              <div ref={composerDockRef} className="w-full">
-                {artifactFlow.generation &&
-                artifactFlow.generation.phase !== 'confirm' ? (
-                  <div className="px-4">
-                    <ArtifactStatusCard
-                      generation={artifactFlow.generation}
-                      onOpen={() => {
-                        const artifactId = artifactFlow.generation?.artifactId;
-                        if (artifactId) {
-                          studioOpenActions.actions.openArtifact(artifactId);
-                        }
-                      }}
-                      onDismiss={artifactFlow.dismiss}
-                      dismissable={!revisingOpenArtifact}
-                    />
-                  </div>
-                ) : null}
-                <Composer
-                  chips={[]}
-                  busy={turn.busy}
-                  statusText={
-                    turn.statusText ?? error ?? sourceNotice?.message ?? null
-                  }
-                  statusTone={
-                    !turn.busy && (error || sourceNotice?.tone === 'error')
-                      ? 'error'
-                      : 'info'
-                  }
-                  onSend={send}
-                  onStop={() => void turn.stop()}
-                  stopAvailable={turn.stopAvailable}
-                  onRemoveChip={() => undefined}
-                  onMenuAction={handleMenuAction}
-                  availableMenuActions={GENERAL_MENU_ACTIONS}
-                  toolChips={composerTools}
-                  onToolAction={handleToolAction}
-                  variant="landing"
-                />
-              </div>
-            </EmptyChatHero>
+            <ConversationPane {...conversationPaneProps} isLanding />
           ) : (
             <div className="relative z-10 flex min-h-0 flex-1">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div
-                  ref={scrollRef}
-                  className="min-h-0 flex-1 overflow-y-auto"
-                  role="region"
-                  aria-label="AI 对话"
-                  onScroll={(event) => {
-                    const node = event.currentTarget;
-                    nearBottom.current =
-                      node.scrollHeight - node.scrollTop - node.clientHeight <=
-                      96;
-                  }}
-                >
-                  <ChatPanel
-                    messages={turn.messages}
-                    canvasOpen={false}
-                    artifactTitle=""
-                    onOpenCanvas={() => undefined}
-                    onContinueText={() => undefined}
-                    onRetry={(messageId) => turn.retry(messageId)}
-                    onPreviewHtml={({ source }) => {
-                      workspace.openHtml(source);
-                    }}
-                    onOpenArtifact={(artifactId) => {
-                      studioOpenActions.actions.openArtifact(artifactId);
-                    }}
-                    assistantLabel="AI"
-                  />
-                </div>
-                <div ref={composerDockRef} className="relative z-10 px-4">
-                  {artifactFlow.generation &&
-                  artifactFlow.generation.phase !== 'confirm' ? (
-                    <ArtifactStatusCard
-                      generation={artifactFlow.generation}
-                      onOpen={() => {
-                        const artifactId = artifactFlow.generation?.artifactId;
-                        if (artifactId) {
-                          studioOpenActions.actions.openArtifact(artifactId);
-                        }
-                      }}
-                      onDismiss={artifactFlow.dismiss}
-                      dismissable={!revisingOpenArtifact}
-                    />
-                  ) : null}
-                  <Composer
-                    chips={[]}
-                    busy={turn.busy}
-                    statusText={
-                      turn.statusText ?? error ?? sourceNotice?.message ?? null
-                    }
-                    statusTone={
-                      !turn.busy && (error || sourceNotice?.tone === 'error')
-                        ? 'error'
-                        : 'info'
-                    }
-                    onSend={send}
-                    onStop={() => void turn.stop()}
-                    stopAvailable={turn.stopAvailable}
-                    onRemoveChip={() => undefined}
-                    onMenuAction={handleMenuAction}
-                    availableMenuActions={GENERAL_MENU_ACTIONS}
-                    toolChips={composerTools}
-                    onToolAction={handleToolAction}
-                  />
-                </div>
-              </div>
+              <ConversationPane
+                {...conversationPaneProps}
+                isLanding={false}
+              />
               {resourceOpenStatus ? (
                 resourceOpenStatus
               ) : surface.type === 'artifact' && artifactFlow.openDetail ? (
