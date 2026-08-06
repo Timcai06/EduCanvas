@@ -73,9 +73,7 @@ export function WorkspaceSurfaceSlot({
         <ArtifactCanvas
           detail={artifactDetail}
           isFull={fullscreen || artifactCanvasFull}
-          onToggleFull={
-            fullscreen ? () => undefined : onToggleFullArtifact
-          }
+          onToggleFull={fullscreen ? () => undefined : onToggleFullArtifact}
           onClose={onCloseArtifact}
           onDeleted={onDeletedArtifact}
           onSelectVersion={(version) =>

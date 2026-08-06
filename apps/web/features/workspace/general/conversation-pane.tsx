@@ -3,10 +3,7 @@
 import type { RefObject } from 'react';
 import type { ChatMessage } from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
-import {
-  Composer,
-  type ComposerToolChip,
-} from '@/features/composer/composer';
+import { Composer, type ComposerToolChip } from '@/features/composer/composer';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import {
   ArtifactStatusCard,

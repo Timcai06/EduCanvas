@@ -1,12 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { Flip } from 'gsap/Flip';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
-import {
-  useArtifactGeneration,
-} from '@/features/canvas/artifact-generation-flow';
+import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
 import {
   fetchNotebookArtifacts,
   type ArtifactDetail,
@@ -184,7 +188,15 @@ export function useGeneralWorkspaceController(options: {
           void refreshAssets().catch(() => undefined);
         });
     },
-    [assets, canvasSelected, composerDockRef, flipStateRef, refreshAssets, setAssets, turn],
+    [
+      assets,
+      canvasSelected,
+      composerDockRef,
+      flipStateRef,
+      refreshAssets,
+      setAssets,
+      turn,
+    ],
   );
 
   useEffect(() => {
@@ -295,8 +307,7 @@ export function useGeneralWorkspaceController(options: {
     artifactCanvasFull: artifactFlow.canvasFull,
     revisingOpenArtifact,
     onToggleFullSurface: () => workspace.dispatch({ type: 'toggleFull' }),
-    onToggleFullArtifact: () =>
-      artifactFlow.setCanvasFull((value) => !value),
+    onToggleFullArtifact: () => artifactFlow.setCanvasFull((value) => !value),
     onCloseSurface: () => workspace.dispatch({ type: 'close' }),
     onCloseArtifact: closeArtifactCanvas,
     onDeletedArtifact: handleArtifactDeleted,
