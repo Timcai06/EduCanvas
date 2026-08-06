@@ -31,15 +31,15 @@
 
 ## 二、已经确认的代码事实
 
-| 事实 | 代码位置 | 本计划处理 |
-| --- | --- | --- |
-| `GeneralChatWorkspace` 聚合大量 state/ref/effect 和多个工作面 | `apps/web/features/workspace/general/general-chat-workspace.tsx` | 建立状态机并拆分职责 |
-| 多个 handler 通过手工 `setX(null)` 保证互斥 | 同上及相邻 hooks | 用判别联合收口 |
-| Artifact 列表/Asset 刷新存在失败转空或吞错路径 | Workspace 与 Studio 相关文件 | 诚实失败 |
-| Source Renderer 已进入 Registry | `apps/web/features/canvas/**` | 保留 |
-| Artifact Registry 仍使用 `ArtifactCompatibilityRenderer` | `canvas-resource-renderers.ts` | 迁移真实 Renderer |
-| Web ESLint 只有 Next 默认规则 | `apps/web/eslint.config.mjs` | 增加边界规则 |
-| 默认 E2E 排除 `@ui` 且只有 Desktop Chromium | `playwright.config.ts` | 建立稳定 UI/移动端验证 lane |
+| 事实                                                          | 代码位置                                                         | 本计划处理                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `GeneralChatWorkspace` 聚合大量 state/ref/effect 和多个工作面 | `apps/web/features/workspace/general/general-chat-workspace.tsx` | 建立状态机并拆分职责        |
+| 多个 handler 通过手工 `setX(null)` 保证互斥                   | 同上及相邻 hooks                                                 | 用判别联合收口              |
+| Artifact 列表/Asset 刷新存在失败转空或吞错路径                | Workspace 与 Studio 相关文件                                     | 诚实失败                    |
+| Source Renderer 已进入 Registry                               | `apps/web/features/canvas/**`                                    | 保留                        |
+| Artifact Registry 仍使用 `ArtifactCompatibilityRenderer`      | `canvas-resource-renderers.ts`                                   | 迁移真实 Renderer           |
+| Web ESLint 只有 Next 默认规则                                 | `apps/web/eslint.config.mjs`                                     | 增加边界规则                |
+| 默认 E2E 排除 `@ui` 且只有 Desktop Chromium                   | `playwright.config.ts`                                           | 建立稳定 UI/移动端验证 lane |
 
 ## 三、绝对文件边界
 
@@ -304,16 +304,16 @@ type WorkspaceSurface =
 
 ## 七、验证台账
 
-| 任务 | 状态 | 证据 |
-| --- | --- | --- |
-| W00 状态基线 | `PENDING` | 状态转换表、入口矩阵 |
-| W01 Surface 模型 | `PENDING` | reducer tests |
-| W02 职责拆分 | `PENDING` | component/hook tests、行数对比 |
-| W03 诚实失败 | `PENDING` | error matrix tests |
-| W04 Artifact Registry | `PENDING` | renderer contract + E2E |
-| W05 静态边界 | `PENDING` | ESLint negative fixtures |
-| W06 多端与性能 | `PENDING` | Playwright、bundle/perf evidence |
-| W07 收口 | `PENDING` | full Web CI、删除清单 |
+| 任务                  | 状态      | 证据                                                                                                                                                    |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W00 状态基线          | `PENDING` | [状态转换表、入口矩阵](../02-architecture/04-统一画布工作面-W00基线.md)（基线 `ccf5309`，行号已抽查验证；产出物已完成，**待 Codex 审核后才可标 PASS**） |
+| W01 Surface 模型      | `PENDING` | reducer tests                                                                                                                                           |
+| W02 职责拆分          | `PENDING` | component/hook tests、行数对比                                                                                                                          |
+| W03 诚实失败          | `PENDING` | error matrix tests                                                                                                                                      |
+| W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
+| W05 静态边界          | `PENDING` | ESLint negative fixtures                                                                                                                                |
+| W06 多端与性能        | `PENDING` | Playwright、bundle/perf evidence                                                                                                                        |
+| W07 收口              | `PENDING` | full Web CI、删除清单                                                                                                                                   |
 
 ## 八、阶段级验证
 
