@@ -43,6 +43,7 @@ import {
 } from './general-chat-entry';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
+import type { ResourceClientError } from '@/features/canvas/resource-error';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -80,7 +81,8 @@ export function useGeneralWorkspaceController(options: {
   );
   const [canvasSelected, setCanvasSelected] = useState(false);
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /* W03：来源加载/变更错误保留结构化语义，UI 据此决定可重试性与文案。 */
+  const [error, setError] = useState<ResourceClientError | null>(null);
   const [sourceNotice, setSourceNotice] = useState<AssetStatusNotice | null>(
     null,
   );
@@ -289,7 +291,8 @@ export function useGeneralWorkspaceController(options: {
     messages: turn.messages,
     busy: turn.busy,
     stopAvailable: turn.stopAvailable,
-    statusText: turn.statusText ?? error ?? sourceNotice?.message ?? null,
+    statusText:
+      turn.statusText ?? error?.message ?? sourceNotice?.message ?? null,
     statusTone: (!turn.busy && (error || sourceNotice?.tone === 'error')
       ? 'error'
       : 'info') as 'info' | 'error',

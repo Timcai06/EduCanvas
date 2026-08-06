@@ -12,6 +12,14 @@ import {
   detectAssetStatusNotices,
   type AssetStatusNotice,
 } from '@/features/assets/asset-status';
+import { ResourceClientError } from '@/features/canvas/resource-error';
+
+/* W03：未知原因统一归为 failed，结构化错误保留 kind 供 UI 区分可重试性。 */
+function toClientError(reason: unknown, fallback: string): ResourceClientError {
+  return reason instanceof ResourceClientError
+    ? reason
+    : new ResourceClientError('failed', fallback);
+}
 
 /**
  * 当前 Notebook 的来源集合与其变更动作。
@@ -22,7 +30,7 @@ import {
  */
 export function useNotebookSources(input: {
   endpoint: string;
-  onError: (message: string) => void;
+  onError: (error: ResourceClientError) => void;
   onStatus?: (notice: AssetStatusNotice) => void;
 }): {
   assets: readonly AssetItem[];
@@ -74,11 +82,7 @@ export function useNotebookSources(input: {
         if (active) applyAssets(items, false);
       })
       .catch((reason: unknown) => {
-        if (active) {
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法读取资料。',
-          );
-        }
+        if (active) onError(toClientError(reason, '暂时无法读取资料。'));
       });
     return () => {
       active = false;
@@ -99,7 +103,12 @@ export function useNotebookSources(input: {
       void refresh().catch(() => {
         pollFailuresRef.current += 1;
         if (pollFailuresRef.current === 3) {
-          onError('暂时无法刷新来源处理进度，请检查网络后重试。');
+          onError(
+            new ResourceClientError(
+              'unavailable',
+              '暂时无法刷新来源处理进度，请检查网络后重试。',
+            ),
+          );
         }
       });
     }, 2_000);
@@ -131,9 +140,7 @@ export function useNotebookSources(input: {
         })
         .catch((reason: unknown) => {
           patch(asset.id, (item) => ({ ...item, enabled: asset.enabled }));
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法更新来源。',
-          );
+          onError(toClientError(reason, '暂时无法更新来源。'));
         });
     },
     [onError, patch],
@@ -145,9 +152,7 @@ export function useNotebookSources(input: {
       void renameAsset({ assetId: asset.id, displayName }).catch(
         (reason: unknown) => {
           patch(asset.id, (item) => ({ ...item, label: asset.label }));
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法重命名来源。',
-          );
+          onError(toClientError(reason, '暂时无法重命名来源。'));
         },
       );
     },
@@ -164,9 +169,7 @@ export function useNotebookSources(input: {
           );
         })
         .catch((reason: unknown) => {
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法删除来源。',
-          );
+          onError(toClientError(reason, '暂时无法删除来源。'));
         });
     },
     [onError],
