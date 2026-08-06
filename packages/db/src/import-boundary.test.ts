@@ -11,7 +11,10 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
+
+/* 台账基线统一用 / 分隔：Windows 上 relative() 产生 \，直接比对会全部"新增"。 */
+const norm = (path: string) => path.split(sep).join('/');
 import { describe, expect, it } from 'vitest';
 
 // 端到端验证受控 subpath 可解析（vitest 按 package.json exports 解析）。
@@ -127,7 +130,7 @@ function collectDbImports(files: string[]): DbImport[] {
       kind: DbImport['kind'],
     ): void => {
       result.push({
-        file: relative(ROOT, file),
+        file: norm(relative(ROOT, file)),
         isTest,
         kind,
         specifier,
@@ -178,7 +181,7 @@ function collectRawDbPathImports(files: string[]): string[] {
     for (const re of [staticRe, dynamicRe]) {
       let m: RegExpExecArray | null;
       while ((m = re.exec(src)) !== null) {
-        result.push(`${relative(ROOT, file)} -> ${m[1]}`);
+        result.push(`${norm(relative(ROOT, file))} -> ${m[1]}`);
       }
     }
   }

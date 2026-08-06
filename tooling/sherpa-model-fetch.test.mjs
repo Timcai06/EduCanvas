@@ -17,7 +17,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
@@ -94,7 +94,9 @@ function buildDeps(overrides = {}) {
         if (overrides.archiveSha256) return overrides.archiveSha256;
         return PROFILE.archive.sha256;
       }
-      const name = filePath.split('/').pop();
+      /* basename 而非 split('/')：Windows 本地路径用 \ 分隔，split('/')
+         会把整条路径当作文件名，查不到 PROFILE.files 期望值。 */
+      const name = basename(filePath);
       const expected = PROFILE.files[name];
       if (expected === undefined) return 'unexpected-file-hash';
       return expected;
