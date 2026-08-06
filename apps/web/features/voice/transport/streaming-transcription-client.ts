@@ -60,10 +60,7 @@ import {
   type StreamingTranscriptionSnapshot,
   type StreamingTranscriptionServerMessage,
 } from '@educanvas/agent-core';
-import {
-  StreamingTranscriptionTicketError,
-  type StreamingTranscriptionTicketClient,
-} from './streaming-transcription-ticket-client';
+import { type StreamingTranscriptionTicketClient } from './streaming-transcription-ticket-client';
 
 /** 客户端阶段：idle（未 start）→ starting（ticket/握手）→ open（可发送）→ terminal。 */
 export type StreamingTranscriptionClientPhase =
