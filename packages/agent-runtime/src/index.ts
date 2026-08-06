@@ -46,7 +46,9 @@ export {
   type AgentLoopToolSuccess,
 } from './agent-loop';
 export {
+  createTurnApplication,
   TurnApplicationService,
+  type TurnApplicationDependencies,
   type TurnApplicationCancellationPort,
   type TurnApplicationContextCandidate,
   type TurnApplicationContextPlan,
@@ -63,6 +65,7 @@ export {
   type TurnApplicationToolPolicy,
   type TurnApplicationTracePort,
   type TurnApplicationTraceSpan,
+  type ToolKernelPort,
 } from './turn-application';
 export {
   ToolKernel,

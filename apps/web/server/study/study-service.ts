@@ -6,9 +6,9 @@ import {
   DrizzleStudyBootstrapCompensator,
   DrizzleStudyDiagnosticRepository,
   DrizzleStudyPlanRepository,
-  getDb,
   type StudyPlanSnapshot,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import {
   diagnosticSubmissionSchema,
   gradeDiagnostic,

@@ -3,11 +3,9 @@
  * @packageDocumentation
  */
 
-export { getDb } from './client';
 // schema 表只按需显式导出（R04 起不再 `export *` 全量泄漏）；新表不得加入默认入口，
 // 应经 `@educanvas/db/internal` / `@educanvas/db/testing` 获取，见 src/import-boundary.test.ts。
-// getDb 与默认入口保留的 17 个 schema 表（本块 14 个 + mcpToolIntents / audioConsents /
-// audioRetentions）仍是暂时兼容出口（遗留生产/测试引用），实际移除属于 R06/R08。
+// `getDb` 只从受控 internal/testing subpath 导出，不属于业务默认 API。
 export {
   agentOperations,
   artifactVersions,
@@ -456,6 +454,12 @@ export {
   type K12ParityAuditCursor,
   type ParityAuditResult,
 } from './k12-conversation-parity';
+export {
+  DrizzleK12ConversationBackfillRepository,
+  type K12ConversationBackfillCursor,
+  type K12ConversationBackfillInput,
+  type K12ConversationBackfillResult,
+} from './k12-conversation-backfill-repository';
 export {
   DrizzleWebRuntimeRunRepository,
   WebRuntimeAdmissionError,

@@ -10,8 +10,8 @@ import {
   DrizzlePlatformConversationRepository,
   DrizzlePlatformTurnRepository,
   DrizzleToolApprovalIntentRepository,
-  getDb,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/testing';
 import {
   AesGcmMcpIntentCipher,
   type McpToolRegistration,

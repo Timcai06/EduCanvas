@@ -39,13 +39,13 @@ import {
   assets,
   audioConsents,
   audioRetentions,
-  getDb,
   objectDeletionOutbox,
   platformUsers,
   securityAuditEvents,
   spaces,
   type ObjectDeletionClaim,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/testing';
 import { eq, inArray, or, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { fileURLToPath } from 'node:url';

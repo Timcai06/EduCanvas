@@ -195,7 +195,15 @@ function immutableRunFieldsMatch(
   );
 }
 
-/** Provider 运行审计仓储；该层不保存 Prompt 原文或供应商推理内容。 */
+/**
+ * Provider 运行审计仓储；该层不保存 Prompt 原文或供应商推理内容。
+ *
+ * @deprecated 教学形状 Model Run 已统一由 `DrizzleAgentModelRunRepository` 写入
+ * `model_runs`（taskAlias 路由双形状，见 agent-model-run-repository.ts）。本类仅保留
+ * 供旧数据读取与集成测试使用；生产代码禁止新增导入（见 import-boundary.test.ts
+ * R05 门禁，基线仅 apps/web/server/model/audited-model-gateway.ts 死代码），
+ * R08 收口时删除。
+ */
 export class DrizzleModelRunRepository {
   constructor(private readonly providedDatabase?: Database) {}
 

@@ -7,6 +7,7 @@ export {
   type ToolAdapterApprovalPreparation,
   type ToolAdapterInvocationContext,
   type ToolKernelAdapter,
+  type ToolKernelExecuteRequest,
   type ToolKernelFailureCode,
   type ToolKernelPolicyContext,
   type ToolKernelResult,
