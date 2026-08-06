@@ -13,7 +13,7 @@ import {
   getLearningRailCapabilities,
 } from './learning-rail-model';
 import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
-import { Sheet } from '../shared/sheet';
+import { Sheet } from '@/components/sheet';
 
 interface LearningRailProps {
   sessions: readonly LearningSessionSummaryDTO[];

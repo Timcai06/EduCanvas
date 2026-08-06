@@ -3,7 +3,7 @@
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import { SourceLinkImportPanel } from '@/features/assets/source-link-import-panel';
-import { Sheet } from '../shared/sheet';
+import { Sheet } from '@/components/sheet';
 
 /** 输入框“+”触发的来源创建面；Studio不复用这些入口。 */
 export function GeneralAssetEntrySheets({

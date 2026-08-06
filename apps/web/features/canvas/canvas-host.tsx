@@ -3,7 +3,7 @@
 import {
   getFocusableElements,
   makeWorkspaceBackgroundInert,
-} from '@/features/workspace/shared/modal-focus';
+} from '@/components/modal-focus';
 import { motionDuration } from '@/features/theme/motion';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
