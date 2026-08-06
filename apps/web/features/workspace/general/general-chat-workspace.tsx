@@ -5,6 +5,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { SourceResourceRenderer } from '@/features/assets/source-resource-renderer';
 import { useNotebookSources } from './use-notebook-sources';
+import { useWorkspaceSurface } from './use-workspace-surface';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { CanvasResourceOpenStatus } from '@/features/canvas/canvas-resource-open-status';
 import type { CanvasResourceRendererProps } from '@/features/canvas/canvas-resource-registry';
@@ -76,20 +77,24 @@ export function GeneralChatWorkspace({
   nickname?: string | null;
 }) {
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
-  const [sourceResource, setSourceResource] = useState<{
+  /* W02：工作面互斥收敛到 useWorkspaceSurface（判别联合）。source 的 resource+Renderer
+     属于详情数据，单独缓存；打开/关闭互斥由 reducer 保证，组件不再散落 setX(null)。 */
+  const workspace = useWorkspaceSurface();
+  const { surface } = workspace;
+  const [sourceDetail, setSourceDetail] = useState<{
     readonly resource: CanvasResource;
     readonly Renderer: ComponentType<CanvasResourceRendererProps>;
   } | null>(null);
-  const [sourcePreviewFull, setSourcePreviewFull] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewFull, setPreviewFull] = useState(false);
-  const [studioOpen, setStudioOpen] = useState(false);
   const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
     [],
   );
   const artifactFlow = useArtifactGeneration();
-  const handleArtifactDeleted = (artifactId: string) => {
+  const closeArtifactCanvas = useCallback(() => {
+    workspace.dispatch({ type: 'close' });
     artifactFlow.closeCanvas();
+  }, [artifactFlow, workspace]);
+  const handleArtifactDeleted = (artifactId: string) => {
+    closeArtifactCanvas();
     setStudioItems((items) => items.filter((item) => item.id !== artifactId));
   };
   const [canvasSelected, setCanvasSelected] = useState(false);
@@ -109,10 +114,12 @@ export function GeneralChatWorkspace({
   const studioOpenActions = useStudioOpenActions({
     scopeKey: conversationId,
     onSourceValid: (resource, Renderer) => {
-      setSourceResource({ resource, Renderer });
-      setSourcePreviewFull(false);
+      /* 验证成功后才开 surface：先缓存详情再 dispatch，渲染时 detail 与 surface 同步就绪。 */
+      setSourceDetail({ resource, Renderer });
+      workspace.openSource(resource.resourceId);
     },
     onArtifactValid: (resource) => {
+      workspace.openArtifact(resource.resourceId);
       void artifactFlow.openArtifact(resource.resourceId);
     },
   });
@@ -293,12 +300,14 @@ export function GeneralChatWorkspace({
         notebookTitle={notebookTitle}
         conversationId={conversationId}
         sidebarOpen={sidebarOpen}
-        studioOpen={studioOpen}
+        studioOpen={surface.type === 'studio'}
         onToggleSidebar={toggleSidebar}
         onOpenStudio={() => {
-          const opening = !studioOpen;
-          setStudioOpen(opening);
-          if (!opening) return;
+          if (surface.type === 'studio') {
+            workspace.closeStudio();
+            return;
+          }
+          workspace.openStudio();
           void fetchNotebookArtifacts()
             .then(setStudioItems)
             .catch(() => setStudioItems([]));
@@ -332,7 +341,6 @@ export function GeneralChatWorkspace({
                       onOpen={() => {
                         const artifactId = artifactFlow.generation?.artifactId;
                         if (artifactId) {
-                          setSourceResource(null);
                           studioOpenActions.actions.openArtifact(artifactId);
                         }
                       }}
@@ -387,14 +395,9 @@ export function GeneralChatWorkspace({
                     onContinueText={() => undefined}
                     onRetry={(messageId) => turn.retry(messageId)}
                     onPreviewHtml={({ source }) => {
-                      setSourceResource(null);
-                      setSourcePreviewFull(false);
-                      setPreviewHtml(source);
+                      workspace.openHtml(source);
                     }}
                     onOpenArtifact={(artifactId) => {
-                      setSourceResource(null);
-                      setSourcePreviewFull(false);
-                      setPreviewHtml(null);
                       studioOpenActions.actions.openArtifact(artifactId);
                     }}
                     assistantLabel="AI"
@@ -408,7 +411,6 @@ export function GeneralChatWorkspace({
                       onOpen={() => {
                         const artifactId = artifactFlow.generation?.artifactId;
                         if (artifactId) {
-                          setSourceResource(null);
                           studioOpenActions.actions.openArtifact(artifactId);
                         }
                       }}
@@ -440,14 +442,14 @@ export function GeneralChatWorkspace({
               </div>
               {resourceOpenStatus ? (
                 resourceOpenStatus
-              ) : artifactFlow.openDetail ? (
+              ) : surface.type === 'artifact' && artifactFlow.openDetail ? (
                 <ArtifactCanvas
                   detail={artifactFlow.openDetail}
                   isFull={artifactFlow.canvasFull}
                   onToggleFull={() =>
                     artifactFlow.setCanvasFull((value) => !value)
                   }
-                  onClose={artifactFlow.closeCanvas}
+                  onClose={closeArtifactCanvas}
                   onDeleted={handleArtifactDeleted}
                   onSelectVersion={(version) =>
                     void artifactFlow.openArtifactVersion(
@@ -469,48 +471,38 @@ export function GeneralChatWorkspace({
                   }
                   revising={revisingOpenArtifact}
                 />
-              ) : sourceResource ? (
+              ) : surface.type === 'source' && sourceDetail ? (
                 <SourceResourceRenderer
-                  key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
-                  resource={sourceResource.resource}
-                  Renderer={sourceResource.Renderer}
-                  isFull={sourcePreviewFull}
-                  onToggleFull={() => setSourcePreviewFull((value) => !value)}
-                  onClose={() => {
-                    setSourceResource(null);
-                    setSourcePreviewFull(false);
-                  }}
+                  key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
+                  resource={sourceDetail.resource}
+                  Renderer={sourceDetail.Renderer}
+                  isFull={surface.full}
+                  onToggleFull={() => workspace.dispatch({ type: 'toggleFull' })}
+                  onClose={() => workspace.dispatch({ type: 'close' })}
                 />
-              ) : previewHtml !== null ? (
+              ) : surface.type === 'html' ? (
                 <HtmlPreviewPanel
-                  source={previewHtml}
-                  isFull={previewFull}
-                  onToggleFull={() => setPreviewFull((value) => !value)}
-                  onClose={() => {
-                    setPreviewHtml(null);
-                    setPreviewFull(false);
-                  }}
+                  source={surface.source}
+                  isFull={surface.full}
+                  onToggleFull={() => workspace.dispatch({ type: 'toggleFull' })}
+                  onClose={() => workspace.dispatch({ type: 'close' })}
                 />
               ) : null}
             </div>
           )}
         </main>
-        {studioOpen ? (
-          <StudioOverlay onClose={() => setStudioOpen(false)}>
+        {surface.type === 'studio' ? (
+          <StudioOverlay onClose={() => workspace.closeStudio()}>
             <StudioWorkspace
               assets={notebookSources}
               outputs={studioItems}
               onOpenSource={(asset) => {
-                setStudioOpen(false);
+                workspace.closeStudio();
                 artifactFlow.closeCanvas();
-                setPreviewHtml(null);
-                setSourceResource(null);
                 studioOpenActions.actions.openSource(asset.id);
               }}
               onOpenOutput={(artifactId) => {
-                setStudioOpen(false);
-                setSourceResource(null);
-                setSourcePreviewFull(false);
+                workspace.closeStudio();
                 studioOpenActions.actions.openArtifact(artifactId);
               }}
               onToggleSource={sources.toggle}
@@ -523,14 +515,14 @@ export function GeneralChatWorkspace({
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
       <AgentBusyOverlay active={turn.busy} />
       {isLanding ? resourceOpenStatus : null}
-      {isLanding && artifactFlow.openDetail ? (
+      {isLanding && surface.type === 'artifact' && artifactFlow.openDetail ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,
            否则内部 z-40 压不过兄弟 header 的 z-20;也不能进带 transform 的 hero。 */
         <ArtifactCanvas
           detail={artifactFlow.openDetail}
           isFull
           onToggleFull={() => undefined}
-          onClose={artifactFlow.closeCanvas}
+          onClose={closeArtifactCanvas}
           onDeleted={handleArtifactDeleted}
           onSelectVersion={(version) =>
             void artifactFlow.openArtifactVersion(
@@ -547,17 +539,14 @@ export function GeneralChatWorkspace({
           revising={revisingOpenArtifact}
         />
       ) : null}
-      {isLanding && sourceResource ? (
+      {isLanding && surface.type === 'source' && sourceDetail ? (
         <SourceResourceRenderer
-          key={`${sourceResource.resource.resourceId}:${sourceResource.resource.version?.versionId ?? 'none'}`}
-          resource={sourceResource.resource}
-          Renderer={sourceResource.Renderer}
+          key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
+          resource={sourceDetail.resource}
+          Renderer={sourceDetail.Renderer}
           isFull
           onToggleFull={() => undefined}
-          onClose={() => {
-            setSourceResource(null);
-            setSourcePreviewFull(false);
-          }}
+          onClose={() => workspace.dispatch({ type: 'close' })}
         />
       ) : null}
 
