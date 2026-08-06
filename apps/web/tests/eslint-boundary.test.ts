@@ -15,7 +15,10 @@ async function lintFeatureCode(code: string): Promise<string[]> {
   const [result] = await eslint.lintText(code, {
     filePath: 'apps/web/features/workspace/probe.ts',
   });
-  return result.messages.map((message) => message.ruleId).filter(Boolean);
+  if (!result) return [];
+  return result.messages
+    .map((message) => message.ruleId)
+    .filter((ruleId): ruleId is string => ruleId !== null);
 }
 
 describe('W05 features 静态边界门禁', () => {
