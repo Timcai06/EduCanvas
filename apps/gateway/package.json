@@ -17,14 +17,16 @@
     "@educanvas/db": "workspace:*",
     "@educanvas/gateway-core": "workspace:*",
     "@educanvas/gateway-runtime": "workspace:*",
-    "@educanvas/model-gateway": "workspace:*",
     "@educanvas/mcp-runtime": "workspace:*",
+    "@educanvas/model-gateway": "workspace:*",
     "@educanvas/node-runtime": "workspace:*",
     "@educanvas/telemetry": "workspace:*",
+    "ws": "^8.21.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1",
     "drizzle-orm": "^0.45.2",
     "esbuild": "^0.27.3",
     "postgres": "^3.4.9",

@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "experiment": "V02-X",
+  "generatedAt": "2026-08-05T15:40:10.967Z",
+  "runtime": {
+    "node": "v24.18.0"
+  },
+  "provider": "none",
+  "source": {
+    "evidence": "evidence/v02-w-summary.json",
+    "experiment": "V02-W",
+    "resolvedModelId": "TeleAI/TeleSpeechASR",
+    "repetitions": 3
+  },
+  "frozenTerms": [
+    {
+      "term": "Bagging",
+      "context": [
+        "reduces",
+        "variance"
+      ]
+    },
+    {
+      "term": "Boosting",
+      "context": [
+        "while",
+        "reduces"
+      ]
+    }
+  ],
+  "expectedText": "Bagging and boosting are two classic ensemble methods. Bagging reduces variance, while boosting reduces bias.",
+  "rules": {
+    "ruleVersion": "educanvas.transcript-term-correction.v1",
+    "maxEditDistance": 2,
+    "maxTranscriptLength": 4000,
+    "casePolicy": "preserve-original",
+    "failClosed": [
+      "only_full_tokens_replaced",
+      "no_substring_replace",
+      "no_global_term_hardcode",
+      "same_distance_keeps_original",
+      "bilateral_context_required"
+    ]
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "originalTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "correctedTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while boosting reduces buyers.",
+      "replacements": [
+        {
+          "originalToken": "bursting",
+          "correctedTerm": "boosting",
+          "tokenIndex": 11,
+          "charStart": 84,
+          "charEnd": 92,
+          "ruleVersion": "educanvas.transcript-term-correction.v1",
+          "confidenceClass": "high",
+          "reversible": true
+        }
+      ],
+      "unchangedReason": null,
+      "totalTokenCount": 14,
+      "unchangedTokenCount": 13,
+      "werBefore": 0.3333333333333333,
+      "werAfter": 0.26666666666666666,
+      "recallBefore": {
+        "bagging": 0.5,
+        "boosting": 0.5
+      },
+      "recallAfter": {
+        "bagging": 0.5,
+        "boosting": 1
+      },
+      "reversible": true
+    },
+    {
+      "repetition": 2,
+      "originalTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "correctedTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while boosting reduces buyers.",
+      "replacements": [
+        {
+          "originalToken": "bursting",
+          "correctedTerm": "boosting",
+          "tokenIndex": 11,
+          "charStart": 84,
+          "charEnd": 92,
+          "ruleVersion": "educanvas.transcript-term-correction.v1",
+          "confidenceClass": "high",
+          "reversible": true
+        }
+      ],
+      "unchangedReason": null,
+      "totalTokenCount": 14,
+      "unchangedTokenCount": 13,
+      "werBefore": 0.3333333333333333,
+      "werAfter": 0.26666666666666666,
+      "recallBefore": {
+        "bagging": 0.5,
+        "boosting": 0.5
+      },
+      "recallAfter": {
+        "bagging": 0.5,
+        "boosting": 1
+      },
+      "reversible": true
+    },
+    {
+      "repetition": 3,
+      "originalTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while bursting reduces buyers.",
+      "correctedTranscript": "Bagging and boosting are two classic assemble methodsbegging reduces variance while boosting reduces buyers.",
+      "replacements": [
+        {
+          "originalToken": "bursting",
+          "correctedTerm": "boosting",
+          "tokenIndex": 11,
+          "charStart": 84,
+          "charEnd": 92,
+          "ruleVersion": "educanvas.transcript-term-correction.v1",
+          "confidenceClass": "high",
+          "reversible": true
+        }
+      ],
+      "unchangedReason": null,
+      "totalTokenCount": 14,
+      "unchangedTokenCount": 13,
+      "werBefore": 0.3333333333333333,
+      "werAfter": 0.26666666666666666,
+      "recallBefore": {
+        "bagging": 0.5,
+        "boosting": 0.5
+      },
+      "recallAfter": {
+        "bagging": 0.5,
+        "boosting": 1
+      },
+      "reversible": true
+    }
+  ],
+  "metrics": {
+    "qualityPassed": true,
+    "stable": true,
+    "allReversible": true,
+    "everyReplacementReversible": true,
+    "neverOverwroteOriginal": true,
+    "maxWerAfter": 0.26666666666666666,
+    "termsComplete": false,
+    "werGate": 0.35
+  },
+  "decisions": {
+    "concatenatedTokenFailClosed": true,
+    "acceptedRisk": "V02 模型质量风险已由负责人接受（2026-08-05），本任务非 V03 前置门槛"
+  },
+  "v02V03Status": {
+    "status": "PASS",
+    "nonBlocking": true,
+    "note": "V02/V03 PASS 由负责人于 2026-08-05 接受质量风险后标记；V02-X 为非阻塞增强，不阻塞 V03-V17，不改变 V02/V03 状态"
+  },
+  "verdict": "REVIEW_REQUIRED",
+  "blockerCode": "frozen_bagging_recall_below_100_concatenated_token"
+}
