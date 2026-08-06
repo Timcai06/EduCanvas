@@ -34,8 +34,9 @@ const SKIP_DIRS = new Set([
 const TEST_FILE_RE =
   /\.(test|spec)\.(ts|tsx|mjs|js)$|(?:integration-support|fixture)\.ts$/;
 
-// R04 台账 R04.2：生产代码经包入口引用 getDb 的基线文件（2026-08-07 盘点，10 个）。
-const GET_DB_PRODUCTION_BASELINE = new Set([
+// R08 收口：只有这些服务端组合点可以经 internal subpath 获取底层连接。
+// 默认入口不再导出 getDb；allowlist 允许后续继续减量，拒绝新增。
+const INTERNAL_GET_DB_PRODUCTION_ALLOWLIST = new Set([
   'apps/gateway/src/canvas-resource-service.ts',
   'apps/gateway/src/index.ts',
   'apps/telegram/src/index.ts',
@@ -67,6 +68,17 @@ const SCHEMA_TABLE_DENYLIST = new Set([
   'securityAuditEvents',
   'spaces',
   'toolApprovalIntents',
+]);
+
+// R05 台账 R05.2/R05.3：旧写入者生产引用基线（2026-08-06 盘点）。
+// DrizzleModelRunRepository 唯一生产引用是 audited-model-gateway.ts（死代码，R08 删除）；
+// DrizzleToolCallRepository 生产基线为 0。
+const LEGACY_WRITER_PRODUCTION_BASELINE = new Set([
+  'apps/web/server/model/audited-model-gateway.ts',
+]);
+const LEGACY_WRITER_SYMBOLS = new Set([
+  'DrizzleModelRunRepository',
+  'DrizzleToolCallRepository',
 ]);
 
 interface DbImport {
@@ -209,8 +221,16 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
     );
   });
 
-  it('默认入口是生产代码唯一允许的包名导入形态（禁止任何 subpath）', () => {
-    const violations = prodImports.filter((i) => i.subpath !== '');
+  it('生产 subpath 仅允许获准组合点从 internal 导入 getDb', () => {
+    const violations = prodImports.filter((i) => {
+      if (i.subpath === '') return false;
+      return !(
+        i.subpath === '/internal' &&
+        i.symbols.length === 1 &&
+        i.symbols[0] === 'getDb' &&
+        INTERNAL_GET_DB_PRODUCTION_ALLOWLIST.has(i.file)
+      );
+    });
     expect(violations.map((v) => `${v.file}: ${v.specifier}`)).toEqual([]);
   });
 
@@ -219,19 +239,49 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
     expect(violations.map((v) => `${v.file}: ${v.specifier}`)).toEqual([]);
   });
 
-  it('生产代码 getDb 引用不超出 R04 基线（允许随迁移减少，禁止新增）', () => {
-    const filesWithGetDb = prodImports
-      .filter((i) => i.symbols.includes('getDb'))
-      .map((i) => i.file);
-    const extra = filesWithGetDb.filter(
-      (f) => !GET_DB_PRODUCTION_BASELINE.has(f),
+  it('默认入口不导出 getDb，生产调用仅存在于 internal allowlist', () => {
+    const indexSrc = readFileSync(
+      join(ROOT, 'packages/db/src/index.ts'),
+      'utf8',
     );
-    expect(extra).toEqual([]);
+    expect(indexSrc).not.toMatch(/export\s*\{[^}]*\bgetDb\b[^}]*\}/s);
+
+    const defaultImports = prodImports.filter(
+      (i) => i.subpath === '' && i.symbols.includes('getDb'),
+    );
+    expect(defaultImports.map((i) => i.file)).toEqual([]);
+
+    const internalFiles = prodImports
+      .filter((i) => i.subpath === '/internal' && i.symbols.includes('getDb'))
+      .map((i) => i.file);
+    expect(
+      internalFiles.filter(
+        (file) => !INTERNAL_GET_DB_PRODUCTION_ALLOWLIST.has(file),
+      ),
+    ).toEqual([]);
   });
 
   it('生产代码不新增 schema 表符号依赖（denylist 17 表，基线 0）', () => {
     const violations = prodImports.filter((i) =>
       i.symbols.some((s) => SCHEMA_TABLE_DENYLIST.has(s)),
+    );
+    expect(violations.map((v) => `${v.file}: ${v.symbols.join(', ')}`)).toEqual(
+      [],
+    );
+  });
+
+  it('生产代码不新增旧写入者依赖（R05 单轨收口：DrizzleModelRunRepository / DrizzleToolCallRepository）', () => {
+    const violations = prodImports
+      .filter((i) => i.symbols.some((s) => LEGACY_WRITER_SYMBOLS.has(s)))
+      .filter((i) => !LEGACY_WRITER_PRODUCTION_BASELINE.has(i.file));
+    expect(violations.map((v) => `${v.file}: ${v.symbols.join(', ')}`)).toEqual(
+      [],
+    );
+  });
+
+  it('生产代码不得直写 turn_context_snapshots（R05：必须经 DrizzleAgentTurnContextRepository）', () => {
+    const violations = prodImports.filter((i) =>
+      i.symbols.includes('turnContextSnapshots'),
     );
     expect(violations.map((v) => `${v.file}: ${v.symbols.join(', ')}`)).toEqual(
       [],

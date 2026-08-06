@@ -13,8 +13,8 @@ import {
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
   requireNotebookAccess,
-  getDb,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

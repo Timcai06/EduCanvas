@@ -3,22 +3,28 @@ import type {
   AgentTurnContextLedgerPort,
   TurnModelGateway,
 } from '@educanvas/agent-core';
-import type { ToolKernel } from '../tool-kernel';
 import type {
   TurnApplicationCancellationPort,
   TurnApplicationLifecyclePort,
   TurnApplicationProfilePort,
   TurnApplicationTracePort,
+  ToolKernelPort,
 } from './ports';
 
-/** @internal 唯一Turn组合根可注入的Ports；不得加入Transport或数据库实现类型。 */
+/**
+ * Turn Application 的唯一组合契约（R 线 R06）。
+ *
+ * 三个生产入口（Web General、Web Teaching、Gateway）统一经 `createTurnApplication`
+ * 注入全部 Ports，不再各自 `new TurnApplicationService`。本接口只含抽象 Port 类型，
+ * 不得加入 Transport 或数据库实现类型；新增依赖必须同时更新本接口与全部生产装配点。
+ */
 export interface TurnApplicationDependencies {
   lifecycle: TurnApplicationLifecyclePort;
   profile: TurnApplicationProfilePort;
   contextLedger: AgentTurnContextLedgerPort;
   modelRunLedger: AgentModelRunLedgerPort;
   modelGateway: TurnModelGateway;
-  toolKernel?: ToolKernel;
+  toolKernel?: ToolKernelPort;
   cancellation?: TurnApplicationCancellationPort;
   trace?: TurnApplicationTracePort;
 }

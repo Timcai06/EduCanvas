@@ -5,7 +5,8 @@ import type {
 } from '@educanvas/agent-core';
 import type { AgentLoopToolBatch, AgentLoopToolSuccess } from '../agent-loop';
 import type { ParsedToolCall } from '../turn-engine';
-import type { ToolKernel, ToolKernelTrustedContext } from '../tool-kernel';
+import type { ToolKernelTrustedContext } from '../tool-kernel';
+import type { ToolKernelPort } from './ports';
 import { executionId, mapToolFailure } from './helpers';
 import type { ModelRunContext } from './model-run-lifecycle';
 import type { TurnApplicationToolPolicy } from './ports';
@@ -62,7 +63,7 @@ export class TurnToolExecutor {
   constructor(
     private readonly command: TurnApplicationCommand,
     private readonly policy: TurnApplicationToolPolicy | undefined,
-    private readonly toolKernel: ToolKernel | undefined,
+    private readonly toolKernel: ToolKernelPort | undefined,
     private readonly signal: AbortSignal,
     private readonly traceCarrier: W3cTraceCarrier | null,
   ) {}

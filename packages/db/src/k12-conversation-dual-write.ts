@@ -1,5 +1,48 @@
 /**
- * K12 可见消息到平台消息账本的受控兼容双写。
+ * K12 可见消息到平台消息账本的受控兼容双写（R 线 R05、R08）。
+ *
+ * ## 权威矩阵（R05 A1）
+ *
+ * | 角色 | 表 | 说明 |
+ * |------|-----|------|
+ * | **当前运行权威** | `chat_messages`（schema.ts:1373） | 切读前承载 K12 可见消息与教学运行态 |
+ * | **长期平台权威** | `conversation_messages`（schema.ts:762） | ADR-0013 指定的跨入口长期消息事实；当前仍是迁移投影 |
+ * | **唯一生产写入者（begin）** | `DrizzleTeachingTurnLedger.beginOrReplay`（turn-ledger-repository.ts:519） | 事务内同写两侧 |
+ * | **唯一生产写入者（settle）** | `DrizzleChatRepository.settleAssistantMessage`（chat-repository.ts:561） | 始终收敛，不受开关控制 |
+ * | **兼容读取者** | 平台 Conversation API、Web General 历史投影、Gateway 兼容查询 | 只读，不写 |
+ *
+ * ## 开关语义
+ *
+ * `EDUCANVAS_K12_CONVERSATION_DUAL_WRITE`（`isK12ConversationDualWriteEnabled`）：
+ * - **仅精确 `"true"` 开启**（`"1"`、`"TRUE"`、`"yes"` 均视为关闭）
+ * - **开关只控制 `begin`**（创建新副本）；`settle` 始终运行，不受开关影响
+ * - **设计理由**：已经创建的副本必须跨部署切换继续收敛，避免平台副本永久留在 pending
+ *
+ * ## 退出条件（R08）
+ *
+ * `chat_messages` 目前仍是 K12 运行权威，`conversation_messages` 是迁移中的长期平台事实。
+ * 退出方向受 accepted ADR-0013 约束：先回填并对账，再把可见消息消费者切到
+ * `conversation_messages`；`chat_messages` 中 lease、取消、heartbeat 等教学运行态在获得
+ * 新归属前不得删除。
+ *
+ * - **截止版本**：本双写随 R08 收口审计决定保留或删除；当前为兼容过渡机制
+ * - **任务归属**：R08 关闭本线全部遗留路径时一并评估；Owner = R 线负责人
+ * - **删除前置（三条同时满足）**：
+ *   1. Web、Gateway、TUI 与 K12 恢复路径已通过统一读取兼容测试，可见消息消费者完成
+ *      向 `conversation_messages` 的切读；
+ *   2. 对账零差异持续 ≥ 1 个完整发布周期（`auditK12Parity` 全量扫描
+ *      `missingInConversation=0` 且 `mismatchedInConversation=0`）；
+ *   3. `chat_messages` 的教学运行态字段已有明确长期归属，并完成独立退役批准；
+ * - **回退路径**：关闭开关（设 `EDUCANVAS_K12_CONVERSATION_DUAL_WRITE=false`）即可停止新
+ *   平台投影创建；已创建的投影 `settle` 仍继续收敛；切读与旧表退役各自需要独立任务
+ * - **当前阶段**：read-only with deadline — 开关默认关闭，已有副本继续 settle 收敛
+ *
+ * ## 数据流
+ *
+ * ```
+ * begin:  chat_messages (INSERT) ──[开关门控]──→ conversation_messages (INSERT)
+ * settle: chat_messages (UPDATE) ──[始终运行]──→ conversation_messages (UPDATE)
+ * ```
  *
  * begin 负责在 chat_messages 的创建事务中建立平台副本；settle 根据同一事务内
  * 已更新的 chat_messages 事实推进副本。开关只控制新副本创建，已经创建的副本

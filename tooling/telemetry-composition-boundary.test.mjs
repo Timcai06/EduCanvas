@@ -6,9 +6,10 @@ import { describe, it } from 'node:test';
 const roots = ['apps', 'packages'];
 const allowedFrameworkRoot = 'packages/telemetry/';
 const compositionFiles = [
-  'apps/gateway/src/agent-runner.ts',
+  'apps/gateway/src/turn-composition.ts',
   'apps/web/server/platform/general-turn.ts',
   'apps/web/server/teaching/learning-turn.ts',
+  'apps/web/server/turn-composition.ts',
 ];
 
 function posixRelative(path) {
@@ -42,7 +43,7 @@ describe('Telemetry production boundary', () => {
       const source = readFileSync(path, 'utf8');
       assert.match(
         source,
-        /trace: get(?:Gateway|Web)TelemetryRuntime\(\)\.turnTrace/,
+        /trace: (?:get(?:Gateway|Web)TelemetryRuntime\(\)\.turnTrace|ledgers\.trace)/,
       );
       assert.doesNotMatch(source, /@opentelemetry\//);
     }
