@@ -2,7 +2,7 @@
 
 - 任务分配名：`W 工作面画布`
 - 状态：`active`
-- 负责人：项目负责人
+- 负责人：hzlgou
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
@@ -308,7 +308,7 @@ type WorkspaceSurface =
 | --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | W00 状态基线          | `PASS`    | [状态转换表、入口矩阵](../02-architecture/04-统一画布工作面-W00基线.md)（基线 `ccf5309`，行号已抽查验证；经 Codex 审核通过，PR #287）                     |
 | W01 Surface 模型      | `PASS`    | `workspace-surface.ts` 判别联合 + reducer；12 个纯函数测试全绿；characterization 先固定 5 处互斥链行为并消除其不一致（经 Codex 审核通过，PR #287）       |
-| W02 职责拆分          | `PENDING` | component/hook tests、行数对比                                                                                                                          |
+| W02 职责拆分          | `PENDING` | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（**待 Codex 审核后才可标 PASS**） |
 | W03 诚实失败          | `PENDING` | error matrix tests                                                                                                                                      |
 | W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
 | W05 静态边界          | `PENDING` | ESLint negative fixtures                                                                                                                                |
