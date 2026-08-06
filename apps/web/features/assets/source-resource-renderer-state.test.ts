@@ -109,13 +109,13 @@ describe('resolveSourceRendererState', () => {
     expect(result.state).toBe('ready');
   });
 
-  it('缺少 view 动作返回 denied', () => {
+  it('缺少 view 动作返回 forbidden', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'ready', allowedActions: [] }),
       null,
       false,
     );
-    expect(result.state).toBe('denied');
+    expect(result.state).toBe('forbidden');
   });
 
   it('预览读取失败返回 failed', () => {

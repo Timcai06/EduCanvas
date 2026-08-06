@@ -7,7 +7,7 @@
  */
 
 import type { TurnApplicationEvent } from '@educanvas/agent-core';
-import type { MetricsPort } from './metrics';
+import { recordMetricSafely, type MetricsPort } from './metrics';
 
 export type TurnMetricsOptions = {
   /** 时间源（毫秒）；测试注入可控时钟。 */
@@ -36,7 +36,8 @@ export async function* wrapTurnApplicationStream(
         case 'message.delta': {
           if (firstDeltaAt === null) {
             firstDeltaAt = now();
-            metrics.record('turn_ttft_ms', firstDeltaAt - startedAt);
+            const elapsedMs = firstDeltaAt - startedAt;
+            recordMetricSafely(() => metrics.record('turn_ttft_ms', elapsedMs));
           }
           break;
         }
@@ -48,32 +49,45 @@ export async function* wrapTurnApplicationStream(
         case 'tool.failed': {
           const toolStarted = toolStartedAt.get(event.toolCallId);
           if (toolStarted !== undefined) {
-            metrics.record('turn_tool_latency_ms', now() - toolStarted);
+            recordMetricSafely(() =>
+              metrics.record('turn_tool_latency_ms', now() - toolStarted),
+            );
             toolStartedAt.delete(event.toolCallId);
           }
           if (event.type === 'tool.failed') {
-            metrics.increment('turn_tool_failure_total', { code: event.code });
+            recordMetricSafely(() =>
+              metrics.increment('turn_tool_failure_total', {
+                code: event.code,
+              }),
+            );
           }
           break;
         }
         case 'artifact.failed': {
-          metrics.increment('artifact_generation_failed_total');
+          recordMetricSafely(() =>
+            metrics.increment('artifact_generation_failed_total'),
+          );
           break;
         }
         case 'turn.completed':
         case 'turn.failed':
         case 'turn.cancelled': {
-          metrics.increment('turn_completed_total', {
-            outcome:
-              event.type === 'turn.completed'
-                ? 'completed'
-                : event.type === 'turn.failed'
-                  ? 'failed'
-                  : 'cancelled',
-          });
-          metrics.record('turn_total_ms', now() - startedAt);
+          recordMetricSafely(() =>
+            metrics.increment('turn_completed_total', {
+              outcome:
+                event.type === 'turn.completed'
+                  ? 'completed'
+                  : event.type === 'turn.failed'
+                    ? 'failed'
+                    : 'cancelled',
+            }),
+          );
+          const elapsedMs = now() - startedAt;
+          recordMetricSafely(() => metrics.record('turn_total_ms', elapsedMs));
           if (event.type === 'turn.failed' && event.code === 'MODEL_FAILED') {
-            metrics.increment('turn_model_failed_total');
+            recordMetricSafely(() =>
+              metrics.increment('turn_model_failed_total'),
+            );
           }
           startedAt = null;
           break;
@@ -87,6 +101,8 @@ export async function* wrapTurnApplicationStream(
   // 事件流自然结束（终态事件或异常截断）时仍未结算的工具调用 = outcome_unknown：
   // 与 DB 账本（AgentToolCallStatus）同语义的投影，不读取任何工具正文。
   if (toolStartedAt.size > 0) {
-    metrics.increment('turn_tool_outcome_unknown_total');
+    recordMetricSafely(() =>
+      metrics.increment('turn_tool_outcome_unknown_total'),
+    );
   }
 }

@@ -18,13 +18,13 @@ import {
   ArtifactRevisionConflictError,
   DrizzleAssetRepository,
   DrizzlePlatformArtifactRepository,
-  getDb,
   spaces,
   conversations,
   notebookMemberships,
   platformUsers,
   artifactVersions,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/testing';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';

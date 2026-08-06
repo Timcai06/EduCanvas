@@ -56,6 +56,7 @@ import {
  * | 工具失败（需审批） | 挂起等 APPROVAL_REQUIRED | — |
  * | 工具失败（已取消） | CANCELLED | false |
  * | Output block | profile 指定的 code | false |
+ * | 预算超限（Q03） | BUDGET_EXCEEDED | false |
  * | 未分类失败 | RUNTIME_FAILED | true |
  */
 export class TurnApplicationService implements TurnApplicationPort {
@@ -205,6 +206,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         cancellation,
         controller: executionController,
         traceCarrier: trace.carrier(),
+        traceSpan: trace,
         ...(outputGuard ? { outputGuard } : {}),
       });
       answer = outcome.answer;
@@ -228,6 +230,11 @@ export class TurnApplicationService implements TurnApplicationPort {
           answer,
           ...(outputGuard ? { outputGuard } : {}),
         });
+        return;
+      }
+      // Q03：超预算是稳定终态，不可伪装为成功；retryable=false。
+      if (outcome.budgetFailure) {
+        yield await emitFailure('BUDGET_EXCEEDED', false);
         return;
       }
       if (

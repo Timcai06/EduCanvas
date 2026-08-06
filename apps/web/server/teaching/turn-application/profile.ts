@@ -3,6 +3,7 @@ import 'server-only';
 import {
   extractAgentMessageText,
   modelMessageText,
+  TURN_USAGE_BUDGET_TEMPLATES,
 } from '@educanvas/agent-core';
 import type {
   BuiltAssetContext,
@@ -187,6 +188,8 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
         promptVersion: TEACHING_TURN_ANSWER_PROMPT_VERSION,
         synthesisPromptVersion: TEACHING_TURN_SYNTHESIS_PROMPT_VERSION,
         maxToolRounds: 1,
+        // Q03：教学 Turn 用更紧的预算模板（服务端冻结，LOOP 阶段强制执行）。
+        usageBudget: TURN_USAGE_BUDGET_TEMPLATES['teaching.turn'],
       },
       // command.capabilities 是传输/渲染协商，不是 Teaching Tool grant。
       toolPolicy,

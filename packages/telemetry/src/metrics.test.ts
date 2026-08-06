@@ -36,6 +36,15 @@ describe('MetricsRegistry（Q04）', () => {
     ).not.toThrow();
   });
 
+  it('协议标签必须属于声明值闭集（格式合法的用户标识也被拒绝）', () => {
+    const registry = new MetricsRegistry();
+    expect(() =>
+      registry.increment('turn_completed_total', {
+        outcome: '550e8400-e29b-41d4-a716-446655440000',
+      }),
+    ).toThrow(/声明闭集/);
+  });
+
   it('counter 与标签聚合', () => {
     const registry = new MetricsRegistry();
     registry.increment('turn_completed_total', { outcome: 'completed' });

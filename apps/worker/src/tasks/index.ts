@@ -7,7 +7,11 @@ import {
   ASSET_RENDER_PREVIEW_TASK,
   ASSET_TRANSCRIBE_AUDIO_TASK,
 } from '@educanvas/db';
-import type { ContinuationTracePort, MetricsPort } from '@educanvas/telemetry';
+import {
+  recordMetricSafely,
+  type ContinuationTracePort,
+  type MetricsPort,
+} from '@educanvas/telemetry';
 import type { Task, TaskList } from 'graphile-worker';
 import {
   embedKnowledgeDocument,
@@ -20,6 +24,10 @@ import { recoverOperationContinuations } from './recover-operation-continuations
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
+import {
+  backfillK12Conversation,
+  K12_CONVERSATION_BACKFILL_TASK,
+} from './backfill-k12-conversation.js';
 import { deleteObjectOutbox } from './delete-object-outbox.js';
 import { extractAssetTextTask } from './extract-asset-text.js';
 import { renderPreviewTask } from './render-preview.js';
@@ -44,19 +52,25 @@ export function withTaskMetrics(
     }
     return async (payload, helpers) => {
       if (helpers.job.attempts > 1) {
-        metrics.increment('worker_task_retry_total', { task: taskName });
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_retry_total', { task: taskName }),
+        );
       }
       try {
         await handler(payload, helpers);
-        metrics.increment('worker_task_total', {
-          task: taskName,
-          status: 'success',
-        });
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_total', {
+            task: taskName,
+            status: 'success',
+          }),
+        );
       } catch (error) {
-        metrics.increment('worker_task_total', {
-          task: taskName,
-          status: 'failed',
-        });
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_total', {
+            task: taskName,
+            status: 'failed',
+          }),
+        );
         throw error;
       }
     };
@@ -122,6 +136,10 @@ export function createTaskList(input: {
     'maintenance:reconcile_tool_approval_intents': wrap(
       'maintenance:reconcile_tool_approval_intents',
       reconcileToolApprovalIntents,
+    ),
+    [K12_CONVERSATION_BACKFILL_TASK]: wrap(
+      K12_CONVERSATION_BACKFILL_TASK,
+      backfillK12Conversation,
     ),
     'system.heartbeat': wrap('system.heartbeat', systemHeartbeat),
   };

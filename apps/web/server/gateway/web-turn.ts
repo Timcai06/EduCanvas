@@ -21,6 +21,7 @@ import {
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { resolveTurnModelRuntime } from '../model/model-runtime';
 import {
   beginGatewayGeneralTurnApplication,
   prepareGatewayGeneralTurnContext,
@@ -43,6 +44,7 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
       assetContext: Awaited<
         ReturnType<typeof prepareGatewayGeneralTurnContext>
       >;
+      modelRuntime: ReturnType<typeof resolveTurnModelRuntime>;
     },
   ) {}
 
@@ -60,6 +62,7 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
         transportCapabilities: input.envelope.capabilities.capabilities.map(
           (capability) => capability.name,
         ),
+        modelRuntime: this.input.modelRuntime,
       });
     } catch (error) {
       this.preparationError = error;
@@ -82,10 +85,12 @@ export async function beginWebGatewayTurn(
   if (!conversation || conversation.agentProfileId !== 'general') {
     throw new PlatformTurnOwnershipError();
   }
+  const modelRuntime = resolveTurnModelRuntime();
   const assetContext = await prepareGatewayGeneralTurnContext({
     identity,
     spaceId: conversation.spaceId,
     request,
+    modelRuntime,
   });
   const principal = identity.studentId.startsWith('anon:')
     ? await identities.ensureAnonymousCompatibility({
@@ -137,6 +142,7 @@ export async function beginWebGatewayTurn(
     identity,
     request,
     assetContext,
+    modelRuntime,
   });
   const service = new GatewayService(routes, operations, runner, fingerprints);
   const iterator = service.handle(envelope)[Symbol.asyncIterator]();

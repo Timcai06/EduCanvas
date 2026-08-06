@@ -3,50 +3,25 @@
  *
  * 设计纪律：
  * - 指标名与标签键都必须是声明的闭集（TURN_METRIC_DEFINITIONS），防止高基数泄漏；
- * - 标签值强制短斜杠串（/^[a-z0-9_.:-]{1,64}$/），任何用户 ID、正文、URL、对象路径、
- *   Secret 或原始错误都不会通过；
+ * - 标签值除格式限制外，协议型标签还必须属于声明的值闭集；任务名则只来自
+ *   Worker 编译期注册表，避免把用户 ID、正文、URL、对象路径或原始错误写入点键；
  * - 注册表只是事件的进程内聚合（snapshot 供端点与测试断言），业务事实仍以 DB 账本为准；
  * - 不依赖 Collector/Exporter：告警必须能在无 Exporter 时基于 snapshot 生效。
  */
 
+import {
+  TURN_METRIC_DEFINITIONS,
+  type MetricDefinition,
+  type MetricKind,
+} from './metric-definitions';
+
+export {
+  TURN_METRIC_DEFINITIONS,
+  type MetricDefinition,
+  type MetricKind,
+} from './metric-definitions';
+
 const LABEL_VALUE_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
-
-export type MetricKind = 'counter' | 'histogram' | 'gauge';
-
-export interface MetricDefinition {
-  readonly name: string;
-  readonly kind: MetricKind;
-  /** 允许的标签键；未声明的键会被拒绝。 */
-  readonly labelKeys: readonly string[];
-}
-
-export const TURN_METRIC_DEFINITIONS: readonly MetricDefinition[] = [
-  // Turn 成功/失败/取消（outcome 为闭集）
-  { name: 'turn_completed_total', kind: 'counter', labelKeys: ['outcome'] },
-  // TTFT 与总延迟（毫秒）
-  { name: 'turn_ttft_ms', kind: 'histogram', labelKeys: [] },
-  { name: 'turn_total_ms', kind: 'histogram', labelKeys: [] },
-  // 模型级错误与延迟（teaching 路径逐调用；code 为规范化错误码闭集）
-  { name: 'model_error_total', kind: 'counter', labelKeys: ['code'] },
-  { name: 'model_first_token_latency_ms', kind: 'histogram', labelKeys: [] },
-  { name: 'model_call_latency_ms', kind: 'histogram', labelKeys: [] },
-  { name: 'provider_rate_limits_total', kind: 'counter', labelKeys: [] },
-  // Turn 因模型失败而失败的稳定计数
-  { name: 'turn_model_failed_total', kind: 'counter', labelKeys: [] },
-  // 工具延迟 / 失败 / outcome_unknown（code 为 turn 失败码闭集）
-  { name: 'turn_tool_latency_ms', kind: 'histogram', labelKeys: [] },
-  { name: 'turn_tool_failure_total', kind: 'counter', labelKeys: ['code'] },
-  { name: 'turn_tool_outcome_unknown_total', kind: 'counter', labelKeys: [] },
-  // 检索模式（vector 命中 / lexical 回退）
-  { name: 'retrieval_mode_total', kind: 'counter', labelKeys: ['mode'] },
-  // Worker 任务结果与重试（task 为任务名闭集）
-  { name: 'worker_task_total', kind: 'counter', labelKeys: ['task', 'status'] },
-  { name: 'worker_task_retry_total', kind: 'counter', labelKeys: ['task'] },
-  // Artifact 生成失败（用户可见 SLI；artifact.failed 事件投影）
-  { name: 'artifact_generation_failed_total', kind: 'counter', labelKeys: [] },
-  // Telemetry exporter 健康（status 为 health 状态闭集；当前状态值为 1）
-  { name: 'telemetry_exporter_health', kind: 'gauge', labelKeys: ['status'] },
-];
 
 export interface HistogramPoint {
   readonly count: number;
@@ -244,6 +219,13 @@ export class MetricsRegistry implements MetricsPort {
           `标签 ${key} 的值不符合低基数格式`,
         );
       }
+      const allowedValues = definition.labelValues?.[key];
+      if (allowedValues !== undefined && !allowedValues.includes(value)) {
+        throw new MetricsValidationError(
+          'invalid_label_value',
+          `标签 ${key} 的值不在声明闭集中`,
+        );
+      }
     }
   }
 
@@ -291,3 +273,12 @@ export const NOOP_METRICS: MetricsPort = {
   set() {},
   snapshot: () => ({ counters: {}, histograms: {}, gauges: {} }),
 };
+
+/** 观测是旁路：注册表或注入实现故障不得改变教学、模型或 Worker 的业务结果。 */
+export function recordMetricSafely(operation: () => void): void {
+  try {
+    operation();
+  } catch {
+    // 指标失败无法安全递归记录；业务路径继续，遥测健康由既有 exporter 状态面表达。
+  }
+}

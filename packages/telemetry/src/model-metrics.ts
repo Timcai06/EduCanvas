@@ -6,7 +6,7 @@
  */
 
 import type { TurnModelGateway, TurnModelEvent } from '@educanvas/agent-core';
-import type { MetricsPort } from './metrics';
+import { recordMetricSafely, type MetricsPort } from './metrics';
 
 export type ModelMetricsOptions = {
   /** 时间源（毫秒）；测试注入可控时钟。 */
@@ -29,23 +29,33 @@ export function wrapTurnModelGatewayForMetrics(
       for await (const event of gateway.streamTurnText(request)) {
         if (event.type === 'text_delta' && firstDeltaAt === null) {
           firstDeltaAt = now();
-          metrics.record(
-            'model_first_token_latency_ms',
-            firstDeltaAt - startedAt,
+          recordMetricSafely(() =>
+            metrics.record(
+              'model_first_token_latency_ms',
+              firstDeltaAt! - startedAt,
+            ),
           );
         }
         if (event.type === 'failed') {
-          metrics.record('model_call_latency_ms', now() - startedAt);
-          metrics.increment('model_error_total', { code: event.error.code });
+          recordMetricSafely(() =>
+            metrics.record('model_call_latency_ms', now() - startedAt),
+          );
+          recordMetricSafely(() =>
+            metrics.increment('model_error_total', { code: event.error.code }),
+          );
           if (event.error.code === 'rate_limit') {
-            metrics.increment('provider_rate_limits_total');
+            recordMetricSafely(() =>
+              metrics.increment('provider_rate_limits_total'),
+            );
           }
           yield event;
           return;
         }
         yield event;
       }
-      metrics.record('model_call_latency_ms', now() - startedAt);
+      recordMetricSafely(() =>
+        metrics.record('model_call_latency_ms', now() - startedAt),
+      );
     },
   };
 }

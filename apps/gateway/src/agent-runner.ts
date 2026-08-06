@@ -1,28 +1,14 @@
-import type {
-  AgentMessagePart,
-  AgentModelRunLedgerPort,
-  AgentToolCallLedgerPort,
-  AgentTurnContextLedgerPort,
-  ModelAbortSignal,
-  TurnApplicationCommand,
-  TurnModelGateway,
-  ToolEffectLedgerPort,
-} from '@educanvas/agent-core';
-import {
-  ToolKernel,
-  TurnApplicationService,
-  type TurnApplicationPort,
-} from '@educanvas/agent-runtime';
-import {
-  DrizzleAgentModelRunRepository,
-  DrizzleAgentToolCallRepository,
-  DrizzleAgentTurnContextRepository,
-  DrizzleGatewayNodeRepository,
-  DrizzleMcpIntentRepository,
-  DrizzlePlatformTurnRepository,
-  DrizzleToolApprovalIntentRepository,
-  DrizzleToolEffectRepository,
-} from '@educanvas/db';
+/**
+ * Gateway Agent Turn Runner（R 线 R06）。
+ *
+ * Gateway 入口只负责把可信路由投影成统一命令，再把统一事件投影回 Gateway 事件。
+ * 公共依赖装配全部委托给 `./turn-composition.ts`，本文件不直接实例化
+ * Drizzle Repository、ToolKernel 或 Telemetry。
+ *
+ * 测试可通过构造函数注入 Application 工厂绕过真实 DB 依赖。
+ */
+import type { AgentMessagePart, ModelAbortSignal } from '@educanvas/agent-core';
+import type { TurnApplicationPort } from '@educanvas/agent-runtime';
 import type {
   GatewayInboundEnvelope,
   GatewayResolvedRoute,
@@ -33,139 +19,30 @@ import {
   type GatewayTurnRunnerPort,
 } from '@educanvas/gateway-runtime';
 import {
-  wrapTurnApplicationStream,
-  wrapTurnModelGatewayForMetrics,
-} from '@educanvas/telemetry';
-import {
-  createTurnModelGatewayFromEnvironment,
-  type ModelGatewayEnvironment,
-} from '@educanvas/model-gateway';
-import {
-  createMcpRuntimeFromEnvironment,
-  type McpRuntime,
-} from '@educanvas/mcp-runtime';
-import {
-  createNodeToolAdapters,
-  type NodeInvocationPersistencePort,
-} from '@educanvas/node-runtime';
-import { getGatewayTelemetryRuntime } from './telemetry';
-import { GatewayGeneralProfile } from './turn-application/general-profile';
-import {
-  GatewayBoundCancellation,
-  GatewayTurnLifecycle,
-  type GatewayTurnRepositoryPort,
-} from './turn-application/lifecycle';
-
-const SUPPORTED_GATEWAY_PROFILE_ID = 'general';
-
-function readModelEnvironment(): ModelGatewayEnvironment {
-  return {
-    EDUCANVAS_DEPLOYMENT_ENV: process.env.EDUCANVAS_DEPLOYMENT_ENV,
-    MODEL_GATEWAY_PROVIDER: process.env.MODEL_GATEWAY_PROVIDER,
-    MODEL_GATEWAY_RUNTIME: process.env.MODEL_GATEWAY_RUNTIME,
-    MODEL_GATEWAY_ALLOW_DEEPSEEK: process.env.MODEL_GATEWAY_ALLOW_DEEPSEEK,
-    MODEL_GATEWAY_BASE_URL: process.env.MODEL_GATEWAY_BASE_URL,
-    MODEL_GATEWAY_API_KEY: process.env.MODEL_GATEWAY_API_KEY,
-    MODEL_GATEWAY_PRIMARY_MODEL: process.env.MODEL_GATEWAY_PRIMARY_MODEL,
-    MODEL_GATEWAY_FAST_MODEL: process.env.MODEL_GATEWAY_FAST_MODEL,
-    MODEL_GATEWAY_STRUCTURED_MODEL: process.env.MODEL_GATEWAY_STRUCTURED_MODEL,
-    MODEL_GATEWAY_TIMEOUT_MS: process.env.MODEL_GATEWAY_TIMEOUT_MS,
-    MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
-      process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
-  };
-}
-
-const unavailableModelGateway: TurnModelGateway = {
-  async *streamTurnText(request) {
-    yield {
-      type: 'failed',
-      phase: request.phase,
-      error: { code: 'unavailable', retryable: true },
-    };
-  },
-};
-
-interface GatewayApplicationDependencies {
-  turns: GatewayTurnRepositoryPort;
-  contextLedger: AgentTurnContextLedgerPort;
-  modelRunLedger: AgentModelRunLedgerPort;
-  toolCallLedger: AgentToolCallLedgerPort;
-  toolEffectLedger: ToolEffectLedgerPort;
-  nodeInvocations: NodeInvocationPersistencePort;
-  mcpRuntime: McpRuntime;
-  modelGateway: TurnModelGateway;
-}
-
-function productionDependencies(): GatewayApplicationDependencies {
-  return {
-    turns: new DrizzlePlatformTurnRepository(),
-    contextLedger: new DrizzleAgentTurnContextRepository(),
-    modelRunLedger: new DrizzleAgentModelRunRepository(),
-    toolCallLedger: new DrizzleAgentToolCallRepository(),
-    toolEffectLedger: new DrizzleToolEffectRepository(),
-    nodeInvocations: new DrizzleGatewayNodeRepository(),
-    mcpRuntime: createMcpRuntimeFromEnvironment(undefined, {
-      durableIntents: new DrizzleMcpIntentRepository(),
-      approvalIntents: new DrizzleToolApprovalIntentRepository(),
-    }),
-    modelGateway:
-      createTurnModelGatewayFromEnvironment(readModelEnvironment()) ??
-      unavailableModelGateway,
-  };
-}
+  createGatewayDependencies,
+  createGatewayTurnApplication,
+  type GatewayDependencies,
+} from './turn-composition';
 
 type ApplicationFactory = (input: {
   signal: ModelAbortSignal;
   route: GatewayResolvedRoute;
 }) => TurnApplicationPort;
 
+const SUPPORTED_GATEWAY_PROFILE_ID = 'general';
+
 /** Gateway只负责把可信路由投影成统一命令，再把统一事件投影回Gateway事件。 */
 export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
   private readonly createApplication: ApplicationFactory;
 
   constructor(
-    dependenciesOrFactory:
-      | GatewayApplicationDependencies
-      | ApplicationFactory = productionDependencies(),
+    depsOrFactory:
+      GatewayDependencies | ApplicationFactory = createGatewayDependencies(),
   ) {
     this.createApplication =
-      typeof dependenciesOrFactory === 'function'
-        ? dependenciesOrFactory
-        : ({ signal, route }) => {
-            const nodeAdapters = createNodeToolAdapters(
-              dependenciesOrFactory.nodeInvocations,
-            );
-            const toolAdapters = [
-              ...dependenciesOrFactory.mcpRuntime.adapters,
-              ...nodeAdapters,
-            ];
-            return new TurnApplicationService({
-              lifecycle: new GatewayTurnLifecycle(dependenciesOrFactory.turns),
-              profile: new GatewayGeneralProfile(
-                dependenciesOrFactory.turns,
-                dependenciesOrFactory.nodeInvocations,
-                dependenciesOrFactory.mcpRuntime.capabilities,
-                route.membershipRole,
-              ),
-              contextLedger: dependenciesOrFactory.contextLedger,
-              modelRunLedger: dependenciesOrFactory.modelRunLedger,
-              // Q04：模型调用级指标在组合根包装，不改 Agent Loop。
-              modelGateway: wrapTurnModelGatewayForMetrics(
-                dependenciesOrFactory.modelGateway,
-                getGatewayTelemetryRuntime().metrics,
-              ),
-              toolKernel: new ToolKernel(
-                toolAdapters,
-                dependenciesOrFactory.toolCallLedger,
-                dependenciesOrFactory.toolEffectLedger,
-              ),
-              cancellation: new GatewayBoundCancellation(
-                signal,
-                dependenciesOrFactory.turns,
-              ),
-              trace: getGatewayTelemetryRuntime().turnTrace,
-            });
-          };
+      typeof depsOrFactory === 'function'
+        ? depsOrFactory
+        : (input) => createGatewayTurnApplication(depsOrFactory, input);
   }
 
   async *run(
@@ -192,8 +69,8 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
       };
       return;
     }
-    const command: TurnApplicationCommand = {
-      protocol: 'educanvas.turn.v2',
+    const command = {
+      protocol: 'educanvas.turn.v2' as const,
       operationId: input.operationId,
       traceId: input.traceId,
       actor: {
@@ -220,12 +97,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
       signal: input.signal,
       route: input.route,
     });
-    // Q04：Turn 级 SLI 由组合根包装事件流。
-    const events = wrapTurnApplicationStream(
-      application.run(command),
-      getGatewayTelemetryRuntime().metrics,
-    );
-    for await (const event of events) {
+    for await (const event of application.run(command)) {
       yield projectTurnApplicationEventToGateway(event, {
         actorUserId: input.route.actorUserId,
         occurredAt: new Date().toISOString(),
@@ -236,7 +108,7 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
 
 function toEntrypoint(
   envelope: GatewayInboundEnvelope,
-): TurnApplicationCommand['entrypoint'] {
+): 'web' | 'tui' | 'channel' | 'system' {
   if (envelope.connection.transport === 'web') return 'web';
   if (envelope.connection.transport === 'tui') return 'tui';
   if (envelope.connection.transport === 'telegram') return 'channel';

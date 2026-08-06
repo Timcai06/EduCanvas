@@ -45,8 +45,8 @@ vi.mock('@educanvas/db', () => ({
       findActiveRegisteredUserIdByTokenHash: vi.fn(async () => null),
     };
   }),
-  getDb: vi.fn(),
 }));
+vi.mock('@educanvas/db/internal', () => ({ getDb: vi.fn() }));
 
 vi.mock('../study/study-service', () => ({
   loadOwnedStudyContext,

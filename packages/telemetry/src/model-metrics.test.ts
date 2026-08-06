@@ -22,6 +22,32 @@ async function drain(gateway: TurnModelGateway): Promise<void> {
 }
 
 describe('wrapTurnModelGatewayForMetrics（Q04）', () => {
+  it('指标实现抛错时仍原样透传模型事件', async () => {
+    const seen: TurnModelEvent['type'][] = [];
+    const wrapped = wrapTurnModelGatewayForMetrics(
+      gatewayWith([
+        event('text_delta', { delta: 'a' }),
+        event('completed', { metadata: {} }),
+      ]),
+      {
+        increment() {
+          throw new Error('metrics unavailable');
+        },
+        record() {
+          throw new Error('metrics unavailable');
+        },
+        set() {
+          throw new Error('metrics unavailable');
+        },
+        snapshot: () => ({ counters: {}, histograms: {}, gauges: {} }),
+      },
+    );
+    for await (const yielded of wrapped.streamTurnText({} as never)) {
+      seen.push(yielded.type);
+    }
+    expect(seen).toEqual(['text_delta', 'completed']);
+  });
+
   it('首 token 延迟与调用总延迟按脚本时钟记录', async () => {
     const registry = new MetricsRegistry();
     const times = [0, 300, 800];

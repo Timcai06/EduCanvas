@@ -12,6 +12,11 @@ import {
   detectAssetStatusNotices,
   type AssetStatusNotice,
 } from '@/features/assets/asset-status';
+import {
+  LatestRequestGuard,
+  ResourceClientError,
+  toClientError,
+} from '@/features/canvas/resource-error';
 
 /**
  * 当前 Notebook 的来源集合与其变更动作。
@@ -22,7 +27,7 @@ import {
  */
 export function useNotebookSources(input: {
   endpoint: string;
-  onError: (message: string) => void;
+  onError: (error: ResourceClientError) => void;
   onStatus?: (notice: AssetStatusNotice) => void;
 }): {
   assets: readonly AssetItem[];
@@ -36,10 +41,20 @@ export function useNotebookSources(input: {
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const assetsRef = useRef<readonly AssetItem[]>([]);
   const pollFailuresRef = useRef(0);
+  /* W03 竞态保护：并发 refresh 只有最新一次可提交（guard），组件卸载后不再更新（mounted）。 */
+  const requestGuardRef = useRef(new LatestRequestGuard());
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     assetsRef.current = assets;
   }, [assets]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const applyAssets = useCallback(
     (next: readonly AssetItem[], announce: boolean) => {
@@ -60,10 +75,11 @@ export function useNotebookSources(input: {
   /* 启停已由服务端按成员持久化，刷新时不再用本地值覆盖服务端结果——
      否则在别处（或上一次失败的乐观更新）留下的陈旧开关会一直粘住。 */
   const refresh = useCallback(async () => {
-    applyAssets(
-      await loadAssets(endpoint, { enableSpaceByDefault: true }),
-      true,
-    );
+    const isCurrent = requestGuardRef.current.begin();
+    const next = await loadAssets(endpoint, { enableSpaceByDefault: true });
+    /* 期间已有更新请求或组件已卸载 → 丢弃过期结果，不覆盖新状态。 */
+    if (!isCurrent() || !mountedRef.current) return;
+    applyAssets(next, true);
     pollFailuresRef.current = 0;
   }, [applyAssets, endpoint]);
 
@@ -74,11 +90,7 @@ export function useNotebookSources(input: {
         if (active) applyAssets(items, false);
       })
       .catch((reason: unknown) => {
-        if (active) {
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法读取资料。',
-          );
-        }
+        if (active) onError(toClientError(reason, '暂时无法读取资料。'));
       });
     return () => {
       active = false;
@@ -99,7 +111,12 @@ export function useNotebookSources(input: {
       void refresh().catch(() => {
         pollFailuresRef.current += 1;
         if (pollFailuresRef.current === 3) {
-          onError('暂时无法刷新来源处理进度，请检查网络后重试。');
+          onError(
+            new ResourceClientError(
+              'unavailable',
+              '暂时无法刷新来源处理进度，请检查网络后重试。',
+            ),
+          );
         }
       });
     }, 2_000);
@@ -131,9 +148,7 @@ export function useNotebookSources(input: {
         })
         .catch((reason: unknown) => {
           patch(asset.id, (item) => ({ ...item, enabled: asset.enabled }));
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法更新来源。',
-          );
+          onError(toClientError(reason, '暂时无法更新来源。'));
         });
     },
     [onError, patch],
@@ -145,9 +160,7 @@ export function useNotebookSources(input: {
       void renameAsset({ assetId: asset.id, displayName }).catch(
         (reason: unknown) => {
           patch(asset.id, (item) => ({ ...item, label: asset.label }));
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法重命名来源。',
-          );
+          onError(toClientError(reason, '暂时无法重命名来源。'));
         },
       );
     },
@@ -164,9 +177,7 @@ export function useNotebookSources(input: {
           );
         })
         .catch((reason: unknown) => {
-          onError(
-            reason instanceof Error ? reason.message : '暂时无法删除来源。',
-          );
+          onError(toClientError(reason, '暂时无法删除来源。'));
         });
     },
     [onError],

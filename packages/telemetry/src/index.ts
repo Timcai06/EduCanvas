@@ -21,6 +21,7 @@ export {
   MetricsRegistry,
   MetricsValidationError,
   NOOP_METRICS,
+  recordMetricSafely,
   TURN_METRIC_DEFINITIONS,
   type HistogramPoint,
   type MetricDefinition,

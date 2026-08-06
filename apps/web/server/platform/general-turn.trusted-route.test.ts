@@ -1,5 +1,5 @@
 import type { MaterializedAssetPlan } from '../assets/asset-materialization';
-import { TurnApplicationService } from '@educanvas/agent-runtime';
+import { createTurnApplication } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentTurnContextRepository,
@@ -23,7 +23,7 @@ import {
 
 vi.mock('server-only', () => ({}));
 vi.mock('@educanvas/agent-runtime', () => ({
-  TurnApplicationService: vi.fn(),
+  createTurnApplication: vi.fn(),
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
@@ -84,6 +84,7 @@ function begin(routeOverride: GatewayResolvedRoute): void {
     assetContext,
     signal: new AbortController().signal,
     transportCapabilities: [],
+    modelRuntime: null,
   });
 }
 
@@ -97,7 +98,7 @@ function expectNoRuntimeComposition(): void {
   expect(WebGeneralProfile).not.toHaveBeenCalled();
   expect(WebGeneralCancellation).not.toHaveBeenCalled();
   expect(getWebTelemetryRuntime).not.toHaveBeenCalled();
-  expect(TurnApplicationService).not.toHaveBeenCalled();
+  expect(createTurnApplication).not.toHaveBeenCalled();
 }
 
 beforeEach(() => {

@@ -10,6 +10,36 @@ const helpers = (attempts: number) =>
   }) as never;
 
 describe('withTaskMetrics（Q04 Worker SLI）', () => {
+  it('指标实现抛错不改变任务成功结果', async () => {
+    let completed = false;
+    const wrapped = withTaskMetrics({
+      increment() {
+        throw new Error('metrics unavailable');
+      },
+      record() {},
+      set() {},
+      snapshot: () => ({ counters: {}, histograms: {}, gauges: {} }),
+    })('test:task', async () => {
+      completed = true;
+    });
+    await expect(wrapped({}, helpers(2))).resolves.toBeUndefined();
+    expect(completed).toBe(true);
+  });
+
+  it('指标实现抛错不覆盖任务原始失败', async () => {
+    const wrapped = withTaskMetrics({
+      increment() {
+        throw new Error('metrics unavailable');
+      },
+      record() {},
+      set() {},
+      snapshot: () => ({ counters: {}, histograms: {}, gauges: {} }),
+    })('test:task', async () => {
+      throw new Error('business failure');
+    });
+    await expect(wrapped({}, helpers(1))).rejects.toThrow('business failure');
+  });
+
   it('成功任务记录 worker_task_total{task,status=success}', async () => {
     const registry = new MetricsRegistry();
     const wrapped = withTaskMetrics(registry)('test:task', async () => {});

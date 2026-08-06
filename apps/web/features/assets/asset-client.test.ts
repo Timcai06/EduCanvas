@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { importLinkAsset, loadAssets } from './asset-client';
+import { ResourceClientError } from '../canvas/resource-error';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -191,5 +192,63 @@ describe('asset browser client', () => {
     await expect(
       importLinkAsset({ url: 'https://example.com', endpoint: '/link' }),
     ).rejects.toThrow('导入响应格式不正确。');
+  });
+});
+
+describe('loadAssets 错误分类（W03 六种语义）', () => {
+  it('401/403 → forbidden（权限不足，不可重试）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 })),
+    );
+    await expect(loadAssets('/assets')).rejects.toMatchObject({
+      kind: 'forbidden',
+    });
+  });
+
+  it('404 → not_found（资源缺失，不可重试）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('not found', { status: 404 })),
+    );
+    await expect(loadAssets('/assets')).rejects.toMatchObject({
+      kind: 'not_found',
+    });
+  });
+
+  it('503 → unavailable（服务不可用，可重试）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('unavailable', { status: 503 })),
+    );
+    await expect(loadAssets('/assets')).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
+  });
+
+  it('500 → failed（其它服务端失败）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('boom', { status: 500 })),
+    );
+    await expect(loadAssets('/assets')).rejects.toMatchObject({
+      kind: 'failed',
+    });
+  });
+
+  it('网络层失败 → offline，且 instanceof ResourceClientError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    );
+    const error = await loadAssets('/assets').catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(ResourceClientError);
+    expect((error as ResourceClientError).kind).toBe('offline');
+  });
+
+  it('AbortError 原样上抛，不误报为 offline', async () => {
+    const abortError = new DOMException('aborted', 'AbortError');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError));
+    await expect(loadAssets('/assets')).rejects.toBe(abortError);
   });
 });

@@ -27,20 +27,12 @@ import type {
   ModelAbortSignal,
   TurnApplicationCommand,
   TurnApplicationEvent,
-  TurnModelGateway,
 } from '@educanvas/agent-core';
 import {
-  ToolKernel,
-  TurnApplicationService,
+  createTurnApplication,
   type BuiltAssetContext,
 } from '@educanvas/agent-runtime';
-import {
-  DrizzleAgentModelRunRepository,
-  DrizzleAgentToolCallRepository,
-  DrizzleAgentTurnContextRepository,
-  DrizzleStudyPlanRepository,
-  DrizzleToolEffectRepository,
-} from '@educanvas/db';
+import { DrizzleStudyPlanRepository } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
   resolveLearnerAdaptationPolicy,
@@ -51,10 +43,11 @@ import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
 import {
-  wrapTurnApplicationStream,
-  wrapTurnModelGatewayForMetrics,
-} from '@educanvas/telemetry';
-import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
+  createWebTurnApplication,
+  createWebTurnLedgers,
+  createWebToolKernel,
+  unavailableModelGateway,
+} from '../turn-composition';
 import {
   createTeachingToolKernelAdapters,
   teachingToolAdapterCapabilities,
@@ -63,15 +56,6 @@ import { WebTeachingCancellation } from './turn-application/cancellation';
 import { WebTeachingLifecycle } from './turn-application/lifecycle';
 import { WebTeachingProfile } from './turn-application/profile';
 
-const unavailableModelGateway: TurnModelGateway = {
-  async *streamTurnText(request) {
-    yield {
-      type: 'failed',
-      phase: request.phase,
-      error: { code: 'unavailable', retryable: true },
-    };
-  },
-};
 const studyPlans = new DrizzleStudyPlanRepository();
 
 /** Web 教学入口的唯一显式 Turn Application 组合根；教学 Profile 不创建私有模型循环。 */
@@ -95,6 +79,7 @@ export function beginGatewayTeachingTurnApplication(input: {
   if (input.route.agentProfileId !== 'k12.teacher') {
     throw new Error('web_teaching_profile_unsupported');
   }
+  const ledgers = createWebTurnLedgers();
   const profile = new WebTeachingProfile(
     input.identity,
     input.session,
@@ -113,25 +98,16 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile.collectKnowledgeEvidence(candidateIds),
   );
   const runtime = resolveTurnModelRuntime();
-  const telemetry = getWebTelemetryRuntime();
-  const service = new TurnApplicationService({
+  const service = createWebTurnApplication({
     lifecycle: new WebTeachingLifecycle(input.identity, input.session.id),
     profile,
-    contextLedger: new DrizzleAgentTurnContextRepository(),
-    modelRunLedger: new DrizzleAgentModelRunRepository(),
-    // Q04：模型调用级指标（首 token 延迟/调用延迟/错误码）在组合根包装，不改 Agent Loop。
-    modelGateway: wrapTurnModelGatewayForMetrics(
-      runtime?.gateway ?? unavailableModelGateway,
-      telemetry.metrics,
-    ),
-    toolKernel: new ToolKernel(
-      adapters,
-      new DrizzleAgentToolCallRepository(),
-      new DrizzleToolEffectRepository(),
-    ),
+    contextLedger: ledgers.contextLedger,
+    modelRunLedger: ledgers.modelRunLedger,
+    usageBudgetLedger: ledgers.usageBudgetLedger,
+    modelGateway: runtime?.gateway ?? unavailableModelGateway,
+    toolKernel: createWebToolKernel(adapters),
     cancellation: new WebTeachingCancellation(input.signal),
-    // 边界测试强制 trace 接线保持内联单例形状（telemetry-composition-boundary）。
-    trace: getWebTelemetryRuntime().turnTrace,
+    trace: ledgers.trace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',
@@ -153,10 +129,7 @@ export function beginGatewayTeachingTurnApplication(input: {
     },
     capabilities: [...new Set(input.transportCapabilities)],
   };
-  // Q04：Turn 级 SLI（TTFT/总延迟/结果计数/工具指标）由组合根包装事件流。
-  return {
-    events: wrapTurnApplicationStream(service.run(command), telemetry.metrics),
-  };
+  return { events: service.run(command) };
 }
 
 /** 在 Gateway Operation 前完成资产归属与模态验证；错误仍由 Web 路由清晰呈现。 */

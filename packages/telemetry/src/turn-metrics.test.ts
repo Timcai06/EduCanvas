@@ -30,6 +30,40 @@ async function collect(
 }
 
 describe('wrapTurnApplicationStream（Q04）', () => {
+  it('指标实现抛错时仍原样透传 Turn 事件', async () => {
+    const events = [
+      event('turn.started', {
+        userMessageId: 'u1',
+        assistantMessageId: 'a1',
+        replayed: false,
+      }),
+      event('message.delta', { messageId: 'a1', delta: 'hi' }),
+      event('turn.completed', { messageId: 'a1' }),
+    ];
+    const seen: string[] = [];
+    const throwingMetrics = {
+      increment() {
+        throw new Error('metrics unavailable');
+      },
+      record() {
+        throw new Error('metrics unavailable');
+      },
+      set() {
+        throw new Error('metrics unavailable');
+      },
+      snapshot: () => ({ counters: {}, histograms: {}, gauges: {} }),
+    };
+    for await (const yielded of wrapTurnApplicationStream(
+      (async function* () {
+        yield* events;
+      })(),
+      throwingMetrics,
+    )) {
+      seen.push(yielded.type);
+    }
+    expect(seen).toEqual(['turn.started', 'message.delta', 'turn.completed']);
+  });
+
   it('事件原样透传（不改变 Turn 语义）', async () => {
     const registry = new MetricsRegistry();
     const events: TurnApplicationEvent[] = [
