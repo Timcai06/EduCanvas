@@ -33,6 +33,10 @@ import {
   type GatewayTurnRunnerPort,
 } from '@educanvas/gateway-runtime';
 import {
+  wrapTurnApplicationStream,
+  wrapTurnModelGatewayForMetrics,
+} from '@educanvas/telemetry';
+import {
   createTurnModelGatewayFromEnvironment,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
@@ -145,7 +149,11 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
               ),
               contextLedger: dependenciesOrFactory.contextLedger,
               modelRunLedger: dependenciesOrFactory.modelRunLedger,
-              modelGateway: dependenciesOrFactory.modelGateway,
+              // Q04：模型调用级指标在组合根包装，不改 Agent Loop。
+              modelGateway: wrapTurnModelGatewayForMetrics(
+                dependenciesOrFactory.modelGateway,
+                getGatewayTelemetryRuntime().metrics,
+              ),
               toolKernel: new ToolKernel(
                 toolAdapters,
                 dependenciesOrFactory.toolCallLedger,
@@ -212,7 +220,12 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
       signal: input.signal,
       route: input.route,
     });
-    for await (const event of application.run(command)) {
+    // Q04：Turn 级 SLI 由组合根包装事件流。
+    const events = wrapTurnApplicationStream(
+      application.run(command),
+      getGatewayTelemetryRuntime().metrics,
+    );
+    for await (const event of events) {
       yield projectTurnApplicationEventToGateway(event, {
         actorUserId: input.route.actorUserId,
         occurredAt: new Date().toISOString(),

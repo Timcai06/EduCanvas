@@ -19,6 +19,7 @@ import {
   type ContinuationTracePort,
 } from './continuation-trace-adapter';
 import { MutableTelemetryHealth, type TelemetryHealthSnapshot } from './health';
+import { MetricsRegistry, NOOP_METRICS, type MetricsPort } from './metrics';
 import { ResilientSpanExporter } from './resilient-exporter';
 import { OpenTelemetryTurnTracePort } from './turn-trace-adapter';
 
@@ -31,9 +32,20 @@ const NOOP_TRACE: TurnApplicationTracePort = {
 export interface TelemetryRuntime {
   readonly turnTrace: TurnApplicationTracePort;
   readonly continuationTrace: ContinuationTracePort;
+  /** Q04：进程内低基数指标注册表（snapshot 供端点与测试断言）。 */
+  readonly metrics: MetricsPort;
   health(): TelemetryHealthSnapshot;
   forceFlush(): Promise<void>;
   shutdown(): Promise<void>;
+}
+
+/** 健康状态机的每次变化都投影到 exporter 健康 gauge（status 为闭集）。 */
+function healthGaugeMetrics(
+  health: MutableTelemetryHealth,
+  metrics: MetricsPort,
+): void {
+  const snapshot = health.snapshot();
+  metrics.set('telemetry_exporter_health', 1, { status: snapshot.status });
 }
 
 const inactiveRuntime = (
@@ -41,6 +53,7 @@ const inactiveRuntime = (
 ): TelemetryRuntime => ({
   turnTrace: NOOP_TRACE,
   continuationTrace: NOOP_CONTINUATION_TRACE,
+  metrics: NOOP_METRICS,
   health: () => health,
   async forceFlush() {},
   async shutdown() {},
@@ -51,7 +64,12 @@ export function createTelemetryRuntime(
   configuration: Extract<TelemetryConfiguration, { enabled: true }>,
   exporter: SpanExporter,
 ): TelemetryRuntime {
-  const health = new MutableTelemetryHealth({ status: 'ready' });
+  const metrics = new MetricsRegistry();
+  const health = new MutableTelemetryHealth({ status: 'ready' }, (snapshot) => {
+    metrics.set('telemetry_exporter_health', 1, { status: snapshot.status });
+  });
+  // 初始 ready 状态也要投影（onChange 只覆盖后续转移）。
+  healthGaugeMetrics(health, metrics);
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({
       'service.name': configuration.serviceName,
@@ -74,6 +92,7 @@ export function createTelemetryRuntime(
     continuationTrace: new OpenTelemetryContinuationTracePort(
       provider.getTracer('educanvas-continuation', '1.0.0'),
     ),
+    metrics,
     health: () => health.snapshot(),
     async forceFlush() {
       try {

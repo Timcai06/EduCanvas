@@ -13,6 +13,10 @@ import {
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
+  wrapTurnApplicationStream,
+  wrapTurnModelGatewayForMetrics,
+} from '@educanvas/telemetry';
+import {
   materializeAssetContextPlan,
   type MaterializedAssetPlan,
 } from '../assets/asset-materialization';
@@ -89,10 +93,13 @@ export function beginGatewayGeneralTurnApplication(input: {
    * 一起降级（ADR-0017）。未配置视觉 Provider 时 nativeImages 恒为空，物化层
    * 已在更早的位置明确拒绝过图片。
    */
-  const modelGateway =
+  const telemetry = getWebTelemetryRuntime();
+  const modelGateway = wrapTurnModelGatewayForMetrics(
     input.assetContext.nativeImages.length > 0 && runtime?.visionGateway
       ? runtime.visionGateway
-      : (runtime?.gateway ?? unavailableModelGateway);
+      : (runtime?.gateway ?? unavailableModelGateway),
+    telemetry.metrics,
+  );
   const service = new TurnApplicationService({
     lifecycle: new WebGeneralLifecycle(input.identity),
     profile: new WebGeneralProfile(
@@ -110,7 +117,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     modelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),
-    trace: getWebTelemetryRuntime().turnTrace,
+    trace: telemetry.turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',
@@ -132,7 +139,10 @@ export function beginGatewayGeneralTurnApplication(input: {
     },
     capabilities: [...new Set(input.transportCapabilities)],
   };
-  return { events: service.run(command) };
+  // Q04：Turn 级 SLI 由组合根包装事件流。
+  return {
+    events: wrapTurnApplicationStream(service.run(command), telemetry.metrics),
+  };
 }
 
 export async function prepareGatewayGeneralTurnContext(input: {

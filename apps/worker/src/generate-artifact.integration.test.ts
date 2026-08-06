@@ -30,6 +30,7 @@ import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { runOnce } from 'graphile-worker';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { NOOP_METRICS } from '@educanvas/telemetry';
 import { createTaskList } from './tasks/index.js';
 
 const connectionString = process.env.TEST_DATABASE_URL!;
@@ -43,6 +44,7 @@ const taskList = createTaskList({
       return callback();
     },
   },
+  metrics: NOOP_METRICS,
 });
 
 describe('产物生成后端全链路(创建→原子入队→worker 消费→版本落库)', () => {

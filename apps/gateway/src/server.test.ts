@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createGatewayHttpHandler } from './server';
 import { GatewayClientSessionAuth } from './client-auth';
 import { GatewayObservability } from './observability';
+import { getGatewayTelemetryRuntime } from './telemetry';
 
 const now = new Date('2026-07-19T04:00:00.000Z');
 const token = 'gateway-test-token-that-is-at-least-32-bytes';
@@ -120,6 +121,7 @@ async function start(
       internalToken,
       clientTransport,
       observability: new GatewayObservability(),
+      telemetry: getGatewayTelemetryRuntime(),
     }),
   );
   servers.push(server);
@@ -393,9 +395,20 @@ describe('Gateway HTTP composition root', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(metrics.status).toBe(200);
-    expect(await metrics.json()).toMatchObject({
-      operationEventsTotal: 3,
-      operationTerminalsTotal: 1,
+    const metricsBody = (await metrics.json()) as {
+      operationEventsTotal: number;
+      operationTerminalsTotal: number;
+      telemetry: {
+        health: { status: string };
+        metrics: { counters: object; histograms: object; gauges: object };
+      };
+    };
+    expect(metricsBody.operationEventsTotal).toBe(3);
+    expect(metricsBody.operationTerminalsTotal).toBe(1);
+    // Q04：测试环境 OTEL 未启用时 health 必须诚实为 disabled，指标快照为空闭集。
+    expect(metricsBody.telemetry).toEqual({
+      health: { status: 'disabled' },
+      metrics: { counters: {}, histograms: {}, gauges: {} },
     });
   });
 

@@ -17,3 +17,21 @@ export {
   createTelemetryRuntimeFromEnvironment,
   type TelemetryRuntime,
 } from './runtime';
+export {
+  MetricsRegistry,
+  MetricsValidationError,
+  NOOP_METRICS,
+  TURN_METRIC_DEFINITIONS,
+  type HistogramPoint,
+  type MetricDefinition,
+  type MetricsPort,
+  type MetricsSnapshot,
+} from './metrics';
+export {
+  wrapTurnApplicationStream,
+  type TurnMetricsOptions,
+} from './turn-metrics';
+export {
+  wrapTurnModelGatewayForMetrics,
+  type ModelMetricsOptions,
+} from './model-metrics';

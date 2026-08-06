@@ -424,7 +424,7 @@ Q00
 | Q01 RAG eval | `PENDING` | frozen dataset v1 + harness 可复现（reports/rag-eval-v1-2026-08-06.json，含 hybrid limit 5/10/20 扫描；两次运行质量指标逐项一致；待验收） |
 | Q02 降级观测 | `PENDING` | reason matrix + telemetry tests |
 | Q03 Turn budget | `PENDING` | budget tests + ledger evidence |
-| Q04 SLO/Runbook | `PENDING` | metrics + fault injection |
+| Q04 SLO/Runbook | `DONE` | metrics registry（15 个闭集指标，8 项 SLI 全覆盖）+ 组合根包装（web/gateway/worker）+ internal metrics 端点 + SLO/Runbook（Q04 PR，CI 全绿） |
 | Q05 测试真实性 | `PENDING` | CI summary + browser/coverage/bundle |
 | Q06 供应链发布 | `PENDING` | dependency/migration/release gates |
 | Q07 收口 | `PENDING` | reproducible baseline report |

@@ -22,7 +22,16 @@ export async function handleInternalRoutes(
   const { request, response, url, deps } = ctx;
 
   if (request.method === 'GET' && url.pathname === '/v1/internal/metrics') {
-    writeJson(response, 200, deps.observability?.snapshot() ?? {});
+    const observability = deps.observability?.snapshot() ?? {};
+    // Q04：遥测健康必须无 Exporter 也可见 —— disabled/degraded 由 health 快照
+    // 诚实表达；指标快照只含低基数闭集，不携带任何业务正文。
+    const telemetry = deps.telemetry
+      ? {
+          health: deps.telemetry.health(),
+          metrics: deps.telemetry.metrics.snapshot(),
+        }
+      : null;
+    writeJson(response, 200, { ...observability, telemetry });
     return HANDLED;
   }
 

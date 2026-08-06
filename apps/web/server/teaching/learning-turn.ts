@@ -50,6 +50,10 @@ import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
+import {
+  wrapTurnApplicationStream,
+  wrapTurnModelGatewayForMetrics,
+} from '@educanvas/telemetry';
 import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
 import {
   createTeachingToolKernelAdapters,
@@ -109,19 +113,24 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile.collectKnowledgeEvidence(candidateIds),
   );
   const runtime = resolveTurnModelRuntime();
+  const telemetry = getWebTelemetryRuntime();
   const service = new TurnApplicationService({
     lifecycle: new WebTeachingLifecycle(input.identity, input.session.id),
     profile,
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
-    modelGateway: runtime?.gateway ?? unavailableModelGateway,
+    // Q04：模型调用级指标（首 token 延迟/调用延迟/错误码）在组合根包装，不改 Agent Loop。
+    modelGateway: wrapTurnModelGatewayForMetrics(
+      runtime?.gateway ?? unavailableModelGateway,
+      telemetry.metrics,
+    ),
     toolKernel: new ToolKernel(
       adapters,
       new DrizzleAgentToolCallRepository(),
       new DrizzleToolEffectRepository(),
     ),
     cancellation: new WebTeachingCancellation(input.signal),
-    trace: getWebTelemetryRuntime().turnTrace,
+    trace: telemetry.turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',
@@ -143,7 +152,10 @@ export function beginGatewayTeachingTurnApplication(input: {
     },
     capabilities: [...new Set(input.transportCapabilities)],
   };
-  return { events: service.run(command) };
+  // Q04：Turn 级 SLI（TTFT/总延迟/结果计数/工具指标）由组合根包装事件流。
+  return {
+    events: wrapTurnApplicationStream(service.run(command), telemetry.metrics),
+  };
 }
 
 /** 在 Gateway Operation 前完成资产归属与模态验证；错误仍由 Web 路由清晰呈现。 */
