@@ -56,6 +56,11 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+      # Q05：核心包 coverage 门禁。阈值 = 2026-08-06 真实基线（防回归，
+      # 只升不降），排除生成代码与纯类型，见各包 vitest.config.ts。
+      - name: Coverage gates
+        run: pnpm test:coverage
+
   integration:
     runs-on: ubuntu-latest
     services:
@@ -190,11 +195,20 @@ jobs:
       - name: Build production application
         run: pnpm build
 
+      - name: Bundle / route size gate
+        run: node tooling/quality/bundle-size.mjs --root apps/web
+
       - name: Persistent Web Runtime composition
         run: pnpm test:e2e:runtime-composition
 
-      - name: Browser E2E
+      - name: Browser E2E (chromium desktop + mobile viewport)
         run: pnpm exec playwright test
+
+      # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，
+      # 这里把 retry 次数与 flaky 名单写入 CI Summary，不得完全隐藏）。
+      - name: Summarize retries and coverage matrix
+        if: always()
+        run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
         if: failure()

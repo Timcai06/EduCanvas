@@ -1,0 +1,78 @@
+name: UI Review
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'tests/e2e/**'
+      - 'playwright.config.ts'
+      - 'playwright.ui.config.ts'
+      - '.github/workflows/ui.yml'
+  schedule:
+    # Q05：nightly 兜底，任何前端改动遗漏都会在次日早上被发现。
+    - cron: '47 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ui-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    # 与默认 e2e 完全隔离的独立数据库；@ui 用例多为设计 QA 页与
+    # worker 规则产物，不调用模型 Provider。
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_ui_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_ui_e2e"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_ui_e2e
+      E2E_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_ui_e2e
+      PLAYWRIGHT_PORT: 3101
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
+      - name: Build production application
+        run: pnpm build
+
+      - name: UI review (@ui, chromium + firefox)
+        run: pnpm exec playwright test --config playwright.ui.config.ts
+
+      - name: Summarize retries and coverage matrix
+        if: always()
+        run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-ui-diagnostics
+          path: output/playwright
+          if-no-files-found: ignore

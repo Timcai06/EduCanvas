@@ -45,6 +45,11 @@ export default defineConfig({
         outputFolder: 'output/playwright/report',
       },
     ],
+    // Q05：CI 下输出 JSON 结果，供 tooling/quality/playwright-summary.mjs
+    // 汇总 retry/flaky 与覆盖矩阵写入 GITHUB_STEP_SUMMARY。
+    ...(process.env.CI
+      ? [['json', { outputFile: 'output/playwright/results.json' }] as const]
+      : []),
   ],
   use: {
     baseURL,
@@ -56,6 +61,13 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    // Q05：移动 viewport 进入稳定 lane（第二 device 环境）。
+    // 与 desktop 同一浏览器内核，不新增 CI 浏览器安装；
+    // 响应式回归由本 project 在每次 PR 必跑捕获。
+    {
+      name: 'chromium-mobile',
+      use: { ...devices['Pixel 7'] },
     },
   ],
   webServer: {
