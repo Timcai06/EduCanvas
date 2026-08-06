@@ -47,6 +47,10 @@ import {
   createNodeToolAdapters,
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
+import {
+  wrapTurnApplicationStream,
+  wrapTurnModelGatewayForMetrics,
+} from '@educanvas/telemetry';
 import { getGatewayTelemetryRuntime } from './telemetry';
 import { GatewayGeneralProfile } from './turn-application/general-profile';
 import {
@@ -129,9 +133,10 @@ export function createGatewayTurnApplication(
   deps: GatewayDependencies,
   input: { signal: ModelAbortSignal; route: GatewayResolvedRoute },
 ): TurnApplicationPort {
+  const telemetry = getGatewayTelemetryRuntime();
   const nodeAdapters = createNodeToolAdapters(deps.nodeInvocations);
   const toolAdapters = [...deps.mcpRuntime.adapters, ...nodeAdapters];
-  return createTurnApplication({
+  const application = createTurnApplication({
     lifecycle: new GatewayTurnLifecycle(deps.turns),
     profile: new GatewayGeneralProfile(
       deps.turns,
@@ -142,7 +147,10 @@ export function createGatewayTurnApplication(
     contextLedger: deps.contextLedger,
     modelRunLedger: deps.modelRunLedger,
     usageBudgetLedger: deps.usageBudgetLedger,
-    modelGateway: deps.modelGateway,
+    modelGateway: wrapTurnModelGatewayForMetrics(
+      deps.modelGateway,
+      telemetry.metrics,
+    ),
     toolKernel: new ToolKernel(
       toolAdapters,
       deps.toolCallLedger,
@@ -151,4 +159,12 @@ export function createGatewayTurnApplication(
     cancellation: new GatewayBoundCancellation(input.signal, deps.turns),
     trace: getGatewayTelemetryRuntime().turnTrace,
   });
+  return {
+    run(command) {
+      return wrapTurnApplicationStream(
+        application.run(command),
+        telemetry.metrics,
+      );
+    },
+  };
 }
