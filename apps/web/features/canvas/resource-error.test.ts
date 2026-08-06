@@ -4,6 +4,7 @@ import {
   classifyHttpStatus,
   isAbortError,
   isRetryableResourceError,
+  toClientError,
   toOfflineError,
 } from './resource-error';
 
@@ -75,5 +76,27 @@ describe('ResourceClientError（带语义的客户端错误）', () => {
     expect(error.name).toBe('ResourceClientError');
     expect(error.kind).toBe('forbidden');
     expect(error.message).toBe('没有权限。');
+  });
+});
+
+describe('toClientError（未知原因规整）', () => {
+  it('已是 ResourceClientError 时原样透传（保留 kind）', () => {
+    const error = new ResourceClientError('offline', '网络不可用。');
+    expect(toClientError(error, 'fallback')).toBe(error);
+  });
+
+  it('其它原因统一归为 failed + fallback 文案', () => {
+    expect(toClientError(new Error('boom'), '加载失败。')).toMatchObject({
+      kind: 'failed',
+      message: '加载失败。',
+    });
+    expect(toClientError(null, '加载失败。')).toMatchObject({
+      kind: 'failed',
+      message: '加载失败。',
+    });
+    expect(toClientError('oops', '加载失败。')).toMatchObject({
+      kind: 'failed',
+      message: '加载失败。',
+    });
   });
 });

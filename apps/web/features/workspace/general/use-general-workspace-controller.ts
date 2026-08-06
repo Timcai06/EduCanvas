@@ -43,7 +43,10 @@ import {
 } from './general-chat-entry';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
-import type { ResourceClientError } from '@/features/canvas/resource-error';
+import {
+  toClientError,
+  type ResourceClientError,
+} from '@/features/canvas/resource-error';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -200,7 +203,10 @@ export function useGeneralWorkspaceController(options: {
               asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
             ),
           );
-          void refreshAssets().catch(() => undefined);
+          /* W03：发送后刷新来源失败不静默吞掉——上报结构化错误，保留服务端已确认的数据。 */
+          void refreshAssets().catch((reason: unknown) => {
+            setError(toClientError(reason, '发送后刷新来源失败。'));
+          });
         });
     },
     [
@@ -266,11 +272,17 @@ export function useGeneralWorkspaceController(options: {
     });
   }, []);
 
+  /* W03：作品列表加载失败不转成空列表——保留已有项并把失败语义上报到错误状态。 */
   const openStudio = useCallback(() => {
     workspace.openStudio();
     void fetchNotebookArtifacts()
-      .then(setStudioItems)
-      .catch(() => setStudioItems([]));
+      .then((items) => {
+        setStudioItems(items);
+        setError(null);
+      })
+      .catch((reason: unknown) => {
+        setError(toClientError(reason, '暂时无法加载作品列表。'));
+      });
   }, [workspace]);
 
   const online = useOnlineStatus();

@@ -12,14 +12,10 @@ import {
   detectAssetStatusNotices,
   type AssetStatusNotice,
 } from '@/features/assets/asset-status';
-import { ResourceClientError } from '@/features/canvas/resource-error';
-
-/* W03：未知原因统一归为 failed，结构化错误保留 kind 供 UI 区分可重试性。 */
-function toClientError(reason: unknown, fallback: string): ResourceClientError {
-  return reason instanceof ResourceClientError
-    ? reason
-    : new ResourceClientError('failed', fallback);
-}
+import {
+  ResourceClientError,
+  toClientError,
+} from '@/features/canvas/resource-error';
 
 /**
  * 当前 Notebook 的来源集合与其变更动作。

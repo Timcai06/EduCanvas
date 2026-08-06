@@ -63,3 +63,13 @@ export class ResourceClientError extends Error {
     this.kind = kind;
   }
 }
+
+/** 把未知原因规整为结构化错误：已带 kind 的直接透传，否则统一归为 failed。 */
+export function toClientError(
+  reason: unknown,
+  fallback: string,
+): ResourceClientError {
+  return reason instanceof ResourceClientError
+    ? reason
+    : new ResourceClientError('failed', fallback);
+}
