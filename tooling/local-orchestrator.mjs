@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import process from 'node:process';
+import { cleanupStaleCore } from './local-core-cleanup.mjs';
 import { applyResolvedLocalPorts } from './local-orchestrator-config.mjs';
 import { loadWorkspaceEnvFiles } from './workspace-env.mjs';
 
@@ -50,9 +51,10 @@ async function webReady() {
   return probe(webUrl);
 }
 
-async function waitFor(label, check, timeoutMs = 30_000) {
+async function waitFor(label, check, timeoutMs = 30_000, aborted) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (aborted?.current) throw new Error(`${label} 探测已中止`);
     if (await check()) return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -66,6 +68,15 @@ function spawnOwned(command, args, options = {}) {
     ...options,
   });
   children.add(child);
+  // 进程退出的权威信号。事件发生后不能重新挂 .once 监听（会永久挂起），
+  // 因此立刻固定成一个 promise，之后随时 await 都立即拿到结果。
+  // spawn 失败（ENOENT 等）不会触发 exit，这里一并兜底。
+  child.exitPromise = new Promise((resolve) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('error', (error) =>
+      resolve({ code: null, signal: null, error }),
+    );
+  });
   child.once('exit', () => children.delete(child));
   child.once('error', (error) => {
     process.stderr.write(`[local] ${command} 启动失败: ${error.message}\n`);
@@ -137,9 +148,33 @@ async function ensureCore({ quiet }) {
     return null;
   }
   if (gateway !== web) {
-    throw new Error(
-      `检测到不完整的 core（Gateway=${gateway ? 'ready' : 'down'}, Web=${web ? 'ready' : 'down'}）；请先停止旧进程或运行 make status`,
+    // 半个 core：旧进程树还占着端口，无法复用也无法启动新 core。
+    // 自动定位并清理「监听本服务端口且属于 EduCanvas 仓库」的残留进程
+    //（按端口 + 命令行双重校验，绝不 taskkill 全量 node.exe），清理失败
+    // 才回退到手动提示。make status 在 Windows 上不可用（Makefile 是
+    // POSIX 语法），因此提示改为通用的端口占用说明。
+    process.stderr.write(
+      `[local] 检测到不完整的 core（Gateway=${gateway ? 'ready' : 'down'}, Web=${web ? 'ready' : 'down'}），正在自动停止旧进程…\n`,
     );
+    try {
+      const { killed } = await cleanupStaleCore([gatewayPort, port]);
+      if (killed > 0) {
+        process.stderr.write(
+          `[local] 已停止 ${killed} 个残留进程，重新探测…\n`,
+        );
+      }
+      const [gatewayAfter, webAfter] = await Promise.all([
+        gatewayReady(),
+        webReady(),
+      ]);
+      if (gatewayAfter || webAfter) {
+        throw new Error(`端口 ${gatewayPort}/${port} 仍被占用`);
+      }
+    } catch (error) {
+      throw new Error(
+        `检测到不完整的 core（Gateway=${gateway ? 'ready' : 'down'}, Web=${web ? 'ready' : 'down'}）；自动清理失败：${error.message}。请手动结束占用 ${gatewayPort}/${port} 端口的进程后重试`,
+      );
+    }
   }
 
   let stdio = 'inherit';
@@ -154,22 +189,23 @@ async function ensureCore({ quiet }) {
   }
   const core = spawnOwned('pnpm', ['dev:core'], { stdio });
   if (logFd !== null) closeSync(logFd);
-  const failed = new Promise((_, reject) => {
-    core.once('exit', (code, signal) => {
-      reject(
-        new Error(
-          `core 在就绪前退出（code=${code ?? '-'}, signal=${signal ?? '-'}）`,
-        ),
-      );
-    });
+  // core 先退出时中止两个探测循环（resolve 而非 reject：race 已定胜负后
+  // 再 resolve 是安全的多余事件，reject 会变成未处理的 rejection）。
+  const aborted = { current: false };
+  const failed = core.exitPromise.then(({ code, signal }) => {
+    aborted.current = true;
+    return new Error(
+      `core 在就绪前退出（code=${code ?? '-'}, signal=${signal ?? '-'}）`,
+    );
   });
-  await Promise.race([
+  const outcome = await Promise.race([
     Promise.all([
-      waitFor('Gateway', gatewayReady),
-      waitFor('Web', webReady, 60_000),
-    ]),
+      waitFor('Gateway', gatewayReady, 30_000, aborted),
+      waitFor('Web', webReady, 60_000, aborted),
+    ]).then(() => null),
     failed,
   ]);
+  if (outcome) throw outcome;
   process.stdout.write(`[local] Gateway ready: ${gatewayUrl}\n`);
   process.stdout.write(`[local] Web ready: ${webUrl}\n`);
   return core;
@@ -197,7 +233,7 @@ async function main() {
   }
 
   if (!core) return;
-  const code = await new Promise((resolve) => core.once('exit', resolve));
+  const { code } = await core.exitPromise;
   process.exitCode = typeof code === 'number' ? code : 1;
 }
 
