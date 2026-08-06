@@ -125,7 +125,6 @@ export function GeneralChatWorkspace({
   const pendingConsumed = useRef(false);
   const pendingMenuConsumed = useRef(false);
   const pendingToolsConsumed = useRef(false);
-
   const sources = useNotebookSources({
     endpoint: GENERAL_ASSET_ENDPOINT,
     onError: setError,
@@ -190,7 +189,6 @@ export function GeneralChatWorkspace({
     },
     [assets, canvasSelected, refreshAssets, setAssets, turn],
   );
-
   useEffect(() => {
     if (pendingConsumed.current) return;
     pendingConsumed.current = true;
@@ -199,7 +197,6 @@ export function GeneralChatWorkspace({
     sessionStorage.removeItem(PENDING_GENERAL_PROMPT_KEY);
     queueMicrotask(() => send(prompt));
   }, [send]);
-
   const handleMenuAction = useCallback(
     (action: PlusMenuActionId) => {
       if (action === 'upload_file') setAssetPanel('document');
@@ -244,7 +241,6 @@ export function GeneralChatWorkspace({
   }, []);
 
   useAssistantArtifacts(artifactFlow);
-
   const online = useOnlineStatus();
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
   const isLanding = turn.messages.length === 0;
