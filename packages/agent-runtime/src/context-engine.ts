@@ -1,6 +1,8 @@
 import type { AgentTurnContextMaterial } from '@educanvas/agent-core';
 
 export const CONTEXT_ENGINE_VERSION = 'context-engine-v1' as const;
+/** 单个 Context Segment 可登记的 Asset Version 上限；超限 fail closed。 */
+export const MAX_ASSET_VERSIONS_PER_SEGMENT = 32;
 export type ContextSegmentKind =
   | 'profile'
   | 'conversation'
@@ -18,7 +20,16 @@ export interface ContextSegment {
   priority: number;
   required?: boolean;
   messageId?: string;
+  /**
+   * 单 Asset 便捷写法，等价于 `assetVersionIds: [id]`；保留以兼容教学等
+   * 单 Asset 段。与 `assetVersionIds` 同时提供会被拒绝（歧义，fail closed）。
+   */
   assetVersionId?: string;
+  /**
+   * 多 Asset 写法：按实际进入模型消息的顺序登记不可变 AssetVersion ID，
+   * 不允许段内或跨段重复；多图合并进同一条消息时必须登记全部版本。
+   */
+  assetVersionIds?: readonly string[];
   /** tool_call/tool_result必须使用相同pairKey成对进入或成对省略。 */
   pairKey?: string;
 }
@@ -44,6 +55,24 @@ export class ContextEngineInputError extends Error {
 
 function validateVersion(value: string): boolean {
   return /^[a-z0-9][a-z0-9._-]{0,31}$/.test(value);
+}
+
+/**
+ * 把段的 Asset 引用规范化为数组：单值 assetVersionId 等价于单元素数组，
+ * 数组写法 assetVersionIds 按消息内顺序登记。两者同时提供视为歧义，
+ * 返回 null 由调用方 fail closed。
+ */
+function assetVersionIdsOf(segment: ContextSegment): readonly string[] | null {
+  if (
+    segment.assetVersionId !== undefined &&
+    segment.assetVersionIds !== undefined
+  ) {
+    return null;
+  }
+  if (segment.assetVersionId !== undefined) {
+    return [segment.assetVersionId];
+  }
+  return segment.assetVersionIds ?? [];
 }
 
 /**
@@ -103,13 +132,31 @@ export function buildAgentContext(input: {
     );
     return new Set(present).size === present.length;
   };
+  /**
+   * Asset 引用统一校验：混用单值/数组、空 ID、段内重复、超限均 fail closed；
+   * source/asset 段必须登记至少一个 Asset Version（不允许空登记）。
+   */
+  const assetVersionsBySegment = all.map((segment) => {
+    const versions = assetVersionIdsOf(segment);
+    if (
+      versions === null ||
+      versions.length > MAX_ASSET_VERSIONS_PER_SEGMENT ||
+      new Set(versions).size !== versions.length ||
+      versions.some(
+        (id) => typeof id !== 'string' || !id.trim() || id.length > 256,
+      )
+    ) {
+      throw new ContextEngineInputError('Context Segment无效或超过上限');
+    }
+    return versions;
+  });
   if (
     all.length > 500 ||
     !unique(all.map((segment) => segment.id)) ||
     !unique(all.map((segment) => segment.messageId)) ||
-    !unique(all.map((segment) => segment.assetVersionId)) ||
+    !unique(assetVersionsBySegment.flat()) ||
     all.some(
-      (segment) =>
+      (segment, index) =>
         !segment.id ||
         segment.id.length > 256 ||
         !segment.content.trim() ||
@@ -119,7 +166,7 @@ export function buildAgentContext(input: {
         segment.priority > 100 ||
         (segment.kind === 'conversation' && !segment.messageId) ||
         ((segment.kind === 'source' || segment.kind === 'asset') &&
-          !segment.assetVersionId) ||
+          assetVersionsBySegment[index]!.length === 0) ||
         ((segment.kind === 'tool_call' || segment.kind === 'tool_result') &&
           !segment.messageId) ||
         ((segment.kind === 'tool_call' || segment.kind === 'tool_result') &&
@@ -211,9 +258,9 @@ export function buildAgentContext(input: {
       includedMessageIds: selected
         .map((item) => item.segment.messageId)
         .filter((id): id is string => id !== undefined),
-      selectedAssetVersionIds: selected
-        .map((item) => item.segment.assetVersionId)
-        .filter((id): id is string => id !== undefined),
+      selectedAssetVersionIds: selected.flatMap(
+        (item) => assetVersionIdsOf(item.segment) ?? [],
+      ),
       omittedMessageCount:
         input.conversation.length - selectedConversationCount,
       characterCount,

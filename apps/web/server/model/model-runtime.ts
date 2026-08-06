@@ -2,8 +2,8 @@ import 'server-only';
 
 import {
   acceptsImageInput,
-  createTurnModelGatewayFromEnvironment,
-  createVisionTurnModelGatewayFromEnvironment,
+  createTurnModelGateway,
+  createVisionTurnModelGateway,
   parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
@@ -54,15 +54,17 @@ export interface ResolvedTurnModelRuntime {
 }
 
 /**
- * 每次 Turn 在服务端解析一次配置；未配置时返回 null，由应用服务写入诚实失败态。
- * 这里不做隐式 fallback，也不会把 API Key、模型 ID 或配置对象返回给浏览器。
+ * 每次 Turn 在服务端解析一次配置：`parseModelGatewayConfiguration` 恰好执行
+ * 一次，主 Gateway 与视觉 Gateway 共享同一份已验证配置对象，Factory 不再自行
+ * 解析（R03）。未配置时返回 null，由应用服务写入诚实失败态。这里不做隐式
+ * fallback，也不会把 API Key、模型 ID 或配置对象返回给浏览器。
  */
 export function resolveTurnModelRuntime(
   environment: ModelGatewayEnvironment = readModelGatewayEnvironment(),
 ): ResolvedTurnModelRuntime | null {
   const configuration = parseModelGatewayConfiguration(environment);
   if (!configuration.enabled) return null;
-  const gateway = createTurnModelGatewayFromEnvironment(environment);
+  const gateway = createTurnModelGateway(configuration);
   if (gateway === null) return null;
 
   return {
@@ -72,6 +74,6 @@ export function resolveTurnModelRuntime(
     nativeAssetKinds: acceptsImageInput(configuration)
       ? (['image'] as const)
       : [],
-    visionGateway: createVisionTurnModelGatewayFromEnvironment(environment),
+    visionGateway: createVisionTurnModelGateway(configuration),
   };
 }

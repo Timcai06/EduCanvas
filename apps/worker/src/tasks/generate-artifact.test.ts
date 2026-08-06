@@ -12,7 +12,6 @@ const {
   turnsRepository,
   appendGeneratedImageVersion,
   ImageArtifactGenerationFailure,
-  resolveImageGateway,
   artifactGateway,
   ArtifactJobLifecycleError,
 } = vi.hoisted(() => ({
@@ -36,7 +35,6 @@ const {
       this.code = code;
     }
   },
-  resolveImageGateway: vi.fn(),
   artifactGateway: {},
   ArtifactJobLifecycleError: class ArtifactJobLifecycleError extends Error {
     constructor(from: string, to: string) {
@@ -66,9 +64,16 @@ vi.mock('@educanvas/db', () => ({
 }));
 
 vi.mock('../model-runtime.js', () => ({
-  resolveImageGenerationModelGateway: resolveImageGateway,
-  resolveSpeechModelGateway: vi.fn(),
-  resolveStructuredModelGateway: vi.fn(),
+  // R03：任务经 createWorkerModelRuntime 一次解析；测试用共享 fake runtime。
+  createWorkerModelRuntime: vi.fn(() => ({
+    structured: {},
+    speech: {},
+    transcription: null,
+    image: {},
+    embedding: null,
+    embeddingIdentity: null,
+  })),
+  readModelGatewayEnvironment: vi.fn(() => ({})),
 }));
 
 vi.mock('./image-artifact-generation.js', () => ({

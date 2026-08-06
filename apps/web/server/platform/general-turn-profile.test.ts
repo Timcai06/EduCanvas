@@ -241,6 +241,30 @@ describe('WebGeneralProfile 原生图片输入', () => {
     expect(plan.context.sourcesAndAssets[0]?.message.content).toHaveLength(3);
   });
 
+  it('多图合并段登记全部 Asset Version 且保持消息内顺序（R02 完整追溯）', async () => {
+    const plan = await createProfile({
+      assetContext: {
+        ...assetContext,
+        nativeImages: [
+          { ...image, versionId: 'version-1' },
+          { ...image, versionId: 'version-2' },
+          { ...image, versionId: 'version-3' },
+        ],
+      },
+    }).prepare({ command, turn });
+
+    const segment = plan.context.sourcesAndAssets[0]!.segment as {
+      assetVersionIds?: readonly string[];
+      assetVersionId?: string;
+    };
+    expect(segment.assetVersionIds).toEqual([
+      'version-1',
+      'version-2',
+      'version-3',
+    ]);
+    expect(segment.assetVersionId).toBeUndefined();
+  });
+
   it('segment 文本与消息的文本投影逐字相等，否则会触发 Prompt 漂移守卫', async () => {
     /* Turn Application 用 modelMessageText(message) === segment.content 检测漂移
        （turn-application/helpers.ts）。这两处的占位符写法是绑定的。 */

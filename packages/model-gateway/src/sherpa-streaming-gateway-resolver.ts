@@ -88,7 +88,9 @@ const defaultDependencies = {
     return new Promise((resolve, reject) => {
       const hash = createHash('sha256');
       const stream = createReadStream(path);
-      stream.on('data', (chunk: Buffer) => hash.update(chunk));
+      // chunk 类型跟随 @types/node@22 的 data 事件签名（Buffer | string）；
+      // 显式 Buffer 标注在该签名下参数逆变不成立，交由推断，避免类型降级后再引入回归。
+      stream.on('data', (chunk) => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);
     });

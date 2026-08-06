@@ -32,7 +32,9 @@ export {
   type OpenAICompatibleTurnModelGatewayOptions,
 } from './openai-compatible-turn-model-gateway';
 export {
+  createTurnModelGateway,
   createTurnModelGatewayFromEnvironment,
+  createVisionTurnModelGateway,
   createVisionTurnModelGatewayFromEnvironment,
 } from './turn-model-gateway-factory';
 export {

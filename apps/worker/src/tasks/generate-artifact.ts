@@ -17,9 +17,9 @@ import {
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import {
-  resolveImageGenerationModelGateway,
-  resolveSpeechModelGateway,
-  resolveStructuredModelGateway,
+  createWorkerModelRuntime,
+  readModelGatewayEnvironment,
+  type WorkerModelRuntime,
 } from '../model-runtime.js';
 import {
   appendGeneratedImageVersion,
@@ -72,6 +72,8 @@ async function appendAudioOverviewVersion(input: {
   job: PlatformArtifactJob;
   subjectId: string;
   artifacts: DrizzlePlatformArtifactRepository;
+  /** R03：任务级一次解析的共享运行时（structured/speech 同一配置）。 */
+  runtime: WorkerModelRuntime;
 }) {
   const storage = new LocalObjectStorage();
   const checkpointKeys = Object.keys(input.job.checkpoint);
@@ -130,7 +132,7 @@ async function appendAudioOverviewVersion(input: {
     throw new ArtifactGenerationFailure('audio_source_text_missing');
   }
 
-  const speechGateway = resolveSpeechModelGateway();
+  const speechGateway = input.runtime.speech;
   if (!speechGateway) {
     throw new ArtifactGenerationFailure('speech_not_configured');
   }
@@ -140,7 +142,7 @@ async function appendAudioOverviewVersion(input: {
       displayName: source.displayName,
       content: source.extractedText!,
     })),
-    gateway: resolveStructuredModelGateway(),
+    gateway: input.runtime.structured,
     traceId: `artifact:${input.artifact.id}:script`,
     operationId: input.job.id,
   });
@@ -325,12 +327,23 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       jobId: payload.jobId,
       trustedSubjectId: payload.subjectId,
     });
+    // R03：任务级一次解析环境。structured/speech/image 三个能力共用同一
+    // 已验证配置（惰性：只走一个 kind 分支，至多解析一次）。
+    let runtime: WorkerModelRuntime | null = null;
+    const getRuntime = (): WorkerModelRuntime => {
+      if (runtime === null) {
+        runtime = createWorkerModelRuntime(readModelGatewayEnvironment());
+      }
+      return runtime;
+    };
     if (artifact.kind === 'audio_overview') {
       const version = await appendAudioOverviewVersion({
         artifact,
         job,
         subjectId: payload.subjectId,
         artifacts,
+        // R03：一次解析，structured/speech 共享同一已验证配置。
+        runtime: getRuntime(),
       });
       helpers.logger.info(
         `音频产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
@@ -343,7 +356,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         job,
         subjectId: payload.subjectId,
         artifacts,
-        gateway: resolveImageGenerationModelGateway(),
+        gateway: getRuntime().image,
       });
       helpers.logger.info(
         `图像产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
@@ -389,7 +402,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             ]
           : []),
       ],
-      gateway: resolveStructuredModelGateway(),
+      gateway: getRuntime().structured,
       traceId: `artifact:${payload.artifactId}`,
       operationId: payload.jobId,
       revision:

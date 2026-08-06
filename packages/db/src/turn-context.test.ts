@@ -78,5 +78,43 @@ describe('prepareTurnContextMaterial', () => {
         characterCount: 10,
       }),
     ).toThrow(TurnContextConflictError);
+    expect(() =>
+      prepareTurnContextMaterial({
+        builderVersion: 'conversation-context-v1',
+        includedMessageIds: [],
+        selectedAssetVersionIds: [assetVersionId, assetVersionId],
+        omittedMessageCount: 0,
+        characterCount: 10,
+      }),
+    ).toThrow(TurnContextConflictError);
+  });
+
+  it('多 Asset 版本顺序属于可审计材料（R02 完整追溯）', () => {
+    const first = prepareTurnContextMaterial({
+      builderVersion: 'conversation-context-v1',
+      includedMessageIds: [firstMessageId],
+      selectedAssetVersionIds: [
+        '20000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000002',
+      ],
+      omittedMessageCount: 0,
+      characterCount: 10,
+    });
+    const reversed = prepareTurnContextMaterial({
+      builderVersion: 'conversation-context-v1',
+      includedMessageIds: [firstMessageId],
+      selectedAssetVersionIds: [
+        '20000000-0000-4000-8000-000000000002',
+        '20000000-0000-4000-8000-000000000001',
+      ],
+      omittedMessageCount: 0,
+      characterCount: 10,
+    });
+
+    expect(reversed.contextHash).not.toBe(first.contextHash);
+    expect(first.selectedAssetVersionIds).toEqual([
+      '20000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000002',
+    ]);
   });
 });

@@ -12,25 +12,34 @@ import {
 } from './openai-compatible-turn-model-gateway';
 
 /**
- * 模型网关工厂 — 环境配置到 TurnModelGateway 的唯一构造路径。
+ * 模型网关工厂 — 已验证配置到 TurnModelGateway 的构造路径。
+ *
+ * ## 两种入口（R03 单次解析纪律）
+ *
+ * - **`createTurnModelGateway(config)`**：接收已验证配置对象，内部不读取
+ *   `process.env`、不再次解析环境。组合根先 `parseModelGatewayConfiguration`
+ *   一次，再把配置对象注入本工厂与各能力解析器，保证同一组合根只解析一次。
+ * - **`createTurnModelGatewayFromEnvironment(env)`**：组合根便捷入口，内部
+ *   parse 恰好一次后委托 `createTurnModelGateway`。只适合进程级一次性装配
+ *   （如 Gateway 启动期）；需要同一配置服务多个能力时请先 parse 一次再注入。
  *
  * ## 两种运行时
  *
  * - **native**: 本包自带的 OpenAICompatibleTurnModelGateway — 纯 fetch + SSE 解析
  * - **ai-sdk**: 通过 Vercel AI SDK 适配 — 提供 provider 抽象层的兼容性
  *
- * 运行时由 `MODEL_GATEWAY_RUNTIME` 环境变量控制，默认 native。
- *
- * ## 返回值
- *
- * - null: 配置禁用（未配置 provider 或 DeepSeek 不允许） → 调用方自行降级
- * - TurnModelGateway: 配置完整 → 正常使用
- *
- * ## 设计意图
- *
- * 工厂函数组合 `parseModelGatewayConfiguration`（纯解析）和 Gateway 构造（副作用）。
- * 分离的好处：配置解析可独立测试（无网络），Gateway 构造只在生产路径调用。
+ * 运行时由已验证配置的 `runtime` 字段决定，构造本身无网络副作用。
  */
+
+/** 从已验证配置构造 Turn Provider；配置必须已通过 `parseModelGatewayConfiguration`。 */
+export function createTurnModelGateway(
+  config: EnabledModelGatewayConfiguration,
+  options: OpenAICompatibleTurnModelGatewayOptions = {},
+): TurnModelGateway {
+  return config.runtime === 'ai-sdk'
+    ? createAiSdkTurnModelGateway(config, options)
+    : new OpenAICompatibleTurnModelGateway(config, options);
+}
 
 /** 解析显式环境并构造Turn Provider；disabled配置返回null且不触发网络。 */
 export function createTurnModelGatewayFromEnvironment(
@@ -39,9 +48,7 @@ export function createTurnModelGatewayFromEnvironment(
 ): TurnModelGateway | null {
   const config = parseModelGatewayConfiguration(environment);
   if (!config.enabled) return null;
-  return config.runtime === 'ai-sdk'
-    ? createAiSdkTurnModelGateway(config, options)
-    : new OpenAICompatibleTurnModelGateway(config, options);
+  return createTurnModelGateway(config, options);
 }
 
 /**
@@ -85,7 +92,8 @@ function projectVisionConfiguration(
 }
 
 /**
- * 构造承接图片输入的 Turn Provider；未配置独立视觉 Provider 时返回 null。
+ * 从已验证配置构造承接图片输入的 Turn Provider；未配置独立视觉 Provider 时
+ * 返回 null。
  *
  * 与主 Gateway 分开构造而不是在一个 Gateway 内部按模态分支：Adapter 持有 Base URL
  * 与 Key，把两套凭据塞进同一个实例会让「这次请求用了哪个供应商」在审计里变得
@@ -93,15 +101,27 @@ function projectVisionConfiguration(
  *
  * 视觉链路固定走 native Adapter：AI SDK Adapter 的 provider 抽象目前只按主配置
  * 的 runtime 解析，尚未覆盖多 Provider 图片投影。
+ *
+ * 本入口不读取 `process.env`，也不再次解析环境（R03）：视觉配置已在
+ * `parseModelGatewayConfiguration` 的 `visionProvider` 字段中验证完毕。
  */
+export function createVisionTurnModelGateway(
+  config: EnabledModelGatewayConfiguration,
+  options: OpenAICompatibleTurnModelGatewayOptions = {},
+): TurnModelGateway | null {
+  if (config.visionProvider === null) return null;
+  return new OpenAICompatibleTurnModelGateway(
+    projectVisionConfiguration(config),
+    options,
+  );
+}
+
+/** 便捷入口：解析一次环境后委托 `createVisionTurnModelGateway`；与主 Factory 同纪律。 */
 export function createVisionTurnModelGatewayFromEnvironment(
   environment: ModelGatewayEnvironment,
   options: OpenAICompatibleTurnModelGatewayOptions = {},
 ): TurnModelGateway | null {
   const config = parseModelGatewayConfiguration(environment);
-  if (!config.enabled || config.visionProvider === null) return null;
-  return new OpenAICompatibleTurnModelGateway(
-    projectVisionConfiguration(config),
-    options,
-  );
+  if (!config.enabled) return null;
+  return createVisionTurnModelGateway(config, options);
 }

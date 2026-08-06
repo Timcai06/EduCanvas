@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <23"
   },
   "scripts": {
     "dev": "node tooling/local-orchestrator.mjs web",
@@ -12,6 +12,7 @@
     "build": "turbo build",
     "lint": "turbo lint && pnpm lint:format",
     "lint:format": "prettier --check \"apps/**/*.{js,mjs,cjs,ts,tsx}\" \"packages/**/*.{js,mjs,cjs,ts,tsx}\" \"tooling/**/*.{js,mjs,cjs,ts,tsx}\" \"*.{js,mjs,cjs,ts,tsx}\"",
+    "node:gate": "node tooling/node-version-gate.mjs",
     "env:check": "node tooling/env-check.mjs",
     "setup:local": "pnpm install --frozen-lockfile && pnpm db:up && pnpm db:migrate",
     "start:local": "node tooling/local-orchestrator.mjs web",
