@@ -39,12 +39,14 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { get } from 'node:https';
 
 const require = createRequire(import.meta.url);
 const manifestPath = new URL('./sherpa-model-manifest.json', import.meta.url);
-const { profiles } = require(manifestPath.pathname);
+// URL.pathname 在 Windows 上带 `/D:/` 前缀，CJS require 无法解析；
+// fileURLToPath 才是跨平台的正规转换。
+const { profiles } = require(fileURLToPath(manifestPath));
 
 /** 安装结果：幂等跳过 / 成功安装 / 失败（失败信息只含稳定原因）。 */
 export class SherpaModelFetchError extends Error {
