@@ -1,5 +1,5 @@
 import type { MaterializedAssetPlan } from '../assets/asset-materialization';
-import { createTurnApplication } from '@educanvas/agent-runtime';
+import { createWebTurnApplication } from '../turn-composition';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentTurnContextRepository,
@@ -22,8 +22,8 @@ import {
 } from './general-turn-tools';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@educanvas/agent-runtime', () => ({
-  createTurnApplication: vi.fn(),
+vi.mock('../turn-composition', () => ({
+  createWebTurnApplication: vi.fn(),
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
@@ -98,7 +98,7 @@ function expectNoRuntimeComposition(): void {
   expect(WebGeneralProfile).not.toHaveBeenCalled();
   expect(WebGeneralCancellation).not.toHaveBeenCalled();
   expect(getWebTelemetryRuntime).not.toHaveBeenCalled();
-  expect(createTurnApplication).not.toHaveBeenCalled();
+  expect(createWebTurnApplication).not.toHaveBeenCalled();
 }
 
 beforeEach(() => {

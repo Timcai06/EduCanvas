@@ -5,6 +5,9 @@
  * 只允许经 `@educanvas/db/internal` / `@educanvas/db/testing` 使用；生产代码不得绕过
  * 包入口直接引用 db 内部文件。本测试以 R04 台账盘点的全仓引用为基线，拒绝"新增"
  * 违约依赖，允许既有引用随 R05/R06 迁移逐步减少。
+ *
+ * tooling/ 自 Q01 回退后纳入扫描范围：评测/工具 harness 曾深度导入 db 内部源码绕过
+ * 包导出边界，该盲区随 Q01 revert 关闭（见 #293），此处补门禁防同类问题复现。
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +25,7 @@ import {
 } from '@educanvas/db/testing';
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const SOURCE_ROOTS = ['apps', 'packages', 'tests'];
+const SOURCE_ROOTS = ['apps', 'packages', 'tests', 'tooling'];
 const SKIP_DIRS = new Set([
   'node_modules',
   '.next',
