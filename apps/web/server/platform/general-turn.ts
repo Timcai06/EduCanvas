@@ -117,7 +117,8 @@ export function beginGatewayGeneralTurnApplication(input: {
     modelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),
-    trace: telemetry.turnTrace,
+    // 边界测试强制 trace 接线保持内联单例形状（telemetry-composition-boundary）。
+    trace: getWebTelemetryRuntime().turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',

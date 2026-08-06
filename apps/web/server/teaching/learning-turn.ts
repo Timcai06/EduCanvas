@@ -130,7 +130,8 @@ export function beginGatewayTeachingTurnApplication(input: {
       new DrizzleToolEffectRepository(),
     ),
     cancellation: new WebTeachingCancellation(input.signal),
-    trace: telemetry.turnTrace,
+    // 边界测试强制 trace 接线保持内联单例形状（telemetry-composition-boundary）。
+    trace: getWebTelemetryRuntime().turnTrace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',
