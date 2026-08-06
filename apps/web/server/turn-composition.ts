@@ -18,9 +18,11 @@ import type {
 import type {
   ToolKernelAdapter,
   ToolKernelPort,
+  TurnApplicationDependencies,
+  TurnApplicationPort,
   TurnApplicationTracePort,
 } from '@educanvas/agent-runtime';
-import { ToolKernel } from '@educanvas/agent-runtime';
+import { ToolKernel, createTurnApplication } from '@educanvas/agent-runtime';
 import {
   DrizzleAgentModelRunRepository,
   DrizzleAgentToolCallRepository,
@@ -28,6 +30,10 @@ import {
   DrizzleToolEffectRepository,
   DrizzleTurnUsageBudgetLedger,
 } from '@educanvas/db';
+import {
+  wrapTurnApplicationStream,
+  wrapTurnModelGatewayForMetrics,
+} from '@educanvas/telemetry';
 import { getWebTelemetryRuntime } from './telemetry/telemetry-runtime';
 
 /** 模型网关不可用时的诚实失败桩，不伪造空能力成功。 */
@@ -72,4 +78,29 @@ export function createWebToolKernel(
     new DrizzleAgentToolCallRepository(),
     new DrizzleToolEffectRepository(),
   );
+}
+
+/**
+ * Web 两条 Turn 入口的唯一 Application 工厂。
+ * 指标属于组合边界：观测包装不进入 Agent Loop，也不回流到入口复制装配。
+ */
+export function createWebTurnApplication(
+  dependencies: TurnApplicationDependencies,
+): TurnApplicationPort {
+  const telemetry = getWebTelemetryRuntime();
+  const application = createTurnApplication({
+    ...dependencies,
+    modelGateway: wrapTurnModelGatewayForMetrics(
+      dependencies.modelGateway,
+      telemetry.metrics,
+    ),
+  });
+  return {
+    run(command) {
+      return wrapTurnApplicationStream(
+        application.run(command),
+        telemetry.metrics,
+      );
+    },
+  };
 }

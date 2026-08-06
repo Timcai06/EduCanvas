@@ -172,6 +172,7 @@ const server = createServer(
           }
         : null,
     observability,
+    telemetry,
   }),
 );
 

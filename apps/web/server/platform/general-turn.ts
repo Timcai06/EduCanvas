@@ -5,7 +5,6 @@ import type {
   TurnApplicationCommand,
   TurnApplicationEvent,
 } from '@educanvas/agent-core';
-import { createTurnApplication } from '@educanvas/agent-runtime';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
   materializeAssetContextPlan,
@@ -26,6 +25,7 @@ import {
   WebOperationSources,
 } from './general-turn-tools';
 import {
+  createWebTurnApplication,
   createWebTurnLedgers,
   unavailableModelGateway,
 } from '../turn-composition';
@@ -83,7 +83,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     input.assetContext.nativeImages.length > 0 && runtime?.visionGateway
       ? runtime.visionGateway
       : (runtime?.gateway ?? unavailableModelGateway);
-  const service = createTurnApplication({
+  const service = createWebTurnApplication({
     lifecycle: new WebGeneralLifecycle(input.identity),
     profile: new WebGeneralProfile(
       input.assetContext,

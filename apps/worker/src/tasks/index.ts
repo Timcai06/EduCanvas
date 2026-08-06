@@ -7,8 +7,12 @@ import {
   ASSET_RENDER_PREVIEW_TASK,
   ASSET_TRANSCRIBE_AUDIO_TASK,
 } from '@educanvas/db';
-import type { ContinuationTracePort } from '@educanvas/telemetry';
-import type { TaskList } from 'graphile-worker';
+import {
+  recordMetricSafely,
+  type ContinuationTracePort,
+  type MetricsPort,
+} from '@educanvas/telemetry';
+import type { Task, TaskList } from 'graphile-worker';
 import {
   embedKnowledgeDocument,
   KNOWLEDGE_EMBED_DOCUMENT_TASK,
@@ -31,6 +35,48 @@ import { generateThumbnailTask } from './generate-thumbnail.js';
 import { processVideoTask } from './process-video.js';
 import { transcribeAudioTask } from './transcribe-audio.js';
 
+/** 任务名直接作为指标标签值，必须在注册时就是低基数短串。 */
+const TASK_LABEL_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+/**
+ * Q04：任务执行包装 — 记录 worker_task_total{task,status} 与
+ * worker_task_retry_total{task}（attempts>1 即为重试执行）。
+ * 任务名是编译期注册表闭集；标签值校验失败在引导期即抛错，不会污染任务结果。
+ */
+export function withTaskMetrics(
+  metrics: MetricsPort,
+): (taskName: string, handler: Task) => Task {
+  return (taskName, handler) => {
+    if (!TASK_LABEL_PATTERN.test(taskName)) {
+      throw new Error(`worker 任务名不符合指标标签格式: ${taskName}`);
+    }
+    return async (payload, helpers) => {
+      if (helpers.job.attempts > 1) {
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_retry_total', { task: taskName }),
+        );
+      }
+      try {
+        await handler(payload, helpers);
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_total', {
+            task: taskName,
+            status: 'success',
+          }),
+        );
+      } catch (error) {
+        recordMetricSafely(() =>
+          metrics.increment('worker_task_total', {
+            task: taskName,
+            status: 'failed',
+          }),
+        );
+        throw error;
+      }
+    };
+  };
+}
+
 /**
  * worker 的任务注册表。周期任务使用Graphile crontab兼容的 `域:动作` 命名;
  * 任务只能通过本注册表暴露,与 Tool Registry 同样是编译期显式白名单,
@@ -38,25 +84,63 @@ import { transcribeAudioTask } from './transcribe-audio.js';
  */
 export function createTaskList(input: {
   continuationTrace: ContinuationTracePort;
+  metrics: MetricsPort;
 }): TaskList {
+  const wrap = withTaskMetrics(input.metrics);
   return {
-    [ARTIFACT_GENERATE_TASK]: generateArtifact,
-    [ASSET_EXTRACT_TEXT_TASK]: extractAssetTextTask,
-    [ASSET_RENDER_PREVIEW_TASK]: renderPreviewTask,
-    [ASSET_GENERATE_THUMBNAIL_TASK]: generateThumbnailTask,
-    [ASSET_TRANSCRIBE_AUDIO_TASK]: transcribeAudioTask,
-    [ASSET_PROCESS_VIDEO_TASK]: processVideoTask,
-    [OPERATION_CONTINUATION_TASK]: createProductionContinueOperationTask(
-      input.continuationTrace,
+    [ARTIFACT_GENERATE_TASK]: wrap(ARTIFACT_GENERATE_TASK, generateArtifact),
+    [ASSET_EXTRACT_TEXT_TASK]: wrap(
+      ASSET_EXTRACT_TEXT_TASK,
+      extractAssetTextTask,
     ),
-    'knowledge:ingest_document': ingestKnowledgeDocument,
-    [KNOWLEDGE_EMBED_DOCUMENT_TASK]: embedKnowledgeDocument,
-    'maintenance:purge_anonymous_subjects': purgeAnonymousSubjects,
-    'maintenance:delete_object_outbox': deleteObjectOutbox,
-    'maintenance:recover_operation_continuations':
+    [ASSET_RENDER_PREVIEW_TASK]: wrap(
+      ASSET_RENDER_PREVIEW_TASK,
+      renderPreviewTask,
+    ),
+    [ASSET_GENERATE_THUMBNAIL_TASK]: wrap(
+      ASSET_GENERATE_THUMBNAIL_TASK,
+      generateThumbnailTask,
+    ),
+    [ASSET_TRANSCRIBE_AUDIO_TASK]: wrap(
+      ASSET_TRANSCRIBE_AUDIO_TASK,
+      transcribeAudioTask,
+    ),
+    [ASSET_PROCESS_VIDEO_TASK]: wrap(
+      ASSET_PROCESS_VIDEO_TASK,
+      processVideoTask,
+    ),
+    [OPERATION_CONTINUATION_TASK]: wrap(
+      OPERATION_CONTINUATION_TASK,
+      createProductionContinueOperationTask(input.continuationTrace),
+    ),
+    'knowledge:ingest_document': wrap(
+      'knowledge:ingest_document',
+      ingestKnowledgeDocument,
+    ),
+    [KNOWLEDGE_EMBED_DOCUMENT_TASK]: wrap(
+      KNOWLEDGE_EMBED_DOCUMENT_TASK,
+      embedKnowledgeDocument,
+    ),
+    'maintenance:purge_anonymous_subjects': wrap(
+      'maintenance:purge_anonymous_subjects',
+      purgeAnonymousSubjects,
+    ),
+    'maintenance:delete_object_outbox': wrap(
+      'maintenance:delete_object_outbox',
+      deleteObjectOutbox,
+    ),
+    'maintenance:recover_operation_continuations': wrap(
+      'maintenance:recover_operation_continuations',
       recoverOperationContinuations,
-    'maintenance:reconcile_tool_approval_intents': reconcileToolApprovalIntents,
-    [K12_CONVERSATION_BACKFILL_TASK]: backfillK12Conversation,
-    'system.heartbeat': systemHeartbeat,
+    ),
+    'maintenance:reconcile_tool_approval_intents': wrap(
+      'maintenance:reconcile_tool_approval_intents',
+      reconcileToolApprovalIntents,
+    ),
+    [K12_CONVERSATION_BACKFILL_TASK]: wrap(
+      K12_CONVERSATION_BACKFILL_TASK,
+      backfillK12Conversation,
+    ),
+    'system.heartbeat': wrap('system.heartbeat', systemHeartbeat),
   };
 }

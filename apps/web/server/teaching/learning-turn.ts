@@ -43,6 +43,7 @@ import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
 import {
+  createWebTurnApplication,
   createWebTurnLedgers,
   createWebToolKernel,
   unavailableModelGateway,
@@ -97,7 +98,7 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile.collectKnowledgeEvidence(candidateIds),
   );
   const runtime = resolveTurnModelRuntime();
-  const service = createTurnApplication({
+  const service = createWebTurnApplication({
     lifecycle: new WebTeachingLifecycle(input.identity, input.session.id),
     profile,
     contextLedger: ledgers.contextLedger,

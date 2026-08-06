@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { K12ConversationDualWriteInvariantError } from '@educanvas/db';
+import { NOOP_METRICS } from '@educanvas/telemetry';
 import {
   createBackfillK12ConversationTask,
   K12_CONVERSATION_BACKFILL_TASK,
@@ -33,9 +34,12 @@ describe('K12 Conversation 历史回填任务', () => {
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('"mode":"dry-run"'),
     );
-    expect(createTaskList({ continuationTrace: {} as never })).toHaveProperty(
-      K12_CONVERSATION_BACKFILL_TASK,
-    );
+    expect(
+      createTaskList({
+        continuationTrace: {} as never,
+        metrics: NOOP_METRICS,
+      }),
+    ).toHaveProperty(K12_CONVERSATION_BACKFILL_TASK);
   });
 
   it('只有显式 apply 才写入，并原样转发受控游标与批次', async () => {

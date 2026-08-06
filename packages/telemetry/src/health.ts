@@ -8,10 +8,16 @@ export type TelemetryHealthSnapshot =
 
 /** @internal 只保存低基数状态码，不保存Exporter异常或配置值。 */
 export class MutableTelemetryHealth {
+  private readonly onChange:
+    ((snapshot: TelemetryHealthSnapshot) => void) | null;
   private current: TelemetryHealthSnapshot;
 
-  constructor(initial: TelemetryHealthSnapshot) {
+  constructor(
+    initial: TelemetryHealthSnapshot,
+    onChange?: (snapshot: TelemetryHealthSnapshot) => void,
+  ) {
     this.current = initial;
+    this.onChange = onChange ?? null;
   }
 
   snapshot(): TelemetryHealthSnapshot {
@@ -20,6 +26,7 @@ export class MutableTelemetryHealth {
 
   ready(): void {
     this.current = { status: 'ready' };
+    this.onChange?.(this.current);
   }
 
   degraded(
@@ -29,5 +36,6 @@ export class MutableTelemetryHealth {
     >['failureCode'],
   ): void {
     this.current = { status: 'degraded', failureCode };
+    this.onChange?.(this.current);
   }
 }
