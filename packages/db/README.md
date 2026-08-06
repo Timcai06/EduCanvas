@@ -6,7 +6,10 @@
 
 ## 核心文件导读
 
-- `src/index.ts`：包的公共出口，统一导出数据库客户端、表定义、仓储和Drizzle适配器。
+- `src/index.ts`：包的公共出口，保持稳定 Repository、Port Adapter 与公开类型；schema 表按需显式导出，不再 `export *` 全量泄漏（R04）。getDb 与 17 个指定 schema 表仍为暂时兼容出口，实际移除属 R06/R08。
+- `src/internal/index.ts`：受控 subpath `@educanvas/db/internal`，导出 `getDb`、schema 全量与迁移辅助（迁移目标）；生产业务代码禁止导入（见 `src/import-boundary.test.ts` 门禁）。
+- `src/testing/index.ts`：受控 subpath `@educanvas/db/testing`，测试专用入口，导出 `getDb` 与 schema 全量；生产代码禁止导入。
+- `src/import-boundary.test.ts`：R04 静态边界门禁，锁定全仓 `@educanvas/db` 导入形态（默认入口白名单、schema 表与内部 subpath 拒绝、动态 import/namespace 绕过拒绝、包入口深路径拒绝）。
 - `src/client.ts`：读取`DATABASE_URL`并惰性创建Drizzle客户端，避免构建阶段连接数据库。
 - `src/schema.ts`：阶段一学习会话、对话/Model Run账本、Canvas产物、学习事件和掌握度表。
 - `src/schema/study.ts`：最小学习者画像、Notebook Goal/Objectives与诊断Attempt/Responses，单独成文件避免继续放大主Schema。
