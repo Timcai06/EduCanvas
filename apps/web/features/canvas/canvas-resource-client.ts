@@ -2,15 +2,19 @@ import {
   validateCanvasResource,
   type CanvasResource,
 } from '@educanvas/canvas-protocol';
+import {
+  classifyHttpStatus,
+  toOfflineError,
+  type ResourceError,
+  type ResourceErrorKind,
+} from './resource-error';
 
 const RESOURCES_ENDPOINT = '/api/v1/canvas/resources';
 
-export type CanvasResourceClientErrorKind = 'denied' | 'unavailable' | 'failed';
+/* W03：统一错误语义。原 denied 统一为 forbidden，新增 not_found 与 offline。 */
+export type CanvasResourceClientErrorKind = Exclude<ResourceErrorKind, 'empty'>;
 
-export interface CanvasResourceClientError {
-  readonly kind: CanvasResourceClientErrorKind;
-  readonly message: string;
-}
+export type CanvasResourceClientError = ResourceError;
 
 /**
  * 统一资源描述客户端：只读取 CanvasResource 元数据（不含内容本体）。
@@ -36,65 +40,56 @@ export async function fetchCanvasResource(
       signal: options.signal,
     });
   } catch (error: unknown) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'name' in error &&
-      error.name === 'AbortError'
-    ) {
-      throw error;
-    }
+    /* 取消（AbortError）不是失败，调用方应忽略过期请求；网络层失败统一判为 offline。 */
     throw canvasResourceClientError(
-      'failed',
-      '无法连接到服务器，请检查网络后重试。',
+      toOfflineError(error, '无法连接到服务器，请检查网络后重试。'),
     );
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw canvasResourceClientError('denied', '没有权限访问这个资源。');
-    }
-    if (response.status === 404 || response.status === 422) {
-      throw canvasResourceClientError(
-        'unavailable',
-        '这个资源不存在或无法加载。',
-      );
-    }
-    if (response.status === 503) {
-      throw canvasResourceClientError(
-        'unavailable',
-        '服务暂时不可用，请稍后重试。',
-      );
-    }
-    throw canvasResourceClientError('failed', '请求失败，请稍后重试。');
+    const kind = classifyHttpStatus(response.status);
+    const message =
+      kind === 'forbidden'
+        ? '没有权限访问这个资源。'
+        : kind === 'not_found'
+          ? '这个资源不存在或已被删除。'
+          : kind === 'unavailable'
+            ? '服务暂时不可用，请稍后重试。'
+            : '请求失败，请稍后重试。';
+    throw canvasResourceClientError({ kind, message });
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    throw canvasResourceClientError('failed', '服务器响应格式不正确。');
+    throw canvasResourceClientError({
+      kind: 'failed',
+      message: '服务器响应格式不正确。',
+    });
   }
 
   const record = body as Record<string, unknown>;
   if (!record || typeof record !== 'object' || !('resource' in record)) {
-    throw canvasResourceClientError('unavailable', '服务器未返回有效资源。');
+    throw canvasResourceClientError({
+      kind: 'unavailable',
+      message: '服务器未返回有效资源。',
+    });
   }
 
   const validation = validateCanvasResource(record.resource);
   if (!validation.ok) {
-    throw canvasResourceClientError(
-      'unavailable',
-      '资源描述不兼容，请更新后重试。',
-    );
+    throw canvasResourceClientError({
+      kind: 'unavailable',
+      message: '资源描述不兼容，请更新后重试。',
+    });
   }
 
   return validation.resource;
 }
 
 function canvasResourceClientError(
-  kind: CanvasResourceClientErrorKind,
-  message: string,
+  error: ResourceError,
 ): CanvasResourceClientError {
-  return { kind, message };
+  return error;
 }

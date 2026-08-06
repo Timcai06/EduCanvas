@@ -26,6 +26,23 @@ function serializeToolOutput(output: unknown): string {
   }
 }
 
+/** 在 UTF-16 代码单元上有界截断，但绝不把 surrogate pair 从中间切开。 */
+function sliceWithoutSplittingSurrogatePair(
+  text: string,
+  maxCodeUnits: number,
+): string {
+  let end = Math.min(text.length, maxCodeUnits);
+  if (
+    end > 0 &&
+    end < text.length &&
+    /[\uD800-\uDBFF]/u.test(text[end - 1] ?? '') &&
+    /[\uDC00-\uDFFF]/u.test(text[end] ?? '')
+  ) {
+    end -= 1;
+  }
+  return text.slice(0, end);
+}
+
 /** 请求正文的估算输入 token：messages + 工具结果正文，与 Provider 无关。 */
 function estimateRequestInputTokens(request: StreamAgentTextRequest): number {
   const messagesText = request.messages
@@ -128,16 +145,12 @@ export class TurnUsageBudgetController {
     this.pendingUsage = usage;
   }
 
-  /**
-   * 每次 run 收敛后（成功）复查累计量。失败 run 交给其自身失败码，
-   * 预算复查由下一次调用尝试的预检承担。
-   */
+  /** 每次模型尝试收敛后结算用量；失败尝试只记账，不覆盖其原有失败码。 */
   checkAfterModelRun(input: {
     run: number;
     ok: boolean;
     textCharacters: number;
   }): BudgetBreachReason | null {
-    if (!input.ok) return null;
     const usage = this.pendingUsage;
     const outputDelta = Math.max(
       0,
@@ -172,6 +185,9 @@ export class TurnUsageBudgetController {
     }
     this.pendingEstInputTokens = 0;
 
+    /* 失败尝试的 token/成本也必须进入账本，但终态仍由原模型错误决定。 */
+    if (!input.ok) return null;
+
     if (this.inputTokens > this.budget.maxInputTokens) {
       return 'max_input_tokens';
     }
@@ -194,6 +210,8 @@ export class TurnUsageBudgetController {
     if (this.toolCalls + input.calls.length > this.budget.maxToolCalls) {
       return 'max_tool_calls';
     }
+    /* 预检通过即预留本批调用数：即使适配器失败，成本账本也不能漏计。 */
+    this.toolCalls += input.calls.length;
     return null;
   }
 
@@ -202,14 +220,13 @@ export class TurnUsageBudgetController {
    * 返回可安全喂给模型的副本；未超限时原样返回。
    */
   observeToolResult(result: ModelToolResult): ModelToolResult {
-    this.toolCalls += 1;
     const text = serializeToolOutput(result.output);
     if (estimateTokensFromText(text) <= this.budget.maxToolResultTokens) {
       return result;
     }
     this.toolResultsTruncated += 1;
     const keptChars = this.budget.maxToolResultTokens * CHARS_PER_TOKEN;
-    const kept = text.slice(0, keptChars);
+    const kept = sliceWithoutSplittingSurrogatePair(text, keptChars);
     return {
       ...result,
       output: `${kept}\n\n[工具结果过长已截断：保留 ${kept.length} 字符]`,

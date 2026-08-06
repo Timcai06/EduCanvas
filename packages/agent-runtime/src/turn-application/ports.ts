@@ -1,6 +1,7 @@
 import type {
   ModelAbortSignal,
   ModelMessage,
+  ModelToolDefinition,
   StreamingTaskAlias,
   TurnApplicationCommand,
   TurnApplicationEvent,
@@ -9,7 +10,11 @@ import type {
   W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
-import type { ToolKernelPolicyContext } from '../tool-kernel';
+import type {
+  ToolKernelExecuteRequest,
+  ToolKernelPolicyContext,
+  ToolKernelResult,
+} from '../tool-kernel';
 
 /**
  * Turn Application 的公开 Port 与 Plan/Snapshot/Guard 类型。
@@ -209,4 +214,25 @@ export interface TurnApplicationTracePort {
     profileId: string;
     entrypoint: TurnApplicationCommand['entrypoint'];
   }): TurnApplicationTraceSpan;
+}
+
+/**
+ * Tool Kernel 的抽象 Port（R 线 R06）。
+ *
+ * Turn Application 只依赖此接口，不依赖具体 `ToolKernel` 类。
+ * 具体实现（`ToolKernel`）在 agent-runtime 内部，生产装配点
+ * （Web General/Teaching、Gateway）通过本接口注入已装配的 Kernel。
+ * 这保证 Turn Application 组合契约不含具体 runtime 类。
+ */
+export interface ToolKernelPort {
+  /** 按工具名查找对应的 capability 标识；未注册返回 null。 */
+  capabilityFor(tool: string): string | null;
+
+  /** 根据策略上下文返回当前 Profile 允许暴露给模型的工具定义列表。 */
+  listDefinitions(
+    context: ToolKernelPolicyContext,
+  ): readonly ModelToolDefinition[];
+
+  /** 执行单次工具调用；幂等、策略、审批全部在 Kernel 内部处理。 */
+  execute(request: ToolKernelExecuteRequest): Promise<ToolKernelResult>;
 }

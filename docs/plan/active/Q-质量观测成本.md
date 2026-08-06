@@ -7,7 +7,7 @@
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-06
 - 当前领取任务：`Q00`
-- 并行计划：[R 运行时收敛](R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
+- 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[KM 知识记忆](KM-知识记忆.md)
 
@@ -327,16 +327,16 @@ Q00
 
 ## 七、验证台账
 
-| 任务            | 状态      | 证据                                          |
-| --------------- | --------- | --------------------------------------------- |
-| Q00 指标冻结    | `PENDING` | metric contract                               |
-| Q01 RAG eval    | `PENDING` | frozen dataset + report                       |
-| Q02 降级观测    | `PENDING` | reason matrix + telemetry tests               |
-| Q03 Turn budget | `DONE`    | budget controller + ledger（Q03 PR，CI 全绿） |
-| Q04 SLO/Runbook | `PENDING` | metrics + fault injection                     |
-| Q05 测试真实性  | `PENDING` | CI summary + browser/coverage/bundle          |
-| Q06 供应链发布  | `PENDING` | dependency/migration/release gates            |
-| Q07 收口        | `PENDING` | reproducible baseline report                  |
+| 任务            | 状态      | 证据                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q00 指标冻结    | `PENDING` | metric contract                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q01 RAG eval    | `PENDING` | frozen dataset + report                                                                                                                                                                                                                                                                                                                                                                                    |
+| Q02 降级观测    | `PENDING` | 9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；待验收 |
+| Q03 Turn budget | `DONE`    | budget controller + ledger（Q03 PR，CI 全绿）                                                                                                                                                                                                                                                                                                                                                              |
+| Q04 SLO/Runbook | `PENDING` | metrics + fault injection                                                                                                                                                                                                                                                                                                                                                                                  |
+| Q05 测试真实性  | `PENDING` | CI summary + browser/coverage/bundle                                                                                                                                                                                                                                                                                                                                                                       |
+| Q06 供应链发布  | `PENDING` | dependency/migration/release gates                                                                                                                                                                                                                                                                                                                                                                         |
+| Q07 收口        | `PENDING` | reproducible baseline report                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## 八、阶段级验证
 

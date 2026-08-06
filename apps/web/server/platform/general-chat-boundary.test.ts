@@ -25,7 +25,8 @@ describe('默认通用Chat产品边界', () => {
       source('./general-turn.ts'),
       source('./general-turn-profile.ts'),
     ].join('\n');
-    expect(turn).toContain('TurnApplicationService');
+    expect(turn).toContain('createTurnApplication');
+    expect(turn).not.toContain('new TurnApplicationService');
     expect(turn).toContain('默认不要假定用户是学生');
     expect(turn).toContain('以教育能力为特色的通用个人 Agent');
     expect(turn).toContain('不要求用户先切换模式');
@@ -68,5 +69,18 @@ describe('默认通用Chat产品边界', () => {
     );
     expect(profile).toContain('resolveWebGeneralToolPolicy');
     expect(profile).not.toContain('command.capabilities.includes');
+  });
+
+  it('Web General每个Turn只解析一次模型配置并复用同一运行时对象', () => {
+    const runner = source('../gateway/web-turn.ts');
+    const turn = source('./general-turn.ts');
+
+    expect(runner.match(/resolveTurnModelRuntime\(\)/g)).toHaveLength(1);
+    expect(runner).toContain('modelRuntime,');
+    expect(turn).not.toContain('resolveTurnModelRuntime(');
+    expect(turn).toContain(
+      'nativeAssetKinds: input.modelRuntime?.nativeAssetKinds',
+    );
+    expect(turn).toContain('const runtime = input.modelRuntime');
   });
 });

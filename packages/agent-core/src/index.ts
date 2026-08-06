@@ -116,6 +116,11 @@ export type {
   TurnUsageBudgetLedgerEntry,
   TurnUsageBudgetLedgerPort,
 } from './turn-usage-budget';
+export {
+  RETRIEVAL_DEGRADATION_REASONS,
+  embeddingGatewayErrorToRetrievalDegradation,
+} from './retrieval-degradation';
+export type { RetrievalDegradationReason } from './retrieval-degradation';
 export type {
   AudioTranscriptionModelGateway,
   AudioTranscriptionRequest,

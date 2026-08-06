@@ -377,6 +377,13 @@ export class AgentLoopEngine {
           };
           return;
         }
+        if (!outcome.ok) {
+          command.usageBudget?.checkAfterModelRun({
+            run,
+            ok: false,
+            textCharacters,
+          });
+        }
         if (
           outcome.ok ||
           emittedEvent ||
@@ -576,6 +583,13 @@ export class AgentLoopEngine {
           error: { code: 'unknown', retryable: true },
         };
         return;
+      }
+      if (!synthesisOutcome.ok) {
+        command.usageBudget?.checkAfterModelRun({
+          run,
+          ok: false,
+          textCharacters,
+        });
       }
       if (
         synthesisOutcome.ok ||

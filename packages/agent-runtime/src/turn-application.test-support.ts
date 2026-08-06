@@ -7,7 +7,7 @@ import type {
   TurnModelGateway,
 } from '@educanvas/agent-core';
 import {
-  TurnApplicationService,
+  type TurnApplicationPort,
   type TurnApplicationLifecyclePort,
   type TurnApplicationProfileEvent,
   type TurnApplicationProfilePort,
@@ -243,7 +243,7 @@ export function metadata(
   } as const;
 }
 
-export async function collect(service: TurnApplicationService) {
+export async function collect(service: TurnApplicationPort) {
   const events: TurnApplicationEvent[] = [];
   for await (const event of service.run(command)) events.push(event);
   return events;

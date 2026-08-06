@@ -29,9 +29,9 @@ import {
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
-  getDb,
   requireNotebookAccess,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import { resolveSherpaStreamingTranscriptionGateway } from '@educanvas/model-gateway';
 import {
   createDefaultGatewayConnectionProviders,

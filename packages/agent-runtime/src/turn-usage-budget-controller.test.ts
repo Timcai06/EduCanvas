@@ -235,14 +235,14 @@ describe('TurnUsageBudgetController（Q03）', () => {
   it('工具调用按批次投影检查：执行数 + 待执行数超限即拒绝', () => {
     const budget = { ...baseBudget, maxToolCalls: 2 };
     const controller = new TurnUsageBudgetController(budget);
-    const result = {
-      callId: 'c1',
-      tool: 'search',
-      arguments: {},
-      output: 'ok',
-    };
-    controller.observeToolResult(result);
-    controller.observeToolResult(result);
+    expect(
+      controller.checkBeforeToolExecution({
+        calls: [
+          { callId: 'c1', tool: 'search' },
+          { callId: 'c2', tool: 'search' },
+        ],
+      }),
+    ).toBeNull();
     // 已执行 2 个 + 本批 1 个 = 3 > 2。
     expect(
       controller.checkBeforeToolExecution({
@@ -254,6 +254,14 @@ describe('TurnUsageBudgetController（Q03）', () => {
   it('超限工具结果按截断协议替换，未超限原样返回', () => {
     const budget = { ...baseBudget, maxToolResultTokens: 2 }; // 2 token → 8 字符
     const controller = new TurnUsageBudgetController(budget);
+    expect(
+      controller.checkBeforeToolExecution({
+        calls: [
+          { callId: 'c1', tool: 'search' },
+          { callId: 'c2', tool: 'search' },
+        ],
+      }),
+    ).toBeNull();
     const underLimit = {
       callId: 'c1',
       tool: 'search',
@@ -279,10 +287,37 @@ describe('TurnUsageBudgetController（Q03）', () => {
     expect(snapshot.toolResultsTruncated).toBe(1);
   });
 
-  it('失败 run 不记账，也不影响后续成功 run 的收敛复查', () => {
+  it('工具结果截断不会切断 UTF-16 surrogate pair', () => {
+    const controller = new TurnUsageBudgetController({
+      ...baseBudget,
+      maxToolResultTokens: 1,
+    });
+    const observed = controller.observeToolResult({
+      callId: 'emoji',
+      tool: 'search',
+      arguments: {},
+      output: 'abc😀tail',
+    });
+    expect(observed.output).toMatch(/^abc\n\n\[工具结果过长已截断/);
+  });
+
+  it('失败 run 的 usage 进入账本，但不覆盖后续成功 run 的终态', () => {
     const controller = new TurnUsageBudgetController(baseBudget);
     expect(
-      controller.checkAfterModelRun({ run: 1, ok: false, textCharacters: 50 }),
+      controller.checkBeforeModelCall({
+        run: 1,
+        attempt: 0,
+        request: request(),
+      }),
+    ).toBeNull();
+    controller.observeUsage({
+      inputTokens: 12,
+      outputTokens: 3,
+      cacheHitTokens: 0,
+      reasoningTokens: 0,
+    });
+    expect(
+      controller.checkAfterModelRun({ run: 1, ok: false, textCharacters: 0 }),
     ).toBeNull();
     expect(
       controller.checkBeforeModelCall({
@@ -295,8 +330,8 @@ describe('TurnUsageBudgetController（Q03）', () => {
       controller.checkAfterModelRun({ run: 2, ok: true, textCharacters: 50 }),
     ).toBeNull();
     const snapshot = controller.snapshot();
-    // 失败 run 没有记入调用数；文本增量只计成功 run 的部分。
-    expect(snapshot.modelCalls).toBe(1);
-    expect(snapshot.outputTokens).toBe(Math.ceil(50 / 4));
+    expect(snapshot.modelCalls).toBe(2);
+    expect(snapshot.inputTokens).toBeGreaterThan(12);
+    expect(snapshot.outputTokens).toBe(3 + Math.ceil(50 / 4));
   });
 });

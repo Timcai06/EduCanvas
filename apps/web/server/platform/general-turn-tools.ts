@@ -1,12 +1,10 @@
 import 'server-only';
 
-import { adaptAgentTool, ToolKernel } from '@educanvas/agent-runtime';
+import { adaptAgentTool, type ToolKernelPort } from '@educanvas/agent-runtime';
 import {
-  DrizzleAgentToolCallRepository,
   DrizzleGatewayNodeRepository,
   DrizzleMcpIntentRepository,
   DrizzleToolApprovalIntentRepository,
-  DrizzleToolEffectRepository,
   type PlatformOperationSourceSnapshot,
 } from '@educanvas/db';
 import { createMcpRuntimeFromEnvironment } from '@educanvas/mcp-runtime';
@@ -26,6 +24,7 @@ import {
   type WebOperationImageArtifacts,
 } from './general-image-tool';
 import { webGeneralSources } from './general-turn-persistence';
+import { createWebToolKernel } from '../turn-composition';
 
 const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
   durableIntents: new DrizzleMcpIntentRepository(),
@@ -83,7 +82,7 @@ export function createGeneralToolKernel(
   operationArtifacts: WebOperationArtifacts,
   operationImages: WebOperationImageArtifacts,
 ): {
-  kernel: ToolKernel;
+  kernel: ToolKernelPort;
   staticCapabilities: readonly string[];
   nodeInvocations: NodeInvocationPersistencePort;
 } {
@@ -137,11 +136,7 @@ export function createGeneralToolKernel(
     ...createNodeToolAdapters(nodeInvocations),
   ];
   return {
-    kernel: new ToolKernel(
-      adapters,
-      new DrizzleAgentToolCallRepository(),
-      new DrizzleToolEffectRepository(),
-    ),
+    kernel: createWebToolKernel(adapters),
     staticCapabilities: [
       ...localAdapters.map((adapter) => adapter.capability),
       ...mcpRuntime.capabilities,
