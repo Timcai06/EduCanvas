@@ -19,9 +19,19 @@
  * | provider_rate_limits | Provider 限流次数 |
  * | tool_rejections | 工具执行拒绝次数 |
  * | citation_invalid | 引用标注无效次数 |
+ * | retrieval_degradations | 混合检索降级次数（按 Q02 低基数 reason 分桶） |
+ *
+ * retrieval_degradations 的用法：vector applied rate = 1 - (各 reason 计数之和
+ * / 检索总数)；fallback rate 由 corpus_not_embedded/vector_query_timeout 等
+ * 回退类 reason 合计；长期隐性降级（如模型升级后语料未重嵌入的
+ * invalid_configuration）靠 reason 分布识别。
  */
 
-import type { ModelAlias, TaskAlias } from '@educanvas/agent-core';
+import type {
+  ModelAlias,
+  RetrievalDegradationReason,
+  TaskAlias,
+} from '@educanvas/agent-core';
 import type {
   TeachingSafetyAction,
   TeachingSafetyCategory,
@@ -43,6 +53,7 @@ export const teachingMetricNames = Object.freeze([
   'tool_rejections',
   'citation_invalid',
   'anonymous_cleanup_failures',
+  'retrieval_degradations',
 ] as const);
 
 export const observableProviderAliases = Object.freeze([
@@ -103,10 +114,30 @@ export type TeachingMetricEvent =
     })
   | (NumericMetric<'anonymous_cleanup_failures'> & {
       code: 'transaction_failed' | 'residual_rows' | 'unknown';
+    })
+  | (NumericMetric<'retrieval_degradations'> & {
+      /** 封闭的 9 值 reason 联合，禁止扩展为自由文本（低基数标签约束）。 */
+      reason: RetrievalDegradationReason;
     });
 
 export interface TeachingObservabilityPort {
   record(metric: Readonly<TeachingMetricEvent>): void;
+}
+
+/**
+ * 记录一次混合检索降级（Q02）。供 Embedding/RAG runtime 在
+ * `retrieveHybrid` 结果带 degradationReason 时调用；低基数 reason 标签，
+ * 不携带 query 正文、embedding 或供应商响应。
+ */
+export function recordRetrievalDegradation(
+  port: TeachingObservabilityPort | undefined,
+  reason: RetrievalDegradationReason,
+): void {
+  recordTeachingMetric(port, {
+    name: 'retrieval_degradations',
+    value: 1,
+    reason,
+  });
 }
 
 /** 指标是best-effort旁路，不能因观测后端故障改变教学结果。 */

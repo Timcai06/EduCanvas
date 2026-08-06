@@ -1,5 +1,7 @@
+import { RETRIEVAL_DEGRADATION_REASONS } from '@educanvas/agent-core';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  recordRetrievalDegradation,
   recordTeachingMetric,
   teachingMetricNames,
   type TeachingMetricEvent,
@@ -20,6 +22,7 @@ describe('low-cardinality teaching observability', () => {
       'tool_rejections',
       'citation_invalid',
       'anonymous_cleanup_failures',
+      'retrieval_degradations',
     ]);
     expect(Object.isFrozen(teachingMetricNames)).toBe(true);
 
@@ -71,5 +74,27 @@ describe('low-cardinality teaching observability', () => {
         },
       ),
     ).not.toThrow();
+  });
+
+  it('检索降级指标：9 个 Q02 reason 均可记录，事件不含正文类字段', () => {
+    const record = vi.fn();
+    const port: TeachingObservabilityPort = { record };
+    for (const reason of RETRIEVAL_DEGRADATION_REASONS) {
+      recordRetrievalDegradation(port, reason);
+    }
+    expect(record).toHaveBeenCalledTimes(RETRIEVAL_DEGRADATION_REASONS.length);
+    for (const call of record.mock.calls) {
+      const event = call[0] as TeachingMetricEvent & { name: string };
+      expect(event.name).toBe('retrieval_degradations');
+      expect(event.value).toBe(1);
+      expect(event).not.toHaveProperty('text');
+      expect(event).not.toHaveProperty('query');
+      expect(event).not.toHaveProperty('embedding');
+      expect(event).not.toHaveProperty('providerBody');
+    }
+    // reason 标签封闭在 9 值联合内：任意 reason 都通过类型检查并可穷举。
+    expect(
+      record.mock.calls.map((call) => (call[0] as { reason: string }).reason),
+    ).toEqual(RETRIEVAL_DEGRADATION_REASONS);
   });
 });
