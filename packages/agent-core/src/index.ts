@@ -101,11 +101,26 @@ export {
 } from './model-contracts';
 
 export {
+  CHARS_PER_TOKEN,
+  TURN_USAGE_BUDGET_TEMPLATES,
+  budgetBreachReasons,
+  estimateTokensFromText,
+  estimateUsageCostUsdCents,
+  turnPricingPerMillionTokens,
+  turnUsageBudgetSchema,
+  usageMissing,
+} from './turn-usage-budget';
+export type {
+  BudgetBreachReason,
+  TurnUsageBudget,
+  TurnUsageBudgetLedgerEntry,
+  TurnUsageBudgetLedgerPort,
+} from './turn-usage-budget';
+export {
   RETRIEVAL_DEGRADATION_REASONS,
   embeddingGatewayErrorToRetrievalDegradation,
 } from './retrieval-degradation';
 export type { RetrievalDegradationReason } from './retrieval-degradation';
-
 export type {
   AudioTranscriptionModelGateway,
   AudioTranscriptionRequest,

@@ -97,6 +97,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     ),
     contextLedger: ledgers.contextLedger,
     modelRunLedger: ledgers.modelRunLedger,
+    usageBudgetLedger: ledgers.usageBudgetLedger,
     modelGateway,
     toolKernel: tools.kernel,
     cancellation: new WebGeneralCancellation(input.signal),

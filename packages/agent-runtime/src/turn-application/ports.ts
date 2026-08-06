@@ -6,6 +6,7 @@ import type {
   TurnApplicationCommand,
   TurnApplicationEvent,
   TurnApplicationFailureCode,
+  TurnUsageBudget,
   W3cTraceCarrier,
 } from '@educanvas/agent-core';
 import type { ContextSegment } from '../context-engine';
@@ -110,6 +111,8 @@ export interface TurnApplicationProfilePlan {
     promptVersion: string;
     synthesisPromptVersion?: string;
     maxToolRounds: number;
+    /** Q03：本 Profile 的 Turn 使用预算（服务端冻结）；省略表示不执行预算。 */
+    usageBudget?: TurnUsageBudget;
   };
   /** 省略表示该 Profile 此轮不暴露任何 Tool。 */
   toolPolicy?: TurnApplicationToolPolicy;
