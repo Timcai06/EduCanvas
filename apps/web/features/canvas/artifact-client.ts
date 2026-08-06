@@ -92,6 +92,15 @@ export interface GeneratedImageMedia {
 
 export type ArtifactMedia = AudioOverviewMedia | GeneratedImageMedia;
 
+/**
+ * Artifact 版本的受控渲染数据：组合层打开时注入 Registry Renderer 的 `content` 槽。
+ * 只携带版本的内容与媒体引用，不含原始存储地址、堆栈或内部对象键。
+ */
+export interface ArtifactVersionData {
+  readonly content: unknown;
+  readonly media: ArtifactMedia | null;
+}
+
 const ARTIFACTS_ENDPOINT = '/api/v1/chat/artifacts';
 
 const artifactSummarySchema = z.object({

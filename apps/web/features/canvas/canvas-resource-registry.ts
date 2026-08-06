@@ -10,9 +10,13 @@ import {
  * Props for every local trusted Canvas Renderer component.
  * The registry only hands out ComponentType<CanvasResourceRendererProps>;
  * callers must not receive raw manifest, URL, or loader references.
+ *
+ * `content` 是打开 Artifact 时由组合层注入的受控版本数据（`ArtifactVersionData`），
+ * 仅 Artifact Renderer 使用；Source 内容经 preview 端点读取，不使用该槽。
  */
 export interface CanvasResourceRendererProps {
   resource: CanvasResource;
+  content?: unknown;
 }
 
 /** Discriminated union: the caller must switch on `kind` to narrow. */
