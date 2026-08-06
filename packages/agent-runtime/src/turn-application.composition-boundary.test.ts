@@ -91,8 +91,17 @@ describe('Turn Application 唯一组合工厂（R06）', () => {
       if (entry === 'apps/gateway/src/agent-runner.ts') {
         expect(src).toContain('createGatewayTurnApplication(');
       } else {
-        expect(src).toContain('createTurnApplication(');
+        // Web 入口经 createWebTurnApplication 组合根（R06 引入 turn-composition 后收口）
+        expect(src).toContain('createWebTurnApplication(');
       }
+    }
+    // 组合根仍必须经唯一工厂 createTurnApplication 组装，避免入口绕过门禁。
+    for (const composition of [
+      'apps/web/server/turn-composition.ts',
+      'apps/gateway/src/turn-composition.ts',
+    ]) {
+      const src = readFileSync(join(ROOT, composition), 'utf8');
+      expect(src).toContain('createTurnApplication(');
     }
   });
 

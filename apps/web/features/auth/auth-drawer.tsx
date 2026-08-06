@@ -2,7 +2,7 @@
 
 import { ArrowUpRight } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { Sheet } from '@/features/workspace/shared/sheet';
+import { Sheet } from '@/components/sheet';
 import { AuthForm } from './auth-form';
 
 type Mode = 'login' | 'register';

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ConnectionSettings } from '@/features/settings/connection-settings';
 import { ProfileSettings } from '@/features/settings/profile-settings';
 import { ThemeToggle } from '@/features/theme/theme-toggle';
-import { Sheet } from '@/features/workspace/shared/sheet';
+import { Sheet } from '@/components/sheet';
 import { AuroraInk } from './aurora-ink';
 import { CountUp } from './count-up';
 import {

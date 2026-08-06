@@ -7,7 +7,7 @@ import {
   Warning,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sheet } from '@/features/workspace/shared/sheet';
+import { Sheet } from '@/components/sheet';
 import {
   createArtifact,
   fetchArtifactDetail,

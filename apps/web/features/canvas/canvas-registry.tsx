@@ -17,7 +17,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { useId, useState, type ComponentType } from 'react';
-import { GradeMark } from '@/features/workspace/shared/two-pen-marks';
+import { GradeMark } from '@/components/two-pen-marks';
 import {
   AnimationShell,
   type AnimationClientObservation,
