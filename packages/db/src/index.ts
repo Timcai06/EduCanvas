@@ -468,3 +468,4 @@ export {
   type ClaimedWebRuntimeBootstrap,
   type WebRuntimeRunSnapshot,
 } from './web-runtime-run-repository';
+export { DrizzleTurnUsageBudgetLedger } from './turn-usage-budget-repository';

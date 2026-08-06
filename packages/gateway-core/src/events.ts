@@ -46,6 +46,8 @@ export const gatewayFailureCodes = [
   'RUNTIME_FAILED',
   'DELIVERY_FAILED',
   'CANCELLED',
+  /** Q03：Turn 超预算终态；retryable=false，客户端须新建 Turn 才能继续。 */
+  'BUDGET_EXCEEDED',
   'INTERNAL_ERROR',
 ] as const;
 export const gatewayFailureCodeSchema = z.enum(gatewayFailureCodes);

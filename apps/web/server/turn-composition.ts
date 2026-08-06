@@ -11,7 +11,10 @@
  */
 import 'server-only';
 
-import type { TurnModelGateway } from '@educanvas/agent-core';
+import type {
+  TurnModelGateway,
+  TurnUsageBudgetLedgerPort,
+} from '@educanvas/agent-core';
 import type {
   ToolKernelAdapter,
   ToolKernelPort,
@@ -23,6 +26,7 @@ import {
   DrizzleAgentToolCallRepository,
   DrizzleAgentTurnContextRepository,
   DrizzleToolEffectRepository,
+  DrizzleTurnUsageBudgetLedger,
 } from '@educanvas/db';
 import { getWebTelemetryRuntime } from './telemetry/telemetry-runtime';
 
@@ -45,11 +49,13 @@ export const unavailableModelGateway: TurnModelGateway = {
 export function createWebTurnLedgers(): {
   contextLedger: DrizzleAgentTurnContextRepository;
   modelRunLedger: DrizzleAgentModelRunRepository;
+  usageBudgetLedger: TurnUsageBudgetLedgerPort;
   trace: TurnApplicationTracePort;
 } {
   return {
     contextLedger: new DrizzleAgentTurnContextRepository(),
     modelRunLedger: new DrizzleAgentModelRunRepository(),
+    usageBudgetLedger: new DrizzleTurnUsageBudgetLedger(),
     trace: getWebTelemetryRuntime().turnTrace,
   };
 }

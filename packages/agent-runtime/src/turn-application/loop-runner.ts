@@ -1,4 +1,5 @@
 import type {
+  BudgetBreachReason,
   NormalizedModelError,
   TurnApplicationCommand,
   TurnApplicationEvent,
@@ -7,6 +8,7 @@ import type {
 } from '@educanvas/agent-core';
 import { turnApplicationProtocolVersion } from '@educanvas/agent-core';
 import { AgentLoopEngine } from '../agent-loop';
+import { TurnUsageBudgetController } from '../turn-usage-budget-controller';
 import type { TurnApplicationDependencies } from './dependencies';
 import { validGuardDeltas, validPublicDelta } from './helpers';
 import {
@@ -18,6 +20,7 @@ import type {
   TurnApplicationLifecycleSnapshot,
   TurnApplicationOutputGuardPort,
   TurnApplicationOutputGuardPushResult,
+  TurnApplicationTraceSpan,
 } from './ports';
 import type { PreparedTurnApplication } from './preparation';
 import {
@@ -34,6 +37,8 @@ export interface TurnLoopOutcome {
   toolFailure: TurnToolFailure | null;
   outputBlocked: TurnApplicationFailureCode | null;
   outputGuardFailed: boolean;
+  /** Q03：超预算终态的具体维度；非 null 时必须是唯一终态。 */
+  budgetFailure: BudgetBreachReason | null;
 }
 
 /**
@@ -69,6 +74,8 @@ export async function* runTurnLoop(input: {
   cancellation: TurnApplicationCancellationHandle;
   controller: AbortController;
   traceCarrier: W3cTraceCarrier | null;
+  /** 已有 Trace span；用于追加低基数预算事件。 */
+  traceSpan?: TurnApplicationTraceSpan;
   outputGuard?: TurnApplicationOutputGuardPort;
 }): AsyncGenerator<TurnApplicationEvent, TurnLoopOutcome> {
   const { dependencies, command, turn, prepared } = input;
@@ -91,7 +98,12 @@ export async function* runTurnLoop(input: {
   let toolFailure: TurnToolFailure | null = null;
   let outputBlocked: TurnApplicationFailureCode | null = null;
   let outputGuardFailed = false;
+  let budgetFailure: BudgetBreachReason | null = null;
   const loop = new AgentLoopEngine(dependencies.modelGateway);
+  const usageBudget =
+    prepared.model.usageBudget === undefined
+      ? null
+      : new TurnUsageBudgetController(prepared.model.usageBudget);
 
   for await (const event of loop.stream<
     TurnToolDetail,
@@ -117,6 +129,7 @@ export async function* runTurnLoop(input: {
     maxToolRounds: prepared.model.maxToolRounds,
     signal: input.controller.signal,
     modelRunLifecycle: modelLifecycle,
+    usageBudget: usageBudget ?? undefined,
     executeTools: (calls, context) => tools.execute(calls, context),
   })) {
     // 输出治理一旦标记失败/拦截，继续读取模型事件仅用于消耗，不再产生副作用；
@@ -204,9 +217,35 @@ export async function* runTurnLoop(input: {
         retryable: event.failure.retryable,
       };
     } else if (event.type === 'failed') {
+      if (event.code === 'BUDGET_EXCEEDED') {
+        // 预算终态独立于模型失败：不进入 modelFailure，由 service 映射为
+        // BUDGET_EXCEEDED（retryable=false，客户端须新建 Turn 才能继续）。
+        budgetFailure = event.budgetReason;
+        continue;
+      }
       modelFailure = event.error;
     } else if (event.type === 'completed') {
       completed = true;
+    }
+  }
+
+  if (usageBudget !== null) {
+    // 预算事件进入账本与 Trace；记录是尽力而为的观测动作，失败不改变 Turn 终态。
+    const snapshot = usageBudget.snapshot();
+    void dependencies.usageBudgetLedger
+      ?.record({
+        operationId: command.operationId,
+        profileId: command.profile.profileId,
+        breachReason: budgetFailure,
+        ...snapshot,
+      })
+      .catch(() => {});
+    if (budgetFailure !== null) {
+      input.traceSpan?.event('usage.budget', {
+        breachReason: budgetFailure,
+        estimated: snapshot.estimated ? 'true' : 'false',
+        estimatedCostCents: String(snapshot.estimatedCostCents),
+      });
     }
   }
 
@@ -217,5 +256,6 @@ export async function* runTurnLoop(input: {
     toolFailure,
     outputBlocked,
     outputGuardFailed,
+    budgetFailure,
   };
 }

@@ -1,3 +1,4 @@
+import { TURN_USAGE_BUDGET_TEMPLATES } from '@educanvas/agent-core';
 import type { TurnApplicationProfilePort } from '@educanvas/agent-runtime';
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import {
@@ -94,6 +95,8 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
         modelAlias: 'primary' as const,
         promptVersion: 'gateway-general-v2',
         maxToolRounds: 1,
+        // Q03：通用 Turn 预算模板（服务端冻结，LOOP 阶段强制执行）。
+        usageBudget: TURN_USAGE_BUDGET_TEMPLATES['agent.turn'],
       },
       // command.capabilities 是入口传输/渲染协商，不是 Tool grant；只采用服务端策略。
       toolPolicy,

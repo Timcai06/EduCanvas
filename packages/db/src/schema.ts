@@ -1640,6 +1640,48 @@ export const modelRuns = pgTable(
 );
 
 /**
+ * Turn 使用预算账本（Q03）— 每次 Turn 一行。
+ *
+ * 只保存预算维度数值（token/次数/毫秒/美分）与低基数 breachReason，
+ * 绝不保存用户正文、Prompt、供应商响应、价格密钥或 operationId 之外的标识。
+ */
+export const turnUsageBudgetOutcomes = pgTable(
+  'turn_usage_budget_outcomes',
+  {
+    operationId: uuid('operation_id').primaryKey(),
+    profileId: text('profile_id').notNull(),
+    /** null 表示预算内正常完成。 */
+    breachReason: text('breach_reason'),
+    estimated: boolean('estimated').notNull().default(false),
+    estimatedCostCents: integer('estimated_cost_cents').notNull(),
+    modelCalls: integer('model_calls').notNull(),
+    toolCalls: integer('tool_calls').notNull(),
+    toolResultsTruncated: integer('tool_results_truncated').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    wallClockMs: integer('wall_clock_ms').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('turn_usage_budget_outcomes_created_idx').on(table.createdAt),
+    check(
+      'turn_usage_budget_outcomes_reason_check',
+      sql`${table.breachReason} is null or ${table.breachReason} in ('max_input_tokens', 'max_output_tokens', 'max_model_calls', 'max_tool_calls', 'max_tool_result_tokens', 'max_wall_clock', 'max_estimated_cost')`,
+    ),
+    check(
+      'turn_usage_budget_outcomes_profile_check',
+      sql`char_length(${table.profileId}) between 1 and 64 and ${table.profileId} ~ '^[a-z][a-z0-9_.-]*$'`,
+    ),
+    check(
+      'turn_usage_budget_outcomes_counts_check',
+      sql`${table.estimatedCostCents} >= 0 and ${table.modelCalls} >= 0 and ${table.toolCalls} >= 0 and ${table.toolResultsTruncated} >= 0 and ${table.inputTokens} >= 0 and ${table.outputTokens} >= 0 and ${table.wallClockMs} >= 0`,
+    ),
+  ],
+);
+
+/**
  * Provider tool call 的脱敏审计账本。参数与结果只保存服务端生成的结构摘要，
  * 不保存原始值、异常消息、堆栈或供应商推理内容。
  */

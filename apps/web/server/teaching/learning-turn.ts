@@ -102,6 +102,7 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile,
     contextLedger: ledgers.contextLedger,
     modelRunLedger: ledgers.modelRunLedger,
+    usageBudgetLedger: ledgers.usageBudgetLedger,
     modelGateway: runtime?.gateway ?? unavailableModelGateway,
     toolKernel: createWebToolKernel(adapters),
     cancellation: new WebTeachingCancellation(input.signal),

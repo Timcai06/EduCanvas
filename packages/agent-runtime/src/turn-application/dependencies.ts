@@ -2,6 +2,7 @@ import type {
   AgentModelRunLedgerPort,
   AgentTurnContextLedgerPort,
   TurnModelGateway,
+  TurnUsageBudgetLedgerPort,
 } from '@educanvas/agent-core';
 import type {
   TurnApplicationCancellationPort,
@@ -27,4 +28,6 @@ export interface TurnApplicationDependencies {
   toolKernel?: ToolKernelPort;
   cancellation?: TurnApplicationCancellationPort;
   trace?: TurnApplicationTracePort;
+  /** Q03：Turn 使用预算账本；省略表示不落账（组合根应始终注入）。 */
+  usageBudgetLedger?: TurnUsageBudgetLedgerPort;
 }

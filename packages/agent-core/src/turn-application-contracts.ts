@@ -108,6 +108,8 @@ export const turnApplicationFailureCodes = [
   'TOOL_FAILED',
   'RUNTIME_FAILED',
   'CANCELLED',
+  /** Q03：Turn 超预算后的稳定终态；retryable=false，客户端须新建 Turn 才能继续。 */
+  'BUDGET_EXCEEDED',
 ] as const;
 
 export const turnApplicationFailureCodeSchema = z.enum(
