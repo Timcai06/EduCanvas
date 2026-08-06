@@ -49,3 +49,17 @@ export function toOfflineError(
   if (isAbortError(cause)) throw cause;
   return { kind: 'offline', message: fallback };
 }
+
+/**
+ * 带错误语义的客户端错误：既有 `kind` 可编程分派，又继承 `Error`（`instanceof`
+ * 仍成立，兼容既有错误边界与 React error boundary）。
+ */
+export class ResourceClientError extends Error {
+  readonly kind: ResourceErrorKind;
+
+  constructor(kind: ResourceErrorKind, message: string) {
+    super(message);
+    this.name = 'ResourceClientError';
+    this.kind = kind;
+  }
+}

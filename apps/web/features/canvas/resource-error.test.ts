@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ResourceClientError,
   classifyHttpStatus,
   isAbortError,
   isRetryableResourceError,
@@ -64,5 +65,15 @@ describe('toOfflineError（网络层失败）', () => {
       kind: 'offline',
       message: '网络连接不可用。',
     });
+  });
+});
+
+describe('ResourceClientError（带语义的客户端错误）', () => {
+  it('继承 Error（instanceof 仍成立）且携带 kind', () => {
+    const error = new ResourceClientError('forbidden', '没有权限。');
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('ResourceClientError');
+    expect(error.kind).toBe('forbidden');
+    expect(error.message).toBe('没有权限。');
   });
 });
