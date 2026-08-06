@@ -22,6 +22,7 @@ import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { OfflineBanner } from '@/features/chat/offline-banner';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
+import { useAssistantArtifacts } from './use-assistant-artifacts';
 import { useSidebarState } from './use-sidebar-state';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
@@ -242,58 +243,7 @@ export function GeneralChatWorkspace({
     });
   }, []);
 
-  // 桌面小助手创建的产物：接管生成反馈和 Canvas 打开
-  const assistantArtifactConsumed = useRef(false);
-  useEffect(() => {
-    if (assistantArtifactConsumed.current) return;
-    assistantArtifactConsumed.current = true;
-    const raw = sessionStorage.getItem('educanvas.assistant_artifact');
-    if (!raw) return;
-    sessionStorage.removeItem('educanvas.assistant_artifact');
-    try {
-      const artifact = JSON.parse(raw) as {
-        id: string;
-        kind: string;
-        title: string;
-      };
-      if (artifact.id && artifact.kind) {
-        queueMicrotask(() => {
-          void artifactFlow.observeProposedArtifact(
-            {
-              artifactId: artifact.id,
-              kind: artifact.kind as
-                | 'mind_map'
-                | 'slides'
-                | 'flashcards'
-                | 'audio_overview'
-                | 'note',
-              title: artifact.title,
-            },
-            { openWhenReady: true },
-          );
-        });
-      }
-    } catch {
-      // 格式异常，静默忽略
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifactFlow.observeProposedArtifact]);
-
-  // 桌面小助手请求打开已有产物
-  const assistantOpenArtifactConsumed = useRef(false);
-  useEffect(() => {
-    if (assistantOpenArtifactConsumed.current) return;
-    assistantOpenArtifactConsumed.current = true;
-    const artifactId = sessionStorage.getItem(
-      'educanvas.assistant_open_artifact',
-    );
-    if (!artifactId) return;
-    sessionStorage.removeItem('educanvas.assistant_open_artifact');
-    queueMicrotask(() => {
-      void artifactFlow.openArtifact(artifactId);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifactFlow.openArtifact]);
+  useAssistantArtifacts(artifactFlow);
 
   const online = useOnlineStatus();
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
