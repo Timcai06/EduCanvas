@@ -97,6 +97,9 @@ export function UserMenu({
             type="button"
             aria-haspopup="dialog"
             aria-expanded={profileOpen}
+            /* Q05：昵称 span 在窄屏（<sm）隐藏，按钮的可访问名因此为空；
+               固定 aria-label 让移动端与读屏仍可识别该菜单按钮。 */
+            aria-label={user.nickname}
             onClick={() => setProfileOpen(true)}
             className="inline-flex min-h-9 items-center gap-2 rounded-full px-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >

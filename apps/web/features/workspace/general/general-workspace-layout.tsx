@@ -70,9 +70,10 @@ export function GeneralWorkspaceLayout({
           activeConversationId={conversationId}
           onNewNotebook={() => void startNewGeneralChatAction()}
         />
+        {/* isolate 堆叠上下文会困住内部 z-40 的 modal，压不过兄弟 header 的 z-20：main 抬到 z-30（同落地态，见组合层全屏 Canvas 注释）。 */}
         <main
           ref={mainRef}
-          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          className="relative isolate z-30 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
           {!ctrl.online ? (
             <div className="relative z-10 shrink-0 pt-1">
