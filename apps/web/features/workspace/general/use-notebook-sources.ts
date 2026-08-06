@@ -13,6 +13,7 @@ import {
   type AssetStatusNotice,
 } from '@/features/assets/asset-status';
 import {
+  LatestRequestGuard,
   ResourceClientError,
   toClientError,
 } from '@/features/canvas/resource-error';
@@ -40,10 +41,20 @@ export function useNotebookSources(input: {
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const assetsRef = useRef<readonly AssetItem[]>([]);
   const pollFailuresRef = useRef(0);
+  /* W03 竞态保护：并发 refresh 只有最新一次可提交（guard），组件卸载后不再更新（mounted）。 */
+  const requestGuardRef = useRef(new LatestRequestGuard());
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     assetsRef.current = assets;
   }, [assets]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const applyAssets = useCallback(
     (next: readonly AssetItem[], announce: boolean) => {
@@ -64,10 +75,11 @@ export function useNotebookSources(input: {
   /* 启停已由服务端按成员持久化，刷新时不再用本地值覆盖服务端结果——
      否则在别处（或上一次失败的乐观更新）留下的陈旧开关会一直粘住。 */
   const refresh = useCallback(async () => {
-    applyAssets(
-      await loadAssets(endpoint, { enableSpaceByDefault: true }),
-      true,
-    );
+    const isCurrent = requestGuardRef.current.begin();
+    const next = await loadAssets(endpoint, { enableSpaceByDefault: true });
+    /* 期间已有更新请求或组件已卸载 → 丢弃过期结果，不覆盖新状态。 */
+    if (!isCurrent() || !mountedRef.current) return;
+    applyAssets(next, true);
     pollFailuresRef.current = 0;
   }, [applyAssets, endpoint]);
 

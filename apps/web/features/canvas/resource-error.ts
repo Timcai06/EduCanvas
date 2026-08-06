@@ -73,3 +73,18 @@ export function toClientError(
     ? reason
     : new ResourceClientError('failed', fallback);
 }
+
+/**
+ * 竞态闸门（latest wins）：同一资源的并发请求只有最新一次能提交状态。
+ *
+ * 异步请求开始时 `begin()`，完成后调用返回的 `isCurrent()`；返回 false 说明期间
+ * 已有更新请求发出，旧结果应被丢弃，避免「过期请求覆盖新状态」（W03 竞态保护）。
+ */
+export class LatestRequestGuard {
+  #sequence = 0;
+
+  begin(): () => boolean {
+    const id = ++this.#sequence;
+    return () => id === this.#sequence;
+  }
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LatestRequestGuard,
   ResourceClientError,
   classifyHttpStatus,
   isAbortError,
@@ -76,6 +77,32 @@ describe('ResourceClientError（带语义的客户端错误）', () => {
     expect(error.name).toBe('ResourceClientError');
     expect(error.kind).toBe('forbidden');
     expect(error.message).toBe('没有权限。');
+  });
+});
+
+describe('LatestRequestGuard（竞态闸门，latest wins）', () => {
+  it('单个请求完成后 isCurrent 为 true（结果可提交）', () => {
+    const guard = new LatestRequestGuard();
+    const isCurrent = guard.begin();
+    expect(isCurrent()).toBe(true);
+  });
+
+  it('并发请求：旧请求在更新请求发出后 isCurrent 为 false（结果应丢弃）', () => {
+    const guard = new LatestRequestGuard();
+    const first = guard.begin();
+    const second = guard.begin();
+    expect(first()).toBe(false);
+    expect(second()).toBe(true);
+  });
+
+  it('新请求发出后首个请求不可提交，后续依旧各自判定', () => {
+    const guard = new LatestRequestGuard();
+    const a = guard.begin();
+    const b = guard.begin();
+    const c = guard.begin();
+    expect(a()).toBe(false);
+    expect(b()).toBe(false);
+    expect(c()).toBe(true);
   });
 });
 
