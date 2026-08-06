@@ -20,10 +20,10 @@ vi.mock('@educanvas/db', async () => {
     DrizzlePlatformArtifactRepository: vi.fn(function () {
       return artifactRepo;
     }),
-    getDb: vi.fn(() => ({})),
     requireNotebookAccess: requireNotebookAccessMock,
   };
 });
+vi.mock('@educanvas/db/internal', () => ({ getDb: vi.fn(() => ({})) }));
 vi.mock('@educanvas/agent-runtime', async () => {
   const actual = await vi.importActual<
     typeof import('@educanvas/agent-runtime')

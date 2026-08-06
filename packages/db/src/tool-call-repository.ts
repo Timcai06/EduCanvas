@@ -237,7 +237,13 @@ async function requireOwnedToolCall(
   return row.call;
 }
 
-/** 工具执行持久幂等与脱敏审计仓储。 */
+/**
+ * 工具执行持久幂等与脱敏审计仓储。
+ *
+ * @deprecated 工具执行事实已统一由 `DrizzleAgentToolCallRepository` 写入 `tool_calls`
+ * （经 ToolKernel 装配）。本类仅保留供集成测试使用；生产代码禁止新增导入（见
+ * import-boundary.test.ts R05 门禁，基线 0），R08 收口时删除。
+ */
 export class DrizzleToolCallRepository {
   constructor(private readonly providedDatabase?: Database) {}
 

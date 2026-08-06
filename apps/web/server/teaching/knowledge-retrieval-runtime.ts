@@ -7,10 +7,10 @@ import {
 } from '@educanvas/agent-core';
 import {
   DrizzleKnowledgeHybridRetrieval,
-  getDb,
   type EmbeddingIdentity,
   type HybridRetrievalResult,
 } from '@educanvas/db';
+import { getDb } from '@educanvas/db/internal';
 import {
   EMBEDDING_INSTRUCTION_VERSION,
   OpenAICompatibleEmbeddingModelGateway,

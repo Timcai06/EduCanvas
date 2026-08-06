@@ -27,20 +27,12 @@ import type {
   ModelAbortSignal,
   TurnApplicationCommand,
   TurnApplicationEvent,
-  TurnModelGateway,
 } from '@educanvas/agent-core';
 import {
-  ToolKernel,
-  TurnApplicationService,
+  createTurnApplication,
   type BuiltAssetContext,
 } from '@educanvas/agent-runtime';
-import {
-  DrizzleAgentModelRunRepository,
-  DrizzleAgentToolCallRepository,
-  DrizzleAgentTurnContextRepository,
-  DrizzleStudyPlanRepository,
-  DrizzleToolEffectRepository,
-} from '@educanvas/db';
+import { DrizzleStudyPlanRepository } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
   resolveLearnerAdaptationPolicy,
@@ -50,7 +42,11 @@ import { materializeAssetContextPlan } from '../assets/asset-materialization';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
-import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
+import {
+  createWebTurnLedgers,
+  createWebToolKernel,
+  unavailableModelGateway,
+} from '../turn-composition';
 import {
   createTeachingToolKernelAdapters,
   teachingToolAdapterCapabilities,
@@ -59,15 +55,6 @@ import { WebTeachingCancellation } from './turn-application/cancellation';
 import { WebTeachingLifecycle } from './turn-application/lifecycle';
 import { WebTeachingProfile } from './turn-application/profile';
 
-const unavailableModelGateway: TurnModelGateway = {
-  async *streamTurnText(request) {
-    yield {
-      type: 'failed',
-      phase: request.phase,
-      error: { code: 'unavailable', retryable: true },
-    };
-  },
-};
 const studyPlans = new DrizzleStudyPlanRepository();
 
 /** Web 教学入口的唯一显式 Turn Application 组合根；教学 Profile 不创建私有模型循环。 */
@@ -91,6 +78,7 @@ export function beginGatewayTeachingTurnApplication(input: {
   if (input.route.agentProfileId !== 'k12.teacher') {
     throw new Error('web_teaching_profile_unsupported');
   }
+  const ledgers = createWebTurnLedgers();
   const profile = new WebTeachingProfile(
     input.identity,
     input.session,
@@ -109,19 +97,15 @@ export function beginGatewayTeachingTurnApplication(input: {
     profile.collectKnowledgeEvidence(candidateIds),
   );
   const runtime = resolveTurnModelRuntime();
-  const service = new TurnApplicationService({
+  const service = createTurnApplication({
     lifecycle: new WebTeachingLifecycle(input.identity, input.session.id),
     profile,
-    contextLedger: new DrizzleAgentTurnContextRepository(),
-    modelRunLedger: new DrizzleAgentModelRunRepository(),
+    contextLedger: ledgers.contextLedger,
+    modelRunLedger: ledgers.modelRunLedger,
     modelGateway: runtime?.gateway ?? unavailableModelGateway,
-    toolKernel: new ToolKernel(
-      adapters,
-      new DrizzleAgentToolCallRepository(),
-      new DrizzleToolEffectRepository(),
-    ),
+    toolKernel: createWebToolKernel(adapters),
     cancellation: new WebTeachingCancellation(input.signal),
-    trace: getWebTelemetryRuntime().turnTrace,
+    trace: ledgers.trace,
   });
   const command: TurnApplicationCommand = {
     protocol: 'educanvas.turn.v2',
