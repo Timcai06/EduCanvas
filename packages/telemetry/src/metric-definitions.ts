@@ -71,6 +71,27 @@ export const TURN_METRIC_DEFINITIONS: readonly MetricDefinition[] = [
     labelValues: { mode: ['vector', 'lexical'] },
   },
   {
+    // Q02 检索降级 reason 分布：reason 闭集与
+    // @educanvas/agent-core 的 RETRIEVAL_DEGRADATION_REASONS 保持同步，
+    // 禁止扩展为自由文本（低基数标签约束）。
+    name: 'retrieval_degradations',
+    kind: 'counter',
+    labelKeys: ['reason'],
+    labelValues: {
+      reason: [
+        'not_configured',
+        'invalid_configuration',
+        'provider_timeout',
+        'provider_unavailable',
+        'invalid_dimensions',
+        'corpus_not_embedded',
+        'vector_query_timeout',
+        'extension_unavailable',
+        'fallback_fts',
+      ],
+    },
+  },
+  {
     name: 'worker_task_total',
     kind: 'counter',
     labelKeys: ['task', 'status'],
