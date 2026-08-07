@@ -3,11 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import {
   AudioOverviewResourceRenderer,
-  DomExplorationResourceRenderer,
   FlashcardsResourceRenderer,
   GeneratedImageResourceRenderer,
   MindMapResourceRenderer,
-  NoteResourceRenderer,
   SlidesResourceRenderer,
 } from './canvas-resource-renderers';
 import type {
@@ -190,15 +188,4 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
     expect(html).toContain('图片不可用');
   });
 
-  it('note / dom_exploration：明确提示由交互式 Canvas 壳渲染', () => {
-    for (const [name, Renderer] of [
-      ['note', NoteResourceRenderer],
-      ['dom_exploration', DomExplorationResourceRenderer],
-    ] as const) {
-      const html = renderToStaticMarkup(
-        <Renderer resource={makeResource(`artifact.${name}`)} />,
-      );
-      expect(html).toContain('需要交互式 Canvas 壳');
-    }
-  });
 });

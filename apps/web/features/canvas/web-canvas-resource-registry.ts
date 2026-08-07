@@ -10,10 +10,8 @@ import {
   MindMapResourceRenderer,
   SlidesResourceRenderer,
   FlashcardsResourceRenderer,
-  NoteResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
-  DomExplorationResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,
@@ -38,10 +36,8 @@ const COMPONENT_MAP: Record<
   'artifact.mind-map': MindMapResourceRenderer,
   'artifact.slides': SlidesResourceRenderer,
   'artifact.flashcards': FlashcardsResourceRenderer,
-  'artifact.note': NoteResourceRenderer,
   'artifact.audio-overview': AudioOverviewResourceRenderer,
   'artifact.generated-image': GeneratedImageResourceRenderer,
-  'artifact.dom-exploration': DomExplorationResourceRenderer,
 };
 
 /**

@@ -5,10 +5,8 @@ vi.mock('./canvas-resource-renderers', () => ({
   MindMapResourceRenderer: () => null,
   SlidesResourceRenderer: () => null,
   FlashcardsResourceRenderer: () => null,
-  NoteResourceRenderer: () => null,
   AudioOverviewResourceRenderer: () => null,
   GeneratedImageResourceRenderer: () => null,
-  DomExplorationResourceRenderer: () => null,
   SourcePdfResourceRenderer: () => null,
   SourceImageResourceRenderer: () => null,
   SourceMarkdownResourceRenderer: () => null,
@@ -65,7 +63,7 @@ afterEach(() => {
 
 describe('webCanvasResourceRegistry', () => {
   it('registry 不为空且已冻结', () => {
-    expect(webCanvasResourceRegistry.size).toBe(14);
+    expect(webCanvasResourceRegistry.size).toBe(12);
   });
 
   describe('Source rendererId 选择', () => {
@@ -204,7 +202,7 @@ describe('webCanvasResourceRegistry', () => {
       expect(result.kind).toBe('available');
     });
 
-    it('artifact.note 选择正确 Renderer', () => {
+    it('artifact.note 未注册 → rendererId_not_registered（交互式产物由壳渲染，Registry 无占位）', () => {
       const result = selectWebCanvasResourceRenderer(
         makeResource('artifact.note', {
           resourceKind: 'artifact',
@@ -216,7 +214,10 @@ describe('webCanvasResourceRegistry', () => {
           allowedActions: ['view', 'edit', 'regenerate'],
         }),
       );
-      expect(result.kind).toBe('available');
+      expect(result.kind).toBe('unavailable');
+      if (result.kind === 'unavailable') {
+        expect(result.reason).toBe('rendererId_not_registered');
+      }
     });
 
     it('artifact.audio-overview 选择正确 Renderer', () => {

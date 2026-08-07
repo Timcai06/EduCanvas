@@ -139,18 +139,6 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
     },
   },
   {
-    rendererId: 'artifact.note',
-    manifest: {
-      manifestVersion: 1,
-      rendererId: 'artifact.note',
-      rendererVersion: 1,
-      representations: ['structured', 'text'],
-      trustTiers: ['tier1'],
-      runtimeKinds: ['none'],
-      supportedActions: ['view', 'edit', 'regenerate'],
-    },
-  },
-  {
     rendererId: 'artifact.audio-overview',
     manifest: {
       manifestVersion: 1,
@@ -172,18 +160,6 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       trustTiers: ['tier2'],
       runtimeKinds: ['none'],
       supportedActions: ['view', 'download', 'delete'],
-    },
-  },
-  {
-    rendererId: 'artifact.dom-exploration',
-    manifest: {
-      manifestVersion: 1,
-      rendererId: 'artifact.dom-exploration',
-      rendererVersion: 1,
-      representations: ['interactive_app'],
-      trustTiers: ['tier2'],
-      runtimeKinds: ['web_sandbox'],
-      supportedActions: ['view', 'run', 'cancel'],
     },
   },
 ];

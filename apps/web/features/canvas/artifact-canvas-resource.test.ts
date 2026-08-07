@@ -43,7 +43,7 @@ function withVersion(detail: ArtifactDetail, content: unknown, version = 1) {
  * （方案 A）。这里钉住映射与构造结果，并验证构造出的资源能被 Registry 选中。
  */
 describe('buildArtifactCanvasResource（W04-3 渲染用资源构造）', () => {
-  it('kind→rendererId 映射覆盖 5 类内容驱动产物', () => {
+  it('kind→rendererId 映射覆盖 5 类内容驱动产物，不含交互式 kind', () => {
     expect(ARTIFACT_KIND_RENDERER_ID).toMatchObject({
       mind_map: 'artifact.mind-map',
       slides: 'artifact.slides',
@@ -51,6 +51,8 @@ describe('buildArtifactCanvasResource（W04-3 渲染用资源构造）', () => {
       audio_overview: 'artifact.audio-overview',
       generated_image: 'artifact.generated-image',
     });
+    expect(ARTIFACT_KIND_RENDERER_ID.note).toBeUndefined();
+    expect(ARTIFACT_KIND_RENDERER_ID.dom_exploration).toBeUndefined();
   });
 
   it('mind_map + version → ready、structured、trustTier/动作透传', () => {
@@ -114,6 +116,15 @@ describe('buildArtifactCanvasResource（W04-3 渲染用资源构造）', () => {
     expect(() => buildArtifactCanvasResource(makeDetail('unknown_type'))).toThrow(
       /Unsupported artifact kind/,
     );
+  });
+
+  it('交互式 kind（note/dom_exploration）→ 抛错（不进 Registry，由壳渲染）', () => {
+    expect(() => buildArtifactCanvasResource(makeDetail('note'))).toThrow(
+      /Unsupported artifact kind/,
+    );
+    expect(() =>
+      buildArtifactCanvasResource(makeDetail('dom_exploration')),
+    ).toThrow(/Unsupported artifact kind/);
   });
 
   it('5 类内容驱动产物构造出的资源都能被 Web Registry 选中', () => {

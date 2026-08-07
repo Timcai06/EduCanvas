@@ -16,8 +16,8 @@ import type { ArtifactVersionData } from './artifact-client';
  * `ArtifactVersionData`。适配器把 `content` 分发给对应真实 Renderer；缺数据或
  * 媒体子类型不匹配时显示 unavailable 而非伪造内容。
  *
- * note（编辑交互）与 dom_exploration（运行时环境）仍由 ArtifactCanvas 壳渲染，
- * 这里的占位只用于 Registry 未接住时的明确失败提示。
+ * note（编辑交互）与 dom_exploration（运行时环境）由 ArtifactCanvas 壳显式渲染，
+ * 不进 Registry（无占位条目）；Registry 只承载内容驱动型 Artifact 与 Source。
  */
 
 function unavailable(title: string, description: string) {
@@ -85,16 +85,6 @@ function GeneratedImageResourceRenderer({
   });
 }
 
-/* note（编辑）与 dom_exploration（运行时）由 ArtifactCanvas 壳渲染；Registry 未接住时明确提示。 */
-function InteractiveArtifactPlaceholder({
-  resource,
-}: CanvasResourceRendererProps) {
-  return unavailable(
-    '需要交互式 Canvas 壳',
-    `此类产物（${resource.renderer.rendererId}）由交互式 Canvas 壳渲染。`,
-  );
-}
-
 function SourcePdfResourceRenderer({ resource }: CanvasResourceRendererProps) {
   return createElement(SourceResourceRendererBody, { resource });
 }
@@ -131,17 +121,12 @@ function SourceVideoResourceRenderer({
   return createElement(SourceResourceRendererBody, { resource });
 }
 
-const NoteResourceRenderer = InteractiveArtifactPlaceholder;
-const DomExplorationResourceRenderer = InteractiveArtifactPlaceholder;
-
 export {
   MindMapResourceRenderer,
   SlidesResourceRenderer,
   FlashcardsResourceRenderer,
-  NoteResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
-  DomExplorationResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,

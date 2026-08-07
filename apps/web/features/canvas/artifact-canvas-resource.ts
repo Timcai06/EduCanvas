@@ -1,7 +1,6 @@
 import type {
   CanvasRepresentationKind,
   CanvasResource,
-  CanvasRuntimeKind,
 } from '@educanvas/canvas-protocol';
 import type { ArtifactDetail } from './artifact-client';
 
@@ -16,15 +15,13 @@ import type { ArtifactDetail } from './artifact-client';
  * 后，本模块的映射与构造可整体删除（缺口见 W 台账 W04-3 节）。
  */
 
-/** artifact.kind → Registry rendererId 的前端映射。 */
+/** artifact.kind → Registry rendererId 的前端映射（仅内容驱动型 Artifact）。 */
 export const ARTIFACT_KIND_RENDERER_ID: Readonly<Record<string, string>> = {
   mind_map: 'artifact.mind-map',
   slides: 'artifact.slides',
   flashcards: 'artifact.flashcards',
   audio_overview: 'artifact.audio-overview',
   generated_image: 'artifact.generated-image',
-  note: 'artifact.note',
-  dom_exploration: 'artifact.dom-exploration',
 };
 
 const KIND_REPRESENTATION: Readonly<Record<string, CanvasRepresentationKind>> = {
@@ -33,26 +30,12 @@ const KIND_REPRESENTATION: Readonly<Record<string, CanvasRepresentationKind>> = 
   flashcards: 'structured',
   audio_overview: 'audio',
   generated_image: 'image',
-  note: 'structured',
-  dom_exploration: 'interactive_app',
 };
 
 const KIND_MIME_TYPE: Readonly<Record<string, string>> = {
   structured: 'application/json',
   audio: 'audio/mpeg',
   image: 'image/png',
-  interactive_app: 'text/html',
-};
-
-/** artifact.kind → runtime 种类；仅 dom_exploration 需要沙箱。 */
-const KIND_RUNTIME: Readonly<Record<string, CanvasRuntimeKind>> = {
-  mind_map: 'none',
-  slides: 'none',
-  flashcards: 'none',
-  audio_overview: 'none',
-  generated_image: 'none',
-  note: 'none',
-  dom_exploration: 'web_sandbox',
 };
 
 /**
@@ -77,7 +60,6 @@ export function buildArtifactCanvasResource(detail: ArtifactDetail): CanvasResou
   }
   /* rendererId 已在上方抛错保护，kind 必然在映射内；! 仅为类型收窄。 */
   const representationKind = KIND_REPRESENTATION[detail.artifact.kind]!;
-  const runtimeKind = KIND_RUNTIME[detail.artifact.kind]!;
   return {
     schemaVersion: 1,
     resourceId: detail.artifact.id,
@@ -110,15 +92,7 @@ export function buildArtifactCanvasResource(detail: ArtifactDetail): CanvasResou
       operationId: null,
       generator: null,
     },
-    runtime:
-      runtimeKind === 'web_sandbox'
-        ? {
-            kind: 'web_sandbox',
-            protocolVersion: 1,
-            maxDurationMs: 300_000,
-            maxOutputBytes: 5 * 1024 * 1024,
-            network: 'none',
-          }
-        : { kind: 'none' },
+    /* 内容驱动型 Artifact 由组合层注入受控 content 渲染，无需沙箱 Runtime。 */
+    runtime: { kind: 'none' },
   };
 }
