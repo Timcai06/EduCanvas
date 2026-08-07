@@ -19,20 +19,10 @@ import {
   type CreatableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
-import {
-  ArtifactGeneratingSkeleton,
-  ArtifactProvenanceStrip,
-  isArtifactGenerating,
-} from './artifact-provenance';
-import { MindMapRenderer } from './mind-map-renderer';
-import { FlashcardsRenderer } from './flashcards-renderer';
-import { SlidesRenderer } from './slides-renderer';
-import { AudioOverviewPlayer } from './audio-overview-player';
-import { GeneratedImageViewer } from './generated-image-viewer';
-import { PersistentWebRuntime } from './persistent-web-runtime';
+import { resolveArtifactContentView } from './artifact-content-view';
+import { ArtifactProvenanceStrip } from './artifact-provenance';
 import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
-import { NoteRenderer } from './note-renderer';
-import type { NoteContent } from '@educanvas/canvas-protocol';
+import { ArtifactCanvasContent } from './artifact-canvas-content';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -469,9 +459,8 @@ export function ArtifactCanvas({
   const canRevise = ['mind_map', 'slides', 'flashcards', 'note'].includes(
     detail.artifact.kind,
   );
-  const generating = isArtifactGenerating(detail, revising);
-  /* 生成中且当前展示的最新版还没有内容:显示骨架而非空态文案 */
-  const showSkeleton = generating && isLatest && !detail.version;
+  /* W04：内容分发收敛到纯函数，组件只消费结果（契约由 characterization 钉住）。 */
+  const contentView = resolveArtifactContentView(detail, revising);
   return (
     <CanvasHost
       ariaLabel="产物Canvas"
@@ -494,59 +483,12 @@ export function ArtifactCanvas({
           aria-label="Canvas 内容"
           className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5"
         >
-          {showSkeleton ? (
-            <ArtifactGeneratingSkeleton />
-          ) : detail.artifact.kind === 'mind_map' && detail.version ? (
-            <MindMapRenderer
-              key={displayedVersion}
-              content={detail.version.content}
-            />
-          ) : detail.artifact.kind === 'slides' && detail.version ? (
-            <SlidesRenderer
-              key={displayedVersion}
-              content={detail.version.content}
-            />
-          ) : detail.artifact.kind === 'flashcards' && detail.version ? (
-            <FlashcardsRenderer
-              key={displayedVersion}
-              content={detail.version.content}
-            />
-          ) : detail.artifact.kind === 'audio_overview' &&
-            detail.version?.media?.contentType === 'audio/mpeg' ? (
-            <AudioOverviewPlayer
-              media={detail.version.media}
-              allowedActions={detail.canvasResource?.allowedActions}
-            />
-          ) : detail.artifact.kind === 'generated_image' &&
-            detail.version?.media &&
-            'size' in detail.version.media &&
-            detail.version.media.contentType.startsWith('image/') ? (
-            <GeneratedImageViewer
-              title={detail.artifact.title}
-              media={
-                detail.version
-                  .media as import('./artifact-client').GeneratedImageMedia
-              }
-              allowedActions={detail.canvasResource?.allowedActions}
-            />
-          ) : detail.artifact.kind === 'note' && detail.version ? (
-            <NoteRenderer
-              key={displayedVersion}
-              content={detail.version.content as NoteContent}
-              isLatest={isLatest}
-              readOnly={!isLatest}
-              onSave={onSaveNote}
-              saving={revising}
-            />
-          ) : detail.artifact.kind === 'dom_exploration' && detail.version ? (
-            <PersistentWebRuntime
-              key={detail.version.id}
-              artifactId={detail.artifact.id}
-              artifactVersionId={detail.version.id}
-            />
-          ) : (
-            <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
-          )}
+          <ArtifactCanvasContent
+            contentView={contentView}
+            detail={detail}
+            revising={revising}
+            onSaveNote={onSaveNote}
+          />
         </div>
         {canRevise ? (
           <form

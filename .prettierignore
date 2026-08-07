@@ -9,3 +9,4 @@ output
 tmp
 temp
 apps/web/.next
+apps/web/next-env.d.ts
