@@ -1,0 +1,677 @@
+{
+  "dataset": {
+    "version": "v1",
+    "created": "2026-08-06",
+    "authorization": "合成内容：自写，不含真实教材或公开出版物；词项空格分隔保证 simple FTS 可预测"
+  },
+  "generatedAt": "2026-08-07T06:52:58.471Z",
+  "retrievers": {
+    "hybrid": {
+      "meanRecall10": 1,
+      "meanRecall20": 1,
+      "meanMRR10": 0.84375,
+      "meanNDCG10": 0.890512870211333
+    },
+    "fts-only": {
+      "meanRecall10": 0.75,
+      "meanRecall20": 0.75,
+      "meanMRR10": 0.875,
+      "meanNDCG10": 0.7782867981913646
+    },
+    "fallback": {
+      "meanRecall10": 0.75,
+      "meanRecall20": 0.75,
+      "meanMRR10": 0.875,
+      "meanNDCG10": 0.7782867981913646
+    }
+  },
+  "perQuery": [
+    {
+      "id": "q1",
+      "scenario": 1,
+      "golden": [
+        "c2"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c2",
+            "a1",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c2"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c2"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q2",
+      "scenario": 2,
+      "golden": [
+        "c1",
+        "c4"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c1",
+            "c4",
+            "a1",
+            "c2",
+            "c3",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c1"
+          ],
+          "recall10": 0.5,
+          "mrr10": 1,
+          "ndcg10": 0.6131471927654584,
+          "recall20": 0.5,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c1"
+          ],
+          "recall10": 0.5,
+          "mrr10": 1,
+          "ndcg10": 0.6131471927654584,
+          "recall20": 0.5,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q3",
+      "scenario": 3,
+      "golden": [
+        "c2"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c2",
+            "a1",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c2"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c2"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q4",
+      "scenario": 4,
+      "golden": [],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "a1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "mrr10": 0,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [],
+          "mrr10": 0,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [],
+          "mrr10": 0,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {},
+        "10": {},
+        "20": {}
+      }
+    },
+    {
+      "id": "q5",
+      "scenario": 5,
+      "golden": [
+        "c2",
+        "a1"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "a1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "a1"
+          ],
+          "recall10": 0.5,
+          "mrr10": 1,
+          "ndcg10": 0.6131471927654584,
+          "recall20": 0.5,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "a1"
+          ],
+          "recall10": 0.5,
+          "mrr10": 1,
+          "ndcg10": 0.6131471927654584,
+          "recall20": 0.5,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q6",
+      "scenario": 6,
+      "golden": [
+        "c1"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c2",
+            "a1",
+            "c3",
+            "c1",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 0.25,
+          "ndcg10": 0.43067655807339306,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c1",
+            "c2",
+            "c3",
+            "a1"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c1",
+            "c2",
+            "c3",
+            "a1"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q7",
+      "scenario": 7,
+      "golden": [
+        "c8"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c8",
+            "a1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c8"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c8"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q8",
+      "scenario": 8,
+      "golden": [],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "a1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "mrr10": 0,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [],
+          "mrr10": 0,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [],
+          "mrr10": 0,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {},
+        "10": {},
+        "20": {}
+      }
+    },
+    {
+      "id": "q9",
+      "scenario": 9,
+      "golden": [
+        "c6"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "c6",
+            "c4",
+            "a1",
+            "c2",
+            "c3",
+            "c5",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [
+            "c6"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [
+            "c6"
+          ],
+          "recall10": 1,
+          "mrr10": 1,
+          "ndcg10": 1,
+          "recall20": 1,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    },
+    {
+      "id": "q10",
+      "scenario": 10,
+      "golden": [
+        "c2",
+        "c3"
+      ],
+      "perConfig": {
+        "hybrid": {
+          "topIds": [
+            "a1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10"
+          ],
+          "recall10": 1,
+          "mrr10": 0.5,
+          "ndcg10": 0.6934264036172708,
+          "recall20": 1,
+          "retriever": "postgres_hybrid",
+          "retrieverVersion": "rrf-v1",
+          "vectorApplied": true
+        },
+        "fts-only": {
+          "topIds": [],
+          "recall10": 0,
+          "mrr10": 0,
+          "ndcg10": 0,
+          "recall20": 0,
+          "retriever": "fts"
+        },
+        "fallback": {
+          "topIds": [],
+          "recall10": 0,
+          "mrr10": 0,
+          "ndcg10": 0,
+          "recall20": 0,
+          "retriever": "postgres_fts",
+          "retrieverVersion": "rrf-fallback-v1",
+          "vectorApplied": false
+        }
+      },
+      "perLimit": {
+        "5": {
+          "recall": 1
+        },
+        "10": {
+          "recall": 1
+        },
+        "20": {
+          "recall": 1
+        }
+      }
+    }
+  ],
+  "latencyMsByRetriever": {
+    "hybrid": {
+      "p50": 9.86700000000019,
+      "p95": 17.675199999999677,
+      "samples": 50
+    },
+    "fts-only": {
+      "p50": 5.35779999999977,
+      "p95": 11.504899999999907,
+      "samples": 50
+    },
+    "fallback": {
+      "p50": 6.436499999999796,
+      "p95": 11.522500000000946,
+      "samples": 50
+    }
+  },
+  "fallbackHonesty": {
+    "retriever": "postgres_fts",
+    "version": "rrf-fallback-v1",
+    "matchesFts": true
+  },
+  "findings": {
+    "ftsAndSemantics": "FTS 使用 websearch_to_tsquery(simple)，未加引号词项为全词 AND：查询含任一语料外词项即整句零命中（部分重叠/真实同义词必然失配）。v1 查询词表因此全部取自语料词项（见数据集修订记录）",
+    "noAnswerHybridBehavior": [
+      {
+        "id": "q4",
+        "ftsCandidateCount": 0,
+        "hybridCandidateCount": 10,
+        "note": "hybrid 向量路无阈值，返回距离平局候选；词法路拒答；拒答语义由上层 agent 层承担"
+      },
+      {
+        "id": "q8",
+        "ftsCandidateCount": 0,
+        "hybridCandidateCount": 10,
+        "note": "hybrid 向量路无阈值，返回距离平局候选；词法路拒答；拒答语义由上层 agent 层承担"
+      }
+    ]
+  },
+  "limitSweep": {
+    "meanRecallByLimit": {
+      "5": {
+        "meanRecall": 1
+      },
+      "10": {
+        "meanRecall": 1
+      },
+      "20": {
+        "meanRecall": 1
+      }
+    }
+  }
+}
