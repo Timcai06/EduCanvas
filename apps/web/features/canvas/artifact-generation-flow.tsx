@@ -20,19 +20,9 @@ import {
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
 import { resolveArtifactContentView } from './artifact-content-view';
-import {
-  ArtifactGeneratingSkeleton,
-  ArtifactProvenanceStrip,
-} from './artifact-provenance';
-import { MindMapRenderer } from './mind-map-renderer';
-import { FlashcardsRenderer } from './flashcards-renderer';
-import { SlidesRenderer } from './slides-renderer';
-import { AudioOverviewPlayer } from './audio-overview-player';
-import { GeneratedImageViewer } from './generated-image-viewer';
-import { PersistentWebRuntime } from './persistent-web-runtime';
+import { ArtifactProvenanceStrip } from './artifact-provenance';
 import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
-import { NoteRenderer } from './note-renderer';
-import type { NoteContent } from '@educanvas/canvas-protocol';
+import { ArtifactCanvasContent } from './artifact-canvas-content';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -493,52 +483,12 @@ export function ArtifactCanvas({
           aria-label="Canvas 内容"
           className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5"
         >
-          {contentView.kind === 'skeleton' ? (
-            <ArtifactGeneratingSkeleton />
-          ) : contentView.kind === 'mind_map' ? (
-            <MindMapRenderer
-              key={contentView.key}
-              content={contentView.content}
-            />
-          ) : contentView.kind === 'slides' ? (
-            <SlidesRenderer
-              key={contentView.key}
-              content={contentView.content}
-            />
-          ) : contentView.kind === 'flashcards' ? (
-            <FlashcardsRenderer
-              key={contentView.key}
-              content={contentView.content}
-            />
-          ) : contentView.kind === 'note' ? (
-            <NoteRenderer
-              key={contentView.key}
-              content={contentView.content as NoteContent}
-              isLatest={contentView.isLatest}
-              readOnly={!contentView.isLatest}
-              onSave={onSaveNote}
-              saving={revising}
-            />
-          ) : contentView.kind === 'audio_overview' ? (
-            <AudioOverviewPlayer
-              media={contentView.media}
-              allowedActions={contentView.allowedActions}
-            />
-          ) : contentView.kind === 'generated_image' ? (
-            <GeneratedImageViewer
-              title={contentView.title}
-              media={contentView.media}
-              allowedActions={contentView.allowedActions}
-            />
-          ) : contentView.kind === 'dom_exploration' ? (
-            <PersistentWebRuntime
-              key={contentView.versionId}
-              artifactId={detail.artifact.id}
-              artifactVersionId={contentView.versionId}
-            />
-          ) : (
-            <p className="text-sm text-ink-muted">该产物还没有可显示的版本。</p>
-          )}
+          <ArtifactCanvasContent
+            contentView={contentView}
+            detail={detail}
+            revising={revising}
+            onSaveNote={onSaveNote}
+          />
         </div>
         {canRevise ? (
           <form
