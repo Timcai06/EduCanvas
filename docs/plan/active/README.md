@@ -11,8 +11,9 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [W 工作面画布](W-工作面画布收敛.md) | hzlgou     | W00/W01/W02/W03/W05 已通过（PR #287/#290/#294/#298）；W04 进行中  | 与 R 不重叠 Web server；与 Q 独立  |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
-[P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)和
-[R 运行时收敛](../completed/R-运行时事实收敛.md)均已完成并归档，
+[P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)、
+[R 运行时收敛](../completed/R-运行时事实收敛.md)和
+[Q 质量观测成本](../completed/Q-质量观测成本.md)（Q00-Q07 全 PASS，2026-08-07）均已完成并归档，
 不再作为待分配任务。
 O 线完成 O03/O04 后再由 Codex 做跨线审计。
 
