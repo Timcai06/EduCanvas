@@ -237,6 +237,24 @@ type WorkspaceSurface =
 - 评分、编辑、版本、Runtime 隔离和可访问等价物不回归；
 - 旧 `ArtifactCanvas` 若保留，只能成为 Renderer 内部实现，不再是第二套路由权威。
 
+接口缺口（W04-3，方案 A 浏览器端补齐）：
+
+`ArtifactDetail.canvasResource` 只返回 `allowedActions`，缺少 Renderer 选择所需的
+协议字段，当前由 `apps/web/features/canvas/artifact-canvas-resource.ts` 在浏览器端
+按 artifact.kind 补齐：
+
+| 缺口字段 | 当前补齐值 | 说明 |
+| -------- | ---------- | ---- |
+| rendererId | kind→rendererId 前端映射 | 后端 detail 应返回真实 rendererId |
+| rendererVersion | 固定 1 | 后端应返回真实版本 |
+| notebookId | `'unknown-notebook'` 占位 | 归属投影，前端无法得知 |
+| representation.mimeType | 按 kind 固定 | 后端应返回真实 MIME |
+| provenance | `agent_generated` 占位 | 后端应返回真实溯源 |
+| runtime | `{ kind: 'none' }` | 后端应返回真实 Runtime 需求 |
+
+后端在 detail 里补全上述字段后，`artifact-canvas-resource.ts` 的映射与构造可整体
+删除。该接口变更属于 R 线或独立后端任务，不在 W 线私自复制 API（见本计划硬边界）。
+
 ### W05：Web 模块静态边界
 
 - 依赖：W02
@@ -310,7 +328,7 @@ type WorkspaceSurface =
 | W01 Surface 模型      | `PASS`    | `workspace-surface.ts` 判别联合 + reducer；12 个纯函数测试全绿；characterization 先固定 5 处互斥链行为并消除其不一致（经 Codex 审核通过，PR #287）       |
 | W02 职责拆分          | `PASS`    | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（经 Codex 审核通过，PR #290） |
 | W03 诚实失败          | `PASS`    | 六种错误语义统一（`canvas/resource-error.ts` + `CanvasShellStatus` 7 态，Retry 只对 failed/unavailable/offline 开放）；asset-client/canvas-resource-client 错误带 kind；useNotebookSources 结构化错误 + `LatestRequestGuard` 竞态保护；失败转空/吞错 3 处修复；error matrix：resource-error 15 + asset 12 + canvas-client 14 + CanvasShellStatus 渲染 7 + 竞态 3 测试；lint/typecheck/**951 测试**/build 全绿，无静默 `catch {}`（经 Codex 审核通过，PR #294） |
-| W04 Artifact Registry | `PENDING` | renderer contract + E2E                                                                                                                                 |
+| W04 Artifact Registry | `IN PROGRESS` | W04-1 契约固定（12 测试）；W04-2 注册真实内容 Renderer（5 类适配器 + 测试）；W04-3 组合层桥接（`artifact-canvas-resource.ts` 构造渲染用资源 + `artifact-canvas-content.tsx` 内容区分发：5 类内容驱动产物经 Registry 渲染真实内容，note/dom/skeleton/empty 壳内保留；lint/typecheck/**999 测试**/build 全绿，接口缺口清单见本计划 W04 节）；剩余 W04-4 删兼容占位/旧入口、W04-5 E2E |
 | W05 静态边界          | `PASS`    | 门禁 A：ESLint `no-restricted-imports` 限定 `features/**` 禁 server/db/schema/server-only + 6 negative fixtures；门禁 C：共享组件移 `components/`（9 处 import）清除 Renderer 反向依赖；门禁 B：feature 公开入口以 allowlist 收口（**Issue #296** 负责人拍板，限期 W 线收口前/下季度）；ADR-0023 + `03-前端工程.md` 回写；lint/typecheck/957 测试/build 全绿（经 Codex 审核通过，PR #298） |
 | W06 多端与性能        | `PENDING` | Playwright、bundle/perf evidence                                                                                                                        |
 | W07 收口              | `PENDING` | full Web CI、删除清单                                                                                                                                   |
