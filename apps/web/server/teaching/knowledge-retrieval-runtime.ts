@@ -18,7 +18,9 @@ import {
   resolveCapabilityGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
 } from '@educanvas/model-gateway';
+import { recordRetrievalDegradation } from '@educanvas/teaching-runtime';
 import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
+import { webTeachingObservability } from '../teaching/teaching-observability';
 
 /**
  * Web 组合根只显式转交向量检索所需的环境变量；与其他模型入口同一纪律，
@@ -167,5 +169,16 @@ export async function retrieveTeachingEvidence(input: {
   getWebTelemetryRuntime().metrics.increment('retrieval_mode_total', {
     mode: result.vectorApplied ? 'vector' : 'lexical',
   });
+  // Q02 接线：降级 reason 双通道记录——teaching-runtime 指标通道（平台可订阅）
+  // 与全局 metrics 注册表（/v1/internal/metrics 暴露），均为低基数闭集标签。
+  if (result.degradationReason) {
+    recordRetrievalDegradation(
+      webTeachingObservability,
+      result.degradationReason,
+    );
+    getWebTelemetryRuntime().metrics.increment('retrieval_degradations', {
+      reason: result.degradationReason,
+    });
+  }
   return result;
 }

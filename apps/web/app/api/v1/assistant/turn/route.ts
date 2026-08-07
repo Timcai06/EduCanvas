@@ -9,9 +9,12 @@ import {
   loadOwnedGeneralConversation,
   writeActiveConversationCookie,
 } from '@/server/platform/general-conversation';
-import { resolveTurnModelRuntime } from '@/server/model/model-runtime';
-import { classifyIntent } from './classify-intent';
-
+import {
+  AssistantClassifyError,
+  createAssistantClassifyDependencies,
+  runClassifiedTurn,
+} from './assistant-classify';
+import type { classifyIntent } from './classify-intent';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -93,17 +96,28 @@ export async function POST(request: Request): Promise<Response> {
 
   let intent: Awaited<ReturnType<typeof classifyIntent>>;
   try {
-    const gateway = resolveTurnModelRuntime()?.gateway;
-    if (!gateway) throw new Error('model_unavailable');
-    intent = await classifyIntent(
-      text,
-      notebooks.map((n) => ({
-        id: n.id,
-        title: n.title ?? '未命名笔记本',
-      })),
-      gateway,
+    const deps = createAssistantClassifyDependencies();
+    intent = await runClassifiedTurn(
+      {
+        text,
+        notebooks: notebooks.map((n) => ({
+          id: n.id,
+          title: n.title ?? '未命名笔记本',
+        })),
+      },
+      deps,
     );
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof AssistantClassifyError &&
+      error.code === 'budget_exceeded'
+    ) {
+      return jsonError(
+        429,
+        'budget_exceeded',
+        '助手使用次数已达上限，请稍后再试。',
+      );
+    }
     return jsonError(503, 'assistant_unavailable', '助手暂时不可用。');
   }
 

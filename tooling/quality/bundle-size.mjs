@@ -88,10 +88,22 @@ const stats = {
 
 const failures = [];
 if (recordMode) {
+  // #310：基线必须注明构建环境——本地（macOS arm64 + node 24）与 CI
+  // （linux x64 + node 22）的 Next 构建产物大小差异可达 10%+，无环境标记的
+  // 基线会把环境差异误判为回归（2026-08-07 实测 _not-found.html 11411→15937）。
+  const buildEnvironment = {
+    platform: process.platform,
+    arch: process.arch,
+    node: process.version,
+  };
   writeFileSync(
     BASELINE_PATH,
     JSON.stringify(
-      { recordedAt: new Date().toISOString().slice(0, 10), ...stats },
+      {
+        recordedAt: new Date().toISOString().slice(0, 10),
+        buildEnvironment,
+        ...stats,
+      },
       null,
       2,
     ) + '\n',
@@ -106,6 +118,15 @@ if (recordMode) {
 let baseline;
 try {
   baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
+  if (
+    baseline.buildEnvironment &&
+    (baseline.buildEnvironment.platform !== process.platform ||
+      baseline.buildEnvironment.node !== process.version)
+  ) {
+    console.warn(
+      `bundle-size: 警告——基线记录于 ${baseline.buildEnvironment.platform}/${baseline.buildEnvironment.arch} node${baseline.buildEnvironment.node}，当前环境 ${process.platform}/${process.arch} node${process.version}；跨环境产物大小有差异，门禁以记录环境（CI）为准。`,
+    );
+  }
 } catch {
   console.log(
     'bundle-size: 无基线文件。先用 --record 记录基线（Q05 要求先真实基线后设阈值）。',

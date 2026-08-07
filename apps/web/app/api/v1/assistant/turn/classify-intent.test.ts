@@ -86,6 +86,30 @@ describe('assistant classifyIntent', () => {
     expect(intent).toEqual({ action: 'unknown' });
   });
 
+  it('panel 不在白名单时整条意图按 unknown 处理', async () => {
+    const gateway = fakeGateway([
+      delta('{"action":"open_panel","panel":"drop_database"}'),
+    ]);
+    const intent = await classifyIntent('删库', NOTEBOOKS, gateway);
+    expect(intent).toEqual({ action: 'unknown' });
+  });
+
+  it('title 超长时剔除，由路由回退默认命名', async () => {
+    const gateway = fakeGateway([
+      delta(`{"action":"create_notebook","title":"${'长'.repeat(121)}"}`),
+    ]);
+    const intent = await classifyIntent('新建笔记本', NOTEBOOKS, gateway);
+    expect(intent).toEqual({ action: 'create_notebook' });
+  });
+
+  it('kind 不在白名单时剔除，仅保留标题匹配', async () => {
+    const gateway = fakeGateway([
+      delta('{"action":"open_artifact","kind":"drop_database","title":"数学"}'),
+    ]);
+    const intent = await classifyIntent('打开数学', NOTEBOOKS, gateway);
+    expect(intent).toEqual({ action: 'open_artifact', title: '数学' });
+  });
+
   it('action 缺失时回退 unknown', async () => {
     const gateway = fakeGateway([delta('{"title":"只有标题"}')]);
     const intent = await classifyIntent('随便说点', NOTEBOOKS, gateway);
