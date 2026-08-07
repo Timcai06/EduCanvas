@@ -43,6 +43,7 @@ export {
 } from './teaching-safety';
 export {
   observableProviderAliases,
+  recordRetrievalDegradation,
   recordTeachingMetric,
   teachingMetricNames,
   type ObservableProviderAlias,
