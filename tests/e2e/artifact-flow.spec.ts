@@ -170,6 +170,16 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   await expect(
     page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
   ).toBeVisible();
+  /* modal 语义：背景（含主导航）被 inert 移出可访问性树——通用工作区
+     此前从不 inert（modal-focus 只认 learning 标记），Q05 修复后与
+     learning 一致；关闭后导航恢复。 */
+  await expect(
+    page.getByRole('navigation', { name: '工作区主导航' }),
+  ).toHaveCount(0);
+  await page
+    .getByRole('dialog', { name: '添加文档来源' })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
   await expect(
     page.getByRole('navigation', { name: '工作区主导航' }),
   ).toBeVisible();

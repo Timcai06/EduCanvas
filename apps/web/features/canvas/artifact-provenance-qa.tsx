@@ -20,7 +20,9 @@ const base: ArtifactDetail['artifact'] = {
   latestVersion: 2,
   fromConversation: true,
   createdAt: '2026-07-20T06:00:00.000Z',
-  updatedAt: new Date().toISOString(),
+  // 冻结时间戳而非渲染期 new Date()：模块在服务端与客户端各求值一次，
+  // 动态时间会在分钟翻转时产生水合不匹配（React #418，Q05 hydration 检查抓到）。
+  updatedAt: '2026-07-20T07:00:00.000Z',
 };
 
 function detail(

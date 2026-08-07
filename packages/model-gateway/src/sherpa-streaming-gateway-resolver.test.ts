@@ -5,6 +5,11 @@
  * SDK 加载次数为 0（即 recognizerFactory.create 不会被调用）。
  */
 import { describe, expect, it } from 'vitest';
+import { sep } from 'node:path';
+
+/* fake 状态统一用 / 分隔的 key：resolver 在 Windows 上会用 \ 拼路径，
+   mock 侧归一化后与平台无关，避免 Windows 上全部文件"缺失"。 */
+const norm = (path: string) => path.split(sep).join('/');
 import { sherpaModelProfiles } from './sherpa-model-manifest';
 import {
   resolveSherpaStreamingTranscriptionGateway,
@@ -50,15 +55,16 @@ function makeDeps(
   overrides: Partial<SherpaStreamingGatewayDependencies> = {},
 ): SherpaStreamingGatewayDependencies {
   return {
-    isDirectory: (path) => state.dirs.has(path),
-    isFile: (path) => state.files.has(path) || state.hotwords.has(path),
+    isDirectory: (path) => state.dirs.has(norm(path)),
+    isFile: (path) =>
+      state.files.has(norm(path)) || state.hotwords.has(norm(path)),
     sha256File: async (path) => {
-      const hash = state.files.get(path);
+      const hash = state.files.get(norm(path));
       if (hash === undefined) throw new Error('missing_file');
       return hash;
     },
     readHotwords: (path) => {
-      const text = state.hotwords.get(path);
+      const text = state.hotwords.get(norm(path));
       if (text === undefined) throw new Error('missing_hotwords');
       return text;
     },

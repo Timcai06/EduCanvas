@@ -18,6 +18,7 @@
     "start:local": "node tooling/local-orchestrator.mjs web",
     "test": "pnpm test:unit",
     "test:unit": "pnpm test:tooling && turbo test",
+    "test:coverage": "turbo test:coverage --filter=@educanvas/telemetry --filter=@educanvas/agent-core --filter=@educanvas/agent-runtime",
     "test:tooling": "node --test tooling/*.test.mjs",
     "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker --concurrency=1",
     "pretest:e2e": "pnpm build",

@@ -36,6 +36,8 @@ test('```html 代码块经预览卡在沙箱 iframe 中运行', async ({ page })
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('给我一个可以点的演示');
+  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
   await composer.press('Enter');
 
   /* 预览卡出现,代码不直接执行 */

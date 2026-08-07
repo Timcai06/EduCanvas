@@ -71,6 +71,11 @@ async function startFixtureProvider(): Promise<{
         'content-type': 'audio/mpeg',
         'content-length': String(bytes.byteLength),
         'x-request-id': 'e2e-speech-1',
+        /* 逐请求关闭连接：worker 的 undici 全局 fetch 默认 keep-alive 4s，
+           与 Node server 的 keepAliveTimeout(5s) 存在空闲复用竞态——偶发
+           ECONNRESET 会让 artifact 任务重试并拖垮 30s 测试预算。fixture
+           无并发性能要求，禁用保活最确定。 */
+        connection: 'close',
       });
       response.end(bytes);
       return;
@@ -84,7 +89,10 @@ async function startFixtureProvider(): Promise<{
         payload.messages
           ?.map((message) => message.content ?? '')
           .join('\n\n') ?? '';
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        connection: 'close',
+      });
       response.end(
         JSON.stringify({
           id: 'e2e-structured-1',
@@ -104,7 +112,11 @@ async function startFixtureProvider(): Promise<{
       );
       return;
     }
-    response.writeHead(404).end();
+    response.writeHead(404, { connection: 'close' }).end();
+  });
+  /* Provider 崩溃要立刻浮出，而不是让 worker 以 unavailable 重试掩盖故障。 */
+  server.on('error', (error) => {
+    process.stderr.write(`[e2e-fixture-provider] error: ${error.stack ?? error}\n`);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -132,6 +144,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     'pnpm',
     ['--filter', '@educanvas/worker', 'start'],
     {
+      // Windows 上 pnpm 是 pnpm.cmd，Node spawn 默认不解析 .cmd；
+      // Linux CI 的 PATH 直接有 pnpm 可执行。命令与参数均为常量，无注入面。
+      shell: process.platform === 'win32',
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
@@ -154,9 +169,12 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   );
 
   await new Promise<void>((resolve, reject) => {
+    // 90s：Linux CI 上 pnpm shim 冷启动约数秒；Windows 本地 pnpm --filter
+    // 解析 workspace 并输出引擎 WARN 明显更慢，30s 是 CI 级偶发超时源。
+    // 真正启动后立即 resolve，超时只是兜底，不拖长通过路径。
     const timeout = setTimeout(
-      () => reject(new Error('worker 启动超时(30s)')),
-      30_000,
+      () => reject(new Error('worker 启动超时(90s)')),
+      90_000,
     );
     worker.stdout?.on('data', (chunk: Buffer) => {
       workerLogAudit.ingest(chunk);

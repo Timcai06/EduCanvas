@@ -50,14 +50,17 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * 从模态节点逐层向学习工作区回溯，将每一层的兄弟分支设为 inert。
+ * 从模态节点逐层向工作区根回溯，将每一层的兄弟分支设为 inert。
  * 这样既能隔离顶栏，也能隔离与 Canvas 同级的 Chat，而不会把包含模态框
  * 自身的祖先一起禁用。清理函数精确恢复调用前状态，支持嵌套表面。
+ * 学习与通用两个 workspace 根都带标记；缺标记的宿主（如设计 QA 页）跳过。
  */
 export function makeWorkspaceBackgroundInert(
   modalRoot: HTMLElement,
 ): () => void {
-  const workspace = modalRoot.closest<HTMLElement>('[data-learning-workspace]');
+  const workspace = modalRoot.closest<HTMLElement>(
+    '[data-learning-workspace], [data-general-workspace]',
+  );
   if (!workspace) return () => undefined;
 
   const targets = new Set<HTMLElement>();

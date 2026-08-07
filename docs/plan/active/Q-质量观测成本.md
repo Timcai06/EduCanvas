@@ -202,6 +202,12 @@ Q00
 - failure reason 不成为高基数 label；
 - 不改变候选权限和引用白名单。
 
+**Q05 回填登记（2026-08-06，覆盖率为三个核心包 vitest v8 实测，bundle 为本地 Next 16 构建实测）：**
+
+- 语句/分支/函数/行覆盖率基线（排除生成代码与纯类型，`packages/{telemetry,agent-core,agent-runtime}/vitest.config.ts`）：telemetry **92.14 / 90.37 / 83.11 / 92.55**、agent-core **96.21 / 94.34 / 96.70 / 97.43**、agent-runtime **78.43 / 74.70 / 86.57 / 80.51**。阈值（G，防回归，只升不降）：telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80；
+- bundle/route size 基线（`tooling/quality/bundle-size-baseline.json`，2026-08-06）：JS 总量 **4120016B**、最大 chunk **875476B**、静态路由 HTML 5 个（login/register/settings/not-found/global-error）。门禁：任一超基线 1.1× 或新增路由 HTML >300KB → fail；
+- retry 纪律：CI 上 `failOnFlakyTests` 使 flaky 直接失败（retries=1），retry/flaky 名单经 `tooling/quality/playwright-summary.mjs` 写入 CI Summary，禁止无限 retry、禁止隐藏 retry 后通过；
+
 ### Q03：Agent Turn token、时间与成本预算
 
 - 依赖：Q00
@@ -334,7 +340,7 @@ Q00
 | Q02 降级观测    | `PENDING` | 9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；待验收 |
 | Q03 Turn budget | `DONE`    | budget controller + ledger（Q03 PR，CI 全绿）                                                                                                                                                                                                                                                                                                                                                              |
 | Q04 SLO/Runbook | `DONE`    | metrics registry + Web/Gateway/Worker 唯一组合层包装 + internal metrics 端点 + SLO/Runbook；指标故障旁路业务结果，协议型标签值使用闭集                                                                                                                                                                                                                                                                     |
-| Q05 测试真实性  | `PENDING` | CI summary + browser/coverage/bundle                                                                                                                                                                                                                                                                                                                                                                       |
+| Q05 测试真实性  | `DONE`    | coverage 门禁（telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80，2026-08-06 基线）+ chromium-mobile 第二环境进默认 lane + hydration 检查 + bundle/route size 基线（jsTotal 4120016B/entry 875476B）+ @ui 独立 lane（chromium+firefox，nightly+路径触发）+ retry/flaky 汇总进 CI Summary（Q05 PR，CI 全绿） |
 | Q06 供应链发布  | `PENDING` | dependency/migration/release gates                                                                                                                                                                                                                                                                                                                                                                         |
 | Q07 收口        | `PENDING` | reproducible baseline report                                                                                                                                                                                                                                                                                                                                                                               |
 

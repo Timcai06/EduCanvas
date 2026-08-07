@@ -1,9 +1,16 @@
 import { expect, test } from '@playwright/test';
 
+// 超长真实链路：注册 + 双上下文登录 + 改档 + 改密 + 会话撤销 + 两次重登，
+// 含多次 bcrypt 哈希与 ~20 次服务端往返，本地实测 ~30s 恰好压住默认 30s
+// 上限；CI runner 负载波动（如 2026-08-07 Actions 故障恢复期）即超时。
+// 60s 预算与流程真实耗时匹配（Q05 门禁：预算真实，不靠无限 retry）。
+// 注意：Playwright 的 test(title, details, body) 不支持 details.timeout，
+// 必须用 test.setTimeout()。
 test('账号注册、资料更新、改密码和会话撤销走真实服务端链路', async ({
   browser,
   page,
 }) => {
+  test.setTimeout(60_000);
   const suffix = Date.now().toString(36);
   const username = `e2e_user_${suffix}`;
   const nickname = '初始昵称';
