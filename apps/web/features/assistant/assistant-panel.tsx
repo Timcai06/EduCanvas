@@ -1,7 +1,13 @@
 'use client';
 
 import { ChatCircleText, PaperPlaneTilt, X } from '@phosphor-icons/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
 
@@ -20,6 +26,18 @@ interface Bubble {
  * Assistant 专用的轻量 SSE 消费 hook。
  * 与 useAgentTurn 使用相同的底层事件解析，但不维护历史消息列表。
  */
+/** matchMedia 桌面宽度订阅（useSyncExternalStore 用）。 */
+function subscribeDesktopWidth(callback: () => void): () => void {
+  const query = window.matchMedia('(min-width: 768px)');
+  query.addEventListener('change', callback);
+  return () => query.removeEventListener('change', callback);
+}
+
+/** 当前是否为桌面宽度。 */
+function getDesktopWidthSnapshot(): boolean {
+  return window.matchMedia('(min-width: 768px)').matches;
+}
+
 function useAssistantStream() {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [busy, setBusy] = useState(false);
@@ -191,6 +209,16 @@ export function AssistantPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // 桌面宽度守卫：悬浮按钮为 fixed 定位 + zIndex 1000，窄视口（含移动端）
+  // 会遮挡页面右下角交互元素（e2e chromium-mobile 实测被截获点击）；
+  // 小助手定位为桌面能力，窄视口不渲染。useSyncExternalStore 订阅 matchMedia，
+  // SSR 首帧（getServerSnapshot=false）与客户端一致，避免 hydration 失配。
+  const isDesktop = useSyncExternalStore(
+    subscribeDesktopWidth,
+    getDesktopWidthSnapshot,
+    () => false,
+  );
+
   // 打开时聚焦输入框
   useEffect(() => {
     if (open) {
@@ -214,6 +242,9 @@ export function AssistantPanel() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
+
+  // 窄视口不渲染悬浮助手（守卫放在所有 hooks 之后，保证 hooks 调用顺序稳定）。
+  if (!isDesktop) return null;
 
   const handleSend = () => {
     if (!input.trim() || busy) return;

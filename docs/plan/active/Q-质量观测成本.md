@@ -5,8 +5,8 @@
 - 负责人：项目负责人
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
-- 最后验证时间：2026-08-06
-- 当前领取任务：`Q00`
+- 最后验证时间：2026-08-07
+- 当前领取任务：`Q07`（收口，复核后归档）
 - 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[KM 知识记忆](KM-知识记忆.md)
@@ -333,16 +333,21 @@ Q00
 
 ## 七、验证台账
 
-| 任务            | 状态      | 证据                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q00 指标冻结    | `PENDING` | metric contract                                                                                                                                                                                                                                                                                                                                                                                            |
-| Q01 RAG eval    | `DONE`    | frozen dataset + report：冻结评测集修正重提（2026-08-07，#307 CI 全绿），报告 `tooling/evals/reports/rag-eval-v1-2026-08-07.json`（hybrid MRR 0.844 / NDCG 0.891，latency hybrid 9.9/17.7ms n=50，latencyMsByRetriever 按配置拆分）                                                                                                                                                                                                                                                                                                                                                                                    |
-| Q02 降级观测    | `PENDING` | 9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；待验收 |
-| Q03 Turn budget | `DONE`    | budget controller + ledger（Q03 PR，CI 全绿）；#309 桌宠（assistant/turn）接入同一 agent.turn 模板 + DrizzleTurnUsageBudgetLedger，调用前/后检查点 + breachReason 闭集落账（2026-08-07，CI 全绿）                                                                                                                                                                                                                                                                                                                                                              |
-| Q04 SLO/Runbook | `DONE`    | metrics registry + Web/Gateway/Worker 唯一组合层包装 + internal metrics 端点 + SLO/Runbook；指标故障旁路业务结果，协议型标签值使用闭集                                                                                                                                                                                                                                                                     |
-| Q05 测试真实性  | `DONE`    | coverage 门禁（telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80，2026-08-06 基线）+ chromium-mobile 第二环境进默认 lane + hydration 检查 + bundle/route size 基线（jsTotal 4120016B/entry 875476B）+ @ui 独立 lane（chromium+firefox，nightly+路径触发）+ retry/flaky 汇总进 CI Summary（Q05 PR，CI 全绿） |
-| Q06 供应链发布  | `PENDING` | dependency/migration/release gates                                                                                                                                                                                                                                                                                                                                                                         |
-| Q07 收口        | `PENDING` | reproducible baseline report                                                                                                                                                                                                                                                                                                                                                                               |
+> 判定口径（2026-08-07 Code Owner 审核后统一）：**DONE** = 已合入 main 且 main 回归全绿；
+> **IMPLEMENTED** = 产物完成且分支 CI 全绿，待合并，或已合入但 main 回归待恢复；
+> **PENDING** = 已回退（Q01）或已合入未验收（Q02）。main 回归状态与根因见
+> `docs/06-quality/09-质量基线报告.md` §1 现状注记与 §7 降级 3/5。
+
+| 任务            | 状态      | 证据                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q00 指标冻结    | `DONE`    | 指标组与阈值语义冻结于本计划 Q00 节（Retrieval/Answer/Runtime/Latency/Cost/UI-Test/Privacy 与 CI gate/趋势/人工评审分类）；文档任务无独立 PR；汇总见 docs/06-quality/09-质量基线报告.md（2026-08-07 回写）                                                                                                                                                                                                                                                                                                                                                                                               |
+| Q01 RAG eval    | `PENDING` | #288 合入后被 #293 revert（延迟基线混入多检索器配置，与 hybrid-only 描述不符）；tooling/evals 已从 git 移除，评测入口不可用；修正版已重提并合入 main（#307，2026-08-07；报告 rag-eval-v1-2026-08-07.json）；待验收（评测非 CI gate，需 TEST_DATABASE_URL 手动复现）                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Q02 降级观测    | `PENDING` | #289 已合入 main（a7df105）；9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；**合入时 e2e gate FAILURE**（runtime-composition `dbModule.getDb is not a function`，基分支过期；main 已于 2026-08-07 回归全绿）；待验收：对 Q02 变更集单独复跑 CI 确认 |
+| Q03 Turn budget | `DONE`    | budget controller + ledger（#291，已合入 main 01424d4）；注：合入于 2026-08-06 Actions 故障期，head 最终 check 含 e2e failure，main 现已回归全绿（2026-08-07）                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Q04 SLO/Runbook | `DONE`    | metrics registry + Web/Gateway/Worker 唯一组合层包装 + internal metrics 端点 + SLO/Runbook（#295，已合入 main 0085e06；合入期 head 最终 check 含 failure/skipped，Actions 故障期影响，main 现已回归全绿）；指标故障旁路业务结果，协议型标签值使用闭集                                                                                                                                                                                                                                                                                                                                                    |
+| Q05 测试真实性  | `IMPLEMENTED` | coverage 门禁（telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80，2026-08-06 基线）+ chromium-mobile 第二环境进默认 lane + hydration 检查 + bundle/route size 基线（jsTotal 4120016B/entry 875476B）+ @ui 独立 lane（chromium+firefox，nightly+路径触发）+ retry/flaky 汇总进 CI Summary；#303 已合入 main `88027be`（分支 CI 3 次全绿）；main 回归待恢复（size gate 基线过时：#304 已重录基线随 `d01db29` 合入，#309 另录精确基线待合并，见报告 §7-3）                                                                                                                                                                                                                  |
+| Q06 供应链发布  | `IMPLEMENTED` | #304：action 40 位 SHA pin + dependency-review 门禁（high 即 fail）+ 容器 digest pin + migration records 门禁（51 迁移全字段）+ release evidence 语义（passed/skipped/failed 终态语义）+ 供应链文档 08-供应链与发布证据.md；#304 已合入 main `d01db29`，分支最终 run（#31161098720）**8 项终态全绿**（dependency-review/secret-scan/checks/integration/windows/runtime-pressure/e2e SUCCESS + release-evidence SKIPPED 预期，rc1 未发布）；main 回归待恢复（dependency-review push-event 缺陷，修复 PR #311，见报告 §7-5）                                                                                                                                                                                                                                                                                            |
+| Q07 收口        | `IMPLEMENTED` | docs/06-quality/09-质量基线报告.md（2026-08-07-2，按 Code Owner 审核意见修订：job 清单/数量/基线/状态语义/门禁接线修正）+ 本文台账回写；**待 Code Owner 复审合并**；Codex 独立复核后归档                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## 八、阶段级验证
 
@@ -371,11 +376,11 @@ rtk git status --short
 
 ## 十、收尾检查表
 
-- [ ] RAG 有冻结质量评测；
-- [ ] 所有关键降级有稳定内部原因和指标；
-- [ ] Turn 使用 token/time/cost 预算；
-- [ ] SLI/SLO、结构化日志和 Runbook 已接通；
-- [ ] CI 显示 retry、coverage、浏览器和 bundle 真相；
-- [ ] 供应链与迁移有发布门；
-- [ ] 质量基线报告可复现；
-- [ ] 计划已归档并更新 active 索引。
+- [ ] RAG 有冻结质量评测 —— **未满足**：Q01 已回退（#293），修正版待重提；
+- [x] 所有关键降级有稳定内部原因和指标 —— Q02 已合入 main（9 reason + 指标 + 测试），台账「待验收」项待 Codex 复核时确认；
+- [x] Turn 使用 token/time/cost 预算 —— Q03 已合入 main；
+- [x] SLI/SLO、结构化日志和 Runbook 已接通 —— Q04 已合入 main；
+- [ ] CI 显示 retry、coverage、浏览器和 bundle 真相 —— Q05 分支全绿，**#303 待合并**，合入后勾选；
+- [ ] 供应链与迁移有发布门 —— Q06 分支全绿，**#304 待合并**，合入后勾选；
+- [x] 质量基线报告可复现 —— docs/06-quality/09-质量基线报告.md（2026-08-07-1）；
+- [ ] 计划已归档并更新 active 索引 —— Codex 独立复核通过后执行（归档至 completed/ 并按 README 更新 active 索引）。
