@@ -22,25 +22,50 @@ const dbNodeModules = path.join(repoRoot, 'packages', 'db', 'node_modules');
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@educanvas/agent-core': aliasEntry('agent-core'),
-      '@educanvas/canvas-protocol': aliasEntry('canvas-protocol'),
-      '@educanvas/db': aliasEntry('db'),
-      '@educanvas/db/internal': path.join(
-        repoRoot,
-        'packages',
-        'db',
-        'src',
-        'internal',
-        'index.ts',
-      ),
-      '@educanvas/gateway-core': aliasEntry('gateway-core'),
-      '@educanvas/teaching-core': aliasEntry('teaching-core'),
-      '@educanvas/teaching-runtime': aliasEntry('teaching-runtime'),
-      'drizzle-orm': path.join(dbNodeModules, 'drizzle-orm'),
-      postgres: path.join(dbNodeModules, 'postgres'),
-      vitest: path.join(dbNodeModules, 'vitest'),
-    },
+    // 数组 + 正则形式：`$` 锚定字符串键在 rolldown/vite 8 下未生效（实测
+    // Cannot find package），正则精确匹配保证 '@educanvas/db' 不吞
+    // '@educanvas/db/internal' 子路径。
+    alias: [
+      {
+        find: /^@educanvas\/agent-core$/,
+        replacement: aliasEntry('agent-core'),
+      },
+      {
+        find: /^@educanvas\/canvas-protocol$/,
+        replacement: aliasEntry('canvas-protocol'),
+      },
+      {
+        find: /^@educanvas\/db$/,
+        replacement: aliasEntry('db'),
+      },
+      {
+        find: /^@educanvas\/db\/internal$/,
+        replacement: path.join(
+          repoRoot,
+          'packages',
+          'db',
+          'src',
+          'internal',
+          'index.ts',
+        ),
+      },
+      {
+        find: /^@educanvas\/gateway-core$/,
+        replacement: aliasEntry('gateway-core'),
+      },
+      {
+        find: /^@educanvas\/teaching-core$/,
+        replacement: aliasEntry('teaching-core'),
+      },
+      {
+        find: /^@educanvas\/teaching-runtime$/,
+        replacement: aliasEntry('teaching-runtime'),
+      },
+      // drizzle-orm 允许子路径导入（postgres-js、postgres-js/migrator），前缀匹配。
+      { find: /^drizzle-orm/, replacement: path.join(dbNodeModules, 'drizzle-orm') },
+      { find: /^postgres$/, replacement: path.join(dbNodeModules, 'postgres') },
+      { find: /^vitest$/, replacement: path.join(dbNodeModules, 'vitest') },
+    ],
   },
   test: {
     include: ['rag-eval.test.ts'],
