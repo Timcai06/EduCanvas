@@ -255,6 +255,21 @@ export function AssistantPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // 桌面宽度守卫：悬浮按钮为 fixed 定位 + zIndex 1000，窄视口（含移动端）
+  // 会遮挡页面右下角交互元素（e2e chromium-mobile 实测被截获点击）；
+  // 小助手定位为桌面能力，窄视口不渲染。
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(query.matches);
+    const onChange = (event: MediaQueryListEvent) =>
+      setIsDesktop(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  if (!isDesktop) return null;
+
   // 打开时聚焦输入框
   useEffect(() => {
     if (open) {
