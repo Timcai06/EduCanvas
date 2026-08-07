@@ -62,7 +62,10 @@ export default defineConfig({
         replacement: aliasEntry('teaching-runtime'),
       },
       // drizzle-orm 允许子路径导入（postgres-js、postgres-js/migrator），前缀匹配。
-      { find: /^drizzle-orm/, replacement: path.join(dbNodeModules, 'drizzle-orm') },
+      {
+        find: /^drizzle-orm/,
+        replacement: path.join(dbNodeModules, 'drizzle-orm'),
+      },
       { find: /^postgres$/, replacement: path.join(dbNodeModules, 'postgres') },
       { find: /^vitest$/, replacement: path.join(dbNodeModules, 'vitest') },
     ],
