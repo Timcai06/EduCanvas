@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-08-06",
+  "recordedAt": "2026-08-07",
   "totalBytes": 4120016,
   "entry": {
     "path": "static\\chunks\\1lqtnek80e9qs.js",
@@ -8,7 +8,7 @@
   "routes": [
     {
       "route": "/_not-found.html",
-      "bytes": 11411
+      "bytes": 15937
     },
     {
       "route": "/_global-error.html",
@@ -16,15 +16,15 @@
     },
     {
       "route": "/register.html",
-      "bytes": 8884
+      "bytes": 12401
     },
     {
       "route": "/settings.html",
-      "bytes": 8880
+      "bytes": 12397
     },
     {
       "route": "/login.html",
-      "bytes": 8875
+      "bytes": 12392
     }
   ]
 }
