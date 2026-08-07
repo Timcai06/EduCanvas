@@ -9,6 +9,7 @@ import gsap from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { useRef } from 'react';
 import { useSidebarState } from './use-sidebar-state';
+import { useAssistantArtifacts } from './use-assistant-artifacts';
 import { AgentBusyOverlay } from '../shared/agent-busy-overlay';
 import { GeneralAssetEntrySheets } from './general-asset-entry-sheets';
 import { GeneralWorkspaceLayout } from './general-workspace-layout';
@@ -49,6 +50,7 @@ export function GeneralChatWorkspace({
     scrollRef,
     nearBottom,
   });
+  useAssistantArtifacts(ctrl.artifactFlow);
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
@@ -87,7 +89,10 @@ export function GeneralChatWorkspace({
     ) : null;
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas text-ink">
+    <div
+      data-general-workspace
+      className="flex h-dvh flex-col bg-canvas text-ink"
+    >
       <GeneralWorkspaceLayout
         ctrl={ctrl}
         notebookTitle={notebookTitle}

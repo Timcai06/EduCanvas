@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -108,14 +108,10 @@ describeWithToolchain('视频派生（真实 ffmpeg fixture）', () => {
 
   it('损坏文件按 video_probe_failed 终结，不抛原始 ffprobe 输出', async () => {
     const brokenPath = path.join(fixtureDirectory, 'broken.mp4');
-    await run(
-      'sh',
-      [
-        '-c',
-        `head -c 512 ${JSON.stringify(withAudioPath)} > ${JSON.stringify(brokenPath)}`,
-      ],
-      { timeout: 30_000 },
-    );
+    /* 用 Node fs 原生截断而非 `sh -c 'head -c 512 > ...'`：Windows 无 sh/head，
+       测试夹具必须跨平台可复现（产物相同：损坏的 512 字节前缀）。 */
+    const originalBytes = await readFile(withAudioPath);
+    await writeFile(brokenPath, originalBytes.subarray(0, 512));
 
     const error = await probeVideoFile(brokenPath, toolchain).catch(
       (failure: unknown) => failure,

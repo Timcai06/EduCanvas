@@ -6,8 +6,32 @@ import path from 'node:path';
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
 
+/* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
+   移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
 function notebookSidebar(page: Page) {
-  return page.getByRole('complementary', { name: '笔记本侧栏' });
+  return page.locator('aside[aria-label="笔记本侧栏"]');
+}
+
+/*
+ * 窄屏（<lg）笔记本列表是覆盖抽屉：初始收起并带 inert/aria-hidden，
+ * 桌面端挂载后自动展开。交互前必须展开（幂等），否则定位与点击全部落空。
+ */
+async function openNotebookSidebar(page: Page) {
+  const sidebar = notebookSidebar(page);
+  if ((await sidebar.getAttribute('aria-hidden')) === 'true') {
+    await page.getByRole('button', { name: '打开笔记本列表' }).click();
+  }
+  await expect(sidebar).toHaveAttribute('aria-hidden', 'false');
+  return sidebar;
+}
+
+/* 收起抽屉：展开状态下遮罩会拦截主区指针事件（桌面端抽屉在流内无遮罩）。 */
+async function closeNotebookSidebar(page: Page) {
+  const sidebar = notebookSidebar(page);
+  if ((await sidebar.getAttribute('aria-hidden')) === 'false') {
+    await page.getByRole('button', { name: '收起笔记本侧栏' }).click();
+  }
+  await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
 }
 
 async function openStudioInput(page: Page) {
@@ -76,6 +100,9 @@ async function createNotebook(
   await expect(
     page.getByRole('region', { name: 'EduCanvas 技术栈' }),
   ).toBeVisible();
+  /* 切换会话若未触发整页重载，窄屏抽屉仍会展开：幂等收起，
+     避免遮罩拦截后续主区交互。 */
+  await closeNotebookSidebar(page);
 }
 
 async function waitForUnavailableTurn(page: Page) {
@@ -126,6 +153,8 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
 
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('帮我分析一个产品想法');
+  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
   await composer.press('Enter');
 
   await expect(page.getByText('帮我分析一个产品想法')).toBeVisible();
@@ -133,13 +162,14 @@ test('根入口默认创建通用Chat，界面上不存在K12模式入口', asyn
     page.getByText('我们先明确目标，再选择最合适的实现路径。'),
   ).toBeVisible();
   /* 当前Notebook出现在列表(本 spec 的 turn 被 mock,服务端不落
-     消息,标题保持空;真实标题=首条消息的行为由仓储层保证) */
-  await expect(notebookSidebar(page).getByText('未命名笔记本')).toBeVisible();
+     消息,标题保持空;真实标题=首条消息的行为由仓储层保证)。
+     窄屏下笔记本列表是覆盖抽屉：先展开断言，再收起，否则遮罩挡住主区。 */
+  const sidebar = await openNotebookSidebar(page);
+  await expect(sidebar.getByText('未命名笔记本')).toBeVisible();
 
   /* 当前 Notebook 的来源与输出属于 Studio，不再混入历史列表。 */
-  await expect(
-    notebookSidebar(page).getByText('来源', { exact: true }),
-  ).toHaveCount(0);
+  await expect(sidebar.getByText('来源', { exact: true })).toHaveCount(0);
+  await closeNotebookSidebar(page);
   const studio = await openStudioInput(page);
   await expect(
     studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
@@ -160,6 +190,8 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill(firstPrompt);
+  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
   await composer.press('Enter');
   await expect(
     page
@@ -168,7 +200,7 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   ).toBeVisible();
   await waitForUnavailableTurn(page);
 
-  const notebooks = notebookSidebar(page);
+  const notebooks = await openNotebookSidebar(page);
   const firstConversationContent = page
     .getByRole('region', { name: 'AI 对话' })
     .getByText(firstPrompt, { exact: true });
@@ -188,14 +220,18 @@ test('笔记本可反复切换，并整体恢复各自的消息', async ({ page 
   );
   await waitForUnavailableTurn(page);
 
-  await notebookSidebar(page)
+  await (
+    await openNotebookSidebar(page)
+  )
     .getByRole('button', { name: new RegExp(firstPrompt) })
     .click();
   let chat = page.getByRole('region', { name: 'AI 对话' });
   await expect(chat.getByText(firstPrompt, { exact: true })).toBeVisible();
   await expect(chat.getByText(secondPrompt, { exact: true })).toHaveCount(0);
 
-  await notebookSidebar(page)
+  await (
+    await openNotebookSidebar(page)
+  )
     .getByRole('button', { name: new RegExp(secondPrompt) })
     .click();
   chat = page.getByRole('region', { name: 'AI 对话' });
@@ -209,6 +245,8 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill(firstPrompt);
+  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
   await composer.press('Enter');
   await expect(
     page
@@ -289,7 +327,9 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
 
   await createNotebook(
     page,
-    notebookSidebar(page).getByRole('button', { name: '新建笔记本' }),
+    (await openNotebookSidebar(page)).getByRole('button', {
+      name: '新建笔记本',
+    }),
     page
       .getByRole('region', { name: 'AI 对话' })
       .getByText(firstPrompt, { exact: true }),
@@ -307,7 +347,9 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
     }, firstArtifact.id),
   ).resolves.toBe(404);
 
-  await notebookSidebar(page)
+  await (
+    await openNotebookSidebar(page)
+  )
     .getByRole('button', { name: /第一本：机器视觉资料/ })
     .click();
   studio = await openStudioInput(page);
@@ -389,7 +431,10 @@ test('Scripted：搜索并读取多个网页后，以稳定编号展示可打开
   await page.goto('/');
   const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
   await composer.fill('搜索网页并比较两份资料');
-  await composer.press('Enter');
+  /* 触屏窄屏由发送按钮承担发送（composer 设计：Enter 发送仅适用于桌面/物理键盘），
+     发送按钮仅在 hasPayload 时渲染，其 enabled 同时充当 React 状态落定同步点 */
+  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
+  await page.getByRole('button', { name: '发送' }).click();
 
   await expect(page.getByText(/第一份资料说明方案重视可达性/)).toBeVisible();
   const firstSource = page.getByRole('link', { name: /1 可达性设计指南/ });

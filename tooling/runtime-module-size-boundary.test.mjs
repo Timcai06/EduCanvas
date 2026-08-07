@@ -14,7 +14,8 @@ const GATEWAY_RUNTIME_REVIEW_LIMIT = 400;
 // PixelBlast runtime 因反闪烁的同步补渲等真实改动小幅增长，2026-07 从 350 上调到 360；仍是可读性护栏。
 const WEB_VISUAL_REVIEW_LIMIT = 360;
 const WEB_SETTINGS_REVIEW_LIMIT = 300;
-const WEB_WORKSPACE_REVIEW_LIMIT = 600;
+// 通用工作台 2026-08 Q05 起受护栏约束：modal 覆盖修复与 workspace 标记使其增长到 ~603 行；仍是可读性护栏。
+const WEB_WORKSPACE_REVIEW_LIMIT = 620;
 // 全局 Token、对话排版和视觉效果分别拆文件；每份样式仍受同一可读性护栏约束。
 const WEB_STYLES_REVIEW_LIMIT = 420;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';

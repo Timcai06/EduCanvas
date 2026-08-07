@@ -11,7 +11,8 @@
   "scripts": {
     "lint": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@educanvas/agent-core": "workspace:*",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "prettier": "^3.9.5",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
