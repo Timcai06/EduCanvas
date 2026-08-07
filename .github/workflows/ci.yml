@@ -27,6 +27,9 @@ concurrency:
 jobs:
   dependency-review:
     # Q06：恶意/高风险依赖变更门禁（license + 漏洞，fail-on-severity: high）。
+    # 仅在 PR event 运行：dependency-review-action 需要 base/head 对比，
+    # main push（无 base）会直接报错失败（#304 引入的回归，见 #305 审核）。
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
