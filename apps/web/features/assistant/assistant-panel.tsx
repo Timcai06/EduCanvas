@@ -10,10 +10,6 @@ import {
 } from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
-import {
-  consumeTeachingTurnResponse,
-  type TeachingTurnEvent,
-} from '@/features/chat/turn-events';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -97,99 +93,39 @@ function useAssistantStream() {
           return;
         }
 
-        const contentType = response.headers.get('content-type') ?? '';
+        // 管理操作：JSON 直接返回（assistant 端点只返回 JSON，无 SSE 分支）
+        const data = await response.json();
+        setBubbles((prev) =>
+          prev.map((b) =>
+            b.id === assistantBubble.id
+              ? { ...b, text: data.message ?? '完成', status: 'completed' }
+              : b,
+          ),
+        );
 
-        if (contentType.includes('text/event-stream')) {
-          // 聊天 / 生成导图：SSE 流式
-          let streamedText = '';
-          await consumeTeachingTurnResponse(
-            response,
-            (event: TeachingTurnEvent) => {
-              if (event.type === 'message.delta') {
-                streamedText += event.delta;
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? { ...b, text: streamedText, status: 'streaming' }
-                      : b,
-                  ),
-                );
-              }
-              if (event.type === 'turn.completed') {
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? { ...b, status: 'completed' }
-                      : b,
-                  ),
-                );
-              }
-              if (event.type === 'turn.failed') {
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? {
-                          ...b,
-                          text: streamedText || event.message || '处理失败',
-                          status: 'failed',
-                        }
-                      : b,
-                  ),
-                );
-              }
-            },
+        // 需要刷新页面的操作
+        if (
+          data.action === 'created' ||
+          data.action === 'renamed' ||
+          data.action === 'deleted' ||
+          data.action === 'switched'
+        ) {
+          setTimeout(() => window.location.reload(), 800);
+        }
+
+        // 打开产物：存 sessionStorage 后刷新
+        if (data.action === 'open_artifact' && data.artifactId) {
+          sessionStorage.setItem(
+            'educanvas.assistant_open_artifact',
+            data.artifactId,
           );
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id && b.status === 'streaming'
-                ? { ...b, status: 'completed' }
-                : b,
-            ),
-          );
-        } else {
-          // 管理操作：JSON 直接返回
-          const data = await response.json();
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id
-                ? { ...b, text: data.message ?? '完成', status: 'completed' }
-                : b,
-            ),
-          );
+          setTimeout(() => window.location.reload(), 300);
+        }
 
-          // 需要刷新页面的操作
-          if (
-            data.action === 'created' ||
-            data.action === 'renamed' ||
-            data.action === 'deleted' ||
-            data.action === 'switched'
-          ) {
-            setTimeout(() => window.location.reload(), 800);
-          }
-
-          // 打开产物：存 sessionStorage 后刷新
-          if (data.action === 'open_artifact' && data.artifactId) {
-            sessionStorage.setItem(
-              'educanvas.assistant_open_artifact',
-              data.artifactId,
-            );
-            setTimeout(() => window.location.reload(), 300);
-          }
-
-          // 打开面板：存 sessionStorage 后刷新
-          if (data.action === 'open_panel' && data.panel) {
-            sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
-            setTimeout(() => window.location.reload(), 300);
-          }
-
-          // 产物创建：存 sessionStorage 后刷新，让 workspace 接管
-          if (data.action === 'artifact_created' && data.artifact) {
-            sessionStorage.setItem(
-              'educanvas.assistant_artifact',
-              JSON.stringify(data.artifact),
-            );
-            setTimeout(() => window.location.reload(), 800);
-          }
+        // 打开面板：存 sessionStorage 后刷新
+        if (data.action === 'open_panel' && data.panel) {
+          sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
+          setTimeout(() => window.location.reload(), 300);
         }
         setBusy(false);
       } catch {
@@ -325,36 +261,39 @@ export function AssistantPanel() {
 
   return (
     <>
-      {/* 悬浮触发按钮 */}
-      <button
-        onClick={() => setOpen((prev) => !prev)}
-        aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          width: 48,
-          height: 48,
-          borderRadius: '50%',
-          border: 'none',
-          background: open ? 'var(--color-surface)' : 'var(--color-accent)',
-          color: open ? 'var(--color-ink)' : '#fff',
-          boxShadow: '0 2px 12px rgba(106, 74, 134, 0.25)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'background 0.2s, color 0.2s, transform 0.2s',
-          transform: open ? 'rotate(90deg)' : 'none',
-          zIndex: 1000,
-        }}
-      >
-        {open ? (
-          <X size={22} weight="bold" />
-        ) : (
-          <ChatCircleText size={22} weight="bold" />
-        )}
-      </button>
+      {/* 悬浮触发按钮（仅桌面端展示）：移动端右下角固定位会遮挡
+          Composer 的发送/停止按钮与产物对话框操作，见 #292 回归。 */}
+      <div className="hidden md:block">
+        <button
+          onClick={() => setOpen((prev) => !prev)}
+          aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            border: 'none',
+            background: open ? 'var(--color-surface)' : 'var(--color-accent)',
+            color: open ? 'var(--color-ink)' : '#fff',
+            boxShadow: '0 2px 12px rgba(106, 74, 134, 0.25)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s, color 0.2s, transform 0.2s',
+            transform: open ? 'rotate(90deg)' : 'none',
+            zIndex: 1000,
+          }}
+        >
+          {open ? (
+            <X size={22} weight="bold" />
+          ) : (
+            <ChatCircleText size={22} weight="bold" />
+          )}
+        </button>
+      </div>
 
       {/* 弹出面板 */}
       {open && (

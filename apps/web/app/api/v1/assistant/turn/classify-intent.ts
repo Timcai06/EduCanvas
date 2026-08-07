@@ -45,18 +45,38 @@ const VALID_ACTIONS = [
   'unknown',
 ] as const;
 
+/** 面板白名单：模型返回的 panel 必须在此闭集内，否则整条意图按 unknown 处理。 */
+const VALID_PANELS = new Set([
+  'upload_file',
+  'upload_image',
+  'add_link',
+  'create_mind_map',
+  'create_slides',
+  'create_flashcards',
+  'create_audio_overview',
+  'create_note',
+]);
+
+/** 产物 kind 白名单（open_artifact 匹配用）。 */
+const VALID_KINDS = new Set([
+  'mind_map',
+  'slides',
+  'flashcards',
+  'note',
+  'audio_overview',
+]);
+
+/** 模型填写的意图文本字段长度上限（对齐产物 titleSchema 的 120）。 */
+const MAX_INTENT_TEXT_LENGTH = 120;
+
 /**
- * 让模型做一次极简分类，返回 JSON。
- *
- * 只包含管理操作和产物创建；不在范围内的返回 `unknown`。LLM 输出是不可信输入：
- * 返回的 action 必须过白名单、JSON 提取失败一律回退 `unknown`；notebookId/title
- * 等字段的越权风险由 repo 层 `requireConversationAccess` 兜底（见 route.ts）。
+ * 构造分类请求。prompt 只携带标题与用户指令，不含消息正文之外的内容；
+ * 每次调用独立 traceId/turnId（分类是一次无状态调用）。
  */
-export async function classifyIntent(
+export function buildClassifyRequest(
   message: string,
   notebooks: { id: string; title: string }[],
-  gateway: ClassifyGateway,
-): Promise<AssistantIntent> {
+): StreamAgentTextRequest {
   const notebookList = notebooks
     .map((n) => `- id: ${n.id}, 标题: ${n.title || '未命名'}`)
     .join('\n');
@@ -96,9 +116,7 @@ ${notebookList || '（暂无）'}
 不需要的字段省略。`;
 
   const requestId = randomUUID();
-  const chunks: string[] = [];
-
-  for await (const event of gateway.streamTurnText({
+  return {
     phase: 'answer',
     taskAlias: 'agent.turn',
     modelAlias: 'primary',
@@ -108,7 +126,16 @@ ${notebookList || '（暂无）'}
     toolResults: [],
     traceId: requestId,
     turnId: requestId,
-  })) {
+  };
+}
+
+/** 流式收集模型文本；failed 事件向上抛错（由调用方转稳定错误）。 */
+export async function collectModelText(
+  request: StreamAgentTextRequest,
+  gateway: ClassifyGateway,
+): Promise<string> {
+  const chunks: string[] = [];
+  for await (const event of gateway.streamTurnText(request)) {
     if (event.type === 'text_delta') {
       chunks.push(event.delta ?? '');
     }
@@ -116,8 +143,18 @@ ${notebookList || '（暂无）'}
       throw new Error(event.error?.code ?? 'model_error');
     }
   }
+  return chunks.join('').trim();
+}
 
-  const raw = chunks.join('').trim();
+/**
+ * 解析模型输出的 JSON 为意图。
+ *
+ * LLM 输出是不可信输入：action 必须过白名单、JSON 提取失败一律回退 `unknown`；
+ * 其余字段做清洗——title 超长剔除、panel 必须在白名单（否则整条按 unknown）、
+ * kind 必须在白名单（否则忽略）。notebookId 的越权风险由 repo 层
+ * 所有权检查兜底（见 route.ts）。
+ */
+export function parseIntent(raw: string): AssistantIntent {
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return { action: 'unknown' };
 
@@ -129,8 +166,37 @@ ${notebookList || '（暂无）'}
     ) {
       return { action: 'unknown' };
     }
-    return parsed as unknown as AssistantIntent;
+    const intent = parsed as unknown as AssistantIntent;
+    if (
+      typeof intent.title === 'string' &&
+      intent.title.length > MAX_INTENT_TEXT_LENGTH
+    ) {
+      delete intent.title;
+    }
+    if (intent.panel !== undefined && !VALID_PANELS.has(intent.panel)) {
+      return { action: 'unknown' };
+    }
+    if (intent.kind !== undefined && !VALID_KINDS.has(intent.kind)) {
+      delete intent.kind;
+    }
+    return intent;
   } catch {
     return { action: 'unknown' };
   }
+}
+
+/**
+ * 让模型做一次极简分类，返回 JSON。
+ *
+ * 只包含管理操作和产物创建；不在范围内的返回 `unknown`。字段清洗见
+ * `parseIntent`；成本与账本边界由调用方（runClassifiedTurn）负责。
+ */
+export async function classifyIntent(
+  message: string,
+  notebooks: { id: string; title: string }[],
+  gateway: ClassifyGateway,
+): Promise<AssistantIntent> {
+  return parseIntent(
+    await collectModelText(buildClassifyRequest(message, notebooks), gateway),
+  );
 }
