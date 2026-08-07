@@ -226,9 +226,6 @@ jobs:
       - name: Build production application
         run: pnpm build
 
-      - name: Bundle / route size gate
-        run: node tooling/quality/bundle-size.mjs --root apps/web
-
       - name: Persistent Web Runtime composition
         run: pnpm test:e2e:runtime-composition
 
@@ -249,8 +246,17 @@ jobs:
           path: output/playwright
           if-no-files-found: ignore
 
+      # Q05 bundle/route size gate：放在全部测试之后执行——gate 失败仍让 job 红，
+      # 但不再跳过 E2E 测试本身（#310：此前 gate 在测试前失败会 skip 全部 E2E，
+      # 掩盖真实回归；构建产物已由上方 Build 生成）。
+      - name: Bundle / route size gate
+        run: node tooling/quality/bundle-size.mjs --root apps/web
+
   release-evidence:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true'
+    # PR 事件：收集证据状态快照（pending/skipped 不失败，见 validate-evidence.mjs
+    # 语义——status 非终态时仅报告）；发布时 workflow_dispatch + input 强制
+    # 终态校验（passed===total、failed 即失败）。2026-08-07 修复此前仅手动可达。
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true')
     needs: [checks, integration, windows, runtime-pressure, e2e]
     runs-on: ubuntu-latest
     steps:

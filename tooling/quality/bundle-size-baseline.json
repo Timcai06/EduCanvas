@@ -26,5 +26,10 @@
       "route": "/login.html",
       "bytes": 12392
     }
-  ]
+  ],
+  "buildEnvironment": {
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.14.0"
+  }
 }
