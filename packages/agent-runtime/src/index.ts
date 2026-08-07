@@ -23,6 +23,7 @@ export {
   type ContextSegmentKind,
 } from './context-engine';
 export { LocalObjectStorage } from './local-object-storage';
+export { TurnUsageBudgetController } from './turn-usage-budget-controller';
 export {
   MAX_RESPONSE_CHARACTERS,
   MAX_TOOL_ARGUMENT_BYTES,

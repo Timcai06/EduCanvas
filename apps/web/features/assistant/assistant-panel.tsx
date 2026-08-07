@@ -4,10 +4,6 @@ import { ChatCircleText, PaperPlaneTilt, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
-import {
-  consumeTeachingTurnResponse,
-  type TeachingTurnEvent,
-} from '@/features/chat/turn-events';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -79,99 +75,39 @@ function useAssistantStream() {
           return;
         }
 
-        const contentType = response.headers.get('content-type') ?? '';
+        // 管理操作：JSON 直接返回（assistant 端点只返回 JSON，无 SSE 分支）
+        const data = await response.json();
+        setBubbles((prev) =>
+          prev.map((b) =>
+            b.id === assistantBubble.id
+              ? { ...b, text: data.message ?? '完成', status: 'completed' }
+              : b,
+          ),
+        );
 
-        if (contentType.includes('text/event-stream')) {
-          // 聊天 / 生成导图：SSE 流式
-          let streamedText = '';
-          await consumeTeachingTurnResponse(
-            response,
-            (event: TeachingTurnEvent) => {
-              if (event.type === 'message.delta') {
-                streamedText += event.delta;
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? { ...b, text: streamedText, status: 'streaming' }
-                      : b,
-                  ),
-                );
-              }
-              if (event.type === 'turn.completed') {
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? { ...b, status: 'completed' }
-                      : b,
-                  ),
-                );
-              }
-              if (event.type === 'turn.failed') {
-                setBubbles((prev) =>
-                  prev.map((b) =>
-                    b.id === assistantBubble.id
-                      ? {
-                          ...b,
-                          text: streamedText || event.message || '处理失败',
-                          status: 'failed',
-                        }
-                      : b,
-                  ),
-                );
-              }
-            },
+        // 需要刷新页面的操作
+        if (
+          data.action === 'created' ||
+          data.action === 'renamed' ||
+          data.action === 'deleted' ||
+          data.action === 'switched'
+        ) {
+          setTimeout(() => window.location.reload(), 800);
+        }
+
+        // 打开产物：存 sessionStorage 后刷新
+        if (data.action === 'open_artifact' && data.artifactId) {
+          sessionStorage.setItem(
+            'educanvas.assistant_open_artifact',
+            data.artifactId,
           );
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id && b.status === 'streaming'
-                ? { ...b, status: 'completed' }
-                : b,
-            ),
-          );
-        } else {
-          // 管理操作：JSON 直接返回
-          const data = await response.json();
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id
-                ? { ...b, text: data.message ?? '完成', status: 'completed' }
-                : b,
-            ),
-          );
+          setTimeout(() => window.location.reload(), 300);
+        }
 
-          // 需要刷新页面的操作
-          if (
-            data.action === 'created' ||
-            data.action === 'renamed' ||
-            data.action === 'deleted' ||
-            data.action === 'switched'
-          ) {
-            setTimeout(() => window.location.reload(), 800);
-          }
-
-          // 打开产物：存 sessionStorage 后刷新
-          if (data.action === 'open_artifact' && data.artifactId) {
-            sessionStorage.setItem(
-              'educanvas.assistant_open_artifact',
-              data.artifactId,
-            );
-            setTimeout(() => window.location.reload(), 300);
-          }
-
-          // 打开面板：存 sessionStorage 后刷新
-          if (data.action === 'open_panel' && data.panel) {
-            sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
-            setTimeout(() => window.location.reload(), 300);
-          }
-
-          // 产物创建：存 sessionStorage 后刷新，让 workspace 接管
-          if (data.action === 'artifact_created' && data.artifact) {
-            sessionStorage.setItem(
-              'educanvas.assistant_artifact',
-              JSON.stringify(data.artifact),
-            );
-            setTimeout(() => window.location.reload(), 800);
-          }
+        // 打开面板：存 sessionStorage 后刷新
+        if (data.action === 'open_panel' && data.panel) {
+          sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
+          setTimeout(() => window.location.reload(), 300);
         }
         setBusy(false);
       } catch {
