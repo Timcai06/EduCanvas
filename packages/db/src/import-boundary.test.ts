@@ -170,13 +170,18 @@ function collectDbImports(files: string[]): DbImport[] {
 }
 
 // 生产代码绕过包入口、以文件路径直接引用 packages/db/src 内部实现的导入。
+// 豁免范围：tests/e2e 端到端测试层（需要真实仓库内部访问，刻意豁免）；
+// 其余包外文件无论是否测试/工具（apps、tooling）都禁止深度导入——Q01 评测
+// harness 曾借测试文件豁免深度导入 src 绕过 R04 边界（#293 revert 原因之一），
+// 2026-08-07 收紧：包外测试应走 @educanvas/db/testing 受控入口。
 function collectRawDbPathImports(files: string[]): string[] {
   const result: string[] = [];
   const staticRe = /from\s+['"]([^'"]*packages\/db\/src[^'"]*)['"]/g;
   const dynamicRe =
     /import\s*\(\s*['"]([^'"]*packages\/db\/src[^'"]*)['"]\s*\)/g;
   for (const file of files) {
-    if (isTestFile(file)) continue;
+    if (file.startsWith(join(ROOT, 'packages/db'))) continue;
+    if (relative(ROOT, file).startsWith('tests/e2e')) continue;
     const src = readFileSync(file, 'utf8');
     for (const re of [staticRe, dynamicRe]) {
       let m: RegExpExecArray | null;
