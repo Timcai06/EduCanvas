@@ -26,19 +26,19 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DrizzleKnowledgeEmbeddingRepository } from '../../packages/db/src/knowledge-embedding-repository';
+import { DrizzleKnowledgeEmbeddingRepository } from '@educanvas/db';
 import {
   DrizzleKnowledgeHybridRetrieval,
   HYBRID_LEXICAL_FALLBACK_VERSION,
   LEXICAL_RETRIEVER,
   type EmbeddingIdentity,
-} from '../../packages/db/src/knowledge-hybrid-retrieval';
-import { DrizzleKnowledgeRetrievalRepository } from '../../packages/db/src/knowledge-retrieval-repository';
+} from '@educanvas/db';
+import { DrizzleKnowledgeRetrievalRepository } from '@educanvas/db';
 import {
   DrizzleKnowledgeSourceRepository,
   hashKnowledgeText,
-} from '../../packages/db/src/knowledge-source-repository';
-import * as schema from '../../packages/db/src/schema';
+} from '@educanvas/db';
+import * as schema from '@educanvas/db/internal';
 import {
   EVAL_DATASET_AUTHORIZATION,
   EVAL_DATASET_CREATED,

@@ -69,3 +69,6 @@ temp/
 
 # 个人学习笔记
 notes/
+
+# RAG 评测本地报告（生成产物，不入仓）
+tooling/evals/reports/
