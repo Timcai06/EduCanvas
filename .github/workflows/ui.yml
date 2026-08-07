@@ -13,6 +13,8 @@ on:
     - cron: '47 2 * * *'
   workflow_dispatch:
 
+# Q06：action 全部 pin 到审计过的 commit SHA（2026-08-07 审计，见
+# docs/06-quality/08-供应链与发布证据.md），postgres 镜像 pin digest。
 concurrency:
   group: ui-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
         env:
           POSTGRES_USER: educanvas
           POSTGRES_PASSWORD: educanvas
@@ -41,11 +43,11 @@ jobs:
       E2E_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_ui_e2e
       PLAYWRIGHT_PORT: 3101
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -71,7 +73,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
         with:
           name: playwright-ui-diagnostics
           path: output/playwright
