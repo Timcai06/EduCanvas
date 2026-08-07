@@ -5,8 +5,8 @@
 - 负责人：hzlgou
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
-- 最后验证时间：2026-08-06
-- 当前领取任务：`W05`
+- 最后验证时间：2026-08-07
+- 当前领取任务：`W04-4`
 - 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[Q 质量观测成本](Q-质量观测成本.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[UV 画布语音](UV-画布语音.md)
@@ -328,7 +328,7 @@ type WorkspaceSurface =
 | W01 Surface 模型      | `PASS`    | `workspace-surface.ts` 判别联合 + reducer；12 个纯函数测试全绿；characterization 先固定 5 处互斥链行为并消除其不一致（经 Codex 审核通过，PR #287）       |
 | W02 职责拆分          | `PASS`    | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（经 Codex 审核通过，PR #290） |
 | W03 诚实失败          | `PASS`    | 六种错误语义统一（`canvas/resource-error.ts` + `CanvasShellStatus` 7 态，Retry 只对 failed/unavailable/offline 开放）；asset-client/canvas-resource-client 错误带 kind；useNotebookSources 结构化错误 + `LatestRequestGuard` 竞态保护；失败转空/吞错 3 处修复；error matrix：resource-error 15 + asset 12 + canvas-client 14 + CanvasShellStatus 渲染 7 + 竞态 3 测试；lint/typecheck/**951 测试**/build 全绿，无静默 `catch {}`（经 Codex 审核通过，PR #294） |
-| W04 Artifact Registry | `IN PROGRESS` | W04-1 契约固定（12 测试）；W04-2 注册真实内容 Renderer（5 类适配器 + 测试）；W04-3 组合层桥接（`artifact-canvas-resource.ts` 构造渲染用资源 + `artifact-canvas-content.tsx` 内容区分发：5 类内容驱动产物经 Registry 渲染真实内容，note/dom/skeleton/empty 壳内保留；lint/typecheck/**999 测试**/build 全绿，接口缺口清单见本计划 W04 节）；剩余 W04-4 删兼容占位/旧入口、W04-5 E2E |
+| W04 Artifact Registry | `IN PROGRESS` | W04-1 契约固定（12 测试）；W04-2 注册真实内容 Renderer（5 类适配器 + 测试）；W04-3 组合层桥接（`artifact-canvas-resource.ts` 构造渲染用资源 + `artifact-canvas-content.tsx` 内容区分发：5 类内容驱动产物经 Registry 渲染真实内容，note/dom/skeleton/empty 壳内保留；lint/typecheck/**999 测试**/build 全绿，接口缺口清单见本计划 W04 节 + Issue #306）；W04-4 删兼容占位/旧入口（删除 note/dom 交互式产物的 Registry 占位 `InteractiveArtifactPlaceholder`、映射收敛到 5 类内容驱动、交互式 kind 构造抛错 + Registry 选择 unavailable 语义；lint/typecheck/**1000 测试**/build 全绿）；剩余 W04-5 E2E |
 | W05 静态边界          | `PASS`    | 门禁 A：ESLint `no-restricted-imports` 限定 `features/**` 禁 server/db/schema/server-only + 6 negative fixtures；门禁 C：共享组件移 `components/`（9 处 import）清除 Renderer 反向依赖；门禁 B：feature 公开入口以 allowlist 收口（**Issue #296** 负责人拍板，限期 W 线收口前/下季度）；ADR-0023 + `03-前端工程.md` 回写；lint/typecheck/957 测试/build 全绿（经 Codex 审核通过，PR #298） |
 | W06 多端与性能        | `PENDING` | Playwright、bundle/perf evidence                                                                                                                        |
 | W07 收口              | `PENDING` | full Web CI、删除清单                                                                                                                                   |
