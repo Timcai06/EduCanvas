@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
@@ -11,12 +10,31 @@ import {
   writeActiveConversationCookie,
 } from '@/server/platform/general-conversation';
 import { resolveTurnModelRuntime } from '@/server/model/model-runtime';
+import { classifyIntent } from './classify-intent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** 单条指令最大长度 */
 const MAX_TEXT_BYTES = 2_048;
+
+/**
+ * create_notebook 的内存级幂等去重（同主体 + 同 clientMessageId，TTL 5 分钟）。
+ * 只防同进程内的网络重试 / 多标签重复提交；跨实例与重启不保证——assistant
+ * 端点是单实例部署形态，DB 级幂等（pg_advisory_xact_lock + 唯一约束）留待
+ * 桌宠迭代需要时再迁移（见 manual-artifact-repository 的先例）。
+ */
+const NOTEBOOK_CREATE_DEDUP_TTL_MS = 5 * 60_000;
+const notebookCreateDedup = new Map<string, { createdAt: number }>();
+
+/** 惰性清理过期幂等记录，避免 Map 无限增长。 */
+function pruneNotebookCreateDedup(now: number): void {
+  for (const [key, record] of notebookCreateDedup) {
+    if (now - record.createdAt > NOTEBOOK_CREATE_DEDUP_TTL_MS) {
+      notebookCreateDedup.delete(key);
+    }
+  }
+}
 
 /** 面板名称到用户可见文案的映射 */
 const PANEL_LABELS: Record<string, string> = {
@@ -33,123 +51,6 @@ const PANEL_LABELS: Record<string, string> = {
 /** 助手的能力清单，用于 unknown 回退时展示 */
 const CAPABILITY_MESSAGE =
   '我可以帮你：\n- 管理笔记本（新建、列出、重命名、删除、切换）\n- 上传文件和图片\n- 导入网页链接\n- 生成和打开思维导图、Slides、闪卡、音频概览、笔记\n- 查看当前有哪些产物\n\n直接告诉我要做什么就行。其他问题可以在主对话里问 AI 老师。';
-
-// ── 意图分类 ──────────────────────────────────────────────────────
-
-interface AssistantIntent {
-  action:
-    | 'list_notebooks'
-    | 'list_artifacts'
-    | 'create_notebook'
-    | 'rename_notebook'
-    | 'delete_notebook'
-    | 'switch_notebook'
-    | 'open_artifact'
-    | 'open_panel'
-    | 'unknown';
-  notebookId?: string;
-  title?: string;
-  kind?: string;
-  panel?: string;
-  message?: string;
-}
-
-/**
- * 让 DeepSeek 做一次极简分类，返回 JSON。
- * 只包含管理操作和产物创建。不在范围内的返回 unknown。
- */
-async function classifyIntent(
-  message: string,
-  notebooks: { id: string; title: string }[],
-): Promise<AssistantIntent> {
-  const runtime = resolveTurnModelRuntime();
-  if (!runtime?.gateway) throw new Error('model_unavailable');
-
-  const notebookList = notebooks
-    .map((n) => `- id: ${n.id}, 标题: ${n.title || '未命名'}`)
-    .join('\n');
-
-  const prompt = `你是一个分类器。根据用户指令，返回一个 JSON。
-
-操作分为两类：
-
-【直接执行类】小助手自己完成，不需要弹窗：
-- list_notebooks：用户想看笔记本列表
-- list_artifacts：用户想看当前有哪些 AI 产物（导图、Slides、闪卡、笔记等）
-- create_notebook：用户要新建笔记本。从指令中提取名称作为 title
-- rename_notebook：用户要重命名笔记本。需提供 notebookId 和新 title
-- delete_notebook：用户要删除笔记本。需提供 notebookId
-- switch_notebook：用户要切换到某个笔记本。从列表中匹配标题，提供 notebookId
-- open_artifact：用户要打开已有的产物。常见说法与 kind 对应：导图/脑图→mind_map，Slides/PPT/小结→slides，闪卡/卡片/记忆卡→flashcards，笔记→note。同时提取标题关键词作为 title
-
-【打开面板类】小助手打开对应面板，用户在面板里操作：
-- upload_file：上传文件
-- upload_image：上传图片
-- add_link：导入网页链接
-- create_mind_map：生成思维导图。从指令中提取主题作为 title
-- create_slides：生成 Slides。从指令中提取主题作为 title
-- create_flashcards：生成闪卡。从指令中提取主题作为 title
-- create_audio_overview：生成音频概览
-- create_note：创建笔记。从指令中提取主题作为 title
-
-以上都走 action: "open_panel"，并提供 panel 字段（填对应值如 "create_mind_map"）和可选的 title。
-unknown：用户的要求不在以上范围内。
-
-当前用户的笔记本：
-${notebookList || '（暂无）'}
-
-用户指令：${message}
-
-只返回 JSON，格式：{"action":"...","notebookId":"...","title":"...","panel":"...","message":"..."}
-不需要的字段省略。`;
-
-  const requestId = randomUUID();
-  const chunks: string[] = [];
-
-  for await (const event of runtime.gateway.streamTurnText({
-    phase: 'answer',
-    taskAlias: 'agent.turn',
-    modelAlias: 'primary',
-    promptVersion: 'assistant-classify-v1',
-    messages: [{ role: 'user', content: prompt }],
-    tools: [],
-    toolResults: [],
-    traceId: requestId,
-    turnId: requestId,
-  })) {
-    if (event.type === 'text_delta') {
-      chunks.push(event.delta);
-    }
-    if (event.type === 'failed') {
-      throw new Error(event.error?.code ?? 'model_error');
-    }
-  }
-
-  const raw = chunks.join('').trim();
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return { action: 'unknown' };
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validActions = [
-      'list_notebooks',
-      'list_artifacts',
-      'create_notebook',
-      'rename_notebook',
-      'delete_notebook',
-      'switch_notebook',
-      'open_artifact',
-      'open_panel',
-      'unknown',
-    ];
-    if (!parsed.action || !validActions.includes(parsed.action)) {
-      return { action: 'unknown' };
-    }
-    return parsed as AssistantIntent;
-  } catch {
-    return { action: 'unknown' };
-  }
-}
 
 // ── 路由处理 ──────────────────────────────────────────────────────
 
@@ -190,14 +91,17 @@ export async function POST(request: Request): Promise<Response> {
     limit: 50,
   });
 
-  let intent: AssistantIntent;
+  let intent: Awaited<ReturnType<typeof classifyIntent>>;
   try {
+    const gateway = resolveTurnModelRuntime()?.gateway;
+    if (!gateway) throw new Error('model_unavailable');
     intent = await classifyIntent(
       text,
       notebooks.map((n) => ({
         id: n.id,
         title: n.title ?? '未命名笔记本',
       })),
+      gateway,
     );
   } catch {
     return jsonError(503, 'assistant_unavailable', '助手暂时不可用。');
@@ -251,6 +155,20 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       case 'create_notebook': {
+        const now = Date.now();
+        const dedupKey = body.clientMessageId
+          ? `${identity.studentId}:${body.clientMessageId}`
+          : null;
+        if (dedupKey) {
+          pruneNotebookCreateDedup(now);
+          const existing = notebookCreateDedup.get(dedupKey);
+          if (existing) {
+            return jsonResponse({
+              message: `已创建笔记本「${intent.title ?? '未命名笔记本'}」。`,
+              action: 'created',
+            });
+          }
+        }
         const notebookTitle = intent.title ?? '未命名笔记本';
         const created = await repo.create({
           ownerSubjectId: identity.studentId,
@@ -260,6 +178,9 @@ export async function POST(request: Request): Promise<Response> {
           agentProfileId: 'general',
         });
         await writeActiveConversationCookie(created.id);
+        if (dedupKey) {
+          notebookCreateDedup.set(dedupKey, { createdAt: now });
+        }
         return jsonResponse({
           message: `已创建笔记本「${notebookTitle}」。`,
           action: 'created',
@@ -270,13 +191,16 @@ export async function POST(request: Request): Promise<Response> {
         if (!intent.notebookId || !intent.title) {
           return jsonResponse({ message: '请指定要重命名的笔记本和新名称。' });
         }
-        await repo.renameOwned({
+        const renamed = await repo.renameOwned({
           conversationId: intent.notebookId,
           trustedSubjectId: identity.studentId,
           title: intent.title,
         });
+        if (!renamed) {
+          return jsonResponse({ message: '笔记本不存在或无权重命名。' });
+        }
         return jsonResponse({
-          message: `已重命名为「${intent.title}」。`,
+          message: `已重命名为「${renamed.title}」。`,
           action: 'renamed',
         });
       }
