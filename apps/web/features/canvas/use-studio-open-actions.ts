@@ -13,6 +13,7 @@ import {
 } from './canvas-resource-client';
 import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry';
 import { CanvasResourceOpenGate } from './canvas-resource-open-gate';
+import { isShellRenderedArtifactResource } from './artifact-shell-rendering';
 import type { CanvasResourceRendererProps } from './canvas-resource-registry';
 
 export interface UseStudioOpenActions {
@@ -90,6 +91,16 @@ export function useStudioOpenActions(input: {
           !gateRef.current.isCurrent(activeRequest, currentScopeKeyRef.current)
         )
           return;
+        if (
+          resourceKind === 'artifact' &&
+          isShellRenderedArtifactResource(resource)
+        ) {
+          /* 交互式产物（note/dom_exploration）由 ArtifactCanvas 壳显式渲染，
+             Registry 无对应条目（W04-4）；验证通过即放行到壳，不判不可用。 */
+          setPendingKind(null);
+          callbacksRef.current.onArtifactValid(resource);
+          return;
+        }
         const selection = selectWebCanvasResourceRenderer(resource);
         if (selection.kind === 'unavailable') {
           setPendingKind(null);
