@@ -230,36 +230,39 @@ export function AssistantPanel() {
 
   return (
     <>
-      {/* 悬浮触发按钮 */}
-      <button
-        onClick={() => setOpen((prev) => !prev)}
-        aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          width: 48,
-          height: 48,
-          borderRadius: '50%',
-          border: 'none',
-          background: open ? 'var(--color-surface)' : 'var(--color-accent)',
-          color: open ? 'var(--color-ink)' : '#fff',
-          boxShadow: '0 2px 12px rgba(106, 74, 134, 0.25)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'background 0.2s, color 0.2s, transform 0.2s',
-          transform: open ? 'rotate(90deg)' : 'none',
-          zIndex: 1000,
-        }}
-      >
-        {open ? (
-          <X size={22} weight="bold" />
-        ) : (
-          <ChatCircleText size={22} weight="bold" />
-        )}
-      </button>
+      {/* 悬浮触发按钮（仅桌面端展示）：移动端右下角固定位会遮挡
+          Composer 的发送/停止按钮与产物对话框操作，见 #292 回归。 */}
+      <div className="hidden md:block">
+        <button
+          onClick={() => setOpen((prev) => !prev)}
+          aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            border: 'none',
+            background: open ? 'var(--color-surface)' : 'var(--color-accent)',
+            color: open ? 'var(--color-ink)' : '#fff',
+            boxShadow: '0 2px 12px rgba(106, 74, 134, 0.25)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s, color 0.2s, transform 0.2s',
+            transform: open ? 'rotate(90deg)' : 'none',
+            zIndex: 1000,
+          }}
+        >
+          {open ? (
+            <X size={22} weight="bold" />
+          ) : (
+            <ChatCircleText size={22} weight="bold" />
+          )}
+        </button>
+      </div>
 
       {/* 弹出面板 */}
       {open && (
