@@ -166,6 +166,17 @@ describe('ArtifactCanvasContent（W04-3 内容区分发）', () => {
     expect(html).toContain('<img');
   });
 
+  it('audio_overview（tier1，renderer 仅接受 tier2）→ unavailable 兜底，不落真实渲染器', () => {
+    const base = makeDetail('audio_overview');
+    const detail: ArtifactDetail = {
+      ...base,
+      version: { id: 'v1', version: 1, content: null, media: audioMedia },
+    };
+    const html = render(resolveArtifactContentView(detail, false), detail);
+    expect(html).toContain('内容不可用');
+    expect(html).not.toContain('<audio');
+  });
+
   it('note → 壳内 NoteRenderer（prose），不落到 Registry 占位', () => {
     const detail = withVersion(makeDetail('note'), '# 笔记');
     const html = render(resolveArtifactContentView(detail, false), detail);
