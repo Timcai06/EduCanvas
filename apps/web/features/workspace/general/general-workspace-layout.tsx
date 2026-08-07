@@ -32,9 +32,7 @@ export type GeneralWorkspaceController = ReturnType<
  */
 function restoreStudioOpenerFocus(): void {
   document
-    .querySelector<HTMLButtonElement>(
-      '[aria-controls="notebook-studio-layer"]',
-    )
+    .querySelector<HTMLButtonElement>('[aria-controls="notebook-studio-layer"]')
     ?.focus();
 }
 
