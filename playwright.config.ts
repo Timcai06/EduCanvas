@@ -69,6 +69,13 @@ export default defineConfig({
       name: 'chromium-mobile',
       use: { ...devices['Pixel 7'] },
     },
+    // W06：第二引擎进入稳定 lane（Desktop + Mobile viewport + 跨内核）。
+    // Firefox 与 @ui lane（playwright.ui.config.ts）复用同一安装，
+    // 不新增 CI 浏览器安装；捕获 Chromium 之外的引擎差异。
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
   ],
   webServer: {
     command: `pnpm --filter @educanvas/web exec next start --port ${port}`,
