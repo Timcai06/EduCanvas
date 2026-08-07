@@ -5,8 +5,8 @@
 - 负责人：项目负责人
 - 实现执行：协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex
-- 最后验证时间：2026-08-06
-- 当前领取任务：`Q00`
+- 最后验证时间：2026-08-07
+- 当前领取任务：`Q07`（收口，复核后归档）
 - 并行计划：[R 运行时收敛](../completed/R-运行时事实收敛.md)、[W 工作面画布](W-工作面画布收敛.md)
 - 后续出口：[G 产品发布闭环](G-产品发布闭环.md)
 - 关联计划：[KM 知识记忆](KM-知识记忆.md)
@@ -136,104 +136,6 @@ Q00
 - 明确哪些是 CI gate、趋势指标和人工评审；
 - 不把 Trace span 数量写成用户价值指标。
 
-### Q00 指标契约 v1（2026-08-06 冻结）
-
-> 契约说明：
->
-> - 分类：`G`=CI gate（发布阻塞）、`T`=趋势指标（只观测、暂不阻塞）、`M`=人工评审（Codex/负责人抽查）；
-> - 现状：`HAS`=现有数据面可直接采集（给出代码位置）、`BUILD`=采集点尚未存在，由标注任务建设；
-> - 阈值策略：Q00 只冻结定义、分母、采集点和版本；**数值基线由各任务用真实数据实测后回填**（Q01 冻结评测集、Q05 覆盖率基线、Q03 成本基线），不预先伪造数值。回填时按"基线 × 保留系数"或"发布门槛 = 基线，只防回归"两种方式之一记录；
-> - 指标 label 一律低基数，禁止用户 ID、Prompt、正文、URL query、对象路径、Secret 或高基数原始错误（计划第四节硬边界）；
-> - 不设"Trace span 数量"类指标（span 数不是用户价值）。
-
-#### Retrieval（冻结评测集上的离线指标，Q01 建立）
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| Recall@10 / Recall@20 | 每 query 命中相关 chunk 数 / 该 query 相关 chunk 总数，按 query 平均 | `tooling/evals/**`（BUILD，Q01） | eval-dataset-v1 | Q01 实测基线回填 | G |
-| MRR@10 | 首个相关候选的 1/rank，按 query 平均 | 同上 | eval-dataset-v1 | 基线回填 | G |
-| nDCG@10 | DCG/IDCG（相关分按证据与 query 匹配度 0/1） | 同上 | eval-dataset-v1 | 基线回填 | G |
-| citation precision | 回答中引用落在相关候选内的引用数 / 回答全部引用数 | 同上（离线判分） | eval-dataset-v1 | 基线回填 | G |
-| 无答案拒答率 | 无答案 query 正确拒答数 / 无答案 query 总数 | 同上 | eval-dataset-v1 | 基线回填 | G |
-| 检索延迟 p50/p95 | 检索耗时分位数（含 vector + fuse） | 同上（harness 计时）；线上 `BUILD`（Q02） | eval-dataset-v1 | 基线回填 | T |
-| 检索 fallback 率 | vectorApplied=false 的检索数 / 检索总数 | `retrieveHybrid` 返回结构已含 `vectorApplied`（`packages/db/src/knowledge-hybrid-retrieval.ts:61-70`，HAS）；落指标 `BUILD`（Q02） | contract-v1 | 基线回填 | T |
-
-#### Answer
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| evidence coverage | 回答主张中可被检索证据支持的主张数 / 主张总数 | 离线判分（Q01 harness 扩展） | eval-dataset-v1 | 基线回填 | M |
-| unsupported claim rate | 无证据支持的主张数 / 主张总数 | 同上 | eval-dataset-v1 | 基线回填 | G |
-| 引用可打开率 | 引用投影为 available 的引用数 / 回答引用总数 | 投影 `available/superseded/tombstoned`（`packages/db/src/knowledge-retrieval-repository.ts:796-802`，HAS） | contract-v1 | 基线回填 | T |
-
-#### Runtime
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| Turn success rate | completed 的 turn 数 / 终态 turn 总数（completed+failed+cancelled） | lifecycle settle 三态（`packages/agent-runtime/src/turn-application/ports.ts:59`，HAS）；落指标 `BUILD`（Q04） | contract-v1 | 基线回填 | G |
-| 取消成功率 | cancelled（经 cancellation 端口二次确认）turn 数 / (cancelled+failed) turn 数 | `turn-application/session.ts:82-91`（HAS） | contract-v1 | 基线回填 | T |
-| outcome_unknown 率 | 工具调用 outcome_unknown 数 / 工具调用总数 | `AgentToolCallStatus`（`packages/agent-core/src/tool-call-ledger.ts:9,15`，HAS） | contract-v1 | 基线回填 | T |
-| 检索异常率 | 检索抛错或 fused 空结果次数 / 检索总数 | fused 空：`knowledge-hybrid-retrieval.ts:352-362`（HAS）；异常计数 `BUILD`（Q02） | contract-v1 | 基线回填 | T |
-| 失败码分布 | 各 `TurnApplicationFailureCode` 计数 | 12 个失败码（`packages/agent-core/src/turn-application-contracts.ts:98-111`，HAS） | contract-v1 | 无固定阈值，异常跳变人工评审 | T/M |
-
-#### Latency
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| TTFT | 模型首 token 耗时 | 指标名已定义 `model_first_token_latency_ms`（`packages/teaching-runtime/src/observability.ts:34-46`，定义 HAS，调用点 `BUILD`（Q04）） | contract-v1 | 基线回填 | T |
-| Turn total | 整个 turn 耗时 | `teaching_turn_latency_ms` 同名处理 | contract-v1 | 基线回填 | T |
-| Tool duration | 单次工具调用耗时 | 现状无采集（`BUILD`，Q04） | contract-v1 | 基线回填 | T |
-| Retrieval duration | 单次检索耗时 | 现状无采集（`BUILD`，Q02） | contract-v1 | 基线回填 | T |
-
-#### Cost
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| input/output token（含 cacheHit/reasoning） | 每 turn 累加值 | `ModelUsage` 已落账（`packages/agent-core/src/model-run-ledger.ts:56-59`，HAS） | contract-v1 | Q03 预算模板回填 | G |
-| model calls / turn | ledger 记录模型调用次数 | 同 HAS；预算检查在 `turn-engine.ts`（现状为字符/轮数硬上限） | contract-v1 | Q03 预算模板回填 | G |
-| embedding units | embedding 调用次数与 token | usage 现状不外发（`openai-compatible-embedding-model-gateway.ts:153-154`，`BUILD`，Q03） | contract-v1 | 基线回填 | T |
-| 估算货币成本 | 服务端按 token × 单价估算（`estimated` 标记） | 现状无估算路径（`BUILD`，Q03；provider 自报不可信，必须服务端保守估算） | contract-v1 | Q03 预算模板回填 | G |
-
-#### UI / Test 真实性
-
-| 指标 | 分子/分母 | 采集点 | 版本 | 阈值 | 分类 |
-| --- | --- | --- | --- | --- | --- |
-| retry count | 各 e2e 用例 retry 次数 | `playwright.config.ts:37`（retries=CI?1:0）已存在，报告汇总 `BUILD`（Q05） | contract-v1 | 无限 retry 禁止（Q05） | G |
-| flaky count | 重试后通过的用例数 | `failOnFlakyTests` 已启用（`playwright.config.ts:35`，HAS） | contract-v1 | 发布门槛内不允许 flaky | G |
-| browser/device matrix | 覆盖的浏览器/视口集合 | 现状仅 Desktop Chromium（`playwright.config.ts:55-60`）；第二浏览器或移动 viewport `BUILD`（Q05） | contract-v1 | Q05 建成后 ≥2 环境 | G |
-| coverage 率 | 核心包语句/分支覆盖率（排除生成代码与纯类型） | 现状无 coverage 配置（`BUILD`，Q05；先真实基线后设阈值） | contract-v1 | Q05 基线回填 | G |
-| bundle/route size | 产物与路由体积 | 现状无检查（`BUILD`，Q05） | contract-v1 | Q05 基线回填 | G |
-
-#### Privacy（禁止采集字段与保留期）
-
-- 禁止采集：用户 ID、Prompt 正文、回答正文、URL query、对象路径、Secret、Provider body、Embedding 向量、高基数原始错误文本（计划第四节 + `turn-trace-adapter.ts` 白名单语义已有先例）；
-- 允许采集：低基数标识（operationId/traceId、稳定 reason/code、模型与版本、turn 终态）、聚合数字（token 计数、耗时、计数）；
-- 保留期：指标时序数据与评测报告的保留策略由 Q04 运维文档规定；RAG 评测集版本变更必须产生新报告，**不得覆盖旧结论**（计划第九节）。
-
-#### 契约版本与回填记录
-
-- 本契约版本：`v1`（2026-08-06 冻结）；
-- 各数值阈值回填时在此小节登记 `（任务号，日期，基线数据，阈值数值）`；
-- 任何指标定义变更必须 bump 契约版本并记录变更原因，禁止静默修改。
-
-**Q01 回填登记（2026-08-07 重提，数据集 eval-dataset-v1，报告 `tooling/evals/reports/rag-eval-v1-2026-08-07.json`，质量指标与 08-06 冻结报告逐项一致）：**
-
-- Recall@10 / Recall@20（hybrid）：**1.0 / 1.0**；MRR@10：**0.844**；nDCG@10：**0.891**。阈值（G）：发布门槛 = 基线，只防回归（Recall@10 ≥ 0.9、MRR@10 ≥ 0.75）；
-- Recall@10 / Recall@20（纯 FTS）：**0.75 / 0.75**；MRR@10：**0.875**；nDCG@10：**0.778**。基线事实：FTS 为全词 AND 语义（`websearch_to_tsquery simple`），部分重叠/同义词必然零命中，词法侧天花板由查询词表决定（见报告 findings.ftsAndSemantics）；阈值（T，趋势）不设硬门槛，记录回归对比；
-- fallback（向量不可用）：指标与纯 FTS 完全一致（等价性断言成立），retriever 如实标记 `postgres_fts` + `rrf-fallback-v1`；
-- 检索延迟（按检索器配置拆分，本地评测库，2026-08-07 修正）：hybrid **p50 ≈ 9.9ms，p95 ≈ 17.7ms**（n=50）、fts-only p50 ≈ 5.4ms / p95 ≈ 11.5ms（n=50）、fallback p50 ≈ 6.4ms / p95 ≈ 11.5ms（n=50）。阈值（T）：趋势指标，Q02 线上采集后再定线上阈值；
-- 检索 fallback 率：评测中为 0（三配置均为显式指定，不产生意外降级）；线上阈值 Q02 采集后回填；
-- 无答案拒答率（词法路）：**1.0**（q4/q8 在 FTS 与 fallback 下均空候选）；hybrid 路按 ADR-0015 设计无阈值返回平局候选（拒答语义由上层 agent 层承担）——此为基线事实而非缺陷；
-- citation precision / evidence coverage / unsupported claim rate / 引用可打开率：Q01 未扩展回答判分（答案层需真实模型），**留待 Q02 之后**评估，此处不登记数值；
-- 基线发现（记录而非缺陷）：① hybrid 向量路无绝对相似度阈值（ADR-0015 文档化行为）；② 陈旧向量排除生效（q10 零词面查询下 c1 不出现在向量路）；③ 注入 chunk 存在不影响正常查询排序（q7 答案仍居首）。
-
-> **恢复记录（2026-08-07，Q01 重提 PR）**：本契约 v1 于 2026-08-06 冻结并随
-> #288 写入本计划；#293 revert 为整 commit 回退，将本契约章节一并删除（含
-> Q01 回填登记）。Q01 重提 PR 原样恢复契约（冻结快照语义不变），并将回填登记
-> 更新为修正后新报告：延迟按检索器配置拆分（v1-08-06 报告曾把三种配置混入
-> 单一分位，与计划 hybrid-only 描述不符——此即 #293 revert 的原因）。
-> 契约表格中标注 `BUILD（Q0x）` 的采集点状态不随本恢复更新，以各任务台账为准。
-
 ### Q01：RAG 冻结评测集与可复现 Harness
 
 - 依赖：Q00
@@ -299,6 +201,12 @@ Q00
 - dashboard/报告可识别长期隐性降级；
 - failure reason 不成为高基数 label；
 - 不改变候选权限和引用白名单。
+
+**Q05 回填登记（2026-08-06，覆盖率为三个核心包 vitest v8 实测，bundle 为本地 Next 16 构建实测）：**
+
+- 语句/分支/函数/行覆盖率基线（排除生成代码与纯类型，`packages/{telemetry,agent-core,agent-runtime}/vitest.config.ts`）：telemetry **92.14 / 90.37 / 83.11 / 92.55**、agent-core **96.21 / 94.34 / 96.70 / 97.43**、agent-runtime **78.43 / 74.70 / 86.57 / 80.51**。阈值（G，防回归，只升不降）：telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80；
+- bundle/route size 基线（`tooling/quality/bundle-size-baseline.json`，2026-08-06）：JS 总量 **4120016B**、最大 chunk **875476B**、静态路由 HTML 5 个（login/register/settings/not-found/global-error）。门禁：任一超基线 1.1× 或新增路由 HTML >300KB → fail；
+- retry 纪律：CI 上 `failOnFlakyTests` 使 flaky 直接失败（retries=1），retry/flaky 名单经 `tooling/quality/playwright-summary.mjs` 写入 CI Summary，禁止无限 retry、禁止隐藏 retry 后通过；
 
 ### Q03：Agent Turn token、时间与成本预算
 
@@ -425,16 +333,21 @@ Q00
 
 ## 七、验证台账
 
-| 任务            | 状态      | 证据                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q00 指标冻结    | `DONE`    | 指标契约 v1（2026-08-06 冻结，含分子/分母/采集点/版本/阈值/分类全套表格）随 #288 写入本计划、被 #293 revert 误删，已由 Q01 重提 PR 原样恢复（冻结快照语义不变，采集点状态以各任务台账为准） |
-| Q01 RAG eval    | `PENDING` | **重提（2026-08-07）**：#288 被 #293 revert（延迟基线混入多检索器配置）；重提修正：延迟按检索器配置拆分（latencyMsByRetriever，hybrid/fts-only/fallback 各 n=50），质量指标与冻结基线逐项一致（hybrid recall@10 1.0/MRR 0.844/NDCG 0.891，FTS 0.75/0.875/0.778，fallback 等价）；新报告 tooling/evals/reports/rag-eval-v1-2026-08-07.json；评测可离线复现（本地 2 passed，10.9s）；待验收 |
-| Q02 降级观测    | `PENDING` | 9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；待验收 |
-| Q03 Turn budget | `DONE`    | budget controller + ledger（Q03 PR，CI 全绿）                                                                                                                                                                                                                                                                                                                                                              |
-| Q04 SLO/Runbook | `DONE`    | metrics registry + Web/Gateway/Worker 唯一组合层包装 + internal metrics 端点 + SLO/Runbook；指标故障旁路业务结果，协议型标签值使用闭集                                                                                                                                                                                                                                                                     |
-| Q05 测试真实性  | `PENDING` | CI summary + browser/coverage/bundle                                                                                                                                                                                                                                                                                                                                                                       |
-| Q06 供应链发布  | `PENDING` | dependency/migration/release gates                                                                                                                                                                                                                                                                                                                                                                         |
-| Q07 收口        | `PENDING` | reproducible baseline report                                                                                                                                                                                                                                                                                                                                                                               |
+> 判定口径（2026-08-07 Code Owner 审核后统一）：**DONE** = 已合入 main 且 main 回归全绿；
+> **IMPLEMENTED** = 产物完成且分支 CI 全绿，待合并，或已合入但 main 回归待恢复；
+> **PENDING** = 已回退（Q01）或已合入未验收（Q02）。main 回归状态与根因见
+> `docs/06-quality/09-质量基线报告.md` §1 现状注记与 §7 降级 3/5。
+
+| 任务            | 状态      | 证据                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q00 指标冻结    | `DONE`    | 指标组与阈值语义冻结于本计划 Q00 节（Retrieval/Answer/Runtime/Latency/Cost/UI-Test/Privacy 与 CI gate/趋势/人工评审分类）；文档任务无独立 PR；汇总见 docs/06-quality/09-质量基线报告.md（2026-08-07 回写）                                                                                                                                                                                                                                                                                                                                                                                               |
+| Q01 RAG eval    | `PENDING` | #288 合入后被 #293 revert（延迟基线混入多检索器配置，与 hybrid-only 描述不符）；tooling/evals 已从 git 移除，评测入口不可用；修正版已重提并合入 main（#307，2026-08-07；报告 rag-eval-v1-2026-08-07.json）；待验收（评测非 CI gate，需 TEST_DATABASE_URL 手动复现）                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Q02 降级观测    | `PENDING` | #289 已合入 main（a7df105）；9 reason 冻结于 agent-core（含网关错误映射）+ retrieveHybrid 输入/异常/语料三侧分类（corpus_not_embedded 用 500ms 预算探针区分身份不匹配）+ teaching-runtime `retrieval_degradations` 指标（9 reason 均测）；集成测试覆盖 not_configured/invalid_configuration/invalid_dimensions/corpus_not_embedded/vector_query_timeout，单测覆盖 extension_unavailable/fallback_fts 与网关映射；降级不断供 FTS；**合入时 e2e gate FAILURE**（runtime-composition `dbModule.getDb is not a function`，基分支过期；main 已于 2026-08-07 回归全绿）；待验收：对 Q02 变更集单独复跑 CI 确认 |
+| Q03 Turn budget | `DONE`    | budget controller + ledger（#291，已合入 main 01424d4）；注：合入于 2026-08-06 Actions 故障期，head 最终 check 含 e2e failure，main 现已回归全绿（2026-08-07）                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Q04 SLO/Runbook | `DONE`    | metrics registry + Web/Gateway/Worker 唯一组合层包装 + internal metrics 端点 + SLO/Runbook（#295，已合入 main 0085e06；合入期 head 最终 check 含 failure/skipped，Actions 故障期影响，main 现已回归全绿）；指标故障旁路业务结果，协议型标签值使用闭集                                                                                                                                                                                                                                                                                                                                                    |
+| Q05 测试真实性  | `IMPLEMENTED` | coverage 门禁（telemetry 92/90/83/92、agent-core 96/94/96/97、agent-runtime 78/74/86/80，2026-08-06 基线）+ chromium-mobile 第二环境进默认 lane + hydration 检查 + bundle/route size 基线（jsTotal 4120016B/entry 875476B）+ @ui 独立 lane（chromium+firefox，nightly+路径触发）+ retry/flaky 汇总进 CI Summary；#303 已合入 main `88027be`（分支 CI 3 次全绿）；main 回归待恢复（size gate 基线过时：#304 已重录基线随 `d01db29` 合入，#309 另录精确基线待合并，见报告 §7-3）                                                                                                                                                                                                                  |
+| Q06 供应链发布  | `IMPLEMENTED` | #304：action 40 位 SHA pin + dependency-review 门禁（high 即 fail）+ 容器 digest pin + migration records 门禁（51 迁移全字段）+ release evidence 语义（passed/skipped/failed 终态语义）+ 供应链文档 08-供应链与发布证据.md；#304 已合入 main `d01db29`，分支最终 run（#31161098720）**8 项终态全绿**（dependency-review/secret-scan/checks/integration/windows/runtime-pressure/e2e SUCCESS + release-evidence SKIPPED 预期，rc1 未发布）；main 回归待恢复（dependency-review push-event 缺陷，修复 PR #311，见报告 §7-5）                                                                                                                                                                                                                                                                                            |
+| Q07 收口        | `IMPLEMENTED` | docs/06-quality/09-质量基线报告.md（2026-08-07-2，按 Code Owner 审核意见修订：job 清单/数量/基线/状态语义/门禁接线修正）+ 本文台账回写；**待 Code Owner 复审合并**；Codex 独立复核后归档                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## 八、阶段级验证
 
@@ -463,11 +376,11 @@ rtk git status --short
 
 ## 十、收尾检查表
 
-- [ ] RAG 有冻结质量评测；
-- [ ] 所有关键降级有稳定内部原因和指标；
-- [ ] Turn 使用 token/time/cost 预算；
-- [ ] SLI/SLO、结构化日志和 Runbook 已接通；
-- [ ] CI 显示 retry、coverage、浏览器和 bundle 真相；
-- [ ] 供应链与迁移有发布门；
-- [ ] 质量基线报告可复现；
-- [ ] 计划已归档并更新 active 索引。
+- [ ] RAG 有冻结质量评测 —— **未满足**：Q01 已回退（#293），修正版待重提；
+- [x] 所有关键降级有稳定内部原因和指标 —— Q02 已合入 main（9 reason + 指标 + 测试），台账「待验收」项待 Codex 复核时确认；
+- [x] Turn 使用 token/time/cost 预算 —— Q03 已合入 main；
+- [x] SLI/SLO、结构化日志和 Runbook 已接通 —— Q04 已合入 main；
+- [ ] CI 显示 retry、coverage、浏览器和 bundle 真相 —— Q05 分支全绿，**#303 待合并**，合入后勾选；
+- [ ] 供应链与迁移有发布门 —— Q06 分支全绿，**#304 待合并**，合入后勾选；
+- [x] 质量基线报告可复现 —— docs/06-quality/09-质量基线报告.md（2026-08-07-1）；
+- [ ] 计划已归档并更新 active 索引 —— Codex 独立复核通过后执行（归档至 completed/ 并按 README 更新 active 索引）。

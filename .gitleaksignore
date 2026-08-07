@@ -1,5 +1,12 @@
+# Q06：allowlist 最小范围 + 解释（见 docs/06-quality/08-供应链与发布证据.md）。
+# 每条都是误报（测试夹具/公开数据，非真实密钥）。新增条目必须说明为什么安全，
+# 禁止用通配符整文件忽略真实密钥位置。
+# voice-lab 评测摘要：模型输出示例 JSON 中的字段名/示例值被 generic-api-key
+# 误报（冻结评测数据，非凭据）。
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:36
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:52
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-v-summary.json:generic-api-key:22
+# sherpa 模型 manifest：模型文件的 sha256 校验值被误报为 api key 格式，
+# 是公开模型的摘要值而非凭据。
 245c4262f30a4b15a109858244ccc8a3513f15f1:tooling/sherpa-model-manifest.json:generic-api-key:17
 245c4262f30a4b15a109858244ccc8a3513f15f1:tooling/sherpa-model-manifest.json:generic-api-key:38

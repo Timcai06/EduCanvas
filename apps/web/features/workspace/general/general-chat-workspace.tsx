@@ -89,7 +89,10 @@ export function GeneralChatWorkspace({
     ) : null;
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas text-ink">
+    <div
+      data-general-workspace
+      className="flex h-dvh flex-col bg-canvas text-ink"
+    >
       <GeneralWorkspaceLayout
         ctrl={ctrl}
         notebookTitle={notebookTitle}

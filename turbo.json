@@ -24,6 +24,10 @@
       "dependsOn": ["^test"],
       "outputs": []
     },
+    "test:coverage": {
+      "dependsOn": ["^test:coverage"],
+      "outputs": ["coverage/**"]
+    },
     "test:integration": {
       "cache": false,
       "env": ["TEST_DATABASE_URL"],

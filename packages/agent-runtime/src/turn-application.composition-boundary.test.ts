@@ -7,8 +7,11 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+/* R06 台账基线统一用 / 分隔：Windows 上 relative() 产生 \，直接比对会全部"违规"。 */
+const norm = (path: string) => path.split(sep).join('/');
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const SOURCE_ROOTS = ['apps', 'packages', 'tests'];
@@ -75,7 +78,7 @@ describe('Turn Application 唯一组合工厂（R06）', () => {
     const violations: string[] = [];
     for (const file of files) {
       if (isTestFile(file)) continue;
-      const rel = relative(ROOT, file);
+      const rel = norm(relative(ROOT, file));
       if (rel === ALLOWED_NEW_TURN_APPLICATION) continue;
       const src = readFileSync(file, 'utf8');
       if (src.includes('new TurnApplicationService(')) violations.push(rel);
@@ -118,7 +121,7 @@ describe('Turn Application 唯一组合工厂（R06）', () => {
     const violations: string[] = [];
     for (const file of files) {
       if (isTestFile(file)) continue;
-      const rel = relative(ROOT, file);
+      const rel = norm(relative(ROOT, file));
       if (ALLOWED_DRIZZLE_TOOLKERNEL_CONSTRUCTION.has(rel)) continue;
       const src = readFileSync(file, 'utf8');
       if (src.includes('new DrizzleAgentTurnContextRepository('))
@@ -131,7 +134,7 @@ describe('Turn Application 唯一组合工厂（R06）', () => {
     const violations: string[] = [];
     for (const file of files) {
       if (isTestFile(file)) continue;
-      const rel = relative(ROOT, file);
+      const rel = norm(relative(ROOT, file));
       if (ALLOWED_DRIZZLE_TOOLKERNEL_CONSTRUCTION.has(rel)) continue;
       const src = readFileSync(file, 'utf8');
       if (src.includes('new DrizzleAgentModelRunRepository('))
@@ -144,7 +147,7 @@ describe('Turn Application 唯一组合工厂（R06）', () => {
     const violations: string[] = [];
     for (const file of files) {
       if (isTestFile(file)) continue;
-      const rel = relative(ROOT, file);
+      const rel = norm(relative(ROOT, file));
       if (ALLOWED_DRIZZLE_TOOLKERNEL_CONSTRUCTION.has(rel)) continue;
       const src = readFileSync(file, 'utf8');
       if (src.includes('new ToolKernel(')) violations.push(rel);

@@ -16,27 +16,50 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Q06：action 全部 pin 到审计过的 commit SHA（2026-08-07 审计，审计过程与
+# 升级流程见 docs/06-quality/08-供应链与发布证据.md）。pin 记录：
+#   actions/checkout@v4                    -> 11d5960a326750d5838078e36cf38b85af677262
+#   actions/setup-node@v4                  -> 49933ea5288caeca8642d1e84afbd3f7d6820020
+#   actions/upload-artifact@v4             -> ea165f8d65b6e75b540449e92b4886f43607fa02
+#   pnpm/action-setup@v4                   -> b906affcce14559ad1aafd4ab0e942779e9f58b1
+#   gitleaks/gitleaks-action@v2            -> ff98106e4c7b2bc287b24eaf42907196329070c7
+#   actions/dependency-review-action@v4    -> 2031cfc080254a8a887f58cffee85186f0e49e48（v4 分支 = v4.9.0）
 jobs:
+  dependency-review:
+    # Q06：恶意/高风险依赖变更门禁（license + 漏洞，fail-on-severity: high）。
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+        with:
+          fetch-depth: 0
+
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4 分支（= v4.9.0）
+        with:
+          fail-on-severity: high
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2 tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4 # 版本取自根 package.json 的 packageManager 字段
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag（版本取自根 package.json 的 packageManager 字段）
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -56,11 +79,21 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+      # Q05：核心包 coverage 门禁。阈值 = 2026-08-06 真实基线（防回归，
+      # 只升不降），排除生成代码与纯类型，见各包 vitest.config.ts。
+      - name: Coverage gates
+        run: pnpm test:coverage
+
+      # Q06：每个 migration 必须有语义/锁表/回滚/N-1/风险记录，
+      # 见 packages/db/drizzle/MIGRATIONS.md。
+      - name: Migration records gate
+        run: node tooling/quality/migration-records.mjs
+
   integration:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
         env:
           POSTGRES_USER: educanvas
           POSTGRES_PASSWORD: educanvas
@@ -75,11 +108,11 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -99,11 +132,11 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -127,11 +160,11 @@ jobs:
     needs: [checks]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -152,7 +185,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
         env:
           POSTGRES_USER: educanvas
           POSTGRES_PASSWORD: educanvas
@@ -169,11 +202,11 @@ jobs:
       E2E_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_e2e
       PLAYWRIGHT_PORT: 3100
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -190,15 +223,24 @@ jobs:
       - name: Build production application
         run: pnpm build
 
+      - name: Bundle / route size gate
+        run: node tooling/quality/bundle-size.mjs --root apps/web
+
       - name: Persistent Web Runtime composition
         run: pnpm test:e2e:runtime-composition
 
-      - name: Browser E2E
+      - name: Browser E2E (chromium desktop + mobile viewport)
         run: pnpm exec playwright test
+
+      # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，
+      # 这里把 retry 次数与 flaky 名单写入 CI Summary，不得完全隐藏）。
+      - name: Summarize retries and coverage matrix
+        if: always()
+        run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
         with:
           name: playwright-diagnostics
           path: output/playwright
@@ -209,11 +251,11 @@ jobs:
     needs: [checks, integration, windows, runtime-pressure, e2e]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
         with:
           node-version-file: .nvmrc
           cache: pnpm
