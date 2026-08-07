@@ -13,11 +13,14 @@ export function HtmlPreviewPanel({
   isFull = false,
   onToggleFull,
   onClose,
+  canExitFullscreen,
 }: {
   source: string;
   isFull?: boolean;
   onToggleFull?: () => void;
   onClose: () => void;
+  /** landing 强制全屏时置 false，Escape 直接关闭（见 CanvasHost）。 */
+  canExitFullscreen?: boolean;
 }) {
   return (
     <CanvasHost
@@ -27,6 +30,7 @@ export function HtmlPreviewPanel({
       onClose={onClose}
       isFull={isFull}
       onToggleFull={onToggleFull}
+      canExitFullscreen={canExitFullscreen}
     >
       <div className="min-h-0 flex-1 p-3">
         <HtmlSandbox source={source} title="互动内容沙箱预览" />

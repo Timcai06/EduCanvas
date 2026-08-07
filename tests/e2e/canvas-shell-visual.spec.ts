@@ -54,16 +54,21 @@ test.describe('@ui Canvas shell 基础语义', () => {
     await expect(fullscreenButton).toBeAttached();
   });
 
-  test('Escape 退出全屏，关闭按钮关闭 Canvas', async ({ page }) => {
+  test('landing 强制全屏 Escape 直接关闭 Canvas', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    // Escape 退出全屏
+    // landing 态是强制全屏（onToggleFull 为 no-op 占位），Escape 不先退全屏，
+    // 一次直接关闭。此前此路径用 `name: '全屏'` 子串匹配恒真掩盖了缺陷（W06）。
     await page.keyboard.press('Escape');
-    // 全屏退出后，全屏按钮文字变为"全屏"
-    await expect(canvas.getByRole('button', { name: '全屏' })).toBeVisible();
+    await expect(canvas).not.toBeVisible();
+  });
 
-    // 用关闭按钮关闭（限定在 canvas 内查找，避免页面上其他"关闭"按钮）
+  test('关闭按钮关闭 Canvas', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const canvas = await openCanvasViaMindMap(page);
+
+    // 限定在 canvas 内查找，避免页面上其他"关闭"按钮
     await canvas.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas).not.toBeVisible();
   });

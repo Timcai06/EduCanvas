@@ -30,12 +30,15 @@ export function SourceResourceRenderer({
   isFull,
   onToggleFull,
   onClose,
+  canExitFullscreen,
 }: {
   resource: CanvasResource;
   Renderer: ComponentType<CanvasResourceRendererProps>;
   isFull: boolean;
   onToggleFull: () => void;
   onClose: () => void;
+  /** landing 强制全屏时置 false，Escape 直接关闭（见 CanvasHost）。 */
+  canExitFullscreen?: boolean;
 }) {
   return (
     <CanvasHost
@@ -45,6 +48,7 @@ export function SourceResourceRenderer({
       onClose={onClose}
       isFull={isFull}
       onToggleFull={onToggleFull}
+      canExitFullscreen={canExitFullscreen}
     >
       <Renderer resource={resource} />
     </CanvasHost>

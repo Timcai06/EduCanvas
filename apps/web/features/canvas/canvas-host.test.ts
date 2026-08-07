@@ -16,7 +16,7 @@ import {
 // ── resolveEscapeAction ──
 
 describe('resolveEscapeAction', () => {
-  it('全屏且 onToggleFull 存在时返回 exit_fullscreen', () => {
+  it('全屏且可退出全屏时返回 exit_fullscreen', () => {
     expect(resolveEscapeAction(true, true)).toBe('exit_fullscreen');
   });
 
@@ -25,7 +25,7 @@ describe('resolveEscapeAction', () => {
     expect(resolveEscapeAction(false, false)).toBe('close');
   });
 
-  it('全屏但无 onToggleFull 时返回 close', () => {
+  it('全屏但不可退出全屏（landing 强制全屏）时返回 close', () => {
     expect(resolveEscapeAction(true, false)).toBe('close');
   });
 });
@@ -99,6 +99,39 @@ describe('handleCanvasEscape', () => {
     await Promise.resolve();
 
     expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it('landing 强制全屏（onToggleFull 是 no-op）时 Escape 直接关闭', () => {
+    const onClose = vi.fn();
+    const onToggleFull = vi.fn();
+    const event = mkEvent('Escape');
+
+    expect(
+      handleCanvasEscape(event, {
+        isFull: true,
+        onClose,
+        // 模拟 landing 分支的 no-op 占位；canExitFullscreen=false 必须压过它
+        onToggleFull,
+        canExitFullscreen: false,
+      }),
+    ).toBe(true);
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onToggleFull).not.toHaveBeenCalled();
+  });
+
+  it('canExitFullscreen 显式覆盖 onToggleFull 推断', () => {
+    const onClose = vi.fn();
+    const onToggleFull = vi.fn();
+
+    handleCanvasEscape(mkEvent('Escape'), {
+      isFull: true,
+      onClose,
+      onToggleFull,
+      canExitFullscreen: true,
+    });
+
+    expect(onToggleFull).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

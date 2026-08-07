@@ -25,6 +25,19 @@ export type GeneralWorkspaceController = ReturnType<
   typeof useGeneralWorkspaceController
 >;
 
+/**
+ * Studio 打开资源即关闭 overlay：把焦点还给 banner 里的 Studio trigger，
+ * 让随后挂载的 Canvas 把它当作 opener。否则焦点掉到 body，Canvas 关闭后
+ * 键盘用户会失去操作入口（W06-1）。选择器与 StudioOverlay 归还逻辑一致。
+ */
+function restoreStudioOpenerFocus(): void {
+  document
+    .querySelector<HTMLButtonElement>(
+      '[aria-controls="notebook-studio-layer"]',
+    )
+    ?.focus();
+}
+
 export interface GeneralWorkspaceLayoutProps {
   readonly ctrl: GeneralWorkspaceController;
   readonly notebookTitle: string | null;
@@ -106,11 +119,13 @@ export function GeneralWorkspaceLayout({
               outputs={ctrl.studioItems}
               onOpenSource={(asset) => {
                 ctrl.workspace.closeStudio();
+                restoreStudioOpenerFocus();
                 ctrl.artifactFlow.closeCanvas();
                 ctrl.studioOpenActions.actions.openSource(asset.id);
               }}
               onOpenOutput={(artifactId) => {
                 ctrl.workspace.closeStudio();
+                restoreStudioOpenerFocus();
                 ctrl.studioOpenActions.actions.openArtifact(artifactId);
               }}
               onToggleSource={ctrl.sources.toggle}
