@@ -113,9 +113,9 @@ describe('buildArtifactCanvasResource（W04-3 渲染用资源构造）', () => {
   });
 
   it('未知 kind → 抛错（调用方只对已知内容驱动 kind 调用）', () => {
-    expect(() => buildArtifactCanvasResource(makeDetail('unknown_type'))).toThrow(
-      /Unsupported artifact kind/,
-    );
+    expect(() =>
+      buildArtifactCanvasResource(makeDetail('unknown_type')),
+    ).toThrow(/Unsupported artifact kind/);
   });
 
   it('交互式 kind（note/dom_exploration）→ 抛错（不进 Registry，由壳渲染）', () => {

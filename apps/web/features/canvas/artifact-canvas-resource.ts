@@ -24,13 +24,14 @@ export const ARTIFACT_KIND_RENDERER_ID: Readonly<Record<string, string>> = {
   generated_image: 'artifact.generated-image',
 };
 
-const KIND_REPRESENTATION: Readonly<Record<string, CanvasRepresentationKind>> = {
-  mind_map: 'structured',
-  slides: 'structured',
-  flashcards: 'structured',
-  audio_overview: 'audio',
-  generated_image: 'image',
-};
+const KIND_REPRESENTATION: Readonly<Record<string, CanvasRepresentationKind>> =
+  {
+    mind_map: 'structured',
+    slides: 'structured',
+    flashcards: 'structured',
+    audio_overview: 'audio',
+    generated_image: 'image',
+  };
 
 const KIND_MIME_TYPE: Readonly<Record<string, string>> = {
   structured: 'application/json',
@@ -51,7 +52,9 @@ const UNKNOWN_NOTEBOOK_ID = 'unknown-notebook';
  * 尚无版本时给 processing，让 Registry 选择仍可发生、由内容分发处理骨架态。
  * 未知 kind 直接抛错——调用方只在已知内容驱动 kind 上调用，抛错是开发期错误。
  */
-export function buildArtifactCanvasResource(detail: ArtifactDetail): CanvasResource {
+export function buildArtifactCanvasResource(
+  detail: ArtifactDetail,
+): CanvasResource {
   const rendererId = ARTIFACT_KIND_RENDERER_ID[detail.artifact.kind];
   if (!rendererId) {
     throw new Error(

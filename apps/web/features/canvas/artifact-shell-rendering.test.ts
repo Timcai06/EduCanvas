@@ -83,15 +83,13 @@ describe('isShellRenderedArtifactResource', () => {
 
   it('Source 即使 rendererId 巧合也不是壳渲染产物', () => {
     expect(
-      isShellRenderedArtifactResource(
-        makeResource('artifact.note', 'source'),
-      ),
+      isShellRenderedArtifactResource(makeResource('artifact.note', 'source')),
     ).toBe(false);
   });
 
   it('未知 rendererId → false', () => {
-    expect(isShellRenderedArtifactResource(makeResource('unknown.renderer'))).toBe(
-      false,
-    );
+    expect(
+      isShellRenderedArtifactResource(makeResource('unknown.renderer')),
+    ).toBe(false);
   });
 });

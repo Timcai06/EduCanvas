@@ -80,7 +80,10 @@ const mindMapContent = {
   root: { id: 'root', label: '根节点' },
 };
 
-function render(view: ReturnType<typeof resolveArtifactContentView>, detail: ArtifactDetail) {
+function render(
+  view: ReturnType<typeof resolveArtifactContentView>,
+  detail: ArtifactDetail,
+) {
   return renderToStaticMarkup(
     <ArtifactCanvasContent
       contentView={view}
@@ -114,7 +117,10 @@ describe('toArtifactVersionData（Registry 受控内容转换）', () => {
       false,
     );
     if (view.kind !== 'audio_overview') throw new Error('unexpected view');
-    expect(toArtifactVersionData(view)).toEqual({ content: null, media: audioMedia });
+    expect(toArtifactVersionData(view)).toEqual({
+      content: null,
+      media: audioMedia,
+    });
   });
 });
 

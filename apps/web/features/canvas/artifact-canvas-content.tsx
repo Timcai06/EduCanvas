@@ -4,10 +4,7 @@ import { useMemo } from 'react';
 import type { NoteContent } from '@educanvas/canvas-protocol';
 import { buildArtifactCanvasResource } from './artifact-canvas-resource';
 import type { ArtifactContentView } from './artifact-content-view';
-import type {
-  ArtifactDetail,
-  ArtifactVersionData,
-} from './artifact-client';
+import type { ArtifactDetail, ArtifactVersionData } from './artifact-client';
 import { ArtifactGeneratingSkeleton } from './artifact-provenance';
 import { CanvasShellStatus } from './canvas-shell-status';
 import { NoteRenderer } from './note-renderer';
@@ -24,11 +21,7 @@ import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry'
  */
 
 type ArtifactRegistryViewKinds =
-  | 'mind_map'
-  | 'slides'
-  | 'flashcards'
-  | 'audio_overview'
-  | 'generated_image';
+  'mind_map' | 'slides' | 'flashcards' | 'audio_overview' | 'generated_image';
 
 /** 走 Registry 的 5 类内容驱动分发结果。 */
 export type ArtifactRegistryContentView = Extract<
@@ -61,10 +54,7 @@ function ArtifactRegistryContent({
   view: ArtifactRegistryContentView;
   detail: ArtifactDetail;
 }) {
-  const resource = useMemo(
-    () => buildArtifactCanvasResource(detail),
-    [detail],
-  );
+  const resource = useMemo(() => buildArtifactCanvasResource(detail), [detail]);
   const selection = selectWebCanvasResourceRenderer(resource);
   if (selection.kind === 'unavailable') {
     return (

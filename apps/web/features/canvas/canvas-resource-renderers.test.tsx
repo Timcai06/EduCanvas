@@ -187,5 +187,4 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
     );
     expect(html).toContain('图片不可用');
   });
-
 });
