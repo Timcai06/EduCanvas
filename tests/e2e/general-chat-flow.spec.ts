@@ -111,7 +111,7 @@ async function waitForUnavailableTurn(page: Page) {
   });
 }
 
-test('根入口默认创建通用Chat，界面上不存在K12模式入口', async ({
+test('@smoke 根入口默认创建通用Chat，界面上不存在K12模式入口', async ({
   context,
   page,
 }) => {

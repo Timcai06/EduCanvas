@@ -86,6 +86,17 @@ describe('CI impact classification', () => {
     assert.equal(result.e2e, true);
   });
 
+  it('treats the PR smoke configuration as an E2E concern without unrelated lanes', () => {
+    assert.deepEqual(classifyChangedPaths(['playwright.pr.config.ts']), {
+      checks: true,
+      integration: false,
+      windows: false,
+      runtime_pressure: false,
+      e2e: true,
+      dependency_review: false,
+    });
+  });
+
   it('compares pull requests from the merge base rather than base-branch churn', () => {
     const base = 'a'.repeat(40);
     const head = 'b'.repeat(40);

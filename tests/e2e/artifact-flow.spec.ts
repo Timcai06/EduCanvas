@@ -44,7 +44,7 @@ async function closeStudio(page: Page) {
  * 对话 → 「+」菜单 → 确认卡 → 后台任务(真实 worker 进程消费)→ 产物卡 → Canvas 打开。
  * 不依赖模型 Provider:v1 大纲由 worker 规则生成,链路的每一环都是真实的。
  */
-test('生成思维导图全链路经真实 worker 完成并可在 Canvas 打开', async ({
+test('@smoke 生成思维导图全链路经真实 worker 完成并可在 Canvas 打开', async ({
   page,
 }) => {
   /* reduced-motion 下验证交互确定性；最终视觉由人工在真实页面验收。 */

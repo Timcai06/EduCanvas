@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 // 60s 预算与流程真实耗时匹配（Q05 门禁：预算真实，不靠无限 retry）。
 // 注意：Playwright 的 test(title, details, body) 不支持 details.timeout，
 // 必须用 test.setTimeout()。
-test('账号注册、资料更新、改密码和会话撤销走真实服务端链路', async ({
+test('@smoke 账号注册、资料更新、改密码和会话撤销走真实服务端链路', async ({
   browser,
   page,
 }) => {

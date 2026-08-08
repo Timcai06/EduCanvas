@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react';
 import { X } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motionDuration } from '@/features/theme/motion';
 import {
   getFocusableElements,
@@ -170,7 +171,15 @@ export function Sheet({
     };
   }, [requestClose]);
 
-  return (
+  /*
+   * Sheet 可能由带 z-index / isolate 的 Header、Rail 或 Canvas 分支打开。
+   * fixed 子节点仍受祖先 stacking context 限制，因此必须挂到 body，才能让遮罩和
+   * dialog 真正成为全局模态层，而不是靠不断增大局部 z-index 碰运气。
+   */
+  const portalHost = globalThis.document?.body;
+  if (!portalHost) return null;
+
+  return createPortal(
     <div
       ref={rootRef}
       className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:justify-end lg:p-5"
@@ -233,6 +242,7 @@ export function Sheet({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    portalHost,
   );
 }

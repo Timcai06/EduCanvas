@@ -29,6 +29,7 @@ const ROOT_FILES = new Set([
   'docker-compose.yml',
   'package.json',
   'playwright.config.ts',
+  'playwright.pr.config.ts',
   'playwright.runtime-composition.config.ts',
   'playwright.runtime.config.ts',
   'playwright.ui.config.ts',

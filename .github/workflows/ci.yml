@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # 完整稳定矩阵集中在 nightly；普通 PR / main push 只跑 Chromium smoke。
+    - cron: '17 1 * * *'
   workflow_dispatch:
     inputs:
       release_evidence:
@@ -263,8 +266,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install browsers (Chromium + Firefox)
-        # W06：第二引擎 Firefox 进稳定 lane；与 @ui lane（ui.yml）共用安装。
+      - name: Install Chromium for PR smoke
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install browsers for full regression
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        # W06：完整稳定矩阵保留 Firefox；集中在 nightly / 手动预发布，不由普通 PR 支付。
         run: pnpm exec playwright install --with-deps chromium firefox
 
       - name: Apply database migrations
@@ -274,9 +282,18 @@ jobs:
         run: pnpm build
 
       - name: Persistent Web Runtime composition
+        if: >-
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch' ||
+          needs.changes.outputs.runtime_pressure == 'true'
         run: pnpm test:e2e:runtime-composition
 
-      - name: Browser E2E (chromium desktop + mobile viewport + firefox)
+      - name: Browser E2E smoke (Chromium desktop)
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pnpm test:e2e:pr
+
+      - name: Full browser E2E (Chromium desktop + mobile + Firefox)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright test
 
       # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，

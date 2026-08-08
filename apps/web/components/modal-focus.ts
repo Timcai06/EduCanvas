@@ -50,14 +50,30 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * 从模态节点逐层向工作区根回溯，将每一层的兄弟分支设为 inert。
- * 这样既能隔离顶栏，也能隔离与 Canvas 同级的 Chat，而不会把包含模态框
- * 自身的祖先一起禁用。清理函数精确恢复调用前状态，支持嵌套表面。
- * 学习与通用两个 workspace 根都带标记；缺标记的宿主（如设计 QA 页）跳过。
+ * Portal 模态隔离 body 下的其他视觉分支；内嵌模态则逐层向工作区根回溯，
+ * 将沿途兄弟分支设为 inert。这样既隔离顶栏，也隔离与 Canvas 同级的 Chat，
+ * 且不会禁用包含模态框自身的祖先。清理函数精确恢复调用前状态。
+ * 内嵌模式下，缺少 workspace 标记的宿主（如设计 QA 页）仍跳过隔离。
  */
 export function makeWorkspaceBackgroundInert(
   modalRoot: HTMLElement,
 ): () => void {
+  /*
+   * Sheet 通过 Portal 成为 body 的直接子节点，避免被调用方的 stacking context 困住。
+   * 此时不能再从 modalRoot 向上找到 workspace：精确隔离 body 下除模态根和非视觉
+   * 资源节点外的兄弟分支，既覆盖 workspace，也覆盖尚未创建会话的首页入口。
+   */
+  if (modalRoot.parentElement === document.body) {
+    return makeElementsInert(
+      Array.from(document.body.children).filter(
+        (element): element is HTMLElement =>
+          element instanceof HTMLElement &&
+          element !== modalRoot &&
+          !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName),
+      ),
+    );
+  }
+
   const workspace = modalRoot.closest<HTMLElement>(
     '[data-learning-workspace], [data-general-workspace]',
   );
@@ -78,7 +94,11 @@ export function makeWorkspaceBackgroundInert(
     parent = parent.parentElement;
   }
 
-  const previous = Array.from(targets).map((element) => ({
+  return makeElementsInert(targets);
+}
+
+function makeElementsInert(elements: Iterable<HTMLElement>): () => void {
+  const previous = Array.from(elements).map((element) => ({
     element,
     inert: element.inert,
     ariaHidden: element.getAttribute('aria-hidden'),

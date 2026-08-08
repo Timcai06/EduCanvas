@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  * 显式点击运行 → 分栏沙箱 iframe 执行。SSE 用与 general-chat-flow 相同的
  * mock 手法,不依赖 Provider;沙箱隔离属性由单测保证,这里验证用户回路。
  */
-test('```html 代码块经预览卡在沙箱 iframe 中运行', async ({ page }) => {
+test('@smoke ```html 代码块经预览卡在沙箱 iframe 中运行', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.route('**/api/v1/chat/turn', async (route) => {
     const encoder = new TextEncoder();
@@ -52,7 +52,9 @@ test('```html 代码块经预览卡在沙箱 iframe 中运行', async ({ page })
 
   /* 沙箱内脚本可交互(allow-scripts),但仍与宿主隔离 */
   await sandboxFrame.getByRole('button', { name: '点我' }).click();
-  await expect(sandboxFrame.getByRole('button', { name: '点过了' })).toBeVisible();
+  await expect(
+    sandboxFrame.getByRole('button', { name: '点过了' }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: '关闭预览' }).click();
   await expect(page.locator('iframe[title="互动内容沙箱预览"]')).toHaveCount(0);

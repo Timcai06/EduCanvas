@@ -32,7 +32,30 @@ async function openProfile(page: Page) {
 }
 
 test.describe('档案活动', () => {
-  test('打开档案后投影可信活动统计', async ({ page }) => {
+  test('@ui 档案抽屉占据全局模态层并遮住工作区', async ({ page }) => {
+    await openProfile(page);
+
+    const dialog = page.getByRole('dialog', { name: '我的档案' });
+    const modalRoot = dialog.locator('..');
+    await expect(modalRoot).toHaveClass(/\bfixed\b/);
+    await expect(modalRoot).toHaveClass(/\bz-50\b/);
+
+    expect(
+      await modalRoot.evaluate(
+        (element) => element.parentElement === document.body,
+      ),
+    ).toBe(true);
+
+    const overlay = page.getByRole('button', { name: '关闭面板' });
+    expect(
+      await overlay.evaluate(
+        (element) =>
+          document.elementFromPoint(20, window.innerHeight / 2) === element,
+      ),
+    ).toBe(true);
+  });
+
+  test('@smoke 打开档案后投影可信活动统计', async ({ page }) => {
     await page.route('**/api/v1/me/activity', (route) =>
       route.fulfill({
         status: 200,

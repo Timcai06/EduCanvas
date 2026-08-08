@@ -136,7 +136,7 @@ async function ensureGeneralNotebook(page: Page) {
   await expect.poll(() => activeConversationId(page)).toBeTruthy();
 }
 
-test('统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用户与版本', async ({
+test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用户与版本', async ({
   browser,
   page,
 }) => {
