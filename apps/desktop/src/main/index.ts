@@ -4,7 +4,8 @@ import { createAssistantWindow } from './window';
 import { createTray } from './tray';
 import { createAssistantProxy } from './assistant-proxy';
 
-const BASE_URL = process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://localhost:3000';
+const BASE_URL =
+  process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://localhost:3000';
 
 // 单实例锁：二次启动聚焦已有窗口而非再开一个
 if (!app.requestSingleInstanceLock()) {
@@ -15,7 +16,10 @@ if (!app.requestSingleInstanceLock()) {
   // invoke 透传 AbortSignal：renderer 取消时 event.signal 同步中止（Electron invoke 约定）。
   // 注：electron 43 的 d.ts 缺 IpcMainInvokeEvent.signal（运行时存在），此处局部增强。
   ipcMain.handle('assistant:turn', (event, payload: { text: string }) =>
-    proxy.turn(payload, (event as IpcMainInvokeEvent & { signal: AbortSignal }).signal),
+    proxy.turn(
+      payload,
+      (event as IpcMainInvokeEvent & { signal: AbortSignal }).signal,
+    ),
   );
 
   let mainWindow: Electron.BrowserWindow | null = null;
@@ -29,7 +33,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     mainWindow = createAssistantWindow(() => {
-      mainWindow?.webContents.send('assistant:toast', '已最小化到托盘，右键托盘图标可退出。');
+      mainWindow?.webContents.send(
+        'assistant:toast',
+        '已最小化到托盘，右键托盘图标可退出。',
+      );
     });
     createTray(mainWindow);
   });

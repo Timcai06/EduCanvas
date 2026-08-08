@@ -11,7 +11,9 @@ export const requestQuit = (): void => {
 };
 
 export function createTray(win: BrowserWindow): Tray {
-  const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'));
+  const icon = nativeImage.createFromPath(
+    join(__dirname, '../../build/icon.png'),
+  );
   const tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('EduCanvas 助手');
   tray.on('click', () => {

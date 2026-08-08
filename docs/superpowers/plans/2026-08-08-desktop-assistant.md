@@ -586,13 +586,25 @@ git commit -m "feat(desktop): assistant turn 代理（无 Origin 头过同源检
   - 生命周期：单实例锁；close=hide；Tray 单击 toggle、右键菜单（显示/退出）
   - baseUrl 读取：`EDUCANVAS_DESKTOP_API_BASE` 环境变量，默认 `http://localhost:3000`
 
-- [ ] **Step 1: preload/index.ts 与 index.d.ts**
+- [ ] **Step 1: preload/index.ts**
 
-`src/preload/index.ts`:
+> 执行修正：`index.d.ts` 分离声明未被单 project tsconfig 的 include glob 收录（tsc 编译单元外），
+> `declare global` 合并进 `index.ts`（含此文件的编译单元即全 project 可见），不单独建 d.ts。
+
 ```ts
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import type { TurnResult } from '../shared/turn-result';
+
+// renderer 侧类型：window.desktopAssistant 由此声明（含此文件的编译单元即全 project 可见）
+declare global {
+  interface Window {
+    desktopAssistant: {
+      turn(text: string, signal?: AbortSignal): Promise<TurnResult>;
+      onToast(callback: (message: string) => void): () => void;
+    };
+  }
+}
 
 /**
  * contextBridge 暴露给 renderer 的唯一 API。
@@ -611,21 +623,6 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     };
   },
 });
-```
-
-`src/preload/index.d.ts`（renderer 类型可见）:
-```ts
-import type { TurnResult } from '../shared/turn-result';
-
-declare global {
-  interface Window {
-    desktopAssistant: {
-      turn(text: string, signal?: AbortSignal): Promise<TurnResult>;
-      onToast(callback: (message: string) => void): () => void;
-    };
-  }
-}
-export {};
 ```
 
 - [ ] **Step 2: main/window.ts**
