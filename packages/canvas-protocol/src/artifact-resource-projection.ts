@@ -104,35 +104,44 @@ function projectSourceResourceIds(
   ];
 }
 
+// 各 Artifact 类型的协议声明：rendererId 与 W04 浏览器端注册表
+// （web-canvas-resource-registry-config.ts）一一对应；rendererVersion 是
+// 渲染器协议版本（v1），与 artifact 数据版本无关——服务端与浏览器端同批
+// 升级时才递增（#306 契约收口，2026-08-07）。
 const ARTIFACT_RENDERERS = {
   mind_map: {
     representation: 'structured',
     mimeType: 'application/vnd.educanvas.mind-map+json',
     rendererId: 'artifact.mind-map',
+    rendererVersion: 1,
     trustTier: 'tier1',
   },
   slides: {
     representation: 'structured',
     mimeType: 'application/vnd.educanvas.slides+json',
     rendererId: 'artifact.slides',
+    rendererVersion: 1,
     trustTier: 'tier1',
   },
   flashcards: {
     representation: 'structured',
     mimeType: 'application/vnd.educanvas.flashcards+json',
     rendererId: 'artifact.flashcards',
+    rendererVersion: 1,
     trustTier: 'tier1',
   },
   note: {
     representation: 'structured',
     mimeType: 'application/vnd.educanvas.note+json',
     rendererId: 'artifact.note',
+    rendererVersion: 1,
     trustTier: 'tier1',
   },
   audio_overview: {
     representation: 'audio',
     mimeType: 'audio/mpeg',
     rendererId: 'artifact.audio-overview',
+    rendererVersion: 1,
     trustTier: 'tier2',
   },
   /* 生成位图不是判分型白名单内容，因此固定 tier2；MIME 只作为渲染声明，
@@ -141,12 +150,14 @@ const ARTIFACT_RENDERERS = {
     representation: 'image',
     mimeType: 'image/png',
     rendererId: 'artifact.generated-image',
+    rendererVersion: 1,
     trustTier: 'tier2',
   },
   dom_exploration: {
     representation: 'interactive_app',
     mimeType: 'application/vnd.educanvas.dom-exploration+json',
     rendererId: 'artifact.dom-exploration',
+    rendererVersion: 1,
     trustTier: 'tier2',
   },
 } as const satisfies Record<
@@ -155,6 +166,7 @@ const ARTIFACT_RENDERERS = {
     representation: CanvasRepresentationKind;
     mimeType: string;
     rendererId: string;
+    rendererVersion: number;
     trustTier: CanvasTrustTier;
   }
 >;
@@ -268,7 +280,7 @@ export function projectOwnedArtifactResource(input: {
     },
     renderer: {
       rendererId: renderer.rendererId,
-      rendererVersion: 1,
+      rendererVersion: renderer.rendererVersion,
     },
     trustTier: renderer.trustTier,
     allowedActions: projectActions(
