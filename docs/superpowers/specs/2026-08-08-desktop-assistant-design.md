@@ -50,7 +50,8 @@ Renderer 输入指令
       fetch POST {baseUrl}/api/v1/assistant/turn
       headers: { 'content-type': 'application/json' }   ← 无 Origin / 无 sec-fetch-site
       body: { text, clientMessageId: randomUUID() }
-  → 本地 web dev (默认 http://localhost:3000)
+  → 本地 web dev (默认 http://127.0.0.1:3101 — 仓库本地 Web 约定端口，
+     实现时修正；可用 EDUCANVAS_DESKTOP_API_BASE 覆盖)
       isTrustedSameOriginWrite 无 Origin 分支通过
       本地模式 readAnonymousIdentity 回退 local:owner（免登录）
   → 200 { action, message, ... } → 气泡渲染

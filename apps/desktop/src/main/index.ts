@@ -4,8 +4,10 @@ import { createAssistantWindow } from './window';
 import { createTray } from './tray';
 import { createAssistantProxy } from './assistant-proxy';
 
+// 仓库本地 Web 约定端口 3101（tooling/local-orchestrator-config.mjs 默认值）。
+// 非标准端口部署可用 EDUCANVAS_DESKTOP_API_BASE 覆盖。
 const BASE_URL =
-  process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://localhost:3000';
+  process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://127.0.0.1:3101';
 
 // 单实例锁：二次启动聚焦已有窗口而非再开一个
 if (!app.requestSingleInstanceLock()) {

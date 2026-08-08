@@ -584,7 +584,7 @@ git commit -m "feat(desktop): assistant turn 代理（无 Origin 头过同源检
   - main IPC：`ipcMain.handle('assistant:turn', (event, payload: { text: string }) => proxy.turn(payload, event.signal))`
   - main → renderer 事件：`webContents.send('assistant:toast', message: string)`（首次隐藏托盘提示）
   - 生命周期：单实例锁；close=hide；Tray 单击 toggle、右键菜单（显示/退出）
-  - baseUrl 读取：`EDUCANVAS_DESKTOP_API_BASE` 环境变量，默认 `http://localhost:3000`
+  - baseUrl 读取：`EDUCANVAS_DESKTOP_API_BASE` 环境变量，默认 `http://127.0.0.1:3101`（执行期修正：仓库本地 Web 约定端口是 3101，见 tooling/local-orchestrator-config.mjs）
 
 - [ ] **Step 1: preload/index.ts**
 
@@ -715,7 +715,9 @@ import { createAssistantWindow } from './window';
 import { createTray } from './tray';
 import { createAssistantProxy } from './assistant-proxy';
 
-const BASE_URL = process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://localhost:3000';
+// 仓库本地 Web 约定端口 3101（tooling/local-orchestrator-config.mjs 默认值）。
+// 非标准端口部署可用 EDUCANVAS_DESKTOP_API_BASE 覆盖。
+const BASE_URL = process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://127.0.0.1:3101';
 
 // 单实例锁：二次启动聚焦已有窗口而非再开一个
 if (!app.requestSingleInstanceLock()) {
