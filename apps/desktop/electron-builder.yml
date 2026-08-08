@@ -1,12 +1,12 @@
 appId: com.educanvas.desktop
 productName: EduCanvas助手
 directories:
-  buildResources: build
+  buildResources: assets
 files:
   - out/**
-  - build/icon.png # 托盘图标在打包后仍需可用（asar 内 build/ 下）
+  - assets/icon.png # 托盘图标在打包后仍需可用（asar 内 assets/ 下；build/ 是治理禁止段）
 win:
-  icon: build/icon.ico
+  icon: assets/icon.ico
   target:
     - target: portable
       arch:

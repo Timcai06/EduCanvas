@@ -30,7 +30,7 @@
 - Create: `apps/desktop/vitest.config.ts`
 - Create: `apps/desktop/electron-builder.yml`
 - Create: `apps/desktop/src/main/index.ts`（最小占位：空窗口）、`src/renderer/index.html`、`src/renderer/src/main.tsx`、`src/renderer/src/App.tsx`（占位文本）
-- Create: `apps/desktop/build/icon.ico`（256）、`build/icon.png`（512，托盘 16/32 由 PNG 缩放）
+- Create: `apps/desktop/assets/icon.ico`（256）、`assets/icon.png`（512，托盘 16/32 由 PNG 缩放）
 - Modify: 根 `package.json` 加 `"dev:desktop"` 脚本（本任务一并做，属于工程接线）
 
 **Interfaces:**
@@ -149,12 +149,12 @@ export default defineConfig({
 appId: com.educanvas.desktop
 productName: EduCanvas助手
 directories:
-  buildResources: build
+  buildResources: assets
 files:
   - out/**
-  - build/icon.png # 托盘图标在打包后仍需可用（asar 内 build/ 下）
+  - assets/icon.png # 托盘图标在打包后仍需可用（asar 内 build/ 下）
 win:
-  icon: build/icon.ico
+  icon: assets/icon.ico
   target:
     - target: portable
       arch:
@@ -285,7 +285,7 @@ New-IconPng 512 'D:\Projects\EduCanvas\apps\desktop\build\icon.png'
 # icon.ico：用 PowerShell 调 .NET 把 256px PNG 编码为 ICO（见下方命令序列）
 ```
 
-`build/icon.ico` 生成：用 System.Drawing `Icon.FromHandle` 不可靠；改为在 PowerShell 中手工组装 ICO 头 + PNG 数据（256×256 PNG 内嵌 ICO 为合法格式）：
+`assets/icon.ico` 生成：用 System.Drawing `Icon.FromHandle` 不可靠；改为在 PowerShell 中手工组装 ICO 头 + PNG 数据（256×256 PNG 内嵌 ICO 为合法格式）：
 
 ```powershell
 # 1) 生成 256 PNG 到临时路径
@@ -687,7 +687,7 @@ export const requestQuit = (): void => {
 };
 
 export function createTray(win: BrowserWindow): Tray {
-  const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'));
+  const icon = nativeImage.createFromPath(join(__dirname, '../../assets/icon.png'));
   const tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('EduCanvas 助手');
   tray.on('click', () => {
