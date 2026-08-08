@@ -1,0 +1,9 @@
+:root {
+  --accent: #6a4a86;
+  --ink: #2b2333;
+  --surface: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.placeholder { height: 100%; display: grid; place-items: center; color: var(--accent); }

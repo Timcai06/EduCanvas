@@ -1,0 +1,5 @@
+node_modules/
+out/
+dist/
+# 根 .gitignore 有 build/ 规则；apps/desktop/build/ 是必须提交的图标产物，重新包含
+!build/
