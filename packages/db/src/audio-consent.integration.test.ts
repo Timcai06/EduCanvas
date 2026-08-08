@@ -545,7 +545,10 @@ describeWithDatabase('audio consent 与留存 schema', () => {
       expect(boundary[0]?.expiresAt).toBeDefined();
       await transaction
         .update(audioRetentions)
-        .set({ status: 'deletion_requested', deletionRequestedAt: new Date(now) })
+        .set({
+          status: 'deletion_requested',
+          deletionRequestedAt: new Date(now),
+        })
         .where(eq(audioRetentions.id, boundary[0]!.id));
     });
 
