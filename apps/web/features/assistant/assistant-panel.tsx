@@ -9,23 +9,11 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
-import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
+import {
+  type AssistantBubble,
+  useAssistantRequest,
+} from './use-assistant-request';
 
-// ── Types ─────────────────────────────────────────────────────────
-
-interface Bubble {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  status: 'pending' | 'streaming' | 'completed' | 'failed';
-}
-
-// ── Hook ──────────────────────────────────────────────────────────
-
-/**
- * Assistant 专用的轻量 SSE 消费 hook。
- * 与 useAgentTurn 使用相同的底层事件解析，但不维护历史消息列表。
- */
 /** matchMedia 桌面宽度订阅（useSyncExternalStore 用）。 */
 function subscribeDesktopWidth(callback: () => void): () => void {
   const query = window.matchMedia('(min-width: 768px)');
@@ -38,124 +26,9 @@ function getDesktopWidthSnapshot(): boolean {
   return window.matchMedia('(min-width: 768px)').matches;
 }
 
-function useAssistantStream() {
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [busy, setBusy] = useState(false);
-  const controller = useRef<AbortController | null>(null);
-
-  const send = useCallback(
-    async (text: string) => {
-      if (!text.trim() || busy) return;
-      setBusy(true);
-      const userBubble: Bubble = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        text: text.trim(),
-        status: 'completed',
-      };
-      const assistantBubble: Bubble = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        text: '',
-        status: 'pending',
-      };
-      setBubbles((prev) => [...prev, userBubble, assistantBubble]);
-
-      const ac = new AbortController();
-      controller.current = ac;
-
-      try {
-        const response = await fetch('/api/v1/assistant/turn', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            clientMessageId: crypto.randomUUID(),
-            text: text.trim(),
-          }),
-          signal: ac.signal,
-        });
-
-        if (!response.ok) {
-          let errorMsg = '抱歉，暂时无法处理。';
-          try {
-            const err = await response.json();
-            if (err?.error?.message) errorMsg = err.error.message;
-          } catch {}
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id
-                ? { ...b, text: errorMsg, status: 'failed' }
-                : b,
-            ),
-          );
-          setBusy(false);
-          return;
-        }
-
-        // 管理操作：JSON 直接返回（assistant 端点只返回 JSON，无 SSE 分支）
-        const data = await response.json();
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === assistantBubble.id
-              ? { ...b, text: data.message ?? '完成', status: 'completed' }
-              : b,
-          ),
-        );
-
-        // 需要刷新页面的操作
-        if (
-          data.action === 'created' ||
-          data.action === 'renamed' ||
-          data.action === 'deleted' ||
-          data.action === 'switched'
-        ) {
-          setTimeout(() => window.location.reload(), 800);
-        }
-
-        // 打开产物：存 sessionStorage 后刷新
-        if (data.action === 'open_artifact' && data.artifactId) {
-          sessionStorage.setItem(
-            'educanvas.assistant_open_artifact',
-            data.artifactId,
-          );
-          setTimeout(() => window.location.reload(), 300);
-        }
-
-        // 打开面板：存 sessionStorage 后刷新
-        if (data.action === 'open_panel' && data.panel) {
-          sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, data.panel);
-          setTimeout(() => window.location.reload(), 300);
-        }
-        setBusy(false);
-      } catch {
-        if (!ac.signal.aborted) {
-          setBubbles((prev) =>
-            prev.map((b) =>
-              b.id === assistantBubble.id && b.status !== 'completed'
-                ? {
-                    ...b,
-                    text: b.text || '连接中断，请重试。',
-                    status: 'failed',
-                  }
-                : b,
-            ),
-          );
-        }
-        setBusy(false);
-      } finally {
-        if (controller.current === ac) controller.current = null;
-      }
-    },
-    [busy],
-  );
-
-  return { bubbles, busy, send } as const;
-}
-
 // ── Assistant Bubble ──────────────────────────────────────────────
 
-function AssistantBubbleItem({ bubble }: { bubble: Bubble }) {
+function AssistantBubbleItem({ bubble }: { bubble: AssistantBubble }) {
   return (
     <div
       style={{
@@ -204,7 +77,7 @@ function AssistantBubbleItem({ bubble }: { bubble: Bubble }) {
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const { bubbles, busy, send } = useAssistantStream();
+  const { bubbles, busy, send, abort } = useAssistantRequest();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -233,15 +106,22 @@ export function AssistantPanel() {
     }
   }, [bubbles]);
 
+  // 关闭面板时停止等待飞行中的请求，并把对应气泡收口为已取消；
+  // HTTP 中断不承诺服务端已停止已经开始的分类工作。
+  const handleClose = useCallback(() => {
+    abort();
+    setOpen(false);
+  }, [abort]);
+
   // Escape 关闭
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, handleClose]);
 
   // 窄视口不渲染悬浮助手（守卫放在所有 hooks 之后，保证 hooks 调用顺序稳定）。
   if (!isDesktop) return null;
@@ -265,7 +145,7 @@ export function AssistantPanel() {
           Composer 的发送/停止按钮与产物对话框操作，见 #292 回归。 */}
       <div className="hidden md:block">
         <button
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() => (open ? handleClose() : setOpen(true))}
           aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
           style={{
             position: 'fixed',

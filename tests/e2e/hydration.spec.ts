@@ -66,12 +66,18 @@ test.describe('hydration 与客户端运行时健康', () => {
     });
 
     await page.goto('/', { waitUntil: 'load' });
-    await page.waitForTimeout(1500);
 
-    // EduCanvas 是匿名优先应用：/ 直接渲染首页，不要求登录。
+    // 通过真实客户端交互证明 hydration 已完成；固定 sleep 在慢 runner 上会
+    // 偶发占满整个 test timeout，且并不能证明事件绑定已经可用。
     await expect(
       page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
+    await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+    await expect(
+      page.getByRole('menuitem', { name: /生成思维导图/ }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+
     expect(hydrationErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
