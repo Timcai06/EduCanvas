@@ -17,6 +17,7 @@ describe('CI impact classification', () => {
         runtime_pressure: false,
         e2e: false,
         dependency_review: false,
+        desktop: false,
       },
     );
   });
@@ -68,6 +69,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       e2e: true,
       dependency_review: false,
+      desktop: false,
     });
   });
 
@@ -86,6 +88,24 @@ describe('CI impact classification', () => {
     assert.equal(result.e2e, true);
   });
 
+  it('routes desktop app changes to the desktop lane plus checks only', () => {
+    const result = classifyChangedPaths([
+      'apps/desktop/src/main/index.ts',
+      'apps/desktop/electron-builder.yml',
+    ]);
+    assert.equal(result.desktop, true);
+    assert.equal(result.checks, true);
+    assert.equal(result.e2e, false);
+    assert.equal(result.windows, false);
+    assert.equal(result.integration, false);
+  });
+
+  it('keeps desktop lane off for docs-only changes', () => {
+    const result = classifyChangedPaths(['docs/plan/active/Q-质量观测成本.md']);
+    assert.equal(result.desktop, false);
+    assert.equal(result.checks, false);
+  });
+
   it('treats the PR smoke configuration as an E2E concern without unrelated lanes', () => {
     assert.deepEqual(classifyChangedPaths(['playwright.pr.config.ts']), {
       checks: true,
@@ -94,6 +114,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       e2e: true,
       dependency_review: false,
+      desktop: false,
     });
   });
 
@@ -115,6 +136,7 @@ describe('CI impact classification', () => {
       runtime_pressure: 'skipped',
       e2e: 'skipped',
       release_evidence: 'skipped',
+      desktop_build: 'skipped',
     };
     assert.deepEqual(
       requiredResultFailures({
@@ -136,6 +158,7 @@ describe('CI impact classification', () => {
           runtime_pressure: 'success',
           e2e: 'failure',
           release_evidence: 'success',
+          desktop_build: 'success',
         },
       }),
       [
