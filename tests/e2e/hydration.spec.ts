@@ -20,7 +20,40 @@ const PUBLIC_ROUTES = [
   '/register',
   '/design-qa/pipeline-flow',
   '/design-qa/canvas-provenance',
-];
+] as const;
+
+async function proveClientReady(
+  page: import('@playwright/test').Page,
+  route: (typeof PUBLIC_ROUTES)[number],
+) {
+  if (route === '/login' || route === '/register') {
+    const initialSwitch = page.getByRole('button', {
+      name: route === '/login' ? '第一次来？创建账号' : '已有账号？返回登录',
+    });
+    const switchedLabel =
+      route === '/login' ? '已有账号？返回登录' : '第一次来？创建账号';
+    await expect(initialSwitch).toBeVisible();
+    await initialSwitch.click();
+    await expect(
+      page.getByRole('button', { name: switchedLabel }),
+    ).toBeVisible();
+    return;
+  }
+
+  if (route === '/design-qa/pipeline-flow') {
+    const shell = page.getByTestId('animation-shell');
+    await expect(shell).toContainText('步骤 1/4');
+    await shell.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(shell).toContainText('步骤 2/4');
+    return;
+  }
+
+  await expect(page.getByTestId('artifact-provenance-qa')).toHaveAttribute(
+    'data-hydrated',
+    'true',
+  );
+}
 
 test.describe('hydration 与客户端运行时健康', () => {
   for (const route of PUBLIC_ROUTES) {
@@ -38,8 +71,7 @@ test.describe('hydration 与客户端运行时健康', () => {
       });
 
       await page.goto(route, { waitUntil: 'load' });
-      // 等待客户端 hydration 与首屏脚本执行完成，再判定错误集合。
-      await page.waitForTimeout(1500);
+      await proveClientReady(page, route);
 
       expect(
         hydrationErrors,
