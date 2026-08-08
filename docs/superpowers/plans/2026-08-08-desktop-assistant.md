@@ -1252,7 +1252,7 @@ git commit -m "ci: desktop lane 与 desktop-build job 接线"
 - Consumes: Task 1-5 全部产物
 - Produces: 合并就绪的 PR
 
-- [ ] **Step 1: 核对验收标准（spec §8）**
+- [x] **Step 1: 核对验收标准（spec §8）**
 
 Run:
 ```bash
@@ -1287,7 +1287,9 @@ gh pr create \
 - 测试：assistant-proxy 7 例、turn-request/turn-response 6 例、ci-impact desktop 用例"
 ```
 
-- [ ] **Step 4: 前台阻塞观察 CI 至全绿**
+- [x] **Step 4: 前台阻塞观察 CI 至全绿**
+
+过程记录：quality 首轮失败（`apps/desktop/build/` 违反文件治理 GENERATED_SEGMENTS）→ 图标 git mv 至 `assets/` 修复（9ea8c61）；e2e 次轮失败（`hydration.spec.ts` 匿名首页 networkidle 30s 超时，非本 PR 改动范围、main 无同失败史）→ `gh run rerun --failed` 重跑通过（环境 flake）。全部 10 checks 终态 SUCCESS。
 
 模式：`gh pr checks <n> --json name,state` 每 25-30s poll；FAILURE/ERROR/CANCELLED 立即查根因（`gh run view <id> --json jobs` / `--log-failed`）并修复后继续；全部终态且 SUCCESS 即完成。
 预期 job：dependency-review（首次含 electron 依赖树，重点核对 license/漏洞）、secret-scan、quality、integration、windows、runtime-pressure、e2e、desktop-build、release-evidence、checks。
