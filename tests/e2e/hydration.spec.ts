@@ -97,6 +97,10 @@ test.describe('hydration 与客户端运行时健康', () => {
       }
     });
 
+    // Hydration correctness must not depend on the landing-page GSAP timeline
+    // receiving enough main-thread time on a saturated CI runner. Reduced motion
+    // is a supported product mode and keeps this gate focused on event binding.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/', { waitUntil: 'load' });
 
     // 通过真实客户端交互证明 hydration 已完成；固定 sleep 在慢 runner 上会
@@ -104,7 +108,12 @@ test.describe('hydration 与客户端运行时健康', () => {
     await expect(
       page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+    const createMenuTrigger = page.getByRole('button', {
+      name: '添加上下文或创建内容',
+    });
+    await createMenuTrigger.focus();
+    await expect(createMenuTrigger).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(
       page.getByRole('menuitem', { name: /生成思维导图/ }),
     ).toBeVisible();
