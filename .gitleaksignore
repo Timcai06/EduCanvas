@@ -6,7 +6,23 @@
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:36
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:52
 d5f27f401457cc3c4595dde8d9dbc95f5951d1ca:tooling/voice-lab/evidence/v02-v-summary.json:generic-api-key:22
+# nightly / 手动扫描包含同一冻结数据的历史提交；旧 fingerprint 也必须精确列出。
+178f35ad2b9d634de02501d119d567512d441e13:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:36
+178f35ad2b9d634de02501d119d567512d441e13:tooling/voice-lab/evidence/v02-u-summary.json:generic-api-key:52
+178f35ad2b9d634de02501d119d567512d441e13:tooling/voice-lab/evidence/v02-v-summary.json:generic-api-key:22
+458a2d32c70a72b82e7416add76d4a8125e54ef7:tooling/voice-lab/evidence/v02-s-summary.json:generic-api-key:34
+458a2d32c70a72b82e7416add76d4a8125e54ef7:tooling/voice-lab/evidence/v02-s-summary.json:generic-api-key:48
+0738bb270f9ac0f378154bbdb234392f3448b48b:tooling/voice-lab/evidence/v02-r-summary.json:generic-api-key:14
 # sherpa 模型 manifest：模型文件的 sha256 校验值被误报为 api key 格式，
 # 是公开模型的摘要值而非凭据。
 245c4262f30a4b15a109858244ccc8a3513f15f1:tooling/sherpa-model-manifest.json:generic-api-key:17
 245c4262f30a4b15a109858244ccc8a3513f15f1:tooling/sherpa-model-manifest.json:generic-api-key:38
+# 同一公开模型摘要在 manifest 初次提交中的历史 fingerprint。
+4175bdb4c764f000330e5c98cb482fa13449775a:tooling/sherpa-model-manifest.json:generic-api-key:17
+4175bdb4c764f000330e5c98cb482fa13449775a:tooling/sherpa-model-manifest.json:generic-api-key:38
+# RFC 6455 示例 nonce、合成 approval id 与固定时序防护材料均是测试/常量夹具，
+# 不具备生产凭据权限；保留精确 commit/path/rule/line fingerprint，禁止扩大范围。
+1d5abcc784cec6b60ad326cda6c6e61f31c0e518:apps/gateway/src/streaming-transcription-ws-transport-quotas.test.ts:generic-api-key:503
+1d5abcc784cec6b60ad326cda6c6e61f31c0e518:apps/gateway/src/streaming-transcription-ws-transport-quotas.test.ts:generic-api-key:673
+1cd8d13b61fa9d55b256a4dd26157f160b9d6849:apps/gateway/src/http/client-operation-access.test.ts:generic-api-key:123
+293b54a5f3f24b90fe8fec6d66c938670a34ad90:apps/web/server/auth/password.ts:generic-api-key:25
