@@ -82,6 +82,11 @@ async function seedSession(
   overrides: Partial<typeof schema.lessonSessions.$inferInsert> = {},
 ) {
   const now = new Date('2026-07-15T02:00:00.000Z');
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await getDatabase()
+    .insert(schema.platformUsers)
+    .values({ id: studentId, kind: 'registered', status: 'active' })
+    .onConflictDoNothing();
   await getDatabase()
     .insert(schema.lessonSessions)
     .values({
@@ -547,6 +552,11 @@ describeWithDatabase('对话与Model Run账本', () => {
   });
 
   it('部分唯一索引对NULL knowledgeNodeId也只允许一个active', async () => {
+    // D02 FK：student_id 必须指向真实 platform_users 主体。
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values({ id: 'null-node-student', kind: 'registered', status: 'active' })
+      .onConflictDoNothing();
     const values = (id: string) => ({
       id,
       studentId: 'null-node-student',

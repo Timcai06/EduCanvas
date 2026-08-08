@@ -44,8 +44,17 @@ describeWithDatabase('学习档案可信事实仓储', () => {
 
   beforeEach(async () => {
     await getDatabase().execute(sql`
-      truncate table learning_events, mastery_states, lesson_sessions restart identity cascade
+      truncate table learning_events, mastery_states, lesson_sessions,
+        platform_users
+      restart identity cascade
     `);
+    // D02 FK：lesson_sessions.student_id 必须指向真实 platform_users 主体。
+    await getDatabase()
+      .insert(schema.platformUsers)
+      .values([
+        { id: 'activity-student', kind: 'registered', status: 'active' },
+        { id: 'other-activity-student', kind: 'registered', status: 'active' },
+      ]);
   });
 
   afterAll(async () => {

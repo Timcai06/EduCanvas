@@ -73,6 +73,17 @@ async function seedSessionAndTurn(input: {
 }) {
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await getDatabase()
+    .insert(schema.platformUsers)
+    .values({
+      id: input.studentId,
+      kind: input.studentId.startsWith('anon:')
+        ? 'anonymous_compat'
+        : 'registered',
+      status: 'active',
+    })
+    .onConflictDoNothing();
   await getDatabase().insert(schema.lessonSessions).values({
     id: sessionId,
     studentId: input.studentId,

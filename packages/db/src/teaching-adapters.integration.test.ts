@@ -85,6 +85,11 @@ function getDatabase() {
 
 async function seedSessionAndArtifact() {
   const db = getDatabase();
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await db
+    .insert(schema.platformUsers)
+    .values({ id: studentId, kind: 'registered', status: 'active' })
+    .onConflictDoNothing();
   await db.insert(schema.lessonSessions).values({
     id: sessionId,
     studentId,

@@ -186,6 +186,14 @@ describeWithDatabase('学习计划与可信诊断仓储', () => {
           eq(studySchema.learnerProfiles.studentId, first.plan.goal.studentId),
         ),
     ).rejects.toThrow();
+    // 教学闭包显式顺序（D01 契约）：canvas_artifacts 由闭包先行清理，
+    // 其 session FK 为 NO ACTION，不允许直接级联删除会话。
+    await getDatabase()
+      .delete(baseSchema.canvasArtifacts)
+      .where(eq(baseSchema.canvasArtifacts.sessionId, first.session.sessionId));
+    await getDatabase()
+      .delete(baseSchema.lessonSessions)
+      .where(eq(baseSchema.lessonSessions.id, first.session.sessionId));
     await getDatabase()
       .delete(baseSchema.platformUsers)
       .where(eq(baseSchema.platformUsers.id, first.plan.goal.studentId));

@@ -90,6 +90,11 @@ async function seedSessionWithConversation() {
     createdAt: now,
     updatedAt: now,
   });
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await getDatabase()
+    .insert(schema.platformUsers)
+    .values({ id: studentId, kind: 'registered', status: 'active' })
+    .onConflictDoNothing();
   await getDatabase()
     .insert(schema.lessonSessions)
     .values({
@@ -367,6 +372,11 @@ describeWithDatabase('K12 消息双写', () => {
       // 创建没有 conversation_id 的 session
       const now = new Date('2026-07-15T02:00:00.000Z');
       const noConvoSessionId = '60000000-0000-4000-8000-000000000099';
+      // D02 FK：student_id 必须指向真实 platform_users 主体。
+      await getDatabase()
+        .insert(schema.platformUsers)
+        .values({ id: studentId, kind: 'registered', status: 'active' })
+        .onConflictDoNothing();
       await getDatabase().insert(schema.lessonSessions).values({
         id: noConvoSessionId,
         studentId,

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as schema from './schema';
 import {
   DrizzleObjectDeletionOutboxRepository,
@@ -72,6 +72,13 @@ describeWithDatabase(
       await migrate(getDatabase(), {
         migrationsFolder: fileURLToPath(new URL('../drizzle', import.meta.url)),
       });
+    });
+
+    beforeEach(async () => {
+      // object_unique=(object_kind, storage_key)：跨测试必须清账本，否则固定 key 冲突。
+      await getDatabase().execute(
+        sql`truncate table object_deletion_outbox restart identity cascade`,
+      );
     });
 
     afterAll(async () => {
