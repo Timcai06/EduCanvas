@@ -1266,14 +1266,14 @@ pnpm dev:desktop
 ```
 Expected: 5 项全过
 
-- [ ] **Step 2: 核对 PR 前清单**
+- [x] **Step 2: 核对 PR 前清单**
 
 - `git log origin/main..HEAD` 只有本 PR 的 6 个 commit（骨架/proxy/窗口托盘/UI/CI 接线/文档）
 - 分支 `feat/20260808-desktop-assistant` 基于最新 origin/main
 - `pnpm lint:format`（prettier）对本 PR 改动文件通过
 - 旧的 PWA 分支 `feat/20260808-pwa-install` 已删除（本地未 push，直接 `git branch -D`）
 
-- [ ] **Step 3: 开 PR**
+- [x] **Step 3: 开 PR**
 
 ```bash
 gh pr create \
