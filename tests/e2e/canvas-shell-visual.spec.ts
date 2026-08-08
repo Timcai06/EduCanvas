@@ -8,9 +8,22 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * 使用仓库现有可控 fixture：通过对话→生成思维导图打开 Canvas，
  * 该链路由 worker 规则生成，不依赖模型 Provider。
+ *
+ * Lane 划分（W06-2）：稳定状态矩阵（基础语义/响应式/长内容/失败/加载/
+ * reduced-motion）进默认 CI lane；高波动视觉（暗色）与键盘焦点（W06-1 的
+ * keyboard-navigation 已覆盖默认 lane）保留 @ui lane。
  */
 
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+
+/**
+ * <lg 视口（如 Pixel 7 移动端）Canvas 全屏切换按钮不渲染（`hidden lg:flex`），
+ * 操作入口是关闭按钮；桌面端才有「退出全屏」。断言按此区分（W06-2 窄屏矩阵）。
+ */
+async function isDesktop(page: Page): Promise<boolean> {
+  const viewport = page.viewportSize();
+  return viewport !== null && viewport.width >= 1024;
+}
 
 async function openCanvasViaMindMap(page: Page) {
   await page.goto('/');
@@ -35,7 +48,7 @@ async function openCanvasViaMindMap(page: Page) {
   return canvas;
 }
 
-test.describe('@ui Canvas shell 基础语义', () => {
+test.describe('Canvas shell 基础语义', () => {
   test('Canvas 以 dialog role 打开，有关闭和全屏按钮', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
@@ -47,23 +60,31 @@ test.describe('@ui Canvas shell 基础语义', () => {
     await expect(closeButton).toBeVisible();
     await expect(closeButton).toBeEnabled();
 
-    // Canvas 默认全屏打开，全屏按钮应显示"退出全屏"
-    const fullscreenButton = canvas.getByRole('button', {
-      name: '退出全屏',
-    });
-    await expect(fullscreenButton).toBeAttached();
+    // Canvas 默认全屏打开：桌面端全屏按钮显示"退出全屏"；<lg 视口按钮
+    // 不渲染（hidden lg:flex），操作入口是关闭按钮。
+    if (await isDesktop(page)) {
+      const fullscreenButton = canvas.getByRole('button', {
+        name: '退出全屏',
+      });
+      await expect(fullscreenButton).toBeAttached();
+    }
   });
 
-  test('Escape 退出全屏，关闭按钮关闭 Canvas', async ({ page }) => {
+  test('landing 强制全屏 Escape 直接关闭 Canvas', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
 
-    // Escape 退出全屏
+    // landing 态是强制全屏（onToggleFull 为 no-op 占位），Escape 不先退全屏，
+    // 一次直接关闭。此前此路径用 `name: '全屏'` 子串匹配恒真掩盖了缺陷（W06）。
     await page.keyboard.press('Escape');
-    // 全屏退出后，全屏按钮文字变为"全屏"
-    await expect(canvas.getByRole('button', { name: '全屏' })).toBeVisible();
+    await expect(canvas).not.toBeVisible();
+  });
 
-    // 用关闭按钮关闭（限定在 canvas 内查找，避免页面上其他"关闭"按钮）
+  test('关闭按钮关闭 Canvas', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const canvas = await openCanvasViaMindMap(page);
+
+    // 限定在 canvas 内查找，避免页面上其他"关闭"按钮
     await canvas.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas).not.toBeVisible();
   });
@@ -86,13 +107,20 @@ test.describe('@ui Canvas shell 键盘焦点', () => {
 
     await expect(canvas).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(
-      canvas.getByRole('button', { name: '退出全屏' }),
-    ).toBeFocused();
+    if (await isDesktop(page)) {
+      await expect(
+        canvas.getByRole('button', { name: '退出全屏' }),
+      ).toBeFocused();
+    } else {
+      // <lg 视口全屏按钮不渲染，首个 Tab 到达关闭按钮
+      await expect(
+        canvas.getByRole('button', { name: '关闭', exact: true }),
+      ).toBeFocused();
+    }
   });
 });
 
-test.describe('@ui Canvas shell 响应式布局', () => {
+test.describe('Canvas shell 响应式布局', () => {
   test('桌面端无横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -124,7 +152,7 @@ test.describe('@ui Canvas shell 响应式布局', () => {
   });
 });
 
-test.describe('@ui Canvas shell 极端内容与失败状态', () => {
+test.describe('Canvas shell 极端内容与失败状态', () => {
   test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
     const longTitle = '超长标题'.repeat(50);
     const longLabel = '长内容'.repeat(40);
@@ -180,9 +208,11 @@ test.describe('@ui Canvas shell 极端内容与失败状态', () => {
       canvas.getByRole('heading', { name: longTitle }),
     ).toBeVisible();
     await expect(canvas.getByRole('button', { name: /关闭/ })).toBeVisible();
-    await expect(
-      canvas.getByRole('button', { name: '退出全屏' }),
-    ).toBeAttached();
+    if (await isDesktop(page)) {
+      await expect(
+        canvas.getByRole('button', { name: '退出全屏' }),
+      ).toBeAttached();
+    }
     await expect(canvas.getByText(longLabel).first()).toBeVisible();
 
     const { scrollWidth, clientWidth } = await canvas.evaluate((element) => ({
@@ -255,6 +285,41 @@ test.describe('@ui Canvas shell 极端内容与失败状态', () => {
     ).toBeEnabled();
     await expect(statusSurface).not.toContainText('resource_unavailable');
   });
+
+  test('打开资源显示加载态，就绪后切换真实内容', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const canvas = await openCanvasViaMindMap(page);
+    await canvas.getByRole('button', { name: /关闭/ }).click();
+
+    // 拦截资源验证接口并延迟响应，制造可稳定捕获的加载态窗口
+    await page.route('**/api/v1/canvas/resources/artifact/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const response = await route.fetch();
+      await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+    const studio = page.getByRole('complementary', {
+      name: '当前笔记本的 Studio',
+    });
+    const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
+    await wheel.press('ArrowDown');
+    await wheel.press('Enter');
+    await studio.getByRole('option', { name: /对话思维导图/ }).click();
+
+    // 验证中间态：Canvas 打开，加载态（aria-busy + 稳定文案，不泄露内部错误码）
+    const statusSurface = page.getByLabel('Canvas 资源状态');
+    await expect(statusSurface).toBeVisible();
+    await expect(statusSurface).toHaveAttribute('aria-busy', 'true');
+    await expect(statusSurface.getByRole('status')).toHaveText(/正在打开作品/);
+
+    // 验证成功：加载态关闭，切换真实内容
+    await expect(statusSurface).not.toBeVisible();
+    const artifactCanvas = page.getByRole('dialog', { name: '产物Canvas' });
+    await expect(artifactCanvas).toBeVisible();
+    await expect(
+      artifactCanvas.locator('[data-mind-map]').getByText('对话思维导图'),
+    ).toBeVisible();
+  });
 });
 
 test.describe('@ui Canvas shell 暗色模式', () => {
@@ -273,7 +338,7 @@ test.describe('@ui Canvas shell 暗色模式', () => {
   });
 });
 
-test.describe('@ui Canvas shell reduced-motion', () => {
+test.describe('Canvas shell reduced-motion', () => {
   test('reduced-motion 下 Canvas 不依赖动画才能展示内容', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);

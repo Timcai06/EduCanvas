@@ -38,6 +38,7 @@ export function CanvasHost({
   isFull = false,
   onToggleFull,
   isPending = false,
+  canExitFullscreen,
   children,
 }: {
   ariaLabel: string;
@@ -51,6 +52,11 @@ export function CanvasHost({
   /** 缺省时不渲染全屏切换按钮。 */
   onToggleFull?: () => void;
   isPending?: boolean;
+  /**
+   * 覆盖「onToggleFull 存在即可退全屏」的推断。landing 强制全屏时
+   * onToggleFull 是 no-op 占位，此处置 false 让 Escape 直接关闭。
+   */
+  canExitFullscreen?: boolean;
   children: ReactNode;
 }) {
   const rootRef = useRef<HTMLElement>(null);
@@ -86,16 +92,28 @@ export function CanvasHost({
   // Escape：优先执行最小退出动作——全屏时退出全屏，非全屏时关闭。
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      handleCanvasEscape(event, {
-        isFull,
-        onClose,
-        onToggleFull,
-        fullscreenButton: fullscreenRef.current,
-      });
+      // Escape 已由 Canvas 消费（capture 阶段）时立即中断传播：阻止
+      // conversation-sidebar 等 bubble 阶段的 Escape handler 用 rAF 抢走
+      // 关闭后的焦点归还（Canvas 模态优先，Escape 只关最上层）。
+      if (
+        handleCanvasEscape(event, {
+          isFull,
+          onClose,
+          onToggleFull,
+          fullscreenButton: fullscreenRef.current,
+          canExitFullscreen,
+        })
+      ) {
+        event.stopImmediatePropagation();
+      }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isFull, onToggleFull, onClose]);
+    // capture 阶段注册：真实 Escape 在 bubble 阶段到达 document 时，Chrome/
+    // React 合成事件系统会吞掉它（desktop 实测 cap:Escape 稳定到达而
+    // bubble 的 handleKeyDown 不被触发）；capture 先于 React 委托，保证
+    // Escape 一定能被 CanvasHost 处理。preventDefault 对 Escape 无副作用。
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isFull, onToggleFull, onClose, canExitFullscreen]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 1023px)');

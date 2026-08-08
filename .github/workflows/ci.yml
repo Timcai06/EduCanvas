@@ -217,8 +217,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install browsers (Chromium + Firefox)
+        # W06：第二引擎 Firefox 进稳定 lane；与 @ui lane（ui.yml）共用安装。
+        run: pnpm exec playwright install --with-deps chromium firefox
 
       - name: Apply database migrations
         run: pnpm db:migrate
@@ -229,7 +230,7 @@ jobs:
       - name: Persistent Web Runtime composition
         run: pnpm test:e2e:runtime-composition
 
-      - name: Browser E2E (chromium desktop + mobile viewport)
+      - name: Browser E2E (chromium desktop + mobile viewport + firefox)
         run: pnpm exec playwright test
 
       # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，

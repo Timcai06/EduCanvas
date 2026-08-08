@@ -35,6 +35,7 @@ W 线（工作面画布收敛）的 W05 要为 Web 前端建立模块静态边�
 1. **门禁 A（server 边界）**：ESLint `no-restricted-imports` 限定 `features/**`，禁止导入 `server/**`、`@educanvas/db`、schema、`server-only`；新违规在 lint 阶段失败；`@/app/actions`（Next server actions）是合法入口，不在限制内。
 2. **门禁 C（Renderer 不反向依赖 Workspace）**：`workspace/shared` 的共享组件移入 `apps/web/components/`，canvas/assets 等不再依赖 Workspace 目录。
 3. **门禁 B（feature 公开入口）**：以限期 allowlist 收口——限期为 **W 线收口前（或最迟下季度）**，届时按需单独排期收敛 feature 公开入口。
+   > 实施状态（2026-08-07 W 线收口）：限期到期，未清零（全库 79 处跨 feature 导入，组织性重构）。挂账 **Issue #317**（owner：hzlgou，deadline：2026-09-30），收口后更新本条状态；W 线归档不视为门禁 B 完成。
 
 ## 原因
 

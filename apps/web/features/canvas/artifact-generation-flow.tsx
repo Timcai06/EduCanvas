@@ -442,6 +442,7 @@ export function ArtifactCanvas({
   onRevise,
   onSaveNote,
   revising = false,
+  canExitFullscreen,
 }: {
   detail: ArtifactDetail;
   isFull: boolean;
@@ -452,6 +453,8 @@ export function ArtifactCanvas({
   onRevise: (instruction: string) => void;
   onSaveNote: (markdown: string) => void;
   revising?: boolean;
+  /** landing 强制全屏时置 false，Escape 直接关闭（见 CanvasHost）。 */
+  canExitFullscreen?: boolean;
 }) {
   const [instruction, setInstruction] = useState('');
   const displayedVersion = detail.version?.version ?? 0;
@@ -469,6 +472,7 @@ export function ArtifactCanvas({
       onClose={onClose}
       isFull={isFull}
       onToggleFull={onToggleFull}
+      canExitFullscreen={canExitFullscreen}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <ArtifactProvenanceStrip detail={detail} revising={revising} />

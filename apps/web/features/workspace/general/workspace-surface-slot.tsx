@@ -74,6 +74,7 @@ export function WorkspaceSurfaceSlot({
           detail={artifactDetail}
           isFull={fullscreen || artifactCanvasFull}
           onToggleFull={fullscreen ? () => undefined : onToggleFullArtifact}
+          canExitFullscreen={!fullscreen}
           onClose={onCloseArtifact}
           onDeleted={onDeletedArtifact}
           onSelectVersion={(version) =>
@@ -96,6 +97,7 @@ export function WorkspaceSurfaceSlot({
           Renderer={sourceDetail.Renderer}
           isFull={fullscreen || surface.full}
           onToggleFull={fullscreen ? () => undefined : onToggleFullSurface}
+          canExitFullscreen={!fullscreen}
           onClose={onCloseSurface}
         />
       );
@@ -106,6 +108,7 @@ export function WorkspaceSurfaceSlot({
           source={surface.source}
           isFull={fullscreen || surface.full}
           onToggleFull={fullscreen ? () => undefined : onToggleFullSurface}
+          canExitFullscreen={!fullscreen}
           onClose={onCloseSurface}
         />
       );

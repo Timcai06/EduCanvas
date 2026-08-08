@@ -1,9 +1,16 @@
-/** Escape 最小退出动作：全屏时退出全屏，非全屏时关闭。 */
+/**
+ * Escape 最小退出动作：可退出全屏时退出全屏，否则关闭。
+ *
+ * canExitFullscreen 是「当前全屏态是否真的允许退出」，它不等于「是否有全屏切换
+ * 按钮」：landing 强制全屏时按钮存在（onToggleFull 是 no-op 占位）但退全屏没有
+ * 意义，此时 Escape 必须直接关闭而非调用无效切换。landing 分支在
+ * workspace-surface-slot 显式传 canExitFullscreen={!fullscreen}。
+ */
 export function resolveEscapeAction(
   isFull: boolean,
-  hasToggleFull: boolean,
+  canExitFullscreen: boolean,
 ): 'exit_fullscreen' | 'close' {
-  return isFull && hasToggleFull ? 'exit_fullscreen' : 'close';
+  return isFull && canExitFullscreen ? 'exit_fullscreen' : 'close';
 }
 
 /** 调度微任务恢复焦点；元素不存在时静默跳过。 */
@@ -68,19 +75,24 @@ export function handleCanvasEscape(
     onClose,
     onToggleFull,
     fullscreenButton,
+    canExitFullscreen,
   }: {
     isFull: boolean;
     onClose: () => void;
     onToggleFull?: () => void;
     fullscreenButton?: HTMLElement | null;
+    /** 覆盖「onToggleFull 存在即可退全屏」的推断；landing 强制全屏传 false。 */
+    canExitFullscreen?: boolean;
   },
 ): boolean {
   if (event.key !== 'Escape') return false;
 
   event.preventDefault();
   if (
-    resolveEscapeAction(isFull, onToggleFull !== undefined) ===
-    'exit_fullscreen'
+    resolveEscapeAction(
+      isFull,
+      canExitFullscreen ?? onToggleFull !== undefined,
+    ) === 'exit_fullscreen'
   ) {
     onToggleFull!();
     scheduleFocusRestore(fullscreenButton);
