@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeArtifactResource } from './canvas-resource-fixtures';
 import {
   createArtifact,
   deleteArtifact,
@@ -152,20 +153,10 @@ describe('artifact client mutation contracts', () => {
               },
             ],
             latestJob: null,
-            canvasResource: {
-              resourceId: `artifact:${artifact.id}:v2`,
+            canvasResource: makeArtifactResource('mind_map', {
               notebookId: '30000000-0000-4000-8000-000000000003',
-              resourceType: 'artifact',
-              rendererId: 'educanvas.artifact.note',
-              rendererVersion: 1,
-              representation: {
-                kind: 'structured',
-                mimeType: 'application/json',
-              },
-              trustTier: 'tier1',
-              runtime: { kind: 'react' },
               allowedActions: ['view', 'download', 'delete'],
-            },
+            }),
           }),
           { status: 200 },
         ),
@@ -174,9 +165,16 @@ describe('artifact client mutation contracts', () => {
 
     const detail = await fetchArtifactDetail(artifact.id);
 
-    expect(detail.canvasResource).toEqual({
-      allowedActions: ['view', 'download', 'delete'],
-    });
+    // R06 收口：client 保留服务端完整 CanvasResource（schema 验证后原样保留），
+    // 不再按 artifact.kind 重建协议事实。
+    expect(detail.canvasResource?.allowedActions).toEqual([
+      'view',
+      'download',
+      'delete',
+    ]);
+    expect(detail.canvasResource?.notebookId).toBe(
+      '30000000-0000-4000-8000-000000000003',
+    );
   });
 
   it('删除产物依赖浏览器同源凭据且不伪造 Origin 头', async () => {

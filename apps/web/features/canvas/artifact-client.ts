@@ -4,10 +4,7 @@
  */
 
 import { z } from 'zod';
-import {
-  canvasResourceActionSchema,
-  type CanvasResourceAction,
-} from '@educanvas/canvas-protocol';
+import { canvasResourceSchema } from '@educanvas/canvas-protocol';
 
 export interface ArtifactSummary {
   id: string;
@@ -46,9 +43,7 @@ export interface ArtifactDetail {
     progress: number | null;
     failureCode: string | null;
   } | null;
-  canvasResource?: {
-    allowedActions: readonly CanvasResourceAction[];
-  };
+  canvasResource?: z.infer<typeof canvasResourceSchema>;
 }
 
 export interface AudioOverviewMedia {
@@ -205,11 +200,10 @@ const artifactDetailSchema = z.object({
       failureCode: z.string().nullable(),
     })
     .nullable(),
-  canvasResource: z
-    .object({
-      allowedActions: z.array(canvasResourceActionSchema).max(16),
-    })
-    .optional(),
+  // R06/#306：服务端 projection 是 CanvasResource 唯一权威，client 用 canonical
+  // schema 完整验证并保留（不再只取 allowedActions、不再在浏览器端按 kind 重建）。
+  // 服务端协议非法时 parse 失败（fail closed），不允许浏览器自行修补。
+  canvasResource: canvasResourceSchema.optional(),
 });
 
 async function parseJsonOrThrow<T>(
