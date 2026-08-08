@@ -23,8 +23,9 @@ interface Bubble {
 // ── Hook ──────────────────────────────────────────────────────────
 
 /**
- * Assistant 专用的轻量 SSE 消费 hook。
- * 与 useAgentTurn 使用相同的底层事件解析，但不维护历史消息列表。
+ * Assistant 专用的轻量请求 hook。
+ * 发送自然语言指令到 /api/v1/assistant/turn，消费 JSON 响应气泡。
+ * （assistant 端点只返回 JSON，无 SSE 分支。）
  */
 /** matchMedia 桌面宽度订阅（useSyncExternalStore 用）。 */
 function subscribeDesktopWidth(callback: () => void): () => void {
@@ -42,6 +43,12 @@ function useAssistantStream() {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
+
+  const abort = useCallback(() => {
+    controller.current?.abort();
+    controller.current = null;
+    setBusy(false);
+  }, []);
 
   const send = useCallback(
     async (text: string) => {
@@ -150,7 +157,7 @@ function useAssistantStream() {
     [busy],
   );
 
-  return { bubbles, busy, send } as const;
+  return { bubbles, busy, send, abort } as const;
 }
 
 // ── Assistant Bubble ──────────────────────────────────────────────
@@ -204,7 +211,7 @@ function AssistantBubbleItem({ bubble }: { bubble: Bubble }) {
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const { bubbles, busy, send } = useAssistantStream();
+  const { bubbles, busy, send, abort } = useAssistantStream();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -233,15 +240,21 @@ export function AssistantPanel() {
     }
   }, [bubbles]);
 
+  // 关闭面板时中断飞行中的请求，避免请求继续消耗一次 LLM 分类调用。
+  const handleClose = useCallback(() => {
+    abort();
+    setOpen(false);
+  }, [abort]);
+
   // Escape 关闭
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, handleClose]);
 
   // 窄视口不渲染悬浮助手（守卫放在所有 hooks 之后，保证 hooks 调用顺序稳定）。
   if (!isDesktop) return null;
@@ -265,7 +278,7 @@ export function AssistantPanel() {
           Composer 的发送/停止按钮与产物对话框操作，见 #292 回归。 */}
       <div className="hidden md:block">
         <button
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() => (open ? handleClose() : setOpen(true))}
           aria-label={open ? '关闭桌面助手' : '打开桌面助手'}
           style={{
             position: 'fixed',

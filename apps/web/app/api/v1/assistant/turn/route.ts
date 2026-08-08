@@ -8,7 +8,9 @@ import {
 import {
   loadOwnedGeneralConversation,
   writeActiveConversationCookie,
+  clearActiveConversationCookie,
 } from '@/server/platform/general-conversation';
+import { checkAssistantRateLimit } from '@/server/assistant/rate-limit';
 import {
   AssistantClassifyError,
   createAssistantClassifyDependencies,
@@ -70,6 +72,15 @@ export async function POST(request: Request): Promise<Response> {
 
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+
+  const rateLimit = checkAssistantRateLimit(`assistant:${identity.studentId}`);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      'rate_limited',
+      `请求太频繁，请${Math.ceil(rateLimit.retryAfterMs / 1000)}秒后再试。`,
+    );
+  }
 
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) {
@@ -213,6 +224,10 @@ export async function POST(request: Request): Promise<Response> {
         if (!renamed) {
           return jsonResponse({ message: '笔记本不存在或无权重命名。' });
         }
+        // 如果重命名的是当前活跃笔记本，重写 cookie 保持引用一致。
+        if (intent.notebookId === conversation.id) {
+          await writeActiveConversationCookie(conversation.id);
+        }
         return jsonResponse({
           message: `已重命名为「${renamed.title}」。`,
           action: 'renamed',
@@ -230,6 +245,10 @@ export async function POST(request: Request): Promise<Response> {
         if (!archived) {
           return jsonResponse({ message: '笔记本不存在或无权删除。' });
         }
+        // 如果删除的是当前活跃笔记本，清除 cookie 避免主对话页永久回退到入口页。
+        if (intent.notebookId === conversation.id) {
+          await clearActiveConversationCookie();
+        }
         return jsonResponse({
           message: '已删除。',
           action: 'deleted',
@@ -240,7 +259,12 @@ export async function POST(request: Request): Promise<Response> {
         if (!intent.notebookId) {
           return jsonResponse({ message: '请指定要切换到的笔记本。' });
         }
-        const target = notebooks.find((n) => n.id === intent.notebookId);
+        // 直接用 getOwned 查找，不依赖 limit:50 的列表——第 51 个之后的
+        // 笔记本也能切换。意图分类只见过前 50 个标题，但 id 校验不因此受限。
+        const target = await repo.getOwned({
+          conversationId: intent.notebookId,
+          trustedSubjectId: identity.studentId,
+        });
         if (!target) {
           return jsonResponse({ message: '找不到这个笔记本。' });
         }

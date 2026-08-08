@@ -11,6 +11,11 @@ vi.mock('@/server/identity/anonymous-identity', () => ({
 vi.mock('@/server/platform/general-conversation', () => ({
   loadOwnedGeneralConversation: vi.fn(),
   writeActiveConversationCookie: vi.fn(),
+  clearActiveConversationCookie: vi.fn(),
+}));
+vi.mock('@/server/assistant/rate-limit', () => ({
+  checkAssistantRateLimit: vi.fn(() => ({ allowed: true })),
+  resetAssistantRateLimit: vi.fn(),
 }));
 vi.mock('./assistant-classify', () => ({
   AssistantClassifyError: class AssistantClassifyError extends Error {
@@ -41,6 +46,7 @@ const listOwnedRecent = vi.fn();
 const create = vi.fn();
 const renameOwned = vi.fn();
 const archiveOwned = vi.fn();
+const getOwned = vi.fn();
 
 function assistantRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/assistant/turn', {
@@ -62,7 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(DrizzlePlatformConversationRepository).mockImplementation(
     function RepositoryMock() {
-      return { listOwnedRecent, create, renameOwned, archiveOwned };
+      return { listOwnedRecent, create, renameOwned, archiveOwned, getOwned };
     } as never,
   );
   vi.mocked(readAnonymousIdentity).mockResolvedValue({
@@ -77,6 +83,12 @@ beforeEach(() => {
   create.mockResolvedValue({ id: CONVERSATION_ID });
   renameOwned.mockResolvedValue({ id: NOTEBOOK_ID, title: '新名字' });
   archiveOwned.mockResolvedValue(true);
+  // switch_notebook 现在直接按 id 查询；默认仅 NOTEBOOK_ID 属于当前主体。
+  getOwned.mockImplementation(async (input: { conversationId: string }) =>
+    input.conversationId === NOTEBOOK_ID
+      ? { id: NOTEBOOK_ID, title: '数学笔记' }
+      : null,
+  );
   vi.mocked(writeActiveConversationCookie).mockResolvedValue(undefined);
   classifyResponse({ action: 'unknown' });
 });
