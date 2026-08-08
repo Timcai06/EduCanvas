@@ -522,22 +522,40 @@ describeWithDatabase('audio consent 与留存 schema', () => {
       expiresAt: new Date(Date.now() + 90 * DAY_MS),
     });
 
-    const boundary = await seedRetention({
-      subjectUserId: subject,
-      consentId: consent.id,
-      assetVersionId: versionId,
-      createdAt: new Date(Date.parse('2026-08-01T00:00:00.000Z')),
-      expiresAt: new Date(Date.parse('2026-08-08T00:00:00.000Z')),
+    // 边界用相对时间表达（固定日期会随时间推移变成"已过期 active 行"，
+    // 污染共享 DB 上其他全表扫描类断言，如 audio-retention 22+24 scanned=1）。
+    // createdAt 恰好 7 天前、expiresAt 为同一时刻 → 差精确 7 天（单次 Date.now()
+    // 避免两次调用引入毫秒漂移触发超限）。
+    // 该行落库瞬间即已到期（createdAt 已过 7 天），且 audio_retentions 不可删除、
+    // 状态只允许 active → deletion_requested——因此在同一事务内立即消费为
+    // deletion_requested：未提交行对其他并行测试文件不可见，零竞态窗口。
+    const now = Date.now();
+    await getDb().transaction(async (transaction) => {
+      const boundary = await transaction
+        .insert(audioRetentions)
+        .values({
+          subjectUserId: subject,
+          consentId: consent.id,
+          consentPurpose: 'audio_retention',
+          assetVersionId: versionId,
+          createdAt: new Date(now - 7 * DAY_MS),
+          expiresAt: new Date(now),
+        })
+        .returning();
+      expect(boundary[0]?.expiresAt).toBeDefined();
+      await transaction
+        .update(audioRetentions)
+        .set({ status: 'deletion_requested', deletionRequestedAt: new Date(now) })
+        .where(eq(audioRetentions.id, boundary[0]!.id));
     });
-    expect(boundary[0]?.expiresAt).toBeDefined();
 
-    const overLimit = new Date(Date.parse('2026-08-08T00:00:00.001Z'));
+    const overLimit = new Date(now + 1);
     await expect(
       seedRetention({
         subjectUserId: subject,
         consentId: consent.id,
         assetVersionId: versionId,
-        createdAt: new Date(Date.parse('2026-08-01T00:00:00.000Z')),
+        createdAt: new Date(now - 7 * DAY_MS),
         expiresAt: overLimit,
       }),
     ).rejects.toThrow();
