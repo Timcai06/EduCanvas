@@ -39,6 +39,7 @@ jobs:
       e2e: ${{ steps.impact.outputs.e2e }}
       dependency_review: ${{ steps.impact.outputs.dependency_review }}
       release_evidence: ${{ steps.impact.outputs.release_evidence }}
+      desktop: ${{ steps.impact.outputs.desktop }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
         with:
@@ -201,6 +202,40 @@ jobs:
       - name: Windows unit smoke
         run: pnpm --filter @educanvas/node-host test
 
+  desktop-build:
+    # 桌面助手（apps/desktop）独立 lane：测试 + electron-vite build + 产物校验。
+    # 不打 portable 包（CI 只验证构建产物；打包在发布流程进行）。
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Desktop unit tests
+        run: pnpm --filter @educanvas/desktop test
+
+      - name: Desktop typecheck
+        run: pnpm --filter @educanvas/desktop typecheck
+
+      - name: Desktop build
+        run: pnpm --filter @educanvas/desktop build
+
+      - name: Verify build artifacts
+        run: |
+          test -f apps/desktop/out/main/index.js
+          test -f apps/desktop/out/preload/index.js
+          test -f apps/desktop/out/renderer/index.html
+
   runtime-pressure:
     needs: [changes, quality]
     if: always() && needs.changes.result == 'success' && needs.changes.outputs.runtime_pressure == 'true' && needs.quality.result == 'success'
@@ -332,7 +367,8 @@ jobs:
       contains(fromJSON('["success", "skipped"]'), needs.integration.result) &&
       contains(fromJSON('["success", "skipped"]'), needs.windows.result) &&
       contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result) &&
-      contains(fromJSON('["success", "skipped"]'), needs.e2e.result)
+      contains(fromJSON('["success", "skipped"]'), needs.e2e.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['desktop-build'].result)
     needs:
       [
         changes,
@@ -343,6 +379,7 @@ jobs:
         windows,
         runtime-pressure,
         e2e,
+        desktop-build,
       ]
     runs-on: ubuntu-latest
     steps:
@@ -365,6 +402,7 @@ jobs:
         windows,
         runtime-pressure,
         e2e,
+        desktop-build,
         release-evidence,
       ]
     runs-on: ubuntu-latest
@@ -377,6 +415,7 @@ jobs:
       E2E_EXPECTED: ${{ needs.changes.outputs.e2e }}
       DEPENDENCY_REVIEW_EXPECTED: ${{ needs.changes.outputs.dependency_review }}
       RELEASE_EVIDENCE_EXPECTED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true') || (github.event_name != 'workflow_dispatch' && needs.changes.outputs.release_evidence == 'true') }}
+      DESKTOP_EXPECTED: ${{ needs.changes.outputs.desktop }}
       CHANGES_RESULT: ${{ needs.changes.result }}
       SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
       DEPENDENCY_REVIEW_RESULT: ${{ needs['dependency-review'].result }}
@@ -385,6 +424,7 @@ jobs:
       WINDOWS_RESULT: ${{ needs.windows.result }}
       RUNTIME_PRESSURE_RESULT: ${{ needs['runtime-pressure'].result }}
       E2E_RESULT: ${{ needs.e2e.result }}
+      DESKTOP_BUILD_RESULT: ${{ needs['desktop-build'].result }}
       RELEASE_EVIDENCE_RESULT: ${{ needs['release-evidence'].result }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag

@@ -1,0 +1,16 @@
+appId: com.educanvas.desktop
+productName: EduCanvas助手
+directories:
+  buildResources: assets
+files:
+  - out/**
+  - assets/icon.png # 托盘图标在打包后仍需可用（asar 内 assets/ 下；build/ 是治理禁止段）
+win:
+  icon: assets/icon.ico
+  target:
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: EduCanvas-助手-${version}.exe
+npmRebuild: false
