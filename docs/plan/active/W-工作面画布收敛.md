@@ -310,7 +310,7 @@ type WorkspaceSurface =
 最低矩阵逐项核对（commit：W06-1 `208bbf8`、W06-2 `8062d92`、W06-3 `81d986c`、W06-4 `f4c59b6`，分支 `feat/20260806-w06-a11y-perf`）：
 
 - Desktop Chromium / Mobile Chrome viewport：`chromium` + `chromium-mobile` project 保留稳定 lane；
-- 第二引擎：`firefox` project 进默认 lane（与 @ui lane 复用同一浏览器安装，不新增 CI 安装）；全量 3 浏览器 134/135（唯一失败为 chromium 既有 SSE 时序 flaky，重跑 2/2 过，CI retries=1 兜底）；
+- 第二引擎：`firefox` project 进默认 lane（与 @ui lane 复用同一浏览器安装，不新增 CI 安装）；全量 3 浏览器 138/138（CI 实测 flaky 0/retry 0）；
 - 键盘-only 打开/切换/关闭资源：`tests/e2e/keyboard-navigation.spec.ts`（键盘路径 + Escape/焦点修复）；
 - Reduced Motion / 失败·空·加载·长内容·窄屏状态：`canvas-shell-visual.spec.ts` 稳定状态矩阵转默认 lane，补齐加载态证据（loading 过渡 → 就绪）。
 
@@ -324,7 +324,7 @@ type WorkspaceSurface =
 
 完成标准逐项核对：
 
-- 默认 CI 保留稳定核心矩阵：W06 起默认 lane = chromium + chromium-mobile + firefox（135 次运行）；
+- 默认 CI 保留稳定核心矩阵：W06 起默认 lane = chromium + chromium-mobile + firefox（138 用例实测通过）；
 - 高波动视觉独立 lane：暗色模式保留 @ui；稳定状态矩阵已转默认 lane；
 - 所有 retry 次数被报告：Q05 `playwright-summary.mjs` 汇总 retry/flaky 写 GITHUB_STEP_SUMMARY；
 - UI lane 不依赖真实外部模型：worker 规则生成 + 进程内 fixture Provider（`MODEL_GATEWAY_BASE_URL` 指向 localhost fixture）。
@@ -360,7 +360,8 @@ type WorkspaceSurface =
 - Web 边界门禁和最小多端矩阵通过：ESLint `no-restricted-imports`（features 禁 server/db/schema/server-only）+ playwright chromium/chromium-mobile/firefox 三 project（W05/W06）；
 - 文档准确描述真实完成范围：`04-统一画布工作面.md` 补 W 线成果段并改写「尚未落地」（Source 未迁移 Registry、Artifact rendererId 待 R 线 Issue #306）；ADR-0009 实施状态追加 2026-08-07 进展。
 
-W 线至此 W00-W07 全部完成，待 PR #316 审核合并后标 W06/W07 PASS。
+W 线至此 W00-W07 代码全部完成（待 PR #316 审核合并后标 W06/W07 PASS）。
+**门禁 B 挂账**：feature 公开入口 allowlist 收口未在本线清零（全库仍有 79 处跨 feature 导入，属组织性重构），挂账 **Issue #317**（owner：hzlgou，deadline：2026-09-30，W 线归档后单独执行）；W05 的"限期 W 线收口前"至此到期，以本挂账 + ADR-0023 更新为准。
 
 ## 七、验证台账
 
@@ -371,7 +372,7 @@ W 线至此 W00-W07 全部完成，待 PR #316 审核合并后标 W06/W07 PASS�
 | W02 职责拆分          | `PASS`    | 组件 599→144 行，拆出 controller（343）/layout（124）/ConversationPane（155，Composer 双分支合并）/WorkspaceSurfaceSlot（117）；组件 useEffect 4→0、useState 11→0（互斥收敛 surface reducer）；lint/typecheck/919 测试/build 全绿；characterization 契约 8 测试保持绿（经 Codex 审核通过，PR #290） |
 | W03 诚实失败          | `PASS`    | 六种错误语义统一（`canvas/resource-error.ts` + `CanvasShellStatus` 7 态，Retry 只对 failed/unavailable/offline 开放）；asset-client/canvas-resource-client 错误带 kind；useNotebookSources 结构化错误 + `LatestRequestGuard` 竞态保护；失败转空/吞错 3 处修复；error matrix：resource-error 15 + asset 12 + canvas-client 14 + CanvasShellStatus 渲染 7 + 竞态 3 测试；lint/typecheck/**951 测试**/build 全绿，无静默 `catch {}`（经 Codex 审核通过，PR #294） |
 | W04 Artifact Registry | `PASS` | W04-1 契约固定（12 测试）；W04-2 注册真实内容 Renderer（5 类适配器 + 测试）；W04-3 组合层桥接（`artifact-canvas-resource.ts` 构造渲染用资源 + `artifact-canvas-content.tsx` 内容区分发：5 类内容驱动产物经 Registry 渲染真实内容，note/dom/skeleton/empty 壳内保留；lint/typecheck/**999 测试**/build 全绿，接口缺口清单见本计划 W04 节 + Issue #306）；W04-4 删兼容占位/旧入口（删除 note/dom 交互式产物的 Registry 占位 `InteractiveArtifactPlaceholder`、映射收敛到 5 类内容驱动、交互式 kind 构造抛错 + Registry 选择 unavailable 语义；lint/typecheck/**1000 测试**/build 全绿）；W04-5 E2E（artifact-flow + canvas-resource-access 10/10 绿，覆盖真实渲染/编辑/版本/隔离/判分链；修复 W04-4 回归——Studio 打开 note/dom 交互式产物误判"该资源没有可用的渲染器"，新增 `artifact-shell-rendering.ts` 识别壳渲染产物并放行 + 6 测试；lint/typecheck/**1006 测试**/build/**全量 E2E 28/28** 全绿）——W04 五个原子任务全部完成（经 Codex 审核通过，PR #308） |
-| W05 静态边界          | `PASS`    | 门禁 A：ESLint `no-restricted-imports` 限定 `features/**` 禁 server/db/schema/server-only + 6 negative fixtures；门禁 C：共享组件移 `components/`（9 处 import）清除 Renderer 反向依赖；门禁 B：feature 公开入口以 allowlist 收口（**Issue #296** 负责人拍板，限期 W 线收口前/下季度）；ADR-0023 + `03-前端工程.md` 回写；lint/typecheck/957 测试/build 全绿（经 Codex 审核通过，PR #298） |
+| W05 静态边界          | `PASS`    | 门禁 A：ESLint `no-restricted-imports` 限定 `features/**` 禁 server/db/schema/server-only + 6 negative fixtures；门禁 C：共享组件移 `components/`（9 处 import）清除 Renderer 反向依赖；门禁 B：feature 公开入口以 allowlist 收口（**Issue #296** 负责人拍板；限期已于 W 线收口到期，挂账 **Issue #317**——owner hzlgou，deadline 2026-09-30）；ADR-0023 + `03-前端工程.md` 回写；lint/typecheck/957 测试/build 全绿（经 Codex 审核通过，PR #298） |
 | W06 多端与性能        | `IN PROGRESS` | W06-1 键盘无障碍（keyboard-navigation.spec.ts 键盘路径 + landing Escape/焦点 4 处修复）；W06-2 响应式与状态矩阵（canvas-shell-visual 稳定状态矩阵转默认 lane + 窄屏断言修正 + 加载态证据）；W06-3 第二引擎（firefox project 进默认 lane，与 @ui lane 复用安装）；W06-4 性能证据（performance-evidence.spec.ts 无重复请求 + 交互耗时基线；大 Renderer 按需加载 next/dynamic 代码证据；hydration/bundle gate 由 Q05 覆盖）；W06 完成情况核对见本计划 W06 节；W06-5 台账回写完成，W06 开发全部完成（5 提交），待 PR 审核合并 |
 | W07 收口              | `IN PROGRESS` | 6 条完成标准逐项审计：GeneralChatWorkspace 149 行组合层（W02）、WorkspaceSurface 单一状态权威（W01/W02）、无 compat renderer 残留（W04-4）、无静默 catch/失败转空（W03）、ESLint 边界门禁 + chromium/mobile/firefox 三 project 多端矩阵（W05/W06）、canonical 文档回写（04-统一画布工作面 + ADR-0009）；W06/W07 待 PR #316 审核合并后标 PASS |
 
