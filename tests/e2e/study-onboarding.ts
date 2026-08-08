@@ -2,6 +2,10 @@ import { expect, type Page } from '@playwright/test';
 
 /** 通过真实 Server Actions 完成 P1 学习计划与短诊断，不在测试里伪造数据库状态。 */
 export async function openLearningWorkspace(page: Page): Promise<void> {
+  // The onboarding helper verifies the real Server Action flow, not entrance
+  // animation timing. Use the supported reduced-motion path so a saturated CI
+  // runner cannot leave GSAP-managed controls unstable for pointer actionability.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/learn');
   await completeStudyOnboarding(page);
 }
@@ -25,7 +29,13 @@ export async function completeStudyOnboarding(page: Page): Promise<void> {
     await page
       .getByRole('textbox', { name: '这次想学会什么' })
       .fill('理解图像 AI 如何根据特征完成分类');
-    await page.getByRole('button', { name: '开始', exact: true }).click();
+    const startButton = page.getByRole('button', {
+      name: '开始',
+      exact: true,
+    });
+    await startButton.focus();
+    await expect(startButton).toBeFocused();
+    await page.keyboard.press('Enter');
   }
 
   const diagnosticHeading = page.getByRole('heading', {
