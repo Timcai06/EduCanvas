@@ -13,6 +13,7 @@ const LANES = [
   'runtime_pressure',
   'e2e',
   'dependency_review',
+  'desktop',
 ];
 const ALL = Object.fromEntries(LANES.map((lane) => [lane, true]));
 const NONE = Object.fromEntries(LANES.map((lane) => [lane, false]));
@@ -113,6 +114,7 @@ export function classifyChangedPaths(
     /^tooling\/(?:e2e-|quality\/bundle-size)/,
   ]);
   result.dependency_review = false;
+  result.desktop = matchesAny(paths, [/^apps\/desktop\//]);
   return result;
 }
 
@@ -131,8 +133,17 @@ export function requiredResultFailures({ eventName, expected, results }) {
     'windows',
     'runtime_pressure',
     'e2e',
+    'desktop',
   ]) {
-    if (expected[lane]) requireSuccess(lane === 'checks' ? 'quality' : lane);
+    if (expected[lane]) {
+      requireSuccess(
+        lane === 'checks'
+          ? 'quality'
+          : lane === 'desktop'
+            ? 'desktop_build'
+            : lane,
+      );
+    }
   }
   if (eventName === 'pull_request' && expected.dependency_review) {
     requireSuccess('dependency_review');
@@ -154,6 +165,7 @@ function verifyResultsFromEnvironment() {
       runtime_pressure: boolean('RUNTIME_PRESSURE_EXPECTED'),
       e2e: boolean('E2E_EXPECTED'),
       dependency_review: boolean('DEPENDENCY_REVIEW_EXPECTED'),
+      desktop: boolean('DESKTOP_EXPECTED'),
     },
     results: {
       changes: process.env.CHANGES_RESULT,
@@ -165,6 +177,7 @@ function verifyResultsFromEnvironment() {
       runtime_pressure: process.env.RUNTIME_PRESSURE_RESULT,
       e2e: process.env.E2E_RESULT,
       release_evidence: process.env.RELEASE_EVIDENCE_RESULT,
+      desktop_build: process.env.DESKTOP_BUILD_RESULT,
     },
   });
   if (failures.length > 0) {
