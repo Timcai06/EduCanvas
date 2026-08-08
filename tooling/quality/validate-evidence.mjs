@@ -18,7 +18,7 @@
  *    （不允许 pending/running 冒充通过）。
  *
  * Usage:
- *   node scripts/validate-evidence.mjs [manifest-path]
+ *   node tooling/quality/validate-evidence.mjs [manifest-path]
  *
  * Exit codes:
  *   0 - All validations passed
@@ -30,7 +30,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, '..');
+const repoRoot = resolve(__dirname, '../..');
 
 const manifestPath =
   process.argv[2] ||

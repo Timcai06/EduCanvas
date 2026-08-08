@@ -28,15 +28,16 @@ docs/06-quality/releases/
 
 ```bash
 # Validate RC1 evidence pack
-node scripts/validate-evidence.mjs
+node tooling/quality/validate-evidence.mjs
 
 # Validate custom manifest
-node scripts/validate-evidence.mjs path/to/manifest.json
+node tooling/quality/validate-evidence.mjs path/to/manifest.json
 ```
 
 ### CI Integration
 
-The `release-evidence` job runs automatically when triggered via workflow dispatch:
+The `release-evidence` job records a non-terminal snapshot for affected pull requests.
+Release-time terminal validation runs via workflow dispatch:
 
 ```bash
 # Trigger release evidence validation
@@ -46,6 +47,7 @@ gh workflow run ci.yml -f release_evidence=true
 ## Manifest Fields
 
 ### Required Fields
+
 - `release`: Release identifier (e.g., "rc1")
 - `version`: Semantic version
 - `status`: Overall status
@@ -53,6 +55,7 @@ gh workflow run ci.yml -f release_evidence=true
 - `gates`: Gate results
 
 ### Optional Fields
+
 - `migration`: Database migration status
 - `provider`: Provider configuration summary
 - `eval`: Evaluation results
