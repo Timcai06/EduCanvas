@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { PLATFORM_EMBEDDING_DIMENSIONS } from '@educanvas/agent-core';
+import {
+  PLATFORM_EMBEDDING_DIMENSIONS,
+  type RetrievalDegradationReason,
+} from '@educanvas/agent-core';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -201,6 +204,7 @@ async function freezeAndRetrieve(input: {
   turnId: string;
   queryEmbedding?: readonly number[] | null;
   identity?: EmbeddingIdentity | null;
+  inputDegradationReason?: RetrievalDegradationReason | null;
   limit?: number;
 }) {
   await new DrizzleKnowledgeRetrievalRepository(
@@ -220,6 +224,7 @@ async function freezeAndRetrieve(input: {
     traceId: 'trace-hybrid',
     queryEmbedding: input.queryEmbedding ?? null,
     embeddingIdentity: input.identity === undefined ? IDENTITY : input.identity,
+    inputDegradationReason: input.inputDegradationReason ?? null,
     now: baseTime,
   });
 }
@@ -305,6 +310,52 @@ describeWithDatabase('pgvector 混合检索', () => {
     expect(result.vectorApplied).toBe(false);
     expect(result.degradationReason).toBe('invalid_configuration');
     expect(labelsOf(result.candidates)).toEqual(['lexical']);
+  });
+
+  it('Provider 已知 reason 优先：queryEmbedding 缺失 + inputDegradationReason → 不被 invalid_configuration 覆盖', async () => {
+    const { sessionId, turnId } = await seedSessionAndTurn({
+      studentId,
+      courseSlug: 'dl-provider-reason',
+    });
+    await seedCorpus('dl-provider-reason', sessionId);
+
+    const result = await freezeAndRetrieve({
+      studentId,
+      sessionId,
+      turnId,
+      queryEmbedding: null,
+      identity: IDENTITY,
+      inputDegradationReason: 'provider_timeout',
+    });
+
+    // 精确的 Provider 原因端到端保真（Q02 最终验收，B5）
+    expect(result.degradationReason).toBe('provider_timeout');
+    // FTS fallback 行为不变：用户仍获得可用检索结果
+    expect(result.retriever).toBe(LEXICAL_RETRIEVER);
+    expect(result.vectorApplied).toBe(false);
+    expect(result.candidates.length).toBeGreaterThan(0);
+  });
+
+  it('inputDegradationReason 不影响正常向量路径（仅输入侧推断时生效）', async () => {
+    const { sessionId, turnId } = await seedSessionAndTurn({
+      studentId,
+      courseSlug: 'dl-provider-ok',
+    });
+    const { documentId } = await seedCorpus('dl-provider-ok', sessionId);
+    await writeCorpusEmbeddings(documentId);
+
+    const result = await freezeAndRetrieve({
+      studentId,
+      sessionId,
+      turnId,
+      queryEmbedding: QUERY_VECTOR,
+      identity: IDENTITY,
+      inputDegradationReason: 'provider_unavailable',
+    });
+
+    // 向量路径真实执行时不携带输入侧 reason（执行成功即无降级）
+    expect(result.vectorApplied).toBe(true);
+    expect(result.degradationReason).toBeNull();
   });
 
   it('向量路补回纯词法找不到的语义相关切块', async () => {

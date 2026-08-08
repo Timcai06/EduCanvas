@@ -18,6 +18,10 @@ import {
   resolveCapabilityGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
 } from '@educanvas/model-gateway';
+import {
+  embeddingGatewayErrorToRetrievalDegradation,
+  type RetrievalDegradationReason,
+} from '@educanvas/agent-core';
 import { recordRetrievalDegradation } from '@educanvas/teaching-runtime';
 import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
 import { webTeachingObservability } from '../teaching/teaching-observability';
@@ -105,10 +109,17 @@ export function resolveWebEmbeddingGateway(): EmbeddingModelGateway | null {
  * 不应该把一次教学提问变成一次工具调用失败。稳定错误码仍然会被上层记录，
  * 但供应商响应体和堆栈不会离开这里。
  */
-async function embedQuery(
+/** embedQuery 的结果：向量与 Provider 侧降级原因分离表达（Q02 最终验收）。 */
+interface QueryEmbeddingResult {
+  vector: readonly number[] | null;
+  degradationReason: RetrievalDegradationReason | null;
+}
+
+/** 供单测直接注入 fake gateway（导出仅为可测性，无副作用）。 */
+export async function embedQuery(
   gateway: EmbeddingModelGateway,
   input: { query: string; traceId: string; turnId: string },
-): Promise<readonly number[] | null> {
+): Promise<QueryEmbeddingResult> {
   try {
     const result = await gateway.embed({
       taskAlias: 'retrieval.embed',
@@ -121,11 +132,20 @@ async function embedQuery(
     });
     const vector = result.embeddings[0];
     return vector && vector.length === PLATFORM_EMBEDDING_DIMENSIONS
-      ? vector
-      : null;
+      ? { vector, degradationReason: null }
+      : // 维度不符属 Provider 返回异常，交给 DB 输入侧 invalid_dimensions 分类
+        // （与既有语义一致，不在本层重复分类）。
+        { vector: null, degradationReason: null };
   } catch (error) {
-    if (error instanceof ModelGatewayInvocationError) return null;
-    return null;
+    // Provider 失败不再吞成无原因 null（B3）：网关归一化错误经既有契约映射为
+    // 精确 reason；非网关错误（如配置/网络层未知异常）保持 null，由输入侧推断。
+    if (error instanceof ModelGatewayInvocationError) {
+      return {
+        vector: null,
+        degradationReason: embeddingGatewayErrorToRetrievalDegradation(error),
+      };
+    }
+    return { vector: null, degradationReason: null };
   }
 }
 
@@ -152,6 +172,7 @@ export async function retrieveTeachingEvidence(input: {
         turnId: input.turnId,
       })
     : null;
+  const providerDegradationReason = queryEmbedding?.degradationReason ?? null;
 
   const result = await new DrizzleKnowledgeHybridRetrieval(
     getDb(),
@@ -162,8 +183,11 @@ export async function retrieveTeachingEvidence(input: {
     query: input.query,
     limit: input.limit,
     traceId: input.traceId,
-    queryEmbedding,
+    queryEmbedding: queryEmbedding?.vector ?? null,
     embeddingIdentity: identity,
+    // Provider 已知原因优先：embedQuery 失败时 DB 输入侧会推断
+    // invalid_configuration，此处传回精确 reason 防止被覆盖（B5）。
+    inputDegradationReason: providerDegradationReason,
   });
   // Q04：检索 SLI —— 向量命中 / 词法回退只记录模式，不记录查询正文。
   getWebTelemetryRuntime().metrics.increment('retrieval_mode_total', {
@@ -171,13 +195,14 @@ export async function retrieveTeachingEvidence(input: {
   });
   // Q02 接线：降级 reason 双通道记录——teaching-runtime 指标通道（平台可订阅）
   // 与全局 metrics 注册表（/v1/internal/metrics 暴露），均为低基数闭集标签。
-  if (result.degradationReason) {
-    recordRetrievalDegradation(
-      webTeachingObservability,
-      result.degradationReason,
-    );
+  // Provider 原因优先于 DB 输入侧推断（二者互斥：Provider 失败时向量路径不执行，
+  // 不会产生执行期 reason），同一降级只记一次。
+  const degradationReason =
+    providerDegradationReason ?? result.degradationReason;
+  if (degradationReason) {
+    recordRetrievalDegradation(webTeachingObservability, degradationReason);
     getWebTelemetryRuntime().metrics.increment('retrieval_degradations', {
-      reason: result.degradationReason,
+      reason: degradationReason,
     });
   }
   return result;

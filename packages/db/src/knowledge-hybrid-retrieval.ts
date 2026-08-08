@@ -358,6 +358,14 @@ export class DrizzleKnowledgeHybridRetrieval {
     queryEmbedding?: readonly number[] | null;
     /** 语料侧向量身份；缺失时同样只走词法路径。 */
     embeddingIdentity?: EmbeddingIdentity | null;
+    /**
+     * 调用方（如 Embedding Provider 层）已知的降级原因，优先级高于输入侧推断
+     * （not_configured/invalid_configuration）。Provider 失败且向量路径未执行
+     * 时，执行期不会产生更精确的 reason，因此本值不得被输入侧推断覆盖。
+     * 执行期分类（vector_query_timeout 等）仅在向量路径真实执行时产生，
+     * 与 Provider 失败互斥，天然不冲突。
+     */
+    inputDegradationReason?: RetrievalDegradationReason | null;
     now?: Date;
   }): Promise<HybridRetrievalResult> {
     const query = input.query.trim().replace(/\s+/g, ' ');
@@ -388,6 +396,13 @@ export class DrizzleKnowledgeHybridRetrieval {
       degradationReason = 'invalid_configuration';
     } else {
       degradationReason = 'not_configured';
+    }
+    // Provider 层已知原因优先：embedQuery 失败时 identity 仍存在，输入侧会推断
+    // invalid_configuration，但真实原因是 provider_timeout/provider_unavailable 等
+    // 更精确的契约值（Q02 最终验收，2026-08-08）。仅在输入侧已推断降级时覆盖：
+    // 向量完整（无输入侧降级）时保持 null，由执行期结果决定。
+    if (input.inputDegradationReason && degradationReason !== null) {
+      degradationReason = input.inputDegradationReason;
     }
     const vectorRequested = queryEmbedding !== null && identity !== null;
 
