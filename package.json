@@ -28,15 +28,18 @@
     "test:e2e:runtime-composition": "playwright test --config playwright.runtime-composition.config.ts",
     "test:e2e:runtime-pressure": "playwright test --config playwright.runtime.config.ts",
     "test:e2e:headed": "playwright test --headed",
-    "typecheck": "turbo typecheck",
+    "typecheck": "turbo typecheck && pnpm typecheck:e2e",
+    "typecheck:e2e": "tsc -p tests/e2e/tsconfig.json",
     "db:up": "docker compose up -d",
     "db:generate": "pnpm --filter @educanvas/db generate",
     "db:migrate": "pnpm --filter @educanvas/db migrate"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@types/node": "^22.20.1",
     "prettier": "^3.9.5",
     "turbo": "^2.10.4",
+    "typescript": "^5.9.3",
     "vitest": "4.1.10"
   },
   "pnpm": {
