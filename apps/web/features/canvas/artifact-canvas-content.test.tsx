@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { makeArtifactResource } from './canvas-resource-fixtures';
 import { describe, expect, it } from 'vitest';
 import type {
   ArtifactDetail,
@@ -30,7 +31,16 @@ function makeDetail(
     version: null,
     versions: [],
     latestJob: null,
-    canvasResource: { allowedActions: ['view'] },
+    canvasResource:
+      kind === 'audio_overview'
+        ? makeArtifactResource('audio_overview')
+        : kind === 'generated_image'
+          ? makeArtifactResource('generated_image')
+          : kind === 'slides'
+            ? makeArtifactResource('slides')
+            : kind === 'flashcards'
+              ? makeArtifactResource('flashcards')
+              : makeArtifactResource('mind_map'),
     ...overrides,
   };
 }
@@ -172,8 +182,14 @@ describe('ArtifactCanvasContent（W04-3 内容区分发）', () => {
     expect(html).toContain('<img');
   });
 
-  it('audio_overview（tier1，renderer 仅接受 tier2）→ unavailable 兜底，不落真实渲染器', () => {
-    const base = makeDetail('audio_overview');
+  it('audio_overview（服务端 resource tier1，renderer 仅接受 tier2）→ unavailable 兜底', () => {
+    // 服务端投影是 trustTier 权威：fixture 直接构造 tier1 的 resource
+    // （浏览器不再按 artifact.kind 重建 trustTier）。
+    const base = makeDetail('audio_overview', {
+      canvasResource: makeArtifactResource('audio_overview', {
+        trustTier: 'tier1',
+      }),
+    });
     const detail: ArtifactDetail = {
       ...base,
       version: { id: 'v1', version: 1, content: null, media: audioMedia },

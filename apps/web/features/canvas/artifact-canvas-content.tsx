@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import type { NoteContent } from '@educanvas/canvas-protocol';
-import { buildArtifactCanvasResource } from './artifact-canvas-resource';
 import type { ArtifactContentView } from './artifact-content-view';
 import type { ArtifactDetail, ArtifactVersionData } from './artifact-client';
 import { ArtifactGeneratingSkeleton } from './artifact-provenance';
@@ -54,7 +53,23 @@ function ArtifactRegistryContent({
   view: ArtifactRegistryContentView;
   detail: ArtifactDetail;
 }) {
-  const resource = useMemo(() => buildArtifactCanvasResource(detail), [detail]);
+  // 服务端 projection 是唯一权威：detail.canvasResource 已是完整验证后的协议
+  // 对象（parser 层 fail closed），Registry 直接消费，不再按 kind 重建。
+  const resource = useMemo(
+    () => detail.canvasResource ?? null,
+    [detail.canvasResource],
+  );
+  if (resource === null) {
+    // 后端未返回可打开资源（如仍在 processing / 尚无 immutable version）时
+    // 不伪造 notebookId/version/renderer/provenance/runtime，显示诚实状态。
+    return (
+      <CanvasShellStatus
+        status="unavailable"
+        title="内容尚不可用"
+        description="产物尚未生成可查看的版本。"
+      />
+    );
+  }
   const selection = selectWebCanvasResourceRenderer(resource);
   if (selection.kind === 'unavailable') {
     return (

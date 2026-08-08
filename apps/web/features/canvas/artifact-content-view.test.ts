@@ -6,6 +6,7 @@ import type {
   GeneratedImageMedia,
 } from './artifact-client';
 import { resolveArtifactContentView } from './artifact-content-view';
+import { makeArtifactResource } from './canvas-resource-fixtures';
 
 function makeDetail(
   kind: string,
@@ -26,7 +27,7 @@ function makeDetail(
     version: null,
     versions: [],
     latestJob: null,
-    canvasResource: { allowedActions: ['view'] },
+    canvasResource: makeArtifactResource('mind_map'),
     ...overrides,
   };
 }
