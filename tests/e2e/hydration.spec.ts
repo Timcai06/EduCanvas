@@ -20,7 +20,40 @@ const PUBLIC_ROUTES = [
   '/register',
   '/design-qa/pipeline-flow',
   '/design-qa/canvas-provenance',
-];
+] as const;
+
+async function proveClientReady(
+  page: import('@playwright/test').Page,
+  route: (typeof PUBLIC_ROUTES)[number],
+) {
+  if (route === '/login' || route === '/register') {
+    const initialSwitch = page.getByRole('button', {
+      name: route === '/login' ? '第一次来？创建账号' : '已有账号？返回登录',
+    });
+    const switchedLabel =
+      route === '/login' ? '已有账号？返回登录' : '第一次来？创建账号';
+    await expect(initialSwitch).toBeVisible();
+    await initialSwitch.click();
+    await expect(
+      page.getByRole('button', { name: switchedLabel }),
+    ).toBeVisible();
+    return;
+  }
+
+  if (route === '/design-qa/pipeline-flow') {
+    const shell = page.getByTestId('animation-shell');
+    await expect(shell).toContainText('步骤 1/4');
+    await shell.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(shell).toContainText('步骤 2/4');
+    return;
+  }
+
+  await expect(page.getByTestId('artifact-provenance-qa')).toHaveAttribute(
+    'data-hydrated',
+    'true',
+  );
+}
 
 test.describe('hydration 与客户端运行时健康', () => {
   for (const route of PUBLIC_ROUTES) {
@@ -38,8 +71,7 @@ test.describe('hydration 与客户端运行时健康', () => {
       });
 
       await page.goto(route, { waitUntil: 'load' });
-      // 等待客户端 hydration 与首屏脚本执行完成，再判定错误集合。
-      await page.waitForTimeout(1500);
+      await proveClientReady(page, route);
 
       expect(
         hydrationErrors,
@@ -65,6 +97,10 @@ test.describe('hydration 与客户端运行时健康', () => {
       }
     });
 
+    // Hydration correctness must not depend on the landing-page GSAP timeline
+    // receiving enough main-thread time on a saturated CI runner. Reduced motion
+    // is a supported product mode and keeps this gate focused on event binding.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/', { waitUntil: 'load' });
 
     // 通过真实客户端交互证明 hydration 已完成；固定 sleep 在慢 runner 上会
@@ -72,7 +108,12 @@ test.describe('hydration 与客户端运行时健康', () => {
     await expect(
       page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+    const createMenuTrigger = page.getByRole('button', {
+      name: '添加上下文或创建内容',
+    });
+    await createMenuTrigger.focus();
+    await expect(createMenuTrigger).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(
       page.getByRole('menuitem', { name: /生成思维导图/ }),
     ).toBeVisible();

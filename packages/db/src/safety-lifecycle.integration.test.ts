@@ -68,6 +68,15 @@ async function seedOwnedTurn(input: {
   const sessionId = randomUUID();
   const turnId = randomUUID();
   const studentMessageId = randomUUID();
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await db
+    .insert(schema.platformUsers)
+    .values({
+      id: input.subjectId,
+      kind: 'anonymous_compat',
+      status: 'active',
+    })
+    .onConflictDoNothing();
   await db.insert(schema.lessonSessions).values({
     id: sessionId,
     studentId: input.subjectId,
@@ -114,6 +123,16 @@ async function seedOwnedGraph(input: {
 }): Promise<SeededGraph> {
   const db = getDatabase();
   const { sessionId, turnId, studentMessageId } = await seedOwnedTurn(input);
+  // D02 FK：K12 迁移期 asset 的 space_id 以 lessonSession.id 映射，此处显式
+  // 创建同 id 的 space，保持映射语义且满足强 FK。
+  await db.insert(schema.spaces).values({
+    id: sessionId,
+    ownerSubjectId: input.subjectId,
+    kind: 'personal',
+    title: `safety-graph-${input.suffix}`,
+    createdAt: input.lastActivityAt,
+    updatedAt: input.lastActivityAt,
+  });
   const [asset] = await db
     .insert(schema.assets)
     .values({

@@ -1,15 +1,8 @@
 name: UI Review
 
 on:
-  pull_request:
-    paths:
-      - 'apps/web/**'
-      - 'tests/e2e/**'
-      - 'playwright.config.ts'
-      - 'playwright.ui.config.ts'
-      - '.github/workflows/ui.yml'
   schedule:
-    # Q05：nightly 兜底，任何前端改动遗漏都会在次日早上被发现。
+    # 视觉与设计 QA 不阻塞普通 PR；nightly 兜底发现跨浏览器视觉漂移。
     - cron: '47 2 * * *'
   workflow_dispatch:
 
@@ -55,12 +48,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Chromium for PR review
-        if: github.event_name == 'pull_request'
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Install browsers for full UI review
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright install --with-deps chromium firefox
 
       - name: Apply database migrations
@@ -69,12 +57,7 @@ jobs:
       - name: Build production application
         run: pnpm build
 
-      - name: UI review for PR (@ui, Chromium)
-        if: github.event_name == 'pull_request'
-        run: pnpm exec playwright test --config playwright.ui.config.ts --project=chromium
-
       - name: Full UI review (@ui, Chromium + Firefox)
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright test --config playwright.ui.config.ts
 
       - name: Summarize retries and coverage matrix

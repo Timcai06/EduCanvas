@@ -37,7 +37,7 @@ describe('E2E suite routing', () => {
     assert.ok(count >= 6 && count <= 12, `PR smoke budget is ${count}`);
   });
 
-  it('routes PRs to smoke while preserving full nightly and manual regression', () => {
+  it('routes PRs to smoke while keeping UI review nightly or manual', () => {
     const prConfig = readFileSync(
       resolve(repoRoot, 'playwright.pr.config.ts'),
       'utf8',
@@ -56,7 +56,11 @@ describe('E2E suite routing', () => {
     assert.match(ci, /pnpm test:e2e:pr/);
     assert.match(ci, /Full browser E2E/);
     assert.match(ci, /github\.event_name == 'schedule'/);
-    assert.match(ui, /--project=chromium/);
+    assert.doesNotMatch(ui, /^\s*pull_request:/m);
+    assert.match(ui, /^\s*schedule:/m);
+    assert.match(ui, /^\s*workflow_dispatch:/m);
+    assert.match(ui, /playwright install --with-deps chromium firefox/);
+    assert.match(ui, /--config playwright\.ui\.config\.ts/);
     assert.match(ui, /Full UI review/);
   });
 });

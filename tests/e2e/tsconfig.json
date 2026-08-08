@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["./**/*.ts", "../../tooling/e2e-worker-log-audit.mjs"]
+}

@@ -46,10 +46,53 @@ describeWithDatabase('Turn 使用预算账本（Q03）', () => {
   });
 
   beforeEach(async () => {
-    await getDatabase().execute(sql`truncate table turn_usage_budget_outcomes`);
+    // FK（D02）要求 operation_id 指向真实 agent_operations，先清子表再清父表链。
+    await getDatabase().execute(sql`
+      truncate table
+        turn_usage_budget_outcomes,
+        agent_operations,
+        conversations,
+        spaces
+      restart identity cascade
+    `);
   });
 
   const ledger = () => new DrizzleTurnUsageBudgetLedger(getDatabase());
+
+  /** 建立 FK 依赖链 spaces → conversations → agent_operations，返回 operationId。 */
+  async function seedOperation(): Promise<string> {
+    const [space] = await getDatabase()
+      .insert(schema.spaces)
+      .values({
+        ownerSubjectId: 'budget-owner',
+        kind: 'personal',
+        title: '预算测试空间',
+        status: 'active',
+      })
+      .returning({ id: schema.spaces.id });
+    const [conversation] = await getDatabase()
+      .insert(schema.conversations)
+      .values({
+        spaceId: space!.id,
+        ownerSubjectId: 'budget-owner',
+        agentProfileId: 'general',
+        title: '预算测试会话',
+        status: 'active',
+      })
+      .returning({ id: schema.conversations.id });
+    const [operation] = await getDatabase()
+      .insert(schema.agentOperations)
+      .values({
+        id: randomUUID(),
+        conversationId: conversation!.id,
+        kind: 'turn',
+        idempotencyKey: randomUUID(),
+        traceId: randomUUID(),
+        status: 'completed',
+      })
+      .returning({ id: schema.agentOperations.id });
+    return operation!.id;
+  }
 
   const entry = (
     overrides: Partial<TurnUsageBudgetLedgerEntry> = {},
@@ -69,7 +112,7 @@ describeWithDatabase('Turn 使用预算账本（Q03）', () => {
   });
 
   it('预算内正常完成的 Turn 记录一行且 breachReason 为空', async () => {
-    const input = entry();
+    const input = entry({ operationId: await seedOperation() });
     await ledger().record(input);
     const rows = await getDatabase()
       .select()
@@ -92,6 +135,7 @@ describeWithDatabase('Turn 使用预算账本（Q03）', () => {
   it('超预算终态的 Turn 记录 breachReason 与估算标记', async () => {
     await ledger().record(
       entry({
+        operationId: await seedOperation(),
         breachReason: 'max_estimated_cost',
         estimated: true,
         estimatedCostCents: 250,
@@ -107,7 +151,7 @@ describeWithDatabase('Turn 使用预算账本（Q03）', () => {
   });
 
   it('重复 operationId 冲突（每个 Turn 只落一行）', async () => {
-    const input = entry();
+    const input = entry({ operationId: await seedOperation() });
     await ledger().record(input);
     await expect(ledger().record(input)).rejects.toThrow();
     const rows = await getDatabase()
@@ -119,13 +163,40 @@ describeWithDatabase('Turn 使用预算账本（Q03）', () => {
 
   it('非法 breachReason 被数据库 CHECK 约束拒绝', async () => {
     await expect(
-      ledger().record(entry({ breachReason: 'user_typed_text' as never })),
+      ledger().record(
+        entry({
+          operationId: await seedOperation(),
+          breachReason: 'user_typed_text' as never,
+        }),
+      ),
     ).rejects.toThrow();
+  });
+
+  it('operation_id 必须指向真实 agent_operations（FK 拒绝孤儿账本）', async () => {
+    await expect(ledger().record(entry())).rejects.toThrow();
+  });
+
+  it('agent_operations 删除时账本随 cascade 删除（无独立生命周期）', async () => {
+    const operationId = await seedOperation();
+    await ledger().record(entry({ operationId }));
+    await getDatabase()
+      .delete(schema.agentOperations)
+      .where(eq(schema.agentOperations.id, operationId));
+    const rows = await getDatabase()
+      .select()
+      .from(schema.turnUsageBudgetOutcomes)
+      .where(eq(schema.turnUsageBudgetOutcomes.operationId, operationId));
+    expect(rows).toHaveLength(0);
   });
 
   it('工具结果截断与调用数原样落账', async () => {
     await ledger().record(
-      entry({ toolCalls: 4, toolResultsTruncated: 2, modelCalls: 7 }),
+      entry({
+        operationId: await seedOperation(),
+        toolCalls: 4,
+        toolResultsTruncated: 2,
+        modelCalls: 7,
+      }),
     );
     const rows = await getDatabase()
       .select()

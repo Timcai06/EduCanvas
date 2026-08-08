@@ -808,8 +808,10 @@ export const conversationMessages = pgTable(
 );
 
 /**
- * 教学状态机和审计的会话边界。阶段一尚未引入 users/courses 表，因此学生、年级和课程先用外部稳定标识；
- * 状态保留为 text 以允许状态机演进而不频繁改枚举，取舍见 docs/04-data/02-数据设计.md。
+ * 教学状态机和审计的会话边界。student_id 为强 FK（D02 起，与 learner_profiles
+ * 口径一致）；ON DELETE restrict 与 learning_events/audio_consents 一致——
+ * 教学事实是审计保留链，主体删除必须先走显式教学闭包（D01 §4.1/§4.10）。
+ * 年级段和课程目录尚在迭代，阶段一用 text 接受稳定外部标识，待正式实体表落地后再加外键。
  */
 export const lessonSessions = pgTable(
   'lesson_sessions',
@@ -818,7 +820,9 @@ export const lessonSessions = pgTable(
     conversationId: uuid('conversation_id').references(() => conversations.id, {
       onDelete: 'restrict',
     }),
-    studentId: text('student_id').notNull(),
+    studentId: text('student_id')
+      .notNull()
+      .references(() => platformUsers.id, { onDelete: 'restrict' }),
     // 年级段和课程目录尚在迭代，阶段一用 text 接受稳定外部标识，待正式实体表落地后再加外键。
     gradeBand: text('grade_band').notNull(),
     courseSlug: text('course_slug').notNull(),
@@ -879,16 +883,18 @@ export const lessonSessions = pgTable(
 
 /**
  * 平台通用 Asset。ownerSubjectId 与 spaceId 都是可信服务端解析出的不透明标识，
- * 对象存储地址只存在于不可变版本表。通用路径已有一等 Space；K12 迁移期仍以
- * lessonSession.id 映射 spaceId。assets 早于 spaces 创建，当前不加外键以兼容双轨，
- * 待K12完成回填与双读迁移后再收紧Workspace级参照完整性。
+ * 对象存储地址只存在于不可变版本表。D02 起 space_id 为强 FK；ON DELETE restrict
+ * 强制 Space 删除先走 Asset tombstone + Outbox 闭包，避免级联删除绕过对象存储清理
+ * （D-RISK-01 收口见 docs/04-data/06-D02）。
  */
 export const assets = pgTable(
   'assets',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     ownerSubjectId: text('owner_subject_id').notNull(),
-    spaceId: uuid('space_id').notNull(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'restrict' }),
     scope: text('scope').notNull(),
     kind: text('kind').notNull(),
     origin: text('origin').notNull(),
@@ -909,6 +915,7 @@ export const assets = pgTable(
   },
   (table) => [
     index('assets_current_version_fk_idx').on(table.currentVersionId),
+    index('assets_space_fk_idx').on(table.spaceId),
     index('assets_owner_space_status_idx').on(
       table.ownerSubjectId,
       table.spaceId,
@@ -1644,11 +1651,15 @@ export const modelRuns = pgTable(
  *
  * 只保存预算维度数值（token/次数/毫秒/美分）与低基数 breachReason，
  * 绝不保存用户正文、Prompt、供应商响应、价格密钥或 operationId 之外的标识。
+ * operation_id 主键即 FK（D02 起）：账本无独立生命周期，随 agent_operations
+ * cascade 删除（D-RISK-02 收口见 docs/04-data/06-D02）。
  */
 export const turnUsageBudgetOutcomes = pgTable(
   'turn_usage_budget_outcomes',
   {
-    operationId: uuid('operation_id').primaryKey(),
+    operationId: uuid('operation_id')
+      .primaryKey()
+      .references(() => agentOperations.id, { onDelete: 'cascade' }),
     profileId: text('profile_id').notNull(),
     /** null 表示预算内正常完成。 */
     breachReason: text('breach_reason'),

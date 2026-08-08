@@ -38,7 +38,7 @@
     "packages/db/src/model-run-repository.ts": 446,
     "packages/db/src/platform-artifact-repository.ts": 1094,
     "packages/db/src/platform-turn-repository.ts": 809,
-    "packages/db/src/schema.ts": 2917,
+    "packages/db/src/schema.ts": 2928,
     "packages/db/src/study-plan-repository.ts": 425,
     "packages/db/src/tool-call-repository.ts": 457,
     "packages/db/src/turn-ledger-repository.ts": 642,

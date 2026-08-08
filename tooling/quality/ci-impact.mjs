@@ -13,6 +13,7 @@ const LANES = [
   'runtime_pressure',
   'e2e',
   'dependency_review',
+  'release_evidence',
   'desktop',
 ];
 const ALL = Object.fromEntries(LANES.map((lane) => [lane, true]));
@@ -21,6 +22,8 @@ const DOC_ONLY =
   /^docs\/.*\.md$|^(?:README|AGENTS|CLAUDE)\.md$|^(?:apps|packages|tooling)\/[^/]+\/README\.md$|^\.vscode\/(?:settings|extensions)\.json$|^\.github\/CODEOWNERS$/;
 const DEPENDENCY =
   /(?:^|\/)(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/workflows\//;
+const RELEASE_EVIDENCE =
+  /^docs\/06-quality\/releases\/|^docs\/06-quality\/08-|^tooling\/quality\/(?:validate-evidence|migration-records)\.mjs$|^packages\/db\/drizzle\//;
 
 function matchesAny(paths, patterns) {
   return paths.some((path) => patterns.some((pattern) => pattern.test(path)));
@@ -76,10 +79,13 @@ export function classifyChangedPaths(
         ].includes(path);
   });
   if (hasUnknownLocation) return { ...ALL };
-  if (paths.every((path) => DOC_ONLY.test(path))) return { ...NONE };
+  const releaseEvidenceAffected = matchesAny(paths, [RELEASE_EVIDENCE]);
+  if (!releaseEvidenceAffected && paths.every((path) => DOC_ONLY.test(path)))
+    return { ...NONE };
   if (paths.some((path) => DEPENDENCY.test(path))) return { ...ALL };
 
   const result = { ...NONE, checks: true };
+  result.release_evidence = releaseEvidenceAffected;
   result.integration = matchesAny(paths, [
     /^packages\/db\//,
     /^apps\/worker\//,
@@ -148,7 +154,7 @@ export function requiredResultFailures({ eventName, expected, results }) {
   if (eventName === 'pull_request' && expected.dependency_review) {
     requireSuccess('dependency_review');
   }
-  if (eventName === 'pull_request' && expected.checks) {
+  if (expected.release_evidence) {
     requireSuccess('release_evidence');
   }
   return failures;
@@ -165,6 +171,7 @@ function verifyResultsFromEnvironment() {
       runtime_pressure: boolean('RUNTIME_PRESSURE_EXPECTED'),
       e2e: boolean('E2E_EXPECTED'),
       dependency_review: boolean('DEPENDENCY_REVIEW_EXPECTED'),
+      release_evidence: boolean('RELEASE_EVIDENCE_EXPECTED'),
       desktop: boolean('DESKTOP_EXPECTED'),
     },
     results: {

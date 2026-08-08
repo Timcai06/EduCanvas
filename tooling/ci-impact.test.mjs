@@ -17,6 +17,7 @@ describe('CI impact classification', () => {
         runtime_pressure: false,
         e2e: false,
         dependency_review: false,
+        release_evidence: false,
         desktop: false,
       },
     );
@@ -25,6 +26,7 @@ describe('CI impact classification', () => {
   it('runs governance checks for non-whitelisted VS Code state', () => {
     const result = classifyChangedPaths(['.vscode/launch.json']);
     assert.equal(result.checks, true);
+    assert.equal(result.release_evidence, false);
     assert.equal(result.integration, false);
     assert.equal(result.e2e, false);
   });
@@ -34,6 +36,12 @@ describe('CI impact classification', () => {
       'docs/06-quality/releases/rc1/manifest.json',
     ]);
     assert.equal(result.checks, true);
+    assert.equal(result.release_evidence, true);
+    assert.equal(
+      classifyChangedPaths(['docs/06-quality/08-供应链与发布证据.md'])
+        .release_evidence,
+      true,
+    );
   });
 
   it('does not treat Markdown test fixtures as documentation-only', () => {
@@ -69,6 +77,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       e2e: true,
       dependency_review: false,
+      release_evidence: false,
       desktop: false,
     });
   });
@@ -114,6 +123,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       e2e: true,
       dependency_review: false,
+      release_evidence: false,
       desktop: false,
     });
   });
@@ -165,6 +175,26 @@ describe('CI impact classification', () => {
         'e2e was required but concluded: failure',
         'dependency_review was required but concluded: skipped',
       ],
+    );
+
+    assert.deepEqual(
+      requiredResultFailures({
+        eventName: 'pull_request',
+        expected: classifyChangedPaths([
+          'docs/06-quality/releases/rc1/manifest.json',
+        ]),
+        results: { ...baseResults, quality: 'success' },
+      }),
+      ['release_evidence was required but concluded: skipped'],
+    );
+
+    assert.deepEqual(
+      requiredResultFailures({
+        eventName: 'pull_request',
+        expected: classifyChangedPaths(['apps/web/app/page.tsx']),
+        results: { ...baseResults, quality: 'success', e2e: 'success' },
+      }),
+      [],
     );
   });
 });

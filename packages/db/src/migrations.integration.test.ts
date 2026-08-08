@@ -1081,4 +1081,306 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       ).rejects.toMatchObject({ code: '23514' });
     });
   });
+
+  it('从0050升级时只修复已审计孤儿、登记对象删除并建立三条强FK', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0051_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const studentId = 'd02-k1-student';
+      const spaceId = '75000000-0000-4000-8000-000000000001';
+      const goodAssetId = '75000000-0000-4000-8000-000000000002';
+      const orphanAssetId = 'f488d009-7753-46e7-9367-c83d5036e265';
+      const orphanSpaceId = 'eac85d6a-7e4c-44ce-a8d7-4abd9f06d081';
+      const orphanVersionId = '75000000-0000-4000-8000-000000000007';
+      const orphanRepresentationId = '75000000-0000-4000-8000-000000000008';
+      const orphanKeyframeId = '75000000-0000-4000-8000-000000000009';
+      const sessionId = '75000000-0000-4000-8000-000000000004';
+      const conversationId = '75000000-0000-4000-8000-000000000005';
+      const operationId = '75000000-0000-4000-8000-000000000006';
+
+      await connection`
+        insert into platform_users (id, kind, status) values
+          (${studentId}, 'registered', 'active')
+      `;
+      await connection`
+        insert into spaces (id, owner_subject_id, kind, title, status) values
+          (${spaceId}, ${studentId}, 'notebook', 'D02迁移测试空间', 'active')
+      `;
+      /* 正常 asset 与孤儿 asset 并存：0050 时代两者都合法（space_id 无 FK）。 */
+      await connection`
+        insert into assets (
+          id, owner_subject_id, space_id, scope, kind, origin,
+          display_name, status
+        ) values
+          (${goodAssetId}, ${studentId}, ${spaceId}, 'space', 'document',
+           'upload', '正常资产', 'pending'),
+          (${orphanAssetId}, ${studentId}, ${orphanSpaceId},
+           'space', 'link', 'upload', '孤儿资产', 'pending')
+      `;
+      await connection`
+        insert into asset_versions (
+          id, asset_id, kind, mime_type, byte_size, content_hash, status,
+          storage_key
+        ) values (
+          ${orphanVersionId}, ${orphanAssetId}, 'link', 'text/html', 128,
+          ${'a'.repeat(64)}, 'ready', 'd02/orphan/source.html'
+        )
+      `;
+      await connection`
+        insert into asset_representations (
+          id, asset_version_id, kind, mime_type, status,
+          derived_storage_key, byte_size, checksum
+        ) values (
+          ${orphanRepresentationId}, ${orphanVersionId}, 'preview',
+          'text/html', 'ready', 'd02/orphan/preview.html', 64,
+          ${'b'.repeat(64)}
+        )
+      `;
+      await connection`
+        insert into asset_video_keyframes (
+          id, asset_version_id, algorithm_version, ordinal,
+          timestamp_seconds, storage_key, checksum, byte_size, mime_type
+        ) values (
+          ${orphanKeyframeId}, ${orphanVersionId}, 'd02-v1', 1, 0,
+          'd02/orphan/frame.jpg', ${'c'.repeat(64)}, 32, 'image/jpeg'
+        )
+      `;
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          ${sessionId}, ${studentId}, 'middle_school', 'd02-course',
+          'node', 'DIAGNOSE', 'active'
+        )
+      `;
+      await connection`
+        insert into conversations (
+          id, space_id, owner_subject_id, title, status
+        ) values (
+          ${conversationId}, ${spaceId}, ${studentId}, 'D02迁移测试会话', 'active'
+        )
+      `;
+      await connection`
+        insert into agent_operations (
+          id, conversation_id, kind, idempotency_key, trace_id, status
+        ) values (
+          ${operationId}, ${conversationId}, 'turn', 'd02-idem-key',
+          'd02-trace-id', 'completed'
+        )
+      `;
+      await connection`
+        insert into turn_usage_budget_outcomes (
+          operation_id, profile_id, estimated, estimated_cost_cents,
+          model_calls, tool_calls, tool_results_truncated,
+          input_tokens, output_tokens, wall_clock_ms
+        ) values (
+          ${operationId}, 'd02.profile', false, 3, 1, 0, 0, 100, 50, 500
+        )
+      `;
+
+      await applyMigrationFile(
+        connection,
+        '0051_d02_core_referential_integrity.sql',
+      );
+
+      /* 孤儿 asset 被确定性清理，正常 asset 与三份事实全部保留。 */
+      expect(
+        await connection`
+          select id from assets order by id
+        `,
+      ).toEqual([{ id: goodAssetId }]);
+      expect(
+        await connection`
+          select source_type, storage_key
+          from object_deletion_outbox
+          where source_id in (
+            ${orphanVersionId}, ${orphanRepresentationId}, ${orphanKeyframeId}
+          )
+          order by source_type
+        `,
+      ).toEqual([
+        {
+          source_type: 'asset_representation',
+          storage_key: 'd02/orphan/preview.html',
+        },
+        {
+          source_type: 'asset_version',
+          storage_key: 'd02/orphan/source.html',
+        },
+        {
+          source_type: 'asset_video_keyframe',
+          storage_key: 'd02/orphan/frame.jpg',
+        },
+      ]);
+      expect(
+        await connection`
+          select count(*)::int as n from lesson_sessions where id = ${sessionId}
+        `,
+      ).toEqual([{ n: 1 }]);
+      expect(
+        await connection`
+          select count(*)::int as n from turn_usage_budget_outcomes
+          where operation_id = ${operationId}
+        `,
+      ).toEqual([{ n: 1 }]);
+      expect(
+        await connection`
+          select count(*)::int as n from conversations where id = ${conversationId}
+        `,
+      ).toEqual([{ n: 1 }]);
+      expect(
+        await connection`
+          select count(*)::int as n from agent_operations where id = ${operationId}
+        `,
+      ).toEqual([{ n: 1 }]);
+
+      /* 三条强 FK 与 space_id 兜底索引就位；lesson_sessions 为 restrict
+         （教学审计保留链，主体删除须显式闭包）。 */
+      expect(
+        await connection`
+          select conname, confdeltype
+          from pg_constraint
+          where conname in (
+            'assets_space_id_spaces_id_fk',
+            'lesson_sessions_student_id_platform_users_id_fk',
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk'
+          )
+          order by conname
+        `,
+      ).toEqual([
+        {
+          conname: 'assets_space_id_spaces_id_fk',
+          confdeltype: 'r',
+        },
+        {
+          conname: 'lesson_sessions_student_id_platform_users_id_fk',
+          confdeltype: 'r',
+        },
+        {
+          conname:
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk',
+          confdeltype: 'c',
+        },
+      ]);
+      expect(
+        await connection`
+          select indexname from pg_indexes
+          where schemaname = 'public' and indexname = 'assets_space_fk_idx'
+        `,
+      ).toEqual([{ indexname: 'assets_space_fk_idx' }]);
+
+      /* FK 生效后新孤儿被拒绝（23503），教学会话写入要求主体先行。 */
+      await expect(
+        connection`
+          insert into assets (
+            id, owner_subject_id, space_id, scope, kind, origin,
+            display_name, status
+          ) values (
+            '77000000-0000-4000-8000-000000000001', ${studentId},
+            '76000000-0000-4000-8000-000000000002', 'space', 'link',
+            'upload', '新孤儿', 'pending'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23503' });
+      await expect(
+        connection`
+          insert into lesson_sessions (
+            id, student_id, grade_band, course_slug, knowledge_node_id,
+            state, status
+          ) values (
+            '77000000-0000-4000-8000-000000000002', 'no-such-student',
+            'middle_school', 'd02-course', 'node', 'DIAGNOSE', 'active'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23503' });
+      await expect(
+        connection`
+          insert into turn_usage_budget_outcomes (
+            operation_id, profile_id, estimated, estimated_cost_cents,
+            model_calls, tool_calls, tool_results_truncated,
+            input_tokens, output_tokens, wall_clock_ms
+          ) values (
+            '77000000-0000-4000-8000-000000000003', 'd02.profile',
+            false, 3, 1, 0, 0, 100, 50, 500
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23503' });
+    });
+  });
+
+  it('从0050升级时遇到未审计孤儿会在修改数据前 fail-closed', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0051_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const unexpectedAssetId = '78000000-0000-4000-8000-000000000001';
+      const orphanOperationId = '78000000-0000-4000-8000-000000000002';
+      await connection`
+        insert into assets (
+          id, owner_subject_id, space_id, scope, kind, origin,
+          display_name, status
+        ) values (
+          ${unexpectedAssetId}, 'd02-unexpected-owner',
+          '78000000-0000-4000-8000-000000000003', 'space', 'link',
+          'upload', '未审计孤儿资产', 'pending'
+        )
+      `;
+      await connection`
+        insert into lesson_sessions (
+          id, student_id, grade_band, course_slug, knowledge_node_id,
+          state, status
+        ) values (
+          '78000000-0000-4000-8000-000000000004', 'd02-missing-student',
+          'middle_school', 'd02-course', 'node', 'DIAGNOSE', 'active'
+        )
+      `;
+      await connection`
+        insert into turn_usage_budget_outcomes (
+          operation_id, profile_id, estimated, estimated_cost_cents,
+          model_calls, tool_calls, tool_results_truncated,
+          input_tokens, output_tokens, wall_clock_ms
+        ) values (
+          ${orphanOperationId}, 'd02.profile', false, 3, 1, 0, 0,
+          100, 50, 500
+        )
+      `;
+
+      await expect(
+        applyMigrationFile(
+          connection,
+          '0051_d02_core_referential_integrity.sql',
+        ),
+      ).rejects.toMatchObject({
+        code: '23503',
+        message: expect.stringContaining('unexpected_asset_orphans=1'),
+      });
+
+      expect(
+        await connection`
+          select count(*)::int as n from assets where id = ${unexpectedAssetId}
+        `,
+      ).toEqual([{ n: 1 }]);
+      expect(
+        await connection`
+          select count(*)::int as n
+          from pg_constraint
+          where conname in (
+            'assets_space_id_spaces_id_fk',
+            'lesson_sessions_student_id_platform_users_id_fk',
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk'
+          )
+        `,
+      ).toEqual([{ n: 0 }]);
+    });
+  });
 });

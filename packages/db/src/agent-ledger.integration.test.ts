@@ -68,6 +68,15 @@ function getDatabase() {
 }
 
 async function seedSession(): Promise<void> {
+  // D02 FK：student_id 必须指向真实 platform_users 主体。
+  await getDatabase()
+    .insert(schema.platformUsers)
+    .values({
+      id: studentId,
+      kind: studentId.startsWith('anon:') ? 'anonymous_compat' : 'registered',
+      status: 'active',
+    })
+    .onConflictDoNothing();
   await getDatabase()
     .insert(schema.lessonSessions)
     .values({

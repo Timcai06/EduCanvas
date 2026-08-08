@@ -1,6 +1,7 @@
 'use client';
 
 import type { ArtifactDetail } from './artifact-client';
+import { useEffect, useRef } from 'react';
 import {
   ArtifactGeneratingSkeleton,
   ArtifactProvenanceStrip,
@@ -122,8 +123,18 @@ const cases: { label: string; detail: ArtifactDetail; revising: boolean }[] = [
 ];
 
 export function ArtifactProvenanceQa() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.setAttribute('data-hydrated', 'true');
+  }, []);
+
   return (
-    <div className="space-y-8">
+    <div
+      ref={rootRef}
+      data-testid="artifact-provenance-qa"
+      data-hydrated="false"
+      className="space-y-8"
+    >
       <section className="space-y-4">
         <h2 className="font-display text-lg font-semibold text-ink">
           溯源条状态

@@ -604,3 +604,26 @@ install / 风险**。
 - Fresh install: 可重放。
 - 风险: 中——只记录估算成本（estimated 标记），不得把估算当
   真实账单（Q03 边界：budget events 进 ledger，不暴露价格 key）。
+
+## 0051_d02_core_referential_integrity.sql
+
+- 状态: active（D02 Codex 修订，2026-08-08）
+- 语义: D02 核心参照完整性收口——(1) 对 assets、lesson_sessions、budget
+  三类孤儿执行 fail-closed preflight；只允许修复已审计的单条开发遗留 asset；
+  (2) 删除该 asset 前，把 version/representation/keyframe 的对象键写入
+  `object_deletion_outbox`；(3) 建立三条强 FK：`assets.space_id → spaces.id`
+  （restrict，强制先走 tombstone + Outbox）、`lesson_sessions.student_id →
+platform_users.id`（restrict）、`turn_usage_budget_outcomes.operation_id →
+agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
+- 锁表: 有界 repair 只锁定已审计行；FK 先 `NOT VALID` 建立再逐条
+  `VALIDATE CONSTRAINT`，避免用一次长时间存量扫描维持 ACCESS EXCLUSIVE；
+  普通索引创建仍取 SHARE 锁。生产规模与维护窗口由 D07 复核。
+- 回滚: DROP 三条 FK 与 `assets_space_fk_idx`；Outbox 行可按三种 source_type
+  与已审计 source_id 识别。已删除的 asset/version 业务行不能由回滚自动恢复，
+  但物理对象删除意图可审计且不会形成静默存储泄漏。
+- N-1: 合法 0050 数据可升级；已审计孤儿会先登记对象删除再移除；任何额外
+  asset、lesson session 或 budget 孤儿都会在数据修改前以 SQLSTATE 23503
+  中止，要求显式处置。三条 FK 生效后老代码的新孤儿写入同样被拒绝。
+- Fresh install: 空库 preflight/repair 无操作，三条 FK 与索引正常建立。
+- 风险: 中——约束验证与普通索引仍需要数据库锁；未知历史脏数据会阻止部署，
+  这是刻意的 fail-closed 行为。Space 物理删除必须先完成 Asset 的显式闭包。

@@ -38,6 +38,7 @@ jobs:
       runtime_pressure: ${{ steps.impact.outputs.runtime_pressure }}
       e2e: ${{ steps.impact.outputs.e2e }}
       dependency_review: ${{ steps.impact.outputs.dependency_review }}
+      release_evidence: ${{ steps.impact.outputs.release_evidence }}
       desktop: ${{ steps.impact.outputs.desktop }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
@@ -352,12 +353,12 @@ jobs:
         run: node tooling/quality/bundle-size.mjs --root apps/web
 
   release-evidence:
-    # PR 事件：收集证据状态快照（pending/skipped 不失败，见 validate-evidence.mjs
-    # 语义——status 非终态时仅报告）；发布时 workflow_dispatch + input 强制
-    # 终态校验（passed===total、failed 即失败）。2026-08-07 修复此前仅手动可达。
+    # 发布证据、校验器或 migration/release governance 变更时才运行；普通功能 PR
+    # 不为静态 RC manifest 支付独立 runner。手动发布仍由显式 input 开启。
     if: >-
       always() &&
-      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true')) &&
+      ((github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true') ||
+       (github.event_name != 'workflow_dispatch' && needs.changes.outputs.release_evidence == 'true')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.checks == 'true' &&
       needs.secret-scan.result == 'success' &&
@@ -383,16 +384,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Validate release evidence pack
         run: node tooling/quality/validate-evidence.mjs
@@ -423,6 +414,7 @@ jobs:
       RUNTIME_PRESSURE_EXPECTED: ${{ needs.changes.outputs.runtime_pressure }}
       E2E_EXPECTED: ${{ needs.changes.outputs.e2e }}
       DEPENDENCY_REVIEW_EXPECTED: ${{ needs.changes.outputs.dependency_review }}
+      RELEASE_EVIDENCE_EXPECTED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true') || (github.event_name != 'workflow_dispatch' && needs.changes.outputs.release_evidence == 'true') }}
       DESKTOP_EXPECTED: ${{ needs.changes.outputs.desktop }}
       CHANGES_RESULT: ${{ needs.changes.result }}
       SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
