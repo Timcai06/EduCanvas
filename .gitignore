@@ -28,7 +28,7 @@ __pycache__/
 .venv/
 venv/
 
-# Editors（.vscode 里共享的两个配置文件例外，用于统一团队编辑器行为）
+# Editors（只跟踪 .vscode/settings.json 和 extensions.json；治理门禁会拒绝其余个人状态）
 .idea/
 .vscode/*
 !.vscode/settings.json

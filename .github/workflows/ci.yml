@@ -25,11 +25,40 @@ concurrency:
 #   gitleaks/gitleaks-action@v2            -> ff98106e4c7b2bc287b24eaf42907196329070c7
 #   actions/dependency-review-action@v4    -> 2031cfc080254a8a887f58cffee85186f0e49e48（v4 分支 = v4.9.0）
 jobs:
+  changes:
+    name: Classify changed files
+    runs-on: ubuntu-latest
+    outputs:
+      checks: ${{ steps.impact.outputs.checks }}
+      integration: ${{ steps.impact.outputs.integration }}
+      windows: ${{ steps.impact.outputs.windows }}
+      runtime_pressure: ${{ steps.impact.outputs.runtime_pressure }}
+      e2e: ${{ steps.impact.outputs.e2e }}
+      dependency_review: ${{ steps.impact.outputs.dependency_review }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+        with:
+          fetch-depth: 0
+
+      - name: Classify CI impact
+        id: impact
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          node tooling/quality/ci-impact.mjs
+          --event "$EVENT_NAME"
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --github-output "$GITHUB_OUTPUT"
+
   dependency-review:
     # Q06：恶意/高风险依赖变更门禁（license + 漏洞，fail-on-severity: high）。
     # 仅 PR 事件运行：action 需要 base/head ref 对比依赖差异，push 到 main 时
     # 没有 PR 上下文会直接报错（实测 2026-08-07 main run failure）。
-    if: github.event_name == 'pull_request'
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.dependency_review == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,7 +84,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  checks:
+  quality:
+    needs: [changes]
+    if: needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
@@ -92,7 +123,12 @@ jobs:
       - name: Migration records gate
         run: node tooling/quality/migration-records.mjs
 
+      - name: Repository file governance
+        run: pnpm file:check
+
   integration:
+    needs: [changes]
+    if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -133,6 +169,8 @@ jobs:
         run: pnpm test:integration
 
   windows:
+    needs: [changes]
+    if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
@@ -160,7 +198,8 @@ jobs:
         run: pnpm --filter @educanvas/node-host test
 
   runtime-pressure:
-    needs: [checks]
+    needs: [changes, quality]
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.runtime_pressure == 'true' && needs.quality.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
@@ -184,7 +223,14 @@ jobs:
   e2e:
     # Windows remains an independent required check, but it does not produce
     # artifacts or state consumed by the Linux browser suite.
-    needs: [checks, integration, runtime-pressure]
+    needs: [changes, quality, integration, runtime-pressure]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.e2e == 'true' &&
+      needs.quality.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.integration.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -257,8 +303,29 @@ jobs:
     # PR 事件：收集证据状态快照（pending/skipped 不失败，见 validate-evidence.mjs
     # 语义——status 非终态时仅报告）；发布时 workflow_dispatch + input 强制
     # 终态校验（passed===total、failed 即失败）。2026-08-07 修复此前仅手动可达。
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true')
-    needs: [checks, integration, windows, runtime-pressure, e2e]
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true')) &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.checks == 'true' &&
+      needs.secret-scan.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs['dependency-review'].result) &&
+      needs.quality.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.integration.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs.windows.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result) &&
+      contains(fromJSON('["success", "skipped"]'), needs.e2e.result)
+    needs:
+      [
+        changes,
+        secret-scan,
+        dependency-review,
+        quality,
+        integration,
+        windows,
+        runtime-pressure,
+        e2e,
+      ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
@@ -274,4 +341,44 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate release evidence pack
-        run: node scripts/validate-evidence.mjs
+        run: node tooling/quality/validate-evidence.mjs
+
+  checks:
+    # Branch protection 只依赖这个稳定汇总上下文。它始终创建，并确保本次分类为
+    # 应运行的 lane 全部成功；被分类为无关的 skipped lane 不会误报失败。
+    if: always()
+    needs:
+      [
+        changes,
+        secret-scan,
+        dependency-review,
+        quality,
+        integration,
+        windows,
+        runtime-pressure,
+        e2e,
+        release-evidence,
+      ]
+    runs-on: ubuntu-latest
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      CHECKS_EXPECTED: ${{ needs.changes.outputs.checks }}
+      INTEGRATION_EXPECTED: ${{ needs.changes.outputs.integration }}
+      WINDOWS_EXPECTED: ${{ needs.changes.outputs.windows }}
+      RUNTIME_PRESSURE_EXPECTED: ${{ needs.changes.outputs.runtime_pressure }}
+      E2E_EXPECTED: ${{ needs.changes.outputs.e2e }}
+      DEPENDENCY_REVIEW_EXPECTED: ${{ needs.changes.outputs.dependency_review }}
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+      DEPENDENCY_REVIEW_RESULT: ${{ needs['dependency-review'].result }}
+      QUALITY_RESULT: ${{ needs.quality.result }}
+      INTEGRATION_RESULT: ${{ needs.integration.result }}
+      WINDOWS_RESULT: ${{ needs.windows.result }}
+      RUNTIME_PRESSURE_RESULT: ${{ needs['runtime-pressure'].result }}
+      E2E_RESULT: ${{ needs.e2e.result }}
+      RELEASE_EVIDENCE_RESULT: ${{ needs['release-evidence'].result }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - name: Verify required lanes
+        run: node tooling/quality/ci-impact.mjs --verify-results
