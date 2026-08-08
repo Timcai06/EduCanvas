@@ -37,7 +37,7 @@ test.describe('hydration 与客户端运行时健康', () => {
         }
       });
 
-      await page.goto(route, { waitUntil: 'networkidle' });
+      await page.goto(route, { waitUntil: 'load' });
       // 等待客户端 hydration 与首屏脚本执行完成，再判定错误集合。
       await page.waitForTimeout(1500);
 
@@ -65,7 +65,7 @@ test.describe('hydration 与客户端运行时健康', () => {
       }
     });
 
-    await page.goto('/', { waitUntil: 'networkidle' });
+    await page.goto('/', { waitUntil: 'load' });
     await page.waitForTimeout(1500);
 
     // EduCanvas 是匿名优先应用：/ 直接渲染首页，不要求登录。
