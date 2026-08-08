@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, it } from 'node:test';
+
+const repoRoot = resolve(import.meta.dirname, '..');
+const e2eRoot = resolve(repoRoot, 'tests/e2e');
+
+function smokeFiles() {
+  return readdirSync(e2eRoot)
+    .filter((name) => name.endsWith('.spec.ts'))
+    .filter((name) =>
+      /test\(\s*['"]@smoke\b/.test(
+        readFileSync(resolve(e2eRoot, name), 'utf8'),
+      ),
+    )
+    .sort();
+}
+
+describe('E2E suite routing', () => {
+  it('keeps the PR smoke budget small and cross-domain', () => {
+    const files = smokeFiles();
+    assert.deepEqual(files, [
+      'account-flow.spec.ts',
+      'artifact-flow.spec.ts',
+      'canvas-resource-access.spec.ts',
+      'general-chat-flow.spec.ts',
+      'hydration.spec.ts',
+      'learning-flow.spec.ts',
+      'profile-activity.spec.ts',
+      'sandbox-preview.spec.ts',
+    ]);
+    const count = files.reduce((total, name) => {
+      const source = readFileSync(resolve(e2eRoot, name), 'utf8');
+      return total + (source.match(/test\(\s*['"]@smoke\b/g)?.length ?? 0);
+    }, 0);
+    assert.ok(count >= 6 && count <= 12, `PR smoke budget is ${count}`);
+  });
+
+  it('routes PRs to smoke while preserving full nightly and manual regression', () => {
+    const prConfig = readFileSync(
+      resolve(repoRoot, 'playwright.pr.config.ts'),
+      'utf8',
+    );
+    const ci = readFileSync(
+      resolve(repoRoot, '.github/workflows/ci.yml'),
+      'utf8',
+    );
+    const ui = readFileSync(
+      resolve(repoRoot, '.github/workflows/ui.yml'),
+      'utf8',
+    );
+
+    assert.match(prConfig, /grep: \/@smoke\//);
+    assert.match(prConfig, /chromium-pr-smoke/);
+    assert.match(ci, /pnpm test:e2e:pr/);
+    assert.match(ci, /Full browser E2E/);
+    assert.match(ci, /github\.event_name == 'schedule'/);
+    assert.match(ui, /--project=chromium/);
+    assert.match(ui, /Full UI review/);
+  });
+});

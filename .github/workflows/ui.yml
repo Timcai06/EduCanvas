@@ -55,7 +55,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install browsers
+      - name: Install Chromium for PR review
+        if: github.event_name == 'pull_request'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install browsers for full UI review
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright install --with-deps chromium firefox
 
       - name: Apply database migrations
@@ -64,7 +69,12 @@ jobs:
       - name: Build production application
         run: pnpm build
 
-      - name: UI review (@ui, chromium + firefox)
+      - name: UI review for PR (@ui, Chromium)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec playwright test --config playwright.ui.config.ts --project=chromium
+
+      - name: Full UI review (@ui, Chromium + Firefox)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright test --config playwright.ui.config.ts
 
       - name: Summarize retries and coverage matrix

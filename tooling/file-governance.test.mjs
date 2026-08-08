@@ -30,6 +30,7 @@ describe('repository file governance', () => {
     assert.ok(pathViolations('apps/web/.next/build.js').length > 0);
     assert.ok(pathViolations('docs/example.md.md').length > 0);
     assert.deepEqual(pathViolations('.vscode/settings.json'), []);
+    assert.deepEqual(pathViolations('playwright.pr.config.ts'), []);
   });
 
   it('classifies every currently tracked file without a path violation', () => {

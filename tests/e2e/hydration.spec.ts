@@ -52,7 +52,7 @@ test.describe('hydration 与客户端运行时健康', () => {
     });
   }
 
-  test('/ 匿名首页渲染且无 hydration 错误', async ({ page }) => {
+  test('@smoke / 匿名首页渲染且无 hydration 错误', async ({ page }) => {
     const pageErrors: string[] = [];
     const hydrationErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(String(error)));
