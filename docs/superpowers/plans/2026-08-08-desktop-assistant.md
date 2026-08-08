@@ -37,7 +37,7 @@
 - Consumes: 仓库约定——`apps/*` workspace 通配已覆盖；turbo 任务（build/test/typecheck/lint）自动发现带脚本的包；eslint 仅 apps/web 有（desktop 不配 eslint，格式由根 `lint:format` 的 prettier glob 覆盖）
 - Produces: `@educanvas/desktop` 包，`pnpm dev:desktop` 可启动、`pnpm --filter @educanvas/desktop build` 产出 `out/`、`pnpm --filter @educanvas/desktop test` 空跑通过
 
-- [ ] **Step 1: 创建 package.json**
+- [x] **Step 1: 创建 package.json**
 
 ```json
 {
@@ -75,7 +75,7 @@
 
 （electron / electron-builder / electron-vite 用 `pnpm add -D` 安装，实际版本由 pnpm 解析并固化进 pnpm-lock.yaml。）
 
-- [ ] **Step 2: 创建 tsconfig.json（单 project）**
+- [x] **Step 2: 创建 tsconfig.json（单 project）**
 
 单个 project 同时含 main/preload/renderer/tests（node + DOM 类型合并，`tsc --noEmit` 一次全查；electron-vite 负责实际构建，tsc 只做类型检查，不需要 composite/references 项目模式）。
 
@@ -105,7 +105,7 @@
 }
 ```
 
-- [ ] **Step 3: 创建 electron.vite.config.ts**
+- [x] **Step 3: 创建 electron.vite.config.ts**
 
 ```ts
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
@@ -129,7 +129,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: 创建 vitest.config.ts**
+- [x] **Step 4: 创建 vitest.config.ts**
 
 ```ts
 import { defineConfig } from 'vitest/config';
@@ -143,7 +143,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: 创建 electron-builder.yml**
+- [x] **Step 5: 创建 electron-builder.yml**
 
 ```yaml
 appId: com.educanvas.desktop
@@ -164,7 +164,7 @@ portable:
 npmRebuild: false
 ```
 
-- [ ] **Step 6: 最小占位源码**（保证 build 可跑）
+- [x] **Step 6: 最小占位源码**（保证 build 可跑）
 
 `src/main/index.ts`:
 ```ts
@@ -261,7 +261,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
 .placeholder { height: 100%; display: grid; place-items: center; color: var(--accent); }
 ```
 
-- [ ] **Step 7: 生成图标并提交**（PowerShell System.Drawing，紫色底 + 三白点）
+- [x] **Step 7: 生成图标并提交**（PowerShell System.Drawing，紫色底 + 三白点）
 
 ```powershell
 Add-Type -AssemblyName System.Drawing
@@ -303,7 +303,7 @@ $bw.Flush()
 [System.IO.File]::WriteAllBytes('D:\Projects\EduCanvas\apps\desktop\build\icon.ico', $ms.ToArray())
 ```
 
-- [ ] **Step 8: 根 package.json 加 dev:desktop 脚本**
+- [x] **Step 8: 根 package.json 加 dev:desktop 脚本**
 
 在根 `package.json` scripts 的 `dev:core` 附近加：
 
@@ -311,7 +311,7 @@ $bw.Flush()
 "dev:desktop": "pnpm --filter @educanvas/desktop dev",
 ```
 
-- [ ] **Step 9: 安装依赖并验证**
+- [x] **Step 9: 安装依赖并验证**
 
 Run:
 ```bash
@@ -323,7 +323,7 @@ pnpm --filter @educanvas/desktop test
 ```
 Expected: typecheck 通过；build 产出 `out/main/index.js`、`out/preload/index.js`、`out/renderer/index.html`；test 报告 0 个测试文件通过（vitest 无测试时 exit 0）。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add apps/desktop package.json pnpm-lock.yaml
@@ -351,7 +351,7 @@ git commit -m "feat(desktop): Electron 工程骨架（electron-vite + React + �
   - `createAssistantProxy(options: { fetchImpl?: typeof fetch; baseUrl?: string; timeoutMs?: number }): AssistantProxy`
   - `AssistantProxy.turn(input: { text: string }, signal?: AbortSignal): Promise<TurnResult>`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -450,12 +450,12 @@ describe('assistant-proxy', () => {
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm --filter @educanvas/desktop test`
 Expected: FAIL —— `Cannot find module '../src/main/assistant-proxy'`
 
-- [ ] **Step 3: 实现 assistant-proxy.ts**
+- [x] **Step 3: 实现 assistant-proxy.ts**
 
 ```ts
 import { randomUUID } from 'node:crypto';
@@ -556,12 +556,12 @@ export function createAssistantProxy(options: {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `pnpm --filter @educanvas/desktop test`
 Expected: 7 个测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/shared/turn-result.ts apps/desktop/tests/assistant-proxy.test.ts apps/desktop/src/main/assistant-proxy.ts
@@ -586,7 +586,7 @@ git commit -m "feat(desktop): assistant turn 代理（无 Origin 头过同源检
   - 生命周期：单实例锁；close=hide；Tray 单击 toggle、右键菜单（显示/退出）
   - baseUrl 读取：`EDUCANVAS_DESKTOP_API_BASE` 环境变量，默认 `http://127.0.0.1:3101`（执行期修正：仓库本地 Web 约定端口是 3101，见 tooling/local-orchestrator-config.mjs）
 
-- [ ] **Step 1: preload/index.ts**
+- [x] **Step 1: preload/index.ts**
 
 > 执行修正：`index.d.ts` 分离声明未被单 project tsconfig 的 include glob 收录（tsc 编译单元外），
 > `declare global` 合并进 `index.ts`（含此文件的编译单元即全 project 可见），不单独建 d.ts。
@@ -625,7 +625,7 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
 });
 ```
 
-- [ ] **Step 2: main/window.ts**
+- [x] **Step 2: main/window.ts**
 
 ```ts
 import { BrowserWindow } from 'electron';
@@ -669,7 +669,7 @@ export function createAssistantWindow(onFirstHide: () => void): BrowserWindow {
 }
 ```
 
-- [ ] **Step 3: main/tray.ts**
+- [x] **Step 3: main/tray.ts**
 
 electron-vite 把 main 构建为 CJS，顶层 `import { app } from 'electron'` 可用。
 
@@ -705,7 +705,7 @@ export function createTray(win: BrowserWindow): Tray {
 }
 ```
 
-- [ ] **Step 4: 重写 main/index.ts**
+- [x] **Step 4: 重写 main/index.ts**
 
 退出链路：托盘「退出」（requestQuit 置位 → app.quit）→ 触发 window close → `isQuitRequested()===true` 不拦截 → 窗口正常关闭 → `window-all-closed` 不拦 → 默认退出。窗口 × 按钮：close 被 window.ts 拦截为 hide，进程常驻托盘。
 
@@ -753,7 +753,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 ```
 
-- [ ] **Step 5: 验证 typecheck 与构建**
+- [x] **Step 5: 验证 typecheck 与构建**
 
 Run:
 ```bash
@@ -762,12 +762,12 @@ pnpm --filter @educanvas/desktop build
 ```
 Expected: 通过，`out/preload/index.js` 存在
 
-- [ ] **Step 6: 手动启动验证（本地 GUI）**
+- [x] **Step 6: 手动启动验证（本地 GUI）**
 
 Run: `pnpm dev:desktop`（需本机已起本地 web 服务；窗口 380×600 出现、关闭后托盘图标存在、单击托盘恢复、右键「退出」进程结束）
 Expected: 全部行为符合预期。此步骤失败（如托盘不可见）需修复后继续。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/desktop/src
@@ -791,7 +791,7 @@ git commit -m "feat(desktop): 窗口/托盘/单实例与 turn IPC 桥接"
   - `useAssistantTurn(): { bubbles: Bubble[]; busy: boolean; send(text: string): void; cancel(): void }`
     - `Bubble = { id: string; role: 'user' | 'assistant'; text: string; status: 'pending' | 'completed' | 'failed' }`
 
-- [ ] **Step 1: 写 turn-request 失败测试**
+- [x] **Step 1: 写 turn-request 失败测试**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -815,7 +815,7 @@ describe('buildTurnRequest', () => {
 });
 ```
 
-- [ ] **Step 2: 实现 turn-request.ts 并确认通过**
+- [x] **Step 2: 实现 turn-request.ts 并确认通过**
 
 ```ts
 const MAX_TEXT_BYTES = 2_048;
@@ -833,7 +833,7 @@ export function buildTurnRequest(text: string): { text: string; clientMessageId:
 
 Run: `pnpm --filter @educanvas/desktop test` → 3 PASS
 
-- [ ] **Step 3: 写 turn-response 失败测试**
+- [x] **Step 3: 写 turn-response 失败测试**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -861,7 +861,7 @@ describe('turnResultToBubble', () => {
 });
 ```
 
-- [ ] **Step 4: 实现 turn-response.ts 并确认通过**
+- [x] **Step 4: 实现 turn-response.ts 并确认通过**
 
 ```ts
 import type { TurnResult } from '../../shared/turn-result';
@@ -880,7 +880,7 @@ export function turnResultToBubble(result: TurnResult): BubblePresentation | nul
 
 Run: `pnpm --filter @educanvas/desktop test` → 6 PASS
 
-- [ ] **Step 5: 实现 use-assistant-turn.ts**
+- [x] **Step 5: 实现 use-assistant-turn.ts**
 
 ```ts
 import { useCallback, useRef, useState } from 'react';
@@ -955,7 +955,7 @@ export function useAssistantTurn() {
 }
 ```
 
-- [ ] **Step 6: 实现 App.tsx 与 styles.css（替换占位）**
+- [x] **Step 6: 实现 App.tsx 与 styles.css（替换占位）**
 
 `App.tsx`:
 ```tsx
@@ -1070,7 +1070,7 @@ export default function App(): React.JSX.Element {
 .send:disabled { background: transparent; color: #c4bacf; cursor: default; }
 ```
 
-- [ ] **Step 7: 验证构建 + 全量测试**
+- [x] **Step 7: 验证构建 + 全量测试**
 
 Run:
 ```bash
@@ -1080,7 +1080,7 @@ pnpm --filter @educanvas/desktop build
 ```
 Expected: 全过；`out/renderer/index.html` 为完整 UI
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/desktop/src/renderer apps/desktop/tests
@@ -1105,7 +1105,7 @@ git commit -m "feat(desktop): 对话 UI（气泡/输入/取消/托盘提示）"
   - `checks`（汇总）与 `release-evidence` 的 needs/if/env 接线加 `desktop-build`
   - ci-impact 分类：`/^apps\/desktop\//` → desktop lane（同时 checks=true 保持默认）
 
-- [ ] **Step 1: 写 ci-impact 测试用例（先失败）**
+- [x] **Step 1: 写 ci-impact 测试用例（先失败）**
 
 在 `tooling/ci-impact.test.mjs` 追加（先看该文件现有结构再插同类用例，其已有 `classifyChangedPaths` 断言模式）：
 
@@ -1123,12 +1123,12 @@ test('docs-only changes still skip desktop lane', () => {
 });
 ```
 
-- [ ] **Step 2: 确认失败**
+- [x] **Step 2: 确认失败**
 
 Run: `node --test tooling/ci-impact.test.mjs`
 Expected: FAIL（`result.desktop` 为 undefined）
 
-- [ ] **Step 3: 改 ci-impact.mjs**
+- [x] **Step 3: 改 ci-impact.mjs**
 
 - `LANES` 数组加 `'desktop'`（放在 `checks` 后）：
 ```js
@@ -1173,12 +1173,12 @@ results: {
 }
 ```
 
-- [ ] **Step 4: 确认通过**
+- [x] **Step 4: 确认通过**
 
 Run: `node --test tooling/ci-impact.test.mjs`
 Expected: PASS（含新用例与既有用例）
 
-- [ ] **Step 5: 改 ci.yml**
+- [x] **Step 5: 改 ci.yml**
 
 a) `changes` job 的 outputs 加：
 ```yaml
@@ -1225,7 +1225,7 @@ d) `checks` job：needs 数组加 `desktop-build`；env 加：
       DESKTOP_BUILD_RESULT: ${{ needs['desktop-build'].result }}
 ```
 
-- [ ] **Step 6: 本地验证**
+- [x] **Step 6: 本地验证**
 
 Run:
 ```bash
@@ -1235,7 +1235,7 @@ python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml')); pr
 ```
 Expected: 测试全过；构建成功；ci.yml YAML 解析通过（如环境无 python，则用 `npx prettier --check .github/workflows/ci.yml` 代替）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tooling/quality/ci-impact.mjs tooling/ci-impact.test.mjs .github/workflows/ci.yml
