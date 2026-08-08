@@ -31,6 +31,8 @@ const MAX_TEXT_BYTES = 2_048;
  */
 const NOTEBOOK_CREATE_DEDUP_TTL_MS = 5 * 60_000;
 const notebookCreateDedup = new Map<string, { createdAt: number }>();
+const NOTEBOOK_LOOKUP_PAGE_LIMIT = 100;
+const NOTEBOOK_LOOKUP_MAX_PAGES = 10;
 
 /** 惰性清理过期幂等记录，避免 Map 无限增长。 */
 function pruneNotebookCreateDedup(now: number): void {
@@ -39,6 +41,36 @@ function pruneNotebookCreateDedup(now: number): void {
       notebookCreateDedup.delete(key);
     }
   }
+}
+
+/** 在不扩张分类 prompt 的前提下，分页解析最近列表之外的精确标题。 */
+async function findAccessibleNotebookByTitle(
+  repo: DrizzlePlatformConversationRepository,
+  trustedSubjectId: string,
+  title: string,
+) {
+  const normalizedTitle = title.normalize('NFKC').trim().toLocaleLowerCase();
+  let cursor: { timestamp: Date; id: string } | null = null;
+  for (
+    let pageIndex = 0;
+    pageIndex < NOTEBOOK_LOOKUP_MAX_PAGES;
+    pageIndex += 1
+  ) {
+    const page = await repo.listAccessibleRecentPage({
+      trustedSubjectId,
+      limit: NOTEBOOK_LOOKUP_PAGE_LIMIT,
+      cursor,
+    });
+    const match = page.items.find(
+      (notebook) =>
+        notebook.title?.normalize('NFKC').trim().toLocaleLowerCase() ===
+        normalizedTitle,
+    );
+    if (match) return match;
+    if (!page.nextCursor) return null;
+    cursor = page.nextCursor;
+  }
+  return null;
 }
 
 /** 面板名称到用户可见文案的映射 */
@@ -256,15 +288,21 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       case 'switch_notebook': {
-        if (!intent.notebookId) {
+        if (!intent.notebookId && !intent.title) {
           return jsonResponse({ message: '请指定要切换到的笔记本。' });
         }
-        // 直接用 getOwned 查找，不依赖 limit:50 的列表——第 51 个之后的
-        // 笔记本也能切换。意图分类只见过前 50 个标题，但 id 校验不因此受限。
-        const target = await repo.getOwned({
-          conversationId: intent.notebookId,
-          trustedSubjectId: identity.studentId,
-        });
+        // 分类 prompt 只携带最近 50 条以控制 token；没有列表 ID 时再通过受限
+        // 分页解析更早的精确标题。模型给出的 ID 仍必须经过所有权查询。
+        const target = intent.notebookId
+          ? await repo.getOwned({
+              conversationId: intent.notebookId!,
+              trustedSubjectId: identity.studentId,
+            })
+          : await findAccessibleNotebookByTitle(
+              repo,
+              identity.studentId,
+              intent.title!,
+            );
         if (!target) {
           return jsonResponse({ message: '找不到这个笔记本。' });
         }

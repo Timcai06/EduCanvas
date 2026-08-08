@@ -7,7 +7,6 @@
     "apps/gateway/src/streaming-transcription-ws-transport.ts": 450,
     "apps/tui/src/index.ts": 590,
     "apps/web/components/OptionWheel.tsx": 516,
-    "apps/web/features/assistant/assistant-panel.tsx": 451,
     "apps/web/features/canvas/animation-shell.tsx": 476,
     "apps/web/features/canvas/artifact-generation-flow.tsx": 545,
     "apps/web/features/canvas/canvas-registry.tsx": 409,

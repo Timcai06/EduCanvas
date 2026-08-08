@@ -9,7 +9,7 @@ type RateWindow = { count: number; resetAt: number };
 const rateWindows = new Map<string, RateWindow>();
 
 /**
- * 小助手端点的每主体滑动窗口限流（默认 10 次 / 60 秒）。
+ * 小助手端点的每主体固定窗口限流（默认 10 次 / 60 秒）。
  * 每个请求都会触发一次 LLM 意图分类，限流是成本与滥用防线。
  * 仅供 local/development/test 使用的单进程窗口；非本地部署需在网关层
  * 叠加共享限流，本实现不作为跨实例安全边界（与 auth/rate-limit 同约定）。

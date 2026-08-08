@@ -91,7 +91,7 @@ export function buildClassifyRequest(
 - create_notebook：用户要新建笔记本。从指令中提取名称作为 title
 - rename_notebook：用户要重命名笔记本。需提供 notebookId 和新 title
 - delete_notebook：用户要删除笔记本。需提供 notebookId
-- switch_notebook：用户要切换到某个笔记本。从列表中匹配标题，提供 notebookId
+- switch_notebook：用户要切换到某个笔记本。始终从指令中提取完整标题作为 title；若列表中能匹配，再提供 notebookId
 - open_artifact：用户要打开已有的产物。常见说法与 kind 对应：导图/脑图→mind_map，Slides/PPT/小结→slides，闪卡/卡片/记忆卡→flashcards，笔记→note。同时提取标题关键词作为 title
 
 【打开面板类】小助手打开对应面板，用户在面板里操作：

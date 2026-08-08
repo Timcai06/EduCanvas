@@ -30,9 +30,11 @@ vi.mock('./assistant-classify', () => ({
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
+  clearActiveConversationCookie,
   loadOwnedGeneralConversation,
   writeActiveConversationCookie,
 } from '@/server/platform/general-conversation';
+import { checkAssistantRateLimit } from '@/server/assistant/rate-limit';
 import {
   AssistantClassifyError,
   runClassifiedTurn,
@@ -43,6 +45,7 @@ const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
 const NOTEBOOK_ID = '22222222-2222-4222-8222-222222222222';
 
 const listOwnedRecent = vi.fn();
+const listAccessibleRecentPage = vi.fn();
 const create = vi.fn();
 const renameOwned = vi.fn();
 const archiveOwned = vi.fn();
@@ -68,7 +71,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(DrizzlePlatformConversationRepository).mockImplementation(
     function RepositoryMock() {
-      return { listOwnedRecent, create, renameOwned, archiveOwned, getOwned };
+      return {
+        listOwnedRecent,
+        listAccessibleRecentPage,
+        create,
+        renameOwned,
+        archiveOwned,
+        getOwned,
+      };
     } as never,
   );
   vi.mocked(readAnonymousIdentity).mockResolvedValue({
@@ -80,6 +90,10 @@ beforeEach(() => {
     agentProfileId: 'general',
   } as never);
   listOwnedRecent.mockResolvedValue([{ id: NOTEBOOK_ID, title: '数学笔记' }]);
+  listAccessibleRecentPage.mockResolvedValue({
+    items: [{ id: NOTEBOOK_ID, title: '数学笔记' }],
+    nextCursor: null,
+  });
   create.mockResolvedValue({ id: CONVERSATION_ID });
   renameOwned.mockResolvedValue({ id: NOTEBOOK_ID, title: '新名字' });
   archiveOwned.mockResolvedValue(true);
@@ -90,6 +104,8 @@ beforeEach(() => {
       : null,
   );
   vi.mocked(writeActiveConversationCookie).mockResolvedValue(undefined);
+  vi.mocked(clearActiveConversationCookie).mockResolvedValue(undefined);
+  vi.mocked(checkAssistantRateLimit).mockReturnValue({ allowed: true });
   classifyResponse({ action: 'unknown' });
 });
 
@@ -114,6 +130,19 @@ describe('assistant turn 路由安全边界', () => {
     vi.mocked(loadOwnedGeneralConversation).mockResolvedValue(null);
     const response = await POST(assistantRequest({ text: 'hi' }));
     expect(response.status).toBe(404);
+  });
+
+  it('超过主体限流时返回 429 且不触发分类', async () => {
+    vi.mocked(checkAssistantRateLimit).mockReturnValue({
+      allowed: false,
+      retryAfterMs: 1_250,
+    });
+
+    const response = await POST(assistantRequest({ text: '列出笔记本' }));
+
+    expect(response.status).toBe(429);
+    expect((await response.json()).error.code).toBe('rate_limited');
+    expect(runClassifiedTurn).not.toHaveBeenCalled();
   });
 
   it('空指令与超长指令返回 400', async () => {
@@ -200,11 +229,29 @@ describe('assistant turn 意图分发', () => {
     expect((await response.json()).message).toContain('不存在或无权');
   });
 
-  it('switch_notebook 只允许切到自己的笔记本', async () => {
-    classifyResponse({ action: 'switch_notebook', notebookId: NOTEBOOK_ID });
+  it('删除当前笔记本后清除活跃对话 cookie', async () => {
+    classifyResponse({
+      action: 'delete_notebook',
+      notebookId: CONVERSATION_ID,
+    });
+
+    await POST(assistantRequest({ text: '删除当前笔记本' }));
+
+    expect(clearActiveConversationCookie).toHaveBeenCalledOnce();
+  });
+
+  it('switch_notebook 可按标题切换到最近 50 条之外的笔记本', async () => {
+    listOwnedRecent.mockResolvedValueOnce([]);
+    classifyResponse({ action: 'switch_notebook', title: '数学笔记' });
     await POST(assistantRequest({ text: '切换到数学' }));
     expect(writeActiveConversationCookie).toHaveBeenCalledWith(NOTEBOOK_ID);
 
+    expect(listAccessibleRecentPage).toHaveBeenCalledWith(
+      expect.objectContaining({ trustedSubjectId: 'local:owner', limit: 100 }),
+    );
+  });
+
+  it('switch_notebook 的模型 ID 仍必须通过所有权检查', async () => {
     classifyResponse({
       action: 'switch_notebook',
       notebookId: '99999999-9999-4999-8999-999999999999',
