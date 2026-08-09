@@ -76,6 +76,7 @@ export const processVideoTask: Task = async (rawPayload, helpers) => {
             hasAudioTrack: metadata.hasAudioTrack,
             jobId: payload.jobId,
             durationSeconds: metadata.durationSeconds,
+            storage,
           }),
           keyframes: await deriveKeyframes({
             workspace,
@@ -140,6 +141,7 @@ async function transcribeAudioTrack(input: {
   hasAudioTrack: boolean;
   jobId: string;
   durationSeconds: number;
+  storage: Awaited<ReturnType<typeof getAssetTaskStorage>>;
 }): Promise<VideoProcessingOutcome['transcription']> {
   if (!input.hasAudioTrack) return { status: 'unavailable' };
 
@@ -167,9 +169,18 @@ async function transcribeAudioTrack(input: {
     if (!result.text.trim()) {
       return { status: 'failed', failureCode: 'video_transcription_empty' };
     }
+    const textBytes = new TextEncoder().encode(result.text);
+    const checksum = createHash('sha256').update(textBytes).digest('hex');
+    const stored = await input.storage.put({
+      key: `derived/transcription/${input.jobId}/${checksum}.txt`,
+      bytes: textBytes,
+      contentType: 'text/plain; charset=utf-8',
+    });
     return {
       status: 'ready',
       text: result.text,
+      derivedStorageKey: stored.key,
+      checksum: stored.checksum,
       metadata: {
         provider: result.metadata.provider,
         resolvedModelId: result.metadata.resolvedModelId,

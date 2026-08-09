@@ -49,6 +49,12 @@ export {
   type AudioTranscriptionOutcome,
 } from './asset-transcription-repository';
 export {
+  DrizzleAssetRepresentationRepository,
+  type AssetRepresentationRow,
+  type AssetRepresentationStatus,
+  type RepresentationWriteInput,
+} from './asset-representation-repository';
+export {
   ASSET_PROCESS_VIDEO_TASK,
   DrizzleAssetVideoRepository,
   type VideoKeyframeRecord,

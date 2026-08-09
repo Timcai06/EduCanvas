@@ -139,6 +139,12 @@ describe('assets:process_video', () => {
     });
     /* 时长以本地容器解析为权威，不采信 Provider 回包的 119。 */
     expect(outcome.transcription.metadata.durationSeconds).toBe(120);
+    expect(outcome.transcription).toMatchObject({
+      derivedStorageKey: expect.stringMatching(
+        new RegExp(`^derived/transcription/${JOB_ID}/[a-f0-9]{64}\\.txt$`),
+      ),
+      checksum: 'b'.repeat(64),
+    });
     expect(outcome.keyframes.frames).toHaveLength(2);
     /* 对象键由内容哈希派生，重投得到同一个键。 */
     expect(outcome.keyframes.frames[0].storageKey).toContain(
@@ -183,6 +189,11 @@ describe('assets:process_video', () => {
 
   it('关键帧对象中途写入失败时回收本批已写对象', async () => {
     storage.put
+      .mockResolvedValueOnce({
+        key: `derived/transcription/${JOB_ID}/${'a'.repeat(64)}.txt`,
+        checksum: 'a'.repeat(64),
+        sizeBytes: 8,
+      })
       .mockResolvedValueOnce({
         key: 'assets/frame-1.jpg',
         checksum: 'b'.repeat(64),

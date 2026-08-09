@@ -67,7 +67,9 @@ test('check 调用提取', () => {
 /* ---------- 门禁正反用例 ---------- */
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
-  assert.equal(loadSchemaCheckCalls().length, 231);
+  // D04 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表），
+  // 总数从 231 → 237；成员闭集仍全部在白名单内。
+  assert.equal(loadSchemaCheckCalls().length, 237);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
 });
@@ -90,11 +92,18 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
 
 test('最新 migration 的 ADD CHECK 与 schema 使用同一分类规则', () => {
   const checks = extractLatestMigrationChecks();
-  assert.equal(checks.length, 13);
+  // D04 0053 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表）。
+  assert.equal(checks.length, 6);
   assert.equal(
-    checks.some((check) => check.name === 'assets_kind_check'),
+    checks.some(
+      (check) => check.name === 'asset_representations_variant_check',
+    ),
     true,
   );
+  // 全部为开放格式约束（非成员闭集），与 schema 的格式 CHECK 一致。
+  for (const check of checks) {
+    assert.equal(isLiteralVocabularyClosure(check.body), false, check.name);
+  }
 });
 
 test('反向：closed 状态机约束即使含 IN 闭集也被允许（白名单命中）', () => {

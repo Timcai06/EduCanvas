@@ -372,6 +372,13 @@
       "when": 1786248654974,
       "tag": "0052_damp_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1786262729175,
+      "tag": "0053_silky_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

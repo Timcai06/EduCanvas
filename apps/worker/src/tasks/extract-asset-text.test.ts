@@ -16,7 +16,7 @@ vi.mock('@educanvas/db', () => ({
 const { read } = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@educanvas/agent-runtime', () => ({
   LocalObjectStorage: vi.fn(function () {
-    return { read };
+    return { read, put: vi.fn() };
   }),
 }));
 
@@ -66,7 +66,14 @@ describe('assets:extract_text', () => {
 
     expect(repo.settleTextExtraction).toHaveBeenCalledWith({
       jobId: JOB_ID,
-      outcome: { status: 'ready', extractedText: '课程资料' },
+      outcome: {
+        status: 'ready',
+        extractedText: '课程资料',
+        derivedStorageKey: expect.stringMatching(
+          /^derived\/text\/[a-f0-9-]+\/[a-f0-9]{64}\.txt$/,
+        ),
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
   });
 

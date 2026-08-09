@@ -6,12 +6,12 @@ import type {
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
+import { upsertAssetRepresentation } from './asset-representation-repository';
 import {
   assetProcessingJobs,
   assetRepresentations,
   assets,
   assetVersions,
-  objectDeletionOutbox,
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
@@ -79,36 +79,41 @@ export async function enqueueDerivedAssetJob(
   },
 ): Promise<string | null> {
   const config = JOB_CONFIG[input.kind];
-  const [existing] = await transaction
-    .select({ id: assetRepresentations.id })
-    .from(assetRepresentations)
-    .where(
-      and(
-        eq(assetRepresentations.assetVersionId, input.assetVersionId),
-        eq(assetRepresentations.kind, config.representationKind),
-      ),
-    )
-    .limit(1);
-  if (existing) return null;
-
+  /* D04：唯一约束 (asset_version_id, kind, variant, producer, producer_version)
+     直接兜底 TOCTOU——并发重复 enqueue 时 insert 冲突即幂等返回，不再依赖先查后插。 */
   const jobId = randomUUID();
   const queueJobKey = `asset-${input.kind}:${jobId}`;
-  await transaction.insert(assetRepresentations).values({
-    assetVersionId: input.assetVersionId,
-    kind: config.representationKind,
-    mimeType: config.representationMimeType,
-    status: 'processing',
-    createdAt: input.now,
-  });
-  await transaction.insert(assetProcessingJobs).values({
-    id: jobId,
-    assetVersionId: input.assetVersionId,
-    kind: input.kind,
-    status: 'queued',
-    attempts: 0,
-    queueJobKey,
-    createdAt: input.now,
-  });
+  const insertedJob = await transaction
+    .insert(assetProcessingJobs)
+    .values({
+      id: jobId,
+      assetVersionId: input.assetVersionId,
+      kind: input.kind,
+      variant: 'default',
+      producer: 'default',
+      producerVersion: 'v1',
+      status: 'queued',
+      attempts: 0,
+      queueJobKey,
+      createdAt: input.now,
+    })
+    .onConflictDoNothing()
+    .returning({ id: assetProcessingJobs.id });
+  if (!insertedJob[0]) return null;
+  await transaction
+    .insert(assetRepresentations)
+    .values({
+      assetVersionId: input.assetVersionId,
+      kind: config.representationKind,
+      variant: 'default',
+      producer: 'default',
+      producerVersion: 'v1',
+      mimeType: config.representationMimeType,
+      status: 'processing',
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoNothing();
   await transaction.execute(sql`
     select graphile_worker.add_job(
       ${config.taskName},
@@ -195,7 +200,12 @@ export class DrizzleAssetDerivedProcessingRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return null;
 
       const [version] = await transaction
@@ -257,70 +267,29 @@ export class DrizzleAssetDerivedProcessingRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return false;
 
-      const [existing] = await transaction
-        .select({
-          id: assetRepresentations.id,
-          derivedStorageKey: assetRepresentations.derivedStorageKey,
-        })
-        .from(assetRepresentations)
-        .where(
-          and(
-            eq(assetRepresentations.assetVersionId, claimed.assetVersionId),
-            eq(assetRepresentations.kind, config.representationKind),
-          ),
-        )
-        .limit(1);
-
-      if (existing?.derivedStorageKey) {
-        const nextKey =
-          outcome.status === 'ready' ? outcome.derivedStorageKey : null;
-        if (existing.derivedStorageKey !== nextKey) {
-          await transaction
-            .insert(objectDeletionOutbox)
-            .values({
-              objectKind: 'asset',
-              storageKey: existing.derivedStorageKey,
-              sourceType: 'asset_representation',
-              sourceId: existing.id,
-              availableAt: now,
-            })
-            .onConflictDoNothing();
-        }
-      }
-
-      const values =
-        outcome.status === 'ready'
-          ? {
-              status: 'ready' as const,
-              derivedStorageKey: outcome.derivedStorageKey,
-              checksum: outcome.checksum,
-              byteSize: outcome.byteSize,
-              failureCode: null,
-            }
-          : {
-              status: 'failed' as const,
-              derivedStorageKey: null,
-              checksum: null,
-              byteSize: null,
-              failureCode: outcome.failureCode,
-            };
-      if (existing) {
-        await transaction
-          .update(assetRepresentations)
-          .set(values)
-          .where(eq(assetRepresentations.id, existing.id));
-      } else {
-        await transaction.insert(assetRepresentations).values({
-          assetVersionId: claimed.assetVersionId,
-          kind: config.representationKind,
-          mimeType: config.representationMimeType,
-          ...values,
-          createdAt: now,
-        });
-      }
+      await upsertAssetRepresentation(transaction, {
+        assetVersionId: claimed.assetVersionId,
+        kind: config.representationKind,
+        variant: claimed.variant,
+        producer: claimed.producer,
+        producerVersion: claimed.producerVersion,
+        mimeType: config.representationMimeType,
+        status: outcome.status,
+        derivedStorageKey:
+          outcome.status === 'ready' ? outcome.derivedStorageKey : null,
+        checksum: outcome.status === 'ready' ? outcome.checksum : null,
+        byteSize: outcome.status === 'ready' ? outcome.byteSize : null,
+        failureCode: outcome.status === 'failed' ? outcome.failureCode : null,
+        now,
+      });
       return true;
     });
   }

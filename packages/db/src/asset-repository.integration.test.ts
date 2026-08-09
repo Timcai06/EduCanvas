@@ -269,6 +269,17 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       attempts: 0,
       createdAt: startedAt,
     });
+    await getDatabase().insert(schema.assetRepresentations).values({
+      assetVersionId: versionId,
+      kind: 'text',
+      variant: 'default',
+      producer: 'default',
+      producerVersion: 'v1',
+      mimeType: 'text/plain',
+      status: 'processing',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    });
 
     await expect(
       repository.beginTextExtractionAttempt({ jobId, now: startedAt }),
@@ -279,7 +290,12 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     await expect(
       repository.settleTextExtraction({
         jobId,
-        outcome: { status: 'ready', extractedText: '异步解析完成' },
+        outcome: {
+          status: 'ready',
+          extractedText: '异步解析完成',
+          derivedStorageKey: `derived/text/${jobId}/abc.txt`,
+          checksum: 'a'.repeat(64),
+        },
         now: new Date('2026-07-26T08:02:00.000Z'),
       }),
     ).resolves.toBe(true);
@@ -306,6 +322,14 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         .from(schema.assetProcessingJobs)
         .where(sql`${schema.assetProcessingJobs.kind} <> 'extract_text'`),
     ).resolves.toEqual([]);
+    await expect(
+      getDatabase()
+        .select({ id: schema.assetRepresentations.id })
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${versionId} and ${schema.assetRepresentations.kind} = 'text'`,
+        ),
+    ).resolves.toHaveLength(1);
   });
 
   it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
@@ -346,6 +370,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         jobId: created.jobId,
         outcome: {
           status: 'ready',
+          derivedStorageKey: `derived/transcription/${created.jobId}/abc.txt`,
+          checksum: 'b'.repeat(64),
           transcriptionText: '今天学习一元二次方程。',
           transcriptionMetadata: {
             provider: 'openai-compatible',
@@ -412,7 +438,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         kind: 'transcription',
         mimeType: 'text/plain',
         status: 'ready',
-        derivedStorageKey: null,
+        derivedStorageKey: `derived/transcription/${created.jobId}/abc.txt`,
+        checksum: 'b'.repeat(64),
         failureCode: null,
       }),
     ]);
@@ -450,6 +477,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           transcription: {
             status: 'ready',
             text: '视频中的课堂讲解。',
+            derivedStorageKey: `derived/transcription/${created.jobId}/${'5'.repeat(64)}.txt`,
+            checksum: '5'.repeat(64),
             metadata: {
               provider: 'fixture',
               resolvedModelId: 'transcription-v1',
@@ -475,6 +504,43 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         },
       }),
     ).resolves.toBe(true);
+
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values([
+        {
+          assetVersionId: created.versionId,
+          kind: 'transcription',
+          variant: 'default',
+          producer: 'cloud',
+          producerVersion: 'provider-a.v1',
+          mimeType: 'text/plain',
+          status: 'failed',
+          failureCode: 'cloud_failed',
+        },
+        {
+          assetVersionId: created.versionId,
+          kind: 'keyframes',
+          variant: 'default',
+          producer: 'cloud',
+          producerVersion: 'provider-a.v1',
+          mimeType: 'image/jpeg',
+          status: 'failed',
+          failureCode: 'cloud_failed',
+        },
+      ]);
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      derivedStatuses: expect.arrayContaining([
+        { kind: 'transcription', status: 'ready' },
+        { kind: 'keyframes', status: 'ready' },
+      ]),
+    });
 
     await expect(
       repository.getOwnedSnapshot({
@@ -540,6 +606,21 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       .where(sql`${schema.assetProcessingJobs.kind} = 'render_preview'`);
     expect(job).toBeDefined();
 
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values({
+        assetVersionId: job!.assetVersionId,
+        kind: 'preview',
+        variant: 'default',
+        producer: 'cloud',
+        producerVersion: 'renderer.v2',
+        mimeType: 'text/html',
+        status: 'ready',
+        derivedStorageKey: 'derived/preview/cloud/fixture.html',
+        checksum: 'a'.repeat(64),
+        byteSize: 64,
+      });
+
     await expect(
       derivedRepository.beginPreviewRenderAttempt({
         jobId: job!.id,
@@ -563,6 +644,27 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         now: new Date('2026-07-27T08:01:00.000Z'),
       }),
     ).resolves.toBe(true);
+    await expect(
+      getDatabase()
+        .select({
+          producer: schema.assetRepresentations.producer,
+          derivedStorageKey: schema.assetRepresentations.derivedStorageKey,
+        })
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${job!.assetVersionId} and ${schema.assetRepresentations.kind} = 'preview'`,
+        )
+        .orderBy(schema.assetRepresentations.producer),
+    ).resolves.toEqual([
+      {
+        producer: 'cloud',
+        derivedStorageKey: 'derived/preview/cloud/fixture.html',
+      },
+      {
+        producer: 'default',
+        derivedStorageKey: `derived/preview/${job!.id}/fixture.html`,
+      },
+    ]);
     await expect(
       derivedRepository.settlePreviewRender({
         jobId: job!.id,

@@ -1457,4 +1457,114 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       ).toEqual([{ n: 3 }]);
     });
   });
+
+  it('从0052升级时派生表示获得多版本身份并保留既有数据', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0053_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const owner = 'd04-n1-owner';
+      const spaceId = '79000000-0000-4000-8000-000000000001';
+      await connection`
+        insert into platform_users (id, kind, status) values
+          (${owner}, 'registered', 'active')
+      `;
+      await connection`
+        insert into spaces (id, owner_subject_id, kind, title, status) values
+          (${spaceId}, ${owner}, 'notebook', 'D04 N-1 空间', 'active')
+      `;
+      await connection`
+        insert into assets (
+          id, owner_subject_id, space_id, scope, kind, origin,
+          display_name, status
+        ) values (
+          '79000000-0000-4000-8000-000000000002', ${owner}, ${spaceId},
+          'space', 'image', 'upload', '旧图片', 'processing'
+        )
+      `;
+      await connection`
+        insert into asset_versions (
+          id, asset_id, kind, mime_type, byte_size, content_hash,
+          status, storage_key
+        ) values (
+          '79000000-0000-4000-8000-000000000003',
+          '79000000-0000-4000-8000-000000000002',
+          'image', 'image/png', 100, ${'d'.repeat(64)}, 'ready',
+          'uploads/legacy.png'
+        )
+      `;
+      await connection`
+        update assets set status = 'ready', current_version_id =
+          '79000000-0000-4000-8000-000000000003'
+        where id = '79000000-0000-4000-8000-000000000002'
+      `;
+      /* 0052 时代：representation 无 variant/producer 维度（每 kind 一行）。 */
+      await connection`
+        insert into asset_representations (
+          asset_version_id, kind, mime_type, status, derived_storage_key,
+          checksum
+        ) values (
+          '79000000-0000-4000-8000-000000000003', 'thumbnail', 'image/jpeg',
+          'ready', 'derived/thumbnail/legacy.jpg', ${'e'.repeat(64)}
+        )
+      `;
+
+      await applyMigrationFile(connection, '0053_silky_millenium_guard.sql');
+
+      /* 旧行被 DEFAULT backfill 到默认 identity（default/default/v1），数据保留。 */
+      expect(
+        await connection`
+          select kind, variant, producer, producer_version, status
+          from asset_representations
+          where asset_version_id = '79000000-0000-4000-8000-000000000003'
+        `,
+      ).toEqual([
+        {
+          kind: 'thumbnail',
+          variant: 'default',
+          producer: 'default',
+          producer_version: 'v1',
+          status: 'ready',
+        },
+      ]);
+      /* 新唯一约束生效：默认 identity 已占用时再插同 identity 被拒，异 identity 并存。 */
+      await connection`
+        insert into asset_representations (
+          asset_version_id, kind, variant, producer, producer_version,
+          mime_type, status, derived_storage_key, checksum
+        ) values (
+          '79000000-0000-4000-8000-000000000003', 'thumbnail',
+          'default', 'cloud', 'renderer-a.v1', 'image/jpeg',
+          'ready', 'derived/thumbnail/cloud.jpg', ${'f'.repeat(64)}
+        )
+      `;
+      await expect(
+        connection`
+          insert into asset_representations (
+            asset_version_id, kind, variant, producer, producer_version,
+            mime_type, status
+          ) values (
+            '79000000-0000-4000-8000-000000000003', 'thumbnail',
+            'default', 'default', 'v1', 'image/jpeg', 'ready'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23505' });
+      /* 非法 producer 格式（大写）被拒。 */
+      await expect(
+        connection`
+          insert into asset_representations (
+            asset_version_id, kind, variant, producer, producer_version,
+            mime_type, status
+          ) values (
+            '79000000-0000-4000-8000-000000000003', 'thumbnail',
+            'default', 'UPPER', 'v1', 'image/jpeg', 'ready'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
 });

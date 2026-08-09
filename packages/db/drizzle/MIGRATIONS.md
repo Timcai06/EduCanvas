@@ -653,3 +653,24 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - 风险: 中——DB 只验证 open identifier 的格式，生产写入依赖应用 Registry；
   AST vocabulary gate 同时审计 231 个 Schema CHECK 与最新 Migration，防止
   新增未登记 hard enum 或以注释/等值约束绕过。
+
+## 0053_silky_millenium_guard.sql
+
+- 状态: active（D04 作者记录，2026-08-08）
+- 语义: D04 派生结果多版本身份——asset_representations 与 asset_processing_jobs
+  新增 (variant, producer, producer_version) 三列（NOT NULL DEFAULT，自动
+  backfill 现有行），唯一约束从 (asset_version_id, kind) 扩展为
+  (asset_version_id, kind, variant, producer, producer_version)：
+  同一 AssetVersion 下不同 Provider/变体/版本的派生结果可并存且互不覆盖；
+  job 与 representation 共享同一 identity，重试 = 同 job attempts 递增，
+  消除入队查重 TOCTOU。新增 6 个开放格式 CHECK（variant/producer/
+  producer_version，D03 词汇门禁）。
+- 锁表: 每表 ADD COLUMN 取 ACCESS EXCLUSIVE 元数据短锁（表规模 28/14 行）；
+  唯一索引创建期间取 SHARE 锁并校验存量（现有 (version_id, kind) 唯一是
+  新唯一键的子集，无冲突）。
+- 回滚: DROP 新唯一索引与 CHECK + 删除三列（数据无丢失——旧行恢复默认
+  identity）；旧唯一索引重建。回退前需确认没有写入非默认 identity 的新行。
+- N-1: 0052 老代码写 representation/job 时新列走 DEFAULT（default/default/v1），
+  与 backfill 行 identity 一致，幂等更新语义不变。
+- Fresh install: 可重放。
+- 风险: 低——无数据迁移；唯一键扩展不拒绝任何旧合法写入。

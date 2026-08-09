@@ -1073,6 +1073,17 @@ export const assetRepresentations = pgTable(
       .notNull()
       .references(() => assetVersions.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
+    /**
+     * D04 派生结果多版本身份：同一 AssetVersion 下不同 (variant, producer,
+     * producer_version) 可并存且互不覆盖（如 transcription/default/local/sherpa.v1
+     * 与 transcription/default/cloud/provider-a.v1、preview/low/high 变体）。
+     * 唯一约束 = (asset_version_id, kind, variant, producer, producer_version)。
+     * variant/producer/producer_version 是开放扩展 Vocabulary（格式 CHECK），
+     * 已登记成员由 agent-core assetRepresentationKinds 等 Registry 约束。
+     */
+    variant: text('variant').notNull().default('default'),
+    producer: text('producer').notNull().default('default'),
+    producerVersion: text('producer_version').notNull().default('v1'),
     mimeType: text('mime_type').notNull(),
     status: text('status').notNull(),
     derivedStorageKey: text('derived_storage_key'),
@@ -1082,11 +1093,18 @@ export const assetRepresentations = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex('asset_representations_version_kind_unique').on(
+    uniqueIndex('asset_representations_identity_unique').on(
       table.assetVersionId,
       table.kind,
+      table.variant,
+      table.producer,
+      table.producerVersion,
     ),
     index('asset_representations_version_status_idx').on(
       table.assetVersionId,
@@ -1095,6 +1113,18 @@ export const assetRepresentations = pgTable(
     check(
       'asset_representations_kind_check',
       sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
+    check(
+      'asset_representations_variant_check',
+      sql`${table.variant} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
+    check(
+      'asset_representations_producer_check',
+      sql`${table.producer} ~ '^[a-z][a-z0-9._-]{0,63}$'`,
+    ),
+    check(
+      'asset_representations_producer_version_check',
+      sql`${table.producerVersion} ~ '^[a-z0-9][a-z0-9._-]{0,63}$'`,
     ),
     check(
       'asset_representations_status_check',
@@ -1181,6 +1211,14 @@ export const assetProcessingJobs = pgTable(
       .notNull()
       .references(() => assetVersions.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
+    /**
+     * D04：job 与 representation 共享同一派生 identity（(asset_version_id,
+     * kind, variant, producer, producer_version)），唯一约束保证同一 identity
+     * 不会产生第二个 job（重试 = 同 job attempts 递增），消除入队查重的 TOCTOU。
+     */
+    variant: text('variant').notNull().default('default'),
+    producer: text('producer').notNull().default('default'),
+    producerVersion: text('producer_version').notNull().default('v1'),
     status: text('status').notNull().default('queued'),
     attempts: integer('attempts').notNull().default(0),
     queueJobKey: text('queue_job_key'),
@@ -1192,6 +1230,13 @@ export const assetProcessingJobs = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table) => [
+    uniqueIndex('asset_processing_jobs_identity_unique').on(
+      table.assetVersionId,
+      table.kind,
+      table.variant,
+      table.producer,
+      table.producerVersion,
+    ),
     index('asset_processing_jobs_status_created_idx').on(
       table.status,
       table.createdAt,
@@ -1205,6 +1250,18 @@ export const assetProcessingJobs = pgTable(
     check(
       'asset_processing_jobs_kind_check',
       sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
+    check(
+      'asset_processing_jobs_variant_check',
+      sql`${table.variant} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
+    check(
+      'asset_processing_jobs_producer_check',
+      sql`${table.producer} ~ '^[a-z][a-z0-9._-]{0,63}$'`,
+    ),
+    check(
+      'asset_processing_jobs_producer_version_check',
+      sql`${table.producerVersion} ~ '^[a-z0-9][a-z0-9._-]{0,63}$'`,
     ),
     check(
       'asset_processing_jobs_status_check',
