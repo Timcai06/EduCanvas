@@ -31,7 +31,8 @@ export const toolEffectReconciliations = pgTable(
     ),
     check(
       'tool_effect_reconciliations_source_check',
-      sql`${table.source} in ('manual', 'adapter')`,
+      // D03：对账方（producer）是开放扩展标识；决议 resolution 保持闭集。
+      sql`${table.source} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'tool_effect_reconciliations_text_check',

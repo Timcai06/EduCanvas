@@ -1,3 +1,4 @@
+import type { AssetRepresentationKind } from '@educanvas/agent-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
@@ -11,6 +12,8 @@ import {
 type Database = ReturnType<typeof getDb>;
 
 export const ASSET_TRANSCRIBE_AUDIO_TASK = 'assets:transcribe_audio' as const;
+const TRANSCRIPTION_REPRESENTATION_KIND =
+  'transcription' as const satisfies AssetRepresentationKind;
 
 const AUDIO_MIME_TYPES = new Set([
   'audio/mpeg',
@@ -180,7 +183,7 @@ export class DrizzleAssetTranscriptionRepository {
         .where(
           and(
             eq(assetRepresentations.assetVersionId, version.id),
-            eq(assetRepresentations.kind, 'transcription'),
+            eq(assetRepresentations.kind, TRANSCRIPTION_REPRESENTATION_KIND),
           ),
         )
         .limit(1);
@@ -192,7 +195,7 @@ export class DrizzleAssetTranscriptionRepository {
       } else {
         await transaction.insert(assetRepresentations).values({
           assetVersionId: version.id,
-          kind: 'transcription',
+          kind: TRANSCRIPTION_REPRESENTATION_KIND,
           mimeType: 'text/plain',
           ...representationValues,
           createdAt: now,

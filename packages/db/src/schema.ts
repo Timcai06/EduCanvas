@@ -499,7 +499,9 @@ export const gatewayNodeInvocations = pgTable(
     ),
     check(
       'gateway_node_invocations_capability_check',
-      sql`${table.capability} in ('device.status', 'filesystem.read_allowlisted')`,
+      // D03：capability 的唯一权威是 gatewayCapabilityNames Registry；当前接线
+      // 白名单由 nodes.ts refine 限定，DB 只保留格式约束。
+      sql`${table.capability} ~ '^[a-z][a-z0-9._]{0,63}$'`,
     ),
     check(
       'gateway_node_invocations_status_check',
@@ -621,7 +623,7 @@ export const agentOperations = pgTable(
     }).onDelete('restrict'),
     check(
       'agent_operations_kind_check',
-      sql`${table.kind} in ('turn', 'artifact_generation')`,
+      sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'agent_operations_status_check',
@@ -924,13 +926,10 @@ export const assets = pgTable(
       table.id,
     ),
     check('assets_scope_check', sql`${table.scope} in ('turn', 'space')`),
-    check(
-      'assets_kind_check',
-      sql`${table.kind} in ('image', 'audio', 'video', 'document', 'data', 'link', 'other')`,
-    ),
+    check('assets_kind_check', sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`),
     check(
       'assets_origin_check',
-      sql`${table.origin} in ('upload', 'url_import', 'generated', 'library')`,
+      sql`${table.origin} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'assets_status_check',
@@ -986,7 +985,7 @@ export const assetVersions = pgTable(
     ),
     check(
       'asset_versions_kind_check',
-      sql`${table.kind} in ('image', 'audio', 'video', 'document', 'data', 'link', 'other')`,
+      sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'asset_versions_status_check',
@@ -1095,7 +1094,7 @@ export const assetRepresentations = pgTable(
     ),
     check(
       'asset_representations_kind_check',
-      sql`${table.kind} in ('original', 'text', 'preview', 'thumbnail', 'transcription', 'keyframes')`,
+      sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'asset_representations_status_check',
@@ -1205,7 +1204,7 @@ export const assetProcessingJobs = pgTable(
     ),
     check(
       'asset_processing_jobs_kind_check',
-      sql`${table.kind} in ('extract_text', 'render_preview', 'generate_thumbnail', 'transcribe_audio', 'process_video')`,
+      sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'asset_processing_jobs_status_check',
@@ -1263,11 +1262,11 @@ export const objectDeletionOutbox = pgTable(
     ),
     check(
       'object_deletion_outbox_kind_check',
-      sql`${table.objectKind} in ('asset', 'artifact', 'avatar')`,
+      sql`${table.objectKind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'object_deletion_outbox_source_check',
-      sql`${table.sourceType} in ('asset_version', 'asset_representation', 'asset_video_keyframe', 'artifact_version', 'user_avatar')`,
+      sql`${table.sourceType} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'object_deletion_outbox_status_check',
@@ -1326,7 +1325,10 @@ export const operationSources = pgTable(
       table.locatorUrl,
     ),
     index('operation_sources_asset_version_idx').on(table.assetVersionId),
-    check('operation_sources_kind_check', sql`${table.kind} = 'web'`),
+    check(
+      'operation_sources_kind_check',
+      sql`${table.kind} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
     check(
       'operation_sources_ordinal_check',
       sql`${table.ordinal} between 1 and 99`,
@@ -1480,11 +1482,13 @@ export const agentMessageParts = pgTable(
     ),
     check(
       'agent_message_parts_type_check',
+      // partType 决定同一行的列形状；新增分支必须同步 shape CHECK 与读取器，
+      // 因而属于封闭结构判别符。artifactKind 才是可独立扩展的 Vocabulary。
       sql`${table.partType} in ('text', 'asset_ref', 'artifact_ref')`,
     ),
     check(
       'agent_message_parts_shape_check',
-      sql`(${table.partType} = 'text' and ${table.textContent} is not null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'asset_ref' and ${table.textContent} is null and ${table.assetId} is not null and ${table.assetVersionId} is not null and ${table.assetUsage} in ('attachment', 'context') and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'artifact_ref' and ${table.textContent} is null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is not null and ${table.artifactVersionId} is not null and ${table.artifactKind} in ('image', 'audio', 'video', 'slide', 'interactive', 'document'))`,
+      sql`(${table.partType} = 'text' and ${table.textContent} is not null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'asset_ref' and ${table.textContent} is null and ${table.assetId} is not null and ${table.assetVersionId} is not null and ${table.assetUsage} in ('attachment', 'context') and ${table.artifactId} is null and ${table.artifactVersionId} is null and ${table.artifactKind} is null) or (${table.partType} = 'artifact_ref' and ${table.textContent} is null and ${table.assetId} is null and ${table.assetVersionId} is null and ${table.assetUsage} is null and ${table.artifactId} is not null and ${table.artifactVersionId} is not null and ${table.artifactKind} ~ '^[a-z][a-z0-9_]{0,63}$')`,
     ),
   ],
 );
@@ -1633,6 +1637,8 @@ export const modelRuns = pgTable(
     check('model_runs_attempt_check', sql`${table.attempt} between 1 and 100`),
     check(
       'model_runs_text_check',
+      // finishReason 是 Provider 原始值归一化后的平台终态语义；原始词汇可以
+      // 扩展，但进入账本前必须映射到稳定闭集。
       sql`char_length(${table.traceId}) between 1 and 128 and ${table.taskAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and ${table.modelAlias} ~ '^[a-z][a-z0-9._-]{0,63}$' and char_length(${table.promptVersion}) between 1 and 128 and ${table.promptHash} ~ '^[a-f0-9]{64}$' and (${table.provider} is null or char_length(${table.provider}) between 1 and 128) and (${table.providerModelId} is null or char_length(${table.providerModelId}) between 1 and 256) and (${table.modelRevision} is null or char_length(${table.modelRevision}) between 1 and 256) and (${table.providerResponseId} is null or char_length(${table.providerResponseId}) between 1 and 512) and (${table.systemFingerprint} is null or char_length(${table.systemFingerprint}) between 1 and 512) and (${table.finishReason} is null or ${table.finishReason} in ('stop', 'tool_calls', 'length', 'content_filter', 'cancelled', 'error', 'other')) and (${table.errorCode} is null or ${table.errorCode} ~ '^[a-z][a-z0-9._:-]{0,127}$')`,
     ),
     check(
@@ -1679,6 +1685,8 @@ export const turnUsageBudgetOutcomes = pgTable(
     index('turn_usage_budget_outcomes_created_idx').on(table.createdAt),
     check(
       'turn_usage_budget_outcomes_reason_check',
+      // 低基数账本标签必须与 agent-core budgetBreachReasons 同步，避免
+      // 未登记原因污染指标维度或伪造预算终态。
       sql`${table.breachReason} is null or ${table.breachReason} in ('max_input_tokens', 'max_output_tokens', 'max_model_calls', 'max_tool_calls', 'max_tool_result_tokens', 'max_wall_clock', 'max_estimated_cost')`,
     ),
     check(
@@ -2067,7 +2075,7 @@ export const knowledgeSources = pgTable(
     ),
     check(
       'knowledge_sources_type_check',
-      sql`${table.sourceType} in ('text', 'pdf')`,
+      sql`${table.sourceType} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
     check(
       'knowledge_sources_status_check',

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   assetDescriptorSchema,
+  assetKindSchema,
   assetOriginSchema,
   assetVersionDescriptorSchema,
   assetVersionReferenceSchema,
@@ -8,6 +9,8 @@ import {
   type AssetDescriptor,
   type AssetKind,
   type AssetOrigin,
+  type AssetProcessorKind,
+  type AssetRepresentationKind,
   type AssetScope,
   type AssetVersionDescriptor,
   type AssetVersionReference,
@@ -118,7 +121,7 @@ export interface OwnedStoredAssetVersion {
   transcriptionMetadata: unknown;
   /** 浏览器预览组合层可用的安全派生状态；不含对象键、校验和或 Provider 数据。 */
   derivedStatuses: readonly {
-    kind: 'transcription' | 'keyframes';
+    kind: Extract<AssetRepresentationKind, 'transcription' | 'keyframes'>;
     status: 'processing' | 'ready' | 'failed' | 'unavailable';
   }[];
 }
@@ -139,6 +142,13 @@ export interface CreateUploadedAssetInput {
   outcome: { status: 'ready' } | { status: 'failed'; failureCode: string };
   now?: Date;
 }
+
+const ORIGINAL_REPRESENTATION_KIND =
+  'original' as const satisfies AssetRepresentationKind;
+const TEXT_REPRESENTATION_KIND =
+  'text' as const satisfies AssetRepresentationKind;
+const EXTRACT_TEXT_PROCESSOR_KIND =
+  'extract_text' as const satisfies AssetProcessorKind;
 
 export class AssetAccessError extends Error {
   readonly code = 'asset_not_available';
@@ -299,8 +309,8 @@ export class DrizzleAssetRepository {
           ownerSubjectId: validated.ownerSubjectId,
           spaceId: validated.spaceId,
           scope: input.scope,
-          kind: input.kind,
-          origin: input.origin ?? 'upload',
+          kind: validated.kind,
+          origin: validated.origin,
           displayName: validated.displayName,
           mimeType: validated.mimeType,
           status: 'processing',
@@ -313,7 +323,7 @@ export class DrizzleAssetRepository {
         .values({
           id: versionId,
           assetId,
-          kind: input.kind,
+          kind: validated.kind,
           mimeType: validated.mimeType,
           byteSize: input.byteSize,
           contentHash: input.contentHash,
@@ -614,6 +624,8 @@ export class DrizzleAssetRepository {
   private validateUploadInput(input: {
     ownerSubjectId: string;
     spaceId: string;
+    kind: AssetKind;
+    origin?: AssetOrigin;
     displayName: string;
     mimeType: string;
     storageKey: string;
@@ -622,6 +634,8 @@ export class DrizzleAssetRepository {
   }): {
     ownerSubjectId: string;
     spaceId: string;
+    kind: AssetKind;
+    origin: AssetOrigin;
     displayName: string;
     mimeType: string;
     storageKey: string;
@@ -643,9 +657,16 @@ export class DrizzleAssetRepository {
     if (!canTransitionAssetStatus('pending', 'processing')) {
       throw new AssetPersistenceError('Asset状态机不可用');
     }
+    // D03：kind/origin 是开放扩展 Vocabulary，写入入口必须通过
+    // agent-core Registry（assetKindSchema/assetOriginSchema）验证；
+    // 数据库只保留格式约束。
+    const kind = assetKindSchema.parse(input.kind);
+    const origin = assetOriginSchema.parse(input.origin ?? 'upload');
     return {
       ownerSubjectId: requireOwner(input.ownerSubjectId),
       spaceId: requireUuid(input.spaceId),
+      kind,
+      origin,
       displayName: requireText(input.displayName, 'displayName', 300),
       mimeType: requireText(input.mimeType, 'mimeType', 255).toLowerCase(),
       storageKey,
@@ -655,27 +676,15 @@ export class DrizzleAssetRepository {
   async createUploaded(
     input: CreateUploadedAssetInput,
   ): Promise<AssetSnapshot> {
-    const ownerSubjectId = requireOwner(input.ownerSubjectId);
-    const spaceId = requireUuid(input.spaceId);
-    const displayName = requireText(input.displayName, 'displayName', 300);
-    const mimeType = requireText(input.mimeType, 'mimeType', 255).toLowerCase();
-    const storageKey = requireText(input.storageKey, 'storageKey', 1_024);
-    if (/^https?:\/\//i.test(storageKey)) {
-      throw new AssetPersistenceError('storageKey不能是公开URL');
-    }
-    if (
-      !Number.isSafeInteger(input.byteSize) ||
-      input.byteSize < 0 ||
-      input.byteSize > 50 * 1024 * 1024
-    ) {
-      throw new AssetPersistenceError('byteSize超出允许范围');
-    }
-    if (!SHA256.test(input.contentHash)) {
-      throw new AssetPersistenceError('contentHash必须是小写SHA-256');
-    }
-    if (!canTransitionAssetStatus('pending', 'processing')) {
-      throw new AssetPersistenceError('Asset状态机不可用');
-    }
+    const {
+      ownerSubjectId,
+      spaceId,
+      kind,
+      origin,
+      displayName,
+      mimeType,
+      storageKey,
+    } = this.validateUploadInput(input);
 
     const now = input.now ?? new Date();
     const assetId = randomUUID();
@@ -698,8 +707,8 @@ export class DrizzleAssetRepository {
           ownerSubjectId,
           spaceId,
           scope: input.scope,
-          kind: input.kind,
-          origin: input.origin ?? 'upload',
+          kind,
+          origin,
           displayName,
           mimeType,
           status: 'processing',
@@ -712,7 +721,7 @@ export class DrizzleAssetRepository {
         .values({
           id: versionId,
           assetId,
-          kind: input.kind,
+          kind,
           mimeType,
           byteSize: input.byteSize,
           contentHash: input.contentHash,
@@ -731,7 +740,7 @@ export class DrizzleAssetRepository {
       }
       await transaction.insert(assetRepresentations).values({
         assetVersionId: versionId,
-        kind: 'original',
+        kind: ORIGINAL_REPRESENTATION_KIND,
         mimeType,
         status: 'ready',
         byteSize: input.byteSize,
@@ -741,7 +750,7 @@ export class DrizzleAssetRepository {
       if (extractedText) {
         await transaction.insert(assetRepresentations).values({
           assetVersionId: versionId,
-          kind: 'text',
+          kind: TEXT_REPRESENTATION_KIND,
           mimeType: 'text/plain',
           status: 'ready',
           byteSize: Buffer.byteLength(extractedText, 'utf8'),
@@ -754,7 +763,7 @@ export class DrizzleAssetRepository {
           .insert(assetProcessingJobs)
           .values({
             assetVersionId: versionId,
-            kind: 'extract_text',
+            kind: EXTRACT_TEXT_PROCESSOR_KIND,
             status: versionStatus === 'ready' ? 'succeeded' : 'failed',
             attempts: 1,
             failureCode:

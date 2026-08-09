@@ -27,6 +27,38 @@ export const assetOrigins = [
 export const assetOriginSchema = z.enum(assetOrigins);
 export type AssetOrigin = z.infer<typeof assetOriginSchema>;
 
+/**
+ * D03：AssetVersion 派生物类型（derivation kind）——开放扩展 Vocabulary。
+ * 新增派生类型只需在本 Registry 登记并让写入入口通过验证，不产生数据库
+ * Migration；D04 的 Provider/版本属于独立 identity 维度，不编码进 kind。
+ */
+export const assetRepresentationKinds = [
+  'original',
+  'text',
+  'preview',
+  'thumbnail',
+  'transcription',
+  'keyframes',
+] as const;
+export const assetRepresentationKindSchema = z.enum(assetRepresentationKinds);
+export type AssetRepresentationKind = z.infer<
+  typeof assetRepresentationKindSchema
+>;
+
+/**
+ * D03：Asset 派生处理任务类型（processor kind）——开放扩展 Vocabulary。
+ * 新增处理器（如 OCR、去噪）只需登记本 Registry，不产生数据库 Migration。
+ */
+export const assetProcessorKinds = [
+  'extract_text',
+  'render_preview',
+  'generate_thumbnail',
+  'transcribe_audio',
+  'process_video',
+] as const;
+export const assetProcessorKindSchema = z.enum(assetProcessorKinds);
+export type AssetProcessorKind = z.infer<typeof assetProcessorKindSchema>;
+
 export const assetStatuses = [
   'pending',
   'processing',

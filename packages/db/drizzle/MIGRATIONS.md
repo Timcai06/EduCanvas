@@ -627,3 +627,29 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - Fresh install: 空库 preflight/repair 无操作，三条 FK 与索引正常建立。
 - 风险: 中——约束验证与普通索引仍需要数据库锁；未知历史脏数据会阻止部署，
   这是刻意的 fail-closed 行为。Space 物理删除必须先完成 Asset 的显式闭包。
+
+## 0052_damp_jigsaw.sql
+
+- 状态: active（D03 Codex 修订，2026-08-09）
+- 语义: 将 11 张表上的 13 个扩展标识 CHECK 从字面量闭集改为稳定格式
+  CHECK：assets.kind/origin、asset_versions.kind、asset_representations.kind、
+  asset_processing_jobs.kind、knowledge_sources.source_type、
+  agent_operations.kind、object_deletion_outbox.object_kind/source_type、
+  operation_sources.kind、gateway_node_invocations.capability、
+  agent_message_parts shape 中的 artifact_kind、
+  tool_effect_reconciliations.source。教学学段/偏好、message part type、
+  model finish reason、budget breach reason 与 MCP 专用 intent capability
+  经复核仍承担结构、安全或平台归一化契约，保持数据库闭集。
+- 锁表: 13 对 DROP/ADD CHECK 会在 11 张表上取得短时 ACCESS EXCLUSIVE
+  DDL 锁并校验存量行；无数据迁移。
+- 回滚: 先停止旧闭集外写入并确认无扩展值，再执行 D03 文档 §7 的完整
+  13 项反向 CHECK SQL。
+- N-1: 格式 CHECK 是原闭集的超集；旧应用写入兼容，格式非法值仍以
+  SQLSTATE 23514 拒绝。测试必须从 0051 升级并同时确认 D02 三条 FK 保留。
+- Fresh install: 可重放。0052 不重复创建 D02 FK/index。生成时只在临时
+  0051 元数据副本补齐历史 snapshot 缺失的三条 FK 与 index；历史
+  `0051_snapshot.json` 未修改，最终 0052 SQL/snapshot/journal 均由 Drizzle
+  生成。0051 元数据漂移由 D06 治理。
+- 风险: 中——DB 只验证 open identifier 的格式，生产写入依赖应用 Registry；
+  AST vocabulary gate 同时审计 231 个 Schema CHECK 与最新 Migration，防止
+  新增未登记 hard enum 或以注释/等值约束绕过。

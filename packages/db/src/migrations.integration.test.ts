@@ -1383,4 +1383,78 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
       ).toEqual([{ n: 0 }]);
     });
   });
+
+  it('从0051升级时开放Vocabulary为格式CHECK并保留既有数据', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0052_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const owner = 'd03-n1-owner';
+      const spaceId = '78000000-0000-4000-8000-000000000001';
+      await connection`
+        insert into platform_users (id, kind, status) values
+          (${owner}, 'registered', 'active')
+      `;
+      await connection`
+        insert into spaces (id, owner_subject_id, kind, title, status) values
+          (${spaceId}, ${owner}, 'notebook', 'D03 N-1 空间', 'active')
+      `;
+      /* 0051 时代：闭集内旧值。 */
+      await connection`
+        insert into assets (
+          id, owner_subject_id, space_id, scope, kind, origin,
+          display_name, status
+        ) values (
+          '78000000-0000-4000-8000-000000000002', ${owner}, ${spaceId},
+          'space', 'link', 'upload', '旧资产', 'pending'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0052_damp_jigsaw.sql');
+
+      /* 旧数据保留；新格式 CHECK 生效：开放值可写入、非法格式拒绝。 */
+      expect(
+        await connection`
+          select count(*)::int as n from assets
+          where id = '78000000-0000-4000-8000-000000000002'
+        `,
+      ).toEqual([{ n: 1 }]);
+      await connection`
+        insert into assets (
+          id, owner_subject_id, space_id, scope, kind, origin,
+          display_name, status
+        ) values (
+          '78000000-0000-4000-8000-000000000003', ${owner}, ${spaceId},
+          'space', 'model_3d', 'scanner_import', '新扩展', 'pending'
+        )
+      `;
+      await expect(
+        connection`
+          insert into assets (
+            id, owner_subject_id, space_id, scope, kind, origin,
+            display_name, status
+          ) values (
+            '78000000-0000-4000-8000-000000000004', ${owner}, ${spaceId},
+            'space', 'BAD-KIND', 'upload', '非法', 'pending'
+          )
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+
+      /* D02 三条 FK 仍由 0051 建立（0052 不重复 ADD，fresh install 不冲突）。 */
+      expect(
+        await connection`
+          select count(*)::int as n from pg_constraint
+          where conname in (
+            'assets_space_id_spaces_id_fk',
+            'lesson_sessions_student_id_platform_users_id_fk',
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk'
+          )
+        `,
+      ).toEqual([{ n: 3 }]);
+    });
+  });
 });

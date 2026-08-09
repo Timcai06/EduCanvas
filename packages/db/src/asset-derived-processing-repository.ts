@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import type {
+  AssetProcessorKind,
+  AssetRepresentationKind,
+} from '@educanvas/agent-core';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
@@ -17,7 +21,10 @@ export const ASSET_RENDER_PREVIEW_TASK = 'assets:render_preview' as const;
 export const ASSET_GENERATE_THUMBNAIL_TASK =
   'assets:generate_thumbnail' as const;
 
-export type DerivedAssetJobKind = 'render_preview' | 'generate_thumbnail';
+export type DerivedAssetJobKind = Extract<
+  AssetProcessorKind,
+  'render_preview' | 'generate_thumbnail'
+>;
 
 const PREVIEW_MIME_TYPES = new Set([
   'application/pdf',
@@ -42,7 +49,14 @@ const JOB_CONFIG = {
     representationKind: 'thumbnail',
     representationMimeType: 'image/jpeg',
   },
-} as const;
+} as const satisfies Record<
+  DerivedAssetJobKind,
+  {
+    taskName: string;
+    representationKind: AssetRepresentationKind;
+    representationMimeType: string;
+  }
+>;
 
 export function getDerivedAssetJobKind(
   mimeType: string,
