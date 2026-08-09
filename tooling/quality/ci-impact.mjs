@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const LANES = [
   'checks',
-  'integration',
+  'db_integration',
+  'worker_integration',
+  'migration_integration',
   'windows',
   'runtime_pressure',
   'e2e',
@@ -86,14 +88,31 @@ export function classifyChangedPaths(
 
   const result = { ...NONE, checks: true };
   result.release_evidence = releaseEvidenceAffected;
-  result.integration = matchesAny(paths, [
+  // D06：CI 套件级分流——原单一 integration lane 拆为三个语义独立的证据：
+  //   db_integration：packages/db（不含 drizzle）→ DB integration；
+  //   worker_integration：apps/worker + packages/asset-processing → Worker integration；
+  //   migration_integration：packages/db/drizzle/** 与 migration 治理 → Migration 证据。
+  // 纯 DB 内部改动不自动支付 Worker integration；纯 Worker 改动不自动运行 DB full。
+  const dbAffected = matchesAny(paths, [
     /^packages\/db\//,
-    /^apps\/worker\//,
-    /^packages\/asset-processing\//,
-    /^tooling\/.*integration/,
     /^tests\/integration\//,
     /^docker-compose\.yml$/,
   ]);
+  const migrationAffected = matchesAny(paths, [
+    /^packages\/db\/drizzle\//,
+    /^packages\/db\/src\/schema\//,
+    /^packages\/db\/src\/migrations\.integration\.test\.ts$/,
+    /^tooling\/quality\/migration-(?:governance|integration|records)\.mjs$/,
+    /^tooling\/migration-(?:governance|records)\.test\.mjs$/,
+  ]);
+  const workerAffected = matchesAny(paths, [
+    /^apps\/worker\//,
+    /^packages\/asset-processing\//,
+    /^tests\/integration\//,
+  ]);
+  result.db_integration = dbAffected;
+  result.migration_integration = migrationAffected;
+  result.worker_integration = workerAffected;
   result.windows = matchesAny(paths, [
     /^(?:Start|Stop) EduCanvas\.cmd$/,
     /^(?:start|stop)-educanvas\.ps1$/,
@@ -110,15 +129,25 @@ export function classifyChangedPaths(
     /^tests\/e2e\/.*runtime/,
     /^tooling\/.*runtime/,
   ]);
-  result.e2e = matchesAny(paths, [
-    /^apps\/(?:gateway|web|web-runtime|worker)\//,
+  // D06：e2e 只对浏览器可执行面触发——纯 DB/Worker/asset-processing 内部改动
+  // 不自动支付 Chromium E2E（路由原则 1/3/4）；其余 packages（browser-facing）
+  // 保持 E2E smoke；未知路径 fail open。
+  const NON_BROWSER_ONLY =
+    /^(?:apps\/worker\/|packages\/(?:db|asset-processing)\/|tests\/integration\/)/;
+  const browserPatterns = [
+    /^apps\/(?:gateway|web|web-runtime)\//,
     /^packages\//,
     /^tests\/e2e\//,
     /^playwright\..*\.config\.ts$/,
     /^playwright\.config\.ts$/,
     /^docker-compose\.yml$/,
     /^tooling\/(?:e2e-|quality\/bundle-size)/,
-  ]);
+  ];
+  result.e2e = paths.some(
+    (path) =>
+      !NON_BROWSER_ONLY.test(path) &&
+      browserPatterns.some((pattern) => pattern.test(path)),
+  );
   result.dependency_review = false;
   result.desktop = matchesAny(paths, [/^apps\/desktop\//]);
   return result;
@@ -135,7 +164,9 @@ export function requiredResultFailures({ eventName, expected, results }) {
   requireSuccess('secret_scan');
   for (const lane of [
     'checks',
-    'integration',
+    'db_integration',
+    'worker_integration',
+    'migration_integration',
     'windows',
     'runtime_pressure',
     'e2e',
@@ -166,7 +197,9 @@ function verifyResultsFromEnvironment() {
     eventName: process.env.EVENT_NAME,
     expected: {
       checks: boolean('CHECKS_EXPECTED'),
-      integration: boolean('INTEGRATION_EXPECTED'),
+      db_integration: boolean('DB_INTEGRATION_EXPECTED'),
+      worker_integration: boolean('WORKER_INTEGRATION_EXPECTED'),
+      migration_integration: boolean('MIGRATION_INTEGRATION_EXPECTED'),
       windows: boolean('WINDOWS_EXPECTED'),
       runtime_pressure: boolean('RUNTIME_PRESSURE_EXPECTED'),
       e2e: boolean('E2E_EXPECTED'),
@@ -179,7 +212,9 @@ function verifyResultsFromEnvironment() {
       secret_scan: process.env.SECRET_SCAN_RESULT,
       dependency_review: process.env.DEPENDENCY_REVIEW_RESULT,
       quality: process.env.QUALITY_RESULT,
-      integration: process.env.INTEGRATION_RESULT,
+      db_integration: process.env.DB_INTEGRATION_RESULT,
+      worker_integration: process.env.WORKER_INTEGRATION_RESULT,
+      migration_integration: process.env.MIGRATION_INTEGRATION_RESULT,
       windows: process.env.WINDOWS_RESULT,
       runtime_pressure: process.env.RUNTIME_PRESSURE_RESULT,
       e2e: process.env.E2E_RESULT,

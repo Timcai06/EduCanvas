@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import {
   classifyChangedPaths,
@@ -12,7 +13,9 @@ describe('CI impact classification', () => {
       classifyChangedPaths(['docs/README.md', '.vscode/settings.json']),
       {
         checks: false,
-        integration: false,
+        db_integration: false,
+        worker_integration: false,
+        migration_integration: false,
         windows: false,
         runtime_pressure: false,
         e2e: false,
@@ -27,7 +30,9 @@ describe('CI impact classification', () => {
     const result = classifyChangedPaths(['.vscode/launch.json']);
     assert.equal(result.checks, true);
     assert.equal(result.release_evidence, false);
-    assert.equal(result.integration, false);
+    assert.equal(result.db_integration, false);
+    assert.equal(result.worker_integration, false);
+    assert.equal(result.migration_integration, false);
     assert.equal(result.e2e, false);
   });
 
@@ -72,10 +77,13 @@ describe('CI impact classification', () => {
   it('routes database changes without paying unrelated Windows or pressure costs', () => {
     assert.deepEqual(classifyChangedPaths(['packages/db/src/repository.ts']), {
       checks: true,
-      integration: true,
+      db_integration: true,
+      worker_integration: false,
+      migration_integration: false,
       windows: false,
       runtime_pressure: false,
-      e2e: true,
+      // D06：纯 DB 内部改动不再自动支付 Chromium E2E（路由原则 1）
+      e2e: false,
       dependency_review: false,
       release_evidence: false,
       desktop: false,
@@ -106,7 +114,8 @@ describe('CI impact classification', () => {
     assert.equal(result.checks, true);
     assert.equal(result.e2e, false);
     assert.equal(result.windows, false);
-    assert.equal(result.integration, false);
+    assert.equal(result.db_integration, false);
+    assert.equal(result.worker_integration, false);
   });
 
   it('keeps desktop lane off for docs-only changes', () => {
@@ -118,7 +127,9 @@ describe('CI impact classification', () => {
   it('treats the PR smoke configuration as an E2E concern without unrelated lanes', () => {
     assert.deepEqual(classifyChangedPaths(['playwright.pr.config.ts']), {
       checks: true,
-      integration: false,
+      db_integration: false,
+      worker_integration: false,
+      migration_integration: false,
       windows: false,
       runtime_pressure: false,
       e2e: true,
@@ -141,7 +152,9 @@ describe('CI impact classification', () => {
       secret_scan: 'success',
       dependency_review: 'skipped',
       quality: 'skipped',
-      integration: 'skipped',
+      db_integration: 'skipped',
+      worker_integration: 'skipped',
+      migration_integration: 'skipped',
       windows: 'skipped',
       runtime_pressure: 'skipped',
       e2e: 'skipped',
@@ -163,7 +176,9 @@ describe('CI impact classification', () => {
         results: {
           ...baseResults,
           quality: 'success',
-          integration: 'success',
+          db_integration: 'success',
+          worker_integration: 'success',
+          migration_integration: 'success',
           windows: 'success',
           runtime_pressure: 'success',
           e2e: 'failure',
@@ -196,5 +211,122 @@ describe('CI impact classification', () => {
       }),
       [],
     );
+  });
+});
+
+describe('D06 lane split routing', () => {
+  it('Worker-only changes route to Worker integration, not DB full or E2E', () => {
+    const result = classifyChangedPaths([
+      'apps/worker/src/tasks/transcribe-audio.ts',
+    ]);
+    assert.equal(result.worker_integration, true);
+    assert.equal(result.db_integration, false);
+    assert.equal(result.migration_integration, false);
+    assert.equal(result.e2e, false);
+  });
+
+  it('asset-processing changes route to Worker integration only', () => {
+    const result = classifyChangedPaths([
+      'packages/asset-processing/src/parser.ts',
+    ]);
+    assert.equal(result.worker_integration, true);
+    assert.equal(result.db_integration, false);
+    assert.equal(result.migration_integration, false);
+    assert.equal(result.e2e, false);
+  });
+
+  it('Migration-only changes route to migration + DB + release evidence, not E2E', () => {
+    const result = classifyChangedPaths([
+      'packages/db/drizzle/0054_new_migration.sql',
+      'packages/db/drizzle/meta/0054_snapshot.json',
+    ]);
+    assert.equal(result.migration_integration, true);
+    assert.equal(result.db_integration, true);
+    assert.equal(result.release_evidence, true);
+    assert.equal(result.worker_integration, false);
+    assert.equal(result.e2e, false);
+    assert.equal(result.checks, true);
+  });
+
+  it('Browser-facing package changes keep the Chromium PR smoke', () => {
+    const result = classifyChangedPaths([
+      'apps/web/features/canvas/viewer.tsx',
+    ]);
+    assert.equal(result.e2e, true);
+    assert.equal(result.runtime_pressure, true);
+    assert.equal(result.db_integration, false);
+  });
+
+  it('Schema definition changes also route to migration drift evidence', () => {
+    const result = classifyChangedPaths(['packages/db/src/schema/asset.ts']);
+    assert.equal(result.db_integration, true);
+    assert.equal(result.migration_integration, true);
+    assert.equal(result.worker_integration, false);
+    assert.equal(result.e2e, false);
+  });
+
+  it('routes the migration integration runner to its own lane', () => {
+    const result = classifyChangedPaths([
+      'tooling/quality/migration-integration.mjs',
+    ]);
+    assert.equal(result.migration_integration, true);
+    assert.equal(result.e2e, false);
+  });
+
+  it('does not re-enable E2E when a DB-only change includes neutral documentation', () => {
+    const result = classifyChangedPaths([
+      'packages/db/src/asset-repository.ts',
+      'docs/04-data/example.md',
+    ]);
+    assert.equal(result.db_integration, true);
+    assert.equal(result.e2e, false);
+  });
+
+  it('wires all split-lane expectations into the checks environment bridge', () => {
+    const workflow = readFileSync(
+      new URL('../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    );
+    for (const lane of [
+      'DB_INTEGRATION_EXPECTED',
+      'WORKER_INTEGRATION_EXPECTED',
+      'MIGRATION_INTEGRATION_EXPECTED',
+    ]) {
+      assert.match(workflow, new RegExp(`^\\s+${lane}:`, 'm'));
+    }
+    assert.doesNotMatch(workflow, /^\s+INTEGRATION_EXPECTED:/m);
+
+    const migrationJob = workflow.slice(
+      workflow.indexOf('\n  migration-integration:'),
+      workflow.indexOf('\n  windows:'),
+    );
+    assert.match(migrationJob, /BASE_SHA:.*github\.sha/);
+    assert.doesNotMatch(migrationJob, /BASE_SHA:.*\|\| ''/);
+  });
+
+  it('fails when a required split lane fails and accepts skipped optional lanes', () => {
+    const failures = requiredResultFailures({
+      eventName: 'pull_request',
+      expected: classifyChangedPaths([
+        'packages/db/drizzle/0054_new_migration.sql',
+      ]),
+      results: {
+        changes: 'success',
+        secret_scan: 'success',
+        quality: 'success',
+        db_integration: 'success',
+        worker_integration: 'skipped',
+        migration_integration: 'failure',
+        windows: 'skipped',
+        runtime_pressure: 'skipped',
+        e2e: 'skipped',
+        dependency_review: 'skipped',
+        release_evidence: 'success',
+        desktop_build: 'skipped',
+      },
+    });
+    assert.deepEqual(failures, [
+      'migration_integration was required but concluded: failure',
+    ]);
   });
 });

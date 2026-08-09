@@ -625,6 +625,12 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
   asset、lesson session 或 budget 孤儿都会在数据修改前以 SQLSTATE 23503
   中止，要求显式处置。三条 FK 生效后老代码的新孤儿写入同样被拒绝。
 - Fresh install: 空库 preflight/repair 无操作，三条 FK 与索引正常建立。
+- Data migration: deterministic bounded repair——fail-closed preflight 只
+  允许修复已审计的单条开发遗留 asset（owner/space 均不存在、零业务引用）；
+  命中时先向 `object_deletion_outbox` 登记其 version/representation/keyframe
+  的对象键再删除；任何额外孤儿都会以 23503 中止，不做启发式清理。
+- Estimated scale: 本地验证 36 assets / 4 lesson_sessions / 1 budget 行，
+  修复目标恰 1 行；生产数据规模未验证，D07 承接。
 - 风险: 中——约束验证与普通索引仍需要数据库锁；未知历史脏数据会阻止部署，
   这是刻意的 fail-closed 行为。Space 物理删除必须先完成 Asset 的显式闭包。
 
@@ -650,6 +656,8 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
   0051 元数据副本补齐历史 snapshot 缺失的三条 FK 与 index；历史
   `0051_snapshot.json` 未修改，最终 0052 SQL/snapshot/journal 均由 Drizzle
   生成。0051 元数据漂移由 D06 治理。
+- Data migration: none——13 对 DROP/ADD CHECK 只改约束定义，不触碰业务行。
+- Estimated scale: 无数据变更（0 行受影响）；生产数据规模未验证，D07 承接。
 - 风险: 中——DB 只验证 open identifier 的格式，生产写入依赖应用 Registry；
   AST vocabulary gate 同时审计 231 个 Schema CHECK 与最新 Migration，防止
   新增未登记 hard enum 或以注释/等值约束绕过。
@@ -673,4 +681,9 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - N-1: 0052 老代码写 representation/job 时新列走 DEFAULT（default/default/v1），
   与 backfill 行 identity 一致，幂等更新语义不变。
 - Fresh install: 可重放。
+- Data migration: backfill——(variant, producer, producer_version) 三列
+  NOT NULL DEFAULT（default/default/v1）对存量 28 行 representations 与
+  14 行 processing_jobs 自动回填；无行级 UPDATE。
+- Estimated scale: 本地 28 representations / 14 jobs（默认值回填，0 行
+  显式变更）；生产数据规模未验证，D07 承接。
 - 风险: 低——无数据迁移；唯一键扩展不拒绝任何旧合法写入。
