@@ -161,6 +161,42 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         { indexname: 'learning_objectives_goal_node_unique' },
         { indexname: 'learning_objectives_goal_sequence_unique' },
       ]);
+      /* 0051 的历史 snapshot 没有记录这三条 FK；历史生成物不可回写，
+         因此 fresh→head 必须直接从 PostgreSQL catalog 固化最终运行态。 */
+      expect(
+        await connection<{ conname: string; confdeltype: string }[]>`
+          select conname, confdeltype
+          from pg_constraint
+          where conname in (
+            'assets_space_id_spaces_id_fk',
+            'lesson_sessions_student_id_platform_users_id_fk',
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk'
+          )
+          order by conname
+        `,
+      ).toEqual([
+        {
+          conname: 'assets_space_id_spaces_id_fk',
+          confdeltype: 'r',
+        },
+        {
+          conname: 'lesson_sessions_student_id_platform_users_id_fk',
+          confdeltype: 'r',
+        },
+        {
+          conname:
+            'turn_usage_budget_outcomes_operation_id_agent_operations_id_fk',
+          confdeltype: 'c',
+        },
+      ]);
+      expect(
+        await connection<{ indexname: string }[]>`
+          select indexname
+          from pg_indexes
+          where schemaname = 'public'
+            and indexname = 'assets_space_fk_idx'
+        `,
+      ).toEqual([{ indexname: 'assets_space_fk_idx' }]);
       const statusDefault = await connection<
         { column_default: string | null; is_nullable: string }[]
       >`
