@@ -10,7 +10,7 @@ import {
 import { DrizzleAssetTranscriptionRepository } from '@educanvas/db';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
-import { getAssetTaskStorage } from './asset-task-storage.js';
+import { getAssetTaskStorage, sha256Hex } from './asset-task-storage.js';
 
 const payloadSchema = z.object({ jobId: z.string().uuid() }).strict();
 
@@ -99,10 +99,22 @@ export const transcribeAudioTask: Task = async (rawPayload, helpers) => {
 
     /* 转录网关只返回文本+审计元数据；原始音频响应与供应商错误堆栈不入业务落库，
        避免跨 Worker/浏览器边界泄露内部调用细节。 */
+    /* D04：转录文本内容写入对象存储（内容权威 = transcription representation
+       的 derivedStorageKey）；旧字段仅在兼容窗口内作为同事务镜像。 */
+    const transcriptionKey = `derived/transcription/${payload.jobId}/${sha256Hex(
+      new TextEncoder().encode(result.text),
+    )}.txt`;
+    await storage.put({
+      key: transcriptionKey,
+      bytes: new TextEncoder().encode(result.text),
+      contentType: 'text/plain; charset=utf-8',
+    });
     await assets.settle({
       jobId: payload.jobId,
       outcome: {
         status: 'ready',
+        derivedStorageKey: transcriptionKey,
+        checksum: sha256Hex(new TextEncoder().encode(result.text)),
         transcriptionText: result.text,
         transcriptionMetadata: {
           provider: result.metadata.provider,

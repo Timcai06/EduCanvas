@@ -7,6 +7,7 @@ const { repo, storage, inspect, gateway, resolveGateway } = vi.hoisted(() => ({
   },
   storage: {
     readVerified: vi.fn(),
+    put: vi.fn(),
   },
   inspect: vi.fn(),
   gateway: {
@@ -22,6 +23,7 @@ vi.mock('@educanvas/db', () => ({
 }));
 vi.mock('./asset-task-storage.js', () => ({
   getAssetTaskStorage: vi.fn(async () => storage),
+  sha256Hex: vi.fn(() => 'a'.repeat(64)),
 }));
 vi.mock('@educanvas/asset-processing', async () => {
   const actual = await vi.importActual<
@@ -95,6 +97,10 @@ describe('assets:transcribe_audio', () => {
       jobId: JOB_ID,
       outcome: {
         status: 'ready',
+        derivedStorageKey: expect.stringMatching(
+          /^derived\/transcription\/[a-f0-9-]+\/[a-f0-9]{64}\.txt$/,
+        ),
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
         transcriptionText: '课堂录音转录',
         transcriptionMetadata: expect.objectContaining({
           durationSeconds: 45,

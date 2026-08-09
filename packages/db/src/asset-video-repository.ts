@@ -1,10 +1,13 @@
-import type { AssetRepresentationKind } from '@educanvas/agent-core';
+import type {
+  AssetRepresentationKind,
+  RepresentationIdentity,
+} from '@educanvas/agent-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
+import { upsertAssetRepresentation } from './asset-representation-repository';
 import {
   assetProcessingJobs,
-  assetRepresentations,
   assetVersions,
   assetVideoKeyframes,
   assets,
@@ -58,7 +61,13 @@ export interface VideoProcessingOutcome {
   width: number;
   height: number;
   transcription:
-    | { status: 'ready'; text: string; metadata: VideoTranscriptionMetadata }
+    | {
+        status: 'ready';
+        text: string;
+        metadata: VideoTranscriptionMetadata;
+        derivedStorageKey: string;
+        checksum: string;
+      }
     | { status: 'failed'; failureCode: string }
     | { status: 'unavailable' };
   keyframes:
@@ -111,7 +120,12 @@ export class DrizzleAssetVideoRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return null;
 
       const [version] = await transaction
@@ -177,7 +191,12 @@ export class DrizzleAssetVideoRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return false;
 
       /* 先把联合窄化到局部常量：直接在对象字面量里用三元判断会丢失窄化，
@@ -205,6 +224,7 @@ export class DrizzleAssetVideoRepository {
 
       await upsertRepresentation(transaction, {
         assetVersionId: version.id,
+        identity: claimed,
         kind: 'transcription',
         mimeType: 'text/plain',
         now,
@@ -213,16 +233,26 @@ export class DrizzleAssetVideoRepository {
             ? {
                 status: 'ready',
                 byteSize: Buffer.byteLength(transcription.text, 'utf8'),
+                derivedStorageKey: transcription.derivedStorageKey,
+                checksum: transcription.checksum,
                 failureCode: null,
               }
             : transcription.status === 'failed'
               ? {
                   status: 'failed',
                   byteSize: null,
+                  derivedStorageKey: null,
+                  checksum: null,
                   failureCode: transcription.failureCode,
                 }
               : /* 没有音轨不是失败：它是这段视频的事实。 */
-                { status: 'unavailable', byteSize: null, failureCode: null },
+                {
+                  status: 'unavailable',
+                  byteSize: null,
+                  derivedStorageKey: null,
+                  checksum: null,
+                  failureCode: null,
+                },
       });
 
       const keyframes = outcome.keyframes;
@@ -247,6 +277,7 @@ export class DrizzleAssetVideoRepository {
       }
       await upsertRepresentation(transaction, {
         assetVersionId: version.id,
+        identity: claimed,
         kind: 'keyframes',
         mimeType: 'image/jpeg',
         now,
@@ -258,11 +289,15 @@ export class DrizzleAssetVideoRepository {
                   (total, frame) => total + frame.byteSize,
                   0,
                 ),
+                derivedStorageKey: null,
+                checksum: null,
                 failureCode: null,
               }
             : {
                 status: 'failed',
                 byteSize: null,
+                derivedStorageKey: null,
+                checksum: null,
                 failureCode: keyframes.failureCode,
               },
       });
@@ -340,39 +375,28 @@ async function upsertRepresentation(
   transaction: DatabaseTransaction,
   input: {
     assetVersionId: string;
+    identity: RepresentationIdentity;
     kind: Extract<AssetRepresentationKind, 'transcription' | 'keyframes'>;
     mimeType: string;
     now: Date;
     values: {
       status: 'ready' | 'failed' | 'unavailable';
       byteSize: number | null;
+      derivedStorageKey: string | null;
+      checksum: string | null;
       failureCode: string | null;
     };
   },
 ): Promise<void> {
-  const [existing] = await transaction
-    .select({ id: assetRepresentations.id })
-    .from(assetRepresentations)
-    .where(
-      and(
-        eq(assetRepresentations.assetVersionId, input.assetVersionId),
-        eq(assetRepresentations.kind, input.kind),
-      ),
-    )
-    .limit(1);
-  if (existing) {
-    await transaction
-      .update(assetRepresentations)
-      .set(input.values)
-      .where(eq(assetRepresentations.id, existing.id));
-    return;
-  }
-  await transaction.insert(assetRepresentations).values({
+  /* D04：按完整 identity（默认 identity 显式）幂等 upsert——
+     同一 identity 重试更新本行，不同 identity 并存互不覆盖。 */
+  await upsertAssetRepresentation(transaction, {
     assetVersionId: input.assetVersionId,
     kind: input.kind,
+    ...input.identity,
     mimeType: input.mimeType,
     ...input.values,
-    createdAt: input.now,
+    now: input.now,
   });
 }
 
@@ -418,7 +442,14 @@ function validateOutcome(
       };
     }
     const text = outcome.transcription.text.normalize('NFC').trim();
-    if (!text || [...text].length > 500_000) {
+    if (
+      !text ||
+      [...text].length > 500_000 ||
+      !outcome.transcription.derivedStorageKey ||
+      outcome.transcription.derivedStorageKey.length > 1_024 ||
+      /^https?:\/\//i.test(outcome.transcription.derivedStorageKey) ||
+      !SHA256.test(outcome.transcription.checksum)
+    ) {
       throw new Error('invalid_video_transcription_text');
     }
     const metadata = outcome.transcription.metadata;
@@ -437,6 +468,8 @@ function validateOutcome(
     return {
       status: 'ready',
       text,
+      derivedStorageKey: outcome.transcription.derivedStorageKey,
+      checksum: outcome.transcription.checksum,
       metadata: {
         provider: requireSafeToken(metadata.provider, 64),
         resolvedModelId: requireSafeToken(metadata.resolvedModelId, 256),

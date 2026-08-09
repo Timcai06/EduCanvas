@@ -59,6 +59,49 @@ export const assetProcessorKinds = [
 export const assetProcessorKindSchema = z.enum(assetProcessorKinds);
 export type AssetProcessorKind = z.infer<typeof assetProcessorKindSchema>;
 
+/**
+ * D04：派生结果多版本身份（variant / producer / producer_version）。
+ *
+ * identity = (assetVersionId, kind, variant, producer, producerVersion)，
+ * 与 asset_representations / asset_processing_jobs 的唯一约束一一对应。
+ * - variant：同 kind 下的变体（'default'、'low'/'high'、'corrected' 等）；
+ * - producer：生产者（'default'、'local'、'cloud'、'human' 或具体
+ *   provider/处理器标识）；
+ * - producerVersion：生产者/算法/配置版本（如 'sherpa.v1'、'provider-a.v1'），
+ *   可含点与连字符。
+ * 三者均为开放扩展 Vocabulary：DB 只保留格式 CHECK，已登记成员由
+ * 对应 Registry（assetRepresentationKinds/assetProcessorKinds）约束。
+ */
+export const representationVariantSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]{0,63}$/);
+export const representationProducerSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9._-]{0,63}$/);
+export const representationProducerVersionSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/);
+
+export const representationIdentitySchema = z.object({
+  variant: representationVariantSchema.default('default'),
+  producer: representationProducerSchema.default('default'),
+  producerVersion: representationProducerVersionSchema.default('v1'),
+});
+export type RepresentationIdentity = z.infer<
+  typeof representationIdentitySchema
+>;
+export const DEFAULT_REPRESENTATION_IDENTITY: RepresentationIdentity = {
+  variant: 'default',
+  producer: 'default',
+  producerVersion: 'v1',
+};
+
 export const assetStatuses = [
   'pending',
   'processing',

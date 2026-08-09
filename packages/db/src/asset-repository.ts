@@ -18,6 +18,7 @@ import {
 import type { NotebookMembershipRole } from '@educanvas/gateway-core';
 import {
   and,
+  asc,
   desc,
   eq,
   inArray,
@@ -59,6 +60,10 @@ import {
   type AudioTranscriptionOutcome,
 } from './asset-transcription-repository';
 import { ASSET_PROCESS_VIDEO_TASK } from './asset-video-repository';
+import {
+  defaultRepresentationOrderBy,
+  upsertAssetRepresentation,
+} from './asset-representation-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -124,6 +129,15 @@ export interface OwnedStoredAssetVersion {
     kind: Extract<AssetRepresentationKind, 'transcription' | 'keyframes'>;
     status: 'processing' | 'ready' | 'failed' | 'unavailable';
   }[];
+  /**
+   * D04：默认 identity 的转录表示（对象内容身份，仅供服务端 Adapter
+   * 读取转录文本——对象键绝不进入客户端状态；无表示时为 null）。
+   */
+  transcriptionRepresentation: {
+    derivedStorageKey: string;
+    checksum: string;
+    status: 'ready' | 'failed' | 'processing' | 'unavailable';
+  } | null;
 }
 
 export interface CreateUploadedAssetInput {
@@ -352,12 +366,17 @@ export class DrizzleAssetRepository {
             ? ASSET_PROCESS_VIDEO_TASK
             : ASSET_EXTRACT_TEXT_TASK;
       const queueJobKey = `asset-${processingKind}:${jobId}`;
+      /* D04：job 与 representation 共享 identity（默认 identity 显式），
+         唯一约束防止同一 identity 重复入队。 */
       const [createdJob] = await transaction
         .insert(assetProcessingJobs)
         .values({
           id: jobId,
           assetVersionId: versionId,
           kind: processingKind,
+          variant: 'default',
+          producer: 'default',
+          producerVersion: 'v1',
           status: 'queued',
           attempts: 0,
           queueJobKey,
@@ -416,7 +435,12 @@ export class DrizzleAssetRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return null;
       const [version] = await transaction
         .select({
@@ -441,7 +465,14 @@ export class DrizzleAssetRepository {
   async settleTextExtraction(input: {
     jobId: string;
     outcome:
-      | { status: 'ready'; extractedText: string }
+      | {
+          status: 'ready';
+          extractedText: string;
+          /** D04：抽取文本对象（text representation 的内容身份）。 */
+          derivedStorageKey: string;
+          /** 抽取文本对象 SHA-256（小写 hex）。 */
+          checksum: string;
+        }
       | { status: 'failed'; failureCode: string };
     now?: Date;
   }): Promise<boolean> {
@@ -464,7 +495,12 @@ export class DrizzleAssetRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return false;
 
       const outcome = input.outcome;
@@ -482,13 +518,18 @@ export class DrizzleAssetRepository {
       if (!version) throw new AssetPersistenceError('Asset版本不存在');
 
       if (ready && version.extractedText) {
-        await transaction.insert(assetRepresentations).values({
+        await upsertAssetRepresentation(transaction, {
           assetVersionId: version.id,
           kind: 'text',
+          variant: claimed.variant,
+          producer: claimed.producer,
+          producerVersion: claimed.producerVersion,
           mimeType: 'text/plain',
           status: 'ready',
+          derivedStorageKey: outcome.derivedStorageKey,
+          checksum: outcome.checksum,
           byteSize: Buffer.byteLength(version.extractedText, 'utf8'),
-          createdAt: now,
+          now,
         });
       }
       if (!canTransitionAssetStatus('processing', ready ? 'ready' : 'failed')) {
@@ -741,20 +782,30 @@ export class DrizzleAssetRepository {
       await transaction.insert(assetRepresentations).values({
         assetVersionId: versionId,
         kind: ORIGINAL_REPRESENTATION_KIND,
+        variant: 'default',
+        producer: 'default',
+        producerVersion: 'v1',
         mimeType,
         status: 'ready',
         byteSize: input.byteSize,
         createdAt: now,
+        updatedAt: now,
+        completedAt: now,
       });
       const extractedText = input.extractedText?.trim() || null;
       if (extractedText) {
         await transaction.insert(assetRepresentations).values({
           assetVersionId: versionId,
           kind: TEXT_REPRESENTATION_KIND,
+          variant: 'default',
+          producer: 'default',
+          producerVersion: 'v1',
           mimeType: 'text/plain',
           status: 'ready',
           byteSize: Buffer.byteLength(extractedText, 'utf8'),
           createdAt: now,
+          updatedAt: now,
+          completedAt: now,
         });
       }
       let processingJob: typeof assetProcessingJobs.$inferSelect | null = null;
@@ -971,7 +1022,7 @@ export class DrizzleAssetRepository {
       )
       .limit(1);
     if (!row) throw new AssetAccessError();
-    const derivedStatuses =
+    const orderedDerivedStatuses =
       row.asset.kind === 'video'
         ? await this.database
             .select({
@@ -988,6 +1039,34 @@ export class DrizzleAssetRepository {
                 ]),
               ),
             )
+            .orderBy(
+              asc(assetRepresentations.kind),
+              ...defaultRepresentationOrderBy(),
+            )
+        : [];
+    const derivedStatuses = orderedDerivedStatuses.filter(
+      (item, index, items) =>
+        index === items.findIndex((candidate) => candidate.kind === item.kind),
+    );
+    /* D04：默认 identity 的 transcription representation（确定性默认选择：
+       ready 优先 → variant/producer default → producer_version 字典序）。 */
+    const [transcriptionRepresentation] =
+      row.asset.kind === 'video' || row.asset.kind === 'audio'
+        ? await this.database
+            .select({
+              derivedStorageKey: assetRepresentations.derivedStorageKey,
+              checksum: assetRepresentations.checksum,
+              status: assetRepresentations.status,
+            })
+            .from(assetRepresentations)
+            .where(
+              and(
+                eq(assetRepresentations.assetVersionId, row.version.id),
+                eq(assetRepresentations.kind, 'transcription'),
+              ),
+            )
+            .orderBy(...defaultRepresentationOrderBy())
+            .limit(1)
         : [];
     return {
       assetId: row.asset.id,
@@ -1007,6 +1086,17 @@ export class DrizzleAssetRepository {
         status: representation.status as
           'processing' | 'ready' | 'failed' | 'unavailable',
       })),
+      transcriptionRepresentation:
+        transcriptionRepresentation &&
+        transcriptionRepresentation.derivedStorageKey &&
+        transcriptionRepresentation.checksum
+          ? {
+              derivedStorageKey: transcriptionRepresentation.derivedStorageKey,
+              checksum: transcriptionRepresentation.checksum,
+              status: transcriptionRepresentation.status as
+                'ready' | 'failed' | 'processing' | 'unavailable',
+            }
+          : null,
     };
   }
 

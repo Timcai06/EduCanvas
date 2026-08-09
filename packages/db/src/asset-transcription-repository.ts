@@ -2,12 +2,8 @@ import type { AssetRepresentationKind } from '@educanvas/agent-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
-import {
-  assetProcessingJobs,
-  assetRepresentations,
-  assets,
-  assetVersions,
-} from './schema';
+import { upsertAssetRepresentation } from './asset-representation-repository';
+import { assetProcessingJobs, assets, assetVersions } from './schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -45,7 +41,12 @@ export interface AudioTranscriptionMetadata {
 export type AudioTranscriptionOutcome =
   | {
       status: 'ready';
+      /** 转录文本对象（D04 内容权威：由 worker 写入对象存储，指向 representation）。 */
+      derivedStorageKey: string;
+      /** 转录文本对象 SHA-256（小写 hex）。 */
+      checksum: string;
       transcriptionText: string;
+      /** 双写镜像（审计元数据无新归宿前的 compatibility，见 docs/04-data/08-D04）。 */
       transcriptionMetadata: AudioTranscriptionMetadata;
     }
   | { status: 'failed'; failureCode: string };
@@ -82,7 +83,12 @@ export class DrizzleAssetTranscriptionRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return null;
 
       const [version] = await transaction
@@ -143,7 +149,12 @@ export class DrizzleAssetTranscriptionRepository {
             inArray(assetProcessingJobs.status, ['queued', 'running']),
           ),
         )
-        .returning({ assetVersionId: assetProcessingJobs.assetVersionId });
+        .returning({
+          assetVersionId: assetProcessingJobs.assetVersionId,
+          variant: assetProcessingJobs.variant,
+          producer: assetProcessingJobs.producer,
+          producerVersion: assetProcessingJobs.producerVersion,
+        });
       if (!claimed) return false;
 
       const ready = outcome.status === 'ready';
@@ -151,6 +162,9 @@ export class DrizzleAssetTranscriptionRepository {
         .update(assetVersions)
         .set({
           status: ready ? 'ready' : 'failed',
+          // D04：内容权威 = transcription representation（对象存储）；
+          // transcriptionText/transcriptionMetadata 为同事务 compatibility
+          // 镜像（agent context 读取与审计元数据，退出条件见 docs/04-data/08-D04）。
           transcriptionText: ready ? outcome.transcriptionText : null,
           transcriptionMetadata: ready ? outcome.transcriptionMetadata : null,
           failureCode: ready ? null : outcome.failureCode,
@@ -166,41 +180,24 @@ export class DrizzleAssetTranscriptionRepository {
       if (!version)
         throw new Error('asset_transcription_version_not_available');
 
-      const representationValues = ready
-        ? {
-            status: 'ready' as const,
-            byteSize: Buffer.byteLength(outcome.transcriptionText, 'utf8'),
-            failureCode: null,
-          }
-        : {
-            status: 'failed' as const,
-            byteSize: null,
-            failureCode: outcome.failureCode,
-          };
-      const [existingRepresentation] = await transaction
-        .select({ id: assetRepresentations.id })
-        .from(assetRepresentations)
-        .where(
-          and(
-            eq(assetRepresentations.assetVersionId, version.id),
-            eq(assetRepresentations.kind, TRANSCRIPTION_REPRESENTATION_KIND),
-          ),
-        )
-        .limit(1);
-      if (existingRepresentation) {
-        await transaction
-          .update(assetRepresentations)
-          .set(representationValues)
-          .where(eq(assetRepresentations.id, existingRepresentation.id));
-      } else {
-        await transaction.insert(assetRepresentations).values({
-          assetVersionId: version.id,
-          kind: TRANSCRIPTION_REPRESENTATION_KIND,
-          mimeType: 'text/plain',
-          ...representationValues,
-          createdAt: now,
-        });
-      }
+      /* D04：按完整 identity（默认 identity 显式）幂等 upsert——
+         同一 identity 重试更新本行，不同 identity（多 Provider）并存互不覆盖。 */
+      await upsertAssetRepresentation(transaction, {
+        assetVersionId: version.id,
+        kind: TRANSCRIPTION_REPRESENTATION_KIND,
+        variant: claimed.variant,
+        producer: claimed.producer,
+        producerVersion: claimed.producerVersion,
+        mimeType: 'text/plain',
+        status: outcome.status,
+        derivedStorageKey: ready ? outcome.derivedStorageKey : null,
+        checksum: ready ? outcome.checksum : null,
+        byteSize: ready
+          ? Buffer.byteLength(outcome.transcriptionText, 'utf8')
+          : null,
+        failureCode: ready ? null : outcome.failureCode,
+        now,
+      });
 
       const [updatedAsset] = await transaction
         .update(assets)
@@ -254,6 +251,16 @@ function validateOutcome(
   if (!transcriptionText || [...transcriptionText].length > 500_000) {
     throw new Error('invalid_audio_transcription_text');
   }
+  if (
+    !outcome.derivedStorageKey ||
+    !/^[a-z0-9][a-z0-9._/-]{0,1023}$/i.test(outcome.derivedStorageKey) ||
+    outcome.derivedStorageKey.length > 1024
+  ) {
+    throw new Error('invalid_audio_transcription_storage_key');
+  }
+  if (!/^[a-f0-9]{64}$/.test(outcome.checksum)) {
+    throw new Error('invalid_audio_transcription_checksum');
+  }
   const metadata = outcome.transcriptionMetadata;
   if (
     !Number.isSafeInteger(metadata.latencyMs) ||
@@ -269,6 +276,8 @@ function validateOutcome(
   }
   return {
     status: 'ready',
+    derivedStorageKey: outcome.derivedStorageKey,
+    checksum: outcome.checksum,
     transcriptionText,
     transcriptionMetadata: {
       provider: requireSafeToken(metadata.provider, 64),

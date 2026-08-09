@@ -41,6 +41,32 @@ const transcriptionMetadataSchema = z
   })
   .passthrough();
 
+/**
+ * D04：转录文本读取——内容权威是 transcription representation 的对象存储
+ * （旧列仅保留兼容镜像）；仅有旧字段、对象缺失或校验失败时按冻结规则回退
+ * transcriptionText。对象读取失败不向浏览器泄露内部路径或错误细节。
+ */
+async function resolveTranscriptionText(
+  version: OwnedStoredAssetVersion,
+): Promise<string | null> {
+  const representation = version.transcriptionRepresentation;
+  if (representation && representation.status === 'ready') {
+    try {
+      const bytes = await readStoredAssetBytes(
+        representation.derivedStorageKey,
+      );
+      const checksum = createHash('sha256').update(bytes).digest('hex');
+      if (checksum !== representation.checksum) {
+        throw new Error('asset_representation_checksum_mismatch');
+      }
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return version.transcriptionText;
+    }
+  }
+  return version.transcriptionText;
+}
+
 export class AssetPreviewError extends Error {
   constructor(
     readonly code: 'asset_not_found' | 'preview_unavailable',
@@ -215,15 +241,16 @@ export async function loadOwnedAssetPreviewDetail(input: {
     const transcriptionMeta = parsedMetadata.success
       ? parsedMetadata.data
       : null;
+    const transcriptionText = await resolveTranscriptionText(version);
     return {
       preview: {
         kind: 'audio' as const,
         fileName: version.displayName,
         mimeType: version.mimeType,
         fileUrl,
-        transcription: version.transcriptionText
+        transcription: transcriptionText
           ? {
-              text: version.transcriptionText.slice(0, 500_000),
+              text: transcriptionText.slice(0, 500_000),
               language: transcriptionMeta?.language ?? null,
               durationSeconds: transcriptionMeta?.durationSeconds ?? null,
             }
@@ -245,15 +272,16 @@ export async function loadOwnedAssetPreviewDetail(input: {
     const derivativeStatus = new Map(
       version.derivedStatuses.map((item) => [item.kind, item.status]),
     );
+    const transcriptionText = await resolveTranscriptionText(version);
     return {
       preview: {
         kind: 'video',
         fileName: version.displayName,
         mimeType: version.mimeType,
         fileUrl,
-        transcription: version.transcriptionText
+        transcription: transcriptionText
           ? {
-              text: version.transcriptionText.slice(0, 500_000),
+              text: transcriptionText.slice(0, 500_000),
               language: transcriptionMeta?.language ?? null,
               durationSeconds: transcriptionMeta?.durationSeconds ?? null,
             }

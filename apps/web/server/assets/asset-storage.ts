@@ -40,6 +40,20 @@ export interface StoredAssetObject {
   absolutePath: string;
 }
 
+const ORIGINAL_STORAGE_KEY = /^assets\/[a-f0-9]{16}\/[0-9a-f-]+\.[a-z0-9]+$/;
+const DERIVED_STORAGE_KEY =
+  /^derived\/(?:text|transcription|preview|thumbnail)\/(?:[a-z0-9][a-z0-9._-]{0,127}\/){0,3}[a-z0-9][a-z0-9._-]{0,127}\.[a-z0-9]+$/i;
+
+function requireControlledStorageKey(storageKey: string): string {
+  if (
+    !ORIGINAL_STORAGE_KEY.test(storageKey) &&
+    !DERIVED_STORAGE_KEY.test(storageKey)
+  ) {
+    throw new Error('asset_storage_key_invalid');
+  }
+  return storageKey;
+}
+
 /** 本地开发对象存储适配器；公开契约和数据库都只保存随机 storageKey。 */
 export async function storeAssetBytes(input: {
   ownerSubjectId: string;
@@ -64,10 +78,9 @@ export async function storeAssetBytes(input: {
 export async function readStoredAssetBytes(
   storageKey: string,
 ): Promise<Buffer> {
-  if (!/^assets\/[a-f0-9]{16}\/[0-9a-f-]+\.[a-z0-9]+$/.test(storageKey)) {
-    throw new Error('asset_storage_key_invalid');
-  }
-  return readFile(await resolveStorageKey(storageKey));
+  return readFile(
+    await resolveStorageKey(requireControlledStorageKey(storageKey)),
+  );
 }
 
 export async function removeStoredAsset(
@@ -80,8 +93,7 @@ export async function removeStoredAsset(
 export async function removeStoredAssetByKey(
   storageKey: string,
 ): Promise<void> {
-  if (!/^assets\/[a-f0-9]{16}\/[0-9a-f-]+\.[a-z0-9]+$/.test(storageKey)) {
-    throw new Error('asset_storage_key_invalid');
-  }
-  await rm(await resolveStorageKey(storageKey), { force: true });
+  await rm(await resolveStorageKey(requireControlledStorageKey(storageKey)), {
+    force: true,
+  });
 }

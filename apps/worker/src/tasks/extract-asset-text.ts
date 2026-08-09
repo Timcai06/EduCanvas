@@ -8,6 +8,7 @@ import {
 import { LocalObjectStorage } from '@educanvas/agent-runtime';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
+import { sha256Hex } from './asset-task-storage.js';
 
 const payloadSchema = z.object({ jobId: z.string().uuid() }).strict();
 
@@ -68,9 +69,24 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
       bytes,
       mimeType: pending.mimeType,
     });
+    /* D04：抽取文本内容写入对象存储（text representation 的内容身份），
+       extractedText 旧字段保持同事务双写镜像（compatibility read）。 */
+    const textKey = `derived/text/${payload.jobId}/${sha256Hex(
+      new TextEncoder().encode(extractedText),
+    )}.txt`;
+    await storage.put({
+      key: textKey,
+      bytes: new TextEncoder().encode(extractedText),
+      contentType: 'text/plain; charset=utf-8',
+    });
     await assets.settleTextExtraction({
       jobId: payload.jobId,
-      outcome: { status: 'ready', extractedText },
+      outcome: {
+        status: 'ready',
+        extractedText,
+        derivedStorageKey: textKey,
+        checksum: sha256Hex(new TextEncoder().encode(extractedText)),
+      },
     });
   } catch (error) {
     if (error instanceof AssetExtractionError) {
