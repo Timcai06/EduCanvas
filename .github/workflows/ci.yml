@@ -33,7 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       checks: ${{ steps.impact.outputs.checks }}
-      integration: ${{ steps.impact.outputs.integration }}
+      db_integration: ${{ steps.impact.outputs.db_integration }}
+      worker_integration: ${{ steps.impact.outputs.worker_integration }}
+      migration_integration: ${{ steps.impact.outputs.migration_integration }}
       windows: ${{ steps.impact.outputs.windows }}
       runtime_pressure: ${{ steps.impact.outputs.runtime_pressure }}
       e2e: ${{ steps.impact.outputs.e2e }}
@@ -131,9 +133,10 @@ jobs:
       - name: Repository file governance
         run: pnpm file:check
 
-  integration:
+  db-integration:
+    # D06：packages/db（Repository/Schema 非 drizzle）改动时运行 DB integration。
     needs: [changes]
-    if: needs.changes.outputs.integration == 'true'
+    if: needs.changes.outputs.db_integration == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -170,8 +173,116 @@ jobs:
           --connection "$TEST_DATABASE_URL"
           --schema-only
 
-      - name: PostgreSQL integration tests
-        run: pnpm test:integration
+      - name: DB integration tests
+        run: pnpm test:integration:db
+
+  worker-integration:
+    # D06：apps/worker 与 packages/asset-processing 改动时运行 Worker integration；
+    # 只准备 Worker 所需的数据库与 Graphile schema，不运行 DB full。
+    needs: [changes]
+    if: needs.changes.outputs.worker_integration == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_integration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Graphile Worker schema
+        run: >-
+          pnpm --filter @educanvas/worker exec graphile-worker
+          --connection "$TEST_DATABASE_URL"
+          --schema-only
+
+      - name: Worker integration tests
+        run: pnpm test:integration:worker
+
+  migration-integration:
+    # D06：packages/db/drizzle/** 或 Schema 定义改动时，聚合独立 Migration 证据：
+    # 历史不可变门禁 + 记录完整性 + schema/migration drift + fresh/N-1 集成测试，
+    # 并在验证结束后确认没有生成 0054 或修改仓库。
+    needs: [changes]
+    if: needs.changes.outputs.migration_integration == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_integration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_integration
+      # schedule/workflow_dispatch 没有 before/base；此时用当前 SHA 做自检，不能把空 ref
+      # 交给 fail-closed governance。PR/push 仍比较真实变更范围。
+      BASE_SHA: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.sha) || (github.event_name == 'push' && github.event.before) || github.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Historical migration immutability gate
+        run: node tooling/quality/migration-governance.mjs "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Migration record completeness
+        run: node tooling/quality/migration-records.mjs
+
+      - name: Schema / migration drift check
+        run: pnpm --dir packages/db exec drizzle-kit check
+
+      - name: Regenerate must be a no-op
+        run: >-
+          pnpm --dir packages/db exec drizzle-kit generate &&
+          git diff --exit-code -- packages/db/drizzle
+
+      - name: Migration integration tests (fresh + N-1)
+        run: pnpm test:integration:migrations
+
+      - name: No generated migration artifacts
+        run: >-
+          test -z "$(git status --short packages/db/drizzle)" ||
+          (echo "drizzle 目录被验证过程修改（可能生成了 0054）" && exit 1)
 
   windows:
     needs: [changes]
@@ -262,13 +373,23 @@ jobs:
   e2e:
     # Windows remains an independent required check, but it does not produce
     # artifacts or state consumed by the Linux browser suite.
-    needs: [changes, quality, integration, runtime-pressure]
+    needs:
+      [
+        changes,
+        quality,
+        db-integration,
+        worker-integration,
+        migration-integration,
+        runtime-pressure,
+      ]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.e2e == 'true' &&
       needs.quality.result == 'success' &&
-      contains(fromJSON('["success", "skipped"]'), needs.integration.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['db-integration'].result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['worker-integration'].result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['migration-integration'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result)
     runs-on: ubuntu-latest
     services:
@@ -364,7 +485,9 @@ jobs:
       needs.secret-scan.result == 'success' &&
       contains(fromJSON('["success", "skipped"]'), needs['dependency-review'].result) &&
       needs.quality.result == 'success' &&
-      contains(fromJSON('["success", "skipped"]'), needs.integration.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['db-integration'].result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['worker-integration'].result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['migration-integration'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs.windows.result) &&
       contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs.e2e.result) &&
@@ -375,7 +498,9 @@ jobs:
         secret-scan,
         dependency-review,
         quality,
-        integration,
+        db-integration,
+        worker-integration,
+        migration-integration,
         windows,
         runtime-pressure,
         e2e,
@@ -398,7 +523,9 @@ jobs:
         secret-scan,
         dependency-review,
         quality,
-        integration,
+        db-integration,
+        worker-integration,
+        migration-integration,
         windows,
         runtime-pressure,
         e2e,
@@ -409,7 +536,9 @@ jobs:
     env:
       EVENT_NAME: ${{ github.event_name }}
       CHECKS_EXPECTED: ${{ needs.changes.outputs.checks }}
-      INTEGRATION_EXPECTED: ${{ needs.changes.outputs.integration }}
+      DB_INTEGRATION_EXPECTED: ${{ needs.changes.outputs.db_integration }}
+      WORKER_INTEGRATION_EXPECTED: ${{ needs.changes.outputs.worker_integration }}
+      MIGRATION_INTEGRATION_EXPECTED: ${{ needs.changes.outputs.migration_integration }}
       WINDOWS_EXPECTED: ${{ needs.changes.outputs.windows }}
       RUNTIME_PRESSURE_EXPECTED: ${{ needs.changes.outputs.runtime_pressure }}
       E2E_EXPECTED: ${{ needs.changes.outputs.e2e }}
@@ -420,7 +549,9 @@ jobs:
       SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
       DEPENDENCY_REVIEW_RESULT: ${{ needs['dependency-review'].result }}
       QUALITY_RESULT: ${{ needs.quality.result }}
-      INTEGRATION_RESULT: ${{ needs.integration.result }}
+      DB_INTEGRATION_RESULT: ${{ needs['db-integration'].result }}
+      WORKER_INTEGRATION_RESULT: ${{ needs['worker-integration'].result }}
+      MIGRATION_INTEGRATION_RESULT: ${{ needs['migration-integration'].result }}
       WINDOWS_RESULT: ${{ needs.windows.result }}
       RUNTIME_PRESSURE_RESULT: ${{ needs['runtime-pressure'].result }}
       E2E_RESULT: ${{ needs.e2e.result }}

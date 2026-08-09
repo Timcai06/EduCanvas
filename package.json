@@ -33,7 +33,10 @@
     "typecheck:e2e": "tsc -p tests/e2e/tsconfig.json",
     "db:up": "docker compose up -d",
     "db:generate": "pnpm --filter @educanvas/db generate",
-    "db:migrate": "pnpm --filter @educanvas/db migrate"
+    "db:migrate": "pnpm --filter @educanvas/db migrate",
+    "test:integration:db": "turbo test:integration --filter=@educanvas/db",
+    "test:integration:worker": "turbo test:integration --filter=@educanvas/worker",
+    "test:integration:migrations": "node tooling/quality/migration-integration.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

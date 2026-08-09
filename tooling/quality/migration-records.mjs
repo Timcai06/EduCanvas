@@ -86,9 +86,22 @@ const REQUIRED_FIELDS = [
   '回滚',
   'N-1',
   'Fresh install',
+  'Data migration',
+  'Estimated scale',
   '风险',
 ];
+/**
+ * D06：归档基线（0000–0050）只要求 Q06 时代的 6 字段——不追溯补造没有
+ * 证据的 Data migration / Estimated scale；新迁移（0051 起）必须 8 字段齐备。
+ */
+const LEGACY_FIELDS = ['语义', '锁表', '回滚', 'N-1', 'Fresh install', '风险'];
 const ARCHIVE_MARK = '归档基线';
+/**
+ * D06：新迁移记录禁止占位词——空字段、TBD、TODO、pending、待定等
+ * 都会导致门禁失败（fail closed），防止口头约定替代书面纪律。
+ */
+const PLACEHOLDER_PATTERN =
+  /^(?:TBD|TODO|FIXME|pending|待定|待补|未填|占位|placeholder|\.\.\.|\s*)$/i;
 
 if (!existsSync(MIGRATIONS_DOC)) {
   process.stderr.write(
@@ -142,12 +155,13 @@ for (const r of records) {
 // 4) 字段完整性 + 基线边界检查。
 for (const r of records) {
   if (!sqlFiles.includes(r.file)) continue; // 已在上报孤儿段
-  for (const field of REQUIRED_FIELDS) {
+  const isBaseline = BASELINE.has(r.file);
+  const requiredForRecord = isBaseline ? LEGACY_FIELDS : REQUIRED_FIELDS;
+  for (const field of requiredForRecord) {
     if (!(field in r)) {
       errors.push(`${r.file} 缺少字段「${field}」`);
     }
   }
-  const isBaseline = BASELINE.has(r.file);
   const isArchived = (r['状态'] ?? '').includes(ARCHIVE_MARK);
   if (isBaseline && !isArchived) {
     errors.push(
@@ -163,6 +177,10 @@ for (const r of records) {
     for (const field of REQUIRED_FIELDS) {
       if (!r[field]) {
         errors.push(`${r.file} 新迁移字段「${field}」为空，必须填写真实内容`);
+      } else if (PLACEHOLDER_PATTERN.test(r[field])) {
+        errors.push(
+          `${r.file} 新迁移字段「${field}」是占位词（TBD/TODO/pending 等），必须填写真实内容`,
+        );
       }
     }
   }
