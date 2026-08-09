@@ -30,7 +30,9 @@ describeWithDatabase('Tool Effect决议数据库约束', () => {
     };
     const invalidRows = [
       { ...base, resolution: 'unknown' },
-      { ...base, source: 'client' },
+      // D03：source 已开放为格式 CHECK（producer 扩展标识），
+      // 格式非法值（连字符）仍被拒绝；resolution 保持闭集。
+      { ...base, source: 'client-side' },
       { ...base, resolverId: 'bad resolver' },
       { ...base, evidenceHash: 'not-a-hash' },
       { ...base, receiptHash: 'not-a-hash' },

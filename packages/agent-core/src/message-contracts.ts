@@ -64,14 +64,13 @@ export const agentArtifactPartSchema = z
     type: z.literal('artifact_ref'),
     artifactId: opaqueIdSchema,
     versionId: opaqueIdSchema,
-    kind: z.enum([
-      'image',
-      'audio',
-      'video',
-      'slide',
-      'interactive',
-      'document',
-    ]),
+    // D03：artifact kind 是开放扩展 Vocabulary；DB 只保留格式约束，
+    // 新产物类型无需 Migration（见 docs/04-data/07-D03）。
+    kind: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-z][a-z0-9_]{0,63}$/),
   })
   .strict();
 

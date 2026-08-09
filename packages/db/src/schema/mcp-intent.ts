@@ -66,6 +66,8 @@ export const mcpToolIntents = pgTable(
     ),
     check(
       'mcp_tool_intents_policy_check',
+      // 该表是 external.mcp.invoke 专用加密意图，不是通用 capability 容器；
+      // 新 MCP capability 必须先设计独立 payload/授权语义，不能借格式绕过。
       sql`${table.risk} in ('l2', 'l3') and ${table.effect} = 'write' and ${table.capability} = 'external.mcp.invoke' and ${table.semanticsHash} ~ '^[a-f0-9]{64}$' and ${table.payloadHash} ~ '^[a-f0-9]{64}$'`,
     ),
     check(

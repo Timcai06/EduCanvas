@@ -1,3 +1,4 @@
+import type { AssetRepresentationKind } from '@educanvas/agent-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import { isUuid } from './internal/identifiers';
@@ -339,7 +340,7 @@ async function upsertRepresentation(
   transaction: DatabaseTransaction,
   input: {
     assetVersionId: string;
-    kind: 'transcription' | 'keyframes';
+    kind: Extract<AssetRepresentationKind, 'transcription' | 'keyframes'>;
     mimeType: string;
     now: Date;
     values: {
