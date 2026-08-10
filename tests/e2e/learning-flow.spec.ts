@@ -180,7 +180,13 @@ test('@smoke K12 输入安全边界在 Provider 前拦截并可刷新恢复', as
   await expect(page.getByRole('button', { name: '发送' })).toBeEnabled({
     timeout: 15_000,
   });
+  const turnResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/v1/learn/turn',
+  );
   await composer.press('Enter');
+  const turnResponse = await turnResponsePromise;
 
   const publicResponse = page
     .getByRole('region', { name: 'AI教师对话' })
@@ -191,6 +197,9 @@ test('@smoke K12 输入安全边界在 Provider 前拦截并可刷新恢复', as
   await expect(publicResponse).toBeVisible();
   await expect(page.getByRole('button', { name: '重新发送' })).toHaveCount(0);
 
+  /* message.delta 会先于持久化后的 turn.failed 到达。刷新前等待 SSE 结束，
+     否则测试会主动 abort 仍在结算的请求，并把自己的竞态误报成产品回归。 */
+  await turnResponse.finished();
   await page.reload();
   await expect(publicResponse).toBeVisible();
   await expect(page.getByText('AI 老师暂时无法回答，请稍后重试。')).toHaveCount(
