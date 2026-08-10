@@ -1,0 +1,58 @@
+{
+  "frameWidth": 32,
+  "frameHeight": 32,
+  "fps": 8,
+  "anchor": {
+    "x": 16,
+    "y": 32
+  },
+  "states": {
+    "idle": {
+      "frames": [
+        0,
+        1
+      ],
+      "fps": 4,
+      "loop": true
+    },
+    "walk": {
+      "frames": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "think": {
+      "frames": [
+        6,
+        7
+      ],
+      "fps": 4,
+      "loop": true
+    },
+    "speak": {
+      "frames": [
+        8
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "success": {
+      "frames": [
+        9
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "error": {
+      "frames": [
+        10
+      ],
+      "fps": 8,
+      "loop": false
+    }
+  }
+}
