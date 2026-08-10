@@ -1,20 +1,33 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import type { TurnResult } from '../shared/turn-result';
+import type { Rect } from '../shared/pet-clamp';
+import type { DragPoint } from '../shared/pet-drag';
 
-// renderer 侧类型：window.desktopAssistant 由此声明（含此文件的编译单元即全 project 可见）
+// renderer 侧类型：window.desktopAssistant / window.desktopPet 由此声明
+// （含此文件的编译单元即全 project 可见）
 declare global {
   interface Window {
     desktopAssistant: {
       turn(text: string, signal?: AbortSignal): Promise<TurnResult>;
       onToast(callback: (message: string) => void): () => void;
     };
+    desktopPet: {
+      onHidden(callback: () => void): () => void;
+      dragMove(p: DragPoint): Promise<void>;
+      moveBy(dx: number, dy: number): Promise<Rect>;
+      getBounds(): Promise<Rect>;
+    };
   }
 }
 
 /**
- * contextBridge 暴露给 renderer 的唯一 API。
- * onToast：main 的 webContents.send('assistant:toast') → 回调；返回退订函数。
+ * contextBridge 暴露给 renderer 的 API。
+ * desktopAssistant：P2/P3 语音 turn 复用 proxy 时仍需要，保留。
+ * desktopPet：桌宠窗口动作与推送（拖动/踱步/位置查询/隐藏提示）。
+ * reduced motion 由 renderer 用 matchMedia('(prefers-reduced-motion: reduce)') 直接读取
+ * （electron 43 已移除 nativeTheme.shouldUseReducedMotion，matchMedia 是 Chromium 原生 OS 设置）。
+ * 所有 on* 返回退订函数。
  */
 contextBridge.exposeInMainWorld('desktopAssistant', {
   turn(text: string, signal?: AbortSignal): Promise<TurnResult> {
@@ -28,5 +41,24 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     return () => {
       ipcRenderer.removeListener('assistant:toast', listener);
     };
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopPet', {
+  onHidden(callback: () => void): () => void {
+    const listener = (): void => callback();
+    ipcRenderer.on('pet:toast', listener);
+    return () => {
+      ipcRenderer.removeListener('pet:toast', listener);
+    };
+  },
+  dragMove(p: DragPoint): Promise<void> {
+    return ipcRenderer.invoke('pet:drag-move', p);
+  },
+  moveBy(dx: number, dy: number): Promise<Rect> {
+    return ipcRenderer.invoke('pet:move-by', dx, dy);
+  },
+  getBounds(): Promise<Rect> {
+    return ipcRenderer.invoke('pet:get-bounds');
   },
 });
