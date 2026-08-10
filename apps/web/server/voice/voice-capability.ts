@@ -1,9 +1,5 @@
 import 'server-only';
 
-import {
-  AUDIO_RETENTION_GUARDIAN_PROOF_POLICIES,
-  AudioVoiceCapabilityRepository,
-} from '@educanvas/db';
 import type { VoiceCapabilityCheck } from '@/features/voice';
 
 const HEALTH_TIMEOUT_MS = 2_000;
@@ -11,10 +7,6 @@ const HEALTH_TIMEOUT_MS = 2_000;
 interface VoiceCapabilityDependencies {
   readonly env?: NodeJS.ProcessEnv;
   readonly fetchImpl?: typeof fetch;
-  readonly repository?: Pick<
-    AudioVoiceCapabilityRepository,
-    'checkVoiceProcessingReadiness'
-  >;
 }
 
 export interface VoiceCapabilityResult {
@@ -78,36 +70,20 @@ async function readGatewayHealth(
 }
 
 /**
- * V17 服务端总闸门。所有维度 fail closed，且 ticket BFF 会在每次签发前
- * 重新调用；浏览器返回值只用于解释 UI，不构成授权事实。
+ * V17 服务端基础设施闸门。流式 PCM 不落盘，所以这里只检查真实模型和
+ * Gateway 连接；若未来保留原始音频，必须另走 V11/V14/V15 的同意与留存
+ * 契约。ticket BFF 会在每次签发前重查，浏览器结果不构成授权事实。
  */
 export async function resolveVoiceCapability(
-  subjectUserId: string,
   dependencies: VoiceCapabilityDependencies = {},
 ): Promise<VoiceCapabilityResult> {
   const env = dependencies.env ?? process.env;
   const fetchImpl = dependencies.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const localDevelopment = env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local';
-  const repository =
-    dependencies.repository ??
-    new AudioVoiceCapabilityRepository({
-      guardianProofPolicy: localDevelopment
-        ? AUDIO_RETENTION_GUARDIAN_PROOF_POLICIES.allowSelfAttested
-        : AUDIO_RETENTION_GUARDIAN_PROOF_POLICIES.verifiedOnly,
-    });
   const gatewayUrl = configuredGatewayUrl(env);
-  const [gatewayHealth, repositoryReadiness] = await Promise.all([
-    readGatewayHealth(gatewayUrl, fetchImpl),
-    repository.checkVoiceProcessingReadiness({ subjectUserId }).catch(() => ({
-      consentActive: false,
-      repositoryHealthy: false as const,
-    })),
-  ]);
+  const gatewayHealth = await readGatewayHealth(gatewayUrl, fetchImpl);
   const clientTransportConfigured =
     Boolean(env.EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN?.trim()) &&
     gatewayUrl !== null;
-  const deletionWorkerHealthy =
-    env.EDUCANVAS_AUDIO_DELETION_WORKER_ENABLED?.trim() === 'true';
   const checks: readonly VoiceCapabilityCheck[] = [
     {
       key: 'model',
@@ -117,9 +93,6 @@ export async function resolveVoiceCapability(
       key: 'connection',
       healthy: gatewayHealth.reachable && clientTransportConfigured,
     },
-    { key: 'consent', healthy: repositoryReadiness.consentActive },
-    { key: 'retention', healthy: repositoryReadiness.repositoryHealthy },
-    { key: 'deletion-worker', healthy: deletionWorkerHealthy },
   ];
   return {
     checks,

@@ -11,9 +11,6 @@ import {
 const healthyChecks = [
   { key: 'model' as const, healthy: true },
   { key: 'connection' as const, healthy: true },
-  { key: 'consent' as const, healthy: true },
-  { key: 'retention' as const, healthy: true },
-  { key: 'deletion-worker' as const, healthy: true },
 ];
 
 function makeOptions(
@@ -70,12 +67,12 @@ describe('useVoiceSession SSR 安全', () => {
   it('能力不健康时入口禁用并携带稳定原因（可读文案映射可用）', () => {
     const options = makeOptions({
       capabilityChecks: healthyChecks.map((check) =>
-        check.key === 'consent' ? { ...check, healthy: false } : check,
+        check.key === 'connection' ? { ...check, healthy: false } : check,
       ),
     });
     const html = renderToStaticMarkup(<Probe options={options} />);
     expect(html).toContain('data-enabled="false"');
-    expect(html).toContain('data-reason="CONSENT_NOT_GRANTED"');
+    expect(html).toContain('data-reason="CONNECTION_UNAVAILABLE"');
   });
 
   it('模型缺失时禁用且 reason 为 MODEL_UNAVAILABLE', () => {

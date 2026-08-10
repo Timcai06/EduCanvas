@@ -8,9 +8,6 @@ import {
 const ALL_HEALTHY: readonly VoiceCapabilityCheck[] = [
   { key: 'model', healthy: true },
   { key: 'connection', healthy: true },
-  { key: 'consent', healthy: true },
-  { key: 'retention', healthy: true },
-  { key: 'deletion-worker', healthy: true },
 ];
 
 describe('evaluateVoiceCapability', () => {
@@ -33,68 +30,38 @@ describe('evaluateVoiceCapability', () => {
     expect(state.reason).toBe('MODEL_UNAVAILABLE');
   });
 
-  it('同意撤回（consent 不健康）→ CONSENT_NOT_GRANTED', () => {
-    const state = evaluateVoiceCapability(
-      ALL_HEALTHY.map((check) =>
-        check.key === 'consent' ? { ...check, healthy: false } : check,
-      ),
-    );
+  it('连接不健康时返回稳定原因', () => {
+    const state = evaluateVoiceCapability([
+      { key: 'model', healthy: true },
+      { key: 'connection', healthy: false },
+    ]);
     expect(state.enabled).toBe(false);
-    expect(state.reason).toBe('CONSENT_NOT_GRANTED');
-  });
-
-  it('连接、留存、删除 Worker 任一不健康各自有稳定原因', () => {
-    const cases: Array<[VoiceCapabilityCheck['key'], string]> = [
-      ['connection', 'CONNECTION_UNAVAILABLE'],
-      ['retention', 'RETENTION_UNAVAILABLE'],
-      ['deletion-worker', 'DELETION_WORKER_UNAVAILABLE'],
-    ];
-    for (const [key, reason] of cases) {
-      const state = evaluateVoiceCapability(
-        ALL_HEALTHY.map((check) =>
-          check.key === key ? { ...check, healthy: false } : check,
-        ),
-      );
-      expect(state.enabled).toBe(false);
-      expect(state.reason).toBe(reason);
-    }
+    expect(state.reason).toBe('CONNECTION_UNAVAILABLE');
   });
 
   it('多个不健康：unhealthy 按声明顺序列出，reason 取第一个', () => {
     const state = evaluateVoiceCapability([
-      { key: 'deletion-worker', healthy: false },
       { key: 'model', healthy: false },
-      { key: 'consent', healthy: false },
-      { key: 'connection', healthy: true },
-      { key: 'retention', healthy: true },
+      { key: 'connection', healthy: false },
     ]);
     expect(state.reason).toBe('MODEL_UNAVAILABLE');
     expect(state.unhealthy).toEqual([
       'MODEL_UNAVAILABLE',
-      'CONSENT_NOT_GRANTED',
-      'DELETION_WORKER_UNAVAILABLE',
+      'CONNECTION_UNAVAILABLE',
     ]);
   });
 
-  it('缺失维度视为不健康（fail closed：五维必须全部显式声明）', () => {
-    const state = evaluateVoiceCapability([
-      { key: 'model', healthy: true },
-      { key: 'connection', healthy: true },
-      // 缺 consent / retention / deletion-worker
-    ]);
+  it('缺失维度视为不健康（fail closed：两项必须全部显式声明）', () => {
+    const state = evaluateVoiceCapability([{ key: 'model', healthy: true }]);
     expect(state.enabled).toBe(false);
-    expect(state.unhealthy).toEqual([
-      'CONSENT_NOT_GRANTED',
-      'RETENTION_UNAVAILABLE',
-      'DELETION_WORKER_UNAVAILABLE',
-    ]);
+    expect(state.unhealthy).toEqual(['CONNECTION_UNAVAILABLE']);
   });
 
   it('空 capability（全部缺失）→ 禁用', () => {
     const state = evaluateVoiceCapability([]);
     expect(state.enabled).toBe(false);
     expect(state.reason).toBe('MODEL_UNAVAILABLE');
-    expect(state.unhealthy).toHaveLength(5);
+    expect(state.unhealthy).toHaveLength(2);
   });
 
   it('重复 capability key（非法输入）→ 禁用为 CAPABILITY_CONFIG_INVALID', () => {
@@ -132,14 +99,8 @@ describe('voiceCapabilityReasonLabel', () => {
     expect(voiceCapabilityReasonLabel('CONNECTION_UNAVAILABLE')).toBe(
       '实时语音连接暂不可用',
     );
-    expect(voiceCapabilityReasonLabel('CONSENT_NOT_GRANTED')).toContain(
-      '监护人同意',
-    );
-    expect(voiceCapabilityReasonLabel('RETENTION_UNAVAILABLE')).toContain(
-      '留存',
-    );
-    expect(voiceCapabilityReasonLabel('DELETION_WORKER_UNAVAILABLE')).toContain(
-      '删除',
+    expect(voiceCapabilityReasonLabel('CAPABILITY_CONFIG_INVALID')).toContain(
+      '配置',
     );
   });
 });

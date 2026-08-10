@@ -12,18 +12,12 @@ const capabilityResponseSchema = z
       .array(
         z
           .object({
-            key: z.enum([
-              'model',
-              'connection',
-              'consent',
-              'retention',
-              'deletion-worker',
-            ]),
+            key: z.enum(['model', 'connection']),
             healthy: z.boolean(),
           })
           .strict(),
       )
-      .length(5),
+      .length(2),
     websocketUrl: z
       .string()
       .url()
@@ -35,9 +29,6 @@ const capabilityResponseSchema = z
 const UNAVAILABLE_CHECKS: readonly VoiceCapabilityCheck[] = [
   { key: 'model', healthy: false },
   { key: 'connection', healthy: false },
-  { key: 'consent', healthy: false },
-  { key: 'retention', healthy: false },
-  { key: 'deletion-worker', healthy: false },
 ];
 
 export interface VoiceCapabilityQueryState {

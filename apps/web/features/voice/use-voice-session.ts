@@ -41,7 +41,7 @@ import { VoiceSessionLifecycle } from './voice-session-lifecycle';
 export interface UseVoiceSessionOptions {
   readonly mode: VoiceSessionMode;
   readonly notebookId: string;
-  /** 五维能力健康检查（模型/连接/同意/留存/删除 Worker）。 */
+  /** 不落盘实时识别的基础设施健康检查（模型/连接）。 */
   readonly capabilityChecks: readonly VoiceCapabilityCheck[];
   /** capture 工厂（点击后调用；浏览器 API 只在那一刻发生）。 */
   readonly createCapture: (

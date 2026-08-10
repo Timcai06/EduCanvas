@@ -4,6 +4,7 @@ vi.mock('server-only', () => ({}));
 
 const mocks = vi.hoisted(() => ({
   readIdentity: vi.fn(),
+  readMode: vi.fn(),
   resolveCapability: vi.fn(),
   issueTicket: vi.fn(),
   trustedOrigin: vi.fn(() => true),
@@ -11,6 +12,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/server/identity/anonymous-identity', () => ({
   readAnonymousIdentity: mocks.readIdentity,
+}));
+vi.mock('@/server/experience-mode', () => ({
+  readExperienceMode: mocks.readMode,
 }));
 vi.mock('@/server/voice/voice-capability', () => ({
   resolveVoiceCapability: mocks.resolveCapability,
@@ -34,9 +38,6 @@ import { POST } from './route';
 const healthyChecks = [
   { key: 'model', healthy: true },
   { key: 'connection', healthy: true },
-  { key: 'consent', healthy: true },
-  { key: 'retention', healthy: true },
-  { key: 'deletion-worker', healthy: true },
 ];
 
 function request(body: unknown): Request {
@@ -52,6 +53,7 @@ describe('POST /api/v1/voice/tickets', () => {
     vi.clearAllMocks();
     mocks.trustedOrigin.mockReturnValue(true);
     mocks.readIdentity.mockResolvedValue({ token: '', studentId: 'user:1' });
+    mocks.readMode.mockResolvedValue('restricted');
     mocks.resolveCapability.mockResolvedValue({
       checks: healthyChecks,
       websocketUrl: 'ws://localhost:3200/v1/client/streaming-transcription',
@@ -69,22 +71,33 @@ describe('POST /api/v1/voice/tickets', () => {
       ticket: 'short-ticket',
       expiresAt: '2026-08-10T00:01:00.000Z',
     });
-    expect(mocks.resolveCapability).toHaveBeenCalledWith('user:1');
+    expect(mocks.resolveCapability).toHaveBeenCalledWith();
     expect(mocks.issueTicket).toHaveBeenCalledWith({
       subjectUserId: 'user:1',
       notebookId: 'notebook:1',
     });
   });
 
-  it('同意撤回后 fail closed，不调用 Gateway', async () => {
+  it('实时基础设施不可用时 fail closed，不调用 Gateway', async () => {
     mocks.resolveCapability.mockResolvedValue({
       checks: healthyChecks.map((check) =>
-        check.key === 'consent' ? { ...check, healthy: false } : check,
+        check.key === 'connection' ? { ...check, healthy: false } : check,
       ),
       websocketUrl: null,
     });
     const response = await POST(request({ notebookId: 'notebook:1' }));
     expect(response.status).toBe(503);
+    expect(mocks.issueTicket).not.toHaveBeenCalled();
+  });
+
+  it('尚未选择模式时在能力查询前拒绝', async () => {
+    mocks.readMode.mockResolvedValue(null);
+    const response = await POST(request({ notebookId: 'notebook:1' }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'experience_mode_required' },
+    });
+    expect(mocks.resolveCapability).not.toHaveBeenCalled();
     expect(mocks.issueTicket).not.toHaveBeenCalled();
   });
 
