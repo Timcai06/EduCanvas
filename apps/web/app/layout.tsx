@@ -12,6 +12,8 @@ import './effects.css';
 import { ThemeSync } from '@/features/theme/theme-sync';
 import { InkSplashHost } from '@/features/celebrate/ink-splash-host';
 import { AssistantPanel } from '@/features/assistant/assistant-panel';
+import { ExperienceModeGate } from '@/features/experience-mode/experience-mode-gate';
+import { readExperienceMode } from '@/server/experience-mode';
 
 /** 统一站点标题和摘要，避免各页面自行维护时出现产品定位漂移。 */
 export const metadata: Metadata = {
@@ -32,11 +34,12 @@ const THEME_INIT_SCRIPT = `(function(){try{var p=localStorage.getItem('educanvas
  * 提供全站唯一的 HTML 语义与视觉基线；`zh-CN` 也供读屏器和浏览器选择正确的中文规则。
  * 页面级布局应留在具体路由中，避免根布局承担教学业务，见 docs/05-engineering/03-前端工程.md。
  */
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const experienceMode = await readExperienceMode();
   return (
     // suppressHydrationWarning：内联脚本会在水合前改写 data-theme，属于预期的服务端/客户端差异
     <html lang="zh-CN" suppressHydrationWarning>
@@ -45,9 +48,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-canvas text-ink antialiased">
         <ThemeSync />
-        {children}
-        <InkSplashHost />
-        <AssistantPanel />
+        <ExperienceModeGate initialMode={experienceMode}>
+          {children}
+          <InkSplashHost />
+          <AssistantPanel />
+        </ExperienceModeGate>
       </body>
     </html>
   );

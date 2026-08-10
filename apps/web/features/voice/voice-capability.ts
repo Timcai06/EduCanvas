@@ -4,16 +4,19 @@
  * ## 职责
  *
  * 完整 V17 的语音入口（短句/字幕）只有在全部前置能力健康时才显示；本模块
- * 把五维健康检查折叠成单一、确定性的判定结果，**fail closed**：
+ * 把实时识别所需的两项基础设施检查折叠成单一、确定性的判定结果，
+ * **fail closed**：
  *
- * - 五维 model / connection / consent / retention / deletion-worker 任一
- *   **缺失、false、重复或非法（未知键）** → `enabled === false`；
- * - 缺失维度视为不健康（五维必须全部显式声明且健康才放行）；重复键或未知
+ * - model / connection 任一 **缺失、false、重复或非法（未知键）** →
+ *   `enabled === false`；
+ * - 缺失维度视为不健康（两项必须全部显式声明且健康才放行）；重复键或未知
  *   键视为配置非法，整体禁用为 `CAPABILITY_CONFIG_INVALID`；
  * - `reason` 是第一个（按声明顺序）不健康项的稳定码，`unhealthy` 列出全部
  *   不健康项（顺序稳定），供 UI 显示可读原因；
  * - 纯函数：无 I/O、无 React、无浏览器 API，SSR 安全；能力检查的真实来源
- *   （服务端配置/同意状态/健康探测）由完整 V17 注入，本模块只做折叠判定。
+ *   （服务端配置/健康探测）由完整 V17 注入，本模块只做折叠判定。
+ * - 本路径只处理不落盘的实时 PCM；任何原始音频留存仍必须走 V11/V14/V15
+ *   的同意、留存和删除契约，不能借本闸门绕过。
  *
  * ## 纪律
  *
@@ -22,17 +25,13 @@
  * - 不保存任何 PCM、文本、ticket 或凭证。
  */
 
-/** 五维能力键：声明顺序即判定优先级与 `unhealthy` 顺序。 */
-export type VoiceCapabilityKey =
-  'model' | 'connection' | 'consent' | 'retention' | 'deletion-worker';
+/** 能力键：声明顺序即判定优先级与 `unhealthy` 顺序。 */
+export type VoiceCapabilityKey = 'model' | 'connection';
 
 /** 稳定原因码：UI 据此显示可读文案，不携带服务端细节。 */
 export type VoiceCapabilityReason =
   | 'MODEL_UNAVAILABLE'
   | 'CONNECTION_UNAVAILABLE'
-  | 'CONSENT_NOT_GRANTED'
-  | 'RETENTION_UNAVAILABLE'
-  | 'DELETION_WORKER_UNAVAILABLE'
   /** 配置非法（重复键/未知键）：fail closed，不携带原始输入。 */
   | 'CAPABILITY_CONFIG_INVALID';
 
@@ -51,29 +50,20 @@ export interface VoiceCapabilityState {
   readonly unhealthy: readonly VoiceCapabilityReason[];
 }
 
-const CAPABILITY_ORDER: readonly VoiceCapabilityKey[] = [
-  'model',
-  'connection',
-  'consent',
-  'retention',
-  'deletion-worker',
-];
+const CAPABILITY_ORDER: readonly VoiceCapabilityKey[] = ['model', 'connection'];
 
 const REASON_BY_KEY: Readonly<
   Record<VoiceCapabilityKey, VoiceCapabilityReason>
 > = {
   model: 'MODEL_UNAVAILABLE',
   connection: 'CONNECTION_UNAVAILABLE',
-  consent: 'CONSENT_NOT_GRANTED',
-  retention: 'RETENTION_UNAVAILABLE',
-  'deletion-worker': 'DELETION_WORKER_UNAVAILABLE',
 };
 
 /**
- * 折叠五维健康检查为入口判定（fail closed）。
+ * 折叠实时识别基础设施检查为入口判定（fail closed）。
  *
  * - 重复键 / 未知键：配置非法，整体禁用（`CAPABILITY_CONFIG_INVALID`）；
- * - 缺失的维度视为不健康（必须五维全部显式声明且健康才放行）；
+ * - 缺失的维度视为不健康（必须两项全部显式声明且健康才放行）；
  * - 任一维度 `healthy === false` 禁用。
  */
 export function evaluateVoiceCapability(
@@ -112,12 +102,6 @@ export function voiceCapabilityReasonLabel(
       return '语音模型暂不可用';
     case 'CONNECTION_UNAVAILABLE':
       return '实时语音连接暂不可用';
-    case 'CONSENT_NOT_GRANTED':
-      return '需要有效的监护人同意才能使用语音';
-    case 'RETENTION_UNAVAILABLE':
-      return '音频留存服务暂不可用';
-    case 'DELETION_WORKER_UNAVAILABLE':
-      return '音频删除服务暂不可用';
     case 'CAPABILITY_CONFIG_INVALID':
       return '语音能力配置无效';
   }

@@ -5,9 +5,6 @@ import { VoiceComposerRuntime } from './voice-composer';
 const healthyChecks = [
   { key: 'model' as const, healthy: true },
   { key: 'connection' as const, healthy: true },
-  { key: 'consent' as const, healthy: true },
-  { key: 'retention' as const, healthy: true },
-  { key: 'deletion-worker' as const, healthy: true },
 ];
 
 function render(checks = healthyChecks) {
@@ -43,13 +40,13 @@ describe('VoiceComposerRuntime', () => {
     expect(result.createClient).not.toHaveBeenCalled();
   });
 
-  it('缺同意时入口禁用且原因可读', () => {
+  it('连接不可用时入口禁用且原因可读', () => {
     const result = render(
       healthyChecks.map((check) =>
-        check.key === 'consent' ? { ...check, healthy: false } : check,
+        check.key === 'connection' ? { ...check, healthy: false } : check,
       ),
     );
     expect(result.html).toContain('disabled=""');
-    expect(result.html).toContain('需要有效的监护人同意才能使用语音');
+    expect(result.html).toContain('实时语音连接暂不可用');
   });
 });

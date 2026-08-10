@@ -2,6 +2,7 @@ import { gatewayOpaqueIdSchema } from '@educanvas/gateway-core';
 import { z } from 'zod';
 import { evaluateVoiceCapability } from '@/features/voice/voice-capability';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { readExperienceMode } from '@/server/experience-mode';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -30,6 +31,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!identity || identity.studentId.startsWith('anon:v1:')) {
     return jsonError(401, 'unauthorized', '请先登录后使用语音。');
   }
+  const mode = await readExperienceMode();
+  if (mode === null) {
+    return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
+  }
   let raw: unknown;
   try {
     raw = await readLimitedJsonRequest(request, { maxBytes: 1_024 });
@@ -42,7 +47,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) {
     return jsonError(400, 'invalid_request', '语音请求格式不正确。');
   }
-  const capability = await resolveVoiceCapability(identity.studentId);
+  const capability = await resolveVoiceCapability();
   if (!evaluateVoiceCapability(capability.checks).enabled) {
     return jsonError(503, 'voice_capability_unavailable', '语音能力暂不可用。');
   }

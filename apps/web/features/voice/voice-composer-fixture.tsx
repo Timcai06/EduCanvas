@@ -11,9 +11,6 @@ import type { VoiceBrowserRuntime } from './voice-browser-runtime';
 const HEALTHY_CHECKS = [
   { key: 'model' as const, healthy: true },
   { key: 'connection' as const, healthy: true },
-  { key: 'consent' as const, healthy: true },
-  { key: 'retention' as const, healthy: true },
-  { key: 'deletion-worker' as const, healthy: true },
 ];
 
 function segment(

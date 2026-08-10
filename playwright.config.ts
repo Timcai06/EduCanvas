@@ -83,6 +83,7 @@ export default defineConfig({
       ...process.env,
       DATABASE_URL: databaseUrl,
       EDUCANVAS_DEPLOYMENT_ENV: 'test',
+      EDUCANVAS_EXPERIENCE_MODE_DEFAULT: 'restricted',
       EDUCANVAS_ENABLE_DESIGN_QA: 'true',
       MODEL_GATEWAY_PROVIDER: '',
       MODEL_GATEWAY_API_KEY: '',
