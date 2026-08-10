@@ -471,6 +471,7 @@ export async function consumeTeachingTurnResponse(
   let buffer = '';
   let responseTextLength = 0;
   let eventCount = 0;
+  let terminalReceived = false;
 
   const dispatchFrame = (frame: string) => {
     if (frame.length > MAX_FRAME_LENGTH) {
@@ -494,6 +495,10 @@ export async function consumeTeachingTurnResponse(
         }
       }
       onEvent(event);
+      terminalReceived ||=
+        event.type === 'turn.completed' ||
+        event.type === 'turn.failed' ||
+        event.type === 'turn.cancelled';
     }
   };
 
@@ -506,6 +511,13 @@ export async function consumeTeachingTurnResponse(
         dispatchFrame(buffer.slice(0, match.index));
         buffer = buffer.slice(match.index + match[0].length);
         match = /\r\n\r\n|\n\n|\r\r/.exec(buffer);
+      }
+      /* Turn 协议的唯一终态已经在服务端持久化后才会发送。此时主动释放
+         reader，避免浏览器或反向代理延迟 HTTP EOF 时让已完成的 Turn
+         继续占用 in-flight 槽位；同一 chunk 内的完整帧仍会先被校验。 */
+      if (terminalReceived) {
+        await reader.cancel().catch(() => undefined);
+        break;
       }
       if (buffer.length > MAX_BUFFER_LENGTH) {
         throw new TurnStreamProtocolError('turn event buffer is too large');

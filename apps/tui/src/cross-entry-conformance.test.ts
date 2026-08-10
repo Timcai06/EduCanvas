@@ -44,4 +44,13 @@ describe('TUI跨入口合规', () => {
     expect(unavailable.err).toContain('所需能力当前不可用');
     expect(unavailable.err).not.toContain('已停止这轮回答');
   });
+
+  it('把 Runtime 失败与未知内部失败投影为稳定且不泄密的提示', () => {
+    const runtime = render(gatewayCrossEntryConformance.runtimeFailed);
+    const unknown = render(gatewayCrossEntryConformance.internalFailure);
+
+    expect(runtime.err).toContain('这轮回答失败了');
+    expect(unknown.err).toContain('INTERNAL_ERROR');
+    expect(unknown.err).not.toContain('stack');
+  });
 });

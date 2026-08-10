@@ -82,6 +82,51 @@ describe('teaching turn SSE protocol', () => {
     expect(stream.locked).toBe(false);
   });
 
+  it.each([
+    ['turn.completed', {}],
+    [
+      'turn.failed',
+      {
+        code: 'POLICY_BLOCKED',
+        message: '请求已被安全规则停止。',
+        retryable: false,
+      },
+    ],
+    ['turn.cancelled', {}],
+  ] as const)('%s 到达后主动释放未关闭的传输流', async (type, fields) => {
+    const encoder = new TextEncoder();
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `event: ${type}\ndata: ${JSON.stringify({
+              type,
+              schemaVersion: '1',
+              turnId: 'turn-1',
+              messageId: 'assistant-1',
+              ...fields,
+            })}\n\n`,
+          ),
+        );
+        // 模拟浏览器或代理没有及时送达 HTTP EOF。
+      },
+      cancel,
+    });
+    const onEvent = vi.fn();
+
+    await consumeTeachingTurnResponse(
+      new Response(stream, {
+        headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+      }),
+      onEvent,
+    );
+
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type }));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(stream.locked).toBe(false);
+  });
+
   it('ignores unknown additive events', () => {
     expect(
       parseTeachingTurnEvent(

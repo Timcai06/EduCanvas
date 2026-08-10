@@ -1,5 +1,6 @@
 import {
   gatewayProtocolVersion,
+  type GatewayFailureCode,
   type GatewayInboundEnvelope,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
@@ -219,6 +220,62 @@ export function telegramTextChunks(
     remaining = remaining.slice(end).replace(/^\n+/, '');
   }
   return chunks;
+}
+
+export type TelegramOperationProjection =
+  | {
+      status: 'approval_required';
+      text: string;
+    }
+  | {
+      status: 'cancelled';
+      text: string;
+    }
+  | {
+      status: 'failed';
+      code: GatewayFailureCode;
+      retryable: boolean;
+      text: string;
+    };
+
+/**
+ * 把 Gateway 控制事实投影为 Telegram 的有界文本。结构中保留稳定失败码供
+ * 适配器测试与观测使用，但下发文本不暴露内部响应、堆栈或 Provider 细节。
+ */
+export function projectTelegramOperation(
+  events: readonly GatewayOperationEvent[],
+): TelegramOperationProjection | null {
+  const terminal = events.findLast(
+    (event) =>
+      event.type === 'operation.completed' ||
+      event.type === 'operation.failed' ||
+      event.type === 'operation.cancelled',
+  );
+  if (terminal?.type === 'operation.completed') return null;
+  if (terminal?.type === 'operation.cancelled') {
+    return { status: 'cancelled', text: '这轮回答已停止。' };
+  }
+  if (terminal?.type === 'operation.failed') {
+    const text =
+      terminal.code === 'CAPABILITY_UNAVAILABLE'
+        ? '这项能力暂不可用，请改用 Web 或 TUI 查看可用入口。'
+        : terminal.code === 'RUNTIME_FAILED'
+          ? '这轮运行失败了，可以稍后重试或在 Web 中查看。'
+          : 'EduCanvas 暂时无法完成这次请求，请稍后重试。';
+    return {
+      status: 'failed',
+      code: terminal.code,
+      retryable: terminal.retryable,
+      text,
+    };
+  }
+  if (events.some((event) => event.type === 'approval.required')) {
+    return {
+      status: 'approval_required',
+      text: '这项操作需要更高权限，请在 Web 或 TUI 中审批；Telegram 私聊不会直接批准高风险操作。',
+    };
+  }
+  return null;
 }
 
 /**

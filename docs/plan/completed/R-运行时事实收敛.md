@@ -9,7 +9,7 @@
 - 当前领取任务：无（R00-R08 已完成并通过 Codex 复核）
 - 并行计划：[W 工作面画布](../completed/W-工作面画布收敛.md)、[Q 质量观测成本](../completed/Q-质量观测成本.md)
 - 后续出口：[G 产品发布闭环](../active/G-产品发布闭环.md)
-- 关联计划：[UV 画布语音](../active/UV-画布语音.md)、[KM 知识记忆](../active/KM-知识记忆.md)
+- 关联计划：[UV 画布语音](UV-画布语音.md)、[KM 知识记忆](../active/KM-知识记忆.md)
 
 ## 一、目标
 
@@ -363,9 +363,7 @@ Gateway transport → GatewayService → GatewayAgentTurnRunner.run (apps/gatewa
   "R02 必须在 KM M02 前完成，或等待 M02 合并后重放"一致 → **R02 可开始；若 KM M02 先行启动则
   串行等待**。
 - **R03 vs UV**：R03 边界含 packages/model-gateway/src/**、apps/web/server/model/**、
-  apps/worker/src/model-runtime.ts；UV 中触碰 model-gateway 的为 V08（UV-画布语音.md:539）与
-  V09（:561-566），二者均已 PASS（UV-画布语音.md:557、台账 :1131-1157）；R03 另两个路径在 UV
-  全文中无引用 → **R03 阻塞解除，可并行**。
+  apps/worker/src/model-runtime.ts；UV 的 V08/V09 已完成并归档，R03 当时的阻塞已经解除。
 - **R01 / R07**：与 UV、KM 均无文件交集 → 可并行。
 - 注意：UV V11/V14/V15 曾修改 packages/db（schema/repository/Outbox）但均已 PASS，且本计划默认
   禁止"音频留存、对象删除"任务；R 后续在 packages/db 新增 repository 需留意与 O 线（删除队列

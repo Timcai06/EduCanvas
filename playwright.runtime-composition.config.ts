@@ -72,6 +72,9 @@ export default defineConfig({
         DATABASE_URL: databaseUrl,
         EDUCANVAS_DEPLOYMENT_ENV: 'test',
         EDUCANVAS_ENABLE_DESIGN_QA: 'true',
+        // Runtime composition does not exercise the first-run product choice.
+        // Match the primary E2E config so the experience gate cannot mask Runtime assertions.
+        EDUCANVAS_EXPERIENCE_MODE_DEFAULT: 'restricted',
         MODEL_GATEWAY_PROVIDER: '',
         MODEL_GATEWAY_API_KEY: '',
         EDUCANVAS_WEB_RUNTIME_PUBLIC_ORIGIN: runtimeOrigin,

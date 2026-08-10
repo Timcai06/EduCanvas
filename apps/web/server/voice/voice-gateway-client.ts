@@ -23,7 +23,8 @@ export class VoiceGatewayError extends Error {
     readonly code:
       | 'VOICE_GATEWAY_NOT_CONFIGURED'
       | 'VOICE_GATEWAY_UNAVAILABLE'
-      | 'VOICE_GATEWAY_REJECTED',
+      | 'VOICE_GATEWAY_REJECTED'
+      | 'VOICE_GATEWAY_RESOURCE_NOT_FOUND',
   ) {
     super(code);
   }
@@ -65,6 +66,7 @@ async function postJson(
   url: URL,
   authorization: string,
   body: unknown,
+  notFoundCode?: VoiceGatewayError['code'],
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -82,6 +84,12 @@ async function postJson(
     throw new VoiceGatewayError('VOICE_GATEWAY_UNAVAILABLE');
   }
   if (!response.ok) {
+    response.body?.cancel().catch(() => undefined);
+    // Gateway 用 404 统一表达资源不存在与主体无权访问。这里只保留该稳定、
+    // 不泄露归属差异的语义；其他下游响应体仍不穿过 model/BFF 信任边界。
+    if (response.status === 404 && notFoundCode) {
+      throw new VoiceGatewayError(notFoundCode);
+    }
     throw new VoiceGatewayError('VOICE_GATEWAY_REJECTED');
   }
   try {
@@ -116,6 +124,7 @@ export async function issueVoiceStreamingTicket(
       new URL('/v1/client/streaming-transcription/tickets', baseUrl),
       session.token,
       { notebookId: input.notebookId },
+      'VOICE_GATEWAY_RESOURCE_NOT_FOUND',
     ),
   );
 }

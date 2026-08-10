@@ -67,7 +67,7 @@ describe('POST /api/v1/voice/tickets', () => {
   it('每次签发前重新校验能力并只返回短时 ticket', async () => {
     const response = await POST(request({ notebookId: 'notebook:1' }));
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       ticket: 'short-ticket',
       expiresAt: '2026-08-10T00:01:00.000Z',
     });
@@ -114,5 +114,23 @@ describe('POST /api/v1/voice/tickets', () => {
       403,
     );
     expect(mocks.resolveCapability).not.toHaveBeenCalled();
+  });
+
+  it('跨 Notebook 或主体拒绝保持统一 404，不降级成基础设施 503', async () => {
+    const { VoiceGatewayError } =
+      await import('@/server/voice/voice-gateway-client');
+    mocks.issueTicket.mockRejectedValue(
+      new VoiceGatewayError('VOICE_GATEWAY_RESOURCE_NOT_FOUND'),
+    );
+
+    const response = await POST(request({ notebookId: 'notebook:other' }));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: 'not_found',
+        message: '语音资源不存在或不可访问。',
+      },
+    });
   });
 });

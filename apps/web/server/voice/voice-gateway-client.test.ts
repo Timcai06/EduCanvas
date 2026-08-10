@@ -97,4 +97,56 @@ describe('issueVoiceStreamingTicket', () => {
     ).rejects.toMatchObject({ code: 'VOICE_GATEWAY_REJECTED' });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it('保留 Gateway 统一的资源不存在语义且不读取或暴露响应体', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? Response.json({
+            userId: 'user:1',
+            agentId: 'agent:1',
+            token: 'session-token',
+            expiresAt: '2026-08-11T00:00:00.000Z',
+          })
+        : Response.json(
+            { error: { code: 'NOT_FOUND', privateDetail: 'must-not-escape' } },
+            { status: 404 },
+          );
+    }) as typeof fetch;
+
+    await expect(
+      issueVoiceStreamingTicket(
+        { subjectUserId: 'user:1', notebookId: 'notebook:other' },
+        {
+          env: {
+            NODE_ENV: 'test',
+            EDUCANVAS_GATEWAY_URL: 'http://127.0.0.1:3200',
+            EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN: 's'.repeat(32),
+          },
+          fetchImpl,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'VOICE_GATEWAY_RESOURCE_NOT_FOUND' });
+  });
+
+  it('bootstrap 路由缺失仍归类为 Gateway 拒绝而非 Notebook 不可访问', async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ error: { code: 'NOT_FOUND' } }, { status: 404 }),
+    ) as typeof fetch;
+
+    await expect(
+      issueVoiceStreamingTicket(
+        { subjectUserId: 'user:1', notebookId: 'notebook:1' },
+        {
+          env: {
+            NODE_ENV: 'test',
+            EDUCANVAS_GATEWAY_URL: 'http://127.0.0.1:3200',
+            EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN: 's'.repeat(32),
+          },
+          fetchImpl,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'VOICE_GATEWAY_REJECTED' });
+  });
 });

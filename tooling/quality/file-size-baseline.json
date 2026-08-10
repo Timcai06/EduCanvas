@@ -10,7 +10,7 @@
     "apps/web/features/canvas/animation-shell.tsx": 476,
     "apps/web/features/canvas/artifact-generation-flow.tsx": 545,
     "apps/web/features/canvas/canvas-registry.tsx": 409,
-    "apps/web/features/chat/turn-events.ts": 523,
+    "apps/web/features/chat/turn-events.ts": 535,
     "apps/web/features/chat/turn-state.ts": 462,
     "apps/web/features/voice/capture/audio-capture.ts": 443,
     "apps/web/features/voice/transport/streaming-transcription-client.ts": 772,

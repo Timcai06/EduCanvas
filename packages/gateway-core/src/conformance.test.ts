@@ -12,6 +12,8 @@ describe('Gateway跨入口合规夹具', () => {
     'approvalPending',
     'cancelled',
     'capabilityUnavailable',
+    'runtimeFailed',
+    'internalFailure',
   ] as const)('%s保持严格Schema、顺序与唯一终态', (name) => {
     const events = gatewayCrossEntryConformance[name];
     expect(
@@ -36,5 +38,30 @@ describe('Gateway跨入口合规夹具', () => {
     expect(gatewayCrossEntryConformance.request).not.toHaveProperty(
       'principal',
     );
+  });
+
+  it('拒绝未知事件和终态后的任何追加事件', () => {
+    const firstEvent = gatewayCrossEntryConformance.completed[0];
+    const terminalEvent = gatewayCrossEntryConformance.completed.at(-1);
+    if (!firstEvent || !terminalEvent) {
+      throw new Error('cross-entry completed fixture must not be empty');
+    }
+
+    expect(
+      gatewayOperationEventSchema.safeParse({
+        ...firstEvent,
+        type: 'operation.future_terminal',
+      }).success,
+    ).toBe(false);
+    expect(
+      validateGatewayEventSequence([
+        ...gatewayCrossEntryConformance.completed,
+        {
+          ...terminalEvent,
+          sequence: 4,
+          eventId: 'event:cross-entry:4',
+        },
+      ]),
+    ).toBe(false);
   });
 });

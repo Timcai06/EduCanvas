@@ -58,4 +58,16 @@ describe('Web SSE跨入口合规', () => {
       },
     ]);
   });
+
+  it.each([
+    ['runtimeFailed', 'RUNTIME_FAILED'],
+    ['internalFailure', 'INTERNAL_ERROR'],
+  ] as const)('保留%s的稳定失败码', async (fixture, code) => {
+    const events = await project(gatewayCrossEntryConformance[fixture]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'turn.failed',
+      code,
+      retryable: true,
+    });
+  });
 });

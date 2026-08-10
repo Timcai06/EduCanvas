@@ -96,6 +96,24 @@ export const gatewayCrossEntryConformance = {
       retryable: false,
     },
   ] satisfies readonly GatewayOperationEvent[],
+  runtimeFailed: [
+    { ...eventBase(0), type: 'operation.accepted' },
+    {
+      ...eventBase(1),
+      type: 'operation.failed',
+      code: 'RUNTIME_FAILED',
+      retryable: true,
+    },
+  ] satisfies readonly GatewayOperationEvent[],
+  internalFailure: [
+    { ...eventBase(0), type: 'operation.accepted' },
+    {
+      ...eventBase(1),
+      type: 'operation.failed',
+      code: 'INTERNAL_ERROR',
+      retryable: true,
+    },
+  ] satisfies readonly GatewayOperationEvent[],
 } as const;
 
 /** 把合规事件编码为Gateway公共NDJSON传输，不添加隐式终态。 */
