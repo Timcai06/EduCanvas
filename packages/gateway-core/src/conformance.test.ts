@@ -41,9 +41,15 @@ describe('Gateway跨入口合规夹具', () => {
   });
 
   it('拒绝未知事件和终态后的任何追加事件', () => {
+    const firstEvent = gatewayCrossEntryConformance.completed[0];
+    const terminalEvent = gatewayCrossEntryConformance.completed.at(-1);
+    if (!firstEvent || !terminalEvent) {
+      throw new Error('cross-entry completed fixture must not be empty');
+    }
+
     expect(
       gatewayOperationEventSchema.safeParse({
-        ...gatewayCrossEntryConformance.completed[0],
+        ...firstEvent,
         type: 'operation.future_terminal',
       }).success,
     ).toBe(false);
@@ -51,7 +57,7 @@ describe('Gateway跨入口合规夹具', () => {
       validateGatewayEventSequence([
         ...gatewayCrossEntryConformance.completed,
         {
-          ...gatewayCrossEntryConformance.completed[2],
+          ...terminalEvent,
           sequence: 4,
           eventId: 'event:cross-entry:4',
         },
