@@ -364,14 +364,19 @@ describe('VoiceSessionController（失败与终态）', () => {
   });
 
   it('ticket 失败：failed/TICKET_FAILED，麦克风从未被请求', async () => {
-    const harness = makeHarness();
+    const capture = new FakeCapture();
+    const createCapture = vi.fn((handlers: VoiceSessionCaptureHandlers) => {
+      capture.bind(handlers);
+      return capture;
+    });
+    const harness = makeHarness({ createCapture });
     harness.client.startError = new StreamingTranscriptionClientError(
       'TICKET_FAILED',
     );
     await harness.controller.start();
     expect(harness.calls.statuses.at(-1)).toBe('failed');
     expect(harness.calls.errors).toEqual(['TICKET_FAILED']);
-    expect(harness.capture.startCalled).toBe(false);
+    expect(createCapture).not.toHaveBeenCalled();
   });
 
   it('权限拒绝（capture 失败）：failed/PERMISSION_DENIED 并取消连接', async () => {
@@ -496,6 +501,18 @@ describe('VoiceSessionController（失败与终态）', () => {
 });
 
 describe('VoiceSessionController（dispose 与清理）', () => {
+  it('client disconnect 抛错时仍释放 capture、引用并收敛 stopped', async () => {
+    const harness = makeHarness();
+    await harness.controller.start();
+    harness.client.disconnect = () => {
+      throw new Error('disconnect failure');
+    };
+
+    expect(() => harness.controller.dispose()).not.toThrow();
+    expect(harness.capture.cleanupCalled).toBe(true);
+    expect(harness.controller.getState()).toBe('stopped');
+  });
+
   it('dispose 停止采集、断开连接、收敛一次且幂等', async () => {
     const harness = makeHarness();
     await harness.controller.start();

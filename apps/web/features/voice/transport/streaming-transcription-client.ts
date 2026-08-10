@@ -61,6 +61,7 @@ import {
   type StreamingTranscriptionServerMessage,
 } from '@educanvas/agent-core';
 import { type StreamingTranscriptionTicketClient } from './streaming-transcription-ticket-client';
+import { StreamingTranscriptionObservers } from './streaming-transcription-observers';
 
 /** 客户端阶段：idle（未 start）→ starting（ticket/握手）→ open（可发送）→ terminal。 */
 export type StreamingTranscriptionClientPhase =
@@ -253,18 +254,9 @@ export class StreamingTranscriptionClient {
   private readonly ticketClient: StreamingTranscriptionTicketClient;
   private readonly WebSocketCtor: typeof WebSocket;
   private readonly resolveWsUrl: (input: { notebookId: string }) => string;
-  private readonly log: (entry: StreamingTranscriptionClientLogEntry) => void;
   private readonly createOperationId: () => string;
   private readonly createSegmentId: () => string;
-  private readonly onSnapshot?: (
-    snapshot: StreamingTranscriptionSnapshot,
-  ) => void;
-  private readonly onStatus?: (
-    status: StreamingTranscriptionClientStatus,
-  ) => void;
-  private readonly onTerminal?: (
-    result: StreamingTranscriptionTerminalResult,
-  ) => void;
+  private readonly observers: StreamingTranscriptionObservers;
   private readonly allowedInsecureWsHosts: readonly string[];
 
   private phase: StreamingTranscriptionClientPhase = 'idle';
@@ -293,13 +285,15 @@ export class StreamingTranscriptionClient {
     this.ticketClient = options.ticketClient;
     this.WebSocketCtor = options.WebSocketCtor;
     this.resolveWsUrl = options.resolveWsUrl;
-    this.log = options.log ?? (() => undefined);
+    this.observers = new StreamingTranscriptionObservers(options);
     this.allowedInsecureWsHosts = options.allowedInsecureWsHosts ?? [];
-    this.createOperationId = options.createOperationId ?? crypto.randomUUID;
-    this.createSegmentId = options.createSegmentId ?? crypto.randomUUID;
-    this.onSnapshot = options.onSnapshot;
-    this.onStatus = options.onStatus;
-    this.onTerminal = options.onTerminal;
+    // Web Crypto methods may enforce their receiver ("Illegal invocation" when
+    // extracted as a bare function). Keep the global lookup inside a wrapper so
+    // browsers call randomUUID with the correct Crypto receiver.
+    this.createOperationId =
+      options.createOperationId ?? (() => globalThis.crypto.randomUUID());
+    this.createSegmentId =
+      options.createSegmentId ?? (() => globalThis.crypto.randomUUID());
   }
 
   /** 当前 V05 归并快照；未 start 或尚未收到事件时为空 operation 快照。 */
@@ -492,7 +486,7 @@ export class StreamingTranscriptionClient {
       ticket = grant.ticket;
     } catch {
       if (this.phase === 'terminal') return; // abort 已收敛
-      this.log({ label: 'ticket_failed', code: 'TICKET_FAILED' });
+      this.observers.log({ label: 'ticket_failed', code: 'TICKET_FAILED' });
       this.enterTerminal({
         reason: 'ticket-failed',
         errorCode: 'TICKET_FAILED',
@@ -544,13 +538,14 @@ export class StreamingTranscriptionClient {
       this.handleSocketClose();
     });
     socket.addEventListener('error', () => {
-      this.log({ label: 'socket_error' });
+      this.observers.log({ label: 'socket_error' });
       // 网络错误立即收敛（close 事件随后到达时已被终态守卫忽略），保证
       // "网络错误只收敛一次"。
       if (this.phase === 'starting') {
         this.connectFailed();
       } else if (this.phase === 'open') {
         this.enterTerminal({ reason: 'disconnected' });
+        this.closeSocket(1000);
       }
     });
   }
@@ -580,7 +575,7 @@ export class StreamingTranscriptionClient {
     ) {
       const code =
         typeof frame.error.code === 'string' ? frame.error.code : undefined;
-      this.log({ label: 'protocol_rejected', code });
+      this.observers.log({ label: 'protocol_rejected', code });
       this.enterTerminal({
         reason: 'protocol-error',
         errorCode: 'PROTOCOL_ERROR',
@@ -611,12 +606,12 @@ export class StreamingTranscriptionClient {
       this.protocolError();
       return;
     }
-    this.log({
+    this.observers.log({
       label: 'event_applied',
       operationId: event.operationId,
       segmentId: event.segmentId,
     });
-    this.onSnapshot?.(this.snapshot!);
+    this.observers.snapshot(this.snapshot!);
     if (event.type === 'final' || event.type === 'failed') {
       const result: StreamingTranscriptionTerminalResult =
         event.type === 'final'
@@ -635,7 +630,8 @@ export class StreamingTranscriptionClient {
 
   /** socket 关闭：未收到终态事件前断开一律收敛为 disconnected（或连接失败）。 */
   private handleSocketClose(): void {
-    this.log({ label: 'socket_closed' });
+    this.observers.log({ label: 'socket_closed' });
+    this.socket = null;
     if (this.phase === 'terminal') return;
     if (this.disconnecting) return; // 主动断开由 disconnect() 统一收敛。
     if (this.phase === 'starting') {
@@ -668,7 +664,7 @@ export class StreamingTranscriptionClient {
 
   /** 服务端消息非法/序列违约：稳定日志 + 终态 + 1008 关闭，绝不记录原文。 */
   private protocolError(): void {
-    this.log({ label: 'protocol_rejected' });
+    this.observers.log({ label: 'protocol_rejected' });
     this.enterTerminal({
       reason: 'protocol-error',
       errorCode: 'PROTOCOL_ERROR',
@@ -678,7 +674,10 @@ export class StreamingTranscriptionClient {
 
   /** 握手失败统一收敛：稳定日志 + 终态 + 拒绝 start()。 */
   private connectFailed(): void {
-    this.log({ label: 'connection_failed', code: 'CONNECTION_FAILED' });
+    this.observers.log({
+      label: 'connection_failed',
+      code: 'CONNECTION_FAILED',
+    });
     this.enterTerminal({
       reason: 'connection-failed',
       errorCode: 'CONNECTION_FAILED',
@@ -707,22 +706,23 @@ export class StreamingTranscriptionClient {
             pcmBytes: encodePcmToBase64(message.pcmBytes),
           })
         : JSON.stringify(message);
-    this.log({
-      label: 'message_sent',
-      operationId: message.operationId,
-      segmentId: message.segmentId,
-    });
     try {
       if (!this.socket || this.socket.readyState !== this.WebSocketCtor.OPEN) {
         throw new Error('socket not open');
       }
       this.socket.send(raw);
+      this.observers.log({
+        label: 'message_sent',
+        operationId: message.operationId,
+        segmentId: message.segmentId,
+      });
       return true;
     } catch {
       // 发送失败（连接已断）：open 阶段本地收敛 disconnected，不把原始
       // 错误带出；starting 阶段（首条 start 写入）由调用方按握手失败收敛。
       if (this.phase === 'open') {
         this.enterTerminal({ reason: 'disconnected' });
+        this.closeSocket(1000);
       }
       return false;
     }
@@ -753,7 +753,7 @@ export class StreamingTranscriptionClient {
     this.userAbortSignal = null;
     // socket 引用由各终态路径的 closeSocket 清理；这里不动，避免 close
     // 事件在终态确立前派发时读到不一致状态。
-    this.log({
+    this.observers.log({
       label: 'terminal',
       ...(result.failureCode !== undefined
         ? { code: result.failureCode }
@@ -762,10 +762,10 @@ export class StreamingTranscriptionClient {
           : {}),
     });
     this.notifyStatus();
-    this.onTerminal?.(result);
+    this.observers.terminal(result);
   }
 
   private notifyStatus(): void {
-    this.onStatus?.(this.getStatus());
+    this.observers.status(this.getStatus());
   }
 }

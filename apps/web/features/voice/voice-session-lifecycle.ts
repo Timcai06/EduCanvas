@@ -21,8 +21,11 @@
  * - 本类不读取浏览器 API，SSR 安全（hook 仅在 ref 中持有实例）。
  */
 
-import type { VoiceSessionController } from './voice-session-controller';
-import type { VoiceSessionStatus } from './voice-session-controller';
+import type {
+  VoiceSessionController,
+  VoiceSessionMode,
+  VoiceSessionStatus,
+} from './voice-session-controller';
 
 /** 终态集合：一轮会话结束（无论成败）后释放活跃引用。 */
 const TERMINAL_STATUSES: readonly VoiceSessionStatus[] = [
@@ -38,6 +41,7 @@ export class VoiceSessionLifecycle<
   TController extends { dispose(): void } = VoiceSessionController,
 > {
   private active: TController | null = null;
+  private mode: VoiceSessionMode | null = null;
 
   /** 启动新会话；已有活跃会话（未终态）时返回 null。 */
   start(create: () => TController): TController | null {
@@ -45,6 +49,25 @@ export class VoiceSessionLifecycle<
     const controller = create();
     this.active = controller;
     return controller;
+  }
+
+  /** 能力关闭时不构造任何 client/capture；能力开启时沿用单活跃会话纪律。 */
+  startIfEnabled(
+    enabled: boolean,
+    create: () => TController,
+  ): TController | null {
+    return enabled ? this.start(create) : null;
+  }
+
+  /** 能力撤回立即清理活跃会话；健康状态不产生副作用。 */
+  handleCapability(enabled: boolean): void {
+    if (!enabled) this.dispose();
+  }
+
+  /** 首次记录模式；后续模式变化立即清理旧会话。 */
+  handleMode(next: VoiceSessionMode): void {
+    if (this.mode !== null && this.mode !== next) this.dispose();
+    this.mode = next;
   }
 
   /** 状态回调：终态后释放活跃引用，允许下一次 start。 */

@@ -20,7 +20,7 @@
  * `start()` 按新模式重建。本 hook 不实现 Composer 接线、不创建 Turn。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   evaluateVoiceCapability,
   type VoiceCapabilityCheck,
@@ -79,7 +79,6 @@ export function useVoiceSession(
   // 会话生命周期引用管理（多轮 start / 终态释放 / 卸载清理）。useState
   // 惰性初始化保证实例稳定且不在渲染期触碰 ref。
   const [lifecycle] = useState(() => new VoiceSessionLifecycle());
-  const modeRef = useRef<VoiceSessionMode>(options.mode);
 
   const capability = useMemo(
     () => evaluateVoiceCapability(options.capabilityChecks),
@@ -88,15 +87,12 @@ export function useVoiceSession(
 
   // 能力被撤销（含监护人撤回同意）：立即停止运行中会话并释放引用。
   useEffect(() => {
-    if (capability.enabled) return;
-    lifecycle.dispose();
+    lifecycle.handleCapability(capability.enabled);
   }, [capability.enabled, lifecycle]);
 
   // 模式切换：销毁旧会话；下次 start() 按新模式重建。
   useEffect(() => {
-    if (modeRef.current === options.mode) return;
-    modeRef.current = options.mode;
-    lifecycle.dispose();
+    lifecycle.handleMode(options.mode);
   }, [options.mode, lifecycle]);
 
   // 卸载：停止采集、断开连接、清理引用。
@@ -112,10 +108,11 @@ export function useVoiceSession(
     // 新会话不污染上一轮：先清空上一轮的 partial/error 展示状态。
     setError(null);
     setPartialText('');
-    const controller = lifecycle.start(
+    const controller = lifecycle.startIfEnabled(
+      capability.enabled,
       () =>
         new VoiceSessionController({
-          mode: modeRef.current,
+          mode: options.mode,
           notebookId: options.notebookId,
           createCapture: options.createCapture,
           createClient: options.createClient,
@@ -137,6 +134,7 @@ export function useVoiceSession(
   }, [
     capability.enabled,
     lifecycle,
+    options.mode,
     options.notebookId,
     options.createCapture,
     options.createClient,

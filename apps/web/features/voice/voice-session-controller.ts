@@ -49,6 +49,10 @@ import {
   type StreamingTranscriptionClientStatus,
   type StreamingTranscriptionTerminalResult,
 } from './transport';
+import {
+  mapClientStartError,
+  mapTerminalToError,
+} from './voice-session-errors';
 
 /** 会话模式：短句（final 交回输入）或课堂字幕（final 追加字幕）。 */
 export type VoiceSessionMode = 'short-utterance' | 'classroom-caption';
@@ -148,28 +152,6 @@ export interface VoiceSessionLogEntry {
   readonly code?: string;
 }
 
-/** 把 V17-A 终态结果映射为会话错误码。 */ function mapTerminalToError(
-  result: StreamingTranscriptionTerminalResult,
-): VoiceSessionErrorCode {
-  switch (result.reason) {
-    case 'failed':
-      return result.failureCode === 'MODEL_FAILED' ? 'MODEL_FAILED' : 'UNKNOWN';
-    case 'disconnected':
-    case 'connection-failed':
-      return 'CONNECTION_FAILED';
-    case 'ticket-failed':
-      return 'TICKET_FAILED';
-    case 'protocol-error':
-      return 'PROTOCOL_ERROR';
-    case 'aborted':
-      return 'ABORTED';
-    case 'final':
-    case 'cancelled':
-      // 正常终态：不是错误。
-      return 'UNKNOWN';
-  }
-}
-
 /**
  * 单会话控制器：一次 start 对应一个采集会话 + 一个转录 operation；
  * 重新开始由调用方新建实例（V17-A client 与 V16 capture 均一次性）。
@@ -209,7 +191,6 @@ export class VoiceSessionController {
     }
     this.setStatus('starting');
     let client: VoiceSessionTranscriptionClient;
-    let capture: AudioCapture;
     try {
       client = this.deps.createClient({
         onSnapshot: (snapshot) => this.applySnapshot(snapshot),
@@ -217,17 +198,12 @@ export class VoiceSessionController {
         onStatus: () => undefined,
         onTerminal: (result) => this.handleClientTerminal(result),
       });
-      capture = this.deps.createCapture({
-        onChunk: (chunk) => this.forwardChunk(chunk),
-        onFailure: (code) => this.handleCaptureFailure(code),
-      });
     } catch {
       // 集成层工厂违约（接线错误）：收敛为稳定失败，不把异常带出。
       this.settle('failed', 'UNKNOWN');
       return;
     }
     this.client = client;
-    this.capture = capture;
     try {
       await client.start({ notebookId: this.deps.notebookId });
     } catch (error) {
@@ -241,6 +217,20 @@ export class VoiceSessionController {
       return;
     }
     if (this.settled) return; // dispose 在连接完成与采集启动之间发生
+    let capture: AudioCapture;
+    try {
+      // 连接成功后才构造采集器：即便未来 factory 增加设备探测或预热，
+      // ticket/connection 失败路径也绝不触碰麦克风侧资源。
+      capture = this.deps.createCapture({
+        onChunk: (chunk) => this.forwardChunk(chunk),
+        onFailure: (code) => this.handleCaptureFailure(code),
+      });
+    } catch {
+      this.disconnectClientQuietly();
+      this.settle('failed', 'UNKNOWN');
+      return;
+    }
+    this.capture = capture;
     this.log({ label: 'session_started' });
     try {
       const result = await capture.start();
@@ -292,7 +282,7 @@ export class VoiceSessionController {
    */
   dispose(): void {
     this.capture?.cleanup();
-    this.client?.disconnect();
+    this.disconnectClientQuietly();
     this.capture = null;
     this.client = null;
     if (!this.settled) this.settle('stopped');
@@ -411,21 +401,5 @@ export class VoiceSessionController {
     } catch {
       // 日志故障不影响会话终态与清理。
     }
-  }
-}
-
-/** V17-A client.start 拒绝错误 → 会话稳定码。 */
-function mapClientStartError(
-  code: StreamingTranscriptionClientError['code'],
-): VoiceSessionErrorCode {
-  switch (code) {
-    case 'TICKET_FAILED':
-      return 'TICKET_FAILED';
-    case 'CONNECTION_FAILED':
-      return 'CONNECTION_FAILED';
-    case 'ABORTED':
-      return 'ABORTED';
-    default:
-      return 'UNKNOWN';
   }
 }

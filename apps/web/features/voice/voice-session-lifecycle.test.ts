@@ -63,6 +63,35 @@ describe('VoiceSessionLifecycle（多轮会话）', () => {
     expect(lifecycle.start(() => fakeController('b'))).not.toBeNull();
   });
 
+  it('能力关闭时 start 是 no-op 且不构造 controller；撤回会清理活跃会话', () => {
+    const lifecycle = new VoiceSessionLifecycle<FakeController>();
+    const create = vi.fn(() => fakeController('voice'));
+
+    expect(lifecycle.startIfEnabled(false, create)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+
+    const active = lifecycle.startIfEnabled(true, create);
+    expect(active?.id).toBe('voice');
+    lifecycle.handleCapability(false);
+    expect(active?.dispose).toHaveBeenCalledTimes(1);
+    expect(lifecycle.activeController).toBeNull();
+  });
+
+  it('模式切换清理旧会话并允许按新模式重建', () => {
+    const lifecycle = new VoiceSessionLifecycle<FakeController>();
+    lifecycle.handleMode('short-utterance');
+    const first = lifecycle.start(() => fakeController('short'));
+
+    lifecycle.handleMode('classroom-caption');
+    expect(first?.dispose).toHaveBeenCalledTimes(1);
+    expect(lifecycle.activeController).toBeNull();
+
+    const second = lifecycle.start(() => fakeController('caption'));
+    lifecycle.handleMode('classroom-caption');
+    expect(second?.dispose).not.toHaveBeenCalled();
+    expect(lifecycle.activeController).toBe(second);
+  });
+
   it('旧控制器终态后的迟到事件不会污染新一轮（引用已释放，事件只进旧实例）', () => {
     const lifecycle = new VoiceSessionLifecycle<FakeController>();
     const first = lifecycle.start(() => fakeController('round-1'));
