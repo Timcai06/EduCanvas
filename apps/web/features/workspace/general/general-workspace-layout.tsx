@@ -40,6 +40,7 @@ export interface GeneralWorkspaceLayoutProps {
   readonly ctrl: GeneralWorkspaceController;
   readonly notebookTitle: string | null;
   readonly conversationId: string;
+  readonly notebookId: string;
   readonly sidebarOpen: boolean;
   readonly onToggleSidebar: () => void;
   readonly mainRef: RefObject<HTMLElement | null>;
@@ -50,6 +51,7 @@ export function GeneralWorkspaceLayout({
   ctrl,
   notebookTitle,
   conversationId,
+  notebookId,
   sidebarOpen,
   onToggleSidebar,
   mainRef,
@@ -92,11 +94,16 @@ export function GeneralWorkspaceLayout({
             </div>
           ) : null}
           {ctrl.isLanding ? (
-            <ConversationPane {...ctrl.conversationPaneProps} isLanding />
+            <ConversationPane
+              {...ctrl.conversationPaneProps}
+              notebookId={notebookId}
+              isLanding
+            />
           ) : (
             <div className="relative z-10 flex min-h-0 flex-1">
               <ConversationPane
                 {...ctrl.conversationPaneProps}
+                notebookId={notebookId}
                 isLanding={false}
               />
               {resourceOpenStatus ? (

@@ -67,6 +67,10 @@ export interface GatewayNodeTransport {
 export interface GatewayHttpDependencies {
   service: GatewayService;
   internalToken: string | null;
+  /** 公共健康检查仅暴露布尔能力事实，不泄漏模型目录或解析失败细节。 */
+  health?: {
+    readonly streamingTranscriptionEnabled: boolean;
+  };
   effectReconciliation?: Pick<
     GatewayEffectReconciliationControl,
     'reconcile'

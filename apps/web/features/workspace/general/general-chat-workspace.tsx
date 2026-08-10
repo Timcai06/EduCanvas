@@ -30,11 +30,13 @@ gsap.registerPlugin(useGSAP, Flip);
 export function GeneralChatWorkspace({
   initialMessages,
   conversationId,
+  notebookId,
   notebookTitle,
   nickname,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
+  notebookId: string;
   notebookTitle: string | null;
   nickname?: string | null;
 }) {
@@ -97,6 +99,7 @@ export function GeneralChatWorkspace({
         ctrl={ctrl}
         notebookTitle={notebookTitle}
         conversationId={conversationId}
+        notebookId={notebookId}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}
         mainRef={mainRef}

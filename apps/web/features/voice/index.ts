@@ -33,3 +33,9 @@ export {
   type UseVoiceSessionOptions,
   type UseVoiceSessionState,
 } from './use-voice-session';
+
+export {
+  VoiceComposer,
+  VoiceComposerRuntime,
+  type VoiceComposerRuntimeProps,
+} from './voice-composer';

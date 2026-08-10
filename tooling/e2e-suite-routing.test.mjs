@@ -29,6 +29,7 @@ describe('E2E suite routing', () => {
       'learning-flow.spec.ts',
       'profile-activity.spec.ts',
       'sandbox-preview.spec.ts',
+      'voice-flow.spec.ts',
     ]);
     const count = files.reduce((total, name) => {
       const source = readFileSync(resolve(e2eRoot, name), 'utf8');

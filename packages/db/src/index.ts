@@ -3,8 +3,7 @@
  * @packageDocumentation
  */
 
-// schema 表只按需显式导出（R04 起不再 `export *` 全量泄漏）；新表不得加入默认入口，
-// 应经 `@educanvas/db/internal` / `@educanvas/db/testing` 获取，见 src/import-boundary.test.ts。
+// schema 表只按需导出；新表应经 internal/testing 子路径获取，见 import-boundary.test.ts。
 // `getDb` 只从受控 internal/testing subpath 导出，不属于业务默认 API。
 export {
   agentOperations,
@@ -343,6 +342,7 @@ export {
   type AudioRetentionRepositoryOptions,
 } from './audio-retention-repository';
 export { enqueueDeletionIntents } from './audio-retention-lifecycle';
+export { AudioVoiceCapabilityRepository } from './audio-voice-capability-repository';
 export {
   DrizzleTurnSafetyDecisionRepository,
   SafetyDecisionConflictError,

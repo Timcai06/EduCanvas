@@ -3,7 +3,8 @@
 import type { RefObject } from 'react';
 import type { ChatMessage } from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
-import { Composer, type ComposerToolChip } from '@/features/composer/composer';
+import type { ComposerToolChip } from '@/features/composer/composer';
+import { VoiceComposer } from '@/features/voice';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import {
   ArtifactStatusCard,
@@ -24,6 +25,7 @@ import { GENERAL_MENU_ACTIONS } from './general-chat-config';
  */
 export interface ConversationPaneProps {
   isLanding: boolean;
+  notebookId: string;
   nickname?: string | null;
   messages: readonly ChatMessage[];
   busy: boolean;
@@ -49,6 +51,7 @@ export interface ConversationPaneProps {
 
 export function ConversationPane({
   isLanding,
+  notebookId,
   nickname,
   messages,
   busy,
@@ -105,7 +108,11 @@ export function ConversationPane({
               />
             </div>
           ) : null}
-          <Composer {...composerProps} variant="landing" />
+          <VoiceComposer
+            {...composerProps}
+            notebookId={notebookId}
+            variant="landing"
+          />
         </div>
       </EmptyChatHero>
     );
@@ -145,7 +152,7 @@ export function ConversationPane({
             dismissable={!revisingOpenArtifact}
           />
         ) : null}
-        <Composer {...composerProps} />
+        <VoiceComposer {...composerProps} notebookId={notebookId} />
       </div>
     </div>
   );

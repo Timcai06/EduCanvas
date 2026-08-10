@@ -229,6 +229,7 @@ export async function loadLearningPageData(
     ),
   );
   return {
+    notebookId: context.plan.goal.notebookId,
     artifact: snapshot.artifact,
     progress: snapshot.mastery
       ? toProgressDTO({

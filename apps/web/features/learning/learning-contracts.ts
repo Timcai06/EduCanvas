@@ -24,6 +24,8 @@ export interface ProgressDTO {
 
 /** Server Component 加载后传入客户端工作区的最小公开数据。 */
 export interface LearningPageDTO {
+  /** 当前教学 Turn 所属 Notebook；仅用于受认证语音 ticket 绑定。 */
+  notebookId: string;
   artifact: PublicArtifact;
   progress: ProgressDTO | null;
   study: StudyProgressDTO;

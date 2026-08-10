@@ -9,7 +9,7 @@ import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
-import { Composer } from '@/features/composer/composer';
+import { VoiceComposer } from '@/features/voice';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import type {
   CanvasFeedbackDTO,
@@ -81,14 +81,12 @@ const CHAT_PCT_MIN = 28;
 const CHAT_PCT_MAX = 62;
 
 /**
- * K12 垂直学习页的大脑：持有布局状态机（Chat-only / Chat+Canvas / 抽屉互斥）、可信判分
- * 提交状态（幂等指纹重试，自旧 CanvasProgressWorkspace 迁移）与消息展示。
+ * K12 垂直学习页的大脑：持有布局状态机、可信判分提交状态与消息展示。
  * 布局状态机是纯 UI 状态，与教学脊柱状态机无关；可信判分和掌握度仍全部来自
  * Server Action，见 docs/01-product/02-学生界面规范.md。
  *
  * 该组件不是平台级 PlatformShell。通用 Chat、Space、Studio 与 Agent 切换应在独立
- * Shell 中组合，K12 Progress、课程标题和判分通过 Vertical Agent slot 注入，避免
- * 继续把新模态和新 Agent 状态堆到本组件。
+ * Shell 中组合；K12 特有能力通过 Vertical Agent slot 注入。
  */
 interface LearnWorkspaceProps {
   initialData: LearningPageDTO;
@@ -371,7 +369,8 @@ function LearnWorkspaceSession({
           >
             {isLanding ? (
               <EmptyChatHero>
-                <Composer
+                <VoiceComposer
+                  notebookId={initialData.notebookId}
                   chips={enabledAssets.map((asset) => ({
                     id: asset.id,
                     label: asset.label,
@@ -416,7 +415,8 @@ function LearnWorkspaceSession({
                     }}
                   />
                 </div>
-                <Composer
+                <VoiceComposer
+                  notebookId={initialData.notebookId}
                   chips={enabledAssets.map((asset) => ({
                     id: asset.id,
                     label: asset.label,

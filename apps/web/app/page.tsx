@@ -17,6 +17,7 @@ export default async function HomePage() {
       key={data.conversation.id}
       initialMessages={data.initialMessages}
       conversationId={data.conversation.id}
+      notebookId={data.conversation.spaceId}
       notebookTitle={data.conversation.title}
       nickname={user?.nickname}
     />

@@ -41,6 +41,8 @@ export function createGatewayHttpHandler(input: GatewayHttpDependencies) {
         service: 'educanvas-gateway',
         status: 'ok',
         protocol: 'gateway.v1',
+        streamingTranscriptionEnabled:
+          input.health?.streamingTranscriptionEnabled ?? false,
       });
       return;
     }
