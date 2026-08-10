@@ -70,4 +70,25 @@ describe('GatewayClient跨入口合规', () => {
     expect(collected[0]?.at(-1)?.type).toBe('approval.required');
     expect(collected[1]?.at(-1)?.type).toBe('operation.cancelled');
   });
+
+  it('恢复请求只消费游标后的稳定事件且保留唯一终态', async () => {
+    let requestedUrl = '';
+    const suffix = gatewayCrossEntryConformance.completed.slice(2);
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        requestedUrl = String(input);
+        return Response.json({ events: suffix });
+      },
+    );
+
+    const events = await client.resume('operation:cross-entry', 1);
+
+    expect(requestedUrl).toContain(
+      '/v1/client/operations/operation%3Across-entry/events?after=1',
+    );
+    expect(events).toEqual(suffix);
+    expect(events.at(-1)?.type).toBe('operation.completed');
+  });
 });

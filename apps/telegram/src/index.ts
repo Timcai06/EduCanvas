@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import {
   normalizeTelegramUpdate,
+  projectTelegramOperation,
   readTelegramConnectionActivation,
   sendTelegramText,
   telegramTextChunks,
@@ -18,6 +19,7 @@ import { getDb } from '@educanvas/db/internal';
 import { projectOwnedArtifactResource } from '@educanvas/canvas-protocol/server';
 import {
   gatewayOperationEventSchema,
+  validateGatewayEventSequence,
   type GatewayInboundEnvelope,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
@@ -94,10 +96,14 @@ async function gatewayEvents(
     );
   }
   const text = await response.text();
-  return text
+  const events = text
     .split('\n')
     .filter(Boolean)
     .map((line) => gatewayOperationEventSchema.parse(JSON.parse(line)));
+  if (!validateGatewayEventSequence(events)) {
+    throw new Error('Gateway returned an invalid Telegram event sequence');
+  }
+  return events;
 }
 
 /**
@@ -189,16 +195,12 @@ async function processUpdate(input: {
       loadTelegramArtifactResource,
     )),
   ];
-  if (
-    chunks.length === 0 &&
-    events.some((event) => event.type === 'operation.failed')
-  ) {
-    chunks = ['EduCanvas 暂时无法完成这次请求，请稍后重试。'];
-  }
-  if (events.some((event) => event.type === 'approval.required')) {
-    chunks = [
-      '这项操作需要更高权限，请在 Web 或 TUI 中审批；Telegram 私聊不会直接批准高风险操作。',
-    ];
+  const operationProjection = projectTelegramOperation(events);
+  if (operationProjection) {
+    chunks =
+      operationProjection.status === 'approval_required'
+        ? [operationProjection.text]
+        : [...chunks, operationProjection.text];
   }
   try {
     let externalMessageId: string | null = null;

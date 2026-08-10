@@ -61,6 +61,12 @@ export async function POST(request: Request): Promise<Response> {
       headers: { 'cache-control': 'no-store' },
     });
   } catch (error) {
+    if (
+      error instanceof VoiceGatewayError &&
+      error.code === 'VOICE_GATEWAY_RESOURCE_NOT_FOUND'
+    ) {
+      return jsonError(404, 'not_found', '语音资源不存在或不可访问。');
+    }
     const code =
       error instanceof VoiceGatewayError
         ? error.code

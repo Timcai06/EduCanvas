@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   normalizeTelegramUpdate,
+  projectTelegramOperation,
   readTelegramConnectionActivation,
   sendTelegramText,
   telegramTextChunks,
@@ -130,5 +131,32 @@ describe('Telegram channel adapter', () => {
       fetcher,
     });
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('把取消、能力不可用、Runtime失败与审批投影为明确安全降级', async () => {
+    const { gatewayCrossEntryConformance } =
+      await import('../../../tooling/test-fixtures/gateway-cross-entry-conformance');
+
+    expect(
+      projectTelegramOperation(gatewayCrossEntryConformance.cancelled),
+    ).toMatchObject({ status: 'cancelled' });
+    expect(
+      projectTelegramOperation(
+        gatewayCrossEntryConformance.capabilityUnavailable,
+      ),
+    ).toMatchObject({
+      status: 'failed',
+      code: 'CAPABILITY_UNAVAILABLE',
+      retryable: false,
+    });
+    expect(
+      projectTelegramOperation(gatewayCrossEntryConformance.runtimeFailed),
+    ).toMatchObject({ status: 'failed', code: 'RUNTIME_FAILED' });
+    expect(
+      projectTelegramOperation(gatewayCrossEntryConformance.approvalPending),
+    ).toMatchObject({ status: 'approval_required' });
+    expect(
+      projectTelegramOperation(gatewayCrossEntryConformance.completed),
+    ).toBeNull();
   });
 });

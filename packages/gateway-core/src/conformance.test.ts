@@ -12,6 +12,8 @@ describe('Gateway跨入口合规夹具', () => {
     'approvalPending',
     'cancelled',
     'capabilityUnavailable',
+    'runtimeFailed',
+    'internalFailure',
   ] as const)('%s保持严格Schema、顺序与唯一终态', (name) => {
     const events = gatewayCrossEntryConformance[name];
     expect(
@@ -36,5 +38,24 @@ describe('Gateway跨入口合规夹具', () => {
     expect(gatewayCrossEntryConformance.request).not.toHaveProperty(
       'principal',
     );
+  });
+
+  it('拒绝未知事件和终态后的任何追加事件', () => {
+    expect(
+      gatewayOperationEventSchema.safeParse({
+        ...gatewayCrossEntryConformance.completed[0],
+        type: 'operation.future_terminal',
+      }).success,
+    ).toBe(false);
+    expect(
+      validateGatewayEventSequence([
+        ...gatewayCrossEntryConformance.completed,
+        {
+          ...gatewayCrossEntryConformance.completed[2],
+          sequence: 4,
+          eventId: 'event:cross-entry:4',
+        },
+      ]),
+    ).toBe(false);
   });
 });
