@@ -325,7 +325,7 @@ export function useGeneralWorkspaceController(options: {
     onOpenStatusCard: (artifactId: string) =>
       studioOpenActions.actions.openArtifact(artifactId),
     onDismissStatusCard: artifactFlow.dismiss,
-  } satisfies Omit<ConversationPaneProps, 'isLanding'>;
+  } satisfies Omit<ConversationPaneProps, 'isLanding' | 'notebookId'>;
 
   /* W02：对话态分栏与 landing 全屏共用同一组槽位 props（只差 fullscreen）。 */
   const surfaceSlotProps = {

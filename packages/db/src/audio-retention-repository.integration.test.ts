@@ -11,6 +11,7 @@ import {
   AudioRetentionPeriodError,
   AudioRetentionPersistenceError,
   AudioRetentionRepository,
+  AudioVoiceCapabilityRepository,
   AUDIO_RETENTION_READ_EVENT_TYPE,
   AUDIO_RETENTION_RESOURCE_TYPE,
 } from './index';
@@ -40,6 +41,8 @@ const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
 describeWithDatabase('音频留存 Repository（V14）', () => {
   let repo: AudioRetentionRepository;
   let devRepo: AudioRetentionRepository;
+  let capabilityRepo: AudioVoiceCapabilityRepository;
+  let devCapabilityRepo: AudioVoiceCapabilityRepository;
   /** 以本人 self 同意创建一条 active 留存（it 内调用，beforeAll 后 repo 已就绪）。 */
   async function seedReadyRetention() {
     const subject = await seedUser();
@@ -82,11 +85,70 @@ describeWithDatabase('音频留存 Repository（V14）', () => {
       database: getDb(),
       guardianProofPolicy: 'allow_self_attested',
     });
+    capabilityRepo = new AudioVoiceCapabilityRepository({ database: getDb() });
+    devCapabilityRepo = new AudioVoiceCapabilityRepository({
+      database: getDb(),
+      guardianProofPolicy: 'allow_self_attested',
+    });
   });
 
   afterAll(async () => {
     await cleanupRetentionDeletionOutbox();
     await connection?.end({ timeout: 5 });
+  });
+
+  it('V17 能力闸门：生产仅接受有效 verified voice_processing 同意', async () => {
+    const child = await seedUser();
+    const guardian = await seedUser();
+    await seedConsent({
+      subjectUserId: child,
+      grantorUserId: guardian,
+      authorizationType: 'guardian',
+      proofMethod: 'guardian_verified',
+      purpose: 'voice_processing',
+    });
+    await expect(
+      capabilityRepo.checkVoiceProcessingReadiness({ subjectUserId: child }),
+    ).resolves.toEqual({ consentActive: true, repositoryHealthy: true });
+  });
+
+  it('V17 能力闸门：self_attested 只在显式开发策略下接受', async () => {
+    const child = await seedUser();
+    const guardian = await seedUser();
+    await seedConsent({
+      subjectUserId: child,
+      grantorUserId: guardian,
+      authorizationType: 'guardian',
+      proofMethod: 'guardian_self_attested',
+      purpose: 'voice_processing',
+    });
+    await expect(
+      capabilityRepo.checkVoiceProcessingReadiness({ subjectUserId: child }),
+    ).resolves.toEqual({ consentActive: false, repositoryHealthy: true });
+    await expect(
+      devCapabilityRepo.checkVoiceProcessingReadiness({ subjectUserId: child }),
+    ).resolves.toEqual({ consentActive: true, repositoryHealthy: true });
+  });
+
+  it('V17 能力闸门：撤回或过期后立即关闭', async () => {
+    const subject = await seedUser();
+    const expired = await seedConsent({
+      subjectUserId: subject,
+      proofMethod: 'adult_verified',
+      purpose: 'voice_processing',
+      grantedAt: new Date(Date.now() - 2 * DAY_MS),
+      expiresAt: new Date(Date.now() - DAY_MS),
+    });
+    await expect(
+      capabilityRepo.checkVoiceProcessingReadiness({ subjectUserId: subject }),
+    ).resolves.toEqual({ consentActive: false, repositoryHealthy: true });
+    await getDb()
+      .update(audioConsents)
+      .set({ status: 'revoked', revokedAt: expired.expiresAt })
+      .where(eq(audioConsents.id, expired.id));
+    await expect(
+      capabilityRepo.checkVoiceProcessingReadiness({ subjectUserId: subject }),
+    ).resolves.toEqual({ consentActive: false, repositoryHealthy: true });
   });
 
   it('1. 有效本人同意创建留存', async () => {

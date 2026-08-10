@@ -114,11 +114,13 @@ async function start(
     typeof createGatewayHttpHandler
   >[0]['clientTransport'],
   onRun?: (input: Parameters<GatewayTurnRunnerPort['run']>[0]) => void,
+  health?: Parameters<typeof createGatewayHttpHandler>[0]['health'],
 ) {
   const server = createServer(
     createGatewayHttpHandler({
       service: createService(onRun),
       internalToken,
+      health,
       clientTransport,
       observability: new GatewayObservability(),
       telemetry: getGatewayTelemetryRuntime(),
@@ -145,11 +147,14 @@ afterEach(async () => {
 
 describe('Gateway HTTP composition root', () => {
   it('serves health without enabling trusted message ingress', async () => {
-    const base = await start(null);
+    const base = await start(null, undefined, undefined, {
+      streamingTranscriptionEnabled: true,
+    });
     expect(await (await fetch(`${base}/healthz`)).json()).toEqual({
       service: 'educanvas-gateway',
       status: 'ok',
       protocol: 'gateway.v1',
+      streamingTranscriptionEnabled: true,
     });
     const disabled = await fetch(`${base}/v1/internal/envelopes`, {
       method: 'POST',

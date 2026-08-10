@@ -138,6 +138,10 @@ const server = createServer(
   createGatewayHttpHandler({
     service,
     internalToken: config.internalToken,
+    health: {
+      streamingTranscriptionEnabled:
+        streamingTranscription.gateway !== null && clientSessionAuth !== null,
+    },
     effectReconciliation: config.internalToken
       ? createGatewayEffectReconciliationControl()
       : null,
