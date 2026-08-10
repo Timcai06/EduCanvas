@@ -160,16 +160,30 @@ describe('verifyOutputDirectory', () => {
     expect(result.violation).toContain('pipe');
   });
 
-  it('rejects unix sockets', async () => {
+  it('rejects unix sockets', async ({ skip }) => {
     const dir = await makeTmpDir();
     const socketPath = path.join(dir, 'sock');
     const net = await import('node:net');
     const server = net.createServer();
     // The socket file disappears when the server closes, so verify while the
     // listening socket still exists and close afterwards.
-    await new Promise<void>((resolve) => {
-      server.listen(socketPath, resolve);
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(socketPath, resolve);
+      });
+    } catch (error) {
+      // macOS app sandboxes may forbid AF_UNIX bind entirely. Skip only that
+      // host restriction; CI and normal shells still execute the rejection proof.
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error.code === 'EPERM' || error.code === 'EACCES')
+      ) {
+        skip(`Host forbids Unix sockets: ${String(error.code)}`);
+      }
+      throw error;
+    }
     try {
       const result = await verifyOutputDirectory(dir, BUDGET);
       expect(result.passed).toBe(false);
