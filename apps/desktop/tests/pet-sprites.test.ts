@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSpriteSheet } from '../scripts/generate-pet-sprites';
+import { createSpriteSheet } from '../scripts/generate-pet-sprites.mjs';
 
 describe('pet sprite sheet 生成', () => {
   it('生成 32×N 的 RGBA PNG（11 帧）', () => {
