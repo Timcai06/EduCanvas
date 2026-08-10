@@ -18,12 +18,14 @@ const D2 = {
 
 describe('pet 窗口钳制', () => {
   it('在主屏 workArea 内不动', () => {
-    expect(clampRect({ x: 100, y: 100, width: 128, height: 128 }, [D])).toEqual({
-      x: 100,
-      y: 100,
-      width: 128,
-      height: 128,
-    });
+    expect(clampRect({ x: 100, y: 100, width: 128, height: 128 }, [D])).toEqual(
+      {
+        x: 100,
+        y: 100,
+        width: 128,
+        height: 128,
+      },
+    );
   });
 
   it('右边越界钳回 workArea 内', () => {
@@ -61,5 +63,15 @@ describe('pet 窗口钳制', () => {
       width: 128,
       height: 128,
     });
+  });
+
+  it('奇数宽 workArea 居中取整（Electron 43 拒绝小数坐标）', () => {
+    // 1707 宽的 workArea：(1707-128)/2 = 789.5 → 取整 790
+    const odd = {
+      ...D,
+      workArea: { x: 0, y: 0, width: 1707, height: 1040 },
+    };
+    expect(initialPetRect([odd]).x).toBe(Math.round((1707 - 128) / 2));
+    expect(Number.isInteger(initialPetRect([odd]).x)).toBe(true);
   });
 });

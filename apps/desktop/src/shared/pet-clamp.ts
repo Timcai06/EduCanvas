@@ -22,13 +22,19 @@ export interface Rect {
 export const PET_SIZE = 128;
 const BOTTOM_MARGIN = 40;
 
-function overlap(a: Rect, b: { x: number; y: number; width: number; height: number }): number {
+function overlap(
+  a: Rect,
+  b: { x: number; y: number; width: number; height: number },
+): number {
   const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
   const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-function centerDistance(a: Rect, b: { x: number; y: number; width: number; height: number }): number {
+function centerDistance(
+  a: Rect,
+  b: { x: number; y: number; width: number; height: number },
+): number {
   const cx = a.x + a.width / 2 - (b.x + b.width / 2);
   const cy = a.y + a.height / 2 - (b.y + b.height / 2);
   return cx * cx + cy * cy;
@@ -54,7 +60,8 @@ export function clampRect(rect: Rect, displays: DisplayInfo[]): Rect {
   };
 }
 
-/** 初始位置：主屏（displays[0]）workArea 底部居中，留底边距。 */
+/** 初始位置：主屏（displays[0]）workArea 底部居中，留底边距。
+ * 坐标取整：Electron 43 的 setPosition 拒绝小数像素。 */
 export function initialPetRect(displays: DisplayInfo[]): Rect {
   const primary = displays[0] ?? {
     x: 0,
@@ -65,8 +72,8 @@ export function initialPetRect(displays: DisplayInfo[]): Rect {
   };
   const wa = primary.workArea;
   return {
-    x: wa.x + (wa.width - PET_SIZE) / 2,
-    y: wa.y + wa.height - PET_SIZE - BOTTOM_MARGIN,
+    x: Math.round(wa.x + (wa.width - PET_SIZE) / 2),
+    y: Math.round(wa.y + wa.height - PET_SIZE - BOTTOM_MARGIN),
     width: PET_SIZE,
     height: PET_SIZE,
   };
