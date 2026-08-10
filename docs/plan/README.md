@@ -20,24 +20,24 @@
 
 当前任务以 [`active/README.md`](active/README.md) 为唯一分配索引：
 
-- [UV 画布语音](active/UV-画布语音.md)；
 - [O 删除队列](active/O-删除队列.md)；
 - [KM 知识记忆](active/KM-知识记忆.md)；
 - [G 产品发布闭环](active/G-产品发布闭环.md)。
 
 [A 账号会话](completed/A-账号会话.md)、[P 学习档案](completed/P-学习档案.md)、
 [F 画布界面](completed/F-画布界面.md)和[R 运行时收敛](completed/R-运行时事实收敛.md)
-、[Q 质量观测成本](completed/Q-质量观测成本.md)、[W 工作面画布](completed/W-工作面画布收敛.md)
-与[D 数据架构](completed/D-数据架构与扩展性收敛.md)已完成归档。O 线完成 O03/O04 后再由 Codex
-联合审计。UV 的 Canvas/语音工程接线与 U20 竞赛级验收已经通过；真人麦克风、课堂
-噪声、十分钟长流和受控并发作为非阻塞后续保留，当前等待 U21 全量门禁与归档。
+、[Q 质量观测成本](completed/Q-质量观测成本.md)、[W 工作面画布](completed/W-工作面画布收敛.md)、
+[D 数据架构](completed/D-数据架构与扩展性收敛.md)与
+[UV 画布语音](completed/UV-画布语音.md)已完成归档。O 线完成 O03/O04 后再由 Codex
+联合审计。UV 的真人麦克风、课堂噪声、十分钟长流和受控并发作为非阻塞后续保留，
+不得把自动化证据改称真人验收。
 
 [自适应学习基线](completed/2026-07-自适应学习基线.md) 已完成并归档。
 [账号、历史记录删除与用户资料](completed/2026-07-账号、历史记录删除与用户资料.md)
 已在 PR #192 完成交付并归档。
 第二代Hybrid Ports架构已[完成并结档](completed/2026-07-第二代架构升级.md)；
 Memory、教育质量、正式身份、渠道生产化、自动verifier与完整SLO继续分别立项；
-多模态输入输出和受控运行环境由当前统一 Canvas 计划承接。
+多模态输入输出和受控运行环境的稳定基线见已归档 UV 计划，后续扩展另行立项。
 历史交付与去向见[`completed/`](completed/README.md)。
 
 ## 命名规则
