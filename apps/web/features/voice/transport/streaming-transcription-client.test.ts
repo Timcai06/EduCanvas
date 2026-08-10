@@ -258,9 +258,30 @@ function pcmBytesOf(
 
 afterEach(() => {
   FakeWebSocket.reset();
+  vi.unstubAllGlobals();
 });
 
 describe('握手与 ticket', () => {
+  it('默认 ID 生成器以正确 Crypto receiver 调用 randomUUID', async () => {
+    const fakeCrypto = {
+      randomUUID(this: unknown) {
+        if (this !== fakeCrypto) throw new TypeError('Illegal invocation');
+        return '00000000-0000-4000-8000-000000000001';
+      },
+    };
+    vi.stubGlobal('crypto', fakeCrypto);
+    const harness = makeHarness({
+      createOperationId: undefined,
+      createSegmentId: undefined,
+    });
+
+    const ws = await startOpen(harness);
+    expect(decodeSentFrames(ws)[0]).toMatchObject({
+      operationId: '00000000-0000-4000-8000-000000000001',
+      segmentId: '00000000-0000-4000-8000-000000000001',
+    });
+  });
+
   it('start 用 ticket 子协议建立连接，ticket 不进入 URL，start 消息 sequence 0', async () => {
     const harness = makeHarness();
     const ws = await startOpen(harness);
@@ -673,6 +694,23 @@ describe('协议违约（服务端不可信输入）', () => {
 });
 
 describe('断开与终态竞争', () => {
+  it('open 后发送失败会收敛并主动释放 socket', async () => {
+    const harness = makeHarness();
+    const ws = await startOpen(harness);
+    const sentLogsBeforeFailure = harness.logs.filter(
+      (entry) => entry.label === 'message_sent',
+    ).length;
+    ws.sendThrows = true;
+
+    harness.client.sendChunk(pcm(0, 1));
+
+    expect(harness.terminals).toEqual([{ reason: 'disconnected' }]);
+    expect(ws.closeCode).toBe(1000);
+    expect(
+      harness.logs.filter((entry) => entry.label === 'message_sent'),
+    ).toHaveLength(sentLogsBeforeFailure);
+  });
+
   it('open 后 socket 中断（无终态事件）→ disconnected', async () => {
     const harness = makeHarness();
     const ws = await startOpen(harness);
@@ -715,6 +753,30 @@ describe('断开与终态竞争', () => {
     expect(harness.terminals).toEqual([{ reason: 'disconnected' }]);
     harness.client.disconnect();
     expect(harness.terminals).toHaveLength(1);
+  });
+});
+
+describe('观察者故障隔离', () => {
+  it('日志与 UI 回调抛错不阻断握手、终态或 socket 清理', async () => {
+    const throwObserver = () => {
+      throw new Error('observer failure');
+    };
+    const harness = makeHarness({
+      log: throwObserver,
+      onSnapshot: throwObserver,
+      onStatus: throwObserver,
+      onTerminal: throwObserver,
+    });
+
+    const ws = await startOpen(harness);
+    ws.receive(JSON.stringify(partialEvent(0, '不会泄露')));
+    ws.receive(JSON.stringify(finalEvent(1, '完成')));
+
+    expect(harness.client.getStatus()).toMatchObject({
+      phase: 'terminal',
+      terminal: { reason: 'final' },
+    });
+    expect(ws.closeCode).toBe(1000);
   });
 });
 
