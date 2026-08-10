@@ -4,7 +4,8 @@
  * P2 接真语音后 demo 事件换成 Voice/Agent 真实事件，转换表不变。
  */
 
-export type PetState = 'idle' | 'listen' | 'think' | 'speak' | 'success' | 'error';
+export type PetState =
+  'idle' | 'listen' | 'think' | 'speak' | 'success' | 'error';
 export type PetEvent =
   | 'pet_click'
   | 'cancel'
@@ -16,9 +17,24 @@ export type PetEvent =
 
 const TABLE: Record<PetState, Partial<Record<PetEvent, PetState>>> = {
   idle: { pet_click: 'listen' },
-  listen: { pet_click: 'idle', cancel: 'idle', listen_done: 'think', demo_fail: 'error' },
-  think: { pet_click: 'idle', cancel: 'idle', think_done: 'speak', demo_fail: 'error' },
-  speak: { pet_click: 'idle', cancel: 'idle', speak_done: 'success', demo_fail: 'error' },
+  listen: {
+    pet_click: 'idle',
+    cancel: 'idle',
+    listen_done: 'think',
+    demo_fail: 'error',
+  },
+  think: {
+    pet_click: 'idle',
+    cancel: 'idle',
+    think_done: 'speak',
+    demo_fail: 'error',
+  },
+  speak: {
+    pet_click: 'idle',
+    cancel: 'idle',
+    speak_done: 'success',
+    demo_fail: 'error',
+  },
   success: { demo_reset: 'idle' },
   error: { demo_reset: 'idle' },
 };

@@ -31,14 +31,16 @@ export function parseManifest(raw: unknown): PetManifest {
     throw new Error('anchor 必须为 {x,y} 数值');
 
   const states = m.states as Record<string, unknown> | undefined;
-  if (!states || typeof states !== 'object') throw new Error('states 必须为对象');
+  if (!states || typeof states !== 'object')
+    throw new Error('states 必须为对象');
 
   for (const name of REQUIRED_STATES) {
     if (!(name in states)) throw new Error(`缺少状态: ${name}`);
   }
 
   for (const [name, st] of Object.entries(states)) {
-    if (!st || typeof st !== 'object') throw new Error(`状态 ${name} 必须为对象`);
+    if (!st || typeof st !== 'object')
+      throw new Error(`状态 ${name} 必须为对象`);
     const s = st as Record<string, unknown>;
     const frames = s.frames;
     if (!Array.isArray(frames) || frames.length === 0)

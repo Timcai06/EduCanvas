@@ -30,7 +30,9 @@ describe('pet manifest 解析', () => {
   });
 
   it('帧索引非负整数校验（负数/小数/NaN 报错）', () => {
-    const bad = structuredClone(VALID) as { states: Record<string, { frames: number[] }> };
+    const bad = structuredClone(VALID) as {
+      states: Record<string, { frames: number[] }>;
+    };
     const speak = bad.states.speak;
     expect(speak).toBeDefined();
     if (speak) {
@@ -42,7 +44,9 @@ describe('pet manifest 解析', () => {
   });
 
   it('帧尺寸非正整数报错', () => {
-    expect(() => parseManifest({ ...VALID, frameWidth: 0 })).toThrow(/frameWidth/);
+    expect(() => parseManifest({ ...VALID, frameWidth: 0 })).toThrow(
+      /frameWidth/,
+    );
     expect(() => parseManifest({ ...VALID, fps: -1 })).toThrow(/fps/);
   });
 

@@ -49,12 +49,12 @@ function encodePng(width, height, rgba) {
 
 // ---- 程序化占位角色（32×32 像素） ----
 const PALETTE = [
-  [0, 0, 0, 0],         // 0 透明
-  [59, 42, 77, 255],    // 1 轮廓（深紫）
-  [124, 92, 255, 255],  // 2 主体（亮紫）
+  [0, 0, 0, 0], // 0 透明
+  [59, 42, 77, 255], // 1 轮廓（深紫）
+  [124, 92, 255, 255], // 2 主体（亮紫）
   [255, 158, 199, 255], // 3 脸颊（粉）
   [255, 255, 255, 255], // 4 眼白
-  [30, 20, 50, 255],    // 5 瞳
+  [30, 20, 50, 255], // 5 瞳
   [255, 214, 102, 255], // 6 嘴/高光（黄）
 ];
 
@@ -73,19 +73,19 @@ function rect(grid, x, y, w, h, color) {
 /** 角色基底：圆头 + 身体 + 眼睛 + 脸颊 + 手臂。eye=瞳色，mouth=嘴色，armY=手臂起点。 */
 function base(eye, mouth, armY = 18) {
   const g = blank();
-  rect(g, 9, 3, 14, 12, 1);   // 头轮廓
-  rect(g, 11, 5, 10, 8, 2);   // 头主体
-  rect(g, 8, 15, 16, 13, 1);  // 身轮廓
-  rect(g, 10, 17, 12, 9, 2);  // 身体
-  rect(g, 13, 26, 6, 3, 1);   // 腿
+  rect(g, 9, 3, 14, 12, 1); // 头轮廓
+  rect(g, 11, 5, 10, 8, 2); // 头主体
+  rect(g, 8, 15, 16, 13, 1); // 身轮廓
+  rect(g, 10, 17, 12, 9, 2); // 身体
+  rect(g, 13, 26, 6, 3, 1); // 腿
   for (const ex of [13, 19]) {
-    rect(g, ex, 7, 2, 2, 4);  // 眼白
+    rect(g, ex, 7, 2, 2, 4); // 眼白
     rect(g, ex + 1, 8, 1, 1, eye); // 瞳
   }
   rect(g, 14, 11, 4, 1, mouth); // 嘴
-  rect(g, 10, 16, 2, 2, 3);   // 左脸颊
-  rect(g, 20, 16, 2, 2, 3);   // 右脸颊
-  rect(g, 8, armY, 2, 8, 1);  // 左臂轮廓
+  rect(g, 10, 16, 2, 2, 3); // 左脸颊
+  rect(g, 20, 16, 2, 2, 3); // 右脸颊
+  rect(g, 8, armY, 2, 8, 1); // 左臂轮廓
   rect(g, 10, armY + 1, 1, 6, 2); // 左臂
   rect(g, 22, armY, 2, 8, 1); // 右臂轮廓
   rect(g, 21, armY + 1, 1, 6, 2); // 右臂
@@ -115,29 +115,29 @@ function frameWalk(step) {
 
 function frameThink() {
   const g = base(5, 6, 21);
-  rect(g, 21, 8, 2, 2, 4);   // 右手托腮（简化）
-  rect(g, 14, 6, 4, 1, 5);   // 眉毛下压
+  rect(g, 21, 8, 2, 2, 4); // 右手托腮（简化）
+  rect(g, 14, 6, 4, 1, 5); // 眉毛下压
   return g;
 }
 
 function frameSpeak() {
   const g = base(5, 6, 19);
-  rect(g, 14, 11, 4, 2, 6);  // 嘴张开
+  rect(g, 14, 11, 4, 2, 6); // 嘴张开
   return g;
 }
 
 function frameSuccess() {
   const g = base(5, 6, 16);
-  rect(g, 13, 8, 2, 1, 5);   // 弯眼（简化为横线）
+  rect(g, 13, 8, 2, 1, 5); // 弯眼（简化为横线）
   rect(g, 19, 8, 2, 1, 5);
-  rect(g, 8, 13, 2, 4, 1);   // 举手
+  rect(g, 8, 13, 2, 4, 1); // 举手
   rect(g, 10, 13, 1, 3, 2);
   return g;
 }
 
 function frameError() {
   const g = base(5, 5, 18);
-  rect(g, 13, 7, 3, 1, 5);   // × 眼（简化）
+  rect(g, 13, 7, 3, 1, 5); // × 眼（简化）
   rect(g, 15, 7, 1, 3, 5);
   rect(g, 19, 7, 3, 1, 5);
   rect(g, 19, 8, 1, 3, 5);
@@ -145,12 +145,17 @@ function frameError() {
 }
 
 const FRAMES = [
-  frameIdle(0), frameIdle(1),                         // 0,1 idle 呼吸
-  frameWalk(0), frameWalk(1), frameWalk(2), frameWalk(3), // 2-5 walk
-  frameThink(), frameThink(),                         // 6,7 think
-  frameSpeak(),                                       // 8 speak
-  frameSuccess(),                                     // 9 success
-  frameError(),                                       // 10 error
+  frameIdle(0),
+  frameIdle(1), // 0,1 idle 呼吸
+  frameWalk(0),
+  frameWalk(1),
+  frameWalk(2),
+  frameWalk(3), // 2-5 walk
+  frameThink(),
+  frameThink(), // 6,7 think
+  frameSpeak(), // 8 speak
+  frameSuccess(), // 9 success
+  frameError(), // 10 error
 ];
 
 const MANIFEST = {
@@ -189,12 +194,20 @@ export function createSpriteSheet() {
 }
 
 // CLI：pnpm --filter @educanvas/desktop gen:pet-sprites
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
+if (
+  process.argv[1] &&
+  import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
+) {
   const fs = await import('node:fs');
   const { pngBuffer, manifest } = createSpriteSheet();
   const dir = new URL('../assets/pet/', import.meta.url);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(new URL('sprite-sheet.png', dir), pngBuffer);
-  fs.writeFileSync(new URL('manifest.json', dir), JSON.stringify(manifest, null, 2));
-  console.log(`pet sprites generated: ${FRAMES.length} frames, ${SIZE}x${SIZE} -> assets/pet/`);
+  fs.writeFileSync(
+    new URL('manifest.json', dir),
+    JSON.stringify(manifest, null, 2),
+  );
+  console.log(
+    `pet sprites generated: ${FRAMES.length} frames, ${SIZE}x${SIZE} -> assets/pet/`,
+  );
 }

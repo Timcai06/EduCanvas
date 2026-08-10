@@ -57,8 +57,8 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
   const win = new BrowserWindow({
     width: PET_SIZE,
     height: PET_SIZE,
-    x: saved?.x,
-    y: saved?.y,
+    // 有存档才给 x/y：显式 undefined 会被 Electron 43 判为参数转换失败
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
     transparent: true,
     frame: false,
     resizable: false,
@@ -96,7 +96,7 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
 
   if (!saved) {
     const r = initialPetRect(displays());
-    win.setPosition(r.x, r.y);
+    setPositionPx(r.x, r.y);
   }
   clampNow();
 
@@ -116,10 +116,15 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
     }
   });
 
+  // Electron 43 的 setPosition 拒绝小数像素，统一取整
+  function setPositionPx(x: number, y: number): void {
+    win.setPosition(Math.round(x), Math.round(y));
+  }
+
   function clampNow(): void {
     const b = win.getBounds();
     const r = clampRect(b, displays());
-    if (r.x !== b.x || r.y !== b.y) win.setPosition(r.x, r.y);
+    if (r.x !== b.x || r.y !== b.y) setPositionPx(r.x, r.y);
   }
 
   return {
@@ -130,7 +135,7 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
         { ...t, width: PET_SIZE, height: PET_SIZE },
         displays(),
       );
-      win.setPosition(r.x, r.y);
+      setPositionPx(r.x, r.y);
     },
     moveBy(dx: number, dy: number): Rect {
       const b = win.getBounds();
@@ -138,7 +143,7 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
         { x: b.x + dx, y: b.y + dy, width: PET_SIZE, height: PET_SIZE },
         displays(),
       );
-      win.setPosition(r.x, r.y);
+      setPositionPx(r.x, r.y);
       return r;
     },
     getBounds: () => win.getBounds(),
