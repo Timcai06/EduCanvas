@@ -6,6 +6,20 @@ import type { VoiceSessionStatus } from './voice-session-controller';
 /** Gateway 单 operation 保留 60 秒 PCM 安全上限；Live 在上限前主动轮换。 */
 export const LIVE_ASR_ROTATION_MS = 45_000;
 
+/**
+ * Live 是长驻会话，恢复预算只能约束“连续失败”，不能在整次入室期间永久耗尽。
+ * 录音稳定超过该窗口后，后续抖动应重新视为第一次瞬时故障。
+ */
+export const LIVE_ASR_RECOVERY_STABLE_MS = 3_000;
+
+const LIVE_ASR_RECOVERY_DELAYS_MS = [500, 1_000, 2_000] as const;
+
+export function resolveLiveAsrRecoveryDelay(
+  consecutiveFailures: number,
+): number | null {
+  return LIVE_ASR_RECOVERY_DELAYS_MS[consecutiveFailures] ?? null;
+}
+
 export function resolveLiveAsrRotationAction(
   partialText: string,
 ): 'cancel' | 'finish' {
@@ -25,7 +39,8 @@ interface LiveTranscriptionContinuityOptions {
  * 把多个短生命周期 ASR operation 编排为一个连续 Live 会话。
  *
  * - 入室和取消静音必须能从上一轮 failed 重新启动；
- * - 瞬时失败只自动恢复一次，配置错误不得无限重连；
+ * - 瞬时失败最多按 0.5s / 1s / 2s 退避恢复三次，随后才进入错误态；
+ * - 新连接稳定录音 3 秒后清零连续失败计数，不能让一次旧抖动永久耗尽预算；
  * - 45 秒主动轮换，避免正常沉默撞上 Gateway 的 60 秒 PCM 安全配额。
  */
 export function useLiveTranscriptionContinuity({
@@ -43,7 +58,7 @@ export function useLiveTranscriptionContinuity({
   const [rotating, setRotating] = useState(false);
   const activationRef = useRef(false);
   const activationStartPendingRef = useRef(false);
-  const retryUsedRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
   const partialTextRef = useRef(partialText);
 
   useEffect(() => {
@@ -54,11 +69,13 @@ export function useLiveTranscriptionContinuity({
     if (!active) {
       activationRef.current = false;
       activationStartPendingRef.current = false;
-      retryUsedRef.current = false;
-      setRecovering(false);
-      setRotating(false);
+      consecutiveFailuresRef.current = 0;
+      const resetViewTimer = window.setTimeout(() => {
+        setRecovering(false);
+        setRotating(false);
+      }, 0);
       cancel();
-      return;
+      return () => window.clearTimeout(resetViewTimer);
     }
     const firstActivation = !activationRef.current;
     activationRef.current = true;
@@ -76,7 +93,7 @@ export function useLiveTranscriptionContinuity({
   useEffect(() => {
     if (!active) return undefined;
     if (status === 'stopped') {
-      retryUsedRef.current = false;
+      consecutiveFailuresRef.current = 0;
       return undefined;
     }
     if (
@@ -87,20 +104,39 @@ export function useLiveTranscriptionContinuity({
       activationStartPendingRef.current = false;
     }
     if (status === 'recording') {
-      setRecovering(false);
-      setRotating(false);
-      return undefined;
+      /* status 来自外部 VoiceSessionController；下一 task 更新视图，避免在
+         effect 提交阶段同步级联 render，同时不把 3 秒预算窗口暴露给用户。 */
+      const resetViewTimer = window.setTimeout(() => {
+        setRecovering(false);
+        setRotating(false);
+      }, 0);
+      const stableTimer = window.setTimeout(() => {
+        consecutiveFailuresRef.current = 0;
+      }, LIVE_ASR_RECOVERY_STABLE_MS);
+      return () => {
+        window.clearTimeout(resetViewTimer);
+        window.clearTimeout(stableTimer);
+      };
     }
     if (status !== 'failed') return undefined;
     if (activationStartPendingRef.current) return undefined;
-    if (retryUsedRef.current) {
-      setRecovering(false);
-      return undefined;
+    const delay = resolveLiveAsrRecoveryDelay(
+      consecutiveFailuresRef.current,
+    );
+    if (delay === null) {
+      const exhaustedTimer = window.setTimeout(
+        () => setRecovering(false),
+        0,
+      );
+      return () => window.clearTimeout(exhaustedTimer);
     }
-    retryUsedRef.current = true;
-    setRecovering(true);
-    const timer = window.setTimeout(() => start(), 500);
-    return () => window.clearTimeout(timer);
+    consecutiveFailuresRef.current += 1;
+    const viewTimer = window.setTimeout(() => setRecovering(true), 0);
+    const timer = window.setTimeout(() => start(), delay);
+    return () => {
+      window.clearTimeout(viewTimer);
+      window.clearTimeout(timer);
+    };
   }, [active, start, status]);
 
   useEffect(() => {
