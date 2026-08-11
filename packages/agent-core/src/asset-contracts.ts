@@ -46,6 +46,29 @@ export type AssetRepresentationKind = z.infer<
 >;
 
 /**
+ * ADR-0026：文档派生表示的质量状态（决定 6，用户可见事实）。
+ *
+ * - `structured`：MinerU 或直接 Markdown 解码产生的结构化表示；
+ * - `degraded_plain_text`：结构化转换失败后由纯文本抽取成功，不能与结构化结果等价；
+ * - `failed`：结构化与降级路径均失败；
+ * - `processing`：仍在转换，当前 Turn 不得静默带入；
+ * - `unavailable`：该表示类型不携带文档质量维度（如 preview/thumbnail），
+ *   或媒体类型不支持文档表示（ADR-0026 决定 4）。
+ *
+ * 与 `assetRepresentations.status`（生命周期）是独立维度：status='ready' 时
+ * quality 仍要区分 structured / degraded_plain_text。只能追加、不能改写含义。
+ */
+export const representationQualityValues = [
+  'processing',
+  'structured',
+  'degraded_plain_text',
+  'failed',
+  'unavailable',
+] as const;
+export const representationQualitySchema = z.enum(representationQualityValues);
+export type RepresentationQuality = z.infer<typeof representationQualitySchema>;
+
+/**
  * D03：Asset 派生处理任务类型（processor kind）——开放扩展 Vocabulary。
  * 新增处理器（如 OCR、去噪）只需登记本 Registry，不产生数据库 Migration。
  */
