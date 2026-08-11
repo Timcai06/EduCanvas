@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "agent-v1",
+  "scope": "synthetic deterministic runtime and policy fixtures",
+  "thresholds": {
+    "toolArtifact.passRate": 1,
+    "teachingSafetyCritical.passRate": 1,
+    "teachingSafetyNonCritical.average": 1
+  }
+}

@@ -14,6 +14,7 @@ const LANES = [
   'windows',
   'runtime_pressure',
   'e2e',
+  'agent_eval',
   'dependency_review',
   'release_evidence',
   'desktop',
@@ -22,8 +23,14 @@ const ALL = Object.fromEntries(LANES.map((lane) => [lane, true]));
 const NONE = Object.fromEntries(LANES.map((lane) => [lane, false]));
 const DOC_ONLY =
   /^docs\/.*\.md$|^(?:README|AGENTS|CLAUDE)\.md$|^(?:apps|packages|tooling)\/[^/]+\/README\.md$|^\.vscode\/(?:settings|extensions)\.json$|^\.github\/CODEOWNERS$/;
-const DEPENDENCY =
-  /(?:^|\/)(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/workflows\//;
+// Root dependency graph and executable Actions changes can affect every lane.
+// Workspace-local manifests are routed by their owning product surface below;
+// treating every package.json as global made Desktop-only changes pay for DB,
+// Worker, Runtime and Web E2E without adding relevant evidence.
+const GLOBAL_DEPENDENCY =
+  /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/(?:workflows|actions)\//;
+const SCOPED_PACKAGE_MANIFEST = /^(?:apps|packages)\/[^/]+\/package\.json$/;
+const ANY_PACKAGE_MANIFEST = /(?:^|\/)package\.json$/;
 const RELEASE_EVIDENCE =
   /^docs\/06-quality\/releases\/|^docs\/06-quality\/08-|^tooling\/quality\/(?:validate-evidence|migration-records)\.mjs$|^packages\/db\/drizzle\//;
 
@@ -84,7 +91,15 @@ export function classifyChangedPaths(
   const releaseEvidenceAffected = matchesAny(paths, [RELEASE_EVIDENCE]);
   if (!releaseEvidenceAffected && paths.every((path) => DOC_ONLY.test(path)))
     return { ...NONE };
-  if (paths.some((path) => DEPENDENCY.test(path))) return { ...ALL };
+  if (
+    paths.some(
+      (path) =>
+        GLOBAL_DEPENDENCY.test(path) ||
+        (ANY_PACKAGE_MANIFEST.test(path) &&
+          !SCOPED_PACKAGE_MANIFEST.test(path)),
+    )
+  )
+    return { ...ALL };
 
   const result = { ...NONE, checks: true };
   result.release_evidence = releaseEvidenceAffected;
@@ -148,7 +163,15 @@ export function classifyChangedPaths(
       !NON_BROWSER_ONLY.test(path) &&
       browserPatterns.some((pattern) => pattern.test(path)),
   );
-  result.dependency_review = false;
+  result.agent_eval = matchesAny(paths, [
+    /^packages\/(?:agent-core|agent-runtime|teaching-core|teaching-runtime)\//,
+    /^packages\/model-gateway\//,
+    /^packages\/db\/src\/(?:knowledge-|schema\/knowledge)/,
+    /^apps\/web\/server\/(?:platform\/general-turn|teaching\/(?:knowledge-|learning-turn|turn-application))/,
+    /^apps\/web\/app\/api\/v1\/(?:chat|learn)\/turn\//,
+    /^tooling\/evals\//,
+  ]);
+  result.dependency_review = matchesAny(paths, [SCOPED_PACKAGE_MANIFEST]);
   result.desktop = matchesAny(paths, [/^apps\/desktop\//]);
   return result;
 }
@@ -162,24 +185,22 @@ export function requiredResultFailures({ eventName, expected, results }) {
   };
   requireSuccess('changes');
   requireSuccess('secret_scan');
+  if (expected.checks) {
+    requireSuccess('quality_static');
+    requireSuccess('quality_tests');
+  }
   for (const lane of [
-    'checks',
     'db_integration',
     'worker_integration',
     'migration_integration',
     'windows',
     'runtime_pressure',
     'e2e',
+    'agent_eval',
     'desktop',
   ]) {
     if (expected[lane]) {
-      requireSuccess(
-        lane === 'checks'
-          ? 'quality'
-          : lane === 'desktop'
-            ? 'desktop_build'
-            : lane,
-      );
+      requireSuccess(lane === 'desktop' ? 'desktop_build' : lane);
     }
   }
   if (eventName === 'pull_request' && expected.dependency_review) {
@@ -191,36 +212,47 @@ export function requiredResultFailures({ eventName, expected, results }) {
   return failures;
 }
 
+export function expectedResultsFromEnvironment(environment = process.env) {
+  const boolean = (name) => environment[name] === 'true';
+  return {
+    checks: boolean('CHECKS_EXPECTED'),
+    db_integration: boolean('DB_INTEGRATION_EXPECTED'),
+    worker_integration: boolean('WORKER_INTEGRATION_EXPECTED'),
+    migration_integration: boolean('MIGRATION_INTEGRATION_EXPECTED'),
+    windows: boolean('WINDOWS_EXPECTED'),
+    runtime_pressure: boolean('RUNTIME_PRESSURE_EXPECTED'),
+    e2e: boolean('E2E_EXPECTED'),
+    agent_eval: boolean('AGENT_EVAL_EXPECTED'),
+    dependency_review: boolean('DEPENDENCY_REVIEW_EXPECTED'),
+    release_evidence: boolean('RELEASE_EVIDENCE_EXPECTED'),
+    desktop: boolean('DESKTOP_EXPECTED'),
+  };
+}
+
+export function laneResultsFromEnvironment(environment = process.env) {
+  return {
+    changes: environment.CHANGES_RESULT,
+    secret_scan: environment.SECRET_SCAN_RESULT,
+    dependency_review: environment.DEPENDENCY_REVIEW_RESULT,
+    quality_static: environment.QUALITY_STATIC_RESULT,
+    quality_tests: environment.QUALITY_TESTS_RESULT,
+    db_integration: environment.DB_INTEGRATION_RESULT,
+    worker_integration: environment.WORKER_INTEGRATION_RESULT,
+    migration_integration: environment.MIGRATION_INTEGRATION_RESULT,
+    windows: environment.WINDOWS_RESULT,
+    runtime_pressure: environment.RUNTIME_PRESSURE_RESULT,
+    e2e: environment.E2E_RESULT,
+    agent_eval: environment.AGENT_EVAL_RESULT,
+    release_evidence: environment.RELEASE_EVIDENCE_RESULT,
+    desktop_build: environment.DESKTOP_BUILD_RESULT,
+  };
+}
+
 function verifyResultsFromEnvironment() {
-  const boolean = (name) => process.env[name] === 'true';
   const failures = requiredResultFailures({
     eventName: process.env.EVENT_NAME,
-    expected: {
-      checks: boolean('CHECKS_EXPECTED'),
-      db_integration: boolean('DB_INTEGRATION_EXPECTED'),
-      worker_integration: boolean('WORKER_INTEGRATION_EXPECTED'),
-      migration_integration: boolean('MIGRATION_INTEGRATION_EXPECTED'),
-      windows: boolean('WINDOWS_EXPECTED'),
-      runtime_pressure: boolean('RUNTIME_PRESSURE_EXPECTED'),
-      e2e: boolean('E2E_EXPECTED'),
-      dependency_review: boolean('DEPENDENCY_REVIEW_EXPECTED'),
-      release_evidence: boolean('RELEASE_EVIDENCE_EXPECTED'),
-      desktop: boolean('DESKTOP_EXPECTED'),
-    },
-    results: {
-      changes: process.env.CHANGES_RESULT,
-      secret_scan: process.env.SECRET_SCAN_RESULT,
-      dependency_review: process.env.DEPENDENCY_REVIEW_RESULT,
-      quality: process.env.QUALITY_RESULT,
-      db_integration: process.env.DB_INTEGRATION_RESULT,
-      worker_integration: process.env.WORKER_INTEGRATION_RESULT,
-      migration_integration: process.env.MIGRATION_INTEGRATION_RESULT,
-      windows: process.env.WINDOWS_RESULT,
-      runtime_pressure: process.env.RUNTIME_PRESSURE_RESULT,
-      e2e: process.env.E2E_RESULT,
-      release_evidence: process.env.RELEASE_EVIDENCE_RESULT,
-      desktop_build: process.env.DESKTOP_BUILD_RESULT,
-    },
+    expected: expectedResultsFromEnvironment(),
+    results: laneResultsFromEnvironment(),
   });
   if (failures.length > 0) {
     console.error(failures.join('\n'));

@@ -9,14 +9,17 @@ on:
 # Q06：action 全部 pin 到审计过的 commit SHA（2026-08-07 审计，见
 # docs/06-quality/08-供应链与发布证据.md），postgres 镜像 pin digest。
 concurrency:
-  group: ui-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Scheduled and manually requested reviews are independent evidence runs.
+  # A unique run group prevents either from cancelling another review.
+  group: ui-${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   ui:
     # 与默认 e2e 完全隔离的独立数据库；@ui 用例多为设计 QA 页与
     # worker 规则产物，不调用模型 Provider。
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
@@ -58,10 +61,13 @@ jobs:
         run: pnpm build
 
       - name: Full UI review (@ui, Chromium + Firefox)
+        id: ui_review
         run: pnpm exec playwright test --config playwright.ui.config.ts
 
       - name: Summarize retries and coverage matrix
         if: always()
+        env:
+          PLAYWRIGHT_RESULTS_REQUIRED: ${{ steps.ui_review.outcome == 'success' }}
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics

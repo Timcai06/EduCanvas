@@ -11,6 +11,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
+    "gen:pet-sprites": "node scripts/generate-pet-sprites.mjs",
     "typecheck": "tsc --noEmit",
     "package:portable": "electron-vite build && electron-builder --win portable"
   },

@@ -16,8 +16,10 @@ on:
         default: false
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # PR updates supersede older commits, while every main SHA keeps independent
+  # evidence and cannot be cancelled by a later docs-only push.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Q06：action 全部 pin 到审计过的 commit SHA（2026-08-07 审计，审计过程与
 # 升级流程见 docs/06-quality/08-供应链与发布证据.md）。pin 记录：
@@ -31,6 +33,7 @@ jobs:
   changes:
     name: Classify changed files
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       checks: ${{ steps.impact.outputs.checks }}
       db_integration: ${{ steps.impact.outputs.db_integration }}
@@ -39,6 +42,7 @@ jobs:
       windows: ${{ steps.impact.outputs.windows }}
       runtime_pressure: ${{ steps.impact.outputs.runtime_pressure }}
       e2e: ${{ steps.impact.outputs.e2e }}
+      agent_eval: ${{ steps.impact.outputs.agent_eval }}
       dependency_review: ${{ steps.impact.outputs.dependency_review }}
       release_evidence: ${{ steps.impact.outputs.release_evidence }}
       desktop: ${{ steps.impact.outputs.desktop }}
@@ -67,6 +71,7 @@ jobs:
     needs: [changes]
     if: github.event_name == 'pull_request' && needs.changes.outputs.dependency_review == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: write
@@ -81,6 +86,7 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
         with:
@@ -91,10 +97,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  quality:
+  quality-static:
     needs: [changes]
     if: needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -111,11 +118,37 @@ jobs:
       - name: Node baseline gate
         run: pnpm node:gate
 
+      # Cheap governance failures must surface before the longer lint/typecheck
+      # work so contributors do not wait several minutes for a sub-second gate.
+      - name: Repository file governance
+        run: pnpm file:check
+
+      - name: Migration records gate
+        run: node tooling/quality/migration-records.mjs
+
       - name: Lint
         run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
+
+  quality-tests:
+    needs: [changes]
+    if: needs.changes.outputs.checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag（版本取自根 package.json 的 packageManager 字段）
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Unit tests
         run: pnpm test:unit
@@ -125,19 +158,12 @@ jobs:
       - name: Coverage gates
         run: pnpm test:coverage
 
-      # Q06：每个 migration 必须有语义/锁表/回滚/N-1/风险记录，
-      # 见 packages/db/drizzle/MIGRATIONS.md。
-      - name: Migration records gate
-        run: node tooling/quality/migration-records.mjs
-
-      - name: Repository file governance
-        run: pnpm file:check
-
   db-integration:
     # D06：packages/db（Repository/Schema 非 drizzle）改动时运行 DB integration。
     needs: [changes]
     if: needs.changes.outputs.db_integration == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
@@ -182,6 +208,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.worker_integration == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
@@ -227,6 +254,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.migration_integration == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
@@ -288,6 +316,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -319,6 +348,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -348,9 +378,16 @@ jobs:
           test -f apps/desktop/out/renderer/index.html
 
   runtime-pressure:
-    needs: [changes, quality]
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.runtime_pressure == 'true' && needs.quality.result == 'success'
+    needs: [changes, quality-static, quality-tests]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.runtime_pressure == 'true' &&
+      ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') ||
+       (needs['quality-static'].result == 'success' &&
+        needs['quality-tests'].result == 'success'))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -376,7 +413,8 @@ jobs:
     needs:
       [
         changes,
-        quality,
+        quality-static,
+        quality-tests,
         db-integration,
         worker-integration,
         migration-integration,
@@ -386,12 +424,15 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.e2e == 'true' &&
-      needs.quality.result == 'success' &&
-      contains(fromJSON('["success", "skipped"]'), needs['db-integration'].result) &&
-      contains(fromJSON('["success", "skipped"]'), needs['worker-integration'].result) &&
-      contains(fromJSON('["success", "skipped"]'), needs['migration-integration'].result) &&
-      contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result)
+      ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') ||
+       (needs['quality-static'].result == 'success' &&
+        needs['quality-tests'].result == 'success' &&
+        contains(fromJSON('["success", "skipped"]'), needs['db-integration'].result) &&
+        contains(fromJSON('["success", "skipped"]'), needs['worker-integration'].result) &&
+        contains(fromJSON('["success", "skipped"]'), needs['migration-integration'].result) &&
+        contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result)))
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
@@ -446,10 +487,12 @@ jobs:
         run: pnpm test:e2e:runtime-composition
 
       - name: Browser E2E smoke (Chromium desktop)
+        id: browser_e2e_smoke
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pnpm test:e2e:pr
 
       - name: Full browser E2E (Chromium desktop + mobile + Firefox)
+        id: browser_e2e_full
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pnpm exec playwright test
 
@@ -457,6 +500,11 @@ jobs:
       # 这里把 retry 次数与 flaky 名单写入 CI Summary，不得完全隐藏）。
       - name: Summarize retries and coverage matrix
         if: always()
+        env:
+          # A missing report is an evidence error only when Playwright reported
+          # success. When the suite failed before producing JSON, keep the
+          # original failure singular instead of adding a misleading second red.
+          PLAYWRIGHT_RESULTS_REQUIRED: ${{ steps.browser_e2e_smoke.outcome == 'success' || steps.browser_e2e_full.outcome == 'success' }}
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
@@ -473,6 +521,56 @@ jobs:
       - name: Bundle / route size gate
         run: node tooling/quality/bundle-size.mjs --root apps/web
 
+  agent-eval:
+    # Frozen synthetic datasets exercise the existing Runtime and safety policy.
+    # This lane never receives Provider secrets or real student content.
+    needs: [changes]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.agent_eval == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b # Q06：digest pin（2026-08-07 审计）
+        env:
+          POSTGRES_USER: educanvas
+          POSTGRES_PASSWORD: educanvas
+          POSTGRES_DB: educanvas_agent_eval
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U educanvas -d educanvas_agent_eval"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://educanvas:educanvas@localhost:5432/educanvas_agent_eval
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deterministic Agent evaluation
+        run: pnpm test:eval
+
+      - name: Upload sanitized Agent evaluation
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: agent-eval-${{ github.event.pull_request.head.sha || github.sha }}
+          path: tooling/evals/reports
+          if-no-files-found: ignore
+
   release-evidence:
     # 发布证据、校验器或 migration/release governance 变更时才运行；普通功能 PR
     # 不为静态 RC manifest 支付独立 runner。手动发布仍由显式 input 开启。
@@ -484,34 +582,44 @@ jobs:
       needs.changes.outputs.checks == 'true' &&
       needs.secret-scan.result == 'success' &&
       contains(fromJSON('["success", "skipped"]'), needs['dependency-review'].result) &&
-      needs.quality.result == 'success' &&
+      needs['quality-static'].result == 'success' &&
+      needs['quality-tests'].result == 'success' &&
       contains(fromJSON('["success", "skipped"]'), needs['db-integration'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs['worker-integration'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs['migration-integration'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs.windows.result) &&
       contains(fromJSON('["success", "skipped"]'), needs['runtime-pressure'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs.e2e.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs['agent-eval'].result) &&
       contains(fromJSON('["success", "skipped"]'), needs['desktop-build'].result)
     needs:
       [
         changes,
         secret-scan,
         dependency-review,
-        quality,
+        quality-static,
+        quality-tests,
         db-integration,
         worker-integration,
         migration-integration,
         windows,
         runtime-pressure,
         e2e,
+        agent-eval,
         desktop-build,
       ]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
-      - name: Validate release evidence pack
-        run: node tooling/quality/validate-evidence.mjs
+      - name: Validate release evidence draft
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.release_evidence != 'true'
+        run: node tooling/quality/validate-evidence.mjs --mode draft
+
+      - name: Validate release readiness
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true'
+        run: node tooling/quality/validate-evidence.mjs --mode release --sha "$GITHUB_SHA"
 
   checks:
     # Branch protection 只依赖这个稳定汇总上下文。它始终创建，并确保本次分类为
@@ -522,17 +630,20 @@ jobs:
         changes,
         secret-scan,
         dependency-review,
-        quality,
+        quality-static,
+        quality-tests,
         db-integration,
         worker-integration,
         migration-integration,
         windows,
         runtime-pressure,
         e2e,
+        agent-eval,
         desktop-build,
         release-evidence,
       ]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       EVENT_NAME: ${{ github.event_name }}
       CHECKS_EXPECTED: ${{ needs.changes.outputs.checks }}
@@ -542,19 +653,22 @@ jobs:
       WINDOWS_EXPECTED: ${{ needs.changes.outputs.windows }}
       RUNTIME_PRESSURE_EXPECTED: ${{ needs.changes.outputs.runtime_pressure }}
       E2E_EXPECTED: ${{ needs.changes.outputs.e2e }}
+      AGENT_EVAL_EXPECTED: ${{ needs.changes.outputs.agent_eval }}
       DEPENDENCY_REVIEW_EXPECTED: ${{ needs.changes.outputs.dependency_review }}
       RELEASE_EVIDENCE_EXPECTED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.release_evidence == 'true') || (github.event_name != 'workflow_dispatch' && needs.changes.outputs.release_evidence == 'true') }}
       DESKTOP_EXPECTED: ${{ needs.changes.outputs.desktop }}
       CHANGES_RESULT: ${{ needs.changes.result }}
       SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
       DEPENDENCY_REVIEW_RESULT: ${{ needs['dependency-review'].result }}
-      QUALITY_RESULT: ${{ needs.quality.result }}
+      QUALITY_STATIC_RESULT: ${{ needs['quality-static'].result }}
+      QUALITY_TESTS_RESULT: ${{ needs['quality-tests'].result }}
       DB_INTEGRATION_RESULT: ${{ needs['db-integration'].result }}
       WORKER_INTEGRATION_RESULT: ${{ needs['worker-integration'].result }}
       MIGRATION_INTEGRATION_RESULT: ${{ needs['migration-integration'].result }}
       WINDOWS_RESULT: ${{ needs.windows.result }}
       RUNTIME_PRESSURE_RESULT: ${{ needs['runtime-pressure'].result }}
       E2E_RESULT: ${{ needs.e2e.result }}
+      AGENT_EVAL_RESULT: ${{ needs['agent-eval'].result }}
       DESKTOP_BUILD_RESULT: ${{ needs['desktop-build'].result }}
       RELEASE_EVIDENCE_RESULT: ${{ needs['release-evidence'].result }}
     steps:
@@ -562,3 +676,21 @@ jobs:
 
       - name: Verify required lanes
         run: node tooling/quality/ci-impact.mjs --verify-results
+
+      - name: Generate SHA-bound CI evidence
+        if: always()
+        env:
+          EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          node tooling/quality/ci-evidence.mjs
+          --sha "$EVIDENCE_SHA"
+          --event "$EVENT_NAME"
+          --output output/ci-evidence/evidence.json
+
+      - name: Upload SHA-bound CI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: ci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/ci-evidence/evidence.json
+          if-no-files-found: error

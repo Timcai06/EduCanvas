@@ -50,6 +50,10 @@ function wav(): Uint8Array {
   return bytes;
 }
 
+function webm(): Uint8Array {
+  return Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81]);
+}
+
 function request(bytes = wav(), contentType = 'audio/wav'): Request {
   return new Request('http://localhost/api/v1/voice/dictation', {
     method: 'POST',
@@ -77,6 +81,27 @@ describe('POST /api/v1/voice/dictation', () => {
     expect(mocks.transcribeAudio).toHaveBeenCalledOnce();
   });
 
+  it('接受带 EBML 魔术字节的 WebM/Opus 并按 audio/webm 交给 Provider', async () => {
+    const response = await POST(request(webm(), 'audio/webm;codecs=opus'));
+
+    expect(response.status).toBe(200);
+    expect(mocks.transcribeAudio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioBytes: webm(),
+        mimeType: 'audio/webm',
+      }),
+    );
+  });
+
+  it('拒绝伪造为 WebM 的任意字节', async () => {
+    const response = await POST(
+      request(Uint8Array.from([1, 2, 3, 4, 5]), 'audio/webm'),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.transcribeAudio).not.toHaveBeenCalled();
+  });
+
   it('同源、登录、体验模式、格式和 WAV 结构均 fail closed', async () => {
     mocks.trustedOrigin.mockReturnValue(false);
     expect((await POST(request())).status).toBe(403);
@@ -87,7 +112,7 @@ describe('POST /api/v1/voice/dictation', () => {
     mocks.readMode.mockResolvedValue(null);
     expect((await POST(request())).status).toBe(409);
     mocks.readMode.mockResolvedValue('restricted');
-    expect((await POST(request(wav(), 'audio/webm'))).status).toBe(415);
+    expect((await POST(request(wav(), 'audio/ogg'))).status).toBe(415);
     expect((await POST(request(Uint8Array.from([1, 2])))).status).toBe(400);
   });
 

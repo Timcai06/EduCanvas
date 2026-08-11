@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 export const DICTATION_MAX_BYTES = 2 * 1024 * 1024;
 const WAV_HEADER_BYTES = 44;
 const PCM_BYTES_PER_SECOND = 16_000 * 2;
+const WEBM_MAGIC = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3]);
 
 async function readLimitedBody(request: Request): Promise<Uint8Array | null> {
   const declared = request.headers.get('content-length');
@@ -69,6 +70,13 @@ function isSupportedPcmWav(bytes: Uint8Array): boolean {
   );
 }
 
+function isSupportedWebm(bytes: Uint8Array): boolean {
+  return (
+    bytes.byteLength > WEBM_MAGIC.byteLength &&
+    WEBM_MAGIC.every((value, index) => bytes[index] === value)
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
@@ -80,14 +88,27 @@ export async function POST(request: Request): Promise<Response> {
   if ((await readExperienceMode()) === null) {
     return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
   }
-  if (request.headers.get('content-type')?.toLowerCase() !== 'audio/wav') {
-    return jsonError(415, 'unsupported_media_type', '只接受 WAV 语音。');
-  }
+  const contentType =
+    request.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase() ?? '';
+  if (contentType !== 'audio/wav' && contentType !== 'audio/webm')
+    return jsonError(
+      415,
+      'unsupported_media_type',
+      '只接受 WAV 或 WebM 语音。',
+    );
   const bytes = await readLimitedBody(request);
   if (bytes === null) {
     return jsonError(413, 'audio_too_large', '语音最长为 60 秒。');
   }
-  if (!isSupportedPcmWav(bytes)) {
+  const validAudio =
+    contentType === 'audio/wav'
+      ? isSupportedPcmWav(bytes)
+      : isSupportedWebm(bytes);
+  if (!validAudio) {
     return jsonError(400, 'invalid_audio', '语音格式不正确。');
   }
   const gateway = resolveDictationGateway();
@@ -100,10 +121,11 @@ export async function POST(request: Request): Promise<Response> {
       taskAlias: 'audio.transcribe',
       modelAlias: 'transcription',
       audioBytes: bytes,
-      mimeType: 'audio/wav',
+      mimeType: contentType,
       promptVersion: 'voice.dictation.v1',
       traceId: randomUUID(),
       operationId,
+      signal: request.signal,
     });
     return jsonResponse({ text: result.text.trim() });
   } catch {

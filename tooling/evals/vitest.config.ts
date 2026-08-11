@@ -19,6 +19,12 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const aliasEntry = (pkg: string) =>
   path.join(repoRoot, 'packages', pkg, 'src', 'index.ts');
 const dbNodeModules = path.join(repoRoot, 'packages', 'db', 'node_modules');
+const agentRuntimeNodeModules = path.join(
+  repoRoot,
+  'packages',
+  'agent-runtime',
+  'node_modules',
+);
 
 export default defineConfig({
   resolve: {
@@ -29,6 +35,10 @@ export default defineConfig({
       {
         find: /^@educanvas\/agent-core$/,
         replacement: aliasEntry('agent-core'),
+      },
+      {
+        find: /^@educanvas\/agent-runtime$/,
+        replacement: aliasEntry('agent-runtime'),
       },
       {
         find: /^@educanvas\/canvas-protocol$/,
@@ -68,10 +78,11 @@ export default defineConfig({
       },
       { find: /^postgres$/, replacement: path.join(dbNodeModules, 'postgres') },
       { find: /^vitest$/, replacement: path.join(dbNodeModules, 'vitest') },
+      { find: /^zod$/, replacement: path.join(agentRuntimeNodeModules, 'zod') },
     ],
   },
   test: {
-    include: ['rag-eval.test.ts'],
+    include: ['rag-eval.test.ts', 'agent/**/*.test.ts'],
     fileParallelism: false,
     maxWorkers: 1,
     minWorkers: 1,

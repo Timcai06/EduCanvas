@@ -27,11 +27,14 @@ docs/06-quality/releases/
 ### Validating Evidence Pack
 
 ```bash
-# Validate RC1 evidence pack
-node tooling/quality/validate-evidence.mjs
+# Validate RC1 draft structure (pending is allowed)
+node tooling/quality/validate-evidence.mjs --mode draft
 
-# Validate custom manifest
-node tooling/quality/validate-evidence.mjs path/to/manifest.json
+# Validate release readiness for an exact target SHA
+node tooling/quality/validate-evidence.mjs --mode release --sha "$GITHUB_SHA"
+
+# Validate a custom draft manifest
+node tooling/quality/validate-evidence.mjs --mode draft path/to/manifest.json
 ```
 
 ### CI Integration

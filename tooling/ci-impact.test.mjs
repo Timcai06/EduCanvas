@@ -19,6 +19,7 @@ describe('CI impact classification', () => {
         windows: false,
         runtime_pressure: false,
         e2e: false,
+        agent_eval: false,
         dependency_review: false,
         release_evidence: false,
         desktop: false,
@@ -65,6 +66,11 @@ describe('CI impact classification', () => {
     );
     assert.ok(
       Object.values(
+        classifyChangedPaths(['.github/actions/setup-workspace/action.yml']),
+      ).every(Boolean),
+    );
+    assert.ok(
+      Object.values(
         classifyChangedPaths(['docs/a.md'], { eventName: 'workflow_dispatch' }),
       ).every(Boolean),
     );
@@ -72,6 +78,37 @@ describe('CI impact classification', () => {
     assert.ok(
       Object.values(classifyChangedPaths(['new-root/file.ts'])).every(Boolean),
     );
+  });
+
+  it('routes workspace-local manifests without treating them as global dependency changes', () => {
+    assert.deepEqual(classifyChangedPaths(['apps/desktop/package.json']), {
+      checks: true,
+      db_integration: false,
+      worker_integration: false,
+      migration_integration: false,
+      windows: false,
+      runtime_pressure: false,
+      e2e: false,
+      agent_eval: false,
+      dependency_review: true,
+      release_evidence: false,
+      desktop: true,
+    });
+
+    const database = classifyChangedPaths(['packages/db/package.json']);
+    assert.equal(database.checks, true);
+    assert.equal(database.db_integration, true);
+    assert.equal(database.dependency_review, true);
+    assert.equal(database.desktop, false);
+    assert.equal(database.runtime_pressure, false);
+    assert.equal(database.e2e, false);
+
+    const web = classifyChangedPaths(['apps/web/package.json']);
+    assert.equal(web.checks, true);
+    assert.equal(web.e2e, true);
+    assert.equal(web.dependency_review, true);
+    assert.equal(web.desktop, false);
+    assert.equal(web.migration_integration, false);
   });
 
   it('routes database changes without paying unrelated Windows or pressure costs', () => {
@@ -84,6 +121,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       // D06：纯 DB 内部改动不再自动支付 Chromium E2E（路由原则 1）
       e2e: false,
+      agent_eval: false,
       dependency_review: false,
       release_evidence: false,
       desktop: false,
@@ -133,10 +171,36 @@ describe('CI impact classification', () => {
       windows: false,
       runtime_pressure: false,
       e2e: true,
+      agent_eval: false,
       dependency_review: false,
       release_evidence: false,
       desktop: false,
     });
+  });
+
+  it('routes Agent contract changes to deterministic eval without charging pure UI or Desktop', () => {
+    for (const path of [
+      'packages/agent-runtime/src/agent-loop.ts',
+      'packages/model-gateway/src/openai-compatible.ts',
+      'packages/db/src/knowledge-hybrid-retrieval.ts',
+      'apps/web/server/platform/general-turn-profile.ts',
+      'tooling/evals/agent/v1/cases.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+    assert.equal(
+      classifyChangedPaths(['apps/web/features/voice/live-voice-panel.tsx'])
+        .agent_eval,
+      false,
+    );
+    assert.equal(
+      classifyChangedPaths(['apps/desktop/src/renderer/pet.tsx']).agent_eval,
+      false,
+    );
+    assert.equal(
+      classifyChangedPaths(['docs/06-quality/03-测试与评估.md']).agent_eval,
+      false,
+    );
   });
 
   it('compares pull requests from the merge base rather than base-branch churn', () => {
@@ -151,13 +215,15 @@ describe('CI impact classification', () => {
       changes: 'success',
       secret_scan: 'success',
       dependency_review: 'skipped',
-      quality: 'skipped',
+      quality_static: 'skipped',
+      quality_tests: 'skipped',
       db_integration: 'skipped',
       worker_integration: 'skipped',
       migration_integration: 'skipped',
       windows: 'skipped',
       runtime_pressure: 'skipped',
       e2e: 'skipped',
+      agent_eval: 'skipped',
       release_evidence: 'skipped',
       desktop_build: 'skipped',
     };
@@ -175,13 +241,15 @@ describe('CI impact classification', () => {
         expected: classifyChangedPaths(['pnpm-lock.yaml']),
         results: {
           ...baseResults,
-          quality: 'success',
+          quality_static: 'success',
+          quality_tests: 'success',
           db_integration: 'success',
           worker_integration: 'success',
           migration_integration: 'success',
           windows: 'success',
           runtime_pressure: 'success',
           e2e: 'failure',
+          agent_eval: 'success',
           release_evidence: 'success',
           desktop_build: 'success',
         },
@@ -198,7 +266,11 @@ describe('CI impact classification', () => {
         expected: classifyChangedPaths([
           'docs/06-quality/releases/rc1/manifest.json',
         ]),
-        results: { ...baseResults, quality: 'success' },
+        results: {
+          ...baseResults,
+          quality_static: 'success',
+          quality_tests: 'success',
+        },
       }),
       ['release_evidence was required but concluded: skipped'],
     );
@@ -207,7 +279,12 @@ describe('CI impact classification', () => {
       requiredResultFailures({
         eventName: 'pull_request',
         expected: classifyChangedPaths(['apps/web/app/page.tsx']),
-        results: { ...baseResults, quality: 'success', e2e: 'success' },
+        results: {
+          ...baseResults,
+          quality_static: 'success',
+          quality_tests: 'success',
+          e2e: 'success',
+        },
       }),
       [],
     );
@@ -295,6 +372,8 @@ describe('D06 lane split routing', () => {
       assert.match(workflow, new RegExp(`^\\s+${lane}:`, 'm'));
     }
     assert.doesNotMatch(workflow, /^\s+INTEGRATION_EXPECTED:/m);
+    assert.match(workflow, /^\s+AGENT_EVAL_EXPECTED:/m);
+    assert.match(workflow, /^\s+AGENT_EVAL_RESULT:/m);
 
     const migrationJob = workflow.slice(
       workflow.indexOf('\n  migration-integration:'),
@@ -313,13 +392,15 @@ describe('D06 lane split routing', () => {
       results: {
         changes: 'success',
         secret_scan: 'success',
-        quality: 'success',
+        quality_static: 'success',
+        quality_tests: 'success',
         db_integration: 'success',
         worker_integration: 'skipped',
         migration_integration: 'failure',
         windows: 'skipped',
         runtime_pressure: 'skipped',
         e2e: 'skipped',
+        agent_eval: 'skipped',
         dependency_review: 'skipped',
         release_evidence: 'success',
         desktop_build: 'skipped',
@@ -328,5 +409,138 @@ describe('D06 lane split routing', () => {
     assert.deepEqual(failures, [
       'migration_integration was required but concluded: failure',
     ]);
+  });
+});
+
+describe('CI workflow scheduling contract', () => {
+  const ci = readFileSync(
+    new URL('../.github/workflows/ci.yml', import.meta.url),
+    'utf8',
+  );
+  const ui = readFileSync(
+    new URL('../.github/workflows/ui.yml', import.meta.url),
+    'utf8',
+  );
+
+  function jobBlock(source, name) {
+    const marker = `\n  ${name}:`;
+    const start = source.indexOf(marker);
+    assert.notEqual(start, -1, `missing job ${name}`);
+    const bodyStart = start + marker.length;
+    const next = source.slice(bodyStart).search(/\n  [a-z][a-z0-9-]+:\n/);
+    return next === -1
+      ? source.slice(start)
+      : source.slice(start, bodyStart + next);
+  }
+
+  it('cancels superseded PR commits without cancelling independent main SHAs', () => {
+    const concurrency = ci.slice(
+      ci.indexOf('\nconcurrency:'),
+      ci.indexOf('\n# Q06：action'),
+    );
+    assert.match(
+      concurrency,
+      /github\.event\.pull_request\.number \|\| github\.sha/,
+    );
+    assert.match(
+      concurrency,
+      /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,
+    );
+    assert.doesNotMatch(concurrency, /github\.ref/);
+
+    const uiConcurrency = ui.slice(
+      ui.indexOf('\nconcurrency:'),
+      ui.indexOf('\njobs:'),
+    );
+    assert.match(uiConcurrency, /github\.run_id/);
+    assert.match(uiConcurrency, /cancel-in-progress: false/);
+  });
+
+  it('runs static and test quality lanes in parallel and keeps checks stable', () => {
+    assert.doesNotMatch(ci, /^  quality:\s*$/m);
+    const staticQuality = jobBlock(ci, 'quality-static');
+    const testQuality = jobBlock(ci, 'quality-tests');
+    assert.match(
+      staticQuality,
+      /Repository file governance[\s\S]*Migration records gate[\s\S]*Lint[\s\S]*Typecheck/,
+    );
+    assert.doesNotMatch(staticQuality, /Unit tests|Coverage gates/);
+    assert.match(testQuality, /Unit tests[\s\S]*Coverage gates/);
+    assert.doesNotMatch(testQuality, /\n      - name: Typecheck/);
+
+    for (const consumer of [
+      'runtime-pressure',
+      'e2e',
+      'release-evidence',
+      'checks',
+    ]) {
+      const block = jobBlock(ci, consumer);
+      assert.match(block, /quality-static/);
+      assert.match(block, /quality-tests/);
+    }
+    assert.match(jobBlock(ci, 'checks'), /QUALITY_STATIC_RESULT/);
+    assert.match(jobBlock(ci, 'checks'), /QUALITY_TESTS_RESULT/);
+  });
+
+  it('bounds every executable job with an explicit timeout', () => {
+    for (const name of [
+      'changes',
+      'dependency-review',
+      'secret-scan',
+      'quality-static',
+      'quality-tests',
+      'db-integration',
+      'worker-integration',
+      'migration-integration',
+      'windows',
+      'desktop-build',
+      'runtime-pressure',
+      'e2e',
+      'agent-eval',
+      'release-evidence',
+      'checks',
+    ]) {
+      assert.match(jobBlock(ci, name), /\n    timeout-minutes: \d+/);
+    }
+    assert.match(jobBlock(ui, 'ui'), /\n    timeout-minutes: 15/);
+  });
+
+  it('distinguishes a missing report after success from an upstream test failure', () => {
+    assert.match(jobBlock(ci, 'e2e'), /PLAYWRIGHT_RESULTS_REQUIRED/);
+    assert.match(
+      jobBlock(ci, 'e2e'),
+      /steps\.browser_e2e_smoke\.outcome == 'success'/,
+    );
+    assert.match(jobBlock(ui, 'ui'), /steps\.ui_review\.outcome == 'success'/);
+  });
+
+  it('collects independent nightly evidence and publishes one SHA-bound CI artifact', () => {
+    for (const name of ['runtime-pressure', 'e2e']) {
+      const block = jobBlock(ci, name);
+      assert.match(block, /github\.event_name == 'schedule'/);
+      assert.match(block, /github\.event_name == 'workflow_dispatch'/);
+      assert.match(block, /always\(\)/);
+    }
+    const agentEval = jobBlock(ci, 'agent-eval');
+    assert.match(agentEval, /always\(\)/);
+    assert.doesNotMatch(agentEval, /quality-static|quality-tests/);
+    assert.match(agentEval, /educanvas_agent_eval/);
+    assert.match(agentEval, /pnpm test:eval/);
+    assert.doesNotMatch(agentEval, /secrets\./);
+
+    const releaseEvidence = jobBlock(ci, 'release-evidence');
+    assert.match(releaseEvidence, /Validate release evidence draft/);
+    assert.match(releaseEvidence, /--mode draft/);
+    assert.match(releaseEvidence, /Validate release readiness/);
+    assert.match(releaseEvidence, /--mode release --sha/);
+
+    const checks = jobBlock(ci, 'checks');
+    assert.match(checks, /ci-evidence\.mjs/);
+    assert.match(checks, /ci-evidence-\$\{\{/);
+    const generator = readFileSync(
+      new URL('./quality/ci-evidence.mjs', import.meta.url),
+      'utf8',
+    );
+    assert.match(generator, /requiredFailures/);
   });
 });

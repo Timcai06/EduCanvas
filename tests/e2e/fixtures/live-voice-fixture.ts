@@ -1,0 +1,398 @@
+import type { Page } from '@playwright/test';
+
+export interface FakeLiveVoiceSnapshot {
+  readonly readyConnections: number;
+  readonly turnRequests: readonly Record<string, unknown>[];
+  readonly cancelRequests: readonly string[];
+  readonly speechRequests: number;
+  readonly speechAborts: number;
+  readonly clientFrameTypes: readonly string[];
+  readonly events: readonly string[];
+}
+
+interface BrowserLiveVoiceDriver {
+  emitPartial(text: string): void;
+  emitFinal(text: string): void;
+  holdNextTurn(assistantText: string): void;
+  snapshot(): FakeLiveVoiceSnapshot;
+}
+
+declare global {
+  interface Window {
+    __EDUCANVAS_E2E_LIVE_VOICE__?: BrowserLiveVoiceDriver;
+  }
+}
+
+/** 浏览器仍跑真实产品状态机；fixture 只封住外部 I/O，且不保存合成 PCM。 */
+export async function installFakeLiveVoice(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    const encoder = new TextEncoder();
+    const turnRequests: Record<string, unknown>[] = [];
+    const cancelRequests: string[] = [];
+    const clientFrameTypes: string[] = [];
+    const events: string[] = [];
+    const sockets: FakeWebSocket[] = [];
+    let readyConnections = 0;
+    let speechRequests = 0;
+    let speechAborts = 0;
+    let holdNext = false;
+    let nextAssistantText = '';
+
+    const frame = (
+      type: string,
+      turnId: string,
+      data: Record<string, unknown>,
+    ) =>
+      encoder.encode(
+        `event: ${type}\ndata: ${JSON.stringify({ type, schemaVersion: '1', turnId, ...data })}\n\n`,
+      );
+
+    class FakeWebSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      readonly url: string;
+      readonly protocol = '';
+      readonly extensions = '';
+      readonly bufferedAmount = 0;
+      binaryType: BinaryType = 'blob';
+      readyState = FakeWebSocket.CONNECTING;
+      private operationId: string | null = null;
+      private segmentId: string | null = null;
+      private serverSequence = 0;
+
+      constructor(url: string | URL, _protocols?: string | string[]) {
+        super();
+        this.url = String(url);
+        sockets.push(this);
+        queueMicrotask(() => {
+          this.readyState = FakeWebSocket.OPEN;
+          this.dispatchEvent(new Event('open'));
+        });
+      }
+
+      send(raw: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+        if (typeof raw !== 'string') return;
+        const message = JSON.parse(raw) as {
+          type?: string;
+          operationId?: string;
+          segmentId?: string;
+        };
+        if (message.type) clientFrameTypes.push(message.type);
+        if (message.type === 'start') {
+          this.operationId = message.operationId ?? null;
+          this.segmentId = message.segmentId ?? null;
+          readyConnections += 1;
+          events.push('voice.ready');
+        }
+      }
+
+      close(): void {
+        if (
+          this.readyState === FakeWebSocket.CLOSED ||
+          this.readyState === FakeWebSocket.CLOSING
+        ) {
+          return;
+        }
+        this.readyState = FakeWebSocket.CLOSING;
+        this.dispatchEvent(new CloseEvent('close', { code: 1000 }));
+        this.readyState = FakeWebSocket.CLOSED;
+      }
+
+      emit(type: 'partial' | 'final', text: string): void {
+        if (
+          this.readyState !== FakeWebSocket.OPEN ||
+          !this.operationId ||
+          !this.segmentId
+        ) {
+          throw new Error('fake voice socket is not ready');
+        }
+        const data = JSON.stringify({
+          protocolVersion: 'educanvas.streaming-transcription.v1',
+          operationId: this.operationId,
+          segmentId: this.segmentId,
+          sequence: this.serverSequence,
+          type,
+          text,
+        });
+        this.serverSequence += 1;
+        this.dispatchEvent(new MessageEvent('message', { data }));
+        events.push(`voice.${type}`);
+      }
+    }
+
+    const activeSocket = () => {
+      const socket = [...sockets]
+        .reverse()
+        .find((candidate) => candidate.readyState === FakeWebSocket.OPEN);
+      if (!socket) throw new Error('no active fake voice socket');
+      return socket;
+    };
+
+    Object.defineProperty(globalThis, 'WebSocket', {
+      configurable: true,
+      value: FakeWebSocket,
+    });
+
+    const nativeCreateScriptProcessor =
+      AudioContext.prototype.createScriptProcessor;
+    AudioContext.prototype.createScriptProcessor = function (
+      ...args: Parameters<AudioContext['createScriptProcessor']>
+    ) {
+      const processor = nativeCreateScriptProcessor.apply(this, args);
+      const samples = new Float32Array(args[0] ?? 2_048).fill(0.2);
+      const timer = window.setInterval(() => {
+        processor.onaudioprocess?.({
+          inputBuffer: {
+            numberOfChannels: 1,
+            getChannelData: () => samples,
+          },
+        } as unknown as AudioProcessingEvent);
+      }, 40);
+      const disconnect = processor.disconnect.bind(processor);
+      processor.disconnect = () => {
+        window.clearInterval(timer);
+        disconnect();
+      };
+      return processor;
+    };
+
+    const audioContext = new AudioContext();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const mediaDestination = audioContext.createMediaStreamDestination();
+    gain.gain.value = 0.2;
+    oscillator.connect(gain).connect(mediaDestination);
+    oscillator.start();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => mediaDestination.stream.clone(),
+      },
+    });
+
+    globalThis.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : null;
+      const url = new URL(
+        request?.url ?? (input instanceof URL ? input.href : String(input)),
+        location.origin,
+      );
+      const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+
+      if (url.pathname === '/api/v1/voice/capability') {
+        return Response.json({
+          checks: [
+            { key: 'model', healthy: true },
+            { key: 'speech', healthy: true },
+            { key: 'connection', healthy: true },
+          ],
+          websocketUrl: 'wss://voice-fixture.invalid/live',
+        });
+      }
+      if (url.pathname === '/api/v1/voice/tickets' && method === 'POST') {
+        return Response.json(
+          {
+            ticket: 'synthetic-e2e-ticket',
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+          { status: 201 },
+        );
+      }
+      if (url.pathname === '/api/v1/chat/assets' && method === 'GET') {
+        const asset = (
+          assetId: string,
+          versionId: string | null,
+          kind: 'image' | 'document',
+          displayName: string,
+          status: 'ready' | 'processing',
+        ) => ({
+          descriptor: {
+            assetId,
+            scope: 'space',
+            kind,
+            displayName,
+            status,
+            currentVersionId: versionId,
+          },
+          version: versionId ? { versionId } : null,
+          processing: null,
+          enabled: true,
+        });
+        return Response.json({
+          assets: [
+            asset(
+              'asset-image-1',
+              'version-image-7',
+              'image',
+              '电路图.png',
+              'ready',
+            ),
+            asset(
+              'asset-doc-1',
+              'version-doc-3',
+              'document',
+              '实验记录.pdf',
+              'ready',
+            ),
+            asset(
+              'asset-processing-1',
+              null,
+              'document',
+              '处理中资料.pdf',
+              'processing',
+            ),
+          ],
+        });
+      }
+      if (url.pathname === '/api/v1/chat/turn' && method === 'POST') {
+        const rawBody = init?.body ?? (request ? await request.text() : null);
+        const body = JSON.parse(String(rawBody)) as Record<string, unknown>;
+        turnRequests.push(body);
+        const index = turnRequests.length;
+        const turnId = `fake-turn-${index}`;
+        const messageId = `fake-assistant-${index}`;
+        const assistantText =
+          nextAssistantText || `第 ${index} 轮回答已经准备好，请继续。`;
+        const shouldHold = holdNext;
+        holdNext = false;
+        nextAssistantText = '';
+        events.push('turn.request');
+
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              frame('turn.accepted', turnId, {
+                studentMessageId: `fake-student-${index}`,
+                assistantMessageId: messageId,
+                replayed: false,
+              }),
+            );
+            controller.enqueue(
+              frame('tool.started', turnId, {
+                toolCallId: `fake-tool-${index}`,
+                label: '正在检索资料',
+              }),
+            );
+            controller.enqueue(
+              frame('tool.completed', turnId, {
+                toolCallId: `fake-tool-${index}`,
+              }),
+            );
+            controller.enqueue(
+              frame('message.delta', turnId, {
+                messageId,
+                delta: assistantText,
+              }),
+            );
+            if (!shouldHold) {
+              controller.enqueue(
+                frame('turn.completed', turnId, { messageId }),
+              );
+              controller.close();
+              return;
+            }
+            init?.signal?.addEventListener(
+              'abort',
+              () => {
+                events.push('turn.abort');
+                try {
+                  controller.error(new DOMException('aborted', 'AbortError'));
+                } catch {
+                  // The consumer may already have closed after a confirmed cancel.
+                }
+              },
+              { once: true },
+            );
+          },
+        });
+        return new Response(stream, {
+          headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+        });
+      }
+      const cancelMatch =
+        method === 'POST'
+          ? /^\/api\/v1\/chat\/turn\/([^/]+)\/cancel$/.exec(url.pathname)
+          : null;
+      if (cancelMatch) {
+        cancelRequests.push(decodeURIComponent(cancelMatch[1]!));
+        events.push('turn.cancel');
+        return Response.json({ accepted: true, status: 'cancelled' });
+      }
+      if (url.pathname === '/api/v1/voice/live/speech' && method === 'POST') {
+        speechRequests += 1;
+        events.push('speech.request');
+        let aborted = false;
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            if (aborted) return;
+            aborted = true;
+            speechAborts += 1;
+            events.push('speech.abort');
+          },
+          { once: true },
+        );
+        const pcm = new Uint8Array(96_000);
+        const view = new DataView(pcm.buffer);
+        for (let offset = 0; offset < pcm.byteLength; offset += 2) {
+          view.setInt16(offset, offset % 8 === 0 ? 2_048 : -2_048, true);
+        }
+        return new Response(pcm, {
+          headers: {
+            'content-type': 'audio/L16; rate=24000; channels=1',
+          },
+        });
+      }
+      return originalFetch(input, init);
+    };
+
+    window.__EDUCANVAS_E2E_LIVE_VOICE__ = {
+      emitPartial: (text) => activeSocket().emit('partial', text),
+      emitFinal: (text) => activeSocket().emit('final', text),
+      holdNextTurn: (assistantText) => {
+        holdNext = true;
+        nextAssistantText = assistantText;
+      },
+      snapshot: () => ({
+        readyConnections,
+        turnRequests: structuredClone(turnRequests),
+        cancelRequests: [...cancelRequests],
+        speechRequests,
+        speechAborts,
+        clientFrameTypes: [...clientFrameTypes],
+        events: [...events],
+      }),
+    };
+  });
+}
+
+export async function emitVoicePartial(page: Page, text: string) {
+  await page.evaluate((value) => {
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.emitPartial(value);
+  }, text);
+}
+
+export async function emitVoiceFinal(page: Page, text: string) {
+  await page.evaluate((value) => {
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.emitFinal(value);
+  }, text);
+}
+
+export async function holdNextVoiceTurn(page: Page, assistantText: string) {
+  await page.evaluate((value) => {
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.holdNextTurn(value);
+  }, assistantText);
+}
+
+export async function readFakeLiveVoiceSnapshot(
+  page: Page,
+): Promise<FakeLiveVoiceSnapshot> {
+  return page.evaluate(() => {
+    const driver = window.__EDUCANVAS_E2E_LIVE_VOICE__;
+    if (!driver) throw new Error('Live Voice fixture driver is unavailable');
+    return driver.snapshot();
+  });
+}
