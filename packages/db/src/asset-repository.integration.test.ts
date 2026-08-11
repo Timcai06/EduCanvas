@@ -1025,4 +1025,45 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       .where(eq(schema.objectDeletionOutbox.id, claim!.id));
     expect(row?.status).toBe('processing');
   });
+
+  it('loadOwnedCurrentStoredVersion 带出默认 text 表示的质量（ADR-0026 决定 6）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    /* extractedText 置空：避免 createUploaded 自动创建的 default text 行
+       （producer='default' 在 defaultRepresentationOrderBy 中恒优先）掩盖
+       MinerU 行，确保断言选中唯一的结构化 text 表示。 */
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values({
+        assetVersionId: created.version!.versionId,
+        kind: 'text',
+        variant: 'default',
+        producer: 'mineru',
+        producerVersion: 'mineru.v1',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+      });
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      textRepresentation: {
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+        status: 'ready',
+        quality: 'structured',
+        mimeType: 'text/markdown',
+      },
+    });
+  });
 });

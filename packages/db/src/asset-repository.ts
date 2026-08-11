@@ -139,6 +139,18 @@ export interface OwnedStoredAssetVersion {
     checksum: string;
     status: 'ready' | 'failed' | 'processing' | 'unavailable';
   } | null;
+  /**
+   * ADR-0026 决定 6：默认 identity 的文本派生表示。quality 四态向用户
+   * 可见（structured / degraded_plain_text / processing / failed），
+   * 阅读视图与 preview 组合层据此显示实际状态；对象键绝不进入客户端状态。
+   */
+  textRepresentation: {
+    derivedStorageKey: string;
+    checksum: string;
+    status: 'ready' | 'failed' | 'processing' | 'unavailable';
+    quality: RepresentationQuality;
+    mimeType: string | null;
+  } | null;
 }
 
 export interface CreateUploadedAssetInput {
@@ -1098,6 +1110,25 @@ export class DrizzleAssetRepository {
             .orderBy(...defaultRepresentationOrderBy())
             .limit(1)
         : [];
+    /* ADR-0026：默认 identity 的 text representation（同样按确定性默认选择；
+       quality 四态供预览层显示实际状态）。 */
+    const [textRepresentation] = await this.database
+      .select({
+        derivedStorageKey: assetRepresentations.derivedStorageKey,
+        checksum: assetRepresentations.checksum,
+        status: assetRepresentations.status,
+        quality: assetRepresentations.quality,
+        mimeType: assetRepresentations.mimeType,
+      })
+      .from(assetRepresentations)
+      .where(
+        and(
+          eq(assetRepresentations.assetVersionId, row.version.id),
+          eq(assetRepresentations.kind, 'text'),
+        ),
+      )
+      .orderBy(...defaultRepresentationOrderBy())
+      .limit(1);
     return {
       assetId: row.asset.id,
       versionId: row.version.id,
@@ -1125,6 +1156,19 @@ export class DrizzleAssetRepository {
               checksum: transcriptionRepresentation.checksum,
               status: transcriptionRepresentation.status as
                 'ready' | 'failed' | 'processing' | 'unavailable',
+            }
+          : null,
+      textRepresentation:
+        textRepresentation &&
+        textRepresentation.derivedStorageKey &&
+        textRepresentation.checksum
+          ? {
+              derivedStorageKey: textRepresentation.derivedStorageKey,
+              checksum: textRepresentation.checksum,
+              status: textRepresentation.status as
+                'ready' | 'failed' | 'processing' | 'unavailable',
+              quality: textRepresentation.quality as RepresentationQuality,
+              mimeType: textRepresentation.mimeType,
             }
           : null,
     };
