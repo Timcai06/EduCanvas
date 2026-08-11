@@ -6,12 +6,14 @@
     "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["node"],
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": [
+    "scripts/**/*.d.mts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/preload/*.d.ts",

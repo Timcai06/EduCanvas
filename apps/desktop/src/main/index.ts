@@ -1,8 +1,10 @@
 import { app, ipcMain } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
-import { createAssistantWindow } from './window';
+import { createPetWindow } from './pet-window';
+import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
 import { createAssistantProxy } from './assistant-proxy';
+import type { DragPoint } from '../shared/pet-drag';
 
 // 仓库本地 Web 约定端口 3101（tooling/local-orchestrator-config.mjs 默认值）。
 // 非标准端口部署可用 EDUCANVAS_DESKTOP_API_BASE 覆盖。
@@ -24,23 +26,26 @@ if (!app.requestSingleInstanceLock()) {
     ),
   );
 
-  let mainWindow: Electron.BrowserWindow | null = null;
+  // 桌宠窗口动作 IPC（controller 在 whenReady 后创建，注册期为空则安全 no-op）
+  let petController: PetWindowController | null = null;
+  ipcMain.handle('pet:drag-move', (_event, p: DragPoint) =>
+    petController?.dragMove(p),
+  );
+  ipcMain.handle('pet:move-by', (_event, dx: number, dy: number) =>
+    petController?.moveBy(dx, dy),
+  );
+  ipcMain.handle('pet:get-bounds', () => petController?.getBounds());
 
   app.on('second-instance', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
+    if (petController && !petController.win.isDestroyed()) {
+      petController.win.show();
+      petController.win.focus();
     }
   });
 
   app.whenReady().then(() => {
-    mainWindow = createAssistantWindow(() => {
-      mainWindow?.webContents.send(
-        'assistant:toast',
-        '已最小化到托盘，右键托盘图标可退出。',
-      );
-    });
-    createTray(mainWindow);
+    petController = createPetWindow();
+    createTray(petController.win);
   });
 
   // 覆盖默认「全部窗口关闭即退出」：关闭=隐藏到托盘，仅托盘「退出」结束进程
