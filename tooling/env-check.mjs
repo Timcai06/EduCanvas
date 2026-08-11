@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
 
 const envPath = process.argv[2] ?? '.env';
 if (!existsSync(envPath)) {
@@ -56,6 +55,16 @@ function validateModelId(name) {
   if (current === '') return;
   if (current.length > 256 || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(current)) {
     fail(`${name} is not a valid model id`);
+  }
+}
+
+function validateDashScopeAlias(name) {
+  const current = value(name);
+  if (
+    current !== '' &&
+    (current.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(current))
+  ) {
+    fail(`${name} is not a valid model or voice alias`);
   }
 }
 
@@ -245,54 +254,67 @@ validateInteger('MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS', 1_000, 180_000);
 validateInteger('MODEL_GATEWAY_EMBEDDING_MAX_BATCH', 1, 256);
 
 /*
- * 实时流式转录（sherpa WASM 本地草稿，ADR-0018 / V09-D）：与 MODEL_GATEWAY_*
- * 的 Provider 配置分域，独立前缀。默认关闭；显式启用时必须给齐 profile 与
- * 模型目录（无隐式默认目录），否则视为配置错误直接 fail——否则部署会以为
- * 语音可用，直到运行时闸门才拒绝。这里只打印安全摘要，不打印路径内容。
+ * Live Voice 由 DashScope ASR/TTS 共同提供。API Key 与 Workspace 必须成组
+ * 出现；模型和音色留空时由 provider adapter 使用冻结默认值。这里复刻同一
+ * 安全边界，避免 env:check 通过但运行时能力闸门关闭，同时不打印任何秘密。
  */
-const streamingEnabledRaw = value('STREAMING_TRANSCRIPTION_ENABLED');
-let streamingSummary = 'streaming=disabled';
-if (streamingEnabledRaw !== '') {
-  if (streamingEnabledRaw !== 'true' && streamingEnabledRaw !== 'false') {
-    fail('STREAMING_TRANSCRIPTION_ENABLED must be true or false');
+function validateDashScopeLiveVoice() {
+  const apiKey = value('DASHSCOPE_API_KEY');
+  const workspaceId = value('DASHSCOPE_WORKSPACE_ID');
+  if (apiKey === '' && workspaceId === '') return 'live-voice=disabled';
+
+  const dashScopeMissing = [];
+  requireValue('DASHSCOPE_API_KEY', dashScopeMissing);
+  requireValue('DASHSCOPE_WORKSPACE_ID', dashScopeMissing);
+  if (dashScopeMissing.length > 0) {
+    fail(`missing DashScope Live Voice values: ${dashScopeMissing.join(', ')}`);
   }
-  if (streamingEnabledRaw === 'true') {
-    const streamingMissing = [];
-    requireValue('STREAMING_TRANSCRIPTION_PROFILE', streamingMissing);
-    requireValue('STREAMING_TRANSCRIPTION_MODEL_DIR', streamingMissing);
-    if (streamingMissing.length > 0) {
+  if (
+    apiKey.length < 16 ||
+    apiKey.length > 4_096 ||
+    !/^[\x21-\x7e]+$/.test(apiKey)
+  ) {
+    fail('DASHSCOPE_API_KEY has an invalid shape');
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspaceId)) {
+    fail('DASHSCOPE_WORKSPACE_ID has an invalid shape');
+  }
+
+  for (const name of [
+    'DASHSCOPE_ASR_MODEL',
+    'DASHSCOPE_TTS_MODEL',
+    'DASHSCOPE_TTS_VOICE',
+  ]) {
+    validateDashScopeAlias(name);
+  }
+
+  const websocketUrl = value('DASHSCOPE_BEIJING_WS_URL');
+  if (websocketUrl !== '') {
+    let url;
+    try {
+      url = new URL(websocketUrl);
+    } catch {
+      fail('DASHSCOPE_BEIJING_WS_URL is not a valid URL');
+    }
+    if (
+      url.protocol !== 'wss:' ||
+      url.pathname !== '/api-ws/v1/inference' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.search !== '' ||
+      url.hash !== '' ||
+      url.hostname.toLowerCase() !==
+        `${workspaceId}.cn-beijing.maas.aliyuncs.com`.toLowerCase()
+    ) {
       fail(
-        `missing streaming transcription values: ${streamingMissing.join(', ')}`,
+        'DASHSCOPE_BEIJING_WS_URL must be a credential-free Beijing wss inference endpoint',
       );
     }
-    validateInteger(
-      'STREAMING_TRANSCRIPTION_SESSION_TIMEOUT_MS',
-      1_000,
-      600_000,
-    );
-    const streamingProfile = value('STREAMING_TRANSCRIPTION_PROFILE');
-    // profile 白名单以 manifest 为唯一事实源，避免与配置解析层双份漂移。
-    const sherpaManifest = JSON.parse(
-      readFileSync(
-        new URL('./sherpa-model-manifest.json', import.meta.url),
-        'utf8',
-      ),
-    );
-    if (!Object.hasOwn(sherpaManifest.profiles, streamingProfile)) {
-      fail('STREAMING_TRANSCRIPTION_PROFILE is not in the manifest whitelist');
-    }
-    if (!isAbsolute(value('STREAMING_TRANSCRIPTION_MODEL_DIR'))) {
-      fail('STREAMING_TRANSCRIPTION_MODEL_DIR must be an absolute path');
-    }
-    const streamingHotwordsPath = value(
-      'STREAMING_TRANSCRIPTION_HOTWORDS_PATH',
-    );
-    if (streamingHotwordsPath !== '' && !isAbsolute(streamingHotwordsPath)) {
-      fail('STREAMING_TRANSCRIPTION_HOTWORDS_PATH must be an absolute path');
-    }
-    streamingSummary = `streaming=enabled profile=${streamingProfile}`;
   }
+  return 'live-voice=enabled provider=dashscope';
 }
+
+const liveVoiceSummary = validateDashScopeLiveVoice();
 
 /* 媒体能力状态（ADR-0021）：声明 override 必须配置组完整，否则只关该能力。 */
 const capabilityStates = {};
@@ -344,5 +366,5 @@ const capabilitySummary = Object.entries(capabilityStates)
   .map(([capability, state]) => `${capability.toLowerCase()}=${state}`)
   .join(' ');
 console.log(
-  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}; ${streamingSummary}`,
+  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}; ${liveVoiceSummary}`,
 );

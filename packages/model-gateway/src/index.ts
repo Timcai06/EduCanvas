@@ -59,22 +59,8 @@ export {
   type OpenAICompatibleEmbeddingModelGatewayOptions,
 } from './openai-compatible-embedding-model-gateway';
 export {
-  SherpaStreamingTranscriptionGateway,
-  type SherpaStreamingTranscriptionGatewayOptions,
-  type SherpaStreamingTranscriptionLogEntry,
-  type SherpaStreamingTranscriptionLogLabel,
-} from './sherpa-streaming-transcription-gateway';
-export {
-  resolveSherpaStreamingTranscriptionGateway,
-  validateSherpaHotwordsText,
-  type SherpaStreamingGatewayDependencies,
-  type SherpaStreamingResolution,
-  type SherpaStreamingUnavailableReason,
-} from './sherpa-streaming-gateway-resolver';
-export {
-  parseSherpaStreamingConfiguration,
-  sherpaStreamingProfiles,
-  type EnabledSherpaStreamingConfiguration,
-  type SherpaStreamingConfiguration,
-  type SherpaStreamingProfile,
-} from './sherpa-streaming-config';
+  resolveDashScopeSpeechAvailability,
+  resolveDashScopeStreamingSpeechGateway,
+  resolveDashScopeStreamingTranscriptionGateway,
+  type DashScopeUnavailableReason,
+} from './dashscope-speech-resolver';

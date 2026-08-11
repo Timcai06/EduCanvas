@@ -37,6 +37,7 @@ import { POST } from './route';
 
 const healthyChecks = [
   { key: 'model', healthy: true },
+  { key: 'speech', healthy: true },
   { key: 'connection', healthy: true },
 ];
 

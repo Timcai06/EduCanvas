@@ -28,6 +28,7 @@ describe('GET /api/v1/voice/capability', () => {
     mocks.resolveCapability.mockResolvedValue({
       checks: [
         { key: 'model', healthy: true },
+        { key: 'speech', healthy: true },
         { key: 'connection', healthy: true },
       ],
       websocketUrl: 'ws://localhost:3200/v1/client/streaming-transcription',
@@ -40,6 +41,7 @@ describe('GET /api/v1/voice/capability', () => {
     expect(await response.json()).toMatchObject({
       checks: [
         { key: 'model', healthy: true },
+        { key: 'speech', healthy: true },
         { key: 'connection', healthy: true },
       ],
     });
@@ -52,6 +54,7 @@ describe('GET /api/v1/voice/capability', () => {
     expect(await response.json()).toEqual({
       checks: [
         { key: 'model', healthy: false },
+        { key: 'speech', healthy: false },
         { key: 'connection', healthy: false },
       ],
       websocketUrl: null,

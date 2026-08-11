@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
 import { issueVoiceStreamingTicket } from './voice-gateway-client';
 
 describe('issueVoiceStreamingTicket', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
   it('服务端 bootstrap 后换取 ticket，长时 bearer 不返回浏览器', async () => {
     const calls: Array<{ url: string; authorization: string; body: unknown }> =
       [];
@@ -148,5 +153,49 @@ describe('issueVoiceStreamingTicket', () => {
         },
       ),
     ).rejects.toMatchObject({ code: 'VOICE_GATEWAY_REJECTED' });
+  });
+
+  it('默认服务端路径在安全窗口内复用同一主体的短期 Gateway grant', async () => {
+    vi.stubEnv('EDUCANVAS_GATEWAY_URL', 'http://127.0.0.1:3299');
+    vi.stubEnv('EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN', 's'.repeat(32));
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: URL | RequestInfo) => {
+        const url = String(input);
+        calls.push(url);
+        return url.endsWith('/v1/client/bootstrap')
+          ? Response.json({
+              userId: 'user:cache-test',
+              token: 'cached-session-token',
+              expiresAt: '2099-08-11T00:00:00.000Z',
+            })
+          : Response.json(
+              {
+                ticket: `ticket-${calls.length}`,
+                expiresAt: '2099-08-11T00:01:00.000Z',
+              },
+              { status: 201 },
+            );
+      }),
+    );
+
+    await issueVoiceStreamingTicket({
+      subjectUserId: 'user:cache-test',
+      notebookId: 'notebook:1',
+    });
+    await issueVoiceStreamingTicket({
+      subjectUserId: 'user:cache-test',
+      notebookId: 'notebook:2',
+    });
+
+    expect(
+      calls.filter((url) => url.endsWith('/v1/client/bootstrap')),
+    ).toHaveLength(1);
+    expect(
+      calls.filter((url) =>
+        url.endsWith('/v1/client/streaming-transcription/tickets'),
+      ),
+    ).toHaveLength(2);
   });
 });

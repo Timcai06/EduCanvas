@@ -15,6 +15,7 @@ export async function GET(): Promise<Response> {
       {
         checks: [
           { key: 'model', healthy: false },
+          { key: 'speech', healthy: false },
           { key: 'connection', healthy: false },
         ],
         websocketUrl: null,

@@ -168,3 +168,5 @@ release evidence、secret scan 和最终 `checks` 聚合。普通 docs-only PR �
 
 本计划不再返回 `active/`。上述后续如进入实现，应领取对应 active 计划或新建单一职责任务，
 不得重新打开已经冻结的 Canvas、Runtime、Gateway 或音频生命周期事实。
+
+后继产品化决策见 [ADR-0025：语音双入口与云端级联边界](../../09-decisions/0025-语音双入口与云端级联边界.md)。UV 的通用采集、协议、ticket、配额和背压结论继续沿用；用户入口与生产 Adapter 由后继决策收敛。

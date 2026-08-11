@@ -12,12 +12,12 @@ const capabilityResponseSchema = z
       .array(
         z
           .object({
-            key: z.enum(['model', 'connection']),
+            key: z.enum(['model', 'speech', 'connection']),
             healthy: z.boolean(),
           })
           .strict(),
       )
-      .length(2),
+      .length(3),
     websocketUrl: z
       .string()
       .url()
@@ -26,8 +26,13 @@ const capabilityResponseSchema = z
   })
   .strict();
 
+export function parseVoiceCapabilityResponse(value: unknown) {
+  return capabilityResponseSchema.parse(value);
+}
+
 const UNAVAILABLE_CHECKS: readonly VoiceCapabilityCheck[] = [
   { key: 'model', healthy: false },
+  { key: 'speech', healthy: false },
   { key: 'connection', healthy: false },
 ];
 
@@ -53,7 +58,7 @@ export function useVoiceCapabilityQuery(): VoiceCapabilityQueryState {
       })
         .then(async (response) => {
           if (!response.ok) throw new Error('capability unavailable');
-          return capabilityResponseSchema.parse(await response.json());
+          return parseVoiceCapabilityResponse(await response.json());
         })
         .then((result) => {
           setState({

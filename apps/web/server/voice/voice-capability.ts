@@ -1,8 +1,13 @@
 import 'server-only';
 
-import type { VoiceCapabilityCheck } from '@/features/voice';
+import {
+  evaluateTranscriptionCapability,
+  type VoiceCapabilityCheck,
+} from '@/features/voice/voice-capability';
+import { resolveDashScopeSpeechAvailability } from '@educanvas/model-gateway';
 
 const HEALTH_TIMEOUT_MS = 2_000;
+const HEALTH_CACHE_MS = 5_000;
 
 interface VoiceCapabilityDependencies {
   readonly env?: NodeJS.ProcessEnv;
@@ -38,6 +43,12 @@ interface GatewayHealth {
   readonly reachable: boolean;
   readonly streamingTranscriptionEnabled: boolean;
 }
+
+let cachedGatewayHealth: {
+  readonly key: string;
+  readonly expiresAt: number;
+  readonly value: GatewayHealth;
+} | null = null;
 
 async function readGatewayHealth(
   gatewayUrl: URL | null,
@@ -80,7 +91,24 @@ export async function resolveVoiceCapability(
   const env = dependencies.env ?? process.env;
   const fetchImpl = dependencies.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const gatewayUrl = configuredGatewayUrl(env);
-  const gatewayHealth = await readGatewayHealth(gatewayUrl, fetchImpl);
+  const cacheEnabled =
+    dependencies.env === undefined && dependencies.fetchImpl === undefined;
+  const cacheKey = gatewayUrl?.origin ?? 'unconfigured';
+  const now = Date.now();
+  const gatewayHealth =
+    cacheEnabled &&
+    cachedGatewayHealth?.key === cacheKey &&
+    cachedGatewayHealth.expiresAt > now
+      ? cachedGatewayHealth.value
+      : await readGatewayHealth(gatewayUrl, fetchImpl);
+  if (cacheEnabled) {
+    cachedGatewayHealth = {
+      key: cacheKey,
+      expiresAt: now + HEALTH_CACHE_MS,
+      value: gatewayHealth,
+    };
+  }
+  const speech = resolveDashScopeSpeechAvailability(env);
   const clientTransportConfigured =
     Boolean(env.EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN?.trim()) &&
     gatewayUrl !== null;
@@ -93,11 +121,12 @@ export async function resolveVoiceCapability(
       key: 'connection',
       healthy: gatewayHealth.reachable && clientTransportConfigured,
     },
+    { key: 'speech', healthy: speech.enabled },
   ];
   return {
     checks,
     websocketUrl:
-      checks.every((check) => check.healthy) && gatewayUrl
+      evaluateTranscriptionCapability(checks).enabled && gatewayUrl
         ? toWebsocketUrl(gatewayUrl)
         : null,
   };

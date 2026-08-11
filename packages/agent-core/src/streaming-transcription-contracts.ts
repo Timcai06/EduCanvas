@@ -30,15 +30,15 @@ export const streamingTranscriptionProtocolVersion =
   'educanvas.streaming-transcription.v1' as const;
 
 /**
- * 采样率冻结为 16 kHz：sherpa-onnx WASM SIMD 路线（ADR-0018）与全部
- * 已验收 fixture 都按 16 kHz 采集，放开会让适配器无法用同一模型服务。
+ * 采样率冻结为 16 kHz：浏览器采集、Gateway 协议与实时 ASR Provider 均按
+ * 16 kHz 接收；放开会让协议参与方无法共用同一输入契约。
  */
 export const STREAMING_TRANSCRIPTION_SAMPLE_RATE_HZ = 16_000 as const;
 
-/** 声道冻结为单声道：课堂字幕不做说话人分离（ADR-0018），多声道没有消费者。 */
+/** 声道冻结为单声道：当前交互式转录不做说话人分离，多声道没有消费者。 */
 export const STREAMING_TRANSCRIPTION_CHANNELS = 1 as const;
 
-/** PCM 编码冻结为 signed 16-bit little-endian：WASM 在线识别器的输入契约。 */
+/** PCM 编码冻结为 signed 16-bit little-endian：实时 ASR Provider 的输入契约。 */
 export const STREAMING_TRANSCRIPTION_PCM_ENCODING = 'pcm_s16le' as const;
 
 /**
@@ -49,8 +49,8 @@ export const STREAMING_TRANSCRIPTION_PCM_ENCODING = 'pcm_s16le' as const;
 export const MAX_PCM_CHUNK_BYTES = 32_000 as const;
 
 /**
- * 单次 partial/final 文本上限。K12 短句实时输入场景下，一次假设/终稿
- * 超过 1 000 字符视为异常（可能是 Provider 把整段课堂音频当成一句），
+ * 单次 partial/final 文本上限。交互式实时输入场景下，一次假设/终稿
+ * 超过 1 000 字符视为异常（可能是 Provider 把长段音频当成一句），
  * 拒绝而不是无界接收。
  */
 export const MAX_STREAMING_TRANSCRIPTION_TEXT_LENGTH = 1_000 as const;

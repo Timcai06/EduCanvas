@@ -35,6 +35,14 @@ export interface VoiceGatewayClientOptions {
   readonly fetchImpl?: typeof fetch;
 }
 
+interface CachedGatewayGrant {
+  readonly grant: z.infer<typeof gatewayGrantSchema>;
+  readonly expiresAtMs: number;
+}
+
+const gatewayGrantCache = new Map<string, CachedGatewayGrant>();
+const GATEWAY_GRANT_SAFETY_MS = 30_000;
+
 function readConfiguration(env: NodeJS.ProcessEnv): {
   baseUrl: URL;
   bootstrapToken: string;
@@ -107,16 +115,30 @@ export async function issueVoiceStreamingTicket(
   const env = options.env ?? process.env;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const { baseUrl, bootstrapToken } = readConfiguration(env);
-  const session = gatewayGrantSchema.parse(
-    await postJson(
-      fetchImpl,
-      new URL('/v1/client/bootstrap', baseUrl),
-      bootstrapToken,
-      { userId: input.subjectUserId },
-    ),
-  );
+  const cacheEnabled =
+    options.env === undefined && options.fetchImpl === undefined;
+  const cacheKey = `${baseUrl.origin}:${input.subjectUserId}`;
+  const cached = cacheEnabled ? gatewayGrantCache.get(cacheKey) : undefined;
+  const session =
+    cached && cached.expiresAtMs > Date.now() + GATEWAY_GRANT_SAFETY_MS
+      ? cached.grant
+      : gatewayGrantSchema.parse(
+          await postJson(
+            fetchImpl,
+            new URL('/v1/client/bootstrap', baseUrl),
+            bootstrapToken,
+            { userId: input.subjectUserId },
+          ),
+        );
   if (session.userId !== input.subjectUserId) {
     throw new VoiceGatewayError('VOICE_GATEWAY_REJECTED');
+  }
+  if (cacheEnabled && cached?.grant !== session) {
+    if (gatewayGrantCache.size >= 128) gatewayGrantCache.clear();
+    gatewayGrantCache.set(cacheKey, {
+      grant: session,
+      expiresAtMs: new Date(session.expiresAt).getTime(),
+    });
   }
   return ticketGrantSchema.parse(
     await postJson(
