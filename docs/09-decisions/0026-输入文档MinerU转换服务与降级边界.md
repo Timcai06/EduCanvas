@@ -35,8 +35,14 @@ md 渲染"的目标。需求调研（见技术路线文档，引擎对比均源�
    `ASSET_TEXT_MAX_CHARACTERS` 截断保证有界），`asset_versions.extracted_text`
    同事务双写 md 内容（兼容现有读路径）；`content_list_v2` 本轮存对象存储
    （同身份派生 json，不新增 DB 字段，"开发中"格式风险不扩散），后续判分需要
-   DB 化时再过 ADR。**本轮不保留 images/ 目录**（仅 md + 结构化块，图片需求
-   后续迭代）。
+   DB 化时再过 ADR。**本轮不保留 images/ 目录**。**md 内图片引用保留原样**
+   （MinerU 输出相对引用 `![](images/xxx.jpg)`），前端渲染器对缺失图片渲染
+   **占位符**（不裂图、不导致整篇渲染失败，符合"失败不伪装成空"）。**图片扩展
+   路径**：mineru-api 转换时原生产出 images/ 目录（实测确认，详见附录），启用
+   只需 worker 侧改提交/取结果参数 + 下载 images/ 目录，**服务端与部署零改动**；
+   存储沿用同身份派生（`derived/text/<sha>/images/`）；content_list_v2 中
+   image 结构化块（文件名/位置）本轮已随 JSON 落对象存储，后续判分需要图片时
+   信息已在，无需重新转换。
 4. **降级与失败语义**：所有 mineru 确定性失败（服务不可达/轮询超时/转换失败/
    结果损坏/配置非法）都降级到现有纯文本抽取（unpdf/mammoth，成本低）；纯文本
    成功则 job `succeeded`（mineru 环节码与降级事实记日志），纯文本也失败才
@@ -123,3 +129,28 @@ md 渲染"的目标。需求调研（见技术路线文档，引擎对比均源�
 - worker 集成后：上传 docx/PDF（含公式样本）→ 落库 md，前端 `source.markdown`
   渲染器零改动可打开；`pdf_text_unavailable` 语义保留（扫描件明确走 pipeline OCR）。
 - 降级验证：停掉 mineru-api 后上传文档，确认走纯文本降级路径且失败码诚实。
+
+## 附录：mineru-api 协议与产物细节（审查参考）
+
+基于 mineru 3.4.4 源码核实 + 本地实测（2026-08-11），供审查对照，不构成决策。
+
+**REST 三步协议**：
+
+1. `POST /tasks`：multipart 表单上传。参数：`files`（可多个）、`backend`
+   （`pipeline`/`vlm`/`hybrid-engine`）、`formula_enable`、`table_enable`、
+   `return_content_list`、`return_md`、`response_format_zip` 等；返回任务 ID。
+2. 轮询 `GET /tasks/{id}`：状态字段 queued/processing/completed/failed 及统计。
+3. `GET /tasks/{id}/result`：`response_format_zip=false`（默认）时返回 JSON
+   `{"results": {"<文件名>": {"md_content": ..., "content_list": ...}}}`；
+   zip 模式返回打包产物。任务结果保留 **24h**（`task_retention_seconds: 86400`）。
+
+**转换产物结构**（实测确认）：`<task_id>/<文件名>/` 目录下 `.md` +
+`content_list_v2.json` + `middle.json` + `images/`（无图文档 images/ 为空）；
+md 内图片为相对引用 `![](images/xxx.jpg)`；content_list_v2 按页分组的结构化块
+（type 含 text/image/table/equation/list/paragraph 等，官方标记"开发中，格式
+可能调整"）。
+
+**实测基线**（2026-08-11）：服务器 RTX 2080 Ti 11GB 与本地 RTX 5070 Ti 12GB
+均完成真实 docx→md 转换通过；并发 1 时推理显存 ~3.1/12GB、进程 RAM ~1.1GB
+（模型驻显存不占 RAM）；office 文件秒级完成（office 解析器，零模型），PDF/图片
+走 GPU（hybrid-engine 精度 OmniDocBench 95.39）。
