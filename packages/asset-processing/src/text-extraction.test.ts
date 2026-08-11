@@ -3,6 +3,7 @@ import {
   ASSET_TEXT_MAX_CHARACTERS,
   AssetExtractionError,
   extractAssetText,
+  routeDocumentExtraction,
   supportsTextExtraction,
 } from './text-extraction';
 
@@ -86,5 +87,37 @@ describe('supportsTextExtraction', () => {
 
   it('图片不可抽取，避免为它建一个必然失败的任务', () => {
     expect(supportsTextExtraction('image/png')).toBe(false);
+  });
+});
+
+describe('routeDocumentExtraction', () => {
+  it('PDF/DOCX/PPTX/XLSX 路由到 MinerU（ADR-0026 决定 2）', () => {
+    expect(routeDocumentExtraction('application/pdf')).toBe('mineru');
+    expect(
+      routeDocumentExtraction(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      ),
+    ).toBe('mineru');
+    expect(
+      routeDocumentExtraction(
+        'application/vnd.openxmlformats-officedocument.presentationml',
+      ),
+    ).toBe('mineru');
+    expect(
+      routeDocumentExtraction(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml',
+      ),
+    ).toBe('mineru');
+  });
+
+  it('TXT/Markdown 直接解码，不调用 MinerU', () => {
+    expect(routeDocumentExtraction('text/plain')).toBe('direct_decode');
+    expect(routeDocumentExtraction('text/markdown')).toBe('direct_decode');
+  });
+
+  it('非文档媒体不进入文档抽取路由', () => {
+    expect(routeDocumentExtraction('image/png')).toBeNull();
+    expect(routeDocumentExtraction('audio/mpeg')).toBeNull();
+    expect(routeDocumentExtraction('')).toBeNull();
   });
 });

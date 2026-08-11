@@ -24,6 +24,20 @@ export const MINERU_POLL_INTERVAL_MS = 1_000;
 export const MINERU_POLL_MAX_INTERVAL_MS = 10_000;
 
 /**
+ * 从环境变量读取 MinerU 服务配置（ADR-0026 决定 2：未配置时允许降级）。
+ *
+ * `MINERU_BASE_URL` 缺失/空白 = 未配置，返回 null，编排层直接走纯文本降级；
+ * 非 http(s) 的值视为配置错误，同样返回 null（宁可降级也不带错误地址打请求）。
+ */
+export function loadMineruConfig(
+  env: Record<string, string | undefined>,
+): { baseUrl: string } | null {
+  const baseUrl = env.MINERU_BASE_URL?.trim();
+  if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) return null;
+  return { baseUrl };
+}
+
+/**
  * 稳定失败码。它们可能落进 asset_processing_jobs.failure_code 或结构化日志，
  * 因此只能追加、不能改写含义。
  */
