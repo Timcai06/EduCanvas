@@ -22,8 +22,14 @@ const ALL = Object.fromEntries(LANES.map((lane) => [lane, true]));
 const NONE = Object.fromEntries(LANES.map((lane) => [lane, false]));
 const DOC_ONLY =
   /^docs\/.*\.md$|^(?:README|AGENTS|CLAUDE)\.md$|^(?:apps|packages|tooling)\/[^/]+\/README\.md$|^\.vscode\/(?:settings|extensions)\.json$|^\.github\/CODEOWNERS$/;
-const DEPENDENCY =
-  /(?:^|\/)(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/workflows\//;
+// Root dependency graph and executable Actions changes can affect every lane.
+// Workspace-local manifests are routed by their owning product surface below;
+// treating every package.json as global made Desktop-only changes pay for DB,
+// Worker, Runtime and Web E2E without adding relevant evidence.
+const GLOBAL_DEPENDENCY =
+  /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/(?:workflows|actions)\//;
+const SCOPED_PACKAGE_MANIFEST = /^(?:apps|packages)\/[^/]+\/package\.json$/;
+const ANY_PACKAGE_MANIFEST = /(?:^|\/)package\.json$/;
 const RELEASE_EVIDENCE =
   /^docs\/06-quality\/releases\/|^docs\/06-quality\/08-|^tooling\/quality\/(?:validate-evidence|migration-records)\.mjs$|^packages\/db\/drizzle\//;
 
@@ -84,7 +90,15 @@ export function classifyChangedPaths(
   const releaseEvidenceAffected = matchesAny(paths, [RELEASE_EVIDENCE]);
   if (!releaseEvidenceAffected && paths.every((path) => DOC_ONLY.test(path)))
     return { ...NONE };
-  if (paths.some((path) => DEPENDENCY.test(path))) return { ...ALL };
+  if (
+    paths.some(
+      (path) =>
+        GLOBAL_DEPENDENCY.test(path) ||
+        (ANY_PACKAGE_MANIFEST.test(path) &&
+          !SCOPED_PACKAGE_MANIFEST.test(path)),
+    )
+  )
+    return { ...ALL };
 
   const result = { ...NONE, checks: true };
   result.release_evidence = releaseEvidenceAffected;
@@ -148,7 +162,7 @@ export function classifyChangedPaths(
       !NON_BROWSER_ONLY.test(path) &&
       browserPatterns.some((pattern) => pattern.test(path)),
   );
-  result.dependency_review = false;
+  result.dependency_review = matchesAny(paths, [SCOPED_PACKAGE_MANIFEST]);
   result.desktop = matchesAny(paths, [/^apps\/desktop\//]);
   return result;
 }
@@ -162,8 +176,11 @@ export function requiredResultFailures({ eventName, expected, results }) {
   };
   requireSuccess('changes');
   requireSuccess('secret_scan');
+  if (expected.checks) {
+    requireSuccess('quality_static');
+    requireSuccess('quality_tests');
+  }
   for (const lane of [
-    'checks',
     'db_integration',
     'worker_integration',
     'migration_integration',
@@ -173,13 +190,7 @@ export function requiredResultFailures({ eventName, expected, results }) {
     'desktop',
   ]) {
     if (expected[lane]) {
-      requireSuccess(
-        lane === 'checks'
-          ? 'quality'
-          : lane === 'desktop'
-            ? 'desktop_build'
-            : lane,
-      );
+      requireSuccess(lane === 'desktop' ? 'desktop_build' : lane);
     }
   }
   if (eventName === 'pull_request' && expected.dependency_review) {
@@ -211,7 +222,8 @@ function verifyResultsFromEnvironment() {
       changes: process.env.CHANGES_RESULT,
       secret_scan: process.env.SECRET_SCAN_RESULT,
       dependency_review: process.env.DEPENDENCY_REVIEW_RESULT,
-      quality: process.env.QUALITY_RESULT,
+      quality_static: process.env.QUALITY_STATIC_RESULT,
+      quality_tests: process.env.QUALITY_TESTS_RESULT,
       db_integration: process.env.DB_INTEGRATION_RESULT,
       worker_integration: process.env.WORKER_INTEGRATION_RESULT,
       migration_integration: process.env.MIGRATION_INTEGRATION_RESULT,
