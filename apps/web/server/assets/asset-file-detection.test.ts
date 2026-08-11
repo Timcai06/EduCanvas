@@ -50,6 +50,52 @@ describe('detectAssetFile', () => {
     ).toBeNull();
   });
 
+  it('recognizes PPTX and XLSX by their OOXML main document', () => {
+    const pptxDirectory = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml ppt/presentation.xml',
+    );
+    expect(detectAssetFile(pptxDirectory, 'slides.bin')).toEqual({
+      kind: 'document',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      extension: 'pptx',
+    });
+    const xlsxDirectory = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml xl/workbook.xml',
+    );
+    expect(detectAssetFile(xlsxDirectory, 'sheet.bin')).toEqual({
+      kind: 'document',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      extension: 'xlsx',
+    });
+  });
+
+  it('does not mistake one OOXML family for another', () => {
+    const pptxDirectory = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml ppt/presentation.xml',
+    );
+    expect(detectAssetFile(pptxDirectory, 'slides.pptx')).not.toEqual(
+      expect.objectContaining({ extension: 'docx' }),
+    );
+    expect(detectAssetFile(pptxDirectory, 'slides.pptx')).not.toEqual(
+      expect.objectContaining({ extension: 'xlsx' }),
+    );
+    /* 普通 ZIP 不会因为改后缀进 PPTX/XLSX。 */
+    expect(
+      detectAssetFile(
+        new TextEncoder().encode('PK\u0003\u0004archive/readme.txt'),
+        'fake.pptx',
+      ),
+    ).toBeNull();
+    expect(
+      detectAssetFile(
+        new TextEncoder().encode('PK\u0003\u0004archive/readme.txt'),
+        'fake.xlsx',
+      ),
+    ).toBeNull();
+  });
+
   it.each([
     [[0x49, 0x44, 0x33], 'audio/mpeg'],
     [[0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45], 'audio/wav'],
