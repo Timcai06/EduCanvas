@@ -19,7 +19,9 @@ import {
   masteryStates,
   messageCitations,
   modelRuns,
+  notebookSurfacePositions,
   operationSources,
+  resourceAnnotations,
   retrievalCandidates,
   sessionSourceBindings,
   spaces,
@@ -200,6 +202,28 @@ async function deleteSpaces(
       .delete(spaces)
       .where(eq(spaces.ownerSubjectId, context.subjectId))
       .returning({ id: spaces.id })
+  ).length;
+}
+
+async function deleteResourceAnnotations(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(resourceAnnotations)
+      .where(eq(resourceAnnotations.ownerSubjectId, context.subjectId))
+      .returning({ id: resourceAnnotations.id })
+  ).length;
+}
+
+async function deleteNotebookSurfacePositions(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  return (
+    await context.transaction
+      .delete(notebookSurfacePositions)
+      .where(eq(notebookSurfacePositions.ownerSubjectId, context.subjectId))
+      .returning({ id: notebookSurfacePositions.resourceId })
   ).length;
 }
 
@@ -556,6 +580,16 @@ const lifecycleDefinitions = [
     tableName: 'conversations',
     ownershipPath: 'owner_subject_id',
     deleteRows: deleteConversations,
+  },
+  {
+    tableName: 'resource_annotations',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteResourceAnnotations,
+  },
+  {
+    tableName: 'notebook_surface_positions',
+    ownershipPath: 'owner_subject_id',
+    deleteRows: deleteNotebookSurfacePositions,
   },
   {
     tableName: 'spaces',

@@ -76,7 +76,7 @@ describe('Artifact CanvasResource adapter', () => {
       version: { versionId: version.id, sequence: 1, checksum: null },
       representation: { kind: 'structured' },
       renderer: { rendererId: 'artifact.mind-map' },
-      allowedActions: ['view', 'regenerate'],
+      allowedActions: ['view', 'regenerate', 'annotate'],
       runtime: { kind: 'none' },
     });
     expect(serialized).not.toMatch(
@@ -160,7 +160,7 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'audio', mimeType: 'audio/mpeg' },
       renderer: { rendererId: 'artifact.audio-overview' },
       trustTier: 'tier2',
-      allowedActions: ['view', 'download', 'delete'],
+      allowedActions: ['view', 'download', 'delete', 'annotate'],
       runtime: { kind: 'none' },
     });
   });
@@ -266,7 +266,7 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'image' },
       renderer: { rendererId: 'artifact.generated-image' },
       trustTier: 'tier2',
-      allowedActions: ['view', 'download', 'delete'],
+      allowedActions: ['view', 'download', 'delete', 'annotate'],
       runtime: { kind: 'none' },
       canProduceCandidateLearningEvents: false,
       provenance: {
@@ -307,7 +307,7 @@ describe('Artifact CanvasResource adapter', () => {
       allowedActions: ['run'],
       rendererId: 'attacker.renderer',
     } as Parameters<typeof projectOwnedArtifactResource>[0]);
-    expect(resource.allowedActions).toEqual(['view', 'regenerate']);
+    expect(resource.allowedActions).toEqual(['view', 'regenerate', 'annotate']);
     expect(resource.renderer.rendererId).toBe('artifact.mind-map');
   });
 
@@ -320,7 +320,7 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'viewer',
     });
 
-    expect(resource.allowedActions).toEqual(['view']);
+    expect(resource.allowedActions).toEqual(['view', 'annotate']);
   });
 
   it('grants download and delete for media artifacts with owner role', () => {
@@ -335,6 +335,7 @@ describe('Artifact CanvasResource adapter', () => {
       'view',
       'download',
       'delete',
+      'annotate',
     ]);
 
     const imageResource = projectOwnedArtifactResource({
@@ -348,6 +349,7 @@ describe('Artifact CanvasResource adapter', () => {
       'view',
       'download',
       'delete',
+      'annotate',
     ]);
   });
 
@@ -359,7 +361,12 @@ describe('Artifact CanvasResource adapter', () => {
       latestJob: null,
       accessRole: 'editor',
     });
-    expect(resource.allowedActions).toEqual(['view', 'download', 'delete']);
+    expect(resource.allowedActions).toEqual([
+      'view',
+      'download',
+      'delete',
+      'annotate',
+    ]);
   });
 
   it('grants download but not delete for media artifacts with viewer role', () => {
@@ -370,7 +377,11 @@ describe('Artifact CanvasResource adapter', () => {
       latestJob: null,
       accessRole: 'viewer',
     });
-    expect(audioResource.allowedActions).toEqual(['view', 'download']);
+    expect(audioResource.allowedActions).toEqual([
+      'view',
+      'download',
+      'annotate',
+    ]);
 
     const imageResource = projectOwnedArtifactResource({
       notebookId,
@@ -379,7 +390,11 @@ describe('Artifact CanvasResource adapter', () => {
       latestJob: null,
       accessRole: 'viewer',
     });
-    expect(imageResource.allowedActions).toEqual(['view', 'download']);
+    expect(imageResource.allowedActions).toEqual([
+      'view',
+      'download',
+      'annotate',
+    ]);
   });
 
   it('grants download but not delete for media artifacts with contributor role', () => {
@@ -390,7 +405,7 @@ describe('Artifact CanvasResource adapter', () => {
       latestJob: null,
       accessRole: 'contributor',
     });
-    expect(resource.allowedActions).toEqual(['view', 'download']);
+    expect(resource.allowedActions).toEqual(['view', 'download', 'annotate']);
   });
 
   it('restricts media actions to view-only when archived', () => {

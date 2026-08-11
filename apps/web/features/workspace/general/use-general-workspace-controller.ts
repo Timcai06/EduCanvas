@@ -58,6 +58,8 @@ import {
   ResourceClientError,
   toClientError,
 } from '@/features/canvas/resource-error';
+import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
+import { useSurfacePositionPersistence } from './use-surface-position-persistence';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -71,6 +73,7 @@ import {
 export function useGeneralWorkspaceController(options: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
+  notebookId: string;
   nickname?: string | null;
   composerDockRef: RefObject<HTMLDivElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -79,6 +82,7 @@ export function useGeneralWorkspaceController(options: {
   const {
     initialMessages,
     conversationId,
+    notebookId,
     nickname,
     composerDockRef,
     scrollRef,
@@ -136,6 +140,14 @@ export function useGeneralWorkspaceController(options: {
       void artifactFlow.openArtifact(resource.resourceId);
     },
   });
+
+  const { positions: surfacePositions, openRestingSurface } =
+    useSurfacePositionPersistence({
+      notebookId,
+      surface,
+      openSource: studioOpenActions.actions.openSource,
+      openArtifact: studioOpenActions.actions.openArtifact,
+    });
 
   /* Artifact 详情新打开时同步 surface：`artifactFlow.confirm`（openWhenReady）与
      `observeProposedArtifact` 只在 artifactFlow 内部 setOpenDetail，不会 dispatch
@@ -242,6 +254,31 @@ export function useGeneralWorkspaceController(options: {
      失败只上报错误——退场动画不依赖这次写库（门槛设计 §4）。 */
   const handleLiveExit = useCallback(
     (payload: LiveVoiceExitPayload) => {
+      if (payload.annotations.length > 0) {
+        void Promise.allSettled(
+          payload.annotations.map((draft) =>
+            saveResourceAnnotation({
+              resourceKind: draft.resourceKind,
+              resourceId: draft.resourceId,
+              annotation: {
+                kind: draft.kind,
+                geometry: draft.geometry,
+                source: 'voice',
+                resourceVersionId: draft.resourceVersionId,
+              },
+            }),
+          ),
+        ).then((results) => {
+          if (results.some((result) => result.status === 'rejected')) {
+            setError(
+              new ResourceClientError(
+                'failed',
+                '部分圈点暂时没有落纸，请稍后重试。',
+              ),
+            );
+          }
+        });
+      }
       if (payload.sessionTranscript.length === 0) return;
       const endedAt = new Date(payload.endedAt);
       const pad = (value: number) => String(value).padStart(2, '0');
@@ -473,5 +510,7 @@ export function useGeneralWorkspaceController(options: {
     revisingOpenArtifact,
     conversationPaneProps,
     surfaceSlotProps,
+    surfacePositions,
+    openRestingSurface,
   };
 }

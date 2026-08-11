@@ -47,6 +47,17 @@ export type DashScopeTranscriptionResult = z.infer<
   typeof dashScopeTranscriptionResultSchema
 >;
 
+const SAFE_PROVIDER_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/** 只提取可审计的稳定错误码；供应商 message 与原始响应不进入日志。 */
+export function dashScopeFailureCode(envelope: DashScopeEnvelope): string {
+  const candidate = envelope.header.error_code;
+  return typeof candidate === 'string' &&
+    SAFE_PROVIDER_ERROR_CODE.test(candidate)
+    ? candidate
+    : 'UNKNOWN';
+}
+
 function decodeTextFrame(raw: unknown): string | null {
   if (typeof raw === 'string') return raw;
   if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString('utf8');

@@ -17,6 +17,8 @@ import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { useGeneralWorkspaceController } from './use-general-workspace-controller';
 import { GENERAL_ASSET_ENDPOINT } from './general-chat-config';
 import { isCreatableArtifactKind } from '@/features/canvas/artifact-client';
+import { deriveDeskAgentPresence } from './desk-agent-phase';
+import { DeskInkstoneIndicator } from './desk-inkstone-indicator';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -48,6 +50,7 @@ export function GeneralChatWorkspace({
   const ctrl = useGeneralWorkspaceController({
     initialMessages,
     conversationId,
+    notebookId,
     nickname,
     composerDockRef,
     scrollRef,
@@ -55,6 +58,10 @@ export function GeneralChatWorkspace({
   });
   useAssistantArtifacts(ctrl.artifactFlow);
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
+  const deskPresence = deriveDeskAgentPresence(
+    ctrl.turn.messages,
+    ctrl.turn.busy,
+  );
 
   /* 落地 → 对话：输入坞 Flip 位移落到吸底位置；reduced-motion 直接跳变。 */
   useGSAP(
@@ -107,7 +114,11 @@ export function GeneralChatWorkspace({
         resourceOpenStatus={resourceOpenStatus}
       />
       {/* Agent 工作态全屏氛围层：老师思考到给出回复期间浮起边缘流光，绑 turn.busy */}
-      <AgentBusyOverlay active={ctrl.turn.busy} />
+      <AgentBusyOverlay
+        active={deskPresence.phase !== 'quiet'}
+        phase={deskPresence.phase === 'quiet' ? 'thinking' : deskPresence.phase}
+      />
+      <DeskInkstoneIndicator label={deskPresence.toolLabel} />
       {ctrl.isLanding ? resourceOpenStatus : null}
       {ctrl.isLanding ? (
         /* 落地态没有分栏槽位,全屏打开。必须在 main(isolate 堆叠上下文)之外,

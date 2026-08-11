@@ -7,6 +7,8 @@ import type { ArtifactDetail } from '@/features/canvas/artifact-client';
 import { ArtifactCanvas } from '@/features/canvas/artifact-generation-flow';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { SourceResourceRenderer } from '@/features/assets/source-resource-renderer';
+import { ResourceAnnotationLayer } from '@/features/canvas/resource-annotation-layer';
+import { DeskSheet } from './desk-sheet';
 import type { WorkspaceSurface } from './workspace-surface';
 
 /** Source 工作面详情：CanvasResource + 注册的 Renderer。 */
@@ -70,36 +72,48 @@ export function WorkspaceSurfaceSlot({
     case 'artifact': {
       if (artifactDetail === null) return null;
       return (
-        <ArtifactCanvas
-          detail={artifactDetail}
-          isFull={fullscreen || artifactCanvasFull}
-          onToggleFull={fullscreen ? () => undefined : onToggleFullArtifact}
-          canExitFullscreen={!fullscreen}
-          onClose={onCloseArtifact}
-          onDeleted={onDeletedArtifact}
-          onSelectVersion={(version) =>
-            onSelectArtifactVersion(artifactDetail.artifact.id, version)
-          }
-          onRevise={(instruction) =>
-            onReviseArtifact(artifactDetail, instruction)
-          }
-          onSaveNote={(markdown) => onSaveNote(artifactDetail, markdown)}
-          revising={revisingOpenArtifact}
-        />
+        <DeskSheet>
+          <ArtifactCanvas
+            detail={artifactDetail}
+            isFull={fullscreen || artifactCanvasFull}
+            onToggleFull={fullscreen ? () => undefined : onToggleFullArtifact}
+            canExitFullscreen={!fullscreen}
+            onClose={onCloseArtifact}
+            onDeleted={onDeletedArtifact}
+            onSelectVersion={(version) =>
+              onSelectArtifactVersion(artifactDetail.artifact.id, version)
+            }
+            onRevise={(instruction) =>
+              onReviseArtifact(artifactDetail, instruction)
+            }
+            onSaveNote={(markdown) => onSaveNote(artifactDetail, markdown)}
+            revising={revisingOpenArtifact}
+          />
+          <ResourceAnnotationLayer
+            resourceKind="artifact"
+            resourceId={artifactDetail.artifact.id}
+          />
+        </DeskSheet>
       );
     }
     case 'source': {
       if (sourceDetail === null) return null;
       return (
-        <SourceResourceRenderer
-          key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
-          resource={sourceDetail.resource}
-          Renderer={sourceDetail.Renderer}
-          isFull={fullscreen || surface.full}
-          onToggleFull={fullscreen ? () => undefined : onToggleFullSurface}
-          canExitFullscreen={!fullscreen}
-          onClose={onCloseSurface}
-        />
+        <DeskSheet>
+          <SourceResourceRenderer
+            key={`${sourceDetail.resource.resourceId}:${sourceDetail.resource.version?.versionId ?? 'none'}`}
+            resource={sourceDetail.resource}
+            Renderer={sourceDetail.Renderer}
+            isFull={fullscreen || surface.full}
+            onToggleFull={fullscreen ? () => undefined : onToggleFullSurface}
+            canExitFullscreen={!fullscreen}
+            onClose={onCloseSurface}
+          />
+          <ResourceAnnotationLayer
+            resourceKind="source"
+            resourceId={sourceDetail.resource.resourceId}
+          />
+        </DeskSheet>
       );
     }
     case 'html':

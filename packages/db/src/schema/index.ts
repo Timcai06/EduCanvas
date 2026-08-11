@@ -25,3 +25,5 @@ export * from './artifact';
 export * from './study';
 export * from './account';
 export * from './web-runtime';
+export * from './annotation';
+export * from './surface-layout';

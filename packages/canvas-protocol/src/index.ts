@@ -86,6 +86,19 @@ export {
   type CanvasTrustTier,
 } from './resource';
 export {
+  canvasAnnotationGeometrySchema,
+  canvasAnnotationKinds,
+  canvasAnnotationPens,
+  canvasAnnotationSchema,
+  canvasAnnotationSources,
+  createCanvasAnnotationSchema,
+  type CanvasAnnotation,
+  type CanvasAnnotationGeometry,
+  type CanvasAnnotationKind,
+  type CanvasAnnotationSource,
+  type CreateCanvasAnnotation,
+} from './resource-annotation';
+export {
   CANVAS_RENDERER_MANIFEST_VERSION,
   canvasRendererManifestSchema,
   rendererSupportsResource,

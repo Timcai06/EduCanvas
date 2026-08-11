@@ -10,6 +10,7 @@ import { ConversationPane } from './conversation-pane';
 import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import type { useGeneralWorkspaceController } from './use-general-workspace-controller';
+import { DeskRestRail } from './desk-rest-rail';
 
 /**
  * 页面框架（W02）：header + sidebar + main + studio overlay 的纯布局组件。
@@ -117,6 +118,10 @@ export function GeneralWorkspaceLayout({
             </div>
           )}
         </main>
+        <DeskRestRail
+          positions={ctrl.surfacePositions}
+          onOpen={ctrl.openRestingSurface}
+        />
         {surface.type === 'studio' ? (
           <StudioOverlay onClose={() => ctrl.workspace.closeStudio()}>
             <StudioWorkspace

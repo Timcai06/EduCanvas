@@ -12,6 +12,7 @@ import {
 } from '@educanvas/agent-core';
 import type { DashScopeSpeechConfiguration } from './dashscope-speech-config';
 import {
+  dashScopeFailureCode,
   parseDashScopeEnvelope,
   parseDashScopeTranscriptionResult,
 } from './dashscope-protocol';
@@ -132,6 +133,10 @@ class Session
             sample_rate: 16000,
             punctuation_prediction_enabled: true,
             inverse_text_normalization_enabled: true,
+            /* Live 会在 Assistant 播放与用户思考时持续存在。Paraformer v2
+               默认会把长静音当作无输入并关闭任务；heartbeat 让供应商在
+               静音段返回心跳，而不是把正常会话降级为 MODEL_FAILED。 */
+            heartbeat: true,
           },
           input: {},
         },
@@ -168,6 +173,13 @@ class Session
       return;
     }
     if (event === 'task-failed') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[model-gateway] provider_failed', {
+          provider: 'dashscope',
+          capability: 'streaming_transcription',
+          code: dashScopeFailureCode(body),
+        });
+      }
       this.fail('MODEL_FAILED');
       return;
     }
@@ -187,6 +199,13 @@ class Session
     const text = sentence.text.trim();
     if (!text) return;
     if (sentence.sentence_end === true) {
+      /* sentence_end 是本轮领域终稿，不是 DashScope task-finished。先发送
+         官方 finish-task 再关闭 socket，避免下一轮立即启动时与供应商侧
+         尚未收敛的前一任务竞争。WebSocket close 会在已排队帧之后发送。 */
+      if (!this.finishing) {
+        this.finishing = true;
+        this.finishTask();
+      }
       this.emit({ type: 'endpoint' });
       this.emit({ type: 'final', text });
       this.terminal = true;

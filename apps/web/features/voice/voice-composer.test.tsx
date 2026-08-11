@@ -6,6 +6,12 @@ import {
   resolveLiveVoiceVisualPhase,
   VoiceComposerRuntime,
 } from './voice-composer';
+import {
+  LIVE_ASR_RECOVERY_STABLE_MS,
+  LIVE_ASR_ROTATION_MS,
+  resolveLiveAsrRecoveryDelay,
+  resolveLiveAsrRotationAction,
+} from './use-live-transcription-continuity';
 
 const healthyChecks = [
   { key: 'model' as const, healthy: true },
@@ -107,6 +113,15 @@ describe('resolveLiveVoiceVisualPhase', () => {
     expect(
       resolveLiveVoiceVisualPhase({
         muted: false,
+        busy: false,
+        recovering: true,
+        speaking: false,
+        status: 'failed',
+      }),
+    ).toBe('connecting');
+    expect(
+      resolveLiveVoiceVisualPhase({
+        muted: false,
         busy: true,
         speaking: false,
         status: 'recording',
@@ -136,5 +151,26 @@ describe('resolveLiveVoiceVisualPhase', () => {
     expect(phase('recording')).toBe('listening');
     expect(phase('finalizing')).toBe('listening');
     expect(phase('stopped')).toBe('idle');
+  });
+});
+
+describe('Live ASR operation rotation', () => {
+  it('在 Gateway 60 秒 PCM 上限前轮换', () => {
+    expect(LIVE_ASR_ROTATION_MS).toBeLessThan(60_000);
+  });
+
+  it('只限制连续失败，并在稳定录音窗口后允许重新恢复', () => {
+    expect([
+      resolveLiveAsrRecoveryDelay(0),
+      resolveLiveAsrRecoveryDelay(1),
+      resolveLiveAsrRecoveryDelay(2),
+      resolveLiveAsrRecoveryDelay(3),
+    ]).toEqual([500, 1_000, 2_000, null]);
+    expect(LIVE_ASR_RECOVERY_STABLE_MS).toBeGreaterThanOrEqual(3_000);
+  });
+
+  it('静默轮取消，有 partial 时先请求终稿', () => {
+    expect(resolveLiveAsrRotationAction('   ')).toBe('cancel');
+    expect(resolveLiveAsrRotationAction('我还在说')).toBe('finish');
   });
 });

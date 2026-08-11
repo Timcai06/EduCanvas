@@ -19,6 +19,14 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 const [, , resultsPath = 'output/playwright/results.json'] = process.argv;
 const writeSummary = process.argv.includes('--summary');
 const resultsRequired = process.env.PLAYWRIGHT_RESULTS_REQUIRED === 'true';
+const goldenEvidenceIndex = process.argv.indexOf('--golden-evidence');
+const goldenEvidencePath =
+  goldenEvidenceIndex >= 0 ? process.argv[goldenEvidenceIndex + 1] : undefined;
+const evidenceSha = (
+  process.env.GOLDEN_EVIDENCE_SHA ??
+  process.env.EVIDENCE_SHA ??
+  ''
+).toLowerCase();
 
 if (!existsSync(resultsPath)) {
   const summary = [
@@ -35,9 +43,10 @@ if (!existsSync(resultsPath)) {
   process.exit(resultsRequired ? 1 : 0);
 }
 
-/** 递归收集 suite 下所有 test，补上 suite 名与 projectName。 */
-function collectTests(suites, acc = []) {
+/** 递归收集 suite 下所有 test，补上 suite 名、projectName、以及 (propagated) 文件路径。 */
+function collectTests(suites, acc = [], parentFile) {
   for (const suite of suites) {
+    const file = suite.file ?? parentFile;
     for (const spec of suite.specs ?? []) {
       for (const test of spec.tests ?? []) {
         acc.push({
@@ -45,16 +54,77 @@ function collectTests(suites, acc = []) {
           projectName: test.projectName ?? suite.projectName ?? 'unknown',
           status: test.status,
           retry: test.retry ?? 0,
+          file,
         });
       }
     }
-    collectTests(suite.suites ?? [], acc);
+    collectTests(suite.suites ?? [], acc, file);
   }
   return acc;
 }
 
 const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
 const tests = collectTests(results.suites ?? []);
+
+// ── Golden journey evidence ──
+const JOURNEY_FILES = [
+  { key: 'general', file: 'general-journey.spec.ts' },
+  { key: 'learning', file: 'learning-journey.spec.ts' },
+];
+
+const journeys = {};
+const missingJourneys = [];
+for (const { key, file } of JOURNEY_FILES) {
+  const matching = tests.filter((t) => t.file && t.file.endsWith(file));
+  const passed = matching.filter((t) => t.status === 'expected').length;
+  const failed = matching.filter((t) => t.status === 'unexpected').length;
+  const flaky = matching.filter((t) => t.status === 'flaky').length;
+  const retries = matching.reduce((sum, t) => sum + t.retry, 0);
+  const total = matching.length;
+
+  if (total === 0) {
+    missingJourneys.push(key);
+    journeys[key] = {
+      passed: 0,
+      total: 0,
+      flaky: 0,
+      failed: 0,
+      retries: 0,
+      status: 'missing',
+      tests: [],
+    };
+  } else {
+    journeys[key] = {
+      passed,
+      total,
+      flaky,
+      failed,
+      retries,
+      status: failed === 0 && flaky === 0 ? 'passed' : 'failed',
+      tests: matching.map((t) => t.title),
+    };
+  }
+}
+
+if (goldenEvidencePath) {
+  if (!evidenceSha) {
+    process.stderr.write(
+      '⚠  GOLDEN_EVIDENCE_SHA is empty; writing golden evidence without a commit SHA (local dev)\n',
+    );
+  }
+  const evidence = {
+    schemaVersion: 1,
+    sha: evidenceSha,
+    generatedAt: new Date().toISOString(),
+    journeys,
+    ...(missingJourneys.length ? { missing: missingJourneys } : {}),
+  };
+  writeFileSync(
+    goldenEvidencePath,
+    JSON.stringify(evidence, null, 2) + '\n',
+    'utf8',
+  );
+}
 
 const projects = [...new Set(tests.map((t) => t.projectName))].sort();
 const byProject = Object.fromEntries(
@@ -93,6 +163,34 @@ const UNCOVERED = ['firefox', 'webkit']
   .map((browser) => `- ${browser} ✗（未覆盖；视觉 QA 在 ui lane 覆盖 firefox）`)
   .join('\n');
 
+// ── Golden journey section for summary ──
+const journeySummaryLines = [
+  '#### 黄金旅程',
+  '',
+  ...JOURNEY_FILES.map(({ key, file }) => {
+    const j = journeys[key];
+    if (!j) return `- **${key}**: 未评估`;
+    const label =
+      j.status === 'passed'
+        ? '✓ passed'
+        : j.status === 'failed'
+          ? '✗ failed'
+          : '⚠ missing';
+    const testsPassed = `${j.passed}/${j.total}`;
+    let suffix = '';
+    if (j.flaky > 0) suffix += ` (flaky ${j.flaky})`;
+    if (j.failed > 0) suffix += ` (failed ${j.failed})`;
+    return `- **${key}** ${label} — ${testsPassed} passed${suffix}`;
+  }),
+  '',
+  ...(missingJourneys.length
+    ? [
+        `⚠ 缺少黄金旅程文件：${missingJourneys.map((k) => JOURNEY_FILES.find((jf) => jf.key === k)?.file ?? k).join(', ')}`,
+        '',
+      ]
+    : []),
+];
+
 const summary = [
   '### Playwright 结果汇总（Q05）',
   '',
@@ -114,6 +212,7 @@ const summary = [
         '',
       ]
     : []),
+  ...journeySummaryLines,
 ].join('\n');
 
 if (writeSummary && process.env.GITHUB_STEP_SUMMARY) {

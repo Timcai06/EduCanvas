@@ -291,6 +291,76 @@ describe('CI impact classification', () => {
   });
 });
 
+describe('AI Product Evidence v2 — agent_eval impact graph', () => {
+  it('routes MCP runtime changes to agent_eval', () => {
+    for (const path of [
+      'packages/mcp-runtime/src/tool-adapter.ts',
+      'packages/mcp-runtime/src/contracts.ts',
+      'packages/mcp-runtime/src/output-sanitizer.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+  });
+
+  it('routes Canvas Protocol and Artifact/Image tool changes to agent_eval', () => {
+    for (const path of [
+      'packages/canvas-protocol/src/artifact.ts',
+      'packages/canvas-protocol/src/artifacts/generated-image.ts',
+      'packages/canvas-protocol/src/web-runtime-contract.ts',
+      'packages/canvas-protocol/src/web-runtime-policy.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+  });
+
+  it('routes General tool paths to agent_eval', () => {
+    for (const path of [
+      'packages/agent-runtime/src/local-tool.ts',
+      'packages/agent-runtime/src/agent-tool-adapter.ts',
+      'packages/agent-runtime/src/tool-kernel/contracts.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+  });
+
+  it('routes Teaching Tool Policy paths to agent_eval', () => {
+    for (const path of [
+      'packages/teaching-core/src/tools.ts',
+      'packages/teaching-runtime/src/teaching-tool.ts',
+      'packages/teaching-runtime/src/tool-kernel-adapter.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+  });
+
+  it('does not trigger agent_eval for pure UI, documentation, or Desktop changes', () => {
+    for (const path of [
+      'apps/web/features/voice/live-voice-panel.tsx',
+      'apps/desktop/src/main/index.ts',
+      'docs/06-quality/03-测试与评估.md',
+      'apps/web/app/(main)/page.tsx',
+      'tests/e2e/general-journey.spec.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, false, path);
+    }
+  });
+
+  it('agent_eval and e2e can both trigger for browser-facing agent packages', () => {
+    for (const path of [
+      'packages/canvas-protocol/src/artifact.ts',
+      'packages/mcp-runtime/src/tool-adapter.ts',
+    ]) {
+      const result = classifyChangedPaths([path]);
+      assert.equal(
+        result.agent_eval,
+        true,
+        `${path} should trigger agent_eval`,
+      );
+      assert.equal(result.e2e, true, `${path} should trigger e2e`);
+    }
+  });
+});
+
 describe('D06 lane split routing', () => {
   it('Worker-only changes route to Worker integration, not DB full or E2E', () => {
     const result = classifyChangedPaths([

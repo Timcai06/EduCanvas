@@ -9,6 +9,7 @@ import {
   type LiveSubtitleCue,
 } from './live-speech-text';
 import { takeLiveSpeechSegments } from './live-speech-segments';
+import { LiveSpeechResponseGate } from './live-speech-response-gate';
 
 export interface UseLiveSpeechPlaybackOptions {
   readonly enabled: boolean;
@@ -25,6 +26,8 @@ export interface LiveSpeechPlaybackState {
   readonly outputLevel: number;
   readonly playbackFailed: boolean;
   readonly prepare: () => void;
+  /** 用户语音 final 后调用：只允许随后产生的新 Assistant 进入 TTS。 */
+  readonly expectNextResponse: () => void;
   readonly cancelPending: () => void;
   readonly interrupt: () => void;
 }
@@ -129,6 +132,8 @@ export function useLiveSpeechPlayback({
   const queueRef = useRef<SpeechQueueState>(createQueueState(null));
   const enabledRef = useRef(enabled);
   const wasEnabledRef = useRef(false);
+  const assistantIdRef = useRef(assistantId);
+  const responseGateRef = useRef(new LiveSpeechResponseGate());
 
   const clearAudioResources = useCallback((suppressCurrent: boolean) => {
     const queue = queueRef.current;
@@ -166,6 +171,10 @@ export function useLiveSpeechPlayback({
     playerRef.current ??= new Pcm16Player();
     void playerRef.current.prepare().catch(() => undefined);
   }, [clearAudioResources]);
+
+  const expectNextResponse = useCallback(() => {
+    responseGateRef.current.expectNext(assistantIdRef.current);
+  }, []);
 
   const finishWhenPlaybackEnds = useCallback((runId: number) => {
     const queue = queueRef.current;
@@ -269,8 +278,10 @@ export function useLiveSpeechPlayback({
 
   useEffect(() => {
     enabledRef.current = enabled;
+    assistantIdRef.current = assistantId;
     if (!enabled) {
       wasEnabledRef.current = false;
+      responseGateRef.current.reset(assistantId);
       clearAudioResources(false);
       queueRef.current = createQueueState(assistantId);
       queueRef.current.currentTextLength = assistantText?.length ?? 0;
@@ -279,12 +290,14 @@ export function useLiveSpeechPlayback({
     }
     if (!wasEnabledRef.current) {
       wasEnabledRef.current = true;
+      responseGateRef.current.reset(assistantId);
       queueRef.current = createQueueState(assistantId);
       queueRef.current.currentTextLength = assistantText?.length ?? 0;
       queueRef.current.consumedCharacters = assistantText?.length ?? 0;
       return;
     }
     if (!assistantId) return;
+    if (!responseGateRef.current.accepts(assistantId)) return;
     const text = assistantText ?? '';
     if (queueRef.current.assistantId !== assistantId) {
       clearAudio(false);
@@ -349,6 +362,7 @@ export function useLiveSpeechPlayback({
     outputLevel: enabled ? outputLevel : 0,
     playbackFailed: visibleState.playbackFailed,
     prepare,
+    expectNextResponse,
     cancelPending: interrupt,
     interrupt,
   };

@@ -67,9 +67,9 @@ test('check 调用提取', () => {
 /* ---------- 门禁正反用例 ---------- */
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
-  // D04 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表），
-  // 总数从 231 → 237；成员闭集仍全部在白名单内。
-  assert.equal(loadSchemaCheckCalls().length, 237);
+  // M2/M3 新增 12 个纸面批注与私人案面 CHECK，总数从 237 → 249；
+  // 其中协议判别联合登记为 closed，坐标/长度/形状仍是开放格式约束。
+  assert.equal(loadSchemaCheckCalls().length, 249);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
 });
@@ -90,20 +90,25 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
   assert.equal(wouldViolate, true);
 });
 
-test('最新 migration 的 ADD CHECK 与 schema 使用同一分类规则', () => {
+test('最新 migration 的 CREATE TABLE CHECK 与 schema 使用同一分类规则', () => {
   const checks = extractLatestMigrationChecks();
-  // D04 0053 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表）。
-  assert.equal(checks.length, 6);
+  assert.equal(checks.length, 5);
   assert.equal(
     checks.some(
-      (check) => check.name === 'asset_representations_variant_check',
+      (check) => check.name === 'notebook_surface_positions_rest_state_check',
     ),
     true,
   );
-  // 全部为开放格式约束（非成员闭集），与 schema 的格式 CHECK 一致。
-  for (const check of checks) {
-    assert.equal(isLiteralVocabularyClosure(check.body), false, check.name);
-  }
+  const closed = checks
+    .filter((check) => isLiteralVocabularyClosure(check.body))
+    .map((check) => check.name);
+  assert.deepEqual(closed, [
+    'notebook_surface_positions_resource_kind_check',
+    'notebook_surface_positions_zone_check',
+    'notebook_surface_positions_rest_state_check',
+  ]);
+  for (const name of closed)
+    assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
 });
 
 test('反向：closed 状态机约束即使含 IN 闭集也被允许（白名单命中）', () => {
@@ -132,6 +137,8 @@ test('白名单覆盖封闭类别：lifecycle/security/approval/consent/effect/t
     'web_runtime_runs_terminal_check',
     'turn_safety_decisions_action_check',
     'notebook_memberships_role_check',
+    'resource_annotations_author_pen_check',
+    'notebook_surface_positions_rest_state_check',
   ]) {
     assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
   }

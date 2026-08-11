@@ -134,6 +134,17 @@
   opacity: 1;
 }
 
+.agent-busy-overlay[data-phase='tool']::before {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-cinnabar) 38%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--color-cinnabar) 16%, transparent),
+    inset 0 0 70px color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+
+.agent-busy-overlay[data-phase='responding']::before {
+  opacity: 0.78;
+}
+
 @keyframes agent-busy-edge-breathe {
   0%,
   100% {

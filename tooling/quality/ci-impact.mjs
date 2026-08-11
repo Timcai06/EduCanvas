@@ -164,7 +164,7 @@ export function classifyChangedPaths(
       browserPatterns.some((pattern) => pattern.test(path)),
   );
   result.agent_eval = matchesAny(paths, [
-    /^packages\/(?:agent-core|agent-runtime|teaching-core|teaching-runtime)\//,
+    /^packages\/(?:agent-core|agent-runtime|teaching-core|teaching-runtime|mcp-runtime|canvas-protocol)\//,
     /^packages\/model-gateway\//,
     /^packages\/db\/src\/(?:knowledge-|schema\/knowledge)/,
     /^apps\/web\/server\/(?:platform\/general-turn|teaching\/(?:knowledge-|learning-turn|turn-application))/,

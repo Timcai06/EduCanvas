@@ -27,7 +27,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['document'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -39,7 +39,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['image'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -51,7 +51,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['text', 'document'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -63,7 +63,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['text'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -75,7 +75,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['document'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -87,7 +87,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['audio'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -99,7 +99,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['video'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'rename', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
     },
   },
   {
@@ -111,7 +111,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate'],
     },
   },
   {
@@ -123,7 +123,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate'],
     },
   },
   {
@@ -135,7 +135,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate'],
     },
   },
   {
@@ -147,7 +147,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['audio'],
       trustTiers: ['tier2'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'delete'],
     },
   },
   {
@@ -159,7 +159,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['image'],
       trustTiers: ['tier2'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'download', 'delete'],
+      supportedActions: ['view', 'annotate', 'download', 'delete'],
     },
   },
 ];
