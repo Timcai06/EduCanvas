@@ -11,6 +11,7 @@ import {
   type AssetOrigin,
   type AssetProcessorKind,
   type AssetRepresentationKind,
+  type RepresentationQuality,
   type AssetScope,
   type AssetVersionDescriptor,
   type AssetVersionReference,
@@ -472,6 +473,16 @@ export class DrizzleAssetRepository {
           derivedStorageKey: string;
           /** 抽取文本对象 SHA-256（小写 hex）。 */
           checksum: string;
+          /**
+           * ADR-0026 质量状态：MinerU/直接 Markdown 解码为 'structured'；
+           * 结构化失败后的纯文本回退省略即可（缺省推导 degraded_plain_text）。
+           */
+          quality?: RepresentationQuality;
+          /**
+           * 表示 MIME：结构化表示是 text/markdown，降级纯文本是 text/plain。
+           * 缺省 text/plain（旧行为）。
+           */
+          mimeType?: 'text/plain' | 'text/markdown';
         }
       | { status: 'failed'; failureCode: string };
     now?: Date;
@@ -524,8 +535,10 @@ export class DrizzleAssetRepository {
           variant: claimed.variant,
           producer: claimed.producer,
           producerVersion: claimed.producerVersion,
-          mimeType: 'text/plain',
+          /* 结构化表示是 Markdown，降级纯文本是 text/plain（ADR-0026 决定 6）。 */
+          mimeType: outcome.mimeType ?? 'text/plain',
           status: 'ready',
+          quality: outcome.quality,
           derivedStorageKey: outcome.derivedStorageKey,
           checksum: outcome.checksum,
           byteSize: Buffer.byteLength(version.extractedText, 'utf8'),

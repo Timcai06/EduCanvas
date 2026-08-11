@@ -334,6 +334,78 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ).resolves.toHaveLength(1);
   });
 
+  it('settle 显式 quality=structured 时落结构化表示（ADR-0026 决定 6）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const startedAt = new Date('2026-07-26T08:00:00.000Z');
+    const assetId = '92000000-0000-4000-8000-0000000000aa';
+    const versionId = '92000000-0000-4000-8000-0000000000ab';
+    const jobId = '92000000-0000-4000-8000-0000000000ac';
+    await getDatabase().insert(schema.assets).values({
+      id: assetId,
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      origin: 'upload',
+      displayName: '讲义.pdf',
+      mimeType: 'application/pdf',
+      status: 'processing',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    });
+    await getDatabase()
+      .insert(schema.assetVersions)
+      .values({
+        id: versionId,
+        assetId,
+        kind: 'document',
+        mimeType: 'application/pdf',
+        byteSize: 12,
+        contentHash: 'e'.repeat(64),
+        status: 'processing',
+        storageKey: 'uploads/fixture/讲义.pdf',
+        createdAt: startedAt,
+      });
+    await getDatabase().insert(schema.assetProcessingJobs).values({
+      id: jobId,
+      assetVersionId: versionId,
+      kind: 'extract_text',
+      status: 'queued',
+      attempts: 0,
+      createdAt: startedAt,
+    });
+
+    await repository.beginTextExtractionAttempt({ jobId, now: startedAt });
+    await repository.settleTextExtraction({
+      jobId,
+      outcome: {
+        status: 'ready',
+        extractedText: '# 结构化标题',
+        derivedStorageKey: `derived/text/${jobId}/abc.md`,
+        checksum: 'b'.repeat(64),
+        quality: 'structured',
+        mimeType: 'text/markdown',
+      },
+      now: new Date('2026-07-26T08:02:00.000Z'),
+    });
+
+    /* 结构化表示以 Markdown MIME 与 structured 质量落库，可被阅读视图读回。 */
+    await expect(
+      getDatabase()
+        .select({
+          quality: schema.assetRepresentations.quality,
+          mimeType: schema.assetRepresentations.mimeType,
+          status: schema.assetRepresentations.status,
+        })
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${versionId} and ${schema.assetRepresentations.kind} = 'text'`,
+        ),
+    ).resolves.toEqual([
+      { quality: 'structured', mimeType: 'text/markdown', status: 'ready' },
+    ]);
+  });
+
   it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
     const repository = new DrizzleAssetRepository(getDatabase());
     const transcriptionRepository = new DrizzleAssetTranscriptionRepository(
