@@ -4,6 +4,7 @@ import {
   MINERU_MD_FILENAME,
   MINERU_ZIP_MAX_ENTRIES,
   readMineruMarkdown,
+  unpackMineruZip,
 } from './mineru-zip';
 import { ASSET_TEXT_MAX_CHARACTERS } from './text-extraction';
 
@@ -213,6 +214,72 @@ describe('readMineruMarkdown', () => {
     view.setUint16(cdStart + 10, 99, true);
 
     expect(() => readMineruMarkdown(corrupted)).toThrow(
+      expect.objectContaining({ code: 'mineru_result_invalid' }),
+    );
+  });
+});
+
+/* ---------------- unpackMineruZip：C 阶段完整解包 ---------------- */
+
+describe('unpackMineruZip', () => {
+  it('解包全部条目，保留 name 与解压后的字节', () => {
+    const zip = mdZip('# 正文', [
+      { name: 'images/001.jpg', data: new Uint8Array([0xff, 0xd8]) },
+      { name: 'content_list.json', data: utf8('[]') },
+    ]);
+
+    const entries = unpackMineruZip(zip);
+
+    expect(entries.map((e) => e.name)).toEqual([
+      MINERU_MD_FILENAME,
+      'images/001.jpg',
+      'content_list.json',
+    ]);
+    expect(entries[1]?.bytes).toEqual(new Uint8Array([0xff, 0xd8]));
+  });
+
+  it('deflate 条目解压后字节正确', () => {
+    const zip = buildZip([
+      {
+        name: 'images/001.png',
+        data: new Uint8Array([1, 2, 3, 4]),
+        deflate: true,
+      },
+    ]);
+
+    expect(unpackMineruZip(zip)[0]?.bytes).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+  });
+
+  it('单条目解压后超过上限明确失败（不静默截断）', () => {
+    const big = new Uint8Array(1024);
+    const zip = buildZip([{ name: 'images/big.bin', data: big }]);
+
+    expect(() => unpackMineruZip(zip, { maxEntryBytes: 512 })).toThrow(
+      expect.objectContaining({ code: 'mineru_result_invalid' }),
+    );
+  });
+
+  it('累计解压字节超过总上限明确失败', () => {
+    const a = new Uint8Array(300);
+    const b = new Uint8Array(300);
+    const zip = buildZip([
+      { name: 'a.bin', data: a },
+      { name: 'b.bin', data: b },
+    ]);
+
+    expect(() => unpackMineruZip(zip, { maxTotalBytes: 500 })).toThrow(
+      expect.objectContaining({ code: 'mineru_result_invalid' }),
+    );
+  });
+
+  it('自定义条目数上限低于容器声明时拒绝', () => {
+    const zip = mdZip('# 正文', [
+      { name: 'images/001.jpg', data: new Uint8Array([1]) },
+    ]);
+
+    expect(() => unpackMineruZip(zip, { maxEntries: 1 })).toThrow(
       expect.objectContaining({ code: 'mineru_result_invalid' }),
     );
   });

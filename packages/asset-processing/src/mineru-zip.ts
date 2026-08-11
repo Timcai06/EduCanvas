@@ -1,22 +1,46 @@
 import { inflateRawSync } from 'node:zlib';
 import { MineruClientError } from './mineru-client';
+import { MINERU_RESULT_MAX_BYTES } from './mineru-client';
 import { ASSET_TEXT_MAX_CHARACTERS } from './text-extraction';
 
 /**
- * MinerU 结果 zip 的最小安全读取（ADR-0026 决定 3 的上界前置）。
+ * MinerU 结果 zip 的安全解包（ADR-0026 决定 3 的上界）。
  *
- * 只读 `index.md` 一个条目：它是 Agent 上下文的文本来源。完整解包
- * （images/、content_list、manifest）在 C 阶段补齐，这里先建立
- * 有界性——条目数、解压后字节数、容器偏移全部限死，任何越界视为
- * 结果损坏（`mineru_result_invalid`），由编排层降级。
+ * `unpackMineruZip` 解出全部条目（含 index.md 与 images/），每条目只保留
+ * 受控相对路径与解压后的字节；条目数、单条目字节、总字节全部限死，任何
+ * 越界视为结果损坏（`mineru_result_invalid`），由编排层降级，不静默遗漏
+ * 用户选择的资料。`readMineruMarkdown` 是它的薄包装：只取 index.md 作
+ * Agent 上下文文本。
  *
- * zip64（偏移/条目数走扩展头）直接拒绝：结果上限 512MB 不可能触发
- * 4GB 偏移，出现 zip64 字段说明容器异常。不校验 CRC32——内容完整性
- * 由上层对象存储的 SHA-256 承担。
+ * zip64（偏移/条目数走扩展头）直接拒绝：结果上限 512MB 不可能触发 4GB
+ * 偏移，出现 zip64 字段说明容器异常。不校验 CRC32——内容完整性由上层
+ * 对象存储的 SHA-256 承担。
  */
 
 /** 容器允许的条目总数上限（含 index.md 与图片）。 */
 export const MINERU_ZIP_MAX_ENTRIES = 200;
+
+/**
+ * 单条目解压后的字节上限。MinerU 单页图片通常远小于此，128MiB 是防御性
+ * 上界：超过即明确失败，防止单个 inflate 条目放大成内存炸弹。
+ */
+export const MINERU_ZIP_MAX_ENTRY_BYTES = 128 * 1024 * 1024;
+
+/**
+ * 全部条目解压后的总字节上限，与容器下载上限一致：压缩容器 512MB 内不
+ * 允许解压出超过容器容量的总和（inflate 放大被双重封顶）。
+ */
+export const MINERU_ZIP_MAX_TOTAL_BYTES = MINERU_RESULT_MAX_BYTES;
+
+/** 解包后的一个条目：受控相对路径（C 阶段再做白名单校验）与解压字节。 */
+export type MineruZipEntry = { name: string; bytes: Uint8Array };
+
+/** 可选覆盖的上界（测试传小值，生产用默认常量）。 */
+export type MineruZipLimits = {
+  maxEntries?: number;
+  maxEntryBytes?: number;
+  maxTotalBytes?: number;
+};
 
 /** MinerU 输出的 Markdown 文件名（固定，不随输入文件名变化）。 */
 export const MINERU_MD_FILENAME = 'index.md';
@@ -47,12 +71,19 @@ function findEocdOffset(view: DataView, byteLength: number): number | null {
 }
 
 /**
- * 从已下载的 MinerU 结果 zip 中读取 `index.md` 文本。
+ * 安全解包 MinerU 结果 zip 的全部条目。
  *
  * 纯函数：不做网络、不读对象存储。失败一律抛 `MineruClientError`
  * （`mineru_result_invalid`），调用方据此决定降级还是终止。
  */
-export function readMineruMarkdown(bytes: Uint8Array): string {
+export function unpackMineruZip(
+  bytes: Uint8Array,
+  limits: MineruZipLimits = {},
+): MineruZipEntry[] {
+  const maxEntries = limits.maxEntries ?? MINERU_ZIP_MAX_ENTRIES;
+  const maxEntryBytes = limits.maxEntryBytes ?? MINERU_ZIP_MAX_ENTRY_BYTES;
+  const maxTotalBytes = limits.maxTotalBytes ?? MINERU_ZIP_MAX_TOTAL_BYTES;
+
   if (bytes.byteLength < EOCD_MIN_LENGTH) throw invalid();
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const eocd = findEocdOffset(view, bytes.byteLength);
@@ -60,20 +91,17 @@ export function readMineruMarkdown(bytes: Uint8Array): string {
 
   const totalEntries = view.getUint16(eocd + 10, true);
   /* 0xFFFF 是 zip64 哨兵；超过上限同样直接拒绝。 */
-  if (totalEntries === 0xffff || totalEntries > MINERU_ZIP_MAX_ENTRIES) {
+  if (totalEntries === 0xffff || totalEntries > maxEntries) {
     throw invalid({ entries: totalEntries });
   }
   const cdOffset = view.getUint32(eocd + 16, true);
   if (cdOffset === 0xffffffff) throw invalid();
   if (cdOffset + EOCD_MIN_LENGTH > bytes.byteLength) throw invalid();
 
-  /* 遍历 central directory 找 index.md（46 字节定长头 + 变长字段）。 */
+  /* 遍历 central directory，逐条解出条目（46 字节定长头 + 变长字段）。 */
+  const entries: MineruZipEntry[] = [];
   let cursor = cdOffset;
-  let found: {
-    method: number;
-    compressedSize: number;
-    localOffset: number;
-  } | null = null;
+  let totalBytes = 0;
   for (let i = 0; i < totalEntries; i += 1) {
     if (cursor + CD_ENTRY_MIN_LENGTH > bytes.byteLength) throw invalid();
     if (view.getUint32(cursor, true) !== CD_SIGNATURE) throw invalid();
@@ -87,47 +115,69 @@ export function readMineruMarkdown(bytes: Uint8Array): string {
       cursor + CD_ENTRY_MIN_LENGTH,
       cursor + CD_ENTRY_MIN_LENGTH + nameLength,
     );
-    if (decodeUtf8(nameBytes) === MINERU_MD_FILENAME) {
-      found = {
-        method: view.getUint16(cursor + 10, true),
-        compressedSize: view.getUint32(cursor + 20, true),
-        localOffset: view.getUint32(cursor + 42, true),
-      };
-      break;
+    /* fatal 解码：非 UTF-8 文件名视为结果损坏。 */
+    const name = decodeUtf8(nameBytes);
+    const method = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+
+    /* 用 local header 定位数据区：local 头 30 字节 + 自己的文件名/扩展长。 */
+    if (localOffset === 0xffffffff) throw invalid();
+    if (localOffset + LOCAL_HEADER_MIN_LENGTH > bytes.byteLength) {
+      throw invalid();
     }
+    if (view.getUint32(localOffset, true) !== LOCAL_SIGNATURE) throw invalid();
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart =
+      localOffset +
+      LOCAL_HEADER_MIN_LENGTH +
+      localNameLength +
+      localExtraLength;
+    const dataEnd = dataStart + compressedSize;
+    if (dataEnd > bytes.byteLength) throw invalid();
+
+    let raw: Uint8Array;
+    if (method === METHOD_STORED) {
+      raw = bytes.slice(dataStart, dataEnd);
+    } else if (method === METHOD_DEFLATE) {
+      try {
+        /* inflateRawSync 返回 Buffer（Uint8Array 子类），归一为纯 Uint8Array。 */
+        raw = new Uint8Array(inflateRawSync(bytes.slice(dataStart, dataEnd)));
+      } catch (cause) {
+        throw invalid(cause);
+      }
+    } else {
+      throw invalid({ method });
+    }
+    /* 单条目与累计双重封顶，防 zip 炸弹（容器内 inflate 放大）。 */
+    if (raw.byteLength > maxEntryBytes) {
+      throw invalid({ entry: name, entryBytes: raw.byteLength });
+    }
+    totalBytes += raw.byteLength;
+    if (totalBytes > maxTotalBytes) throw invalid({ totalBytes });
+
+    entries.push({ name, bytes: raw });
     cursor = entryEnd;
   }
-  if (found === null) throw invalid();
+  return entries;
+}
 
-  /* 用 local header 定位数据区：local 头 30 字节 + 自己的文件名/扩展长。 */
-  const localStart = found.localOffset;
-  if (localStart + LOCAL_HEADER_MIN_LENGTH > bytes.byteLength) throw invalid();
-  if (view.getUint32(localStart, true) !== LOCAL_SIGNATURE) throw invalid();
-  const localNameLength = view.getUint16(localStart + 26, true);
-  const localExtraLength = view.getUint16(localStart + 28, true);
-  const dataStart =
-    localStart + LOCAL_HEADER_MIN_LENGTH + localNameLength + localExtraLength;
-  const dataEnd = dataStart + found.compressedSize;
-  if (dataEnd > bytes.byteLength) throw invalid();
-
-  let raw: Uint8Array;
-  if (found.method === METHOD_STORED) {
-    raw = bytes.slice(dataStart, dataEnd);
-  } else if (found.method === METHOD_DEFLATE) {
-    try {
-      raw = inflateRawSync(bytes.slice(dataStart, dataEnd));
-    } catch (cause) {
-      throw invalid(cause);
-    }
-  } else {
-    throw invalid({ method: found.method });
-  }
-  /* 解压后仍受字节上限约束，防止 zip 炸弹（容器内 inflate 放大）。 */
-  if (raw.byteLength > MINERU_MD_MAX_UTF8_BYTES) throw invalid();
+/**
+ * 从已下载的 MinerU 结果 zip 中读取 `index.md` 文本。
+ *
+ * 纯函数：不做网络、不读对象存储。失败一律抛 `MineruClientError`
+ * （`mineru_result_invalid`），调用方据此决定降级还是终止。
+ */
+export function readMineruMarkdown(bytes: Uint8Array): string {
+  const md = unpackMineruZip(bytes).find((e) => e.name === MINERU_MD_FILENAME);
+  if (!md) throw invalid();
+  /* md 有更紧的字节上限（480KB），在条目级上限之上再收一道。 */
+  if (md.bytes.byteLength > MINERU_MD_MAX_UTF8_BYTES) throw invalid();
 
   let decoded: string;
   try {
-    decoded = decodeUtf8(raw);
+    decoded = decodeUtf8(md.bytes);
   } catch (cause) {
     throw invalid(cause);
   }

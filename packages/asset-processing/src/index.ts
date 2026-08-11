@@ -35,7 +35,12 @@ export {
 export {
   MINERU_MD_FILENAME,
   MINERU_ZIP_MAX_ENTRIES,
+  MINERU_ZIP_MAX_ENTRY_BYTES,
+  MINERU_ZIP_MAX_TOTAL_BYTES,
   readMineruMarkdown,
+  unpackMineruZip,
+  type MineruZipEntry,
+  type MineruZipLimits,
 } from './mineru-zip';
 
 export {
