@@ -1,7 +1,9 @@
-# tooling/evals — RAG 评测 harness（Q01）
+# tooling/evals — deterministic Agent product evaluation
 
-冻结评测集与可复现离线评测。仓库内唯一入口是 `rag-eval.test.ts`（vitest），
-评测全程不调用任何模型、不依赖公网、不读真实密钥。
+冻结评测集与可复现离线评测。`rag-eval.test.ts` 验证真实检索实现；
+`agent/agent-eval.test.ts` 通过现有 `AgentLoopEngine`、`ToolKernel` 与 K12
+安全策略验证 Tool/Artifact 和 Teaching Safety。全程不调用真实模型、不依赖
+公网、不读取 Provider Secret。
 
 ## 复现命令
 
@@ -10,7 +12,7 @@
 
 ```powershell
 $env:TEST_DATABASE_URL = "postgresql://educanvas:educanvas@localhost:5432/educanvas_eval_test"
-pnpm --filter @educanvas/db exec vitest run --root ../../tooling/evals --config ../../tooling/evals/vitest.config.ts
+pnpm test:eval
 ```
 
 - vitest 只在 workspace 包中安装，故经 `--filter @educanvas/db exec` 运行；
@@ -19,7 +21,7 @@ pnpm --filter @educanvas/db exec vitest run --root ../../tooling/evals --config 
   / `packages/db/node_modules`（tooling/ 不是 pnpm workspace 包，Node 解析链
   走不到这些依赖）；
 - 每次运行：migrate → truncate（restart identity cascade）→ 重播冻结数据集
-  v1 → 生成报告 `reports/rag-eval-v1-<日期>.json`。质量指标部分逐项确定
+  v1 → 生成报告 `reports/rag-eval-v1.json`。质量指标部分逐项确定
   （已验证两次运行完全一致）；延迟按检索器配置拆分（2026-08-07 修正：
   v1-08-06 报告曾把三种配置混入单一分位，重提后 `latencyMsByRetriever`
   逐配置给出，hybrid-only 基线取 hybrid 分位），仍为运行噪声，仅作量级参考。
@@ -35,9 +37,13 @@ pnpm --filter @educanvas/db exec vitest run --root ../../tooling/evals --config 
 - `latencyMsByRetriever.*`：各检索配置各自的 p50/p95 与样本数；
 - `fallbackHonesty`：回退路是否与 FTS-only 等价（诚实标记）；
 - `findings`：基线事实（FTS AND 语义、hybrid 无阈值返回）。
+- `agent-eval-agent-v1.json`：只包含 fixture ID、稳定结果码和聚合数字；
+  不包含输入正文、Prompt、Provider body、Secret 或真实学生内容。
+- `eval-gate-v1.json`：将报告与 `baselines/*.json` 独立比较。Critical safety、
+  authorization、terminal exactly-once 均要求 100%，非关键评分单独报告。
 
 ## 冻结规则
 
-数据集定义在 `dataset-v1/`，文件头记录了冻结规则与 v1 修订记录。任何语料、
-query、golden 或轴定义变更必须新增版本（v2…），不得修改已冻结内容；版本
-变更必须产生新报告，不得覆盖旧结论。
+数据集定义在 `dataset-v1/` 与 `agent/v1/`，门槛位于 `baselines/`。任何语料、
+query、golden、Agent case 或评分轴变更必须新增版本（v2…），不得覆盖历史
+baseline。报告明确限定为合成集回归证据，不宣称真实课程语义质量。

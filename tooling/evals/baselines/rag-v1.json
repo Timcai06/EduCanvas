@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "v1",
+  "scope": "frozen synthetic retrieval fixtures only",
+  "thresholds": {
+    "hybrid.meanRecall10": 0.95,
+    "hybrid.meanMRR10": 0.8,
+    "hybrid.meanNDCG10": 0.85,
+    "fallbackHonesty": 1
+  }
+}

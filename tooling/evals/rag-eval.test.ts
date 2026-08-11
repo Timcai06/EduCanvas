@@ -132,6 +132,19 @@ async function writeChunkEmbeddings(input: {
 async function seedSession(input: { studentId: string; courseSlug: string }) {
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  // The production schema now requires every lesson session to reference the
+  // canonical platform principal. Keep the frozen evaluation identity intact,
+  // but seed its synthetic anonymous principal before the session row.
+  await database
+    .insert(schema.platformUsers)
+    .values({
+      id: input.studentId,
+      kind: input.studentId.startsWith('anon:')
+        ? 'anonymous_compat'
+        : 'registered',
+      status: 'active',
+    })
+    .onConflictDoNothing();
   await database.insert(schema.lessonSessions).values({
     id: sessionId,
     studentId: input.studentId,
@@ -840,8 +853,7 @@ describe('Q01 RAG 冻结评测 v1', () => {
 
     const reportsDir = fileURLToPath(new URL('./reports', import.meta.url));
     mkdirSync(reportsDir, { recursive: true });
-    const date = new Date().toISOString().slice(0, 10);
-    const reportPath = `${reportsDir}/rag-eval-${EVAL_DATASET_VERSION}-${date}.json`;
+    const reportPath = `${reportsDir}/rag-eval-${EVAL_DATASET_VERSION}.json`;
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
     // console 摘要（报告是评测产出，摘要便于人工评审）。

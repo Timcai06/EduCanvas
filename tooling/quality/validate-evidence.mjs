@@ -7,7 +7,8 @@
  * links, and result files. Used in CI to gate RC releases.
  *
  * Q06：状态语义门禁（docs/06-quality/08-供应链与发布证据.md 第六节）——
- * 1. 任何 gate / budget / migration / supply_chain 项 status = failed → 校验失败；
+ * draft 只校验结构和声明一致性；release 额外要求目标 SHA 与所有必需项通过。
+ * 1. release 或整体 status=passed 时，任何 failed 项 → 校验失败；
  * 2. skipped 是独立状态，绝不等于通过：skipped 必须有 skipped_reason /
  *    note 说明，且汇总输出中独立计数（skipped 不计入 passed）；
  * 3. passed 与数字一致：带 total/passed 的 gate 若写 passed，必须
@@ -18,7 +19,8 @@
  *    （不允许 pending/running 冒充通过）。
  *
  * Usage:
- *   node tooling/quality/validate-evidence.mjs [manifest-path]
+ *   node tooling/quality/validate-evidence.mjs --mode draft [manifest-path]
+ *   node tooling/quality/validate-evidence.mjs --mode release --sha <40-char-sha> [manifest-path]
  *
  * Exit codes:
  *   0 - All validations passed
@@ -28,13 +30,34 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  validateEvidenceStatusValues,
+  validateEvidenceTimestamps,
+} from './evidence-shape.mjs';
+import {
+  REQUIRED_RELEASE_GATES,
+  validateReleaseReadiness,
+} from './release-readiness.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../..');
 
-const manifestPath =
-  process.argv[2] ||
-  resolve(repoRoot, 'docs/06-quality/releases/rc1/manifest.json');
+function argument(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
+const mode = argument('--mode') ?? 'draft';
+const targetSha = argument('--sha');
+const positional = process.argv.slice(2).filter((value, index, values) => {
+  const previous = values[index - 1];
+  return (
+    !value.startsWith('--') && previous !== '--mode' && previous !== '--sha'
+  );
+})[0];
+const manifestPath = resolve(
+  positional ?? 'docs/06-quality/releases/rc1/manifest.json',
+);
 
 const TERMINAL = new Set(['passed', 'failed', 'skipped']);
 
@@ -68,15 +91,7 @@ function validateRequiredFields(manifest) {
   }
 
   if (manifest.gates) {
-    const requiredGates = [
-      'lint',
-      'typecheck',
-      'unit',
-      'build',
-      'security',
-      'release-evidence',
-    ];
-    for (const gate of requiredGates) {
+    for (const gate of REQUIRED_RELEASE_GATES) {
       if (!manifest.gates[gate]) {
         errors.push(`Missing gate: ${gate}`);
       } else if (!manifest.gates[gate].status) {
@@ -90,7 +105,7 @@ function validateRequiredFields(manifest) {
 
 function validateEvidenceFiles(manifest) {
   const errors = [];
-  const evidenceDir = resolve(repoRoot, 'docs/06-quality/releases/rc1');
+  const evidenceDir = dirname(manifestPath);
 
   if (manifest.evidence) {
     for (const [key, path] of Object.entries(manifest.evidence)) {
@@ -104,56 +119,19 @@ function validateEvidenceFiles(manifest) {
   return errors;
 }
 
-function validateGateStatuses(manifest) {
-  const errors = [];
-  const validStatuses = ['pending', 'running', 'passed', 'failed', 'skipped'];
-
-  if (manifest.gates) {
-    for (const [name, gate] of Object.entries(manifest.gates)) {
-      if (!validStatuses.includes(gate.status)) {
-        errors.push(`Gate ${name} has invalid status: ${gate.status}`);
-      }
-    }
-  }
-
-  return errors;
-}
-
-function validateTimestamps(manifest) {
-  const errors = [];
-  const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
-
-  if (
-    manifest.baseline?.timestamp &&
-    !isoRegex.test(manifest.baseline.timestamp)
-  ) {
-    errors.push('baseline.timestamp is not ISO 8601 format');
-  }
-
-  if (manifest.gates) {
-    for (const [name, gate] of Object.entries(manifest.gates)) {
-      if (gate.timestamp && !isoRegex.test(gate.timestamp)) {
-        errors.push(`Gate ${name} timestamp is not ISO 8601 format`);
-      }
-    }
-  }
-
-  return errors;
-}
-
 /**
  * Q06：状态语义门禁（规则 1–3）。
  * - failed 即失败；
  * - skipped 必须有理由（skipped_reason / note），且绝不计入 passed；
  * - passed 与数字一致（有 total/passed 时 passed === total，total > 0）。
  */
-function validateStatusSemantics(entries, scope, errors) {
+function validateStatusSemantics(entries, scope, errors, rejectFailed) {
   for (const [name, entry] of Object.entries(entries)) {
     if (!entry || typeof entry !== 'object') continue;
     const status = entry.status;
     if (!status) continue;
 
-    if (status === 'failed') {
+    if (status === 'failed' && rejectFailed) {
       errors.push(`${scope} ${name} failed：failed 即失败，不允许发布`);
       continue;
     }
@@ -191,24 +169,39 @@ function validateStatusSemantics(entries, scope, errors) {
  * Q06：budget（SLO）语义门禁（规则 4）。
  * passed 时 actual <= limit 且 actual > 0；failed 即失败；skipped 需理由。
  */
-function validateBudgetSemantics(manifest, errors) {
+function budgetMeasurement(item) {
+  if ('actual' in item || 'limit' in item) {
+    return { actual: item.actual, limit: item.limit };
+  }
+  if ('p95_actual_ms' in item || 'p95_limit_ms' in item) {
+    return { actual: item.p95_actual_ms, limit: item.p95_limit_ms };
+  }
+  return { actual: undefined, limit: undefined };
+}
+
+function validateBudgetSemantics(manifest, errors, rejectFailed) {
   const budget = manifest.budget;
   if (!budget || typeof budget !== 'object') return;
   for (const [name, item] of Object.entries(budget)) {
     if (!item || typeof item !== 'object' || !item.status) continue;
-    if (item.status === 'failed') {
+    if (item.status === 'failed' && rejectFailed) {
       errors.push(`budget ${name} failed：SLO 未达成，不允许发布`);
     } else if (item.status === 'skipped' && !item.note) {
       errors.push(`budget ${name} skipped 但没有 note 说明原因`);
     } else if (item.status === 'passed') {
-      if (!(item.actual > 0)) {
+      const { actual, limit } = budgetMeasurement(item);
+      if (!(actual > 0)) {
         errors.push(
-          `budget ${name} 写 passed 但 actual=${item.actual}：` +
+          `budget ${name} 写 passed 但 actual=${actual}：` +
             '0 表示没测量，不允许写成通过',
         );
-      } else if (item.limit > 0 && item.actual > item.limit) {
+      } else if (!(limit > 0)) {
         errors.push(
-          `budget ${name} 写 passed 但 actual(${item.actual}) 超 limit(${item.limit})：` +
+          `budget ${name} 写 passed 但 limit=${limit}：必须声明正数门槛`,
+        );
+      } else if (actual > limit) {
+        errors.push(
+          `budget ${name} 写 passed 但 actual(${actual}) 超 limit(${limit})：` +
             '超限必须写 failed',
         );
       }
@@ -220,7 +213,7 @@ function validateBudgetSemantics(manifest, errors) {
  * Q06：迁移记录语义门禁（规则 5）。
  * migration.version 必须与磁盘迁移文件数一致；fresh/upgrade 状态语义同 gate。
  */
-function validateMigrationSemantics(manifest, errors) {
+function validateMigrationSemantics(manifest, errors, rejectFailed) {
   const migration = manifest.migration;
   if (!migration) return;
   const drizzleDir = join(repoRoot, 'packages/db/drizzle');
@@ -240,7 +233,7 @@ function validateMigrationSemantics(manifest, errors) {
   for (const kind of ['fresh', 'upgrade']) {
     const item = migration[kind];
     if (!item?.status) continue;
-    if (item.status === 'failed') {
+    if (item.status === 'failed' && rejectFailed) {
       errors.push(`migration.${kind} failed：迁移验证未通过，不允许发布`);
     } else if (item.status === 'skipped' && !item.note) {
       errors.push(`migration.${kind} skipped 但没有 note 说明原因`);
@@ -253,13 +246,13 @@ function validateMigrationSemantics(manifest, errors) {
  * 新增 supply_chain 段：actions_pinned / dependency_review / container_digest /
  * migration_records，发布时必须全部终态且无 failed。
  */
-function validateSupplyChain(manifest, errors) {
+function validateSupplyChain(manifest, errors, rejectFailed) {
   const supply = manifest.supply_chain;
   if (!supply || typeof supply !== 'object') {
     // supply_chain 段为 Q06 新增，缺段不阻塞旧包，但写 passed 时必须有。
     return;
   }
-  validateStatusSemantics(supply, 'supply_chain', errors);
+  validateStatusSemantics(supply, 'supply_chain', errors, rejectFailed);
 }
 
 /**
@@ -285,7 +278,12 @@ function validateFinality(manifest, errors) {
 }
 
 // Main validation
-console.log('🔍 Validating release evidence pack...\n');
+if (!new Set(['draft', 'release']).has(mode)) {
+  console.error(`❌ Unsupported evidence mode: ${mode}`);
+  process.exit(1);
+}
+
+console.log(`🔍 Validating release evidence (${mode})...\n`);
 console.log(`Manifest: ${manifestPath}\n`);
 
 const manifest = loadJSON(manifestPath);
@@ -296,23 +294,31 @@ if (!manifest) {
 const errors = [
   ...validateRequiredFields(manifest),
   ...validateEvidenceFiles(manifest),
-  ...validateGateStatuses(manifest),
-  ...validateTimestamps(manifest),
+  ...validateEvidenceStatusValues(manifest),
+  ...validateEvidenceTimestamps(manifest),
 ];
-validateStatusSemantics(manifest.gates ?? {}, 'gate', errors);
-validateBudgetSemantics(manifest, errors);
-validateMigrationSemantics(manifest, errors);
-validateSupplyChain(manifest, errors);
+const rejectFailed = mode === 'release' || manifest.status === 'passed';
+validateStatusSemantics(manifest.gates ?? {}, 'gate', errors, rejectFailed);
+validateStatusSemantics(manifest.eval ?? {}, 'eval', errors, rejectFailed);
+validateBudgetSemantics(manifest, errors, rejectFailed);
+validateMigrationSemantics(manifest, errors, rejectFailed);
+validateSupplyChain(manifest, errors, rejectFailed);
 validateFinality(manifest, errors);
+if (mode === 'release') validateReleaseReadiness(manifest, targetSha, errors);
 
 if (errors.length === 0) {
-  console.log('✅ All validations passed!\n');
+  console.log(
+    mode === 'release'
+      ? '✅ Release readiness verified!\n'
+      : '✅ Draft evidence structure is valid!\n',
+  );
 
   // Summary
   console.log('Summary:');
   console.log(`  Release: ${manifest.release}`);
   console.log(`  Version: ${manifest.version}`);
   console.log(`  Status: ${manifest.status}`);
+  console.log(`  Mode: ${mode}`);
   console.log(`  Baseline: ${manifest.baseline?.sha?.slice(0, 8) || 'N/A'}`);
 
   // Q06：状态计数——skipped 独立计数，绝不计入 passed。
