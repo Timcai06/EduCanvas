@@ -139,6 +139,7 @@ export function LiveVoiceVisualStage({
               key={asset.id}
               type="button"
               role="listitem"
+              data-live-stage-asset={asset.id}
               data-active={asset.enabled || undefined}
               data-focused={focusedAsset?.id === asset.id || undefined}
               disabled={

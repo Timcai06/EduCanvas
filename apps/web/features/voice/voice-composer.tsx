@@ -39,6 +39,17 @@ import {
   type LiveVoiceContextSnapshot,
   type LiveVoiceToolItem,
 } from './live-voice-context';
+import {
+  captureLiveVoiceEntry,
+  reduceLiveVoiceThreshold,
+  type LiveVoiceEntryCapture,
+  type LiveVoiceThresholdEvent,
+  type LiveVoiceThresholdPhase,
+} from './live-voice-threshold';
+import {
+  assembleLiveVoiceExitPayload,
+  type LiveVoiceExitPayload,
+} from './live-voice-bring-back';
 
 type BaseComposerProps = Omit<
   ComponentProps<typeof Composer>,
@@ -69,6 +80,8 @@ export interface VoiceComposerRuntimeProps extends BaseComposerProps {
     text: string,
     context: LiveVoiceContextSnapshot,
   ) => void;
+  /** 出室瞬间同步回调（EXIT 时触发，不等退场动画）：信笺等带回写库与动画并行。 */
+  readonly onLiveExit?: (payload: LiveVoiceExitPayload) => void;
 }
 
 const LIVE_STATUS = {
@@ -140,11 +153,16 @@ export function VoiceComposerRuntime({
   onLiveOpenAsset,
   onLiveOpenArtifact,
   onLiveSend,
+  onLiveExit,
   ...composerProps
 }: VoiceComposerRuntimeProps) {
   const { busy, onSend, onStop } = composerProps;
   const [draft, setDraft] = useState('');
-  const [liveOpen, setLiveOpen] = useState(false);
+  /* 门槛相位机取代 liveOpen 布尔：entering/exiting 期间面板已挂载但会话未开始。 */
+  const [threshold, setThreshold] = useState<LiveVoiceThresholdPhase>('desk');
+  const [entryCapture, setEntryCapture] =
+    useState<LiveVoiceEntryCapture | null>(null);
+  const liveOpen = threshold !== 'desk';
   const [muted, setMuted] = useState(false);
   const [liveTranscriptBaselineIds, setLiveTranscriptBaselineIds] = useState<
     readonly string[]
@@ -221,8 +239,9 @@ export function VoiceComposerRuntime({
   const liveStart = live.start;
   const liveCancel = live.cancel;
 
+  /* 先过门再落座：entering 完成（onEntered→voice）前不启动 voice session。 */
   useEffect(() => {
-    if (!liveOpen || muted) {
+    if (threshold !== 'voice' || muted) {
       liveCancel();
       return;
     }
@@ -233,7 +252,7 @@ export function VoiceComposerRuntime({
     ) {
       liveStart();
     }
-  }, [live.status, liveCancel, liveOpen, liveStart, muted]);
+  }, [live.status, liveCancel, threshold, liveStart, muted]);
 
   useEffect(() => {
     if (busy || pendingInterruptionRef.current === null) return;
@@ -334,14 +353,42 @@ export function VoiceComposerRuntime({
   const displayedLiveAssets = busy
     ? (liveContextSnapshot?.assets ?? liveAssets)
     : liveAssets;
-  const closeLive = useCallback(() => {
-    interruptSpeech();
-    setLiveOpen(false);
+  const applyThresholdEvent = useCallback((event: LiveVoiceThresholdEvent) => {
+    setThreshold((current) => reduceLiveVoiceThreshold(current, event));
+  }, []);
+  const handleEntered = useCallback(
+    () => applyThresholdEvent('ENTERED'),
+    [applyThresholdEvent],
+  );
+  const handleExited = useCallback(
+    () => applyThresholdEvent('EXITED'),
+    [applyThresholdEvent],
+  );
+
+  /* 唯一收尾路径：相位回到 desk 时清理会话态、释放采集池并归还焦点；
+     entering 取消与 exiting 动画完成殊途同归，都经这里。 */
+  const prevThresholdRef = useRef<LiveVoiceThresholdPhase>('desk');
+  useEffect(() => {
+    const previous = prevThresholdRef.current;
+    prevThresholdRef.current = threshold;
+    if (threshold !== 'desk' || previous === 'desk') return;
     setLiveTranscriptBaselineIds([]);
     setLiveContextSnapshot(null);
+    setEntryCapture(null);
     runtime.disposeLiveCapturePool?.();
     requestAnimationFrame(() => liveLaunchButtonRef.current?.focus());
-  }, [interruptSpeech, runtime]);
+  }, [threshold, runtime]);
+
+  /* 出室：先停语音、同步组装带回 payload（信笺写库与退场动画并行、
+     不在关键路径上等网络），再进入 exiting；动画完成由 onExited 收尾。 */
+  const requestCloseLive = useCallback(() => {
+    interruptSpeech();
+    const payload = assembleLiveVoiceExitPayload({
+      sessionTranscript: liveSessionTranscript,
+    });
+    if (payload) onLiveExit?.(payload);
+    applyThresholdEvent('EXIT');
+  }, [applyThresholdEvent, interruptSpeech, liveSessionTranscript, onLiveExit]);
 
   return (
     <>
@@ -364,21 +411,25 @@ export function VoiceComposerRuntime({
               artifacts={liveArtifacts}
               citations={liveCitations}
               tools={liveTools}
+              thresholdPhase={threshold}
+              entryCapture={entryCapture}
+              onEntered={handleEntered}
+              onExited={handleExited}
               onToggleAsset={onLiveToggleAsset}
               onUploadAsset={onLiveUploadAsset}
               onOpenAsset={(assetId) => {
-                closeLive();
+                requestCloseLive();
                 onLiveOpenAsset?.(assetId);
               }}
               onOpenArtifact={(artifactId) => {
-                closeLive();
+                requestCloseLive();
                 onLiveOpenArtifact?.(artifactId);
               }}
               onToggleMute={() => {
                 if (!muted) interruptSpeech();
                 setMuted((value) => !value);
               }}
-              onClose={closeLive}
+              onClose={requestCloseLive}
             />
           ) : (
             <LiveVoiceLaunchButton
@@ -388,12 +439,16 @@ export function VoiceComposerRuntime({
               }
               onClick={() => {
                 speech.prepare();
+                /* 同一帧冻结位置与数据：纸从案上哪里起飞，飞进茶室时就从哪里出发。 */
+                setEntryCapture(
+                  captureLiveVoiceEntry(liveLaunchButtonRef.current),
+                );
                 setLiveTranscriptBaselineIds(
                   liveTranscript.map((entry) => entry.id),
                 );
                 setLiveContextSnapshot(freezeLiveVoiceContext(liveAssets));
                 setMuted(false);
-                setLiveOpen(true);
+                applyThresholdEvent('ENTER');
               }}
               title={liveReason ?? '开始 Live Voice'}
             />
@@ -433,6 +488,7 @@ export function VoiceComposer(
       text: string,
       context: LiveVoiceContextSnapshot,
     ) => void;
+    readonly onLiveExit?: (payload: LiveVoiceExitPayload) => void;
   },
 ) {
   const capability = useVoiceCapabilityQuery();

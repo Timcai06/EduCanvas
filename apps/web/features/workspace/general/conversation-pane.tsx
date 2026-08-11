@@ -14,6 +14,7 @@ import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GENERAL_MENU_ACTIONS } from './general-chat-config';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { LiveVoiceContextSnapshot } from '@/features/voice/live-voice-context';
+import type { LiveVoiceExitPayload } from '@/features/voice/live-voice-bring-back';
 
 /**
  * 消息与 Composer（W02）。
@@ -54,6 +55,8 @@ export interface ConversationPaneProps {
   onUploadLiveAsset: (file: File, kind: 'image' | 'document') => Promise<void>;
   onOpenStatusCard: (artifactId: string) => void;
   onDismissStatusCard: () => void;
+  /** Live 出室瞬间回调（EXIT 时同步触发）：信笺等带回写库与退场动画并行。 */
+  onLiveExit?: (payload: LiveVoiceExitPayload) => void;
 }
 
 export function ConversationPane({
@@ -85,6 +88,7 @@ export function ConversationPane({
   onUploadLiveAsset,
   onOpenStatusCard,
   onDismissStatusCard,
+  onLiveExit,
 }: ConversationPaneProps) {
   const showStatusCard = generation !== null && generation.phase !== 'confirm';
   const liveAssistantMessage = [...messages]
@@ -258,6 +262,7 @@ export function ConversationPane({
           onLiveUploadAsset={onUploadLiveAsset}
           onLiveOpenAsset={onOpenAsset}
           onLiveOpenArtifact={onOpenArtifact}
+          onLiveExit={onLiveExit}
         />
       </div>
     </div>

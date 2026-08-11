@@ -12,6 +12,10 @@ import type {
   LiveVoiceContextAsset,
   LiveVoiceToolItem,
 } from './live-voice-context';
+import type {
+  LiveVoiceEntryCapture,
+  LiveVoiceThresholdPhase,
+} from './live-voice-threshold';
 import { LiveVoiceVisualStage } from './live-voice-visual-stage';
 import './live-voice-panel.css';
 import './live-voice-orb.css';
@@ -39,6 +43,14 @@ export interface LiveVoicePanelProps {
   readonly onOpenArtifact?: (artifactId: string) => void;
   readonly onToggleMute: () => void;
   readonly onClose: () => void;
+  /** 门槛相位：面板在 entering/exiting 期间已挂载，转场编排据此推进。 */
+  readonly thresholdPhase?: LiveVoiceThresholdPhase;
+  /** 入室捕获（按钮与桌面语境纸的位置快照）；exiting 时用于 orb 归位。 */
+  readonly entryCapture?: LiveVoiceEntryCapture | null;
+  /** 入场时间线完成回调（reduced-motion 下挂载后即时触发）。 */
+  readonly onEntered?: () => void;
+  /** 退场时间线完成回调（reduced-motion 下即时触发）。 */
+  readonly onExited?: () => void;
 }
 
 export interface LiveVoiceTranscriptEntry {
@@ -128,6 +140,10 @@ export function LiveVoicePanel({
   onOpenArtifact,
   onToggleMute,
   onClose,
+  thresholdPhase,
+  entryCapture = null,
+  onEntered,
+  onExited,
 }: LiveVoicePanelProps) {
   const rootRef = useRef<HTMLDialogElement>(null);
   const activeTranscript = resolveLiveVoiceActiveTranscript({
@@ -141,6 +157,12 @@ export function LiveVoicePanel({
     phase,
     activeTranscript?.id ?? `live-hint-${muted ? 'muted' : phase}`,
     audioLevel,
+    {
+      thresholdPhase: thresholdPhase ?? 'voice',
+      entryCapture,
+      onEntered,
+      onExited,
+    },
   );
 
   useEffect(() => {
@@ -252,6 +274,31 @@ export function LiveVoicePanel({
           </button>
         </div>
       </section>
+      {thresholdPhase === 'entering' && entryCapture !== null ? (
+        <div data-live-flight-proxies aria-hidden="true">
+          {Object.entries(entryCapture.assetRects).map(([assetId, rect]) => {
+            const asset = assets.find((candidate) => candidate.id === assetId);
+            return (
+              <div
+                key={assetId}
+                data-live-flight-proxy={assetId}
+                className="live-voice-flight-proxy"
+                style={{
+                  left: rect.x,
+                  top: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                }}
+              >
+                {asset?.kind === 'image' && asset.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={asset.previewUrl} alt="" />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </dialog>
   );
 
