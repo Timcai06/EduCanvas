@@ -120,14 +120,9 @@ export function useLiveTranscriptionContinuity({
     }
     if (status !== 'failed') return undefined;
     if (activationStartPendingRef.current) return undefined;
-    const delay = resolveLiveAsrRecoveryDelay(
-      consecutiveFailuresRef.current,
-    );
+    const delay = resolveLiveAsrRecoveryDelay(consecutiveFailuresRef.current);
     if (delay === null) {
-      const exhaustedTimer = window.setTimeout(
-        () => setRecovering(false),
-        0,
-      );
+      const exhaustedTimer = window.setTimeout(() => setRecovering(false), 0);
       return () => window.clearTimeout(exhaustedTimer);
     }
     consecutiveFailuresRef.current += 1;

@@ -180,8 +180,6 @@ export function VoiceComposerRuntime({
   const [activeDictation, setActiveDictation] = useState<
     'realtime' | 'batch' | null
   >(null);
-  const [realtimeDictationUnavailable, setRealtimeDictationUnavailable] =
-    useState(false);
   const liveLaunchButtonRef = useRef<HTMLButtonElement>(null);
   const pendingInterruptionRef = useRef<{
     readonly text: string;
@@ -215,13 +213,10 @@ export function VoiceComposerRuntime({
     );
   }, [realtimeDictation.partialText]);
 
-  /* 实时供应商短暂失败不能同时拖垮 Dictation：本页后续录音退回已经独立
-     鉴权、独立闸门的批量 ASR，避免在同一次录音上偷偷重试或重复提交。 */
-  useEffect(() => {
-    if (realtimeDictation.status !== 'failed' || !dictation.enabled) return;
-    setRealtimeDictationUnavailable(true);
-    setActiveDictation('batch');
-  }, [dictation.enabled, realtimeDictation.status]);
+  /* 实时供应商短暂失败不能同时拖垮 Dictation：失败状态本身就是降级信号，
+     无需再复制一份 React state；批量 ASR 可用时，本页后续录音直接走它。 */
+  const realtimeDictationUnavailable =
+    realtimeDictation.status === 'failed' && dictation.enabled;
 
   const speech = useLiveSpeechPlayback({
     enabled: liveOpen && !muted,
