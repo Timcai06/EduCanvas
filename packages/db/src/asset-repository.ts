@@ -787,6 +787,8 @@ export class DrizzleAssetRepository {
         producerVersion: 'v1',
         mimeType,
         status: 'ready',
+        /* original 不携带文档质量维度（ADR-0026 决定 6）。 */
+        quality: 'unavailable',
         byteSize: input.byteSize,
         createdAt: now,
         updatedAt: now,
@@ -802,6 +804,9 @@ export class DrizzleAssetRepository {
           producerVersion: 'v1',
           mimeType: 'text/plain',
           status: 'ready',
+          /* 同步提供的正文（如 link 网页导入）是直接解码文本，
+             不是结构化转换失败后的回退（ADR-0026 决定 2/6）。 */
+          quality: 'structured',
           byteSize: Buffer.byteLength(extractedText, 'utf8'),
           createdAt: now,
           updatedAt: now,
