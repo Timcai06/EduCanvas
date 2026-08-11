@@ -176,7 +176,9 @@ export async function submitMineruTask(
   const form = new FormData();
   form.append(
     'files',
-    new Blob([params.fileBytes], { type: params.contentType }),
+    /* 拷贝收窄为 Uint8Array<ArrayBuffer>：TS 5.7 后 BlobPart 不接受
+       ArrayBufferLike 视图（如 SharedArrayBuffer 背景的调用方字节）。 */
+    new Blob([new Uint8Array(params.fileBytes)], { type: params.contentType }),
     params.filename,
   );
   form.append('backend', 'hybrid-engine');
