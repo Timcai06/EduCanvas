@@ -77,6 +77,10 @@ mineru -p /path/to/your.pdf -o ~/mineru-output --api-url http://127.0.0.1:8000
 | 服务启动但日志目录没生成 | 日志路径若写 `/var/log/`，普通用户无写权限会静默失败；改用 `~/mineru-api.log`（本手册步骤 5 已默认） |
 | 想停服务 | `kill` 掉 nohup 的进程；想固化常驻可改 systemd service（见下） |
 | 完整卸载 | `conda remove -n mineru --all` |
+| 转换报「缺 pipeline 依赖」/ `No module named 'six'` | 典型假象：真实根因是 `six` 未装（MinerU 内置 pytorchocr 依赖它但 pyproject 未声明）。`pip install six` 后重启服务即可；先跑 `python -c "import six"` 验证再排查其他 |
+| 报 `no relationship of type officeDocument` | **非标准 docx**（转换/爬取工具生成，包结构缺 officeDocument 关系），与 MinerU 无关——用 `python -c "import docx; docx.Document('x.docx')"` 复现即可确认，直接换源文件 |
+| `.doc` 老格式（2003）不支持 | office 后端只认 `.docx/.pptx/.xlsx`，`.doc` 会报 `No supported documents found`；先经 LibreOffice/WPS 转 `.docx` 再喂 |
+| 并发限制重启后恢复默认 | `MINERU_API_MAX_CONCURRENT_REQUESTS` 是 shell 级 env，`export` 后重启终端即丢；要长期生效就固化进 systemd 或写入 `~/.bashrc` |
 
 ## 四、注意事项（安全/运维）
 
