@@ -13,25 +13,43 @@ vi.mock('@educanvas/db', () => ({
   }),
 }));
 
-const { read } = vi.hoisted(() => ({ read: vi.fn() }));
+const { read, put } = vi.hoisted(() => ({ read: vi.fn(), put: vi.fn() }));
 vi.mock('@educanvas/agent-runtime', () => ({
   LocalObjectStorage: vi.fn(function () {
-    return { read, put: vi.fn() };
+    return { read, put };
   }),
 }));
 
-const { extract } = vi.hoisted(() => ({ extract: vi.fn() }));
+/* MinerU 三步协议与结果读取全部 mock（真网络在 fake server 集成测试覆盖）。 */
+const { extract, submit, wait, fetchResult, readMd } = vi.hoisted(() => ({
+  extract: vi.fn(),
+  submit: vi.fn(),
+  wait: vi.fn(),
+  fetchResult: vi.fn(),
+  readMd: vi.fn(),
+}));
 vi.mock('@educanvas/asset-processing', async () => {
   const actual = await vi.importActual<
     typeof import('@educanvas/asset-processing')
   >('@educanvas/asset-processing');
-  return { ...actual, extractAssetText: extract };
+  return {
+    ...actual,
+    extractAssetText: extract,
+    submitMineruTask: submit,
+    waitForMineruTask: wait,
+    fetchMineruResult: fetchResult,
+    readMineruMarkdown: readMd,
+  };
 });
 
-import { AssetExtractionError } from '@educanvas/asset-processing';
+import {
+  AssetExtractionError,
+  MineruClientError,
+} from '@educanvas/asset-processing';
 import { extractAssetTextTask } from './extract-asset-text';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
+const SHA = expect.stringMatching(/^[a-f0-9]{64}$/);
 
 function run(attempts = 1, maxAttempts = 3) {
   return extractAssetTextTask({ jobId: JOB_ID }, {
@@ -39,9 +57,16 @@ function run(attempts = 1, maxAttempts = 3) {
   } as never);
 }
 
+function pending(mimeType: string, storageKey = 'assets/a') {
+  repo.beginTextExtractionAttempt.mockResolvedValue({ storageKey, mimeType });
+}
+
 describe('assets:extract_text', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.MINERU_BASE_URL;
+    read.mockResolvedValue(new Uint8Array([1]));
+    put.mockResolvedValue(undefined);
   });
 
   it('已终结的任务安静退出，不重复解析', async () => {
@@ -54,16 +79,15 @@ describe('assets:extract_text', () => {
     expect(repo.settleTextExtraction).not.toHaveBeenCalled();
   });
 
-  it('成功时写入 ready 终态', async () => {
-    repo.beginTextExtractionAttempt.mockResolvedValue({
-      storageKey: 'assets/a',
-      mimeType: 'application/pdf',
-    });
-    read.mockResolvedValue(new Uint8Array([1]));
+  /* ---------------- direct_decode 路由（TXT/Markdown） ---------------- */
+
+  it('TXT 直接解码不调用 MinerU（ADR-0026 决定 2）', async () => {
+    pending('text/plain');
     extract.mockResolvedValue('课程资料');
 
     await run();
 
+    expect(submit).not.toHaveBeenCalled();
     expect(repo.settleTextExtraction).toHaveBeenCalledWith({
       jobId: JOB_ID,
       outcome: {
@@ -72,32 +96,153 @@ describe('assets:extract_text', () => {
         derivedStorageKey: expect.stringMatching(
           /^derived\/text\/[a-f0-9-]+\/[a-f0-9]{64}\.txt$/,
         ),
-        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+        checksum: SHA,
       },
     });
   });
 
-  it('解析失败是确定性的，写终态而不是抛给队列重试', async () => {
-    repo.beginTextExtractionAttempt.mockResolvedValue({
-      storageKey: 'assets/a',
-      mimeType: 'application/pdf',
+  /* ---------------- mineru 路由：降级路径 ---------------- */
+
+  it('MinerU 未配置时 PDF 走纯文本降级（缺省 degraded_plain_text）', async () => {
+    pending('application/pdf');
+    extract.mockResolvedValue('PDF 纯文本');
+
+    await run();
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'ready',
+        extractedText: 'PDF 纯文本',
+        derivedStorageKey: expect.stringMatching(/\.txt$/),
+        checksum: SHA,
+      },
     });
-    read.mockResolvedValue(new Uint8Array([1]));
-    extract.mockRejectedValue(new AssetExtractionError('pdf_text_unavailable'));
+  });
+
+  it('MinerU 服务不可用时降级为纯文本抽取', async () => {
+    pending('application/pdf');
+    submit.mockRejectedValue(new MineruClientError('mineru_unreachable'));
+    extract.mockResolvedValue('降级文本');
+
+    await run();
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'ready',
+        extractedText: '降级文本',
+        derivedStorageKey: expect.stringMatching(/\.txt$/),
+        checksum: SHA,
+      },
+    });
+  });
+
+  it('结果 zip 损坏（缺 index.md）时降级为纯文本抽取', async () => {
+    pending('application/pdf');
+    submit.mockResolvedValue({
+      taskId: 't1',
+      statusUrl: 'u1',
+      resultUrl: 'r1',
+    });
+    wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
+    fetchResult.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    readMd.mockRejectedValue(new MineruClientError('mineru_result_invalid'));
+    extract.mockResolvedValue('降级文本');
+
+    await run();
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'ready',
+        extractedText: '降级文本',
+        derivedStorageKey: expect.stringMatching(/\.txt$/),
+        checksum: SHA,
+      },
+    });
+  });
+
+  /* ---------------- mineru 路由：结构化成功 ---------------- */
+
+  it('MinerU 成功落 structured 质量与 Markdown 表示', async () => {
+    process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
+    pending('application/pdf', 'uploads/fixture/讲义.pdf');
+    submit.mockResolvedValue({
+      taskId: 't1',
+      statusUrl: 'u1',
+      resultUrl: 'r1',
+    });
+    wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
+    fetchResult.mockResolvedValue(new Uint8Array([0x50, 0x4b]));
+    /* readMineruMarkdown 是同步纯函数，mock 必须同步返回（不能是 Promise）。 */
+    readMd.mockImplementation(() => '# 结构化标题\n\n正文。');
+
+    await run();
+
+    /* 结构化原包与 md 文本两个对象都写入存储。 */
+    expect(put).toHaveBeenCalledTimes(2);
+    const keys = put.mock.calls.map(([c]) => c.key);
+    expect(keys.some((k) => k.endsWith('.zip'))).toBe(true);
+    expect(keys.some((k) => k.endsWith('.md'))).toBe(true);
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: '讲义.pdf',
+        contentType: 'application/pdf',
+      }),
+    );
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'ready',
+        extractedText: '# 结构化标题\n\n正文。',
+        derivedStorageKey: expect.stringMatching(/\.md$/),
+        checksum: SHA,
+        quality: 'structured',
+        mimeType: 'text/markdown',
+      },
+    });
+  });
+
+  it('结构化对象写入失败是瞬时错误，抛给队列重试而不是降级', async () => {
+    process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
+    pending('application/pdf');
+    submit.mockResolvedValue({
+      taskId: 't1',
+      statusUrl: 'u1',
+      resultUrl: 'r1',
+    });
+    wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
+    fetchResult.mockResolvedValue(new Uint8Array([0x50, 0x4b]));
+    readMd.mockResolvedValue('# 标题');
+    /* 第一次 put（zip）失败：内容没存上不能标记结构化成功。 */
+    put.mockRejectedValueOnce(new Error('EACCES'));
+
+    await expect(run()).rejects.toThrow('EACCES');
+    expect(repo.settleTextExtraction).not.toHaveBeenCalled();
+  });
+
+  /* ---------------- 通用失败路径（沿用原语义） ---------------- */
+
+  it('解析失败是确定性的，写终态而不是抛给队列重试', async () => {
+    pending('text/plain');
+    extract.mockRejectedValue(
+      new AssetExtractionError('text_content_unavailable'),
+    );
 
     await run();
 
     expect(repo.settleTextExtraction).toHaveBeenCalledWith({
       jobId: JOB_ID,
-      outcome: { status: 'failed', failureCode: 'pdf_text_unavailable' },
+      outcome: { status: 'failed', failureCode: 'text_content_unavailable' },
     });
   });
 
   it('读取字节失败可能是瞬时的，抛给队列重试而不是写终态', async () => {
-    repo.beginTextExtractionAttempt.mockResolvedValue({
-      storageKey: 'assets/a',
-      mimeType: 'application/pdf',
-    });
+    pending('text/plain');
     read.mockRejectedValue(new Error('EACCES'));
 
     await expect(run()).rejects.toThrow('EACCES');
@@ -105,10 +250,7 @@ describe('assets:extract_text', () => {
   });
 
   it('最后一次未知失败写安全终态，不把业务任务永久留在处理中', async () => {
-    repo.beginTextExtractionAttempt.mockResolvedValue({
-      storageKey: 'assets/a',
-      mimeType: 'application/pdf',
-    });
+    pending('text/plain');
     read.mockRejectedValue(new Error('包含本地路径的私有错误'));
 
     await run(3, 3);
