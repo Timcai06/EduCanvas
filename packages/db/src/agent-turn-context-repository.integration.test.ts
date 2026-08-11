@@ -602,4 +602,113 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
     expect(readBack?.selectedAssetVersionIds).toHaveLength(1);
     expect(readBack).toEqual(created.snapshot);
   });
+
+  it('0054 前旧行（未冻结表示身份）可原样重放，不因 hash 算法演进冲突', async () => {
+    const fixture = await createContextFixture('legacy-row');
+    const material = {
+      builderVersion: 'agent-context-v2',
+      includedMessageIds: fixture.includedMessageIds,
+      selectedAssetVersionIds: fixture.selectedAssetVersionIds,
+      selectedAssetRepresentations: fixture.selectedAssetVersionIds.map(
+        () => null,
+      ),
+      omittedMessageCount: 2,
+      characterCount: 60,
+    };
+    /* 手插 0054 前旧形状行：selected_asset_representations 为 '[]' 且
+       contextHash 不含表示字段（旧算法）。新代码重试同 Operation 必须兼容。 */
+    const legacyHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          builderVersion: material.builderVersion,
+          includedMessageIds: material.includedMessageIds,
+          selectedAssetVersionIds: material.selectedAssetVersionIds,
+          omittedMessageCount: material.omittedMessageCount,
+          characterCount: material.characterCount,
+        }),
+      )
+      .digest('hex');
+    const [legacyRow] = await getDatabase()
+      .insert(schema.turnContextSnapshots)
+      .values({
+        agentOperationId: fixture.operationId,
+        builderVersion: material.builderVersion,
+        includedMessageIds: material.includedMessageIds,
+        selectedAssetVersionIds: material.selectedAssetVersionIds,
+        selectedAssetRepresentations: [],
+        omittedMessageCount: material.omittedMessageCount,
+        characterCount: material.characterCount,
+        contextHash: legacyHash,
+      })
+      .returning();
+
+    const replayed = await new DrizzleAgentTurnContextRepository(
+      getDatabase(),
+    ).createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material,
+    });
+
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.snapshot.id).toBe(legacyRow!.id);
+    expect(replayed.snapshot.selectedAssetRepresentations).toEqual([]);
+    /* 旧行仍受不可变事实保护：预算变化即冲突。 */
+    await expect(
+      new DrizzleAgentTurnContextRepository(getDatabase()).createOrGet({
+        operationId: fixture.operationId,
+        actorId: fixture.actorId,
+        material: { ...material, characterCount: 61 },
+      }),
+    ).rejects.toBeInstanceOf(TurnContextConflictError);
+  });
+
+  it('表示身份是冻结事实：同一 Operation 重放带不同表示 → 冲突', async () => {
+    const fixture = await createContextFixture('representation-freeze');
+    const repository = new DrizzleAgentTurnContextRepository(getDatabase());
+    const base = {
+      builderVersion: 'agent-context-v2',
+      includedMessageIds: fixture.includedMessageIds,
+      selectedAssetVersionIds: fixture.selectedAssetVersionIds,
+      omittedMessageCount: 2,
+      characterCount: 60,
+    };
+    const identity = {
+      kind: 'text' as const,
+      quality: 'structured' as const,
+      variant: 'default',
+      producer: 'mineru',
+      producerVersion: 'mineru.v1',
+    };
+    const created = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material: {
+        ...base,
+        selectedAssetRepresentations: [identity],
+      },
+    });
+    expect(created.replayed).toBe(false);
+    /* 同 Operation 以「无表示身份」重放 → 冻结事实冲突。 */
+    await expect(
+      repository.createOrGet({
+        operationId: fixture.operationId,
+        actorId: fixture.actorId,
+        material: {
+          ...base,
+          selectedAssetRepresentations: [null],
+        },
+      }),
+    ).rejects.toBeInstanceOf(TurnContextConflictError);
+    /* 相同表示重放 → 幂等成功。 */
+    const replayed = await repository.createOrGet({
+      operationId: fixture.operationId,
+      actorId: fixture.actorId,
+      material: {
+        ...base,
+        selectedAssetRepresentations: [identity],
+      },
+    });
+    expect(replayed.replayed).toBe(true);
+  });
 });

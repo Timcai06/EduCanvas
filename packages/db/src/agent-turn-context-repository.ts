@@ -166,6 +166,21 @@ function immutableFieldsMatch(
   row: typeof turnContextSnapshots.$inferSelect,
   input: ReturnType<typeof prepareTurnContextMaterial>,
 ): boolean {
+  /* ADR-0026 第 5 节：旧行（0054 前）未冻结表示身份，selected_asset_representations
+     默认 '[]'，且 contextHash 不含表示字段。对其只比较当时能表达的事实
+     （构建器/消息/版本/预算），hash 与表示身份跳过——重试不能改变这些事实，
+     历史 Turn 允许继续读取；新行（0055 后）仍做全字段含 hash 核对。 */
+  if (row.selectedAssetRepresentations.length === 0) {
+    return (
+      row.builderVersion === input.builderVersion &&
+      row.omittedMessageCount === input.omittedMessageCount &&
+      row.characterCount === input.characterCount &&
+      JSON.stringify(row.includedMessageIds) ===
+        JSON.stringify(input.includedMessageIds) &&
+      JSON.stringify(row.selectedAssetVersionIds) ===
+        JSON.stringify(input.selectedAssetVersionIds)
+    );
+  }
   return (
     row.builderVersion === input.builderVersion &&
     row.contextHash === input.contextHash &&

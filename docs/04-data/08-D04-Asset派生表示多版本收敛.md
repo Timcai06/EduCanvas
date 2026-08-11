@@ -97,7 +97,11 @@
   **派生图片路径已于 E2 切换**（2026-08-11）——structured 表示 + Provider 声明 image 能力时，
   manifest 图片按 position 排序、白名单 MIME（png/jpeg/webp）过滤后进 native image parts，
   逐张核对 byteSize+sha256（不符 → 完整性失败），与用户上传原生图共享
-  MAX_NATIVE_IMAGES/MAX_NATIVE_IMAGE_BYTES 预算；manifest 缺失按数据损坏明确失败。
+  MAX_NATIVE_IMAGES/MAX_NATIVE_IMAGE_BYTES 预算；manifest 缺失按数据损坏明确失败；
+  **旧行重放兼容已于 E3 固化**（2026-08-11）——0054 前旧行 `selected_asset_representations='[]'`
+  且 contextHash 不含表示字段，重放（createOrGet 幂等重试）时只比较旧行能表达的事实
+  （构建器/消息/版本/预算），跳过 hash 与表示身份；历史 Turn 允许继续读取，
+  重试不因 hash 算法演进冲突；新行（0055 后）仍做全字段含 hash 核对。
 
 ## 8. backfill
 
