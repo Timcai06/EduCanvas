@@ -5,6 +5,7 @@ import {
   ASSET_PREVIEW_MAX_INPUT_BYTES,
   AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
   VIDEO_SOURCE_MAX_INPUT_BYTES,
+  rewriteMarkdownImageRefs,
 } from '@educanvas/asset-processing';
 import {
   AssetAccessError,
@@ -66,6 +67,32 @@ async function resolveTranscriptionText(
     }
   }
   return version.transcriptionText;
+}
+
+/**
+ * ADR-0026 决定 3/6：读取默认 text 表示的派生 Markdown，图片引用投影为
+ * 已鉴权资源 URL（D1 资源路由逐次复验权限），校验和与声明不一致或对象
+ * 缺失时按无表示处理（调用方回退原格式预览）。截断到结构化阅读上限。
+ */
+async function resolveStructuredMarkdown(
+  representation: NonNullable<OwnedStoredAssetVersion['textRepresentation']>,
+  assetId: string,
+): Promise<string | null> {
+  try {
+    const bytes = await readStoredAssetBytes(representation.derivedStorageKey);
+    const checksum = createHash('sha256').update(bytes).digest('hex');
+    if (checksum !== representation.checksum) {
+      throw new Error('asset_representation_checksum_mismatch');
+    }
+    const markdown = rewriteMarkdownImageRefs(
+      new TextDecoder().decode(bytes),
+      (relativePath) =>
+        `/api/v1/chat/assets/${encodeURIComponent(assetId)}/resources/${relativePath}`,
+    );
+    return markdown.slice(0, 120_000);
+  } catch {
+    return null;
+  }
 }
 
 export class AssetPreviewError extends Error {
@@ -206,18 +233,41 @@ export async function loadOwnedAssetPreviewDetail(input: {
     version.mimeType ===
     'application/vnd.openxmlformats-officedocument.wordprocessingml'
   ) {
-    const bytes = await readStoredAssetBytes(version.storageKey);
-    const result = await mammoth.convertToHtml({
-      buffer: Buffer.from(bytes),
-    });
+    /* ADR-0026 决定 2/6：MinerU 结构化派生可用时优先提供结构化阅读视图，
+       原件下载入口始终保留（决定 1：不把派生 Markdown 冒充原始 DOCX）。 */
+    const representation = version.textRepresentation;
+    const structured =
+      representation &&
+      representation.status === 'ready' &&
+      representation.quality === 'structured'
+        ? await resolveStructuredMarkdown(representation, version.assetId)
+        : null;
+    let content = '';
+    const warnings: string[] = [];
+    if (!structured) {
+      /* 降级/处理中/失败或无表示时保持 mammoth 原格式预览。 */
+      const bytes = await readStoredAssetBytes(version.storageKey);
+      const result = await mammoth.convertToHtml({
+        buffer: Buffer.from(bytes),
+      });
+      content = result.value.slice(0, 500_000);
+      warnings.push(...result.messages.map((m) => m.message));
+    }
     return {
       preview: {
         kind: 'docx',
         fileName: version.displayName,
         mimeType:
           'application/vnd.openxmlformats-officedocument.wordprocessingml',
-        content: result.value.slice(0, 500_000),
-        warnings: result.messages.map((m) => m.message),
+        content,
+        warnings,
+        representation: representation
+          ? {
+              quality: representation.quality,
+              markdown: structured ?? undefined,
+            }
+          : null,
+        downloadUrl: `/api/v1/chat/assets/${encodeURIComponent(version.assetId)}/file?download=1`,
       },
       canvasResource,
     };
@@ -320,6 +370,32 @@ export async function readOwnedAssetPreviewFile(input: {
   if (
     bytes.byteLength !== version.byteSize ||
     bytes.byteLength > maxBytes ||
+    createHash('sha256').update(bytes).digest('hex') !== version.contentHash
+  ) {
+    throw new AssetPreviewError('preview_unavailable', 422);
+  }
+  return {
+    bytes,
+    mimeType: version.mimeType,
+    fileName: version.displayName,
+  };
+}
+
+/**
+ * 读取经所有权校验的原件字节供下载（ADR-0026 决定 1：Office 等浏览器无法
+ * 忠实预览的格式保留原件下载入口）。任何 MIME 都允许下载；字节数与内容
+ * hash 必须与 Version 声明一致，防止对象被篡改后外泄。调用方只能以内联
+ * 或 attachment、nosniff 响应返回，不得接受客户端传入的 storageKey。
+ */
+export async function readOwnedAssetDownload(input: {
+  identity: AnonymousIdentity;
+  spaceId: string;
+  assetId: string;
+}): Promise<{ bytes: Uint8Array; mimeType: string; fileName: string }> {
+  const version = await loadStoredVersion(input);
+  const bytes = await readStoredAssetBytes(version.storageKey);
+  if (
+    bytes.byteLength !== version.byteSize ||
     createHash('sha256').update(bytes).digest('hex') !== version.contentHash
   ) {
     throw new AssetPreviewError('preview_unavailable', 422);
