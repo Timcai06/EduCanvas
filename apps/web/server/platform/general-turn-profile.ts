@@ -74,13 +74,22 @@ function nativeImageCandidates(
   return [
     {
       segment: {
-        id: `asset-native:${images.map((image) => image.versionId).join(',')}`,
+        /* 派生图多张共享同一版本，part id 用 resourcePath 区分；用户上传图无
+           resourcePath，直接以版本号标识。 */
+        id: `asset-native:${images
+          .map((image) =>
+            image.resourcePath
+              ? `${image.versionId}:${image.resourcePath}`
+              : image.versionId,
+          )
+          .join(',')}`,
         kind: 'asset' as const,
         content: modelMessageText(message),
         priority: 95,
         required: true,
-        // 按消息内实际顺序登记全部 Asset Version，账本才能重建本轮完整图集。
-        assetVersionIds: images.map((image) => image.versionId),
+        /* 账本只登记唯一 Asset Version：同版本的多张派生图重复登记会被
+           validateIds 拒绝；重建本轮完整图集依靠消息内顺序 + part id。 */
+        assetVersionIds: [...new Set(images.map((image) => image.versionId))],
       },
       message,
     },
@@ -197,6 +206,8 @@ ${IMAGE_TOOL_GUIDANCE}`
                 priority: 90 - index,
                 required: true,
                 assetVersionId: segment.reference.versionId,
+                /* ADR-0026 第 5 节：实际表示身份随段冻结进 Context Snapshot。 */
+                assetRepresentation: segment.representation,
               },
               message: { role: 'user' as const, content },
             };

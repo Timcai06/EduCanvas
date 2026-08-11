@@ -61,7 +61,54 @@ const manifestSchema = z
   .strict();
 
 /** C3 布局：文本表示的对象固定是 derived/<jobId>/index.md。 */
-const INDEX_MD_SUFFIX = '/index.md';
+export const INDEX_MD_SUFFIX = '/index.md';
+
+/**
+ * 解析后的派生资源清单（C3 buildMineruManifest 写入结构的读取端投影）。
+ * Agent 物化层与资源路由共用同一清单，避免两处解析规则漂移。
+ */
+export interface DerivedManifest {
+  markdown: {
+    relativePath: string;
+    sha256: string;
+    byteSize: number;
+    mimeType: string;
+  };
+  images: ReadonlyArray<{
+    relativePath: string;
+    sha256: string;
+    byteSize: number;
+    mimeType: string;
+    position: number;
+  }>;
+}
+
+/** manifest 缺失或结构不符。错误语义由调用方决定（资源路由转 404，Agent 物化转完整性失败）。 */
+export class DerivedManifestError extends Error {
+  constructor() {
+    super('derived manifest invalid');
+    this.name = 'DerivedManifestError';
+  }
+}
+
+/** 读取并校验派生资源清单（manifest.json），失败抛 DerivedManifestError。 */
+export async function loadDerivedManifest(
+  prefix: string,
+): Promise<DerivedManifest> {
+  let parsed: ReturnType<typeof manifestSchema.safeParse>;
+  try {
+    const bytes = await readStoredAssetBytes(`${prefix}/manifest.json`);
+    parsed = manifestSchema.safeParse(
+      JSON.parse(new TextDecoder().decode(bytes)),
+    );
+  } catch {
+    throw new DerivedManifestError();
+  }
+  if (!parsed.success) {
+    throw new DerivedManifestError();
+  }
+  return parsed.data;
+}
 
 /**
  * 读取经所有权校验的派生资源。resourcePath 必须是 manifest 声明的相对路径
@@ -103,14 +150,9 @@ export async function readOwnedAssetResource(input: {
     -INDEX_MD_SUFFIX.length,
   );
 
-  let manifest: z.infer<typeof manifestSchema>;
+  let manifest: DerivedManifest;
   try {
-    const manifestBytes = await readStoredAssetBytes(`${prefix}/manifest.json`);
-    const parsed = manifestSchema.safeParse(
-      JSON.parse(new TextDecoder().decode(manifestBytes)),
-    );
-    if (!parsed.success) throw new Error('asset_manifest_invalid');
-    manifest = parsed.data;
+    manifest = await loadDerivedManifest(prefix);
   } catch {
     throw new AssetResourceError('resource_not_found', 404);
   }

@@ -227,6 +227,7 @@ describe('WebGeneralProfile 原生图片输入', () => {
     versionId: 'version-1',
     mimeType: 'image/png' as const,
     data: 'iVBORw0KGgo=',
+    resourcePath: null,
   };
 
   it('把多张图片合并进一条消息，不逐张占用 segment 名额', async () => {
@@ -274,6 +275,31 @@ describe('WebGeneralProfile 原生图片输入', () => {
 
     const candidate = plan.context.sourcesAndAssets[0]!;
     expect(modelMessageText(candidate.message)).toBe(candidate.segment.content);
+  });
+
+  it('同一版本的多张派生图只登记唯一 Asset Version，part id 用 resourcePath 区分', async () => {
+    const derivedA = {
+      ...image,
+      versionId: 'version-1',
+      resourcePath: 'images/fig1.png',
+    };
+    const derivedB = {
+      ...image,
+      versionId: 'version-1',
+      resourcePath: 'images/fig2.png',
+    };
+    const plan = await createProfile({
+      assetContext: { ...assetContext, nativeImages: [derivedA, derivedB] },
+    }).prepare({ command, turn });
+
+    const segment = plan.context.sourcesAndAssets[0]!.segment as {
+      id?: string;
+      assetVersionIds?: readonly string[];
+    };
+    expect(segment.id).toBe(
+      'asset-native:version-1:images/fig1.png,version-1:images/fig2.png',
+    );
+    expect(segment.assetVersionIds).toEqual(['version-1']);
   });
 
   it('没有原生图片时不产生任何额外 segment', async () => {

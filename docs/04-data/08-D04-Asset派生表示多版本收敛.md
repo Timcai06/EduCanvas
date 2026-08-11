@@ -91,7 +91,13 @@
 - 新 representation 存在（ready + storage key + checksum）→ 读新权威（对象内容并校验完整性）；
 - 仅有旧字段（无 representation 或对象缺失）→ 按冻结规则回退 `transcriptionText`；
 - 新写入不再只落旧字段（representation 权威 + 镜像同事务）；
-- 镜像读取端（agent context materialize）继续读旧字段镜像（双写窗口内一致）。
+- 镜像读取端（agent context materialize）：**文档文本路径已于 E1 切换**（2026-08-11）——
+  structured 读 derived 对象并核对 SHA-256、degraded/无表示回退 extractedText 镜像、
+  processing/failed 明确失败；音频 transcription 镜像路径保持（双写窗口内一致，见 §11 注记）；
+  **派生图片路径已于 E2 切换**（2026-08-11）——structured 表示 + Provider 声明 image 能力时，
+  manifest 图片按 position 排序、白名单 MIME（png/jpeg/webp）过滤后进 native image parts，
+  逐张核对 byteSize+sha256（不符 → 完整性失败），与用户上传原生图共享
+  MAX_NATIVE_IMAGES/MAX_NATIVE_IMAGE_BYTES 预算；manifest 缺失按数据损坏明确失败。
 
 ## 8. backfill
 
@@ -123,7 +129,7 @@
 - **旧字段退出条件**（第一阶段不删除，物理删除归属后续任务）：
   1. 回填完成：transcription 旧字段 live 零数据（无回填负担）；extractedText 镜像保持；
   2. 新写入切换完成：✅（本任务 6 个写入点全部切 identity upsert）；
-  3. 读取切换完成：transcription ✅（preview API 已切 representation 优先）；agent context（materialize 镜像读取）未切换——双写窗口内；
+  3. 读取切换完成：transcription ✅（preview API 已切 representation 优先）；agent context 文档文本路径 ✅（E1，2026-08-11：structured 读 derived 对象 + SHA-256 核对，degraded/无表示回退镜像，processing/failed 明确失败；音频 transcription 镜像路径保留，待转录回填证据后再切）；
   4. 生产调用证据为零：transcriptionText/transcriptionMetadata 需在双写窗口结束后再审计；
   5. 回退窗口结束：0053 应用后一个发布周期；
   6. 物理删除任务归属：后续 D 线任务（与 D05/D06 相邻排期），本任务不删除。
