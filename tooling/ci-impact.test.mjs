@@ -19,6 +19,7 @@ describe('CI impact classification', () => {
         windows: false,
         runtime_pressure: false,
         e2e: false,
+        agent_eval: false,
         dependency_review: false,
         release_evidence: false,
         desktop: false,
@@ -88,6 +89,7 @@ describe('CI impact classification', () => {
       windows: false,
       runtime_pressure: false,
       e2e: false,
+      agent_eval: false,
       dependency_review: true,
       release_evidence: false,
       desktop: true,
@@ -119,6 +121,7 @@ describe('CI impact classification', () => {
       runtime_pressure: false,
       // D06：纯 DB 内部改动不再自动支付 Chromium E2E（路由原则 1）
       e2e: false,
+      agent_eval: false,
       dependency_review: false,
       release_evidence: false,
       desktop: false,
@@ -168,10 +171,36 @@ describe('CI impact classification', () => {
       windows: false,
       runtime_pressure: false,
       e2e: true,
+      agent_eval: false,
       dependency_review: false,
       release_evidence: false,
       desktop: false,
     });
+  });
+
+  it('routes Agent contract changes to deterministic eval without charging pure UI or Desktop', () => {
+    for (const path of [
+      'packages/agent-runtime/src/agent-loop.ts',
+      'packages/model-gateway/src/openai-compatible.ts',
+      'packages/db/src/knowledge-hybrid-retrieval.ts',
+      'apps/web/server/platform/general-turn-profile.ts',
+      'tooling/evals/agent/v1/cases.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).agent_eval, true, path);
+    }
+    assert.equal(
+      classifyChangedPaths(['apps/web/features/voice/live-voice-panel.tsx'])
+        .agent_eval,
+      false,
+    );
+    assert.equal(
+      classifyChangedPaths(['apps/desktop/src/renderer/pet.tsx']).agent_eval,
+      false,
+    );
+    assert.equal(
+      classifyChangedPaths(['docs/06-quality/03-测试与评估.md']).agent_eval,
+      false,
+    );
   });
 
   it('compares pull requests from the merge base rather than base-branch churn', () => {
@@ -194,6 +223,7 @@ describe('CI impact classification', () => {
       windows: 'skipped',
       runtime_pressure: 'skipped',
       e2e: 'skipped',
+      agent_eval: 'skipped',
       release_evidence: 'skipped',
       desktop_build: 'skipped',
     };
@@ -219,6 +249,7 @@ describe('CI impact classification', () => {
           windows: 'success',
           runtime_pressure: 'success',
           e2e: 'failure',
+          agent_eval: 'success',
           release_evidence: 'success',
           desktop_build: 'success',
         },
@@ -341,6 +372,8 @@ describe('D06 lane split routing', () => {
       assert.match(workflow, new RegExp(`^\\s+${lane}:`, 'm'));
     }
     assert.doesNotMatch(workflow, /^\s+INTEGRATION_EXPECTED:/m);
+    assert.match(workflow, /^\s+AGENT_EVAL_EXPECTED:/m);
+    assert.match(workflow, /^\s+AGENT_EVAL_RESULT:/m);
 
     const migrationJob = workflow.slice(
       workflow.indexOf('\n  migration-integration:'),
@@ -367,6 +400,7 @@ describe('D06 lane split routing', () => {
         windows: 'skipped',
         runtime_pressure: 'skipped',
         e2e: 'skipped',
+        agent_eval: 'skipped',
         dependency_review: 'skipped',
         release_evidence: 'success',
         desktop_build: 'skipped',
@@ -462,6 +496,7 @@ describe('CI workflow scheduling contract', () => {
       'desktop-build',
       'runtime-pressure',
       'e2e',
+      'agent-eval',
       'release-evidence',
       'checks',
     ]) {
@@ -477,5 +512,35 @@ describe('CI workflow scheduling contract', () => {
       /steps\.browser_e2e_smoke\.outcome == 'success'/,
     );
     assert.match(jobBlock(ui, 'ui'), /steps\.ui_review\.outcome == 'success'/);
+  });
+
+  it('collects independent nightly evidence and publishes one SHA-bound CI artifact', () => {
+    for (const name of ['runtime-pressure', 'e2e']) {
+      const block = jobBlock(ci, name);
+      assert.match(block, /github\.event_name == 'schedule'/);
+      assert.match(block, /github\.event_name == 'workflow_dispatch'/);
+      assert.match(block, /always\(\)/);
+    }
+    const agentEval = jobBlock(ci, 'agent-eval');
+    assert.match(agentEval, /always\(\)/);
+    assert.doesNotMatch(agentEval, /quality-static|quality-tests/);
+    assert.match(agentEval, /educanvas_agent_eval/);
+    assert.match(agentEval, /pnpm test:eval/);
+    assert.doesNotMatch(agentEval, /secrets\./);
+
+    const releaseEvidence = jobBlock(ci, 'release-evidence');
+    assert.match(releaseEvidence, /Validate release evidence draft/);
+    assert.match(releaseEvidence, /--mode draft/);
+    assert.match(releaseEvidence, /Validate release readiness/);
+    assert.match(releaseEvidence, /--mode release --sha/);
+
+    const checks = jobBlock(ci, 'checks');
+    assert.match(checks, /ci-evidence\.mjs/);
+    assert.match(checks, /ci-evidence-\$\{\{/);
+    const generator = readFileSync(
+      new URL('./quality/ci-evidence.mjs', import.meta.url),
+      'utf8',
+    );
+    assert.match(generator, /requiredFailures/);
   });
 });
