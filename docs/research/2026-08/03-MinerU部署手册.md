@@ -31,8 +31,10 @@ conda create -n mineru python=3.11 -y
 conda activate mineru
 python --version    # 应输出 3.11.x
 
-# ─── 2. 安装 MinerU（含 GPU 版 torch 依赖）────────
-pip install mineru
+# ─── 2. 安装 MinerU ──────────────────────────────
+# ⚠️ 仅 `pip install mineru` 只装核心（office 解析 + API 服务），不含 torch！
+# torch 在 extras 里：pipeline（PDF 小模型）+ vlm（hybrid 的 VLM 部分）都要
+pip install "mineru[pipeline,vlm]" -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ─── 3. 确认 torch 认到 GPU（关键自检）───────────
 python -c "import torch; print('CUDA:', torch.cuda.is_available(), '|', torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
@@ -69,6 +71,7 @@ mineru -p /path/to/your.pdf -o /opt/mineru-output --api-url http://127.0.0.1:800
 | 情况 | 处理 |
 |------|------|
 | 模型下载卡住/失败 | 换源重试：`export MINERU_MODEL_SOURCE=huggingface` 再跑 `mineru-models-download`；或 `pip install -U huggingface_hub` 后重试 |
+| 装了 mineru 但 `import torch` 报 No module | 缺 extras：补 `pip install "mineru[pipeline,vlm]"`（见第二步） |
 | 第 3 步 CUDA=False | 按上面 index-url 重装 GPU 版 torch（这是最常见坑：pip 默认可能解析到 CPU torch） |
 | 服务起不来 / OOM | 确认已设 `MINERU_API_MAX_CONCURRENT_REQUESTS=1`；内存不足时缩 `--enable-vlm-preload`（去掉预载，首个任务慢一点但不 OOM） |
 | 想停服务 | `kill` 掉 nohup 的进程；想固化常驻可改 systemd service（见下） |
