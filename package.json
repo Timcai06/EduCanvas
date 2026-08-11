@@ -25,6 +25,7 @@
     "test:eval:harness": "pnpm --filter @educanvas/db exec vitest run --root ../../tooling/evals --config ../../tooling/evals/vitest.config.ts",
     "test:eval:rag": "pnpm --filter @educanvas/db exec vitest run --root ../../tooling/evals --config ../../tooling/evals/vitest.config.ts rag-eval.test.ts",
     "test:eval": "pnpm test:eval:harness && node tooling/evals/eval-gate.mjs",
+    "provider:canary": "pnpm --filter @educanvas/model-gateway canary",
     "test:integration": "turbo test:integration --filter=@educanvas/db --filter=@educanvas/worker --concurrency=1",
     "pretest:e2e": "pnpm build",
     "test:e2e": "playwright test",

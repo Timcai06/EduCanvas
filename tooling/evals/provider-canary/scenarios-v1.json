@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "live-voice-provider-v1",
+  "turnsPerScenario": 2,
+  "scenarios": [
+    {
+      "id": "zh-photosynthesis",
+      "text": "今天我们学习光合作用。"
+    },
+    {
+      "id": "zh-gravity",
+      "text": "请解释重力为什么让物体下落。"
+    }
+  ]
+}

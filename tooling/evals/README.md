@@ -47,3 +47,18 @@ pnpm test:eval
 数据集定义在 `dataset-v1/` 与 `agent/v1/`，门槛位于 `baselines/`。任何语料、
 query、golden、Agent case 或评分轴变更必须新增版本（v2…），不得覆盖历史
 baseline。报告明确限定为合成集回归证据，不宣称真实课程语义质量。
+
+## Protected Provider Canary
+
+`provider-canary/` 是与上述离线 eval 分离的真实供应商探针。它只由
+`.github/workflows/provider-canary.yml` 的 `workflow_dispatch` 启动，并绑定需要
+人工批准的 `provider-canary` GitHub Environment；普通 PR、main push 与 nightly
+均不会读取 DashScope Secret 或产生模型费用。
+
+- `scenarios-v1.json` 最多 5 个冻结场景，每场景固定 2 次 Provider operation
+  （CosyVoice TTS → 内存重采样 → Paraformer ASR）；当前 v1 为 2 个场景、4 次调用。
+- PCM 只在 runner 内存中存在，不写文件、不上传；summary 只保存场景 ID、成功率、
+  p50/p95、相似度和稳定错误码，不保存输入正文、识别文本、Provider body 或 Secret。
+- workflow 10 分钟超时；初期只作为趋势证据，不进入普通 PR required checks。
+- GitHub Environment 未配置 Secret 时只会让人工 canary 失败，不影响文字聊天、
+  Dictation、Live fake-provider E2E 或常规 CI。

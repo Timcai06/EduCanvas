@@ -27,6 +27,7 @@ describe('E2E suite routing', () => {
       'general-chat-flow.spec.ts',
       'hydration.spec.ts',
       'learning-flow.spec.ts',
+      'live-voice-flow.spec.ts',
       'profile-activity.spec.ts',
       'sandbox-preview.spec.ts',
     ]);
@@ -62,5 +63,23 @@ describe('E2E suite routing', () => {
     assert.match(ui, /playwright install --with-deps chromium firefox/);
     assert.match(ui, /--config playwright\.ui\.config\.ts/);
     assert.match(ui, /Full UI review/);
+  });
+
+  it('keeps Live Voice browser evidence synthetic and Provider-independent', () => {
+    const story = readFileSync(
+      resolve(e2eRoot, 'live-voice-flow.spec.ts'),
+      'utf8',
+    );
+    const fixture = readFileSync(
+      resolve(e2eRoot, 'fixtures/live-voice-fixture.ts'),
+      'utf8',
+    );
+
+    assert.equal(story.match(/test\(\s*['"]@smoke\b/g)?.length, 1);
+    assert.match(story, /speechAbort/);
+    assert.match(story, /asset-processing-1/);
+    assert.match(fixture, /MediaStreamDestination/);
+    assert.match(fixture, /voice-fixture\.invalid/);
+    assert.doesNotMatch(fixture, /DASHSCOPE_API_KEY|SILICONFLOW_API_KEY/);
   });
 });
