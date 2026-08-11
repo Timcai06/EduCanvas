@@ -10,7 +10,10 @@ export const requestQuit = (): void => {
   app.quit();
 };
 
-export function createTray(win: BrowserWindow): Tray {
+export function createTray(
+  win: BrowserWindow,
+  options: { onSignOut?: () => void | Promise<unknown> } = {},
+): Tray {
   const icon = nativeImage.createFromPath(
     join(__dirname, '../../assets/icon.png'),
   );
@@ -23,6 +26,12 @@ export function createTray(win: BrowserWindow): Tray {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示助手', click: () => win.show() },
+      {
+        label: '退出登录',
+        click: () => {
+          void options.onSignOut?.();
+        },
+      },
       { type: 'separator' },
       { label: '退出', click: requestQuit },
     ]),

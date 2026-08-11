@@ -63,4 +63,40 @@ export class DrizzleWebSessionRepository {
         ),
       );
   }
+
+  /**
+   * 原子消费一次性 credential：只有尚未撤销且未过期的 hash 能把 revokedAt 从 null
+   * 改为当前时间。随后再次确认主体仍是 active registered user；主体失效时凭据也已
+   * 被消费，按失败关闭处理。
+   */
+  async consumeActiveRegisteredUserIdByTokenHash(input: {
+    tokenHash: string;
+    now?: Date;
+  }): Promise<string | null> {
+    const now = input.now ?? new Date();
+    const [consumed] = await this.database
+      .update(webSessions)
+      .set({ revokedAt: now })
+      .where(
+        and(
+          eq(webSessions.tokenHash, input.tokenHash),
+          gt(webSessions.expiresAt, now),
+          isNull(webSessions.revokedAt),
+        ),
+      )
+      .returning({ userId: webSessions.userId });
+    if (!consumed) return null;
+    const [user] = await this.database
+      .select({ userId: platformUsers.id })
+      .from(platformUsers)
+      .where(
+        and(
+          eq(platformUsers.id, consumed.userId),
+          eq(platformUsers.kind, 'registered'),
+          eq(platformUsers.status, 'active'),
+        ),
+      )
+      .limit(1);
+    return user?.userId ?? null;
+  }
 }

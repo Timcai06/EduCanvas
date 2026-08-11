@@ -8,11 +8,18 @@ import type {
 } from '../shared/voice-result';
 import type { Rect } from '../shared/pet-clamp';
 import type { DragPoint } from '../shared/pet-drag';
+import type { DesktopAuthStatus } from '../shared/desktop-auth';
 
 // renderer 侧类型：window.desktopAssistant / window.desktopPet 由此声明
 // （含此文件的编译单元即全 project 可见）
 declare global {
   interface Window {
+    desktopAuth: {
+      getStatus(): Promise<DesktopAuthStatus>;
+      signIn(): Promise<DesktopAuthStatus>;
+      signOut(): Promise<DesktopAuthStatus>;
+      onStatus(callback: (status: DesktopAuthStatus) => void): () => void;
+    };
     desktopAssistant: {
       turn(text: string, requestId: string): Promise<TurnResult>;
       cancel(requestId: string): void;
@@ -35,6 +42,24 @@ declare global {
     };
   }
 }
+
+contextBridge.exposeInMainWorld('desktopAuth', {
+  getStatus(): Promise<DesktopAuthStatus> {
+    return ipcRenderer.invoke('auth:get-status');
+  },
+  signIn(): Promise<DesktopAuthStatus> {
+    return ipcRenderer.invoke('auth:sign-in');
+  },
+  signOut(): Promise<DesktopAuthStatus> {
+    return ipcRenderer.invoke('auth:sign-out');
+  },
+  onStatus(callback: (status: DesktopAuthStatus) => void): () => void {
+    const listener = (_event: IpcRendererEvent, status: DesktopAuthStatus) =>
+      callback(status);
+    ipcRenderer.on('auth:status', listener);
+    return () => ipcRenderer.removeListener('auth:status', listener);
+  },
+});
 
 /**
  * contextBridge 暴露给 renderer 的 API。

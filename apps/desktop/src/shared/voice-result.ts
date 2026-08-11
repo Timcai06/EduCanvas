@@ -1,5 +1,10 @@
 export type VoiceFailureCode =
-  'backend_offline' | 'timeout' | 'aborted' | 'http' | 'invalid_response';
+  | 'backend_offline'
+  | 'timeout'
+  | 'aborted'
+  | 'http'
+  | 'invalid_response'
+  | 'unauthenticated';
 
 export interface VoiceFailure {
   ok: false;

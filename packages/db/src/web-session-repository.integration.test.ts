@@ -149,6 +149,40 @@ describeWithDatabase('DrizzleWebSessionRepository integration', () => {
     await repo.revokeByTokenHash({ tokenHash: testTokenHash('ghost-revoke') });
   });
 
+  it('consumeActive 对短期 credential 只允许原子消费一次', async () => {
+    await ensureRegisteredUser();
+    const tokenHash = testTokenHash('desktop-code');
+    const expiresAt = new Date(Date.now() + 60_000);
+
+    await repo.create({ userId: registeredUserId, tokenHash, expiresAt });
+    expect(
+      await repo.consumeActiveRegisteredUserIdByTokenHash({ tokenHash }),
+    ).toBe(registeredUserId);
+    expect(
+      await repo.consumeActiveRegisteredUserIdByTokenHash({ tokenHash }),
+    ).toBeNull();
+  });
+
+  it('consumeActive 拒绝过期 credential', async () => {
+    await ensureRegisteredUser();
+    const createdAt = new Date();
+    const tokenHash = testTokenHash('desktop-code-expired');
+    const expiresAt = new Date(createdAt.getTime() + 60_000);
+    await repo.create({
+      userId: registeredUserId,
+      tokenHash,
+      expiresAt,
+      now: createdAt,
+    });
+
+    expect(
+      await repo.consumeActiveRegisteredUserIdByTokenHash({
+        tokenHash,
+        now: new Date(expiresAt.getTime() + 1),
+      }),
+    ).toBeNull();
+  });
+
   it('不同 userId 的 session 互不影响', async () => {
     const otherUserId = '99990000-0000-4000-8000-000000000002';
     const db = getDatabase();

@@ -13,6 +13,7 @@ import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
+import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
 import {
   HANDLED,
   UNHANDLED,
@@ -98,20 +99,19 @@ export async function handleClientRoutes(
   if (url.pathname.startsWith('/v1/client/')) {
     const client = deps.clientTransport ?? null;
     const token = readBearerToken(request.headers.authorization);
-    const claims = client && token ? client.sessionAuth.verify(token) : null;
     if (!client) {
       writeJson(response, 503, {
         error: { code: 'CLIENT_TRANSPORT_DISABLED' },
       });
       return HANDLED;
     }
-    if (!claims) {
+    const auth = await resolveClientAuth(client, token);
+    if (!auth) {
       writeJson(response, 401, { error: { code: 'UNAUTHENTICATED' } });
       return HANDLED;
     }
-    const identity = await client.identities.getActive(claims.userId);
-    if (!identity) {
-      writeJson(response, 401, { error: { code: 'UNAUTHENTICATED' } });
+    const { identity } = auth;
+    if (await handleDesktopRevoke(ctx, client, auth.desktopToken)) {
       return HANDLED;
     }
 

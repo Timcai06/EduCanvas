@@ -1,4 +1,7 @@
-import { app, ipcMain, session } from 'electron';
+import { promises as fileSystem } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { app, ipcMain, safeStorage, session, shell } from 'electron';
+import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
@@ -6,22 +9,84 @@ import { createAssistantProxy } from './assistant-proxy';
 import { createVoiceProxy } from './voice-proxy';
 import { isAllowedVoicePermission } from './voice-permission';
 import { IpcAbortRegistry } from './ipc-abort-registry';
+import { createDesktopSessionStore } from './desktop-session-store';
+import {
+  createDesktopAuthCoordinator,
+  type DesktopAuthCoordinator,
+} from './desktop-auth-service';
+import type { DesktopAuthStatus } from '../shared/desktop-auth';
+import { findDesktopDeepLink } from './native-auth';
 import type { DragPoint } from '../shared/pet-drag';
 import type { VoiceAudioInput } from '../shared/voice-result';
 
-// 仓库本地 Web 约定端口 3101（tooling/local-orchestrator-config.mjs 默认值）。
-// 非标准端口部署可用 EDUCANVAS_DESKTOP_API_BASE 覆盖。
-const BASE_URL =
-  process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://127.0.0.1:3101';
+const WEB_BASE_URL =
+  process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
+  process.env['EDUCANVAS_DESKTOP_API_BASE'] ??
+  'http://127.0.0.1:3101';
+const GATEWAY_BASE_URL =
+  process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
 
-// 单实例锁：二次启动聚焦已有窗口而非再开一个
+// Electron deep-link registration and platform callbacks follow the official pattern:
+// https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
+if (process.defaultApp && process.argv[1]) {
+  app.setAsDefaultProtocolClient(gatewayDesktopProtocol, process.execPath, [
+    resolve(process.argv[1]),
+  ]);
+} else {
+  app.setAsDefaultProtocolClient(gatewayDesktopProtocol);
+}
+
+let authCoordinator: DesktopAuthCoordinator | null = null;
+let queuedDeepLink: string | null = null;
+let petController: PetWindowController | null = null;
+
+function focusPet(): void {
+  if (!petController || petController.win.isDestroyed()) return;
+  petController.win.show();
+  petController.win.focus();
+}
+
+function dispatchDeepLink(raw: string): void {
+  if (!authCoordinator) {
+    queuedDeepLink = raw;
+    return;
+  }
+  void authCoordinator.handleDeepLink(raw).finally(focusPet);
+}
+
+// macOS delivers both cold and warm custom-scheme launches through open-url.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  dispatchDeepLink(url);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  const proxy = createAssistantProxy({ baseUrl: BASE_URL });
-  const voiceProxy = createVoiceProxy({ baseUrl: BASE_URL });
+  const authAccess = {
+    getSession: () => authCoordinator?.getSession() ?? Promise.resolve(null),
+    invalidateSession: () =>
+      authCoordinator?.invalidateSession() ??
+      Promise.resolve({ state: 'signed_out' as const }),
+  };
+  const proxy = createAssistantProxy(authAccess);
+  const voiceProxy = createVoiceProxy(authAccess);
   const abortRegistry = new IpcAbortRegistry();
 
+  ipcMain.handle(
+    'auth:get-status',
+    () =>
+      authCoordinator?.getStatus() ?? Promise.resolve({ state: 'signed_out' }),
+  );
+  ipcMain.handle(
+    'auth:sign-in',
+    () => authCoordinator?.signIn() ?? Promise.resolve({ state: 'signed_out' }),
+  );
+  ipcMain.handle(
+    'auth:sign-out',
+    () =>
+      authCoordinator?.signOut() ?? Promise.resolve({ state: 'signed_out' }),
+  );
   ipcMain.handle(
     'assistant:turn',
     async (_event, payload: { requestId: string; text: string }) => {
@@ -59,8 +124,6 @@ if (!app.requestSingleInstanceLock()) {
     abortRegistry.cancel(requestId);
   });
 
-  // 桌宠窗口动作 IPC（controller 在 whenReady 后创建，注册期为空则安全 no-op）
-  let petController: PetWindowController | null = null;
   ipcMain.handle('pet:drag-move', (_event, p: DragPoint) =>
     petController?.dragMove(p),
   );
@@ -75,15 +138,33 @@ if (!app.requestSingleInstanceLock()) {
     petController?.setMousePassthrough(passthrough),
   );
 
-  app.on('second-instance', () => {
-    if (petController && !petController.win.isDestroyed()) {
-      petController.win.show();
-      petController.win.focus();
-    }
+  // Windows/Linux send custom schemes to the existing single instance command line.
+  app.on('second-instance', (_event, commandLine) => {
+    const deepLink = findDesktopDeepLink(commandLine);
+    if (deepLink) dispatchDeepLink(deepLink);
+    focusPet();
   });
 
-  app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     petController = createPetWindow();
+    const publishAuthStatus = (status: DesktopAuthStatus): void => {
+      if (petController?.win.isDestroyed() === false) {
+        petController.win.webContents.send('auth:status', status);
+      }
+    };
+    authCoordinator = createDesktopAuthCoordinator({
+      webBaseUrl: WEB_BASE_URL,
+      gatewayBaseUrl: GATEWAY_BASE_URL,
+      sessionStore: createDesktopSessionStore({
+        filePath: join(app.getPath('userData'), 'desktop-session.enc'),
+        safeStorage,
+        fileSystem,
+      }),
+      openExternal: (url) => shell.openExternal(url),
+      onStatus: publishAuthStatus,
+    });
+    await authCoordinator.getStatus();
+
     const petWebContentsId = petController.win.webContents.id;
     session.defaultSession.setPermissionRequestHandler(
       (webContents, permission, callback, details) => {
@@ -115,13 +196,21 @@ if (!app.requestSingleInstanceLock()) {
           documentUrl: webContents.getURL(),
         }),
     );
-    createTray(petController.win);
+    createTray(petController.win, {
+      onSignOut: () => authCoordinator?.signOut(),
+    });
+
+    const initialDeepLink =
+      queuedDeepLink ??
+      (process.platform === 'darwin'
+        ? null
+        : findDesktopDeepLink(process.argv));
+    queuedDeepLink = null;
+    if (initialDeepLink) dispatchDeepLink(initialDeepLink);
   });
 
   app.on('before-quit', () => abortRegistry.cancelAll());
-
-  // 覆盖默认「全部窗口关闭即退出」：关闭=隐藏到托盘，仅托盘「退出」结束进程
   app.on('window-all-closed', () => {
-    /* no-op */
+    /* Closing hides to tray; only the tray Quit action terminates the process. */
   });
 }

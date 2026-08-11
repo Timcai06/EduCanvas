@@ -1,166 +1,146 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAssistantProxy } from '../src/main/assistant-proxy';
+import type { StoredDesktopSession } from '../src/main/desktop-session-store';
+import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 
-/** 记录 fetch 调用（URL、headers、body、signal）并返回指定响应的 fake。 */
-function fakeFetch(
-  responder: (info: {
-    url: string;
-    headers: Headers;
-    body: unknown;
-    signal: AbortSignal | null;
-  }) => Response | Promise<Response>,
-) {
-  const calls: Array<{
-    url: string;
-    origin: string | null;
-    secFetchSite: string | null;
-    body: unknown;
-  }> = [];
-  const impl = async (
-    url: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    const body = init?.body ? JSON.parse(String(init.body)) : null;
-    calls.push({
-      url: String(url),
-      origin:
-        (init?.headers as Record<string, string> | undefined)?.['origin'] ??
-        null,
-      secFetchSite:
-        (init?.headers as Record<string, string> | undefined)?.[
-          'sec-fetch-site'
-        ] ?? null,
-      body,
-    });
-    return responder({
-      url: String(url),
-      headers: new Headers(init?.headers),
-      body,
-      signal: init?.signal ?? null,
-    });
+const session: StoredDesktopSession = {
+  token: `ecs1_${'t'.repeat(43)}`,
+  expiresAt: '2026-09-10T08:00:00.000Z',
+  webBaseUrl: 'https://learn.educanvas.example',
+  gatewayBaseUrl: 'https://gateway.educanvas.example',
+  userId: 'user:one',
+  notebookId: 'notebook:bound',
+  conversationId: 'conversation:bound',
+};
+
+function event(
+  sequence: number,
+  value:
+    | { type: 'operation.accepted' }
+    | { type: 'message.delta'; delta: string }
+    | { type: 'operation.completed'; messageId: string },
+): GatewayOperationEvent {
+  return {
+    protocol: 'gateway.v1',
+    eventId: `event:${sequence}`,
+    operationId: 'operation:one',
+    sequence,
+    occurredAt: '2026-08-11T08:00:00.000Z',
+    ...value,
   };
-  return { impl: impl as typeof fetch, calls };
 }
 
-const okJson = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-
-describe('assistant-proxy', () => {
-  it('请求不带 Origin 与 sec-fetch-site 头（通过后端同源检查的无 Origin 分支）', async () => {
-    const { impl, calls } = fakeFetch(() =>
-      okJson({ action: 'unknown', message: 'hi' }),
-    );
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-    });
-    await proxy.turn({ text: '有哪些笔记本' });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.origin).toBeNull();
-    expect(calls[0]!.secFetchSite).toBeNull();
-    expect(calls[0]!.url).toBe('http://localhost:3000/api/v1/assistant/turn');
-  });
-
-  it('每次调用生成新的 clientMessageId（幂等去重键）', async () => {
-    const { impl, calls } = fakeFetch(() =>
-      okJson({ action: 'unknown', message: 'ok' }),
-    );
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-    });
-    await proxy.turn({ text: 'a' });
-    await proxy.turn({ text: 'b' });
-    const [first, second] = calls.map(
-      (c) => (c.body as { clientMessageId: string }).clientMessageId,
-    );
-    expect(first).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(first).not.toBe(second);
-  });
-
-  it('ECONNREFUSED 映射为 backend_offline（本地服务未启动）', async () => {
-    const { impl } = fakeFetch(() => {
-      throw Object.assign(new TypeError('fetch failed'), {
-        cause: { code: 'ECONNREFUSED' },
+describe('remote assistant proxy', () => {
+  it('uses the authorization-bound Conversation/Notebook and aggregates deltas', async () => {
+    const calls: Array<{
+      url: string;
+      authorization: string | null;
+      body: unknown;
+    }> = [];
+    const fetchImpl = (async (input, init) => {
+      const url = String(input);
+      calls.push({
+        url,
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
       });
-    });
+      return new Response(
+        [
+          event(0, { type: 'operation.accepted' }),
+          event(1, { type: 'message.delta', delta: '你好，' }),
+          event(2, { type: 'message.delta', delta: '我是老师。' }),
+          event(3, { type: 'operation.completed', messageId: 'message:one' }),
+        ]
+          .map((value) => JSON.stringify(value))
+          .join('\n'),
+        { headers: { 'content-type': 'application/x-ndjson' } },
+      );
+    }) as typeof fetch;
     const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      fetchImpl,
     });
-    const result = await proxy.turn({ text: 'hi' });
-    expect(result).toMatchObject({ ok: false, code: 'backend_offline' });
-  });
 
-  it('HTTP 429/503 解析 error.message 文案', async () => {
-    const { impl } = fakeFetch(() =>
-      okJson(
-        { error: { code: 'budget_exceeded', message: '今日额度已用完' } },
-        429,
-      ),
-    );
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-    });
-    const result = await proxy.turn({ text: 'hi' });
-    expect(result).toMatchObject({
-      ok: false,
-      code: 'http',
-      message: '今日额度已用完',
-    });
-  });
-
-  it('超过 timeoutMs 映射为 timeout', async () => {
-    const { impl } = fakeFetch(() => new Promise(() => {})); // 永不 resolve
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-      timeoutMs: 50,
-    });
-    const result = await proxy.turn({ text: 'hi' });
-    expect(result).toMatchObject({ ok: false, code: 'timeout' });
-  });
-
-  it('用户 signal 中止映射为 aborted，且信号透传给 fetch', async () => {
-    const received: AbortSignal[] = [];
-    const { impl } = fakeFetch(({ signal }) => {
-      if (signal) received.push(signal);
-      return new Promise(() => {});
-    });
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-    });
-    const ac = new AbortController();
-    const pending = proxy.turn({ text: 'hi' }, ac.signal);
-    ac.abort();
-    const result = await pending;
-    expect(received[0]?.aborted).toBe(true);
-    expect(result).toMatchObject({ ok: false, code: 'aborted' });
-  });
-
-  it('成功响应透传 action/message/artifactId/panel', async () => {
-    const { impl } = fakeFetch(() =>
-      okJson({
-        action: 'open_artifact',
-        message: '已打开',
-        artifactId: 'art-1',
-      }),
-    );
-    const proxy = createAssistantProxy({
-      fetchImpl: impl,
-      baseUrl: 'http://localhost:3000',
-    });
-    const result = await proxy.turn({ text: '打开宇宙导图' });
-    expect(result).toEqual({
+    await expect(proxy.turn({ text: '你好' })).resolves.toEqual({
       ok: true,
-      action: 'open_artifact',
-      message: '已打开',
-      artifactId: 'art-1',
+      action: 'answered',
+      message: '你好，我是老师。',
     });
+    expect(calls).toHaveLength(1);
+    expect(
+      calls.every((call) => call.authorization === `Bearer ${session.token}`),
+    ).toBe(true);
+    expect(calls[0]!.url).toContain('/v1/client/turns');
+    expect(calls[0]!.body).toMatchObject({
+      notebookId: 'notebook:bound',
+      conversationId: 'conversation:bound',
+      parts: [{ type: 'text', text: '你好' }],
+      clientMessageId: expect.stringMatching(/^desktop:/),
+    });
+  });
+
+  it('requires a desktop session', async () => {
+    const withoutSession = createAssistantProxy({
+      getSession: async () => null,
+      invalidateSession: async () => undefined,
+    });
+    await expect(withoutSession.turn({ text: 'hi' })).resolves.toMatchObject({
+      ok: false,
+      code: 'unauthenticated',
+    });
+  });
+
+  it('clears an invalid local session after Gateway 401', async () => {
+    const invalidateSession = vi.fn(async () => undefined);
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession,
+      clientFactory: () => ({
+        async *streamTurn() {
+          throw Object.assign(new Error('unauthenticated'), { status: 401 });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    await expect(proxy.turn({ text: 'hi' })).resolves.toMatchObject({
+      ok: false,
+      code: 'unauthenticated',
+    });
+    expect(invalidateSession).toHaveBeenCalledOnce();
+  });
+
+  it('cancels the accepted Gateway operation when the user aborts', async () => {
+    const cancelOperation = vi.fn(async () => ({
+      status: 'cancelling' as const,
+    }));
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn(_request, options) {
+          yield event(0, { type: 'operation.accepted' });
+          await new Promise<void>((_resolve, reject) =>
+            options?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('aborted', 'AbortError')),
+              { once: true },
+            ),
+          );
+        },
+        cancelOperation,
+      }),
+    });
+    const controller = new AbortController();
+    const pending = proxy.turn({ text: '停止' }, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      code: 'aborted',
+    });
+    expect(cancelOperation).toHaveBeenCalledWith('operation:one');
   });
 });

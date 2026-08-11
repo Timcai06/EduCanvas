@@ -3,6 +3,7 @@
 import { ArrowRight, Eye, EyeSlash } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { assessPasswordRisk } from './password-strength';
+import { USERNAME_HTML_PATTERN } from './username-pattern';
 
 type Mode = 'login' | 'register';
 
@@ -93,7 +94,7 @@ export function AuthForm({
           required
           minLength={3}
           maxLength={32}
-          pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,31}"
+          pattern={USERNAME_HTML_PATTERN}
           className="ec-input h-11 w-full rounded-2xl px-4 text-sm text-ink"
         />
       </label>

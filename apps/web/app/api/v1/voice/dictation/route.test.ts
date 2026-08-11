@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   resolveGateway: vi.fn(),
 }));
 
-vi.mock('@/server/identity/anonymous-identity', () => ({
-  readAnonymousIdentity: mocks.readIdentity,
+vi.mock('@/server/auth/request-identity', () => ({
+  readAuthenticatedRequestIdentity: mocks.readIdentity,
 }));
 vi.mock('@/server/experience-mode', () => ({
   readExperienceMode: mocks.readMode,
@@ -66,7 +66,7 @@ describe('POST /api/v1/voice/dictation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.trustedOrigin.mockReturnValue(true);
-    mocks.readIdentity.mockResolvedValue({ token: '', studentId: 'user:1' });
+    mocks.readIdentity.mockResolvedValue({ userId: 'user:1', source: 'web' });
     mocks.readMode.mockResolvedValue('restricted');
     mocks.resolveGateway.mockReturnValue({
       transcribeAudio: mocks.transcribeAudio,
@@ -93,6 +93,16 @@ describe('POST /api/v1/voice/dictation', () => {
     );
   });
 
+  it('桌面 bearer 主体不依赖浏览器的体验模式 Cookie', async () => {
+    mocks.readIdentity.mockResolvedValue({
+      userId: 'user:desktop',
+      source: 'desktop',
+    });
+    mocks.readMode.mockResolvedValue(null);
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.readMode).not.toHaveBeenCalled();
+  });
+
   it('拒绝伪造为 WebM 的任意字节', async () => {
     const response = await POST(
       request(Uint8Array.from([1, 2, 3, 4, 5]), 'audio/webm'),
@@ -108,7 +118,7 @@ describe('POST /api/v1/voice/dictation', () => {
     mocks.trustedOrigin.mockReturnValue(true);
     mocks.readIdentity.mockResolvedValue(null);
     expect((await POST(request())).status).toBe(401);
-    mocks.readIdentity.mockResolvedValue({ token: '', studentId: 'user:1' });
+    mocks.readIdentity.mockResolvedValue({ userId: 'user:1', source: 'web' });
     mocks.readMode.mockResolvedValue(null);
     expect((await POST(request())).status).toBe(409);
     mocks.readMode.mockResolvedValue('restricted');

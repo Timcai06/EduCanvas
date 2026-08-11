@@ -9,6 +9,7 @@ import type {
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
+  DrizzleWebSessionRepository,
 } from '@educanvas/db';
 import type {
   GatewayClientSessionAuth,
@@ -29,6 +30,11 @@ import type { StreamingTranscriptionTicketStore } from '../streaming-transcripti
 export interface GatewayClientTransport {
   bootstrapToken: string | null;
   sessionAuth: GatewayClientSessionAuth;
+  /** P3 packaged desktop sessions are opaque, revocable hashes in existing web_sessions. */
+  desktopSessions?: Pick<
+    DrizzleWebSessionRepository,
+    'findActiveRegisteredUserIdByTokenHash' | 'revokeByTokenHash'
+  >;
   identities: Pick<
     DrizzleGatewayIdentityRepository,
     'ensureRegistered' | 'getActive'

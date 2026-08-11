@@ -5,6 +5,10 @@ directories:
 files:
   - out/**
   - assets/icon.png # 托盘图标在打包后仍需可用（asar 内 assets/ 下；build/ 是治理禁止段）
+protocols:
+  - name: EduCanvas Desktop
+    schemes:
+      - educanvas
 win:
   icon: assets/icon.ico
   target:

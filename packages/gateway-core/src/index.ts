@@ -12,5 +12,6 @@ export * from './envelopes';
 export * from './events';
 export * from './handoffs';
 export * from './identity';
+export * from './native-client-auth';
 export * from './nodes';
 export * from './routing';

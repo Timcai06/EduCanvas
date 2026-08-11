@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { parseManifest } from '../../shared/pet-manifest';
 import type { PetManifest } from '../../shared/pet-manifest';
@@ -78,6 +78,7 @@ export default function App() {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const walkingRef = useRef(false);
   const pet = window.desktopPet;
+  const desktopAuth = window.desktopAuth;
   const copy = useMemo(() => phaseCopy(phase), [phase]);
   const expanded = phase !== 'idle';
   const active = ACTIVE_PHASES.has(phase);
@@ -134,18 +135,62 @@ export default function App() {
     return () => cancelAnimationFrame(raf);
   }, [manifest, phase, walking]);
 
-  const collapse = (): void => {
+  const collapse = useCallback((): void => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     resetTimerRef.current = null;
     setSnapshot({ phase: 'cancelled' });
     void pet?.setExpanded(false);
-  };
+  }, [pet]);
+
+  useEffect(() => {
+    return desktopAuth.onStatus((status) => {
+      if (status.state === 'signed_in') {
+        setSnapshot({
+          phase: 'success',
+          reply: '登录成功，现在可以点我说话了。',
+        });
+        void pet?.setExpanded(true);
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = setTimeout(collapse, 5000);
+      } else if (status.state === 'error') {
+        setSnapshot({ phase: 'error', error: status.message });
+        void pet?.setExpanded(true);
+      }
+    });
+  }, [collapse, desktopAuth, pet]);
 
   const startSession = async (): Promise<void> => {
     sessionRef.current?.abort();
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     resetTimerRef.current = null;
     setWalking(false);
+    try {
+      const authStatus = await desktopAuth.getStatus();
+      if (authStatus.state !== 'signed_in') {
+        await pet?.setExpanded(true);
+        if (authStatus.state === 'authorizing') {
+          setSnapshot({
+            phase: 'error',
+            error: '请在系统浏览器完成登录，完成后再点我。',
+          });
+          return;
+        }
+        const started = await desktopAuth.signIn();
+        setSnapshot(
+          started.state === 'error'
+            ? { phase: 'error', error: started.message }
+            : {
+                phase: 'error',
+                error: '已打开系统浏览器，请完成登录后返回桌宠。',
+              },
+        );
+        return;
+      }
+    } catch {
+      await pet?.setExpanded(true);
+      setSnapshot({ phase: 'error', error: '暂时无法检查登录状态，请重试。' });
+      return;
+    }
     const controller = new AbortController();
     sessionRef.current = controller;
     setSnapshot({ phase: 'starting' });
