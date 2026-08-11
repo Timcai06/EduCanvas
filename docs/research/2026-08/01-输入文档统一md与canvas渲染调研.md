@@ -89,19 +89,24 @@
 
 ### 对比矩阵（调研中，逐步填充）
 
-**A. 文档→Markdown 转换工具**
+**A. 文档→Markdown 转换工具**（三列绿色=进程内 Node 方案；后三列为 Python 独立服务方案）
 
 | 维度 | anydoc | pandoc | markitdown | docling | marker | MinerU | mammoth(已用) |
 |------|--------|--------|-----------|---------|--------|--------|---------------|
-| 输入格式 | 14 类(doc/docx/ppt/pptx/xls/xlsx/odt/ods/odp/rtf/epub/csv/pdf文本层) | 40+ 标记格式，**无 PDF 输入** | PDF/ppt/docx/xlsx/xls/图片/音频/html/csv/epub | 待调研(A2) | 待调研(A2) | 待调研(A2) | DOCX |
-| md 保真度 | 最高(盲评81，全场第一)；标题/表格(合并格)/列表/脚注/备注/图片alt；**无公式**；扫描PDF需另接OCR | 高且确定；**唯一原生支持公式(OMML→TeX)**；docx表格列宽对齐未实现 | 中等(65)；docx仍走mammoth；PDF词坐标猜表格 | 待调研 | 待调研 | 待调研 | 纯文本 |
-| 依赖/语言 | **Rust→napi-rs 原生.node 插件，进程内跑** | Haskell(CLI/pandoc-server/WASM) | Python(CLI/微服务) | 待调研 | 待调研 | 待调研 | JS |
-| 许可 | **MIT** | **GPL-2.0+** | MIT | 待调研 | 待调研 | 待调研 | 待调研 |
-| 维护活跃度 | 13.6k★，2026-08-10 极活跃 | 45.8k★，极活跃 | 172.9k★，极活跃 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 服务端可跑性 | **进程内 Node≥20，无阻塞** | 子进程/pandoc-server sidecar | 需 Python 运行时 | 待调研 | 待调研 | 待调研 | 已用 |
-| 安全 | 无网络；硬资源上限防zip炸弹；错误分类细 | pandoc-server 零I/O沙箱防SSRF；Lua filter禁用 | 自警SSRF/进程权限I/O；无硬上限 | 待调研 | 待调研 | 待调研 | — |
+| 输入格式 | 14 类(doc/docx/ppt/pptx/xls/xlsx/odt/ods/odp/rtf/epub/csv/pdf文本层) | 40+ 标记格式，**无 PDF 输入** | PDF/ppt/docx/xlsx/xls/图片/音频/html/csv/epub | PDF/DOCX/PPTX/XLSX/HTML/EPUB/LaTeX/图片/邮件等(广) | PDF/图片/PPTX/DOCX/XLSX/HTML/EPUB | PDF 为主+office原生(DOCX/PPTX/XLSX) | DOCX |
+| md 保真度 | 最高(盲评81)；标题/表格(合并格)/列表/脚注/备注/图片alt；**无公式**；扫描PDF另接OCR | 高且确定；**唯一原生公式(OMML→TeX)**；docx表格列宽未实现 | 中等(65)；docx走mammoth；PDF词坐标猜表格 | 中(50.3 benchmark)；公式/多栏/扫描弱项 | 高(自报76，自家基准需保留)；表格启发式+VLM | **最强**：中文/公式/表格/扫描最优；专用表格双模型+公式模型+阅读序 | 纯文本 |
+| 依赖/语言 | **Rust→napi-rs 原生.node 插件，进程内跑** | Haskell(CLI/pandoc-server/WASM) | Python(CLI/微服务) | Python(torch/onnx) | Python+**vLLM/llama.cpp 推理服务** | Python(torch/onnxruntime/PaddleOCR) | JS |
+| 许可 | **MIT** | **GPL-2.0+** | MIT | **MIT** | 代码Apache-2.0，**模型权重OpenRAIL-M商用受限** | Apache2.0+附加条款(**在线服务须署名**，<1亿MAU/<2000万美元免费商用) | 待核实 |
+| 维护活跃度 | 13.6k★，极活跃 | 45.8k★，极活跃 | 172.9k★，极活跃 | 64.6k★，极活跃 | 38.7k★，活跃 | 77.3k★，极活跃 | — |
+| 服务端可跑性 | **进程内 Node≥20，无阻塞** | 子进程/pandoc-server sidecar | 需 Python 运行时 | **独立服务** docling-serve(FastAPI/Redis队列) | 独立服务 + GPU 推理 | **独立服务** mineru-api(异步/tasks)，可路由多GPU | 已用 |
+| 资源消耗 | 无（原生库） | 无 | 无 | CPU可行，模型~1GB | 需 GPU(vLLM)或CPU fast模式 | pipeline: 4GB显存或纯CPU，模型实下~1.5-2GB | — |
+| 安全 | 无网络；硬资源上限防zip炸弹；错误分类细 | pandoc-server 零I/O沙箱；Lua filter禁用 | 自警SSRF；无硬上限 | 离线可跑；无远程服务 | 离线；需本地推理运行时 | 完全离线可跑；ModelScope适配国内 | — |
 
-**A 线初步结论（待 A2 复核）**：**首选 anydoc**——MIT、Node 进程内原生插件、格式覆盖含 PDF、质量分第一，可最小侵入替换现有 mammoth 纯文本管线；共同缺口是**公式**（anydoc/markitdown 无，pandoc 有），若 K12 文档强依赖公式需补一路 pandoc 或走云 OCR。
+**A 线结论**：
+1. **进程内首选 anydoc**（MIT、Node 原生插件、14 格式含 PDF、质量第一），最小侵入替换现有 mammoth 纯文本管线
+2. **公式是共同缺口**：anydoc/markitdown 无公式；pandoc 唯一原生支持（GPL 但可 sidecar 调用）；若 K12 文档强依赖公式需补 pandoc 或 MinerU
+3. **扫描 PDF / 中文教学文档**：三家 Python 工具都需独立转换服务（sidecar REST）——按中文 K12 场景**优先 MinerU pipeline 后端**（中文OCR/公式/表格针对性最强、纯CPU可跑、许可规模内免费但**在线服务须署名**）；**docling 为 MIT 宽松备选**（多格式覆盖、工程化最规整）；**marker 不建议**（模型权重商用受限）
+4. 可选组合：**anydoc 做常规格式进程内转换 + MinerU/docling 做扫描/复杂 PDF 的独立服务**
 
 **B. Mermaid 渲染接入**
 
