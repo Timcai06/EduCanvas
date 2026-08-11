@@ -199,3 +199,27 @@
 - 转换质量验证：需要 1-2 份真实样本文档（PDF + DOCX 含公式）在 Phase 1 实测
 - anydoc 已退出主路线，仅作可选纯文本快速路径留存（见上输入侧说明）
 - 报告落位与后续 PR 时机由用户决定
+
+## 附录 A：anydoc vs MinerU 引擎对比（2026-08-11 源码核实）
+
+> 背景：本轮输入侧决策的核心二选一。anydoc 为"轻量进程内快速路径"候选，MinerU 为"核心转换引擎"。本表逐项对比，每行附源码核实位置（克隆路径 `research-clones/20260811-input-md-canvas/`）。
+
+| 维度 | anydoc | MinerU | 证据来源 |
+|------|--------|--------|----------|
+| 许可 | MIT，无附加条款，最干净 | Apache-2.0 + 附加条款（在线服务须署名；MAU>100M 或月收入>$20M 需商业授权） | `anydoc/LICENSE`；`MinerU/LICENSE.md` |
+| 部署形态 | 进程内 npm 包，Node ≥ 20，预编译二进制（7 平台含 Linux/macOS/Windows × x64/aarch64 + musl） | 独立 Python 服务 `mineru-api`（FastAPI）+ 离线模型；CLI / Docker / 桌面端 | `anydoc/node/package.json`（napi targets）；`MinerU/mineru/cli/fast_api.py` |
+| 集成方式 | 直接 `await toMarkdown(bytes)`，零网络、进程内、libuv 线程池不阻塞事件循环 | HTTP REST：multipart `POST /tasks` → 轮询 `GET /tasks/{id}` → 下载结果 zip | `anydoc/node/README.md`；`MinerU/mineru/cli/fast_api.py:1228-1352` |
+| 资源需求 | 无系统依赖（纯 Rust）；无额外磁盘/内存 | 模型下载 ~2GB、磁盘 20GB+、内存 16GB 起 | `MinerU/README_zh-CN` + `mineru/utils/models_download_utils.py` |
+| GPU | 完全不需要 | office+pipeline 不需要；**高精度 PDF 需 GPU 8GB+**（hybrid/vlm） | `MinerU/mineru/backend/office/docx_analyze.py`（零模型） |
+| 格式覆盖 | 14 种：Word(.doc/.docx/.docm)、PPT、Excel、ODF、RTF、EPUB、CSV、PDF | docx / pptx / xlsx / pdf / txt / md | `anydoc/README.md` Supported formats；`MinerU/mineru/cli/common.py:633` |
+| 转换质量 | 盲测 81 分（100 份真实文档，纯文本类文档；同类第一） | OmniDocBench：pipeline 86.47 / hybrid 95.39 / vlm 95.30 | `anydoc/README.md` Benchmark；`MinerU/README_zh-CN` |
+| 数学公式 | ✗ 无 | ✓ docx OMML→LaTeX（`mineru/model/docx/tools/math/omml.py`）；PDF MFR 模型 | 源码核实 |
+| 扫描件 / OCR | ✗ 无（OCR 仅在 Firecrawl 付费托管 API） | ✓ pipeline 内置 OCR，中文版面/公式针对性最强 | `anydoc/node/README.md`；`MinerU/enum_class.py ModelPath` |
+| 中文文档 | 一般（无专门中文模型） | 强（CJK 语言专项、PaddleOCR 系、中文公式模型） | `MinerU/mineru/utils/enum_class.py` |
+| 输出形态 | 单一 GFM Markdown | 结构化契约：`.md` + `content_list_v2.json`（按页分块）+ `middle.json` + `images/` | `MinerU/docs/zh/reference/output_files.md` |
+| 表格 | GFM 管道表 | 原生 HTML（复杂表保真高，前端需清洗；pipeline 侧未做样式清洗） | `MinerU/backend/pipeline/pipeline_middle_json_mkcontent.py` |
+| 并发 / 认证 | 无服务可运维，零成本 | 默认并发 3（`MINERU_API_MAX_CONCURRENT_REQUESTS`）；**无内置认证**需自建网关；结果保留 24h | `MinerU/mineru/cli/fast_api.py` |
+| 坏文件处理 | reject + `error.code` 细分变体，颗粒度好 | 任务失败仅 `failed` + error 字符串，需 Node 侧解析分类 | `anydoc/node/README.md` Errors；`MinerU/mineru/cli/api_request.py` |
+| 公式定界符 | —（无公式） | 默认 `$$/$`，**可配置**（自定义后前端渲染器须同步） | `MinerU/backend/pipeline/pipeline_middle_json_mkcontent.py` |
+
+**结论**：anydoc 轻、快、免运维、许可干净，但正好缺失 K12 教学文档最需要的**数学公式**与**扫描件 OCR**；MinerU 公式/扫描/中文/结构化输出全覆盖，代价是独立 Python 服务与资源门槛。因此** MinerU 定为核心转换引擎**，anydoc 仅作可选纯文本快速路径（若引入，成本为一次 `npm install` + 一个 ADR）。
