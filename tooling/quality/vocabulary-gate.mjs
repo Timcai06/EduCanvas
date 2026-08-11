@@ -135,6 +135,15 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'web_user_profiles_avatar_check',
   'turn_usage_budget_outcomes_reason_check',
   'operation_continuations_kind_check',
+  // 私人纸面批注与案面布局是协议判别联合；新值需要 renderer/repository 同步支持。
+  'resource_annotations_resource_kind_check',
+  'resource_annotations_author_pen_check',
+  'resource_annotations_kind_check',
+  'resource_annotations_source_check',
+  'resource_annotations_body_check',
+  'notebook_surface_positions_resource_kind_check',
+  'notebook_surface_positions_zone_check',
+  'notebook_surface_positions_rest_state_check',
 ]);
 
 const SCHEMA_SOURCES = [
@@ -218,7 +227,38 @@ export function isLiteralVocabularyClosure(body) {
   return /\$\{[^}]+\}(?:\s*->>\s*'[^']+')?\s*=\s*'[^']*'/i.test(body);
 }
 
-/** 从最新 journal 项读取本轮 migration 的 ADD CHECK，防止手写 SQL 绕过 schema 门禁。 */
+function extractSqlCheckConstraints(statement) {
+  const checks = [];
+  const pattern = /(?:ADD\s+)?CONSTRAINT\s+"([^"]+)"\s+CHECK\s*\(/gi;
+  for (const match of statement.matchAll(pattern)) {
+    const bodyStart = (match.index ?? 0) + match[0].length;
+    let depth = 1;
+    let quoted = false;
+    for (let index = bodyStart; index < statement.length; index += 1) {
+      const character = statement[index];
+      if (character === "'") {
+        if (quoted && statement[index + 1] === "'") {
+          index += 1;
+          continue;
+        }
+        quoted = !quoted;
+      } else if (!quoted && character === '(') depth += 1;
+      else if (!quoted && character === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          checks.push({
+            name: match[1],
+            body: statement.slice(bodyStart, index),
+          });
+          break;
+        }
+      }
+    }
+  }
+  return checks;
+}
+
+/** 从最新 journal 项读取全部 CHECK，防止 CREATE TABLE 或 ALTER 手写 SQL 绕过门禁。 */
 export function extractLatestMigrationChecks() {
   const journal = JSON.parse(
     readFileSync(
@@ -234,12 +274,9 @@ export function extractLatestMigrationChecks() {
     `${latest.tag}.sql`,
   );
   const source = readFileSync(migrationPath, 'utf8');
-  return source.split('--> statement-breakpoint').flatMap((statement) => {
-    const match = /ADD CONSTRAINT "([^"]+)" CHECK \(([\s\S]*)\)\s*;?\s*$/.exec(
-      statement.trim(),
-    );
-    return match ? [{ name: match[1], body: match[2] }] : [];
-  });
+  return source
+    .split('--> statement-breakpoint')
+    .flatMap(extractSqlCheckConstraints);
 }
 
 /** 审计 schema 源码：返回违规的约束名列表（白名单外的成员闭集）。 */

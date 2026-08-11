@@ -81,6 +81,17 @@
 
 `tooling/vocabulary-gate.test.mjs` 固化：231/231 提取、注释/换行防绕过、IN/等值识别、表达式不误判、当前 Schema 零违规、最新 0052 的 13 个 CHECK、正反白名单用例。
 
+### 6.1 后继扩展：Live Voice 私人纸面语义（0054–0055）
+
+- `resource_annotations` 的 resource kind、笔色、批注 kind/source 与 note body shape，
+  以及 `notebook_surface_positions` 的 resource kind、zone/rest state 均是前后端协议
+  判别联合；数据库接受应用不认识的新值会产生无法渲染或无法恢复的私人状态，因此登记为 closed。
+- 两张新表另有 4 个坐标、长度与 JSON shape CHECK，继续按开放格式约束处理。
+- 门禁现会解析最新 Migration 中 `CREATE TABLE ... CONSTRAINT ... CHECK` 和
+  `ALTER TABLE ... ADD CONSTRAINT ... CHECK` 两种形态，避免新表内联 CHECK 绕过审计。
+- 当前 Schema 共 249 个 CHECK；该数字用于 AST 提取完整性回归，不改变 D03 原始
+  231 个 CHECK 的历史审计结论。
+
 ## 7. 可执行回退 SQL
 
 以下 SQL 仅在应用写入已回退、且 13 个字段不存在旧闭集外值时执行：

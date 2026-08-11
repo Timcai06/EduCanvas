@@ -9,11 +9,26 @@
  * touchedArtifactIds 的填充属于 M2+，字段先冻结形状。
  */
 import type { LiveVoiceTranscriptEntry } from './live-voice-panel';
+import type {
+  CanvasAnnotationGeometry,
+  CanvasResourceKind,
+} from '@educanvas/canvas-protocol';
+
+export interface LiveVoiceAnnotationDraft {
+  readonly clientId: string;
+  readonly resourceKind: CanvasResourceKind;
+  readonly resourceId: string;
+  readonly resourceVersionId: string | null;
+  readonly kind: 'circle';
+  readonly geometry: CanvasAnnotationGeometry;
+}
 
 export interface LiveVoiceExitPayload {
   readonly endedAt: number;
   /** 本次 Live 会话内产生的对话（进入前已有的消息已被 baseline 排除）。 */
   readonly sessionTranscript: readonly LiveVoiceTranscriptEntry[];
+  /** Voice 中圈下的朱砂痕迹；由工作区在出室时并行持久化。 */
+  readonly annotations: readonly LiveVoiceAnnotationDraft[];
   /** 会话中打开/生成的产物；M1 恒为空，占位给产物归位。 */
   readonly touchedArtifactIds: readonly string[];
 }
@@ -26,18 +41,25 @@ export interface LiveVoiceExitPayload {
 export function assembleLiveVoiceExitPayload(input: {
   readonly sessionTranscript: readonly LiveVoiceTranscriptEntry[];
   readonly touchedArtifactIds?: readonly string[];
+  readonly annotations?: readonly LiveVoiceAnnotationDraft[];
   readonly now?: number;
 }): LiveVoiceExitPayload | null {
   const sessionTranscript = input.sessionTranscript.filter(
     (entry) => entry.text.trim().length > 0,
   );
   const touchedArtifactIds = input.touchedArtifactIds ?? [];
-  if (sessionTranscript.length === 0 && touchedArtifactIds.length === 0) {
+  const annotations = input.annotations ?? [];
+  if (
+    sessionTranscript.length === 0 &&
+    touchedArtifactIds.length === 0 &&
+    annotations.length === 0
+  ) {
     return null;
   }
   return {
     endedAt: input.now ?? Date.now(),
     sessionTranscript,
+    annotations,
     touchedArtifactIds,
   };
 }

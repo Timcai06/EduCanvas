@@ -379,6 +379,20 @@
       "when": 1786262729175,
       "tag": "0053_silky_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1786441733442,
+      "tag": "0054_hot_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1786443891669,
+      "tag": "0055_sticky_leader",
+      "breakpoints": true
     }
   ]
 }

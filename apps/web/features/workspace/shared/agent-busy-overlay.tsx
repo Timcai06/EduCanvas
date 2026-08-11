@@ -77,7 +77,13 @@ class BusyShaderBoundary extends Component<
   }
 }
 
-export function AgentBusyOverlay({ active }: { active: boolean }) {
+export function AgentBusyOverlay({
+  active,
+  phase = 'thinking',
+}: {
+  active: boolean;
+  phase?: 'thinking' | 'tool' | 'responding';
+}) {
   const reduced = useReducedMotion();
   const documentVisible = useSyncExternalStore(
     subscribeDocumentVisibility,
@@ -122,6 +128,7 @@ export function AgentBusyOverlay({ active }: { active: boolean }) {
       aria-hidden="true"
       className="agent-busy-overlay"
       data-shown={shown ? 'true' : 'false'}
+      data-phase={phase}
     >
       {!canRenderShader ? (
         <div className="agent-busy-fallback" />
@@ -135,14 +142,14 @@ export function AgentBusyOverlay({ active }: { active: boolean }) {
               roundness={0}
               thickness={0.045}
               softness={0.78}
-              intensity={0.2}
-              bloom={0.28}
+              intensity={phase === 'tool' ? 0.26 : 0.2}
+              bloom={phase === 'responding' ? 0.34 : 0.28}
               spots={4}
               spotSize={0.32}
               pulse={0.18}
               smoke={0.34}
               smokeSize={0.7}
-              speed={0.9}
+              speed={phase === 'thinking' ? 0.62 : 0.9}
               scale={1}
             />
           </BusyShaderBoundary>

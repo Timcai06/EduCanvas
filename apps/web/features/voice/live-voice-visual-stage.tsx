@@ -11,6 +11,7 @@ import {
   Waveform,
 } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
+import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
 import {
   MAX_LIVE_CONTEXT_ASSETS,
   liveVoiceAssetStatusLabel,
@@ -32,6 +33,8 @@ export interface LiveVoiceVisualStageProps {
   ) => Promise<void>;
   readonly onOpenAsset?: (assetId: string) => void;
   readonly onOpenArtifact?: (artifactId: string) => void;
+  readonly annotations?: readonly LiveVoiceAnnotationDraft[];
+  readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
 }
 
 function AssetKindIcon({ kind }: { kind: LiveVoiceContextAsset['kind'] }) {
@@ -51,6 +54,8 @@ export function LiveVoiceVisualStage({
   onUploadAsset,
   onOpenAsset,
   onOpenArtifact,
+  annotations = [],
+  onAnnotateAsset,
 }: LiveVoiceVisualStageProps) {
   const firstFocusable = assets.find(
     (asset) => asset.enabled && asset.status === 'ready',
@@ -201,6 +206,66 @@ export function LiveVoiceVisualStage({
             </button>
           ) : null}
         </article>
+      ) : null}
+
+      {focusedAsset?.kind === 'image' &&
+      focusedAsset.previewUrl &&
+      focusedAsset.status === 'ready' &&
+      onAnnotateAsset ? (
+        <div className="live-voice-annotation-wrap">
+          <p>轻点图片，把这一处带回书案</p>
+          <button
+            type="button"
+            className="live-voice-annotation-surface"
+            aria-label={`在 ${focusedAsset.label} 上圈点`}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const centerX = (event.clientX - rect.left) / rect.width;
+              const centerY = (event.clientY - rect.top) / rect.height;
+              const width = 0.18;
+              const height = 0.13;
+              onAnnotateAsset({
+                clientId: crypto.randomUUID(),
+                resourceKind: 'source',
+                resourceId: focusedAsset.id,
+                resourceVersionId: focusedAsset.versionId ?? null,
+                kind: 'circle',
+                geometry: {
+                  x: Math.max(0, Math.min(1 - width, centerX - width / 2)),
+                  y: Math.max(0, Math.min(1 - height, centerY - height / 2)),
+                  width,
+                  height,
+                },
+              });
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={focusedAsset.previewUrl} alt="" />
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              {annotations
+                .filter(
+                  (annotation) => annotation.resourceId === focusedAsset.id,
+                )
+                .map((annotation) => (
+                  <ellipse
+                    key={annotation.clientId}
+                    cx={
+                      (annotation.geometry.x +
+                        (annotation.geometry.width ?? 0.18) / 2) *
+                      100
+                    }
+                    cy={
+                      (annotation.geometry.y +
+                        (annotation.geometry.height ?? 0.13) / 2) *
+                      100
+                    }
+                    rx={((annotation.geometry.width ?? 0.18) / 2) * 100}
+                    ry={((annotation.geometry.height ?? 0.13) / 2) * 100}
+                  />
+                ))}
+            </svg>
+          </button>
+        </div>
       ) : null}
 
       {tools.length > 0 || artifacts.length > 0 || citations.length > 0 ? (

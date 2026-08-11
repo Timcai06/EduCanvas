@@ -23,6 +23,7 @@ describe('assembleLiveVoiceExitPayload', () => {
       'c',
     ]);
     expect(payload?.touchedArtifactIds).toEqual([]);
+    expect(payload?.annotations).toEqual([]);
   });
 
   it('空会话返回 null——空会话不留痕', () => {
@@ -44,6 +45,23 @@ describe('assembleLiveVoiceExitPayload', () => {
       now: NOW,
     });
     expect(payload?.touchedArtifactIds).toEqual(['artifact-1']);
+  });
+
+  it('仅有圈点时仍生成带回 payload', () => {
+    const annotation = {
+      clientId: 'mark-1',
+      resourceKind: 'source' as const,
+      resourceId: '2570e43a-cb28-4bb8-914f-566b1f5539d9',
+      resourceVersionId: null,
+      kind: 'circle' as const,
+      geometry: { x: 0.2, y: 0.3, width: 0.18, height: 0.13 },
+    };
+    const payload = assembleLiveVoiceExitPayload({
+      sessionTranscript: [],
+      annotations: [annotation],
+      now: NOW,
+    });
+    expect(payload?.annotations).toEqual([annotation]);
   });
 });
 

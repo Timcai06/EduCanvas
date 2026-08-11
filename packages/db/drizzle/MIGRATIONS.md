@@ -687,3 +687,36 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - Estimated scale: 本地 28 representations / 14 jobs（默认值回填，0 行
   显式变更）；生产数据规模未验证，D07 承接。
 - 风险: 低——无数据迁移；唯一键扩展不拒绝任何旧合法写入。
+
+## 0054_hot_hex.sql
+
+- 状态: active
+- 语义: 新增 `resource_annotations` 纸面批注表（Live Voice 门槛设计 M2）：
+  canvas-protocol `annotate` action 的持久化实体。多态引用
+  (resource_kind, resource_id) 指向 assets/artifacts（不建 FK，引用语义
+  走 CanvasResource 协议），resource_version_id 记录批注面对的不可变版本；
+  author_pen 区分学生的墨笔（dai）与批改的笔（zhusha）；geometry 为归一化
+  坐标 jsonb；space_id 强 FK 随 Space 删除前清理（生命周期注册表第 32 项）。
+- 锁表: 无用户表锁（CREATE TABLE + CREATE INDEX 只触新表；spaces 的 FK
+  校验取 ACCESS EXCLUSIVE 元数据短锁，引用既有主键，无需验证存量）。
+- 回滚: DROP TABLE resource_annotations，并从生命周期注册表移除第 32 项。
+- N-1: 全新表，老代码不感知；无兼容性问题。
+- Fresh install: 可重放。
+- Data migration: none——只创建空的叶子表与索引，不读取或改写既有业务行。
+- Estimated scale: 新表初始 0 行；批注按用户显式圈点增长，生产规模尚未验证。
+- 风险: 低——新增叶子表，不改动任何既有表结构。
+
+## 0055_sticky_leader.sql
+
+- 状态: active
+- 语义: 新增 `notebook_surface_positions` 私有案面快照表（门槛设计 M3）。
+  主键包含 space、owner_subject、resource_kind 与 resource_id，因此协作成员
+  不会覆盖彼此的注意力位置；zone/rest_state 表达中心、案边、页签和展开、折叠、
+  钉住状态，x/y 使用 0..1 归一化坐标。
+- 锁表: 只创建新表与索引；spaces 外键校验只读取既有主键。
+- 回滚: DROP TABLE notebook_surface_positions，并移除生命周期注册项。
+- N-1: 全新表，旧应用不读取也不写入，兼容。
+- Fresh install: 可重放。
+- Data migration: none——只创建空的私人布局表，不读取或回填既有资源。
+- Estimated scale: 新表初始 0 行；上界随每位成员摆放的资源数线性增长，生产规模尚未验证。
+- 风险: 低——个人布局是可重建派生状态，失败不影响资源或对话事实。

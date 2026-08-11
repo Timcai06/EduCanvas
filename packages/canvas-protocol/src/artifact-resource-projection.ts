@@ -221,17 +221,19 @@ function projectActions(
   if (accessRole === 'viewer' || accessRole === 'contributor') {
     /* 只读角色可查看和下载媒体产物，但不可删除。 */
     if (kind === 'audio_overview' || kind === 'generated_image')
-      return ['view', 'download'];
-    return kind === 'dom_exploration' ? ['view', 'run', 'cancel'] : ['view'];
+      return ['view', 'download', 'annotate'];
+    return kind === 'dom_exploration'
+      ? ['view', 'run', 'cancel', 'annotate']
+      : ['view', 'annotate'];
   }
-  if (kind === 'dom_exploration') return ['view', 'run', 'cancel'];
-  if (kind === 'note') return ['view', 'edit', 'regenerate'];
+  if (kind === 'dom_exploration') return ['view', 'run', 'cancel', 'annotate'];
+  if (kind === 'note') return ['view', 'edit', 'regenerate', 'annotate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
      这两类；不开放 regenerate 才与实际后端能力一致。
      删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
   if (kind === 'audio_overview' || kind === 'generated_image')
-    return ['view', 'download', 'delete'];
-  return ['view', 'regenerate'];
+    return ['view', 'download', 'delete', 'annotate'];
+  return ['view', 'regenerate', 'annotate'];
 }
 
 /**

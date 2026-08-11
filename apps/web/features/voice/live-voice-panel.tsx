@@ -17,6 +17,7 @@ import type {
   LiveVoiceThresholdPhase,
 } from './live-voice-threshold';
 import { LiveVoiceVisualStage } from './live-voice-visual-stage';
+import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
 import './live-voice-panel.css';
 import './live-voice-orb.css';
 
@@ -41,6 +42,8 @@ export interface LiveVoicePanelProps {
   ) => Promise<void>;
   readonly onOpenAsset?: (assetId: string) => void;
   readonly onOpenArtifact?: (artifactId: string) => void;
+  readonly annotations?: readonly LiveVoiceAnnotationDraft[];
+  readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
   readonly onToggleMute: () => void;
   readonly onClose: () => void;
   /** 门槛相位：面板在 entering/exiting 期间已挂载，转场编排据此推进。 */
@@ -138,6 +141,8 @@ export function LiveVoicePanel({
   onUploadAsset,
   onOpenAsset,
   onOpenArtifact,
+  annotations = [],
+  onAnnotateAsset,
   onToggleMute,
   onClose,
   thresholdPhase,
@@ -230,6 +235,8 @@ export function LiveVoicePanel({
           onUploadAsset={onUploadAsset}
           onOpenAsset={onOpenAsset}
           onOpenArtifact={onOpenArtifact}
+          annotations={annotations}
+          onAnnotateAsset={onAnnotateAsset}
         />
 
         <div data-live-copy className="live-voice-transcript-deck">

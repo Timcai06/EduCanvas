@@ -62,6 +62,20 @@ export {
   type VideoProcessingOutcome,
   type VideoTranscriptionMetadata,
 } from './asset-video-repository';
+export {
+  DrizzleResourceAnnotationRepository,
+  isResourceAnnotationGeometry,
+  ResourceAnnotationValidationError,
+  type CreateResourceAnnotationInput,
+  type ResourceAnnotationGeometry,
+  type ResourceAnnotationRow,
+} from './resource-annotation-repository';
+export {
+  DrizzleNotebookSurfacePositionRepository,
+  NotebookSurfacePositionValidationError,
+  type NotebookSurfacePositionRow,
+  type SaveNotebookSurfacePositionInput,
+} from './notebook-surface-position-repository';
 export { MessagePartValidationError } from './message-parts';
 export {
   DrizzlePlatformConversationRepository,

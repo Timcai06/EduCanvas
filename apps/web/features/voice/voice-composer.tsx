@@ -48,6 +48,7 @@ import {
 } from './live-voice-threshold';
 import {
   assembleLiveVoiceExitPayload,
+  type LiveVoiceAnnotationDraft,
   type LiveVoiceExitPayload,
 } from './live-voice-bring-back';
 
@@ -162,6 +163,9 @@ export function VoiceComposerRuntime({
   const [threshold, setThreshold] = useState<LiveVoiceThresholdPhase>('desk');
   const [entryCapture, setEntryCapture] =
     useState<LiveVoiceEntryCapture | null>(null);
+  const [liveAnnotations, setLiveAnnotations] = useState<
+    readonly LiveVoiceAnnotationDraft[]
+  >([]);
   const liveOpen = threshold !== 'desk';
   const [muted, setMuted] = useState(false);
   const [liveTranscriptBaselineIds, setLiveTranscriptBaselineIds] = useState<
@@ -375,6 +379,7 @@ export function VoiceComposerRuntime({
     setLiveTranscriptBaselineIds([]);
     setLiveContextSnapshot(null);
     setEntryCapture(null);
+    setLiveAnnotations([]);
     runtime.disposeLiveCapturePool?.();
     requestAnimationFrame(() => liveLaunchButtonRef.current?.focus());
   }, [threshold, runtime]);
@@ -385,10 +390,17 @@ export function VoiceComposerRuntime({
     interruptSpeech();
     const payload = assembleLiveVoiceExitPayload({
       sessionTranscript: liveSessionTranscript,
+      annotations: liveAnnotations,
     });
     if (payload) onLiveExit?.(payload);
     applyThresholdEvent('EXIT');
-  }, [applyThresholdEvent, interruptSpeech, liveSessionTranscript, onLiveExit]);
+  }, [
+    applyThresholdEvent,
+    interruptSpeech,
+    liveAnnotations,
+    liveSessionTranscript,
+    onLiveExit,
+  ]);
 
   return (
     <>
@@ -411,6 +423,10 @@ export function VoiceComposerRuntime({
               artifacts={liveArtifacts}
               citations={liveCitations}
               tools={liveTools}
+              annotations={liveAnnotations}
+              onAnnotateAsset={(annotation) =>
+                setLiveAnnotations((current) => [...current, annotation])
+              }
               thresholdPhase={threshold}
               entryCapture={entryCapture}
               onEntered={handleEntered}
