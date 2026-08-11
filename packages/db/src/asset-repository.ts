@@ -1130,6 +1130,82 @@ export class DrizzleAssetRepository {
     };
   }
 
+  /**
+   * 供资源路由读取某 Asset 的文本派生表示（ADR-0026 决定 3：响应派生
+   * 资源时重新校验用户、Notebook、Asset 与 Version 权限）。权限复验与
+   * `loadOwnedCurrentStoredVersion` 相同；text 表示采用与转录一致的
+   * 确定性默认选择（ready 优先 → variant/producer default → 字典序）。
+   * 无可用表示返回 null（调用方按 404 处理）。
+   */
+  async loadOwnedTextRepresentation(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<{
+    derivedStorageKey: string;
+    checksum: string;
+    status: 'processing' | 'ready' | 'failed' | 'unavailable';
+    quality: RepresentationQuality;
+    mimeType: string | null;
+  } | null> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const [row] = await this.database
+      .select({ assetId: assets.id, versionId: assetVersions.id })
+      .from(assets)
+      .innerJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          eq(assets.status, 'ready'),
+          eq(assetVersions.status, 'ready'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    const [representation] = await this.database
+      .select({
+        derivedStorageKey: assetRepresentations.derivedStorageKey,
+        checksum: assetRepresentations.checksum,
+        status: assetRepresentations.status,
+        quality: assetRepresentations.quality,
+        mimeType: assetRepresentations.mimeType,
+      })
+      .from(assetRepresentations)
+      .where(
+        and(
+          eq(assetRepresentations.assetVersionId, row.versionId),
+          eq(assetRepresentations.kind, 'text'),
+        ),
+      )
+      .orderBy(...defaultRepresentationOrderBy())
+      .limit(1);
+    if (
+      !representation ||
+      !representation.derivedStorageKey ||
+      !representation.checksum
+    ) {
+      return null;
+    }
+    return {
+      derivedStorageKey: representation.derivedStorageKey,
+      checksum: representation.checksum,
+      status: representation.status as
+        'processing' | 'ready' | 'failed' | 'unavailable',
+      quality: representation.quality as RepresentationQuality,
+      mimeType: representation.mimeType,
+    };
+  }
+
   async materializeOwnedReferences(input: {
     ownerSubjectId: string;
     spaceId: string;
