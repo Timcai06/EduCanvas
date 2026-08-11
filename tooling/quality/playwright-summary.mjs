@@ -14,11 +14,26 @@
  *
  * 只输出聚合数字与测试标题，不采集页面正文。
  */
-import { readFileSync } from 'node:fs';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const [, , resultsPath = 'output/playwright/results.json'] = process.argv;
 const writeSummary = process.argv.includes('--summary');
+const resultsRequired = process.env.PLAYWRIGHT_RESULTS_REQUIRED === 'true';
+
+if (!existsSync(resultsPath)) {
+  const summary = [
+    '### Playwright 结果汇总（Q05）',
+    '',
+    resultsRequired
+      ? `结果文件缺失：\`${resultsPath}\`（测试步骤成功，证据不完整）`
+      : `结果文件未生成：\`${resultsPath}\`（上游测试未成功完成，保留原始失败）`,
+  ].join('\n');
+  if (writeSummary && process.env.GITHUB_STEP_SUMMARY) {
+    writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, 'utf8');
+  }
+  process.stdout.write(`${summary}\n`);
+  process.exit(resultsRequired ? 1 : 0);
+}
 
 /** 递归收集 suite 下所有 test，补上 suite 名与 projectName。 */
 function collectTests(suites, acc = []) {
