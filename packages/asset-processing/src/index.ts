@@ -57,6 +57,11 @@ export {
 } from './mineru-manifest';
 
 export {
+  rewriteMarkdownImageRefs,
+  type ImageRefResolver,
+} from './markdown-image-refs';
+
+export {
   ASSET_PREVIEW_MAX_INPUT_BYTES,
   ASSET_PREVIEW_MAX_CHARACTERS,
   AssetPreviewError,
