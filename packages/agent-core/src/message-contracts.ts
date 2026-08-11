@@ -85,10 +85,13 @@ export type AgentTextPart = z.infer<typeof agentTextPartSchema>;
 export type AgentAssetPart = z.infer<typeof agentAssetPartSchema>;
 export type AgentArtifactPart = z.infer<typeof agentArtifactPartSchema>;
 
+/** 一条多模态消息最多 64 个 Part（通常是 1 段文字 + 63 个来源引用）。 */
+export const MAX_AGENT_MESSAGE_PARTS = 64;
+
 export const agentMessageInputSchema = z
   .object({
     clientMessageId: opaqueIdSchema,
-    parts: z.array(agentMessagePartSchema).min(1).max(32),
+    parts: z.array(agentMessagePartSchema).min(1).max(MAX_AGENT_MESSAGE_PARTS),
   })
   .strict()
   .superRefine((message, context) => {

@@ -2,7 +2,7 @@ import { getDocumentProxy } from 'unpdf';
 import mammoth from 'mammoth';
 
 /** Worker 在读取对象前与读取后都必须执行的输入上限。 */
-export const ASSET_PREVIEW_MAX_INPUT_BYTES = 10 * 1024 * 1024;
+export const ASSET_PREVIEW_MAX_INPUT_BYTES = 25 * 1024 * 1024;
 
 /**
  * 预览渲染的字符上限。

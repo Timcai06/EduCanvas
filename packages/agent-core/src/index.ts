@@ -45,6 +45,7 @@ export {
   agentMessageRoleSchema,
   agentMessageRoles,
   agentTextPartSchema,
+  MAX_AGENT_MESSAGE_PARTS,
   extractAgentMessageText,
   normalizeAgentMessageParts,
   referencedAssetKinds,

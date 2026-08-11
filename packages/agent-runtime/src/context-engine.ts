@@ -2,7 +2,7 @@ import type { AgentTurnContextMaterial } from '@educanvas/agent-core';
 
 export const CONTEXT_ENGINE_VERSION = 'context-engine-v1' as const;
 /** 单个 Context Segment 可登记的 Asset Version 上限；超限 fail closed。 */
-export const MAX_ASSET_VERSIONS_PER_SEGMENT = 32;
+export const MAX_ASSET_VERSIONS_PER_SEGMENT = 64;
 export type ContextSegmentKind =
   | 'profile'
   | 'conversation'
@@ -103,7 +103,7 @@ export function buildAgentContext(input: {
   maxCharacters?: number;
 }): BuiltAgentContext {
   const maxSegments = input.maxSegments ?? 100;
-  const maxCharacters = input.maxCharacters ?? 128_000;
+  const maxCharacters = input.maxCharacters ?? 256_000;
   const memoryVersion =
     input.memory.status === 'available'
       ? input.memory.version
@@ -116,7 +116,7 @@ export function buildAgentContext(input: {
     maxSegments > 100 ||
     !Number.isSafeInteger(maxCharacters) ||
     maxCharacters < 1 ||
-    maxCharacters > 128_000
+    maxCharacters > 512_000
   ) {
     throw new ContextEngineInputError('Context版本或预算无效');
   }
@@ -160,7 +160,7 @@ export function buildAgentContext(input: {
         !segment.id ||
         segment.id.length > 256 ||
         !segment.content.trim() ||
-        segment.content.length > 64_000 ||
+        segment.content.length > 160_000 ||
         !Number.isSafeInteger(segment.priority) ||
         segment.priority < 0 ||
         segment.priority > 100 ||

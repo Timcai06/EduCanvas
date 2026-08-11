@@ -55,6 +55,7 @@ interface InFlightTurn {
   assistantMessageId: string | null;
   terminalReceived: boolean;
   stopConfirmed: boolean;
+  cancelRequested: boolean;
 }
 
 interface PublicRouteError {
@@ -85,6 +86,7 @@ export function useAgentTurn(
   callbacks: AgentTurnClientCallbacks = {},
 ) {
   const safeConnectionError = `${options.assistantLabel}暂时无法连接，请稍后重试。`;
+  const cancelEndpoint = options.cancelEndpoint;
   const [state, dispatch] = useReducer(
     teachingTurnReducer,
     initialMessages,
@@ -94,6 +96,46 @@ export function useAgentTurn(
   const callbacksRef = useRef(callbacks);
   const mounted = useRef(true);
   const [controlError, setControlError] = useState<string | null>(null);
+
+  const cancelAcceptedTurn = useCallback(
+    async (current: InFlightTurn) => {
+      if (
+        !current.turnId ||
+        current.terminalReceived ||
+        current.stopConfirmed ||
+        !cancelEndpoint
+      ) {
+        return false;
+      }
+      try {
+        const response = await fetch(cancelEndpoint(current.turnId), {
+          method: 'POST',
+        });
+        if (!response.ok) {
+          setControlError('暂时无法停止回答，请稍后重试。');
+          return false;
+        }
+        const body = (await response.json()) as {
+          accepted?: unknown;
+          status?: unknown;
+        };
+        if (body.accepted !== true && body.status !== 'cancelled') {
+          setControlError('回答已经结束，无需再次停止。');
+          return false;
+        }
+        current.stopConfirmed = true;
+        current.controller.abort();
+        if (mounted.current && inFlight.current === current) {
+          dispatch({ type: 'stop.confirmed' });
+        }
+        return true;
+      } catch {
+        setControlError('暂时无法停止回答，请稍后重试。');
+        return false;
+      }
+    },
+    [cancelEndpoint],
+  );
 
   useEffect(() => {
     callbacksRef.current = callbacks;
@@ -127,6 +169,7 @@ export function useAgentTurn(
         assistantMessageId: null,
         terminalReceived: false,
         stopConfirmed: false,
+        cancelRequested: false,
       };
       inFlight.current = current;
       setControlError(null);
@@ -208,6 +251,9 @@ export function useAgentTurn(
               }
               current.turnId = event.turnId;
               current.assistantMessageId = event.assistantMessageId;
+              if (current.cancelRequested) {
+                void cancelAcceptedTurn(current);
+              }
             } else if (current.turnId === null) {
               throw new TurnStreamProtocolError(
                 'turn stream emitted an event before acceptance',
@@ -292,42 +338,23 @@ export function useAgentTurn(
         if (inFlight.current === current) inFlight.current = null;
       }
     },
-    [options.assistantLabel, options.endpoint, safeConnectionError],
+    [
+      cancelAcceptedTurn,
+      options.assistantLabel,
+      options.endpoint,
+      safeConnectionError,
+    ],
   );
 
   const stop = useCallback(async () => {
     const current = inFlight.current;
-    if (!current?.turnId || current.terminalReceived || !options.cancelEndpoint)
+    if (!current || current.terminalReceived || !options.cancelEndpoint)
       return false;
     setControlError(null);
-    try {
-      const response = await fetch(options.cancelEndpoint(current.turnId), {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        setControlError('暂时无法停止回答，请稍后重试。');
-        return false;
-      }
-      const body = (await response.json()) as {
-        accepted?: unknown;
-        status?: unknown;
-      };
-      if (body.accepted !== true && body.status !== 'cancelled') {
-        setControlError('回答已经结束，无需再次停止。');
-        return false;
-      }
-
-      current.stopConfirmed = true;
-      current.controller.abort();
-      if (mounted.current && inFlight.current === current) {
-        dispatch({ type: 'stop.confirmed' });
-      }
-      return true;
-    } catch {
-      setControlError('暂时无法停止回答，请稍后重试。');
-      return false;
-    }
-  }, [options]);
+    current.cancelRequested = true;
+    if (!current.turnId) return true;
+    return cancelAcceptedTurn(current);
+  }, [cancelAcceptedTurn, options.cancelEndpoint]);
 
   const retry = useCallback(
     (assistantMessageId: string) => {
@@ -368,7 +395,7 @@ export function useAgentTurn(
     activeStatus,
     statusText,
     busy: state.active !== null,
-    stopAvailable: Boolean(state.active?.turnId && options.cancelEndpoint),
+    stopAvailable: Boolean(state.active && options.cancelEndpoint),
     send,
     stop,
     retry,

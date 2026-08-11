@@ -267,6 +267,7 @@ describe('Runtime module size boundary', () => {
     assertFilesWithinLimit(
       [
         'apps/web/app/globals.css',
+        'apps/web/app/interactive-controls.css',
         'apps/web/app/conversation-content.css',
         'apps/web/app/effects.css',
       ],

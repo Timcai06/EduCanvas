@@ -31,7 +31,10 @@ vi.mock('@educanvas/asset-processing', async () => {
   return { ...actual, renderAssetPreview: render };
 });
 
-import { AssetPreviewError } from '@educanvas/asset-processing';
+import {
+  ASSET_PREVIEW_MAX_INPUT_BYTES,
+  AssetPreviewError,
+} from '@educanvas/asset-processing';
 import { renderPreviewTask } from './render-preview';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
@@ -105,7 +108,7 @@ describe('assets:render_preview', () => {
 
     repo.beginPreviewRenderAttempt.mockResolvedValueOnce({
       ...pending,
-      byteSize: 10 * 1024 * 1024 + 1,
+      byteSize: ASSET_PREVIEW_MAX_INPUT_BYTES + 1,
     });
     await run();
     expect(repo.settlePreviewRender).toHaveBeenLastCalledWith({

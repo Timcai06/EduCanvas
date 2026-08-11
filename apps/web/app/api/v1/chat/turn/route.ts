@@ -34,6 +34,15 @@ function validationErrorResponse(error: TurnRequestValidationError): Response {
   return jsonError(400, error.code, '消息格式不正确。');
 }
 
+function hasStableErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
@@ -44,7 +53,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body = await parseTeachingTurnRequest(request);
     const turn = await beginWebGatewayTurn(identity, body);
-    return sseResponse(createSseEventStream(turn.events));
+    return sseResponse(
+      createSseEventStream(turn.events, { onCancel: turn.cancel }),
+    );
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {
       return validationErrorResponse(error);
@@ -52,8 +63,11 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof PlatformMessageIdConflictError) {
       return jsonError(409, error.code, '这条消息标识已被其他内容使用。');
     }
-    if (error instanceof PlatformTurnInProgressError) {
-      return jsonError(409, error.code, 'AI 仍在回答上一条消息。');
+    if (
+      error instanceof PlatformTurnInProgressError ||
+      hasStableErrorCode(error, 'turn_in_progress')
+    ) {
+      return jsonError(409, 'turn_in_progress', 'AI 仍在回答上一条消息。');
     }
     if (error instanceof PlatformTurnOwnershipError) {
       return jsonError(404, error.code, '当前对话不存在。');
@@ -82,8 +96,8 @@ export async function POST(request: Request): Promise<Response> {
         422,
         error.code,
         error.reason === 'count'
-          ? '一次最多带 4 张图片，请先取消勾选一些再发送。'
-          : '本轮图片总大小超出上限，请先取消勾选一些再发送。',
+          ? '一次最多带 12 张图片，请先取消勾选一些再发送。'
+          : '本轮图片总大小不能超过24MB，请先取消勾选一些再发送。',
       );
     }
     return jsonError(503, 'turn_unavailable', 'AI 暂时无法回答，请稍后重试。');

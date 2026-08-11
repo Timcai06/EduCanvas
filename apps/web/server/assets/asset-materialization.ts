@@ -25,8 +25,8 @@ export class UnsupportedAssetModalityError extends UnsupportedAgentInputModality
  * 图就能把请求体撑到供应商拒绝或超时。超出部分明确失败而不是静默截断——静默丢图
  * 会让模型基于不完整材料作答，比报错更糟。
  */
-const MAX_NATIVE_IMAGES = 4;
-const MAX_NATIVE_IMAGE_BYTES = 8 * 1024 * 1024;
+export const MAX_NATIVE_IMAGES = 12;
+export const MAX_NATIVE_IMAGE_BYTES = 24 * 1024 * 1024;
 
 const NATIVE_IMAGE_MIME_TYPES = new Set([
   'image/png',
@@ -117,29 +117,32 @@ async function loadNativeImages(
   if (context.nativeReferences.length > MAX_NATIVE_IMAGES) {
     throw new NativeAssetBudgetError('count');
   }
-  const images: NativeAssetImage[] = [];
-  let totalBytes = 0;
-  for (const reference of context.nativeReferences) {
-    const version = await assets.loadOwnedCurrentStoredVersion({
-      ownerSubjectId: identity.studentId,
-      spaceId,
-      assetId: reference.assetId,
-    });
-    if (!NATIVE_IMAGE_MIME_TYPES.has(version.mimeType)) {
-      throw new UnsupportedAssetModalityError([reference.kind]);
-    }
-    const bytes = await readStoredAssetBytes(version.storageKey);
-    totalBytes += bytes.byteLength;
-    if (totalBytes > MAX_NATIVE_IMAGE_BYTES) {
-      throw new NativeAssetBudgetError('bytes');
-    }
-    images.push({
-      versionId: reference.versionId,
-      mimeType: version.mimeType as NativeAssetImage['mimeType'],
-      data: Buffer.from(bytes).toString('base64'),
-    });
+  const loaded = await Promise.all(
+    context.nativeReferences.map(async (reference) => {
+      const version = await assets.loadOwnedCurrentStoredVersion({
+        ownerSubjectId: identity.studentId,
+        spaceId,
+        assetId: reference.assetId,
+      });
+      if (!NATIVE_IMAGE_MIME_TYPES.has(version.mimeType)) {
+        throw new UnsupportedAssetModalityError([reference.kind]);
+      }
+      const bytes = await readStoredAssetBytes(version.storageKey);
+      return {
+        byteLength: bytes.byteLength,
+        image: {
+          versionId: reference.versionId,
+          mimeType: version.mimeType as NativeAssetImage['mimeType'],
+          data: Buffer.from(bytes).toString('base64'),
+        } satisfies NativeAssetImage,
+      };
+    }),
+  );
+  const totalBytes = loaded.reduce((total, item) => total + item.byteLength, 0);
+  if (totalBytes > MAX_NATIVE_IMAGE_BYTES) {
+    throw new NativeAssetBudgetError('bytes');
   }
-  return images;
+  return loaded.map((item) => item.image);
 }
 
 /**

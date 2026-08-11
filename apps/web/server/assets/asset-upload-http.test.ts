@@ -128,7 +128,7 @@ describe('asset upload HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'file_too_large',
-        message: '文档和图片不能超过10MB，音频不能超过25MB，视频不能超过50MB。',
+        message: '文档、图片和音频不能超过25MB，视频不能超过50MB。',
       },
     });
   });

@@ -36,6 +36,7 @@ const fingerprints = new Sha256GatewayRequestFingerprint();
 
 class WebCompatibilityRunner implements GatewayTurnRunnerPort {
   preparationError: unknown = null;
+  operationId: string | null = null;
 
   constructor(
     private readonly input: {
@@ -49,6 +50,7 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
   ) {}
 
   async *run(input: Parameters<GatewayTurnRunnerPort['run']>[0]) {
+    this.operationId = input.operationId;
     let turn;
     try {
       turn = beginGatewayGeneralTurnApplication({
@@ -80,7 +82,10 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
 export async function beginWebGatewayTurn(
   identity: AnonymousIdentity,
   request: TeachingTurnRequestBody,
-): Promise<{ events: AsyncIterable<TeachingTurnEvent> }> {
+): Promise<{
+  events: AsyncIterable<TeachingTurnEvent>;
+  cancel: () => Promise<void>;
+}> {
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation || conversation.agentProfileId !== 'general') {
     throw new PlatformTurnOwnershipError();
@@ -164,6 +169,8 @@ export async function beginWebGatewayTurn(
   if (!prefix.some((event) => event.type === 'message.started')) {
     throw new Error('gateway_turn_did_not_start');
   }
+  const operationId = runner.operationId;
+  if (!operationId) throw new Error('gateway_turn_operation_missing');
   async function* primed(): AsyncGenerator<GatewayOperationEvent> {
     yield* prefix;
     while (true) {
@@ -172,5 +179,13 @@ export async function beginWebGatewayTurn(
       yield next.value;
     }
   }
-  return { events: gatewayToLegacy(primed()) };
+  return {
+    events: gatewayToLegacy(primed()),
+    cancel: async () => {
+      await service.requestCancel({
+        operationId,
+        principalUserId: principal.userId,
+      });
+    },
+  };
 }

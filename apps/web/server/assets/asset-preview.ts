@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import {
+  ASSET_PREVIEW_MAX_INPUT_BYTES,
   AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
   VIDEO_SOURCE_MAX_INPUT_BYTES,
 } from '@educanvas/asset-processing';
@@ -315,7 +316,7 @@ export async function readOwnedAssetPreviewFile(input: {
     ? AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES
     : version.mimeType.startsWith('video/')
       ? VIDEO_SOURCE_MAX_INPUT_BYTES
-      : 10 * 1024 * 1024;
+      : ASSET_PREVIEW_MAX_INPUT_BYTES;
   if (
     bytes.byteLength !== version.byteSize ||
     bytes.byteLength > maxBytes ||

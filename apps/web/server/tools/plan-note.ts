@@ -27,12 +27,22 @@ import { z } from 'zod';
  * 风险等级 L0：无副作用、不需要审批、不产生可信学习事件。
  */
 
-const planNoteInputSchema = z
-  .object({
-    /** 一句话即可；上限刻意压低，避免模型把它当成第二个回答通道。 */
-    note: z.string().trim().min(1).max(200),
-  })
-  .strict();
+/* 模型仍被明确约束为一句短说明；该 Schema 由 Adapter 单独投影。 */
+export const planNoteModelInputSchema = {
+  type: 'object',
+  properties: {
+    note: { type: 'string', minLength: 1, maxLength: 200 },
+  },
+  required: ['note'],
+  additionalProperties: false,
+} as const;
+
+/*
+ * planNote 是无副作用的进度信号，handler 也不会读取模型原文。供应商偶发多写
+ * 字段或超过提示长度时，不能让这个纯展示工具拖垮整个 Turn；因此本地只要求
+ * JSON 参数是对象。真正产生读取/写入效果的工具仍在各自 Adapter 严格校验。
+ */
+const planNoteInputSchema = z.object({}).passthrough();
 
 const planNoteOutputSchema = z
   .object({ acknowledged: z.literal(true) })

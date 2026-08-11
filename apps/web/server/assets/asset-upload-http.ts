@@ -54,7 +54,7 @@ export function assetUploadErrorResponse(error: AssetUploadError): Response {
   const message = (() => {
     switch (error.code) {
       case 'file_too_large':
-        return '文档和图片不能超过10MB，音频不能超过25MB，视频不能超过50MB。';
+        return '文档、图片和音频不能超过25MB，视频不能超过50MB。';
       case 'audio_too_large':
         return '音频不能超过25MB。';
       case 'video_too_large':

@@ -56,4 +56,33 @@ describe('Local AgentTool兼容Adapter', () => {
       effect: 'read',
     });
   });
+
+  it('可独立投影模型提示 Schema，不放宽本地执行 Schema', () => {
+    const modelInputSchema = {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+      additionalProperties: false,
+    } as const;
+    const adapted = adaptAgentTool(
+      {
+        name: 'localTool',
+        description: 'test',
+        inputSchema: z.object({ query: z.string().max(5) }).strict(),
+        outputSchema: z.object({ ok: z.literal(true) }).strict(),
+        timeoutMs: 1_000,
+        handler: async () => ({ ok: true as const }),
+      },
+      {
+        capability: 'local.tool',
+        risk: 'l0',
+        effect: 'read',
+        modelInputSchema,
+      },
+    );
+    expect(adapted.modelInputSchema).toBe(modelInputSchema);
+    expect(adapted.inputSchema.safeParse({ query: 'too-long' }).success).toBe(
+      false,
+    );
+  });
 });

@@ -48,6 +48,7 @@ describe('POST /api/v1/chat/turn', () => {
   });
 
   it('streams accepted turns as SSE', async () => {
+    const cancel = vi.fn(async () => undefined);
     vi.mocked(beginWebGatewayTurn).mockResolvedValue({
       events: (async function* () {
         yield {
@@ -65,6 +66,7 @@ describe('POST /api/v1/chat/turn', () => {
           messageId: 'assistant-1',
         };
       })(),
+      cancel,
     });
 
     const response = await POST(
@@ -76,6 +78,38 @@ describe('POST /api/v1/chat/turn', () => {
     expect(response.headers.get('content-type')).toContain('text/event-stream');
     expect(text).toContain('event: turn.accepted');
     expect(text).toContain('event: turn.completed');
+  });
+
+  it('propagates a released SSE response to the accepted Gateway turn', async () => {
+    let finish!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const cancel = vi.fn(async () => undefined);
+    vi.mocked(beginWebGatewayTurn).mockResolvedValue({
+      events: (async function* () {
+        yield {
+          type: 'turn.accepted' as const,
+          schemaVersion: '1' as const,
+          turnId: 'turn-1',
+          studentMessageId: 'student-1',
+          assistantMessageId: 'assistant-1',
+          replayed: false,
+        };
+        await completed;
+      })(),
+      cancel,
+    });
+
+    const response = await POST(
+      turnRequest(JSON.stringify({ clientMessageId: 'msg-1', text: '你好' })),
+    );
+    const reader = response.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    finish();
+
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it('forbids cross-origin writes before parsing payload', async () => {
@@ -148,6 +182,21 @@ describe('POST /api/v1/chat/turn', () => {
   it('maps in-progress turns to 409', async () => {
     vi.mocked(beginWebGatewayTurn).mockRejectedValue(
       new PlatformTurnInProgressError('turn-1'),
+    );
+
+    const response = await POST(
+      turnRequest(JSON.stringify({ clientMessageId: 'msg-1', text: 'hi' })),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'turn_in_progress' },
+    });
+  });
+
+  it('maps stable in-progress codes across bundled module boundaries', async () => {
+    vi.mocked(beginWebGatewayTurn).mockRejectedValue(
+      Object.assign(new Error('internal detail'), { code: 'turn_in_progress' }),
     );
 
     const response = await POST(
