@@ -37,6 +37,7 @@ export {
   MINERU_ZIP_MAX_ENTRIES,
   MINERU_ZIP_MAX_ENTRY_BYTES,
   MINERU_ZIP_MAX_TOTAL_BYTES,
+  decodeMineruMarkdown,
   readMineruMarkdown,
   unpackMineruZip,
   type MineruZipEntry,
@@ -48,6 +49,12 @@ export {
   validateMineruEntries,
   type MineruExtracted,
 } from './mineru-validate';
+
+export {
+  buildMineruManifest,
+  type MineruManifest,
+  type MineruManifestImage,
+} from './mineru-manifest';
 
 export {
   ASSET_PREVIEW_MAX_INPUT_BYTES,

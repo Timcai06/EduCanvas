@@ -164,6 +164,28 @@ export function unpackMineruZip(
 }
 
 /**
+ * 解码 index.md 条目为 Agent 上下文文本。
+ *
+ * 与容器解析解耦（C3 起 worker 用解包+校验+本函数，不必为取文本而重复
+ * 解包整个 zip）。失败一律抛 `MineruClientError`（`mineru_result_invalid`）。
+ */
+export function decodeMineruMarkdown(bytes: Uint8Array): string {
+  /* md 有更紧的字节上限（480KB），在条目级上限之上再收一道。 */
+  if (bytes.byteLength > MINERU_MD_MAX_UTF8_BYTES) throw invalid();
+
+  let decoded: string;
+  try {
+    decoded = decodeUtf8(bytes);
+  } catch (cause) {
+    throw invalid(cause);
+  }
+  const normalized = decoded.normalize('NFC').replace(/\r\n?/g, '\n').trim();
+  /* 空 md 视同结果损坏：降级路径会兜底出文本，不产生空正文。 */
+  if (!normalized) throw invalid();
+  return [...normalized].slice(0, ASSET_TEXT_MAX_CHARACTERS).join('');
+}
+
+/**
  * 从已下载的 MinerU 结果 zip 中读取 `index.md` 文本。
  *
  * 纯函数：不做网络、不读对象存储。失败一律抛 `MineruClientError`
@@ -172,19 +194,7 @@ export function unpackMineruZip(
 export function readMineruMarkdown(bytes: Uint8Array): string {
   const md = unpackMineruZip(bytes).find((e) => e.name === MINERU_MD_FILENAME);
   if (!md) throw invalid();
-  /* md 有更紧的字节上限（480KB），在条目级上限之上再收一道。 */
-  if (md.bytes.byteLength > MINERU_MD_MAX_UTF8_BYTES) throw invalid();
-
-  let decoded: string;
-  try {
-    decoded = decodeUtf8(md.bytes);
-  } catch (cause) {
-    throw invalid(cause);
-  }
-  const normalized = decoded.normalize('NFC').replace(/\r\n?/g, '\n').trim();
-  /* 空 md 视同结果损坏：降级路径会兜底出文本，不产生空正文。 */
-  if (!normalized) throw invalid();
-  return [...normalized].slice(0, ASSET_TEXT_MAX_CHARACTERS).join('');
+  return decodeMineruMarkdown(md.bytes);
 }
 
 /** fatal 模式：文件名或内容非 UTF-8 必须报错，不静默替换。 */

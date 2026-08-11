@@ -22,14 +22,17 @@ vi.mock('@educanvas/agent-runtime', () => ({
   }),
 }));
 
-/* MinerU 三步协议与结果读取全部 mock（真网络在 fake server 集成测试覆盖）。 */
-const { extract, submit, wait, fetchResult, readMd } = vi.hoisted(() => ({
-  extract: vi.fn(),
-  submit: vi.fn(),
-  wait: vi.fn(),
-  fetchResult: vi.fn(),
-  readMd: vi.fn(),
-}));
+/* MinerU 三步协议与结果解包/校验/解码全部 mock（真网络在 fake server 集成测试覆盖）。 */
+const { extract, submit, wait, fetchResult, unpack, validate, decode } =
+  vi.hoisted(() => ({
+    extract: vi.fn(),
+    submit: vi.fn(),
+    wait: vi.fn(),
+    fetchResult: vi.fn(),
+    unpack: vi.fn(),
+    validate: vi.fn(),
+    decode: vi.fn(),
+  }));
 vi.mock('@educanvas/asset-processing', async () => {
   const actual = await vi.importActual<
     typeof import('@educanvas/asset-processing')
@@ -40,7 +43,9 @@ vi.mock('@educanvas/asset-processing', async () => {
     submitMineruTask: submit,
     waitForMineruTask: wait,
     fetchMineruResult: fetchResult,
-    readMineruMarkdown: readMd,
+    unpackMineruZip: unpack,
+    validateMineruEntries: validate,
+    decodeMineruMarkdown: decode,
   };
 });
 
@@ -169,8 +174,8 @@ describe('assets:extract_text', () => {
     });
     wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
     fetchResult.mockResolvedValue(new Uint8Array([1, 2, 3]));
-    /* readMineruMarkdown 是同步纯函数，mock 必须同步抛（mockRejectedValue 会传 Promise）。 */
-    readMd.mockImplementation(() => {
+    /* unpackMineruZip 是同步纯函数，mock 必须同步抛（mockRejectedValue 会传 Promise）。 */
+    unpack.mockImplementation(() => {
       throw new MineruClientError('mineru_result_invalid');
     });
     extract.mockResolvedValue('降级文本');
@@ -201,16 +206,37 @@ describe('assets:extract_text', () => {
     });
     wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
     fetchResult.mockResolvedValue(new Uint8Array([0x50, 0x4b]));
-    /* readMineruMarkdown 是同步纯函数，mock 必须同步返回（不能是 Promise）。 */
-    readMd.mockImplementation(() => '# 结构化标题\n\n正文。');
+    const mdEntry = {
+      name: 'index.md',
+      bytes: new TextEncoder().encode('# 结构化标题\n\n正文。'),
+    };
+    const jpgEntry = { name: 'images/001.jpg', bytes: new Uint8Array([1, 2]) };
+    /* 三个都是同步纯函数，mock 必须同步返回（不能是 Promise）。 */
+    unpack.mockReturnValue([mdEntry, jpgEntry]);
+    validate.mockReturnValue({ markdown: mdEntry, images: [jpgEntry] });
+    decode.mockReturnValue('# 结构化标题\n\n正文。');
 
     await run();
 
-    /* 结构化原包与 md 文本两个对象都写入存储。 */
-    expect(put).toHaveBeenCalledTimes(2);
+    /* 派生表示三件套：index.md + images/ + manifest.json（ADR-0026 决定 3）。 */
+    expect(put).toHaveBeenCalledTimes(3);
     const keys = put.mock.calls.map(([c]) => c.key);
-    expect(keys.some((k) => k.endsWith('.zip'))).toBe(true);
-    expect(keys.some((k) => k.endsWith('.md'))).toBe(true);
+    expect(keys).toEqual([
+      `derived/${JOB_ID}/index.md`,
+      `derived/${JOB_ID}/images/001.jpg`,
+      `derived/${JOB_ID}/manifest.json`,
+    ]);
+    const manifestCall = put.mock.calls.find(
+      ([c]) => c.key === `derived/${JOB_ID}/manifest.json`,
+    );
+    expect(
+      JSON.parse(new TextDecoder().decode(manifestCall?.[0].bytes)),
+    ).toEqual(
+      expect.objectContaining({
+        producer: 'mineru',
+        images: [expect.objectContaining({ relativePath: 'images/001.jpg' })],
+      }),
+    );
     expect(submit).toHaveBeenCalledWith(
       expect.objectContaining({
         filename: '讲义.pdf',
@@ -247,8 +273,14 @@ describe('assets:extract_text', () => {
     });
     wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
     fetchResult.mockResolvedValue(new Uint8Array([0x50, 0x4b]));
-    readMd.mockResolvedValue('# 标题');
-    /* 第一次 put（zip）失败：内容没存上不能标记结构化成功。 */
+    const mdEntry = {
+      name: 'index.md',
+      bytes: new TextEncoder().encode('# 标题'),
+    };
+    unpack.mockReturnValue([mdEntry]);
+    validate.mockReturnValue({ markdown: mdEntry, images: [] });
+    decode.mockReturnValue('# 标题');
+    /* 第一次 put（index.md）失败：内容没存上不能标记结构化成功。 */
     put.mockRejectedValueOnce(new Error('EACCES'));
 
     await expect(run()).rejects.toThrow('EACCES');

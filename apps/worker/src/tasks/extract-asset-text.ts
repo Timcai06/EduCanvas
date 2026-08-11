@@ -4,12 +4,16 @@ import { DrizzleAssetRepository } from '@educanvas/db';
 import {
   AssetExtractionError,
   MineruClientError,
+  buildMineruManifest,
+  decodeMineruMarkdown,
   extractAssetText,
   fetchMineruResult,
+  imageMimeType,
   loadMineruConfig,
-  readMineruMarkdown,
   routeDocumentExtraction,
   submitMineruTask,
+  unpackMineruZip,
+  validateMineruEntries,
   waitForMineruTask,
 } from '@educanvas/asset-processing';
 import { LocalObjectStorage } from '@educanvas/agent-runtime';
@@ -95,22 +99,35 @@ async function tryStructuredExtraction(input: {
       taskId: submitted.taskId,
       resultUrl: submitted.resultUrl,
     });
-    const markdown = readMineruMarkdown(zipBytes);
+    /* 解包 → 白名单校验（ADR-0026 决定 3），任何越界明确失败降级。 */
+    const extracted = validateMineruEntries(unpackMineruZip(zipBytes));
+    const markdown = decodeMineruMarkdown(extracted.markdown.bytes);
 
-    /* 结构化原包先整体保留（C 阶段改为 index.md + images/ + manifest 布局）。 */
-    const zipKey = `derived/mineru/${input.jobId}/${sha256Hex(zipBytes)}.zip`;
-    await input.storage.put({
-      key: zipKey,
-      bytes: zipBytes,
-      contentType: 'application/zip',
-    });
-    const mdKey = `derived/text/${input.jobId}/${sha256Hex(
-      new TextEncoder().encode(markdown),
-    )}.md`;
+    /*
+     * 不可变派生表示（C3 布局，ADR-0026 决定 3）：同一 jobId 目录下放
+     * index.md、images/ 与 manifest.json，图片引用不被丢弃、目录可验证。
+     * md 文本同时写 settled 的 extractedText 字段镜像（compatibility read）。
+     */
+    const mdKey = `derived/${input.jobId}/index.md`;
     await input.storage.put({
       key: mdKey,
-      bytes: new TextEncoder().encode(markdown),
+      bytes: extracted.markdown.bytes,
       contentType: 'text/markdown; charset=utf-8',
+    });
+    for (const image of extracted.images) {
+      const imageKey = `derived/${input.jobId}/images/${image.name.slice('images/'.length)}`;
+      await input.storage.put({
+        key: imageKey,
+        bytes: image.bytes,
+        contentType: imageMimeType(image.name) ?? 'application/octet-stream',
+      });
+    }
+    const manifest = buildMineruManifest(extracted);
+    const manifestKey = `derived/${input.jobId}/manifest.json`;
+    await input.storage.put({
+      key: manifestKey,
+      bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)),
+      contentType: 'application/json',
     });
     return {
       status: 'ready',
