@@ -3,13 +3,13 @@
  *
  * ## 职责
  *
- * 完整 V17 的语音入口（短句/字幕）只有在全部前置能力健康时才显示；本模块
- * 把实时识别所需的两项基础设施检查折叠成单一、确定性的判定结果，
+ * Live Voice 只有在全部前置能力健康时才显示；本模块
+ * 把实时识别、语音合成与连接检查折叠成单一、确定性的判定结果，
  * **fail closed**：
  *
  * - model / connection 任一 **缺失、false、重复或非法（未知键）** →
  *   `enabled === false`；
- * - 缺失维度视为不健康（两项必须全部显式声明且健康才放行）；重复键或未知
+ * - 缺失维度视为不健康（三项必须全部显式声明且健康才放行）；重复键或未知
  *   键视为配置非法，整体禁用为 `CAPABILITY_CONFIG_INVALID`；
  * - `reason` 是第一个（按声明顺序）不健康项的稳定码，`unhealthy` 列出全部
  *   不健康项（顺序稳定），供 UI 显示可读原因；
@@ -26,11 +26,12 @@
  */
 
 /** 能力键：声明顺序即判定优先级与 `unhealthy` 顺序。 */
-export type VoiceCapabilityKey = 'model' | 'connection';
+export type VoiceCapabilityKey = 'model' | 'speech' | 'connection';
 
 /** 稳定原因码：UI 据此显示可读文案，不携带服务端细节。 */
 export type VoiceCapabilityReason =
   | 'MODEL_UNAVAILABLE'
+  | 'SPEECH_UNAVAILABLE'
   | 'CONNECTION_UNAVAILABLE'
   /** 配置非法（重复键/未知键）：fail closed，不携带原始输入。 */
   | 'CAPABILITY_CONFIG_INVALID';
@@ -50,12 +51,17 @@ export interface VoiceCapabilityState {
   readonly unhealthy: readonly VoiceCapabilityReason[];
 }
 
-const CAPABILITY_ORDER: readonly VoiceCapabilityKey[] = ['model', 'connection'];
+const CAPABILITY_ORDER: readonly VoiceCapabilityKey[] = [
+  'model',
+  'speech',
+  'connection',
+];
 
 const REASON_BY_KEY: Readonly<
   Record<VoiceCapabilityKey, VoiceCapabilityReason>
 > = {
   model: 'MODEL_UNAVAILABLE',
+  speech: 'SPEECH_UNAVAILABLE',
   connection: 'CONNECTION_UNAVAILABLE',
 };
 
@@ -68,6 +74,20 @@ const REASON_BY_KEY: Readonly<
  */
 export function evaluateVoiceCapability(
   checks: readonly VoiceCapabilityCheck[],
+): VoiceCapabilityState {
+  return evaluateRequiredCapabilities(checks, CAPABILITY_ORDER);
+}
+
+/** Live ASR ticket 只依赖实时 ASR 与 Gateway；TTS 降级不阻断已有转录通道。 */
+export function evaluateTranscriptionCapability(
+  checks: readonly VoiceCapabilityCheck[],
+): VoiceCapabilityState {
+  return evaluateRequiredCapabilities(checks, ['model', 'connection']);
+}
+
+function evaluateRequiredCapabilities(
+  checks: readonly VoiceCapabilityCheck[],
+  required: readonly VoiceCapabilityKey[],
 ): VoiceCapabilityState {
   const seen = new Set<VoiceCapabilityKey>();
   for (const check of checks) {
@@ -82,7 +102,7 @@ export function evaluateVoiceCapability(
     seen.add(check.key);
   }
   const unhealthy: VoiceCapabilityReason[] = [];
-  for (const key of CAPABILITY_ORDER) {
+  for (const key of required) {
     const healthy = checks.some((check) => check.key === key && check.healthy);
     if (!healthy) unhealthy.push(REASON_BY_KEY[key]);
   }
@@ -102,6 +122,8 @@ export function voiceCapabilityReasonLabel(
       return '语音模型暂不可用';
     case 'CONNECTION_UNAVAILABLE':
       return '实时语音连接暂不可用';
+    case 'SPEECH_UNAVAILABLE':
+      return '语音播报暂不可用';
     case 'CAPABILITY_CONFIG_INVALID':
       return '语音能力配置无效';
   }

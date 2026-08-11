@@ -15,7 +15,10 @@ import {
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { createFetchWebPageTool, type FetchedWebPage } from '../tools/web-page';
-import { createPlanNoteTool } from '../tools/plan-note';
+import {
+  createPlanNoteTool,
+  planNoteModelInputSchema,
+} from '../tools/plan-note';
 import { resolveWebSearchTool } from '../tools/web-search';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import {
@@ -97,6 +100,7 @@ export function createGeneralToolKernel(
       capability: 'agent.plan_note',
       risk: 'l0',
       effect: 'read',
+      modelInputSchema: planNoteModelInputSchema,
     }),
     adaptAgentTool(operationArtifacts.createTool(), {
       capability: 'artifact.create',

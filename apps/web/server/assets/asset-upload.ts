@@ -28,7 +28,7 @@ import {
 } from './asset-storage';
 import { detectAssetFile } from './asset-file-detection';
 
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** 音频转录需要更多空间（Whisper API 限制 25MB） */
 export const MAX_AUDIO_UPLOAD_BYTES = AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES;
 /**
@@ -109,8 +109,8 @@ export async function uploadOwnedAssetToSpace(input: {
   const detected = detectAssetFile(bytes, input.file.name);
   if (!detected) throw new AssetUploadError('unsupported_file_type', 415);
 
-  /* 音频用 Whisper 的 25MB 上限，视频用平台自己的 50MB 上限（也是
-     asset_versions 的库级字节上限），其他文件 10MB。 */
+  /* 音频与文档/图片使用 25MB 上限，视频使用平台 50MB 上限（也是
+     asset_versions 的库级字节上限）。 */
   const maxBytes =
     detected.kind === 'audio'
       ? MAX_AUDIO_UPLOAD_BYTES

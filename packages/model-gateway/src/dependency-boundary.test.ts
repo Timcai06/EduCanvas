@@ -31,7 +31,7 @@ describe('model-gateway dependency boundary', () => {
       '@ai-sdk/openai-compatible',
       '@educanvas/agent-core',
       'ai',
-      'sherpa-onnx',
+      'ws',
       'zod',
     ]);
     expect(dependencies.some((name) => name.includes('teaching'))).toBe(false);

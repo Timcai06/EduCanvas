@@ -357,6 +357,35 @@ export function teachingTurnReducer(
     };
   }
 
+  if (
+    event.type === 'artifact.version_added' ||
+    event.type === 'artifact.generation_progress' ||
+    event.type === 'artifact.failed'
+  ) {
+    return {
+      ...state,
+      messages: updateAssistant(state.messages, assistantId, (message) => ({
+        ...message,
+        artifacts: (message.artifacts ?? []).map((artifact) =>
+          artifact.id !== event.artifactId
+            ? artifact
+            : event.type === 'artifact.version_added'
+              ? {
+                  ...artifact,
+                  status: 'active' as const,
+                  latestVersion: Math.max(
+                    artifact.latestVersion,
+                    event.version,
+                  ),
+                }
+              : event.type === 'artifact.failed'
+                ? { ...artifact, status: 'failed' as const }
+                : artifact,
+        ),
+      })),
+    };
+  }
+
   if (!('messageId' in event)) return state;
   if (event.type === 'message.citation') {
     if (event.messageId !== assistantId) return state;

@@ -1,6 +1,6 @@
 import { gatewayOpaqueIdSchema } from '@educanvas/gateway-core';
 import { z } from 'zod';
-import { evaluateVoiceCapability } from '@/features/voice/voice-capability';
+import { evaluateTranscriptionCapability } from '@/features/voice/voice-capability';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { readExperienceMode } from '@/server/experience-mode';
 import {
@@ -48,7 +48,7 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(400, 'invalid_request', '语音请求格式不正确。');
   }
   const capability = await resolveVoiceCapability();
-  if (!evaluateVoiceCapability(capability.checks).enabled) {
+  if (!evaluateTranscriptionCapability(capability.checks).enabled) {
     return jsonError(503, 'voice_capability_unavailable', '语音能力暂不可用。');
   }
   try {

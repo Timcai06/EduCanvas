@@ -32,7 +32,7 @@ import {
   requireNotebookAccess,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
-import { resolveSherpaStreamingTranscriptionGateway } from '@educanvas/model-gateway';
+import { resolveDashScopeStreamingTranscriptionGateway } from '@educanvas/model-gateway';
 import {
   createDefaultGatewayConnectionProviders,
   GatewayConnectionService,
@@ -121,10 +121,8 @@ const service = new GatewayService(
   new GatewayAgentTurnRunner(),
   new Sha256GatewayRequestFingerprint(),
 );
-// V12：sherpa WASM 流式转录闸门只解析一次（fail-closed，未配置时返回
-// { gateway: null, reason } 且不创建 recognizer）。解析结果注入 upgrade
-// 处理器；reason 仅用于稳定审计日志。
-const streamingTranscription = await resolveSherpaStreamingTranscriptionGateway(
+// Live Voice 使用北京区域 DashScope Paraformer；配置缺失时只关闭语音通道。
+const streamingTranscription = resolveDashScopeStreamingTranscriptionGateway(
   process.env,
 );
 // V13：流式转录资源配额（单一配额源，fail-closed：非法配置直接启动失败）

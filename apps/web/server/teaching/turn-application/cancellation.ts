@@ -4,6 +4,7 @@ import type { ModelAbortSignal } from '@educanvas/agent-core';
 import type { TurnApplicationCancellationPort } from '@educanvas/agent-runtime';
 import { DEFAULT_ASSISTANT_LEASE_MS } from '@educanvas/db';
 import { webTeachingPersistence } from './persistence';
+import { registerTurnAbortController } from '../../http/turn-abort-registry';
 
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const CANCELLATION_POLL_MS = 250;
@@ -20,6 +21,10 @@ export class WebTeachingCancellation implements TurnApplicationCancellationPort 
     const leaseId = snapshot?.assistantMessage.leaseId;
     if (!snapshot || !leaseId) throw new Error('teaching_turn_lease_missing');
     const controller = new AbortController();
+    const unregisterAbort = registerTurnAbortController(
+      input.operationId,
+      controller,
+    );
     let heartbeatRunning = false;
     let cancellationRunning = false;
     const abort = () => {
@@ -71,6 +76,7 @@ export class WebTeachingCancellation implements TurnApplicationCancellationPort 
       close: () => {
         clearInterval(heartbeat);
         clearInterval(cancellation);
+        unregisterAbort();
         this.upstream.removeEventListener('abort', abort);
       },
     };

@@ -307,6 +307,42 @@ describe('teaching turn browser state machine', () => {
         },
       ],
     });
+
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'artifact.version_added',
+        schemaVersion: '1',
+        turnId: 'turn-artifact',
+        artifactId: 'artifact-1',
+        version: 2,
+      },
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      artifacts: [
+        expect.objectContaining({
+          id: 'artifact-1',
+          status: 'active',
+          latestVersion: 2,
+        }),
+      ],
+    });
+
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'artifact.failed',
+        schemaVersion: '1',
+        turnId: 'turn-artifact',
+        artifactId: 'artifact-1',
+        code: 'render_failed',
+      },
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      artifacts: [
+        expect.objectContaining({ id: 'artifact-1', status: 'failed' }),
+      ],
+    });
   });
 });
 

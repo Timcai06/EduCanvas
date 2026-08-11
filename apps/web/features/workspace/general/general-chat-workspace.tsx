@@ -16,6 +16,7 @@ import { GeneralWorkspaceLayout } from './general-workspace-layout';
 import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { useGeneralWorkspaceController } from './use-general-workspace-controller';
 import { GENERAL_ASSET_ENDPOINT } from './general-chat-config';
+import { isCreatableArtifactKind } from '@/features/canvas/artifact-client';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -117,16 +118,19 @@ export function GeneralChatWorkspace({
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {ctrl.turn.announcement?.text ?? ctrl.sourceNotice?.message ?? ''}
       </p>
-      {ctrl.artifactFlow.generation?.phase === 'confirm' ? (
+      {ctrl.artifactFlow.generation?.phase === 'confirm' &&
+      isCreatableArtifactKind(ctrl.artifactFlow.generation.kind) ? (
         <ArtifactConfirmSheet
           kind={ctrl.artifactFlow.generation.kind}
           defaultTitle={ctrl.artifactFlow.generation.title}
           sourceCount={ctrl.selectedAudioSources.length}
           onConfirm={(title) => {
             const openWhenReady = ctrl.canvasSelected;
+            const kind = ctrl.artifactFlow.generation?.kind;
+            if (!kind || !isCreatableArtifactKind(kind)) return;
             ctrl.setCanvasSelected(false);
             void ctrl.artifactFlow.confirm(
-              ctrl.artifactFlow.generation!.kind,
+              kind,
               title,
               ctrl.selectedAudioSources,
               { openWhenReady },

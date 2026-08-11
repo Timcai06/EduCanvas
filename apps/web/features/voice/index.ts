@@ -6,6 +6,7 @@
  */
 
 export {
+  evaluateTranscriptionCapability,
   evaluateVoiceCapability,
   voiceCapabilityReasonLabel,
   type VoiceCapabilityCheck,
@@ -21,7 +22,6 @@ export {
   type VoiceSessionControllerDeps,
   type VoiceSessionErrorCode,
   type VoiceSessionLogEntry,
-  type VoiceSessionMode,
   type VoiceSessionStatus,
   type VoiceSessionTranscriptionClient,
 } from './voice-session-controller';

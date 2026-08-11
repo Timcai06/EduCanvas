@@ -17,6 +17,7 @@ import {
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
+  type ObservableArtifactKind,
 } from './artifact-client';
 import { CanvasHost } from './canvas-host';
 import { resolveArtifactContentView } from './artifact-content-view';
@@ -28,7 +29,7 @@ export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
 export interface GenerationState {
   phase: GenerationPhase;
-  kind: CreatableArtifactKind;
+  kind: ObservableArtifactKind;
   artifactId?: string;
   title: string;
   detail?: ArtifactDetail;
@@ -40,16 +41,17 @@ export interface ConfirmArtifactOptions {
 
 export interface ProposedArtifact {
   artifactId: string;
-  kind: CreatableArtifactKind;
+  kind: ObservableArtifactKind;
   title: string;
 }
 
-export const ARTIFACT_KIND_LABELS: Record<CreatableArtifactKind, string> = {
+export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   mind_map: '思维导图',
   slides: 'Slides',
   flashcards: '闪卡',
   audio_overview: '音频概览',
   note: '笔记',
+  generated_image: '生成图片',
 };
 
 /**
@@ -178,7 +180,7 @@ export function useArtifactGeneration() {
       const baseVersion = detail.artifact.latestVersion;
       setGeneration({
         phase: 'generating',
-        kind: detail.artifact.kind as CreatableArtifactKind,
+        kind: detail.artifact.kind as ObservableArtifactKind,
         artifactId: detail.artifact.id,
         title: detail.artifact.title,
       });
@@ -195,7 +197,7 @@ export function useArtifactGeneration() {
           updated.latestJob?.status !== 'failed';
         setGeneration({
           phase: succeeded ? 'ready' : 'failed',
-          kind: detail.artifact.kind as CreatableArtifactKind,
+          kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
           detail: updated,
@@ -208,7 +210,7 @@ export function useArtifactGeneration() {
       } catch {
         setGeneration({
           phase: 'failed',
-          kind: detail.artifact.kind as CreatableArtifactKind,
+          kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });

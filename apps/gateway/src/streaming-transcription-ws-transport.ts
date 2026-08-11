@@ -58,7 +58,6 @@ import type {
   StreamingTranscriptionGateway,
   StreamingTranscriptionServerMessage,
 } from '@educanvas/agent-core';
-import type { SherpaStreamingUnavailableReason } from '@educanvas/model-gateway';
 import { WebSocket, WebSocketServer } from 'ws';
 import { readBearerToken } from './client-auth';
 import {
@@ -105,7 +104,7 @@ export interface StreamingTranscriptionUpgradeDependencies {
   /** V09 resolver 结果：null 表示不可用，握手阶段直接 503 不创建 recognizer。 */
   gateway: StreamingTranscriptionGateway | null;
   /** resolver 的稳定 reason，仅用于审计日志。 */
-  unavailableReason: SherpaStreamingUnavailableReason | null;
+  unavailableReason: string | null;
   /** V13 连接槽租约协调器：在创建 recognizer 前申请用户/Notebook/全局槽位。 */
   quotaManager: StreamingTranscriptionQuotaManager;
   /** V13 连接级配额（通道 deadline/输入队列/输出背压共用）。 */

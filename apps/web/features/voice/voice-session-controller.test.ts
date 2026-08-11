@@ -173,7 +173,6 @@ function makeHarness(
     logs: [],
   };
   const controller = new VoiceSessionController({
-    mode: 'short-utterance',
     notebookId: 'nb-1',
     createCapture: (handlers) => {
       capture.bind(handlers);
@@ -185,7 +184,6 @@ function makeHarness(
     },
     onPartialText: (text) => calls.partial.push(text),
     onFinalText: (text) => calls.final.push(text),
-    onCaptionAppend: (text) => calls.caption.push(text),
     onStatusChange: (status) => calls.statuses.push(status),
     onError: (code) => calls.errors.push(code),
     log: (entry) => calls.logs.push(entry),
@@ -233,7 +231,7 @@ function snapshot(
 
 const PCM = Uint8Array.from([0xde, 0xad, 0xbe, 0xef]);
 
-describe('VoiceSessionController（short-utterance）', () => {
+describe('VoiceSessionController（Live Voice）', () => {
   it('start 完整交互：先建连接后启动采集，chunk 转发到 client', async () => {
     const harness = makeHarness();
     await harness.controller.start();
@@ -282,10 +280,10 @@ describe('VoiceSessionController（short-utterance）', () => {
       snapshot('op-1', [segment('seg-1', 'final', '你好世界')]),
     );
     expect(harness.calls.final).toEqual(['你好世界']);
-    expect(harness.calls.statuses).toHaveLength(4); // starting/recording/finalizing/stopped
+    expect(harness.calls.statuses).toHaveLength(5); // starting/authorizing/recording/finalizing/stopped
   });
 
-  it('short-utterance 零直接 Turn 调用', async () => {
+  it('final 只经组合回调进入现有 Turn', async () => {
     const harness = makeHarness();
     await harness.controller.start();
     harness.capture.emitChunk(PCM);
@@ -298,58 +296,6 @@ describe('VoiceSessionController（short-utterance）', () => {
     expect(harness.calls.final).toEqual(['你好世界']);
     expect(harness.turnSubmissions()).toBe(1); // 1 次 final 交付 = 1 次 onFinalText
     expect(harness.client.sentChunks.length).toBeGreaterThan(0);
-  });
-});
-
-describe('VoiceSessionController（classroom-caption）', () => {
-  it('segment 定稿时各追加一次字幕，partial 持续更新，零 Turn 调用', async () => {
-    const harness = makeHarness({ mode: 'classroom-caption' });
-    await harness.controller.start();
-
-    harness.client.emitSnapshot(
-      snapshot('op-1', [segment('seg-1', 'active', '第一句')]),
-    );
-    expect(harness.calls.partial.at(-1)).toBe('第一句');
-    expect(harness.calls.caption).toEqual([]);
-
-    harness.client.emitSnapshot(
-      snapshot('op-1', [segment('seg-1', 'final', '第一句')]),
-    );
-    expect(harness.calls.caption).toEqual(['第一句']);
-
-    harness.client.emitSnapshot(
-      snapshot('op-1', [
-        segment('seg-1', 'final', '第一句'),
-        segment('seg-2', 'active', '第二句'),
-      ]),
-    );
-    expect(harness.calls.partial.at(-1)).toBe('第一句 第二句');
-
-    harness.client.emitSnapshot(
-      snapshot('op-1', [
-        segment('seg-1', 'final', '第一句'),
-        segment('seg-2', 'final', '第二句'),
-      ]),
-    );
-    expect(harness.calls.caption).toEqual(['第一句', '第二句']);
-
-    // 会话终态 final：caption 模式不触发 onFinalText（不交给 Turn 输入）。
-    harness.controller.stop();
-    harness.client.emitTerminal({ reason: 'final' });
-    expect(harness.calls.final).toEqual([]);
-    expect(harness.calls.statuses.at(-1)).toBe('stopped');
-  });
-
-  it('同一 segment 定稿只追加一次（快照重放幂等）', async () => {
-    const harness = makeHarness({ mode: 'classroom-caption' });
-    await harness.controller.start();
-    const finalized = snapshot('op-1', [segment('seg-1', 'final', '第一句')]);
-    harness.client.emitSnapshot(finalized);
-    harness.client.emitSnapshot(finalized);
-    harness.client.emitSnapshot(
-      snapshot('op-1', [segment('seg-1', 'final', '第一句')]),
-    );
-    expect(harness.calls.caption).toEqual(['第一句']);
   });
 });
 
@@ -553,6 +499,19 @@ describe('VoiceSessionController（dispose 与清理）', () => {
     expect(harness.capture.startCalled).toBe(false);
     expect(harness.calls.statuses.at(-1)).toBe('stopped');
   });
+
+  it('连接或麦克风授权挂起期间 cancel：立即断开且迟到结果不能启动采集', async () => {
+    const harness = makeHarness();
+    harness.client.gateStart();
+    const started = harness.controller.start();
+    harness.controller.cancel();
+
+    expect(harness.client.disconnectCalled).toBe(true);
+    expect(harness.calls.statuses.at(-1)).toBe('cancelled');
+    harness.client.releaseStart();
+    await started;
+    expect(harness.capture.startCalled).toBe(false);
+  });
 });
 
 describe('VoiceSessionController（日志脱敏）', () => {
@@ -612,6 +571,7 @@ describe('VoiceSessionController（状态机健全性）', () => {
     harness.client.emitTerminal({ reason: 'final' });
     expect(harness.calls.statuses).toEqual([
       'starting',
+      'authorizing',
       'recording',
       'finalizing',
       'stopped',

@@ -3,7 +3,7 @@
  *
  * ## 为什么存在
  *
- * 同一组件必须能完成一轮语音会话后再 start 第二轮（例如短句模式说完一句
+ * 同一组件必须能完成一轮语音会话后再 start 第二轮（例如一次提问结束后
  * 再录下一句）。控制器本身是会话级、一次性的；本类管理"当前活跃控制器"
  * 的引用生命周期：
  *
@@ -23,7 +23,6 @@
 
 import type {
   VoiceSessionController,
-  VoiceSessionMode,
   VoiceSessionStatus,
 } from './voice-session-controller';
 
@@ -41,7 +40,6 @@ export class VoiceSessionLifecycle<
   TController extends { dispose(): void } = VoiceSessionController,
 > {
   private active: TController | null = null;
-  private mode: VoiceSessionMode | null = null;
 
   /** 启动新会话；已有活跃会话（未终态）时返回 null。 */
   start(create: () => TController): TController | null {
@@ -62,12 +60,6 @@ export class VoiceSessionLifecycle<
   /** 能力撤回立即清理活跃会话；健康状态不产生副作用。 */
   handleCapability(enabled: boolean): void {
     if (!enabled) this.dispose();
-  }
-
-  /** 首次记录模式；后续模式变化立即清理旧会话。 */
-  handleMode(next: VoiceSessionMode): void {
-    if (this.mode !== null && this.mode !== next) this.dispose();
-    this.mode = next;
   }
 
   /** 状态回调：终态后释放活跃引用，允许下一次 start。 */

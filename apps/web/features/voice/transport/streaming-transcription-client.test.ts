@@ -259,6 +259,7 @@ function pcmBytesOf(
 afterEach(() => {
   FakeWebSocket.reset();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('握手与 ticket', () => {
@@ -1008,5 +1009,23 @@ describe('凭证投递目标受控（安全边界）', () => {
     ]);
     // start 帧没有上线（服务端没有会话）。
     expect(ws.sent).toHaveLength(0);
+  });
+
+  it('WebSocket upgrade 半开超过截止时间：稳定失败而不是永久 starting', async () => {
+    vi.useFakeTimers();
+    const harness = makeHarness({ connectionTimeoutMs: 25 });
+    const started = harness.client.start({ notebookId: 'nb-1' });
+    const rejected = expect(started).rejects.toMatchObject({
+      code: 'CONNECTION_FAILED',
+    });
+    await flushMicrotasks();
+    expect(FakeWebSocket.last().readyState).toBe(FakeWebSocket.CONNECTING);
+
+    await vi.advanceTimersByTimeAsync(25);
+    await rejected;
+    expect(harness.client.getStatus().phase).toBe('terminal');
+    expect(harness.terminals).toEqual([
+      { reason: 'connection-failed', errorCode: 'CONNECTION_FAILED' },
+    ]);
   });
 });

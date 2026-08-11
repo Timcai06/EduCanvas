@@ -62,7 +62,9 @@ export function ConversationArtifactCard({
           {presentation.label}
           {artifact.latestVersion > 0
             ? ` · v${artifact.latestVersion}`
-            : ' · 正在生成'}
+            : artifact.status === 'failed'
+              ? ' · 生成失败'
+              : ' · 正在生成'}
         </span>
       </span>
       <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-accent">
