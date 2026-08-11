@@ -105,6 +105,7 @@ function beginInput(clientMessageId = 'agent-client-1', now = baseTime) {
       builderVersion: 'conversation-context-v1',
       includedMessageIds: [],
       selectedAssetVersionIds: [],
+      selectedAssetRepresentations: [],
       omittedMessageCount: 0,
       characterCount: 0,
     },

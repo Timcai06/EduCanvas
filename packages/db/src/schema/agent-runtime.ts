@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { AssetVersionRepresentationIdentity } from '@educanvas/agent-core';
 import { platformUsers } from './identity';
 import { assetVersions, assets } from './asset';
 import { agentOperations, conversations } from './conversation';
@@ -230,6 +231,11 @@ export const turnContextSnapshots = pgTable(
       .notNull(),
     selectedAssetVersionIds: jsonb('selected_asset_version_ids')
       .$type<string[]>()
+      .notNull(),
+    /* ADR-0026 第 5 节：与 selected_asset_version_ids 同序的实际表示身份
+       （null=无派生表示）；旧行迁移默认 '[]'，历史 Turn 未冻结身份可接受。 */
+    selectedAssetRepresentations: jsonb('selected_asset_representations')
+      .$type<(AssetVersionRepresentationIdentity | null)[]>()
       .notNull(),
     omittedMessageCount: integer('omitted_message_count').notNull(),
     characterCount: integer('character_count').notNull(),

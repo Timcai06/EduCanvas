@@ -227,6 +227,9 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       builderVersion: 'agent-context-v2',
       includedMessageIds: fixture.includedMessageIds,
       selectedAssetVersionIds: fixture.selectedAssetVersionIds,
+      selectedAssetRepresentations: fixture.selectedAssetVersionIds.map(
+        () => null,
+      ),
       omittedMessageCount: 3,
       characterCount: 120,
     };
@@ -329,6 +332,7 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       builderVersion: 'teaching-context-v2',
       includedMessageIds: [teachingMessageId],
       selectedAssetVersionIds: [],
+      selectedAssetRepresentations: [],
       omittedMessageCount: 0,
       characterCount: 6,
     };
@@ -386,6 +390,9 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       builderVersion: 'agent-context-v2',
       includedMessageIds: fixture.includedMessageIds,
       selectedAssetVersionIds: fixture.selectedAssetVersionIds,
+      selectedAssetRepresentations: fixture.selectedAssetVersionIds.map(
+        () => null,
+      ),
       omittedMessageCount: 0,
       characterCount: 80,
     };
@@ -431,6 +438,8 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
           ...material,
           includedMessageIds: secondFixture.includedMessageIds,
           selectedAssetVersionIds: secondFixture.selectedAssetVersionIds,
+          selectedAssetRepresentations:
+            secondFixture.selectedAssetVersionIds.map(() => null),
         },
       }),
     ).rejects.toBeInstanceOf(AgentTurnContextLifecycleError);
@@ -443,6 +452,9 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       builderVersion: 'agent-context-v2',
       includedMessageIds: fixture.includedMessageIds,
       selectedAssetVersionIds: fixture.selectedAssetVersionIds,
+      selectedAssetRepresentations: fixture.selectedAssetVersionIds.map(
+        () => null,
+      ),
       omittedMessageCount: 0,
       characterCount: 80,
     };
@@ -470,6 +482,7 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
         material: {
           ...base,
           selectedAssetVersionIds: [fixture.otherNotebookAssetVersionId],
+          selectedAssetRepresentations: [null],
         },
       }),
     ).rejects.toBeInstanceOf(AgentTurnContextOwnershipError);
@@ -514,6 +527,7 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
         second,
         third,
       ],
+      selectedAssetRepresentations: [null, null, null],
       omittedMessageCount: 1,
       characterCount: 200,
     };
@@ -549,6 +563,7 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
             fixture.selectedAssetVersionIds[0]!,
             fixture.otherNotebookAssetVersionId,
           ],
+          selectedAssetRepresentations: [null, null],
           omittedMessageCount: 0,
           characterCount: 80,
         },
@@ -568,6 +583,7 @@ describeWithDatabase('统一Agent Context Snapshot账本', () => {
       builderVersion: 'agent-context-v2',
       includedMessageIds: fixture.includedMessageIds,
       selectedAssetVersionIds: [fixture.selectedAssetVersionIds[0]!],
+      selectedAssetRepresentations: [null],
       omittedMessageCount: 2,
       characterCount: 60,
     };

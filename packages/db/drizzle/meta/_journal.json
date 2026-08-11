@@ -386,6 +386,13 @@
       "when": 1786452997973,
       "tag": "0054_absent_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1786455000000,
+      "tag": "0055_asset_representation_identity",
+      "breakpoints": true
     }
   ]
 }

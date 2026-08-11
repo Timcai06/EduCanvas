@@ -64,6 +64,8 @@ function toSnapshot(
     builderVersion: row.builderVersion,
     includedMessageIds: row.includedMessageIds,
     selectedAssetVersionIds: row.selectedAssetVersionIds,
+    /* 旧行（0054 前）默认 '[]'：历史 Turn 未冻结表示身份，允许读取。 */
+    selectedAssetRepresentations: row.selectedAssetRepresentations,
     omittedMessageCount: row.omittedMessageCount,
     characterCount: row.characterCount,
     contextHash: row.contextHash,
@@ -172,7 +174,10 @@ function immutableFieldsMatch(
     JSON.stringify(row.includedMessageIds) ===
       JSON.stringify(input.includedMessageIds) &&
     JSON.stringify(row.selectedAssetVersionIds) ===
-      JSON.stringify(input.selectedAssetVersionIds)
+      JSON.stringify(input.selectedAssetVersionIds) &&
+    /* ADR-0026 第 5 节：表示身份是不可变上下文事实，重放必须逐字段核对。 */
+    JSON.stringify(row.selectedAssetRepresentations) ===
+      JSON.stringify(input.selectedAssetRepresentations)
   );
 }
 
@@ -225,6 +230,7 @@ export class DrizzleAgentTurnContextRepository implements AgentTurnContextLedger
           builderVersion: prepared.builderVersion,
           includedMessageIds: prepared.includedMessageIds,
           selectedAssetVersionIds: prepared.selectedAssetVersionIds,
+          selectedAssetRepresentations: prepared.selectedAssetRepresentations,
           omittedMessageCount: prepared.omittedMessageCount,
           characterCount: prepared.characterCount,
           contextHash: prepared.contextHash,

@@ -1066,4 +1066,95 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       },
     });
   });
+
+  it('materializeOwnedReferences 带出默认 text 表示身份与结构化派生源（ADR-0026 第 5 节）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    /* extractedText 置空：避免 createUploaded 自动创建的 default text 行掩盖 MinerU 行。 */
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values({
+        assetVersionId: created.version!.versionId,
+        kind: 'text',
+        variant: 'default',
+        producer: 'mineru',
+        producerVersion: 'mineru.v1',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+      });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.descriptor.assetId,
+            versionId: created.version!.versionId,
+            kind: 'document',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        textRepresentation: {
+          kind: 'text',
+          quality: 'structured',
+          variant: 'default',
+          producer: 'mineru',
+          producerVersion: 'mineru.v1',
+        },
+        derivedTextSource: {
+          storageKey: 'derived/11111111-1111-4111-8111-111111111111/index.md',
+          checksumSha256: 'c'.repeat(64),
+        },
+      }),
+    ]);
+  });
+
+  it('degraded 表示只带身份不带派生源（文本走 extractedText 兼容）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase().insert(schema.assetRepresentations).values({
+      assetVersionId: created.version!.versionId,
+      kind: 'text',
+      variant: 'default',
+      producer: 'textractor',
+      producerVersion: 'textractor.v1',
+      mimeType: 'text/plain',
+      status: 'ready',
+      quality: 'degraded_plain_text',
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.descriptor.assetId,
+            versionId: created.version!.versionId,
+            kind: 'document',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        textRepresentation: {
+          kind: 'text',
+          quality: 'degraded_plain_text',
+          variant: 'default',
+          producer: 'textractor',
+          producerVersion: 'textractor.v1',
+        },
+        derivedTextSource: null,
+      }),
+    ]);
+  });
 });

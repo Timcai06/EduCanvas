@@ -717,3 +717,23 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - 风险: 低——CHECK 形状约束与仓储缺省推导一致；唯一边界是
   ready+text 行若被 UPDATE 直接改成无质量语义值会违反 CHECK，属预期
   防护而非回归。
+
+## 0055_asset_representation_identity.sql
+
+- 状态: active（@hzlgou 作者记录，2026-08-11，ADR-0026 第 5 节）
+- 语义: `turn_context_snapshots` 新增
+  `selected_asset_representations` jsonb 列（NOT NULL DEFAULT '[]'），
+  与 `selected_asset_version_ids` 同序冻结实际表示身份
+  （kind/quality/variant/producer/producerVersion，null=无派生表示）。
+  后续重新处理不能改变历史 Turn 已冻结的表示事实。
+- 锁表: ADD COLUMN 元数据短锁。
+- 回滚: DROP COLUMN selected_asset_representations（历史数据不依赖该列
+  重建 Prompt；旧 Turn 未冻结身份可接受）。
+- N-1: 0054 老代码不触碰该列，新列带 DEFAULT 兼容插入/投影；本 PR 的
+  prepareTurnContextMaterial 在 N 版起写入并校验身份。
+- Fresh install: 可重放（ADD COLUMN 幂等语义）。
+- Data migration: 无 backfill；存量行取 DEFAULT '[]'（历史 Turn 未冻结
+  表示身份）。
+- Estimated scale: 本地 0 行量级。
+- 风险: 低——应用层校验（同序同数、quality 枚举、producer 格式）在写入
+  前拦截，DB 只存 JSON。

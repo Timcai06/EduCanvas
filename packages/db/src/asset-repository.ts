@@ -34,6 +34,8 @@ import { isUuid } from './internal/identifiers';
 import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
+  type DerivedTextSource,
+  type OwnedTextRepresentationIdentity,
 } from './internal/owned-asset-versions';
 import { requireNotebookAccess } from './notebook-access';
 import {
@@ -100,6 +102,16 @@ export interface MaterializedAssetVersion {
   extractedText: string | null;
   /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
   transcriptionText: string | null;
+  /**
+   * ADR-0026 第 5 节：默认 text 表示身份（Context Snapshot 冻结用）。
+   * 仅含身份，不含对象存储位置——位置由 derivedTextSource 单独携带。
+   */
+  textRepresentation: OwnedTextRepresentationIdentity | null;
+  /**
+   * ADR-0026 第 5 节：structured 派生文件源定位（仅 structured 非 null）。
+   * 由 web 物化层读取并核对 checksum；storageKey 绝不能进 Context Snapshot。
+   */
+  derivedTextSource: DerivedTextSource | null;
 }
 
 export interface AssetAccessPolicy {
@@ -1277,6 +1289,11 @@ export class DrizzleAssetRepository {
           byteSize: row.version.byteSize,
           extractedText: row.version.extractedText,
           transcriptionText: row.version.transcriptionText,
+          /* ADR-0026 第 5 节：默认 text 表示身份，供 Context Snapshot 冻结；
+             不含对象存储位置。 */
+          textRepresentation: row.textRepresentation,
+          /* ADR-0026 第 5 节：structured 派生文件源定位（web 物化层读取核对用）。 */
+          derivedTextSource: row.derivedTextSource,
         };
       });
     } catch (error) {

@@ -15,6 +15,15 @@ const document = {
   byteSize: 100,
   extractedText: '可信引用的正文',
   transcriptionText: null,
+  textRepresentation: {
+    kind: 'text' as const,
+    quality: 'structured' as const,
+    variant: 'default',
+    producer: 'mineru',
+    producerVersion: 'mineru.v1',
+  },
+  derivedTextSource: null,
+  derivedMarkdown: null,
 };
 
 describe('通用Asset输入物化', () => {
@@ -30,6 +39,13 @@ describe('通用Asset输入物化', () => {
       textSegments: [
         {
           reference: document.reference,
+          representation: {
+            kind: 'text',
+            quality: 'structured',
+            variant: 'default',
+            producer: 'mineru',
+            producerVersion: 'mineru.v1',
+          },
           text: expect.stringContaining('可信引用'),
         },
       ],
@@ -48,6 +64,9 @@ describe('通用Asset输入物化', () => {
             mimeType: 'image/png',
             extractedText: null,
             transcriptionText: null,
+            textRepresentation: null,
+            derivedTextSource: null,
+            derivedMarkdown: null,
           },
         ],
         capabilities: { nativeAssetKinds: [] },
@@ -63,6 +82,9 @@ describe('通用Asset输入物化', () => {
       mimeType: 'image/png',
       extractedText: null,
       transcriptionText: null,
+      textRepresentation: null,
+      derivedTextSource: null,
+      derivedMarkdown: null,
     };
     expect(
       buildAssetContext({
@@ -74,6 +96,41 @@ describe('通用Asset输入物化', () => {
       textSegments: [],
       nativeReferences: [image.reference],
     });
+  });
+
+  it('structured 时优先使用已核对 checksum 的派生 Markdown 而非镜像', () => {
+    const structured = {
+      ...document,
+      extractedText: '镜像的纯文本正文',
+      /* 物化层读入并核对 checksum 后的派生 Markdown（ADR-0026 第 5 节）。 */
+      derivedMarkdown: '# 标题\n\n- 要点一\n- 要点二',
+    };
+    const { textSegments } = buildAssetContext({
+      assets: [structured],
+      capabilities: { nativeAssetKinds: [] },
+    });
+    expect(textSegments[0]?.text).toContain('# 标题');
+    expect(textSegments[0]?.text).not.toContain('镜像的纯文本正文');
+  });
+
+  it('无派生 Markdown 时回退 extractedText（degraded/旧资产兼容）', () => {
+    const degraded = {
+      ...document,
+      textRepresentation: {
+        ...document.textRepresentation,
+        quality: 'degraded_plain_text' as const,
+        producer: 'textractor',
+        producerVersion: 'textractor.v1',
+      },
+      derivedTextSource: null,
+      derivedMarkdown: null,
+    };
+    expect(
+      buildAssetContext({
+        assets: [degraded],
+        capabilities: { nativeAssetKinds: [] },
+      }).text,
+    ).toContain('可信引用的正文');
   });
 
   it('使用转录文本作为音频的可用文本来源', () => {
@@ -88,6 +145,9 @@ describe('通用Asset输入物化', () => {
       byteSize: 1000,
       extractedText: null,
       transcriptionText: '转录得到的文本内容',
+      textRepresentation: null,
+      derivedTextSource: null,
+      derivedMarkdown: null,
     };
     expect(
       buildAssetContext({
@@ -99,6 +159,7 @@ describe('通用Asset输入物化', () => {
       textSegments: [
         {
           reference: audio.reference,
+          representation: null,
           text: expect.stringContaining('转录得到的文本内容'),
         },
       ],

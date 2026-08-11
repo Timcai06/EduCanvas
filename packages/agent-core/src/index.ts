@@ -241,6 +241,7 @@ export type {
   AgentTurnContextLedgerPort,
   AgentTurnContextMaterial,
   AgentTurnContextSnapshot,
+  AssetVersionRepresentationIdentity,
 } from './turn-context-ledger';
 
 export {

@@ -15,6 +15,7 @@ describe('prepareTurnContextMaterial', () => {
       builderVersion: 'conversation-context-v1',
       includedMessageIds,
       selectedAssetVersionIds: [assetVersionId],
+      selectedAssetRepresentations: [null],
       omittedMessageCount: 2,
       characterCount: 128,
     };
@@ -33,6 +34,7 @@ describe('prepareTurnContextMaterial', () => {
       builderVersion: 'conversation-context-v1',
       includedMessageIds: [firstMessageId, secondMessageId],
       selectedAssetVersionIds: [],
+      selectedAssetRepresentations: [],
       omittedMessageCount: 0,
       characterCount: 8,
     });
@@ -40,6 +42,7 @@ describe('prepareTurnContextMaterial', () => {
       builderVersion: 'conversation-context-v1',
       includedMessageIds: [secondMessageId, firstMessageId],
       selectedAssetVersionIds: [],
+      selectedAssetRepresentations: [],
       omittedMessageCount: 0,
       characterCount: 8,
     });
@@ -53,6 +56,7 @@ describe('prepareTurnContextMaterial', () => {
         builderVersion: 'conversation-context-v1',
         includedMessageIds: ['not-a-uuid'],
         selectedAssetVersionIds: [],
+        selectedAssetRepresentations: [],
         omittedMessageCount: 0,
         characterCount: 0,
       }),
@@ -62,6 +66,7 @@ describe('prepareTurnContextMaterial', () => {
         builderVersion: 'conversation-context-v1',
         includedMessageIds: [],
         selectedAssetVersionIds: [],
+        selectedAssetRepresentations: [],
         omittedMessageCount: -1,
         characterCount: 0,
       }),
@@ -74,6 +79,7 @@ describe('prepareTurnContextMaterial', () => {
         builderVersion: 'conversation-context-v1',
         includedMessageIds: [firstMessageId, firstMessageId],
         selectedAssetVersionIds: [],
+        selectedAssetRepresentations: [],
         omittedMessageCount: 0,
         characterCount: 10,
       }),
@@ -83,6 +89,7 @@ describe('prepareTurnContextMaterial', () => {
         builderVersion: 'conversation-context-v1',
         includedMessageIds: [],
         selectedAssetVersionIds: [assetVersionId, assetVersionId],
+        selectedAssetRepresentations: [],
         omittedMessageCount: 0,
         characterCount: 10,
       }),
@@ -97,6 +104,7 @@ describe('prepareTurnContextMaterial', () => {
         '20000000-0000-4000-8000-000000000001',
         '20000000-0000-4000-8000-000000000002',
       ],
+      selectedAssetRepresentations: [null, null],
       omittedMessageCount: 0,
       characterCount: 10,
     });
@@ -107,6 +115,7 @@ describe('prepareTurnContextMaterial', () => {
         '20000000-0000-4000-8000-000000000002',
         '20000000-0000-4000-8000-000000000001',
       ],
+      selectedAssetRepresentations: [null, null],
       omittedMessageCount: 0,
       characterCount: 10,
     });

@@ -1,4 +1,8 @@
-import type { AssetKind, AssetVersionReference } from '@educanvas/agent-core';
+import type {
+  AssetKind,
+  AssetVersionReference,
+  AssetVersionRepresentationIdentity,
+} from '@educanvas/agent-core';
 
 export interface MaterializedAssetInput {
   reference: AssetVersionReference;
@@ -8,6 +12,31 @@ export interface MaterializedAssetInput {
   extractedText: string | null;
   /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
   transcriptionText: string | null;
+  /**
+   * ADR-0026：默认 text representation 的实际身份（kind 恒为 'text'）。
+   * null 表示无派生表示（如直接上传的图片/音频，或旧资产没有 representation 行）。
+   */
+  textRepresentation: {
+    kind: 'text';
+    quality: AssetVersionRepresentationIdentity['quality'];
+    variant: string;
+    producer: string;
+    producerVersion: string;
+  } | null;
+  /**
+   * ADR-0026 第 5 节：structured 派生文件源定位（物化层据此读取并核对 checksum）。
+   * 仅 structured 且带派生文件时非 null；storageKey 绝不能进入 Context Snapshot。
+   */
+  derivedTextSource: {
+    storageKey: string;
+    checksumSha256: string;
+  } | null;
+  /**
+   * ADR-0026 第 5 节：已核对 checksum 的派生 Markdown（structured 质量的
+   * 唯一文本源，文档进入有界 Markdown 文本段）。由物化层读入并验证后填充，
+   * 本函数只消费不读取。null = 无派生文本（降级/旧资产走 extractedText 兼容）。
+   */
+  derivedMarkdown: string | null;
 }
 
 export interface AgentInputCapabilities {
@@ -17,10 +46,15 @@ export interface AgentInputCapabilities {
 
 export interface BuiltAssetContext {
   text: string;
-  /** 每段文本绑定一个不可变AssetVersion，供Context Snapshot精确审计。 */
+  /**
+   * 每段文本绑定一个不可变AssetVersion，供Context Snapshot精确审计。
+   * representation 携带该版本实际使用的派生表示身份（ADR-0026 第 5 节），
+   * null 表示该版本没有派生表示（如旧资产或直接解码文本）。
+   */
   textSegments: readonly {
     reference: AssetVersionReference;
     text: string;
+    representation: AssetVersionRepresentationIdentity | null;
   }[];
   nativeReferences: readonly AssetVersionReference[];
 }
@@ -54,20 +88,33 @@ export function buildAssetContext(input: {
   if (input.assets.length === 0) {
     return { text: '', textSegments: [], nativeReferences: [] };
   }
+  /** 资产 → 冻结身份；无派生表示时为 null（旧资产/直接解码文本）。 */
+  const representationOf = (asset: MaterializedAssetInput) =>
+    asset.textRepresentation
+      ? {
+          kind: asset.textRepresentation.kind,
+          quality: asset.textRepresentation.quality,
+          variant: asset.textRepresentation.variant,
+          producer: asset.textRepresentation.producer,
+          producerVersion: asset.textRepresentation.producerVersion,
+        }
+      : null;
   const supportedNative = new Set(input.capabilities.nativeAssetKinds);
   /**
    * 音频的转录文本（transcriptionText）是与 extractedText 等价的文本来源，
    * 只是来源不同（Provider 转录 vs. 文本抽取）。判断「有没有可用文本」时
    * 两者都算。
    */
+  const hasText = (asset: MaterializedAssetInput) =>
+    Boolean(
+      asset.derivedMarkdown || asset.extractedText || asset.transcriptionText,
+    );
   const unsupported = [
     ...new Set(
       input.assets
         .filter(
           (asset) =>
-            !asset.extractedText &&
-            !asset.transcriptionText &&
-            !supportedNative.has(asset.reference.kind),
+            !hasText(asset) && !supportedNative.has(asset.reference.kind),
         )
         .map((asset) => asset.reference.kind),
     ),
@@ -78,26 +125,30 @@ export function buildAssetContext(input: {
 
   const nativeReferences = input.assets
     .filter(
-      (asset) =>
-        !asset.extractedText &&
-        !asset.transcriptionText &&
-        supportedNative.has(asset.reference.kind),
+      (asset) => !hasText(asset) && supportedNative.has(asset.reference.kind),
     )
     .map((asset) => asset.reference);
   let remaining = normalizedLimit(input.maxTextCharacters);
-  const textSegments: { reference: AssetVersionReference; text: string }[] = [];
+  const textSegments: {
+    reference: AssetVersionReference;
+    text: string;
+    representation: AssetVersionRepresentationIdentity | null;
+  }[] = [];
   for (const asset of input.assets) {
     /**
-     * 优先使用 extractedText（PDF/DOCX/文本），其次使用 transcriptionText（音频）。
-     * 两者不会同时存在——音频不走文本抽取，文档不走转录。
+     * 文本源优先级：已核对 checksum 的派生 Markdown（structured）→ extractedText
+     * （degraded/旧资产兼容）→ transcriptionText（音频）。前两者不会同时作为
+     * 有效来源——structured 时物化层填充 derivedMarkdown，镜像只作回退。
      */
-    const availableText = asset.extractedText ?? asset.transcriptionText;
+    const availableText =
+      asset.derivedMarkdown ?? asset.extractedText ?? asset.transcriptionText;
     const extractedText = availableText?.trim();
     if (!extractedText || remaining <= 0) continue;
     const excerpt = [...extractedText].slice(0, remaining).join('');
     remaining -= [...excerpt].length;
     textSegments.push({
       reference: asset.reference,
+      representation: representationOf(asset),
       text: [
         `--- Asset: ${asset.displayName} (${asset.mimeType}) ---`,
         excerpt,
