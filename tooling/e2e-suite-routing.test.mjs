@@ -24,9 +24,9 @@ describe('E2E suite routing', () => {
       'account-flow.spec.ts',
       'artifact-flow.spec.ts',
       'canvas-resource-access.spec.ts',
-      'general-chat-flow.spec.ts',
+      'general-journey.spec.ts',
       'hydration.spec.ts',
-      'learning-flow.spec.ts',
+      'learning-journey.spec.ts',
       'live-voice-flow.spec.ts',
       'profile-activity.spec.ts',
       'sandbox-preview.spec.ts',
@@ -35,7 +35,7 @@ describe('E2E suite routing', () => {
       const source = readFileSync(resolve(e2eRoot, name), 'utf8');
       return total + (source.match(/test\(\s*['"]@smoke\b/g)?.length ?? 0);
     }, 0);
-    assert.ok(count >= 6 && count <= 12, `PR smoke budget is ${count}`);
+    assert.ok(count >= 6 && count <= 14, `PR smoke budget is ${count}`);
   });
 
   it('routes PRs to smoke while keeping UI review nightly or manual', () => {

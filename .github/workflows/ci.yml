@@ -515,6 +515,22 @@ jobs:
           path: output/playwright
           if-no-files-found: ignore
 
+      - name: Extract golden journey evidence
+        if: always() && (steps.browser_e2e_smoke.outcome == 'success' || steps.browser_e2e_full.outcome == 'success')
+        env:
+          EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --golden-evidence output/playwright/golden-journey-evidence.json
+
+      - name: Upload E2E results for evidence v2
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: e2e-results-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            output/playwright/results.json
+            output/playwright/golden-journey-evidence.json
+          if-no-files-found: ignore
+
       # Q05 bundle/route size gate：放在全部测试之后执行——gate 失败仍让 job 红，
       # 但不再跳过 E2E 测试本身（#310：此前 gate 在测试前失败会 skip 全部 E2E，
       # 掩盖真实回归；构建产物已由上方 Build 生成）。
@@ -561,7 +577,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deterministic Agent evaluation
-        run: pnpm test:eval
+        env:
+          EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pnpm test:eval && node tooling/evals/eval-gate.mjs --sha "$EVIDENCE_SHA"
 
       - name: Upload sanitized Agent evaluation
         if: always()
@@ -694,3 +712,42 @@ jobs:
           name: ci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: output/ci-evidence/evidence.json
           if-no-files-found: error
+
+      - name: Download agent-eval artifact
+        if: always()
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: agent-eval-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/agent-eval
+        continue-on-error: true
+
+      - name: Download e2e results artifact
+        if: always()
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: e2e-results-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/e2e-results
+        continue-on-error: true
+
+      - name: Generate AI Product Evidence v2
+        if: always()
+        env:
+          EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          node tooling/quality/ai-product-evidence.mjs
+          --sha "$EVIDENCE_SHA"
+          --event "$EVENT_NAME"
+          --eval-reports output/agent-eval
+          --playwright-results output/e2e-results/results.json
+          --output output/ai-product-evidence/evidence.json
+          --summary
+
+      - name: Upload AI Product Evidence v2
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: ai-product-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: output/ai-product-evidence/evidence.json
+          # A failing verdict still writes useful evidence. A pre-write parser error
+          # should preserve the original red without adding a second artifact error.
+          if-no-files-found: ignore

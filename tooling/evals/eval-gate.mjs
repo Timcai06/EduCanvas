@@ -13,7 +13,7 @@ function loadJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-function assertSanitized(value, path = '$') {
+export function assertSanitized(value, path = '$') {
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
       assertSanitized(entry, `${path}[${index}]`),
@@ -60,6 +60,7 @@ export function evaluateReports({
   ragBaseline,
   agentReport,
   agentBaseline,
+  sha,
 }) {
   assertSanitized(ragReport);
   assertSanitized(agentReport);
@@ -92,6 +93,7 @@ export function evaluateReports({
   ];
   return {
     schemaVersion: 1,
+    sha: sha ? sha.toLowerCase() : undefined,
     datasets: {
       rag: ragBaseline.datasetVersion,
       agent: agentBaseline.datasetVersion,
@@ -123,6 +125,8 @@ function main() {
     agentBaseline: loadJson(
       resolve(repoRoot, 'tooling/evals/baselines/agent-v1.json'),
     ),
+    sha:
+      argument('--sha') || process.env.EVIDENCE_SHA || process.env.GITHUB_SHA,
   });
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
