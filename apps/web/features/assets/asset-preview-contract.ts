@@ -46,8 +46,29 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
       mimeType: z.literal(
         'application/vnd.openxmlformats-officedocument.wordprocessingml',
       ),
+      /** mammoth 原格式预览 HTML；结构化可用时为空串（前端优先结构化阅读）。 */
       content: z.string().max(500_000),
       warnings: z.array(z.string()).optional(),
+      /**
+       * ADR-0026 决定 6：文本派生表示的实际质量；null 表示该版本没有
+       * text 表示（如未走文档抽取的旧资产）。quality 为 structured 时
+       * markdown 携带服务端投影后的派生内容（图片引用已是鉴权资源 URL）。
+       */
+      representation: z
+        .object({
+          quality: z.enum([
+            'structured',
+            'degraded_plain_text',
+            'processing',
+            'failed',
+            'unavailable',
+          ]),
+          markdown: z.string().max(120_000).optional(),
+        })
+        .nullable()
+        .optional(),
+      /** 原件下载入口（决定 1：不把派生 Markdown 冒充原始 DOCX）。 */
+      downloadUrl: fileUrlSchema,
     })
     .strict(),
   z
