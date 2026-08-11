@@ -110,12 +110,19 @@
 
 **B. Mermaid 渲染接入**
 
-| 维度 | mermaid.js | rehype-mermaid | remark-mermaid | kroki | mermaid-cli |
-|------|-----------|----------------|----------------|-------|-------------|
-| 渲染位置(客户端/服务端) | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 安全模型 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 与 react-markdown 集成 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 依赖重量 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
+| 维度 | mermaid.js | rehype-mermaid | remark-mermaid(mauvm/已死) | kroki | mermaid-cli |
+|------|-----------|----------------|---------------------------|-------|-------------|
+| 渲染位置 | **纯客户端 JS**（必须 DOM，无官方 Node SSR） | 服务端预渲染（playwright） | 服务端(mermaid-cli)或客户端 | 外部服务/独立容器聚合器 | 服务端（puppeteer headless） |
+| 安全模型 | `securityLevel` 4档(strict默认/antiscript/loose/sandbox)；**默认 secure 数组含 securityLevel，`%%{init}%%` 无法降级**（已核实 schema）；DOMPurify 洗 SVG（官方自认有洞）；SSRF 不防护 | 4策略：inline-svg最弱/`img-svg`/`img-png`强；不强制锁 securityLevel；playwright `bypassCSP:true` | 过时，仅形态参考 | **最强**：fail-closed SafeMode + request interception 网络白名单(仅file:/data:/同源/白名单，其余abort，已核实) + 配置锁死(忽略 securityLevel/maxTextSize 等用户输入) + 50k 上限 | 只拦截本地文件，**不阻断外部网络**（SSRF 需自防）；不锁 securityLevel |
+| 与 react-markdown 集成 | 自研组件/rehype 插件调 `mermaid.render` | rehype 插件，`rehypePlugins={[rehypeMermaid]}` 直接用（须服务端/构建时） | remark 插件(mdast→mdast)，react-markdown 用不上 | HTTP API 外部调用 | 库 `renderMermaid()` 可作自研 rehype 插件底层引擎 |
+| 依赖重量 | **3.57MB min(~1MB gzip)**，客户端负担重 | 重：playwright+chromium | 重 | 重：Java 服务+每图一容器 | 重：puppeteer+chrome |
+| 活跃度 | ★★★ 89.7k★，2026-08 | ★★ 192★，2026-04 | ✗ 0★，2019 死 | ★★★ 4.3k★，2026-08 | ★★★ 4.9k★，2026-08 |
+
+**B 线结论（安全机制已源码核实）**：
+1. **首选 Tier 1：服务端预渲染 SVG + `<img>` 呈现**——自研 rehype 插件 + headless 浏览器渲染服务，`mermaid.render()` 出 SVG 转 `data:image/svg+xml` 的 `<img>`（`<img>` 里 SVG 不执行 script，比 inline `<svg>` 硬）
+2. **照抄 kroki 三道安全防线**（已核实源码）：① request interception 网络白名单断 SSRF（仅 file:/data:/同源/白名单）；② 配置锁死——保留 mermaid 默认 secure 数组 + 渲染接口忽略用户传入的 `securityLevel`/`maxTextSize`/`secure`；③ 资源上限（maxTextSize 50k、超时、并发信号量）
+3. **客户端方案不推荐**：3.57MB 体积 + 需 `style-src 'unsafe-inline'` CSP；除非确需点击交互，才走 EduCanvas 既有 sandboxed iframe + 白名单组件路径
+4. **新依赖需过 ADR**：Node 服务端引入 playwright/chromium（部署体积数百 MB）或外部渲染服务（对外网络依赖）
 
 ### 调研发现（主线 C 形态对标，已完成）
 
@@ -142,15 +149,47 @@
 2. **落库与表示**：`apps/worker/src/tasks/extract-asset-text.ts` 把输出以 `text/plain` 存 `derived/text/<sha>.txt` 并双写 `asset_versions.extracted_text`。**升级点**：输出内容类型改 `text/markdown`、存储键改 `.md`，并保留旧纯文本字段兼容读（类似 D04 的 compatibility 双写）
 3. **渲染消费**：Source 渲染器 `apps/web/features/assets/source-resource-renderer.tsx` 已能渲染 `source.markdown`；服务端预览 `asset-preview.ts` 对 markdown 直接返回 extractedText。结构 md 落地后渲染侧几乎零改动，只需补 Mermaid
 
-## 五、方法与产出物
+## 五、汇总推荐方案
+
+### 输入侧（各格式 → 带结构 Markdown）：双轨分流
+
+| 文档类型 | 方案 | 说明 |
+|----------|------|------|
+| docx/pptx/xls/epub/csv + 文本层 PDF | **anydoc 进程内**（napi-rs 原生 Node 插件） | MIT、质量第一、零外部服务；替换 `text-extraction.ts` 的 mammoth 分支，输出 GFM；`pdf_text_unavailable`（扫描件）分支保留 |
+| 扫描 PDF / 复杂排版 / 中文教学文档 | **MinerU pipeline 或 docling 独立服务**（Python sidecar REST） | MinerU 中文/公式/表格最强、纯 CPU 可跑但**在线服务须署名**；docling MIT 更宽松为备选；两者都离线可跑 |
+| 网页 → md | 待补一轮 mini 调研 | 现有 `web-page.ts` 只出纯文本；Node 侧需 `@mozilla/readability` + html→md，或复用 markitdown(Python)；见开放问题 |
+
+### 渲染侧（md + Mermaid 在 Canvas 渲染）
+
+- **Mermaid：Tier 1 服务端预渲染 SVG + `<img>` 呈现**——自研 rehype 插件，服务端 headless 渲染 `mermaid.render()` → `data:image/svg+xml` `<img>`；照抄 kroki 三道防线（网络白名单断 SSRF、配置锁死防降级、资源上限）
+- **md 文档查看**：现有 `source-resource-renderer.tsx` / `note-renderer.tsx` 已渲染 md，补 Mermaid 插件即达"完整 md 文档（含图）"；渲染侧改动远小于输入侧
+- 确需图表交互才走既有 sandboxed iframe + 白名单组件（Tier 2）
+
+### 输出侧（统一 md）
+
+- **现状已接近**：note artifact 原生 md、聊天消息全 md、Source md 已注册；模型输出 html 走沙箱预览
+- 需评估：是否新增"文档 Artifact"类型（触碰 canvas-protocol 白名单 + ADR-0004），或让 `note` 承担完整文档角色——建议后续单独立项
+
+### 落地顺序建议（供后续 plan 参考）
+
+1. **Phase 1（输入统一 md）**：anydoc 换装 `text-extraction.ts` → 输出落库改 `text/markdown`（含兼容双写）→ 验证 docx/pdf 转换质量
+2. **Phase 2（Mermaid 渲染）**：headless 渲染服务 + 自研 rehype 插件 + 防降级/SSRF/限流；接入 react-markdown 管线
+3. **Phase 3（输出规范 + 新 artifact 判断）**：模型输出 md 规范 + 是否新增文档 Artifact
+4. **新依赖/新服务需过 ADR**：anydoc 原生 .node 插件、playwright/chromium、Python sidecar 服务
+
+## 六、方法与产出物
 
 1. **内部基线**：已完成（本文件第二节）
 2. **外部调研**：分批并行 subagent，每类产出一张对比矩阵（功能/质量/依赖/许可/活跃度/契合度/安全），来源以官方仓库/文档/许可证/发布记录为准
 3. **汇总**：推荐方案 + 与 ADR-0004/0009/0023 契合检查 + 开放问题
 4. **产出物**：本文件收敛为最终调研报告（状态 draft → 供后续实现与 ADR 引用）
 
-## 六、开放问题
+## 七、开放问题
 
-- OCR→md 是否纳入主调研线（当前不纳入）
-- 是否有 1-2 份真实样本文档（PDF + DOCX）用于后续转换质量验证（报告阶段可延后）
+- **网页→md 未深调研**：候选清单中 Readability/trafilatura/Jina Reader 未派专属 agent；需补一轮"Node 侧 html→md（readability + 转换器）vs markitdown(Python)"的 mini 调研
+- **公式需求强度未定**：anydoc 无公式；若 K12 文档强依赖数学公式，需评估补 pandoc(docx→md 专跑公式) 或 MinerU
+- **OCR→md 未纳入**（当前明确不纳入；若后续要扫描件全覆盖，MinerU pipeline 已具备 OCR 能力）
+- **是否新增"文档 Artifact"类型**：触碰 canvas-protocol 白名单 + ADR-0004，需单独立项评估（当前 note 可先承担）
+- **新依赖/服务需过 ADR**：anydoc 原生 .node 插件、playwright/chromium 渲染服务、Python sidecar（MinerU/docling）
+- 转换质量验证：需要 1-2 份真实样本文档（PDF + DOCX）在 Phase 1 实测
 - 报告落位与后续 PR 时机由用户决定
