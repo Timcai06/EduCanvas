@@ -76,25 +76,29 @@
 
 > 按团队协作规则：外部项目**先 clone 到本地读源码再下结论**（网络走代理），禁止只凭网页/记忆下结论。
 
+> **clone 存放位置**（用户手动可查，不进 git）：`/home/hzlgou/EduCanvas/research-clones/20260811-input-md-canvas/<项目名>`，每个项目 `git clone --depth 1`。
+
 | 类别 | 候选项目 | 优先级 | 调研方式 |
 |------|----------|--------|----------|
-| PDF/DOCX→md | pandoc、markitdown、docling、marker、MinerU、mammoth(已用) | 高 | clone + 源码/文档 |
+| PDF/DOCX→md | **firecrawl/anydoc**（用户指定参考）、pandoc、markitdown、docling、marker、MinerU（用户指定参考）、mammoth(已用) | 高 | clone + 源码/文档 |
 | 网页→md | Readability、trafilatura、Jina Reader | 中 | clone + 文档 |
 | Mermaid 渲染 | mermaid.js、rehype-mermaid、remark-mermaid、kroki、mermaid-cli | 高 | clone + 源码/文档 |
 | 形态对标 | NotebookLM、Obsidian、Napkin、Heptabase | 低 | 文档调研即可 |
+
+> ⚠️ 许可注意：anydoc 为 **AGPL-3.0**，MinerU、markitdown 等多为 MIT/Apache，落地时需评估与 EduCanvas 闭源/商用边界（服务化隔离可能缓解）。
 
 ### 对比矩阵（调研中，逐步填充）
 
 **A. 文档→Markdown 转换工具**
 
-| 维度 | pandoc | markitdown | docling | marker | MinerU | mammoth(已用) |
-|------|--------|-----------|---------|--------|--------|---------------|
-| 输入格式 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | DOCX |
-| md 保真度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 依赖/语言 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | JS |
-| 许可 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 维护活跃度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 服务端可跑性 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 已用 |
+| 维度 | anydoc | pandoc | markitdown | docling | marker | MinerU | mammoth(已用) |
+|------|--------|--------|-----------|---------|--------|--------|---------------|
+| 输入格式 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | DOCX |
+| md 保真度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
+| 依赖/语言 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | JS |
+| 许可 | AGPL | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
+| 维护活跃度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
+| 服务端可跑性 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 已用 |
 
 **B. Mermaid 渲染接入**
 
