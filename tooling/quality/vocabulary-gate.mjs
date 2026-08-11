@@ -47,6 +47,11 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'assets_status_check',
   'asset_versions_status_check',
   'asset_versions_failure_shape_check',
+  /* ADR-0026 四态质量（processing/structured/degraded_plain_text/failed）是
+     closed 枚举；quality_shape_check 的 ready 分支内联同一闭集字面量，同为
+     closed 语义，一并注册（B1 0054 引入时漏注册，全量门禁测试补齐）。 */
+  'asset_representations_quality_check',
+  'asset_representations_quality_shape_check',
   'asset_representations_status_check',
   'asset_representations_failure_shape_check',
   'asset_video_keyframes_shape_check',
@@ -218,28 +223,37 @@ export function isLiteralVocabularyClosure(body) {
   return /\$\{[^}]+\}(?:\s*->>\s*'[^']+')?\s*=\s*'[^']*'/i.test(body);
 }
 
-/** 从最新 journal 项读取本轮 migration 的 ADD CHECK，防止手写 SQL 绕过 schema 门禁。 */
-export function extractLatestMigrationChecks() {
+/**
+ * 从全部 migration journal 项提取 ADD CHECK，防止手写 SQL 绕过 schema 门禁。
+ * 同名约束按 journal 顺序去重、保留最新定义：migration 是演进快照，约束会被
+ * 后续 migration 覆盖（如 kind/phase 由闭集演化为开放格式 ~ 正则），只审最新
+ * 单条 migration 又会随纯加列 migration 漂移成空集，去重保留最终态最贴门禁本意。
+ */
+export function extractMigrationChecks() {
   const journal = JSON.parse(
     readFileSync(
       join(process.cwd(), 'packages/db/drizzle/meta/_journal.json'),
       'utf8',
     ),
   );
-  const latest = journal.entries.at(-1);
-  if (!latest?.tag) return [];
-  const migrationPath = join(
-    process.cwd(),
-    'packages/db/drizzle',
-    `${latest.tag}.sql`,
-  );
-  const source = readFileSync(migrationPath, 'utf8');
-  return source.split('--> statement-breakpoint').flatMap((statement) => {
-    const match = /ADD CONSTRAINT "([^"]+)" CHECK \(([\s\S]*)\)\s*;?\s*$/.exec(
-      statement.trim(),
+  const byName = new Map();
+  for (const entry of journal.entries) {
+    if (!entry.tag) continue;
+    const migrationPath = join(
+      process.cwd(),
+      'packages/db/drizzle',
+      `${entry.tag}.sql`,
     );
-    return match ? [{ name: match[1], body: match[2] }] : [];
-  });
+    const source = readFileSync(migrationPath, 'utf8');
+    for (const statement of source.split('--> statement-breakpoint')) {
+      const match =
+        /ADD CONSTRAINT "([^"]+)" CHECK \(([\s\S]*)\)\s*;?\s*$/.exec(
+          statement.trim(),
+        );
+      if (match) byName.set(match[1], { name: match[1], body: match[2] });
+    }
+  }
+  return [...byName.values()];
 }
 
 /** 审计 schema 源码：返回违规的约束名列表（白名单外的成员闭集）。 */
@@ -253,14 +267,12 @@ export function auditVocabularyClosures() {
       violations.push(`${call.file}: ${call.name} 是白名单外的成员闭集约束`);
     }
   }
-  for (const call of extractLatestMigrationChecks()) {
+  for (const call of extractMigrationChecks()) {
     if (
       isLiteralVocabularyClosure(call.body) &&
       !CLOSED_VOCABULARY_CONSTRAINTS.has(call.name)
     ) {
-      violations.push(
-        `latest migration: ${call.name} 是白名单外的成员闭集约束`,
-      );
+      violations.push(`migration: ${call.name} 是白名单外的成员闭集约束`);
     }
   }
   return violations;

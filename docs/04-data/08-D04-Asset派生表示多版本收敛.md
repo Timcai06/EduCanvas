@@ -144,6 +144,7 @@
 - `agent-core assetProcessorKinds`（processor 权威，D03 冻结）——未改；
 - **新增** `agent-core representationIdentitySchema / representationVariantSchema / representationProducerSchema / representationProducerVersionSchema / DEFAULT_REPRESENTATION_IDENTITY`（identity 权威，单一 zod，无并行 TS enum）；
 - DB 仅格式 CHECK（D03 词汇门禁继续通过：`vocabulary-gate` audit exit 0、8/8 测试）。
+- **ADR-0026（0054）新增 2 个 closed 质量 CHECK**（`asset_representations_quality_check` / `_quality_shape_check`）：四态质量（processing/structured/degraded_plain_text/failed + unavailable）是 closed 枚举，与 status/failure_shape 同类，已注册进 `CLOSED_VOCABULARY_CONSTRAINTS` 白名单（全量门禁测试覆盖，见 §15 验证记录）。
 
 ## 13. 对 UV / KM / PET / O 的影响
 

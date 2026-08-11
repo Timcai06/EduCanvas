@@ -4,7 +4,7 @@ import {
   auditVocabularyClosures,
   CLOSED_VOCABULARY_CONSTRAINTS,
   extractCheckCalls,
-  extractLatestMigrationChecks,
+  extractMigrationChecks,
   isLiteralVocabularyClosure,
   loadSchemaCheckCalls,
 } from './quality/vocabulary-gate.mjs';
@@ -68,8 +68,9 @@ test('check 调用提取', () => {
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
   // D04 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表），
-  // 总数从 231 → 237；成员闭集仍全部在白名单内。
-  assert.equal(loadSchemaCheckCalls().length, 237);
+  // 总数从 231 → 237；ADR-0026 B1（0054）再增 2 个质量 CHECK → 239。
+  // 成员闭集仍全部在白名单内。
+  assert.equal(loadSchemaCheckCalls().length, 239);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
 });
@@ -90,19 +91,35 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
   assert.equal(wouldViolate, true);
 });
 
-test('最新 migration 的 ADD CHECK 与 schema 使用同一分类规则', () => {
-  const checks = extractLatestMigrationChecks();
-  // D04 0053 新增 6 个开放格式 CHECK（variant/producer/producer_version ×2 表）。
-  assert.equal(checks.length, 6);
+test('全部 migration 的 ADD CHECK 与 schema 使用同一分类规则', () => {
+  const checks = extractMigrationChecks();
+  // 全量审计 + 同名去重（保留最新定义）：最新单条引用会随纯加列 migration
+  // 漂移成空集，而全量不去重会误报被后续 migration 覆盖的废弃闭集版本。
+  // 当前 0000–0054 去重后共 46 个约束；0054（B1）新增的 2 个质量 CHECK
+  // 与 0053（D04）的 6 个开放格式 CHECK 均在列。
+  assert.equal(checks.length, 46);
   assert.equal(
     checks.some(
       (check) => check.name === 'asset_representations_variant_check',
     ),
     true,
   );
-  // 全部为开放格式约束（非成员闭集），与 schema 的格式 CHECK 一致。
+  // ADR-0026 质量四态是 closed 枚举，B1 的 2 个 CHECK 必须已注册白名单
+  // （与 status/failure_shape 同属 closed_state 词汇）。
+  for (const name of [
+    'asset_representations_quality_check',
+    'asset_representations_quality_shape_check',
+  ]) {
+    assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
+  }
+  // 违规判定与 auditVocabularyClosures 一致：是成员闭集就必须在白名单内。
   for (const check of checks) {
-    assert.equal(isLiteralVocabularyClosure(check.body), false, check.name);
+    assert.equal(
+      isLiteralVocabularyClosure(check.body) &&
+        !CLOSED_VOCABULARY_CONSTRAINTS.has(check.name),
+      false,
+      check.name,
+    );
   }
 });
 
