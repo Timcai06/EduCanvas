@@ -313,6 +313,15 @@ export type {
 } from './streaming-transcription-port';
 
 export {
+  STREAMING_SPEECH_CHANNELS,
+  STREAMING_SPEECH_ENCODING,
+  STREAMING_SPEECH_SAMPLE_RATE_HZ,
+  type StreamingSpeechEvent,
+  type StreamingSpeechGateway,
+  type StreamingSpeechRequest,
+} from './streaming-speech-port';
+
+export {
   applyStreamingTranscriptionEvent,
   createStreamingTranscriptionSnapshot,
   type StreamingTranscriptionEventType,

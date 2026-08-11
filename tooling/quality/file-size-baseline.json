@@ -49,7 +49,6 @@
     "packages/teaching-core/src/learning-projection.ts": 666,
     "packages/teaching-core/src/safety-policy.ts": 446,
     "packages/teaching-runtime/src/state-transition.ts": 472,
-    "tooling/sherpa-model-fetch.mjs": 402,
     "tooling/voice-lab/run-v02-v-matrix.mjs": 440
   }
 }

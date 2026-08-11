@@ -10,6 +10,7 @@
       "persistent": true,
       "passThroughEnv": [
         "ASSET_STORAGE_ROOT",
+        "DASHSCOPE_*",
         "DATABASE_URL",
         "EDUCANVAS_*",
         "MODEL_GATEWAY_*",
