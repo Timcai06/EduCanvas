@@ -408,12 +408,19 @@ export class DrizzleAssetRepository {
    *
    * 只返回解析所需的最小事实：storageKey 与 MIME。它不经过公共 API，
    * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * assetVersionId/producer 仅供 worker 日志链路使用（ADR-0026 决定 6
+   * 要求日志记录 producer）。
    * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
    */
   async beginTextExtractionAttempt(input: {
     jobId: string;
     now?: Date;
-  }): Promise<{ storageKey: string; mimeType: string } | null> {
+  }): Promise<{
+    storageKey: string;
+    mimeType: string;
+    assetVersionId: string;
+    producer: string;
+  } | null> {
     const jobId = requireUuid(input.jobId);
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
@@ -452,7 +459,12 @@ export class DrizzleAssetRepository {
         .where(eq(assetVersions.id, claimed.assetVersionId))
         .limit(1);
       if (!version) throw new AssetPersistenceError('Asset版本不存在');
-      return version;
+      return {
+        storageKey: version.storageKey,
+        mimeType: version.mimeType,
+        assetVersionId: claimed.assetVersionId,
+        producer: claimed.producer,
+      };
     });
   }
 

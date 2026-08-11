@@ -288,6 +288,9 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ).resolves.toEqual({
       storageKey: 'uploads/fixture/async.md',
       mimeType: 'text/markdown',
+      /* assetVersionId/producer 供日志链路使用（ADR-0026 决定 6）。 */
+      assetVersionId: versionId,
+      producer: 'default',
     });
     await expect(
       repository.settleTextExtraction({
