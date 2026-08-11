@@ -164,6 +164,23 @@ html {
 }
 
 /*
+ * General / Learning 都是 h-dvh 应用壳，页面本身不滚动，滚动责任在内部工作面。
+ * 进入这两种壳时取消普通长页面的预留槽，避免 100vw 覆盖槽位引入横向溢出。
+ */
+html:has([data-general-workspace]),
+html:has([data-learning-workspace]),
+body:has([data-general-workspace]),
+body:has([data-learning-workspace]) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+[data-general-workspace],
+[data-learning-workspace] {
+  width: 100%;
+}
+
+/*
  * 全站滚动条治理：把原生粗滚动条统一成一条细墨线，只在需要时显形。
  * 缘由见交互约定——内联/抽屉里的长列表以前直接露原生条，又粗又贴边。
  * Firefox 用 scrollbar-width/color；Chromium 用 ::-webkit-*，thumb 靠透明 border
@@ -190,6 +207,25 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--color-ink) 38%, transparent);
   background-clip: padding-box;
+}
+
+/*
+ * 工作区主对话的滚动条就是当前工作面的边界，不再套全站 thumb 的透明内边。
+ * Chromium 同时支持标准 scrollbar-width 时会忽略 WebKit 尺寸，因此先恢复 auto。
+ */
+@supports selector(::-webkit-scrollbar) {
+  .workspace-edge-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  .workspace-edge-scrollbar::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .workspace-edge-scrollbar::-webkit-scrollbar-thumb {
+    border: 0;
+  }
 }
 
 /*

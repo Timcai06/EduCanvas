@@ -126,25 +126,27 @@ export function AgentBusyOverlay({ active }: { active: boolean }) {
       {!canRenderShader ? (
         <div className="agent-busy-fallback" />
       ) : (
-        <BusyShaderBoundary>
-          <PulsingBorder
-            style={{ width: '100%', height: '100%' }}
-            colors={[accent, accentStrong, accent, cinnabar]}
-            colorBack="rgba(0,0,0,0)"
-            roundness={0}
-            thickness={0.06}
-            softness={1}
-            intensity={0.28}
-            bloom={0.55}
-            spots={4}
-            spotSize={0.32}
-            pulse={0.18}
-            smoke={0.42}
-            smokeSize={0.72}
-            speed={0.9}
-            scale={1}
-          />
-        </BusyShaderBoundary>
+        <div className="agent-busy-shader-overscan">
+          <BusyShaderBoundary>
+            <PulsingBorder
+              style={{ width: '100%', height: '100%' }}
+              colors={[accent, accentStrong, accent, cinnabar]}
+              colorBack="rgba(0,0,0,0)"
+              roundness={0}
+              thickness={0.045}
+              softness={0.78}
+              intensity={0.2}
+              bloom={0.28}
+              spots={4}
+              spotSize={0.32}
+              pulse={0.18}
+              smoke={0.34}
+              smokeSize={0.7}
+              speed={0.9}
+              scale={1}
+            />
+          </BusyShaderBoundary>
+        </div>
       )}
     </div>
   );

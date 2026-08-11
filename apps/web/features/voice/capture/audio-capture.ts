@@ -4,13 +4,12 @@
  * ## 架构
  *
  * 采集路径：`getUserMedia` → `MediaStreamAudioSourceNode` →
- * `ScriptProcessorNode`（onaudioprocess 提供 Float32 块）→ 多声道归并
+ * `ScriptProcessorNode`（兼容回退，onaudioprocess 提供 Float32 块）→ 多声道归并
  * mono → 确定性重采样到 16 kHz → Float32 转 PCM16LE → 按固定目标大小
  * 切分为有界 chunk 交给 consumer。
  *
- * 选择 ScriptProcessorNode 而非 AudioWorklet：后者需要 `addModule` 加载
- * worklet 文件（同源请求），与"本任务不发送网络请求"冲突；ScriptProcessor
- * 是纯内存路径，且不写 outputBuffer 时输出静音，不会产生声音。
+ * 这里保留兼容采集器，处理块与网络 chunk 已压缩到约 40/50ms；后续
+ * AudioWorklet 迁移不改变 AudioCapture 公共契约。
  *
  * ## SSR 安全
  *
@@ -52,11 +51,11 @@ import {
 import { mixChannelsToMono, float32ToPcm16Le } from './pcm';
 import { createLinearResampler, type LinearResampler } from './resampler';
 
-/** 默认目标 chunk 字节数 = 100 ms @16 kHz/mono/s16le（V04 文档实测粒度）。 */
-export const DEFAULT_CHUNK_BYTES = 3_200 as const;
+/** 默认目标 chunk 字节数 = 50 ms @16 kHz/mono/s16le，降低首个 partial 等待。 */
+export const DEFAULT_CHUNK_BYTES = 1_600 as const;
 
 /** 采集器处理块大小：输入声道声明 2（覆盖常见立体声/单声道流）。 */
-const PROCESSOR_BUFFER_SIZE = 4096;
+const PROCESSOR_BUFFER_SIZE = 2048;
 
 export type AudioCaptureState =
   'idle' | 'starting' | 'recording' | 'stopped' | 'cancelled' | 'failed';
@@ -120,12 +119,14 @@ export interface AudioCaptureDependencies {
   onChunk: (chunk: AudioPcmChunk) => void;
   /** 可选：异步失败通知（consumer 抛错、start 失败后）。 */
   onFailure?: (code: AudioCaptureFailureCode) => void;
+  /** 归一化输入能量，只用于本地即时反馈/VAD，不记录也不发送。 */
+  onLevel?: (level: number) => void;
 }
 
 export interface AudioCaptureOptions {
   /**
    * 每满 chunk 的目标字节数（偶数，2..MAX_PCM_CHUNK_BYTES，默认
-   * DEFAULT_CHUNK_BYTES=3200）。最后一个不满的 chunk 在 stop 时交付。
+   * DEFAULT_CHUNK_BYTES=1600）。最后一个不满的 chunk 在 stop 时交付。
    */
   chunkBytes?: number;
 }
@@ -247,6 +248,14 @@ export function createAudioCapture(
       }
       mono = mixChannelsToMono(channels);
     }
+    if (deps.onLevel) {
+      let sum = 0;
+      for (let index = 0; index < mono.length; index += 1) {
+        const sample = mono[index]!;
+        sum += sample * sample;
+      }
+      deps.onLevel(Math.min(1, Math.sqrt(sum / Math.max(1, mono.length)) * 4));
+    }
     const resampled = resampler.push(mono);
     for (let i = 0; i < resampled.length; i += 1) {
       pending.push(resampled[i]!);
@@ -300,6 +309,7 @@ export function createAudioCapture(
     state = next;
     startCancelled = true;
     releaseResources();
+    deps.onLevel?.(0);
     if (next === 'failed' && failureCode !== undefined) {
       deps.onFailure?.(failureCode);
     }
@@ -339,7 +349,14 @@ export function createAudioCapture(
     state = 'starting';
     // 阶段 1：获取麦克风。失败按 getUserMedia 错误分类映射稳定码。
     try {
-      stream = await deps.mediaDevices.getUserMedia({ audio: true });
+      stream = await deps.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
     } catch (error) {
       const code = mapGetUserMediaError(error);
       fail(code);

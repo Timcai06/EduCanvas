@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Flip } from 'gsap/Flip';
 import type { AssetItem } from '@/features/assets/assets-drawer';
+import { uploadAsset } from '@/features/assets/asset-client';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
 import {
@@ -21,6 +22,11 @@ import { useOnlineStatus } from '@/features/chat/use-online-status';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
+import {
+  MAX_LIVE_CONTEXT_ASSETS,
+  type LiveVoiceContextAsset,
+  type LiveVoiceContextSnapshot,
+} from '@/features/voice/live-voice-context';
 import { useNotebookSources } from './use-notebook-sources';
 import { useWorkspaceSurface } from './use-workspace-surface';
 import {
@@ -44,8 +50,8 @@ import {
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 import {
+  ResourceClientError,
   toClientError,
-  type ResourceClientError,
 } from '@/features/canvas/resource-error';
 
 /**
@@ -159,15 +165,17 @@ export function useGeneralWorkspaceController(options: {
   }, [nearBottom, scrollRef, turn.messages]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, frozenAssets?: readonly LiveVoiceContextAsset[]) => {
       setError(null);
       setSourceNotice(null);
       /* Flip 三段式:状态翻转前捕获输入坞位置,渲染后由组合层 useGSAP 播放位移。 */
       if (turn.messages.length === 0 && composerDockRef.current) {
         flipStateRef.current = Flip.getState(composerDockRef.current);
       }
-      const selected = assets.flatMap((asset) =>
-        asset.enabled && asset.versionId
+      const selected = (frozenAssets ?? assets).flatMap((asset) =>
+        asset.enabled &&
+        asset.versionId &&
+        (asset.kind === 'image' || asset.kind === 'document')
           ? [
               {
                 type: 'asset_ref' as const,
@@ -218,6 +226,11 @@ export function useGeneralWorkspaceController(options: {
       setAssets,
       turn,
     ],
+  );
+  const sendLive = useCallback(
+    (text: string, context: LiveVoiceContextSnapshot) =>
+      send(text, context.assets),
+    [send],
   );
 
   useEffect(() => {
@@ -296,6 +309,32 @@ export function useGeneralWorkspaceController(options: {
   }, []);
   const selectedAudioSources = selectAudioArtifactSources(notebookSources);
   const revisingOpenArtifact = isArtifactRevisionInProgress(artifactFlow);
+  const uploadLiveAsset = useCallback(
+    async (file: File) => {
+      try {
+        const asset = await uploadAsset({
+          file,
+          scope: 'space',
+          endpoint: GENERAL_ASSET_ENDPOINT,
+        });
+        setAssets((current) => {
+          const enabledCount = current.filter((item) => item.enabled).length;
+          return [
+            {
+              ...asset,
+              enabled:
+                asset.selectable && enabledCount < MAX_LIVE_CONTEXT_ASSETS,
+            },
+            ...current.filter((item) => item.id !== asset.id),
+          ];
+        });
+      } catch (reason: unknown) {
+        setError(toClientError(reason, '文件上传暂时不可用。'));
+        throw reason;
+      }
+    },
+    [setAssets],
+  );
 
   /* W02：landing 与对话共享同一组 ConversationPane props（两态只差 isLanding）。 */
   const conversationPaneProps = {
@@ -311,10 +350,12 @@ export function useGeneralWorkspaceController(options: {
     generation: artifactFlow.generation,
     revisingOpenArtifact,
     composerTools,
+    liveAssets: assets,
     composerDockRef,
     scrollRef,
     nearBottomRef: nearBottom,
     onSend: send,
+    onLiveSend: sendLive,
     onStop: () => void turn.stop(),
     onMenuAction: handleMenuAction,
     onToolAction: handleToolAction,
@@ -322,6 +363,27 @@ export function useGeneralWorkspaceController(options: {
     onPreviewHtml: (source: string) => workspace.openHtml(source),
     onOpenArtifact: (artifactId: string) =>
       studioOpenActions.actions.openArtifact(artifactId),
+    onOpenAsset: (assetId: string) =>
+      studioOpenActions.actions.openSource(assetId),
+    onToggleLiveAsset: (assetId: string) => {
+      const asset = assets.find((candidate) => candidate.id === assetId);
+      if (!asset?.selectable) return;
+      if (
+        !asset.enabled &&
+        assets.filter((candidate) => candidate.enabled).length >=
+          MAX_LIVE_CONTEXT_ASSETS
+      ) {
+        setError(
+          new ResourceClientError(
+            'failed',
+            `一轮最多同时带入 ${MAX_LIVE_CONTEXT_ASSETS} 份资料。`,
+          ),
+        );
+        return;
+      }
+      sources.toggle(asset);
+    },
+    onUploadLiveAsset: uploadLiveAsset,
     onOpenStatusCard: (artifactId: string) =>
       studioOpenActions.actions.openArtifact(artifactId),
     onDismissStatusCard: artifactFlow.dismiss,

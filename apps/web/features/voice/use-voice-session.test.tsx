@@ -10,6 +10,7 @@ import {
 
 const healthyChecks = [
   { key: 'model' as const, healthy: true },
+  { key: 'speech' as const, healthy: true },
   { key: 'connection' as const, healthy: true },
 ];
 
@@ -17,7 +18,6 @@ function makeOptions(
   overrides: Partial<UseVoiceSessionOptions> = {},
 ): UseVoiceSessionOptions {
   return {
-    mode: 'short-utterance',
     notebookId: 'nb-1',
     capabilityChecks: healthyChecks,
     createCapture: () => ({
@@ -84,6 +84,17 @@ describe('useVoiceSession SSR 安全', () => {
     const html = renderToStaticMarkup(<Probe options={options} />);
     expect(html).toContain('data-enabled="false"');
     expect(html).toContain('data-reason="MODEL_UNAVAILABLE"');
+  });
+
+  it('transcription 会话不因 TTS 不可用而禁用', () => {
+    const options = makeOptions({
+      capabilityKind: 'transcription',
+      capabilityChecks: healthyChecks.map((check) =>
+        check.key === 'speech' ? { ...check, healthy: false } : check,
+      ),
+    });
+    const html = renderToStaticMarkup(<Probe options={options} />);
+    expect(html).toContain('data-enabled="true"');
   });
 
   it('控制层源码不含浏览器全局读取与直接全局 WebSocket 构造', () => {
