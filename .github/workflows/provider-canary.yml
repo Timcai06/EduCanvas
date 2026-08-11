@@ -1,0 +1,53 @@
+name: Provider Canary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 每次人工批准的 canary 都是独立证据，不允许后续点击取消前一笔结果。
+  group: provider-canary-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 仓库管理员需在该 Environment 配置 required reviewers；普通 PR/main
+    # 不引用本 workflow，也无法读取其中的 Provider Secret。
+    environment: provider-canary
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 tag
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 tag
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run protected Provider canary
+        env:
+          # Secret 只注入直接调用 model-gateway 的这一进程；后续 artifact
+          # 步骤拿不到 Secret，Web/Gateway/Worker 也不会在此 workflow 启动。
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          DASHSCOPE_WORKSPACE_ID: ${{ secrets.DASHSCOPE_WORKSPACE_ID }}
+          DASHSCOPE_BEIJING_WS_URL: ${{ vars.DASHSCOPE_BEIJING_WS_URL }}
+          DASHSCOPE_ASR_MODEL: ${{ vars.DASHSCOPE_ASR_MODEL }}
+          DASHSCOPE_TTS_MODEL: ${{ vars.DASHSCOPE_TTS_MODEL }}
+          DASHSCOPE_TTS_VOICE: ${{ vars.DASHSCOPE_TTS_VOICE }}
+        run: pnpm provider:canary
+
+      - name: Upload sanitized Provider canary summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: provider-canary-${{ github.sha }}-${{ github.run_id }}
+          path: output/provider-canary/summary.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -10,7 +10,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "canary": "tsx ../../tooling/evals/provider-canary/run.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.14",
@@ -23,6 +24,7 @@
     "@educanvas/agent-runtime": "workspace:*",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
