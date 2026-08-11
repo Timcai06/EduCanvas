@@ -85,7 +85,7 @@
 | Mermaid 渲染 | mermaid.js、rehype-mermaid、remark-mermaid、kroki、mermaid-cli | 高 | clone + 源码/文档 |
 | 形态对标 | NotebookLM、Obsidian、Napkin、Heptabase | 低 | 文档调研即可 |
 
-> ⚠️ 许可注意：anydoc 为 **AGPL-3.0**，MinerU、markitdown 等多为 MIT/Apache，落地时需评估与 EduCanvas 闭源/商用边界（服务化隔离可能缓解）。
+> ⚠️ 许可注意（已核实）：**anydoc 为 MIT**（LICENSE 头 Sideguide Technologies Inc.，非此前误标的 AGPL）；markitdown MIT；**pandoc GPL-2.0+**；MinerU 许可待 A2 线确认。
 
 ### 对比矩阵（调研中，逐步填充）
 
@@ -93,12 +93,15 @@
 
 | 维度 | anydoc | pandoc | markitdown | docling | marker | MinerU | mammoth(已用) |
 |------|--------|--------|-----------|---------|--------|--------|---------------|
-| 输入格式 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | DOCX |
-| md 保真度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 依赖/语言 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | JS |
-| 许可 | AGPL | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 维护活跃度 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
-| 服务端可跑性 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 | 已用 |
+| 输入格式 | 14 类(doc/docx/ppt/pptx/xls/xlsx/odt/ods/odp/rtf/epub/csv/pdf文本层) | 40+ 标记格式，**无 PDF 输入** | PDF/ppt/docx/xlsx/xls/图片/音频/html/csv/epub | 待调研(A2) | 待调研(A2) | 待调研(A2) | DOCX |
+| md 保真度 | 最高(盲评81，全场第一)；标题/表格(合并格)/列表/脚注/备注/图片alt；**无公式**；扫描PDF需另接OCR | 高且确定；**唯一原生支持公式(OMML→TeX)**；docx表格列宽对齐未实现 | 中等(65)；docx仍走mammoth；PDF词坐标猜表格 | 待调研 | 待调研 | 待调研 | 纯文本 |
+| 依赖/语言 | **Rust→napi-rs 原生.node 插件，进程内跑** | Haskell(CLI/pandoc-server/WASM) | Python(CLI/微服务) | 待调研 | 待调研 | 待调研 | JS |
+| 许可 | **MIT** | **GPL-2.0+** | MIT | 待调研 | 待调研 | 待调研 | 待调研 |
+| 维护活跃度 | 13.6k★，2026-08-10 极活跃 | 45.8k★，极活跃 | 172.9k★，极活跃 | 待调研 | 待调研 | 待调研 | 待调研 |
+| 服务端可跑性 | **进程内 Node≥20，无阻塞** | 子进程/pandoc-server sidecar | 需 Python 运行时 | 待调研 | 待调研 | 待调研 | 已用 |
+| 安全 | 无网络；硬资源上限防zip炸弹；错误分类细 | pandoc-server 零I/O沙箱防SSRF；Lua filter禁用 | 自警SSRF/进程权限I/O；无硬上限 | 待调研 | 待调研 | 待调研 | — |
+
+**A 线初步结论（待 A2 复核）**：**首选 anydoc**——MIT、Node 进程内原生插件、格式覆盖含 PDF、质量分第一，可最小侵入替换现有 mammoth 纯文本管线；共同缺口是**公式**（anydoc/markitdown 无，pandoc 有），若 K12 文档强依赖公式需补一路 pandoc 或走云 OCR。
 
 **B. Mermaid 渲染接入**
 
