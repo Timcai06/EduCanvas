@@ -10,6 +10,10 @@ import {
 } from '../shared/pet-clamp';
 import { dragTarget, type DragPoint } from '../shared/pet-drag';
 import { savePetPositionFile } from '../shared/pet-position-file';
+import {
+  collapsedAnchorRect,
+  resizePetWindowRect,
+} from '../shared/pet-window-layout';
 import { isQuitRequested } from './tray';
 
 /** 桌宠窗口动作对象：index.ts 注册 IPC 时直接调用，不在 win 上 hack 挂字段。 */
@@ -18,6 +22,8 @@ export interface PetWindowController {
   dragMove(p: DragPoint): void;
   moveBy(dx: number, dy: number): Rect;
   getBounds(): Rect;
+  setExpanded(expanded: boolean): Rect;
+  setMousePassthrough(passthrough: boolean): void;
 }
 
 function displays(): DisplayInfo[] {
@@ -76,7 +82,7 @@ export function createPetWindow(): PetWindowController {
   // 位置记忆：隐藏与真正退出都落盘（拖走后直接退出也不丢最后位置）
   function savePosition(): void {
     try {
-      savePetPositionFile(posFile, win.getBounds());
+      savePetPositionFile(posFile, collapsedAnchorRect(win.getBounds()));
     } catch {
       /* 保存失败不影响运行/退出 */
     }
@@ -129,8 +135,9 @@ export function createPetWindow(): PetWindowController {
     win,
     dragMove(p: DragPoint): void {
       const t = dragTarget(p);
+      const b = win.getBounds();
       const r = clampRect(
-        { ...t, width: PET_SIZE, height: PET_SIZE },
+        { ...t, width: b.width, height: b.height },
         displays(),
       );
       setPositionPx(r.x, r.y);
@@ -138,12 +145,29 @@ export function createPetWindow(): PetWindowController {
     moveBy(dx: number, dy: number): Rect {
       const b = win.getBounds();
       const r = clampRect(
-        { x: b.x + dx, y: b.y + dy, width: PET_SIZE, height: PET_SIZE },
+        { x: b.x + dx, y: b.y + dy, width: b.width, height: b.height },
         displays(),
       );
       setPositionPx(r.x, r.y);
       return r;
     },
     getBounds: () => win.getBounds(),
+    setExpanded(expanded: boolean): Rect {
+      const current = win.getBounds();
+      const target = clampRect(
+        resizePetWindowRect(current, expanded),
+        displays(),
+      );
+      win.setBounds({
+        x: Math.round(target.x),
+        y: Math.round(target.y),
+        width: target.width,
+        height: target.height,
+      });
+      return target;
+    },
+    setMousePassthrough(passthrough: boolean): void {
+      win.setIgnoreMouseEvents(passthrough, { forward: true });
+    },
   };
 }

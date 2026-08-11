@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import type { TurnResult } from '../shared/turn-result';
+import type {
+  VoiceAudioInput,
+  VoiceSpeechResult,
+  VoiceTranscriptionResult,
+} from '../shared/voice-result';
 import type { Rect } from '../shared/pet-clamp';
 import type { DragPoint } from '../shared/pet-drag';
 
@@ -9,13 +14,24 @@ import type { DragPoint } from '../shared/pet-drag';
 declare global {
   interface Window {
     desktopAssistant: {
-      turn(text: string, signal?: AbortSignal): Promise<TurnResult>;
+      turn(text: string, requestId: string): Promise<TurnResult>;
+      cancel(requestId: string): void;
       onToast(callback: (message: string) => void): () => void;
+    };
+    desktopVoice: {
+      transcribe(
+        input: VoiceAudioInput,
+        requestId: string,
+      ): Promise<VoiceTranscriptionResult>;
+      synthesize(text: string, requestId: string): Promise<VoiceSpeechResult>;
+      cancel(requestId: string): void;
     };
     desktopPet: {
       dragMove(p: DragPoint): Promise<void>;
       moveBy(dx: number, dy: number): Promise<Rect>;
       getBounds(): Promise<Rect>;
+      setExpanded(expanded: boolean): Promise<Rect>;
+      setMousePassthrough(passthrough: boolean): void;
     };
   }
 }
@@ -28,9 +44,11 @@ declare global {
  * （electron 43 已移除 nativeTheme.shouldUseReducedMotion，matchMedia 是 Chromium 原生 OS 设置）。
  */
 contextBridge.exposeInMainWorld('desktopAssistant', {
-  turn(text: string, signal?: AbortSignal): Promise<TurnResult> {
-    // invoke 的最后一个参数支持 AbortSignal：abort 时 main 侧 event.signal 同步中止
-    return ipcRenderer.invoke('assistant:turn', { text }, signal);
+  turn(text: string, requestId: string): Promise<TurnResult> {
+    return ipcRenderer.invoke('assistant:turn', { text, requestId });
+  },
+  cancel(requestId: string): void {
+    ipcRenderer.send('operation:cancel', requestId);
   },
   onToast(callback: (message: string) => void): () => void {
     const listener = (_event: IpcRendererEvent, message: string): void =>
@@ -39,6 +57,21 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     return () => {
       ipcRenderer.removeListener('assistant:toast', listener);
     };
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopVoice', {
+  transcribe(
+    input: VoiceAudioInput,
+    requestId: string,
+  ): Promise<VoiceTranscriptionResult> {
+    return ipcRenderer.invoke('voice:transcribe', { input, requestId });
+  },
+  synthesize(text: string, requestId: string): Promise<VoiceSpeechResult> {
+    return ipcRenderer.invoke('voice:synthesize', { text, requestId });
+  },
+  cancel(requestId: string): void {
+    ipcRenderer.send('operation:cancel', requestId);
   },
 });
 
@@ -51,5 +84,11 @@ contextBridge.exposeInMainWorld('desktopPet', {
   },
   getBounds(): Promise<Rect> {
     return ipcRenderer.invoke('pet:get-bounds');
+  },
+  setExpanded(expanded: boolean): Promise<Rect> {
+    return ipcRenderer.invoke('pet:set-expanded', expanded);
+  },
+  setMousePassthrough(passthrough: boolean): void {
+    ipcRenderer.send('pet:set-mouse-passthrough', passthrough);
   },
 });
