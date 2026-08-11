@@ -72,11 +72,13 @@ export function routeDocumentExtraction(
   return null;
 }
 
-/** 调用方据此判断某个版本要不要排进解析队列，避免为图片建一个必然失败的任务。 */
+/** 调用方据此判断某个版本要不要排进解析队列，避免为图片建一个必然失败的任务。
+ *  判定范围与 MinerU 受理类型 + 纯文本解码一致（ADR-0026 决定 2），
+ *  PPTX/XLSX 与 PDF/DOCX 同权：必须落 processing 排入转换队列，
+ *  不能静默写成 ready 假装有内容。 */
 export function supportsTextExtraction(mimeType: string): boolean {
   return (
-    mimeType === 'application/pdf' ||
-    DOCX_MIME_TYPES.has(mimeType) ||
+    MINERU_DOCUMENT_MIME_TYPES.has(mimeType) ||
     PLAIN_TEXT_MIME_TYPES.has(mimeType)
   );
 }

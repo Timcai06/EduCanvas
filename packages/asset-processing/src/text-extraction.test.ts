@@ -74,13 +74,25 @@ describe('extractAssetText', () => {
 });
 
 describe('supportsTextExtraction', () => {
-  it('覆盖当前四种可抽取类型', () => {
+  it('覆盖当前六种可抽取类型', () => {
     expect(supportsTextExtraction('application/pdf')).toBe(true);
     expect(supportsTextExtraction('text/markdown')).toBe(true);
     expect(supportsTextExtraction('text/plain')).toBe(true);
     expect(
       supportsTextExtraction(
         'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      ),
+    ).toBe(true);
+    /* ADR-0026 决定 2：PPTX/XLSX 与 PDF/DOCX 一样进 MinerU 转换队列，
+       上传层依据该判定决定是否落 processing 而非静默 ready。 */
+    expect(
+      supportsTextExtraction(
+        'application/vnd.openxmlformats-officedocument.presentationml',
+      ),
+    ).toBe(true);
+    expect(
+      supportsTextExtraction(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml',
       ),
     ).toBe(true);
   });
