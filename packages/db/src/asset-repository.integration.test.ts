@@ -277,6 +277,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       producerVersion: 'v1',
       mimeType: 'text/plain',
       status: 'processing',
+      /* ADR-0026 决定 6 形状约束：processing 状态要求 processing 质量。 */
+      quality: 'processing',
       createdAt: startedAt,
       updatedAt: startedAt,
     });
@@ -516,6 +518,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           producerVersion: 'provider-a.v1',
           mimeType: 'text/plain',
           status: 'failed',
+          /* ADR-0026 决定 6 形状约束：failed 状态要求 failed 质量。 */
+          quality: 'failed',
           failureCode: 'cloud_failed',
         },
         {
@@ -526,6 +530,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           producerVersion: 'provider-a.v1',
           mimeType: 'image/jpeg',
           status: 'failed',
+          quality: 'failed',
           failureCode: 'cloud_failed',
         },
       ]);

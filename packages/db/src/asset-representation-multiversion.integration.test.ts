@@ -563,4 +563,166 @@ describeWithDatabase('D04 派生表示多版本并存', () => {
       }),
     ).toBeNull();
   });
+
+  describe('quality 质量维度（ADR-0026 决定 6）', () => {
+    async function seedDocumentVersion(mimeType: string): Promise<string> {
+      const owner = `user:${randomUUID()}`;
+      await getDatabase()
+        .insert(schema.platformUsers)
+        .values({ id: owner, kind: 'registered', status: 'active' });
+      const [space] = await getDatabase()
+        .insert(schema.spaces)
+        .values({
+          ownerSubjectId: owner,
+          kind: 'notebook',
+          title: 'D04 文档空间',
+          status: 'active',
+        })
+        .returning({ id: schema.spaces.id });
+      const [asset] = await getDatabase()
+        .insert(schema.assets)
+        .values({
+          ownerSubjectId: owner,
+          spaceId: space!.id,
+          scope: 'space',
+          kind: 'document',
+          origin: 'upload',
+          displayName: '文档',
+          status: 'processing',
+        })
+        .returning({ id: schema.assets.id });
+      const [version] = await getDatabase()
+        .insert(schema.assetVersions)
+        .values({
+          assetId: asset!.id,
+          kind: 'document',
+          mimeType,
+          byteSize: 1024,
+          contentHash: 'c'.repeat(64),
+          status: 'ready',
+          storageKey: `uploads/doc-${randomUUID()}`,
+        })
+        .returning({ id: schema.assetVersions.id });
+      await getDatabase()
+        .update(schema.assets)
+        .set({ status: 'ready', currentVersionId: version!.id })
+        .where(eq(schema.assets.id, asset!.id));
+      return version!.id;
+    }
+
+    it('text/ready + structured：显式质量写入并读回', async () => {
+      const versionId = await seedDocumentVersion('application/pdf');
+      const row = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey: 'derived/text/index.md',
+        checksum: 'a'.repeat(64),
+        byteSize: 12,
+      });
+      expect(row.quality).toBe('structured');
+      expect(
+        (
+          await repository().selectDefaultRepresentation({
+            assetVersionId: versionId,
+            kind: 'text',
+          })
+        )?.quality,
+      ).toBe('structured');
+    });
+
+    it('text/ready + degraded_plain_text：降级路径显式标记', async () => {
+      const versionId = await seedDocumentVersion('application/pdf');
+      const row = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/plain',
+        status: 'ready',
+        quality: 'degraded_plain_text',
+        derivedStorageKey: 'derived/text/plain.txt',
+        checksum: 'b'.repeat(64),
+        byteSize: 12,
+      });
+      expect(row.quality).toBe('degraded_plain_text');
+    });
+
+    it('缺省推导：processing/failed 一一对应，ready 非文档表示取 unavailable', async () => {
+      const versionId = await seedDocumentVersion('application/pdf');
+      const processing = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/plain',
+        status: 'processing',
+      });
+      expect(processing.quality).toBe('processing');
+
+      const failed = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/plain',
+        status: 'failed',
+        failureCode: 'mineru_unreachable',
+      });
+      expect(failed.quality).toBe('failed');
+
+      const ready = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'transcription',
+        mimeType: 'text/plain',
+        status: 'ready',
+        derivedStorageKey: 'k',
+        checksum: 'c'.repeat(64),
+        byteSize: 1,
+      });
+      expect(ready.quality).toBe('unavailable');
+    });
+
+    it('形状约束：非文档 ready + quality=structured 被数据库 CHECK 拒绝', async () => {
+      const versionId = await seedDocumentVersion('application/pdf');
+      await expect(
+        repository().upsertRepresentation({
+          assetVersionId: versionId,
+          kind: 'transcription',
+          mimeType: 'text/plain',
+          status: 'ready',
+          quality: 'structured',
+          derivedStorageKey: 'k',
+          checksum: 'a'.repeat(64),
+          byteSize: 1,
+        }),
+      ).rejects.toMatchObject({ cause: { code: '23514' } });
+    });
+
+    it('upsert 覆盖：同 identity 从 degraded 升级到 structured（重新处理）', async () => {
+      const versionId = await seedDocumentVersion('application/pdf');
+      await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/plain',
+        status: 'ready',
+        quality: 'degraded_plain_text',
+        derivedStorageKey: 'derived/text/plain.txt',
+        checksum: 'b'.repeat(64),
+        byteSize: 12,
+      });
+      const upgraded = await repository().upsertRepresentation({
+        assetVersionId: versionId,
+        kind: 'text',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey: 'derived/text/index.md',
+        checksum: 'a'.repeat(64),
+        byteSize: 12,
+      });
+      expect(upgraded.quality).toBe('structured');
+      const list = await repository().listRepresentations({
+        assetVersionId: versionId,
+        kind: 'text',
+      });
+      expect(list).toHaveLength(1);
+    });
+  });
 });
