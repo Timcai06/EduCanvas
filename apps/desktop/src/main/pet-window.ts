@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   clampRect,
   initialPetRect,
@@ -9,6 +9,7 @@ import {
   type Rect,
 } from '../shared/pet-clamp';
 import { dragTarget, type DragPoint } from '../shared/pet-drag';
+import { savePetPositionFile } from '../shared/pet-position-file';
 import { isQuitRequested } from './tray';
 
 /** 桌宠窗口动作对象：index.ts 注册 IPC 时直接调用，不在 win 上 hack 挂字段。 */
@@ -34,7 +35,7 @@ function displays(): DisplayInfo[] {
   }));
 }
 
-export function createPetWindow(onFirstHide: () => void): PetWindowController {
+export function createPetWindow(): PetWindowController {
   // 位置记忆：上次隐藏时的窗口位置（userData/pet-window.json）
   const posFile = join(app.getPath('userData'), 'pet-window.json');
   const saved = ((): Rect | null => {
@@ -72,16 +73,22 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
     },
   });
 
-  // 关闭 = 隐藏到托盘；仅托盘「退出」（isQuitRequested 置位）时真正放行关闭
-  let hideToastShown = false;
+  // 位置记忆：隐藏与真正退出都落盘（拖走后直接退出也不丢最后位置）
+  function savePosition(): void {
+    try {
+      savePetPositionFile(posFile, win.getBounds());
+    } catch {
+      /* 保存失败不影响运行/退出 */
+    }
+  }
+
+  // 关闭 = 隐藏到托盘；仅托盘「退出」（isQuitRequested 置位）时放行关闭，退出前落盘
   win.on('close', (event) => {
     if (!isQuitRequested()) {
       event.preventDefault();
       win.hide();
-      if (!hideToastShown) {
-        hideToastShown = true;
-        onFirstHide();
-      }
+    } else {
+      savePosition();
     }
   });
 
@@ -105,16 +112,7 @@ export function createPetWindow(onFirstHide: () => void): PetWindowController {
   screen.on('display-removed', clampNow);
   screen.on('display-metrics-changed', clampNow);
 
-  // 位置记忆：隐藏时落盘，下次启动恢复
-  win.on('hide', () => {
-    try {
-      const b = win.getBounds();
-      mkdirSync(app.getPath('userData'), { recursive: true });
-      writeFileSync(posFile, JSON.stringify({ x: b.x, y: b.y }));
-    } catch {
-      /* 保存失败不影响运行 */
-    }
-  });
+  win.on('hide', savePosition);
 
   // Electron 43 的 setPosition 拒绝小数像素，统一取整
   function setPositionPx(x: number, y: number): void {

@@ -44,12 +44,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    petController = createPetWindow(() => {
-      petController?.win.webContents.send(
-        'pet:toast',
-        '已隐藏到托盘，右键托盘图标可显示或退出。',
-      );
-    });
+    petController = createPetWindow();
     createTray(petController.win);
   });
 
