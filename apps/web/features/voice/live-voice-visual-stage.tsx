@@ -10,7 +10,7 @@ import {
   VideoCamera,
   Waveform,
 } from '@phosphor-icons/react';
-import { useRef, useState } from 'react';
+import { useRef, useState, type WheelEvent } from 'react';
 import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
 import {
   MAX_LIVE_CONTEXT_ASSETS,
@@ -43,6 +43,32 @@ function AssetKindIcon({ kind }: { kind: LiveVoiceContextAsset['kind'] }) {
   if (kind === 'audio') return <Waveform size={17} />;
   if (kind === 'video') return <VideoCamera size={17} />;
   return <FilePdf size={17} />;
+}
+
+/** 鼠标纵向滚轮在资料带仍可横移；到达两端后把滚动交还给外层卡片。 */
+export function scrollLiveVoiceContextRail(
+  event: Pick<
+    WheelEvent<HTMLDivElement>,
+    'currentTarget' | 'deltaX' | 'deltaY' | 'preventDefault'
+  >,
+): void {
+  const rail = event.currentTarget;
+  if (
+    rail.scrollWidth <= rail.clientWidth ||
+    Math.abs(event.deltaY) <= Math.abs(event.deltaX)
+  ) {
+    return;
+  }
+  const next = Math.max(
+    0,
+    Math.min(
+      rail.scrollWidth - rail.clientWidth,
+      rail.scrollLeft + event.deltaY,
+    ),
+  );
+  if (next === rail.scrollLeft) return;
+  event.preventDefault();
+  rail.scrollLeft = next;
 }
 
 export function LiveVoiceVisualStage({
@@ -138,8 +164,9 @@ export function LiveVoiceVisualStage({
           className="live-voice-context-rail"
           role="list"
           aria-label="Live 上下文"
+          onWheel={scrollLiveVoiceContextRail}
         >
-          {assets.slice(0, MAX_LIVE_CONTEXT_ASSETS).map((asset) => (
+          {assets.map((asset) => (
             <button
               key={asset.id}
               type="button"
@@ -163,11 +190,6 @@ export function LiveVoiceVisualStage({
               <i aria-hidden="true" />
             </button>
           ))}
-          {assets.length > MAX_LIVE_CONTEXT_ASSETS ? (
-            <span className="live-voice-context-overflow">
-              +{assets.length - MAX_LIVE_CONTEXT_ASSETS}
-            </span>
-          ) : null}
         </div>
       ) : (
         <p className="live-voice-context-empty">

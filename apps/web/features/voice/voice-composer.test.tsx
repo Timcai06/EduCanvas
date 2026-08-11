@@ -6,6 +6,10 @@ import {
   resolveLiveVoiceVisualPhase,
   VoiceComposerRuntime,
 } from './voice-composer';
+import {
+  LIVE_ASR_ROTATION_MS,
+  resolveLiveAsrRotationAction,
+} from './use-live-transcription-continuity';
 
 const healthyChecks = [
   { key: 'model' as const, healthy: true },
@@ -107,6 +111,15 @@ describe('resolveLiveVoiceVisualPhase', () => {
     expect(
       resolveLiveVoiceVisualPhase({
         muted: false,
+        busy: false,
+        recovering: true,
+        speaking: false,
+        status: 'failed',
+      }),
+    ).toBe('connecting');
+    expect(
+      resolveLiveVoiceVisualPhase({
+        muted: false,
         busy: true,
         speaking: false,
         status: 'recording',
@@ -136,5 +149,16 @@ describe('resolveLiveVoiceVisualPhase', () => {
     expect(phase('recording')).toBe('listening');
     expect(phase('finalizing')).toBe('listening');
     expect(phase('stopped')).toBe('idle');
+  });
+});
+
+describe('Live ASR operation rotation', () => {
+  it('在 Gateway 60 秒 PCM 上限前轮换', () => {
+    expect(LIVE_ASR_ROTATION_MS).toBeLessThan(60_000);
+  });
+
+  it('静默轮取消，有 partial 时先请求终稿', () => {
+    expect(resolveLiveAsrRotationAction('   ')).toBe('cancel');
+    expect(resolveLiveAsrRotationAction('我还在说')).toBe('finish');
   });
 });

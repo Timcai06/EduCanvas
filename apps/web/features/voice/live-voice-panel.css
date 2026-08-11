@@ -160,7 +160,10 @@
   display: grid;
   width: min(25rem, 31vw);
   max-height: min(68dvh, 46rem);
+  min-height: 0;
   gap: 0.72rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.82rem;
   border: 1px solid color-mix(in srgb, var(--color-line) 56%, transparent);
   border-radius: 1.8rem;
@@ -169,6 +172,19 @@
   color: var(--color-ink);
   pointer-events: auto;
   backdrop-filter: blur(26px) saturate(1.15);
+  scrollbar-color: color-mix(in srgb, var(--live-voice-accent) 30%, transparent)
+    transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.live-voice-visual-stage::-webkit-scrollbar {
+  width: 0.32rem;
+}
+
+.live-voice-visual-stage::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--live-voice-accent) 30%, transparent);
 }
 
 .live-voice-context-head {
@@ -229,12 +245,21 @@
   display: flex;
   gap: 0.42rem;
   overflow-x: auto;
-  padding: 0.15rem 0.1rem 0.35rem;
-  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+  padding: 0.15rem 0.1rem 0.45rem;
+  scroll-snap-type: x proximity;
+  scrollbar-color: color-mix(in srgb, var(--live-voice-accent) 34%, transparent)
+    transparent;
+  scrollbar-width: thin;
 }
 
 .live-voice-context-rail::-webkit-scrollbar {
-  display: none;
+  height: 0.26rem;
+}
+
+.live-voice-context-rail::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--live-voice-accent) 34%, transparent);
 }
 
 .live-voice-context-rail > button {
@@ -254,6 +279,7 @@
   box-shadow: 0 0.35rem 1.4rem
     color-mix(in srgb, var(--color-ink) 5%, transparent);
   backdrop-filter: blur(16px);
+  scroll-snap-align: start;
   transition:
     transform var(--duration-micro) var(--ease-spring),
     border-color var(--duration-fast) var(--ease-enter),
@@ -297,17 +323,6 @@
   box-shadow: 0 0.8rem 2rem
     color-mix(in srgb, var(--live-voice-accent) 12%, transparent);
   transform: translateY(-3px);
-}
-
-.live-voice-context-overflow {
-  display: grid;
-  min-width: 2.45rem;
-  height: 2.45rem;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--color-surface-strong);
-  color: var(--color-ink-muted);
-  font-size: 0.72rem;
 }
 
 .live-voice-context-empty {

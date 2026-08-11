@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StreamingTranscriptionEvent } from '@educanvas/agent-core';
 import { DashScopeStreamingSpeechGateway } from './dashscope-streaming-speech-gateway';
 import { DashScopeStreamingTranscriptionGateway } from './dashscope-streaming-transcription-gateway';
+import { dashScopeFailureCode } from './dashscope-protocol';
 import type { DashScopeSocket } from './dashscope-websocket';
 
 const configuration = {
@@ -40,6 +41,28 @@ function serverEvent(
 }
 
 describe('DashScope streaming adapters', () => {
+  it('只暴露白名单形状的供应商失败码', () => {
+    expect(
+      dashScopeFailureCode({
+        header: {
+          task_id: '00000000-0000-4000-8000-000000000000',
+          event: 'task-failed',
+          error_code: 'INVALID_API_KEY',
+          error_message: 'secret response body',
+        },
+      }),
+    ).toBe('INVALID_API_KEY');
+    expect(
+      dashScopeFailureCode({
+        header: {
+          task_id: '00000000-0000-4000-8000-000000000000',
+          event: 'task-failed',
+          error_code: 'bad response body',
+        },
+      }),
+    ).toBe('UNKNOWN');
+  });
+
   it('Paraformer 将 partial/sentence_end 归一化为 partial/endpoint/final 且 final 唯一', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingTranscriptionGateway({
@@ -56,7 +79,7 @@ describe('DashScope streaming adapters', () => {
     const taskId = run.header.task_id as string;
     expect(run.payload).toMatchObject({
       model: 'paraformer-realtime-v2',
-      parameters: { format: 'pcm', sample_rate: 16000 },
+      parameters: { format: 'pcm', sample_rate: 16000, heartbeat: true },
     });
     session.pushChunk({
       operationId: 'op-1',
@@ -99,6 +122,11 @@ describe('DashScope streaming adapters', () => {
       'final',
     ]);
     expect(events.filter((event) => event.type === 'final')).toHaveLength(1);
+    expect(
+      socket.sent
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => JSON.parse(value).header.action),
+    ).toEqual(['run-task', 'finish-task']);
     expect(JSON.stringify(events)).not.toContain(configuration.apiKey);
   });
 

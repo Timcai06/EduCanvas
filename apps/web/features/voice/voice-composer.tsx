@@ -23,7 +23,9 @@ import {
 } from './voice-browser-runtime';
 import { useDictation } from './dictation/use-dictation';
 import { useVoiceSession } from './use-voice-session';
+import { useLiveTranscriptionContinuity } from './use-live-transcription-continuity';
 import { useLiveSpeechPlayback } from './playback/use-live-speech-playback';
+import { isLikelyLivePlaybackEcho } from './playback/live-speech-echo';
 import { LiveVoiceLaunchButton } from './live-voice-launch-button';
 import {
   LiveVoicePanel,
@@ -100,10 +102,12 @@ export function resolveLiveVoiceVisualPhase(input: {
   readonly muted: boolean;
   readonly busy: boolean;
   readonly preparing?: boolean;
+  readonly recovering?: boolean;
   readonly speaking: boolean;
   readonly status: keyof typeof LIVE_STATUS;
 }): LiveVoiceVisualPhase {
   if (input.muted) return 'muted';
+  if (input.recovering) return 'connecting';
   if (input.status === 'failed') return 'error';
   if (input.speaking) return 'speaking';
   if (input.preparing) return 'thinking';
@@ -176,6 +180,8 @@ export function VoiceComposerRuntime({
   const [activeDictation, setActiveDictation] = useState<
     'realtime' | 'batch' | null
   >(null);
+  const [realtimeDictationUnavailable, setRealtimeDictationUnavailable] =
+    useState(false);
   const liveLaunchButtonRef = useRef<HTMLButtonElement>(null);
   const pendingInterruptionRef = useRef<{
     readonly text: string;
@@ -209,6 +215,14 @@ export function VoiceComposerRuntime({
     );
   }, [realtimeDictation.partialText]);
 
+  /* 实时供应商短暂失败不能同时拖垮 Dictation：本页后续录音退回已经独立
+     鉴权、独立闸门的批量 ASR，避免在同一次录音上偷偷重试或重复提交。 */
+  useEffect(() => {
+    if (realtimeDictation.status !== 'failed' || !dictation.enabled) return;
+    setRealtimeDictationUnavailable(true);
+    setActiveDictation('batch');
+  }, [dictation.enabled, realtimeDictation.status]);
+
   const speech = useLiveSpeechPlayback({
     enabled: liveOpen && !muted,
     assistantId: liveAssistantId,
@@ -217,10 +231,34 @@ export function VoiceComposerRuntime({
   });
   const interruptSpeech = speech.interrupt;
   const cancelPendingSpeech = speech.cancelPending;
+  const expectNextSpeechResponse = speech.expectNextResponse;
+  const speechEchoRef = useRef({
+    assistantText: liveAssistantText,
+    assistantSubtitle: speech.subtitle,
+    lastPlaybackAt: 0,
+  });
+
+  useEffect(() => {
+    speechEchoRef.current.assistantText = liveAssistantText;
+    speechEchoRef.current.assistantSubtitle = speech.subtitle;
+    if (speech.speaking) speechEchoRef.current.lastPlaybackAt = Date.now();
+  }, [liveAssistantText, speech.speaking, speech.subtitle]);
+
+  const isPlaybackEcho = useCallback((text: string) => {
+    const echo = speechEchoRef.current;
+    return isLikelyLivePlaybackEcho({
+      transcript: text,
+      assistantText: echo.assistantText,
+      assistantSubtitle: echo.assistantSubtitle,
+      playbackRecentlyActive: Date.now() - echo.lastPlaybackAt <= 2_500,
+    });
+  }, []);
 
   const handleLiveFinal = useCallback(
     (text: string) => {
+      if (isPlaybackEcho(text)) return;
       interruptSpeech();
+      expectNextSpeechResponse();
       const context = freezeLiveVoiceContext(liveAssets);
       setLiveContextSnapshot(context);
       if (busy) {
@@ -231,7 +269,16 @@ export function VoiceComposerRuntime({
       if (onLiveSend) onLiveSend(text, context);
       else onSend(text);
     },
-    [busy, interruptSpeech, liveAssets, onLiveSend, onSend, onStop],
+    [
+      busy,
+      expectNextSpeechResponse,
+      interruptSpeech,
+      isPlaybackEcho,
+      liveAssets,
+      onLiveSend,
+      onSend,
+      onStop,
+    ],
   );
   const live = useVoiceSession({
     notebookId,
@@ -241,22 +288,16 @@ export function VoiceComposerRuntime({
     onFinalText: handleLiveFinal,
   });
   const liveStart = live.start;
+  const liveStop = live.stop;
   const liveCancel = live.cancel;
-
-  /* 先过门再落座：entering 完成（onEntered→voice）前不启动 voice session。 */
-  useEffect(() => {
-    if (threshold !== 'voice' || muted) {
-      liveCancel();
-      return;
-    }
-    if (
-      live.status === 'idle' ||
-      live.status === 'stopped' ||
-      live.status === 'cancelled'
-    ) {
-      liveStart();
-    }
-  }, [live.status, liveCancel, threshold, liveStart, muted]);
+  const liveContinuity = useLiveTranscriptionContinuity({
+    active: threshold === 'voice' && !muted,
+    status: live.status,
+    partialText: live.partialText,
+    start: liveStart,
+    stop: liveStop,
+    cancel: liveCancel,
+  });
 
   useEffect(() => {
     if (busy || pendingInterruptionRef.current === null) return;
@@ -267,15 +308,20 @@ export function VoiceComposerRuntime({
   }, [busy, onLiveSend, onSend]);
 
   useEffect(() => {
-    if (live.inputLevel >= 0.08 && live.partialText.trim().length >= 2) {
+    if (
+      live.inputLevel >= 0.08 &&
+      live.partialText.trim().length >= 2 &&
+      !isPlaybackEcho(live.partialText)
+    ) {
       cancelPendingSpeech();
     }
-  }, [cancelPendingSpeech, live.inputLevel, live.partialText]);
+  }, [cancelPendingSpeech, isPlaybackEcho, live.inputLevel, live.partialText]);
 
   const realtimeDictationReady = realtimeDictation.capability.enabled;
   const useRealtimeDictation =
-    activeDictation === 'realtime' ||
-    (activeDictation === null && realtimeDictationReady);
+    !realtimeDictationUnavailable &&
+    (activeDictation === 'realtime' ||
+      (activeDictation === null && realtimeDictationReady));
   const selectedDictationStatus = useRealtimeDictation
     ? realtimeDictation.status
     : dictation.status;
@@ -289,14 +335,17 @@ export function VoiceComposerRuntime({
     enabled:
       (realtimeDictationReady || dictation.enabled) && !busy && !liveOpen,
     status: selectedDictationStatus,
-    reason:
-      useRealtimeDictation && realtimeDictation.error
+    reason: realtimeDictationUnavailable
+      ? dictation.status === 'failed' && dictation.reason
+        ? dictation.reason
+        : '实时识别暂不可用，已切换为录音后转写'
+      : useRealtimeDictation && realtimeDictation.error
         ? '实时语音转文字失败，请重试'
         : useRealtimeDictation
           ? null
           : dictation.reason,
     onStart: () => {
-      if (realtimeDictationReady) {
+      if (realtimeDictationReady && !realtimeDictationUnavailable) {
         setActiveDictation('realtime');
         realtimeDictationBaseRef.current = draft;
         realtimeDictation.start();
@@ -337,18 +386,23 @@ export function VoiceComposerRuntime({
     muted,
     busy,
     preparing: speech.preparing,
+    recovering: liveContinuity.recovering || liveContinuity.rotating,
     speaking: speech.speaking && !live.partialText,
     status: live.status,
   });
   const liveStatusLabel = speech.playbackFailed
     ? '语音播放暂时不可用，仍在聆听'
-    : speech.preparing
-      ? '正在准备语音…'
-      : liveVisualPhase === 'speaking'
-        ? '正在回答'
-        : liveVisualPhase === 'thinking'
-          ? (composerProps.statusText ?? '正在思考…')
-          : (liveReason ?? LIVE_STATUS[live.status]);
+    : liveContinuity.rotating
+      ? '正在保持连接…'
+      : liveContinuity.recovering
+        ? '正在恢复连接…'
+        : speech.preparing
+          ? '正在准备语音…'
+          : liveVisualPhase === 'speaking'
+            ? '正在回答'
+            : liveVisualPhase === 'thinking'
+              ? (composerProps.statusText ?? '正在思考…')
+              : (liveReason ?? LIVE_STATUS[live.status]);
   const liveSessionTranscript = useMemo(
     () =>
       filterLiveSessionTranscript(liveTranscript, liveTranscriptBaselineIds),
@@ -360,6 +414,15 @@ export function VoiceComposerRuntime({
   const applyThresholdEvent = useCallback((event: LiveVoiceThresholdEvent) => {
     setThreshold((current) => reduceLiveVoiceThreshold(current, event));
   }, []);
+
+  /* 动效只能表现门槛，不能成为语音会话的唯一启停信号。后台标签页、GSAP
+     context 被重建或浏览器丢失完成回调时，保底推进同一幂等相位事件。 */
+  useEffect(() => {
+    if (threshold !== 'entering' && threshold !== 'exiting') return undefined;
+    const event = threshold === 'entering' ? 'ENTERED' : 'EXITED';
+    const timer = window.setTimeout(() => applyThresholdEvent(event), 1_800);
+    return () => window.clearTimeout(timer);
+  }, [applyThresholdEvent, threshold]);
   const handleEntered = useCallback(
     () => applyThresholdEvent('ENTERED'),
     [applyThresholdEvent],
