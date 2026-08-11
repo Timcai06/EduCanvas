@@ -13,6 +13,7 @@ import { uploadAsset } from '@/features/assets/asset-client';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
 import {
+  createArtifact,
   fetchNotebookArtifacts,
   type ArtifactDetail,
   type ArtifactSummary,
@@ -27,6 +28,10 @@ import {
   type LiveVoiceContextAsset,
   type LiveVoiceContextSnapshot,
 } from '@/features/voice/live-voice-context';
+import {
+  formatLiveVoiceLetterMarkdown,
+  type LiveVoiceExitPayload,
+} from '@/features/voice/live-voice-bring-back';
 import { useNotebookSources } from './use-notebook-sources';
 import { useWorkspaceSurface } from './use-workspace-surface';
 import {
@@ -233,6 +238,33 @@ export function useGeneralWorkspaceController(options: {
     [send],
   );
 
+  /* 出室带回：会话转录装订成 note 信笺落库，成功后摆上工作面。
+     失败只上报错误——退场动画不依赖这次写库（门槛设计 §4）。 */
+  const handleLiveExit = useCallback(
+    (payload: LiveVoiceExitPayload) => {
+      if (payload.sessionTranscript.length === 0) return;
+      const endedAt = new Date(payload.endedAt);
+      const pad = (value: number) => String(value).padStart(2, '0');
+      const title = `Live Voice 信笺 ${pad(endedAt.getHours())}:${pad(endedAt.getMinutes())}`;
+      const markdown = formatLiveVoiceLetterMarkdown(
+        payload.sessionTranscript,
+        payload.endedAt,
+      );
+      void createArtifact('note', title, [], markdown)
+        .then(({ artifact }) => {
+          setStudioItems((items) => [
+            artifact,
+            ...items.filter((item) => item.id !== artifact.id),
+          ]);
+          studioOpenActions.actions.openArtifact(artifact.id);
+        })
+        .catch((reason: unknown) => {
+          setError(toClientError(reason, '会话信笺保存失败。'));
+        });
+    },
+    [studioOpenActions],
+  );
+
   useEffect(() => {
     if (pendingConsumed.current) return;
     pendingConsumed.current = true;
@@ -356,6 +388,7 @@ export function useGeneralWorkspaceController(options: {
     nearBottomRef: nearBottom,
     onSend: send,
     onLiveSend: sendLive,
+    onLiveExit: handleLiveExit,
     onStop: () => void turn.stop(),
     onMenuAction: handleMenuAction,
     onToolAction: handleToolAction,
