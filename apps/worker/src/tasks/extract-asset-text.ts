@@ -13,7 +13,7 @@ import {
   waitForMineruTask,
 } from '@educanvas/asset-processing';
 import { LocalObjectStorage } from '@educanvas/agent-runtime';
-import type { Task } from 'graphile-worker';
+import type { Logger, Task } from 'graphile-worker';
 import { z } from 'zod';
 import { sha256Hex } from './asset-task-storage.js';
 
@@ -72,7 +72,9 @@ async function tryStructuredExtraction(input: {
   baseUrl: string;
   storage: LocalObjectStorage;
   jobId: string;
+  logger: Logger;
 }): Promise<StructuredReadyOutcome | null> {
+  let taskId: string | undefined;
   try {
     const submitted = await submitMineruTask({
       baseUrl: input.baseUrl,
@@ -80,6 +82,11 @@ async function tryStructuredExtraction(input: {
       fileBytes: input.bytes,
       contentType: input.mimeType,
     });
+    taskId = submitted.taskId;
+    /* 外部 taskId 是跨系统追溯的关键（ADR-0026 决定 6）。 */
+    input.logger.info(
+      `MinerU 任务提交成功 jobId=${input.jobId} taskId=${taskId}`,
+    );
     await waitForMineruTask({
       taskId: submitted.taskId,
       statusUrl: submitted.statusUrl,
@@ -115,7 +122,13 @@ async function tryStructuredExtraction(input: {
       mimeType: 'text/markdown' as const,
     };
   } catch (error) {
-    if (error instanceof MineruClientError) return null;
+    if (error instanceof MineruClientError) {
+      /* 只记稳定错误码，不记供应商错误体（secret containment）。 */
+      input.logger.warn(
+        `MinerU 不可用降级纯文本抽取 jobId=${input.jobId} taskId=${taskId ?? '-'} reason=${error.code}`,
+      );
+      return null;
+    }
     throw error;
   }
 }
@@ -146,13 +159,23 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
   /* 任务已终结（重复投递或已被人工处置）：安静退出，不当作错误。 */
   if (!pending) return;
 
+  /* 路由与领取日志：只记稳定事实，不记存储路径（secret containment）。 */
+  const route = routeDocumentExtraction(pending.mimeType);
+  helpers.logger.info(
+    `领取文本抽取任务 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} producer=${pending.producer} mimeType=${pending.mimeType} route=${route ?? 'none'}`,
+  );
+
   try {
     const storage = await getAssetStorage();
     const bytes = await storage.read(pending.storageKey);
 
-    if (routeDocumentExtraction(pending.mimeType) === 'mineru') {
+    if (route === 'mineru') {
       const config = loadMineruConfig(process.env);
-      if (config !== null) {
+      if (config === null) {
+        helpers.logger.warn(
+          `MinerU 未配置（MINERU_BASE_URL），文档降级纯文本抽取 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} mimeType=${pending.mimeType}`,
+        );
+      } else {
         const structured = await tryStructuredExtraction({
           bytes,
           mimeType: pending.mimeType,
@@ -161,12 +184,16 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
           baseUrl: config.baseUrl,
           storage,
           jobId: payload.jobId,
+          logger: helpers.logger,
         });
         if (structured !== null) {
           await assets.settleTextExtraction({
             jobId: payload.jobId,
             outcome: structured,
           });
+          helpers.logger.info(
+            `文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=structured mimeType=text/markdown`,
+          );
           return;
         }
         /* null = MinerU 降级，继续走下面的纯文本抽取（degraded_plain_text）。 */
@@ -196,12 +223,19 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
         checksum: sha256Hex(new TextEncoder().encode(extractedText)),
       },
     });
+    /* 纯文本路径质量取仓储缺省推导值 degraded_plain_text（向后兼容缺省）。 */
+    helpers.logger.info(
+      `文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=degraded_plain_text mimeType=text/plain`,
+    );
   } catch (error) {
     if (error instanceof AssetExtractionError) {
       await assets.settleTextExtraction({
         jobId: payload.jobId,
         outcome: { status: 'failed', failureCode: error.code },
       });
+      helpers.logger.warn(
+        `文本抽取终态失败 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} failureCode=${error.code}`,
+      );
       return;
     }
     /*
@@ -217,6 +251,9 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
           failureCode: 'asset_processing_exhausted',
         },
       });
+      helpers.logger.error(
+        `文本抽取重试耗尽写安全终态 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} failureCode=asset_processing_exhausted`,
+      );
       return;
     }
     throw error;

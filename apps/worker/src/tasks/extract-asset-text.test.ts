@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { repo } = vi.hoisted(() => ({
+const { repo, logger } = vi.hoisted(() => ({
   repo: {
     beginTextExtractionAttempt: vi.fn(),
     settleTextExtraction: vi.fn(),
   },
+  /* B3 日志链路：helpers.logger 的结构化字段断言。 */
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock('@educanvas/db', () => ({
@@ -51,14 +53,22 @@ import { extractAssetTextTask } from './extract-asset-text';
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const SHA = expect.stringMatching(/^[a-f0-9]{64}$/);
 
+const VERSION_ID = '22222222-2222-4222-8222-222222222222';
+
 function run(attempts = 1, maxAttempts = 3) {
   return extractAssetTextTask({ jobId: JOB_ID }, {
     job: { attempts, max_attempts: maxAttempts },
+    logger,
   } as never);
 }
 
 function pending(mimeType: string, storageKey = 'assets/a') {
-  repo.beginTextExtractionAttempt.mockResolvedValue({ storageKey, mimeType });
+  repo.beginTextExtractionAttempt.mockResolvedValue({
+    storageKey,
+    mimeType,
+    assetVersionId: VERSION_ID,
+    producer: 'default',
+  });
 }
 
 describe('assets:extract_text', () => {
@@ -119,9 +129,14 @@ describe('assets:extract_text', () => {
         checksum: SHA,
       },
     });
+    /* B3：未配置是预期降级，warn 记原因但不带路径/密钥。 */
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('MinerU 未配置'),
+    );
   });
 
   it('MinerU 服务不可用时降级为纯文本抽取', async () => {
+    process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
     pending('application/pdf');
     submit.mockRejectedValue(new MineruClientError('mineru_unreachable'));
     extract.mockResolvedValue('降级文本');
@@ -138,9 +153,14 @@ describe('assets:extract_text', () => {
         checksum: SHA,
       },
     });
+    /* B3：只记稳定错误码 reason，不记供应商错误体。 */
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('reason=mineru_unreachable'),
+    );
   });
 
   it('结果 zip 损坏（缺 index.md）时降级为纯文本抽取', async () => {
+    process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
     pending('application/pdf');
     submit.mockResolvedValue({
       taskId: 't1',
@@ -149,7 +169,10 @@ describe('assets:extract_text', () => {
     });
     wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
     fetchResult.mockResolvedValue(new Uint8Array([1, 2, 3]));
-    readMd.mockRejectedValue(new MineruClientError('mineru_result_invalid'));
+    /* readMineruMarkdown 是同步纯函数，mock 必须同步抛（mockRejectedValue 会传 Promise）。 */
+    readMd.mockImplementation(() => {
+      throw new MineruClientError('mineru_result_invalid');
+    });
     extract.mockResolvedValue('降级文本');
 
     await run();
@@ -205,6 +228,13 @@ describe('assets:extract_text', () => {
         mimeType: 'text/markdown',
       },
     });
+    /* B3 日志链路：提交 taskId 与结构化完成都要落日志（ADR-0026 决定 6）。 */
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining(`MinerU 任务提交成功 jobId=${JOB_ID} taskId=t1`),
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining(`quality=structured mimeType=text/markdown`),
+    );
   });
 
   it('结构化对象写入失败是瞬时错误，抛给队列重试而不是降级', async () => {
@@ -239,6 +269,9 @@ describe('assets:extract_text', () => {
       jobId: JOB_ID,
       outcome: { status: 'failed', failureCode: 'text_content_unavailable' },
     });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('failureCode=text_content_unavailable'),
+    );
   });
 
   it('读取字节失败可能是瞬时的，抛给队列重试而不是写终态', async () => {
@@ -264,6 +297,9 @@ describe('assets:extract_text', () => {
     });
     expect(JSON.stringify(repo.settleTextExtraction.mock.calls)).not.toContain(
       '包含本地路径',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('failureCode=asset_processing_exhausted'),
     );
   });
 });
