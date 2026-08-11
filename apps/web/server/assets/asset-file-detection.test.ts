@@ -56,8 +56,7 @@ describe('detectAssetFile', () => {
     );
     expect(detectAssetFile(pptxDirectory, 'slides.bin')).toEqual({
       kind: 'document',
-      mimeType:
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml',
       extension: 'pptx',
     });
     const xlsxDirectory = new TextEncoder().encode(
@@ -65,8 +64,7 @@ describe('detectAssetFile', () => {
     );
     expect(detectAssetFile(xlsxDirectory, 'sheet.bin')).toEqual({
       kind: 'document',
-      mimeType:
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml',
       extension: 'xlsx',
     });
   });

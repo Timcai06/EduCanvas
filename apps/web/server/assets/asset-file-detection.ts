@@ -83,8 +83,11 @@ function detectBinaryFile(bytes: Uint8Array): DetectedAssetFile | null {
     ) {
       return {
         kind: 'document',
+        /* 归一化 MIME（不带 .presentation 后缀）：与 MinerU 转换白名单
+           （MINERU_DOCUMENT_MIME_TYPES）和 DOCX 分支保持一致，否则
+           supportsTextExtraction 不认，pptx 会静默落到 ready 分支。 */
         mimeType:
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.openxmlformats-officedocument.presentationml',
         extension: 'pptx',
       };
     }
@@ -94,8 +97,8 @@ function detectBinaryFile(bytes: Uint8Array): DetectedAssetFile | null {
     ) {
       return {
         kind: 'document',
-        mimeType:
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        /* 归一化 MIME（不带 .sheet 后缀）：同上，与转换白名单保持一致。 */
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml',
         extension: 'xlsx',
       };
     }
