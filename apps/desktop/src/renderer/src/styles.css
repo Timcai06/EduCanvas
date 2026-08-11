@@ -1,24 +1,228 @@
-/* 桌宠壳：透明无框窗口内只有 128×128 的画布 */
+:root {
+  color: #25332d;
+  font-family:
+    Inter, 'Segoe UI Variable Text', 'Microsoft YaHei UI', system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 html,
-body {
-  margin: 0;
-  background: transparent;
-  overflow: hidden;
-}
-
+body,
 #root {
-  width: 128px;
-  height: 128px;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
 }
 
-canvas {
-  display: block;
+button {
+  font: inherit;
+}
+
+.pet-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.pet-button {
+  position: absolute;
+  right: 0;
+  bottom: 0;
   width: 128px;
   height: 128px;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 42px;
+  outline: none;
+  background: transparent;
   cursor: grab;
   touch-action: none;
 }
 
-canvas:active {
+.pet-button:active {
   cursor: grabbing;
+}
+
+.pet-button:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.96),
+    0 0 0 6px #287c5b;
+}
+
+.pet-button canvas {
+  display: block;
+  width: 128px;
+  height: 128px;
+  pointer-events: none;
+}
+
+.voice-card {
+  --accent: #287c5b;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 236px;
+  min-height: 174px;
+  padding: 18px 18px 14px;
+  border: 1px solid rgba(44, 74, 61, 0.12);
+  border-radius: 22px 22px 8px 22px;
+  background: rgba(255, 253, 247, 0.97);
+  box-shadow:
+    0 18px 45px rgba(37, 51, 45, 0.18),
+    0 3px 10px rgba(37, 51, 45, 0.1);
+  animation: card-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.voice-card::after {
+  position: absolute;
+  right: -13px;
+  bottom: 15px;
+  width: 24px;
+  height: 24px;
+  border-right: 1px solid rgba(44, 74, 61, 0.1);
+  border-bottom: 1px solid rgba(44, 74, 61, 0.1);
+  background: #fffdf7;
+  content: '';
+  transform: rotate(-45deg);
+}
+
+.voice-card.phase-error {
+  --accent: #b45145;
+}
+
+.voice-card.phase-success {
+  --accent: #217957;
+}
+
+.voice-card__header {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voice-card__eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.voice-card h1 {
+  margin: 5px 0 7px;
+  color: #24342c;
+  font-size: 18px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.voice-card p {
+  margin: 0 0 7px;
+  overflow: hidden;
+  color: #56635d;
+  font-size: 14px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+
+.voice-card__transcript {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.voice-card .voice-card__reply {
+  display: -webkit-box;
+  color: #293b32;
+  font-weight: 560;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.voice-card .voice-card__error {
+  color: #934439;
+}
+
+.voice-card .voice-card__notice {
+  color: #7a6b48;
+  font-size: 12px;
+}
+
+.voice-card__actions {
+  display: flex;
+  min-height: 44px;
+  align-items: end;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.voice-card__actions button {
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.action-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.action-quiet {
+  border: 1px solid rgba(40, 60, 50, 0.17);
+  background: rgba(255, 255, 255, 0.74);
+  color: #42534a;
+}
+
+.voice-card__actions button:focus-visible {
+  outline: 3px solid rgba(40, 124, 91, 0.28);
+  outline-offset: 2px;
+}
+
+.level-bars {
+  display: flex;
+  height: 18px;
+  align-items: center;
+  gap: 3px;
+}
+
+.level-bars i {
+  width: 3px;
+  height: 16px;
+  border-radius: 9px;
+  background: var(--accent);
+  transform-origin: center;
+  transition: transform 80ms linear;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translate(8px, 6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-card {
+    animation: none;
+  }
+
+  .level-bars i {
+    transition: none;
+  }
 }
