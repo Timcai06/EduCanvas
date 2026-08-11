@@ -112,6 +112,23 @@
 | 与 react-markdown 集成 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
 | 依赖重量 | 待调研 | 待调研 | 待调研 | 待调研 | 待调研 |
 
+### 调研发现（主线 C 形态对标，已完成）
+
+对标 NotebookLM / Obsidian / Heptabase / Napkin：
+
+| 产品 | 输入策略 | 渲染形态 | 格式底层 | 对 EduCanvas 的启示 |
+|------|----------|----------|----------|----------------------|
+| NotebookLM | 广开格式(PDF/DOCX/MD/CSV/PPTX/ePub/URL/音频/图片)，RAG 式抽取，**保留原文件静态副本**，不承诺还原排版("查看器可与原文件不同") | 来源查看器 + AI 面板，非文档画布 | 抽取文本 | 输入层广开格式、md 归一化作为规范；原文件留作附件，md 只是渲染层+AI 层 |
+| Obsidian | **md 是唯一文档格式**，导入工具转 md | 单笔记视图；md 里 fenced ```mermaid 客户端渲染 | 纯 md 文件(CommonMark+GFM) | Mermaid 姿势：```mermaid 代码块 + 客户端渲染 + 锁死 `securityLevel: strict` + Secure Array 防 `%%{init}%%` 降级 + 产物消毒 + 进 sandboxed iframe（Docmost 有此类 XSS 前科） |
+| Heptabase | 卡片+无限白板，白板是综合思考层 | 卡片铺白板 | **ProseMirror JSON**，md 只是导出格式 | 反例：文档一旦结构化(块注解/卡片属性)，md 往返有损；EduCanvas 若只做文档视图，**内部 md→AST→块 渲染，永远保有 md 导出** |
+| Napkin | 粘贴文本/描述/导入 PDF/PPT/DOC | 文本→可编辑图表资产 | 非渲染语法 | 若走"模型自动配图"：**让模型产出 Mermaid 代码块**（而非直接调图服务），保留可编辑+可导出 |
+
+**C 线关键结论**：
+1. **输入统一 md 值得，但要分两层**：输入接受层像 NotebookLM 广开格式归一化为 md；存储/画布层以 md 为规范文档格式，原文件留作静态副本，避免"必须高保真还原原排版"的伪需求
+2. **md 作为画布文档格式**优点成立（Obsidian 背书：纯文本/非专有/可 Git/LLM 友好）；代价是结构化后往返有损（Heptabase），故内部 md→AST→块 渲染、保有 md 导出能力
+3. **Mermaid**：学 Obsidian 的 fenced 代码块 + 客户端渲染姿势；安全上锁死 securityLevel strict + 产物消毒 + **渲染器进 sandboxed iframe**（契合分层信任模型）
+4. **渲染形态定位**：统一内容面板（一次开一个文档）最接近"Obsidian 单笔记视图 + NotebookLM 来源查看器"，不是 Heptabase 白板；将来要加白板应是独立于文档视图的第二层
+
 ## 五、方法与产出物
 
 1. **内部基线**：已完成（本文件第二节）
