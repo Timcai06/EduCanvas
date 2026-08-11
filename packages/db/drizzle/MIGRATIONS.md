@@ -687,3 +687,33 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - Estimated scale: 本地 28 representations / 14 jobs（默认值回填，0 行
   显式变更）；生产数据规模未验证，D07 承接。
 - 风险: 低——无数据迁移；唯一键扩展不拒绝任何旧合法写入。
+
+## 0054_absent_blur.sql
+
+- 状态: active（@hzlgou 作者记录，2026-08-11，ADR-0026 决定 6）
+- 语义: `asset_representations` 新增 `quality` 列（NOT NULL DEFAULT
+  'unavailable'），记录文档派生表示的质量状态（structured /
+  degraded_plain_text / failed / processing / unavailable），与 status
+  （生命周期）是独立维度——status='ready' 仍要区分结构化与降级。两个新
+  CHECK：值域 + 与 status/kind 的形状一致性（ready+text 必须二选一；
+  ready+非 text 恒为 unavailable；processing/failed/unavailable 一一对应）。
+  存量行行级 UPDATE backfill：text/ready 按原文件 MIME 区分——text/plain、
+  text/markdown（直接 UTF-8 解码）→ structured，pdf/docx（unpdf/mammoth
+  纯文本抽取）→ degraded_plain_text；其余状态按 status 映射。
+- 锁表: ADD COLUMN 与 ADD CONSTRAINT 均 ACCESS EXCLUSIVE 元数据短锁；
+  UPDATE 逐行 ROW EXCLUSIVE（本地存量 28 行量级）。
+- 回滚: DROP 两个 CHECK + DROP COLUMN quality（数据无丢失，仅回退
+  quality 维度）；不需要恢复任何数据。
+- N-1: 0053 老代码（Drizzle schema 不含 quality 列）读写不触碰该列，
+  新列带 DEFAULT，插入/投影均兼容；本 PR 的仓储扩展在 N 版才写入 quality。
+- Fresh install: 可重放（ADD COLUMN → UPDATE → ADD CONSTRAINT 顺序
+  保证空库/旧库都成功）。
+- Data migration: 行级 UPDATE backfill（按 status + kind + mime_type 的
+  CASE 表达式）；非 text representation（preview/thumbnail/transcription/
+  keyframes/original）统一取 unavailable，语义为「该表示不携带文档质量
+  维度」（ADR-0026 决定 4）。
+- Estimated scale: 本地 28 representations 存量 backfill；生产数据规模
+  未验证，D07 承接。
+- 风险: 低——CHECK 形状约束与仓储缺省推导一致；唯一边界是
+  ready+text 行若被 UPDATE 直接改成无质量语义值会违反 CHECK，属预期
+  防护而非回归。
