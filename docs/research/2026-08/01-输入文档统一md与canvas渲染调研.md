@@ -134,6 +134,14 @@
 3. **Mermaid**：学 Obsidian 的 fenced 代码块 + 客户端渲染姿势；安全上锁死 securityLevel strict + 产物消毒 + **渲染器进 sandboxed iframe**（契合分层信任模型）
 4. **渲染形态定位**：统一内容面板（一次开一个文档）最接近"Obsidian 单笔记视图 + NotebookLM 来源查看器"，不是 Heptabase 白板；将来要加白板应是独立于文档视图的第二层
 
+### 集成落点（已核实现有源码）
+
+「统一为带结构 Markdown」的最小改动落点在现有管线两端：
+
+1. **抽取纯函数**：`packages/asset-processing/src/text-extraction.ts` 的 `extractAssetText(bytes, mimeType) → string`——目前 unpdf→纯文本、mammoth.extractRawText→纯文本、UTF-8 严格解码；`pdf_text_unavailable` 失败码已识别扫描件。**换装点**：anydoc 进程内替换 mammoth 分支，输出 GFM；扫描/复杂 PDF 分支可接 Python sidecar
+2. **落库与表示**：`apps/worker/src/tasks/extract-asset-text.ts` 把输出以 `text/plain` 存 `derived/text/<sha>.txt` 并双写 `asset_versions.extracted_text`。**升级点**：输出内容类型改 `text/markdown`、存储键改 `.md`，并保留旧纯文本字段兼容读（类似 D04 的 compatibility 双写）
+3. **渲染消费**：Source 渲染器 `apps/web/features/assets/source-resource-renderer.tsx` 已能渲染 `source.markdown`；服务端预览 `asset-preview.ts` 对 markdown 直接返回 extractedText。结构 md 落地后渲染侧几乎零改动，只需补 Mermaid
+
 ## 五、方法与产出物
 
 1. **内部基线**：已完成（本文件第二节）
