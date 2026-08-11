@@ -568,3 +568,29 @@
     backdrop-filter: none;
   }
 }
+
+/* 门槛转场：入室飞行 proxy —— 语境纸从案上捕获位置飞进茶室舞台。
+   只承载 transform/opacity 动画（DESIGN.md §6）；reduced-motion 下不渲染。 */
+.live-voice-flight-proxy {
+  position: fixed;
+  z-index: 3;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: calc(var(--radius-pill) / 2.5);
+  background: var(--color-card);
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}
+
+.live-voice-flight-proxy > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-voice-flight-proxy {
+    display: none;
+  }
+}
