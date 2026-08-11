@@ -122,8 +122,49 @@ export function SourcePreviewPanel({
               alt={preview.fileName}
               className="mx-auto max-h-full max-w-full rounded-2xl object-contain p-4 shadow-[var(--shadow-float)]"
             />
-          ) : preview.kind === 'docx' && preview.content ? (
-            <DocxPreview html={preview.content} warnings={preview.warnings} />
+          ) : preview.kind === 'docx' ? (
+            <div className="m-4 space-y-4">
+              {preview.representation?.quality === 'structured' &&
+              preview.representation.markdown ? (
+                <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
+                  <p className="mb-2 text-xs font-medium text-ink-muted">
+                    结构化阅读 · MinerU 派生表示
+                  </p>
+                  <MessageMarkdown text={preview.representation.markdown} />
+                </article>
+              ) : preview.content ? (
+                <DocxPreview
+                  html={preview.content}
+                  warnings={preview.warnings}
+                />
+              ) : (
+                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+                  这个来源还没有可预览内容。
+                </div>
+              )}
+              {preview.representation?.quality === 'degraded_plain_text' ? (
+                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+                  结构化转换当前不可用，已降级为纯文本表示；原件仍可下载。
+                </div>
+              ) : preview.representation?.quality === 'processing' ? (
+                <div className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-muted">
+                  文档转换处理中，完成后提供结构化阅读视图。
+                </div>
+              ) : preview.representation?.quality === 'failed' ? (
+                <div className="rounded-2xl border border-cinnabar/25 bg-cinnabar-soft p-4 text-sm text-cinnabar">
+                  结构化转换失败，当前显示原格式近似提取；原件仍可下载。
+                </div>
+              ) : null}
+              <div className="flex justify-center">
+                <a
+                  href={preview.downloadUrl}
+                  download
+                  className="inline-flex min-h-9 items-center rounded-full border border-line px-4 text-xs font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  下载原件（{preview.fileName}）
+                </a>
+              </div>
+            </div>
           ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />

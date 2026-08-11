@@ -195,6 +195,8 @@ describe('SourceResourceRendererContent', () => {
         mimeType:
           'application/vnd.openxmlformats-officedocument.wordprocessingml',
         content: '<p>真实 DOCX</p>',
+        downloadUrl:
+          '/api/v1/chat/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/file?download=1',
       },
     });
 
