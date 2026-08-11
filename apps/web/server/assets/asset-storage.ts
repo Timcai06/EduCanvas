@@ -41,8 +41,16 @@ export interface StoredAssetObject {
 }
 
 const ORIGINAL_STORAGE_KEY = /^assets\/[a-f0-9]{16}\/[0-9a-f-]+\.[a-z0-9]+$/;
+/**
+ * 派生对象有两种顶层布局（ADR-0026 决定 3）：
+ * - `derived/<kind>/...`：kind 枚举（text/transcription/preview/thumbnail），
+ *   如 `derived/text/<jobId>/<sha>.txt`；
+ * - `derived/<jobId>/...`：MinerU 结构化结果按抽取任务 jobId 分组
+ *   （index.md / images/<name> / manifest.json），jobId 是 UUID。
+ * 两种都接受；`images/` 等中间段经通用路径段匹配。
+ */
 const DERIVED_STORAGE_KEY =
-  /^derived\/(?:text|transcription|preview|thumbnail)\/(?:[a-z0-9][a-z0-9._-]{0,127}\/){0,3}[a-z0-9][a-z0-9._-]{0,127}\.[a-z0-9]+$/i;
+  /^derived\/(?:text|transcription|preview|thumbnail|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/(?:[a-z0-9][a-z0-9._-]{0,127}\/){0,3}[a-z0-9][a-z0-9._-]{0,127}\.[a-z0-9]+$/i;
 
 function requireControlledStorageKey(storageKey: string): string {
   if (

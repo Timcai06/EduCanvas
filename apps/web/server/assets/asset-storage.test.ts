@@ -31,6 +31,39 @@ describe('asset storage controlled reads', () => {
     );
   });
 
+  it('读取 MinerU 结构化布局 derived/<jobId>/index.md（ADR-0026 决定 3）', async () => {
+    const storageKey = 'derived/11111111-1111-4111-8111-111111111111/index.md';
+    const absolutePath = path.join(storageRoot, ...storageKey.split('/'));
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, '# 结构化标题');
+
+    await expect(readStoredAssetBytes(storageKey)).resolves.toEqual(
+      Buffer.from('# 结构化标题'),
+    );
+  });
+
+  it('读取 MinerU 布局的 manifest.json 与 images/ 子目录对象', async () => {
+    for (const key of [
+      'derived/11111111-1111-4111-8111-111111111111/manifest.json',
+      'derived/11111111-1111-4111-8111-111111111111/images/001.jpg',
+    ]) {
+      const absolutePath = path.join(storageRoot, ...key.split('/'));
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, 'x');
+    }
+
+    await expect(
+      readStoredAssetBytes(
+        'derived/11111111-1111-4111-8111-111111111111/manifest.json',
+      ),
+    ).resolves.toEqual(Buffer.from('x'));
+    await expect(
+      readStoredAssetBytes(
+        'derived/11111111-1111-4111-8111-111111111111/images/001.jpg',
+      ),
+    ).resolves.toEqual(Buffer.from('x'));
+  });
+
   it('拒绝未登记前缀和路径穿越', async () => {
     await expect(
       readStoredAssetBytes('derived/unknown/job/file.txt'),
@@ -38,5 +71,9 @@ describe('asset storage controlled reads', () => {
     await expect(readStoredAssetBytes('../outside.txt')).rejects.toThrow(
       'asset_storage_key_invalid',
     );
+    /* jobId 段必须是 UUID 或 kind 枚举，路径穿越进不了第一段。 */
+    await expect(
+      readStoredAssetBytes('derived/../secret/file.txt'),
+    ).rejects.toThrow('asset_storage_key_invalid');
   });
 });
