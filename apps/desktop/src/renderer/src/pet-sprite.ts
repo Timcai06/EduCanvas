@@ -45,7 +45,8 @@ export class PetSprite {
     if (!st) return;
     const ctx = this.canvas.getContext('2d');
     if (!ctx || !this.image.complete) return;
-    const dpr = window.devicePixelRatio || 1;
+    // globalThis 而非 window：node 测试环境可 stub devicePixelRatio
+    const dpr = globalThis.devicePixelRatio || 1;
     const scale = Math.max(1, Math.round(dpr)); // 整数倍
     if (this.canvas.width !== 128 * scale) this.canvas.width = 128 * scale;
     if (this.canvas.height !== 128 * scale) this.canvas.height = 128 * scale;
@@ -64,7 +65,14 @@ export class PetSprite {
     }
 
     const frameIdx = this.frameIndex % st.frames.length;
-    const src = st.frames[frameIdx] ?? 0;
+    const frame = st.frames[frameIdx] ?? 0;
+    // manifest 与 sprite sheet 失配兜底：按图片实际列数钳制帧号，
+    // 保证帧号不会越出图片横向范围（safeFrameIndex 在绘制路径内生效）
+    const sheetCols = Math.max(
+      1,
+      Math.floor(this.image.naturalWidth / this.manifest.frameWidth),
+    );
+    const src = safeFrameIndex(frame, sheetCols);
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.drawImage(
