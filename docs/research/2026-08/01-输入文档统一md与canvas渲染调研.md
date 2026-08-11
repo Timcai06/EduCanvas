@@ -102,11 +102,11 @@
 | 资源消耗 | 无（原生库） | 无 | 无 | CPU可行，模型~1GB | 需 GPU(vLLM)或CPU fast模式 | pipeline: 4GB显存或纯CPU，模型实下~1.5-2GB | — |
 | 安全 | 无网络；硬资源上限防zip炸弹；错误分类细 | pandoc-server 零I/O沙箱；Lua filter禁用 | 自警SSRF；无硬上限 | 离线可跑；无远程服务 | 离线；需本地推理运行时 | 完全离线可跑；ModelScope适配国内 | — |
 
-**A 线结论**：
+**A 线结论**（初版分析；2026-08-11 MinerU 深调后，最终输入侧推荐收敛为 **MinerU 单引擎**，见本文件第五节与 02-doc 引擎能力覆盖表）：
 1. **进程内首选 anydoc**（MIT、Node 原生插件、14 格式含 PDF、质量第一），最小侵入替换现有 mammoth 纯文本管线
 2. **公式是共同缺口**：anydoc/markitdown 无公式；pandoc 唯一原生支持（GPL 但可 sidecar 调用）；若 K12 文档强依赖公式需补 pandoc 或 MinerU
 3. **扫描 PDF / 中文教学文档**：三家 Python 工具都需独立转换服务（sidecar REST）——按中文 K12 场景**优先 MinerU pipeline 后端**（中文OCR/公式/表格针对性最强、纯CPU可跑、许可规模内免费但**在线服务须署名**）；**docling 为 MIT 宽松备选**（多格式覆盖、工程化最规整）；**marker 不建议**（模型权重商用受限）
-4. 可选组合：**anydoc 做常规格式进程内转换 + MinerU/docling 做扫描/复杂 PDF 的独立服务**
+4. 可选组合：**anydoc 做常规格式进程内转换 + MinerU/docling 做扫描/复杂 PDF 的独立服务**（深调后：anydoc 无公式无 OCR，被 MinerU office/pipeline 覆盖，不再进入主路线）
 
 **B. Mermaid 渲染接入**
 
@@ -151,13 +151,18 @@
 
 ## 五、汇总推荐方案
 
-### 输入侧（各格式 → 带结构 Markdown）：双轨分流
+### 输入侧（各格式 → 带结构 Markdown）：**MinerU 单引擎**（2026-08-11 深调后更新）
+
+> 依据：MinerU 源码级深调（见 02-doc 引擎能力覆盖表）。核心支撑：office 后端零模型秒级、公式全覆盖（OMML→LaTeX / MFR）、五大后端统一输出契约、REST 异步任务协议、用户日常使用背书。
 
 | 文档类型 | 方案 | 说明 |
 |----------|------|------|
-| docx/pptx/xls/epub/csv + 文本层 PDF | **anydoc 进程内**（napi-rs 原生 Node 插件） | MIT、质量第一、零外部服务；替换 `text-extraction.ts` 的 mammoth 分支，输出 GFM；`pdf_text_unavailable`（扫描件）分支保留 |
-| 扫描 PDF / 复杂排版 / 中文教学文档 | **MinerU pipeline 或 docling 独立服务**（Python sidecar REST） | MinerU 中文/公式/表格最强、纯 CPU 可跑但**在线服务须署名**；docling MIT 更宽松为备选；两者都离线可跑 |
+| docx/pptx/xlsx | **MinerU office 后端** | 纯解析零模型、秒级、读原生结构质量最高、公式 OMML→LaTeX；不受 GPU 影响 |
+| PDF（文本层 / 扫描 / 公式 / 复杂版面） | **MinerU pipeline**（无 GPU，86.47）或 **hybrid**（GPU 8GB+，95.39） | 含 OCR、MFR 公式、表格识别；`pdf_text_unavailable`（扫描件）分支自然由 pipeline OCR 覆盖 |
+| txt / md | 原样通过（MinerU pass-through 或 Node 侧直存） | 本就是 md，不重复转换 |
 | 网页 → md | 待补一轮 mini 调研 | 现有 `web-page.ts` 只出纯文本；Node 侧需 `@mozilla/readability` + html→md，或复用 markitdown(Python)；见开放问题 |
+
+> anydoc（MIT、进程内、无公式无 OCR）在深调后不再进入主路线：契约统一是核心目标，单引擎最干净；其能力被 MinerU office/pipeline 覆盖。仅作为可选纯文本快速路径留存备查。
 
 ### 渲染侧（md + Mermaid 在 Canvas 渲染）
 
@@ -172,10 +177,10 @@
 
 ### 落地顺序建议（供后续 plan 参考）
 
-1. **Phase 1（输入统一 md）**：anydoc 换装 `text-extraction.ts` → 输出落库改 `text/markdown`（含兼容双写）→ 验证 docx/pdf 转换质量
+1. **Phase 1（输入统一 md）**：部署 `mineru-api` 独立服务（离线模型）→ worker 接入 REST 异步任务 → 输出落库改 `text/markdown`（含 `extracted_text` 兼容双写）→ 验证 docx/pdf 转换质量
 2. **Phase 2（Mermaid 渲染）**：headless 渲染服务 + 自研 rehype 插件 + 防降级/SSRF/限流；接入 react-markdown 管线
 3. **Phase 3（输出规范 + 新 artifact 判断）**：模型输出 md 规范 + 是否新增文档 Artifact
-4. **新依赖/新服务需过 ADR**：anydoc 原生 .node 插件、playwright/chromium、Python sidecar 服务
+4. **新依赖/新服务需过 ADR**：MinerU Python sidecar 服务（含许可合规边界）、playwright/chromium 渲染服务
 
 ## 六、方法与产出物
 
@@ -186,10 +191,11 @@
 
 ## 七、开放问题
 
+- **部署硬件待确认**：mineru-api 跑在哪台机器、有无 GPU（决定 PDF pipeline 还是 hybrid）——见 02-doc 开放问题
 - **网页→md 未深调研**：候选清单中 Readability/trafilatura/Jina Reader 未派专属 agent；需补一轮"Node 侧 html→md（readability + 转换器）vs markitdown(Python)"的 mini 调研
-- **公式需求强度未定**：anydoc 无公式；若 K12 文档强依赖数学公式，需评估补 pandoc(docx→md 专跑公式) 或 MinerU
-- **OCR→md 未纳入**（当前明确不纳入；若后续要扫描件全覆盖，MinerU pipeline 已具备 OCR 能力）
+- **OCR→md 已由 MinerU 覆盖**：pipeline 后端具备 OCR 能力，扫描件自然走此路，不再单列
 - **是否新增"文档 Artifact"类型**：触碰 canvas-protocol 白名单 + ADR-0004，需单独立项评估（当前 note 可先承担）
-- **新依赖/服务需过 ADR**：anydoc 原生 .node 插件、playwright/chromium 渲染服务、Python sidecar（MinerU/docling）
-- 转换质量验证：需要 1-2 份真实样本文档（PDF + DOCX）在 Phase 1 实测
+- **新依赖/服务需过 ADR**：MinerU Python sidecar 服务（含许可合规边界）、playwright/chromium 渲染服务
+- 转换质量验证：需要 1-2 份真实样本文档（PDF + DOCX 含公式）在 Phase 1 实测
+- anydoc 已退出主路线，仅作可选纯文本快速路径留存（见上输入侧说明）
 - 报告落位与后续 PR 时机由用户决定
