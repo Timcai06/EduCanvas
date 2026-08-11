@@ -70,7 +70,7 @@ describe('webCanvasResourceRegistry', () => {
     it('source.pdf 选择正确 Renderer', () => {
       const result = selectWebCanvasResourceRenderer(
         makeResource('source.pdf', {
-          allowedActions: ['view', 'download', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -84,7 +84,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'image/png',
             byteSize: null,
           },
-          allowedActions: ['view', 'download', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -98,7 +98,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'text/markdown',
             byteSize: null,
           },
-          allowedActions: ['view', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -112,7 +112,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'text/plain',
             byteSize: null,
           },
-          allowedActions: ['view', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -121,7 +121,7 @@ describe('webCanvasResourceRegistry', () => {
     it('source.docx 选择正确 Renderer', () => {
       const result = selectWebCanvasResourceRenderer(
         makeResource('source.docx', {
-          allowedActions: ['view', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -135,7 +135,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'audio/mpeg',
             byteSize: null,
           },
-          allowedActions: ['view', 'download', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -149,7 +149,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'video/mp4',
             byteSize: null,
           },
-          allowedActions: ['view', 'download', 'rename', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'rename', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -166,7 +166,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'application/json',
             byteSize: null,
           },
-          allowedActions: ['view', 'regenerate'],
+          allowedActions: ['view', 'annotate', 'regenerate'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -181,7 +181,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'application/json',
             byteSize: null,
           },
-          allowedActions: ['view', 'regenerate'],
+          allowedActions: ['view', 'annotate', 'regenerate'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -196,7 +196,7 @@ describe('webCanvasResourceRegistry', () => {
             mimeType: 'application/json',
             byteSize: null,
           },
-          allowedActions: ['view', 'regenerate'],
+          allowedActions: ['view', 'annotate', 'regenerate'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -230,7 +230,7 @@ describe('webCanvasResourceRegistry', () => {
             byteSize: null,
           },
           trustTier: 'tier2',
-          allowedActions: ['view', 'download', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
@@ -246,7 +246,7 @@ describe('webCanvasResourceRegistry', () => {
             byteSize: null,
           },
           trustTier: 'tier2',
-          allowedActions: ['view', 'download', 'delete'],
+          allowedActions: ['view', 'annotate', 'download', 'delete'],
         }),
       );
       expect(result.kind).toBe('available');
