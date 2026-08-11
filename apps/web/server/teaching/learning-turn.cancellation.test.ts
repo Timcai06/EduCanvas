@@ -3,6 +3,7 @@ import type { ChatMessageSnapshot, TeachingTurnSnapshot } from '@educanvas/db';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebTeachingCancellation } from './turn-application/cancellation';
 import { webTeachingPersistence } from './turn-application/persistence';
+import { abortRegisteredTurn } from '../http/turn-abort-registry';
 
 vi.mock('server-only', () => ({}));
 
@@ -94,9 +95,12 @@ describe('WebTeachingCancellation characterization', () => {
       leaseDurationMs: 45_000,
     });
 
+    expect(abortRegisteredTurn('turn-1')).toBe(true);
+    expect(handle.signal?.aborted).toBe(true);
     upstream.abort();
     expect(handle.signal?.aborted).toBe(true);
     await handle.close();
+    expect(abortRegisteredTurn('turn-1')).toBe(false);
     expect(upstream.listenerCount).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });

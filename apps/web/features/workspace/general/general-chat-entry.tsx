@@ -39,6 +39,7 @@ const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
 ];
 
 export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
+  const [draft, setDraft] = useState('');
   const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
   const [canvasSelected, setCanvasSelected] = useState(false);
@@ -67,7 +68,10 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   }, []);
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas text-ink">
+    <div
+      data-general-workspace
+      className="flex h-dvh flex-col bg-canvas text-ink"
+    >
       <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
         <ProductMark />
         <span className="flex-1" />
@@ -81,6 +85,8 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
       ) : null}
       <EmptyChatHero nickname={nickname}>
         <Composer
+          value={draft}
+          onValueChange={setDraft}
           chips={[]}
           busy={isPending}
           statusText={isPending ? '正在创建对话…' : null}

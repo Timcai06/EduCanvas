@@ -193,38 +193,39 @@ afterEach(() => {
 // ── 采集与重采样集成（16k/44.1k/48k + 双声道）────────────────────────
 
 describe('采集路径：任意采样率确定性转换到 16k mono', () => {
-  it('16k 输入直通：1600 样本 → 一个 3200 字节 chunk', async () => {
+  it('16k 输入直通：1600 样本 → 两个 1600 字节 chunk', async () => {
     const h = await makeHarness();
     // 直通路径每块末尾延迟 1 个样本到下一块，故喂 1601 个输入
     // （延迟样本在 stop 时冲刷，见 stop 测试）。
     h.fire([filled(1601, 0.5)]);
-    expect(h.chunks).toHaveLength(1);
-    expect(h.chunks[0]!.pcmBytes.length).toBe(3200);
+    expect(h.chunks).toHaveLength(2);
+    expect(h.chunks[0]!.pcmBytes.length).toBe(1600);
+    expect(h.chunks[1]!.pcmBytes.length).toBe(1600);
     // 0.5 → 16384 → LE [0x00, 0x40]
     expect(h.chunks[0]!.pcmBytes[0]).toBe(0x00);
     expect(h.chunks[0]!.pcmBytes[1]).toBe(0x40);
   });
 
-  it('44.1k → 16k：4410 输入样本恰好一个 3200 字节 chunk', async () => {
+  it('44.1k → 16k：4410 输入样本恰好两个 1600 字节 chunk', async () => {
     const h = await makeHarness({ sampleRate: 44100 });
     h.fire([filled(4410, 0.5)]);
-    expect(h.chunks).toHaveLength(1);
-    expect(h.chunks[0]!.pcmBytes.length).toBe(3200);
+    expect(h.chunks).toHaveLength(2);
+    expect(h.chunks[0]!.pcmBytes.length).toBe(1600);
     expect(readInt16Le(h.chunks[0]!.pcmBytes, 0)).toBe(16384);
   });
 
-  it('48k → 16k：4800 输入样本恰好一个 3200 字节 chunk', async () => {
+  it('48k → 16k：4800 输入样本恰好两个 1600 字节 chunk', async () => {
     const h = await makeHarness({ sampleRate: 48000 });
     h.fire([filled(4800, 0.5)]);
-    expect(h.chunks).toHaveLength(1);
-    expect(h.chunks[0]!.pcmBytes.length).toBe(3200);
+    expect(h.chunks).toHaveLength(2);
+    expect(h.chunks[0]!.pcmBytes.length).toBe(1600);
     expect(readInt16Le(h.chunks[0]!.pcmBytes, 0)).toBe(16384);
   });
 
   it('双声道输入正确归并为 mono 平均值（0.2/0.4 → 0.3）', async () => {
     const h = await makeHarness();
     h.fire([filled(1601, 0.2), filled(1601, 0.4)]);
-    expect(h.chunks).toHaveLength(1);
+    expect(h.chunks).toHaveLength(2);
     // mono 0.3 → round(0.3*32768) = 9830 → LE [0x66, 0x26]
     expect(readInt16Le(h.chunks[0]!.pcmBytes, 0)).toBe(9830);
     expect(h.chunks[0]!.pcmBytes[0]).toBe(0x66);
@@ -234,7 +235,7 @@ describe('采集路径：任意采样率确定性转换到 16k mono', () => {
   it('单声道输入（numberOfChannels=1）也正常交付', async () => {
     const h = await makeHarness();
     h.fire([filled(1601, -1)]);
-    expect(h.chunks).toHaveLength(1);
+    expect(h.chunks).toHaveLength(2);
     expect(readInt16Le(h.chunks[0]!.pcmBytes, 0)).toBe(-32768);
   });
 });
@@ -619,16 +620,16 @@ describe('SSR 安全与无副作用（V16 必测）', () => {
     const h = await makeHarness();
     h.fire([filled(1601, 0.1)]);
     h.fire([filled(1601, 0.2)]);
-    expect(h.chunks).toHaveLength(2);
+    expect(h.chunks).toHaveLength(4);
     // 篡改第一个 chunk 不影响第二个。
     h.chunks[0]!.pcmBytes.fill(0xff);
     // 第二个 chunk 首样本是上一块的延迟样本（0.1），第 2 个样本才是 0.2。
-    expect(readInt16Le(h.chunks[1]!.pcmBytes, 0)).toBe(Math.round(0.1 * 32768));
-    expect(readInt16Le(h.chunks[1]!.pcmBytes, 1)).toBe(Math.round(0.2 * 32768));
+    expect(readInt16Le(h.chunks[2]!.pcmBytes, 0)).toBe(Math.round(0.1 * 32768));
+    expect(readInt16Le(h.chunks[2]!.pcmBytes, 1)).toBe(Math.round(0.2 * 32768));
   });
 
-  it('默认 chunkBytes 为 3200（100ms @16kHz mono s16le）', () => {
-    expect(DEFAULT_CHUNK_BYTES).toBe(3200);
+  it('默认 chunkBytes 为 1600（50ms @16kHz mono s16le）', () => {
+    expect(DEFAULT_CHUNK_BYTES).toBe(1600);
     expect(DEFAULT_CHUNK_BYTES).toBeLessThanOrEqual(MAX_PCM_CHUNK_BYTES);
   });
 

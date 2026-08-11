@@ -7,7 +7,7 @@ import {
   StopCircle,
   X,
 } from '@phosphor-icons/react';
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
 
 const subscribeToHydration = () => () => undefined;
@@ -28,19 +28,16 @@ export interface ComposerToolChip {
 
 export interface ComposerVoiceControl {
   enabled: boolean;
-  mode: 'short-utterance' | 'classroom-caption';
   status:
     | 'idle'
     | 'starting'
+    | 'authorizing'
     | 'recording'
     | 'finalizing'
     | 'stopped'
     | 'cancelled'
     | 'failed';
-  partialText: string;
-  captions: readonly string[];
   reason: string | null;
-  onModeChange: (mode: ComposerVoiceControl['mode']) => void;
   onStart: () => void;
   onStop: () => void;
   onCancel: () => void;
@@ -57,6 +54,8 @@ export function Composer({
   chips,
   busy,
   statusText,
+  value,
+  onValueChange,
   onSend,
   onRemoveChip,
   onMenuAction,
@@ -73,6 +72,9 @@ export function Composer({
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
   busy: boolean;
   statusText: string | null;
+  /** 受控草稿；语音转写与键盘输入共享同一份可编辑文本。 */
+  value: string;
+  onValueChange: (value: string) => void;
   onSend: (text: string) => void;
   onRemoveChip: (id: string) => void;
   onMenuAction: (action: PlusMenuActionId) => void;
@@ -86,7 +88,6 @@ export function Composer({
   voice?: ComposerVoiceControl;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [value, setValue] = useState('');
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     getHydratedSnapshot,
@@ -97,6 +98,7 @@ export function Composer({
   const hasPayload = hasText || chips.length > 0;
   const voiceActive =
     voice?.status === 'starting' ||
+    voice?.status === 'authorizing' ||
     voice?.status === 'recording' ||
     voice?.status === 'finalizing';
 
@@ -105,7 +107,7 @@ export function Composer({
     if (!textarea) return;
     const text = value.trim();
     if (!hasPayload || busy) return;
-    setValue('');
+    onValueChange('');
     textarea.style.height = 'auto';
     onSend(text);
   };
@@ -136,45 +138,6 @@ export function Composer({
           ))}
         </div>
       ) : null}
-      {voice ? (
-        <div className="mb-2 flex items-center justify-between gap-2 px-1">
-          <div
-            className="inline-flex rounded-full border border-line bg-surface p-0.5"
-            aria-label="语音模式"
-          >
-            {(
-              [
-                ['short-utterance', '短句'],
-                ['classroom-caption', '课堂字幕'],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={voice.mode === mode}
-                disabled={voiceActive}
-                onClick={() => voice.onModeChange(mode)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  voice.mode === mode
-                    ? 'bg-card text-ink shadow-sm'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {voiceActive ? (
-            <button
-              type="button"
-              onClick={voice.onCancel}
-              className="rounded-full px-2 py-1 text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              取消语音
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       <div
         className={`ink-flow-shell relative flex items-end gap-1 border border-line bg-card p-2 transition-[border-color,box-shadow] focus-within:border-accent/60 focus-within:shadow-[var(--shadow-float)] ${
           isLanding
@@ -197,7 +160,7 @@ export function Composer({
           rows={1}
           aria-label="向 EduCanvas 提问"
           placeholder={isLanding ? '向 EduCanvas 提问' : '继续对话…'}
-          onChange={(event) => setValue(event.currentTarget.value)}
+          onChange={(event) => onValueChange(event.currentTarget.value)}
           onInput={(event) => {
             const textarea = event.currentTarget;
             textarea.style.height = 'auto';
@@ -218,6 +181,28 @@ export function Composer({
             isLanding ? 'text-base' : 'text-[15px]'
           }`}
         />
+        {voice ? (
+          <button
+            type="button"
+            disabled={busy || !voice.enabled || voice.status === 'finalizing'}
+            onClick={voiceActive ? voice.onStop : voice.onStart}
+            title={
+              voiceActive ? '结束语音输入' : (voice.reason ?? '语音转文字')
+            }
+            aria-label={voiceActive ? '结束语音输入' : '语音转文字'}
+            className={`grid size-10 shrink-0 place-items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:text-ink-faint ${
+              voiceActive
+                ? 'bg-accent text-card'
+                : 'text-ink-muted hover:bg-surface'
+            }`}
+          >
+            {voiceActive ? (
+              <StopCircle size={21} weight="fill" />
+            ) : (
+              <Microphone size={20} />
+            )}
+          </button>
+        ) : null}
         {busy && stopAvailable && onStop ? (
           <button
             type="button"
@@ -238,28 +223,7 @@ export function Composer({
           >
             <ArrowUp aria-hidden="true" size={20} weight="bold" />
           </button>
-        ) : voice ? (
-          <button
-            type="button"
-            disabled={busy || !voice.enabled || voice.status === 'finalizing'}
-            onClick={voiceActive ? voice.onStop : voice.onStart}
-            title={
-              voiceActive ? '结束语音输入' : (voice.reason ?? '开始语音输入')
-            }
-            aria-label={voiceActive ? '结束语音输入' : '开始语音输入'}
-            className={`grid size-10 shrink-0 place-items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
-              voiceActive
-                ? 'bg-accent text-card hover:bg-accent-strong'
-                : 'text-ink-muted hover:bg-surface disabled:cursor-not-allowed disabled:text-ink-faint'
-            }`}
-          >
-            {voiceActive ? (
-              <StopCircle aria-hidden="true" size={21} weight="fill" />
-            ) : (
-              <Microphone aria-hidden="true" size={20} weight="regular" />
-            )}
-          </button>
-        ) : (
+        ) : !voice ? (
           <button
             type="button"
             disabled
@@ -269,30 +233,14 @@ export function Composer({
           >
             <Microphone aria-hidden="true" size={20} weight="regular" />
           </button>
-        )}
+        ) : null}
       </div>
-      {voice &&
-      (voice.partialText ||
-        voice.reason ||
-        (voice.mode === 'classroom-caption' && voice.captions.length > 0)) ? (
+      {voice?.reason ? (
         <div
           className="mt-2 rounded-xl border border-line/70 bg-surface/70 px-3 py-2 text-sm"
           aria-live="polite"
         >
-          {voice.mode === 'classroom-caption' && voice.captions.length > 0 ? (
-            <ol aria-label="课堂字幕" className="space-y-1 text-ink-muted">
-              {voice.captions.map((caption, index) => (
-                <li key={`${index}-${caption}`}>{caption}</li>
-              ))}
-            </ol>
-          ) : null}
-          {voice.partialText ? (
-            <p className="text-ink" data-voice-partial>
-              {voice.partialText}
-            </p>
-          ) : voice.reason ? (
-            <p className="text-ink-muted">{voice.reason}</p>
-          ) : null}
+          <p className="text-ink-muted">{voice.reason}</p>
         </div>
       ) : null}
       {toolChips.length > 0 ? (

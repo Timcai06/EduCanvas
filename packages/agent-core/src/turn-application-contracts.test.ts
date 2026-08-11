@@ -58,7 +58,7 @@ describe('Turn Application contracts', () => {
         ...command(),
         input: {
           clientMessageId: 'message:client:1',
-          parts: Array.from({ length: 33 }, () => ({
+          parts: Array.from({ length: 65 }, () => ({
             type: 'text',
             text: 'x',
           })),

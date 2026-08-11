@@ -10,6 +10,8 @@ export function adaptAgentTool<Input, Output>(
     risk: ToolRiskLevel;
     effect: AgentToolEffect;
     exposure?: AgentToolExposure;
+    /** 模型侧提示 Schema；本地执行仍以 inputSchema 为唯一校验事实。 */
+    modelInputSchema?: Readonly<Record<string, unknown>>;
   },
 ): ToolKernelAdapter<Input, Output> {
   return {
@@ -22,6 +24,9 @@ export function adaptAgentTool<Input, Output>(
     exposure: policy.exposure ?? 'model',
     timeoutMs: tool.timeoutMs,
     inputSchema: tool.inputSchema,
+    ...(policy.modelInputSchema
+      ? { modelInputSchema: policy.modelInputSchema }
+      : {}),
     outputSchema: tool.outputSchema,
     invoke(input, context) {
       return tool.handler(input, {

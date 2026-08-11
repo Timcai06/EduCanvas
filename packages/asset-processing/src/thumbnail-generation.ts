@@ -10,7 +10,7 @@
 /**
  * 缩略图尺寸配置。
  */
-export const ASSET_THUMBNAIL_MAX_INPUT_BYTES = 10 * 1024 * 1024;
+export const ASSET_THUMBNAIL_MAX_INPUT_BYTES = 25 * 1024 * 1024;
 
 export const THUMBNAIL_CONFIG = {
   /** 缩略图最大宽度（像素）。 */

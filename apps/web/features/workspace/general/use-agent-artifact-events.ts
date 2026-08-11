@@ -3,7 +3,7 @@
 import {
   fetchNotebookArtifacts,
   type ArtifactSummary,
-  type CreatableArtifactKind,
+  type ObservableArtifactKind,
 } from '@/features/canvas/artifact-client';
 import type {
   ConfirmArtifactOptions,
@@ -12,15 +12,17 @@ import type {
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import { type Dispatch, type SetStateAction, useCallback } from 'react';
 
-const AGENT_ARTIFACT_KINDS = new Set<CreatableArtifactKind>([
+const AGENT_ARTIFACT_KINDS = new Set<ObservableArtifactKind>([
   'mind_map',
   'slides',
   'flashcards',
   'note',
+  'audio_overview',
+  'generated_image',
 ]);
 
-function isAgentArtifactKind(kind: string): kind is CreatableArtifactKind {
-  return AGENT_ARTIFACT_KINDS.has(kind as CreatableArtifactKind);
+function isAgentArtifactKind(kind: string): kind is ObservableArtifactKind {
+  return AGENT_ARTIFACT_KINDS.has(kind as ObservableArtifactKind);
 }
 
 /**

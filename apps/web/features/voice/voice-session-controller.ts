@@ -6,12 +6,7 @@
  *
  * 把一个"语音会话"编排为受控生命周期：点击开始 → 建立实时转录连接 →
  * 启动麦克风采集 → PCM chunk 从 capture 转发到 client → 服务端事件经 V05
- * reducer 快照投影为 partial / final。两种显式模式：
- *
- * - `short-utterance`：显示 partial（`onPartialText`），会话终态 final 时把
- *   最终文本交给 `onFinalText` **一次**；不创建 Turn；
- * - `classroom-caption`：显示 partial（`onPartialText`），每个 segment 定稿
- *   （final）时把该句文本交给 `onCaptionAppend` **一次**；不创建 Turn。
+ * reducer 快照投影为 partial / final；final 只交付一次，由组合层进入现有 Turn。
  *
  * ## 依赖注入
  *
@@ -22,7 +17,7 @@
  *
  * ## 生命周期与唯一终态
  *
- * - `idle → starting → recording → finalizing → stopped`；`cancelled` /
+ * - `idle → starting → authorizing → recording → finalizing → stopped`；`cancelled` /
  *   `failed` 是其余终态；终态**只收敛一次**（settled 守卫），之后所有
  *   事件回调与用户动作成为 no-op；
  * - `stop()`：冲刷采集器尾部 chunk 后 `finish()`，等待 final；
@@ -54,13 +49,11 @@ import {
   mapTerminalToError,
 } from './voice-session-errors';
 
-/** 会话模式：短句（final 交回输入）或课堂字幕（final 追加字幕）。 */
-export type VoiceSessionMode = 'short-utterance' | 'classroom-caption';
-
 /** 会话阶段（UI 可显示）。 */
 export type VoiceSessionStatus =
   | 'idle'
   | 'starting'
+  | 'authorizing'
   | 'recording'
   | 'finalizing'
   | 'stopped'
@@ -90,6 +83,7 @@ export type VoiceSessionErrorCode =
 export interface VoiceSessionCaptureHandlers {
   onChunk: (chunk: AudioPcmChunk) => void;
   onFailure: (code: AudioCaptureFailureCode) => void;
+  onLevel?: (level: number) => void;
 }
 
 /** client 工厂的回调面：控制器注入，V17-A 集成层绑定到 client options。 */
@@ -112,7 +106,6 @@ export interface VoiceSessionTranscriptionClient {
 }
 
 export interface VoiceSessionControllerDeps {
-  readonly mode: VoiceSessionMode;
   /** 当前 Notebook：client.start 的会话归属（服务端据此绑定访问权限）。 */
   readonly notebookId: string;
   /** capture 工厂（点击后调用；回调面由控制器注入）。 */
@@ -125,10 +118,10 @@ export interface VoiceSessionControllerDeps {
   ) => VoiceSessionTranscriptionClient;
   /** partial 文本更新（连续修正，含 final 定稿后的最终文本）。 */
   readonly onPartialText?: (text: string) => void;
-  /** short-utterance：会话终态 final 时回调一次，绝不创建 Turn。 */
+  /** 本地归一化输入能量；不写日志、不进入协议。 */
+  readonly onInputLevel?: (level: number) => void;
+  /** 会话终态 final 时回调一次。 */
   readonly onFinalText?: (text: string) => void;
-  /** classroom-caption：每个 segment 定稿时追加一次字幕，绝不创建 Turn。 */
-  readonly onCaptionAppend?: (text: string) => void;
   /** 阶段变化通知。 */
   readonly onStatusChange?: (status: VoiceSessionStatus) => void;
   /** 稳定错误码通知（终态 failed 时）。 */
@@ -143,7 +136,6 @@ export interface VoiceSessionLogEntry {
     | 'session_started'
     | 'chunk_forwarded'
     | 'final_delivered'
-    | 'segment_final_appended'
     | 'session_stopped'
     | 'session_cancelled'
     | 'session_failed'
@@ -164,10 +156,6 @@ export class VoiceSessionController {
   private settled = false;
   private lastSnapshot: StreamingTranscriptionSnapshot | null = null;
   private lastPartialText = '';
-  private lastSegmentStatuses = new Map<
-    string,
-    'active' | 'final' | 'failed'
-  >();
 
   constructor(deps: VoiceSessionControllerDeps) {
     this.deps = deps;
@@ -217,6 +205,7 @@ export class VoiceSessionController {
       return;
     }
     if (this.settled) return; // dispose 在连接完成与采集启动之间发生
+    this.setStatus('authorizing');
     let capture: AudioCapture;
     try {
       // 连接成功后才构造采集器：即便未来 factory 增加设备探测或预热，
@@ -224,6 +213,7 @@ export class VoiceSessionController {
       capture = this.deps.createCapture({
         onChunk: (chunk) => this.forwardChunk(chunk),
         onFailure: (code) => this.handleCaptureFailure(code),
+        onLevel: (level) => this.deps.onInputLevel?.(level),
       });
     } catch {
       this.disconnectClientQuietly();
@@ -262,6 +252,16 @@ export class VoiceSessionController {
   /** 放弃：丢弃未发送 PCM、取消连接，本地立即收敛 cancelled。 */
   cancel(): void {
     if (this.settled) return;
+    if (this.status === 'starting' || this.status === 'authorizing') {
+      /*
+       * 系统麦克风授权可能长期悬挂；关闭 Live 必须让迟到的连接/授权结果
+       * 无法重新启动采集。starting 尚不能发协议 cancel，因此直接断开。
+       */
+      this.capture?.cancel();
+      this.disconnectClientQuietly();
+      this.settle('cancelled');
+      return;
+    }
     if (this.status !== 'recording' && this.status !== 'finalizing') return;
     this.capture?.cancel();
     if (this.status === 'recording') {
@@ -303,27 +303,10 @@ export class VoiceSessionController {
     }
   }
 
-  /** V05 reducer 快照投影：caption 按 segment 定稿追加；partial 连续修正。 */
+  /** V05 reducer 快照投影：partial 连续修正。 */
   private applySnapshot(snapshot: StreamingTranscriptionSnapshot): void {
     if (this.settled) return;
     this.lastSnapshot = snapshot;
-    if (this.deps.mode === 'classroom-caption') {
-      for (const segment of snapshot.segments) {
-        const previous = this.lastSegmentStatuses.get(segment.segmentId);
-        if (
-          segment.status === 'final' &&
-          previous !== 'final' &&
-          segment.text.length > 0
-        ) {
-          // 每个 segment 定稿只追加一次（同一快照内幂等判定见 lastSegmentStatuses）。
-          this.deps.onCaptionAppend?.(segment.text);
-          this.log({ label: 'segment_final_appended' });
-        }
-      }
-    }
-    this.lastSegmentStatuses = new Map(
-      snapshot.segments.map((segment) => [segment.segmentId, segment.status]),
-    );
     if (snapshot.combinedText !== this.lastPartialText) {
       this.lastPartialText = snapshot.combinedText;
       this.deps.onPartialText?.(snapshot.combinedText);
@@ -337,7 +320,7 @@ export class VoiceSessionController {
     if (this.settled) return;
     if (result.reason === 'final') {
       const text = this.lastSnapshot?.combinedText ?? '';
-      if (this.deps.mode === 'short-utterance' && text.length > 0) {
+      if (text.length > 0) {
         this.deps.onFinalText?.(text);
         this.log({ label: 'final_delivered' });
       }

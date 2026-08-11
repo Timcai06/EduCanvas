@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  evaluateTranscriptionCapability,
   evaluateVoiceCapability,
   type VoiceCapabilityCheck,
   type VoiceCapabilityState,
@@ -32,17 +33,17 @@ import {
   type VoiceSessionCaptureHandlers,
   type VoiceSessionClientHandlers,
   type VoiceSessionErrorCode,
-  type VoiceSessionMode,
   type VoiceSessionStatus,
   type VoiceSessionTranscriptionClient,
 } from './voice-session-controller';
 import { VoiceSessionLifecycle } from './voice-session-lifecycle';
 
 export interface UseVoiceSessionOptions {
-  readonly mode: VoiceSessionMode;
   readonly notebookId: string;
   /** 不落盘实时识别的基础设施健康检查（模型/连接）。 */
   readonly capabilityChecks: readonly VoiceCapabilityCheck[];
+  /** Live 需要 ASR + TTS；Dictation 只需要 ASR。 */
+  readonly capabilityKind?: 'live' | 'transcription';
   /** capture 工厂（点击后调用；浏览器 API 只在那一刻发生）。 */
   readonly createCapture: (
     handlers: VoiceSessionCaptureHandlers,
@@ -51,16 +52,15 @@ export interface UseVoiceSessionOptions {
   readonly createClient: (
     handlers: VoiceSessionClientHandlers,
   ) => VoiceSessionTranscriptionClient;
-  /** short-utterance：final 文本（一次）；不得用于创建 Turn。 */
+  /** Live final 文本（一次）；组合层负责调用现有 Turn。 */
   readonly onFinalText?: (text: string) => void;
-  /** classroom-caption：每 segment 定稿追加；不得用于创建 Turn。 */
-  readonly onCaptionAppend?: (text: string) => void;
 }
 
 export interface UseVoiceSessionState {
   readonly status: VoiceSessionStatus;
   readonly partialText: string;
   readonly error: VoiceSessionErrorCode | null;
+  readonly inputLevel: number;
   readonly capability: VoiceCapabilityState;
   /** 用户点击：启动会话（能力禁用时 no-op）。 */
   readonly start: () => void;
@@ -76,24 +76,23 @@ export function useVoiceSession(
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [partialText, setPartialText] = useState('');
   const [error, setError] = useState<VoiceSessionErrorCode | null>(null);
+  const [inputLevel, setInputLevel] = useState(0);
   // 会话生命周期引用管理（多轮 start / 终态释放 / 卸载清理）。useState
   // 惰性初始化保证实例稳定且不在渲染期触碰 ref。
   const [lifecycle] = useState(() => new VoiceSessionLifecycle());
 
   const capability = useMemo(
-    () => evaluateVoiceCapability(options.capabilityChecks),
-    [options.capabilityChecks],
+    () =>
+      options.capabilityKind === 'transcription'
+        ? evaluateTranscriptionCapability(options.capabilityChecks)
+        : evaluateVoiceCapability(options.capabilityChecks),
+    [options.capabilityChecks, options.capabilityKind],
   );
 
   // 能力被撤销（含监护人撤回同意）：立即停止运行中会话并释放引用。
   useEffect(() => {
     lifecycle.handleCapability(capability.enabled);
   }, [capability.enabled, lifecycle]);
-
-  // 模式切换：销毁旧会话；下次 start() 按新模式重建。
-  useEffect(() => {
-    lifecycle.handleMode(options.mode);
-  }, [options.mode, lifecycle]);
 
   // 卸载：停止采集、断开连接、清理引用。
   useEffect(
@@ -112,13 +111,12 @@ export function useVoiceSession(
       capability.enabled,
       () =>
         new VoiceSessionController({
-          mode: options.mode,
           notebookId: options.notebookId,
           createCapture: options.createCapture,
           createClient: options.createClient,
           onPartialText: setPartialText,
+          onInputLevel: setInputLevel,
           onFinalText: options.onFinalText,
-          onCaptionAppend: options.onCaptionAppend,
           onStatusChange: (next) => {
             setStatus(next);
             // 终态（stopped/cancelled/failed）后释放活跃引用，允许同一
@@ -134,12 +132,10 @@ export function useVoiceSession(
   }, [
     capability.enabled,
     lifecycle,
-    options.mode,
     options.notebookId,
     options.createCapture,
     options.createClient,
     options.onFinalText,
-    options.onCaptionAppend,
   ]);
 
   const stop = useCallback(() => {
@@ -150,5 +146,14 @@ export function useVoiceSession(
     lifecycle.activeController?.cancel();
   }, [lifecycle]);
 
-  return { status, partialText, error, capability, start, stop, cancel };
+  return {
+    status,
+    partialText,
+    error,
+    inputLevel,
+    capability,
+    start,
+    stop,
+    cancel,
+  };
 }

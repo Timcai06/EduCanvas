@@ -31,7 +31,10 @@ vi.mock('@educanvas/asset-processing', async () => {
   return { ...actual, generateThumbnail: generate };
 });
 
-import { AssetThumbnailError } from '@educanvas/asset-processing';
+import {
+  ASSET_THUMBNAIL_MAX_INPUT_BYTES,
+  AssetThumbnailError,
+} from '@educanvas/asset-processing';
 import { generateThumbnailTask } from './generate-thumbnail';
 
 const JOB_ID = '22222222-2222-4222-8222-222222222222';
@@ -98,7 +101,7 @@ describe('assets:generate_thumbnail', () => {
 
     repo.beginThumbnailGenerationAttempt.mockResolvedValueOnce({
       ...pending,
-      byteSize: 10 * 1024 * 1024 + 1,
+      byteSize: ASSET_THUMBNAIL_MAX_INPUT_BYTES + 1,
     });
     await run();
     expect(repo.settleThumbnailGeneration).toHaveBeenLastCalledWith({

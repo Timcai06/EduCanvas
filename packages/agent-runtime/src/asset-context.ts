@@ -35,9 +35,9 @@ export class UnsupportedAgentInputModalityError extends Error {
 }
 
 function normalizedLimit(value: number | undefined): number {
-  const limit = value ?? 60_000;
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 256_000) {
-    throw new TypeError('maxTextCharacters必须是1-256000之间的整数');
+  const limit = value ?? 160_000;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 320_000) {
+    throw new TypeError('maxTextCharacters必须是1-320000之间的整数');
   }
   return limit;
 }

@@ -18,6 +18,7 @@ import {
 } from '@educanvas/db';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { webGeneralSources, webGeneralTurns } from './general-turn-persistence';
+import { registerTurnAbortController } from '../http/turn-abort-registry';
 
 const CANCELLATION_POLL_MS = 250;
 
@@ -143,6 +144,10 @@ export class WebGeneralCancellation implements TurnApplicationCancellationPort {
 
   async open(input: { operationId: string; actorId: string }) {
     const controller = new AbortController();
+    const unregisterAbort = registerTurnAbortController(
+      input.operationId,
+      controller,
+    );
     let checking = false;
     const abort = () => {
       if (!controller.signal.aborted) controller.abort('turn_cancelled');
@@ -176,6 +181,7 @@ export class WebGeneralCancellation implements TurnApplicationCancellationPort {
         })),
       close: () => {
         clearInterval(timer);
+        unregisterAbort();
         this.upstream.removeEventListener('abort', abort);
       },
     };

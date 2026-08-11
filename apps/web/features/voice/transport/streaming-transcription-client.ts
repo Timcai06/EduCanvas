@@ -154,6 +154,8 @@ export interface StreamingTranscriptionClientOptions {
    * `['127.0.0.1:8787']`。
    */
   readonly allowedInsecureWsHosts?: readonly string[];
+  /** WebSocket upgrade 最长等待；防止代理/TCP 半开让 UI 永久停在 starting。 */
+  readonly connectionTimeoutMs?: number;
   /** 脱敏日志 sink；缺省静默。 */
   readonly log?: (entry: StreamingTranscriptionClientLogEntry) => void;
   /** operationId 生成（测试注入固定值）；缺省 crypto.randomUUID。 */
@@ -258,6 +260,7 @@ export class StreamingTranscriptionClient {
   private readonly createSegmentId: () => string;
   private readonly observers: StreamingTranscriptionObservers;
   private readonly allowedInsecureWsHosts: readonly string[];
+  private readonly connectionTimeoutMs: number;
 
   private phase: StreamingTranscriptionClientPhase = 'idle';
   private terminalResult: StreamingTranscriptionTerminalResult | null = null;
@@ -280,6 +283,7 @@ export class StreamingTranscriptionClient {
   private startResolve: (() => void) | null = null;
   private startReject:
     ((error: StreamingTranscriptionClientError) => void) | null = null;
+  private connectionTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: StreamingTranscriptionClientOptions) {
     this.ticketClient = options.ticketClient;
@@ -287,6 +291,7 @@ export class StreamingTranscriptionClient {
     this.resolveWsUrl = options.resolveWsUrl;
     this.observers = new StreamingTranscriptionObservers(options);
     this.allowedInsecureWsHosts = options.allowedInsecureWsHosts ?? [];
+    this.connectionTimeoutMs = options.connectionTimeoutMs ?? 10_000;
     // Web Crypto methods may enforce their receiver ("Illegal invocation" when
     // extracted as a bare function). Keep the global lookup inside a wrapper so
     // browsers call randomUUID with the correct Crypto receiver.
@@ -504,8 +509,14 @@ export class StreamingTranscriptionClient {
       return;
     }
     this.socket = socket;
+    this.connectionTimer = setTimeout(() => {
+      if (this.phase !== 'starting') return;
+      this.connectFailed();
+      this.closeSocket(1000);
+    }, this.connectionTimeoutMs);
     socket.addEventListener('open', () => {
       if (this.phase === 'terminal') return;
+      this.clearConnectionTimer();
       // 首条 start 的写入是握手的一部分：失败说明服务端没有会话，必须
       // 拒绝 start() 并进入终态，绝不能报告连接成功。
       if (
@@ -733,19 +744,24 @@ export class StreamingTranscriptionClient {
     if (socket === null) return;
     this.socket = null;
     try {
-      if (socket.readyState === this.WebSocketCtor.OPEN) socket.close(code);
-      else if (socket.readyState === this.WebSocketCtor.CONNECTING) {
-        // 浏览器 WebSocket 无 terminate；Fake/Node 实现可选提供。
-        (socket as unknown as { terminate?: () => void }).terminate?.();
+      if (
+        socket.readyState === this.WebSocketCtor.OPEN ||
+        socket.readyState === this.WebSocketCtor.CONNECTING
+      ) {
+        /* 浏览器 close() 在 CONNECTING 阶段会中止握手；不能只调用 Node
+         * fake 才有的 terminate，否则关闭面板后真实 socket 仍会迟到打开。 */
+        socket.close(code);
       }
     } catch {
-      // 关闭失败不影响终态收敛。
+      // Node/fake 可提供 terminate 兜底；浏览器失败仍不影响本地终态收敛。
+      (socket as unknown as { terminate?: () => void }).terminate?.();
     }
   }
 
   /** 终态收敛（至多一次）：清理监听、记录稳定日志、通知 onTerminal。 */
   private enterTerminal(result: StreamingTranscriptionTerminalResult): void {
     if (this.terminalNotified) return;
+    this.clearConnectionTimer();
     this.terminalNotified = true;
     this.phase = 'terminal';
     this.terminalResult = result;
@@ -763,6 +779,11 @@ export class StreamingTranscriptionClient {
     });
     this.notifyStatus();
     this.observers.terminal(result);
+  }
+
+  private clearConnectionTimer(): void {
+    if (this.connectionTimer !== null) clearTimeout(this.connectionTimer);
+    this.connectionTimer = null;
   }
 
   private notifyStatus(): void {

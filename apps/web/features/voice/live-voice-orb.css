@@ -1,0 +1,377 @@
+.live-voice-copy,
+.live-voice-orb-wrap,
+.live-voice-transcript-deck,
+.live-voice-controls {
+  position: relative;
+  z-index: 1;
+}
+
+.live-voice-copy {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  text-align: center;
+}
+
+.live-voice-eyebrow {
+  color: var(--color-ink-faint);
+  font-size: var(--text-overline);
+  font-weight: 680;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.live-voice-status {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.35rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-line) 66%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card) 64%, transparent);
+  color: var(--color-ink);
+  box-shadow: 0 0.7rem 2rem color-mix(in srgb, var(--color-ink) 5%, transparent);
+  font-size: var(--text-note);
+  font-weight: 580;
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.live-voice-status > span {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--live-voice-accent);
+  box-shadow:
+    0 0 0.75rem color-mix(in srgb, var(--live-voice-accent) 64%, transparent),
+    0 0 0 0.22rem color-mix(in srgb, var(--live-voice-accent) 10%, transparent);
+}
+
+.live-voice-stage[data-phase='error'] .live-voice-status > span {
+  background: var(--color-bad);
+}
+
+.live-voice-stage[data-phase='muted'] .live-voice-status > span {
+  background: var(--color-ink-faint);
+  box-shadow: none;
+}
+
+.live-voice-orb-wrap {
+  align-self: center;
+  width: clamp(16rem, 33vw, 24rem);
+  height: clamp(16rem, 33vw, 24rem);
+  color: var(--live-voice-accent);
+  transition: color var(--duration-emphasis) var(--ease-enter);
+  will-change: transform, opacity;
+}
+
+.live-voice-orb-reactive {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.live-voice-orb-aura-shell {
+  position: absolute;
+  z-index: -2;
+  inset: -58%;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+.live-voice-orb-aura-shell i {
+  position: absolute;
+  border-radius: 48% 52% 58% 42% / 52% 45% 55% 48%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.live-voice-orb-aura-shell i:nth-child(1) {
+  inset: 9%;
+  background: conic-gradient(
+    from 24deg,
+    transparent 0 10%,
+    color-mix(in srgb, var(--live-voice-accent) 18%, transparent) 18%,
+    transparent 31% 48%,
+    color-mix(in srgb, var(--live-voice-accent) 12%, transparent) 61%,
+    transparent 78% 100%
+  );
+  filter: blur(30px);
+  opacity: 0.76;
+}
+
+.live-voice-orb-aura-shell i:nth-child(2) {
+  inset: 20%;
+  background: conic-gradient(
+    from 190deg,
+    transparent 0 14%,
+    color-mix(in srgb, var(--live-voice-accent) 26%, transparent) 28%,
+    transparent 43% 66%,
+    color-mix(in srgb, var(--color-card) 76%, transparent) 79%,
+    transparent 92%
+  );
+  filter: blur(18px);
+  opacity: 0.72;
+  -webkit-mask: radial-gradient(
+    circle,
+    transparent 0 47%,
+    #000 59%,
+    transparent 76%
+  );
+  mask: radial-gradient(circle, transparent 0 47%, #000 59%, transparent 76%);
+}
+
+.live-voice-orb-aura-shell i:nth-child(3) {
+  inset: 2%;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    color-mix(in srgb, var(--live-voice-accent) 15%, transparent) 0 21%,
+    color-mix(in srgb, var(--live-voice-accent) 7%, transparent) 42%,
+    transparent 70%
+  );
+  filter: blur(36px);
+  opacity: 0.82;
+}
+
+.live-voice-orb {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(
+    0 1.8rem 2.8rem
+      color-mix(in srgb, var(--live-voice-accent) 18%, transparent)
+  );
+  will-change: transform;
+}
+
+.live-voice-svg-aura {
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  will-change: transform, opacity;
+}
+
+.live-voice-svg-aura [data-live-aura] {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.live-voice-svg-aura [data-live-aura='outer'] {
+  opacity: 0.78;
+  transform: scale(1.42);
+}
+
+.live-voice-svg-aura [data-live-aura='middle'] {
+  opacity: 0.44;
+  stroke-width: 0.62;
+  transform: scale(1.3);
+}
+
+.live-voice-svg-aura [data-live-aura='inner'] {
+  opacity: 0.18;
+  transform: scale(1.14);
+}
+
+.live-voice-rings {
+  opacity: 0;
+  transform-origin: 50% 50%;
+}
+
+.live-voice-rings circle {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 56%, transparent);
+  stroke-width: 0.7;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.live-voice-particle-orbit {
+  fill: currentColor;
+  opacity: 0.42;
+  transform-box: view-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.live-voice-particle-orbit circle {
+  filter: drop-shadow(0 0 4px currentColor);
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+[data-live-morph],
+[data-live-light],
+[data-live-sheen] {
+  will-change: transform, opacity;
+}
+
+.live-voice-transcript-deck {
+  display: grid;
+  width: min(100%, 50rem);
+  min-height: 6.5rem;
+  place-items: center;
+  align-content: center;
+  padding-inline: var(--space-5);
+  text-align: center;
+}
+
+.live-voice-active-transcript {
+  display: grid;
+  min-height: 3.5rem;
+  place-items: center;
+  color: var(--color-ink);
+  font-size: clamp(1.05rem, 1.8vw, 1.42rem);
+  font-weight: 540;
+  line-height: 1.55;
+  text-shadow: 0 0.8rem 2rem
+    color-mix(in srgb, var(--color-canvas) 78%, transparent);
+  text-wrap: balance;
+  will-change: transform, opacity;
+}
+
+.live-voice-active-transcript p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.live-voice-transcript-deck span {
+  margin-right: var(--space-2);
+  color: var(--color-accent-strong);
+  font-size: var(--text-overline);
+  font-weight: 760;
+  letter-spacing: 0.08em;
+}
+
+.live-voice-active-transcript[data-speaker='system'] {
+  color: var(--color-ink-muted);
+  font-size: clamp(0.95rem, 1.25vw, 1.08rem);
+  font-weight: 490;
+}
+
+.live-voice-active-transcript[data-speaker='你'] span {
+  color: var(--color-ink-faint);
+}
+
+.live-voice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--color-line) 64%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card) 68%, transparent);
+  box-shadow: 0 1rem 2.8rem color-mix(in srgb, var(--color-ink) 8%, transparent);
+  backdrop-filter: blur(22px) saturate(1.2);
+}
+
+.live-voice-round-button {
+  display: grid;
+  width: 3.35rem;
+  height: 3.35rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card) 76%, transparent);
+  color: var(--color-ink);
+  transition:
+    transform var(--duration-micro) var(--ease-spring),
+    color var(--duration-fast) var(--ease-enter),
+    background-color var(--duration-fast) var(--ease-enter),
+    border-color var(--duration-fast) var(--ease-enter);
+}
+
+.live-voice-round-button:active {
+  transform: scale(0.92);
+}
+
+.live-voice-round-button:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 36%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-accent-soft) 32%,
+    var(--color-card)
+  );
+  color: var(--color-accent-strong);
+  transform: translateY(-2px);
+}
+
+.live-voice-round-button[aria-pressed='true'] {
+  background: var(--color-surface-strong);
+  color: var(--color-ink-muted);
+}
+
+.live-voice-close-button {
+  background: var(--color-ink);
+  color: var(--color-card);
+}
+
+.live-voice-close-button:hover {
+  border-color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink) 88%, var(--color-card));
+  color: var(--color-card);
+}
+
+.live-voice-round-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-height: 760px) {
+  .live-voice-orb-wrap {
+    width: 13rem;
+    height: 13rem;
+  }
+
+  .live-voice-transcript-deck {
+    min-height: 5.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .live-voice-orb-wrap {
+    width: min(66vw, 17.5rem);
+    height: min(66vw, 17.5rem);
+  }
+
+  .live-voice-orb-aura-shell {
+    inset: -46%;
+  }
+
+  .live-voice-transcript-deck {
+    min-height: 7rem;
+    padding-inline: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-voice-round-button {
+    transition-duration: var(--duration-instant);
+  }
+
+  .live-voice-round-button:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .live-voice-status,
+  .live-voice-controls {
+    background: var(--color-card);
+    backdrop-filter: none;
+  }
+
+  .live-voice-orb-aura-shell {
+    opacity: 0.3;
+  }
+}

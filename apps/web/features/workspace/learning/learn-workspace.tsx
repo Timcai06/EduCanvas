@@ -3,13 +3,18 @@
 import { submitCanvasAction } from '@/app/learn/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
-import { loadAssets } from '@/features/assets/asset-client';
+import { loadAssets, uploadAsset } from '@/features/assets/asset-client';
 import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
 import { VoiceComposer } from '@/features/voice';
+import {
+  MAX_LIVE_CONTEXT_ASSETS,
+  type LiveVoiceContextAsset,
+  type LiveVoiceContextSnapshot,
+} from '@/features/voice/live-voice-context';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import type {
   CanvasFeedbackDTO,
@@ -119,6 +124,19 @@ function LearnWorkspaceSession({
   const teachingTurn = useTeachingTurn(initialData.initialMessages);
   const sendTeachingTurn = teachingTurn.send;
   const messages = teachingTurn.messages;
+  const liveAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant');
+  const liveTranscript = messages
+    .slice(-6)
+    .filter((message) => message.text.trim().length > 0)
+    .slice(-4)
+    .map((message) => ({
+      /* 持久化确认会替换 message.id；role + clientMessageId 跨替换稳定。 */
+      id: `${message.role}:${message.clientMessageId}`,
+      speaker: message.role === 'student' ? ('你' as const) : ('AI' as const),
+      text: message.text,
+    }));
   const [chatError, setChatError] = useState<string | null>(null);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [canvasFull, setCanvasFull] = useState(false);
@@ -175,7 +193,7 @@ function LearnWorkspaceSession({
     setPreviewHtml(null);
     setPreviewFull(false);
     setCanvasOpen(true);
-  }, []);
+  }, [setCanvasOpen, setChatError, setDrawer, setPreviewFull, setPreviewHtml]);
 
   const closeCanvas = useCallback(() => {
     setCanvasOpen(false);
@@ -187,14 +205,19 @@ function LearnWorkspaceSession({
         container.scrollTop = savedScrollTop.current;
       }
     });
-  }, []);
+  }, [setCanvasFull, setCanvasOpen]);
 
-  const handleSend = useCallback(
-    (text: string) => {
+  const sendWithAssets = useCallback(
+    (
+      text: string,
+      selectedAssets: readonly (AssetItem | LiveVoiceContextAsset)[],
+    ) => {
       setChatError(null);
       justSentMessage.current = true;
-      const parts = assets.flatMap((asset) =>
-        asset.enabled && asset.versionId
+      const parts = selectedAssets.flatMap((asset) =>
+        asset.enabled &&
+        asset.versionId &&
+        (asset.kind === 'image' || asset.kind === 'document')
           ? [
               {
                 type: 'asset_ref' as const,
@@ -218,7 +241,16 @@ function LearnWorkspaceSession({
         );
       });
     },
-    [assets, sendTeachingTurn],
+    [sendTeachingTurn, setAssets, setChatError],
+  );
+  const handleSend = useCallback(
+    (text: string) => sendWithAssets(text, assets),
+    [assets, sendWithAssets],
+  );
+  const handleLiveSend = useCallback(
+    (text: string, context: LiveVoiceContextSnapshot) =>
+      sendWithAssets(text, context.assets),
+    [sendWithAssets],
   );
 
   useEffect(() => {
@@ -247,7 +279,7 @@ function LearnWorkspaceSession({
       }
       setChatError('这项功能尚未开放。');
     },
-    [canvasOpen, openCanvas],
+    [canvasOpen, openCanvas, setChatError, setDrawer, setUploadKind],
   );
 
   useEffect(() => {
@@ -261,15 +293,28 @@ function LearnWorkspaceSession({
     queueMicrotask(() => handleMenuAction(pendingAction));
   }, [handleMenuAction]);
 
-  const handleToggleAsset = useCallback((id: string) => {
-    setAssets((current) =>
-      current.map((asset) =>
-        asset.id === id && asset.selectable
-          ? { ...asset, enabled: !asset.enabled }
-          : asset,
-      ),
-    );
-  }, []);
+  const handleToggleAsset = useCallback(
+    (id: string) => {
+      const target = assets.find((asset) => asset.id === id);
+      if (
+        target?.selectable &&
+        !target.enabled &&
+        assets.filter((asset) => asset.enabled).length >=
+          MAX_LIVE_CONTEXT_ASSETS
+      ) {
+        setChatError(`一轮最多同时带入 ${MAX_LIVE_CONTEXT_ASSETS} 份资料。`);
+        return;
+      }
+      setAssets((current) =>
+        current.map((asset) =>
+          asset.id === id && asset.selectable
+            ? { ...asset, enabled: !asset.enabled }
+            : asset,
+        ),
+      );
+    },
+    [assets, setAssets, setChatError],
+  );
 
   const handleSubmit = useCallback((draft: CanvasSubmissionDraft) => {
     const fingerprint = JSON.stringify(draft);
@@ -320,6 +365,46 @@ function LearnWorkspaceSession({
   );
 
   const enabledAssets = assets.filter((asset) => asset.enabled);
+  const liveAssetItems = assets.map((asset) => ({
+    id: asset.id,
+    versionId: asset.versionId,
+    label: asset.label,
+    kind: asset.kind,
+    scope: asset.scope,
+    status: asset.status,
+    enabled: asset.enabled,
+    selectable: asset.selectable,
+    previewUrl: null,
+  }));
+  const liveCitations =
+    liveAssistantMessage?.role === 'assistant'
+      ? (liveAssistantMessage.citations ?? []).map((citation) => ({
+          id: citation.id,
+          label: citation.label,
+          pageStart: citation.pageStart,
+          pageEnd: citation.pageEnd,
+        }))
+      : [];
+  const liveTools =
+    liveAssistantMessage?.role === 'assistant'
+      ? (liveAssistantMessage.toolSteps ?? [])
+      : [];
+  const uploadLiveAsset = useCallback(
+    async (file: File) => {
+      const asset = await uploadAsset({ file, scope: 'turn' });
+      setAssets((current) => {
+        const enabledCount = current.filter((item) => item.enabled).length;
+        return [
+          {
+            ...asset,
+            enabled: asset.selectable && enabledCount < MAX_LIVE_CONTEXT_ASSETS,
+          },
+          ...current.filter((item) => item.id !== asset.id),
+        ];
+      });
+    },
+    [setAssets],
+  );
   const artifactCompleted =
     feedback !== null && feedback.correctItems === feedback.attemptedItems;
   const previewOpen = previewHtml !== null;
@@ -382,13 +467,16 @@ function LearnWorkspaceSession({
                   onMenuAction={handleMenuAction}
                   availableMenuActions={LEARN_MENU_ACTIONS}
                   variant="landing"
+                  liveAssistantId={null}
+                  liveAssistantText={null}
+                  liveAssets={liveAssetItems}
                 />
               </EmptyChatHero>
             ) : (
               <>
                 <div
                   ref={chatScrollRef}
-                  className="min-h-0 flex-1 overflow-y-auto"
+                  className="workspace-edge-scrollbar min-h-0 flex-1 overflow-y-auto"
                   aria-label="AI教师对话"
                   role="region"
                   onScroll={(event) => {
@@ -437,6 +525,18 @@ function LearnWorkspaceSession({
                   availableMenuActions={LEARN_MENU_ACTIONS}
                   stopAvailable={teachingTurn.stopAvailable}
                   onStop={() => void teachingTurn.stop()}
+                  liveAssistantId={
+                    liveAssistantMessage?.clientMessageId ?? null
+                  }
+                  liveAssistantText={liveAssistantMessage?.text ?? null}
+                  liveAssistantStatus={liveAssistantMessage?.status ?? null}
+                  liveTranscript={liveTranscript}
+                  liveAssets={liveAssetItems}
+                  onLiveSend={handleLiveSend}
+                  liveCitations={liveCitations}
+                  liveTools={liveTools}
+                  onLiveToggleAsset={handleToggleAsset}
+                  onLiveUploadAsset={uploadLiveAsset}
                 />
               </>
             )}

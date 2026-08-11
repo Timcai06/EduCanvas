@@ -12,6 +12,8 @@ import {
 } from '@/features/canvas/artifact-generation-flow';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GENERAL_MENU_ACTIONS } from './general-chat-config';
+import type { AssetItem } from '@/features/assets/assets-drawer';
+import type { LiveVoiceContextSnapshot } from '@/features/voice/live-voice-context';
 
 /**
  * 消息与 Composer（W02）。
@@ -35,16 +37,21 @@ export interface ConversationPaneProps {
   generation: GenerationState | null;
   revisingOpenArtifact: boolean;
   composerTools: readonly ComposerToolChip[];
+  liveAssets: readonly AssetItem[];
   composerDockRef: RefObject<HTMLDivElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
   nearBottomRef: RefObject<boolean>;
   onSend: (text: string) => void;
+  onLiveSend: (text: string, context: LiveVoiceContextSnapshot) => void;
   onStop: () => void;
   onMenuAction: (action: PlusMenuActionId) => void;
   onToolAction: () => void;
   onRetry: (messageId: string) => void;
   onPreviewHtml: (source: string) => void;
   onOpenArtifact: (artifactId: string) => void;
+  onOpenAsset: (assetId: string) => void;
+  onToggleLiveAsset: (assetId: string) => void;
+  onUploadLiveAsset: (file: File, kind: 'image' | 'document') => Promise<void>;
   onOpenStatusCard: (artifactId: string) => void;
   onDismissStatusCard: () => void;
 }
@@ -61,20 +68,100 @@ export function ConversationPane({
   generation,
   revisingOpenArtifact,
   composerTools,
+  liveAssets,
   composerDockRef,
   scrollRef,
   nearBottomRef,
   onSend,
+  onLiveSend,
   onStop,
   onMenuAction,
   onToolAction,
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
+  onOpenAsset,
+  onToggleLiveAsset,
+  onUploadLiveAsset,
   onOpenStatusCard,
   onDismissStatusCard,
 }: ConversationPaneProps) {
   const showStatusCard = generation !== null && generation.phase !== 'confirm';
+  const liveAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant');
+  const liveArtifacts = [
+    ...(liveAssistantMessage?.role === 'assistant'
+      ? (liveAssistantMessage.artifacts ?? []).map((artifact) => ({
+          id: artifact.id,
+          kind: artifact.kind,
+          title: artifact.title,
+          status: artifact.status,
+          previewUrl: null,
+        }))
+      : []),
+    ...(generation?.artifactId &&
+    !liveAssistantMessage?.artifacts?.some(
+      (artifact) => artifact.id === generation.artifactId,
+    )
+      ? [
+          {
+            id: generation.artifactId,
+            kind: generation.kind,
+            title: generation.title,
+            status:
+              generation.phase === 'failed'
+                ? ('failed' as const)
+                : generation.phase === 'ready'
+                  ? ('active' as const)
+                  : ('generating' as const),
+            previewUrl:
+              generation.detail?.version?.media?.contentType.startsWith(
+                'image/',
+              )
+                ? generation.detail.version.media.url
+                : null,
+          },
+        ]
+      : []),
+  ];
+  const liveCitations =
+    liveAssistantMessage?.role === 'assistant'
+      ? (liveAssistantMessage.citations ?? []).map((citation) => ({
+          id: citation.id,
+          label: citation.label,
+          pageStart: citation.pageStart,
+          pageEnd: citation.pageEnd,
+        }))
+      : [];
+  const liveTools =
+    liveAssistantMessage?.role === 'assistant'
+      ? (liveAssistantMessage.toolSteps ?? [])
+      : [];
+  const liveAssetItems = liveAssets.map((asset) => ({
+    id: asset.id,
+    versionId: asset.versionId,
+    label: asset.label,
+    kind: asset.kind,
+    scope: asset.scope,
+    status: asset.status,
+    enabled: asset.enabled,
+    selectable: asset.selectable,
+    previewUrl:
+      asset.kind === 'image' && asset.status === 'ready'
+        ? `/api/v1/chat/assets/${encodeURIComponent(asset.id)}/file`
+        : null,
+  }));
+  const liveTranscript = messages
+    .slice(-6)
+    .filter((message) => message.text.trim().length > 0)
+    .slice(-4)
+    .map((message) => ({
+      /* 持久化确认会替换 message.id；role + clientMessageId 跨替换稳定。 */
+      id: `${message.role}:${message.clientMessageId}`,
+      speaker: message.role === 'student' ? ('你' as const) : ('AI' as const),
+      text: message.text,
+    }));
   const handleStatusCardOpen = () => {
     const artifactId = generation?.artifactId;
     if (artifactId) onOpenStatusCard(artifactId);
@@ -112,6 +199,9 @@ export function ConversationPane({
             {...composerProps}
             notebookId={notebookId}
             variant="landing"
+            liveAssistantId={null}
+            liveAssistantText={null}
+            liveAssets={liveAssetItems}
           />
         </div>
       </EmptyChatHero>
@@ -122,7 +212,7 @@ export function ConversationPane({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="workspace-edge-scrollbar min-h-0 flex-1 overflow-y-auto"
         role="region"
         aria-label="AI 对话"
         onScroll={(event) => {
@@ -152,7 +242,23 @@ export function ConversationPane({
             dismissable={!revisingOpenArtifact}
           />
         ) : null}
-        <VoiceComposer {...composerProps} notebookId={notebookId} />
+        <VoiceComposer
+          {...composerProps}
+          notebookId={notebookId}
+          liveAssistantId={liveAssistantMessage?.clientMessageId ?? null}
+          liveAssistantText={liveAssistantMessage?.text ?? null}
+          liveAssistantStatus={liveAssistantMessage?.status ?? null}
+          liveTranscript={liveTranscript}
+          liveAssets={liveAssetItems}
+          onLiveSend={onLiveSend}
+          liveArtifacts={liveArtifacts}
+          liveCitations={liveCitations}
+          liveTools={liveTools}
+          onLiveToggleAsset={onToggleLiveAsset}
+          onLiveUploadAsset={onUploadLiveAsset}
+          onLiveOpenAsset={onOpenAsset}
+          onLiveOpenArtifact={onOpenArtifact}
+        />
       </div>
     </div>
   );

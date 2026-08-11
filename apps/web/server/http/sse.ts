@@ -9,9 +9,9 @@
  *
  * ## 客户端断开处理
  *
- * `createSseEventStream` 不因客户端断开而终止业务生成。
- * 客户端 `clientOpen = false` 只停止写响应，服务端继续生成并持久化。
- * 这保证用户关掉浏览器重开后可以通过 replay 拿到完整结果。
+ * 默认情况下，`createSseEventStream` 不因客户端断开而终止业务生成。
+ * 需要把断开传播到业务层的入口必须显式提供 `onCancel`；这样 Chat Turn
+ * 可以经 Gateway 的取消协议收敛，而普通后台流仍可继续完成持久化。
  */
 
 import 'server-only';
@@ -41,11 +41,18 @@ export function sseResponse(stream: ReadableStream<Uint8Array>): Response {
   });
 }
 
-/** 客户端断开只停止写响应；业务生成与持久化继续由服务端完成。 */
+export interface SseEventStreamOptions {
+  /** 浏览器释放响应体时触发一次；失败不得反向制造未处理的 Promise rejection。 */
+  onCancel?: () => void | Promise<void>;
+}
+
+/** 客户端断开停止写响应；是否终止业务由调用入口显式决定。 */
 export function createSseEventStream<T extends object & { type: string }>(
   events: AsyncIterable<T>,
+  options: SseEventStreamOptions = {},
 ): ReadableStream<Uint8Array> {
   let clientOpen = true;
+  let cancelNotified = false;
   return new ReadableStream<Uint8Array>({
     start(controller) {
       void (async () => {
@@ -61,6 +68,9 @@ export function createSseEventStream<T extends object & { type: string }>(
     },
     cancel() {
       clientOpen = false;
+      if (cancelNotified || !options.onCancel) return;
+      cancelNotified = true;
+      return Promise.resolve(options.onCancel()).catch(() => undefined);
     },
   });
 }

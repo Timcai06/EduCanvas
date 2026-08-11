@@ -119,9 +119,11 @@ export type TurnModelPhase = z.infer<typeof turnModelPhaseSchema>;
  * 发给外部供应商，任何形式的内部地址都不能出现在这条路径上。字节由服务端从
  * 已鉴权的不可变 AssetVersion 读出，浏览器不能直接提交。
  *
- * `data` 上限对应上传侧 10MB 原始字节经 base64 膨胀 4/3 后的量；它是防御异常
+ * `data` 上限覆盖物化层 24 MiB 总图片预算经 base64 膨胀后的单图极值；它是防御异常
  * 输入的硬边界，真正该控制张数与总量的地方在物化层。
  */
+export const MAX_MODEL_INPUT_IMAGE_BASE64_CHARACTERS = 34_000_000;
+
 export const modelInputPartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }).strict(),
   z
@@ -129,7 +131,7 @@ export const modelInputPartSchema = z.discriminatedUnion('type', [
       type: z.literal('image'),
       mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
       /** 不带 `data:` 前缀的裸 base64。 */
-      data: z.string().min(1).max(14_000_000),
+      data: z.string().min(1).max(MAX_MODEL_INPUT_IMAGE_BASE64_CHARACTERS),
     })
     .strict(),
 ]);
