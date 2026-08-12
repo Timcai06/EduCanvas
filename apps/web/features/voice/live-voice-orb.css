@@ -244,6 +244,25 @@
   -webkit-line-clamp: 4;
 }
 
+.live-voice-audible-cue {
+  max-width: min(100%, 38rem);
+  margin-top: var(--space-2);
+  overflow: hidden;
+  color: var(--color-ink-muted);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-voice-audible-cue span {
+  margin-right: var(--space-2);
+  color: var(--color-accent-strong);
+  font-size: var(--text-overline);
+  font-weight: 720;
+  letter-spacing: 0.06em;
+}
+
 .live-voice-transcript-deck span {
   margin-right: var(--space-2);
   color: var(--color-accent-strong);

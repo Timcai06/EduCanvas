@@ -3,6 +3,7 @@
 import type { RefObject } from 'react';
 import type { ChatMessage } from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
+import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
 import type { ComposerToolChip } from '@/features/composer/composer';
 import { VoiceComposer } from '@/features/voice';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
@@ -91,21 +92,24 @@ export function ConversationPane({
   onLiveExit,
 }: ConversationPaneProps) {
   const showStatusCard = generation !== null && generation.phase !== 'confirm';
-  const liveAssistantMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === 'assistant');
+  const {
+    assistantId,
+    assistantText,
+    assistantStatus,
+    assistantArtifacts,
+    assistantCitations,
+    assistantToolSteps,
+  } = useAssistantMessageProjection(messages);
   const liveArtifacts = [
-    ...(liveAssistantMessage?.role === 'assistant'
-      ? (liveAssistantMessage.artifacts ?? []).map((artifact) => ({
-          id: artifact.id,
-          kind: artifact.kind,
-          title: artifact.title,
-          status: artifact.status,
-          previewUrl: null,
-        }))
-      : []),
+    ...assistantArtifacts.map((artifact) => ({
+      id: artifact.id,
+      kind: artifact.kind,
+      title: artifact.title,
+      status: artifact.status,
+      previewUrl: null,
+    })),
     ...(generation?.artifactId &&
-    !liveAssistantMessage?.artifacts?.some(
+    !assistantArtifacts.some(
       (artifact) => artifact.id === generation.artifactId,
     )
       ? [
@@ -129,19 +133,13 @@ export function ConversationPane({
         ]
       : []),
   ];
-  const liveCitations =
-    liveAssistantMessage?.role === 'assistant'
-      ? (liveAssistantMessage.citations ?? []).map((citation) => ({
-          id: citation.id,
-          label: citation.label,
-          pageStart: citation.pageStart,
-          pageEnd: citation.pageEnd,
-        }))
-      : [];
-  const liveTools =
-    liveAssistantMessage?.role === 'assistant'
-      ? (liveAssistantMessage.toolSteps ?? [])
-      : [];
+  const liveCitations = assistantCitations.map((citation) => ({
+    id: citation.id,
+    label: citation.label,
+    pageStart: citation.pageStart,
+    pageEnd: citation.pageEnd,
+  }));
+  const liveTools = assistantToolSteps;
   const liveAssetItems = liveAssets.map((asset) => ({
     id: asset.id,
     versionId: asset.versionId,
@@ -249,9 +247,9 @@ export function ConversationPane({
         <VoiceComposer
           {...composerProps}
           notebookId={notebookId}
-          liveAssistantId={liveAssistantMessage?.clientMessageId ?? null}
-          liveAssistantText={liveAssistantMessage?.text ?? null}
-          liveAssistantStatus={liveAssistantMessage?.status ?? null}
+          liveAssistantId={assistantId}
+          liveAssistantText={assistantText}
+          liveAssistantStatus={assistantStatus}
           liveTranscript={liveTranscript}
           liveAssets={liveAssetItems}
           onLiveSend={onLiveSend}
