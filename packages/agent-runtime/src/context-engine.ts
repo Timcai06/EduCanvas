@@ -1,4 +1,7 @@
-import type { AgentTurnContextMaterial } from '@educanvas/agent-core';
+import type {
+  AgentTurnContextMaterial,
+  AssetVersionRepresentationIdentity,
+} from '@educanvas/agent-core';
 
 export const CONTEXT_ENGINE_VERSION = 'context-engine-v1' as const;
 /** 单个 Context Segment 可登记的 Asset Version 上限；超限 fail closed。 */
@@ -30,6 +33,13 @@ export interface ContextSegment {
    * 不允许段内或跨段重复；多图合并进同一条消息时必须登记全部版本。
    */
   assetVersionIds?: readonly string[];
+  /**
+   * ADR-0026 第 5 节：单 Asset 段的实际派生表示身份（null = 无派生表示，
+   * 如原生图片段）。只配 `assetVersionId` 使用；多值 `assetVersionIds`
+   * 段的身份按 null 冻结（多图合并段不携带文本身份）。与版本 ID 同时
+   * 进入 material，供 Context Snapshot 冻结。
+   */
+  assetRepresentation?: AssetVersionRepresentationIdentity | null;
   /** tool_call/tool_result必须使用相同pairKey成对进入或成对省略。 */
   pairKey?: string;
 }
@@ -261,6 +271,21 @@ export function buildAgentContext(input: {
       selectedAssetVersionIds: selected.flatMap(
         (item) => assetVersionIdsOf(item.segment) ?? [],
       ),
+      /* 与 selectedAssetVersionIds 同序同数：单值段带身份（可能为 null），
+         多值段一律按 null 冻结（多图合并段不携带文本身份）。 */
+      selectedAssetRepresentations: selected.flatMap((item) => {
+        const ids = assetVersionIdsOf(item.segment);
+        if (!ids || ids.length === 0) return [];
+        if (item.segment.assetRepresentation !== undefined) {
+          if (ids.length !== 1) {
+            throw new ContextEngineInputError(
+              'assetRepresentation 只能配单值 assetVersionId',
+            );
+          }
+          return [item.segment.assetRepresentation];
+        }
+        return ids.map(() => null);
+      }),
       omittedMessageCount:
         input.conversation.length - selectedConversationCount,
       characterCount,
