@@ -8,7 +8,7 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [O 删除队列](O-删除队列.md)                            | sky-k111   | O00-O02 已通过；O03 PENDING；O04 PENDING | 不修改 Canvas、Runtime、语音或账号    |
 | [KM 知识记忆](KM-知识记忆.md)                          | hzlgou     | K00、M00 待开始                          | 与 O 解耦；K/M 顺序执行               |
 | [G 产品发布闭环](G-产品发布闭环.md)                    | 项目负责人 | G00 待开始                               | 依赖已归档的 R/W/Q/UV，和 KM 关联     |
-| [LC Live 与 Canvas 输出](LC-Live与Canvas输出产品化.md) | @Timcai06  | LC00 待开始                              | 复用 UV；输入边界由 ADR-0026 独立负责 |
+| [LC Live 与 Canvas 输出](LC-Live与Canvas输出产品化.md) | @Timcai06  | LC00-L01 PASS，L02/C01 待开始            | 复用 UV；输入边界由 ADR-0026 独立负责 |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
 [P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)、

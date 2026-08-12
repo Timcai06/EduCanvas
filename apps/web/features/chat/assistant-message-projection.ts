@@ -17,7 +17,7 @@ import type {
  *
  * 设计要点：
  * - 只读 selector，不持有状态、不复制文本、不从 TTS 队列反推完整回答；
- * - 按 turnId 降序取最新 assistant 消息，避免历史消息被误当成本轮新回答；
+ * - 消息数组按账本顺序查找最后一条 assistant；Turn reducer 会在发送时同步追加本轮占位消息；
  * - clientMessageId 是稳定身份语义，用于 Live 会话与失效游标；
  * - text 来自 Turn reducer 中 message.delta 的增量增长，是唯一视觉事实源；
  * - status 是消息级终态（pending/streaming/completed/failed/cancelled/interrupted）。
@@ -35,7 +35,7 @@ export interface AssistantMessageProjection {
  * 从消息列表中投影当前 Assistant 消息。
  *
  * 规则：
- * 1. 取最后一个 `role === 'assistant'` 的消息（按 turnId 降序）；
+ * 1. 按消息账本顺序取最后一个 `role === 'assistant'` 的消息；
  * 2. 该消息的 clientMessageId 作为稳定身份；
  * 3. 该消息的 text 是视觉显示事实源（message.delta 增量增长）；
  * 4. 历史 Assistant 消息不会被误当成本轮新回答（只取最后一个）；
@@ -44,11 +44,14 @@ export interface AssistantMessageProjection {
 export function projectAssistantMessage(
   messages: readonly ChatMessage[],
 ): AssistantMessageProjection {
-  const lastAssistant = [...messages]
-    .reverse()
-    .find(
-      (message): message is AssistantMessage => message.role === 'assistant',
-    );
+  let lastAssistant: AssistantMessage | null = null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'assistant') {
+      lastAssistant = message;
+      break;
+    }
+  }
 
   if (!lastAssistant) {
     return {
@@ -63,7 +66,7 @@ export function projectAssistantMessage(
 
   return {
     assistantId: lastAssistant.clientMessageId ?? null,
-    assistantText: lastAssistant.text || null,
+    assistantText: lastAssistant.text,
     assistantStatus: lastAssistant.status,
     assistantArtifacts: lastAssistant.artifacts ?? [],
     assistantCitations: lastAssistant.citations ?? [],

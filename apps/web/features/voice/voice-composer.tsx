@@ -470,6 +470,9 @@ export function VoiceComposerRuntime({
               statusLabel={liveStatusLabel}
               muted={muted}
               userSubtitle={live.partialText || null}
+              assistantMessageId={liveAssistantId}
+              assistantText={liveAssistantText}
+              assistantStatus={liveAssistantStatus}
               assistantSubtitle={speech.subtitle}
               transcript={liveSessionTranscript}
               audioLevel={

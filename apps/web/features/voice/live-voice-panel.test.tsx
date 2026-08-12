@@ -20,6 +20,9 @@ describe('LiveVoicePanel', () => {
         statusLabel="正在聆听"
         muted={false}
         userSubtitle="我想了解监督学习"
+        assistantMessageId="assistant-1"
+        assistantText="它是一类从数据中学习的方法。"
+        assistantStatus="completed"
         assistantSubtitle={null}
         transcript={[
           { id: 'user-1', speaker: '你', text: '什么是机器学习？' },
@@ -48,6 +51,9 @@ describe('LiveVoicePanel', () => {
     const active = resolveLiveVoiceActiveTranscript({
       phase: 'listening',
       userSubtitle: null,
+      assistantMessageId: 'assistant-old',
+      assistantText: '上一轮完整回答',
+      assistantStatus: 'completed',
       assistantSubtitle: '上一轮最后一句',
       transcript: [
         { id: 'user-1', speaker: '你', text: '上一轮问题' },
@@ -63,6 +69,9 @@ describe('LiveVoicePanel', () => {
       resolveLiveVoiceActiveTranscript({
         phase: 'thinking',
         userSubtitle: null,
+        assistantMessageId: null,
+        assistantText: null,
+        assistantStatus: null,
         assistantSubtitle: null,
         transcript: [
           { id: 'ai-old', speaker: 'AI', text: '旧回答' },
@@ -72,17 +81,89 @@ describe('LiveVoicePanel', () => {
     ).toEqual({ id: 'user-current', speaker: '你', text: '本轮问题' });
   });
 
-  it('播报时只显示播放时钟当前 cue', () => {
+  it('播报时完整回答继续增长，PCM cue 保持独立', () => {
     expect(
       resolveLiveVoiceActiveTranscript({
         phase: 'speaking',
         userSubtitle: null,
+        assistantMessageId: 'assistant-current',
+        assistantText: '完整回答继续增长。这里是新到达的文字。',
+        assistantStatus: 'streaming',
         assistantSubtitle: '正在读的这一句。',
         transcript: [
           { id: 'ai-full', speaker: 'AI', text: '完整回答不应覆盖 cue。' },
         ],
       }),
-    ).toMatchObject({ speaker: 'AI', text: '正在读的这一句。' });
+    ).toEqual({
+      id: 'live-assistant:assistant-current',
+      speaker: 'AI',
+      text: '完整回答继续增长。这里是新到达的文字。',
+    });
+  });
+
+  it('渲染时同时保留增长回答与当前可听 cue', () => {
+    const html = renderToStaticMarkup(
+      <LiveVoicePanel
+        phase="speaking"
+        statusLabel="正在回答"
+        muted={false}
+        userSubtitle={null}
+        assistantMessageId="assistant-current"
+        assistantText="完整回答已经增长到这里。"
+        assistantStatus="streaming"
+        assistantSubtitle="当前正在播放的短语。"
+        onToggleMute={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('完整回答已经增长到这里。');
+    expect(html).toContain('data-live-audible-cue="true"');
+    expect(html).toContain('当前正在播放的短语。');
+  });
+
+  it('TTS 尚未产生 cue 时直接显示同一 Assistant 消息的增量文本', () => {
+    const first = resolveLiveVoiceActiveTranscript({
+      phase: 'thinking',
+      userSubtitle: null,
+      assistantMessageId: 'assistant-current',
+      assistantText: '先看定义',
+      assistantStatus: 'streaming',
+      assistantSubtitle: null,
+      transcript: [],
+    });
+    const next = resolveLiveVoiceActiveTranscript({
+      phase: 'thinking',
+      userSubtitle: null,
+      assistantMessageId: 'assistant-current',
+      assistantText: '先看定义，再比较两个例子。',
+      assistantStatus: 'streaming',
+      assistantSubtitle: null,
+      transcript: [],
+    });
+
+    expect(first).toMatchObject({
+      id: 'live-assistant:assistant-current',
+      text: '先看定义',
+    });
+    expect(next).toMatchObject({
+      id: 'live-assistant:assistant-current',
+      text: '先看定义，再比较两个例子。',
+    });
+  });
+
+  it('静音不清空正在增长的 Assistant 文本', () => {
+    expect(
+      resolveLiveVoiceActiveTranscript({
+        phase: 'muted',
+        userSubtitle: null,
+        assistantMessageId: 'assistant-current',
+        assistantText: '这段文字仍应可见。',
+        assistantStatus: 'streaming',
+        assistantSubtitle: null,
+        transcript: [],
+      }),
+    ).toMatchObject({ speaker: 'AI', text: '这段文字仍应可见。' });
   });
 
   it('静音态给出明确恢复动作', () => {
@@ -92,6 +173,9 @@ describe('LiveVoicePanel', () => {
         statusLabel="已静音"
         muted
         userSubtitle={null}
+        assistantMessageId={null}
+        assistantText={null}
+        assistantStatus={null}
         assistantSubtitle={null}
         onToggleMute={vi.fn()}
         onClose={vi.fn()}
@@ -110,6 +194,9 @@ describe('LiveVoicePanel', () => {
         statusLabel="正在分析资料"
         muted={false}
         userSubtitle={null}
+        assistantMessageId={null}
+        assistantText={null}
+        assistantStatus={null}
         assistantSubtitle={null}
         assets={[
           {

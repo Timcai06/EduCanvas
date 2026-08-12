@@ -3,6 +3,7 @@
 import { Microphone, MicrophoneSlash, X } from '@phosphor-icons/react';
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import type { ChatMessageStatus } from '@/features/chat/messages';
 import type { LiveVoiceVisualPhase } from './live-voice-motion';
 import { useLiveVoiceMotion } from './use-live-voice-motion';
 import { LiveVoiceOrb } from './live-voice-orb';
@@ -28,6 +29,11 @@ export interface LiveVoicePanelProps {
   readonly statusLabel: string;
   readonly muted: boolean;
   readonly userSubtitle: string | null;
+  /** 同一 Turn 消息账本中的 Assistant 身份与增长文本；不由 TTS 状态派生。 */
+  readonly assistantMessageId: string | null;
+  readonly assistantText: string | null;
+  readonly assistantStatus: ChatMessageStatus | null;
+  /** 与实际 PCM 排期同步的当前可听 cue，不代表完整 Assistant 回答。 */
   readonly assistantSubtitle: string | null;
   readonly transcript?: readonly LiveVoiceTranscriptEntry[];
   readonly audioLevel?: number;
@@ -81,12 +87,15 @@ export function toLiveVoiceDisplayText(text: string): string {
 }
 
 /**
- * 沉浸层不承担聊天记录浏览：只显示正在识别的用户话语、思考中的本轮问题，
- * 或与 Web Audio 播放时钟同步的 Assistant cue。
+ * 沉浸层不承担聊天记录浏览：用户 partial 优先；本轮 Assistant 消息开始增长后，
+ * 直接显示消息账本中的文本。PCM cue 由独立视觉层表达，不能覆盖完整回答。
  */
 export function resolveLiveVoiceActiveTranscript(input: {
   readonly phase: LiveVoiceVisualPhase;
   readonly userSubtitle: string | null;
+  readonly assistantMessageId: string | null;
+  readonly assistantText: string | null;
+  readonly assistantStatus: ChatMessageStatus | null;
   readonly assistantSubtitle: string | null;
   readonly transcript: readonly LiveVoiceTranscriptEntry[];
 }): LiveVoiceActiveTranscript | null {
@@ -98,6 +107,24 @@ export function resolveLiveVoiceActiveTranscript(input: {
       id: 'live-partial-current',
       speaker: '你',
       text: userSubtitle,
+    };
+  }
+
+  const assistantText = input.assistantText
+    ? toLiveVoiceDisplayText(input.assistantText)
+    : '';
+  const showsCurrentAssistant =
+    input.phase === 'thinking' ||
+    input.phase === 'speaking' ||
+    input.phase === 'muted' ||
+    input.phase === 'error' ||
+    input.assistantStatus === 'pending' ||
+    input.assistantStatus === 'streaming';
+  if (showsCurrentAssistant && assistantText) {
+    return {
+      id: `live-assistant:${input.assistantMessageId ?? 'current'}`,
+      speaker: 'AI',
+      text: assistantText,
     };
   }
 
@@ -130,6 +157,9 @@ export function LiveVoicePanel({
   statusLabel,
   muted,
   userSubtitle,
+  assistantMessageId,
+  assistantText,
+  assistantStatus,
   assistantSubtitle,
   transcript = [],
   audioLevel = 0,
@@ -154,9 +184,16 @@ export function LiveVoicePanel({
   const activeTranscript = resolveLiveVoiceActiveTranscript({
     phase,
     userSubtitle,
+    assistantMessageId,
+    assistantText,
+    assistantStatus,
     assistantSubtitle,
     transcript,
   });
+  const audibleCue =
+    phase === 'speaking' && assistantSubtitle
+      ? toLiveVoiceDisplayText(assistantSubtitle)
+      : '';
   useLiveVoiceMotion(
     rootRef,
     phase,
@@ -255,6 +292,12 @@ export function LiveVoicePanel({
               <p>{muted ? '点按麦克风继续' : phaseHint(phase)}</p>
             )}
           </div>
+          {audibleCue ? (
+            <p data-live-audible-cue className="live-voice-audible-cue">
+              <span>正在播放</span>
+              {audibleCue}
+            </p>
+          ) : null}
         </div>
 
         <div data-live-controls className="live-voice-controls">
