@@ -4,10 +4,19 @@ import type {
   StreamingSpeechSession,
 } from '@educanvas/agent-core';
 import type { StreamingTranscriptionSessionLease } from './streaming-transcription-quota-manager';
+import {
+  STREAMING_TRANSCRIPTION_DEFAULT_QUOTAS,
+  type StreamingTranscriptionQuotas,
+} from './streaming-transcription-quotas';
 import type {
   StreamingSpeechClientMessage,
   StreamingSpeechServerMessage,
 } from './streaming-speech-wire';
+
+interface StreamingSpeechPendingAudioFrame {
+  readonly sequence: number;
+  readonly pcmBytes: Uint8Array;
+}
 
 export interface StreamingSpeechChannelOptions {
   readonly gateway: StreamingSpeechGateway;
@@ -16,6 +25,7 @@ export interface StreamingSpeechChannelOptions {
   readonly acquireSession: () => StreamingTranscriptionSessionLease | null;
   readonly onTerminal: () => void;
   readonly createId?: () => string;
+  readonly quotas?: StreamingTranscriptionQuotas;
 }
 
 export class StreamingSpeechChannel {
@@ -26,7 +36,20 @@ export class StreamingSpeechChannel {
   private nextInputSequence = 0;
   private acceptingText = false;
 
-  constructor(private readonly options: StreamingSpeechChannelOptions) {}
+  private readonly quotas: StreamingTranscriptionQuotas;
+
+  private readonly pendingAudioFrames: StreamingSpeechPendingAudioFrame[] = [];
+  private nextUnsentAudioFrame = 0;
+  private nextOutputSequenceToRelease = 0;
+  private pendingOutputBytes = 0;
+
+  private nextExpectedOutputSequence = 0;
+  private lastAckedAudioSequence = -1;
+  private providerFinished = false;
+
+  constructor(private readonly options: StreamingSpeechChannelOptions) {
+    this.quotas = options.quotas ?? STREAMING_TRANSCRIPTION_DEFAULT_QUOTAS;
+  }
 
   receive(message: StreamingSpeechClientMessage): void {
     if (this.terminal || message.sequence !== this.nextCommandSequence) {
@@ -72,6 +95,7 @@ export class StreamingSpeechChannel {
       this.fail('INVALID_REQUEST');
       return;
     }
+
     if (message.type === 'speech.submit') {
       if (!this.acceptingText) {
         this.fail('INVALID_REQUEST');
@@ -85,17 +109,31 @@ export class StreamingSpeechChannel {
       } catch {
         this.fail('MODEL_FAILED');
       }
-    } else if (message.type === 'speech.finish') {
+      return;
+    }
+    if (message.type === 'speech.finish') {
       this.acceptingText = false;
       try {
         session.finish();
       } catch {
         this.fail('MODEL_FAILED');
       }
-    } else {
-      this.acceptingText = false;
-      this.cancelSession();
+      return;
     }
+    if (message.type === 'speech.ack') {
+      this.handleAck(message.audioSequence);
+      return;
+    }
+
+    this.acceptingText = false;
+    this.cancelSession();
+    this.terminal = true;
+    this.options.sendEvent({
+      type: 'speech.failed',
+      failureCode: 'CANCELLED',
+    });
+    this.releaseSession();
+    this.options.onTerminal();
   }
 
   disconnect(): void {
@@ -107,8 +145,83 @@ export class StreamingSpeechChannel {
 
   outputBackpressureExceeded(): void {
     if (this.terminal) return;
-    this.cancelSession();
     this.fail('BACKPRESSURE_EXCEEDED');
+  }
+
+  private handleAck(audioSequence: number): void {
+    if (this.terminal) return;
+    if (
+      audioSequence <= this.lastAckedAudioSequence ||
+      audioSequence > this.nextExpectedOutputSequence - 1 ||
+      audioSequence !== this.lastAckedAudioSequence + 1
+    ) {
+      this.fail('INVALID_REQUEST');
+      return;
+    }
+
+    this.lastAckedAudioSequence = audioSequence;
+    while (
+      this.nextOutputSequenceToRelease < this.pendingAudioFrames.length &&
+      (() => {
+        const frame = this.pendingAudioFrames[this.nextOutputSequenceToRelease];
+        return frame !== undefined && frame.sequence <= audioSequence;
+      })()
+    ) {
+      const frame = this.pendingAudioFrames[this.nextOutputSequenceToRelease]!;
+      this.pendingOutputBytes -= frame.pcmBytes.byteLength;
+      this.nextOutputSequenceToRelease += 1;
+    }
+    this.compactPendingAudioQueue();
+    void this.flushOutput();
+    this.finishIfDrained();
+  }
+
+  private compactPendingAudioQueue(): void {
+    if (this.nextOutputSequenceToRelease <= 0) return;
+    this.pendingAudioFrames.splice(0, this.nextOutputSequenceToRelease);
+    this.nextUnsentAudioFrame -= this.nextOutputSequenceToRelease;
+    this.nextOutputSequenceToRelease = 0;
+  }
+
+  private enqueueOutputFrame(sequence: number, pcmBytes: Uint8Array): void {
+    if (this.terminal) return;
+    if (sequence !== this.nextExpectedOutputSequence) {
+      this.fail('MODEL_FAILED');
+      return;
+    }
+    if (pcmBytes.byteLength === 0 || pcmBytes.byteLength % 2 !== 0) {
+      this.fail('MODEL_FAILED');
+      return;
+    }
+    this.nextExpectedOutputSequence += 1;
+    if (
+      this.pendingOutputBytes + pcmBytes.byteLength >
+      this.quotas.maxOutputBufferedBytes
+    ) {
+      this.outputBackpressureExceeded();
+      return;
+    }
+    this.pendingAudioFrames.push({ sequence, pcmBytes });
+    this.pendingOutputBytes += pcmBytes.byteLength;
+    void this.flushOutput();
+  }
+
+  private async flushOutput(): Promise<void> {
+    try {
+      while (
+        this.nextUnsentAudioFrame < this.pendingAudioFrames.length &&
+        !this.terminal
+      ) {
+        const frame = this.pendingAudioFrames[this.nextUnsentAudioFrame]!;
+        if (!this.options.sendAudio(frame.sequence, frame.pcmBytes)) {
+          this.outputBackpressureExceeded();
+          return;
+        }
+        this.nextUnsentAudioFrame += 1;
+      }
+    } catch {
+      this.outputBackpressureExceeded();
+    }
   }
 
   private async forwardEvents(session: StreamingSpeechSession): Promise<void> {
@@ -116,24 +229,22 @@ export class StreamingSpeechChannel {
       for await (const event of session.events) {
         if (this.terminal || session !== this.session) return;
         if (event.type === 'audio') {
-          if (!this.options.sendAudio(event.sequence, event.pcmBytes)) {
-            this.outputBackpressureExceeded();
-            return;
-          }
-        } else if (event.type === 'finished') {
-          this.terminal = true;
-          this.options.sendEvent({ type: 'speech.finished' });
-          this.releaseSession();
-          this.options.onTerminal();
-        } else {
-          this.terminal = true;
-          this.options.sendEvent({
-            type: 'speech.failed',
-            failureCode: event.failureCode,
-          });
-          this.releaseSession();
-          this.options.onTerminal();
+          this.enqueueOutputFrame(event.sequence, event.pcmBytes);
+          continue;
         }
+        if (event.type === 'finished') {
+          this.providerFinished = true;
+          this.releaseSession();
+          this.finishIfDrained();
+          return;
+        }
+        this.terminal = true;
+        this.options.sendEvent({
+          type: 'speech.failed',
+          failureCode: event.failureCode,
+        });
+        this.releaseSession();
+        this.options.onTerminal();
       }
     } catch {
       this.fail('MODEL_FAILED');
@@ -157,6 +268,20 @@ export class StreamingSpeechChannel {
   private releaseSession(): void {
     this.sessionLease?.release();
     this.sessionLease = null;
+  }
+
+  /** Provider 完成不等于浏览器已接收；最后一个 enqueue ACK 后才能关闭 WS。 */
+  private finishIfDrained(): void {
+    if (
+      this.terminal ||
+      !this.providerFinished ||
+      this.pendingAudioFrames.length > 0
+    ) {
+      return;
+    }
+    this.terminal = true;
+    this.options.sendEvent({ type: 'speech.finished' });
+    this.options.onTerminal();
   }
 
   private cancelSession(): void {

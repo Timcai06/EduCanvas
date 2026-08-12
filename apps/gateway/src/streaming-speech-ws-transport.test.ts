@@ -133,7 +133,7 @@ describe('streaming speech websocket transport', () => {
       pcmBytes: Uint8Array.of(1, 2),
     });
     ctx.session.emit({ type: 'finished' });
-    await vi.waitFor(() => expect(messages.length).toBe(3));
+    await vi.waitFor(() => expect(messages.length).toBe(2));
     expect(JSON.parse(messages[0]!.data.toString()).type).toBe(
       'speech.started',
     );
@@ -141,9 +141,53 @@ describe('streaming speech websocket transport', () => {
       0x45, 0x44, 0x54, 0x53, 0, 0, 0, 0, 1, 2,
     ]);
     expect(messages[1]!.binary).toBe(true);
+    client.send(
+      JSON.stringify({
+        type: 'speech.ack',
+        sequence: 3,
+        audioSequence: 0,
+      }),
+    );
+    await vi.waitFor(() => expect(messages.length).toBe(3));
     expect(JSON.parse(messages[2]!.data.toString()).type).toBe(
       'speech.finished',
     );
+  });
+
+  it('speech.ack 与 command sequence 同步递增；越界 ack 会触发终态', async () => {
+    const ctx = await start();
+    const ticket = ctx.tickets.issue({
+      userId: 'user:A',
+      notebookId: 'notebook:A',
+      scope: 'speech',
+    }).ticket;
+    const client = connect(ctx.url, ticket);
+    const messages: Array<{ data: Buffer; binary: boolean }> = [];
+    client.on('message', (data, binary) =>
+      messages.push({ data: Buffer.from(data as Buffer), binary }),
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      client.once('open', resolve);
+      client.once('error', reject);
+    });
+    client.send(JSON.stringify({ type: 'speech.start', sequence: 0 }));
+    await vi.waitFor(() => expect(messages).toHaveLength(1));
+    client.send(
+      JSON.stringify({ type: 'speech.ack', sequence: 1, audioSequence: 0 }),
+    );
+    await new Promise<number>((resolve) =>
+      client.once('close', (code) => resolve(code)),
+    );
+
+    const body = messages.at(-1);
+    expect(body).toBeTruthy();
+    if (body && !body.binary) {
+      expect(JSON.parse(body.data.toString())).toEqual({
+        type: 'speech.failed',
+        failureCode: 'INVALID_REQUEST',
+      });
+    }
   });
 
   it('transcription scope ticket 和非白名单 Origin 均拒绝握手', async () => {

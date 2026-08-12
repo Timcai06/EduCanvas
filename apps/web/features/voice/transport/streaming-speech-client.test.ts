@@ -7,7 +7,6 @@ class FakeSpeechSocket {
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
   static last: FakeSpeechSocket;
-
   readonly sent: string[] = [];
   readonly protocols: readonly string[];
   readyState = FakeSpeechSocket.CONNECTING;
@@ -24,27 +23,23 @@ class FakeSpeechSocket {
     this.protocols = typeof protocols === 'string' ? [protocols] : protocols;
     FakeSpeechSocket.last = this;
   }
-
   send(data: string): void {
     this.sent.push(data);
   }
-
   close(): void {
     this.readyState = FakeSpeechSocket.CLOSED;
   }
-
   open(): void {
     this.readyState = FakeSpeechSocket.OPEN;
     this.onopen?.();
   }
-
   receive(data: unknown): void {
     this.onmessage?.({ data });
   }
 }
 
 function audioFrame(sequence: number, pcm: readonly number[]): ArrayBuffer {
-  const bytes = Uint8Array.from([
+  return Uint8Array.from([
     0x45,
     0x44,
     0x54,
@@ -54,101 +49,89 @@ function audioFrame(sequence: number, pcm: readonly number[]): ArrayBuffer {
     (sequence >>> 8) & 0xff,
     sequence & 0xff,
     ...pcm,
-  ]);
-  return bytes.buffer;
+  ]).buffer;
 }
 
-async function flush(): Promise<void> {
+async function startClient(
+  onAudio: ConstructorParameters<typeof StreamingSpeechClient>[0]['onAudio'],
+  onFailed = vi.fn(),
+) {
+  const client = new StreamingSpeechClient({
+    ticketClient: {
+      requestTicket: vi.fn().mockResolvedValue({
+        ticket: 'single-use-ticket',
+        expiresAt: '2026-08-12T00:00:00.000Z',
+      }),
+    },
+    WebSocketCtor: FakeSpeechSocket as unknown as typeof WebSocket,
+    resolveWsUrl: ({ notebookId }) =>
+      `wss://gateway.invalid/v1/client/streaming-speech?notebookId=${notebookId}`,
+    onAudio,
+    onFinished: vi.fn(),
+    onFailed,
+  });
+  const starting = client.start({ notebookId: 'notebook:1' });
   for (let index = 0; index < 4; index += 1) await Promise.resolve();
+  const socket = FakeSpeechSocket.last;
+  socket.open();
+  socket.receive(
+    JSON.stringify({
+      type: 'speech.started',
+      format: 'pcm_s16le',
+      sampleRate: 24_000,
+      channels: 1,
+    }),
+  );
+  await starting;
+  return { client, socket, onFailed };
 }
 
 describe('StreamingSpeechClient', () => {
-  it('使用 scoped ticket 建立会话并按序提交多个文本段', async () => {
-    const audio: unknown[] = [];
-    const finished = vi.fn();
-    const client = new StreamingSpeechClient({
-      ticketClient: {
-        requestTicket: vi.fn().mockResolvedValue({
-          ticket: 'single-use-ticket',
-          expiresAt: '2026-08-12T00:00:00.000Z',
-        }),
-      },
-      WebSocketCtor: FakeSpeechSocket as unknown as typeof WebSocket,
-      resolveWsUrl: ({ notebookId }) =>
-        `wss://gateway.invalid/v1/client/streaming-speech?notebookId=${notebookId}`,
-      onAudio: (frame) => audio.push(frame),
-      onFinished: finished,
-      onFailed: vi.fn(),
-    });
-    const starting = client.start({ notebookId: 'nb-1' });
-    await flush();
-    const socket = FakeSpeechSocket.last;
-    expect(socket.protocols).toEqual(['ticket.single-use-ticket']);
-    socket.open();
-    expect(JSON.parse(socket.sent[0]!)).toEqual({
-      type: 'speech.start',
-      sequence: 0,
-    });
-    socket.receive(
-      JSON.stringify({
-        type: 'speech.started',
-        format: 'pcm_s16le',
-        sampleRate: 24_000,
-        channels: 1,
-      }),
+  it('共享命令序列，且只有消费者确认后才发送逐帧 ACK', async () => {
+    const consumed: Array<() => void> = [];
+    const audio = vi.fn((_frame, onConsumed: () => void) =>
+      consumed.push(onConsumed),
     );
-    await starting;
+    const { client, socket } = await startClient(audio);
+    expect(socket.protocols).toEqual(['ticket.single-use-ticket']);
     client.submit({ text: '第一句。' });
-    client.submit({ text: '第二句。' });
     client.finish();
-    expect(socket.sent.slice(1).map((value) => JSON.parse(value))).toEqual([
-      { type: 'speech.submit', sequence: 1, text: '第一句。' },
-      { type: 'speech.submit', sequence: 2, text: '第二句。' },
-      { type: 'speech.finish', sequence: 3 },
-    ]);
     socket.receive(audioFrame(0, [1, 2]));
-    socket.receive(audioFrame(1, [3, 4]));
-    expect(audio).toEqual([
+    expect(audio).toHaveBeenCalledWith(
       { sequence: 0, pcmBytes: Uint8Array.from([1, 2]) },
-      { sequence: 1, pcmBytes: Uint8Array.from([3, 4]) },
+      expect.any(Function),
+    );
+    expect(socket.sent.map((value) => JSON.parse(value))).toEqual([
+      { type: 'speech.start', sequence: 0 },
+      { type: 'speech.submit', sequence: 1, text: '第一句。' },
+      { type: 'speech.finish', sequence: 2 },
     ]);
-    socket.receive(JSON.stringify({ type: 'speech.finished' }));
-    expect(finished).toHaveBeenCalledOnce();
+    consumed[0]!();
+    consumed[0]!();
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({
+      type: 'speech.ack',
+      sequence: 3,
+      audioSequence: 0,
+    });
   });
 
-  it('拒绝跳号或奇数 PCM，并且终态后不再投影音频', async () => {
+  it.each([
+    ['跳号', audioFrame(1, [1, 2])],
+    ['重复', null],
+    ['空 PCM', audioFrame(0, [])],
+    ['奇数 PCM', audioFrame(0, [1])],
+  ])('%s PCM fail closed', async (label, frame) => {
     const failed = vi.fn();
-    const audio = vi.fn();
-    const client = new StreamingSpeechClient({
-      ticketClient: {
-        requestTicket: vi.fn().mockResolvedValue({
-          ticket: 'ticket',
-          expiresAt: '2026-08-12T00:00:00.000Z',
-        }),
-      },
-      WebSocketCtor: FakeSpeechSocket as unknown as typeof WebSocket,
-      resolveWsUrl: () => 'wss://gateway.invalid/v1/client/streaming-speech',
-      onAudio: audio,
-      onFinished: vi.fn(),
-      onFailed: failed,
-    });
-    const starting = client.start({ notebookId: 'nb-1' });
-    await flush();
-    const socket = FakeSpeechSocket.last;
-    socket.open();
-    socket.receive(
-      JSON.stringify({
-        type: 'speech.started',
-        format: 'pcm_s16le',
-        sampleRate: 24_000,
-        channels: 1,
-      }),
+    const { socket } = await startClient(
+      (_frame, consumed) => consumed(),
+      failed,
     );
-    await starting;
-    socket.receive(audioFrame(1, [1, 2]));
-    socket.receive(audioFrame(0, [3, 4]));
-    expect(audio).not.toHaveBeenCalled();
-    expect(failed).toHaveBeenCalledOnce();
+    if (label === '重复') {
+      socket.receive(audioFrame(0, [1, 2]));
+      socket.receive(audioFrame(0, [3, 4]));
+    } else {
+      socket.receive(frame!);
+    }
     expect(failed).toHaveBeenCalledWith('PROTOCOL_ERROR');
     expect(socket.readyState).toBe(FakeSpeechSocket.CLOSED);
   });

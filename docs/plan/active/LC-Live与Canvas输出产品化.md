@@ -124,16 +124,16 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 ### 6.2 Live 实时交互线
 
-| 任务                    | 状态      | 交付与验收                                                                                                                                                                                                                                                                  |
-| ----------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L01 同源流式消息        | `PASS`    | Live 面板直接消费当前 Assistant `message.delta` 投影，不维护第二份完整回答；普通聊天同一消息逐增量增长，入室/出室均不丢字、不重复字。                                                                                                                                       |
-| L02 三游标状态机        | `PASS`    | 已引入纯 `displayCursor`、`speechCommittedCursor`、`audioPlayedCursor`、`sessionBaselineCursor` 与单调 `runId`；语义段携带原文 offset，只有同代 PCM 完成 marker 推进播放游标，覆盖回退、重复事件、取消迟到回调和重新入室。                                                  |
-| L03 自适应语义提交      | `PASS`    | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                                                                       |
-| L04 连续 Speech Session | `REVIEW`  | 已增加 provider-neutral 可取消会话、独立受同源/ticket/Notebook/配额保护的 TTS WebSocket，并在一个 Assistant response 内增量提交语义段、连续播放 PCM；首个 PCM 前失败才回退逐短语 HTTP。fake provider、wire、transport 与浏览器状态机证据已补齐，待独立 reviewer 判定 PASS。 |
-| L05 音频与字幕时钟      | `PENDING` | 当前段播放时预取下一段；字幕只由实际 PCM 排期推进；网络抖动、空 PCM、奇数字节、TTS 失败和播放恢复均不会导致文字/声音漂移。                                                                                                                                                  |
-| L06 插话和工具连续性    | `PENDING` | 插话原子取消 Agent operation、Speech Session 和本地队列；已显示文字保留。工具调用前后继续同一消息和同一语音游标，工具运行期间显示真实状态，不合成伪造填充语。                                                                                                               |
-| L07 Live 壳连续体验     | `PENDING` | 入室可接管正在流式生成的当前 Turn，出室只卸载沉浸壳；字幕区只强调当前可听内容，完整对话仍落在普通消息列。来源、引用和 Artifact 状态均来自现有控制器。                                                                                                                       |
-| L08 Live 性能与真人验收 | `PENDING` | fake SSE/TTS/PCM 对预算逐项阻断；macOS Chrome/Safari 完成连续三轮、一次工具调用、一次插话、一次 TTS 失败恢复，并记录首字、首音、段间隙与取消延迟。                                                                                                                          |
+| 任务                    | 状态      | 交付与验收                                                                                                                                                                                                                                               |
+| ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L01 同源流式消息        | `PASS`    | Live 面板直接消费当前 Assistant `message.delta` 投影，不维护第二份完整回答；普通聊天同一消息逐增量增长，入室/出室均不丢字、不重复字。                                                                                                                    |
+| L02 三游标状态机        | `PASS`    | 已引入纯 `displayCursor`、`speechCommittedCursor`、`audioPlayedCursor`、`sessionBaselineCursor` 与单调 `runId`；语义段携带原文 offset，只有同代 PCM 完成 marker 推进播放游标，覆盖回退、重复事件、取消迟到回调和重新入室。                               |
+| L03 自适应语义提交      | `PASS`    | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                                                    |
+| L04 连续 Speech Session | `PASS`    | provider-neutral 可取消会话、独立受同源/ticket/Notebook/配额保护的 TTS WebSocket 已合并；一个 Assistant response 增量提交语义段并连续播放 PCM，首个 PCM 前失败才回退逐短语 HTTP。PR #360 的静态质量、测试、Agent Eval、E2E 与 secret scan 均通过。       |
+| L05 音频与字幕时钟      | `REVIEW`  | 已增加逐帧消费 ACK 与有界 PCM 窗口；Provider finished 等待最后 ACK 后才关闭。空/奇数/乱序/重复 PCM fail closed，播放取消不会产生幽灵 source；字幕和播放游标只由 Web Audio 排期推进，并以跨轮真实 PCM 时长校准估算。待远端 CI 与独立 reviewer 判定 PASS。 |
+| L06 插话和工具连续性    | `PENDING` | 插话原子取消 Agent operation、Speech Session 和本地队列；已显示文字保留。工具调用前后继续同一消息和同一语音游标，工具运行期间显示真实状态，不合成伪造填充语。                                                                                            |
+| L07 Live 壳连续体验     | `PENDING` | 入室可接管正在流式生成的当前 Turn，出室只卸载沉浸壳；字幕区只强调当前可听内容，完整对话仍落在普通消息列。来源、引用和 Artifact 状态均来自现有控制器。                                                                                                    |
+| L08 Live 性能与真人验收 | `PENDING` | fake SSE/TTS/PCM 对预算逐项阻断；macOS Chrome/Safari 完成连续三轮、一次工具调用、一次插话、一次 TTS 失败恢复，并记录首字、首音、段间隙与取消延迟。                                                                                                       |
 
 ### 6.3 ADR-0027 Canvas 输出线
 

@@ -4,8 +4,10 @@ import type {
 } from '../transport';
 import { describe, expect, it, vi } from 'vitest';
 import { LiveStreamingSpeechPlayback } from './live-streaming-speech-playback';
+import type { SubtitleDurationClock } from './subtitle-clock/recovery';
+import type { LiveSpeechPcmPlayer } from './stream-speech-into-player';
 
-function harness() {
+function harness(durationClock?: SubtitleDurationClock) {
   let handlers: StreamingSpeechClientHandlers | null = null;
   const client: LiveSpeechSessionClient = {
     start: vi.fn().mockResolvedValue(undefined),
@@ -39,6 +41,7 @@ function harness() {
     onAudioLevel: vi.fn(),
     onFinished: finished,
     onFailed: failed,
+    durationClock,
   });
   return {
     playback,
@@ -61,7 +64,9 @@ describe('LiveStreamingSpeechPlayback', () => {
     test.playback.finish();
     expect(test.client.submit).toHaveBeenCalledTimes(2);
     expect(test.client.finish).toHaveBeenCalledOnce();
-    test.handlers().onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) });
+    test
+      .handlers()
+      .onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) }, vi.fn());
     await Promise.resolve();
     await Promise.resolve();
     test.markers.forEach((marker) => marker.callback());
@@ -78,10 +83,77 @@ describe('LiveStreamingSpeechPlayback', () => {
     expect(before.failed).toHaveBeenCalledWith(true);
 
     const after = harness();
-    after.handlers().onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) });
+    after
+      .handlers()
+      .onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) }, vi.fn());
     await Promise.resolve();
     await Promise.resolve();
     after.handlers().onFailed('CONNECTION_LOST');
     expect(after.failed).toHaveBeenCalledWith(false);
+  });
+
+  it('只有 enqueue 成功才触发音频消费回调', async () => {
+    const consumed = vi.fn();
+    const enqueue = vi.fn<LiveSpeechPcmPlayer['enqueue']>().mockResolvedValue({
+      startAt: 10,
+      endAt: 11,
+      durationSeconds: 1,
+    });
+    const player: LiveSpeechPcmPlayer = { enqueue };
+    let handlers: StreamingSpeechClientHandlers | null = null;
+    const playbackMarkers: Array<() => void> = [];
+    const playback = new LiveStreamingSpeechPlayback({
+      notebookId: 'nb-1',
+      player,
+      signal: new AbortController().signal,
+      createClient: (nextHandlers) => {
+        handlers = nextHandlers;
+        return {
+          start: vi.fn().mockResolvedValue(undefined),
+          submit: vi.fn(),
+          finish: vi.fn(),
+          cancel: vi.fn(),
+        };
+      },
+      onMarker: (_at, callback) => playbackMarkers.push(callback),
+      onSubtitle: () => undefined,
+      onPlayedCursor: () => undefined,
+      onFirstAudio: vi.fn(),
+      onAudioLevel: vi.fn(),
+      onFinished: vi.fn(),
+      onFailed: vi.fn(),
+    });
+    await playback.start();
+    handlers!.onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) }, consumed);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(consumed).not.toHaveBeenCalled();
+    playbackMarkers.forEach((callback) => callback());
+    expect(consumed).toHaveBeenCalledOnce();
+
+    enqueue.mockResolvedValue(null);
+    handlers!.onAudio({ sequence: 1, pcmBytes: Uint8Array.of(3, 4) }, consumed);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(consumed).toHaveBeenCalledOnce();
+  });
+
+  it('完成一轮后用实际累计 PCM 校准下一轮字幕估算', async () => {
+    const durationClock: SubtitleDurationClock = {
+      getScaleFactor: vi.fn(() => 1),
+      observe: vi.fn(),
+      reset: vi.fn(),
+    };
+    const test = harness(durationClock);
+    test.playback.submit({ text: '你好。', startCursor: 0, endCursor: 3 });
+    test
+      .handlers()
+      .onAudio({ sequence: 0, pcmBytes: Uint8Array.of(1, 2) }, vi.fn());
+    await Promise.resolve();
+    await Promise.resolve();
+    test.handlers().onFinished();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(durationClock.observe).toHaveBeenCalledWith(1, expect.any(Number));
   });
 });

@@ -1,3 +1,5 @@
+import type { SubtitleDurationClock } from './subtitle-clock/recovery';
+
 const DEFAULT_MAX_SPEECH_CHARACTERS = 1_600;
 const LONG_CUE_CHARACTERS = 34;
 
@@ -6,6 +8,10 @@ export interface LiveSubtitleCue {
   readonly text: string;
   readonly startOffsetSeconds: number;
   readonly estimatedDurationSeconds: number;
+}
+
+export interface LiveSubtitleCueOptions {
+  readonly durationClock?: SubtitleDurationClock | null;
 }
 
 /** 将聊天 Markdown 收敛成适合连续 TTS 的口语文本，不把代码、链接和公式语法读出来。 */
@@ -52,11 +58,15 @@ export function prepareLiveSpeechText(
 /** 字幕 cue 只负责显示节奏；TTS 始终接收完整文本，避免逐句合成造成音色和语气重置。 */
 export function createLiveSubtitleCues(
   text: string,
+  options: LiveSubtitleCueOptions = {},
 ): readonly LiveSubtitleCue[] {
+  const scale = options.durationClock?.getScaleFactor() ?? 1;
   const phrases = splitIntoSubtitlePhrases(text);
   let offset = 0;
   return phrases.map((phrase, index) => {
-    const duration = estimateSpeechDurationSeconds(phrase);
+    const duration = Number(
+      Math.max(0.08, estimateSpeechDurationSeconds(phrase) * scale).toFixed(2),
+    );
     const cue = {
       id: `speech-cue-${index}`,
       text: phrase,

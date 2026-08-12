@@ -3,6 +3,7 @@ import {
   createLiveSubtitleCues,
   prepareLiveSpeechText,
 } from './live-speech-text';
+import { createSubtitleDurationClock } from './subtitle-clock/recovery';
 
 describe('prepareLiveSpeechText', () => {
   it('一次性保留自然段落并移除 Markdown、链接、代码与公式语法', () => {
@@ -45,6 +46,38 @@ describe('createLiveSubtitleCues', () => {
         return (
           cue.startOffsetSeconds ===
           previous.startOffsetSeconds + previous.estimatedDurationSeconds
+        );
+      }),
+    ).toBe(true);
+  });
+
+  it('可按真实累计 PCM 时长做确定性缩放', () => {
+    const clock = createSubtitleDurationClock();
+    const first = createLiveSubtitleCues('第一句。第二句。第三句。', {
+      durationClock: clock,
+    });
+    const rawTotal = first.reduce(
+      (total, cue) => total + cue.estimatedDurationSeconds,
+      0,
+    );
+    clock.observe(2.4, rawTotal);
+
+    const second = createLiveSubtitleCues('第一句。第二句。第三句。', {
+      durationClock: clock,
+    });
+    const secondTotal = second.reduce(
+      (total, cue) => total + cue.estimatedDurationSeconds,
+      0,
+    );
+    expect(secondTotal).toBeGreaterThan(0.8);
+    expect(secondTotal).toBeCloseTo(rawTotal * clock.getScaleFactor());
+    expect(
+      second.every((cue, index) => {
+        if (index === 0) return true;
+        return (
+          cue.startOffsetSeconds ===
+          second[index - 1]!.startOffsetSeconds +
+            second[index - 1]!.estimatedDurationSeconds
         );
       }),
     ).toBe(true);

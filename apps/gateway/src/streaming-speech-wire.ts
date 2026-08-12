@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const sequenceSchema = z.number().int().min(0).max(1_000_000);
+const audioSequenceSchema = z.number().int().min(0).max(1_000_000);
 
 export const streamingSpeechClientMessageSchema = z.discriminatedUnion('type', [
   z
@@ -15,6 +16,13 @@ export const streamingSpeechClientMessageSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({ type: z.literal('speech.finish'), sequence: sequenceSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal('speech.ack'),
+      sequence: sequenceSchema,
+      audioSequence: audioSequenceSchema,
+    })
     .strict(),
   z
     .object({ type: z.literal('speech.cancel'), sequence: sequenceSchema })

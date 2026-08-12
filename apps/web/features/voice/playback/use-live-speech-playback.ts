@@ -29,6 +29,7 @@ import {
 } from './live-speech-cursors';
 import { streamSpeechIntoPlayer } from './stream-speech-into-player';
 import { useSemanticSegmentationRetry } from './use-semantic-segmentation-retry';
+import { createSubtitleDurationClock } from './subtitle-clock/recovery';
 
 export {
   streamSpeechIntoPlayer,
@@ -104,6 +105,7 @@ export function useLiveSpeechPlayback({
   );
   const forceHttpRef = useRef(false);
   const pumpRef = useRef<() => void>(() => undefined);
+  const durationClockRef = useRef(createSubtitleDurationClock());
 
   const replaceQueue = useCallback(
     (
@@ -314,6 +316,7 @@ export function useLiveSpeechPlayback({
       dispatch,
       setOutputLevel,
       finishWhenPlaybackEnds,
+      durationClock: durationClockRef.current,
     });
   }, [createSpeechClient, finishWhenPlaybackEnds, notebookId]);
 

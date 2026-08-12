@@ -24,18 +24,27 @@ export class Pcm16Player {
    * 首个 PCM 到达后再初始化会额外增加首音延迟，也更容易撞上浏览器自动播放策略。
    */
   async prepare(): Promise<void> {
-    this.context ??= this.contextFactory();
-    if (this.context.state === 'suspended') await this.context.resume();
+    const currentGeneration = this.generation;
+    const context = (this.context ??= this.contextFactory());
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+    if (currentGeneration !== this.generation && this.context === context) {
+      // 准备发生在并发竞争后过期，立即释放已创建上下文以避免幽灵时钟继续排期。
+      this.context = null;
+      await context.close().catch(() => undefined);
+    }
   }
 
   async enqueue(bytes: Uint8Array): Promise<PcmPlaybackWindow | null> {
-    if (bytes.byteLength < 2) return null;
+    if (bytes.byteLength < 2 || bytes.byteLength % 2 === 1) return null;
     const expectedGeneration = this.generation;
     await this.prepare();
     if (expectedGeneration !== this.generation) return null;
     const context = this.context;
     if (!context) return null;
-    const samples = new Float32Array(Math.floor(bytes.byteLength / 2));
+    const sampleCount = bytes.byteLength / 2;
+    const samples = new Float32Array(sampleCount);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     for (let index = 0; index < samples.length; index += 1) {
       samples[index] = view.getInt16(index * 2, true) / 32_768;
@@ -45,14 +54,21 @@ export class Pcm16Player {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
-    source.onended = () => this.sources.delete(source);
+    source.onended = () => {
+      this.sources.delete(source);
+    };
     this.sources.add(source);
     const startAt = Math.max(context.currentTime, this.nextStart);
+    if (expectedGeneration !== this.generation) {
+      this.sources.delete(source);
+      return null;
+    }
     source.start(startAt);
-    this.nextStart = startAt + buffer.duration;
+    const endAt = startAt + buffer.duration;
+    this.nextStart = Math.max(this.nextStart, endAt);
     return {
       startAt,
-      endAt: this.nextStart,
+      endAt,
       durationSeconds: buffer.duration,
     };
   }
@@ -84,7 +100,7 @@ export class Pcm16Player {
 
   stop(): void {
     this.generation += 1;
-    for (const source of this.sources) {
+    for (const source of Array.from(this.sources)) {
       try {
         source.stop();
       } catch {
@@ -106,7 +122,8 @@ export class Pcm16Player {
 
   async close(): Promise<void> {
     this.stop();
-    await this.context?.close();
+    const context = this.context;
     this.context = null;
+    await context?.close();
   }
 }
