@@ -58,10 +58,12 @@ describe('worker bootstrap ordering', () => {
           createTaskList(input: {
             continuationTrace: ContinuationTracePort;
             metrics: MetricsPort;
+            terminalReconciliationMode: 'enabled' | 'legacy-disabled';
           }) {
             order.push('tasks.create');
             expect(input.continuationTrace).toBe(continuationTrace);
             expect(input.metrics).toBe(metrics);
+            expect(input.terminalReconciliationMode).toBe('enabled');
             return taskList;
           },
         } as never;
@@ -96,5 +98,33 @@ describe('worker bootstrap ordering', () => {
     ).rejects.toThrow('DATABASE_URL 未设置');
     expect(loadTelemetryModule).not.toHaveBeenCalled();
     expect(loadTaskModule).not.toHaveBeenCalled();
+  });
+
+  it('非法终态收敛模式在构造任务列表前失败且不回显原值', async () => {
+    const createTaskList = vi.fn();
+    await expect(
+      prepareWorkerBootstrap({
+        environment: {
+          DATABASE_URL: 'postgresql://worker-test',
+          EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE: 'private-value',
+        },
+        loadEnvironment: vi.fn(),
+        loadTelemetryModule: async () =>
+          ({
+            createTelemetryRuntimeFromEnvironment: () => ({
+              continuationTrace: {} as never,
+              turnTrace: {} as never,
+              metrics: {} as never,
+              health: vi.fn(),
+              forceFlush: vi.fn(async () => undefined),
+              shutdown: vi.fn(async () => undefined),
+            }),
+          }) as never,
+        loadTaskModule: async () => ({ createTaskList }) as never,
+      }),
+    ).rejects.toThrow(
+      'EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE must be enabled or legacy-disabled',
+    );
+    expect(createTaskList).not.toHaveBeenCalled();
   });
 });

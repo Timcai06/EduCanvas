@@ -508,7 +508,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       name: 'cancelled',
       terminal: { status: 'cancelled' as const },
       failureCode: 'CANCELLED',
-      retryable: false,
+      retryable: undefined,
     },
   ])(
     'Gateway $name消息结算后的append故障可由begin/listEvents幂等收敛',
@@ -552,6 +552,13 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         { type: 'operation.accepted' },
         now,
       );
+      if (terminal.status === 'cancelled') {
+        await firstStore.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 1_000),
+        });
+      }
       let sourceMarkers: number[] = [];
       if (terminal.status === 'completed') {
         const asset = await assets.createUploaded({
@@ -599,13 +606,6 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         },
         now,
       );
-      if (terminal.status === 'cancelled') {
-        await firstStore.requestCancellation({
-          operationId: operation.operationId,
-          actorUserId: owner.userId,
-          now: new Date(now.getTime() + 1_000),
-        });
-      }
       const gatewayTerminalIntent =
         terminal.status === 'completed'
           ? { ...terminal, messageId: turn.assistantMessage.id }
@@ -636,6 +636,13 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         gatewayTerminalIntent,
         now: new Date(now.getTime() + 2_000),
       });
+      if (terminal.status === 'cancelled') {
+        // Isolate the acknowledgement-gap control-plane assertion from the earlier runtime cancel.
+        await getDatabase()
+          .update(schema.agentOperations)
+          .set({ cancelRequestedAt: null })
+          .where(eq(schema.agentOperations.id, operation.operationId));
+      }
 
       const [beforeRecovery] = await getDatabase()
         .select({
@@ -666,8 +673,64 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
           ),
       ).toHaveLength(0);
 
-      // 新Store模拟进程重启；begin先对同一持久intent做一次operation级收敛。
+      if (terminal.status === 'completed') {
+        const legacyStore = new DrizzleGatewayOperationStore(getDatabase(), {
+          terminalReconciliationMode: 'legacy-disabled',
+        });
+        await expect(
+          legacyStore.describe(operation.operationId, owner.userId),
+        ).resolves.toMatchObject({ status: 'running' });
+        await expect(legacyStore.listRecent(owner.userId)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              operationId: operation.operationId,
+              status: 'running',
+            }),
+          ]),
+        );
+      }
+
+      // 新Store模拟进程重启；三个控制面入口分别成为各终态的首次收敛触发点。
       const restartedStore = new DrizzleGatewayOperationStore(getDatabase());
+      if (terminal.status === 'completed') {
+        await expect(
+          restartedStore.describe(
+            operation.operationId,
+            owner.userId,
+            new Date(now.getTime() + 3_000),
+          ),
+        ).resolves.toMatchObject({ status: 'completed' });
+      } else if (terminal.status === 'failed') {
+        await expect(
+          restartedStore.listRecent(
+            owner.userId,
+            20,
+            new Date(now.getTime() + 3_000),
+          ),
+        ).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              operationId: operation.operationId,
+              status: 'failed',
+            }),
+          ]),
+        );
+      } else {
+        await expect(
+          restartedStore.requestCancellation({
+            operationId: operation.operationId,
+            actorUserId: owner.userId,
+            now: new Date(now.getTime() + 3_000),
+          }),
+        ).resolves.toEqual({ recorded: false, continuation: 'none' });
+        const [cancelState] = await getDatabase()
+          .select({
+            cancelRequestedAt: schema.agentOperations.cancelRequestedAt,
+          })
+          .from(schema.agentOperations)
+          .where(eq(schema.agentOperations.id, operation.operationId));
+        expect(cancelState?.cancelRequestedAt).toBeNull();
+      }
       await expect(
         restartedStore.begin({
           envelopeId: `gateway-terminal:${name}`,

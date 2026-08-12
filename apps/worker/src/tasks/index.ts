@@ -6,6 +6,7 @@ import {
   ASSET_PROCESS_VIDEO_TASK,
   ASSET_RENDER_PREVIEW_TASK,
   ASSET_TRANSCRIBE_AUDIO_TASK,
+  type GatewayTerminalReconciliationMode,
 } from '@educanvas/db';
 import {
   recordMetricSafely,
@@ -85,6 +86,7 @@ export function withTaskMetrics(
 export function createTaskList(input: {
   continuationTrace: ContinuationTracePort;
   metrics: MetricsPort;
+  terminalReconciliationMode?: GatewayTerminalReconciliationMode;
 }): TaskList {
   const wrap = withTaskMetrics(input.metrics);
   return {
@@ -111,7 +113,10 @@ export function createTaskList(input: {
     ),
     [OPERATION_CONTINUATION_TASK]: wrap(
       OPERATION_CONTINUATION_TASK,
-      createProductionContinueOperationTask(input.continuationTrace),
+      createProductionContinueOperationTask(
+        input.continuationTrace,
+        input.terminalReconciliationMode ?? 'enabled',
+      ),
     ),
     'knowledge:ingest_document': wrap(
       'knowledge:ingest_document',

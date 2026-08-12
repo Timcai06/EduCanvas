@@ -466,6 +466,10 @@ export {
 } from './unified-message-history';
 export { isK12ConversationDualWriteEnabled } from './k12-conversation-dual-write';
 export {
+  resolveGatewayTerminalReconciliationMode,
+  type GatewayTerminalReconciliationMode,
+} from './gateway/terminal-reconciliation-mode';
+export {
   deterministicConversationMessageId,
   K12ConversationDualWriteInvariantError,
 } from './k12-conversation-message-identity';
