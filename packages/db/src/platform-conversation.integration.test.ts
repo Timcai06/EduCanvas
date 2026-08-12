@@ -688,6 +688,27 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
             }),
           ]),
         );
+        const legacyCancellationRequestedAt = new Date(now.getTime() + 2_500);
+        await expect(
+          legacyStore.requestCancellation({
+            operationId: operation.operationId,
+            actorUserId: owner.userId,
+            now: legacyCancellationRequestedAt,
+          }),
+        ).resolves.toEqual({ recorded: true, continuation: 'none' });
+        const [legacyCancellationState] = await getDatabase()
+          .select({
+            cancelRequestedAt: schema.agentOperations.cancelRequestedAt,
+          })
+          .from(schema.agentOperations)
+          .where(eq(schema.agentOperations.id, operation.operationId));
+        expect(legacyCancellationState?.cancelRequestedAt).toEqual(
+          legacyCancellationRequestedAt,
+        );
+        await getDatabase()
+          .update(schema.agentOperations)
+          .set({ cancelRequestedAt: null })
+          .where(eq(schema.agentOperations.id, operation.operationId));
       }
 
       // 新Store模拟进程重启；三个控制面入口分别成为各终态的首次收敛触发点。

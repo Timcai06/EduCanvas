@@ -100,6 +100,35 @@ describe('worker bootstrap ordering', () => {
     expect(loadTaskModule).not.toHaveBeenCalled();
   });
 
+  it('显式legacy-disabled透传到任务构造', async () => {
+    const createTaskList = vi.fn(() => ({ noop: async () => {} }));
+    const telemetry = {
+      continuationTrace: {} as never,
+      turnTrace: {} as never,
+      metrics: {} as never,
+      health: vi.fn(),
+      forceFlush: vi.fn(),
+      shutdown: vi.fn(),
+    };
+
+    await prepareWorkerBootstrap({
+      environment: {
+        DATABASE_URL: 'postgresql://worker-test',
+        EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE: 'legacy-disabled',
+      },
+      loadEnvironment: vi.fn(),
+      loadTelemetryModule: async () =>
+        ({ createTelemetryRuntimeFromEnvironment: () => telemetry }) as never,
+      loadTaskModule: async () => ({ createTaskList }) as never,
+    });
+
+    expect(createTaskList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalReconciliationMode: 'legacy-disabled',
+      }),
+    );
+  });
+
   it('非法终态收敛模式在构造任务列表前失败且不回显原值', async () => {
     const createTaskList = vi.fn();
     await expect(
