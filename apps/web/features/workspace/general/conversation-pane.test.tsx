@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ConversationPane } from './conversation-pane';
+import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 
 let composerProps: Record<string, unknown> = {};
 
@@ -44,6 +45,7 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
         composerTools={[]}
         outputPreference="web_app"
         liveAssets={[]}
+        turnContextSnapshot={buildTurnContextSnapshot([])}
         composerDockRef={{ current: null }}
         scrollRef={{ current: null }}
         nearBottomRef={{ current: true }}

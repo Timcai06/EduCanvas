@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_LIVE_CONTEXT_ASSETS,
   freezeLiveVoiceContext,
   liveVoiceAssetStatusLabel,
   type LiveVoiceContextAsset,
@@ -38,5 +39,25 @@ describe('Live Voice context snapshot', () => {
   it('处理中的资料明确说明本轮不会静默带入', () => {
     expect(liveVoiceAssetStatusLabel(assets[1]!)).toBe('处理中 · 本轮暂不带入');
     expect(liveVoiceAssetStatusLabel(assets[0]!)).toBe('长期上下文');
+  });
+
+  it('与普通 Turn 共用五类 Source、去重和 63 项硬上限', () => {
+    const many = Array.from(
+      { length: MAX_LIVE_CONTEXT_ASSETS + 2 },
+      (_, index) => ({
+        ...assets[0]!,
+        id: `source-${index}`,
+        versionId: `version-${index}`,
+        kind: (['image', 'document', 'link', 'audio', 'video'] as const)[
+          index % 5
+        ]!,
+      }),
+    );
+    expect(freezeLiveVoiceContext(many, 42).assets).toHaveLength(
+      MAX_LIVE_CONTEXT_ASSETS,
+    );
+    expect(
+      freezeLiveVoiceContext([many[0]!, many[0]!], 42).assets,
+    ).toHaveLength(1);
   });
 });

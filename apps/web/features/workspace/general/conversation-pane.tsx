@@ -17,6 +17,8 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { LiveVoiceContextSnapshot } from '@/features/voice/live-voice-context';
 import type { LiveVoiceExitPayload } from '@/features/voice/live-voice-bring-back';
 import type { OutputPreference } from '@educanvas/agent-core';
+import type { TurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
+import { TurnContextStrip } from './turn-context-strip';
 
 /**
  * 消息与 Composer（W02）。
@@ -42,6 +44,7 @@ export interface ConversationPaneProps {
   composerTools: readonly ComposerToolChip[];
   outputPreference: OutputPreference;
   liveAssets: readonly AssetItem[];
+  turnContextSnapshot: TurnContextSnapshot;
   composerDockRef: RefObject<HTMLDivElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
   nearBottomRef: RefObject<boolean>;
@@ -76,6 +79,7 @@ export function ConversationPane({
   composerTools,
   outputPreference,
   liveAssets,
+  turnContextSnapshot,
   composerDockRef,
   scrollRef,
   nearBottomRef,
@@ -202,6 +206,7 @@ export function ConversationPane({
               />
             </div>
           ) : null}
+          <TurnContextStrip snapshot={turnContextSnapshot} />
           <VoiceComposer
             {...composerProps}
             notebookId={notebookId}
@@ -249,6 +254,7 @@ export function ConversationPane({
             dismissable={!revisingOpenArtifact}
           />
         ) : null}
+        <TurnContextStrip snapshot={turnContextSnapshot} />
         <VoiceComposer
           {...composerProps}
           notebookId={notebookId}

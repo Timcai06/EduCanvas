@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type RefObject,
@@ -63,6 +64,7 @@ import {
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
 import { useResourceDock } from './use-resource-dock';
+import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 
 /**
@@ -181,6 +183,14 @@ export function useGeneralWorkspaceController(options: {
   });
   const { assets, setAssets } = sources;
   const refreshAssets = sources.refresh;
+  const assetsRef = useRef(assets);
+  useLayoutEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
+  const [activeTurnContextSnapshot, setActiveTurnContextSnapshot] =
+    useState<ReturnType<typeof buildTurnContextSnapshot> | null>(null);
+  const turnContextSnapshot =
+    activeTurnContextSnapshot ?? buildTurnContextSnapshot(assets);
 
   /* 消息列跟随新消息滚底；用户上翻阅读时不打断（nearBottom 由组合层滚动容器更新）。 */
   useEffect(() => {
@@ -201,30 +211,14 @@ export function useGeneralWorkspaceController(options: {
       if (turn.messages.length === 0 && composerDockRef.current) {
         flipStateRef.current = Flip.getState(composerDockRef.current);
       }
-      const selected = (frozenAssets ?? assets).flatMap((asset) =>
-        asset.enabled &&
-        asset.versionId &&
-        (asset.kind === 'image' || asset.kind === 'document')
-          ? [
-              {
-                type: 'asset_ref' as const,
-                reference: {
-                  assetId: asset.id,
-                  versionId: asset.versionId,
-                  kind: asset.kind,
-                },
-                /* usage 跟随 scope：笔记本长期来源是背景上下文，只在 Studio 里管理；
-                   仅本轮的附件才属于这条消息，会在气泡里留痕。此前一律写死
-                   'context'，导致每条提问都把全部来源重新盖一遍章。 */
-                usage:
-                  asset.scope === 'space'
-                    ? ('context' as const)
-                    : ('attachment' as const),
-                label: asset.label,
-              },
-            ]
-          : [],
+      const snapshot = buildTurnContextSnapshot(
+        frozenAssets ?? assetsRef.current,
       );
+      setActiveTurnContextSnapshot(snapshot);
+      const selected = snapshot.parts.map((part, index) => ({
+        ...part,
+        label: snapshot.included[index]!.label,
+      }));
       activeTurnOutputPreferenceRef.current = preference;
       void turn
         .send(text, undefined, selected, {
@@ -232,6 +226,7 @@ export function useGeneralWorkspaceController(options: {
         })
         .then((accepted) => {
           if (!accepted) return;
+          setActiveTurnContextSnapshot(null);
           setOutputPreference('auto');
           activeTurnOutputPreferenceRef.current = 'auto';
           setAssets((current) =>
@@ -246,7 +241,6 @@ export function useGeneralWorkspaceController(options: {
         });
     },
     [
-      assets,
       outputPreference,
       composerDockRef,
       flipStateRef,
@@ -404,7 +398,7 @@ export function useGeneralWorkspaceController(options: {
         });
         setAssets((current) => {
           const enabledCount = current.filter((item) => item.enabled).length;
-          return [
+          const next = [
             {
               ...asset,
               enabled:
@@ -412,6 +406,8 @@ export function useGeneralWorkspaceController(options: {
             },
             ...current.filter((item) => item.id !== asset.id),
           ];
+          assetsRef.current = next;
+          return next;
         });
       } catch (reason: unknown) {
         setError(toClientError(reason, '文件上传暂时不可用。'));
@@ -437,6 +433,7 @@ export function useGeneralWorkspaceController(options: {
     composerTools,
     outputPreference,
     liveAssets: assets,
+    turnContextSnapshot,
     composerDockRef,
     scrollRef,
     nearBottomRef: nearBottom,

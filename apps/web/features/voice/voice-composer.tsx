@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -170,7 +171,6 @@ export function VoiceComposerRuntime({
       ),
     );
   }, [realtimeDictation.partialText]);
-
   /* 实时供应商短暂失败不能同时拖垮 Dictation：失败状态本身就是降级信号，
      无需再复制一份 React state；批量 ASR 可用时，本页后续录音直接走它。 */
   const realtimeDictationUnavailable =
@@ -209,10 +209,10 @@ export function VoiceComposerRuntime({
     });
   }, []);
 
-  useEffect(() => {
+  // Layout sync closes the paint-to-effect window before ASR final can arrive.
+  useLayoutEffect(() => {
     liveAssetsRef.current = liveAssets;
   }, [liveAssets]);
-
   const applyInterruptionActions = useCallback(
     (
       actions: readonly LiveInterruptionCoordinatorDecision<LiveVoiceContextSnapshot>[],
