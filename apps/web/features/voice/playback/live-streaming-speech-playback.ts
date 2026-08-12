@@ -39,10 +39,16 @@ export interface LiveStreamingSpeechPlaybackOptions {
   readonly onFinished: (lastWindow: PcmPlaybackWindow | null) => void;
   readonly onFailed: (beforeFirstAudio: boolean) => void;
   readonly durationClock?: SubtitleDurationClock;
+  /** 必须短于 DashScope 23 秒 continue-task 空闲上限。 */
+  readonly idleFinishMs?: number;
 }
 
+export const LIVE_SPEECH_PROVIDER_IDLE_FINISH_MS = 18_000;
+
 /**
- * 一个 Assistant response 复用一个浏览器到 Gateway 的 TTS 会话。
+ * 一个连续 delta burst 复用一个浏览器到 Gateway 的 TTS 会话；当 Agent
+ * 因工具或长思考暂停输出时，会在 Provider 空闲上限前正常结束，后续 delta
+ * 由同一 Web Audio 时间轴上的新 burst 接力。
  * Provider PCM 没有可靠的提交归属，因此这里只把文本 cue 投影到同一 Web
  * Audio 时间轴；绝不伪造“某一帧属于某个 submission”的供应商事实。
  */
@@ -60,6 +66,7 @@ export class LiveStreamingSpeechPlayback {
   private heardFirstAudio = false;
   private terminal = false;
   private finishing = false;
+  private idleFinishTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: LiveStreamingSpeechPlaybackOptions) {
     this.client = options.createClient({
@@ -82,7 +89,7 @@ export class LiveStreamingSpeechPlayback {
   }
 
   submit(segment: SemanticSegment): boolean {
-    if (this.terminal) return false;
+    if (this.terminal || this.finishing) return false;
     const text = prepareLiveSpeechText(segment.text);
     if (!text) return true;
     const rawCues = createLiveSubtitleCues(text);
@@ -112,18 +119,21 @@ export class LiveStreamingSpeechPlayback {
     this.client.submit({
       text,
     });
+    this.scheduleIdleFinish();
     return true;
   }
 
   finish(): void {
     if (this.terminal || this.finishing) return;
     this.finishing = true;
+    this.clearIdleFinish();
     this.client.finish();
   }
 
   cancel(): void {
     if (this.terminal) return;
     this.terminal = true;
+    this.clearIdleFinish();
     this.client.cancel();
   }
 
@@ -180,6 +190,7 @@ export class LiveStreamingSpeechPlayback {
 
   private finishFromServer(): void {
     if (this.terminal) return;
+    this.clearIdleFinish();
     void this.audioChain.then(() => {
       if (this.terminal) return;
       this.terminal = true;
@@ -202,6 +213,21 @@ export class LiveStreamingSpeechPlayback {
   private fail(): void {
     if (this.terminal) return;
     this.terminal = true;
+    this.clearIdleFinish();
     this.options.onFailed(!this.heardFirstAudio);
+  }
+
+  private scheduleIdleFinish(): void {
+    this.clearIdleFinish();
+    this.idleFinishTimer = setTimeout(
+      () => this.finish(),
+      this.options.idleFinishMs ?? LIVE_SPEECH_PROVIDER_IDLE_FINISH_MS,
+    );
+  }
+
+  private clearIdleFinish(): void {
+    if (this.idleFinishTimer === null) return;
+    clearTimeout(this.idleFinishTimer);
+    this.idleFinishTimer = null;
   }
 }

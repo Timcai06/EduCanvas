@@ -68,9 +68,9 @@ export {
 } from './live-speech-playback-state';
 
 /**
- * Assistant 的安全 message.delta 到达后立即分段播报。当前 HTTP 路由保持兼容，
- * 语义段按顺序预取并进入同一 Web Audio 队列；后端升级为长连接 Speech Session
- * 时只需替换 `streamSpeechIntoPlayer` 的 transport，不改变字幕与播放状态机。
+ * Assistant 的安全 message.delta 到达后立即分段播报。语义段按顺序进入同一
+ * Web Audio 时间轴；连续 delta 复用 Speech Session，工具/长思考造成的空闲则
+ * 在 Provider deadline 前收尾并由下一 burst 接力。HTTP 路由只保留首音前降级。
  */
 export function useLiveSpeechPlayback({
   enabled,

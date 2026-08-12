@@ -4,6 +4,7 @@ import { VoiceComposerRuntime } from './voice-composer';
 import {
   filterLiveSessionTranscript,
   mergeDictationTranscript,
+  resolveLiveReaderBaselineId,
   resolveLiveVoiceVisualPhase,
 } from './voice-composer-projection';
 import {
@@ -45,8 +46,15 @@ function render(checks = healthyChecks) {
 describe('VoiceComposerRuntime', () => {
   it('SSR 初始渲染显示双入口且不触碰浏览器 runtime', () => {
     const result = render();
+    const buttonLabels = [
+      ...result.html.matchAll(/<button\b[^>]*aria-label="([^"]+)"/g),
+    ].map((match) => match[1]);
+    const dictationIndex = buttonLabels.indexOf('语音转文字');
     expect(result.html).toContain('Live Voice');
     expect(result.html).toContain('aria-label="语音转文字"');
+    expect(dictationIndex).toBeGreaterThanOrEqual(0);
+    expect(buttonLabels[dictationIndex + 1]).toBe('Live Voice');
+    expect(result.html).toContain('viewBox="0 0 24 24"');
     expect(result.html).not.toContain('短句');
     expect(result.html).not.toContain('课堂字幕');
     expect(result.createCapture).not.toHaveBeenCalled();
@@ -98,6 +106,26 @@ describe('filterLiveSessionTranscript', () => {
       entries.slice(1),
     );
   });
+});
+
+describe('resolveLiveReaderBaselineId', () => {
+  it.each(['completed', 'failed', 'cancelled', 'interrupted'] as const)(
+    '隐藏入室前已终态的 %s 回答',
+    (status) => {
+      expect(
+        resolveLiveReaderBaselineId({ assistantId: 'assistant-old', status }),
+      ).toBe('assistant-old');
+    },
+  );
+
+  it.each(['pending', 'streaming'] as const)(
+    '接管仍活跃的 %s 回答',
+    (status) => {
+      expect(
+        resolveLiveReaderBaselineId({ assistantId: 'assistant-live', status }),
+      ).toBeNull();
+    },
+  );
 });
 
 describe('resolveLiveVoiceVisualPhase', () => {

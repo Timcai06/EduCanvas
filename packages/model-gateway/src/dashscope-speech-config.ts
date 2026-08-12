@@ -40,8 +40,16 @@ export function parseDashScopeSpeechConfiguration(
     env.DASHSCOPE_BEIJING_WS_URL?.trim() ||
     `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`;
   const asrModel = env.DASHSCOPE_ASR_MODEL?.trim() || 'paraformer-realtime-v2';
-  const ttsModel = env.DASHSCOPE_TTS_MODEL?.trim() || 'cosyvoice-v3-flash';
-  const voice = env.DASHSCOPE_TTS_VOICE?.trim() || 'longanyang';
+  const hasTtsModel = Boolean(env.DASHSCOPE_TTS_MODEL?.trim());
+  const hasTtsVoice = Boolean(env.DASHSCOPE_TTS_VOICE?.trim());
+  /* Model 与系统音色构成同一 Provider profile；单边遗留变量不能与
+     新默认静默组合成未经验证的配置。 */
+  if (hasTtsModel !== hasTtsVoice) {
+    return { enabled: false, reason: 'invalid_configuration' };
+  }
+  const ttsModel =
+    env.DASHSCOPE_TTS_MODEL?.trim() || 'qwen-audio-3.0-tts-flash';
+  const voice = env.DASHSCOPE_TTS_VOICE?.trim() || 'longanhuan_v3.6';
   try {
     const url = new URL(websocketUrl);
     if (

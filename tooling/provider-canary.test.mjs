@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
   MAX_PROVIDER_CANARY_SCENARIOS,
   MAX_PROVIDER_TURNS_PER_SCENARIO,
+  PROVIDER_CANARY_PROFILES,
   buildProviderCanarySummary,
   validateProviderCanaryInput,
   validateSanitizedProviderCanarySummary,
@@ -15,6 +16,8 @@ const scenariosPath = resolve(
   repoRoot,
   'tooling/evals/provider-canary/scenarios-v1.json',
 );
+const QWEN_AUDIO_FLASH_PROFILE =
+  'dashscope-qwen-audio-3-tts-flash-longanhuan-v3-6-pcm24k';
 
 describe('protected Provider canary contract', () => {
   it('accepts the frozen input within the five-scenario/two-turn budget', () => {
@@ -58,6 +61,7 @@ describe('protected Provider canary contract', () => {
   it('emits only aggregate SHA-bound evidence and rejects sensitive fields', () => {
     const summary = buildProviderCanarySummary({
       sha: 'a'.repeat(40),
+      providerProfile: QWEN_AUDIO_FLASH_PROFILE,
       datasetVersion: 'live-voice-provider-v1',
       turnsPerScenario: 2,
       results: [
@@ -100,6 +104,38 @@ describe('protected Provider canary contract', () => {
           note: `Bearer ${'x'.repeat(20)}`,
         }),
       /secret-like text/,
+    );
+  });
+
+  it('binds evidence to a closed, non-sensitive TTS profile identity', () => {
+    const input = {
+      sha: 'a'.repeat(40),
+      datasetVersion: 'live-voice-provider-v1',
+      turnsPerScenario: 2,
+      results: [
+        {
+          id: 'passing',
+          status: 'passed',
+          latencyMs: 120,
+          roundTripSimilarity: 0.9,
+          stableErrorCode: null,
+        },
+      ],
+      generatedAt: '2026-08-12T00:00:00.000Z',
+    };
+    const summary = buildProviderCanarySummary({
+      ...input,
+      providerProfile: QWEN_AUDIO_FLASH_PROFILE,
+    });
+    assert.equal(summary.providerProfile, QWEN_AUDIO_FLASH_PROFILE);
+    assert.ok(PROVIDER_CANARY_PROFILES.includes(QWEN_AUDIO_FLASH_PROFILE));
+    assert.throws(
+      () =>
+        buildProviderCanarySummary({
+          ...input,
+          providerProfile: 'unregistered-provider-profile',
+        }),
+      /profile/,
     );
   });
 

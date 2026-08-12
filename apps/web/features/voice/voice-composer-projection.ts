@@ -2,6 +2,7 @@ import type {
   LiveVoiceTranscriptEntry,
   LiveVoiceVisualPhase,
 } from './live-voice-panel';
+import type { ChatMessageStatus } from '@/features/chat/messages';
 
 export const LIVE_STATUS = {
   idle: '准备就绪',
@@ -53,4 +54,16 @@ export function filterLiveSessionTranscript(
 ): readonly LiveVoiceTranscriptEntry[] {
   const baseline = new Set(baselineIds);
   return transcript.filter((entry) => !baseline.has(entry.id));
+}
+
+/** 入室前已终态的 Assistant 不得冒充本轮长回答；活跃流可由 Live 接管。 */
+export function resolveLiveReaderBaselineId(input: {
+  readonly assistantId: string | null;
+  readonly status: ChatMessageStatus | null;
+}): string | null {
+  return input.assistantId &&
+    input.status !== 'pending' &&
+    input.status !== 'streaming'
+    ? input.assistantId
+    : null;
 }

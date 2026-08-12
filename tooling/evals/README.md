@@ -56,7 +56,7 @@ baseline。报告明确限定为合成集回归证据，不宣称真实课程语
 均不会读取 DashScope Secret 或产生模型费用。
 
 - `scenarios-v1.json` 最多 5 个冻结场景，每场景固定 2 次 Provider operation
-  （CosyVoice TTS → 内存重采样 → Paraformer ASR）；当前 v1 为 2 个场景、4 次调用。
+  （DashScope TTS → 内存重采样 → Paraformer ASR）；当前 v1 为 2 个场景、4 次调用。
 - PCM 只在 runner 内存中存在，不写文件、不上传；summary 只保存场景 ID、成功率、
   p50/p95、相似度和稳定错误码，不保存输入正文、识别文本、Provider body 或 Secret。
 - workflow 10 分钟超时；初期只作为趋势证据，不进入普通 PR required checks。

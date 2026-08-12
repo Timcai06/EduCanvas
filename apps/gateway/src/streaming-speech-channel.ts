@@ -39,6 +39,7 @@ export class StreamingSpeechChannel {
   private readonly quotas: StreamingTranscriptionQuotas;
 
   private readonly pendingAudioFrames: StreamingSpeechPendingAudioFrame[] = [];
+  private readonly outputCreditWaiters: Array<() => void> = [];
   private nextUnsentAudioFrame = 0;
   private nextOutputSequenceToRelease = 0;
   private pendingOutputBytes = 0;
@@ -139,6 +140,7 @@ export class StreamingSpeechChannel {
   disconnect(): void {
     if (this.terminal) return;
     this.terminal = true;
+    this.wakeOutputCreditWaiters();
     this.cancelSession();
     this.releaseSession();
   }
@@ -172,6 +174,7 @@ export class StreamingSpeechChannel {
       this.nextOutputSequenceToRelease += 1;
     }
     this.compactPendingAudioQueue();
+    this.wakeOutputCreditWaiters();
     void this.flushOutput();
     this.finishIfDrained();
   }
@@ -183,7 +186,10 @@ export class StreamingSpeechChannel {
     this.nextOutputSequenceToRelease = 0;
   }
 
-  private enqueueOutputFrame(sequence: number, pcmBytes: Uint8Array): void {
+  private async enqueueOutputFrame(
+    sequence: number,
+    pcmBytes: Uint8Array,
+  ): Promise<void> {
     if (this.terminal) return;
     if (sequence !== this.nextExpectedOutputSequence) {
       this.fail('MODEL_FAILED');
@@ -193,14 +199,27 @@ export class StreamingSpeechChannel {
       this.fail('MODEL_FAILED');
       return;
     }
-    this.nextExpectedOutputSequence += 1;
-    if (
-      this.pendingOutputBytes + pcmBytes.byteLength >
-      this.quotas.maxOutputBufferedBytes
-    ) {
+    if (pcmBytes.byteLength > this.quotas.maxOutputBufferedBytes) {
       this.outputBackpressureExceeded();
       return;
     }
+
+    /* DashScope TTS 可以远快于实时播放地产生 PCM。这里的额度代表浏览器尚未按
+       Web Audio 时间轴确认消费的窗口；窗口满时必须暂停拉取 Provider，而
+       不是把正常的长回答误判为背压失败。Provider adapter 自身仍有独立的
+       有界队列，因此等待 ACK 不会变成无界内存。 */
+    while (
+      !this.terminal &&
+      this.pendingOutputBytes + pcmBytes.byteLength >
+        this.quotas.maxOutputBufferedBytes
+    ) {
+      await new Promise<void>((resolve) =>
+        this.outputCreditWaiters.push(resolve),
+      );
+    }
+    if (this.terminal) return;
+
+    this.nextExpectedOutputSequence += 1;
     this.pendingAudioFrames.push({ sequence, pcmBytes });
     this.pendingOutputBytes += pcmBytes.byteLength;
     void this.flushOutput();
@@ -229,7 +248,7 @@ export class StreamingSpeechChannel {
       for await (const event of session.events) {
         if (this.terminal || session !== this.session) return;
         if (event.type === 'audio') {
-          this.enqueueOutputFrame(event.sequence, event.pcmBytes);
+          await this.enqueueOutputFrame(event.sequence, event.pcmBytes);
           continue;
         }
         if (event.type === 'finished') {
@@ -259,6 +278,7 @@ export class StreamingSpeechChannel {
   ): void {
     if (this.terminal) return;
     this.terminal = true;
+    this.wakeOutputCreditWaiters();
     this.cancelSession();
     this.options.sendEvent({ type: 'speech.failed', failureCode });
     this.releaseSession();
@@ -280,6 +300,7 @@ export class StreamingSpeechChannel {
       return;
     }
     this.terminal = true;
+    this.wakeOutputCreditWaiters();
     this.options.sendEvent({ type: 'speech.finished' });
     this.options.onTerminal();
   }
@@ -290,5 +311,9 @@ export class StreamingSpeechChannel {
     } catch {
       /* Provider adapter action errors stay behind the stable channel terminal. */
     }
+  }
+
+  private wakeOutputCreditWaiters(): void {
+    this.outputCreditWaiters.splice(0).forEach((resolve) => resolve());
   }
 }

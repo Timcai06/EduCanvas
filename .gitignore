@@ -18,6 +18,7 @@ coverage/
 .turbo/
 .pnpm-store/
 /output/playwright/
+/output/provider-canary/
 
 # Python
 __pycache__/

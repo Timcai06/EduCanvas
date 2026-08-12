@@ -48,7 +48,6 @@ export interface LiveVoiceRect {
  */
 export interface LiveVoiceEntryCapture {
   readonly buttonRect: LiveVoiceRect | null;
-  readonly assetRects: Readonly<Record<string, LiveVoiceRect>>;
 }
 
 export function toLiveVoiceRect(rect: DOMRect): LiveVoiceRect {
@@ -61,27 +60,14 @@ export function toLiveVoiceRect(rect: DOMRect): LiveVoiceRect {
 }
 
 /**
- * 捕获入口现场。资产定位走通用查询：桌面上任何带
- * `data-live-asset="<assetId>"` 的元素都视为那张纸的当前位置；
- * 没有标记的资产不飞行，由舞台自身的入场动画承接（优雅降级，不造假）。
+ * 捕获入口现场。LX 已移除逐资料飞行 proxy，因此只读取 launcher 几何，
+ * 避免点击时对整张桌面同步测量布局。
  */
 export function captureLiveVoiceEntry(
   button: HTMLElement | null,
-  root: ParentNode = document,
 ): LiveVoiceEntryCapture {
-  const assetRects: Record<string, LiveVoiceRect> = {};
-  for (const element of root.querySelectorAll<HTMLElement>(
-    '[data-live-asset]',
-  )) {
-    const assetId = element.dataset.liveAsset;
-    if (!assetId) continue;
-    const rect = element.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) continue;
-    assetRects[assetId] = toLiveVoiceRect(rect);
-  }
   return {
     buttonRect: button ? toLiveVoiceRect(button.getBoundingClientRect()) : null,
-    assetRects,
   };
 }
 

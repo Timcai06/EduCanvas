@@ -11,8 +11,8 @@ const configuration = {
   websocketUrl:
     'wss://ws-test.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
   asrModel: 'paraformer-realtime-v2',
-  ttsModel: 'cosyvoice-v3-flash',
-  voice: 'longanyang',
+  ttsModel: 'qwen-audio-3.0-tts-flash',
+  voice: 'longanhuan_v3.6',
 };
 
 class FakeSocket implements DashScopeSocket {
@@ -161,7 +161,7 @@ describe('DashScope streaming adapters', () => {
     expect(JSON.stringify(events)).not.toContain('42');
   });
 
-  it('CosyVoice 只输出有序 PCM 与 finished，不投影原始事件', async () => {
+  it('DashScope TTS 只输出有序 PCM 与 finished，不投影原始事件', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingSpeechGateway({
       configuration,
@@ -182,6 +182,14 @@ describe('DashScope streaming adapters', () => {
     await Promise.resolve();
     socket.emit('open');
     const run = JSON.parse(socket.sent[0] as string);
+    expect(run.payload).toMatchObject({
+      model: 'qwen-audio-3.0-tts-flash',
+      parameters: {
+        voice: 'longanhuan_v3.6',
+        format: 'pcm',
+        sample_rate: 24_000,
+      },
+    });
     const taskId = run.header.task_id as string;
     socket.emit('message', serverEvent(taskId, 'task-started'), false);
     expect(JSON.parse(socket.sent[1] as string).payload.input.text).toBe(
@@ -196,7 +204,7 @@ describe('DashScope streaming adapters', () => {
     ]);
   });
 
-  it('CosyVoice 在同一 task 内按序提交多个语义段并只 finish 一次', async () => {
+  it('DashScope TTS 在同一 task 内按序提交多个语义段并只 finish 一次', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingSpeechGateway({
       configuration,
@@ -241,7 +249,55 @@ describe('DashScope streaming adapters', () => {
     ]);
   });
 
-  it('CosyVoice 拒绝跳号输入与奇数 PCM，并保持唯一终态', async () => {
+  it('DashScope TTS cancel 发送 Provider cancel 且忽略迟到事件', async () => {
+    const socket = new FakeSocket();
+    const gateway = new DashScopeStreamingSpeechGateway({
+      configuration,
+      socketFactory: () => socket,
+    });
+    const session = gateway.beginStreaming({
+      taskAlias: 'speech.generate',
+      modelAlias: 'speech',
+      operationId: 'op-cancel',
+      traceId: 'trace-cancel',
+    });
+    const eventsPromise = (async () => {
+      const events = [];
+      for await (const event of session.events) events.push(event);
+      return events;
+    })();
+
+    socket.emit('open');
+    const taskId = JSON.parse(socket.sent[0] as string).header
+      .task_id as string;
+    socket.emit('message', serverEvent(taskId, 'task-started'), false);
+    session.pushText({ sequence: 0, input: '这句话会被取消。' });
+    session.cancel();
+    session.cancel();
+    socket.emit('message', Uint8Array.from([1, 2]), true);
+    socket.emit('message', serverEvent(taskId, 'task-finished'), false);
+
+    const commands = socket.sent.map((raw) => JSON.parse(raw as string));
+    expect(commands.map((command) => command.header.action)).toEqual([
+      'run-task',
+      'continue-task',
+      'finish-task',
+    ]);
+    const cancel = commands.at(-1);
+    expect(cancel).toMatchObject({
+      header: {
+        action: 'finish-task',
+        task_id: taskId,
+        streaming: 'duplex',
+      },
+      payload: { input: { directive: 'cancel' } },
+    });
+    await expect(eventsPromise).resolves.toEqual([
+      { type: 'failed', failureCode: 'CANCELLED' },
+    ]);
+  });
+
+  it('DashScope TTS 拒绝跳号输入与奇数 PCM，并保持唯一终态', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingSpeechGateway({
       configuration,
@@ -265,7 +321,7 @@ describe('DashScope streaming adapters', () => {
     ]);
   });
 
-  it('CosyVoice 遇到非法文本帧时收敛为稳定失败', async () => {
+  it('DashScope TTS 遇到非法文本帧时收敛为稳定失败', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingSpeechGateway({
       configuration,

@@ -44,7 +44,10 @@ export function isLikelyLivePlaybackEcho({
 }: LiveSpeechEchoInput): boolean {
   if (!playbackRecentlyActive) return false;
   const heard = normalize(transcript);
-  if ([...heard].length < 3) return false;
+  /* 两个汉字已经足以触发上层插话（例如“等等”），所以回声门闩也必须
+     覆盖两个汉字。否则扬声器播出的“好的”“首先”会穿透过滤并取消
+     正在生成的 Agent turn。单字仍不参与判断，避免环境噪声误吞输入。 */
+  if ([...heard].length < 2) return false;
   const candidates = [
     assistantSubtitle ?? '',
     ...(assistantText ?? '').split(/(?<=[。！？!?；;])/u),
@@ -55,7 +58,7 @@ export function isLikelyLivePlaybackEcho({
   return candidates.some((candidate) => {
     const shorterLength = Math.min([...heard].length, [...candidate].length);
     if (
-      shorterLength >= 4 &&
+      shorterLength >= 2 &&
       (candidate.includes(heard) || heard.includes(candidate))
     ) {
       return true;

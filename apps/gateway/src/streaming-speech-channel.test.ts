@@ -38,7 +38,7 @@ class FakeSession implements StreamingSpeechSession {
 }
 
 describe('StreamingSpeechChannel', () => {
-  it('在队列上限内顺序转发多段文本', async () => {
+  it('播放信用窗口满时暂停 Provider 消费，ACK 后继续而不误报失败', async () => {
     const session = new FakeSession();
     const events: unknown[] = [];
     const audio: Array<{ sequence: number; bytes: Uint8Array }> = [];
@@ -85,19 +85,25 @@ describe('StreamingSpeechChannel', () => {
       sequence: 2,
       pcmBytes: Uint8Array.of(5, 6),
     });
-    await vi.waitFor(() =>
-      expect(events).toEqual([
-        {
-          type: 'speech.started',
-          format: 'pcm_s16le',
-          sampleRate: 24_000,
-          channels: 1,
-        },
-        { type: 'speech.failed', failureCode: 'BACKPRESSURE_EXCEEDED' },
-      ]),
-    );
-    expect(terminal).toHaveBeenCalledOnce();
-    expect(release).toHaveBeenCalledOnce();
+    await Promise.resolve();
+    expect(audio).toHaveLength(2);
+    expect(events).toEqual([
+      {
+        type: 'speech.started',
+        format: 'pcm_s16le',
+        sampleRate: 24_000,
+        channels: 1,
+      },
+    ]);
+    expect(terminal).not.toHaveBeenCalled();
+
+    channel.receive({ type: 'speech.ack', sequence: 2, audioSequence: 0 });
+    await vi.waitFor(() => expect(audio).toHaveLength(3));
+    expect(audio[2]).toEqual({
+      sequence: 2,
+      bytes: Uint8Array.of(5, 6),
+    });
+    expect(release).not.toHaveBeenCalled();
   });
 
   it('ACK 可释放已消费区间，允许后续帧继续写入', async () => {

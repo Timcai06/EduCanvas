@@ -12,6 +12,7 @@ import {
   resolveDashScopeStreamingTranscriptionGateway,
 } from '../../../packages/model-gateway/src/index.ts';
 import {
+  PROVIDER_CANARY_PROFILES,
   buildProviderCanarySummary,
   validateProviderCanaryInput,
 } from './contracts.mjs';
@@ -22,6 +23,21 @@ const outputPath = resolve(repoRoot, 'output/provider-canary/summary.json');
 const MAX_IN_MEMORY_PCM_BYTES = 2 * 1024 * 1024;
 const SCENARIO_TIMEOUT_MS = 45_000;
 const MIN_ROUND_TRIP_SIMILARITY = 0.55;
+
+function resolveProviderProfile(env: NodeJS.ProcessEnv): string {
+  const model = env.DASHSCOPE_TTS_MODEL?.trim() || 'qwen-audio-3.0-tts-flash';
+  const voice = env.DASHSCOPE_TTS_VOICE?.trim() || 'longanhuan_v3.6';
+  const profile =
+    model === 'qwen-audio-3.0-tts-flash' && voice === 'longanhuan_v3.6'
+      ? 'dashscope-qwen-audio-3-tts-flash-longanhuan-v3-6-pcm24k'
+      : model === 'cosyvoice-v3-flash' && voice === 'longanyang'
+        ? 'dashscope-cosyvoice-v3-flash-longanyang-pcm24k'
+        : null;
+  if (!profile || !PROVIDER_CANARY_PROFILES.includes(profile)) {
+    throw new CanaryFailure('CONFIGURATION_INVALID');
+  }
+  return profile;
+}
 
 class CanaryFailure extends Error {
   constructor(readonly stableCode: string) {
@@ -232,6 +248,7 @@ async function main() {
   }
   const summary = buildProviderCanarySummary({
     sha: process.env.GITHUB_SHA,
+    providerProfile: resolveProviderProfile(process.env),
     datasetVersion: input.datasetVersion,
     turnsPerScenario: input.turnsPerScenario,
     results,

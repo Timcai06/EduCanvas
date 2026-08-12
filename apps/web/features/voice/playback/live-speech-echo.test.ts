@@ -14,6 +14,28 @@ describe('isLikelyLivePlaybackEcho', () => {
     ).toBe(true);
   });
 
+  it('两字播放回声不能穿透插话门槛', () => {
+    expect(
+      isLikelyLivePlaybackEcho({
+        transcript: '好的',
+        assistantText: '好的，我们继续分析。',
+        assistantSubtitle: '好的，我们继续分析。',
+        playbackRecentlyActive: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('两字明确插话与当前播报不同，仍允许立即打断', () => {
+    expect(
+      isLikelyLivePlaybackEcho({
+        transcript: '等等',
+        assistantText: '好的，我们继续分析。',
+        assistantSubtitle: '好的，我们继续分析。',
+        playbackRecentlyActive: true,
+      }),
+    ).toBe(false);
+  });
+
   it('不同内容的用户插话不会被回声门闩吞掉', () => {
     expect(
       isLikelyLivePlaybackEcho({

@@ -31,3 +31,10 @@
 - Add comments for causal constraints, security boundaries, platform differences, caching decisions, and compatibility behavior.
 - Do not comment obvious syntax or duplicate the implementation in prose.
 - Keep public module/class/function documentation consistent with nearby JSDoc and explain side effects and failure behavior.
+
+## Agent collaboration
+
+- When the project owner asks for delegated implementation, prefer several small, bounded Codex 5.3 Spark tasks for local code, focused tests, or fact-finding that can proceed independently.
+- Give each delegated task explicit file ownership and remind agents that the worktree is shared; they must not revert concurrent edits.
+- The primary agent owns architecture, security and compatibility review, integrates the shared worktree, corrects weak-model output, and decides whether evidence is sufficient for PASS.
+- Do not delegate final acceptance claims, cross-cutting contract decisions, destructive operations, release merges, or the interpretation of repository instructions.

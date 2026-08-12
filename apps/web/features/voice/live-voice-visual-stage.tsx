@@ -31,8 +31,16 @@ export interface LiveVoiceVisualStageProps {
     file: File,
     kind: 'image' | 'document',
   ) => Promise<void>;
-  readonly onOpenAsset?: (assetId: string) => void;
-  readonly onOpenArtifact?: (artifactId: string) => void;
+  readonly onOpenAsset?: (
+    assetId: string,
+    title: string,
+    trigger: HTMLButtonElement,
+  ) => void;
+  readonly onOpenArtifact?: (
+    artifactId: string,
+    title: string,
+    trigger: HTMLButtonElement,
+  ) => void;
   readonly annotations?: readonly LiveVoiceAnnotationDraft[];
   readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
 }
@@ -223,8 +231,17 @@ export function LiveVoiceVisualStage({
             <span>{liveVoiceAssetStatusLabel(focusedAsset)}</span>
           </div>
           {onOpenAsset && focusedAsset.status === 'ready' ? (
-            <button type="button" onClick={() => onOpenAsset(focusedAsset.id)}>
-              在 Canvas 打开
+            <button
+              type="button"
+              onClick={(event) =>
+                onOpenAsset(
+                  focusedAsset.id,
+                  focusedAsset.label,
+                  event.currentTarget,
+                )
+              }
+            >
+              在 Live 中预览
             </button>
           ) : null}
         </article>
@@ -306,7 +323,19 @@ export function LiveVoiceVisualStage({
             <button
               key={artifact.id}
               type="button"
-              onClick={() => onOpenArtifact?.(artifact.id)}
+              disabled={
+                artifact.status === 'generating' ||
+                artifact.status === 'proposed' ||
+                artifact.status === 'failed' ||
+                artifact.status === 'archived'
+              }
+              onClick={(event) =>
+                onOpenArtifact?.(
+                  artifact.id,
+                  artifact.title,
+                  event.currentTarget,
+                )
+              }
             >
               {artifact.previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element

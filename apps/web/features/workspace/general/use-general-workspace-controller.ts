@@ -433,8 +433,6 @@ export function useGeneralWorkspaceController(options: {
     onPreviewHtml: (source: string) => workspace.openHtml(source),
     onOpenArtifact: (artifactId: string) =>
       studioOpenActions.actions.openArtifact(artifactId),
-    onOpenAsset: (assetId: string) =>
-      studioOpenActions.actions.openSource(assetId),
     onToggleLiveAsset: (assetId: string) => {
       const asset = assets.find((candidate) => candidate.id === assetId);
       if (!asset?.selectable) return;

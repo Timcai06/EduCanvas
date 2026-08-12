@@ -7,7 +7,7 @@ import { LiveStreamingSpeechPlayback } from './live-streaming-speech-playback';
 import type { SubtitleDurationClock } from './subtitle-clock/recovery';
 import type { LiveSpeechPcmPlayer } from './stream-speech-into-player';
 
-function harness(durationClock?: SubtitleDurationClock) {
+function harness(durationClock?: SubtitleDurationClock, idleFinishMs?: number) {
   let handlers: StreamingSpeechClientHandlers | null = null;
   const client: LiveSpeechSessionClient = {
     start: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +42,7 @@ function harness(durationClock?: SubtitleDurationClock) {
     onFinished: finished,
     onFailed: failed,
     durationClock,
+    idleFinishMs,
   });
   return {
     playback,
@@ -90,6 +91,51 @@ describe('LiveStreamingSpeechPlayback', () => {
     await Promise.resolve();
     after.handlers().onFailed('CONNECTION_LOST');
     expect(after.failed).toHaveBeenCalledWith(false);
+  });
+
+  it('在 Provider 空闲上限前正常结束 burst，后续文本等待新 session', async () => {
+    vi.useFakeTimers();
+    try {
+      const test = harness(undefined, 18_000);
+      await test.playback.start();
+      expect(
+        test.playback.submit({
+          text: '先说一句。',
+          startCursor: 0,
+          endCursor: 5,
+        }),
+      ).toBe(true);
+      await vi.advanceTimersByTimeAsync(17_999);
+      expect(test.client.finish).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(test.client.finish).toHaveBeenCalledOnce();
+      expect(
+        test.playback.submit({
+          text: '工具回来后继续。',
+          startCursor: 5,
+          endCursor: 13,
+        }),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('新语义段会重置 Provider 空闲收尾计时', async () => {
+    vi.useFakeTimers();
+    try {
+      const test = harness(undefined, 18_000);
+      await test.playback.start();
+      test.playback.submit({ text: '第一句。', startCursor: 0, endCursor: 4 });
+      await vi.advanceTimersByTimeAsync(10_000);
+      test.playback.submit({ text: '第二句。', startCursor: 4, endCursor: 8 });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(test.client.finish).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(test.client.finish).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('只有 enqueue 成功才触发音频消费回调', async () => {
