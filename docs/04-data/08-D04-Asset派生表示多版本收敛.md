@@ -91,7 +91,17 @@
 - 新 representation 存在（ready + storage key + checksum）→ 读新权威（对象内容并校验完整性）；
 - 仅有旧字段（无 representation 或对象缺失）→ 按冻结规则回退 `transcriptionText`；
 - 新写入不再只落旧字段（representation 权威 + 镜像同事务）；
-- 镜像读取端（agent context materialize）继续读旧字段镜像（双写窗口内一致）。
+- 镜像读取端（agent context materialize）：**文档文本路径已于 E1 切换**（2026-08-11）——
+  structured 读 derived 对象并核对 SHA-256、degraded/无表示回退 extractedText 镜像、
+  processing/failed 明确失败；音频 transcription 镜像路径保持（双写窗口内一致，见 §11 注记）；
+  **派生图片路径已于 E2 切换**（2026-08-11）——structured 表示 + Provider 声明 image 能力时，
+  manifest 图片按 position 排序、白名单 MIME（png/jpeg/webp）过滤后进 native image parts，
+  逐张核对 byteSize+sha256（不符 → 完整性失败），与用户上传原生图共享
+  MAX_NATIVE_IMAGES/MAX_NATIVE_IMAGE_BYTES 预算；manifest 缺失按数据损坏明确失败；
+  **旧行重放兼容已于 E3 固化**（2026-08-11）——0054 前旧行 `selected_asset_representations='[]'`
+  且 contextHash 不含表示字段，重放（createOrGet 幂等重试）时只比较旧行能表达的事实
+  （构建器/消息/版本/预算），跳过 hash 与表示身份；历史 Turn 允许继续读取，
+  重试不因 hash 算法演进冲突；新行（0055 后）仍做全字段含 hash 核对。
 
 ## 8. backfill
 
@@ -123,7 +133,7 @@
 - **旧字段退出条件**（第一阶段不删除，物理删除归属后续任务）：
   1. 回填完成：transcription 旧字段 live 零数据（无回填负担）；extractedText 镜像保持；
   2. 新写入切换完成：✅（本任务 6 个写入点全部切 identity upsert）；
-  3. 读取切换完成：transcription ✅（preview API 已切 representation 优先）；agent context（materialize 镜像读取）未切换——双写窗口内；
+  3. 读取切换完成：transcription ✅（preview API 已切 representation 优先）；agent context 文档文本路径 ✅（E1，2026-08-11：structured 读 derived 对象 + SHA-256 核对，degraded/无表示回退镜像，processing/failed 明确失败；音频 transcription 镜像路径保留，待转录回填证据后再切）；
   4. 生产调用证据为零：transcriptionText/transcriptionMetadata 需在双写窗口结束后再审计；
   5. 回退窗口结束：0053 应用后一个发布周期；
   6. 物理删除任务归属：后续 D 线任务（与 D05/D06 相邻排期），本任务不删除。
@@ -134,6 +144,7 @@
 - `agent-core assetProcessorKinds`（processor 权威，D03 冻结）——未改；
 - **新增** `agent-core representationIdentitySchema / representationVariantSchema / representationProducerSchema / representationProducerVersionSchema / DEFAULT_REPRESENTATION_IDENTITY`（identity 权威，单一 zod，无并行 TS enum）；
 - DB 仅格式 CHECK（D03 词汇门禁继续通过：`vocabulary-gate` audit exit 0、8/8 测试）。
+- **ADR-0026（0054）新增 2 个 closed 质量 CHECK**（`asset_representations_quality_check` / `_quality_shape_check`）：四态质量（processing/structured/degraded_plain_text/failed + unavailable）是 closed 枚举，与 status/failure_shape 同类，已注册进 `CLOSED_VOCABULARY_CONSTRAINTS` 白名单（全量门禁测试覆盖，见 §15 验证记录）。
 
 ## 13. 对 UV / KM / PET / O 的影响
 
