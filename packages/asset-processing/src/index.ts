@@ -3,9 +3,63 @@ export {
   AssetExtractionError,
   assetExtractionFailureCodes,
   extractAssetText,
+  routeDocumentExtraction,
   supportsTextExtraction,
   type AssetExtractionFailureCode,
 } from './text-extraction';
+
+export {
+  DEFAULT_MINERU_REQUEST_TIMEOUT_MS,
+  MINERU_POLL_INTERVAL_MS,
+  MINERU_POLL_MAX_INTERVAL_MS,
+  MINERU_POLL_TIMEOUT_MS,
+  MINERU_RESULT_MAX_BYTES,
+  MineruClientError,
+  assertMineruZipBytes,
+  classifyMineruFetchError,
+  fetchMineruResult,
+  loadMineruConfig,
+  mineruClientFailureCodes,
+  submitMineruTask,
+  validateStatusResponse,
+  validateSubmitResponse,
+  waitForMineruTask,
+  type MineruClientFailureCode,
+  type MineruFetchResultParams,
+  type MineruPollParams,
+  type MineruSubmittedTask,
+  type MineruSubmitParams,
+  type MineruTaskOutcome,
+} from './mineru-client';
+
+export {
+  MINERU_MD_FILENAME,
+  MINERU_ZIP_MAX_ENTRIES,
+  MINERU_ZIP_MAX_ENTRY_BYTES,
+  MINERU_ZIP_MAX_TOTAL_BYTES,
+  decodeMineruMarkdown,
+  readMineruMarkdown,
+  unpackMineruZip,
+  type MineruZipEntry,
+  type MineruZipLimits,
+} from './mineru-zip';
+
+export {
+  imageMimeType,
+  validateMineruEntries,
+  type MineruExtracted,
+} from './mineru-validate';
+
+export {
+  buildMineruManifest,
+  type MineruManifest,
+  type MineruManifestImage,
+} from './mineru-manifest';
+
+export {
+  rewriteMarkdownImageRefs,
+  type ImageRefResolver,
+} from './markdown-image-refs';
 
 export {
   ASSET_PREVIEW_MAX_INPUT_BYTES,

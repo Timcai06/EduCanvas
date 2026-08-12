@@ -219,6 +219,13 @@ export const assetRepresentations = pgTable(
     producerVersion: text('producer_version').notNull().default('v1'),
     mimeType: text('mime_type').notNull(),
     status: text('status').notNull(),
+    /**
+     * ADR-0026 决定 6：文档派生表示的质量状态（structured /
+     * degraded_plain_text / failed / processing；非文档表示取 unavailable）。
+     * 与 status（生命周期）独立：status='ready' 时仍要区分结构化与降级。
+     * 值域与形状一致性由下方两个 CHECK 约束强制。
+     */
+    quality: text('quality').notNull().default('unavailable'),
     derivedStorageKey: text('derived_storage_key'),
     byteSize: integer('byte_size'),
     checksum: text('checksum'),
@@ -262,6 +269,16 @@ export const assetRepresentations = pgTable(
     check(
       'asset_representations_status_check',
       sql`${table.status} in ('processing', 'ready', 'failed', 'unavailable')`,
+    ),
+    check(
+      'asset_representations_quality_check',
+      sql`${table.quality} in ('processing', 'structured', 'degraded_plain_text', 'failed', 'unavailable')`,
+    ),
+    /* quality 与 status/kind 的一致性：ready 的文档表示必须在
+       structured/degraded_plain_text 二选一，其余状态一一对应。 */
+    check(
+      'asset_representations_quality_shape_check',
+      sql`(${table.status} = 'processing' and ${table.quality} = 'processing') or (${table.status} = 'failed' and ${table.quality} = 'failed') or (${table.status} = 'unavailable' and ${table.quality} = 'unavailable') or (${table.status} = 'ready' and ${table.kind} = 'text' and ${table.quality} in ('structured', 'degraded_plain_text')) or (${table.status} = 'ready' and ${table.kind} <> 'text' and ${table.quality} = 'unavailable')`,
     ),
     check(
       'asset_representations_storage_shape_check',

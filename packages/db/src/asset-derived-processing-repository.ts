@@ -110,6 +110,8 @@ export async function enqueueDerivedAssetJob(
       producerVersion: 'v1',
       mimeType: config.representationMimeType,
       status: 'processing',
+      /* 入队即 processing 质量（ADR-0026 决定 6 形状约束）。 */
+      quality: 'processing',
       createdAt: input.now,
       updatedAt: input.now,
     })

@@ -49,6 +49,10 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'asset_versions_failure_shape_check',
   'asset_representations_status_check',
   'asset_representations_failure_shape_check',
+  // ADR-0026 派生表示质量是封闭四态判别符（与 status 生命周期同性质）：
+  // quality 是 agent 上下文与阅读视图的判别依据，新增值必须四态同步演进。
+  'asset_representations_quality_check',
+  'asset_representations_quality_shape_check',
   'asset_video_keyframes_shape_check',
   'asset_processing_jobs_status_check',
   'asset_processing_jobs_failure_shape_check',

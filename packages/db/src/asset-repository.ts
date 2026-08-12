@@ -11,6 +11,7 @@ import {
   type AssetOrigin,
   type AssetProcessorKind,
   type AssetRepresentationKind,
+  type RepresentationQuality,
   type AssetScope,
   type AssetVersionDescriptor,
   type AssetVersionReference,
@@ -33,6 +34,8 @@ import { isUuid } from './internal/identifiers';
 import {
   loadOwnedReadyAssetVersions,
   OwnedAssetVersionError,
+  type DerivedTextSource,
+  type OwnedTextRepresentationIdentity,
 } from './internal/owned-asset-versions';
 import { requireNotebookAccess } from './notebook-access';
 import {
@@ -99,6 +102,16 @@ export interface MaterializedAssetVersion {
   extractedText: string | null;
   /** 音频转录派生文本；与 extractedText 来源不同（文本抽取 vs. Provider 转录）。 */
   transcriptionText: string | null;
+  /**
+   * ADR-0026 第 5 节：默认 text 表示身份（Context Snapshot 冻结用）。
+   * 仅含身份，不含对象存储位置——位置由 derivedTextSource 单独携带。
+   */
+  textRepresentation: OwnedTextRepresentationIdentity | null;
+  /**
+   * ADR-0026 第 5 节：structured 派生文件源定位（仅 structured 非 null）。
+   * 由 web 物化层读取并核对 checksum；storageKey 绝不能进 Context Snapshot。
+   */
+  derivedTextSource: DerivedTextSource | null;
 }
 
 export interface AssetAccessPolicy {
@@ -137,6 +150,21 @@ export interface OwnedStoredAssetVersion {
     derivedStorageKey: string;
     checksum: string;
     status: 'ready' | 'failed' | 'processing' | 'unavailable';
+  } | null;
+  /**
+   * ADR-0026 决定 6：默认 identity 的文本派生表示。quality 四态向用户
+   * 可见（structured / degraded_plain_text / processing / failed），
+   * 阅读视图与 preview 组合层据此显示实际状态；对象键绝不进入客户端状态。
+   * producer/producerVersion 是阅读视图的 provenance 标注（如 MinerU 3.4.4）。
+   */
+  textRepresentation: {
+    derivedStorageKey: string;
+    checksum: string;
+    status: 'ready' | 'failed' | 'processing' | 'unavailable';
+    quality: RepresentationQuality;
+    mimeType: string | null;
+    producer: string;
+    producerVersion: string;
   } | null;
 }
 
@@ -407,12 +435,19 @@ export class DrizzleAssetRepository {
    *
    * 只返回解析所需的最小事实：storageKey 与 MIME。它不经过公共 API，
    * 也不进入任何面向客户端的投影（storageKey 是私有对象地址）。
+   * assetVersionId/producer 仅供 worker 日志链路使用（ADR-0026 决定 6
+   * 要求日志记录 producer）。
    * 任务已终结时返回 null，让重复投递直接退出而不是重跑一遍解析。
    */
   async beginTextExtractionAttempt(input: {
     jobId: string;
     now?: Date;
-  }): Promise<{ storageKey: string; mimeType: string } | null> {
+  }): Promise<{
+    storageKey: string;
+    mimeType: string;
+    assetVersionId: string;
+    producer: string;
+  } | null> {
     const jobId = requireUuid(input.jobId);
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
@@ -451,7 +486,12 @@ export class DrizzleAssetRepository {
         .where(eq(assetVersions.id, claimed.assetVersionId))
         .limit(1);
       if (!version) throw new AssetPersistenceError('Asset版本不存在');
-      return version;
+      return {
+        storageKey: version.storageKey,
+        mimeType: version.mimeType,
+        assetVersionId: claimed.assetVersionId,
+        producer: claimed.producer,
+      };
     });
   }
 
@@ -472,6 +512,16 @@ export class DrizzleAssetRepository {
           derivedStorageKey: string;
           /** 抽取文本对象 SHA-256（小写 hex）。 */
           checksum: string;
+          /**
+           * ADR-0026 质量状态：MinerU/直接 Markdown 解码为 'structured'；
+           * 结构化失败后的纯文本回退省略即可（缺省推导 degraded_plain_text）。
+           */
+          quality?: RepresentationQuality;
+          /**
+           * 表示 MIME：结构化表示是 text/markdown，降级纯文本是 text/plain。
+           * 缺省 text/plain（旧行为）。
+           */
+          mimeType?: 'text/plain' | 'text/markdown';
         }
       | { status: 'failed'; failureCode: string };
     now?: Date;
@@ -524,8 +574,10 @@ export class DrizzleAssetRepository {
           variant: claimed.variant,
           producer: claimed.producer,
           producerVersion: claimed.producerVersion,
-          mimeType: 'text/plain',
+          /* 结构化表示是 Markdown，降级纯文本是 text/plain（ADR-0026 决定 6）。 */
+          mimeType: outcome.mimeType ?? 'text/plain',
           status: 'ready',
+          quality: outcome.quality,
           derivedStorageKey: outcome.derivedStorageKey,
           checksum: outcome.checksum,
           byteSize: Buffer.byteLength(version.extractedText, 'utf8'),
@@ -787,6 +839,8 @@ export class DrizzleAssetRepository {
         producerVersion: 'v1',
         mimeType,
         status: 'ready',
+        /* original 不携带文档质量维度（ADR-0026 决定 6）。 */
+        quality: 'unavailable',
         byteSize: input.byteSize,
         createdAt: now,
         updatedAt: now,
@@ -802,6 +856,9 @@ export class DrizzleAssetRepository {
           producerVersion: 'v1',
           mimeType: 'text/plain',
           status: 'ready',
+          /* 同步提供的正文（如 link 网页导入）是直接解码文本，
+             不是结构化转换失败后的回退（ADR-0026 决定 2/6）。 */
+          quality: 'structured',
           byteSize: Buffer.byteLength(extractedText, 'utf8'),
           createdAt: now,
           updatedAt: now,
@@ -1068,6 +1125,27 @@ export class DrizzleAssetRepository {
             .orderBy(...defaultRepresentationOrderBy())
             .limit(1)
         : [];
+    /* ADR-0026：默认 identity 的 text representation（同样按确定性默认选择；
+       quality 四态供预览层显示实际状态）。 */
+    const [textRepresentation] = await this.database
+      .select({
+        derivedStorageKey: assetRepresentations.derivedStorageKey,
+        checksum: assetRepresentations.checksum,
+        status: assetRepresentations.status,
+        quality: assetRepresentations.quality,
+        mimeType: assetRepresentations.mimeType,
+        producer: assetRepresentations.producer,
+        producerVersion: assetRepresentations.producerVersion,
+      })
+      .from(assetRepresentations)
+      .where(
+        and(
+          eq(assetRepresentations.assetVersionId, row.version.id),
+          eq(assetRepresentations.kind, 'text'),
+        ),
+      )
+      .orderBy(...defaultRepresentationOrderBy())
+      .limit(1);
     return {
       assetId: row.asset.id,
       versionId: row.version.id,
@@ -1097,6 +1175,97 @@ export class DrizzleAssetRepository {
                 'ready' | 'failed' | 'processing' | 'unavailable',
             }
           : null,
+      textRepresentation:
+        textRepresentation &&
+        textRepresentation.derivedStorageKey &&
+        textRepresentation.checksum
+          ? {
+              derivedStorageKey: textRepresentation.derivedStorageKey,
+              checksum: textRepresentation.checksum,
+              status: textRepresentation.status as
+                'ready' | 'failed' | 'processing' | 'unavailable',
+              quality: textRepresentation.quality as RepresentationQuality,
+              mimeType: textRepresentation.mimeType,
+              producer: textRepresentation.producer,
+              producerVersion: textRepresentation.producerVersion,
+            }
+          : null,
+    };
+  }
+
+  /**
+   * 供资源路由读取某 Asset 的文本派生表示（ADR-0026 决定 3：响应派生
+   * 资源时重新校验用户、Notebook、Asset 与 Version 权限）。权限复验与
+   * `loadOwnedCurrentStoredVersion` 相同；text 表示采用与转录一致的
+   * 确定性默认选择（ready 优先 → variant/producer default → 字典序）。
+   * 无可用表示返回 null（调用方按 404 处理）。
+   */
+  async loadOwnedTextRepresentation(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+  }): Promise<{
+    derivedStorageKey: string;
+    checksum: string;
+    status: 'processing' | 'ready' | 'failed' | 'unavailable';
+    quality: RepresentationQuality;
+    mimeType: string | null;
+  } | null> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    await requireNotebookAccess(this.database, {
+      notebookId: spaceId,
+      trustedSubjectId: ownerSubjectId,
+      requiredPermission: 'notebook.read',
+    }).catch(() => {
+      throw new AssetAccessError();
+    });
+    const [row] = await this.database
+      .select({ assetId: assets.id, versionId: assetVersions.id })
+      .from(assets)
+      .innerJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
+      .where(
+        and(
+          eq(assets.id, assetId),
+          eq(assets.spaceId, spaceId),
+          eq(assets.status, 'ready'),
+          eq(assetVersions.status, 'ready'),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new AssetAccessError();
+    const [representation] = await this.database
+      .select({
+        derivedStorageKey: assetRepresentations.derivedStorageKey,
+        checksum: assetRepresentations.checksum,
+        status: assetRepresentations.status,
+        quality: assetRepresentations.quality,
+        mimeType: assetRepresentations.mimeType,
+      })
+      .from(assetRepresentations)
+      .where(
+        and(
+          eq(assetRepresentations.assetVersionId, row.versionId),
+          eq(assetRepresentations.kind, 'text'),
+        ),
+      )
+      .orderBy(...defaultRepresentationOrderBy())
+      .limit(1);
+    if (
+      !representation ||
+      !representation.derivedStorageKey ||
+      !representation.checksum
+    ) {
+      return null;
+    }
+    return {
+      derivedStorageKey: representation.derivedStorageKey,
+      checksum: representation.checksum,
+      status: representation.status as
+        'processing' | 'ready' | 'failed' | 'unavailable',
+      quality: representation.quality as RepresentationQuality,
+      mimeType: representation.mimeType,
     };
   }
 
@@ -1127,6 +1296,11 @@ export class DrizzleAssetRepository {
           byteSize: row.version.byteSize,
           extractedText: row.version.extractedText,
           transcriptionText: row.version.transcriptionText,
+          /* ADR-0026 第 5 节：默认 text 表示身份，供 Context Snapshot 冻结；
+             不含对象存储位置。 */
+          textRepresentation: row.textRepresentation,
+          /* ADR-0026 第 5 节：structured 派生文件源定位（web 物化层读取核对用）。 */
+          derivedTextSource: row.derivedTextSource,
         };
       });
     } catch (error) {

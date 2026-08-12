@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { AssetVersionRepresentationIdentity } from '@educanvas/agent-core';
 import { platformUsers } from './identity';
 import { assetVersions, assets } from './asset';
 import { agentOperations, conversations } from './conversation';
@@ -231,6 +232,14 @@ export const turnContextSnapshots = pgTable(
     selectedAssetVersionIds: jsonb('selected_asset_version_ids')
       .$type<string[]>()
       .notNull(),
+    /* ADR-0026 第 5 节：与 selected_asset_version_ids 同序的实际表示身份
+       （null=无派生表示）。迁移必须带 DEFAULT '[]'：表在长期运行的库里
+       非空，无 DEFAULT 的 NOT NULL 加列会直接失败；历史 Turn 未冻结身份
+       以空数组表示可接受。 */
+    selectedAssetRepresentations: jsonb('selected_asset_representations')
+      .$type<(AssetVersionRepresentationIdentity | null)[]>()
+      .notNull()
+      .default([]),
     omittedMessageCount: integer('omitted_message_count').notNull(),
     characterCount: integer('character_count').notNull(),
     contextHash: text('context_hash').notNull(),

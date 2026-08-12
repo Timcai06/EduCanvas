@@ -277,6 +277,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       producerVersion: 'v1',
       mimeType: 'text/plain',
       status: 'processing',
+      /* ADR-0026 决定 6 形状约束：processing 状态要求 processing 质量。 */
+      quality: 'processing',
       createdAt: startedAt,
       updatedAt: startedAt,
     });
@@ -286,6 +288,9 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ).resolves.toEqual({
       storageKey: 'uploads/fixture/async.md',
       mimeType: 'text/markdown',
+      /* assetVersionId/producer 供日志链路使用（ADR-0026 决定 6）。 */
+      assetVersionId: versionId,
+      producer: 'default',
     });
     await expect(
       repository.settleTextExtraction({
@@ -330,6 +335,78 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           sql`${schema.assetRepresentations.assetVersionId} = ${versionId} and ${schema.assetRepresentations.kind} = 'text'`,
         ),
     ).resolves.toHaveLength(1);
+  });
+
+  it('settle 显式 quality=structured 时落结构化表示（ADR-0026 决定 6）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const startedAt = new Date('2026-07-26T08:00:00.000Z');
+    const assetId = '92000000-0000-4000-8000-0000000000aa';
+    const versionId = '92000000-0000-4000-8000-0000000000ab';
+    const jobId = '92000000-0000-4000-8000-0000000000ac';
+    await getDatabase().insert(schema.assets).values({
+      id: assetId,
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      origin: 'upload',
+      displayName: '讲义.pdf',
+      mimeType: 'application/pdf',
+      status: 'processing',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    });
+    await getDatabase()
+      .insert(schema.assetVersions)
+      .values({
+        id: versionId,
+        assetId,
+        kind: 'document',
+        mimeType: 'application/pdf',
+        byteSize: 12,
+        contentHash: 'e'.repeat(64),
+        status: 'processing',
+        storageKey: 'uploads/fixture/讲义.pdf',
+        createdAt: startedAt,
+      });
+    await getDatabase().insert(schema.assetProcessingJobs).values({
+      id: jobId,
+      assetVersionId: versionId,
+      kind: 'extract_text',
+      status: 'queued',
+      attempts: 0,
+      createdAt: startedAt,
+    });
+
+    await repository.beginTextExtractionAttempt({ jobId, now: startedAt });
+    await repository.settleTextExtraction({
+      jobId,
+      outcome: {
+        status: 'ready',
+        extractedText: '# 结构化标题',
+        derivedStorageKey: `derived/text/${jobId}/abc.md`,
+        checksum: 'b'.repeat(64),
+        quality: 'structured',
+        mimeType: 'text/markdown',
+      },
+      now: new Date('2026-07-26T08:02:00.000Z'),
+    });
+
+    /* 结构化表示以 Markdown MIME 与 structured 质量落库，可被阅读视图读回。 */
+    await expect(
+      getDatabase()
+        .select({
+          quality: schema.assetRepresentations.quality,
+          mimeType: schema.assetRepresentations.mimeType,
+          status: schema.assetRepresentations.status,
+        })
+        .from(schema.assetRepresentations)
+        .where(
+          sql`${schema.assetRepresentations.assetVersionId} = ${versionId} and ${schema.assetRepresentations.kind} = 'text'`,
+        ),
+    ).resolves.toEqual([
+      { quality: 'structured', mimeType: 'text/markdown', status: 'ready' },
+    ]);
   });
 
   it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
@@ -516,6 +593,8 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           producerVersion: 'provider-a.v1',
           mimeType: 'text/plain',
           status: 'failed',
+          /* ADR-0026 决定 6 形状约束：failed 状态要求 failed 质量。 */
+          quality: 'failed',
           failureCode: 'cloud_failed',
         },
         {
@@ -526,6 +605,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
           producerVersion: 'provider-a.v1',
           mimeType: 'image/jpeg',
           status: 'failed',
+          quality: 'failed',
           failureCode: 'cloud_failed',
         },
       ]);
@@ -944,5 +1024,137 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       .from(schema.objectDeletionOutbox)
       .where(eq(schema.objectDeletionOutbox.id, claim!.id));
     expect(row?.status).toBe('processing');
+  });
+
+  it('loadOwnedCurrentStoredVersion 带出默认 text 表示的质量（ADR-0026 决定 6）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    /* extractedText 置空：避免 createUploaded 自动创建的 default text 行
+       （producer='default' 在 defaultRepresentationOrderBy 中恒优先）掩盖
+       MinerU 行，确保断言选中唯一的结构化 text 表示。 */
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values({
+        assetVersionId: created.version!.versionId,
+        kind: 'text',
+        variant: 'default',
+        producer: 'mineru',
+        producerVersion: 'mineru.v1',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+      });
+    await expect(
+      repository.loadOwnedCurrentStoredVersion({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      textRepresentation: {
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+        status: 'ready',
+        quality: 'structured',
+        mimeType: 'text/markdown',
+      },
+    });
+  });
+
+  it('materializeOwnedReferences 带出默认 text 表示身份与结构化派生源（ADR-0026 第 5 节）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    /* extractedText 置空：避免 createUploaded 自动创建的 default text 行掩盖 MinerU 行。 */
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase()
+      .insert(schema.assetRepresentations)
+      .values({
+        assetVersionId: created.version!.versionId,
+        kind: 'text',
+        variant: 'default',
+        producer: 'mineru',
+        producerVersion: 'mineru.v1',
+        mimeType: 'text/markdown',
+        status: 'ready',
+        quality: 'structured',
+        derivedStorageKey:
+          'derived/11111111-1111-4111-8111-111111111111/index.md',
+        checksum: 'c'.repeat(64),
+      });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.descriptor.assetId,
+            versionId: created.version!.versionId,
+            kind: 'document',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        textRepresentation: {
+          kind: 'text',
+          quality: 'structured',
+          variant: 'default',
+          producer: 'mineru',
+          producerVersion: 'mineru.v1',
+        },
+        derivedTextSource: {
+          storageKey: 'derived/11111111-1111-4111-8111-111111111111/index.md',
+          checksumSha256: 'c'.repeat(64),
+        },
+      }),
+    ]);
+  });
+
+  it('degraded 表示只带身份不带派生源（文本走 extractedText 兼容）', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploaded(
+      readyPdf({ extractedText: null }),
+    );
+    await getDatabase().insert(schema.assetRepresentations).values({
+      assetVersionId: created.version!.versionId,
+      kind: 'text',
+      variant: 'default',
+      producer: 'textractor',
+      producerVersion: 'textractor.v1',
+      mimeType: 'text/plain',
+      status: 'ready',
+      quality: 'degraded_plain_text',
+    });
+    await expect(
+      repository.materializeOwnedReferences({
+        ownerSubjectId,
+        spaceId,
+        references: [
+          {
+            assetId: created.descriptor.assetId,
+            versionId: created.version!.versionId,
+            kind: 'document',
+          },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        textRepresentation: {
+          kind: 'text',
+          quality: 'degraded_plain_text',
+          variant: 'default',
+          producer: 'textractor',
+          producerVersion: 'textractor.v1',
+        },
+        derivedTextSource: null,
+      }),
+    ]);
   });
 });

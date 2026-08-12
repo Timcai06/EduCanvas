@@ -17,8 +17,11 @@ export {
   representationIdentitySchema,
   representationProducerSchema,
   representationProducerVersionSchema,
+  representationQualitySchema,
+  representationQualityValues,
   representationVariantSchema,
   type RepresentationIdentity,
+  type RepresentationQuality,
   assetScopeSchema,
   assetScopes,
   assetStatusSchema,
@@ -253,6 +256,7 @@ export type {
   AgentTurnContextLedgerPort,
   AgentTurnContextMaterial,
   AgentTurnContextSnapshot,
+  AssetVersionRepresentationIdentity,
 } from './turn-context-ledger';
 
 export {

@@ -73,10 +73,25 @@ export function resolveSourceRendererState(
 
   if (
     preview &&
-    (preview.kind === 'markdown' ||
-      preview.kind === 'text' ||
-      preview.kind === 'docx') &&
+    (preview.kind === 'markdown' || preview.kind === 'text') &&
     preview.content.trim().length === 0
+  ) {
+    return {
+      state: 'empty',
+      error: null,
+      errorMessage: '这个来源没有可预览内容。',
+    };
+  }
+  /* DOCX structured 时服务端不跑 mammoth（content 为空是预期），只要派生文本
+     可读就不是"无内容"；degraded 时 mammoth 已跑，content 非空走正常分支。 */
+  if (
+    preview &&
+    preview.kind === 'docx' &&
+    preview.content.trim().length === 0 &&
+    !(
+      preview.representation?.quality === 'structured' ||
+      preview.representation?.quality === 'degraded_plain_text'
+    )
   ) {
     return {
       state: 'empty',

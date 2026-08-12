@@ -3,18 +3,12 @@
 import { CanvasHost } from '@/features/canvas/canvas-host';
 import { MessageMarkdown } from '@/features/chat/markdown';
 import { Trash } from '@phosphor-icons/react';
-import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { deleteAsset, loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
 import type { AssetItem } from './assets-drawer';
-
-/** pdf.js 依赖浏览器 Canvas API，禁止 SSR */
-const PdfPreview = dynamic(
-  () => import('./preview/pdf-preview').then((mod) => mod.PdfPreview),
-  { ssr: false },
-);
-import { DocxPreview } from './preview/docx-preview';
+import { DocxReadingSwitcher } from './docx-reading-switcher';
+import { PdfReadingSwitcher } from './pdf-reading-switcher';
 
 /**
  * 来源预览面板：PDF（pdf.js 翻页+缩放）、DOCX（mammoth HTML）、
@@ -113,8 +107,9 @@ export function SourcePreviewPanel({
             </div>
           ) : !preview ? (
             <div className="m-4 h-52 animate-pulse rounded-2xl bg-surface-strong" />
-          ) : preview.kind === 'pdf' && preview.fileUrl ? (
-            <PdfPreview fileUrl={preview.fileUrl} />
+          ) : preview.kind === 'pdf' ? (
+            /* ADR-0026 决定 6：默认原件预览，显式切换结构化/降级阅读。 */
+            <PdfReadingSwitcher preview={preview} />
           ) : preview.kind === 'image' && preview.fileUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -122,8 +117,11 @@ export function SourcePreviewPanel({
               alt={preview.fileName}
               className="mx-auto max-h-full max-w-full rounded-2xl object-contain p-4 shadow-[var(--shadow-float)]"
             />
-          ) : preview.kind === 'docx' && preview.content ? (
-            <DocxPreview html={preview.content} warnings={preview.warnings} />
+          ) : preview.kind === 'docx' ? (
+            /* ADR-0026 决定 6：默认原件预览（mammoth），结构化/降级显式切换，
+               下载入口始终保留。与 SourceResourceRenderer 共用同一组件，避免
+               两条渲染路径行为漂移。 */
+            <DocxReadingSwitcher preview={preview} />
           ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />

@@ -170,6 +170,8 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
                 priority: 90 - index,
                 required: true,
                 assetVersionId: segment.reference.versionId,
+                /* ADR-0026 第 5 节：实际表示身份随段冻结进 Context Snapshot。 */
+                assetRepresentation: segment.representation,
               },
               message: { role: 'user' as const, content },
             };

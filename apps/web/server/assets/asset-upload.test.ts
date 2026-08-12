@@ -60,7 +60,11 @@ function bytesFile(bytes: readonly number[], name: string, type: string): File {
   return new File([new Uint8Array(bytes)], name, { type });
 }
 
-function snapshot(id: string, displayName = 'note.pdf') {
+function snapshot(
+  id: string,
+  displayName = 'note.pdf',
+  status: 'ready' | 'processing' = 'ready',
+) {
   return {
     descriptor: {
       assetId: id,
@@ -69,7 +73,7 @@ function snapshot(id: string, displayName = 'note.pdf') {
       origin: 'upload',
       displayName,
       mimeType: 'application/pdf',
-      status: 'ready',
+      status,
       currentVersionId: `${id}-v1`,
     },
     version: {
@@ -79,7 +83,7 @@ function snapshot(id: string, displayName = 'note.pdf') {
       mimeType: 'application/pdf',
       byteSize: 4,
       contentHash: 'a'.repeat(64),
-      status: 'ready',
+      status,
     },
     processing: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -111,7 +115,7 @@ describe('uploadOwnedAsset', () => {
     ).mockResolvedValue({ notebookId: 'space-1' });
     drizzleRepo.createUploaded.mockResolvedValue(snapshot('asset-1'));
     drizzleRepo.createUploadedPending.mockResolvedValue({
-      snapshot: snapshot('asset-1'),
+      snapshot: snapshot('asset-1', 'note.pdf', 'processing'),
       versionId: 'asset-1-v1',
       jobId: 'job-1',
     });
@@ -168,6 +172,51 @@ describe('uploadOwnedAsset', () => {
       }),
     );
     expect(mammoth.extractRawText).not.toHaveBeenCalled();
+  });
+
+  it('PPTX 上传落库为 processing 并排入 MinerU 转换队列（不静默当纯文本）', async () => {
+    const pptxBytes = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml ppt/presentation.xml',
+    );
+
+    const result = await uploadOwnedAsset({
+      identity,
+      file: new File([pptxBytes], 'slides.pptx'),
+      scope: 'space',
+    });
+
+    /* 状态诚实：响应如实带 processing，不冒充 ready。 */
+    expect(result).toMatchObject({ descriptor: { status: 'processing' } });
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'document',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.presentationml',
+      }),
+    );
+    expect(drizzleRepo.createUploaded).not.toHaveBeenCalled();
+  });
+
+  it('XLSX 上传落库为 processing 并排入 MinerU 转换队列（不静默当纯文本）', async () => {
+    const xlsxBytes = new TextEncoder().encode(
+      'PK\u0003\u0004[Content_Types].xml xl/workbook.xml',
+    );
+
+    const result = await uploadOwnedAsset({
+      identity,
+      file: new File([xlsxBytes], 'sheet.xlsx'),
+      scope: 'space',
+    });
+
+    /* 状态诚实：响应如实带 processing，不冒充 ready。 */
+    expect(result).toMatchObject({ descriptor: { status: 'processing' } });
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'document',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml',
+      }),
+    );
+    expect(drizzleRepo.createUploaded).not.toHaveBeenCalled();
   });
 
   it('图片不需要抽取，仍然一次性写成 ready', async () => {
