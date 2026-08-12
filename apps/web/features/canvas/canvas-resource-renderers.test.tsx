@@ -1,7 +1,10 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
+import { MessageMarkdown } from '@/features/chat/markdown';
 import {
   AudioOverviewResourceRenderer,
   FlashcardsResourceRenderer,
@@ -15,6 +18,13 @@ import type {
   AudioOverviewMedia,
   GeneratedImageMedia,
 } from './artifact-client';
+
+const NORMAL_MARKDOWN_FIXTURE = readFileSync(
+  fileURLToPath(
+    new URL('../../../../tests/fixtures/sample.md', import.meta.url),
+  ),
+  'utf8',
+);
 
 function makeResource(rendererId: string): CanvasResource {
   return {
@@ -194,11 +204,38 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
     const html = renderToStaticMarkup(
       <MarkdownDocumentResourceRenderer
         resource={makeResource('artifact.markdown-document')}
-        content={versionData({ contentVersion: 1, markdown: '# 文档' })}
+        content={versionData({
+          contentVersion: 1,
+          markdown: NORMAL_MARKDOWN_FIXTURE,
+        })}
       />,
     );
     expect(html).toContain('prose');
-    expect(html).toContain('文档');
+    expect(html).toContain('测试文档');
+    expect(html).toContain('列表项 3');
+  });
+
+  it('正常 Markdown fixture 在 Source 与 Artifact 真实渲染器保持同一安全语义', () => {
+    const sourceHtml = renderToStaticMarkup(
+      <MessageMarkdown text={NORMAL_MARKDOWN_FIXTURE} />,
+    );
+    const artifactHtml = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({
+          contentVersion: 1,
+          markdown: NORMAL_MARKDOWN_FIXTURE,
+        })}
+      />,
+    );
+
+    for (const html of [sourceHtml, artifactHtml]) {
+      expect(html).toContain('<h1>测试文档</h1>');
+      expect(html).toContain('<li>列表项 3</li>');
+      expect(html).toContain('<strong>粗体文本</strong>');
+      expect(html).toContain('<em>斜体文本</em>');
+      expect(html).not.toContain('<script');
+    }
   });
 
   it('markdown_document：缺 markdown → unavailable', () => {

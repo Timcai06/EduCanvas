@@ -6,6 +6,10 @@ import {
   readOwnedAssetDownload,
   readOwnedAssetPreviewFile,
 } from '@/server/assets/asset-preview';
+import {
+  CanvasResourceAccessError,
+  loadOwnedCanvasResource,
+} from '@/server/canvas/resource-access';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -41,6 +45,17 @@ export async function GET(
   try {
     /* ADR-0026 决定 1：download=1 走原件下载（任意 MIME，校验 contentHash），
        其余请求保持内联预览语义（二进制白名单）。 */
+    if (download) {
+      const resource = await loadOwnedCanvasResource({
+        identity,
+        notebookId: conversation.spaceId,
+        resourceKind: 'source',
+        resourceId: parsed.data.assetId,
+      });
+      if (!resource.allowedActions.includes('download')) {
+        return jsonError(403, 'forbidden', '这个来源不允许下载。');
+      }
+    }
     const file = download
       ? await readOwnedAssetDownload({
           identity,
@@ -61,6 +76,13 @@ export async function GET(
       },
     });
   } catch (error) {
+    if (error instanceof CanvasResourceAccessError) {
+      return jsonError(
+        error.status,
+        error.code,
+        error.status === 404 ? '来源不存在。' : '这个来源暂时不能下载。',
+      );
+    }
     if (error instanceof AssetPreviewError) {
       return jsonError(
         error.status,

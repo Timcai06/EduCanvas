@@ -8,10 +8,19 @@ import { loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
 import { PdfReadingSwitcher } from './pdf-reading-switcher';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
-import { resolveSourceRendererState } from './source-resource-renderer-state';
+import {
+  canLoadSourcePreview,
+  resolveSourceRendererState,
+} from './source-resource-renderer-state';
 import type { CanvasResourceRendererProps } from '../canvas/canvas-resource-registry';
+import type { CanvasResourceClientErrorKind } from '../canvas/canvas-resource-client';
+import {
+  isRetryableResourceError,
+  toClientError,
+} from '../canvas/resource-error';
 
 import { DocxReadingSwitcher } from './docx-reading-switcher';
+import { pollSourceResource } from './source-resource-polling';
 
 /**
  * 来源内容渲染器：统一处理 PDF、图片、DOCX、Markdown、纯文本、音频、视频。
@@ -60,38 +69,79 @@ export function SourceResourceRendererBody({
 }: {
   resource: CanvasResource;
 }) {
+  const resourceKey = `${resource.resourceId}:${resource.version?.versionId ?? 'none'}:${resource.status}:${resource.allowedActions.join(',')}`;
+  return <SourceResourceLoader key={resourceKey} initialResource={resource} />;
+}
+
+function SourceResourceLoader({
+  initialResource,
+}: {
+  initialResource: CanvasResource;
+}) {
   const [retrySequence, setRetrySequence] = useState(0);
-  const loadKey = `${resource.resourceId}:${resource.version?.versionId ?? 'none'}:${retrySequence}`;
+  const [currentResource, setCurrentResource] = useState(initialResource);
+  const resourceId = currentResource.resourceId;
+  const resourceStatus = currentResource.status;
+  const canLoadPreview = canLoadSourcePreview(currentResource);
+  const loadKey = `${currentResource.resourceId}:${currentResource.version?.versionId ?? 'none'}:${retrySequence}`;
   const [result, setResult] = useState<{
     readonly loadKey: string;
     readonly preview: AssetPreview | null;
-    readonly failed: boolean;
-  }>({ loadKey: '', preview: null, failed: false });
+    readonly error: CanvasResourceClientErrorKind | null;
+  }>({ loadKey: '', preview: null, error: null });
 
   useEffect(() => {
-    if (resource.status !== 'ready') return;
+    if (resourceStatus !== 'processing') return;
+    const controller = new AbortController();
     let active = true;
-    void loadAssetPreview(resource.resourceId)
-      .then((value) => {
-        if (active) setResult({ loadKey, preview: value, failed: false });
+    void pollSourceResource({ resourceId, signal: controller.signal })
+      .then((next) => {
+        if (active) setCurrentResource(next);
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
+        if (!active || controller.signal.aborted) return;
+        const error = toClientError(reason, '暂时无法刷新这个来源。');
+        setResult({
+          loadKey,
+          preview: null,
+          error: error.kind === 'empty' ? 'failed' : error.kind,
+        });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [resourceId, resourceStatus, loadKey]);
+
+  useEffect(() => {
+    if (!canLoadPreview) return;
+    let active = true;
+    void loadAssetPreview(resourceId)
+      .then((value) => {
+        if (active) setResult({ loadKey, preview: value, error: null });
+      })
+      .catch((reason: unknown) => {
         if (active) {
-          setResult({ loadKey, preview: null, failed: true });
+          const error = toClientError(reason, '暂时无法预览这个来源。');
+          setResult({
+            loadKey,
+            preview: null,
+            error: error.kind === 'empty' ? 'failed' : error.kind,
+          });
         }
       });
     return () => {
       active = false;
     };
-  }, [loadKey, resource.resourceId, resource.status]);
+  }, [canLoadPreview, resourceId, loadKey]);
 
   const preview = result.loadKey === loadKey ? result.preview : null;
-  const previewFailed = result.loadKey === loadKey && result.failed;
+  const previewError = result.loadKey === loadKey ? result.error : null;
   return (
     <SourceResourceRendererContent
-      resource={resource}
+      resource={currentResource}
       preview={preview}
-      previewFailed={previewFailed}
+      previewError={previewError}
       onRetry={() => setRetrySequence((value) => value + 1)}
     />
   );
@@ -100,19 +150,15 @@ export function SourceResourceRendererBody({
 export function SourceResourceRendererContent({
   resource,
   preview,
-  previewFailed,
+  previewError,
   onRetry,
 }: {
   resource: CanvasResource;
   preview: AssetPreview | null;
-  previewFailed: boolean;
+  previewError: CanvasResourceClientErrorKind | null;
   onRetry: () => void;
 }) {
-  const stateInfo = resolveSourceRendererState(
-    resource,
-    preview,
-    previewFailed,
-  );
+  const stateInfo = resolveSourceRendererState(resource, preview, previewError);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -135,12 +181,27 @@ export function SourceResourceRendererContent({
         >
           <div className="m-4 h-52 animate-pulse rounded-2xl bg-surface-strong" />
         </div>
-      ) : stateInfo.state === 'failed' || stateInfo.state === 'forbidden' ? (
+      ) : stateInfo.state === 'failed' ||
+        stateInfo.state === 'forbidden' ||
+        stateInfo.state === 'not_found' ||
+        stateInfo.state === 'offline' ? (
         <CanvasShellStatus
           status={stateInfo.state}
-          title={stateInfo.state === 'forbidden' ? '无权访问' : '加载失败'}
+          title={
+            stateInfo.state === 'forbidden'
+              ? '无权访问'
+              : stateInfo.state === 'not_found'
+                ? '来源不存在'
+                : stateInfo.state === 'offline'
+                  ? '网络不可用'
+                  : '加载失败'
+          }
           description={stateInfo.errorMessage ?? '暂时无法预览这个来源。'}
-          onRetry={stateInfo.state === 'failed' ? onRetry : undefined}
+          onRetry={
+            stateInfo.error && isRetryableResourceError(stateInfo.error)
+              ? onRetry
+              : undefined
+          }
           retryLabel="重试"
         />
       ) : stateInfo.state === 'unavailable' ? (
@@ -148,6 +209,11 @@ export function SourceResourceRendererContent({
           status="unavailable"
           title="来源不可用"
           description={stateInfo.errorMessage ?? '这个来源不可用。'}
+          onRetry={
+            stateInfo.error && isRetryableResourceError(stateInfo.error)
+              ? onRetry
+              : undefined
+          }
         />
       ) : stateInfo.state === 'empty' ? (
         <CanvasShellStatus
@@ -169,7 +235,10 @@ export function SourceResourceRendererContent({
             />
           ) : preview.kind === 'docx' ? (
             /* ADR-0026 决定 6：默认原件预览（mammoth），结构化/降级显式切换。 */
-            <DocxReadingSwitcher preview={preview} />
+            <DocxReadingSwitcher
+              preview={preview}
+              canDownload={resource.allowedActions.includes('download')}
+            />
           ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />

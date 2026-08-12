@@ -19,6 +19,10 @@ vi.mock('@/server/assets/asset-preview', () => ({
   readOwnedAssetDownload: vi.fn(),
   readOwnedAssetPreviewFile: vi.fn(),
 }));
+vi.mock('@/server/canvas/resource-access', () => ({
+  CanvasResourceAccessError: class CanvasResourceAccessError extends Error {},
+  loadOwnedCanvasResource: vi.fn(),
+}));
 
 import {
   AssetPreviewError,
@@ -27,6 +31,7 @@ import {
 } from '@/server/assets/asset-preview';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import { loadOwnedCanvasResource } from '@/server/canvas/resource-access';
 import { GET } from './route';
 
 const assetId = '10000000-0000-4000-8000-000000000001';
@@ -53,6 +58,9 @@ describe('GET /api/v1/chat/assets/[assetId]/file', () => {
       mimeType: 'application/pdf',
       fileName: '教材.pdf',
     });
+    vi.mocked(loadOwnedCanvasResource).mockResolvedValue({
+      allowedActions: ['view', 'download'],
+    } as never);
   });
 
   it('无 download 参数时走内联预览（inline + nosniff）', async () => {
@@ -86,10 +94,32 @@ describe('GET /api/v1/chat/assets/[assetId]/file', () => {
       spaceId: conversation.spaceId,
       assetId,
     });
+    expect(loadOwnedCanvasResource).toHaveBeenCalledWith({
+      identity,
+      notebookId: conversation.spaceId,
+      resourceKind: 'source',
+      resourceId: assetId,
+    });
     expect(readOwnedAssetPreviewFile).not.toHaveBeenCalled();
     const disposition = response.headers.get('content-disposition') ?? '';
     expect(disposition).toContain('attachment');
     expect(disposition).toContain('filename*=UTF-8');
+  });
+
+  it('直接拼接 download=1 仍按 fresh CanvasResource 动作拒绝', async () => {
+    vi.mocked(loadOwnedCanvasResource).mockResolvedValue({
+      allowedActions: ['view'],
+    } as never);
+
+    const response = await GET(
+      new Request(
+        `http://localhost/api/v1/chat/assets/${assetId}/file?download=1`,
+      ),
+      { params: Promise.resolve({ assetId }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(readOwnedAssetDownload).not.toHaveBeenCalled();
   });
 
   it('其他 download 值按内联预览处理，不切换到下载路径', async () => {

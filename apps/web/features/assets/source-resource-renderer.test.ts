@@ -1,8 +1,11 @@
 import type { CanvasResource } from '@educanvas/canvas-protocol';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetPreview } from './asset-preview-contract';
+import type { CanvasResourceClientErrorKind } from '@/features/canvas/canvas-resource-client';
 
 vi.mock('next/dynamic', () => ({
   default: () =>
@@ -47,6 +50,10 @@ vi.mock('@/features/canvas/canvas-host', () => ({
 const { SourceResourceRenderer, SourceResourceRendererContent } =
   await import('./source-resource-renderer');
 
+const MARKDOWN_FIXTURE = fileURLToPath(
+  new URL('../../../../tests/fixtures/sample.md', import.meta.url),
+);
+
 function makeResource(overrides: Partial<CanvasResource> = {}): CanvasResource {
   return {
     schemaVersion: 1,
@@ -86,7 +93,7 @@ function render(
   input: {
     resource?: CanvasResource;
     preview?: AssetPreview | null;
-    previewFailed?: boolean;
+    previewError?: CanvasResourceClientErrorKind | null;
     onRetry?: () => void;
   } = {},
 ) {
@@ -94,7 +101,7 @@ function render(
     createElement(SourceResourceRendererContent, {
       resource: input.resource ?? makeResource(),
       preview: input.preview ?? null,
-      previewFailed: input.previewFailed ?? false,
+      previewError: input.previewError ?? null,
       onRetry: input.onRetry ?? vi.fn(),
     }),
   );
@@ -137,7 +144,7 @@ describe('SourceResourceRendererContent', () => {
   });
 
   it('failed 状态提供可聚焦的真实重试按钮', () => {
-    const html = render({ previewFailed: true });
+    const html = render({ previewError: 'failed' });
 
     expect(html).toContain('加载失败');
     expect(html).toContain('<button');
@@ -157,6 +164,34 @@ describe('SourceResourceRendererContent', () => {
     expect(unavailable).toContain('来源不可用');
   });
 
+  it.each([
+    ['forbidden', '无权访问', false],
+    ['not_found', '来源不存在', false],
+    ['offline', '网络', true],
+    ['unavailable', '来源不可用', true],
+    ['failed', '加载失败', true],
+  ] as const)(
+    'preview %s 保留稳定语义并按可重试性展示操作',
+    (previewError, expectedText, retryable) => {
+      const html = render({ previewError });
+
+      expect(html).toContain(expectedText);
+      expect(html.includes('<button')).toBe(retryable);
+      expect(html).not.toContain('storageKey');
+      expect(html).not.toContain('objectKey');
+    },
+  );
+
+  it('ready 但无 view 时即使有可重试错误也不展示重试', () => {
+    const html = render({
+      resource: makeResource({ allowedActions: [] }),
+      previewError: 'offline',
+    });
+
+    expect(html).toContain('无权访问');
+    expect(html).not.toContain('<button');
+  });
+
   it('空文本进入 empty 状态', () => {
     const html = render({
       preview: {
@@ -172,6 +207,7 @@ describe('SourceResourceRendererContent', () => {
   });
 
   it('文本、Markdown 与 DOCX 输出真实内容', () => {
+    const markdownFixture = readFileSync(MARKDOWN_FIXTURE, 'utf8');
     const text = render({
       preview: {
         kind: 'text',
@@ -185,7 +221,7 @@ describe('SourceResourceRendererContent', () => {
         kind: 'markdown',
         fileName: 'sample.md',
         mimeType: 'text/markdown',
-        content: '# 真实 Markdown',
+        content: markdownFixture,
       },
     });
     const docx = render({
@@ -201,7 +237,8 @@ describe('SourceResourceRendererContent', () => {
     });
 
     expect(text).toContain('真实纯文本');
-    expect(markdown).toContain('# 真实 Markdown');
+    expect(markdown).toContain('# 测试文档');
+    expect(markdown).toContain('这是一个用于测试的 Markdown 文档。');
     expect(docx).toContain('data-docx-html="&lt;p&gt;真实 DOCX&lt;/p&gt;"');
   });
 
@@ -285,6 +322,7 @@ describe('SourceResourceRendererContent', () => {
           byteSize: 2048,
         },
         renderer: { rendererId: 'source.docx', rendererVersion: 1 },
+        allowedActions: ['view', 'download'],
       }),
       preview: {
         kind: 'docx',
@@ -308,6 +346,36 @@ describe('SourceResourceRendererContent', () => {
     expect(html).not.toContain('暂不支持预览');
     /* 默认视图仍是原件侧，派生 Markdown 不默认顶替。 */
     expect(html).not.toContain('data-markdown');
+  });
+
+  it('DOCX 仅在 fresh CanvasResource 允许 download 时展示原件下载', () => {
+    const preview: AssetPreview = {
+      kind: 'docx',
+      fileName: '讲义.docx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+      content: '<p>讲义</p>',
+      downloadUrl:
+        '/api/v1/chat/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/file?download=1',
+    };
+    const resource = makeResource({
+      representation: {
+        kind: 'document',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        byteSize: 2048,
+      },
+      renderer: { rendererId: 'source.docx', rendererVersion: 1 },
+      allowedActions: ['view'],
+    });
+
+    expect(render({ resource, preview })).not.toContain('下载原件');
+    expect(
+      render({
+        resource: { ...resource, allowedActions: ['view', 'download'] },
+        preview,
+      }),
+    ).toContain('下载原件');
   });
 
   it('PNG fixture 使用非空替代文本与受控 URL', () => {
