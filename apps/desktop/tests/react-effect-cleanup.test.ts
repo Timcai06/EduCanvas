@@ -9,6 +9,8 @@ describe('desktop React effects', () => {
       'utf8',
     );
 
-    expect(source).not.toMatch(/useEffect\(\(\) => historyEndRef.*scrollIntoView/);
+    expect(source).not.toMatch(
+      /useEffect\(\(\) => historyEndRef.*scrollIntoView/,
+    );
   });
 });

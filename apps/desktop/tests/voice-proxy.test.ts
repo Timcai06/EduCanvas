@@ -208,7 +208,9 @@ describe('voice-proxy', () => {
       ).impl,
     });
 
-    await expect(proxy.synthesize({ text: '很长的回答' })).resolves.toMatchObject({
+    await expect(
+      proxy.synthesize({ text: '很长的回答' }),
+    ).resolves.toMatchObject({
       ok: false,
       code: 'invalid_response',
     });

@@ -1,6 +1,14 @@
 import { promises as fileSystem } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { app, BrowserWindow, ipcMain, safeStorage, screen, session, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  safeStorage,
+  screen,
+  session,
+  shell,
+} from 'electron';
 import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
@@ -137,11 +145,13 @@ if (!app.requestSingleInstanceLock()) {
     openExpandedChat();
   });
   ipcMain.handle('chat:get-history', (event) => {
-    if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
     return chatHistory.state();
   });
   ipcMain.handle('chat:append', (event, input: DesktopChatMessageInput) => {
-    if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
     if (
       !input ||
       !['user', 'assistant', 'system'].includes(input.role) ||
@@ -161,7 +171,8 @@ if (!app.requestSingleInstanceLock()) {
     sendToDesktopRenderers('pet:visual', state);
   });
   ipcMain.handle('operation:acquire', (event) => {
-    if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
     const token = operationLease.acquire(event.sender.id);
     return token
       ? { ok: true as const, token }
@@ -172,27 +183,27 @@ if (!app.requestSingleInstanceLock()) {
     operationLease.release(event.sender.id, token);
   });
 
-  ipcMain.handle(
-    'auth:get-status',
-    (event) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
-      return authCoordinator?.getStatus() ?? Promise.resolve({ state: 'signed_out' });
-    },
-  );
-  ipcMain.handle(
-    'auth:sign-in',
-    (event) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
-      return authCoordinator?.signIn() ?? Promise.resolve({ state: 'signed_out' });
-    },
-  );
-  ipcMain.handle(
-    'auth:sign-out',
-    (event) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
-      return authCoordinator?.signOut() ?? Promise.resolve({ state: 'signed_out' });
-    },
-  );
+  ipcMain.handle('auth:get-status', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.getStatus() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
+  ipcMain.handle('auth:sign-in', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.signIn() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
+  ipcMain.handle('auth:sign-out', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.signOut() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
   ipcMain.handle(
     'assistant:turn',
     async (
@@ -204,7 +215,8 @@ if (!app.requestSingleInstanceLock()) {
         leaseToken: string;
       },
     ) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
       if (
         !payload ||
         typeof payload.leaseToken !== 'string' ||
@@ -235,9 +247,14 @@ if (!app.requestSingleInstanceLock()) {
     'voice:transcribe',
     async (
       event,
-      payload: { requestId: string; input: VoiceAudioInput; leaseToken: string },
+      payload: {
+        requestId: string;
+        input: VoiceAudioInput;
+        leaseToken: string;
+      },
     ) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
       if (
         !payload?.input ||
         typeof payload.leaseToken !== 'string' ||
@@ -262,7 +279,8 @@ if (!app.requestSingleInstanceLock()) {
       event,
       payload: { requestId: string; text: string; leaseToken: string },
     ) => {
-      if (!isDesktopSender(event.sender.id)) throw new Error('Untrusted renderer');
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
       if (
         !payload ||
         typeof payload.leaseToken !== 'string' ||

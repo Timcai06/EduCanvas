@@ -14,8 +14,7 @@ import type {
 import type { PetVisualSignal } from '../shared/pet-visual-signal';
 
 export type DesktopOperationLeaseResult =
-  | { ok: true; token: string }
-  | { ok: false; message: string };
+  { ok: true; token: string } | { ok: false; message: string };
 
 let activeOperationLeaseToken: string | null = null;
 
@@ -47,8 +46,12 @@ declare global {
     };
     desktopChat: {
       getHistory(): Promise<DesktopChatHistorySnapshot>;
-      append(input: DesktopChatMessageInput): Promise<DesktopChatHistorySnapshot>;
-      onHistory(callback: (snapshot: DesktopChatHistorySnapshot) => void): () => void;
+      append(
+        input: DesktopChatMessageInput,
+      ): Promise<DesktopChatHistorySnapshot>;
+      onHistory(
+        callback: (snapshot: DesktopChatHistorySnapshot) => void,
+      ): () => void;
     };
     desktopOperation: {
       acquire(): Promise<DesktopOperationLeaseResult>;
@@ -128,7 +131,8 @@ contextBridge.exposeInMainWorld('desktopPet', {
     ipcRenderer.send('pet:set-visual', state);
   },
   onVisual(callback: (state: PetVisualSignal) => void): () => void {
-    const listener = (_event: IpcRendererEvent, state: PetVisualSignal): void => callback(state);
+    const listener = (_event: IpcRendererEvent, state: PetVisualSignal): void =>
+      callback(state);
     ipcRenderer.on('pet:visual', listener);
     return () => ipcRenderer.removeListener('pet:visual', listener);
   },
@@ -141,9 +145,13 @@ contextBridge.exposeInMainWorld('desktopChat', {
   append(input: DesktopChatMessageInput): Promise<DesktopChatHistorySnapshot> {
     return ipcRenderer.invoke('chat:append', input);
   },
-  onHistory(callback: (snapshot: DesktopChatHistorySnapshot) => void): () => void {
-    const listener = (_event: IpcRendererEvent, snapshot: DesktopChatHistorySnapshot): void =>
-      callback(snapshot);
+  onHistory(
+    callback: (snapshot: DesktopChatHistorySnapshot) => void,
+  ): () => void {
+    const listener = (
+      _event: IpcRendererEvent,
+      snapshot: DesktopChatHistorySnapshot,
+    ): void => callback(snapshot);
     ipcRenderer.on('chat:history', listener);
     return () => ipcRenderer.removeListener('chat:history', listener);
   },
@@ -151,7 +159,9 @@ contextBridge.exposeInMainWorld('desktopChat', {
 
 contextBridge.exposeInMainWorld('desktopOperation', {
   async acquire(): Promise<DesktopOperationLeaseResult> {
-    const result = await ipcRenderer.invoke('operation:acquire') as DesktopOperationLeaseResult;
+    const result = (await ipcRenderer.invoke(
+      'operation:acquire',
+    )) as DesktopOperationLeaseResult;
     if (result.ok) activeOperationLeaseToken = result.token;
     return result;
   },

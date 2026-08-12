@@ -21,8 +21,7 @@ function harness(overrides?: {
   const opened: string[] = [];
   const statuses: string[] = [];
   const fetchImpl = vi.fn<typeof fetch>(
-    overrides?.fetchImpl ??
-      (async () => Response.json(grant, { status: 200 })),
+    overrides?.fetchImpl ?? (async () => Response.json(grant, { status: 200 })),
   );
   const revoke = vi.fn(overrides?.revokeSession ?? (async () => undefined));
   const coordinator = createDesktopAuthCoordinator({
@@ -173,7 +172,9 @@ describe('desktop auth coordinator', () => {
       `educanvas://auth/callback?code=eca1.${'p'.repeat(48)}.${'x'.repeat(43)}&state=${state}`,
     );
 
-    await expect(coordinator.signOut()).resolves.toEqual({ state: 'signed_out' });
+    await expect(coordinator.signOut()).resolves.toEqual({
+      state: 'signed_out',
+    });
     expect(stored()).toBeNull();
   });
 });

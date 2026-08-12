@@ -187,9 +187,10 @@ describe('remote assistant proxy', () => {
   it('does not accept operation.completed after a user cancellation wins', async () => {
     let releaseCancel!: () => void;
     const cancelOperation = vi.fn(
-      () => new Promise<{ status: 'cancelling' }>((resolve) => {
-        releaseCancel = () => resolve({ status: 'cancelling' });
-      }),
+      () =>
+        new Promise<{ status: 'cancelling' }>((resolve) => {
+          releaseCancel = () => resolve({ status: 'cancelling' });
+        }),
     );
     const proxy = createAssistantProxy({
       getSession: async () => session,

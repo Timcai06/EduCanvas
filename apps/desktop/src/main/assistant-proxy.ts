@@ -95,7 +95,11 @@ export function createAssistantProxy(options: {
             if (userAborted || timedOut) cancelRemoteThenStream();
           } else if (event.type === 'message.delta') {
             if (timedOut) {
-              return { ok: false, code: 'timeout', message: '请求超时，请重试。' };
+              return {
+                ok: false,
+                code: 'timeout',
+                message: '请求超时，请重试。',
+              };
             }
             if (userAborted || signal?.aborted) {
               return { ok: false, code: 'aborted', message: '已取消。' };
@@ -113,7 +117,11 @@ export function createAssistantProxy(options: {
             return { ok: false, code: 'aborted', message: '已取消。' };
           } else if (event.type === 'operation.completed') {
             if (timedOut) {
-              return { ok: false, code: 'timeout', message: '请求超时，请重试。' };
+              return {
+                ok: false,
+                code: 'timeout',
+                message: '请求超时，请重试。',
+              };
             }
             if (userAborted || signal?.aborted) {
               return { ok: false, code: 'aborted', message: '已取消。' };

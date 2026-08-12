@@ -139,7 +139,9 @@ export function createPetWindow(): PetWindowController {
     : process.env['ELECTRON_RENDERER_URL'];
   const rendererEntryUrl = rendererUrl
     ? new URL(rendererUrl).toString()
-    : new URL(`file:///${join(__dirname, '../renderer/index.html').replaceAll('\\', '/')}`).toString();
+    : new URL(
+        `file:///${join(__dirname, '../renderer/index.html').replaceAll('\\', '/')}`,
+      ).toString();
   win.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl, !app.isPackaged))
       event.preventDefault();

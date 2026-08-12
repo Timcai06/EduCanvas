@@ -9,7 +9,9 @@ export interface ChatHistoryStore {
   append(input: DesktopChatMessageInput): DesktopChatMessage;
   snapshot(): readonly DesktopChatMessage[];
   state(): DesktopChatHistorySnapshot;
-  subscribe(listener: (messages: readonly DesktopChatMessage[]) => void): () => void;
+  subscribe(
+    listener: (messages: readonly DesktopChatMessage[]) => void,
+  ): () => void;
 }
 
 export function createChatHistoryStore(
@@ -19,7 +21,9 @@ export function createChatHistoryStore(
   },
 ): ChatHistoryStore {
   const messages: DesktopChatMessage[] = [];
-  const listeners = new Set<(messages: readonly DesktopChatMessage[]) => void>();
+  const listeners = new Set<
+    (messages: readonly DesktopChatMessage[]) => void
+  >();
   let revision = 0;
   const snapshot = (): readonly DesktopChatMessage[] =>
     Object.freeze(messages.map((message) => Object.freeze({ ...message })));

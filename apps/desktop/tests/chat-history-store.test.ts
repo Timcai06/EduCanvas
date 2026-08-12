@@ -5,9 +5,15 @@ describe('desktop chat history store', () => {
   it('shares one ordered history snapshot across renderer windows', () => {
     const store = createChatHistoryStore();
     const observed: string[][] = [];
-    store.subscribe((messages) => observed.push(messages.map(({ content }) => content)));
+    store.subscribe((messages) =>
+      observed.push(messages.map(({ content }) => content)),
+    );
 
-    const user = store.append({ role: 'user', content: '解释勾股定理', source: 'text' });
+    const user = store.append({
+      role: 'user',
+      content: '解释勾股定理',
+      source: 'text',
+    });
     const assistant = store.append({
       role: 'assistant',
       content: '直角三角形两直角边平方和等于斜边平方。',
@@ -24,9 +30,9 @@ describe('desktop chat history store', () => {
   it('rejects blank messages and protects snapshots from mutation', () => {
     const store = createChatHistoryStore();
 
-    expect(() => store.append({ role: 'user', content: '   ', source: 'voice' })).toThrow(
-      'Chat message cannot be blank',
-    );
+    expect(() =>
+      store.append({ role: 'user', content: '   ', source: 'voice' }),
+    ).toThrow('Chat message cannot be blank');
     const snapshot = store.snapshot();
     expect(Object.isFrozen(snapshot)).toBe(true);
   });

@@ -24,5 +24,8 @@ export const PET_VISUAL_SIGNALS: readonly PetVisualSignal[] = [
 ];
 
 export function isPetVisualSignal(value: unknown): value is PetVisualSignal {
-  return typeof value === 'string' && PET_VISUAL_SIGNALS.includes(value as PetVisualSignal);
+  return (
+    typeof value === 'string' &&
+    PET_VISUAL_SIGNALS.includes(value as PetVisualSignal)
+  );
 }

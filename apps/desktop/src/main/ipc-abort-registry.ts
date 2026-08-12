@@ -29,7 +29,8 @@ export class IpcAbortRegistry {
 
   cancel(requestId: string, ownerId?: number): boolean {
     const entry = this.controllers.get(requestId);
-    if (!entry || (ownerId !== undefined && entry.ownerId !== ownerId)) return false;
+    if (!entry || (ownerId !== undefined && entry.ownerId !== ownerId))
+      return false;
     this.controllers.delete(requestId);
     entry.controller.abort();
     return true;
