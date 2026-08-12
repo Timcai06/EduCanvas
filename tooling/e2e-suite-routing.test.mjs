@@ -54,6 +54,10 @@ describe('E2E suite routing', () => {
   });
 
   it('routes PRs to smoke while keeping UI review nightly or manual', () => {
+    const baseConfig = readFileSync(
+      resolve(repoRoot, 'playwright.config.ts'),
+      'utf8',
+    );
     const prConfig = readFileSync(
       resolve(repoRoot, 'playwright.pr.config.ts'),
       'utf8',
@@ -67,11 +71,17 @@ describe('E2E suite routing', () => {
       'utf8',
     );
 
+    assert.match(baseConfig, /retries:\s*0/);
+    assert.doesNotMatch(baseConfig, /retries:\s*process\.env\.CI/);
     assert.match(prConfig, /grep: \/@smoke\//);
     assert.match(prConfig, /chromium-pr-smoke/);
     assert.match(ci, /pnpm test:e2e:pr/);
     assert.match(ci, /Full browser E2E/);
     assert.match(ci, /github\.event_name == 'schedule'/);
+    assert.match(ci, /PLAYWRIGHT_EVIDENCE_SCOPE/);
+    for (const scope of ['affected', 'full', 'nightly']) {
+      assert.match(ci, new RegExp(`PLAYWRIGHT_EVIDENCE_SCOPE[^\\n]*${scope}`));
+    }
     assert.doesNotMatch(ui, /^\s*pull_request:/m);
     assert.match(ui, /^\s*schedule:/m);
     assert.match(ui, /^\s*workflow_dispatch:/m);
