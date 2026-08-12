@@ -55,4 +55,14 @@ describe('useResourceDock page seam', () => {
       },
     );
   });
+
+  it('跨页重复资源不会改变稳定 identity 集合', () => {
+    const current = [summary('source', 's1')];
+    expect(
+      appendResourceDockPage(current, {
+        items: [summary('source', 's1')],
+        nextCursor: 'cursor-2',
+      }).items,
+    ).toEqual(current);
+  });
 });

@@ -32,6 +32,14 @@ export async function fetchWorkspaceResourcePage(
     signal?: AbortSignal;
   } = {},
 ): Promise<WorkspaceResourcePage> {
+  if (
+    options.limit !== undefined &&
+    (!Number.isInteger(options.limit) ||
+      options.limit < 1 ||
+      options.limit > 100)
+  ) {
+    throw new Error('资源分页大小不正确。');
+  }
   const query = new URLSearchParams();
   if (options.cursor) query.set('cursor', options.cursor);
   if (options.filter && options.filter !== 'all')

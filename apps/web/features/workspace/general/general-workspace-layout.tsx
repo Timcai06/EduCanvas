@@ -143,18 +143,24 @@ export function GeneralWorkspaceLayout({
         {surface.type === 'studio' ? (
           <StudioOverlay onClose={() => ctrl.workspace.closeStudio()}>
             <StudioWorkspace
+              summaries={ctrl.resourceDock.items}
               assets={ctrl.notebookSources}
-              outputs={ctrl.studioItems}
-              onOpenSource={(asset) => {
+              loading={ctrl.resourceDock.loading}
+              error={ctrl.resourceDock.error?.message ?? null}
+              hasMore={ctrl.resourceDock.hasMore}
+              onLoadMore={() => void ctrl.resourceDock.loadMore()}
+              onRetry={() => void ctrl.resourceDock.reload()}
+              onOpen={(summary) => {
                 ctrl.workspace.closeStudio();
                 restoreStudioOpenerFocus();
                 ctrl.artifactFlow.closeCanvas();
-                ctrl.studioOpenActions.actions.openSource(asset.id);
-              }}
-              onOpenOutput={(artifactId) => {
-                ctrl.workspace.closeStudio();
-                restoreStudioOpenerFocus();
-                ctrl.studioOpenActions.actions.openArtifact(artifactId);
+                if (summary.resourceKind === 'source') {
+                  ctrl.studioOpenActions.actions.openSource(summary.resourceId);
+                } else {
+                  ctrl.studioOpenActions.actions.openArtifact(
+                    summary.resourceId,
+                  );
+                }
               }}
               onToggleSource={ctrl.sources.toggle}
               onRenameSource={ctrl.sources.rename}

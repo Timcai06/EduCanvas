@@ -216,11 +216,17 @@ export function ResourceDock({
               <button
                 key={`${entry.summary.resourceKind}:${entry.summary.resourceId}`}
                 type="button"
+                disabled={
+                  !entry.summary.allowedActions.includes('view') ||
+                  entry.summary.version === null ||
+                  entry.status === 'failed' ||
+                  entry.status === 'unavailable'
+                }
                 onClick={() => {
                   setExpanded(null);
                   onOpen(entry.summary);
                 }}
-                className="flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="shrink-0 text-ink-muted">
                   <RendererIcon rendererId={entry.rendererId} />

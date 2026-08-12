@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseWorkspaceResourcePage } from './workspace-resource-client';
+import {
+  fetchWorkspaceResourcePage,
+  parseWorkspaceResourcePage,
+} from './workspace-resource-client';
 
 const item = {
   schemaVersion: 1,
@@ -33,5 +36,13 @@ describe('workspace resource response parser', () => {
     expect(() =>
       parseWorkspaceResourcePage({ items: [item], nextCursor: 3 }),
     ).toThrow();
+  });
+  it('rejects invalid page limits before a request is issued', async () => {
+    await expect(fetchWorkspaceResourcePage({ limit: 0 })).rejects.toThrow(
+      '资源分页大小不正确',
+    );
+    await expect(fetchWorkspaceResourcePage({ limit: 101 })).rejects.toThrow(
+      '资源分页大小不正确',
+    );
   });
 });

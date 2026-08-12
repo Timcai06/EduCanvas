@@ -17,6 +17,7 @@ export interface ResourceDockState {
 
 export interface UseResourceDockResult extends ResourceDockState {
   readonly loadMore: () => Promise<void>;
+  readonly loadAll: () => Promise<void>;
   readonly reload: () => Promise<void>;
 }
 
@@ -97,10 +98,23 @@ export function useResourceDock(notebookId: string): UseResourceDockResult {
         });
         if (controller.signal.aborted || generation !== generationRef.current)
           return;
+        if (
+          page.nextCursor !== null &&
+          (page.nextCursor === cursor || page.items.length === 0)
+        ) {
+          throw new Error('资源分页游标没有向前推进。');
+        }
         const merged = appendResourceDockPage(
           replace ? [] : itemsRef.current,
           page,
         );
+        if (
+          !replace &&
+          page.nextCursor !== null &&
+          merged.items.length === itemsRef.current.length
+        ) {
+          throw new Error('资源分页没有返回新的资源。');
+        }
         itemsRef.current = merged.items;
         cursorRef.current = merged.nextCursor;
         setState({
@@ -149,6 +163,14 @@ export function useResourceDock(notebookId: string): UseResourceDockResult {
     );
   }, [notebookId, requestPage]);
 
+  const loadAll = useCallback(async () => {
+    while (cursorRef.current && !loadingRef.current) {
+      const previous = cursorRef.current;
+      await requestPage(previous, false, generationRef.current, notebookId);
+      if (cursorRef.current === previous) break;
+    }
+  }, [notebookId, requestPage]);
+
   useEffect(() => {
     generationRef.current += 1;
     controllerRef.current?.abort();
@@ -160,5 +182,5 @@ export function useResourceDock(notebookId: string): UseResourceDockResult {
   }, [notebookId, requestPage]);
 
   const visibleState = state.notebookId === notebookId ? state : initialState;
-  return { ...visibleState, loadMore, reload };
+  return { ...visibleState, loadMore, loadAll, reload };
 }

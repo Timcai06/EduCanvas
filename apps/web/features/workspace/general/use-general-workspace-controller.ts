@@ -15,7 +15,6 @@ import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
 import {
   createArtifact,
-  fetchNotebookArtifacts,
   type ArtifactDetail,
   type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
@@ -363,18 +362,10 @@ export function useGeneralWorkspaceController(options: {
     }
   }, [handleMenuAction, send]);
 
-  /* W03：作品列表加载失败不转成空列表——保留已有项并把失败语义上报到错误状态。 */
   const openStudio = useCallback(() => {
     workspace.openStudio();
-    void fetchNotebookArtifacts()
-      .then((items) => {
-        setStudioItems(items);
-        setError(null);
-      })
-      .catch((reason: unknown) => {
-        setError(toClientError(reason, '暂时无法加载作品列表。'));
-      });
-  }, [workspace]);
+    void resourceDock.reload().then(resourceDock.loadAll);
+  }, [resourceDock, workspace]);
 
   const online = useOnlineStatus();
   const isLanding = turn.messages.length === 0;

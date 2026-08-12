@@ -251,17 +251,27 @@ function projectActions(
       : ['view', 'annotate'];
   }
   if (kind === 'markdown_document')
-    return ['view', 'edit', 'regenerate', 'download'];
-  if (kind === 'dom_exploration') return ['view', 'run', 'cancel', 'annotate'];
+    return ['view', 'edit', 'regenerate', 'download', 'delete'];
+  if (kind === 'dom_exploration')
+    return ['view', 'run', 'cancel', 'delete', 'annotate'];
   if (kind === 'web_app')
-    return ['view', 'run', 'cancel', 'regenerate', 'download', 'annotate'];
-  if (kind === 'note') return ['view', 'edit', 'regenerate', 'annotate'];
+    return [
+      'view',
+      'run',
+      'cancel',
+      'regenerate',
+      'download',
+      'delete',
+      'annotate',
+    ];
+  if (kind === 'note')
+    return ['view', 'edit', 'regenerate', 'delete', 'annotate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
      这两类；不开放 regenerate 才与实际后端能力一致。
      删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
   if (kind === 'audio_overview' || kind === 'generated_image')
     return ['view', 'download', 'delete', 'annotate'];
-  return ['view', 'regenerate', 'annotate'];
+  return ['view', 'regenerate', 'delete', 'annotate'];
 }
 
 /**

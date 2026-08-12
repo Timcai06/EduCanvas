@@ -42,7 +42,7 @@ const webAppVersion = {
 };
 
 describe('artifact-resource-projection（markdown_document）', () => {
-  it('maps markdown_document as structured tier1 with edit/regenerate/download actions', () => {
+  it('maps markdown_document as structured tier1 with authorized owner actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId: artifactBase.spaceId,
       artifact: {
@@ -64,7 +64,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         rendererVersion: 1,
       },
       trustTier: 'tier1',
-      allowedActions: ['view', 'edit', 'regenerate', 'download'],
+      allowedActions: ['view', 'edit', 'regenerate', 'download', 'delete'],
     });
   });
 
@@ -214,6 +214,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         'cancel',
         'regenerate',
         'download',
+        'delete',
         'annotate',
       ],
     });
