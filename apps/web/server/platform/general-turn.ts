@@ -17,7 +17,10 @@ import {
   WebGeneralCancellation,
   WebGeneralLifecycle,
 } from './general-turn-lifecycle';
-import { WebOperationArtifacts } from './general-artifact-tool';
+import {
+  collectArtifactInputSourceReferences,
+  WebOperationArtifacts,
+} from './general-artifact-tool';
 import { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import {
@@ -55,11 +58,15 @@ export function beginGatewayGeneralTurnApplication(input: {
     spaceId: input.route.notebookId,
     operationId: input.operationId,
   });
+  const artifactSourceReferences = collectArtifactInputSourceReferences(
+    input.assetContext,
+  );
   const operationArtifacts = new WebOperationArtifacts({
     identity: input.identity,
     conversationId: input.route.conversationId,
     spaceId: input.route.notebookId,
     operationId: input.operationId,
+    sourceReferences: artifactSourceReferences,
   });
   const operationImages = new WebOperationImageArtifacts({
     identity: input.identity,

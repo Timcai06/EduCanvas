@@ -8,6 +8,8 @@ import type {
 import {
   artifactProposalKindSchema,
   artifactProposalSchema,
+  type AssetVersionReference,
+  type AssetVersionRepresentationIdentity,
 } from '@educanvas/agent-core';
 import {
   ARTIFACT_GENERATE_TASK,
@@ -40,8 +42,56 @@ interface ArtifactGenerationRepository {
     trustTier: 'tier1' | 'tier2';
     title: string;
     taskIdentifier: typeof ARTIFACT_GENERATE_TASK;
-    params: { generation: { instruction: string } };
+    params: {
+      generation: { instruction: string };
+      provenance: {
+        sources: readonly ArtifactInputSourceReference[];
+      };
+    };
   }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }>;
+}
+
+export interface ArtifactInputSourceReference {
+  readonly assetId: string;
+  readonly versionId: string;
+  /** 本轮实际进入模型的表示身份；原生图片或旧资产为 null。 */
+  readonly representation: AssetVersionRepresentationIdentity | null;
+}
+
+/**
+ * 把本轮已物化的文本段和原生输入收敛成 Artifact provenance。
+ * 同一不可变版本可能同时贡献 Markdown 与派生图片，必须只冻结一次且保持首见顺序。
+ */
+export function collectArtifactInputSourceReferences(input: {
+  readonly textSegments: readonly {
+    readonly reference: AssetVersionReference;
+    readonly representation: AssetVersionRepresentationIdentity | null;
+  }[];
+  readonly nativeReferences: readonly AssetVersionReference[];
+}): readonly ArtifactInputSourceReference[] {
+  const references: ArtifactInputSourceReference[] = [];
+  const seen = new Set<string>();
+  const append = (reference: ArtifactInputSourceReference) => {
+    const key = `${reference.assetId}:${reference.versionId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    references.push(reference);
+  };
+  for (const segment of input.textSegments) {
+    append({
+      assetId: segment.reference.assetId,
+      versionId: segment.reference.versionId,
+      representation: segment.representation,
+    });
+  }
+  for (const reference of input.nativeReferences) {
+    append({
+      assetId: reference.assetId,
+      versionId: reference.versionId,
+      representation: null,
+    });
+  }
+  return references;
 }
 
 /**
@@ -60,6 +110,12 @@ export class WebOperationArtifacts {
       conversationId: string;
       spaceId: string;
       operationId: string;
+      /**
+       * 只能由已物化的服务端 Asset plan 注入。模型和浏览器都不能声明 Artifact
+       * provenance；所有输入段在 General Profile 中是 required，因此这里与随后
+       * 写入的 Turn Context Snapshot 使用同一组不可变版本事实。
+       */
+      sourceReferences?: readonly ArtifactInputSourceReference[];
     },
     private readonly repository: ArtifactGenerationRepository = new DrizzlePlatformArtifactRepository(),
   ) {}
@@ -103,7 +159,12 @@ export class WebOperationArtifacts {
       trustTier: toolInput.kind === 'web_app' ? 'tier2' : 'tier1',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
-      params: { generation: { instruction: toolInput.instruction } },
+      params: {
+        generation: { instruction: toolInput.instruction },
+        provenance: {
+          sources: [...(this.input.sourceReferences ?? [])],
+        },
+      },
     });
     this.proposed.set(created.artifact.id, {
       protocol: 'educanvas.turn.v2',

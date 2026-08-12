@@ -37,6 +37,20 @@ describe('E2E suite routing', () => {
       return total + (source.match(/test\(\s*['"]@smoke\b/g)?.length ?? 0);
     }, 0);
     assert.ok(count >= 6 && count <= 14, `PR smoke budget is ${count}`);
+    assert.deepEqual(
+      files.filter((name) =>
+        [
+          'artifact-flow.spec.ts',
+          'live-voice-flow.spec.ts',
+          'canvas-resource-access.spec.ts',
+        ].includes(name),
+      ),
+      [
+        'artifact-flow.spec.ts',
+        'canvas-resource-access.spec.ts',
+        'live-voice-flow.spec.ts',
+      ],
+    );
   });
 
   it('routes PRs to smoke while keeping UI review nightly or manual', () => {

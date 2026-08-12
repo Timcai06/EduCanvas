@@ -168,6 +168,12 @@ export async function readOwnedAssetResource(input: {
       : manifest.images.find(
           (image) => image.relativePath === input.resourcePath,
         );
+  if (
+    input.resourcePath === manifest.markdown.relativePath &&
+    representation.checksum !== manifest.markdown.sha256
+  ) {
+    throw new AssetResourceError('resource_not_found', 404);
+  }
   if (!declared) {
     throw new AssetResourceError('resource_not_found', 404);
   }

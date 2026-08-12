@@ -21,6 +21,23 @@ import {
   type LiveVoiceToolItem,
 } from './live-voice-context';
 
+function resolveLiveToolStatusLabel(
+  status: LiveVoiceToolItem['status'],
+): string {
+  if (status === 'running') return '执行中';
+  if (status === 'failed') return '失败';
+  return '已完成';
+}
+
+function resolveLiveArtifactStatusLabel(
+  status: LiveVoiceArtifactItem['status'],
+): string {
+  if (status === 'generating' || status === 'proposed') return '生成中';
+  if (status === 'failed') return '生成失败';
+  if (status === 'archived') return '已归档';
+  return '已生成';
+}
+
 export interface LiveVoiceVisualStageProps {
   readonly assets: readonly LiveVoiceContextAsset[];
   readonly artifacts: readonly LiveVoiceArtifactItem[];
@@ -309,7 +326,7 @@ export function LiveVoiceVisualStage({
 
       {tools.length > 0 || artifacts.length > 0 || citations.length > 0 ? (
         <div className="live-voice-output-stack" aria-live="polite">
-          {tools.slice(-2).map((tool) => (
+          {tools.map((tool) => (
             <p key={tool.id} data-status={tool.status}>
               {tool.status === 'running' ? (
                 <SpinnerGap className="animate-spin" size={14} />
@@ -317,9 +334,10 @@ export function LiveVoiceVisualStage({
                 <MagicWand size={14} />
               )}
               {tool.label}
+              <small> · {resolveLiveToolStatusLabel(tool.status)}</small>
             </p>
           ))}
-          {artifacts.slice(-2).map((artifact) => (
+          {artifacts.map((artifact) => (
             <button
               key={artifact.id}
               type="button"
@@ -344,14 +362,7 @@ export function LiveVoiceVisualStage({
                 <MagicWand size={15} />
               )}
               <span>{artifact.title}</span>
-              <small>
-                {artifact.status === 'generating' ||
-                artifact.status === 'proposed'
-                  ? '生成中'
-                  : artifact.status === 'failed'
-                    ? '生成失败'
-                    : '已生成'}
-              </small>
+              <small>{resolveLiveArtifactStatusLabel(artifact.status)}</small>
             </button>
           ))}
           {citations.length > 0 ? (

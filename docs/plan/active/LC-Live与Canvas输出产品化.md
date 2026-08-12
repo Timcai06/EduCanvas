@@ -156,12 +156,12 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 ### 6.4 联合收口
 
-| 任务                     | 状态      | 交付与验收                                                                                                                                                                                    |
-| ------------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| X01 Live × Canvas        | `PENDING` | Live 中可听到 Agent 对产物生成的自然说明并看到真实进度；产物 ready 后出现预览/打开动作，打开后进入同一 Canvas；Live 不朗读代码、长 URL、原始 JSON 或隐藏安全字段。                            |
-| X02 多模态 provenance    | `PENDING` | 使用 ADR-0026 的 PDF/图片/文档输入生成三类输出；Artifact provenance 精确记录实际 `assetId + versionId`，撤销来源权限后不能借 Artifact 或 Live 越权读取原件。                                  |
-| X03 CI 路由与证据        | `PENDING` | 契约/unit/fake-provider 按 changed-files 运行；浏览器 smoke 只覆盖核心纵切；真实 Provider canary 与完整浏览器矩阵不在普通文档或无关 PR 重跑。报告区分自动化、fake、真实 Provider 和真人证据。 |
-| X04 Canonical 回写与归档 | `PENDING` | 回写产品、架构、前后端、测试、可观测性及 ADR-0025/0027；保留偏差和未完成项，完成一次最终全量门禁后移入 `completed/`，不改写 UV 历史结论。                                                     |
+| 任务                     | 状态      | 交付与验收                                                                                                                                                                                                                                     |
+| ------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| X01 Live × Canvas        | `PASS`    | Live 投影 canonical Assistant delta 与工具/Artifact 真实状态，就绪产物经同一 CanvasResource gate 打开；朗读净化阻止代码、公式、长 URL、链接目标和原始 JSON 进入 TTS。自动化证据见[联合收口记录](../../06-quality/15-LC联合收口自动化证据.md)。 |
+| X02 多模态 provenance    | `PASS`    | Artifact Tool 从服务端已物化且实际进入本轮的 Asset plan 冻结 `assetId + versionId + representation identity`；CanvasResource 投影精确版本引用，打开原件仍逐次重授权，不以 provenance 授权。证据同上。                                          |
+| X03 CI 路由与证据        | `PASS`    | 契约/unit/fake-provider 按 changed-files 运行；PR smoke 有界覆盖 Live、Artifact、Canvas 资源访问；真实 Provider canary 与完整浏览器矩阵不在无关 PR 重跑，报告明确区分自动化、fake、真实 Provider 和真人证据。                                  |
+| X04 Canonical 回写与归档 | `PENDING` | 稳定产品、架构、前后端、测试与运维事实已经回写；只待 C08 负责人签署后运行一次最终全量门禁、记录 merge 证据并移入 `completed/`。在此之前保持 active，不改写 UV 历史结论。                                                                       |
 
 ## 七、建议文件所有权
 
@@ -234,22 +234,22 @@ API Key、学生内容、Provider 原始响应或音频。
 
 ## 十二、验证证据台账
 
-| 验收项               | 证据                                                                                     | 结果      |
-| -------------------- | ---------------------------------------------------------------------------------------- | --------- |
-| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                  | `pass`    |
-| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                 | `pass`    |
-| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md) | `pass`    |
-| C08 Canvas 验收      | 真实 Turn、浏览器、恶意输入、历史回放与性能体验                                          | `pending` |
-| X01-X03 联合验收     | 产品级 E2E、provenance、安全与 CI 路由报告                                               | `pending` |
-| X04 结档             | 最终 CI run、canonical diff、PR/merge 链接                                               | `pending` |
+| 验收项               | 证据                                                                                             | 结果      |
+| -------------------- | ------------------------------------------------------------------------------------------------ | --------- |
+| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                          | `pass`    |
+| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                         | `pass`    |
+| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md)         | `pass`    |
+| C08 Canvas 验收      | 真实 Turn、浏览器、恶意输入、历史回放与性能体验                                                  | `pending` |
+| X01-X03 联合验收     | [Live/Canvas、provenance、安全与 CI 路由自动化证据](../../06-quality/15-LC联合收口自动化证据.md) | `pass`    |
+| X04 结档             | canonical diff 已完成；最终 CI run、PR/merge 链接与归档等待 C08                                  | `pending` |
 
 ## 十三、收尾检查表
 
 - [ ] L01-L08、C01-C08、X01-X04 均有可复现证据，失败项明确转入后续计划；
-- [ ] 普通聊天、Live 字幕和语音确认来自同一 Assistant 消息与单调游标；
+- [x] 普通聊天、Live 字幕和语音确认来自同一 Assistant 消息与单调游标；
 - [x] 三种代表性 Canvas 输出通过同一 Turn/Agent Runtime 产生并保留不可变版本；
-- [ ] Live、Canvas、Web Runtime、输入 Source 均未形成旁路权限或第二事实源；
-- [ ] 性能数字区分客户端增加延迟、Provider 延迟、自动化和真人证据；
-- [ ] 稳定事实已经回写 canonical 文档，ADR 只保留长期决策；
+- [x] Live、Canvas、Web Runtime、输入 Source 均未形成旁路权限或第二事实源；
+- [x] 性能数字区分客户端增加延迟、Provider 延迟、自动化和真人证据；
+- [x] 稳定事实已经回写 canonical 文档，ADR 只保留长期决策；
 - [ ] 只完成一次最终全量门禁，不用重复 CI 冒充更多信心；
 - [ ] 本计划压缩后移入 `completed/`，并更新 `docs/plan/README.md` 与 active 索引。

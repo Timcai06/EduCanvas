@@ -178,6 +178,37 @@ describe('CI impact classification', () => {
     });
   });
 
+  it('keeps ADR-0026/provenance and quality evidence docs out of costly matrix lanes', () => {
+    const result = classifyChangedPaths([
+      'docs/09-decisions/0026-多模态输入原件与派生表示边界.md',
+      'docs/06-quality/11-Live Voice真实验收.md',
+      'docs/06-quality/12-LC基线与契约矩阵.md',
+      'docs/06-quality/14-Canvas-C01-C07交付证据.md',
+    ]);
+    assert.equal(result.checks, false);
+    assert.equal(result.e2e, false);
+    assert.equal(result.runtime_pressure, false);
+    assert.equal(result.agent_eval, false);
+    assert.equal(result.release_evidence, false);
+  });
+
+  it('routes core Live/Canvas artifact paths to E2E without widening other lanes', () => {
+    for (const path of [
+      'apps/web/features/voice/live-voice-panel.tsx',
+      'apps/web/features/canvas/viewer.tsx',
+      'packages/canvas-protocol/src/artifacts/mind-map.ts',
+      'tests/e2e/hydration.spec.ts',
+    ]) {
+      assert.equal(classifyChangedPaths([path]).e2e, true, path);
+    }
+    assert.equal(
+      classifyChangedPaths(['apps/web/features/canvas/viewer.tsx'])
+        .runtime_pressure,
+      true,
+      'canvas viewer change should keep runtime-pressure lane',
+    );
+  });
+
   it('routes Agent contract changes to deterministic eval without charging pure UI or Desktop', () => {
     for (const path of [
       'packages/agent-runtime/src/agent-loop.ts',

@@ -54,7 +54,7 @@ const manifest = {
 function structuredRepresentation() {
   return {
     derivedStorageKey: `derived/${JOB_ID}/index.md`,
-    checksum: 'a'.repeat(64),
+    checksum: MD_SHA,
     status: 'ready' as const,
     quality: 'structured' as const,
     mimeType: 'text/markdown',
@@ -144,6 +144,15 @@ describe('readOwnedAssetResource', () => {
         return Buffer.from('not json {');
       }
       return storageByKey(key);
+    });
+
+    await expect(run('index.md')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('manifest markdown 校验和与文本表示身份不一致时按 404（防越权复用旧表示）', async () => {
+    loadOwnedTextRepresentation.mockResolvedValue({
+      ...structuredRepresentation(),
+      checksum: 'b'.repeat(64),
     });
 
     await expect(run('index.md')).rejects.toMatchObject({ status: 404 });

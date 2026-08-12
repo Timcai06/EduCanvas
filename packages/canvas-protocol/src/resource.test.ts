@@ -112,6 +112,10 @@ describe('canvasResourceSchema', () => {
           createdBy: 'agent',
           createdAt: '2026-07-25T12:00:00+08:00',
           sourceResourceIds: ['asset-parent', 'asset-parent'],
+          sourceReferences: [
+            { resourceId: 'asset-parent', versionId: 'version-1' },
+            { resourceId: 'asset-parent', versionId: 'version-1' },
+          ],
           operationId: 'operation-1',
           generator: {
             provider: 'provider',
@@ -128,7 +132,31 @@ describe('canvasResourceSchema', () => {
         expect.arrayContaining([
           'allowedActions不能重复',
           'sourceResourceIds不能重复',
+          'sourceReferences不能重复',
         ]),
+      );
+    }
+  });
+
+  it('精确版本来源存在时要求与兼容资源ID同序一致', () => {
+    const result = canvasResourceSchema.safeParse(
+      createResource({
+        provenance: {
+          origin: 'derived',
+          createdBy: 'agent',
+          createdAt: '2026-07-25T12:00:00+08:00',
+          sourceResourceIds: ['asset-a'],
+          sourceReferences: [{ resourceId: 'asset-b', versionId: 'version-b' }],
+          operationId: 'operation-1',
+          generator: null,
+        },
+      }),
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toContain(
+        'sourceReferences必须与sourceResourceIds同序一致',
       );
     }
   });
