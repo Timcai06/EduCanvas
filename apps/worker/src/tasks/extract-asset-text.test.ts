@@ -109,11 +109,22 @@ describe('assets:extract_text', () => {
         status: 'ready',
         extractedText: '课程资料',
         derivedStorageKey: expect.stringMatching(
-          /^derived\/text\/[a-f0-9-]+\/[a-f0-9]{64}\.txt$/,
+          /^derived\/text\/[a-f0-9-]+\/[a-f0-9]{64}\.md$/,
         ),
         checksum: SHA,
+        quality: 'structured',
+        mimeType: 'text/markdown',
       },
     });
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: expect.stringMatching(/\.md$/),
+        contentType: 'text/markdown; charset=utf-8',
+      }),
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('quality=structured mimeType=text/markdown'),
+    );
   });
 
   /* ---------------- mineru 路由：降级路径 ---------------- */

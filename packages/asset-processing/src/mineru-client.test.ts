@@ -128,16 +128,23 @@ describe('submitMineruTask（三步协议第一步）', () => {
   });
 
   it('调用方主动取消时原样传播 AbortError，不伪装成失败码', async () => {
-    const server = await start({ hang: true });
-    const controller = new AbortController();
-    const pending = submitMineruTask({
+    /* 先完成上传，再取消挂起的状态请求。直接在 undici 正流式上传 FormData 时
+       同步 abort 会触发 Node 自身的 ReadableStream late-enqueue 噪声，反而不能
+       稳定验证本模块的取消语义。 */
+    const server = await start({ hangStatus: true });
+    const submitted = await submitMineruTask({
       baseUrl: server.baseUrl,
       filename: 'a.pdf',
       fileBytes: SAMPLE_DOCX,
       contentType: 'application/pdf',
+    });
+    const controller = new AbortController();
+    const pending = waitForMineruTask({
+      taskId: submitted.taskId,
+      statusUrl: submitted.statusUrl,
       signal: controller.signal,
     });
-    controller.abort();
+    setTimeout(() => controller.abort(), 10);
     const err = await pending.then(
       () => null,
       (e: unknown) => e,
@@ -169,15 +176,16 @@ describe('waitForMineruTask（三步协议第二步：轮询）', () => {
     });
   }
 
-  it('立即完成的任务一次轮询即返回 completed', async () => {
+  it('默认任务经有界轮询返回 completed', async () => {
     const server = await start();
-    const outcome = await submitAndWait(server);
+    const outcome = await submitAndWait(server, { pollIntervalMs: 5 });
 
     expect(outcome).toEqual({
       taskId: expect.any(String),
       status: 'completed',
     });
-    expect(server.statusRequestCount).toBe(1);
+    /* fake 用 0ms timer 模拟异步终态；根据事件循环顺序可能首轮仍见 pending。 */
+    expect(server.statusRequestCount).toBeGreaterThanOrEqual(1);
   });
 
   it('延迟完成的任务多次轮询直到 completed', async () => {
@@ -442,12 +450,15 @@ describe('mineru-client 错误分类总表与映射矩阵', () => {
 
   describe('validateSubmitResponse 矩阵', () => {
     it('完整负载 → 返回规范化结果', () => {
-      const parsed = validateSubmitResponse({
-        task_id: 't-1',
-        status_url: 'http://x/tasks/t-1',
-        result_url: 'http://x/tasks/t-1/result',
-        queued_ahead: 2,
-      });
+      const parsed = validateSubmitResponse(
+        {
+          task_id: 't-1',
+          status_url: 'http://x/tasks/t-1',
+          result_url: 'http://x/tasks/t-1/result',
+          queued_ahead: 2,
+        },
+        'http://x',
+      );
       expect(parsed).toEqual({
         taskId: 't-1',
         status: 'pending',
@@ -458,11 +469,14 @@ describe('mineru-client 错误分类总表与映射矩阵', () => {
     });
 
     it('queued_ahead 缺失 → 归 0（背压未知不阻塞）', () => {
-      const parsed = validateSubmitResponse({
-        task_id: 't-1',
-        status_url: 'http://x/tasks/t-1',
-        result_url: 'http://x/tasks/t-1/result',
-      });
+      const parsed = validateSubmitResponse(
+        {
+          task_id: 't-1',
+          status_url: 'http://x/tasks/t-1',
+          result_url: 'http://x/tasks/t-1/result',
+        },
+        'http://x',
+      );
       expect(parsed.queuedAhead).toBe(0);
     });
 
@@ -475,10 +489,10 @@ describe('mineru-client 错误分类总表与映射矩阵', () => {
       ['缺 status_url', { task_id: 't', result_url: 'r' }],
       ['缺 result_url', { task_id: 't', status_url: 'u' }],
     ])('%s → mineru_invalid_response', (_name, payload) => {
-      expect(() => validateSubmitResponse(payload)).toThrowError(
+      expect(() => validateSubmitResponse(payload, 'http://x')).toThrowError(
         MineruClientError,
       );
-      expect(() => validateSubmitResponse(payload)).toThrowError(
+      expect(() => validateSubmitResponse(payload, 'http://x')).toThrowError(
         /mineru_invalid_response/,
       );
     });
@@ -545,7 +559,7 @@ describe('loadMineruConfig（ADR-0026 决定 2 降级入口）', () => {
     ).toEqual({ baseUrl: 'http://127.0.0.1:8001' });
     expect(
       loadMineruConfig({ MINERU_BASE_URL: 'https://mineru.example.com/' }),
-    ).toEqual({ baseUrl: 'https://mineru.example.com/' });
+    ).toEqual({ baseUrl: 'https://mineru.example.com' });
   });
 
   it('未配置或空白返回 null（编排层直接降级）', () => {

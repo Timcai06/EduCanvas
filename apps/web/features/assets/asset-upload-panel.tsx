@@ -14,6 +14,23 @@ import type { AssetItem } from './assets-drawer';
 
 gsap.registerPlugin(useGSAP);
 
+/** 浏览器文件选择器使用标准 OOXML MIME，并保留扩展名兜底空 MIME 系统。 */
+export const DOCUMENT_UPLOAD_ACCEPT = [
+  'application/pdf',
+  'text/markdown',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pdf',
+  '.md',
+  '.markdown',
+  '.txt',
+  '.docx',
+  '.pptx',
+  '.xlsx',
+].join(',');
+
 export function AssetUploadPanel({
   kind,
   onUploaded,
@@ -30,16 +47,10 @@ export function AssetUploadPanel({
   const [scope, setScope] = useState<AssetItem['scope']>(fixedScope ?? 'turn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /*
-   * DOCX 在这里必须写浏览器/操作系统上报的标准 MIME（带 .document 后缀），
-   * 而服务端把 DOCX 归一化成不带后缀的内部值（见 asset-file-detection.ts）。
-   * 两者不是同一个值，改动其一不要顺手"对齐"另一个，否则文件选择框会筛不到 .docx。
-   * 同时保留 .docx 扩展名，兜住上报 MIME 为空的系统。
-   */
   const accept =
     kind === 'image'
       ? 'image/png,image/jpeg,image/webp'
-      : 'application/pdf,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.md,.markdown,.txt,.docx';
+      : DOCUMENT_UPLOAD_ACCEPT;
 
   useGSAP(
     () => {
@@ -86,8 +97,8 @@ export function AssetUploadPanel({
               ? '支持PNG、JPEG和WebP，最大25MB。图片会保存为当前笔记本来源；能否被模型直接读取取决于当前所用模型，不支持时发送会明确提示。'
               : '支持PNG、JPEG和WebP，最大25MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
             : fixedScope === 'space'
-              ? '支持PDF、Word（.docx）、Markdown和TXT，最大25MB。文字会在服务端解析并成为当前笔记本的长期来源。'
-              : '支持PDF、Word（.docx）、Markdown和TXT，最大25MB。上传后文字会在服务端解析并作为受控附件进入对话。'}
+              ? '支持PDF、Word、PowerPoint、Excel、Markdown和TXT，最大25MB。内容会在服务端解析并成为当前笔记本的长期来源。'
+              : '支持PDF、Word、PowerPoint、Excel、Markdown和TXT，最大25MB。上传后内容会在服务端解析并作为受控附件进入对话。'}
         </p>
       </div>
 

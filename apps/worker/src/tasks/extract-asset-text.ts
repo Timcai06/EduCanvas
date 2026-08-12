@@ -223,13 +223,16 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
     });
     /* D04：抽取文本内容写入对象存储（text representation 的内容身份），
        extractedText 旧字段保持同事务双写镜像（compatibility read）。 */
+    const directlyStructured = route === 'direct_decode';
     const textKey = `derived/text/${payload.jobId}/${sha256Hex(
       new TextEncoder().encode(extractedText),
-    )}.txt`;
+    )}.${directlyStructured ? 'md' : 'txt'}`;
     await storage.put({
       key: textKey,
       bytes: new TextEncoder().encode(extractedText),
-      contentType: 'text/plain; charset=utf-8',
+      contentType: directlyStructured
+        ? 'text/markdown; charset=utf-8'
+        : 'text/plain; charset=utf-8',
     });
     await assets.settleTextExtraction({
       jobId: payload.jobId,
@@ -238,11 +241,18 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
         extractedText,
         derivedStorageKey: textKey,
         checksum: sha256Hex(new TextEncoder().encode(extractedText)),
+        ...(directlyStructured
+          ? {
+              quality: 'structured' as const,
+              mimeType: 'text/markdown' as const,
+            }
+          : {}),
       },
     });
-    /* 纯文本路径质量取仓储缺省推导值 degraded_plain_text（向后兼容缺省）。 */
+    /* TXT/Markdown 严格解码后本身就是结构化 Markdown；只有 MinerU 文档
+       fallback 才取仓储缺省 degraded_plain_text，不能把两者混为同一质量。 */
     helpers.logger.info(
-      `文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=degraded_plain_text mimeType=text/plain`,
+      `文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=${directlyStructured ? 'structured' : 'degraded_plain_text'} mimeType=${directlyStructured ? 'text/markdown' : 'text/plain'}`,
     );
   } catch (error) {
     if (error instanceof AssetExtractionError) {

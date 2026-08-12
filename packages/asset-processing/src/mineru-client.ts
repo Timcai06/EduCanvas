@@ -33,8 +33,22 @@ export function loadMineruConfig(
   env: Record<string, string | undefined>,
 ): { baseUrl: string } | null {
   const baseUrl = env.MINERU_BASE_URL?.trim();
-  if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) return null;
-  return { baseUrl };
+  if (!baseUrl) return null;
+  try {
+    const parsed = new URL(baseUrl);
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username !== '' ||
+      parsed.password !== '' ||
+      parsed.search !== '' ||
+      parsed.hash !== ''
+    ) {
+      return null;
+    }
+    return { baseUrl: parsed.href.replace(/\/$/, '') };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -108,7 +122,9 @@ async function fetchWithTimeout(
     ? AbortSignal.any([externalSignal, timeoutSignal])
     : timeoutSignal;
   try {
-    return await fetch(url, { ...init, signal });
+    /* MinerU 是服务端配置的固定边界。禁止跟随上游重定向，避免已校验的
+       同源任务 URL 被 30x 转向内网其他服务（SSRF）。 */
+    return await fetch(url, { ...init, redirect: 'error', signal });
   } catch (cause) {
     throw classifyMineruFetchError(cause, externalSignal);
   }
@@ -143,7 +159,10 @@ export interface MineruSubmittedTask {
 /**
  * 校验提交响应结构。缺关键字段 = 响应损坏，不静默成功。
  */
-export function validateSubmitResponse(payload: unknown): MineruSubmittedTask {
+export function validateSubmitResponse(
+  payload: unknown,
+  expectedBaseUrl: string,
+): MineruSubmittedTask {
   if (
     !isRecord(payload) ||
     typeof payload.task_id !== 'string' ||
@@ -153,11 +172,33 @@ export function validateSubmitResponse(payload: unknown): MineruSubmittedTask {
   ) {
     throw new MineruClientError('mineru_invalid_response');
   }
+  let expectedOrigin: string;
+  let statusUrl: URL;
+  let resultUrl: URL;
+  try {
+    expectedOrigin = new URL(expectedBaseUrl).origin;
+    statusUrl = new URL(payload.status_url);
+    resultUrl = new URL(payload.result_url);
+  } catch {
+    throw new MineruClientError('mineru_invalid_response');
+  }
+  /* status_url/result_url 是外部响应，不是可信配置。只允许回到配置的
+     MinerU origin，且禁止 URL 凭据；否则 Worker 会成为任意 URL 请求器。 */
+  for (const taskUrl of [statusUrl, resultUrl]) {
+    if (
+      taskUrl.origin !== expectedOrigin ||
+      !['http:', 'https:'].includes(taskUrl.protocol) ||
+      taskUrl.username !== '' ||
+      taskUrl.password !== ''
+    ) {
+      throw new MineruClientError('mineru_invalid_response');
+    }
+  }
   return {
     taskId: payload.task_id,
     status: 'pending',
-    statusUrl: payload.status_url,
-    resultUrl: payload.result_url,
+    statusUrl: statusUrl.href,
+    resultUrl: resultUrl.href,
     queuedAhead:
       typeof payload.queued_ahead === 'number' ? payload.queued_ahead : 0,
   };
@@ -212,7 +253,7 @@ export async function submitMineruTask(
   } catch (cause) {
     throw new MineruClientError('mineru_invalid_response', { cause });
   }
-  return validateSubmitResponse(payload);
+  return validateSubmitResponse(payload, params.baseUrl);
 }
 
 /* ------------------------------------------------------------------ */

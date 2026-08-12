@@ -71,6 +71,20 @@ const DEFAULT_ZIP_ENTRIES = [
   },
 ];
 
+async function waitUntilCompleted(
+  server: MineruFakeServer,
+  taskId: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const payload = (await (
+      await fetch(`${server.baseUrl}/tasks/${taskId}`)
+    ).json()) as { status: string };
+    if (payload.status === 'completed') return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error('fake MinerU task did not complete');
+}
+
 describe('fake MinerU 服务（协议自测）', () => {
   it('POST /tasks 返回 202 与 task_id/status/status_url/result_url', async () => {
     const server = await start();
@@ -156,6 +170,9 @@ describe('fake MinerU 服务（协议自测）', () => {
         body,
       })
     ).json()) as { task_id: string };
+
+    /* 提交契约恒先返回 pending；等待终态再读取结果，避免 0ms timer 竞态。 */
+    await waitUntilCompleted(server, submitted.task_id);
 
     const res = await fetch(
       `${server.baseUrl}/tasks/${submitted.task_id}/result`,
@@ -270,6 +287,8 @@ describe('fake MinerU 服务（协议自测）', () => {
       })
     ).json()) as { task_id: string };
 
+    await waitUntilCompleted(server, submitted.task_id);
+
     const res = await fetch(
       `${server.baseUrl}/tasks/${submitted.task_id}/result`,
     );
@@ -289,6 +308,8 @@ describe('fake MinerU 服务（协议自测）', () => {
         body,
       })
     ).json()) as { task_id: string };
+
+    await waitUntilCompleted(server, submitted.task_id);
 
     const res = await fetch(
       `${server.baseUrl}/tasks/${submitted.task_id}/result`,
@@ -317,6 +338,8 @@ describe('fake MinerU 服务（协议自测）', () => {
         body,
       })
     ).json()) as { task_id: string };
+
+    await waitUntilCompleted(server, submitted.task_id);
 
     const res = await fetch(
       `${server.baseUrl}/tasks/${submitted.task_id}/result`,
