@@ -129,6 +129,41 @@ describe('GatewayService', () => {
     expect(replay).toEqual(first);
   });
 
+  it('recovers the persisted terminal when append acknowledgement is lost', async () => {
+    let runnerCalls = 0;
+    const service = buildService({
+      async *run() {
+        runnerCalls += 1;
+        yield {
+          type: 'operation.completed',
+          messageId: 'message:assistant:recovered',
+        };
+      },
+    });
+    const append = service.store.append.bind(service.store);
+    let acknowledgementLost = false;
+    service.store.append = async (operationId, payload, occurredAt) => {
+      const event = await append(operationId, payload, occurredAt);
+      if (payload.type === 'operation.completed' && !acknowledgementLost) {
+        acknowledgementLost = true;
+        throw new Error('terminal_append_acknowledgement_lost');
+      }
+      return event;
+    };
+
+    const first = await collect(service.handle(envelope()));
+    expect(first.map((event) => event.type)).toEqual([
+      'operation.accepted',
+      'operation.completed',
+    ]);
+    expect(
+      first.filter((event) => event.type === 'operation.completed'),
+    ).toHaveLength(1);
+    const replay = await collect(service.handle(envelope()));
+    expect(replay).toEqual(first);
+    expect(runnerCalls).toBe(1);
+  });
+
   it('rejects idempotency key reuse with different content', async () => {
     const service = buildService();
     await collect(service.handle(envelope()));

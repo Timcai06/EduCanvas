@@ -13,6 +13,7 @@ import {
 } from '../schema';
 import {
   describeCurrentGatewayOperation,
+  findCurrentOperationAccess,
   listCurrentGatewayOperationEvents,
   listRecentCurrentGatewayOperations,
   requestCurrentGatewayOperationCancellation,
@@ -23,6 +24,7 @@ import {
   type ResolvedGatewayApproval,
 } from './operation-approval-control';
 import { GatewayPersistenceError, type Database } from './persistence';
+import { reconcileGatewayTerminalWithinTransaction } from './terminal-reconciliation';
 import {
   appendGatewayOperationEvent,
   cancelContinuationWithinTransaction,
@@ -89,13 +91,21 @@ export class DrizzleGatewayOperationStore {
             'Idempotency key is bound to a different request',
           );
         }
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${existing.id}`}, 0))`,
+        );
+        const status = await reconcileGatewayTerminalWithinTransaction(
+          transaction,
+          existing.id,
+          input.now,
+        );
         return {
           operationId: existing.id,
           traceId: existing.traceId,
           envelopeId: existing.gatewayEnvelopeId,
           idempotencyKey: existing.idempotencyKey,
           requestFingerprint: existing.requestFingerprint,
-          status: normalizeOperationStatus(existing.status),
+          status,
           replayed: true,
         };
       }
@@ -144,6 +154,14 @@ export class DrizzleGatewayOperationStore {
     return this.database.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
+      );
+      // A lifecycle may have committed assistant/citations plus its durable
+      // intent before this append. Reconcile first so a retry cannot overwrite
+      // that terminal with GatewayService's generic catch fallback.
+      await reconcileGatewayTerminalWithinTransaction(
+        transaction,
+        operationId,
+        now,
       );
       return appendGatewayOperationEvent(
         transaction,
@@ -473,11 +491,45 @@ export class DrizzleGatewayOperationStore {
     actorUserId: string,
     now: Date = new Date(),
   ): Promise<readonly GatewayOperationEvent[]> {
-    return listCurrentGatewayOperationEvents(this.database, {
+    const access = await findCurrentOperationAccess(this.database, {
       operationId,
-      afterSequence,
       actorUserId,
+      requiredPermission: 'notebook.read',
       now,
+    });
+    if (!access) {
+      throw new GatewayPersistenceError(
+        'operation_not_found',
+        'Operation not found',
+      );
+    }
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
+      );
+      const lockedAccess = await findCurrentOperationAccess(transaction, {
+        operationId,
+        actorUserId,
+        requiredPermission: 'notebook.read',
+        now,
+      });
+      if (!lockedAccess) {
+        throw new GatewayPersistenceError(
+          'operation_not_found',
+          'Operation not found',
+        );
+      }
+      await reconcileGatewayTerminalWithinTransaction(
+        transaction,
+        operationId,
+        now,
+      );
+      return listCurrentGatewayOperationEvents(transaction, {
+        operationId,
+        afterSequence,
+        actorUserId,
+        now,
+      });
     });
   }
 }

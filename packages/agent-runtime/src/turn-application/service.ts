@@ -126,6 +126,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         status: 'failed',
         content: '',
         failureCode: 'RUNTIME_FAILED',
+        retryable: true,
       });
       trace.end('failed');
       yield {

@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -10,6 +10,11 @@ import {
 } from './conversation-platform-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzlePlatformSourceRepository } from './platform-source-repository';
+import {
+  DrizzleGatewayIdentityRepository,
+  DrizzleGatewayOperationStore,
+  GatewayPersistenceError,
+} from './gateway-repository';
 import {
   DrizzlePlatformTurnRepository,
   PlatformMessageIdConflictError,
@@ -480,5 +485,579 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       content: '部分回答',
       failureCode: 'aborted',
     });
+  });
+
+  it.each([
+    {
+      name: 'completed',
+      terminal: { status: 'completed' as const },
+      failureCode: null,
+      retryable: undefined,
+    },
+    {
+      name: 'failed',
+      terminal: {
+        status: 'failed' as const,
+        code: 'RUNTIME_FAILED' as const,
+        retryable: true,
+      },
+      failureCode: 'RUNTIME_FAILED',
+      retryable: true,
+    },
+    {
+      name: 'cancelled',
+      terminal: { status: 'cancelled' as const },
+      failureCode: 'CANCELLED',
+      retryable: false,
+    },
+  ])(
+    'Gateway $name消息结算后的append故障可由begin/listEvents幂等收敛',
+    async ({ name, terminal, failureCode, retryable }) => {
+      const ownerSubjectId = `gateway-terminal-${name}`;
+      const conversations = new DrizzlePlatformConversationRepository(
+        getDatabase(),
+      );
+      const identities = new DrizzleGatewayIdentityRepository(getDatabase());
+      const turns = new DrizzlePlatformTurnRepository(getDatabase());
+      const firstStore = new DrizzleGatewayOperationStore(getDatabase());
+      const assets = new DrizzleAssetRepository(getDatabase());
+      const sources = new DrizzlePlatformSourceRepository(getDatabase());
+      const conversation = await conversations.create({
+        ownerSubjectId,
+        spaceKind: 'notebook',
+        spaceTitle: `Gateway ${name}`,
+      });
+      const owner = await identities.getActive(ownerSubjectId);
+      if (!owner) throw new Error('Gateway terminal fixture缺少主体');
+      const route = {
+        actorUserId: owner.userId,
+        agentId: owner.agentId,
+        notebookId: conversation.spaceId,
+        conversationId: conversation.id,
+        agentProfileId: 'general',
+        membershipRole: 'owner' as const,
+      };
+      const now = new Date('2026-08-12T10:00:00.000Z');
+      const fingerprint =
+        name === 'completed' ? 'a' : name === 'failed' ? 'b' : 'c';
+      const operation = await firstStore.begin({
+        envelopeId: `gateway-terminal:${name}`,
+        idempotencyKey: `gateway-terminal:${name}`,
+        requestFingerprint: fingerprint.repeat(64),
+        route,
+        now,
+      });
+      await firstStore.append(
+        operation.operationId,
+        { type: 'operation.accepted' },
+        now,
+      );
+      let sourceMarkers: number[] = [];
+      if (terminal.status === 'completed') {
+        const asset = await assets.createUploaded({
+          ownerSubjectId: owner.userId,
+          spaceId: conversation.spaceId,
+          scope: 'space',
+          kind: 'link',
+          origin: 'url_import',
+          displayName: '终态对账来源',
+          mimeType: 'text/plain',
+          byteSize: 8,
+          contentHash: 'd'.repeat(64),
+          storageKey: `tests/gateway-terminal-${name}.txt`,
+          extractedText: '可信来源',
+          outcome: { status: 'ready' },
+        });
+        if (!asset.version)
+          throw new Error('Gateway terminal fixture缺少Asset版本');
+        const source = await sources.createOrGetWebSource({
+          conversationId: conversation.id,
+          trustedSubjectId: owner.userId,
+          operationId: operation.operationId,
+          assetId: asset.descriptor.assetId,
+          assetVersionId: asset.version.versionId,
+          label: '终态对账来源',
+          url: 'https://example.com/gateway-terminal',
+        });
+        sourceMarkers = [source.ordinal];
+      }
+      const turn = await turns.attachGatewayTurn({
+        operationId: operation.operationId,
+        conversationId: conversation.id,
+        trustedSubjectId: owner.userId,
+        clientMessageId: `gateway-terminal:${name}`,
+        text: `测试 ${name} 终态`,
+        now,
+      });
+      await firstStore.append(
+        operation.operationId,
+        {
+          type: 'message.started',
+          userMessageId: turn.studentMessage.id,
+          assistantMessageId: turn.assistantMessage.id,
+          replayed: false,
+        },
+        now,
+      );
+      if (terminal.status === 'cancelled') {
+        await firstStore.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 1_000),
+        });
+      }
+      const gatewayTerminalIntent =
+        terminal.status === 'completed'
+          ? { ...terminal, messageId: turn.assistantMessage.id }
+          : terminal;
+      await expect(
+        turns.settleTurn({
+          conversationId: conversation.id,
+          trustedSubjectId: owner.userId,
+          turnId: operation.operationId,
+          status: terminal.status,
+          content:
+            terminal.status === 'completed' ? '最终回答' : '安全的部分回答',
+          failureCode,
+          sourceMarkers,
+          now: new Date(now.getTime() + 2_000),
+        }),
+      ).rejects.toThrow('Gateway附着Turn只能由Gateway写入Operation终态');
+      await turns.settleTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: owner.userId,
+        turnId: operation.operationId,
+        status: terminal.status,
+        content:
+          terminal.status === 'completed' ? '最终回答' : '安全的部分回答',
+        failureCode,
+        sourceMarkers,
+        operationTerminalWriter: 'gateway',
+        gatewayTerminalIntent,
+        now: new Date(now.getTime() + 2_000),
+      });
+
+      const [beforeRecovery] = await getDatabase()
+        .select({
+          status: schema.agentOperations.status,
+          assistantStatus: schema.conversationMessages.status,
+        })
+        .from(schema.agentOperations)
+        .innerJoin(
+          schema.conversationMessages,
+          eq(
+            schema.conversationMessages.operationId,
+            schema.agentOperations.id,
+          ),
+        )
+        .where(
+          sql`${schema.agentOperations.id} = ${operation.operationId} and ${schema.conversationMessages.role} = 'assistant'`,
+        );
+      expect(beforeRecovery).toMatchObject({
+        status: 'running',
+        assistantStatus: terminal.status,
+      });
+      expect(
+        await getDatabase()
+          .select()
+          .from(schema.gatewayOperationEvents)
+          .where(
+            sql`${schema.gatewayOperationEvents.operationId} = ${operation.operationId} and ${schema.gatewayOperationEvents.type} like 'operation.%' and ${schema.gatewayOperationEvents.type} <> 'operation.accepted'`,
+          ),
+      ).toHaveLength(0);
+
+      // 新Store模拟进程重启；begin先对同一持久intent做一次operation级收敛。
+      const restartedStore = new DrizzleGatewayOperationStore(getDatabase());
+      await expect(
+        restartedStore.begin({
+          envelopeId: `gateway-terminal:${name}`,
+          idempotencyKey: `gateway-terminal:${name}`,
+          requestFingerprint: fingerprint.repeat(64),
+          route,
+          now: new Date(now.getTime() + 3_000),
+        }),
+      ).resolves.toMatchObject({
+        operationId: operation.operationId,
+        status: terminal.status,
+        replayed: true,
+      });
+      const events = await restartedStore.listEvents(
+        operation.operationId,
+        -1,
+        owner.userId,
+        new Date(now.getTime() + 4_000),
+      );
+      const terminalEvents = events.filter((event) =>
+        [
+          'operation.completed',
+          'operation.failed',
+          'operation.cancelled',
+        ].includes(event.type),
+      );
+      expect(terminalEvents).toHaveLength(1);
+      expect(terminalEvents[0]).toMatchObject({
+        type: `operation.${terminal.status}`,
+        ...(retryable === undefined ? {} : { retryable }),
+      });
+      const persistedCitations = await getDatabase()
+        .select()
+        .from(schema.conversationMessageCitations)
+        .where(
+          eq(
+            schema.conversationMessageCitations.assistantMessageId,
+            turn.assistantMessage.id,
+          ),
+        );
+      expect(persistedCitations).toHaveLength(
+        terminal.status === 'completed' ? 1 : 0,
+      );
+      expect(
+        await restartedStore.append(
+          operation.operationId,
+          terminal.status === 'completed'
+            ? {
+                type: 'operation.completed',
+                messageId: turn.assistantMessage.id,
+              }
+            : terminal.status === 'failed'
+              ? {
+                  type: 'operation.failed',
+                  code: terminal.code,
+                  retryable: terminal.retryable,
+                }
+              : { type: 'operation.cancelled' },
+          new Date(now.getTime() + 5_000),
+        ),
+      ).toEqual(terminalEvents[0]);
+      expect(
+        (
+          await restartedStore.listEvents(
+            operation.operationId,
+            -1,
+            owner.userId,
+            new Date(now.getTime() + 6_000),
+          )
+        ).filter((event) =>
+          [
+            'operation.completed',
+            'operation.failed',
+            'operation.cancelled',
+          ].includes(event.type),
+        ),
+      ).toHaveLength(1);
+
+      const conflictingPayload =
+        terminal.status === 'completed'
+          ? {
+              type: 'operation.completed' as const,
+              messageId: '00000000-0000-4000-8000-000000000099',
+            }
+          : terminal.status === 'failed'
+            ? {
+                type: 'operation.failed' as const,
+                code: terminal.code,
+                retryable: !terminal.retryable,
+              }
+            : {
+                type: 'operation.completed' as const,
+                messageId: turn.assistantMessage.id,
+              };
+      await expect(
+        restartedStore.append(
+          operation.operationId,
+          conflictingPayload,
+          new Date(now.getTime() + 7_000),
+        ),
+      ).rejects.toBeInstanceOf(GatewayPersistenceError);
+    },
+  );
+
+  it('Gateway completed event不能把active assistant猜成已完成正文', async () => {
+    const ownerSubjectId = 'gateway-event-first-completed';
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const identities = new DrizzleGatewayIdentityRepository(getDatabase());
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const store = new DrizzleGatewayOperationStore(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId,
+      spaceKind: 'notebook',
+      spaceTitle: 'Gateway event-first完成',
+    });
+    const owner = await identities.getActive(ownerSubjectId);
+    if (!owner) throw new Error('Gateway completed fixture缺少主体');
+    const route = {
+      actorUserId: owner.userId,
+      agentId: owner.agentId,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      agentProfileId: 'general',
+      membershipRole: 'owner' as const,
+    };
+    const now = new Date('2026-08-12T10:30:00.000Z');
+    const operation = await store.begin({
+      envelopeId: 'gateway-event-first:completed',
+      idempotencyKey: 'gateway-event-first:completed',
+      requestFingerprint: 'f'.repeat(64),
+      route,
+      now,
+    });
+    const turn = await turns.attachGatewayTurn({
+      operationId: operation.operationId,
+      conversationId: conversation.id,
+      trustedSubjectId: owner.userId,
+      clientMessageId: 'gateway-event-first:completed',
+      text: '不要猜最终正文',
+      now,
+    });
+    await store.append(
+      operation.operationId,
+      { type: 'operation.accepted' },
+      now,
+    );
+    await store.append(
+      operation.operationId,
+      {
+        type: 'message.started',
+        userMessageId: turn.studentMessage.id,
+        assistantMessageId: turn.assistantMessage.id,
+        replayed: false,
+      },
+      now,
+    );
+    await store.append(
+      operation.operationId,
+      {
+        type: 'operation.completed',
+        messageId: turn.assistantMessage.id,
+      },
+      new Date(now.getTime() + 1_000),
+    );
+
+    await expect(
+      new DrizzleGatewayOperationStore(getDatabase()).begin({
+        envelopeId: 'gateway-event-first:completed',
+        idempotencyKey: 'gateway-event-first:completed',
+        requestFingerprint: 'f'.repeat(64),
+        route,
+        now: new Date(now.getTime() + 2_000),
+      }),
+    ).rejects.toBeInstanceOf(GatewayPersistenceError);
+    expect(
+      await getDatabase()
+        .select({
+          status: schema.conversationMessages.status,
+          content: schema.conversationMessages.content,
+        })
+        .from(schema.conversationMessages)
+        .where(eq(schema.conversationMessages.id, turn.assistantMessage.id)),
+    ).toEqual([{ status: 'streaming', content: '' }]);
+  });
+
+  it('Gateway取消event先落账时由重启Store补齐assistant且不重跑模型或工具', async () => {
+    const ownerSubjectId = 'gateway-event-first-cancel';
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const identities = new DrizzleGatewayIdentityRepository(getDatabase());
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const firstStore = new DrizzleGatewayOperationStore(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId,
+      spaceKind: 'notebook',
+      spaceTitle: 'Gateway event-first取消',
+    });
+    const owner = await identities.getActive(ownerSubjectId);
+    if (!owner) throw new Error('Gateway event-first fixture缺少主体');
+    const route = {
+      actorUserId: owner.userId,
+      agentId: owner.agentId,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      agentProfileId: 'general',
+      membershipRole: 'owner' as const,
+    };
+    const now = new Date('2026-08-12T11:00:00.000Z');
+    const operation = await firstStore.begin({
+      envelopeId: 'gateway-event-first:cancel',
+      idempotencyKey: 'gateway-event-first:cancel',
+      requestFingerprint: 'e'.repeat(64),
+      route,
+      now,
+    });
+    await firstStore.append(
+      operation.operationId,
+      { type: 'operation.accepted' },
+      now,
+    );
+    const turn = await turns.attachGatewayTurn({
+      operationId: operation.operationId,
+      conversationId: conversation.id,
+      trustedSubjectId: owner.userId,
+      clientMessageId: 'gateway-event-first:cancel',
+      text: '取消这个长回答',
+      now,
+    });
+    await firstStore.append(
+      operation.operationId,
+      {
+        type: 'message.started',
+        userMessageId: turn.studentMessage.id,
+        assistantMessageId: turn.assistantMessage.id,
+        replayed: false,
+      },
+      now,
+    );
+    await firstStore.requestCancellation({
+      operationId: operation.operationId,
+      actorUserId: owner.userId,
+      now: new Date(now.getTime() + 1_000),
+    });
+    await firstStore.append(
+      operation.operationId,
+      { type: 'operation.cancelled' },
+      new Date(now.getTime() + 2_000),
+    );
+
+    const [beforeRestart] = await getDatabase()
+      .select({
+        operationStatus: schema.agentOperations.status,
+        operationFailureCode: schema.agentOperations.failureCode,
+        assistantStatus: schema.conversationMessages.status,
+        assistantFailureCode: schema.conversationMessages.failureCode,
+        assistantContent: schema.conversationMessages.content,
+      })
+      .from(schema.agentOperations)
+      .innerJoin(
+        schema.conversationMessages,
+        eq(schema.conversationMessages.operationId, schema.agentOperations.id),
+      )
+      .where(
+        sql`${schema.agentOperations.id} = ${operation.operationId} and ${schema.conversationMessages.role} = 'assistant'`,
+      );
+    expect(beforeRestart).toEqual({
+      operationStatus: 'cancelled',
+      operationFailureCode: null,
+      assistantStatus: 'streaming',
+      assistantFailureCode: null,
+      assistantContent: '',
+    });
+    expect(
+      await getDatabase()
+        .select()
+        .from(schema.modelRuns)
+        .where(eq(schema.modelRuns.agentOperationId, operation.operationId)),
+    ).toHaveLength(0);
+    expect(
+      await getDatabase()
+        .select()
+        .from(schema.toolCalls)
+        .where(eq(schema.toolCalls.agentOperationId, operation.operationId)),
+    ).toHaveLength(0);
+
+    await getDatabase()
+      .update(schema.conversationMessages)
+      .set({ content: '未经最终结算的模型片段' })
+      .where(eq(schema.conversationMessages.id, turn.assistantMessage.id));
+    const unsafeRestart = new DrizzleGatewayOperationStore(getDatabase());
+    await expect(
+      unsafeRestart.begin({
+        envelopeId: 'gateway-event-first:cancel',
+        idempotencyKey: 'gateway-event-first:cancel',
+        requestFingerprint: 'e'.repeat(64),
+        route,
+        now: new Date(now.getTime() + 3_000),
+      }),
+    ).rejects.toBeInstanceOf(GatewayPersistenceError);
+    expect(
+      await getDatabase()
+        .select({
+          status: schema.conversationMessages.status,
+          content: schema.conversationMessages.content,
+        })
+        .from(schema.conversationMessages)
+        .where(eq(schema.conversationMessages.id, turn.assistantMessage.id)),
+    ).toEqual([{ status: 'streaming', content: '未经最终结算的模型片段' }]);
+    await getDatabase()
+      .update(schema.conversationMessages)
+      .set({ content: '' })
+      .where(eq(schema.conversationMessages.id, turn.assistantMessage.id));
+
+    const restartedStore = new DrizzleGatewayOperationStore(getDatabase());
+    await expect(
+      restartedStore.begin({
+        envelopeId: 'gateway-event-first:cancel',
+        idempotencyKey: 'gateway-event-first:cancel',
+        requestFingerprint: 'e'.repeat(64),
+        route,
+        now: new Date(now.getTime() + 3_000),
+      }),
+    ).resolves.toMatchObject({
+      operationId: operation.operationId,
+      status: 'cancelled',
+      replayed: true,
+    });
+    const firstReplay = await restartedStore.listEvents(
+      operation.operationId,
+      -1,
+      owner.userId,
+      new Date(now.getTime() + 4_000),
+    );
+    expect(
+      firstReplay.filter((event) => event.type === 'operation.cancelled'),
+    ).toHaveLength(1);
+    const [afterRestart] = await getDatabase()
+      .select({
+        status: schema.conversationMessages.status,
+        content: schema.conversationMessages.content,
+        failureCode: schema.conversationMessages.failureCode,
+        completedAt: schema.conversationMessages.completedAt,
+      })
+      .from(schema.conversationMessages)
+      .where(
+        and(
+          eq(schema.conversationMessages.operationId, operation.operationId),
+          eq(schema.conversationMessages.role, 'assistant'),
+        ),
+      );
+    expect(afterRestart).toMatchObject({
+      status: 'cancelled',
+      content: '',
+      failureCode: 'CANCELLED',
+    });
+    expect(afterRestart?.completedAt).toEqual(new Date(now.getTime() + 3_000));
+
+    const secondRestart = new DrizzleGatewayOperationStore(getDatabase());
+    await expect(
+      secondRestart.begin({
+        envelopeId: 'gateway-event-first:cancel',
+        idempotencyKey: 'gateway-event-first:cancel',
+        requestFingerprint: 'e'.repeat(64),
+        route,
+        now: new Date(now.getTime() + 5_000),
+      }),
+    ).resolves.toMatchObject({ status: 'cancelled', replayed: true });
+    const secondReplay = await secondRestart.listEvents(
+      operation.operationId,
+      -1,
+      owner.userId,
+      new Date(now.getTime() + 6_000),
+    );
+    expect(
+      secondReplay.filter((event) => event.type === 'operation.cancelled'),
+    ).toHaveLength(1);
+    expect(
+      await getDatabase()
+        .select()
+        .from(schema.modelRuns)
+        .where(eq(schema.modelRuns.agentOperationId, operation.operationId)),
+    ).toHaveLength(0);
+    expect(
+      await getDatabase()
+        .select()
+        .from(schema.toolCalls)
+        .where(eq(schema.toolCalls.agentOperationId, operation.operationId)),
+    ).toHaveLength(0);
   });
 });

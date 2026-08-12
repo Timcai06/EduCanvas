@@ -9,11 +9,18 @@ import {
 } from './message-parts';
 import { requireNotebookAccess } from './notebook-access';
 import {
+  encodeGatewayTerminalIntent,
+  gatewayTerminalEventMatchesIntent,
+  type DurableGatewayTerminalIntent,
+} from './gateway/terminal-reconciliation';
+import { gatewayOperationEventSchema } from '@educanvas/gateway-core';
+import {
   agentOperations,
   assetVersions,
   conversationMessageCitations,
   conversationMessages,
   conversations,
+  gatewayOperationEvents,
   operationSources,
   personalAgents,
   spaces,
@@ -70,6 +77,41 @@ export interface PlatformSettledCitationSnapshot {
 
 export interface PlatformTurnSettlementSnapshot extends PlatformTurnSnapshot {
   settledCitations: readonly PlatformSettledCitationSnapshot[];
+}
+
+async function loadSettledCitations(
+  executor: DatabaseExecutor,
+  input: { assistantMessageId: string; operationId: string },
+): Promise<PlatformSettledCitationSnapshot[]> {
+  return executor
+    .select({
+      citationId: conversationMessageCitations.id,
+      assistantMessageId: conversationMessageCitations.assistantMessageId,
+      ordinal: operationSources.ordinal,
+      assetId: assetVersions.assetId,
+      assetVersionId: operationSources.assetVersionId,
+      label: operationSources.label,
+      url: operationSources.locatorUrl,
+    })
+    .from(conversationMessageCitations)
+    .innerJoin(
+      operationSources,
+      eq(operationSources.id, conversationMessageCitations.operationSourceId),
+    )
+    .innerJoin(
+      assetVersions,
+      eq(assetVersions.id, operationSources.assetVersionId),
+    )
+    .where(
+      and(
+        eq(
+          conversationMessageCitations.assistantMessageId,
+          input.assistantMessageId,
+        ),
+        eq(operationSources.operationId, input.operationId),
+      ),
+    )
+    .orderBy(asc(operationSources.ordinal));
 }
 
 export class PlatformTurnOwnershipError extends Error {
@@ -493,6 +535,8 @@ export class DrizzlePlatformTurnRepository {
     sourceMarkers?: readonly number[];
     /** Gateway入口由Gateway Event循环独占Operation终态；本仓储只结算消息。 */
     operationTerminalWriter?: 'turn_application' | 'gateway';
+    /** 与消息/引用同事务冻结，供 Gateway 在 append 失败或重启后收敛。 */
+    gatewayTerminalIntent?: DurableGatewayTerminalIntent;
     now?: Date;
   }): Promise<PlatformTurnSettlementSnapshot> {
     const sourceMarkers = input.sourceMarkers ?? [];
@@ -520,6 +564,7 @@ export class DrizzlePlatformTurnRepository {
         .select({
           id: agentOperations.id,
           cancelRequestedAt: agentOperations.cancelRequestedAt,
+          failureCode: agentOperations.failureCode,
           gatewayEnvelopeId: agentOperations.gatewayEnvelopeId,
           status: agentOperations.status,
         })
@@ -543,10 +588,52 @@ export class DrizzlePlatformTurnRepository {
         );
       }
       const gatewayOwnsTerminal = input.operationTerminalWriter === 'gateway';
-      if (gatewayOwnsTerminal && operation.gatewayEnvelopeId === null) {
+      const gatewayAttached = operation.gatewayEnvelopeId !== null;
+      if (gatewayOwnsTerminal && !gatewayAttached) {
         throw new PlatformTurnLifecycleError(
           '只有Gateway附着Turn可以把Operation终态交给Gateway',
         );
+      }
+      if (gatewayAttached && !gatewayOwnsTerminal) {
+        throw new PlatformTurnLifecycleError(
+          'Gateway附着Turn只能由Gateway写入Operation终态',
+        );
+      }
+      if (gatewayOwnsTerminal) {
+        const intent = input.gatewayTerminalIntent;
+        const normalizedInputStatus =
+          input.status === 'interrupted' ? 'failed' : input.status;
+        if (!intent || intent.status !== normalizedInputStatus) {
+          throw new PlatformTurnLifecycleError(
+            'Gateway附着Turn必须提供匹配的terminal intent',
+          );
+        }
+        if (!['pending', 'running'].includes(operation.status)) {
+          const terminalRows = await transaction
+            .select({ payload: gatewayOperationEvents.payload })
+            .from(gatewayOperationEvents)
+            .where(
+              and(
+                eq(gatewayOperationEvents.operationId, input.turnId),
+                inArray(gatewayOperationEvents.type, [
+                  'operation.completed',
+                  'operation.failed',
+                  'operation.cancelled',
+                ]),
+              ),
+            );
+          const terminalEvents = terminalRows.map(({ payload }) =>
+            gatewayOperationEventSchema.parse(payload),
+          );
+          if (
+            terminalEvents.length !== 1 ||
+            !gatewayTerminalEventMatchesIntent(terminalEvents[0]!, intent)
+          ) {
+            throw new PlatformTurnLifecycleError(
+              'Gateway Operation终态与assistant结算意图冲突',
+            );
+          }
+        }
       }
       let settleMessage = false;
       const settledCitations: PlatformSettledCitationSnapshot[] = [];
@@ -575,7 +662,12 @@ export class DrizzlePlatformTurnRepository {
       }
       if (settleMessage) {
         const [assistant] = await transaction
-          .select({ id: conversationMessages.id })
+          .select({
+            id: conversationMessages.id,
+            status: conversationMessages.status,
+            content: conversationMessages.content,
+            failureCode: conversationMessages.failureCode,
+          })
           .from(conversationMessages)
           .where(
             and(
@@ -586,6 +678,71 @@ export class DrizzlePlatformTurnRepository {
           .limit(1);
         if (!assistant) {
           throw new PlatformTurnLifecycleError('通用Turn缺少assistant消息');
+        }
+        const assistantAlreadyTerminal = !['pending', 'streaming'].includes(
+          assistant.status,
+        );
+        if (assistantAlreadyTerminal) {
+          const sameTerminal =
+            assistant.status === input.status &&
+            assistant.content === input.content &&
+            assistant.failureCode === (input.failureCode ?? null);
+          if (!sameTerminal) {
+            throw new PlatformTurnLifecycleError(
+              '重复结算与已有assistant终态冲突',
+            );
+          }
+          const existingCitations = await loadSettledCitations(transaction, {
+            assistantMessageId: assistant.id,
+            operationId: input.turnId,
+          });
+          if (
+            existingCitations.length !== sourceMarkers.length ||
+            existingCitations.some(
+              (citation, index) => citation.ordinal !== sourceMarkers[index],
+            )
+          ) {
+            throw new PlatformTurnLifecycleError('重复结算与已有引用事实冲突');
+          }
+          settledCitations.push(...existingCitations);
+          if (
+            gatewayOwnsTerminal &&
+            ['pending', 'running'].includes(operation.status)
+          ) {
+            const encodedIntent = encodeGatewayTerminalIntent(
+              input.gatewayTerminalIntent!,
+            );
+            if (
+              operation.failureCode !== null &&
+              operation.failureCode !== encodedIntent
+            ) {
+              throw new PlatformTurnLifecycleError(
+                '重复结算与已有Gateway terminal intent冲突',
+              );
+            }
+            const [intentPersisted] = await transaction
+              .update(agentOperations)
+              .set({ failureCode: encodedIntent })
+              .where(
+                and(
+                  eq(agentOperations.id, input.turnId),
+                  inArray(agentOperations.status, ['pending', 'running']),
+                  operation.failureCode === null
+                    ? isNull(agentOperations.failureCode)
+                    : eq(agentOperations.failureCode, encodedIntent),
+                ),
+              )
+              .returning({ id: agentOperations.id });
+            if (!intentPersisted) {
+              throw new PlatformTurnLifecycleError(
+                'Gateway terminal intent无法与重复assistant终态共同提交',
+              );
+            }
+          }
+          return {
+            ...(await loadTurn(transaction, input.turnId, false)),
+            settledCitations,
+          };
         }
         if (sourceMarkers.length > 0) {
           const citedSources = await transaction
@@ -658,7 +815,7 @@ export class DrizzlePlatformTurnRepository {
             }),
           );
         }
-        await transaction
+        const [updatedAssistant] = await transaction
           .update(conversationMessages)
           .set({
             status: input.status,
@@ -672,7 +829,37 @@ export class DrizzlePlatformTurnRepository {
               eq(conversationMessages.role, 'assistant'),
               inArray(conversationMessages.status, ['pending', 'streaming']),
             ),
+          )
+          .returning({ id: conversationMessages.id });
+        if (!updatedAssistant) {
+          throw new PlatformTurnLifecycleError(
+            'assistant消息被并发结算，请重试读取持久终态',
           );
+        }
+        if (
+          gatewayOwnsTerminal &&
+          ['pending', 'running'].includes(operation.status)
+        ) {
+          const [intentPersisted] = await transaction
+            .update(agentOperations)
+            .set({
+              failureCode: encodeGatewayTerminalIntent(
+                input.gatewayTerminalIntent!,
+              ),
+            })
+            .where(
+              and(
+                eq(agentOperations.id, input.turnId),
+                inArray(agentOperations.status, ['pending', 'running']),
+              ),
+            )
+            .returning({ id: agentOperations.id });
+          if (!intentPersisted) {
+            throw new PlatformTurnLifecycleError(
+              'Gateway terminal intent无法与assistant终态共同提交',
+            );
+          }
+        }
         await transaction
           .update(conversations)
           .set({ lastActivityAt: now, updatedAt: now })

@@ -273,7 +273,7 @@ export async function listRecentCurrentGatewayOperations(
 }
 
 export async function listCurrentGatewayOperationEvents(
-  database: Database,
+  database: DatabaseExecutor,
   input: {
     operationId: string;
     afterSequence: number;

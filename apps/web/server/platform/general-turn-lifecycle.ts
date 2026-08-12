@@ -11,6 +11,7 @@ import type {
   TurnApplicationLifecycleSnapshot,
   TurnApplicationProfileEvent,
 } from '@educanvas/agent-runtime';
+import { toGatewayFailureCode } from '@educanvas/gateway-runtime';
 import {
   type PlatformMessageCitationSnapshot,
   type PlatformSettledCitationSnapshot,
@@ -43,7 +44,7 @@ function citationEvent(
   };
 }
 
-/** Web General消息与引用生命周期；只结算消息，Gateway仍独占Operation终态。 */
+/** Web General消息/引用冻结 terminal intent；Gateway adapter仍独占Operation终态。 */
 export class WebGeneralLifecycle implements TurnApplicationLifecyclePort {
   private snapshot: PlatformTurnSnapshot | null = null;
 
@@ -122,6 +123,27 @@ export class WebGeneralLifecycle implements TurnApplicationLifecyclePort {
   async settle(
     input: Parameters<TurnApplicationLifecyclePort['settle']>[0],
   ): ReturnType<TurnApplicationLifecyclePort['settle']> {
+    if (
+      input.status === 'failed' &&
+      (input.failureCode === null ||
+        input.failureCode === undefined ||
+        input.retryable === undefined)
+    ) {
+      throw new Error('web_general_gateway_failure_intent_missing');
+    }
+    const gatewayTerminalIntent =
+      input.status === 'completed'
+        ? {
+            status: 'completed' as const,
+            messageId: input.turn.assistantMessageId,
+          }
+        : input.status === 'cancelled'
+          ? { status: 'cancelled' as const }
+          : {
+              status: 'failed' as const,
+              code: toGatewayFailureCode(input.failureCode!),
+              retryable: input.retryable!,
+            };
     const settled = await webGeneralTurns.settleTurn({
       conversationId: input.command.notebook.conversationId,
       trustedSubjectId: this.identity.studentId,
@@ -131,6 +153,7 @@ export class WebGeneralLifecycle implements TurnApplicationLifecyclePort {
       failureCode: input.failureCode,
       sourceMarkers: input.citationMarkers,
       operationTerminalWriter: 'gateway',
+      gatewayTerminalIntent,
     });
     return settled.settledCitations.map((citation) =>
       citationEvent(input.command.operationId, citation),
