@@ -159,6 +159,7 @@ export function Composer({
         <PlusMenu
           onAction={onMenuAction}
           availableActions={availableMenuActions}
+          placement={isLanding ? 'below' : 'above'}
         />
         <textarea
           ref={textareaRef}

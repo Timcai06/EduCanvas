@@ -106,9 +106,12 @@ const menuItems: readonly PlusMenuItem[] = [
 export function PlusMenu({
   onAction,
   availableActions,
+  placement = 'above',
 }: {
   onAction: (action: PlusMenuActionId) => void;
   availableActions?: readonly PlusMenuActionId[];
+  /** Landing 输入框上方空间会随辅助控件收缩，因此菜单改向下展开；对话 dock 仍向上展开。 */
+  placement?: 'above' | 'below';
 }) {
   const items = useMemo(
     () =>
@@ -153,7 +156,11 @@ export function PlusMenu({
         const timeline = gsap.timeline();
         timeline.fromTo(
           menu,
-          { opacity: 0, y: 8, scale: 0.97 },
+          {
+            opacity: 0,
+            y: placement === 'above' ? 8 : -8,
+            scale: 0.97,
+          },
           {
             opacity: 1,
             y: 0,
@@ -181,7 +188,11 @@ export function PlusMenu({
       });
       return () => media.revert();
     },
-    { dependencies: [open], scope: rootRef, revertOnUpdate: true },
+    {
+      dependencies: [open, placement],
+      scope: rootRef,
+      revertOnUpdate: true,
+    },
   );
 
   const close = (refocus: boolean) => {
@@ -228,7 +239,12 @@ export function PlusMenu({
           role="menu"
           aria-label="添加上下文或创建内容"
           onKeyDown={handleMenuKeyDown}
-          className="absolute bottom-12 left-0 z-50 w-56 origin-bottom-left rounded-2xl border border-line bg-card py-1.5 shadow-[var(--shadow-sheet)]"
+          data-placement={placement}
+          className={`absolute left-0 z-50 max-h-[calc(50dvh-1rem)] w-56 overscroll-contain overflow-y-auto rounded-2xl border border-line bg-card py-1.5 shadow-[var(--shadow-sheet)] ${
+            placement === 'above'
+              ? 'bottom-12 origin-bottom-left'
+              : 'top-12 origin-top-left'
+          }`}
         >
           {items.map((item, index) => (
             <button
