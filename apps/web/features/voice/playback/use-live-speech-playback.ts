@@ -8,9 +8,9 @@ import {
   prepareLiveSpeechText,
 } from './live-speech-text';
 import {
-  takeLiveSpeechSegments,
-  type LiveSpeechSegment,
-} from './live-speech-segments';
+  takeSemanticSpeechSegments,
+  type SemanticSegment,
+} from './semantic-segmentation';
 import { LiveSpeechResponseGate } from './live-speech-response-gate';
 import {
   INITIAL_LIVE_SPEECH_CURSORS,
@@ -97,14 +97,14 @@ export function reduceLiveSpeechPlayback(
 
 interface SpeechQueueState {
   cursor: LiveSpeechCursorState;
-  /** 空白等不生成 TTS 的原文也必须只扫描一次。 */
   segmentCursor: number;
   segmentCount: number;
-  queue: LiveSpeechSegment[];
+  queue: SemanticSegment[];
   pumping: boolean;
   complete: boolean;
   suppressed: boolean;
   lastWindow: PcmPlaybackWindow | null;
+  lastCommittedAtMs: number;
 }
 
 function createQueueState(
@@ -119,6 +119,7 @@ function createQueueState(
     complete: false,
     suppressed: false,
     lastWindow: null,
+    lastCommittedAtMs: 0,
   };
 }
 
@@ -382,14 +383,19 @@ export function useLiveSpeechPlayback({
       return;
     }
     queue.complete = assistantStatus === 'completed';
-    const batch = takeLiveSpeechSegments({
+    const batch = takeSemanticSpeechSegments({
       text,
       consumedCharacters: queue.segmentCursor,
       segmentCount: queue.segmentCount,
       complete: queue.complete,
+      nowMs: Date.now(),
+      lastCommittedAtMs: queue.lastCommittedAtMs,
     });
     queue.segmentCursor = batch.consumedCharacters;
     queue.segmentCount += batch.segments.length;
+    if (batch.segments.length > 0) {
+      queue.lastCommittedAtMs = Date.now();
+    }
     const runId = queue.cursor.runId;
     for (const segment of batch.segments) {
       queue.cursor = reduceLiveSpeechCursors(queue.cursor, {
