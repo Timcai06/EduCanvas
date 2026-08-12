@@ -47,11 +47,38 @@ const DOCX_MIME_TYPES = new Set([
 
 const PLAIN_TEXT_MIME_TYPES = new Set(['text/markdown', 'text/plain']);
 
-/** 调用方据此判断某个版本要不要排进解析队列，避免为图片建一个必然失败的任务。 */
+/** MinerU 转换服务受理的文档类型（ADR-0026 决定 2）。 */
+const MINERU_DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  /* 服务端归一化后的内部值（见 DOCX_MIME_TYPES 注释），PPTX/XLSX 同型。 */
+  'application/vnd.openxmlformats-officedocument.wordprocessingml',
+  'application/vnd.openxmlformats-officedocument.presentationml',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml',
+]);
+
+/**
+ * 文档抽取路由（ADR-0026 决定 2）。
+ *
+ * - `mineru`：PDF/DOCX/PPTX/XLSX 进入独立 MinerU 转换服务，产出结构化
+ *   Markdown；MinerU 不可用时由编排层降级为纯文本抽取。
+ * - `direct_decode`：TXT/Markdown 严格 UTF-8 解码，不调用 MinerU。
+ * - `null`：不在文档抽取范围内（图片、音频等另有流程）。
+ */
+export function routeDocumentExtraction(
+  mimeType: string,
+): 'mineru' | 'direct_decode' | null {
+  if (MINERU_DOCUMENT_MIME_TYPES.has(mimeType)) return 'mineru';
+  if (PLAIN_TEXT_MIME_TYPES.has(mimeType)) return 'direct_decode';
+  return null;
+}
+
+/** 调用方据此判断某个版本要不要排进解析队列，避免为图片建一个必然失败的任务。
+ *  判定范围与 MinerU 受理类型 + 纯文本解码一致（ADR-0026 决定 2），
+ *  PPTX/XLSX 与 PDF/DOCX 同权：必须落 processing 排入转换队列，
+ *  不能静默写成 ready 假装有内容。 */
 export function supportsTextExtraction(mimeType: string): boolean {
   return (
-    mimeType === 'application/pdf' ||
-    DOCX_MIME_TYPES.has(mimeType) ||
+    MINERU_DOCUMENT_MIME_TYPES.has(mimeType) ||
     PLAIN_TEXT_MIME_TYPES.has(mimeType)
   );
 }
