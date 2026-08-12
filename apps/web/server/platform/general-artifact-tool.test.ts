@@ -2,7 +2,10 @@ import type { AgentToolContext } from '@educanvas/agent-runtime';
 import type { PlatformArtifact, PlatformArtifactJob } from '@educanvas/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { WebOperationArtifacts } from './general-artifact-tool';
+import {
+  collectArtifactInputSourceReferences,
+  WebOperationArtifacts,
+} from './general-artifact-tool';
 
 vi.mock('server-only', () => ({}));
 
@@ -42,6 +45,58 @@ const job: PlatformArtifactJob = {
 };
 
 describe('WebOperationArtifacts', () => {
+  it('从实际物化计划按首见顺序冻结文本与原生版本并去重', () => {
+    expect(
+      collectArtifactInputSourceReferences({
+        textSegments: [
+          {
+            reference: {
+              assetId: 'asset-document',
+              versionId: 'version-document',
+              kind: 'document',
+            },
+            representation: {
+              kind: 'text',
+              quality: 'structured',
+              variant: 'default',
+              producer: 'mineru',
+              producerVersion: 'v1',
+            },
+          },
+        ],
+        nativeReferences: [
+          {
+            assetId: 'asset-document',
+            versionId: 'version-document',
+            kind: 'document',
+          },
+          {
+            assetId: 'asset-image',
+            versionId: 'version-image',
+            kind: 'image',
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        assetId: 'asset-document',
+        versionId: 'version-document',
+        representation: {
+          kind: 'text',
+          quality: 'structured',
+          variant: 'default',
+          producer: 'mineru',
+          producerVersion: 'v1',
+        },
+      },
+      {
+        assetId: 'asset-image',
+        versionId: 'version-image',
+        representation: null,
+      },
+    ]);
+  });
+
   it('以可信 Notebook 范围原子入队并投影 proposed 事件', async () => {
     const repository = {
       createArtifactWithGenerationJob: vi
@@ -54,6 +109,19 @@ describe('WebOperationArtifacts', () => {
         conversationId: context.conversationId,
         spaceId: artifact.spaceId,
         operationId: 'operation-1',
+        sourceReferences: [
+          {
+            assetId: 'asset-1',
+            versionId: 'asset-version-1',
+            representation: {
+              kind: 'text',
+              quality: 'structured',
+              variant: 'default',
+              producer: 'mineru',
+              producerVersion: 'v1',
+            },
+          },
+        ],
       },
       repository,
     );
@@ -79,6 +147,21 @@ describe('WebOperationArtifacts', () => {
       params: {
         generation: {
           instruction: '围绕分数的意义、运算规则和常见错误整理。',
+        },
+        provenance: {
+          sources: [
+            {
+              assetId: 'asset-1',
+              versionId: 'asset-version-1',
+              representation: {
+                kind: 'text',
+                quality: 'structured',
+                variant: 'default',
+                producer: 'mineru',
+                producerVersion: 'v1',
+              },
+            },
+          ],
         },
       },
     });
@@ -168,6 +251,7 @@ describe('WebOperationArtifacts', () => {
         generation: {
           instruction: '生成一份课程结构化文档。',
         },
+        provenance: { sources: [] },
       },
     });
     expect(output).toEqual({
@@ -219,6 +303,7 @@ describe('WebOperationArtifacts', () => {
           generation: {
             instruction: '基于对话生成一页课程网站。',
           },
+          provenance: { sources: [] },
         },
       }),
     );

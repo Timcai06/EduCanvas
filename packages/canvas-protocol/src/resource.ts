@@ -121,7 +121,22 @@ export const canvasResourceProvenanceSchema = z
     ]),
     createdBy: z.enum(['user', 'agent', 'system', 'import']),
     createdAt: z.iso.datetime({ offset: true }),
-    sourceResourceIds: z.array(opaqueIdSchema).max(32),
+    sourceResourceIds: z.array(opaqueIdSchema).max(64),
+    /**
+     * 精确到不可变版本的来源引用。可选字段保持 schemaVersion=1 历史资源兼容；
+     * 它只是审计/导航元数据，不是读取 Source 的授权凭据。
+     */
+    sourceReferences: z
+      .array(
+        z
+          .object({
+            resourceId: opaqueIdSchema,
+            versionId: opaqueIdSchema,
+          })
+          .strict(),
+      )
+      .max(64)
+      .optional(),
     operationId: opaqueIdSchema.nullable(),
     /**
      * 仅允许展示经服务端净化的生成摘要；原始Prompt、Provider响应和Secret不属于该协议。
@@ -145,6 +160,35 @@ export const canvasResourceProvenanceSchema = z
         path: ['sourceResourceIds'],
         message: 'sourceResourceIds不能重复',
       });
+    }
+    if (value.sourceReferences) {
+      const references = value.sourceReferences.map(
+        (reference) => `${reference.resourceId}:${reference.versionId}`,
+      );
+      if (new Set(references).size !== references.length) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sourceReferences'],
+          message: 'sourceReferences不能重复',
+        });
+      }
+      const referencedResources = [
+        ...new Set(
+          value.sourceReferences.map((reference) => reference.resourceId),
+        ),
+      ];
+      if (
+        referencedResources.length !== value.sourceResourceIds.length ||
+        referencedResources.some(
+          (resourceId, index) => resourceId !== value.sourceResourceIds[index],
+        )
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sourceReferences'],
+          message: 'sourceReferences必须与sourceResourceIds同序一致',
+        });
+      }
     }
   });
 

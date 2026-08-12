@@ -226,6 +226,12 @@ describe('Artifact CanvasResource adapter', () => {
       createdBy: 'agent',
       createdAt: version.createdAt,
       sourceResourceIds: [sourceId],
+      sourceReferences: [
+        {
+          resourceId: sourceId,
+          versionId: '70000000-0000-4000-8000-000000000007',
+        },
+      ],
       operationId,
       generator: {
         provider: 'fixture-speech',
@@ -450,6 +456,25 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
     });
     expect(resource.allowedActions).toEqual(['view']);
+    expect(resource.status).toBe('archived');
+  });
+
+  it('web_app 归档后移除 live 运行动作，避免旁路重放', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: {
+        ...artifact,
+        kind: 'web_app',
+        trustTier: 'tier2',
+        status: 'archived',
+      },
+      version,
+      latestJob: null,
+      accessRole: 'owner',
+    });
+
+    expect(resource.allowedActions).toEqual(['view']);
+    expect(resource.runtime.kind).toBe('web_sandbox');
     expect(resource.status).toBe('archived');
   });
 

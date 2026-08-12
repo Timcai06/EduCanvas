@@ -68,6 +68,91 @@ describe('artifact-resource-projection（markdown_document）', () => {
     });
   });
 
+  it('projects the exact immutable input versions without turning provenance into authority', () => {
+    const generationJobId = '30000000-0000-4000-8000-000000000003';
+    const resource = projectOwnedArtifactResource({
+      notebookId: artifactBase.spaceId,
+      artifact: { ...artifactBase, kind: 'markdown_document' },
+      version: { ...version, generationJobId },
+      latestJob: {
+        id: generationJobId,
+        artifactId: artifactBase.id,
+        operationId: '40000000-0000-4000-8000-000000000004',
+        status: 'succeeded',
+        progress: 100,
+        failureCode: null,
+        params: {
+          generation: { instruction: '根据资料生成文档' },
+          provenance: {
+            sources: [
+              {
+                assetId: 'asset-1',
+                versionId: 'asset-version-1',
+                representation: {
+                  kind: 'text',
+                  quality: 'structured',
+                  variant: 'default',
+                  producer: 'mineru',
+                  producerVersion: 'v1',
+                },
+              },
+              {
+                assetId: 'asset-2',
+                versionId: 'asset-version-2',
+                representation: null,
+              },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual([
+      'asset-1',
+      'asset-2',
+    ]);
+    expect(resource.provenance.sourceReferences).toEqual([
+      { resourceId: 'asset-1', versionId: 'asset-version-1' },
+      { resourceId: 'asset-2', versionId: 'asset-version-2' },
+    ]);
+    expect(resource.allowedActions).not.toContain('source.read');
+  });
+
+  it('does not attach provenance from a different generation job', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId: artifactBase.spaceId,
+      artifact: { ...artifactBase, kind: 'markdown_document' },
+      version: {
+        ...version,
+        generationJobId: '30000000-0000-4000-8000-000000000003',
+      },
+      latestJob: {
+        id: '50000000-0000-4000-8000-000000000005',
+        artifactId: artifactBase.id,
+        operationId: null,
+        status: 'succeeded',
+        progress: 100,
+        failureCode: null,
+        params: {
+          provenance: {
+            sources: [
+              { assetId: 'asset-stale', versionId: 'asset-version-stale' },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual([]);
+    expect(resource.provenance.sourceReferences).toEqual([]);
+  });
+
   it('keeps viewer markdown_document to read-only actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId: artifactBase.spaceId,

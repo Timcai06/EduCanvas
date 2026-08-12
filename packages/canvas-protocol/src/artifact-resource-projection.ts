@@ -76,19 +76,23 @@ function projectMediaGenerator(
   return null;
 }
 
-function projectSourceResourceIds(
-  kind: string,
+function projectSourceReferences(
   version: ArtifactProjectionVersion | null,
   job: ArtifactProjectionJob | null,
-): string[] {
-  if (
-    kind !== 'audio_overview' ||
-    !version?.generationJobId ||
-    version.generationJobId !== job?.id
-  ) {
+): { resourceId: string; versionId: string }[] {
+  if (!version?.generationJobId || version.generationJobId !== job?.id) {
     return [];
   }
-  const selectedSources = job.params.selectedSources;
+  const provenance = job.params.provenance;
+  const explicitSources =
+    typeof provenance === 'object' &&
+    provenance !== null &&
+    'sources' in provenance &&
+    Array.isArray(provenance.sources)
+      ? provenance.sources
+      : null;
+  /* audio_overview 是早于统一 Artifact Tool provenance 的兼容形状。 */
+  const selectedSources = explicitSources ?? job.params.selectedSources;
   if (!Array.isArray(selectedSources)) return [];
   return [
     ...new Set(
@@ -96,12 +100,17 @@ function projectSourceResourceIds(
         typeof reference === 'object' &&
         reference !== null &&
         'assetId' in reference &&
-        typeof reference.assetId === 'string'
-          ? [reference.assetId]
+        typeof reference.assetId === 'string' &&
+        'versionId' in reference &&
+        typeof reference.versionId === 'string'
+          ? [`${reference.assetId}\u0000${reference.versionId}`]
           : [],
       ),
     ),
-  ];
+  ].map((reference) => {
+    const [resourceId, versionId] = reference.split('\u0000');
+    return { resourceId: resourceId!, versionId: versionId! };
+  });
 }
 
 // 各 Artifact 类型的协议声明：rendererId 与 W04 浏览器端注册表
@@ -279,6 +288,10 @@ export function projectOwnedArtifactResource(input: {
   }
 
   const status = projectStatus(input.artifact, input.version, input.latestJob);
+  const sourceReferences = projectSourceReferences(
+    input.version,
+    input.latestJob,
+  );
   const parsed = canvasResourceSchema.safeParse({
     schemaVersion: 1,
     resourceId: input.artifact.id,
@@ -319,11 +332,10 @@ export function projectOwnedArtifactResource(input: {
       createdBy:
         input.version?.generatedBy === 'user:manual' ? 'user' : 'agent',
       createdAt: input.version?.createdAt ?? input.artifact.createdAt,
-      sourceResourceIds: projectSourceResourceIds(
-        kind,
-        input.version,
-        input.latestJob,
-      ),
+      sourceResourceIds: [
+        ...new Set(sourceReferences.map((source) => source.resourceId)),
+      ],
+      sourceReferences,
       operationId: input.version?.createdByOperationId ?? null,
       generator: projectMediaGenerator(kind, input.version?.metadata),
     },

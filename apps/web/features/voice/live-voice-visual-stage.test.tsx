@@ -66,4 +66,57 @@ describe('scrollLiveVoiceContextRail', () => {
     expect(rail.scrollLeft).toBe(600);
     expect(preventDefault).not.toHaveBeenCalled();
   });
+
+  it('工具与产物的真实状态会作为投影文本展示，便于 Live 侧进度核验', () => {
+    const html = renderToStaticMarkup(
+      <LiveVoiceVisualStage
+        assets={[]}
+        artifacts={[
+          {
+            id: 'artifact-running',
+            kind: 'note',
+            title: '文档草稿',
+            status: 'generating',
+          },
+          {
+            id: 'artifact-ready',
+            kind: 'note',
+            title: '总结',
+            status: 'active',
+          },
+          {
+            id: 'artifact-failed',
+            kind: 'note',
+            title: '失败样例',
+            status: 'failed',
+          },
+        ]}
+        tools={[
+          {
+            id: 'tool-running',
+            label: '分析图片',
+            status: 'running',
+          },
+          {
+            id: 'tool-failed',
+            label: '生成摘要',
+            status: 'failed',
+          },
+          {
+            id: 'tool-completed',
+            label: '提取正文',
+            status: 'completed',
+          },
+        ]}
+        citations={[]}
+      />,
+    );
+
+    expect(html).toContain('<small> · 执行中</small>');
+    expect(html).toContain('<small> · 失败</small>');
+    expect(html).toContain('<small> · 已完成</small>');
+    expect(html).toContain('文档草稿</span><small>生成中</small>');
+    expect(html).toContain('总结</span><small>已生成</small>');
+    expect(html).toContain('失败样例</span><small>生成失败</small>');
+  });
 });
