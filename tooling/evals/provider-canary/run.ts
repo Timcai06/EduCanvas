@@ -113,14 +113,24 @@ async function runRoundTrip(id: string, text: string): Promise<number> {
   try {
     const pcmChunks: Uint8Array[] = [];
     let speechFinished = false;
-    for await (const event of speech.streamSpeech({
-      taskAlias: 'speech.synthesize',
+    const speechSession = speech.beginStreaming({
+      taskAlias: 'speech.generate',
       modelAlias: 'speech',
-      input: text,
       operationId: `${id}.tts`,
       traceId: `${id}.tts`,
       signal: abort.signal,
-    })) {
+    });
+    const characters = [...text];
+    const splitAt = Math.max(1, Math.floor(characters.length / 2));
+    const submissions = [
+      characters.slice(0, splitAt).join(''),
+      characters.slice(splitAt).join(''),
+    ].filter(Boolean);
+    submissions.forEach((input, sequence) =>
+      speechSession.pushText({ sequence, input }),
+    );
+    speechSession.finish();
+    for await (const event of speechSession.events) {
       if (event.type === 'audio') pcmChunks.push(event.pcmBytes);
       if (event.type === 'finished') speechFinished = true;
       if (event.type === 'failed') {

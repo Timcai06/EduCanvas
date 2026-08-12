@@ -170,7 +170,7 @@ describe('DashScope streaming adapters', () => {
     const eventsPromise = (async () => {
       const events = [];
       for await (const event of gateway.streamSpeech({
-        taskAlias: 'speech.synthesize',
+        taskAlias: 'speech.generate',
         modelAlias: 'speech',
         input: '你好。',
         operationId: 'op-1',
@@ -196,6 +196,75 @@ describe('DashScope streaming adapters', () => {
     ]);
   });
 
+  it('CosyVoice 在同一 task 内按序提交多个语义段并只 finish 一次', async () => {
+    const socket = new FakeSocket();
+    const gateway = new DashScopeStreamingSpeechGateway({
+      configuration,
+      socketFactory: () => socket,
+    });
+    const session = gateway.beginStreaming({
+      taskAlias: 'speech.generate',
+      modelAlias: 'speech',
+      operationId: 'op-continuous',
+      traceId: 'trace-continuous',
+    });
+    session.pushText({ sequence: 0, input: '第一句。' });
+    session.pushText({ sequence: 1, input: '第二句。' });
+    session.finish();
+    const eventsPromise = (async () => {
+      const events = [];
+      for await (const event of session.events) events.push(event);
+      return events;
+    })();
+
+    socket.emit('open');
+    const taskId = JSON.parse(socket.sent[0] as string).header
+      .task_id as string;
+    socket.emit('message', serverEvent(taskId, 'task-started'), false);
+    const commands = socket.sent.map((raw) => JSON.parse(raw as string));
+    expect(commands.map((command) => command.header.action)).toEqual([
+      'run-task',
+      'continue-task',
+      'continue-task',
+      'finish-task',
+    ]);
+    expect(
+      commands.slice(1, 3).map((command) => command.payload.input.text),
+    ).toEqual(['第一句。', '第二句。']);
+    socket.emit('message', Uint8Array.from([1, 2]), true);
+    socket.emit('message', Uint8Array.from([3, 4]), true);
+    socket.emit('message', serverEvent(taskId, 'task-finished'), false);
+    await expect(eventsPromise).resolves.toEqual([
+      { type: 'audio', sequence: 0, pcmBytes: Uint8Array.from([1, 2]) },
+      { type: 'audio', sequence: 1, pcmBytes: Uint8Array.from([3, 4]) },
+      { type: 'finished' },
+    ]);
+  });
+
+  it('CosyVoice 拒绝跳号输入与奇数 PCM，并保持唯一终态', async () => {
+    const socket = new FakeSocket();
+    const gateway = new DashScopeStreamingSpeechGateway({
+      configuration,
+      socketFactory: () => socket,
+    });
+    const session = gateway.beginStreaming({
+      taskAlias: 'speech.generate',
+      modelAlias: 'speech',
+      operationId: 'op-invalid-sequence',
+      traceId: 'trace-invalid-sequence',
+    });
+    const eventsPromise = (async () => {
+      const events = [];
+      for await (const event of session.events) events.push(event);
+      return events;
+    })();
+    session.pushText({ sequence: 1, input: '跳号。' });
+    session.finish();
+    await expect(eventsPromise).resolves.toEqual([
+      { type: 'failed', failureCode: 'MODEL_FAILED' },
+    ]);
+  });
+
   it('CosyVoice 遇到非法文本帧时收敛为稳定失败', async () => {
     const socket = new FakeSocket();
     const gateway = new DashScopeStreamingSpeechGateway({
@@ -205,7 +274,7 @@ describe('DashScope streaming adapters', () => {
     const eventsPromise = (async () => {
       const events = [];
       for await (const event of gateway.streamSpeech({
-        taskAlias: 'speech.synthesize',
+        taskAlias: 'speech.generate',
         modelAlias: 'speech',
         input: '你好。',
         operationId: 'op-invalid',

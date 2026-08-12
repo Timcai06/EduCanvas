@@ -220,6 +220,8 @@ export function VoiceComposerRuntime({
 
   const speech = useLiveSpeechPlayback({
     enabled: liveOpen && !muted,
+    notebookId,
+    createSpeechClient: runtime.createSpeechClient,
     assistantId: liveAssistantId,
     assistantText: liveAssistantText,
     assistantStatus: liveAssistantStatus,

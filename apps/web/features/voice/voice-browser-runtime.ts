@@ -6,8 +6,13 @@ import {
   type MediaStreamLike,
 } from './capture/audio-capture';
 import {
+  StreamingSpeechClient,
   StreamingTranscriptionClient,
   createStreamingTranscriptionTicketClient,
+} from './transport';
+import type {
+  LiveSpeechSessionClient,
+  StreamingSpeechClientHandlers,
 } from './transport';
 import type {
   VoiceSessionCaptureHandlers,
@@ -27,6 +32,9 @@ export interface VoiceBrowserRuntime {
   readonly createClient: (
     handlers: VoiceSessionClientHandlers,
   ) => VoiceSessionTranscriptionClient;
+  readonly createSpeechClient?: (
+    handlers: StreamingSpeechClientHandlers,
+  ) => LiveSpeechSessionClient;
 }
 
 /**
@@ -97,6 +105,29 @@ export function createVoiceBrowserRuntime(
         onSnapshot: handlers.onSnapshot,
         onStatus: handlers.onStatus,
         onTerminal: handlers.onTerminal,
+      });
+    },
+    createSpeechClient(handlers) {
+      if (websocketUrl === null || typeof globalThis.WebSocket !== 'function') {
+        throw new Error('VOICE_CONNECTION_UNAVAILABLE');
+      }
+      const parsed = new URL(websocketUrl);
+      const allowedInsecureWsHosts =
+        parsed.protocol === 'ws:' ? [parsed.host] : [];
+      return new StreamingSpeechClient({
+        ticketClient: createStreamingTranscriptionTicketClient({
+          endpoint: '/api/v1/voice/speech-tickets',
+        }),
+        WebSocketCtor: globalThis.WebSocket,
+        resolveWsUrl: ({ notebookId }) => {
+          const url = new URL(websocketUrl);
+          url.pathname = '/v1/client/streaming-speech';
+          url.search = '';
+          url.searchParams.set('notebookId', notebookId);
+          return url.toString();
+        },
+        allowedInsecureWsHosts,
+        ...handlers,
       });
     },
   };

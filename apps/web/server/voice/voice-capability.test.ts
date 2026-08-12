@@ -22,6 +22,7 @@ describe('resolveVoiceCapability', () => {
           status: 'ok',
           protocol: 'gateway.v1',
           streamingTranscriptionEnabled: true,
+          streamingSpeechEnabled: true,
         }),
       ) as typeof fetch,
     });
@@ -40,6 +41,7 @@ describe('resolveVoiceCapability', () => {
           status: 'ok',
           protocol: 'gateway.v1',
           streamingTranscriptionEnabled: true,
+          streamingSpeechEnabled: true,
         }),
       ) as typeof fetch,
     });
@@ -59,6 +61,7 @@ describe('resolveVoiceCapability', () => {
           status: 'ok',
           protocol: 'gateway.v1',
           streamingTranscriptionEnabled: true,
+          streamingSpeechEnabled: true,
         }),
       ) as typeof fetch,
     });
@@ -77,6 +80,7 @@ describe('resolveVoiceCapability', () => {
           status: 'ok',
           protocol: 'gateway.v1',
           streamingTranscriptionEnabled: false,
+          streamingSpeechEnabled: false,
         }),
       ) as typeof fetch,
     });

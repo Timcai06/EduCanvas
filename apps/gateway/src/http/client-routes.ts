@@ -291,14 +291,14 @@ export async function handleClientRoutes(
       );
       return HANDLED;
     }
-
-    // V12：实时语音 WebSocket 握手 ticket。用短时（60 秒）单次使用的 ticket
-    // 替代把长时 session bearer 放进 Sec-WebSocket-Protocol（避免长时凭证
-    // 进入代理/网关/诊断日志）；Notebook 在此由服务端重新绑定校验。
-    if (
-      request.method === 'POST' &&
+    // 60 秒单次 ticket 隔离长时 bearer；Notebook 仍由服务端重验。
+    const voiceTicketScope =
       url.pathname === '/v1/client/streaming-transcription/tickets'
-    ) {
+        ? 'transcription'
+        : url.pathname === '/v1/client/streaming-speech/tickets'
+          ? 'speech'
+          : null;
+    if (request.method === 'POST' && voiceTicketScope !== null) {
       if (!client.streamingTickets) {
         writeJson(response, 503, {
           error: { code: 'STREAMING_TRANSCRIPTION_UNAVAILABLE' },
@@ -315,7 +315,7 @@ export async function handleClientRoutes(
         });
         return HANDLED;
       }
-      let allowed = false;
+      let allowed: boolean;
       try {
         allowed = await client.checkNotebookAccess({
           notebookId: body.notebookId,
@@ -325,7 +325,6 @@ export async function handleClientRoutes(
         allowed = false;
       }
       if (!allowed) {
-        // Notebook 不存在/无成员资格统一 404，不泄露差异。
         writeJson(response, 404, { error: { code: 'NOT_FOUND' } });
         return HANDLED;
       }
@@ -335,6 +334,7 @@ export async function handleClientRoutes(
         client.streamingTickets.issue({
           userId: identity.userId,
           notebookId: body.notebookId,
+          scope: voiceTicketScope,
         }),
       );
       return HANDLED;

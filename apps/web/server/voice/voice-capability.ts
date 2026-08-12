@@ -42,6 +42,7 @@ function toWebsocketUrl(gatewayUrl: URL): string {
 interface GatewayHealth {
   readonly reachable: boolean;
   readonly streamingTranscriptionEnabled: boolean;
+  readonly streamingSpeechEnabled: boolean;
 }
 
 let cachedGatewayHealth: {
@@ -57,6 +58,7 @@ async function readGatewayHealth(
   const unavailable: GatewayHealth = {
     reachable: false,
     streamingTranscriptionEnabled: false,
+    streamingSpeechEnabled: false,
   };
   if (gatewayUrl === null) return unavailable;
   try {
@@ -74,6 +76,7 @@ async function readGatewayHealth(
       reachable,
       streamingTranscriptionEnabled:
         reachable && body.streamingTranscriptionEnabled === true,
+      streamingSpeechEnabled: reachable && body.streamingSpeechEnabled === true,
     };
   } catch {
     return unavailable;
@@ -121,7 +124,10 @@ export async function resolveVoiceCapability(
       key: 'connection',
       healthy: gatewayHealth.reachable && clientTransportConfigured,
     },
-    { key: 'speech', healthy: speech.enabled },
+    {
+      key: 'speech',
+      healthy: speech.enabled && gatewayHealth.streamingSpeechEnabled,
+    },
   ];
   return {
     checks,

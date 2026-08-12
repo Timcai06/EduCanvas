@@ -108,8 +108,9 @@ async function postJson(
 }
 
 /** Web session 主体换取一次性 WS ticket；长时 bearer 永不返回浏览器。 */
-export async function issueVoiceStreamingTicket(
+async function issueVoiceTicket(
   input: { subjectUserId: string; notebookId: string },
+  ticketPath: string,
   options: VoiceGatewayClientOptions = {},
 ): Promise<{ ticket: string; expiresAt: string }> {
   const env = options.env ?? process.env;
@@ -143,10 +144,32 @@ export async function issueVoiceStreamingTicket(
   return ticketGrantSchema.parse(
     await postJson(
       fetchImpl,
-      new URL('/v1/client/streaming-transcription/tickets', baseUrl),
+      new URL(ticketPath, baseUrl),
       session.token,
       { notebookId: input.notebookId },
       'VOICE_GATEWAY_RESOURCE_NOT_FOUND',
     ),
+  );
+}
+
+export function issueVoiceStreamingTicket(
+  input: { subjectUserId: string; notebookId: string },
+  options: VoiceGatewayClientOptions = {},
+): Promise<{ ticket: string; expiresAt: string }> {
+  return issueVoiceTicket(
+    input,
+    '/v1/client/streaming-transcription/tickets',
+    options,
+  );
+}
+
+export function issueVoiceSpeechTicket(
+  input: { subjectUserId: string; notebookId: string },
+  options: VoiceGatewayClientOptions = {},
+): Promise<{ ticket: string; expiresAt: string }> {
+  return issueVoiceTicket(
+    input,
+    '/v1/client/streaming-speech/tickets',
+    options,
   );
 }
