@@ -23,8 +23,8 @@ export interface LiveVoiceThresholdMotionOptions {
 }
 
 /**
- * Live 只保留一条 MorphSVG 常驻循环。状态变化、声压响应和门槛转场都作用于
- * 同一个球体容器；后台标签页主动暂停，避免不可见时持续消耗图形资源。
+ * Live 只保留一条内部光场常驻循环；外轮廓只在状态变化时 Morph，避免持续修改
+ * SVG path 造成额外主线程与绘制开销。后台标签页主动暂停常驻循环。
  */
 export function useLiveVoiceMotion(
   rootRef: RefObject<HTMLElement | null>,
@@ -33,9 +33,10 @@ export function useLiveVoiceMotion(
   audioLevel = 0,
   threshold?: LiveVoiceThresholdMotionOptions,
 ): void {
-  const morphLoopRef = useRef<gsap.core.Timeline | null>(null);
+  const ambientLoopRef = useRef<gsap.core.Timeline | null>(null);
   const phaseTimelineRef = useRef<gsap.core.Timeline | null>(null);
-  const reactiveScaleRef = useRef<((value: number) => void) | null>(null);
+  const reactiveScaleXRef = useRef<((value: number) => void) | null>(null);
+  const reactiveScaleYRef = useRef<((value: number) => void) | null>(null);
   const [motionPreferenceVersion, setMotionPreferenceVersion] = useState(0);
   const thresholdPhase = threshold?.thresholdPhase ?? null;
   const onEnteredRef = useRef(threshold?.onEntered);
@@ -61,11 +62,16 @@ export function useLiveVoiceMotion(
           '[data-live-orb-reactive]',
         );
         if (reactiveOrb) {
-          const scale = gsap.quickTo(reactiveOrb, 'scale', {
+          // quickTo/resetTo 不支持会拆成两个 PropTween 的复合 scale；分别驱动两轴，
+          // 否则每个声压采样都会产生 "scale not eligible for reset" 警告。
+          reactiveScaleXRef.current = gsap.quickTo(reactiveOrb, 'scaleX', {
             duration: 0.1,
             ease: 'power2.out',
           });
-          reactiveScaleRef.current = scale;
+          reactiveScaleYRef.current = gsap.quickTo(reactiveOrb, 'scaleY', {
+            duration: 0.1,
+            ease: 'power2.out',
+          });
         }
 
         let entrance: gsap.core.Timeline | null = null;
@@ -122,7 +128,8 @@ export function useLiveVoiceMotion(
 
         return () => {
           entrance?.kill();
-          reactiveScaleRef.current = null;
+          reactiveScaleXRef.current = null;
+          reactiveScaleYRef.current = null;
         };
       });
       return () => media.revert();
@@ -135,7 +142,9 @@ export function useLiveVoiceMotion(
       '(prefers-reduced-motion: reduce)',
     ).matches;
     const normalized = Math.min(1, Math.max(0, audioLevel));
-    reactiveScaleRef.current?.(reduced ? 1 : 1 + normalized * 0.12);
+    const scale = reduced ? 1 : 1 + normalized * 0.055;
+    reactiveScaleXRef.current?.(scale);
+    reactiveScaleYRef.current?.(scale);
   }, [audioLevel]);
 
   useEffect(() => {
@@ -219,11 +228,11 @@ export function useLiveVoiceMotion(
         '(prefers-reduced-motion: reduce)',
       ).matches;
       phaseTimelineRef.current?.kill();
-      morphLoopRef.current?.kill();
+      ambientLoopRef.current?.kill();
 
       if (reduced) {
         gsap.set(target, {
-          morphSVG: { shape: motion.shapes[0]!, type: 'rotational' },
+          morphSVG: { shape: motion.shape, type: 'rotational' },
         });
         gsap.set('[data-live-orb]', { scale: motion.scale });
         gsap.set('[data-live-glow]', { opacity: motion.energy });
@@ -234,24 +243,43 @@ export function useLiveVoiceMotion(
         .timeline({
           defaults: { ease: 'power2.out' },
           onComplete: () => {
-            const loopShapes = [...motion.shapes.slice(1), motion.shapes[0]!];
-            morphLoopRef.current = gsap.timeline({
+            ambientLoopRef.current = gsap.timeline({
               repeat: -1,
+              yoyo: true,
               paused: document.hidden,
               defaults: { ease: 'sine.inOut' },
             });
-            loopShapes.forEach((shape) => {
-              morphLoopRef.current?.to(target, {
-                morphSVG: { shape, type: 'rotational' },
-                duration: motion.morphDuration,
-              });
-            });
+            ambientLoopRef.current
+              .to(
+                '[data-live-flow-a]',
+                {
+                  x: 8,
+                  y: 6,
+                  rotation: 6,
+                  scaleX: 1.07,
+                  scaleY: 0.96,
+                  duration: motion.lightDuration,
+                },
+                0,
+              )
+              .to(
+                '[data-live-flow-b]',
+                {
+                  x: -9,
+                  y: -7,
+                  rotation: -5,
+                  scaleX: 0.95,
+                  scaleY: 1.06,
+                  duration: motion.lightDuration * 1.08,
+                },
+                0,
+              );
           },
         })
         .to(
           target,
           {
-            morphSVG: { shape: motion.shapes[0]!, type: 'rotational' },
+            morphSVG: { shape: motion.shape, type: 'rotational' },
             duration: Math.min(0.65, motion.morphDuration * 0.5),
           },
           0,
@@ -284,7 +312,7 @@ export function useLiveVoiceMotion(
     transition();
     return () => {
       phaseTimelineRef.current?.kill();
-      morphLoopRef.current?.kill();
+      ambientLoopRef.current?.kill();
     };
   }, [contextSafe, motionPreferenceVersion, phase, rootRef]);
 
@@ -297,9 +325,9 @@ export function useLiveVoiceMotion(
 
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.hidden) morphLoopRef.current?.pause();
+      if (document.hidden) ambientLoopRef.current?.pause();
       else if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        morphLoopRef.current?.resume();
+        ambientLoopRef.current?.resume();
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);

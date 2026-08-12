@@ -7,7 +7,11 @@ import { ORB_SHAPES } from './live-voice-motion';
 export function LiveVoiceOrb() {
   const instanceId = useId().replaceAll(':', '');
   const bodyGradientId = `live-voice-body-${instanceId}`;
+  const warmGradientId = `live-voice-warm-${instanceId}`;
+  const coolGradientId = `live-voice-cool-${instanceId}`;
   const glowGradientId = `live-voice-glow-${instanceId}`;
+  const glowFilterId = `live-voice-glow-filter-${instanceId}`;
+  const bodyClipId = `live-voice-body-clip-${instanceId}`;
 
   return (
     <div data-live-orb-wrap className="live-voice-orb-wrap">
@@ -20,40 +24,80 @@ export function LiveVoiceOrb() {
           className="live-voice-orb"
         >
           <defs>
-            <linearGradient
+            <radialGradient
               id={bodyGradientId}
               gradientUnits="userSpaceOnUse"
-              x1="30"
-              y1="25"
-              x2="170"
-              y2="175"
+              cx="70"
+              cy="58"
+              r="118"
+              fx="58"
+              fy="46"
             >
               <stop
                 offset="0"
-                stopColor="var(--color-card)"
+                stopColor="var(--live-orb-light)"
+                stopOpacity="0.98"
+              />
+              <stop
+                offset="0.2"
+                stopColor="var(--live-orb-soft)"
                 stopOpacity="0.96"
               />
               <stop
-                offset="0.38"
+                offset="0.56"
                 stopColor="var(--live-voice-accent)"
                 stopOpacity="0.98"
               />
               <stop
                 offset="1"
-                stopColor="var(--color-accent-strong)"
-                stopOpacity="0.9"
+                stopColor="var(--live-orb-deep)"
+                stopOpacity="0.96"
               />
-            </linearGradient>
+            </radialGradient>
+            <radialGradient id={warmGradientId} cx="50%" cy="50%" r="50%">
+              <stop
+                offset="0"
+                stopColor="var(--live-orb-warm)"
+                stopOpacity="0.94"
+              />
+              <stop
+                offset="0.62"
+                stopColor="var(--live-orb-warm)"
+                stopOpacity="0.36"
+              />
+              <stop
+                offset="1"
+                stopColor="var(--live-orb-warm)"
+                stopOpacity="0"
+              />
+            </radialGradient>
+            <radialGradient id={coolGradientId} cx="50%" cy="50%" r="50%">
+              <stop
+                offset="0"
+                stopColor="var(--live-orb-cool)"
+                stopOpacity="0.92"
+              />
+              <stop
+                offset="0.58"
+                stopColor="var(--live-orb-cool)"
+                stopOpacity="0.3"
+              />
+              <stop
+                offset="1"
+                stopColor="var(--live-orb-cool)"
+                stopOpacity="0"
+              />
+            </radialGradient>
             <radialGradient id={glowGradientId} cx="50%" cy="50%" r="50%">
               <stop
                 offset="0"
                 stopColor="var(--live-voice-accent)"
-                stopOpacity="0.5"
+                stopOpacity="0.54"
               />
               <stop
-                offset="0.58"
+                offset="0.5"
                 stopColor="var(--live-voice-accent)"
-                stopOpacity="0.18"
+                stopOpacity="0.24"
               />
               <stop
                 offset="1"
@@ -61,31 +105,58 @@ export function LiveVoiceOrb() {
                 stopOpacity="0"
               />
             </radialGradient>
+            <filter
+              id={glowFilterId}
+              x="-55%"
+              y="-55%"
+              width="210%"
+              height="210%"
+              colorInterpolationFilters="sRGB"
+            >
+              <feGaussianBlur stdDeviation="15" />
+            </filter>
+            <clipPath id={bodyClipId} clipPathUnits="userSpaceOnUse">
+              <path data-live-morph d={ORB_SHAPES.calm} />
+            </clipPath>
           </defs>
           <circle
             data-live-glow
             aria-hidden="true"
             cx="100"
             cy="100"
-            r="98"
+            r="86"
             fill={`url(#${glowGradientId})`}
+            filter={`url(#${glowFilterId})`}
           />
-          <path
-            data-live-morph
-            d={ORB_SHAPES.calm}
-            fill={`url(#${bodyGradientId})`}
-            stroke="var(--color-accent-strong)"
-            strokeOpacity="0.68"
-            strokeWidth="1.25"
-          />
-          <ellipse
-            cx="78"
-            cy="68"
-            rx="30"
-            ry="18"
-            fill="var(--color-card)"
-            opacity="0.22"
-          />
+          <g
+            data-live-orb-body
+            clipPath={`url(#${bodyClipId})`}
+            className="live-voice-orb-body"
+          >
+            <rect
+              x="28"
+              y="28"
+              width="144"
+              height="144"
+              fill={`url(#${bodyGradientId})`}
+            />
+            <circle
+              data-live-flow-a
+              className="live-voice-flow-layer"
+              cx="61"
+              cy="66"
+              r="72"
+              fill={`url(#${warmGradientId})`}
+            />
+            <circle
+              data-live-flow-b
+              className="live-voice-flow-layer"
+              cx="143"
+              cy="137"
+              r="82"
+              fill={`url(#${coolGradientId})`}
+            />
+          </g>
         </svg>
       </div>
     </div>

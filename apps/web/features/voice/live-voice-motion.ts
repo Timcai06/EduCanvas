@@ -21,57 +21,57 @@ interface PhaseMotion {
   readonly lightDuration: number;
   readonly scale: number;
   readonly energy: number;
-  readonly shapes: readonly string[];
+  readonly shape: string;
 }
 
 export const PHASE_MOTION: Record<LiveVoiceVisualPhase, PhaseMotion> = {
   idle: {
-    morphDuration: 3.4,
-    lightDuration: 7.5,
-    scale: 1.01,
+    morphDuration: 2.8,
+    lightDuration: 7.2,
+    scale: 1,
     energy: 0.62,
-    shapes: [ORB_SHAPES.open, ORB_SHAPES.swell, ORB_SHAPES.calm],
+    shape: ORB_SHAPES.open,
   },
   connecting: {
-    morphDuration: 2.5,
-    lightDuration: 4.8,
-    scale: 1.025,
+    morphDuration: 2.4,
+    lightDuration: 5.8,
+    scale: 1.015,
     energy: 0.72,
-    shapes: [ORB_SHAPES.lean, ORB_SHAPES.swell, ORB_SHAPES.calm],
+    shape: ORB_SHAPES.lean,
   },
   listening: {
-    morphDuration: 1.25,
-    lightDuration: 3.4,
-    scale: 1.065,
-    energy: 0.88,
-    shapes: [ORB_SHAPES.swell, ORB_SHAPES.open, ORB_SHAPES.lean],
+    morphDuration: 1.6,
+    lightDuration: 4.6,
+    scale: 1.035,
+    energy: 0.84,
+    shape: ORB_SHAPES.swell,
   },
   thinking: {
-    morphDuration: 1.7,
-    lightDuration: 2.6,
-    scale: 1.035,
+    morphDuration: 1.9,
+    lightDuration: 4.2,
+    scale: 1.025,
     energy: 0.82,
-    shapes: [ORB_SHAPES.lift, ORB_SHAPES.swell, ORB_SHAPES.lean],
+    shape: ORB_SHAPES.lift,
   },
   speaking: {
-    morphDuration: 0.72,
-    lightDuration: 1.85,
-    scale: 1.1,
+    morphDuration: 1.15,
+    lightDuration: 3.2,
+    scale: 1.065,
     energy: 1,
-    shapes: [ORB_SHAPES.swell, ORB_SHAPES.lift, ORB_SHAPES.open],
+    shape: ORB_SHAPES.swell,
   },
   muted: {
     morphDuration: 4,
     lightDuration: 8,
     scale: 0.96,
     energy: 0.34,
-    shapes: [ORB_SHAPES.calm],
+    shape: ORB_SHAPES.calm,
   },
   error: {
     morphDuration: 4,
     lightDuration: 8,
     scale: 0.97,
     energy: 0.42,
-    shapes: [ORB_SHAPES.calm],
+    shape: ORB_SHAPES.calm,
   },
 };

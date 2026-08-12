@@ -43,7 +43,9 @@ describe('LiveVoicePanel', () => {
     expect(html).toContain('data-live-morph="true"');
     expect(html).toContain('data-live-glow="true"');
     expect(html).toContain('gradientUnits="userSpaceOnUse"');
-    expect(html).toContain('stop-color="var(--color-accent-strong)"');
+    expect(html).toContain('stop-color="var(--live-orb-light)"');
+    expect(html).toContain('data-live-flow-a="true"');
+    expect(html).toContain('data-live-flow-b="true"');
     expect(html.match(/data-live-morph=/g)).toHaveLength(1);
     expect(html).not.toContain('data-live-field');
     expect(html).not.toContain('data-live-ring');

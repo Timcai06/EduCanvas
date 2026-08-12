@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => ({
   reduced: false,
   documentListeners: new Map<string, Set<EventListener>>(),
   mediaListeners: new Set<EventListener>(),
+  quickToProperties: [] as string[],
   selectorTargets: [] as unknown[],
   timelines: [] as Array<{
     options: Record<string, unknown>;
@@ -89,7 +90,10 @@ vi.mock('gsap', () => {
           ),
         };
       }),
-      quickTo: vi.fn(() => vi.fn()),
+      quickTo: vi.fn((_target: unknown, property: string) => {
+        harness.quickToProperties.push(property);
+        return vi.fn();
+      }),
       registerPlugin: vi.fn(),
       set: vi.fn((target: unknown) => harness.selectorTargets.push(target)),
       timeline,
@@ -166,6 +170,7 @@ describe('useLiveVoiceMotion', () => {
     harness.cleanups.splice(0).forEach((cleanup) => cleanup());
     harness.documentListeners.clear();
     harness.mediaListeners.clear();
+    harness.quickToProperties.length = 0;
     harness.selectorTargets.length = 0;
     harness.timelines.length = 0;
     harness.hidden = false;
@@ -179,7 +184,7 @@ describe('useLiveVoiceMotion', () => {
     vi.unstubAllGlobals();
   });
 
-  it('只创建一条无限 morph 循环且不再触及装饰 selector', () => {
+  it('只创建一条无限内部光场循环且不再触及装饰 selector', () => {
     const { rootRef, root } = createRootRef();
 
     useLiveVoiceMotion(rootRef, 'speaking', 'assistant-1', 0.5, {
@@ -198,6 +203,18 @@ describe('useLiveVoiceMotion', () => {
           /ring|particle|field|aura-layer/.test(target),
       ),
     ).toBe(false);
+  });
+
+  it('声压响应拆分 scaleX/scaleY，避免 quickTo 重置复合 scale', () => {
+    const { rootRef } = createRootRef();
+
+    useLiveVoiceMotion(rootRef, 'listening', 'user-audio', 0.7, {
+      thresholdPhase: 'voice',
+      entryCapture: null,
+    });
+
+    expect(harness.quickToProperties).toEqual(['scaleX', 'scaleY']);
+    expect(harness.quickToProperties).not.toContain('scale');
   });
 
   it('隐藏页创建的 morph 循环初始暂停，并随可见性恢复和再暂停', () => {
