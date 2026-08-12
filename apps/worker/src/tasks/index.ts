@@ -25,10 +25,6 @@ import { recoverOperationContinuations } from './recover-operation-continuations
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
-import {
-  backfillK12Conversation,
-  K12_CONVERSATION_BACKFILL_TASK,
-} from './backfill-k12-conversation.js';
 import { deleteObjectOutbox } from './delete-object-outbox.js';
 import { extractAssetTextTask } from './extract-asset-text.js';
 import { renderPreviewTask } from './render-preview.js';
@@ -141,10 +137,6 @@ export function createTaskList(input: {
     'maintenance:reconcile_tool_approval_intents': wrap(
       'maintenance:reconcile_tool_approval_intents',
       reconcileToolApprovalIntents,
-    ),
-    [K12_CONVERSATION_BACKFILL_TASK]: wrap(
-      K12_CONVERSATION_BACKFILL_TASK,
-      backfillK12Conversation,
     ),
     'system.heartbeat': wrap('system.heartbeat', systemHeartbeat),
   };
