@@ -18,8 +18,8 @@ describe('local configuration contract', () => {
       compose,
       /127\.0\.0\.1:\$\{EDUCANVAS_POSTGRES_PORT:-5434\}:5432/,
     );
-    assert.match(env, new RegExp(`localhost:${hostPort}/educanvas`));
-    assert.match(drizzle, new RegExp(`localhost:${hostPort}/educanvas`));
+    assert.match(env, new RegExp(`127\\.0\\.0\\.1:${hostPort}/educanvas`));
+    assert.match(drizzle, new RegExp(`127\\.0\\.0\\.1:${hostPort}/educanvas`));
     const canonicalUrl = env.match(/^DATABASE_URL=(.+)$/m)?.[1];
     assert.ok(canonicalUrl);
     assert.ok(
@@ -31,6 +31,10 @@ describe('local configuration contract', () => {
     const makefile = source('Makefile');
     assert.match(makefile, /EDUCANVAS_POSTGRES_PORT \?= 5434/);
     assert.match(makefile, /export EDUCANVAS_POSTGRES_PORT/);
+    assert.match(
+      source('.env.example'),
+      /EDUCANVAS_POSTGRES_PORT=5435 DATABASE_URL=/,
+    );
     assert.match(
       makefile,
       /TEST_DATABASE_URL \?=.*\$\(EDUCANVAS_POSTGRES_PORT\)\/educanvas_integration/,
