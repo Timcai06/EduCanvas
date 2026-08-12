@@ -13,6 +13,25 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
       fileName: fileNameSchema,
       mimeType: z.literal('application/pdf'),
       fileUrl: fileUrlSchema,
+      /**
+       * ADR-0026 决定 6：文本派生表示的实际质量；null 表示该版本没有
+       * text 表示（如未走文档抽取的旧资产）。quality 为 structured 时
+       * markdown 携带服务端投影后的派生内容（图片引用已是鉴权资源 URL）。
+       * 与 docx 同构：前端在结构化可用时优先阅读视图，否则 pdf.js 原样预览。
+       */
+      representation: z
+        .object({
+          quality: z.enum([
+            'structured',
+            'degraded_plain_text',
+            'processing',
+            'failed',
+            'unavailable',
+          ]),
+          markdown: z.string().max(120_000).optional(),
+        })
+        .nullable()
+        .optional(),
     })
     .strict(),
   z

@@ -76,6 +76,42 @@ describe('assetPreviewSchema', () => {
     ).toBe(true);
   });
 
+  it('pdf 阅读视图接受结构化表示（与 docx 同构），无表示时兼容旧响应', () => {
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'pdf',
+        fileName: '网络编程.pdf',
+        mimeType: 'application/pdf',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+        representation: {
+          quality: 'structured',
+          markdown:
+            '# 网络编程\n\n![拓扑图](/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/resources/images/001.jpg)',
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'pdf',
+        fileName: '网络编程.pdf',
+        mimeType: 'application/pdf',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+        representation: { quality: 'degraded_plain_text' },
+      }).success,
+    ).toBe(true);
+    expect(
+      assetPreviewSchema.safeParse({
+        kind: 'pdf',
+        fileName: '旧版.pdf',
+        mimeType: 'application/pdf',
+        fileUrl:
+          '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file',
+      }).success,
+    ).toBe(true);
+  });
+
   it('docx 阅读视图接受结构化表示与同源原件下载 URL', () => {
     expect(
       assetPreviewSchema.safeParse({
