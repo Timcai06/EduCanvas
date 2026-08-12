@@ -13,6 +13,11 @@ describe('local configuration contract', () => {
     assert.equal(hostPort, '5434');
     assert.match(env, new RegExp(`localhost:${hostPort}/educanvas`));
     assert.match(drizzle, new RegExp(`localhost:${hostPort}/educanvas`));
+    const canonicalUrl = env.match(/^DATABASE_URL=(.+)$/m)?.[1];
+    assert.ok(canonicalUrl);
+    assert.ok(
+      source('docs/04-data/04-D00-数据架构基线.md').includes(canonicalUrl),
+    );
   });
 
   it('uses .nvmrc as the README and package engine authority', () => {
@@ -21,6 +26,9 @@ describe('local configuration contract', () => {
     const rootPackage = JSON.parse(source('package.json'));
     assert.equal(rootPackage.engines.node, `>=${version} <${major + 1}`);
     assert.match(source('README.md'), new RegExp(`Node\\.js ${version}`));
+    const collaboration = source('docs/08-collaboration/03-团队协作指南.md');
+    assert.match(collaboration, new RegExp(`Node\\.js ${version}`));
+    assert.doesNotMatch(collaboration, /Node\.js 22/);
   });
 
   it('lets env-check decide whether an optional Provider is complete', () => {
@@ -28,6 +36,10 @@ describe('local configuration contract', () => {
     assert.match(makefile, /pnpm env:check \.env/);
     assert.doesNotMatch(makefile, /MODEL_GATEWAY_API_KEY 未设置/);
     assert.match(makefile, /node tooling\/node-runtime-check\.mjs/);
+    const collaboration = source('docs/08-collaboration/03-团队协作指南.md');
+    assert.match(collaboration, /Provider 可选/);
+    assert.match(collaboration, /pnpm env:check/);
+    assert.doesNotMatch(collaboration, /填入自己的API Key/);
   });
 
   it('declares the existing Desktop output without changing its build command', () => {
