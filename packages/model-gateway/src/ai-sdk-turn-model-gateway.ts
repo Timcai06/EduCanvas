@@ -86,6 +86,11 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         maxOutputTokens: this.options.maxOutputTokens,
         maxRetries: 0,
         abortSignal: controller.signal,
+        // AI SDK defaults to console.error(error), which can print Provider raw
+        // bodies, credentials and stacks before this adapter normalizes them.
+        // The stream still emits its error part; logging happens only through
+        // logProviderFailure's closed provider/code/retryable fields below.
+        onError: () => undefined,
       });
 
       let toolCallCount = 0;
