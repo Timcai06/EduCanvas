@@ -56,7 +56,8 @@ export function GeneralChatWorkspace({
     scrollRef,
     nearBottom,
   });
-  useAssistantArtifacts(ctrl.artifactFlow);
+  /* 桌面助手与 Dock/资源库共用 fresh CanvasResource view gate。 */
+  useAssistantArtifacts(ctrl.studioOpenActions.actions);
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
   const deskPresence = deriveDeskAgentPresence(
     ctrl.turn.messages,
