@@ -111,9 +111,7 @@ describe('DocxReadingSwitcher（ADR-0026 决定 6，与 PDF 同构）', () => {
   });
 
   it('failed 时原件视图显示失败提示且不可切换', () => {
-    const html = render(
-      docxPreview({ representation: { quality: 'failed' } }),
-    );
+    const html = render(docxPreview({ representation: { quality: 'failed' } }));
     expect(html).toContain('结构化转换失败');
     expect(html).not.toContain('阅读视图切换');
   });

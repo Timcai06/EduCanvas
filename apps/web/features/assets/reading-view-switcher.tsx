@@ -98,7 +98,9 @@ export function ReadingViewSwitcher({
             {degraded
               ? `纯文本降级 · ${availability.producerLabel}`
               : `结构化阅读 · ${availability.producerLabel}`}
-            {availability.producerVersion ? ` ${availability.producerVersion}` : ''}{' '}
+            {availability.producerVersion
+              ? ` ${availability.producerVersion}`
+              : ''}{' '}
             · 派生表示
           </p>
           <button

@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetPreview } from './asset-preview-contract';
@@ -19,7 +19,8 @@ vi.mock('@/features/chat/markdown', () => ({
     createElement('div', { 'data-markdown': text }, text),
 }));
 
-const FILE_URL = '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file';
+const FILE_URL =
+  '/api/v1/chat/assets/11111111-1111-4111-8111-111111111111/file';
 
 function pdfPreview(
   overrides: Partial<Extract<AssetPreview, { kind: 'pdf' }>> = {},
@@ -77,11 +78,7 @@ describe('resolvePdfReadingAvailability', () => {
   });
 
   it('processing/failed/unavailable 或无 markdown 均不可读', () => {
-    for (const quality of [
-      'processing',
-      'failed',
-      'unavailable',
-    ] as const) {
+    for (const quality of ['processing', 'failed', 'unavailable'] as const) {
       expect(
         resolvePdfReadingAvailability({ quality, markdown: '# x' }),
       ).toMatchObject({ readable: false });
@@ -144,9 +141,7 @@ describe('PdfReadingSwitcher', () => {
   });
 
   it('failed 时原件视图显示失败提示且不可切换', () => {
-    const html = render(
-      pdfPreview({ representation: { quality: 'failed' } }),
-    );
+    const html = render(pdfPreview({ representation: { quality: 'failed' } }));
     expect(html).toContain('结构化转换失败');
     expect(html).not.toContain('阅读视图切换');
   });
