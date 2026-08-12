@@ -2,9 +2,15 @@ const SENTENCE_END = /[。！？!?；;：:\n]/u;
 const SOFT_BREAK = /[，、,]/u;
 
 export interface LiveSpeechSegmentBatch {
-  readonly segments: readonly string[];
+  readonly segments: readonly LiveSpeechSegment[];
   /** 已经安全交给 TTS 队列的原始文本字符数。 */
   readonly consumedCharacters: number;
+}
+
+export interface LiveSpeechSegment {
+  readonly text: string;
+  readonly startCursor: number;
+  readonly endCursor: number;
 }
 
 function preferredBoundary(
@@ -44,7 +50,7 @@ export function takeLiveSpeechSegments(input: {
   ) {
     return { segments: [], consumedCharacters: 0 };
   }
-  const segments: string[] = [];
+  const segments: LiveSpeechSegment[] = [];
   let cursor = input.consumedCharacters;
   let segmentCount = input.segmentCount;
   while (cursor < input.text.length) {
@@ -56,15 +62,22 @@ export function takeLiveSpeechSegments(input: {
     if (boundary === null) {
       if (!input.complete) break;
       const tail = remainder.trim();
-      if (tail) segments.push(tail);
+      if (tail) {
+        segments.push({
+          text: tail,
+          startCursor: cursor,
+          endCursor: input.text.length,
+        });
+      }
       cursor = input.text.length;
       break;
     }
+    const startCursor = cursor;
     const raw = remainder.slice(0, boundary);
     const segment = raw.trim();
     cursor += boundary;
     if (!segment) continue;
-    segments.push(segment);
+    segments.push({ text: segment, startCursor, endCursor: cursor });
     segmentCount += 1;
   }
   return { segments, consumedCharacters: cursor };

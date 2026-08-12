@@ -9,7 +9,13 @@ describe('takeLiveSpeechSegments', () => {
       segmentCount: 0,
       complete: false,
     });
-    expect(result.segments).toEqual(['这是第一句，先建立背景。']);
+    expect(result.segments).toEqual([
+      {
+        text: '这是第一句，先建立背景。',
+        startCursor: 0,
+        endCursor: '这是第一句，先建立背景。'.length,
+      },
+    ]);
     expect(result.consumedCharacters).toBe('这是第一句，先建立背景。'.length);
   });
 
@@ -22,8 +28,11 @@ describe('takeLiveSpeechSegments', () => {
       segmentCount: 0,
       complete: false,
     });
-    expect(result.segments).toEqual(['我们先观察这张图片里的坐标轴，']);
-    expect(result.consumedCharacters).toBe(result.segments[0]!.length);
+    expect(result.segments[0]).toMatchObject({
+      text: '我们先观察这张图片里的坐标轴，',
+      startCursor: 0,
+    });
+    expect(result.consumedCharacters).toBe(result.segments[0]!.endCursor);
   });
 
   it('Turn 完成时冲刷最后一个短尾句', () => {
@@ -34,7 +43,10 @@ describe('takeLiveSpeechSegments', () => {
         segmentCount: 0,
         complete: true,
       }),
-    ).toEqual({ segments: ['最后补充一点'], consumedCharacters: 6 });
+    ).toEqual({
+      segments: [{ text: '最后补充一点', startCursor: 0, endCursor: 6 }],
+      consumedCharacters: 6,
+    });
   });
 
   it('增量游标只返回尚未播报的新内容', () => {
@@ -45,6 +57,12 @@ describe('takeLiveSpeechSegments', () => {
       segmentCount: 1,
       complete: false,
     });
-    expect(result.segments).toEqual(['第二部分现在完成。']);
+    expect(result.segments).toEqual([
+      {
+        text: '第二部分现在完成。',
+        startCursor: first.length,
+        endCursor: `${first}第二部分现在完成。`.length,
+      },
+    ]);
   });
 });

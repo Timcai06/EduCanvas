@@ -118,6 +118,26 @@ describe('streamSpeechIntoPlayer', () => {
     expect(lastWindow?.endAt).toBe(11);
   });
 
+  it('空 PCM 不产生播放窗口，调用方不会据此推进 audioPlayedCursor', async () => {
+    const player: LiveSpeechPcmPlayer = {
+      enqueue: vi.fn(async () => null),
+    };
+
+    const lastWindow = await streamSpeechIntoPlayer({
+      text: '没有音频。',
+      signal: new AbortController().signal,
+      player,
+      cues: [],
+      fetchImpl: vi.fn(async () =>
+        Promise.resolve(new Response(new Uint8Array(), { status: 200 })),
+      ) as typeof fetch,
+      onMarker: () => undefined,
+      onSubtitle: () => undefined,
+    });
+
+    expect(lastWindow).toBeNull();
+  });
+
   it('按播放窗口而不是下载时刻更新输出能量', async () => {
     const levelMarkers: Array<{ at: number; callback: () => void }> = [];
     const levels: number[] = [];
