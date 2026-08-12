@@ -43,12 +43,8 @@ function restoreStudioOpenerFocus(): void {
  */
 function openResourceAfterStudioCloses(openResource: () => void): void {
   window.requestAnimationFrame(() => {
-    // The first frame lets React commit the Studio unmount. Only the following frame can focus the
-    // formerly inert background trigger and let Canvas capture it as a durable opener.
-    window.requestAnimationFrame(() => {
-      restoreStudioOpenerFocus();
-      openResource();
-    });
+    restoreStudioOpenerFocus();
+    openResource();
   });
 }
 

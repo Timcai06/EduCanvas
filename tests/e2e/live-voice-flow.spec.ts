@@ -5,6 +5,8 @@ import {
   holdNextVoiceTurn,
   installFakeLiveVoice,
   readFakeLiveVoiceSnapshot,
+  waitForAudiblePlaybackSilence,
+  waitForAudiblePlaybackStart,
 } from './fixtures/live-voice-fixture';
 
 async function enterLiveWorkspace(page: Page) {
@@ -135,14 +137,17 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
     .toBeGreaterThanOrEqual(2);
-  const playbackStopsBeforeInterruption = (
+  await waitForAudiblePlaybackStart(page);
+  const audibleSourcesBeforeInterruption = (
     await readFakeLiveVoiceSnapshot(page)
-  ).playbackStops;
+  ).activeAudiblePlaybackSourceIds;
+  expect(audibleSourcesBeforeInterruption).not.toEqual([]);
   await emitVoicePartial(page, '停一下，改为比较两份资料');
+  await waitForAudiblePlaybackSilence(page);
   await expect(dialog.getByText('停一下，改为比较两份资料')).toBeVisible();
-  await expect
-    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).playbackStops)
-    .toBeGreaterThan(playbackStopsBeforeInterruption);
+  expect(
+    (await readFakeLiveVoiceSnapshot(page)).activeAudiblePlaybackSourceIds,
+  ).toEqual([]);
   await emitVoiceFinal(page, '停一下，改为比较两份资料');
 
   await expect
@@ -155,14 +160,19 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     .toBe(3);
 
   const snapshot = await readFakeLiveVoiceSnapshot(page);
-  const playbackStop = snapshot.events.lastIndexOf(
-    'playback.stop',
-    snapshot.events.indexOf('turn.cancel'),
+  expect(snapshot.activeAudiblePlaybackSourceIdsAtCancel).toEqual([[]]);
+  expect(snapshot.audiblePlaybackStoppedSourceIds).toEqual(
+    expect.arrayContaining([...audibleSourcesBeforeInterruption]),
   );
   const turnCancel = snapshot.events.indexOf('turn.cancel');
+  const lastAudiblePlaybackStop = Math.max(
+    ...audibleSourcesBeforeInterruption.map((sourceId) =>
+      snapshot.events.indexOf(`playback.audible.stop:${sourceId}`),
+    ),
+  );
   const resumedTurn = snapshot.events.lastIndexOf('turn.request');
-  expect(playbackStop).toBeGreaterThan(-1);
-  expect(turnCancel).toBeGreaterThan(playbackStop);
+  expect(lastAudiblePlaybackStop).toBeGreaterThan(-1);
+  expect(turnCancel).toBeGreaterThan(lastAudiblePlaybackStop);
   expect(resumedTurn).toBeGreaterThan(turnCancel);
 
   for (const request of snapshot.turnRequests.slice(1)) {
