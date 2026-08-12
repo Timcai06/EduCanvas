@@ -23,11 +23,10 @@ async function openStudioSource(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('source');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -132,7 +131,7 @@ test('@smoke PDF 结构化表示默认原件预览，显式切换结构化阅读
         .includes(`/api/v1/canvas/resources/source/${fixture.sourceId}`) &&
       response.request().method() === 'GET',
   );
-  await studio.getByRole('option', { name: /网络编程\.pdf/ }).click();
+  await studio.getByRole('button', { name: /网络编程\.pdf/ }).click();
   expect((await sourceResponse).status()).toBe(200);
 
   const sourceCanvas = page.locator('[aria-label="来源预览"]');

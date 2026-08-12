@@ -37,15 +37,10 @@ async function openStudio(page: Page, kind: 'source' | 'artifact') {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  if (kind === 'artifact') await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', {
-      name:
-        kind === 'source' ? '浏览当前Notebook来源' : '浏览当前Notebook的AI产物',
-    }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption(kind);
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -170,7 +165,7 @@ test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
         .includes(`/api/v1/canvas/resources/source/${fixture.sourceId}`) &&
       response.request().method() === 'GET',
   );
-  await studio.getByRole('option', { name: /S1 文本来源\.txt/ }).click();
+  await studio.getByRole('button', { name: /S1 文本来源\.txt/ }).click();
   expect((await sourceResponse).status()).toBe(200);
   const sourceCanvas = page.locator('[aria-label="来源预览"]');
   await expect(sourceCanvas).toBeVisible();
@@ -187,7 +182,7 @@ test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
         .includes(`/api/v1/canvas/resources/artifact/${fixture.artifactId}`) &&
       response.request().method() === 'GET',
   );
-  await studio.getByRole('option', { name: /S1 版本恢复导图/ }).click();
+  await studio.getByRole('button', { name: /S1 版本恢复导图/ }).click();
   expect((await artifactResponse).status()).toBe(200);
   const artifactCanvas = page.locator('[aria-label="产物Canvas"]');
   const versions = artifactCanvas.getByRole('combobox', {
