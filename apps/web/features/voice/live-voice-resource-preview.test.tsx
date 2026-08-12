@@ -135,9 +135,10 @@ const sourceTarget: LiveVoicePreviewTarget = {
 function renderPreview(
   target: LiveVoicePreviewTarget = sourceTarget,
   scopeKey = 'notebook-a',
+  onClose = vi.fn(),
 ) {
   hooks.beginRender();
-  return LiveVoiceResourcePreview({ target, scopeKey, onClose: vi.fn() });
+  return LiveVoiceResourcePreview({ target, scopeKey, onClose });
 }
 
 async function flushPromises() {
@@ -302,5 +303,24 @@ describe('LiveVoiceResourcePreview', () => {
     const html = renderToStaticMarkup(renderPreview());
     expect(html).toContain('无权访问');
     expect(html).not.toContain('>重试<');
+  });
+
+  it('资源加载失败只落到预览错误态，不触发 Live 退出回调', async () => {
+    const onClose = vi.fn();
+    mocks.fetchCanvasResource.mockRejectedValueOnce({
+      kind: 'failed',
+      message: '预览服务暂时不可用。',
+    });
+
+    renderPreview(sourceTarget, 'notebook-a', onClose);
+    hooks.runEffect();
+    await flushPromises();
+
+    const html = renderToStaticMarkup(
+      renderPreview(sourceTarget, 'notebook-a', onClose),
+    );
+    expect(html).toContain('预览服务暂时不可用');
+    expect(html).toContain('>重试<');
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
