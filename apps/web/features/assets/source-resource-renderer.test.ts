@@ -195,6 +195,8 @@ describe('SourceResourceRendererContent', () => {
         mimeType:
           'application/vnd.openxmlformats-officedocument.wordprocessingml',
         content: '<p>真实 DOCX</p>',
+        downloadUrl:
+          '/api/v1/chat/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/file?download=1',
       },
     });
 
@@ -225,6 +227,87 @@ describe('SourceResourceRendererContent', () => {
     });
 
     expect(html).toContain(`data-pdf-url="${fileUrl}"`);
+    /* 无文本表示（旧资产）不出现结构化切换入口。 */
+    expect(html).not.toContain('阅读视图切换');
+  });
+
+  /* 问题 A 回归：canvas 来源渲染路径（SourceResourceRenderer）必须消费
+     representation——结构化可用时默认仍渲染原件 PDF 并提供切换入口，
+     不能只渲染 pdf.js 而忽略服务端已返回的结构化表示。 */
+  it('PDF 带结构化表示时默认原件预览并提供切换入口', () => {
+    const fileUrl =
+      '/api/v1/chat/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/file';
+    const html = render({
+      resource: makeResource({
+        title: '网络编程.pdf',
+        representation: {
+          kind: 'document',
+          mimeType: 'application/pdf',
+          byteSize: 1024,
+        },
+        renderer: { rendererId: 'source.pdf', rendererVersion: 1 },
+      }),
+      preview: {
+        kind: 'pdf',
+        fileName: '网络编程.pdf',
+        mimeType: 'application/pdf',
+        fileUrl,
+        representation: {
+          quality: 'structured',
+          markdown: '# 网络编程\n\n正文。',
+          producer: 'mineru',
+          producerVersion: '3.4.4',
+        },
+      },
+    });
+
+    /* 默认视图仍是原件 PDF，派生 Markdown 不默认顶替。 */
+    expect(html).toContain(`data-pdf-url="${fileUrl}"`);
+    expect(html).not.toContain('data-markdown');
+    /* 显式切换入口出现且标注 provenance。 */
+    expect(html).toContain('阅读视图切换');
+    expect(html).toContain('结构化阅读');
+  });
+
+  /* 问题 A 同构回归：DOCX 与 PDF 一样必须消费 representation——structured
+     时服务端不跑 mammoth（content 为空），渲染器不能因 content 为空而落到
+     "暂不支持预览"兜底，必须显示原件占位 + 切换入口 + 下载。 */
+  it('DOCX 带结构化表示时默认原件视图并提供切换入口（不空白）', () => {
+    const downloadUrl =
+      '/api/v1/chat/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/file?download=1';
+    const html = render({
+      resource: makeResource({
+        title: '讲义.docx',
+        representation: {
+          kind: 'document',
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml',
+          byteSize: 2048,
+        },
+        renderer: { rendererId: 'source.docx', rendererVersion: 1 },
+      }),
+      preview: {
+        kind: 'docx',
+        fileName: '讲义.docx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml',
+        content: '',
+        representation: {
+          quality: 'structured',
+          markdown: '# 讲义正文',
+          producer: 'mineru',
+          producerVersion: '3.4.4',
+        },
+        downloadUrl,
+      },
+    });
+
+    expect(html).toContain('阅读视图切换');
+    expect(html).toContain('结构化阅读');
+    expect(html).toContain('下载原件');
+    expect(html).not.toContain('暂不支持预览');
+    /* 默认视图仍是原件侧，派生 Markdown 不默认顶替。 */
+    expect(html).not.toContain('data-markdown');
   });
 
   it('PNG fixture 使用非空替代文本与受控 URL', () => {

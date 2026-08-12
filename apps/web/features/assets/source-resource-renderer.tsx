@@ -3,19 +3,15 @@
 import { CanvasHost } from '@/features/canvas/canvas-host';
 import { CanvasShellStatus } from '@/features/canvas/canvas-shell-status';
 import { MessageMarkdown } from '@/features/chat/markdown';
-import dynamic from 'next/dynamic';
 import { useEffect, useState, type ComponentType } from 'react';
 import { loadAssetPreview } from './asset-client';
 import type { AssetPreview } from './asset-preview-contract';
+import { PdfReadingSwitcher } from './pdf-reading-switcher';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import { resolveSourceRendererState } from './source-resource-renderer-state';
 import type { CanvasResourceRendererProps } from '../canvas/canvas-resource-registry';
 
-const PdfPreview = dynamic(
-  () => import('./preview/pdf-preview').then((mod) => mod.PdfPreview),
-  { ssr: false },
-);
-import { DocxPreview } from './preview/docx-preview';
+import { DocxReadingSwitcher } from './docx-reading-switcher';
 
 /**
  * 来源内容渲染器：统一处理 PDF、图片、DOCX、Markdown、纯文本、音频、视频。
@@ -161,8 +157,9 @@ export function SourceResourceRendererContent({
         />
       ) : preview ? (
         <div className="min-h-0 flex-1 overflow-auto bg-surface/30">
-          {preview.kind === 'pdf' && preview.fileUrl ? (
-            <PdfPreview fileUrl={preview.fileUrl} />
+          {preview.kind === 'pdf' ? (
+            /* ADR-0026 决定 6：默认原件预览，显式切换结构化/降级阅读。 */
+            <PdfReadingSwitcher preview={preview} />
           ) : preview.kind === 'image' && preview.fileUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -170,8 +167,9 @@ export function SourceResourceRendererContent({
               alt={resource.title}
               className="mx-auto max-h-full max-w-full rounded-2xl object-contain p-4 shadow-[var(--shadow-float)]"
             />
-          ) : preview.kind === 'docx' && preview.content ? (
-            <DocxPreview html={preview.content} warnings={preview.warnings} />
+          ) : preview.kind === 'docx' ? (
+            /* ADR-0026 决定 6：默认原件预览（mammoth），结构化/降级显式切换。 */
+            <DocxReadingSwitcher preview={preview} />
           ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />
