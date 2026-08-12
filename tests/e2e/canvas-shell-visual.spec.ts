@@ -156,6 +156,21 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
   test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
     const longTitle = '超长标题'.repeat(50);
     const longLabel = '长内容'.repeat(40);
+    await page.route(
+      '**/api/v1/canvas/resources/artifact/**',
+      async (route) => {
+        const response = await route.fetch();
+        if (!response.ok()) {
+          await route.fulfill({ response });
+          return;
+        }
+        const payload = (await response.json()) as {
+          resource?: { title?: string };
+        };
+        if (payload.resource) payload.resource.title = longTitle;
+        await route.fulfill({ response, json: payload });
+      },
+    );
     await page.route('**/api/v1/chat/artifacts/*', async (route) => {
       const request = route.request();
       const pathname = new URL(request.url()).pathname;
@@ -175,29 +190,27 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         artifact?: { title?: string };
         version?: {
           content?: {
-            root?: {
-              children?: Array<{
-                id: string;
-                label: string;
-                children?: Array<{ id: string; label: string }>;
-              }>;
-            };
+            contentVersion?: number;
+            rootNodeId?: string;
+            nodes?: Array<{ id: string; label: string }>;
+            edges?: Array<{ from: string; to: string }>;
           };
         } | null;
       };
-      if (payload.artifact) payload.artifact.title = longTitle;
-      if (payload.version?.content?.root) {
-        payload.version.content.root.children = Array.from(
-          { length: 8 },
-          (_, index) => ({
+      const content = payload.version?.content;
+      if (content?.contentVersion === 2 && content.rootNodeId) {
+        const rootNodeId = content.rootNodeId;
+        content.nodes = [
+          { id: rootNodeId, label: longLabel },
+          ...Array.from({ length: 24 }, (_, index) => ({
             id: `long-${index + 1}`,
-            label: longLabel,
-            children: Array.from({ length: 3 }, (_, childIndex) => ({
-              id: `long-${index + 1}-${childIndex + 1}`,
-              label: `嵌套长内容 ${index + 1}-${childIndex + 1}`,
-            })),
-          }),
-        );
+            label: `${longLabel} ${index + 1}`,
+          })),
+        ];
+        content.edges = content.nodes.slice(1).map((node) => ({
+          from: rootNodeId,
+          to: node.id,
+        }));
       }
       await route.fulfill({ response, json: payload });
     });
@@ -291,12 +304,19 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     const canvas = await openCanvasViaMindMap(page);
     await canvas.getByRole('button', { name: /关闭/ }).click();
 
-    // 拦截资源验证接口并延迟响应，制造可稳定捕获的加载态窗口
-    await page.route('**/api/v1/canvas/resources/artifact/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const response = await route.fetch();
-      await route.fulfill({ response });
+    let releaseResource = () => undefined as void;
+    const resourceGate = new Promise<void>((resolve) => {
+      releaseResource = resolve;
     });
+    // 测试显式释放受控请求；加载态由因果门控制，不依赖机器速度或固定 sleep。
+    await page.route(
+      '**/api/v1/canvas/resources/artifact/**',
+      async (route) => {
+        await resourceGate;
+        const response = await route.fetch();
+        await route.fulfill({ response });
+      },
+    );
     await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
     const studio = page.getByRole('complementary', {
       name: '当前笔记本的 Studio',
@@ -313,6 +333,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     await expect(statusSurface.getByRole('status')).toHaveText(/正在打开作品/);
 
     // 验证成功：加载态关闭，切换真实内容
+    releaseResource();
     await expect(statusSurface).not.toBeVisible();
     const artifactCanvas = page.getByRole('dialog', { name: '产物Canvas' });
     await expect(artifactCanvas).toBeVisible();
