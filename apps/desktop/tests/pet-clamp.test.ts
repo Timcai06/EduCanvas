@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { clampRect, initialPetRect } from '../src/shared/pet-clamp';
+import {
+  clampRect,
+  initialPetRect,
+  recoverOffscreenRect,
+} from '../src/shared/pet-clamp';
 
 const D = {
   x: 0,
@@ -73,5 +77,66 @@ describe('pet 窗口钳制', () => {
     };
     expect(initialPetRect([odd]).x).toBe(Math.round((1707 - 128) / 2));
     expect(Number.isInteger(initialPetRect([odd]).x)).toBe(true);
+  });
+
+  it('does not constrain a freely dragged window while its pet area remains visible', () => {
+    const freelyDragged = { x: -120, y: 200, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(freelyDragged, petGrabArea, [D])).toEqual(
+      freelyDragged,
+    );
+  });
+
+  it('allows dragging through the taskbar strip while the pet remains on the full display', () => {
+    const overTaskbar = { x: 1000, y: 839, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(overTaskbar, petGrabArea, [D])).toEqual(
+      overTaskbar,
+    );
+  });
+
+  it('keeps the complete draggable pet area inside the full display bottom edge', () => {
+    const belowTaskbar = { x: 1000, y: 939, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(belowTaskbar, petGrabArea, [D])).toEqual({
+      x: 1000,
+      y: 865,
+      width: 500,
+      height: 240,
+    });
+  });
+
+  it('keeps the complete draggable pet area inside the left screen edge', () => {
+    const beyondLeftEdge = { x: -400, y: 200, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(beyondLeftEdge, petGrabArea, [D])).toEqual({
+      x: -343,
+      y: 200,
+      width: 500,
+      height: 240,
+    });
+  });
+
+  it('recovers a window left on a disconnected display', () => {
+    const disconnected = { x: 2200, y: 200, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(disconnected, petGrabArea, [D])).toEqual({
+      x: 1457,
+      y: 200,
+      width: 500,
+      height: 240,
+    });
+  });
+
+  it('recovers when only a non-draggable chat edge remains onscreen', () => {
+    const chatEdgeOnly = { x: 1900, y: 200, width: 500, height: 240 };
+    const petGrabArea = { x: 343, y: 82, width: 120, height: 133 };
+
+    expect(recoverOffscreenRect(chatEdgeOnly, petGrabArea, [D]).x).toBe(1457);
   });
 });

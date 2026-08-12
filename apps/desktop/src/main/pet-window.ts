@@ -1,173 +1,149 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
 import {
-  clampRect,
-  initialPetRect,
-  PET_SIZE,
-  type DisplayInfo,
-  type Rect,
-} from '../shared/pet-clamp';
-import { dragTarget, type DragPoint } from '../shared/pet-drag';
-import { savePetPositionFile } from '../shared/pet-position-file';
+  MVP_WINDOW_HEIGHT,
+  MVP_WINDOW_WIDTH,
+  petVisibleRect,
+} from '../shared/pet-mvp-layout';
 import {
-  collapsedAnchorRect,
-  resizePetWindowRect,
-} from '../shared/pet-window-layout';
+  loadPetPositionFile,
+  savePetPositionFile,
+} from '../shared/pet-position-file';
+import { recoverOffscreenRect } from '../shared/pet-clamp';
 import { isQuitRequested } from './tray';
+import { PET_WINDOW_APPEARANCE } from './pet-window-appearance';
+import { showPetWindow } from './pet-window-visibility';
+import { isTrustedDesktopRendererUrl } from './desktop-renderer-url';
 
-/** 桌宠窗口动作对象：index.ts 注册 IPC 时直接调用，不在 win 上 hack 挂字段。 */
 export interface PetWindowController {
   win: BrowserWindow;
-  dragMove(p: DragPoint): void;
-  moveBy(dx: number, dy: number): Rect;
-  getBounds(): Rect;
-  setExpanded(expanded: boolean): Rect;
-  setMousePassthrough(passthrough: boolean): void;
+  savePosition(): void;
 }
 
-function displays(): DisplayInfo[] {
-  return screen.getAllDisplays().map((d) => ({
-    x: d.bounds.x,
-    y: d.bounds.y,
-    width: d.bounds.width,
-    height: d.bounds.height,
-    workArea: {
-      x: d.workArea.x,
-      y: d.workArea.y,
-      width: d.workArea.width,
-      height: d.workArea.height,
-    },
+function currentDisplays() {
+  return screen.getAllDisplays().map((display) => ({
+    ...display.bounds,
+    workArea: display.workArea,
   }));
 }
 
 export function createPetWindow(): PetWindowController {
-  // 位置记忆：上次隐藏时的窗口位置（userData/pet-window.json）
-  const posFile = join(app.getPath('userData'), 'pet-window.json');
-  const saved = ((): Rect | null => {
-    try {
-      if (existsSync(posFile)) {
-        const r = JSON.parse(readFileSync(posFile, 'utf8')) as Record<
-          string,
-          unknown
-        >;
-        if (typeof r.x === 'number' && typeof r.y === 'number') {
-          return { x: r.x, y: r.y, width: PET_SIZE, height: PET_SIZE };
-        }
-      }
-    } catch {
-      /* 损坏的存档文件忽略，用默认位置 */
-    }
-    return null;
-  })();
+  const positionFile = join(app.getPath('userData'), 'pet-window.json');
+  const saved = loadPetPositionFile(positionFile);
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const defaultPosition = {
+    x: workArea.x + workArea.width - MVP_WINDOW_WIDTH - 24,
+    y: workArea.y + workArea.height - MVP_WINDOW_HEIGHT - 24,
+  };
+  const restored = recoverOffscreenRect(
+    {
+      x: saved?.x ?? defaultPosition.x,
+      y: saved?.y ?? defaultPosition.y,
+      width: MVP_WINDOW_WIDTH,
+      height: MVP_WINDOW_HEIGHT,
+    },
+    petVisibleRect(MVP_WINDOW_HEIGHT),
+    currentDisplays(),
+  );
 
   const win = new BrowserWindow({
-    width: PET_SIZE,
-    height: PET_SIZE,
-    // 有存档才给 x/y：显式 undefined 会被 Electron 43 判为参数转换失败
-    ...(saved ? { x: saved.x, y: saved.y } : {}),
-    transparent: true,
+    width: MVP_WINDOW_WIDTH,
+    height: MVP_WINDOW_HEIGHT,
+    x: Math.round(restored.x),
+    y: Math.round(restored.y),
+    useContentSize: true,
+    ...PET_WINDOW_APPEARANCE,
     frame: false,
+    hasShadow: false,
     resizable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
     webPreferences: {
+      ...PET_WINDOW_APPEARANCE.webPreferences,
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true,
     },
   });
 
-  // 位置记忆：隐藏与真正退出都落盘（拖走后直接退出也不丢最后位置）
   function savePosition(): void {
     try {
-      savePetPositionFile(posFile, collapsedAnchorRect(win.getBounds()));
+      const bounds = win.getBounds();
+      savePetPositionFile(positionFile, {
+        x: bounds.x,
+        y: bounds.y,
+        width: MVP_WINDOW_WIDTH,
+        height: MVP_WINDOW_HEIGHT,
+      });
     } catch {
-      /* 保存失败不影响运行/退出 */
+      // 位置记忆失败不应影响桌宠运行或退出。
     }
   }
 
-  // 关闭 = 隐藏到托盘；仅托盘「退出」（isQuitRequested 置位）时放行关闭，退出前落盘
+  function recoverIfDisplayWasRemoved(): void {
+    if (win.isDestroyed()) return;
+    const current = win.getBounds();
+    const recovered = recoverOffscreenRect(
+      current,
+      petVisibleRect(current.height),
+      currentDisplays(),
+    );
+    if (recovered.x === current.x && recovered.y === current.y) return;
+    win.setPosition(recovered.x, recovered.y, false);
+    savePosition();
+  }
+
+  win.on('will-move', (event, proposedBounds) => {
+    const constrained = recoverOffscreenRect(
+      proposedBounds,
+      petVisibleRect(proposedBounds.height),
+      currentDisplays(),
+    );
+    if (
+      constrained.x === proposedBounds.x &&
+      constrained.y === proposedBounds.y
+    ) {
+      return;
+    }
+    event.preventDefault();
+    win.setPosition(
+      Math.round(constrained.x),
+      Math.round(constrained.y),
+      false,
+    );
+  });
+
   win.on('close', (event) => {
     if (!isQuitRequested()) {
       event.preventDefault();
       win.hide();
-    } else {
-      savePosition();
+      return;
     }
+    savePosition();
+  });
+  win.on('hide', savePosition);
+  win.on('ready-to-show', () => showPetWindow(win));
+  screen.on('display-removed', recoverIfDisplayWasRemoved);
+  screen.on('display-metrics-changed', recoverIfDisplayWasRemoved);
+  win.on('closed', () => {
+    screen.removeListener('display-removed', recoverIfDisplayWasRemoved);
+    screen.removeListener(
+      'display-metrics-changed',
+      recoverIfDisplayWasRemoved,
+    );
   });
 
-  win.on('ready-to-show', () => win.show());
-
   const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
-  if (rendererUrl) {
-    void win.loadURL(rendererUrl);
-  } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  const rendererEntryUrl = rendererUrl
+    ? new URL(rendererUrl).toString()
+    : new URL(`file:///${join(__dirname, '../renderer/index.html').replaceAll('\\', '/')}`).toString();
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl)) event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  if (rendererUrl) void win.loadURL(rendererEntryUrl);
+  else void win.loadFile(join(__dirname, '../renderer/index.html'));
 
-  if (!saved) {
-    const r = initialPetRect(displays());
-    setPositionPx(r.x, r.y);
-  }
-  clampNow();
-
-  // 显示器增删/尺寸变化时钳回可见区域，防止桌宠滞留屏幕外
-  screen.on('display-added', clampNow);
-  screen.on('display-removed', clampNow);
-  screen.on('display-metrics-changed', clampNow);
-
-  win.on('hide', savePosition);
-
-  // Electron 43 的 setPosition 拒绝小数像素，统一取整
-  function setPositionPx(x: number, y: number): void {
-    win.setPosition(Math.round(x), Math.round(y));
-  }
-
-  function clampNow(): void {
-    const b = win.getBounds();
-    const r = clampRect(b, displays());
-    if (r.x !== b.x || r.y !== b.y) setPositionPx(r.x, r.y);
-  }
-
-  return {
-    win,
-    dragMove(p: DragPoint): void {
-      const t = dragTarget(p);
-      const b = win.getBounds();
-      const r = clampRect(
-        { ...t, width: b.width, height: b.height },
-        displays(),
-      );
-      setPositionPx(r.x, r.y);
-    },
-    moveBy(dx: number, dy: number): Rect {
-      const b = win.getBounds();
-      const r = clampRect(
-        { x: b.x + dx, y: b.y + dy, width: b.width, height: b.height },
-        displays(),
-      );
-      setPositionPx(r.x, r.y);
-      return r;
-    },
-    getBounds: () => win.getBounds(),
-    setExpanded(expanded: boolean): Rect {
-      const current = win.getBounds();
-      const target = clampRect(
-        resizePetWindowRect(current, expanded),
-        displays(),
-      );
-      win.setBounds({
-        x: Math.round(target.x),
-        y: Math.round(target.y),
-        width: target.width,
-        height: target.height,
-      });
-      return target;
-    },
-    setMousePassthrough(passthrough: boolean): void {
-      win.setIgnoreMouseEvents(passthrough, { forward: true });
-    },
-  };
+  return { win, savePosition };
 }

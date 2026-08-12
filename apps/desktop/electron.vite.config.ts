@@ -4,8 +4,12 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
-    build: { outDir: 'out/main' },
+    build: {
+      outDir: 'out/main',
+      // The desktop app consumes workspace TypeScript packages. Bundle them so
+      // Electron never tries to resolve their extensionless source imports.
+      externalizeDeps: false,
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

@@ -29,6 +29,7 @@ import {
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
+  DrizzleWebSessionRepository,
   requireNotebookAccess,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
@@ -158,6 +159,7 @@ const server = createServer(
       ? {
           bootstrapToken: config.bootstrapToken,
           sessionAuth: clientSessionAuth,
+          desktopSessions: new DrizzleWebSessionRepository(),
           identities,
           directory,
           localOnboarding: config.localOnboardingEnabled

@@ -12,6 +12,7 @@ export type TurnResult =
     }
   | {
       ok: false;
-      code: 'backend_offline' | 'timeout' | 'aborted' | 'http';
+      code:
+        'backend_offline' | 'timeout' | 'aborted' | 'http' | 'unauthenticated';
       message: string;
     };

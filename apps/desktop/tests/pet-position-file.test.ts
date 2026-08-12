@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { savePetPositionFile } from '../src/shared/pet-position-file';
+import {
+  loadPetPositionFile,
+  savePetPositionFile,
+} from '../src/shared/pet-position-file';
 
 const dirs: string[] = [];
 
@@ -27,6 +36,7 @@ describe('savePetPositionFile', () => {
     >;
     expect(saved.x).toBe(100);
     expect(saved.y).toBe(200);
+    expect(saved.version).toBe(2);
   });
 
   it('父目录不存在时自动创建', () => {
@@ -34,5 +44,15 @@ describe('savePetPositionFile', () => {
     const file = join(dir, 'nested', 'deep', 'pet-window.json');
     savePetPositionFile(file, { x: -5, y: 9, width: 128, height: 128 });
     expect(existsSync(file)).toBe(true);
+  });
+
+  it('ignores unversioned positions from the old 128px window layout', () => {
+    const dir = tmpDir();
+    const file = join(dir, 'pet-window.json');
+    savePetPositionFile(file, { x: 10, y: 20, width: 500, height: 240 });
+    expect(loadPetPositionFile(file)).toEqual({ x: 10, y: 20 });
+
+    writeFileSync(file, JSON.stringify({ x: 10, y: 20 }));
+    expect(loadPetPositionFile(file)).toBeNull();
   });
 });

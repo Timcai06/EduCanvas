@@ -12,3 +12,4 @@ export {
   type GatewayPendingApproval,
   type GatewayRecentOperation,
 } from './client';
+export { revokeGatewayDesktopSession } from './desktop-session';

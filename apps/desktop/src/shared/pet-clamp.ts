@@ -60,6 +60,51 @@ export function clampRect(rect: Rect, displays: DisplayInfo[]): Rect {
   };
 }
 
+/**
+ * 让实际可拖动的角色区域始终完整落在现有显示器边界内；聊天框和透明窗口边距可以越界。
+ * 相邻屏幕共同覆盖完整角色时保持跨屏位置，避免跨屏拖动被吸回单屏。
+ */
+export function recoverOffscreenRect(
+  rect: Rect,
+  localGrabArea: Rect,
+  displays: DisplayInfo[],
+): Rect {
+  const screenGrabArea = {
+    ...localGrabArea,
+    x: rect.x + localGrabArea.x,
+    y: rect.y + localGrabArea.y,
+  };
+  const ranked = displays
+    .map((display) => ({
+      display,
+      overlap: overlap(screenGrabArea, display),
+      distance: centerDistance(screenGrabArea, display),
+    }))
+    .sort((a, b) => b.overlap - a.overlap || a.distance - b.distance);
+  const coveredArea = ranked.reduce((sum, item) => sum + item.overlap, 0);
+  if (coveredArea >= localGrabArea.width * localGrabArea.height) return rect;
+
+  const displayBounds = ranked[0]?.display;
+  if (!displayBounds) return rect;
+  const minX = displayBounds.x - localGrabArea.x;
+  const maxX =
+    displayBounds.x +
+    displayBounds.width -
+    localGrabArea.x -
+    localGrabArea.width;
+  const minY = displayBounds.y - localGrabArea.y;
+  const maxY =
+    displayBounds.y +
+    displayBounds.height -
+    localGrabArea.y -
+    localGrabArea.height;
+  return {
+    ...rect,
+    x: Math.min(Math.max(rect.x, minX), maxX),
+    y: Math.min(Math.max(rect.y, minY), maxY),
+  };
+}
+
 /** 初始位置：主屏（displays[0]）workArea 底部居中，留底边距。
  * 坐标取整：Electron 43 的 setPosition 拒绝小数像素。 */
 export function initialPetRect(displays: DisplayInfo[]): Rect {

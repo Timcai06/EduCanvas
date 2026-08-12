@@ -4,6 +4,7 @@ import type {
   VoiceSpeechResult,
   VoiceTranscriptionResult,
 } from '../shared/voice-result';
+import type { StoredDesktopSession } from './desktop-session-store';
 
 export interface VoiceProxy {
   transcribe(
@@ -27,7 +28,19 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
-function httpFailure(body: unknown): VoiceFailure {
+async function httpFailure(
+  response: Response,
+  body: unknown,
+  invalidateSession: () => Promise<unknown>,
+): Promise<VoiceFailure> {
+  if (response.status === 401) {
+    await invalidateSession();
+    return {
+      ok: false,
+      code: 'unauthenticated',
+      message: '登录已失效，请重新登录。',
+    };
+  }
   const message = (body as { error?: { message?: unknown } } | null)?.error
     ?.message;
   return {
@@ -38,22 +51,30 @@ function httpFailure(body: unknown): VoiceFailure {
 }
 
 /**
- * Electron main → 本地 Web BFF 的有界语音代理。只返回文本或音频字节，
+ * Electron main → remote Web BFF 的有界语音代理。只返回文本或音频字节，
  * Provider headers、metadata、原始错误和 Secret 都止于服务端。
  */
-export function createVoiceProxy(
-  options: {
-    fetchImpl?: typeof fetch;
-    baseUrl?: string;
-    timeoutMs?: number;
-  } = {},
-): VoiceProxy {
+export function createVoiceProxy(options: {
+  getSession(): Promise<StoredDesktopSession | null>;
+  invalidateSession(): Promise<unknown>;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}): VoiceProxy {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const baseUrl = (options.baseUrl ?? 'http://127.0.0.1:3101').replace(
-    /\/$/,
-    '',
-  );
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  async function authenticatedSession(): Promise<
+    StoredDesktopSession | VoiceFailure
+  > {
+    const session = await options.getSession();
+    return (
+      session ?? {
+        ok: false,
+        code: 'unauthenticated',
+        message: '请先登录 EduCanvas。',
+      }
+    );
+  }
 
   async function run<T>(
     signal: AbortSignal | undefined,
@@ -105,15 +126,24 @@ export function createVoiceProxy(
 
   return {
     async transcribe(input, signal) {
+      const session = await authenticatedSession();
+      if ('ok' in session) return session;
       const result = await run(signal, async (combinedSignal) => {
-        const response = await fetchImpl(`${baseUrl}/api/v1/voice/dictation`, {
-          method: 'POST',
-          headers: { 'content-type': input.mimeType },
-          body: input.bytes.slice().buffer,
-          signal: combinedSignal,
-        });
+        const response = await fetchImpl(
+          new URL('/api/v1/voice/dictation', session.webBaseUrl),
+          {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${session.token}`,
+              'content-type': input.mimeType,
+            },
+            body: input.bytes.slice().buffer,
+            signal: combinedSignal,
+          },
+        );
         const body = await safeJson(response);
-        if (!response.ok) return httpFailure(body);
+        if (!response.ok)
+          return httpFailure(response, body, options.invalidateSession);
         const text = (body as { text?: unknown } | null)?.text;
         if (typeof text !== 'string' || !text.trim()) {
           return {
@@ -128,14 +158,27 @@ export function createVoiceProxy(
     },
 
     async synthesize(input, signal) {
+      const session = await authenticatedSession();
+      if ('ok' in session) return session;
       const result = await run(signal, async (combinedSignal) => {
-        const response = await fetchImpl(`${baseUrl}/api/v1/voice/speech`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text: input.text.trim() }),
-          signal: combinedSignal,
-        });
-        if (!response.ok) return httpFailure(await safeJson(response));
+        const response = await fetchImpl(
+          new URL('/api/v1/voice/speech', session.webBaseUrl),
+          {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${session.token}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ text: input.text.trim() }),
+            signal: combinedSignal,
+          },
+        );
+        if (!response.ok)
+          return httpFailure(
+            response,
+            await safeJson(response),
+            options.invalidateSession,
+          );
         const contentType =
           response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
         const declaredBytes = Number(response.headers.get('content-length'));
