@@ -6,7 +6,10 @@ import {
   type WorkspaceResourceSummary,
 } from '@educanvas/canvas-protocol';
 import { type AssetSnapshot, type TemporalIdCursor } from '@educanvas/db';
-import { DrizzleWorkspaceResourceSummaryRepository } from '@educanvas/db/workspace-resource-summary';
+import {
+  DrizzleWorkspaceResourceMemberFactsRepository,
+  DrizzleWorkspaceResourceSummaryRepository,
+} from '@educanvas/db/workspace-resource-summary';
 import { projectOwnedArtifactResource } from './artifact-resource-adapter';
 import { projectOwnedSourceResourcesForSubject } from './resource-access';
 import { loadOwnedGeneralConversationForSubject } from '../platform/general-conversation';
@@ -215,10 +218,7 @@ export function mergeWorkspaceResourceCandidates(input: {
   };
 }
 
-/**
- * Source 与 Artifact 保持各自的权威 keyset 游标。每次各取至多一页、合并后只
- * 推进已实际返回条目的分域游标，因此交错排序不会丢项或重复，也不需要 offset。
- */
+/** 双 keyset 游标只推进已扫描的分域事实，不使用 offset。 */
 export async function listWorkspaceResourceSummaries(input: {
   readonly dataOwnerKind: WebDataOwnerKind;
   readonly dataOwnerId: string;
@@ -246,6 +246,8 @@ export async function listWorkspaceResourceSummaries(input: {
   const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
   const cursor = decodeCursor(input.cursor);
   const summaries = new DrizzleWorkspaceResourceSummaryRepository();
+  const memberFactsRepository =
+    new DrizzleWorkspaceResourceMemberFactsRepository();
   const [sourcePage, artifactPage] = await Promise.all([
     input.filter === 'artifact'
       ? Promise.resolve({ items: [], nextCursor: null })
@@ -265,7 +267,7 @@ export async function listWorkspaceResourceSummaries(input: {
           kinds: WEB_ARTIFACT_KINDS,
         }),
   ]);
-  const memberFacts = await summaries.loadMemberFacts({
+  const memberFacts = await memberFactsRepository.load({
     ownerSubjectId: input.dataOwnerId,
     spaceId: conversation.spaceId,
     sourceIds: sourcePage.items.map((item) => item.descriptor.assetId),

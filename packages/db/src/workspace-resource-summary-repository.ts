@@ -19,8 +19,6 @@ import {
   assetProcessingJobs,
   assetVersions,
   assets,
-  notebookAssetBindings,
-  notebookSurfacePositions,
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
@@ -392,103 +390,5 @@ export class DrizzleWorkspaceResourceSummaryRepository {
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
-  }
-
-  /** 当前页成员私有事实；ID 过滤保证资源增长不会扩大每页读取集合。 */
-  async loadMemberFacts(input: {
-    readonly spaceId: string;
-    readonly ownerSubjectId: string;
-    readonly sourceIds: readonly string[];
-    readonly artifactIds: readonly string[];
-  }): Promise<WorkspaceResourceMemberFacts> {
-    await requireReadAccess(this.database, {
-      spaceId: input.spaceId,
-      ownerSubjectId: input.ownerSubjectId,
-      permission: 'notebook.read',
-    });
-    const resourceIds = [
-      ...new Set([...input.sourceIds, ...input.artifactIds]),
-    ];
-    const [bindingRows, positionRows] = await Promise.all([
-      input.sourceIds.length === 0
-        ? []
-        : this.database
-            .selectDistinctOn(
-              [notebookAssetBindings.subjectId, notebookAssetBindings.assetId],
-              {
-                assetId: notebookAssetBindings.assetId,
-                enabled: notebookAssetBindings.enabled,
-              },
-            )
-            .from(notebookAssetBindings)
-            .innerJoin(assets, eq(assets.id, notebookAssetBindings.assetId))
-            .where(
-              and(
-                eq(notebookAssetBindings.subjectId, input.ownerSubjectId),
-                eq(assets.spaceId, input.spaceId),
-                inArray(notebookAssetBindings.assetId, [...input.sourceIds]),
-                ne(assets.status, 'tombstoned'),
-              ),
-            )
-            .orderBy(
-              notebookAssetBindings.subjectId,
-              notebookAssetBindings.assetId,
-              desc(notebookAssetBindings.sequence),
-            ),
-      resourceIds.length === 0
-        ? []
-        : this.database
-            .select({
-              resourceKind: notebookSurfacePositions.resourceKind,
-              resourceId: notebookSurfacePositions.resourceId,
-              zone: notebookSurfacePositions.zone,
-              restState: notebookSurfacePositions.restState,
-              updatedAt: notebookSurfacePositions.updatedAt,
-            })
-            .from(notebookSurfacePositions)
-            .where(
-              and(
-                eq(notebookSurfacePositions.spaceId, input.spaceId),
-                eq(
-                  notebookSurfacePositions.ownerSubjectId,
-                  input.ownerSubjectId,
-                ),
-                or(
-                  input.sourceIds.length
-                    ? and(
-                        eq(notebookSurfacePositions.resourceKind, 'source'),
-                        inArray(notebookSurfacePositions.resourceId, [
-                          ...input.sourceIds,
-                        ]),
-                      )
-                    : undefined,
-                  input.artifactIds.length
-                    ? and(
-                        eq(notebookSurfacePositions.resourceKind, 'artifact'),
-                        inArray(notebookSurfacePositions.resourceId, [
-                          ...input.artifactIds,
-                        ]),
-                      )
-                    : undefined,
-                ),
-              ),
-            ),
-    ]);
-
-    return {
-      sourceBindings: new Map(
-        bindingRows.map((row) => [row.assetId, row.enabled]),
-      ),
-      surfacePositions: new Map(
-        positionRows.map((row) => [
-          `${row.resourceKind}:${row.resourceId}`,
-          {
-            zone: row.zone as 'center' | 'periphery' | 'margin',
-            restState: row.restState as 'open' | 'folded' | 'pinned',
-            updatedAt: row.updatedAt.toISOString(),
-          },
-        ]),
-      ),
-    };
   }
 }

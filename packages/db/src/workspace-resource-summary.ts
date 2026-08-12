@@ -4,3 +4,4 @@ export {
   type WorkspaceArtifactSummaryFact,
   type WorkspaceResourceMemberFacts,
 } from './workspace-resource-summary-repository';
+export { DrizzleWorkspaceResourceMemberFactsRepository } from './workspace-resource-member-facts-repository';
