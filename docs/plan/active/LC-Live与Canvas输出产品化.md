@@ -34,8 +34,9 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
   独立会话（`apps/web/features/voice/voice-composer.tsx:252-303`）。
 - 当前 TTS 会读取增长中的 `assistantText`，维护已消费字符并顺序入 Web Audio 队列
   （`apps/web/features/voice/playback/use-live-speech-playback.ts:279-346`）。
-- 当前短语切分首段阈值为 10–32 字，后续为 18–72 字；未闭合尾句通常等 Turn 完成才释放
-  （`apps/web/features/voice/playback/live-speech-segments.ts:28-70`）。
+- 当前语义分段首段阈值为 4–40 字、后续为 8–80 字，并用可取消的 400/800ms 等待时钟处理
+  无自然标点的稳定短语；代码、公式、图片、URL 与 JSON 不会作为原文进入 TTS
+  （`apps/web/features/voice/playback/semantic-segmentation.ts`）。
 - 每个短语仍单独 POST `/api/v1/voice/live/speech`，虽然响应 PCM 是流式的，但短语之间重复
   建连且缺少统一的语音提交游标（`apps/web/features/voice/playback/use-live-speech-playback.ts:401-469`、
   `apps/web/app/api/v1/voice/live/speech/route.ts:19-88`）。
@@ -127,7 +128,7 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 | ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | L01 同源流式消息        | `PASS`    | Live 面板直接消费当前 Assistant `message.delta` 投影，不维护第二份完整回答；普通聊天同一消息逐增量增长，入室/出室均不丢字、不重复字。                                                                                      |
 | L02 三游标状态机        | `PASS`    | 已引入纯 `displayCursor`、`speechCommittedCursor`、`audioPlayedCursor`、`sessionBaselineCursor` 与单调 `runId`；语义段携带原文 offset，只有同代 PCM 完成 marker 推进播放游标，覆盖回退、重复事件、取消迟到回调和重新入室。 |
-| L03 自适应语义提交      | `PENDING` | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                      |
+| L03 自适应语义提交      | `PASS`    | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                      |
 | L04 连续 Speech Session | `PENDING` | 在 provider-neutral `StreamingSpeechGateway` 上增加可取消的会话级文本提交/PCM 事件；优先复用一条服务端会话，当前逐短语 HTTP 保留为能力降级，不改变浏览器字幕和播放状态机。                                                 |
 | L05 音频与字幕时钟      | `PENDING` | 当前段播放时预取下一段；字幕只由实际 PCM 排期推进；网络抖动、空 PCM、奇数字节、TTS 失败和播放恢复均不会导致文字/声音漂移。                                                                                                 |
 | L06 插话和工具连续性    | `PENDING` | 插话原子取消 Agent operation、Speech Session 和本地队列；已显示文字保留。工具调用前后继续同一消息和同一语音游标，工具运行期间显示真实状态，不合成伪造填充语。                                                              |

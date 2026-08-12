@@ -2,23 +2,23 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { ChatMessageStatus } from '@/features/chat/messages';
-import { Pcm16Player, type PcmPlaybackWindow } from './pcm-player';
+import { Pcm16Player } from './pcm-player';
 import {
   createLiveSubtitleCues,
   prepareLiveSpeechText,
 } from './live-speech-text';
+import { takeSemanticSpeechSegments } from './semantic-segmentation';
 import {
-  takeLiveSpeechSegments,
-  type LiveSpeechSegment,
-} from './live-speech-segments';
+  createLiveSpeechQueueState,
+  type LiveSpeechQueueState,
+} from './live-speech-queue';
 import { LiveSpeechResponseGate } from './live-speech-response-gate';
 import {
-  INITIAL_LIVE_SPEECH_CURSORS,
   nextLiveSpeechSourceCursor,
   reduceLiveSpeechCursors,
-  type LiveSpeechCursorState,
 } from './live-speech-cursors';
 import { streamSpeechIntoPlayer } from './stream-speech-into-player';
+import { useSemanticSegmentationRetry } from './use-semantic-segmentation-retry';
 
 export {
   streamSpeechIntoPlayer,
@@ -95,33 +95,6 @@ export function reduceLiveSpeechPlayback(
   return { ...state, phase: 'idle', subtitle: null };
 }
 
-interface SpeechQueueState {
-  cursor: LiveSpeechCursorState;
-  /** 空白等不生成 TTS 的原文也必须只扫描一次。 */
-  segmentCursor: number;
-  segmentCount: number;
-  queue: LiveSpeechSegment[];
-  pumping: boolean;
-  complete: boolean;
-  suppressed: boolean;
-  lastWindow: PcmPlaybackWindow | null;
-}
-
-function createQueueState(
-  cursor: LiveSpeechCursorState = INITIAL_LIVE_SPEECH_CURSORS,
-): SpeechQueueState {
-  return {
-    cursor,
-    segmentCursor: nextLiveSpeechSourceCursor(cursor),
-    segmentCount: 0,
-    queue: [],
-    pumping: false,
-    complete: false,
-    suppressed: false,
-    lastWindow: null,
-  };
-}
-
 /**
  * Assistant 的安全 message.delta 到达后立即分段播报。当前 HTTP 路由保持兼容，
  * 语义段按顺序预取并进入同一 Web Audio 队列；后端升级为长连接 Speech Session
@@ -142,7 +115,12 @@ export function useLiveSpeechPlayback({
   const abortControllerRef = useRef<AbortController | null>(null);
   const markerCancelsRef = useRef<Array<() => void>>([]);
   const finishMarkerCancelRef = useRef<(() => void) | null>(null);
-  const queueRef = useRef<SpeechQueueState>(createQueueState());
+  const queueRef = useRef<LiveSpeechQueueState>(createLiveSpeechQueueState());
+  const {
+    revision: segmentationRevision,
+    cancel: cancelSegmentationRetry,
+    schedule: scheduleSegmentationRetry,
+  } = useSemanticSegmentationRetry();
   const enabledRef = useRef(enabled);
   const wasEnabledRef = useRef(false);
   const assistantIdRef = useRef(assistantId);
@@ -162,30 +140,34 @@ export function useLiveSpeechPlayback({
         sessionBaselineCursor,
       });
       queueRef.current = {
-        ...createQueueState(cursor),
+        ...createLiveSpeechQueueState(cursor),
         suppressed,
       };
     },
     [],
   );
 
-  const clearAudioResources = useCallback((suppressCurrent: boolean) => {
-    const queue = queueRef.current;
-    queue.cursor = reduceLiveSpeechCursors(queue.cursor, {
-      type: 'invalidate',
-    });
-    queue.segmentCursor = nextLiveSpeechSourceCursor(queue.cursor);
-    queue.queue = [];
-    queue.pumping = false;
-    queue.lastWindow = null;
-    queue.suppressed = suppressCurrent;
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    markerCancelsRef.current.splice(0).forEach((cancel) => cancel());
-    finishMarkerCancelRef.current?.();
-    finishMarkerCancelRef.current = null;
-    playerRef.current?.stop();
-  }, []);
+  const clearAudioResources = useCallback(
+    (suppressCurrent: boolean) => {
+      const queue = queueRef.current;
+      queue.cursor = reduceLiveSpeechCursors(queue.cursor, {
+        type: 'invalidate',
+      });
+      queue.segmentCursor = nextLiveSpeechSourceCursor(queue.cursor);
+      queue.queue = [];
+      queue.pumping = false;
+      queue.lastWindow = null;
+      queue.suppressed = suppressCurrent;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      markerCancelsRef.current.splice(0).forEach((cancel) => cancel());
+      finishMarkerCancelRef.current?.();
+      finishMarkerCancelRef.current = null;
+      cancelSegmentationRetry();
+      playerRef.current?.stop();
+    },
+    [cancelSegmentationRetry],
+  );
 
   const clearAudio = useCallback(
     (suppressCurrent: boolean) => {
@@ -382,14 +364,29 @@ export function useLiveSpeechPlayback({
       return;
     }
     queue.complete = assistantStatus === 'completed';
-    const batch = takeLiveSpeechSegments({
+    const nowMs = Date.now();
+    if (queue.waitingSinceMs === null && queue.segmentCursor < text.length) {
+      queue.waitingSinceMs = nowMs;
+    }
+    const waitingSinceMs = queue.waitingSinceMs ?? nowMs;
+    const previousSegmentCursor = queue.segmentCursor;
+    const batch = takeSemanticSpeechSegments({
       text,
       consumedCharacters: queue.segmentCursor,
       segmentCount: queue.segmentCount,
       complete: queue.complete,
+      nowMs,
+      waitingSinceMs,
     });
     queue.segmentCursor = batch.consumedCharacters;
     queue.segmentCount += batch.segments.length;
+    queue.waitingSinceMs =
+      queue.segmentCursor >= text.length
+        ? null
+        : batch.segments.length > 0 ||
+            queue.segmentCursor > previousSegmentCursor
+          ? nowMs
+          : waitingSinceMs;
     const runId = queue.cursor.runId;
     for (const segment of batch.segments) {
       queue.cursor = reduceLiveSpeechCursors(queue.cursor, {
@@ -400,6 +397,18 @@ export function useLiveSpeechPlayback({
       });
     }
     queue.queue.push(...batch.segments);
+    const expectedRunId = queue.cursor.runId;
+    const expectedCursor = queue.segmentCursor;
+    scheduleSegmentationRetry(batch.retryAfterMs, () => {
+      const current = queueRef.current;
+      return (
+        current.cursor.runId === expectedRunId &&
+        current.cursor.assistantId === assistantId &&
+        current.segmentCursor === expectedCursor &&
+        !current.complete &&
+        !current.suppressed
+      );
+    });
     if (queue.queue.length > 0) pump();
     else finishWhenPlaybackEnds(queue.cursor.runId);
   }, [
@@ -412,6 +421,8 @@ export function useLiveSpeechPlayback({
     finishWhenPlaybackEnds,
     pump,
     replaceQueue,
+    scheduleSegmentationRetry,
+    segmentationRevision,
   ]);
 
   useEffect(
