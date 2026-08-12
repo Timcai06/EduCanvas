@@ -31,6 +31,26 @@ function summary(
 }
 
 describe('resource dock model', () => {
+  it.each([0, 6, 7, 63, 256, 500])(
+    'keeps all %i loaded summaries recoverable while bounding the quick area',
+    (count) => {
+      const summaries = Array.from({ length: count }, (_, index) =>
+        summary(index % 2 === 0 ? 'source' : 'artifact', `resource-${index}`),
+      );
+      const model = buildResourceDockModel(summaries, { visibleLimit: 6 });
+      const all = model.sections.find((section) => section.id === 'all')!;
+
+      expect(all.items).toHaveLength(count);
+      expect(all.visibleItems).toHaveLength(Math.min(count, 6));
+      expect(all.hiddenLoadedCount).toBe(Math.max(0, count - 6));
+      expect(
+        model.sections
+          .filter((section) => section.id !== 'all')
+          .flatMap((section) => section.items),
+      ).toHaveLength(count);
+    },
+  );
+
   it('keeps stable categories and every summary without six-item truncation', () => {
     const summaries = Array.from({ length: 7 }, (_, index) =>
       summary('source', `source-${index}`),

@@ -17,7 +17,16 @@ describe('ResourceDock boundary', () => {
     expect(source).toContain('加载更多（仍有未加载资源）');
     expect(source).toContain('查看全部资源');
     expect(source).toContain('motion-safe:');
+    expect(source).toContain("['ArrowUp', 'ArrowDown', 'Home', 'End']");
+    expect(source).toContain('event.preventDefault()');
+    expect(source).toContain('focus-visible:ring-2');
+    expect(source).toContain('max-h-[min(32rem,70vh)]');
+    expect(source).toContain('overflow-y-auto');
+    expect(source).toContain('此分类暂无资源');
+    expect(source).toContain('正在加载资源…');
+    expect(source).toContain('role="status"');
     expect(source).not.toContain('fetchCanvasResource');
     expect(source).not.toContain('/detail');
+    expect(source).not.toMatch(/\b(?:content|objectKey|binary|byteStream)\b/);
   });
 });

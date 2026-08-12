@@ -95,4 +95,28 @@ describe('resource library model', () => {
       ),
     ).toBe(false);
   });
+
+  it.each([0, 6, 7, 63, 256, 500])(
+    'queries %i summaries without truncating the loaded result set',
+    (count) => {
+      const resources = Array.from({ length: count }, (_, index) =>
+        makeSummary(
+          index % 2 === 0 ? 'source' : 'artifact',
+          `resource-${index}`,
+          {
+            title: `函数资源 ${String(index).padStart(3, '0')}`,
+          },
+        ),
+      );
+
+      expect(queryResourceLibrary(resources)).toHaveLength(count);
+      expect(
+        queryResourceLibrary(resources, {
+          search: '函数资源',
+          sort: 'title',
+          order: 'asc',
+        }),
+      ).toHaveLength(count);
+    },
+  );
 });

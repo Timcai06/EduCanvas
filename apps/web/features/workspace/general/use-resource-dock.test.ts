@@ -65,4 +65,35 @@ describe('useResourceDock page seam', () => {
       }).items,
     ).toEqual(current);
   });
+
+  it('500 条跨页摘要合并只按稳定 identity 去重且不丢失末页', () => {
+    const firstPage = Array.from({ length: 256 }, (_, index) =>
+      summary(index % 2 === 0 ? 'source' : 'artifact', `resource-${index}`),
+    );
+    const secondPage = Array.from({ length: 256 }, (_, index) =>
+      summary(
+        index % 2 === 0 ? 'source' : 'artifact',
+        `resource-${index + 244}`,
+      ),
+    );
+    const first = appendResourceDockPage([], {
+      items: firstPage,
+      nextCursor: 'cursor-256',
+    });
+    const completed = appendResourceDockPage(first.items, {
+      items: secondPage,
+      nextCursor: null,
+    });
+
+    expect(first.hasMore).toBe(true);
+    expect(completed.hasMore).toBe(false);
+    expect(completed.items).toHaveLength(500);
+    expect(
+      new Set(
+        completed.items.map(
+          (item) => `${item.resourceKind}:${item.resourceId}`,
+        ),
+      ).size,
+    ).toBe(500);
+  });
 });
