@@ -7,13 +7,22 @@ import { canvasResourceSchema } from '@educanvas/canvas-protocol';
  */
 export function makeArtifactResource(
   kind:
-    'mind_map' | 'slides' | 'flashcards' | 'audio_overview' | 'generated_image',
+    | 'mind_map'
+    | 'slides'
+    | 'flashcards'
+    | 'markdown_document'
+    | 'audio_overview'
+    | 'generated_image',
   overrides: Partial<Parameters<typeof canvasResourceSchema.parse>[0]> = {},
 ) {
   const rendererByKind = {
     mind_map: { rendererId: 'artifact.mind-map', rendererVersion: 1 },
     slides: { rendererId: 'artifact.slides', rendererVersion: 1 },
     flashcards: { rendererId: 'artifact.flashcards', rendererVersion: 1 },
+    markdown_document: {
+      rendererId: 'artifact.markdown-document',
+      rendererVersion: 1,
+    },
     audio_overview: {
       rendererId: 'artifact.audio-overview',
       rendererVersion: 1,
@@ -27,6 +36,7 @@ export function makeArtifactResource(
     mind_map: 'application/vnd.educanvas.mind-map+json',
     slides: 'application/vnd.educanvas.slides+json',
     flashcards: 'application/vnd.educanvas.flashcards+json',
+    markdown_document: 'application/vnd.educanvas.markdown+text',
     audio_overview: 'audio/mpeg',
     generated_image: 'image/png',
   } as const;

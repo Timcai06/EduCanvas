@@ -11,6 +11,7 @@ import { GraduationCap } from '@phosphor-icons/react';
 import { UserMenu } from '@/features/auth/user-menu';
 import { ProductMark } from '@/components/ProductMark';
 import { PillNav, type PillNavItem } from '@/components/PillNav';
+import type { OutputPreference } from '@educanvas/agent-core';
 
 /**
  * 空态入口此时还没有 Notebook/Studio 上下文，只暴露「学习计划」一个入口，
@@ -29,6 +30,8 @@ export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
   'educanvas.pending-general-menu-action.v1';
 export const PENDING_GENERAL_CANVAS_KEY = 'educanvas.pending-general-canvas.v1';
+export const PENDING_GENERAL_OUTPUT_PREFERENCE_KEY =
+  'educanvas.pending-general-output-preference.v1';
 const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
@@ -43,13 +46,22 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
   const [canvasSelected, setCanvasSelected] = useState(false);
-  const begin = useCallback((prompt: string) => {
-    sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
-    sessionStorage.setItem(PENDING_GENERAL_PROMPT_KEY, prompt);
-    startTransition(async () => {
-      await startGeneralChatAction();
-    });
-  }, []);
+  const [outputPreference, setOutputPreference] =
+    useState<OutputPreference>('auto');
+  const begin = useCallback(
+    (prompt: string) => {
+      sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
+      sessionStorage.setItem(PENDING_GENERAL_PROMPT_KEY, prompt);
+      sessionStorage.setItem(
+        PENDING_GENERAL_OUTPUT_PREFERENCE_KEY,
+        outputPreference,
+      );
+      startTransition(async () => {
+        await startGeneralChatAction();
+      });
+    },
+    [outputPreference],
+  );
 
   const beginWithMenuAction = useCallback((action: PlusMenuActionId) => {
     sessionStorage.removeItem(PENDING_GENERAL_PROMPT_KEY);
@@ -98,6 +110,11 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
             { id: 'canvas', label: 'Canvas', selected: canvasSelected },
           ]}
           onToolAction={handleToolAction}
+          outputPreference={outputPreference}
+          onOutputPreferenceChange={(preference) => {
+            setOutputPreference(preference);
+            setCanvasSelected(preference !== 'auto');
+          }}
           variant="landing"
         />
       </EmptyChatHero>

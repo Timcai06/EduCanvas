@@ -51,7 +51,12 @@ import {
   PENDING_GENERAL_MENU_ACTION_KEY,
   PENDING_GENERAL_PROMPT_KEY,
   PENDING_GENERAL_CANVAS_KEY,
+  PENDING_GENERAL_OUTPUT_PREFERENCE_KEY,
 } from './general-chat-entry';
+import {
+  outputPreferenceSchema,
+  type OutputPreference,
+} from '@educanvas/agent-core';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 import {
@@ -60,6 +65,7 @@ import {
 } from '@/features/canvas/resource-error';
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
+import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -98,6 +104,8 @@ export function useGeneralWorkspaceController(options: {
     [],
   );
   const [canvasSelected, setCanvasSelected] = useState(false);
+  const [outputPreference, setOutputPreference] =
+    useState<OutputPreference>('auto');
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   /* W03：来源加载/变更错误保留结构化语义，UI 据此决定可重试性与文案。 */
   const [error, setError] = useState<ResourceClientError | null>(null);
@@ -214,15 +222,13 @@ export function useGeneralWorkspaceController(options: {
           : [],
       );
       void turn
-        .send(
-          text,
-          undefined,
-          selected,
-          canvasSelected ? { outputPreference: 'canvas' } : {},
-        )
+        .send(text, undefined, selected, {
+          outputPreference,
+        })
         .then((accepted) => {
           if (!accepted) return;
           if (canvasSelected) setCanvasSelected(false);
+          setOutputPreference('auto');
           setAssets((current) =>
             current.map((asset) =>
               asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
@@ -237,6 +243,7 @@ export function useGeneralWorkspaceController(options: {
     [
       assets,
       canvasSelected,
+      outputPreference,
       composerDockRef,
       flipStateRef,
       refreshAssets,
@@ -249,6 +256,25 @@ export function useGeneralWorkspaceController(options: {
       send(text, context.assets),
     [send],
   );
+
+  useEffect(() => {
+    const askNode = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (!detail || typeof detail !== 'object') return;
+      const node = detail as Record<string, unknown>;
+      if (
+        typeof node.nodeId !== 'string' ||
+        typeof node.nodeLabel !== 'string' ||
+        node.nodeId.length > 64 ||
+        node.nodeLabel.length > 120
+      ) {
+        return;
+      }
+      send(`请围绕思维导图节点“${node.nodeLabel}”进一步讲解。`);
+    };
+    window.addEventListener(MIND_MAP_ASK_NODE_EVENT, askNode);
+    return () => window.removeEventListener(MIND_MAP_ASK_NODE_EVENT, askNode);
+  }, [send]);
 
   /* 出室带回：会话转录装订成 note 信笺落库，成功后摆上工作面。
      失败只上报错误——退场动画不依赖这次写库（门槛设计 §4）。 */
@@ -348,9 +374,19 @@ export function useGeneralWorkspaceController(options: {
     const restoreCanvas = Boolean(
       sessionStorage.getItem(PENDING_GENERAL_CANVAS_KEY),
     );
+    const pendingOutput = outputPreferenceSchema.safeParse(
+      sessionStorage.getItem(PENDING_GENERAL_OUTPUT_PREFERENCE_KEY),
+    );
     sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
+    sessionStorage.removeItem(PENDING_GENERAL_OUTPUT_PREFERENCE_KEY);
     queueMicrotask(() => {
-      if (restoreCanvas) setCanvasSelected(true);
+      const restored = pendingOutput.success
+        ? pendingOutput.data
+        : restoreCanvas
+          ? 'interactive_artifact'
+          : 'auto';
+      setOutputPreference(restored);
+      setCanvasSelected(restored !== 'auto');
     });
   }, []);
 
@@ -371,11 +407,34 @@ export function useGeneralWorkspaceController(options: {
   const isLanding = turn.messages.length === 0;
   const notebookSources = assets.filter((asset) => asset.scope === 'space');
   const composerTools = [
-    { id: 'canvas' as const, label: 'Canvas', selected: canvasSelected },
+    {
+      id: 'canvas' as const,
+      label: 'Canvas',
+      selected: canvasSelected,
+      detail:
+        outputPreference === 'markdown_document'
+          ? 'Markdown'
+          : outputPreference === 'web_app'
+            ? 'Web App'
+            : outputPreference === 'interactive_artifact'
+              ? '互动产物'
+              : undefined,
+    },
   ];
   const handleToolAction = useCallback(() => {
-    setCanvasSelected((selected) => !selected);
+    setCanvasSelected((selected) => {
+      const next = !selected;
+      setOutputPreference(next ? 'interactive_artifact' : 'auto');
+      return next;
+    });
   }, []);
+  const handleOutputPreferenceChange = useCallback(
+    (preference: OutputPreference) => {
+      setOutputPreference(preference);
+      setCanvasSelected(preference !== 'auto');
+    },
+    [],
+  );
   const selectedAudioSources = selectAudioArtifactSources(notebookSources);
   const revisingOpenArtifact = isArtifactRevisionInProgress(artifactFlow);
   const uploadLiveAsset = useCallback(
@@ -419,6 +478,7 @@ export function useGeneralWorkspaceController(options: {
     generation: artifactFlow.generation,
     revisingOpenArtifact,
     composerTools,
+    outputPreference,
     liveAssets: assets,
     composerDockRef,
     scrollRef,
@@ -429,6 +489,7 @@ export function useGeneralWorkspaceController(options: {
     onStop: () => void turn.stop(),
     onMenuAction: handleMenuAction,
     onToolAction: handleToolAction,
+    onOutputPreferenceChange: handleOutputPreferenceChange,
     onRetry: (messageId: string) => turn.retry(messageId),
     onPreviewHtml: (source: string) => workspace.openHtml(source),
     onOpenArtifact: (artifactId: string) =>

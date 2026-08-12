@@ -38,6 +38,14 @@ export {
 } from './asset-contracts';
 
 export {
+  artifactProposalKindSchema,
+  artifactProposalKinds,
+  artifactProposalSchema,
+  type ArtifactProposal,
+  type ArtifactProposalKind,
+} from './artifact-proposal';
+
+export {
   agentArtifactPartSchema,
   agentAssetPartSchema,
   agentMessageInputSchema,
@@ -57,6 +65,13 @@ export {
   type AgentMessageRole,
   type AgentTextPart,
 } from './message-contracts';
+
+export {
+  normalizeOutputPreference,
+  outputPreferenceSchema,
+  outputPreferences,
+  type OutputPreference,
+} from './output-preference';
 
 export {
   ModelGatewayInvocationError,

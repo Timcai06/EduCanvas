@@ -8,7 +8,7 @@ import type { CanvasResource } from '@educanvas/canvas-protocol';
  * 须识别它们并直接放行到壳，而不是按 rendererId_not_registered 判为不可用。
  */
 export const SHELL_RENDERED_ARTIFACT_RENDERER_IDS: ReadonlySet<string> =
-  new Set(['artifact.note', 'artifact.dom-exploration']);
+  new Set(['artifact.note', 'artifact.dom-exploration', 'artifact.web-app']);
 
 /**
  * 判断 CanvasResource 是否由 ArtifactCanvas 壳显式渲染（Registry 无条目）。

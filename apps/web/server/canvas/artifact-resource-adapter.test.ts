@@ -283,6 +283,34 @@ describe('Artifact CanvasResource adapter', () => {
     );
   });
 
+  it('maps markdown 文档为结构化 tier1 renderer，允许编辑与重生成', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact: {
+        ...artifact,
+        kind: 'markdown_document',
+        trustTier: 'tier1',
+      },
+      version: {
+        ...version,
+        content: {
+          contentVersion: 1,
+          markdown: '# 文档',
+          generatedByModel: true,
+        },
+      },
+      latestJob: null,
+      accessRole: 'owner',
+    });
+
+    expect(resource).toMatchObject({
+      representation: { kind: 'structured' },
+      renderer: { rendererId: 'artifact.markdown-document' },
+      trustTier: 'tier1',
+      allowedActions: ['view', 'edit', 'regenerate', 'download'],
+    });
+  });
+
   it('rejects cross-Notebook projection and ignores caller-shaped policy fields', () => {
     expect(() =>
       projectOwnedArtifactResource({

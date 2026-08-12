@@ -1,3 +1,4 @@
+import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
@@ -6,6 +7,7 @@ import {
   FlashcardsResourceRenderer,
   GeneratedImageResourceRenderer,
   MindMapResourceRenderer,
+  MarkdownDocumentResourceRenderer,
   SlidesResourceRenderer,
 } from './canvas-resource-renderers';
 import type {
@@ -186,5 +188,26 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
       />,
     );
     expect(html).toContain('图片不可用');
+  });
+
+  it('markdown_document：合法 markdown content → 渲染只读 NoteRenderer', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({ contentVersion: 1, markdown: '# 文档' })}
+      />,
+    );
+    expect(html).toContain('prose');
+    expect(html).toContain('文档');
+  });
+
+  it('markdown_document：缺 markdown → unavailable', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({ contentVersion: 1 })}
+      />,
+    );
+    expect(html).toContain('内容不可用');
   });
 });

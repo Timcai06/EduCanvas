@@ -5,6 +5,13 @@
  */
 
 export {
+  MARKDOWN_DOCUMENT_CONTENT_VERSION,
+  MARKDOWN_DOCUMENT_KIND,
+  MARKDOWN_DOCUMENT_MAX_CHARS,
+  markdownDocumentContentSchema,
+  type MarkdownDocumentContent,
+} from './artifacts/markdown-document';
+export {
   ARTIFACT_SCHEMA_VERSION,
   artifactSchema,
   gradableArtifactSchema,
@@ -40,6 +47,16 @@ export {
 export {
   domExplorationContentSchema,
   type DomExplorationContent,
+  WEB_APP_SCHEMA_VERSION,
+  WEB_APP_CAPABILITIES,
+  WEB_APP_DIAGNOSTIC_CODES,
+  WEB_APP_KIND,
+  WEB_APP_MEDIA_TYPES,
+  WEB_APP_FILES_MAX_COUNT,
+  webAppContentSchema,
+  type WebAppContent,
+  type WebAppManifestFile,
+  type WebAppDiagnosticCode,
 } from './web-runtime-artifact';
 export {
   validateWebRuntimePolicy,

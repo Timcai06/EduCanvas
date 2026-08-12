@@ -4,6 +4,129 @@ import {
   MAX_RUNTIME_MESSAGES_PER_SECOND,
   MAX_RUNTIME_OUTPUT_BYTES,
 } from './message-budget';
+import { createHash } from 'node:crypto';
+import {
+  type DomExplorationContent,
+  type WebAppContent,
+  webAppContentSchema,
+  WEB_APP_MEDIA_TYPES,
+} from '@educanvas/canvas-protocol/server';
+
+type WebRuntimeArtifactContent = DomExplorationContent | WebAppContent;
+
+const FORBIDDEN_REMOTE_URL =
+  /(href|src)\s*=\s*["']\s*(?:https?:\/\/|\/\/)|url\(\s*["']?\s*(?:https?:\/\/|\/\/)/i;
+
+function isManifestPathSafe(path: string): boolean {
+  return (
+    path.length > 0 &&
+    path.length <= 200 &&
+    /^[A-Za-z0-9._/-]+$/.test(path) &&
+    !path.includes('..') &&
+    !path.startsWith('/') &&
+    !path.includes('\\') &&
+    !path.includes('://')
+  );
+}
+
+function assertLocalAndSafePayload(
+  content: string,
+  label: 'html' | 'css' | 'js',
+): void {
+  const forbiddenScriptNetwork =
+    label === 'js' &&
+    (/\b(?:fetch|WebSocket|EventSource|XMLHttpRequest|importScripts)\s*\(/.test(
+      content,
+    ) ||
+      /navigator\.sendBeacon\s*\(/.test(content));
+  const forbiddenCssImport =
+    label === 'css' &&
+    /@import\s+(?:url\()?\s*["']?\s*(?:https?:\/\/|\/\/)/i.test(content);
+  if (
+    FORBIDDEN_REMOTE_URL.test(content) ||
+    forbiddenScriptNetwork ||
+    forbiddenCssImport
+  ) {
+    throw new Error(`runtime_rejected_${label}`);
+  }
+}
+
+function validateWebAppContent(content: WebAppContent): {
+  html: string;
+  css: string;
+  script: string;
+} {
+  /* v1 没有依赖字节装载器。即使 manifest 写了锁定版本，Host 也不能从网络
+     安装或猜测依赖；必须与 admission 层一样 fail closed。 */
+  if (content.lockedDependencies.length > 0) {
+    throw new Error('runtime_rejected_dependencies');
+  }
+  if (!isManifestPathSafe(content.manifest.entry)) {
+    throw new Error('runtime_rejected_invalid_manifest');
+  }
+  const fileByPath = new Map<string, (typeof content.manifest.files)[number]>();
+  for (const file of content.manifest.files) {
+    if (!isManifestPathSafe(file.path) || fileByPath.has(file.path)) {
+      throw new Error('runtime_rejected_invalid_manifest');
+    }
+    if (!WEB_APP_MEDIA_TYPES.includes(file.mediaType)) {
+      throw new Error('runtime_rejected_unknown_media_type');
+    }
+    const actualHash = createHash('sha256')
+      .update(file.content, 'utf8')
+      .digest('hex');
+    if (actualHash !== file.hash) {
+      throw new Error('runtime_rejected_hash_mismatch');
+    }
+    fileByPath.set(file.path, file);
+  }
+  const entry = fileByPath.get(content.manifest.entry);
+  if (!entry || entry.mediaType !== 'text/html') {
+    throw new Error('runtime_rejected_invalid_entry');
+  }
+  const styles = [];
+  const scripts = [];
+  for (const file of fileByPath.values()) {
+    if (file.path === content.manifest.entry) continue;
+    if (file.mediaType === 'text/css') styles.push(file.content);
+    if (file.mediaType === 'text/javascript') scripts.push(file.content);
+    if (
+      !['text/html', 'text/css', 'text/javascript'].includes(file.mediaType)
+    ) {
+      throw new Error('runtime_rejected_unknown_media_type');
+    }
+  }
+  assertLocalAndSafePayload(entry.content, 'html');
+  assertLocalAndSafePayload(styles.join('\n'), 'css');
+  assertLocalAndSafePayload(scripts.join('\n'), 'js');
+  return {
+    html: entry.content,
+    css: styles.join('\n'),
+    script: scripts.join('\n'),
+  };
+}
+
+/**
+ * Compile artifact content into the legacy `html/css/script` runtime payload.
+ *
+ * `dom_exploration` stays byte-compatible; `web_app.v1` uses manifest entry and
+ * hash-verified file lookup before assembling the same runtime contract.
+ */
+export function compileRuntimePayload(content: WebRuntimeArtifactContent): {
+  html: string;
+  css: string;
+  script: string;
+} {
+  if ('manifest' in content) {
+    const parsed = webAppContentSchema.parse(content);
+    return validateWebAppContent(parsed);
+  }
+  return {
+    html: content.html,
+    css: content.css,
+    script: content.script,
+  };
+}
 
 /**
  * In-browser host script for web-runtime:

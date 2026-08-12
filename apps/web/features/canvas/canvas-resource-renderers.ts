@@ -7,7 +7,9 @@ import { SlidesRenderer } from './slides-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
 import { GeneratedImageViewer } from './generated-image-viewer';
+import { NoteRenderer } from './note-renderer';
 import type { ArtifactVersionData } from './artifact-client';
+import type { NoteContent } from '@educanvas/canvas-protocol';
 
 /**
  * W04（选项 1）：内容驱动型 Artifact 的真实 Renderer 迁入 Registry。
@@ -50,6 +52,24 @@ function FlashcardsResourceRenderer({ content }: CanvasResourceRendererProps) {
     return unavailable('内容不可用', '缺少受控渲染数据。');
   }
   return createElement(FlashcardsRenderer, { content: data.content });
+}
+
+function MarkdownDocumentResourceRenderer({
+  content,
+}: CanvasResourceRendererProps) {
+  const data = content as ArtifactVersionData | undefined;
+  if (
+    typeof data?.content !== 'object' ||
+    data?.content === null ||
+    typeof (data?.content as NoteContent).markdown !== 'string'
+  ) {
+    return unavailable('内容不可用', '缺少受控渲染数据。');
+  }
+  return createElement(NoteRenderer, {
+    content: data.content as NoteContent,
+    isLatest: true,
+    readOnly: true,
+  });
 }
 
 function AudioOverviewResourceRenderer({
@@ -125,6 +145,7 @@ export {
   MindMapResourceRenderer,
   SlidesResourceRenderer,
   FlashcardsResourceRenderer,
+  MarkdownDocumentResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
   SourcePdfResourceRenderer,

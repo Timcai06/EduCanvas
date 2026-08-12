@@ -41,22 +41,18 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
   建连且缺少统一的语音提交游标（`apps/web/features/voice/playback/use-live-speech-playback.ts:401-469`、
   `apps/web/app/api/v1/voice/live/speech/route.ts:19-88`）。
 
-### 2.2 Canvas 已有基础
+### 2.2 Canvas 当前事实
 
-- Turn 请求当前只接受 `outputPreference: 'canvas'`，尚不能表达 ADR-0027 的四种输出意图
-  （`apps/web/features/chat/use-teaching-turn.ts:40-42`、
-  `apps/web/server/http/turn-request.ts:28-34,111-150`）。
-- Agent Artifact Tool 已通过闭集 schema、服务端身份注入和后台 Job 创建
-  `mind_map/slides/flashcards/note`（`apps/web/server/platform/general-artifact-tool.ts:17-39,56-132`）。
-- Worker 已有不可变 Artifact Version 生成链，但支持类型仍是旧闭集
-  （`apps/worker/src/tasks/generate-artifact.ts:309-436`）。
-- Canvas 已把内容型 Artifact 交给 Registry，把 note 编辑与 `dom_exploration` 隔离 Runtime
-  留在专用壳内（`apps/web/features/canvas/artifact-canvas-content.tsx:13-20,99-137`）。
-- 当前思维导图 Renderer 只是递归缩进树，没有边布局、视口、折叠、拖拽或节点操作，视觉与
-  交互不足不能由模型生成 CSS 掩盖（`apps/web/features/canvas/mind-map-renderer.tsx:19-99`）。
-- 现有 `dom_exploration` 已限制 HTML/CSS/JS 字节和依赖数量，为 `web_app.v1` 提供 Tier 2
-  基础，但尚不是完整的源码 manifest、构建诊断和发布包契约
-  （`packages/canvas-protocol/src/web-runtime-artifact.ts:3-24`）。
+- Turn 公共输入已支持四种 canonical 输出偏好；旧 `canvas` 只在服务端边界归一化，未知值
+  fail closed。
+- Artifact Tool 已使用闭集 Proposal，并继续通过既有 Job 与不可变 Version 生成
+  Markdown 文档、互动 Artifact 和隔离 Web App。
+- `mind_map.v2` 与历史 v1 由同一 Renderer 显式兼容；当前 Renderer 已具备确定性布局、边、
+  视口、折叠、聚焦、节点提问和键盘交互。
+- `web_app.v1` 使用自包含 manifest、hash、预算与诊断进入 ADR-0019 Tier 2 Runtime；非空依赖、
+  外部网络、未知 schema 和越权访问均 fail closed。
+- C01-C07 的实现与自动化证据见
+  [Canvas C01-C07 交付证据](../../06-quality/14-Canvas-C01-C07交付证据.md)；真实产品验收仍属于 C08。
 
 ## 三、范围与非目标
 
@@ -147,16 +143,16 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 ### 6.3 ADR-0027 Canvas 输出线
 
-| 任务                      | 状态      | 交付与验收                                                                                                                                                                                             |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| C01 输出意图契约          | `PENDING` | Turn 公共输入支持 `auto`、`markdown_document`、`interactive_artifact`、`web_app`；旧 `canvas` 在服务端归一化并有弃用测试。未知值 400，偏好不改变工具授权。                                             |
-| C02 Markdown 文档纵切     | `PENDING` | 新增版本化 `document.markdown.v1`，Markdown 为 canonical content；支持生成、编辑、新版本、差异、回退和 `.md` 导出。Renderer 禁止 raw HTML、脚本、事件属性和任意网络资源。                              |
-| C03 Artifact 提案统一     | `PENDING` | Agent Tool 使用闭集 Artifact Proposal，服务端注入 identity/notebook/conversation/operation；生成中、失败、取消、版本新增和打开状态沿用现有 Turn 事件及 Artifact Job，不另建生成 Loop。                 |
-| C04 `mind_map.v2` 协议    | `PENDING` | schema 表达节点、边、分组、语义角色和有限布局提示；保留 v1 Renderer 或提供显式迁移，历史版本不可静默失效。120 节点和深度上限经产品测试重新确认，不为追求“大”而取消可读性上限。                         |
-| C05 思维导图 Renderer     | `PENDING` | 先用固定 fixture 对候选布局算法做尺寸、许可证、确定性和性能 spike，再决定是否引入依赖；交付自动布局、缩放、平移、折叠、聚焦、节点提问、键盘与 reduced-motion，视觉 token 与动效由 Renderer 控制。      |
-| C06 `web_app.v1` 构建纵切 | `PENDING` | Artifact Version 包含文件 manifest、入口、hash、锁定依赖、capability、预算和诊断；构建后进入 ADR-0019 Tier 2 Runtime。无 `allow-same-origin`、Credential、任意网络/CDN、运行时安装和跨 Notebook 读取。 |
-| C07 编辑、版本和导出      | `PENDING` | 三类代表性输出都产生不可变版本，可查看版本、回退和继续要求 Agent 修改；导出不包含运行凭据、私有 Source、对象存储键或 Provider 内容。                                                                   |
-| C08 Canvas 产品验收       | `PENDING` | 真实 Turn 分别生成 Markdown、mind map 和 Web App；验证大图、窄屏、键盘、失败态、未知版本、恶意脚本、资源超限、构建取消和历史版本回放。                                                                 |
+| 任务                      | 状态      | 交付与验收                                                                                                                                                                                                   |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C01 输出意图契约          | `PASS`    | Turn 公共输入支持 `auto`、`markdown_document`、`interactive_artifact`、`web_app`；旧 `canvas` 在服务端归一化并有弃用测试。未知值 400，偏好不改变工具授权。                                                   |
+| C02 Markdown 文档纵切     | `PASS`    | 新增版本化 `document.markdown.v1`，Markdown 为 canonical content；支持生成、编辑、新版本、差异、回退和 `.md` 导出。Renderer 禁止 raw HTML、脚本、事件属性和任意网络资源。                                    |
+| C03 Artifact 提案统一     | `PASS`    | Agent Tool 使用闭集 Artifact Proposal，服务端注入 identity/notebook/conversation/operation；生成中、失败、取消、版本新增和打开状态沿用现有 Turn 事件及 Artifact Job，不另建生成 Loop。                       |
+| C04 `mind_map.v2` 协议    | `PASS`    | schema 表达节点、边、分组、语义角色和有限布局提示；同一注册 Renderer 显式兼容 v1/v2，历史版本不可静默失效。120 节点和深度上限由 fixture 固定。                                                               |
+| C05 思维导图 Renderer     | `PASS`    | 无新增布局依赖；交付确定性自动布局、缩放、平移、折叠、聚焦、节点提问、键盘与 reduced-motion。真实浏览器 FPS 留给 C08。                                                                                       |
+| C06 `web_app.v1` 构建纵切 | `PASS`    | Artifact Version 包含文件 manifest、入口、hash、空锁定依赖字段、capability、预算和诊断；构建后进入 ADR-0019 Tier 2 Runtime。无 `allow-same-origin`、Credential、任意网络/CDN、运行时安装和跨 Notebook 读取。 |
+| C07 编辑、版本和导出      | `PASS`    | 三类代表性输出都产生不可变版本，可查看版本、回退和继续要求 Agent 修改；导出不包含运行凭据、私有 Source、对象存储键或 Provider 内容。                                                                         |
+| C08 Canvas 产品验收       | `PENDING` | 真实 Turn 分别生成 Markdown、mind map 和 Web App；验证大图、窄屏、键盘、失败态、未知版本、恶意脚本、资源超限、构建取消和历史版本回放。                                                                       |
 
 ### 6.4 联合收口
 
@@ -238,19 +234,20 @@ API Key、学生内容、Provider 原始响应或音频。
 
 ## 十二、验证证据台账
 
-| 验收项               | 证据                                         | 结果      |
-| -------------------- | -------------------------------------------- | --------- |
-| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR      | `pass`    |
-| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录     | `pass`    |
-| C01-C08 Canvas       | schema/Renderer/Runtime 测试、视觉与安全报告 | `pending` |
-| X01-X03 联合验收     | 产品级 E2E、provenance、安全与 CI 路由报告   | `pending` |
-| X04 结档             | 最终 CI run、canonical diff、PR/merge 链接   | `pending` |
+| 验收项               | 证据                                                                                     | 结果      |
+| -------------------- | ---------------------------------------------------------------------------------------- | --------- |
+| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                  | `pass`    |
+| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                 | `pass`    |
+| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md) | `pass`    |
+| C08 Canvas 验收      | 真实 Turn、浏览器、恶意输入、历史回放与性能体验                                          | `pending` |
+| X01-X03 联合验收     | 产品级 E2E、provenance、安全与 CI 路由报告                                               | `pending` |
+| X04 结档             | 最终 CI run、canonical diff、PR/merge 链接                                               | `pending` |
 
 ## 十三、收尾检查表
 
 - [ ] L01-L08、C01-C08、X01-X04 均有可复现证据，失败项明确转入后续计划；
 - [ ] 普通聊天、Live 字幕和语音确认来自同一 Assistant 消息与单调游标；
-- [ ] 三种代表性 Canvas 输出通过同一 Turn/Agent Runtime 产生并保留不可变版本；
+- [x] 三种代表性 Canvas 输出通过同一 Turn/Agent Runtime 产生并保留不可变版本；
 - [ ] Live、Canvas、Web Runtime、输入 Source 均未形成旁路权限或第二事实源；
 - [ ] 性能数字区分客户端增加延迟、Provider 延迟、自动化和真人证据；
 - [ ] 稳定事实已经回写 canonical 文档，ADR 只保留长期决策；

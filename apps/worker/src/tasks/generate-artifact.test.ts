@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelGatewayInvocationError } from '@educanvas/agent-core';
 import { mindMapContentSchema } from '@educanvas/canvas-protocol';
+import { type MarkdownDocumentContent } from '../../../../packages/canvas-protocol/src/artifacts/markdown-document';
 import { buildConversationOutline } from './mind-map-outline';
 import { generateArtifact } from './generate-artifact';
 
@@ -11,6 +12,8 @@ const {
   repository,
   turnsRepository,
   appendGeneratedImageVersion,
+  generateMarkdownDocumentContent,
+  generateWebAppContent,
   ImageArtifactGenerationFailure,
   artifactGateway,
   ArtifactJobLifecycleError,
@@ -27,6 +30,8 @@ const {
     listMessages: vi.fn(),
   },
   appendGeneratedImageVersion: vi.fn(),
+  generateMarkdownDocumentContent: vi.fn(),
+  generateWebAppContent: vi.fn(),
   ImageArtifactGenerationFailure: class ArtifactImageFailure extends Error {
     readonly code: string;
     constructor(code: string) {
@@ -80,6 +85,12 @@ vi.mock('./image-artifact-generation.js', () => ({
   appendGeneratedImageVersion,
   IMAGE_GENERATOR: 'model:image.generate:canvas-image-v1',
   ImageArtifactGenerationFailure,
+}));
+vi.mock('./markdown-document-generation.js', () => ({
+  generateMarkdownDocumentContent,
+}));
+vi.mock('./web-app-generation.js', () => ({
+  generateWebAppContent,
 }));
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
@@ -399,6 +410,122 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
       expect.objectContaining({
         to: 'failed',
         failureCode: 'unsupported_kind',
+      }),
+    );
+  });
+
+  it('支持 markdown_document 使用 markdown 生成器产出版本', async () => {
+    repository.getArtifact.mockResolvedValue({
+      ...artifactBase,
+      kind: 'markdown_document',
+      trustTier: 'tier1',
+      latestVersion: 0,
+    });
+    repository.getGenerationJob.mockResolvedValue({
+      id: JOB_ID,
+      artifactId: ARTIFACT_ID,
+      operationId: null,
+      status: 'running',
+      progress: 1,
+      failureCode: null,
+      params: {
+        generation: {
+          instruction: '生成课程文档',
+        },
+      },
+      checkpoint: {},
+      queueJobKey: 'artifact-generate',
+    });
+    const content: MarkdownDocumentContent = {
+      contentVersion: 1,
+      markdown: '# 课程文档',
+      generatedByModel: true,
+    };
+    (
+      generateMarkdownDocumentContent as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      content,
+      generatedBy: 'model:artifact.generate:markdown-document-v1',
+    });
+
+    await runTask();
+
+    expect(generateMarkdownDocumentContent).toHaveBeenCalledTimes(1);
+    expect(
+      repository.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content,
+      }),
+    );
+  });
+
+  it('支持 web_app 使用 web_app 生成器产出版本', async () => {
+    repository.getArtifact.mockResolvedValue({
+      ...artifactBase,
+      kind: 'web_app',
+      trustTier: 'tier2',
+      latestVersion: 0,
+    });
+    repository.getGenerationJob.mockResolvedValue({
+      id: JOB_ID,
+      artifactId: ARTIFACT_ID,
+      operationId: null,
+      status: 'running',
+      progress: 1,
+      failureCode: null,
+      params: {
+        generation: {
+          instruction: '生成课程网页',
+        },
+      },
+      checkpoint: {},
+      queueJobKey: 'artifact-generate',
+    });
+    const content = {
+      contentVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          {
+            path: 'index.html',
+            mediaType: 'text/html',
+            content: '<!doctype html><html><body>课程网页</body></html>',
+            hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          },
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation', 'css-render', 'javascript-runtime'],
+      budget: {
+        maxInputBytes: 8_192,
+        maxMessageBytes: 8_192,
+        maxOutputBytes: 16_000,
+        maxDurationMs: 5_000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 10,
+        maxMessagesPerSecond: 5,
+      },
+      diagnostics: [{ code: 'build_succeeded' }],
+      generatedByModel: true,
+    } as const;
+
+    (
+      generateWebAppContent as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      content,
+      generatedBy: 'model:artifact.generate:web-app-v1',
+    });
+
+    await runTask();
+
+    expect(generateWebAppContent).toHaveBeenCalledTimes(1);
+    expect(
+      repository.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content,
+        generatedBy: 'model:artifact.generate:web-app-v1',
       }),
     );
   });

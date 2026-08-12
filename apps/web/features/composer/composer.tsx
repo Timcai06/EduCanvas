@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
+import type { OutputPreference } from '@educanvas/agent-core';
 
 const subscribeToHydration = () => () => undefined;
 const getHydratedSnapshot = () => true;
@@ -68,6 +69,8 @@ export function Composer({
   onToolAction,
   voice,
   voiceAccessory,
+  outputPreference,
+  onOutputPreferenceChange,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -89,6 +92,9 @@ export function Composer({
   voice?: ComposerVoiceControl;
   /** Dictation 旁的同尺寸语音能力入口；Composer 不反向依赖具体 Voice 产品。 */
   voiceAccessory?: ReactNode;
+  /** 本轮输出形态偏好；仅影响呈现，不授予工具或 Runtime 权限。 */
+  outputPreference?: OutputPreference;
+  onOutputPreferenceChange?: (preference: OutputPreference) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hydrated = useSyncExternalStore(
@@ -279,6 +285,26 @@ export function Composer({
             );
           })}
         </div>
+      ) : null}
+      {onOutputPreferenceChange && outputPreference ? (
+        <label className="mt-2 inline-flex items-center gap-2 px-1 text-xs text-ink-muted">
+          <span>输出方式</span>
+          <select
+            aria-label="输出方式"
+            value={outputPreference}
+            onChange={(event) =>
+              onOutputPreferenceChange(
+                event.currentTarget.value as OutputPreference,
+              )
+            }
+            className="rounded-full border border-line bg-surface/75 px-3 py-1.5 text-xs font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value="auto">自动</option>
+            <option value="markdown_document">Markdown 文档</option>
+            <option value="interactive_artifact">互动 Canvas</option>
+            <option value="web_app">Web App</option>
+          </select>
+        </label>
       ) : null}
       {!isLanding || statusText ? (
         <p

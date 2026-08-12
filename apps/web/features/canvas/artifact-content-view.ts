@@ -1,4 +1,6 @@
 import type { CanvasResourceAction } from '@educanvas/canvas-protocol';
+import { webAppContentSchema } from '@educanvas/canvas-protocol';
+import type { WebAppContent } from '@educanvas/canvas-protocol';
 import type {
   ArtifactDetail,
   AudioOverviewMedia,
@@ -21,6 +23,12 @@ export type ArtifactContentView =
   | { kind: 'mind_map'; content: unknown; key: number }
   | { kind: 'slides'; content: unknown; key: number }
   | { kind: 'flashcards'; content: unknown; key: number }
+  | {
+      kind: 'markdown_document';
+      content: unknown;
+      key: number;
+      isLatest: boolean;
+    }
   | { kind: 'note'; content: unknown; key: number; isLatest: boolean }
   | {
       kind: 'audio_overview';
@@ -34,6 +42,8 @@ export type ArtifactContentView =
       allowedActions: readonly CanvasResourceAction[];
     }
   | { kind: 'dom_exploration'; versionId: string }
+  | { kind: 'web_app'; versionId: string; content: WebAppContent }
+  | { kind: 'web_app_unavailable'; versionId: string }
   | { kind: 'empty' };
 
 export function resolveArtifactContentView(
@@ -102,8 +112,26 @@ export function resolveArtifactContentView(
       isLatest,
     };
   }
+  if (detail.artifact.kind === 'markdown_document' && detail.version) {
+    return {
+      kind: 'markdown_document',
+      content: detail.version.content,
+      key: displayedVersion,
+      isLatest,
+    };
+  }
   if (detail.artifact.kind === 'dom_exploration' && detail.version) {
     return { kind: 'dom_exploration', versionId: detail.version.id };
+  }
+  if (detail.artifact.kind === 'web_app' && detail.version) {
+    const parsed = webAppContentSchema.safeParse(detail.version.content);
+    if (!parsed.success)
+      return { kind: 'web_app_unavailable', versionId: detail.version.id };
+    return {
+      kind: 'web_app',
+      versionId: detail.version.id,
+      content: parsed.data,
+    };
   }
 
   return { kind: 'empty' };

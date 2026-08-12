@@ -266,7 +266,16 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
       detail.latestVersion?.content,
     );
     expect(parsed.success).toBe(true);
-    expect(parsed.success ? parsed.data.root.label : null).toBe('本课思维导图');
+    const parsedContent = parsed.success ? parsed.data : null;
+    expect(
+      parsedContent
+        ? parsedContent.contentVersion === 2
+          ? parsedContent.nodes.find(
+              (node) => node.id === parsedContent.rootNodeId,
+            )?.label
+          : parsedContent.root.label
+        : null,
+    ).toBe('本课思维导图');
   });
 
   it('Canvas 修改在同一Artifact上追加v2，并拒绝并发任务与过期基线', async () => {
@@ -328,7 +337,10 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     expect(detail.artifact.latestVersion).toBe(2);
     expect(detail.latestJob?.status).toBe('succeeded');
     const parsed = mindMapContentSchema.parse(detail.latestVersion?.content);
-    expect(parsed.root.children).toContainEqual(
+    expect(parsed.contentVersion).toBe(2);
+    expect(
+      parsed.contentVersion === 2 ? parsed.nodes : (parsed.root.children ?? []),
+    ).toContainEqual(
       expect.objectContaining({ label: '修改：增加一个关于卷积层的分支' }),
     );
     await expect(

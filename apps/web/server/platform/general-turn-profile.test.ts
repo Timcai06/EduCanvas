@@ -66,7 +66,8 @@ function createProfile(input?: {
   staticToolCapabilities?: readonly string[];
   operationArtifacts?: WebOperationArtifacts;
   operationImages?: WebOperationImageArtifacts;
-  preferCanvas?: boolean;
+  outputPreference?:
+    'auto' | 'markdown_document' | 'interactive_artifact' | 'web_app';
   assetContext?: MaterializedAssetPlan;
 }) {
   return new WebGeneralProfile(
@@ -76,7 +77,7 @@ function createProfile(input?: {
       ({ events: () => [] } as unknown as WebOperationArtifacts),
     input?.operationImages ??
       ({ events: () => [] } as unknown as WebOperationImageArtifacts),
-    input?.preferCanvas ?? false,
+    input?.outputPreference ?? 'auto',
     input?.staticToolCapabilities ?? ['web.fetch', 'web.search'],
     input?.nodeInvocations ?? createNodeInvocations(),
     input?.membershipRole ?? 'owner',
@@ -208,18 +209,41 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     });
   });
 
-  it('Canvas 偏好只强化本轮输出指令而不改变可信 Tool grant', async () => {
+  it('输出偏好只强化本轮提示而不改变可信 Tool grant', async () => {
     const normal = await createProfile().prepare({ command, turn });
-    const canvas = await createProfile({ preferCanvas: true }).prepare({
+    const interactive = await createProfile({
+      outputPreference: 'interactive_artifact',
+    }).prepare({
       command,
       turn,
     });
-    const canvasSystemPrompt = canvas.context.profile[0]?.message.content ?? '';
+    const interactiveSystemPrompt =
+      interactive.context.profile[0]?.message.content ?? '';
 
-    expect(canvasSystemPrompt).toContain('必须调用 createCanvasArtifact');
-    expect(canvasSystemPrompt).toContain('不要用 ASCII 图');
-    expect(canvas.toolPolicy).toEqual(normal.toolPolicy);
+    expect(interactiveSystemPrompt).toContain('思维导图');
+    expect(interactiveSystemPrompt).toContain('Canvas');
+    expect(interactive.toolPolicy).toEqual(normal.toolPolicy);
   });
+
+  it.each([
+    ['auto', '自然语言回答'],
+    ['markdown_document', 'Markdown 文档'],
+    ['interactive_artifact', '可在 Canvas'],
+    ['web_app', 'web_app'],
+  ] as const)(
+    '不同输出偏好仅影响提示词，不影响工具授权 (%s)',
+    async (preference, expectedHint) => {
+      const base = await createProfile().prepare({ command, turn });
+      const hinted = await createProfile({
+        outputPreference: preference,
+      }).prepare({ command, turn });
+
+      expect(hinted.context.profile[0]?.message.content).toContain(
+        expectedHint,
+      );
+      expect(hinted.toolPolicy).toEqual(base.toolPolicy);
+    },
+  );
 });
 
 describe('WebGeneralProfile 原生图片输入', () => {

@@ -153,6 +153,20 @@ const ARTIFACT_RENDERERS = {
     rendererVersion: 1,
     trustTier: 'tier2',
   },
+  markdown_document: {
+    representation: 'structured',
+    mimeType: 'application/vnd.educanvas.markdown+text',
+    rendererId: 'artifact.markdown-document',
+    rendererVersion: 1,
+    trustTier: 'tier1',
+  },
+  web_app: {
+    representation: 'interactive_app',
+    mimeType: 'application/vnd.educanvas.web-app+json',
+    rendererId: 'artifact.web-app',
+    rendererVersion: 1,
+    trustTier: 'tier2',
+  },
   dom_exploration: {
     representation: 'interactive_app',
     mimeType: 'application/vnd.educanvas.dom-exploration+json',
@@ -222,11 +236,16 @@ function projectActions(
     /* 只读角色可查看和下载媒体产物，但不可删除。 */
     if (kind === 'audio_overview' || kind === 'generated_image')
       return ['view', 'download', 'annotate'];
-    return kind === 'dom_exploration'
+    if (kind === 'markdown_document') return ['view', 'download'];
+    return kind === 'dom_exploration' || kind === 'web_app'
       ? ['view', 'run', 'cancel', 'annotate']
       : ['view', 'annotate'];
   }
+  if (kind === 'markdown_document')
+    return ['view', 'edit', 'regenerate', 'download'];
   if (kind === 'dom_exploration') return ['view', 'run', 'cancel', 'annotate'];
+  if (kind === 'web_app')
+    return ['view', 'run', 'cancel', 'regenerate', 'download', 'annotate'];
   if (kind === 'note') return ['view', 'edit', 'regenerate', 'annotate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
      这两类；不开放 regenerate 才与实际后端能力一致。
@@ -309,7 +328,7 @@ export function projectOwnedArtifactResource(input: {
       generator: projectMediaGenerator(kind, input.version?.metadata),
     },
     runtime:
-      kind === 'dom_exploration'
+      kind === 'dom_exploration' || kind === 'web_app'
         ? {
             kind: 'web_sandbox',
             protocolVersion: 1,

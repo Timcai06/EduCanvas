@@ -1,13 +1,17 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { NoteContent } from '@educanvas/canvas-protocol';
+import {
+  markdownDocumentContentSchema,
+  type NoteContent,
+} from '@educanvas/canvas-protocol';
 import type { ArtifactContentView } from './artifact-content-view';
 import type { ArtifactDetail, ArtifactVersionData } from './artifact-client';
 import { ArtifactGeneratingSkeleton } from './artifact-provenance';
 import { CanvasShellStatus } from './canvas-shell-status';
 import { NoteRenderer } from './note-renderer';
 import { PersistentWebRuntime } from './persistent-web-runtime';
+import { WebAppArtifactView } from './web-app-artifact-view';
 import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry';
 
 /**
@@ -20,7 +24,12 @@ import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry'
  */
 
 type ArtifactRegistryViewKinds =
-  'mind_map' | 'slides' | 'flashcards' | 'audio_overview' | 'generated_image';
+  | 'mind_map'
+  | 'slides'
+  | 'flashcards'
+  | 'audio_overview'
+  | 'generated_image'
+  | 'markdown_document';
 
 /** 走 Registry 的 5 类内容驱动分发结果。 */
 export type ArtifactRegistryContentView = Extract<
@@ -39,6 +48,7 @@ export function toArtifactVersionData(
     case 'mind_map':
     case 'slides':
     case 'flashcards':
+    case 'markdown_document':
       return { content: view.content, media: null };
     case 'audio_overview':
     case 'generated_image':
@@ -133,6 +143,30 @@ export function ArtifactCanvasContent({
           saving={revising}
         />
       );
+    case 'markdown_document': {
+      const parsed = markdownDocumentContentSchema.safeParse(
+        contentView.content,
+      );
+      if (!parsed.success) {
+        return (
+          <CanvasShellStatus
+            status="unavailable"
+            title="Markdown 文档不可用"
+            description="当前版本内容未通过文档协议校验。"
+          />
+        );
+      }
+      return (
+        <NoteRenderer
+          key={contentView.key}
+          content={parsed.data}
+          isLatest={contentView.isLatest}
+          readOnly={readOnly || !contentView.isLatest}
+          onSave={onSaveNote}
+          saving={revising}
+        />
+      );
+    }
     case 'dom_exploration':
       if (presentation === 'live-preview') {
         return (
@@ -148,6 +182,23 @@ export function ArtifactCanvasContent({
           key={contentView.versionId}
           artifactId={detail.artifact.id}
           artifactVersionId={contentView.versionId}
+        />
+      );
+    case 'web_app':
+      return (
+        <WebAppArtifactView
+          artifactId={detail.artifact.id}
+          artifactVersionId={contentView.versionId}
+          content={contentView.content}
+          presentation={presentation}
+        />
+      );
+    case 'web_app_unavailable':
+      return (
+        <CanvasShellStatus
+          status="unavailable"
+          title="Web App 内容不可用"
+          description="产物内容不符合 Web App 安全协议。"
         />
       );
     case 'empty':

@@ -26,10 +26,18 @@ export {
   type PipelineFlowSlot,
 } from './artifacts/pipeline-flow';
 export {
+  MIND_MAP_CONTENT_VERSION_V1,
+  MIND_MAP_CONTENT_VERSION_V2,
   MIND_MAP_CONTENT_VERSION,
+  mindMapContentV2Schema,
   mindMapContentSchema,
+  mindMapEdgeRoleSchema,
+  mindMapLayoutHintSchema,
+  mindMapSemanticRoleSchema,
   type MindMapContent,
   type MindMapNode,
+  type MindMapContentV1,
+  type MindMapContentV2,
 } from './artifacts/mind-map';
 export {
   SLIDES_CONTENT_VERSION,
@@ -59,6 +67,13 @@ export {
   noteContentSchema,
   type NoteContent,
 } from './artifacts/note';
+export {
+  MARKDOWN_DOCUMENT_CONTENT_VERSION,
+  MARKDOWN_DOCUMENT_KIND,
+  MARKDOWN_DOCUMENT_MAX_CHARS,
+  markdownDocumentContentSchema,
+  type MarkdownDocumentContent,
+} from './artifacts/markdown-document';
 export {
   CANVAS_RESOURCE_SCHEMA_VERSION,
   canvasRepresentationKinds,
@@ -148,3 +163,16 @@ export {
   type WebRuntimeTerminalType,
   type WebRuntimeValidationResult,
 } from './web-runtime-contract';
+export {
+  WEB_APP_CAPABILITIES,
+  WEB_APP_DIAGNOSTIC_CODES,
+  WEB_APP_FILES_MAX_COUNT,
+  WEB_APP_KIND,
+  WEB_APP_MEDIA_TYPES,
+  WEB_APP_SCHEMA_VERSION,
+  webAppContentSchema,
+  webAppDiagnosticCodeSchema,
+  type WebAppContent,
+  type WebAppDiagnosticCode,
+  type WebAppManifestFile,
+} from './web-runtime-artifact';

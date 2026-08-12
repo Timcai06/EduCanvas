@@ -21,9 +21,13 @@ import { getDb } from '@educanvas/db/internal';
 import {
   audioOverviewMetadataSchema,
   generatedImageMetadataSchema,
+  MARKDOWN_DOCUMENT_MAX_CHARS,
+  markdownDocumentContentSchema,
+  mindMapContentSchema,
   NOTE_MARKDOWN_MAX_CHARS,
   noteContentSchema,
 } from '@educanvas/canvas-protocol';
+import { webAppContentSchema } from '@educanvas/canvas-protocol/server';
 import {
   ArtifactResourceProjectionError,
   projectOwnedArtifactResource,
@@ -207,7 +211,51 @@ const mutateArtifactSchema = z.discriminatedUnion('action', [
       markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal('save_markdown_document'),
+      baseVersion: z.number().int().min(1),
+      markdown: z.string().max(MARKDOWN_DOCUMENT_MAX_CHARS),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('restore'),
+      sourceVersion: z.number().int().min(1),
+      expectedLatestVersion: z.number().int().min(1),
+    })
+    .strict(),
 ]);
+
+function validateRestorableContent(kind: string, content: unknown): unknown {
+  if (kind === 'markdown_document') {
+    return markdownDocumentContentSchema.parse(content);
+  }
+  if (kind === 'mind_map') return mindMapContentSchema.parse(content);
+  if (kind === 'web_app') return webAppContentSchema.parse(content);
+  throw new ArtifactOwnershipError();
+}
+
+function supportsMutation(
+  kind: string,
+  action: z.infer<typeof mutateArtifactSchema>['action'],
+): boolean {
+  if (action === 'save_note') return kind === 'note';
+  if (action === 'save_markdown_document') {
+    return kind === 'markdown_document';
+  }
+  if (action === 'restore') {
+    return ['mind_map', 'markdown_document', 'web_app'].includes(kind);
+  }
+  return [
+    'mind_map',
+    'slides',
+    'flashcards',
+    'note',
+    'markdown_document',
+    'web_app',
+  ].includes(kind);
+}
 
 /**
  * Canvas 共创入口：AI 修改进入持久生成任务，笔记直接保存只追加不可变
@@ -251,9 +299,7 @@ export async function PATCH(
     });
     if (
       artifact.spaceId !== conversation.spaceId ||
-      (parsed.data.action === 'save_note'
-        ? artifact.kind !== 'note'
-        : !['mind_map', 'slides', 'flashcards', 'note'].includes(artifact.kind))
+      !supportsMutation(artifact.kind, parsed.data.action)
     ) {
       throw new ArtifactOwnershipError();
     }
@@ -290,6 +336,68 @@ export async function PATCH(
         },
         { status: 200 },
       );
+    }
+
+    if (parsed.data.action === 'save_markdown_document') {
+      const currentVersion = await repository.getVersion({
+        artifactId,
+        version: parsed.data.baseVersion,
+        trustedSubjectId: identity.studentId,
+      });
+      const currentContent = markdownDocumentContentSchema.parse(
+        currentVersion.content,
+      );
+      const version = await repository.appendVersion({
+        artifactId,
+        trustedSubjectId: identity.studentId,
+        content: markdownDocumentContentSchema.parse({
+          ...currentContent,
+          markdown: parsed.data.markdown,
+          generatedByModel: false,
+        }),
+        generatedBy: 'user:manual',
+        expectedLatestVersion: parsed.data.baseVersion,
+      });
+      return jsonResponse(
+        {
+          artifact: {
+            id: artifact.id,
+            kind: artifact.kind,
+            trustTier: artifact.trustTier,
+            title: artifact.title,
+            status: artifact.status,
+            latestVersion: version.version,
+          },
+          job: null,
+        },
+        { status: 200 },
+      );
+    }
+
+    if (parsed.data.action === 'restore') {
+      const source = await repository.getVersion({
+        artifactId,
+        version: parsed.data.sourceVersion,
+        trustedSubjectId: identity.studentId,
+      });
+      const version = await repository.appendVersion({
+        artifactId,
+        trustedSubjectId: identity.studentId,
+        content: validateRestorableContent(artifact.kind, source.content),
+        generatedBy: `user:restore:v${source.version}`,
+        expectedLatestVersion: parsed.data.expectedLatestVersion,
+      });
+      return jsonResponse({
+        artifact: {
+          id: artifact.id,
+          kind: artifact.kind,
+          trustTier: artifact.trustTier,
+          title: artifact.title,
+          status: artifact.status,
+          latestVersion: version.version,
+        },
+        job: null,
+      });
     }
 
     const created = await repository.createRevisionGenerationJob({

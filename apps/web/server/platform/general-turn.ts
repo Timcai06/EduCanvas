@@ -90,7 +90,7 @@ export function beginGatewayGeneralTurnApplication(input: {
       operationSources,
       operationArtifacts,
       operationImages,
-      input.request.outputPreference === 'canvas',
+      input.request.outputPreference ?? 'auto',
       tools.staticCapabilities,
       tools.nodeInvocations,
       input.route.membershipRole,

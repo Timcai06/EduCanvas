@@ -4,6 +4,7 @@ vi.mock('server-only', () => ({}));
 
 const artifactRepo = {
   getArtifactDetail: vi.fn(),
+  getVersion: vi.fn(),
 };
 const objectStorage = {
   readVerified: vi.fn(),
@@ -121,9 +122,97 @@ const audioDetail = {
   latestJob: null,
 };
 
-function request(artId = artifactId): Request {
+const markdownDetail = {
+  artifact: {
+    id: artifactId,
+    kind: 'markdown_document',
+    spaceId: conversation.spaceId,
+    title: '课程文档',
+  },
+  latestVersion: {
+    version: 2,
+    content: {
+      contentVersion: 1,
+      markdown: '# 标题\n\n正文',
+      generatedByModel: true,
+    },
+    objectKey: null,
+    checksum: null,
+    metadata: null,
+  },
+  latestJob: null,
+};
+
+const mindMapDetail = {
+  artifact: {
+    id: artifactId,
+    kind: 'mind_map',
+    spaceId: conversation.spaceId,
+    title: '课程导图',
+  },
+  latestVersion: {
+    version: 1,
+    content: {
+      contentVersion: 2,
+      rootNodeId: 'n_root',
+      nodes: [{ id: 'n_root', label: '根节点' }],
+      edges: [],
+    },
+    objectKey: null,
+    checksum: null,
+    metadata: null,
+  },
+  latestJob: null,
+};
+
+const webAppDetail = {
+  artifact: {
+    id: artifactId,
+    kind: 'web_app',
+    spaceId: conversation.spaceId,
+    title: '小程序',
+  },
+  latestVersion: {
+    version: 1,
+    content: {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          {
+            path: 'index.html',
+            mediaType: 'text/html',
+            content: '<!doctype html><html><body>ok</body></html>',
+            hash: 'f'.repeat(64),
+          },
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['javascript-runtime'],
+      budget: {
+        maxInputBytes: 2000,
+        maxMessageBytes: 2000,
+        maxOutputBytes: 2000,
+        maxDurationMs: 1000,
+        maxConcurrentInstances: 2,
+        maxQueueDepth: 8,
+        maxMessagesPerSecond: 10,
+      },
+      diagnostics: [],
+      sourceConversationId: '22222222-2222-4222-8222-222222222222',
+      generatedByModel: false,
+    },
+    objectKey: null,
+    checksum: null,
+    metadata: null,
+  },
+  latestJob: null,
+};
+
+function request(artId = artifactId, version?: number): Request {
+  const query = version ? `?version=${version}` : '';
   return new Request(
-    `http://localhost/api/v1/chat/artifacts/${artId}/download`,
+    `http://localhost/api/v1/chat/artifacts/${artId}/download${query}`,
     { method: 'GET', headers: { origin: 'http://localhost' } },
   );
 }
@@ -143,6 +232,7 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/download', () => {
     artifactRepo.getArtifactDetail.mockReset();
     objectStorage.readVerified.mockReset();
     artifactRepo.getArtifactDetail.mockResolvedValue(imageDetail);
+    artifactRepo.getVersion.mockResolvedValue(imageDetail.latestVersion);
     objectStorage.readVerified.mockResolvedValue(
       new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     );
@@ -213,6 +303,44 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/download', () => {
     expect(new Uint8Array(bytes).byteLength).toBe(4);
   });
 
+  it('uses explicit version when provided and falls back to latest when absent', async () => {
+    const v1 = {
+      ...imageDetail.latestVersion,
+      version: 1,
+    };
+    artifactRepo.getVersion.mockResolvedValueOnce(v1);
+
+    const withVersion = await GET(request(artifactId, 1), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(withVersion.status).toBe(200);
+    expect(artifactRepo.getVersion).toHaveBeenCalledWith({
+      artifactId,
+      version: 1,
+      trustedSubjectId: identity.studentId,
+    });
+
+    artifactRepo.getVersion.mockClear();
+    await GET(request(artifactId), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(artifactRepo.getVersion).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for invalid version query', async () => {
+    const response = await GET(
+      new Request(
+        `http://localhost/api/v1/chat/artifacts/${artifactId}/download?version=bad`,
+        { method: 'GET', headers: { origin: 'http://localhost' } },
+      ),
+      { params: Promise.resolve({ artifactId }) },
+    );
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+  });
+
   it('serves audio download with correct extension', async () => {
     artifactRepo.getArtifactDetail.mockResolvedValueOnce(audioDetail);
     objectStorage.readVerified.mockResolvedValueOnce(
@@ -242,10 +370,138 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/download', () => {
     expect(response.status).toBe(200);
   });
 
-  it('returns 404 for non-media artifact kinds', async () => {
+  it('returns markdown file for markdown_document kind', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce(markdownDetail);
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe(
+      'text/markdown; charset=utf-8',
+    );
+    expect(response.headers.get('content-disposition')).toBe(
+      'attachment; filename="download.md"',
+    );
+    expect(text).toBe('# 标题\n\n正文');
+  });
+
+  it('returns 404 for invalid markdown schema', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...markdownDetail,
+      latestVersion: {
+        ...markdownDetail.latestVersion,
+        content: {
+          ...markdownDetail.latestVersion.content,
+          generatedByModel: undefined,
+        },
+      },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+  });
+
+  it('returns json for mind_map kind with strict schema validation', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce(mindMapDetail);
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe(
+      'application/json; charset=utf-8',
+    );
+    expect(response.headers.get('content-disposition')).toBe(
+      'attachment; filename="download.json"',
+    );
+    expect(body).toMatchObject({
+      contentVersion: 2,
+      rootNodeId: 'n_root',
+      nodes: [{ id: 'n_root', label: '根节点' }],
+      edges: [],
+    });
+  });
+
+  it('returns 404 for invalid mind_map schema', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...mindMapDetail,
+      latestVersion: {
+        ...mindMapDetail.latestVersion,
+        content: {
+          ...mindMapDetail.latestVersion.content,
+          rootNodeId: 'missing',
+        },
+      },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+  });
+
+  it('returns json for web_app kind with strict schema validation', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce(webAppDetail);
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe(
+      'application/json; charset=utf-8',
+    );
+    expect(response.headers.get('content-disposition')).toBe(
+      'attachment; filename="download.json"',
+    );
+    expect(body).toMatchObject({
+      schemaVersion: 1,
+      manifest: { entry: 'index.html', files: [{ path: 'index.html' }] },
+    });
+    expect(body).not.toHaveProperty('sourceConversationId');
+  });
+
+  it('returns 404 for invalid web_app schema', async () => {
+    artifactRepo.getArtifactDetail.mockResolvedValueOnce({
+      ...webAppDetail,
+      latestVersion: {
+        ...webAppDetail.latestVersion,
+        content: {
+          ...webAppDetail.latestVersion.content,
+          manifest: {
+            ...webAppDetail.latestVersion.content.manifest,
+            files: [
+              {
+                ...webAppDetail.latestVersion.content.manifest.files[0],
+                hash: 'bad-hash',
+              },
+            ],
+          },
+        },
+      },
+    });
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+  });
+
+  it('returns 404 for unsupported artifact kind', async () => {
     artifactRepo.getArtifactDetail.mockResolvedValueOnce({
       ...imageDetail,
-      artifact: { ...imageDetail.artifact, kind: 'mind_map' },
+      artifact: { ...imageDetail.artifact, kind: 'note' },
     });
     const response = await GET(request(), {
       params: Promise.resolve({ artifactId }),

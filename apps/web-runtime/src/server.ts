@@ -1,6 +1,10 @@
 import { DrizzleWebRuntimeRunRepository } from '@educanvas/db';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { renderHostPage, renderHostScript } from './host-page';
+import {
+  compileRuntimePayload,
+  renderHostPage,
+  renderHostScript,
+} from './host-page';
 import type { WebRuntimeConfig } from './config';
 
 /** runId in bootstrap payload follows UUID v4-like 36-char format. */
@@ -126,6 +130,7 @@ export function createWebRuntimeHandler(
           return;
         }
         const claimed = await repository.claimBootstrap(parsed);
+        const content = compileRuntimePayload(claimed.content);
         json(response, 200, {
           binding: {
             protocolVersion: 'educanvas.web-runtime.v1',
@@ -134,7 +139,7 @@ export function createWebRuntimeHandler(
             artifactVersionId: claimed.run.artifactVersionId,
             artifactContentHash: claimed.run.artifactContentHash,
           },
-          content: claimed.content,
+          content,
         });
         return;
       }

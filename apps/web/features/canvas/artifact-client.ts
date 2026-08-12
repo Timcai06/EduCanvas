@@ -220,7 +220,13 @@ async function parseJsonOrThrow<T>(
 }
 
 export type CreatableArtifactKind =
-  'mind_map' | 'slides' | 'flashcards' | 'audio_overview' | 'note';
+  | 'mind_map'
+  | 'slides'
+  | 'flashcards'
+  | 'markdown_document'
+  | 'audio_overview'
+  | 'web_app'
+  | 'note';
 
 /** Agent 工具可产生、UI 可观察的种类；generated_image 不开放手动 POST 创建。 */
 export type ObservableArtifactKind = CreatableArtifactKind | 'generated_image';
@@ -232,7 +238,9 @@ export function isCreatableArtifactKind(
     'mind_map',
     'slides',
     'flashcards',
+    'markdown_document',
     'audio_overview',
+    'web_app',
     'note',
   ].includes(kind);
 }
@@ -317,6 +325,31 @@ export async function reviseArtifact(
   );
 }
 
+/** 从历史版本恢复为新版本；服务端会落一个新版本，不会移动最新版本指针。 */
+export async function restoreArtifactVersion(
+  artifactId: string,
+  sourceVersion: number,
+  expectedLatestVersion: number,
+): Promise<{ artifact: ArtifactSummary; job: { id: string } | null }> {
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'restore',
+        sourceVersion,
+        expectedLatestVersion,
+      }),
+    },
+  );
+  return parseJsonOrThrow(
+    response,
+    artifactMutationResponseSchema,
+    '产物恢复响应格式不正确。',
+  );
+}
+
 /** 直接保存 Markdown 笔记为新版本；它不创建模型任务或伪造 generation job。 */
 export async function saveNoteArtifact(
   artifactId: string,
@@ -342,6 +375,35 @@ export async function saveNoteArtifact(
   );
   if (result.job !== null) {
     throw new Error('笔记保存不应创建生成任务。');
+  }
+  return { artifact: result.artifact, job: null };
+}
+
+/** 直接编辑 Markdown 文档；服务端按文档 schema 追加完整不可变版本。 */
+export async function saveMarkdownDocumentArtifact(
+  artifactId: string,
+  baseVersion: number,
+  markdown: string,
+): Promise<{ artifact: ArtifactSummary; job: null }> {
+  const response = await fetch(
+    `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save_markdown_document',
+        baseVersion,
+        markdown,
+      }),
+    },
+  );
+  const result = await parseJsonOrThrow(
+    response,
+    artifactMutationResponseSchema,
+    'Markdown 文档保存响应格式不正确。',
+  );
+  if (result.job !== null) {
+    throw new Error('Markdown 文档保存不应创建生成任务。');
   }
   return { artifact: result.artifact, job: null };
 }

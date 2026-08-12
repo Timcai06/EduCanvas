@@ -451,6 +451,42 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     );
   });
 
+  it('returns 202 for accepted markdown document revision request', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'markdown_document',
+      spaceId: conversation.spaceId,
+    });
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '增加章节',
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(202);
+    const payload = await response.json();
+    expect(payload).toMatchObject({
+      artifact: {
+        id: validArtifact.id,
+      },
+      job: { id: 'job-2' },
+    });
+    expect(artifactRepo.createRevisionGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseVersion: 1,
+        artifactId: validArtifact.id,
+        trustedSubjectId: identity.studentId,
+        taskIdentifier: 'artifact:generate',
+      }),
+    );
+  });
+
   it('returns 200 and appends a note version without a generation job', async () => {
     artifactRepo.getArtifact.mockResolvedValue({
       ...validArtifact,
@@ -487,6 +523,175 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
       }),
     );
     expect(artifactRepo.createRevisionGenerationJob).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 and appends a markdown 文档版本并保留可追踪字段', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'markdown_document',
+      spaceId: conversation.spaceId,
+    });
+    artifactRepo.getVersion.mockResolvedValue({
+      version: 1,
+      content: {
+        contentVersion: 1,
+        markdown: '# 原文档',
+        generatedByModel: true,
+      },
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'save_markdown_document',
+          baseVersion: 1,
+          markdown: '# 新文档',
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      artifact: { latestVersion: 2 },
+      job: null,
+    });
+    expect(artifactRepo.appendVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactId: validArtifact.id,
+        trustedSubjectId: identity.studentId,
+        expectedLatestVersion: 1,
+        generatedBy: 'user:manual',
+        content: expect.objectContaining({
+          contentVersion: 1,
+          markdown: '# 新文档',
+          generatedByModel: false,
+        }),
+      }),
+    );
+    expect(artifactRepo.createRevisionGenerationJob).not.toHaveBeenCalled();
+  });
+
+  it('rejects markdown 文档保存在 kind 不匹配时的请求', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'mind_map',
+      spaceId: conversation.spaceId,
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'save_markdown_document',
+          baseVersion: 1,
+          markdown: '# 新文档',
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+    expect(artifactRepo.appendVersion).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when markdown_document 保存请求超出长度限制', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'markdown_document',
+      spaceId: conversation.spaceId,
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'save_markdown_document',
+          baseVersion: 1,
+          markdown: 'x'.repeat(60001),
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'invalid_request' },
+    });
+    expect(artifactRepo.appendVersion).not.toHaveBeenCalled();
+    expect(artifactRepo.createRevisionGenerationJob).not.toHaveBeenCalled();
+  });
+
+  it('restores a historical mind map by appending a new immutable version', async () => {
+    const historical = {
+      version: 1,
+      content: {
+        contentVersion: 2,
+        rootNodeId: 'root',
+        nodes: [{ id: 'root', label: '原导图' }],
+        edges: [],
+      },
+    };
+    artifactRepo.getVersion.mockResolvedValue(historical);
+    artifactRepo.appendVersion.mockResolvedValue({ version: 3 });
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      latestVersion: 2,
+      spaceId: conversation.spaceId,
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'restore',
+          sourceVersion: 1,
+          expectedLatestVersion: 2,
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      artifact: { latestVersion: 3 },
+      job: null,
+    });
+    expect(artifactRepo.appendVersion).toHaveBeenCalledWith({
+      artifactId: validArtifact.id,
+      trustedSubjectId: identity.studentId,
+      content: historical.content,
+      generatedBy: 'user:restore:v1',
+      expectedLatestVersion: 2,
+    });
+  });
+
+  it('rejects restore for a kind without a validated restore contract', async () => {
+    artifactRepo.getArtifact.mockResolvedValue({
+      ...validArtifact,
+      kind: 'slides',
+      latestVersion: 2,
+      spaceId: conversation.spaceId,
+    });
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'restore',
+          sourceVersion: 1,
+          expectedLatestVersion: 2,
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(404);
+    expect(artifactRepo.appendVersion).not.toHaveBeenCalled();
   });
 
   it('maps artifact ownership mismatches to 404', async () => {

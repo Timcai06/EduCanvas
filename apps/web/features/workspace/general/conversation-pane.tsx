@@ -16,6 +16,7 @@ import { GENERAL_MENU_ACTIONS } from './general-chat-config';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { LiveVoiceContextSnapshot } from '@/features/voice/live-voice-context';
 import type { LiveVoiceExitPayload } from '@/features/voice/live-voice-bring-back';
+import type { OutputPreference } from '@educanvas/agent-core';
 
 /**
  * 消息与 Composer（W02）。
@@ -39,6 +40,7 @@ export interface ConversationPaneProps {
   generation: GenerationState | null;
   revisingOpenArtifact: boolean;
   composerTools: readonly ComposerToolChip[];
+  outputPreference: OutputPreference;
   liveAssets: readonly AssetItem[];
   composerDockRef: RefObject<HTMLDivElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -48,6 +50,7 @@ export interface ConversationPaneProps {
   onStop: () => void;
   onMenuAction: (action: PlusMenuActionId) => void;
   onToolAction: () => void;
+  onOutputPreferenceChange: (preference: OutputPreference) => void;
   onRetry: (messageId: string) => void;
   onPreviewHtml: (source: string) => void;
   onOpenArtifact: (artifactId: string) => void;
@@ -71,6 +74,7 @@ export function ConversationPane({
   generation,
   revisingOpenArtifact,
   composerTools,
+  outputPreference,
   liveAssets,
   composerDockRef,
   scrollRef,
@@ -80,6 +84,7 @@ export function ConversationPane({
   onStop,
   onMenuAction,
   onToolAction,
+  onOutputPreferenceChange,
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
@@ -179,6 +184,8 @@ export function ConversationPane({
     availableMenuActions: GENERAL_MENU_ACTIONS,
     toolChips: composerTools,
     onToolAction,
+    outputPreference,
+    onOutputPreferenceChange,
   };
 
   if (isLanding) {

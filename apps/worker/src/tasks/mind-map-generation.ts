@@ -1,15 +1,17 @@
 import type { StructuredModelGateway } from '@educanvas/agent-core';
 import {
   mindMapContentSchema,
-  type MindMapContent,
+  mindMapContentV2Schema,
+  type MindMapContentV1,
+  type MindMapContentV2,
 } from '@educanvas/canvas-protocol';
 import {
   buildConversationOutline,
   type OutlineSourceMessage,
 } from './mind-map-outline.js';
 
-export const MIND_MAP_PROMPT_VERSION = 'artifact-mind-map-v1';
-export const MIND_MAP_REVISION_PROMPT_VERSION = 'artifact-mind-map-revision-v1';
+export const MIND_MAP_PROMPT_VERSION = 'artifact-mind-map-v2';
+export const MIND_MAP_REVISION_PROMPT_VERSION = 'artifact-mind-map-revision-v2';
 
 /** 溯源标识写入 artifact_versions.generated_by,区分规则大纲与模型生成。 */
 export const RULE_GENERATOR = 'rule:outline-v1';
@@ -38,6 +40,60 @@ const buildTranscript = (messages: readonly OutlineSourceMessage[]): string => {
   return transcript;
 };
 
+const toV2FromV1 = (content: MindMapContentV1): MindMapContentV2 => {
+  const nodes: Array<{ id: string; label: string }> = [];
+  const edges: Array<{ from: string; to: string }> = [];
+
+  const walk = (
+    node: MindMapContentV1['root'],
+    parentId?: string,
+    depth = 1,
+  ) => {
+    nodes.push({ id: node.id, label: node.label });
+    if (parentId) {
+      edges.push({ from: parentId, to: node.id });
+    }
+    for (const child of node.children ?? []) {
+      walk(child, node.id, depth + 1);
+    }
+  };
+  walk(content.root);
+
+  return {
+    contentVersion: 2,
+    rootNodeId: content.root.id,
+    nodes,
+    edges,
+  };
+};
+
+const appendRevisionNodeV2 = (
+  content: MindMapContentV2,
+  label: string,
+): MindMapContentV2 => {
+  const nodeIds = new Set(content.nodes.map((node) => node.id));
+  let revisionIndex = 1;
+  let revisionNodeId = `revision-${revisionIndex}`;
+  while (nodeIds.has(revisionNodeId)) {
+    revisionIndex += 1;
+    revisionNodeId = `revision-${revisionIndex}`;
+  }
+
+  return {
+    contentVersion: 2,
+    rootNodeId: content.rootNodeId,
+    nodes: [...content.nodes, { id: revisionNodeId, label }],
+    edges: [
+      ...content.edges,
+      {
+        from: content.rootNodeId,
+        to: revisionNodeId,
+        semanticRole: 'hierarchy',
+      },
+    ],
+  };
+};
+
 /**
  * 思维导图内容生成策略:
  * - 模型网关**未配置**:确定性规则大纲(开发/E2E 的诚实默认,不伪装 AI);
@@ -52,29 +108,26 @@ export async function generateMindMapContent(input: {
   traceId: string;
   operationId: string;
   revision?: ArtifactRevisionContext;
-}): Promise<{ content: MindMapContent; generatedBy: string }> {
+}): Promise<{ content: MindMapContentV2; generatedBy: string }> {
   if (!input.gateway) {
     if (input.revision) {
       const base = mindMapContentSchema.parse(input.revision.baseContent);
-      const children = [...(base.root.children ?? [])];
-      if (children.length >= 12) children.pop();
-      const usedIds = new Set(children.map((child) => child.id));
-      let revisionIndex = 1;
-      while (usedIds.has(`revision-${revisionIndex}`)) revisionIndex += 1;
-      children.push({
-        id: `revision-${revisionIndex}`,
-        label: `修改：${input.revision.instruction.slice(0, 110)}`,
-      });
+      const baseV2 =
+        base.contentVersion === 2
+          ? mindMapContentV2Schema.parse(base)
+          : toV2FromV1(base as MindMapContentV1);
       return {
-        content: mindMapContentSchema.parse({
-          ...base,
-          root: { ...base.root, children },
-        }),
+        content: appendRevisionNodeV2(
+          baseV2,
+          `修改：${input.revision.instruction.slice(0, 110)}`,
+        ),
         generatedBy: RULE_REVISION_GENERATOR,
       };
     }
+
+    const outline = buildConversationOutline(input.title, input.messages);
     return {
-      content: buildConversationOutline(input.title, input.messages),
+      content: toV2FromV1(outline),
       generatedBy: RULE_GENERATOR,
     };
   }
@@ -82,7 +135,7 @@ export async function generateMindMapContent(input: {
   const result = await input.gateway.generateStructured({
     taskAlias: 'artifact.generate',
     modelAlias: 'structured',
-    schema: mindMapContentSchema,
+    schema: mindMapContentV2Schema,
     promptVersion: input.revision
       ? MIND_MAP_REVISION_PROMPT_VERSION
       : MIND_MAP_PROMPT_VERSION,
@@ -97,7 +150,7 @@ export async function generateMindMapContent(input: {
             : '你是知识结构梳理助手。根据给定的对话记录,产出一份中文思维导图。',
           '要求:root.label 使用给定标题;一级分支概括对话中的主要话题(不是逐句照抄);',
           '每个分支的子节点提炼关键概念或结论;节点 label 简洁(≤40字);',
-          'id 使用小写字母数字与连字符;contentVersion 固定为 1;',
+          'id 使用小写字母数字与连字符;contentVersion 固定为 2;',
           '总节点数≤60,深度≤4;不要输出对话和修改要求中不存在的内容。',
           input.revision
             ? '保留未被要求改变的结构；不要只返回差异或解释。'
@@ -112,6 +165,7 @@ export async function generateMindMapContent(input: {
       },
     ],
   });
+
   return {
     content: result.output,
     generatedBy: input.revision ? MODEL_REVISION_GENERATOR : MODEL_GENERATOR,

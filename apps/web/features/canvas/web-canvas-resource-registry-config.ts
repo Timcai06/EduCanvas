@@ -162,6 +162,18 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       supportedActions: ['view', 'annotate', 'download', 'delete'],
     },
   },
+  {
+    rendererId: 'artifact.markdown-document',
+    manifest: {
+      manifestVersion: 1,
+      rendererId: 'artifact.markdown-document',
+      rendererVersion: 1,
+      representations: ['structured'],
+      trustTiers: ['tier1'],
+      runtimeKinds: ['none'],
+      supportedActions: ['view', 'edit', 'regenerate', 'download'],
+    },
+  },
 ];
 
 export type WebRendererComponentMap = Record<
