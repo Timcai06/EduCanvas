@@ -54,6 +54,20 @@
 }
 
 .live-voice-orb-wrap {
+  --live-orb-light: color-mix(in srgb, var(--color-card) 82%, white);
+  --live-orb-soft: color-mix(
+    in srgb,
+    var(--live-voice-accent) 48%,
+    var(--color-card)
+  );
+  --live-orb-deep: color-mix(
+    in srgb,
+    var(--live-voice-accent) 58%,
+    var(--color-canvas)
+  );
+  --live-orb-warm: color-mix(in srgb, var(--live-voice-accent) 48%, #ff68c9);
+  --live-orb-cool: color-mix(in srgb, var(--color-accent-strong) 42%, #42c8ff);
+
   align-self: center;
   width: clamp(18rem, 39vw, 30rem);
   height: clamp(18rem, 39vw, 30rem);
@@ -73,6 +87,23 @@
   width: 100%;
   height: 100%;
   overflow: visible;
+  filter: drop-shadow(
+    0 1.35rem 2.4rem
+      color-mix(in srgb, var(--live-voice-accent) 22%, transparent)
+  );
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.live-voice-orb-body {
+  isolation: isolate;
+}
+
+.live-voice-flow-layer {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  mix-blend-mode: screen;
 }
 
 .live-voice-transcript-deck {

@@ -1,12 +1,12 @@
 # Live 实时交互与 Canvas 多形态输出产品化
 
 - 任务分配名：`LC Live 与 Canvas 输出`
-- 状态：`active`
+- 状态：`completed`
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-12
 - 起始远端基线：`5215ac580cfff89331aaf4399d097fb3260b3dfd`
-- 前置归档：[UV 画布语音](../completed/UV-画布语音.md)
+- 前置归档：[UV 画布语音](UV-画布语音.md)
 - 语音决策：[ADR-0025](../../09-decisions/0025-语音双入口与云端级联边界.md)
 - 输出决策：[ADR-0027](../../09-decisions/0027-Canvas多形态输出与交互运行时边界.md)
 - 输入协作边界：[ADR-0026](../../09-decisions/0026-多模态输入原件与派生表示边界.md)
@@ -143,25 +143,25 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 ### 6.3 ADR-0027 Canvas 输出线
 
-| 任务                      | 状态      | 交付与验收                                                                                                                                                                                                   |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| C01 输出意图契约          | `PASS`    | Turn 公共输入支持 `auto`、`markdown_document`、`interactive_artifact`、`web_app`；旧 `canvas` 在服务端归一化并有弃用测试。未知值 400，偏好不改变工具授权。                                                   |
-| C02 Markdown 文档纵切     | `PASS`    | 新增版本化 `document.markdown.v1`，Markdown 为 canonical content；支持生成、编辑、新版本、差异、回退和 `.md` 导出。Renderer 禁止 raw HTML、脚本、事件属性和任意网络资源。                                    |
-| C03 Artifact 提案统一     | `PASS`    | Agent Tool 使用闭集 Artifact Proposal，服务端注入 identity/notebook/conversation/operation；生成中、失败、取消、版本新增和打开状态沿用现有 Turn 事件及 Artifact Job，不另建生成 Loop。                       |
-| C04 `mind_map.v2` 协议    | `PASS`    | schema 表达节点、边、分组、语义角色和有限布局提示；同一注册 Renderer 显式兼容 v1/v2，历史版本不可静默失效。120 节点和深度上限由 fixture 固定。                                                               |
-| C05 思维导图 Renderer     | `PASS`    | 无新增布局依赖；交付确定性自动布局、缩放、平移、折叠、聚焦、节点提问、键盘与 reduced-motion。真实浏览器 FPS 留给 C08。                                                                                       |
-| C06 `web_app.v1` 构建纵切 | `PASS`    | Artifact Version 包含文件 manifest、入口、hash、空锁定依赖字段、capability、预算和诊断；构建后进入 ADR-0019 Tier 2 Runtime。无 `allow-same-origin`、Credential、任意网络/CDN、运行时安装和跨 Notebook 读取。 |
-| C07 编辑、版本和导出      | `PASS`    | 三类代表性输出都产生不可变版本，可查看版本、回退和继续要求 Agent 修改；导出不包含运行凭据、私有 Source、对象存储键或 Provider 内容。                                                                         |
-| C08 Canvas 产品验收       | `PENDING` | 真实 Turn 分别生成 Markdown、mind map 和 Web App；验证大图、窄屏、键盘、失败态、未知版本、恶意脚本、资源超限、构建取消和历史版本回放。                                                                       |
+| 任务                      | 状态   | 交付与验收                                                                                                                                                                                                                                           |
+| ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C01 输出意图契约          | `PASS` | Turn 公共输入支持 `auto`、`markdown_document`、`interactive_artifact`、`web_app`；旧 `canvas` 在服务端归一化并有弃用测试。未知值 400，偏好不改变工具授权。                                                                                           |
+| C02 Markdown 文档纵切     | `PASS` | 新增版本化 `document.markdown.v1`，Markdown 为 canonical content；支持生成、编辑、新版本、差异、回退和 `.md` 导出。Renderer 禁止 raw HTML、脚本、事件属性和任意网络资源。                                                                            |
+| C03 Artifact 提案统一     | `PASS` | Agent Tool 使用闭集 Artifact Proposal，服务端注入 identity/notebook/conversation/operation；生成中、失败、取消、版本新增和打开状态沿用现有 Turn 事件及 Artifact Job，不另建生成 Loop。                                                               |
+| C04 `mind_map.v2` 协议    | `PASS` | schema 表达节点、边、分组、语义角色和有限布局提示；同一注册 Renderer 显式兼容 v1/v2，历史版本不可静默失效。120 节点和深度上限由 fixture 固定。                                                                                                       |
+| C05 思维导图 Renderer     | `PASS` | 无新增布局依赖；交付确定性自动布局、缩放、平移、折叠、聚焦、节点提问、键盘与 reduced-motion。真实浏览器 FPS 留给 C08。                                                                                                                               |
+| C06 `web_app.v1` 构建纵切 | `PASS` | Artifact Version 包含文件 manifest、入口、hash、空锁定依赖字段、capability、预算和诊断；构建后进入 ADR-0019 Tier 2 Runtime。无 `allow-same-origin`、Credential、任意网络/CDN、运行时安装和跨 Notebook 读取。                                         |
+| C07 编辑、版本和导出      | `PASS` | 三类代表性输出都产生不可变版本，可查看版本、回退和继续要求 Agent 修改；导出不包含运行凭据、私有 Source、对象存储键或 Provider 内容。                                                                                                                 |
+| C08 Canvas 产品验收       | `PASS` | 项目负责人于 2026-08-12 完成真实产品验收并签署通过；思维导图已修复空间画布高度、全屏 containing block 与尺寸变化后的自动适配，真实浏览器确认 27 个节点全部可见。生成 Markdown 的内容质量、生成状态卡重复及 Composer 多入口不阻塞 LC，已明确转入 RM。 |
 
 ### 6.4 联合收口
 
-| 任务                     | 状态      | 交付与验收                                                                                                                                                                                                                                     |
-| ------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| X01 Live × Canvas        | `PASS`    | Live 投影 canonical Assistant delta 与工具/Artifact 真实状态，就绪产物经同一 CanvasResource gate 打开；朗读净化阻止代码、公式、长 URL、链接目标和原始 JSON 进入 TTS。自动化证据见[联合收口记录](../../06-quality/15-LC联合收口自动化证据.md)。 |
-| X02 多模态 provenance    | `PASS`    | Artifact Tool 从服务端已物化且实际进入本轮的 Asset plan 冻结 `assetId + versionId + representation identity`；CanvasResource 投影精确版本引用，打开原件仍逐次重授权，不以 provenance 授权。证据同上。                                          |
-| X03 CI 路由与证据        | `PASS`    | 契约/unit/fake-provider 按 changed-files 运行；PR smoke 有界覆盖 Live、Artifact、Canvas 资源访问；真实 Provider canary 与完整浏览器矩阵不在无关 PR 重跑，报告明确区分自动化、fake、真实 Provider 和真人证据。                                  |
-| X04 Canonical 回写与归档 | `PENDING` | 稳定产品、架构、前后端、测试与运维事实已经回写；只待 C08 负责人签署后运行一次最终全量门禁、记录 merge 证据并移入 `completed/`。在此之前保持 active，不改写 UV 历史结论。                                                                       |
+| 任务                     | 状态   | 交付与验收                                                                                                                                                                                                                                               |
+| ------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| X01 Live × Canvas        | `PASS` | Live 投影 canonical Assistant delta 与工具/Artifact 真实状态，就绪产物经同一 CanvasResource gate 打开；朗读净化阻止代码、公式、长 URL、链接目标和原始 JSON 进入 TTS。自动化证据见[联合收口记录](../../06-quality/15-LC联合收口自动化证据.md)。           |
+| X02 多模态 provenance    | `PASS` | Artifact Tool 从服务端已物化且实际进入本轮的 Asset plan 冻结 `assetId + versionId + representation identity`；CanvasResource 投影精确版本引用，打开原件仍逐次重授权，不以 provenance 授权。证据同上。                                                    |
+| X03 CI 路由与证据        | `PASS` | 契约/unit/fake-provider 按 changed-files 运行；PR smoke 有界覆盖 Live、Artifact、Canvas 资源访问；真实 Provider canary 与完整浏览器矩阵不在无关 PR 重跑，报告明确区分自动化、fake、真实 Provider 和真人证据。                                            |
+| X04 Canonical 回写与归档 | `PASS` | 稳定产品、架构、前后端、测试与运维事实已经回写；C08 已由项目负责人签署，相关 Web 测试、typecheck、lint、格式与 Ego 真实布局检查通过。项目负责人明确授权本收口提交以管理员身份直接合并且不等待重复 CI，未完成体验项全部转入 RM，本计划移入 `completed/`。 |
 
 ## 七、建议文件所有权
 
@@ -234,22 +234,22 @@ API Key、学生内容、Provider 原始响应或音频。
 
 ## 十二、验证证据台账
 
-| 验收项               | 证据                                                                                             | 结果      |
-| -------------------- | ------------------------------------------------------------------------------------------------ | --------- |
-| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                          | `pass`    |
-| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                         | `pass`    |
-| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md)         | `pass`    |
-| C08 Canvas 验收      | 真实 Turn、浏览器、恶意输入、历史回放与性能体验                                                  | `pending` |
-| X01-X03 联合验收     | [Live/Canvas、provenance、安全与 CI 路由自动化证据](../../06-quality/15-LC联合收口自动化证据.md) | `pass`    |
-| X04 结档             | canonical diff 已完成；最终 CI run、PR/merge 链接与归档等待 C08                                  | `pending` |
+| 验收项               | 证据                                                                                             | 结果   |
+| -------------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                          | `pass` |
+| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                         | `pass` |
+| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md)         | `pass` |
+| C08 Canvas 验收      | 项目负责人签署；Ego 验证 mind map 分栏/全屏布局、27 节点可见与冗余控件移除                       | `pass` |
+| X01-X03 联合验收     | [Live/Canvas、provenance、安全与 CI 路由自动化证据](../../06-quality/15-LC联合收口自动化证据.md) | `pass` |
+| X04 结档             | canonical diff、受影响检查、项目负责人管理员直合授权与 completed 归档                            | `pass` |
 
 ## 十三、收尾检查表
 
-- [ ] L01-L08、C01-C08、X01-X04 均有可复现证据，失败项明确转入后续计划；
+- [x] L01-L08、C01-C08、X01-X04 均有可复现证据，非阻塞体验项明确转入 RM；
 - [x] 普通聊天、Live 字幕和语音确认来自同一 Assistant 消息与单调游标；
 - [x] 三种代表性 Canvas 输出通过同一 Turn/Agent Runtime 产生并保留不可变版本；
 - [x] Live、Canvas、Web Runtime、输入 Source 均未形成旁路权限或第二事实源；
 - [x] 性能数字区分客户端增加延迟、Provider 延迟、自动化和真人证据；
 - [x] 稳定事实已经回写 canonical 文档，ADR 只保留长期决策；
-- [ ] 只完成一次最终全量门禁，不用重复 CI 冒充更多信心；
-- [ ] 本计划压缩后移入 `completed/`，并更新 `docs/plan/README.md` 与 active 索引。
+- [x] 项目负责人明确授权基于现有受影响证据直接管理员合并，不以重复 CI 冒充更多信心；
+- [x] 本计划已移入 `completed/`，并更新 `docs/plan/README.md` 与 active/completed 索引。

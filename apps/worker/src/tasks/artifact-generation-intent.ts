@@ -1,4 +1,32 @@
+import {
+  assetRepresentationKindSchema,
+  representationIdentitySchema,
+  representationQualitySchema,
+} from '@educanvas/agent-core';
 import { z } from 'zod';
+
+const artifactSourceRepresentationSchema = representationIdentitySchema
+  .extend({
+    kind: assetRepresentationKindSchema,
+    quality: representationQualitySchema,
+  })
+  .strict();
+
+const artifactGenerationProvenanceSchema = z
+  .object({
+    sources: z
+      .array(
+        z
+          .object({
+            assetId: z.uuid(),
+            versionId: z.uuid(),
+            representation: artifactSourceRepresentationSchema.nullable(),
+          })
+          .strict(),
+      )
+      .max(64),
+  })
+  .strict();
 
 const revisionJobParamsSchema = z
   .object({
@@ -18,6 +46,8 @@ const initialGenerationJobParamsSchema = z
         instruction: z.string().trim().min(1).max(2_000),
       })
       .strict(),
+    // 新任务冻结实际物化的资源版本；optional 保留旧队列任务的回放兼容性。
+    provenance: artifactGenerationProvenanceSchema.optional(),
   })
   .strict();
 

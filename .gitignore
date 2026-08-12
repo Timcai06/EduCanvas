@@ -19,6 +19,8 @@ coverage/
 .pnpm-store/
 /output/playwright/
 /output/provider-canary/
+/.playwright-mcp/
+/current-profile.png
 
 # Python
 __pycache__/

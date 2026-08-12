@@ -14,6 +14,7 @@ const config: EnabledModelGatewayConfiguration = {
   modelIds: { primary: 'model-primary', structured: 'model-structured' },
   timeoutMs: 5_000,
   maxOutputTokens: 2_000,
+  structuredMaxOutputTokens: 8_000,
   visionEnabled: false,
   visionProvider: null,
   disableThinking: false,
@@ -80,12 +81,14 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
       model: string;
       stream: boolean;
       response_format: { type: string };
+      max_tokens: number;
       thinking?: { type: string };
       messages: { role: string; content: string }[];
     };
     expect(parsed.model).toBe('model-structured');
     expect(parsed.stream).toBe(false);
     expect(parsed.response_format.type).toBe('json_object');
+    expect(parsed.max_tokens).toBe(8_000);
     expect(parsed.thinking).toBeUndefined();
     expect(parsed.messages.at(-1)?.content).toContain('JSON Schema');
   });
@@ -116,7 +119,7 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
     expect(parsed.thinking).toEqual({ type: 'disabled' });
   });
 
-  it('内容不过调用方 Schema 时以 invalid_response 失败,不静默修复', async () => {
+  it('内容不过调用方 Schema 时以可重试 invalid_response 失败,不静默修复', async () => {
     const gateway = new OpenAICompatibleStructuredModelGateway(config, {
       fetchImpl: fetchStub(() =>
         Response.json({
@@ -127,7 +130,7 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
       ),
     });
     await expect(gateway.generateStructured(request)).rejects.toMatchObject({
-      normalized: { code: 'invalid_response', retryable: false },
+      normalized: { code: 'invalid_response', retryable: true },
     });
   });
 
@@ -155,7 +158,7 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
     const rejected = gateway.generateStructured(request);
     await expect(rejected).rejects.toBeInstanceOf(ModelGatewayInvocationError);
     await expect(rejected).rejects.toMatchObject({
-      normalized: { code: 'output_limit' },
+      normalized: { code: 'output_limit', retryable: false },
     });
   });
 });

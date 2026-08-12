@@ -68,9 +68,35 @@ describe('parseModelGatewayConfiguration', () => {
         modelIds: { primary: 'explicitly-configured-model' },
         timeoutMs: 30_000,
         maxOutputTokens: 2_048,
+        structuredMaxOutputTokens: 8_192,
       });
     },
   );
+
+  it('结构化输出预算独立于普通 Turn 且保持有界', () => {
+    expect(
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({
+          MODEL_GATEWAY_MAX_OUTPUT_TOKENS: '1024',
+          MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS: '12000',
+        }),
+      ),
+    ).toMatchObject({
+      maxOutputTokens: 1_024,
+      structuredMaxOutputTokens: 12_000,
+    });
+    expect(() =>
+      parseModelGatewayConfiguration(
+        deepSeekEnvironment({
+          MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS: '65537',
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ModelGatewayConfigurationError>>({
+        code: 'INVALID_MAX_OUTPUT_TOKENS',
+      }),
+    );
+  });
 
   it('Turn Adapter默认native且只接受显式ai-sdk候选', () => {
     expect(

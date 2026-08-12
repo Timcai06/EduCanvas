@@ -23,7 +23,7 @@
 - [O 删除队列](active/O-删除队列.md)；
 - [KM 知识记忆](active/KM-知识记忆.md)；
 - [G 产品发布闭环](active/G-产品发布闭环.md)。
-- [LC Live 与 Canvas 输出](active/LC-Live与Canvas输出产品化.md)。
+- [RM 统一资源工作台](active/RM-统一资源工作台.md)。
 
 [A 账号会话](completed/A-账号会话.md)、[P 学习档案](completed/P-学习档案.md)、
 [F 画布界面](completed/F-画布界面.md)和[R 运行时收敛](completed/R-运行时事实收敛.md)
@@ -32,6 +32,8 @@
 [UV 画布语音](completed/UV-画布语音.md)已完成归档。O 线完成 O03/O04 后再由 Codex
 联合审计。UV 的真人麦克风、课堂噪声、十分钟长流和受控并发作为非阻塞后续保留，
 不得把自动化证据改称真人验收。
+[LC Live 与 Canvas 输出](completed/LC-Live与Canvas输出产品化.md)已完成真实产品验收并归档；
+生成 Markdown 质量、产物状态卡重复和多输入口径收敛已转入 RM。
 
 [自适应学习基线](completed/2026-07-自适应学习基线.md) 已完成并归档。
 [账号、历史记录删除与用户资料](completed/2026-07-账号、历史记录删除与用户资料.md)
