@@ -307,7 +307,9 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
 
     expect(response.status).toBe(404);
     expect(body).toContain('artifact_not_found');
-    expect(body).not.toMatch(/membership revoked|objectKey|private\/key|stack/i);
+    expect(body).not.toMatch(
+      /membership revoked|objectKey|private\/key|stack/i,
+    );
   });
 
   it('returns 404 for archived artifacts', async () => {
