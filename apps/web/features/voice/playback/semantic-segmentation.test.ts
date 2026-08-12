@@ -10,7 +10,7 @@ function defaults(
     segmentCount: 0,
     complete: false,
     nowMs: 1000,
-    lastCommittedAtMs: 0,
+    waitingSinceMs: 0,
     ...overrides,
   };
 }
@@ -39,6 +39,13 @@ describe('takeSemanticSpeechSegments', () => {
     expect(result.segments.length).toBeGreaterThanOrEqual(1);
     expect(result.segments[0]!.text).toBe('Mr. Smith went to Washington.');
     expect(result.segments[0]!.endCursor).toBe(29);
+  });
+
+  it('英文首字母缩写不误切', () => {
+    const result = takeSemanticSpeechSegments(
+      defaults({ text: 'The U.S. team arrived. More follows.' }),
+    );
+    expect(result.segments[0]!.text).toBe('The U.S. team arrived.');
   });
 
   it('小数不误切', () => {
@@ -88,7 +95,7 @@ describe('takeSemanticSpeechSegments', () => {
       defaults({
         text: '这是一个很长的句子中间没有标点符号但是有一些内容可以释放',
         nowMs: 2000,
-        lastCommittedAtMs: 0,
+        waitingSinceMs: 0,
       }),
     );
     expect(result.segments.length).toBeGreaterThanOrEqual(1);
@@ -101,7 +108,29 @@ describe('takeSemanticSpeechSegments', () => {
         text: '短',
         complete: false,
         nowMs: 100,
-        lastCommittedAtMs: 0,
+        waitingSinceMs: 0,
+      }),
+    );
+    expect(result.segments).toHaveLength(0);
+    expect(result.consumedCharacters).toBe(0);
+    expect(result.retryAfterMs).toBe(300);
+  });
+
+  it('等待预算到期后仍不释放低于最小长度的碎片', () => {
+    const result = takeSemanticSpeechSegments(
+      defaults({ text: '三个', nowMs: 500, waitingSinceMs: 0 }),
+    );
+    expect(result.segments).toHaveLength(0);
+    expect(result.consumedCharacters).toBe(0);
+    expect(result.retryAfterMs).toBeNull();
+  });
+
+  it('等待预算到期后不从英文单词中间切开', () => {
+    const result = takeSemanticSpeechSegments(
+      defaults({
+        text: 'Supercalifragilisticexpialidociouscontinuation',
+        nowMs: 500,
+        waitingSinceMs: 0,
       }),
     );
     expect(result.segments).toHaveLength(0);
@@ -153,6 +182,14 @@ describe('takeSemanticSpeechSegments', () => {
     expect(allText).not.toContain('npm install');
   });
 
+  it('未闭合inline code在流式阶段保持等待且不朗读', () => {
+    const result = takeSemanticSpeechSegments(
+      defaults({ text: '使用`npm install', nowMs: 500, waitingSinceMs: 0 }),
+    );
+    expect(result.segments).toHaveLength(0);
+    expect(result.consumedCharacters).toBe(0);
+  });
+
   it('公式不朗读', () => {
     const result = takeSemanticSpeechSegments(
       defaults({
@@ -185,6 +222,7 @@ describe('takeSemanticSpeechSegments', () => {
     expect(result.segments.length).toBeGreaterThanOrEqual(1);
     const allText = result.segments.map((s) => s.text).join('');
     expect(allText).not.toContain('https://example.com');
+    expect(allText).toContain('了解更多。');
   });
 
   it('中英文数字混排不在单词或数字内部断开', () => {
@@ -226,7 +264,7 @@ describe('takeSemanticSpeechSegments', () => {
     const input = defaults({
       text: '这是测试句子。第二句。',
       nowMs: 5000,
-      lastCommittedAtMs: 4000,
+      waitingSinceMs: 4000,
     });
     const result1 = takeSemanticSpeechSegments(input);
     const result2 = takeSemanticSpeechSegments(input);
