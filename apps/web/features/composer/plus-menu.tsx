@@ -6,13 +6,7 @@ import {
   FileArrowUp,
   ImageSquare,
   Plus,
-  PresentationChart,
-  Cards,
-  Slideshow,
-  TreeStructure,
-  Headphones,
   LinkSimple,
-  NotePencil,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -24,11 +18,13 @@ gsap.registerPlugin(useGSAP);
 export type PlusMenuActionId =
   | 'upload_file'
   | 'upload_image'
+  | 'pick_course_material'
+  | 'add_link'
+  // Kept as compatibility input types for old persisted entry state. They are
+  // intentionally absent from the menu and cannot be initiated here.
   | 'create_mind_map'
   | 'create_flashcards'
   | 'create_audio_overview'
-  | 'pick_course_material'
-  | 'add_link'
   | 'create_demo'
   | 'create_slides'
   | 'create_quiz'
@@ -46,7 +42,7 @@ interface PlusMenuItem {
  * Gemini 式紧凑菜单:单列图标行,只渲染真实接通的能力。
  * 未接入的动作不再以 disabled 行占位——不展示就是最诚实的"未开放"。
  */
-const menuItems: readonly PlusMenuItem[] = [
+export const PLUS_MENU_ITEMS: readonly PlusMenuItem[] = [
   { id: 'upload_file', icon: FileArrowUp, label: '上传文件', available: true },
   {
     id: 'upload_image',
@@ -60,42 +56,6 @@ const menuItems: readonly PlusMenuItem[] = [
     icon: BookOpen,
     label: '选择课程资料',
     available: false,
-  },
-  {
-    id: 'create_mind_map',
-    icon: TreeStructure,
-    label: '生成思维导图',
-    available: true,
-  },
-  {
-    id: 'create_slides',
-    icon: Slideshow,
-    label: '生成 Slides',
-    available: true,
-  },
-  {
-    id: 'create_flashcards',
-    icon: Cards,
-    label: '生成闪卡',
-    available: true,
-  },
-  {
-    id: 'create_audio_overview',
-    icon: Headphones,
-    label: '生成音频概览',
-    available: true,
-  },
-  {
-    id: 'create_note',
-    icon: NotePencil,
-    label: '生成笔记',
-    available: true,
-  },
-  {
-    id: 'create_demo',
-    icon: PresentationChart,
-    label: '打开互动演示',
-    available: true,
   },
 ];
 
@@ -115,7 +75,7 @@ export function PlusMenu({
 }) {
   const items = useMemo(
     () =>
-      menuItems.filter(
+      PLUS_MENU_ITEMS.filter(
         (item) =>
           item.available &&
           (availableActions === undefined ||
@@ -223,7 +183,7 @@ export function PlusMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label="添加上下文或创建内容"
+        aria-label="添加来源"
         onClick={() => {
           setActiveIndex(0);
           setOpen((value) => !value);
@@ -237,7 +197,7 @@ export function PlusMenu({
           data-plus-menu
           id={menuId}
           role="menu"
-          aria-label="添加上下文或创建内容"
+          aria-label="添加来源"
           onKeyDown={handleMenuKeyDown}
           data-placement={placement}
           className={`absolute left-0 z-50 max-h-[calc(50dvh-1rem)] w-56 overscroll-contain overflow-y-auto rounded-2xl border border-line bg-card py-1.5 shadow-[var(--shadow-sheet)] ${

@@ -14,9 +14,4 @@ export const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
   'add_link',
-  'create_mind_map',
-  'create_slides',
-  'create_flashcards',
-  'create_audio_overview',
-  'create_note',
 ];

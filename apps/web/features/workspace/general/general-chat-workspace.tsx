@@ -136,10 +136,10 @@ export function GeneralChatWorkspace({
           defaultTitle={ctrl.artifactFlow.generation.title}
           sourceCount={ctrl.selectedAudioSources.length}
           onConfirm={(title) => {
-            const openWhenReady = ctrl.canvasSelected;
+            const openWhenReady = ctrl.outputPreference !== 'auto';
             const kind = ctrl.artifactFlow.generation?.kind;
             if (!kind || !isCreatableArtifactKind(kind)) return;
-            ctrl.setCanvasSelected(false);
+            ctrl.setOutputPreference('auto');
             void ctrl.artifactFlow.confirm(
               kind,
               title,

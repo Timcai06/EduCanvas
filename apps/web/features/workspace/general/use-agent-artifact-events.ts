@@ -32,20 +32,15 @@ function isAgentArtifactKind(kind: string): kind is ObservableArtifactKind {
  * SSE 只负责提示已有任务；轮询仍是断线可恢复的事实读取路径。
  */
 export function useAgentArtifactEvents(input: {
-  canvasSelected: boolean;
-  setCanvasSelected: Dispatch<SetStateAction<boolean>>;
+  shouldOpenWhenReady: () => boolean;
   setStudioItems: Dispatch<SetStateAction<readonly ArtifactSummary[]>>;
   observeProposedArtifact: (
     artifact: ProposedArtifact,
     options?: ConfirmArtifactOptions,
   ) => Promise<void>;
 }) {
-  const {
-    canvasSelected,
-    setCanvasSelected,
-    setStudioItems,
-    observeProposedArtifact,
-  } = input;
+  const { shouldOpenWhenReady, setStudioItems, observeProposedArtifact } =
+    input;
   return useCallback(
     (
       event: Extract<
@@ -60,18 +55,12 @@ export function useAgentArtifactEvents(input: {
           kind: event.kind,
           title: event.title,
         },
-        { openWhenReady: canvasSelected },
+        { openWhenReady: shouldOpenWhenReady() },
       );
       void fetchNotebookArtifacts()
         .then(setStudioItems)
         .catch(() => undefined);
-      if (canvasSelected) setCanvasSelected(false);
     },
-    [
-      canvasSelected,
-      observeProposedArtifact,
-      setCanvasSelected,
-      setStudioItems,
-    ],
+    [observeProposedArtifact, setStudioItems, shouldOpenWhenReady],
   );
 }
