@@ -33,6 +33,17 @@ async function settleTurn(
     content,
     failureCode,
     operationTerminalWriter: 'gateway',
+    gatewayTerminalIntent:
+      status === 'completed'
+        ? {
+            status: 'completed',
+            messageId: input.scope.assistantMessageId,
+          }
+        : {
+            status: 'failed',
+            code: 'RUNTIME_FAILED',
+            retryable: false,
+          },
   });
 }
 

@@ -108,6 +108,10 @@ describe('Gateway approval到continuation队列的原子边界', () => {
               status: 'completed',
               content: '已读取受控学习资料。',
               operationTerminalWriter: 'gateway',
+              gatewayTerminalIntent: {
+                status: 'completed',
+                messageId: input.scope.assistantMessageId,
+              },
             });
             return {
               status: 'completed',

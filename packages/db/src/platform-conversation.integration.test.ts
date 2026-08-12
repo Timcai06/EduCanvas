@@ -792,6 +792,26 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
           new Date(now.getTime() + 5_000),
         ),
       ).toEqual(terminalEvents[0]);
+      // Terminal append 已提交但响应丢失：新进程的所有控制面读取/取消仍只观察唯一终态。
+      const ackLostRestart = new DrizzleGatewayOperationStore(getDatabase());
+      await expect(
+        ackLostRestart.describe(operation.operationId, owner.userId),
+      ).resolves.toMatchObject({ status: terminal.status });
+      await expect(ackLostRestart.listRecent(owner.userId)).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operationId: operation.operationId,
+            status: terminal.status,
+          }),
+        ]),
+      );
+      await expect(
+        ackLostRestart.requestCancellation({
+          operationId: operation.operationId,
+          actorUserId: owner.userId,
+          now: new Date(now.getTime() + 5_500),
+        }),
+      ).resolves.toEqual({ recorded: false, continuation: 'none' });
       expect(
         (
           await restartedStore.listEvents(

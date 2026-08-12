@@ -28,6 +28,7 @@ const ids = {
   actorId: 'local:owner',
   agentId: '30000000-0000-4000-8000-000000000001',
   conversationId: '40000000-0000-4000-8000-000000000001',
+  assistantMessageId: '70000000-0000-4000-8000-000000000001',
   resumeRef: `mcp.intent:${'a'.repeat(64)}`,
 };
 
@@ -99,6 +100,7 @@ function resumeInput() {
       agentId: ids.agentId,
       notebookId: '60000000-0000-4000-8000-000000000001',
       conversationId: ids.conversationId,
+      assistantMessageId: ids.assistantMessageId,
       profileId: 'general.default',
       traceId: 'trace:mcp',
       capability: registration.capability,

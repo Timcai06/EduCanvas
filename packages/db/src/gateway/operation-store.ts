@@ -330,6 +330,13 @@ export class DrizzleGatewayOperationStore {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
       );
+      if (this.terminalReconciliationMode === 'enabled') {
+        await reconcileGatewayTerminalWithinTransaction(
+          transaction,
+          input.operationId,
+          now,
+        );
+      }
       const [operation] = await transaction
         .select({
           status: agentOperations.status,
@@ -339,13 +346,17 @@ export class DrizzleGatewayOperationStore {
         .from(agentOperations)
         .where(eq(agentOperations.id, input.operationId))
         .limit(1);
-      if (!operation?.actorUserId || operation.status !== 'running') {
+      if (
+        !operation?.actorUserId ||
+        (operation.status !== 'running' &&
+          operation.status !== input.result.status)
+      ) {
         throw new GatewayPersistenceError(
           'invalid_event_sequence',
           'Operation is no longer running for continuation settlement',
         );
       }
-      if (operation.cancelRequestedAt) {
+      if (operation.status === 'running' && operation.cancelRequestedAt) {
         const cancelled = await cancelContinuationWithinTransaction(
           transaction,
           {
