@@ -99,7 +99,7 @@ async function createPdfStructuredFixture(page: Page) {
 }
 
 async function ensureGeneralNotebook(page: Page) {
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
   await page
     .getByRole('dialog', { name: '添加文档来源' })
