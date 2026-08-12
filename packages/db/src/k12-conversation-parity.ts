@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, inArray, or, sql } from 'drizzle-orm';
-import type { DatabaseExecutor } from './internal/database-types';
+import { getDb } from './client';
+import type { Database, DatabaseExecutor } from './internal/database-types';
 import { isUuid } from './internal/identifiers';
 import {
   mapK12ConversationRole,
@@ -31,8 +32,15 @@ export interface ParityAuditResult {
   dualWrittenCount: number;
   missingInConversation: number;
   mismatchedInConversation: number;
-  /** 确定性哈希不可逆，未引入显式映射前无法诚实反查孤立副本。 */
+  /** @deprecated 使用 orphanDetection；保留 null 以免消费者把未知误读为 0。 */
   orphanedConversationMessages: null;
+  orphanDetection: {
+    status: 'unavailable';
+    count: null;
+    reason: 'k12_projection_provenance_unavailable';
+  };
+  /** 阶段一缺少孤立副本来源标记，因此即使本页零差异也不能宣称具备切读资格。 */
+  readCutoverEligible: false;
   nextCursor: K12ParityAuditCursor | null;
 }
 
@@ -162,6 +170,12 @@ export async function auditK12Parity(
     missingInConversation: pageRows.length - dualWrittenCount,
     mismatchedInConversation,
     orphanedConversationMessages: null,
+    orphanDetection: {
+      status: 'unavailable',
+      count: null,
+      reason: 'k12_projection_provenance_unavailable',
+    },
+    readCutoverEligible: false,
     nextCursor:
       hasNext && last
         ? {
@@ -170,4 +184,17 @@ export async function auditK12Parity(
           }
         : null,
   };
+}
+
+/** Worker/operator 边界使用的命名仓储；结果仅含计数、能力状态与稳定游标。 */
+export class DrizzleK12ConversationParityRepository {
+  constructor(private readonly providedDatabase?: Database) {}
+
+  auditPage(input: {
+    conversationId: string;
+    after?: K12ParityAuditCursor | null;
+    limit?: number;
+  }): Promise<ParityAuditResult> {
+    return auditK12Parity(this.providedDatabase ?? getDb(), input);
+  }
 }

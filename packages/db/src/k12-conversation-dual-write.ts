@@ -18,6 +18,11 @@
  * - **开关只控制 `begin`**（创建新副本）；`settle` 始终运行，不受开关影响
  * - **设计理由**：已经创建的副本必须跨部署切换继续收敛，避免平台副本永久留在 pending
  *
+ * `EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE` 只描述 CA08A 第一阶段：
+ * - `legacy`（默认）与 `observe` 都保持可见消息和教学运行态从 `chat_messages` 读取；
+ * - `observe` 只允许对账/观测，不授予 `conversation_messages` 生产读权威；
+ * - `platform` 与其他值必须拒绝，切读只能由后续独立阶段增加新枚举后执行。
+ *
  * ## 退出条件（R08）
  *
  * `chat_messages` 目前仍是 K12 运行权威，`conversation_messages` 是迁移中的长期平台事实。
@@ -86,6 +91,64 @@ interface K12SourceProjection {
   failureCode: string | null;
   createdAt: Date;
   completedAt: Date | null;
+}
+
+export const K12_CONVERSATION_AUTHORITY_STAGE_ENV =
+  'EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE';
+
+export type K12ConversationAuthorityStage = 'legacy' | 'observe';
+
+export interface K12ConversationAuthorityContract {
+  stage: K12ConversationAuthorityStage;
+  currentVisibleAuthority: 'chat_messages';
+  runtimeAuthority: 'chat_messages';
+  longTermTarget: 'conversation_messages';
+  productionReadSource: 'chat_messages';
+  rollback: Readonly<{
+    stage: 'legacy';
+    visibleAuthority: 'chat_messages';
+    runtimeAuthority: 'chat_messages';
+    dualWriteEnabled: false;
+  }>;
+}
+
+/** 配置错误不回显原值，避免把误填的Secret带入日志或HTTP错误。 */
+export class K12ConversationAuthorityConfigurationError extends Error {
+  readonly code = 'invalid_k12_conversation_authority_stage';
+
+  constructor() {
+    super('K12 conversation authority stage is invalid');
+    this.name = 'K12ConversationAuthorityConfigurationError';
+  }
+}
+
+const STAGE_ONE_ROLLBACK = Object.freeze({
+  stage: 'legacy' as const,
+  visibleAuthority: 'chat_messages' as const,
+  runtimeAuthority: 'chat_messages' as const,
+  dualWriteEnabled: false as const,
+});
+
+/**
+ * 冻结 CA08A 的读权威与回退契约。本函数只解析/报告状态，不参与任何消息查询；
+ * 因而 `observe` 不能暗中切换既有 Web、Gateway 或 K12 恢复读路径。
+ */
+export function resolveK12ConversationAuthorityContract(
+  env: NodeJS.ProcessEnv = process.env,
+): Readonly<K12ConversationAuthorityContract> {
+  const configured = env[K12_CONVERSATION_AUTHORITY_STAGE_ENV];
+  const stage = configured === undefined ? 'legacy' : configured;
+  if (stage !== 'legacy' && stage !== 'observe') {
+    throw new K12ConversationAuthorityConfigurationError();
+  }
+  return Object.freeze({
+    stage,
+    currentVisibleAuthority: 'chat_messages',
+    runtimeAuthority: 'chat_messages',
+    longTermTarget: 'conversation_messages',
+    productionReadSource: 'chat_messages',
+    rollback: STAGE_ONE_ROLLBACK,
+  });
 }
 
 /** 关闭默认；只有精确的 `true` 才允许为新 K12 消息创建平台副本。 */

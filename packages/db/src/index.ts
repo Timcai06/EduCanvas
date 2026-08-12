@@ -471,6 +471,7 @@ export {
 } from './k12-conversation-message-identity';
 export {
   auditK12Parity,
+  DrizzleK12ConversationParityRepository,
   type K12ParityAuditCursor,
   type ParityAuditResult,
 } from './k12-conversation-parity';

@@ -197,6 +197,12 @@ async function runPage(
       .onConflictDoNothing({ target: conversationMessages.id })
       .returning({ id: conversationMessages.id });
     insertedCount = inserted.length;
+    // A concurrent writer can win after the repeatable-read snapshot and make
+    // ON CONFLICT skip rows. Do not report a partially applied page: aborting
+    // the transaction preserves an operator-visible, retryable boundary.
+    if (insertedCount !== missing.length) {
+      throw new K12ConversationDualWriteInvariantError();
+    }
   }
   const last = pageRows.at(-1);
   return {

@@ -606,6 +606,14 @@ describeWithDatabase('K12 消息双写', () => {
       expect(result).toHaveProperty('missingInConversation');
       expect(result).toHaveProperty('mismatchedInConversation');
       expect(result).toHaveProperty('orphanedConversationMessages', null);
+      expect(result).toMatchObject({
+        orphanDetection: {
+          status: 'unavailable',
+          count: null,
+          reason: 'k12_projection_provenance_unavailable',
+        },
+        readCutoverEligible: false,
+      });
       expect(result).toHaveProperty('nextCursor');
 
       // 验证计数正确

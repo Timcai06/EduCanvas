@@ -325,6 +325,12 @@ function validateDashScopeLiveVoice() {
 
 const liveVoiceSummary = validateDashScopeLiveVoice();
 
+const k12AuthorityStage =
+  value('EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE') || 'legacy';
+if (!['legacy', 'observe'].includes(k12AuthorityStage)) {
+  fail('EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE is not valid');
+}
+
 /* 媒体能力状态（ADR-0021）：声明 override 必须配置组完整，否则只关该能力。 */
 const capabilityStates = {};
 for (const capability of ['SPEECH', 'TRANSCRIPTION', 'IMAGE', 'EMBEDDING']) {
@@ -375,5 +381,5 @@ const capabilitySummary = Object.entries(capabilityStates)
   .map(([capability, state]) => `${capability.toLowerCase()}=${state}`)
   .join(' ');
 console.log(
-  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}; ${liveVoiceSummary}`,
+  `[env-check] OK: ${envPath} loaded; database configured; model provider ${provider || 'disabled'}; capabilities ${capabilitySummary}; k12-authority=${k12AuthorityStage}; ${liveVoiceSummary}`,
 );
