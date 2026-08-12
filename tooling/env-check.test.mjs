@@ -50,7 +50,7 @@ after(async () => {
 });
 
 describe('env-check', () => {
-  it('只允许阶段一legacy或observe且不回显非法原值', async () => {
+  it('operator env gate只允许阶段一legacy或observe且不回显非法原值', async () => {
     for (const stage of ['legacy', 'observe']) {
       const result = await runEnvCheck(
         await writeEnv(

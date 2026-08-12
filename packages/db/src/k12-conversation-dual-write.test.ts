@@ -12,7 +12,7 @@ import {
 import { DrizzleK12ConversationBackfillRepository } from './k12-conversation-backfill-repository';
 
 describe('K12 消息双写', () => {
-  describe('CA08A authority与rollback契约', () => {
+  describe('CA08A operator/report authority与rollback契约', () => {
     it('未配置时默认legacy且可见消息/运行态都保持chat_messages权威', () => {
       expect(resolveK12ConversationAuthorityContract({})).toEqual({
         stage: 'legacy',
