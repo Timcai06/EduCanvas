@@ -131,10 +131,10 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     .toBeGreaterThanOrEqual(2);
   await emitVoicePartial(page, '停一下，改为比较两份资料');
   await expect(dialog.getByText('停一下，改为比较两份资料')).toBeVisible();
+  await emitVoiceFinal(page, '停一下，改为比较两份资料');
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechAborts)
     .toBeGreaterThanOrEqual(1);
-  await emitVoiceFinal(page, '停一下，改为比较两份资料');
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).cancelRequests)
