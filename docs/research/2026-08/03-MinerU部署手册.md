@@ -8,13 +8,13 @@
 
 ## 一、部署机环境（已实测，2026-08-11）
 
-| 项 | 实测值 | MinerU 要求 | 结论 |
-|----|--------|-------------|------|
-| GPU | NVIDIA RTX 2080 Ti，11GB（11264MiB） | hybrid-engine 需 8GB+ | ✓ |
-| CUDA / 驱动 | CUDA 13.2 / 驱动 595.84 | torch 2.6+ 兼容 | ✓ |
-| 内存 | 31GB | ≥16GB（推荐 32） | ✓ |
-| 磁盘 | 可用 558GB | ≥25GB | ✓ |
-| Python | **3.14.6**（conda base） | **`>=3.10,<3.14`** | ✗ **必须建 ≤3.13 环境** |
+| 项          | 实测值                               | MinerU 要求           | 结论                    |
+| ----------- | ------------------------------------ | --------------------- | ----------------------- |
+| GPU         | NVIDIA RTX 2080 Ti，11GB（11264MiB） | hybrid-engine 需 8GB+ | ✓                       |
+| CUDA / 驱动 | CUDA 13.2 / 驱动 595.84              | torch 2.6+ 兼容       | ✓                       |
+| 内存        | 31GB                                 | ≥16GB（推荐 32）      | ✓                       |
+| 磁盘        | 可用 558GB                           | ≥25GB                 | ✓                       |
+| Python      | **3.14.6**（conda base）             | **`>=3.10,<3.14`**    | ✗ **必须建 ≤3.13 环境** |
 
 > ⚠️ **最关键一条**：MinerU `pyproject.toml` 声明 `requires-python = ">=3.10,<3.14"`，系统默认 Python 3.14 **不受支持**。**不要**在 base 环境直接 `pip install mineru`，必须先建 conda 环境（下文用 3.11）。
 
@@ -66,22 +66,43 @@ mineru -p /path/to/your.pdf -o ~/mineru-output --api-url http://127.0.0.1:8000
 # 产出 ~/mineru-output/<文件名>/ 下：<名>.md + content_list_v2.json + images/
 ```
 
+## 二·五、结果 zip 布局（客户端契约，3.4.4 实测 + 源码确认）
+
+`GET /file/result` 返回的任务结果 zip 不是平铺的 `index.md + images/`，而是按
+`build_zip_arcname`（MinerU `cli/output_paths.py`）生成的嵌套布局，**客户端必须按此识别**：
+
+```
+<base>/<parse_dir>/<base>.md                     # 正文 Markdown（相对引用 images/）
+<base>/<parse_dir>/<base>_content_list.json      # 结构化辅助产物（客户端忽略）
+<base>/<parse_dir>/<base>_content_list_v2.json   # 同上（忽略）
+<base>/<parse_dir>/images/<sha>.jpg              # 图片（文件名是内容 SHA 前缀）
+```
+
+- `base` = 提交的原始文件名 stem（`syllabus.pdf` → `syllabus`），与 md 文件名一致
+- `parse_dir` 由 `build_parse_dir` 决定，随服务端后端与解析方式变化：
+  `office` / `vlm` / `hybrid_<method>` / `<method>` —— **不可硬编码，识别时当单段通配**
+- md 内图片用相对引用 `![](images/<sha>.jpg)`，落盘时保持 `images/` 前缀即可直接解析
+
+EduCanvas 客户端（`asset-processing`）的识别规则：恰好一个 `<base>/<parse_dir>/<base>.md`
+条目（三节单段路径、文件名 stem 与顶层一致），该前缀下 `images/` 平铺单层的白名单图片
+进派生存储，其余辅助产物忽略；不满足即判 `mineru_result_invalid` 走降级。
+
 ## 三、回滚 / 换源 / 排错
 
-| 情况 | 处理 |
-|------|------|
-| 模型下载卡住/失败 | 换源重试：`export MINERU_MODEL_SOURCE=huggingface` 再跑 `mineru-models-download`；或 `pip install -U huggingface_hub` 后重试 |
-| 装了 mineru 但 `import torch` 报 No module | 缺 extras：补 `pip install "mineru[pipeline,vlm]"`（见第二步） |
-| 第 3 步 CUDA=False | 按上面 index-url 重装 GPU 版 torch（这是最常见坑：pip 默认可能解析到 CPU torch） |
-| 服务起不来 / OOM | 确认已设 `MINERU_API_MAX_CONCURRENT_REQUESTS=1`；内存不足时缩 `--enable-vlm-preload`（去掉预载，首个任务慢一点但不 OOM） |
-| 服务启动但日志目录没生成 | 日志路径若写 `/var/log/`，普通用户无写权限会静默失败；改用 `~/mineru-api.log`（本手册步骤 5 已默认） |
-| 想停服务 | `kill` 掉 nohup 的进程；想固化常驻可改 systemd service（见下） |
-| 完整卸载 | `conda remove -n mineru --all` |
-| 转换报「缺 pipeline 依赖」/ `No module named 'six'` | 典型假象：真实根因是 `six` 未装（MinerU 内置 pytorchocr 依赖它但 pyproject 未声明）。`pip install six` 后重启服务即可；先跑 `python -c "import six"` 验证再排查其他 |
+| 情况                                                                       | 处理                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 模型下载卡住/失败                                                          | 换源重试：`export MINERU_MODEL_SOURCE=huggingface` 再跑 `mineru-models-download`；或 `pip install -U huggingface_hub` 后重试                                                                                                           |
+| 装了 mineru 但 `import torch` 报 No module                                 | 缺 extras：补 `pip install "mineru[pipeline,vlm]"`（见第二步）                                                                                                                                                                         |
+| 第 3 步 CUDA=False                                                         | 按上面 index-url 重装 GPU 版 torch（这是最常见坑：pip 默认可能解析到 CPU torch）                                                                                                                                                       |
+| 服务起不来 / OOM                                                           | 确认已设 `MINERU_API_MAX_CONCURRENT_REQUESTS=1`；内存不足时缩 `--enable-vlm-preload`（去掉预载，首个任务慢一点但不 OOM）                                                                                                               |
+| 服务启动但日志目录没生成                                                   | 日志路径若写 `/var/log/`，普通用户无写权限会静默失败；改用 `~/mineru-api.log`（本手册步骤 5 已默认）                                                                                                                                   |
+| 想停服务                                                                   | `kill` 掉 nohup 的进程；想固化常驻可改 systemd service（见下）                                                                                                                                                                         |
+| 完整卸载                                                                   | `conda remove -n mineru --all`                                                                                                                                                                                                         |
+| 转换报「缺 pipeline 依赖」/ `No module named 'six'`                        | 典型假象：真实根因是 `six` 未装（MinerU 内置 pytorchocr 依赖它但 pyproject 未声明）。`pip install six` 后重启服务即可；先跑 `python -c "import six"` 验证再排查其他                                                                    |
 | 任务提交成功但 failed：`RuntimeError: Failed to find C compiler`（triton） | 宿主缺 C 编译器（WSL/裸机都可能）：`sudo apt-get install -y gcc g++ python3.12-dev`。`Python.h` 必须靠 python3.12-dev；`cuda.h` 由 pip 的 nvidia-cuda-runtime 自带无需 sudo。不装 gcc 则每个任务必失败，与 `--enable-vlm-preload` 无关 |
-| 报 `no relationship of type officeDocument` | **非标准 docx**（转换/爬取工具生成，包结构缺 officeDocument 关系），与 MinerU 无关——用 `python -c "import docx; docx.Document('x.docx')"` 复现即可确认，直接换源文件 |
-| `.doc` 老格式（2003）不支持 | office 后端只认 `.docx/.pptx/.xlsx`，`.doc` 会报 `No supported documents found`；先经 LibreOffice/WPS 转 `.docx` 再喂 |
-| 并发限制重启后恢复默认 | `MINERU_API_MAX_CONCURRENT_REQUESTS` 是 shell 级 env，`export` 后重启终端即丢；要长期生效就固化进 systemd 或写入 `~/.bashrc` |
+| 报 `no relationship of type officeDocument`                                | **非标准 docx**（转换/爬取工具生成，包结构缺 officeDocument 关系），与 MinerU 无关——用 `python -c "import docx; docx.Document('x.docx')"` 复现即可确认，直接换源文件                                                                   |
+| `.doc` 老格式（2003）不支持                                                | office 后端只认 `.docx/.pptx/.xlsx`，`.doc` 会报 `No supported documents found`；先经 LibreOffice/WPS 转 `.docx` 再喂                                                                                                                  |
+| 并发限制重启后恢复默认                                                     | `MINERU_API_MAX_CONCURRENT_REQUESTS` 是 shell 级 env，`export` 后重启终端即丢；要长期生效就固化进 systemd 或写入 `~/.bashrc`                                                                                                           |
 
 ## 四、注意事项（安全/运维）
 
@@ -97,17 +118,18 @@ mineru -p /path/to/your.pdf -o ~/mineru-output --api-url http://127.0.0.1:8000
 - [x] `python -c "import torch; torch.cuda.is_available()"` 输出 True（实测：`CUDA: True | NVIDIA GeForce RTX 2080 Ti`）
 - [x] `mineru-models-download` 完成（模型路径写回 `~/mineru.json`）
 - [x] `curl :8000/health` 返回 200（实测：`status:healthy, version:3.4.4`）
-- [ ] `mineru -p 测试文档 -o 输出目录 --api-url :8000` 产出 md + content_list_v2.json（**待测**）
+- [x] 真实 PDF 提交→轮询→取结果 zip→解包→校验→解码 全链路（**2026-08-11 G2 canary 实测**：Layout Predict → VLM Predict → Processing 各 100%，产出 11664 字符中文 md + 1 张图片；验证方式 7 的 fake 服务单测链路上再补了真实布局集成用例）
 
 ## 六、部署实测记录（2026-08-11 逐步验证）
 
-| 阶段 | 命令/动作 | 实测结果 |
-|------|-----------|----------|
-| ① 装 torch | `pip install "mineru[pipeline,vlm]"` | torch-2.13.0 + CUDA 13 组件 + transformers-4.57.6 装好；⚠️ 仅 `pip install mineru` 不含 torch（extras 必装） |
-| ② CUDA 自检 | `python -c "import torch; ..."` | `CUDA: True \| NVIDIA GeForce RTX 2080 Ti` ✓ |
-| ③ 下载模型 | `mineru-models-download -s modelscope -m all` | pipeline 7 模型 → `~/.cache/modelscope/models/OpenDataLab--PDF-Extract-Kit-1.0/snapshots/master`（2.5G）；vlm → `~/.cache/modelscope/models/OpenDataLab--MinerU2.5-Pro-2605-1.2B/snapshots/master`（2.2G）；写回 `~/mineru.json` |
-| ④ 启动服务 | `nohup mineru-api --host 0.0.0.0 --port 8000 --enable-vlm-preload true` | 后台启动成功，日志 `~/mineru-api.log` |
-| ⑤ 健康检查 | `curl :8000/health` | HTTP 200：`{"status":"healthy","version":"3.4.4","protocol_version":2,"max_concurrent_requests":1,"task_retention_seconds":86400,...}` |
+| 阶段          | 命令/动作                                                               | 实测结果                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ① 装 torch    | `pip install "mineru[pipeline,vlm]"`                                    | torch-2.13.0 + CUDA 13 组件 + transformers-4.57.6 装好；⚠️ 仅 `pip install mineru` 不含 torch（extras 必装）                                                                                                                     |
+| ② CUDA 自检   | `python -c "import torch; ..."`                                         | `CUDA: True \| NVIDIA GeForce RTX 2080 Ti` ✓                                                                                                                                                                                     |
+| ③ 下载模型    | `mineru-models-download -s modelscope -m all`                           | pipeline 7 模型 → `~/.cache/modelscope/models/OpenDataLab--PDF-Extract-Kit-1.0/snapshots/master`（2.5G）；vlm → `~/.cache/modelscope/models/OpenDataLab--MinerU2.5-Pro-2605-1.2B/snapshots/master`（2.2G）；写回 `~/mineru.json` |
+| ④ 启动服务    | `nohup mineru-api --host 0.0.0.0 --port 8000 --enable-vlm-preload true` | 后台启动成功，日志 `~/mineru-api.log`                                                                                                                                                                                            |
+| ⑤ 健康检查    | `curl :8000/health`                                                     | HTTP 200：`{"status":"healthy","version":"3.4.4","protocol_version":2,"max_concurrent_requests":1,"task_retention_seconds":86400,...}`                                                                                           |
+| ⑥ 真 GPU 转换 | curl 提交真实 PDF → 轮询 → 取结果 zip → 解包/校验/解码（g2-canary.ts）  | 三段进度各 100%，zip 布局 = `<stem>/hybrid_auto/<stem>.md` + `images/<sha>.jpg`（与"二·五"一致）；md 中文内容正确、图片引用 `![](images/...)` 相对路径                                                                           |
 
 **mineru.json 配置解读**（`config_version: 1.3.2`）：
 
