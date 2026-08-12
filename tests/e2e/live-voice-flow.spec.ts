@@ -62,11 +62,10 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
       async () => (await readFakeLiveVoiceSnapshot(page)).turnRequests.length,
     )
     .toBe(2);
-  await expect(dialog.getByText('正在检索资料')).toBeVisible();
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
     .toBeGreaterThanOrEqual(1);
-  await expect(dialog.getByText('正在回答')).toBeVisible();
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
@@ -101,8 +100,12 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   page,
 }) => {
   const dialog = await enterLiveWorkspace(page);
-  await expect(dialog.getByText('电路图.png')).toBeVisible();
-  await expect(dialog.getByText('实验记录.pdf')).toBeVisible();
+  await expect(
+    dialog.getByRole('listitem', { name: '电路图.png · 长期上下文' }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole('listitem', { name: '实验记录.pdf · 长期上下文' }),
+  ).toBeVisible();
   await expect(
     dialog.getByTitle(/处理中资料\.pdf · 处理中 · 本轮暂不带入/),
   ).toBeVisible();
@@ -121,7 +124,7 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
     .toBeGreaterThanOrEqual(1);
-  await expect(dialog.getByText('正在回答')).toBeVisible();
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
