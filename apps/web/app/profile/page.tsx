@@ -7,7 +7,10 @@ import { AuroraInk } from '@/features/profile/aurora-ink';
 import { LearningHeatmap } from '@/features/profile/learning-heatmap';
 import { ProfileStats } from '@/features/profile/profile-stats';
 import { readCurrentWebUser } from '@/server/auth/current-user';
-import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import {
+  projectPublicEffectiveSubject,
+  readEffectiveSubject,
+} from '@/server/identity/effective-subject';
 import { getLearningActivity } from '@/server/profile/learning-activity-service';
 
 export const metadata: Metadata = { title: '学习档案 · EduCanvas' };
@@ -20,14 +23,25 @@ export const dynamic = 'force-dynamic';
  * 跟随光斑、热力图波浪点亮、主按钮扫光——灵感来源见各组件注释（React Bits / GSAP）。
  */
 export default async function ProfilePage() {
-  const [user, identity] = await Promise.all([
-    readCurrentWebUser(),
-    readAnonymousIdentity(),
-  ]);
+  const subject = await readEffectiveSubject();
+  const user = await readCurrentWebUser(subject.registeredSession);
+  const publicSubject = projectPublicEffectiveSubject(subject, {
+    profileAvailable: user !== null,
+  });
 
-  const activity = await getLearningActivity(identity?.studentId ?? null);
+  const activity = await getLearningActivity(subject.dataOwnerId);
   const hasActivity = activity.activeDays > 0;
   const displayName = user?.nickname ?? '游客';
+  const ownershipExplanation =
+    publicSubject.dataOwner === 'local'
+      ? user
+        ? '账号只用于登录和资料；学习记录仍属于此本地实例，不会自动迁移到账号。'
+        : '本地模式的学习记录属于此 EduCanvas 实例。'
+      : publicSubject.dataOwner === 'registered'
+        ? '学习记录属于当前登录账号。'
+        : publicSubject.dataOwner === 'anonymous'
+          ? '学习记录属于当前浏览器匿名主体；登录不会自动迁移已有记录。'
+          : '尚未建立可读取学习记录的数据主体。';
 
   return (
     <main className="min-h-dvh bg-canvas text-ink">
@@ -66,6 +80,9 @@ export default async function ProfilePage() {
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">
                   {user ? `@${user.username}` : '未登录 · 记录只留在当前浏览器'}
+                </p>
+                <p className="mt-2 max-w-xl text-xs leading-5 text-ink-muted">
+                  {ownershipExplanation}
                 </p>
               </div>
               {user ? null : (

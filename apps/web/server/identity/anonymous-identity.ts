@@ -2,7 +2,10 @@ import 'server-only';
 
 import { createHash, randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { readRegisteredSessionIdentity } from '../auth/session';
+import {
+  readRegisteredSessionIdentity,
+  type RegisteredSessionIdentity,
+} from '../auth/session';
 
 export const ANONYMOUS_IDENTITY_COOKIE =
   process.env.NODE_ENV === 'production'
@@ -50,8 +53,13 @@ export function isEphemeralAnonymousIdentity(
   return identity.token.length > 0 && identity.studentId.startsWith('anon:v1:');
 }
 
-/** Server Component只能调用读取函数；缺失或畸形Cookie不会被静默替换。 */
-export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
+/**
+ * 按已验证的注册 session 解析真实数据主体。调用方传入服务端恢复的 session，
+ * 浏览器请求体不能选择 userId；缺失或畸形匿名 Cookie 不会被静默替换。
+ */
+export async function readDataOwnerIdentity(
+  registeredSession: RegisteredSessionIdentity | null,
+): Promise<AnonymousIdentity | null> {
   if (
     process.env.EDUCANVAS_DEPLOYMENT_ENV?.trim() === 'local' &&
     (process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner')
@@ -61,14 +69,18 @@ export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null>
       studentId: process.env.EDUCANVAS_LOCAL_USER_ID?.trim() || 'local:owner',
     };
   }
-  const registered = await readRegisteredSessionIdentity();
-  if (registered) {
-    return { token: '', studentId: registered.userId };
+  if (registeredSession) {
+    return { token: '', studentId: registeredSession.userId };
   }
   const value = (await cookies()).get(ANONYMOUS_IDENTITY_COOKIE)?.value;
   if (!value) return null;
   const token = parseAnonymousToken(value);
   return token ? { token, studentId: deriveAnonymousStudentId(token) } : null;
+}
+
+/** Server Component只能调用读取函数；身份只来自服务端 session/Cookie。 */
+export async function readAnonymousIdentity(): Promise<AnonymousIdentity | null> {
+  return readDataOwnerIdentity(await readRegisteredSessionIdentity());
 }
 
 /** 只能从Server Action/Route Handler调用；bootstrap成功之前不得调用。 */

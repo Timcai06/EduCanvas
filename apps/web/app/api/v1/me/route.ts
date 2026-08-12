@@ -15,14 +15,36 @@ import {
 } from '@/server/auth/account-repository';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import { profileUpdateInputSchema } from '@/server/auth/input-policy';
+import {
+  projectPublicEffectiveSubject,
+  readEffectiveSubject,
+} from '@/server/identity/effective-subject';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function publicUserProfile(user: {
+  username: string;
+  nickname: string;
+  avatarAvailable: boolean;
+}) {
+  return {
+    username: user.username,
+    nickname: user.nickname,
+    avatarAvailable: user.avatarAvailable,
+  };
+}
+
 export async function GET(): Promise<Response> {
-  const user = await readCurrentWebUser();
+  const subject = await readEffectiveSubject();
+  const user = await readCurrentWebUser(subject.registeredSession);
   return jsonResponse(
-    { user },
+    {
+      user: user ? publicUserProfile(user) : null,
+      subject: projectPublicEffectiveSubject(subject, {
+        profileAvailable: user !== null,
+      }),
+    },
     { headers: { 'cache-control': 'private, no-store' } },
   );
 }
@@ -51,7 +73,7 @@ export async function PATCH(request: Request): Promise<Response> {
       userId: identity.userId,
       nickname: parsed.data.nickname,
     });
-    return jsonResponse({ user });
+    return jsonResponse({ user: publicUserProfile(user) });
   } catch (error) {
     if (error instanceof AccountError) {
       return jsonError(400, error.code, '昵称不符合要求。');
