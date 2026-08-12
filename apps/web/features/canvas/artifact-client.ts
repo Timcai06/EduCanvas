@@ -279,10 +279,12 @@ export async function fetchNotebookArtifacts(): Promise<
 export async function fetchArtifactDetail(
   artifactId: string,
   version?: number,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ArtifactDetail> {
   const query = version === undefined ? '' : `?version=${version}`;
   const response = await fetch(
     `${ARTIFACTS_ENDPOINT}/${encodeURIComponent(artifactId)}${query}`,
+    { signal: options.signal },
   );
   return parseJsonOrThrow(
     response,

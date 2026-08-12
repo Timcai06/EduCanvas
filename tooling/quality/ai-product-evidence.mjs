@@ -246,7 +246,7 @@ export function buildAiProductEvidence({
         'Golden journey E2E: Playwright Chromium (turn lifecycle, SSE, Canvas, Progress)',
       ],
       providerEvidence: [
-        'Provider Canary: DashScope CosyVoice TTS + Paraformer ASR (workflow_dispatch only, not in PR)',
+        'Provider Canary: DashScope TTS + Paraformer ASR (workflow_dispatch only, not in PR)',
       ],
       humanVerification: [
         'Live Voice hotword validation (requires human operator)',

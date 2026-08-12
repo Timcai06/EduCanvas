@@ -1,7 +1,7 @@
 'use client';
 
 import { Microphone, MicrophoneSlash, X } from '@phosphor-icons/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChatMessageStatus } from '@/features/chat/messages';
 import type { LiveVoiceVisualPhase } from './live-voice-motion';
@@ -19,12 +19,21 @@ import type {
 } from './live-voice-threshold';
 import { LiveVoiceVisualStage } from './live-voice-visual-stage';
 import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
+import {
+  LiveVoiceAnswerReader,
+  shouldShowLiveAnswerReader,
+} from './live-voice-answer-reader';
+import {
+  LiveVoiceResourcePreview,
+  type LiveVoicePreviewTarget,
+} from './live-voice-resource-preview';
 import './live-voice-panel.css';
 import './live-voice-orb.css';
 
 export type { LiveVoiceVisualPhase } from './live-voice-motion';
 
 export interface LiveVoicePanelProps {
+  readonly scopeKey?: string;
   readonly phase: LiveVoiceVisualPhase;
   readonly statusLabel: string;
   readonly muted: boolean;
@@ -46,8 +55,6 @@ export interface LiveVoicePanelProps {
     file: File,
     kind: 'image' | 'document',
   ) => Promise<void>;
-  readonly onOpenAsset?: (assetId: string) => void;
-  readonly onOpenArtifact?: (artifactId: string) => void;
   readonly annotations?: readonly LiveVoiceAnnotationDraft[];
   readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
   readonly onToggleMute: () => void;
@@ -150,6 +157,7 @@ export function resolveLiveVoiceActiveTranscript(input: {
  * MorphSVG 表达能量变化，字幕与状态文字仍是唯一的信息承载层。
  */
 export function LiveVoicePanel({
+  scopeKey = 'live-preview',
   phase,
   statusLabel,
   muted,
@@ -166,8 +174,6 @@ export function LiveVoicePanel({
   tools = [],
   onToggleAsset,
   onUploadAsset,
-  onOpenAsset,
-  onOpenArtifact,
   annotations = [],
   onAnnotateAsset,
   onToggleMute,
@@ -178,6 +184,13 @@ export function LiveVoicePanel({
   onExited,
 }: LiveVoicePanelProps) {
   const rootRef = useRef<HTMLDialogElement>(null);
+  const [previewTarget, setPreviewTarget] =
+    useState<LiveVoicePreviewTarget | null>(null);
+  const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const closePreview = () => {
+    setPreviewTarget(null);
+    requestAnimationFrame(() => previewTriggerRef.current?.focus());
+  };
   const activeTranscript = resolveLiveVoiceActiveTranscript({
     phase,
     userSubtitle,
@@ -191,6 +204,7 @@ export function LiveVoicePanel({
     phase === 'speaking' && assistantSubtitle
       ? toLiveVoiceDisplayText(assistantSubtitle)
       : '';
+  const showAnswerReader = shouldShowLiveAnswerReader(assistantText);
   useLiveVoiceMotion(
     rootRef,
     phase,
@@ -223,6 +237,10 @@ export function LiveVoicePanel({
       className="live-voice-modal"
       onCancel={(event) => {
         event.preventDefault();
+        if (previewTarget) {
+          closePreview();
+          return;
+        }
         onClose();
       }}
     >
@@ -234,18 +252,11 @@ export function LiveVoicePanel({
             ? 'true'
             : 'false'
         }
+        data-has-content={
+          previewTarget !== null || showAnswerReader ? 'true' : 'false'
+        }
         className="live-voice-stage"
       >
-        <div
-          data-live-field-layer
-          aria-hidden="true"
-          className="live-voice-field"
-        >
-          <i data-live-field="a" />
-          <i data-live-field="b" />
-          <i data-live-field="c" />
-          <i data-live-field="d" />
-        </div>
         <div data-live-copy className="live-voice-copy">
           <p className="live-voice-eyebrow">Live Voice</p>
           <p
@@ -258,43 +269,70 @@ export function LiveVoicePanel({
           </p>
         </div>
 
-        <LiveVoiceOrb />
-
-        <LiveVoiceVisualStage
-          assets={assets}
-          artifacts={artifacts}
-          citations={citations}
-          tools={tools}
-          onToggleAsset={onToggleAsset}
-          onUploadAsset={onUploadAsset}
-          onOpenAsset={onOpenAsset}
-          onOpenArtifact={onOpenArtifact}
-          annotations={annotations}
-          onAnnotateAsset={onAnnotateAsset}
-        />
-
-        <div data-live-copy className="live-voice-transcript-deck">
-          <div
-            data-live-active-line
-            data-speaker={activeTranscript?.speaker ?? 'system'}
-            aria-live="polite"
-            className="live-voice-active-transcript"
-          >
-            {activeTranscript ? (
-              <p>
-                <span>{activeTranscript.speaker}</span>
-                {activeTranscript.text}
-              </p>
-            ) : (
-              <p>{muted ? '点按麦克风继续' : phaseHint(phase)}</p>
-            )}
+        <div className="live-voice-experience">
+          <div className="live-voice-orb-column">
+            <LiveVoiceOrb />
+            <div data-live-copy className="live-voice-transcript-deck">
+              <div
+                data-live-active-line
+                data-speaker={activeTranscript?.speaker ?? 'system'}
+                aria-live="polite"
+                className="live-voice-active-transcript"
+              >
+                {activeTranscript ? (
+                  <p>
+                    <span>{activeTranscript.speaker}</span>
+                    {activeTranscript.text}
+                  </p>
+                ) : (
+                  <p>{muted ? '点按麦克风继续' : phaseHint(phase)}</p>
+                )}
+              </div>
+              {audibleCue ? (
+                <p data-live-audible-cue className="live-voice-audible-cue">
+                  <span>正在播放</span>
+                  {audibleCue}
+                </p>
+              ) : null}
+            </div>
           </div>
-          {audibleCue ? (
-            <p data-live-audible-cue className="live-voice-audible-cue">
-              <span>正在播放</span>
-              {audibleCue}
-            </p>
-          ) : null}
+
+          <div className="live-voice-content-column">
+            {previewTarget ? (
+              <LiveVoiceResourcePreview
+                key={`${scopeKey}:${previewTarget.kind}:${previewTarget.id}`}
+                target={previewTarget}
+                scopeKey={scopeKey}
+                onClose={closePreview}
+              />
+            ) : null}
+            {showAnswerReader && assistantText ? (
+              <LiveVoiceAnswerReader
+                key={assistantMessageId ?? 'live-answer'}
+                text={assistantText}
+                streaming={assistantStatus === 'streaming'}
+                hidden={previewTarget !== null}
+              />
+            ) : null}
+            <LiveVoiceVisualStage
+              assets={assets}
+              artifacts={artifacts}
+              citations={citations}
+              tools={tools}
+              onToggleAsset={onToggleAsset}
+              onUploadAsset={onUploadAsset}
+              onOpenAsset={(assetId, title, trigger) => {
+                previewTriggerRef.current = trigger;
+                setPreviewTarget({ kind: 'source', id: assetId, title });
+              }}
+              onOpenArtifact={(artifactId, title, trigger) => {
+                previewTriggerRef.current = trigger;
+                setPreviewTarget({ kind: 'artifact', id: artifactId, title });
+              }}
+              annotations={annotations}
+              onAnnotateAsset={onAnnotateAsset}
+            />
+          </div>
         </div>
 
         <div data-live-controls className="live-voice-controls">
@@ -321,31 +359,6 @@ export function LiveVoicePanel({
           </button>
         </div>
       </section>
-      {thresholdPhase === 'entering' && entryCapture !== null ? (
-        <div data-live-flight-proxies aria-hidden="true">
-          {Object.entries(entryCapture.assetRects).map(([assetId, rect]) => {
-            const asset = assets.find((candidate) => candidate.id === assetId);
-            return (
-              <div
-                key={assetId}
-                data-live-flight-proxy={assetId}
-                className="live-voice-flight-proxy"
-                style={{
-                  left: rect.x,
-                  top: rect.y,
-                  width: rect.width,
-                  height: rect.height,
-                }}
-              >
-                {asset?.kind === 'image' && asset.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={asset.previewUrl} alt="" />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
     </dialog>
   );
 

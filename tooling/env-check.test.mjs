@@ -329,7 +329,7 @@ describe('env-check', () => {
     assert.match(result.stdout, /speech=overridden/);
   });
 
-  it('accepts complete DashScope Live Voice configuration without printing secrets', async () => {
+  it('accepts the explicit legacy DashScope rollback profile without printing secrets', async () => {
     const secret = 'dashscope-fixture-secret';
     const result = runEnvCheck(
       await writeEnv(
@@ -346,6 +346,29 @@ describe('env-check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /live-voice=enabled provider=dashscope/);
     assert.doesNotMatch(result.stdout, new RegExp(secret));
+  });
+
+  it('rejects a one-sided DashScope TTS profile override', async () => {
+    for (const override of [
+      { DASHSCOPE_TTS_MODEL: 'cosyvoice-v3-flash' },
+      { DASHSCOPE_TTS_VOICE: 'longanyang' },
+    ]) {
+      const result = runEnvCheck(
+        await writeEnv(
+          providerEnv({
+            DASHSCOPE_API_KEY: 'dashscope-fixture-secret',
+            DASHSCOPE_WORKSPACE_ID: 'workspace_fixture',
+            ...override,
+          }),
+        ),
+      );
+
+      assert.equal(result.status, 1);
+      assert.match(
+        result.stderr,
+        /DASHSCOPE_TTS_MODEL and DASHSCOPE_TTS_VOICE must be configured together/,
+      );
+    }
   });
 
   it('rejects half-configured DashScope Live Voice without printing secrets', async () => {

@@ -93,12 +93,14 @@ const mindMapContent = {
 function render(
   view: ReturnType<typeof resolveArtifactContentView>,
   detail: ArtifactDetail,
+  readOnly = false,
 ) {
   return renderToStaticMarkup(
     <ArtifactCanvasContent
       contentView={view}
       detail={detail}
       revising={false}
+      readOnly={readOnly}
       onSaveNote={() => {}}
     />,
   );
@@ -204,6 +206,17 @@ describe('ArtifactCanvasContent（W04-3 内容区分发）', () => {
     const html = render(resolveArtifactContentView(detail, false), detail);
     expect(html).toContain('prose');
     expect(html).not.toContain('需要交互式 Canvas 壳');
+  });
+
+  it('Live 等内嵌宿主可强制最新版 note 只读', () => {
+    const detail = withVersion(makeDetail('note'), '# 只读笔记');
+    const html = render(
+      resolveArtifactContentView(detail, false),
+      detail,
+      true,
+    );
+    expect(html).toContain('只读');
+    expect(html).not.toContain('>编辑<');
   });
 
   it('生成中无版本 → 骨架（role=status 正在生成产物）', () => {

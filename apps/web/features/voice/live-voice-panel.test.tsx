@@ -41,10 +41,14 @@ describe('LiveVoicePanel', () => {
     expect(html).toContain('aria-label="暂停聆听"');
     expect(html).toContain('结束');
     expect(html).toContain('data-live-morph="true"');
-    expect(html).toContain('data-live-aura="outer"');
-    expect(html).toContain('data-live-aura-layer="a"');
-    expect(html).toContain('data-live-particle-orbit="true"');
-    expect(html).toContain('clip-path="url(#live-voice-clip-');
+    expect(html).toContain('data-live-glow="true"');
+    expect(html).toContain('gradientUnits="userSpaceOnUse"');
+    expect(html).toContain('stop-color="var(--color-accent-strong)"');
+    expect(html.match(/data-live-morph=/g)).toHaveLength(1);
+    expect(html).not.toContain('data-live-field');
+    expect(html).not.toContain('data-live-ring');
+    expect(html).not.toContain('data-live-particle');
+    expect(html).not.toContain('data-live-aura-layer');
   });
 
   it('聆听状态不使用最近聊天消息兜底，避免旧记录长期驻留', () => {
@@ -120,6 +124,32 @@ describe('LiveVoicePanel', () => {
     expect(html).not.toContain('完整回答已经增长到这里。');
     expect(html).toContain('data-live-audible-cue="true"');
     expect(html).toContain('当前正在播放的短语。');
+  });
+
+  it('长回答在 Live 内展示 canonical 增量正文且不冒充 aria-live 字幕', () => {
+    const longAnswer = `## 推导思路\n\n${'先观察变量之间的关系，再逐步验证每一个条件。'.repeat(12)}`;
+    const html = renderToStaticMarkup(
+      <LiveVoicePanel
+        phase="speaking"
+        statusLabel="正在回答"
+        muted={false}
+        userSubtitle={null}
+        assistantMessageId="assistant-long"
+        assistantText={longAnswer}
+        assistantStatus="streaming"
+        assistantSubtitle="先观察变量之间的关系。"
+        onToggleMute={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('data-live-answer-reader="true"');
+    expect(html).toContain('推导思路');
+    expect(html).toContain('回答正在生成');
+    expect(html).toContain('data-live-audible-cue="true"');
+    expect(html).not.toContain(
+      'data-live-answer-reader="true" aria-live="polite"',
+    );
   });
 
   it('思考阶段未有字幕时显示已提交用户问题', () => {

@@ -92,7 +92,11 @@ export function pumpLiveStreamingSpeech(
             options.abortControllerRef.current = null;
             options.queueRef.current.lastWindow = lastWindow;
             options.queueRef.current.pumping = false;
-            options.finishWhenPlaybackEnds(runId);
+            if (options.queueRef.current.queue.length > 0) {
+              queueMicrotask(options.requestPump);
+            } else {
+              options.finishWhenPlaybackEnds(runId);
+            }
           },
           onFailed: (beforeFirstAudio) => {
             if (options.queueRef.current.cursor.runId !== runId) return;
@@ -109,13 +113,19 @@ export function pumpLiveStreamingSpeech(
               return;
             }
             options.streamingSegmentsRef.current = [];
-            options.queueRef.current.suppressed = true;
+            /* 已听到的 segment 不能重放，否则会重复；但也不能永久 suppress
+               整个 Assistant response。后续尚未提交或新到达的 delta 切到
+               逐段 HTTP，下一段 prepare 会清除暂时失败状态。 */
+            options.forceHttpRef.current = true;
             options.markerCancelsRef.current
               .splice(0)
               .forEach((cancel) => cancel());
             player.stop();
             options.dispatch({ type: 'fail' });
             options.setOutputLevel(0);
+            if (options.queueRef.current.queue.length > 0) {
+              queueMicrotask(options.requestPump);
+            }
           },
         });
         options.streamingPlaybackRef.current = playback;
@@ -136,9 +146,12 @@ export function pumpLiveStreamingSpeech(
       const playback = options.streamingPlaybackRef.current;
       if (!playback || options.queueRef.current.cursor.runId !== runId) return;
       while (options.queueRef.current.queue.length > 0) {
-        const segment = options.queueRef.current.queue.shift()!;
+        const segment = options.queueRef.current.queue[0]!;
+        /* Provider 空闲窗口主动 finish 后，迟到 delta 必须留在公共队列，等
+           task-finished 再开启下一段 burst；不能 shift 后静默丢字。 */
+        if (!playback.submit(segment)) break;
+        options.queueRef.current.queue.shift();
         options.streamingSegmentsRef.current.push(segment);
-        playback.submit(segment);
       }
       if (options.queueRef.current.complete) playback.finish();
     } catch {
@@ -152,7 +165,7 @@ export function pumpLiveStreamingSpeech(
           ...options.streamingSegmentsRef.current,
         );
       } else {
-        options.queueRef.current.suppressed = true;
+        options.forceHttpRef.current = true;
         options.markerCancelsRef.current
           .splice(0)
           .forEach((cancel) => cancel());
@@ -164,7 +177,12 @@ export function pumpLiveStreamingSpeech(
     } finally {
       if (options.queueRef.current.cursor.runId !== runId) return;
       options.queueRef.current.pumping = false;
-      if (options.forceHttpRef.current) queueMicrotask(options.requestPump);
+      if (
+        options.forceHttpRef.current &&
+        options.queueRef.current.queue.length > 0
+      ) {
+        queueMicrotask(options.requestPump);
+      }
     }
   })();
 }

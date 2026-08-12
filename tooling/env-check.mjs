@@ -287,6 +287,14 @@ function validateDashScopeLiveVoice() {
   ]) {
     validateDashScopeAlias(name);
   }
+  if (
+    (value('DASHSCOPE_TTS_MODEL') !== '') !==
+    (value('DASHSCOPE_TTS_VOICE') !== '')
+  ) {
+    fail(
+      'DASHSCOPE_TTS_MODEL and DASHSCOPE_TTS_VOICE must be configured together',
+    );
+  }
 
   const websocketUrl = value('DASHSCOPE_BEIJING_WS_URL');
   if (websocketUrl !== '') {

@@ -7,7 +7,7 @@ import {
   StopCircle,
   X,
 } from '@phosphor-icons/react';
-import { useRef, useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
 
 const subscribeToHydration = () => () => undefined;
@@ -67,6 +67,7 @@ export function Composer({
   toolChips = [],
   onToolAction,
   voice,
+  voiceAccessory,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -86,6 +87,8 @@ export function Composer({
   toolChips?: readonly ComposerToolChip[];
   onToolAction?: (id: ComposerToolChip['id']) => void;
   voice?: ComposerVoiceControl;
+  /** Dictation 旁的同尺寸语音能力入口；Composer 不反向依赖具体 Voice 产品。 */
+  voiceAccessory?: ReactNode;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hydrated = useSyncExternalStore(
@@ -203,6 +206,7 @@ export function Composer({
             )}
           </button>
         ) : null}
+        {voiceAccessory}
         {busy && stopAvailable && onStop ? (
           <button
             type="button"

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseDashScopeSpeechConfiguration } from './dashscope-speech-config';
 
 describe('parseDashScopeSpeechConfiguration', () => {
-  it('默认冻结北京区 Paraformer/CosyVoice/longanyang', () => {
+  it('默认冻结北京区 Paraformer/Qwen-Audio-TTS Flash profile', () => {
     const result = parseDashScopeSpeechConfiguration({
       DASHSCOPE_API_KEY: 'k'.repeat(32),
       DASHSCOPE_WORKSPACE_ID: 'ws-test',
@@ -13,8 +13,8 @@ describe('parseDashScopeSpeechConfiguration', () => {
         websocketUrl:
           'wss://ws-test.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
         asrModel: 'paraformer-realtime-v2',
-        ttsModel: 'cosyvoice-v3-flash',
-        voice: 'longanyang',
+        ttsModel: 'qwen-audio-3.0-tts-flash',
+        voice: 'longanhuan_v3.6',
       },
     });
   });
@@ -34,8 +34,8 @@ describe('parseDashScopeSpeechConfiguration', () => {
         websocketUrl:
           'wss://ws-test.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
         asrModel: 'paraformer-realtime-v2',
-        ttsModel: 'cosyvoice-v3-flash',
-        voice: 'longanyang',
+        ttsModel: 'qwen-audio-3.0-tts-flash',
+        voice: 'longanhuan_v3.6',
       },
     });
   });
@@ -61,6 +61,42 @@ describe('parseDashScopeSpeechConfiguration', () => {
         DASHSCOPE_WORKSPACE_ID: 'ws-test',
         DASHSCOPE_BEIJING_WS_URL:
           'wss://other-workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
+      }),
+    ).toEqual({ enabled: false, reason: 'invalid_configuration' });
+  });
+
+  it('保留显式 CosyVoice 旧 profile 作为可回滚配置', () => {
+    expect(
+      parseDashScopeSpeechConfiguration({
+        DASHSCOPE_API_KEY: 'k'.repeat(32),
+        DASHSCOPE_WORKSPACE_ID: 'ws-test',
+        DASHSCOPE_TTS_MODEL: 'cosyvoice-v3-flash',
+        DASHSCOPE_TTS_VOICE: 'longanyang',
+      }),
+    ).toMatchObject({
+      enabled: true,
+      configuration: {
+        ttsModel: 'cosyvoice-v3-flash',
+        voice: 'longanyang',
+      },
+    });
+  });
+
+  it('拒绝只覆盖 model 或 voice 的不完整 TTS profile', () => {
+    const base = {
+      DASHSCOPE_API_KEY: 'k'.repeat(32),
+      DASHSCOPE_WORKSPACE_ID: 'ws-test',
+    };
+    expect(
+      parseDashScopeSpeechConfiguration({
+        ...base,
+        DASHSCOPE_TTS_MODEL: 'cosyvoice-v3-flash',
+      }),
+    ).toEqual({ enabled: false, reason: 'invalid_configuration' });
+    expect(
+      parseDashScopeSpeechConfiguration({
+        ...base,
+        DASHSCOPE_TTS_VOICE: 'longanyang',
       }),
     ).toEqual({ enabled: false, reason: 'invalid_configuration' });
   });

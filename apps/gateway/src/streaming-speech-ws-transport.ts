@@ -9,6 +9,7 @@ import {
   decodeStreamingSpeechClientMessage,
   encodeStreamingSpeechAudioFrame,
 } from './streaming-speech-wire';
+import type { StreamingSpeechServerMessage } from './streaming-speech-wire';
 import type { StreamingTranscriptionQuotaManager } from './streaming-transcription-quota-manager';
 import type { StreamingTranscriptionQuotas } from './streaming-transcription-quotas';
 import type { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
@@ -80,8 +81,13 @@ function attachSpeechChannel(
   deps: StreamingSpeechUpgradeDependencies,
   socketLease: { release(): void },
 ): void {
-  const sendEvent = (event: unknown): void => {
+  const sendEvent = (event: StreamingSpeechServerMessage): void => {
     if (ws.readyState !== WebSocket.OPEN) return;
+    if (event.type === 'speech.failed') {
+      deps.log?.({ label: 'session_failed', code: event.failureCode });
+    } else if (event.type === 'speech.finished') {
+      deps.log?.({ label: 'session_finished' });
+    }
     try {
       ws.send(JSON.stringify(event));
     } catch {

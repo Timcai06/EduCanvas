@@ -124,16 +124,26 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 ### 6.2 Live 实时交互线
 
-| 任务                    | 状态     | 交付与验收                                                                                                                                                                                                                                          |
-| ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L01 同源流式消息        | `PASS`   | Live 面板直接消费当前 Assistant `message.delta` 投影，不维护第二份完整回答；普通聊天同一消息逐增量增长，入室/出室均不丢字、不重复字。                                                                                                               |
-| L02 三游标状态机        | `PASS`   | 已引入纯 `displayCursor`、`speechCommittedCursor`、`audioPlayedCursor`、`sessionBaselineCursor` 与单调 `runId`；语义段携带原文 offset，只有同代 PCM 完成 marker 推进播放游标，覆盖回退、重复事件、取消迟到回调和重新入室。                          |
-| L03 自适应语义提交      | `PASS`   | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                                               |
-| L04 连续 Speech Session | `PASS`   | provider-neutral 可取消会话、独立受同源/ticket/Notebook/配额保护的 TTS WebSocket 已合并；一个 Assistant response 增量提交语义段并连续播放 PCM，首个 PCM 前失败才回退逐短语 HTTP。PR #360 的静态质量、测试、Agent Eval、E2E 与 secret scan 均通过。  |
-| L05 音频与字幕时钟      | `PASS`   | 逐帧消费 ACK、有界 PCM 窗口、最终 ACK、严格 PCM 校验、Web Audio 排期字幕和跨轮时长校准已由 PR #361 远端 CI 验证并合入主线。                                                                                                                         |
-| L06 插话和工具连续性    | `REVIEW` | 有效 partial 即原子失效 Speech Session/本地队列，并按稳定 operation identity 最多一次取消旧 Agent；ASR final 等旧轮终态后只提交最新一条。工具真实状态不改写 Assistant 身份或文本游标，failed 不被迟到 completed 覆盖。待本 PR CI。                  |
-| L07 Live 壳连续体验     | `REVIEW` | 入室以当前 Assistant 游标为 baseline 接管后续 delta，出室只卸载语音壳；主字幕只显示用户 partial 或 PCM 排期 cue，完整回答留在普通消息列。来源、引用、Artifact 与工具继续来自 General/Learning 控制器。待本 PR CI。                                  |
-| L08 Live 性能与真人验收 | `REVIEW` | fake 单调时钟 harness 已逐项阻断六项预算，空指标 fail closed；Ego 已验证本地入室/出室壳层。Chrome/Safari 真麦克风、真实 Provider 三轮/工具/插话/失败恢复仍须按[验收记录](../../06-quality/13-Live性能与真人验收记录.md)人工签署，不能由 fake 代替。 |
+| 任务                    | 状态   | 交付与验收                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L01 同源流式消息        | `PASS` | Live 面板直接消费当前 Assistant `message.delta` 投影，不维护第二份完整回答；普通聊天同一消息逐增量增长，入室/出室均不丢字、不重复字。                                                                                                                                                                                     |
+| L02 三游标状态机        | `PASS` | 已引入纯 `displayCursor`、`speechCommittedCursor`、`audioPlayedCursor`、`sessionBaselineCursor` 与单调 `runId`；语义段携带原文 offset，只有同代 PCM 完成 marker 推进播放游标，覆盖回退、重复事件、取消迟到回调和重新入室。                                                                                                |
+| L03 自适应语义提交      | `PASS` | 用标点、长度、等待时间和 Markdown/公式/代码安全边界共同决定首段与后续段；视觉文字立即出现，TTS 只提交稳定可朗读短语，不按单字请求，也不等待完整回答。                                                                                                                                                                     |
+| L04 连续 Speech Session | `PASS` | provider-neutral 可取消会话、独立受同源/ticket/Notebook/配额保护的 TTS WebSocket 已合并；连续 delta burst 增量提交语义段并共享 Web Audio 时间轴，工具/长思考空闲会在 Provider 23 秒上限前正常收尾并由下一 burst 接力，首个 PCM 前失败才回退逐短语 HTTP。PR #360 的静态质量、测试、Agent Eval、E2E 与 secret scan 均通过。 |
+| L05 音频与字幕时钟      | `PASS` | 逐帧消费 ACK、有界 PCM 窗口、最终 ACK、严格 PCM 校验、Web Audio 排期字幕和跨轮时长校准已由 PR #361 远端 CI 验证并合入主线。                                                                                                                                                                                               |
+| L06 插话和工具连续性    | `PASS` | 有效 partial 即原子失效 Speech Session/本地队列，并按稳定 operation identity 最多一次取消旧 Agent；ASR final 等旧轮终态后只提交最新一条。工具真实状态不改写 Assistant 身份或文本游标，failed 不被迟到 completed 覆盖。PR #363 的静态质量、测试、E2E 与 secret scan 已通过并合入主线。                                     |
+| L07 Live 壳连续体验     | `PASS` | 入室以当前 Assistant 游标为 baseline 接管后续 delta，出室只卸载语音壳；主字幕只显示用户 partial 或 PCM 排期 cue，完整回答留在普通消息列。来源、引用、Artifact 与工具继续来自 General/Learning 控制器。PR #363 已通过远端 CI 并合入主线。                                                                                  |
+| L08 Live 性能与真人验收 | `PASS` | fake 单调时钟 harness 已逐项阻断六项预算，空指标 fail closed；项目负责人已于 2026-08-12 完成并签署 Chrome/Safari 真麦克风、真实 Provider 连续对话、工具、插话与失败恢复验收。未记录的精确延迟不补造，详见[验收记录](../../06-quality/13-Live性能与真人验收记录.md)。                                                      |
+
+### Live 体验收口（LX）
+
+| 任务               | 状态   | 交付与验收                                                                                                                                |
+| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| LX01 内嵌资源预览  | `PASS` | 来源与 Artifact 在 Live 内使用只读嵌入壳并复用现有安全 Renderer；打开、返回和 Escape 不退出语音会话，完整编辑仍属于 Workspace Canvas。    |
+| LX02 长回答阅读面  | `PASS` | canonical Assistant 增量文本在长回答或结构化回答时进入 Markdown 阅读面；PCM cue 独立显示，用户滚离末尾后不被新 delta 抢回。               |
+| LX03 球体与性能    | `PASS` | 删除 field、圆环、粒子、三层 aura、动态 SVG filter 和逐资料 stagger；仅保留一个液态球、一个静态光晕与一条 MorphSVG 循环，后台标签页暂停。 |
+| LX04 Composer 入口 | `PASS` | Live 改为 Dictation 旁的 40px SVG-only 入口，保留 capability、互斥、入退场定位与焦点归还语义。                                            |
+| LX05 TTS profile   | `PASS` | 默认切换为 `qwen-audio-3.0-tts-flash + longanhuan_v3.6`；旧 CosyVoice 组合保留显式双变量回滚，ASR、PCM 和 wire contract 不变。            |
 
 ### 6.3 ADR-0027 Canvas 输出线
 
@@ -231,7 +241,7 @@ API Key、学生内容、Provider 原始响应或音频。
 | 验收项               | 证据                                         | 结果      |
 | -------------------- | -------------------------------------------- | --------- |
 | LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR      | `pass`    |
-| L01-L08 Live         | 单元/集成/浏览器性能报告、真人记录           | `pending` |
+| L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录     | `pass`    |
 | C01-C08 Canvas       | schema/Renderer/Runtime 测试、视觉与安全报告 | `pending` |
 | X01-X03 联合验收     | 产品级 E2E、provenance、安全与 CI 路由报告   | `pending` |
 | X04 结档             | 最终 CI run、canonical diff、PR/merge 链接   | `pending` |

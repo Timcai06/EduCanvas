@@ -60,12 +60,13 @@ import {
   filterLiveSessionTranscript,
   LIVE_STATUS,
   mergeDictationTranscript,
+  resolveLiveReaderBaselineId,
   resolveLiveVoiceVisualPhase,
 } from './voice-composer-projection';
 
 type BaseComposerProps = Omit<
   ComponentProps<typeof Composer>,
-  'voice' | 'value' | 'onValueChange'
+  'voice' | 'voiceAccessory' | 'value' | 'onValueChange'
 >;
 
 export interface VoiceComposerRuntimeProps extends BaseComposerProps {
@@ -86,8 +87,6 @@ export interface VoiceComposerRuntimeProps extends BaseComposerProps {
     file: File,
     kind: 'image' | 'document',
   ) => Promise<void>;
-  readonly onLiveOpenAsset?: (assetId: string) => void;
-  readonly onLiveOpenArtifact?: (artifactId: string) => void;
   readonly onLiveSend?: (
     text: string,
     context: LiveVoiceContextSnapshot,
@@ -112,8 +111,6 @@ export function VoiceComposerRuntime({
   liveTools = [],
   onLiveToggleAsset,
   onLiveUploadAsset,
-  onLiveOpenAsset,
-  onLiveOpenArtifact,
   onLiveSend,
   onLiveExit,
   ...composerProps
@@ -134,6 +131,9 @@ export function VoiceComposerRuntime({
   >([]);
   const [liveContextSnapshot, setLiveContextSnapshot] =
     useState<LiveVoiceContextSnapshot | null>(null);
+  const [hiddenReaderAssistantId, setHiddenReaderAssistantId] = useState<
+    string | null
+  >(null);
   const [activeDictation, setActiveDictation] = useState<
     'realtime' | 'batch' | null
   >(null);
@@ -422,6 +422,7 @@ export function VoiceComposerRuntime({
     if (threshold !== 'desk' || previous === 'desk') return;
     setLiveTranscriptBaselineIds([]);
     setLiveContextSnapshot(null);
+    setHiddenReaderAssistantId(null);
     setEntryCapture(null);
     setLiveAnnotations([]);
     runtime.disposeLiveCapturePool?.();
@@ -446,83 +447,90 @@ export function VoiceComposerRuntime({
     onLiveExit,
   ]);
 
+  const requestOpenLive = useCallback(() => {
+    speech.prepare();
+    /* 同一帧冻结位置与数据；小球从 Composer 内的新入口飞入，语境身份不漂移。 */
+    setEntryCapture(captureLiveVoiceEntry(liveLaunchButtonRef.current));
+    setLiveTranscriptBaselineIds(liveTranscript.map((entry) => entry.id));
+    setLiveContextSnapshot(freezeLiveVoiceContext(liveAssets));
+    setHiddenReaderAssistantId(
+      resolveLiveReaderBaselineId({
+        assistantId: liveAssistantId,
+        status: liveAssistantStatus,
+      }),
+    );
+    setMuted(false);
+    applyThresholdEvent('ENTER');
+  }, [
+    applyThresholdEvent,
+    liveAssistantId,
+    liveAssistantStatus,
+    liveAssets,
+    liveTranscript,
+    speech,
+  ]);
+
   return (
     <>
-      {composerProps.variant !== 'landing' ? (
-        <div className="mx-auto mb-2 w-full max-w-3xl px-4">
-          {liveOpen ? (
-            <LiveVoicePanel
-              phase={liveVisualPhase}
-              statusLabel={liveStatusLabel}
-              muted={muted}
-              userSubtitle={live.partialText || null}
-              assistantMessageId={liveAssistantId}
-              assistantText={liveAssistantText}
-              assistantStatus={liveAssistantStatus}
-              assistantSubtitle={speech.subtitle}
-              transcript={liveSessionTranscript}
-              audioLevel={
-                liveVisualPhase === 'speaking'
-                  ? speech.outputLevel
-                  : live.inputLevel
-              }
-              assets={displayedLiveAssets}
-              artifacts={liveArtifacts}
-              citations={liveCitations}
-              tools={liveTools}
-              annotations={liveAnnotations}
-              onAnnotateAsset={(annotation) =>
-                setLiveAnnotations((current) => [...current, annotation])
-              }
-              thresholdPhase={threshold}
-              entryCapture={entryCapture}
-              onEntered={handleEntered}
-              onExited={handleExited}
-              onToggleAsset={onLiveToggleAsset}
-              onUploadAsset={onLiveUploadAsset}
-              onOpenAsset={(assetId) => {
-                requestCloseLive();
-                onLiveOpenAsset?.(assetId);
-              }}
-              onOpenArtifact={(artifactId) => {
-                requestCloseLive();
-                onLiveOpenArtifact?.(artifactId);
-              }}
-              onToggleMute={() => {
-                if (!muted) interruptSpeech();
-                setMuted((value) => !value);
-              }}
-              onClose={requestCloseLive}
-            />
-          ) : (
-            <LiveVoiceLaunchButton
-              buttonRef={liveLaunchButtonRef}
-              disabled={
-                !live.capability.enabled || capabilityLoading || dictationActive
-              }
-              onClick={() => {
-                speech.prepare();
-                /* 同一帧冻结位置与数据：纸从案上哪里起飞，飞进茶室时就从哪里出发。 */
-                setEntryCapture(
-                  captureLiveVoiceEntry(liveLaunchButtonRef.current),
-                );
-                setLiveTranscriptBaselineIds(
-                  liveTranscript.map((entry) => entry.id),
-                );
-                setLiveContextSnapshot(freezeLiveVoiceContext(liveAssets));
-                setMuted(false);
-                applyThresholdEvent('ENTER');
-              }}
-              title={liveReason ?? '开始 Live Voice'}
-            />
-          )}
-        </div>
+      {composerProps.variant !== 'landing' && liveOpen ? (
+        <LiveVoicePanel
+          scopeKey={notebookId}
+          phase={liveVisualPhase}
+          statusLabel={liveStatusLabel}
+          muted={muted}
+          userSubtitle={live.partialText || null}
+          assistantMessageId={liveAssistantId}
+          assistantText={
+            liveAssistantId === hiddenReaderAssistantId
+              ? null
+              : liveAssistantText
+          }
+          assistantStatus={liveAssistantStatus}
+          assistantSubtitle={speech.subtitle}
+          transcript={liveSessionTranscript}
+          audioLevel={
+            liveVisualPhase === 'speaking'
+              ? speech.outputLevel
+              : live.inputLevel
+          }
+          assets={displayedLiveAssets}
+          artifacts={liveArtifacts}
+          citations={liveCitations}
+          tools={liveTools}
+          annotations={liveAnnotations}
+          onAnnotateAsset={(annotation) =>
+            setLiveAnnotations((current) => [...current, annotation])
+          }
+          thresholdPhase={threshold}
+          entryCapture={entryCapture}
+          onEntered={handleEntered}
+          onExited={handleExited}
+          onToggleAsset={onLiveToggleAsset}
+          onUploadAsset={onLiveUploadAsset}
+          onToggleMute={() => {
+            if (!muted) interruptSpeech();
+            setMuted((value) => !value);
+          }}
+          onClose={requestCloseLive}
+        />
       ) : null}
       <Composer
         {...composerProps}
         value={draft}
         onValueChange={setDraft}
         voice={dictationVoice}
+        voiceAccessory={
+          composerProps.variant !== 'landing' && !liveOpen ? (
+            <LiveVoiceLaunchButton
+              buttonRef={liveLaunchButtonRef}
+              disabled={
+                !live.capability.enabled || capabilityLoading || dictationActive
+              }
+              onClick={requestOpenLive}
+              title={liveReason ?? '开始 Live Voice'}
+            />
+          ) : null
+        }
       />
     </>
   );
@@ -545,8 +553,6 @@ export function VoiceComposer(
       file: File,
       kind: 'image' | 'document',
     ) => Promise<void>;
-    readonly onLiveOpenAsset?: (assetId: string) => void;
-    readonly onLiveOpenArtifact?: (artifactId: string) => void;
     readonly onLiveSend?: (
       text: string,
       context: LiveVoiceContextSnapshot,

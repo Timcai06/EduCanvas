@@ -101,11 +101,17 @@ export function ArtifactCanvasContent({
   detail,
   revising,
   onSaveNote,
+  readOnly = false,
+  presentation = 'canvas',
 }: {
   contentView: ArtifactContentView;
   detail: ArtifactDetail;
   revising: boolean;
   onSaveNote: (markdown: string) => void;
+  /** Live 等只读宿主不得让最新版笔记在旁路视图中产生写入。 */
+  readOnly?: boolean;
+  /** Live 只读壳不启动会产生 Provider/任务副作用的持久 Web Runtime。 */
+  presentation?: 'canvas' | 'live-preview';
 }) {
   switch (contentView.kind) {
     case 'skeleton':
@@ -122,12 +128,21 @@ export function ArtifactCanvasContent({
           key={contentView.key}
           content={contentView.content as NoteContent}
           isLatest={contentView.isLatest}
-          readOnly={!contentView.isLatest}
+          readOnly={readOnly || !contentView.isLatest}
           onSave={onSaveNote}
           saving={revising}
         />
       );
     case 'dom_exploration':
+      if (presentation === 'live-preview') {
+        return (
+          <CanvasShellStatus
+            status="unavailable"
+            title="交互网页需在 Canvas 打开"
+            description="Live 预览不会启动或取消持久运行任务；结束语音后可在 Canvas 中完整交互。"
+          />
+        );
+      }
       return (
         <PersistentWebRuntime
           key={contentView.versionId}

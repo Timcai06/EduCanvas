@@ -51,7 +51,6 @@ export interface ConversationPaneProps {
   onRetry: (messageId: string) => void;
   onPreviewHtml: (source: string) => void;
   onOpenArtifact: (artifactId: string) => void;
-  onOpenAsset: (assetId: string) => void;
   onToggleLiveAsset: (assetId: string) => void;
   onUploadLiveAsset: (file: File, kind: 'image' | 'document') => Promise<void>;
   onOpenStatusCard: (artifactId: string) => void;
@@ -84,7 +83,6 @@ export function ConversationPane({
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
-  onOpenAsset,
   onToggleLiveAsset,
   onUploadLiveAsset,
   onOpenStatusCard,
@@ -258,8 +256,6 @@ export function ConversationPane({
           liveTools={liveTools}
           onLiveToggleAsset={onToggleLiveAsset}
           onLiveUploadAsset={onUploadLiveAsset}
-          onLiveOpenAsset={onOpenAsset}
-          onLiveOpenArtifact={onOpenArtifact}
           onLiveExit={onLiveExit}
         />
       </div>

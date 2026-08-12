@@ -6,6 +6,10 @@ const SECRET_LIKE_TEXT = /(?:bearer\s+|api[_-]?key\s*[:=]|\bsk-[a-z0-9]{12,})/i;
 
 export const MAX_PROVIDER_CANARY_SCENARIOS = 5;
 export const MAX_PROVIDER_TURNS_PER_SCENARIO = 2;
+export const PROVIDER_CANARY_PROFILES = Object.freeze([
+  'dashscope-qwen-audio-3-tts-flash-longanhuan-v3-6-pcm24k',
+  'dashscope-cosyvoice-v3-flash-longanyang-pcm24k',
+]);
 
 export function validateProviderCanaryInput(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -90,6 +94,7 @@ function assertSanitized(value, path = '$') {
 
 export function buildProviderCanarySummary({
   sha,
+  providerProfile,
   datasetVersion,
   turnsPerScenario,
   results,
@@ -100,6 +105,9 @@ export function buildProviderCanarySummary({
   }
   if (!SAFE_ID.test(datasetVersion ?? '')) {
     throw new Error('canary dataset identity is invalid');
+  }
+  if (!PROVIDER_CANARY_PROFILES.includes(providerProfile)) {
+    throw new Error('canary provider profile is not registered');
   }
   if (
     !Number.isInteger(turnsPerScenario) ||
@@ -153,6 +161,7 @@ export function buildProviderCanarySummary({
   const summary = {
     schemaVersion: 1,
     sha: sha.toLowerCase(),
+    providerProfile,
     datasetVersion,
     scenarioCount: results.length,
     turnCount: results.length * turnsPerScenario,
