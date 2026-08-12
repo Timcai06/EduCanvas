@@ -295,6 +295,21 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     });
   });
 
+  it('returns stable 404 when current Notebook membership was revoked after summary load', async () => {
+    requireNotebookAccessMock.mockRejectedValueOnce(
+      new Error('membership revoked objectKey=private/key'),
+    );
+    const response = await GET(
+      getRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(body).toContain('artifact_not_found');
+    expect(body).not.toMatch(/membership revoked|objectKey|private\/key|stack/i);
+  });
+
   it('returns 404 for archived artifacts', async () => {
     artifactRepo.getArtifactDetail.mockResolvedValue({
       ...detail,
@@ -713,6 +728,32 @@ describe('PATCH /api/v1/chat/artifacts/[artifactId]', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'artifact_not_found' },
     });
+  });
+
+  it('rechecks viewer write authority and returns stable 404', async () => {
+    artifactRepo.createRevisionGenerationJob.mockRejectedValueOnce(
+      new ArtifactOwnershipError(),
+    );
+
+    const response = await PATCH(
+      patchRequest(
+        validArtifact.id,
+        JSON.stringify({
+          action: 'generate',
+          baseVersion: 1,
+          instruction: '不能依赖旧 allowedActions 的修改',
+        }),
+      ),
+      params(validArtifact.id),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'artifact_not_found' },
+    });
+    expect(artifactRepo.createRevisionGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({ trustedSubjectId: identity.studentId }),
+    );
   });
 
   it('maps generic failures to 503', async () => {

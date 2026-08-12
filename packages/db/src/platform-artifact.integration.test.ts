@@ -198,6 +198,73 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     ).rejects.toBeInstanceOf(ArtifactOwnershipError);
   });
 
+  it('成员资格撤销后每次读写与归档都以当前事实拒绝', async () => {
+    const editor = 'subject-revoked-editor';
+    await database!.insert(schema.platformUsers).values({
+      id: editor,
+      kind: 'registered',
+      status: 'active',
+    });
+    await database!.insert(schema.notebookMemberships).values({
+      notebookId: spaceId,
+      userId: editor,
+      role: 'editor',
+      grantedByUserId: owner,
+    });
+    const artifact = await repository.createArtifact({
+      spaceId,
+      trustedSubjectId: editor,
+      kind: 'note',
+      trustTier: 'tier1',
+      title: '撤权前笔记',
+      status: 'active',
+    });
+    await expect(
+      repository.getArtifact({
+        artifactId: artifact.id,
+        trustedSubjectId: editor,
+      }),
+    ).resolves.toMatchObject({ id: artifact.id });
+
+    await database!
+      .update(schema.notebookMemberships)
+      .set({ revokedAt: new Date() })
+      .where(eq(schema.notebookMemberships.userId, editor));
+
+    await expect(
+      repository.getArtifact({
+        artifactId: artifact.id,
+        trustedSubjectId: editor,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+    await expect(
+      repository.listSpaceArtifacts({ spaceId, trustedSubjectId: editor }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+    await expect(
+      repository.appendVersion({
+        artifactId: artifact.id,
+        trustedSubjectId: editor,
+        content: { contentVersion: 1, markdown: '# stale write' },
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+    await expect(
+      repository.createArtifact({
+        spaceId,
+        trustedSubjectId: editor,
+        kind: 'note',
+        trustTier: 'tier1',
+        title: '撤权后伪造笔记',
+      }),
+    ).rejects.toBeInstanceOf(ArtifactOwnershipError);
+    await expect(
+      repository.archiveOwnedArtifact({
+        artifactId: artifact.id,
+        trustedSubjectId: editor,
+        notebookId: spaceId,
+      }),
+    ).resolves.toBe(false);
+  });
+
   it('原子生成拒绝把其他 Notebook 的 Conversation 挂到目标 Space', async () => {
     const [conversationSpace] = await database!
       .insert(schema.spaces)

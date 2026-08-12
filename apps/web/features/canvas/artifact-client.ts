@@ -150,8 +150,19 @@ const audioOverviewMediaSchema = z
 
 const generatedImageMediaSchema = z
   .object({
-    url: z.string(),
-    downloadUrl: z.string().optional(),
+    url: z
+      .string()
+      .regex(
+        /^\/api\/v1\/chat\/artifacts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/image$/i,
+        '生成图片必须使用同源受控读取路径',
+      ),
+    downloadUrl: z
+      .string()
+      .regex(
+        /^\/api\/v1\/chat\/artifacts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/download$/i,
+        '生成图片必须使用同源受控下载路径',
+      )
+      .optional(),
     contentVersion: z.literal(1),
     contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
     byteSize: z

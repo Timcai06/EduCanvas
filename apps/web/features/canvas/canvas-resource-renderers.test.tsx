@@ -238,6 +238,35 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
     }
   });
 
+  it('Markdown 危险 href/src 与 raw HTML 不会进入可执行 DOM', () => {
+    const maliciousMarkdown = [
+      '[javascript link](javascript:alert(1))',
+      '[data link](data:text/html;base64,PHNjcmlwdD4=)',
+      '![javascript image](javascript:alert(2))',
+      '![data image](data:image/svg+xml,<svg/onload=alert(3)>)',
+      '<script>alert(4)</script>',
+      '<img src="x" onerror="alert(5)" />',
+    ].join('\n\n');
+    const artifactHtml = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({
+          contentVersion: 1,
+          markdown: maliciousMarkdown,
+        })}
+      />,
+    );
+
+    expect(artifactHtml).not.toContain('href="javascript:');
+    expect(artifactHtml).not.toContain('href="data:');
+    expect(artifactHtml).not.toContain('src="javascript:');
+    expect(artifactHtml).not.toContain('src="data:');
+    expect(artifactHtml).not.toContain('<script');
+    expect(artifactHtml).not.toContain('<img src="x"');
+    expect(artifactHtml).toContain('&lt;script&gt;alert(4)&lt;/script&gt;');
+    expect(artifactHtml).toContain('&lt;img src=&quot;x&quot;');
+  });
+
   it('markdown_document：缺 markdown → unavailable', () => {
     const html = renderToStaticMarkup(
       <MarkdownDocumentResourceRenderer

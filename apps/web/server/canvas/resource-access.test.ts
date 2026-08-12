@@ -209,6 +209,81 @@ describe('resource-access boundary', () => {
         }),
       );
     });
+
+    it('does not let an Artifact provenance reference authorize a foreign Source', async () => {
+      const { AssetAccessError } = await import('@educanvas/db');
+      const foreignSourceId = '90000000-0000-4000-8000-000000000009';
+      mockRequireNotebookAccess.mockResolvedValue({ role: 'viewer' });
+      mockGetArtifactDetail.mockResolvedValue({
+        artifact: {
+          id: artifactId,
+          spaceId: notebookId,
+          conversationId: null,
+          ownerSubjectId: identity.studentId,
+          kind: 'mind_map',
+          trustTier: 'tier1',
+          title: '引用外部来源的产物',
+          status: 'active',
+          latestVersion: 1,
+          createdAt: '2026-08-13T00:00:00.000Z',
+          updatedAt: '2026-08-13T00:01:00.000Z',
+        },
+        latestVersion: {
+          id: '90000000-0000-4000-8000-000000000011',
+          artifactId,
+          version: 1,
+          content: {},
+          metadata: null,
+          objectKey: null,
+          checksum: null,
+          generatedBy: 'model:fixture',
+          createdByOperationId: null,
+          generationJobId: '90000000-0000-4000-8000-000000000012',
+          createdAt: '2026-08-13T00:01:00.000Z',
+        },
+        latestJob: {
+          id: '90000000-0000-4000-8000-000000000012',
+          artifactId,
+          operationId: null,
+          status: 'succeeded',
+          progress: 100,
+          failureCode: null,
+          params: {
+            provenance: {
+              sources: [
+                {
+                  assetId: foreignSourceId,
+                  versionId: '90000000-0000-4000-8000-000000000010',
+                },
+              ],
+            },
+          },
+          checkpoint: {},
+          queueJobKey: null,
+        },
+      });
+
+      const projected = await loadOwnedCanvasResource({
+        identity,
+        notebookId,
+        resourceKind: 'artifact',
+        resourceId: artifactId,
+      });
+      expect(projected.provenance.sourceResourceIds).toContain(foreignSourceId);
+
+      mockGetOwnedSnapshot.mockRejectedValue(new AssetAccessError());
+      mockGetAccessPolicy.mockRejectedValue(new AssetAccessError());
+      await expect(
+        loadOwnedCanvasResource({
+          identity,
+          notebookId,
+          resourceKind: 'source',
+          resourceId: foreignSourceId,
+        }),
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'resource_not_found', status: 404 }),
+      );
+    });
   });
 
   describe('projectOwnedSourceResources', () => {

@@ -362,6 +362,38 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.allowedActions).toEqual(['view', 'annotate']);
   });
 
+  it('does not turn provenance references into authority over a foreign Source', () => {
+    const foreignSourceId = '90000000-0000-4000-8000-000000000009';
+    const job = {
+      ...runningJob,
+      status: 'succeeded' as const,
+      params: {
+        provenance: {
+          sources: [
+            {
+              assetId: foreignSourceId,
+              versionId: '90000000-0000-4000-8000-000000000010',
+              kind: 'document',
+            },
+          ],
+        },
+      },
+    };
+    const resource = projectOwnedArtifactResource({
+      notebookId,
+      artifact,
+      version: { ...version, generationJobId: job.id },
+      latestJob: job,
+      accessRole: 'viewer',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual([foreignSourceId]);
+    expect(resource.allowedActions).toEqual(['view', 'annotate']);
+    expect(JSON.stringify(resource)).not.toMatch(
+      /source\.read|source\.download|notebook\.read|notebook\.write/i,
+    );
+  });
+
   it('grants download and delete for media artifacts with owner role', () => {
     const audioResource = projectOwnedArtifactResource({
       notebookId,

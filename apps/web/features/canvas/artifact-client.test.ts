@@ -229,6 +229,56 @@ describe('artifact client mutation contracts', () => {
     expect(detail.version?.media).not.toHaveProperty('objectKey');
   });
 
+  it.each([
+    ['https://attacker.invalid/image.png', undefined],
+    ['data:image/svg+xml,<svg onload="alert(1)"/>', undefined],
+    [`/api/v1/chat/artifacts/${artifact.id}/image`, 'javascript:alert(2)'],
+  ])('拒绝生成图片详情中的非同源或可执行 URL', async (url, downloadUrl) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            artifact: {
+              ...artifact,
+              kind: 'generated_image',
+              trustTier: 'tier2',
+              latestVersion: 1,
+              fromConversation: true,
+              createdAt: '2026-07-27T00:00:00.000Z',
+              updatedAt: '2026-07-27T00:01:00.000Z',
+            },
+            version: {
+              id: '50000000-0000-4000-8000-000000000001',
+              version: 1,
+              content: null,
+              media: {
+                url,
+                ...(downloadUrl ? { downloadUrl } : {}),
+                contentVersion: 1,
+                contentType: 'image/png',
+                byteSize: 4,
+                size: '1024x1024',
+                image: {
+                  provider: 'fixture',
+                  resolvedModelId: 'image-v1',
+                  latencyMs: 10,
+                },
+              },
+            },
+            versions: [],
+            latestJob: null,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(fetchArtifactDetail(artifact.id)).rejects.toThrow(
+      '产物详情响应格式不正确。',
+    );
+  });
+
   it('从完整 CanvasResource 投影中只读取浏览器需要的操作权限', async () => {
     vi.stubGlobal(
       'fetch',

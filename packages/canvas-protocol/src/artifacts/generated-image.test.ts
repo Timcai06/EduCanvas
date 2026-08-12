@@ -58,4 +58,18 @@ describe('generatedImageMetadataSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('拒绝媒体 URL、data URI 或伪造 manifest 混入持久元数据', () => {
+    for (const hostileField of [
+      { url: 'javascript:alert(1)' },
+      { downloadUrl: 'data:text/html,<script>alert(2)</script>' },
+      { dataUrl: 'data:image/svg+xml,<svg onload="alert(3)" />' },
+      { manifest: { src: 'https://attacker.invalid/image.png' } },
+    ]) {
+      expect(
+        generatedImageMetadataSchema.safeParse({ ...valid, ...hostileField })
+          .success,
+      ).toBe(false);
+    }
+  });
 });
