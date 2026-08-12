@@ -134,12 +134,15 @@ export function createPetWindow(): PetWindowController {
     );
   });
 
-  const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
+  const rendererUrl = app.isPackaged
+    ? undefined
+    : process.env['ELECTRON_RENDERER_URL'];
   const rendererEntryUrl = rendererUrl
     ? new URL(rendererUrl).toString()
     : new URL(`file:///${join(__dirname, '../renderer/index.html').replaceAll('\\', '/')}`).toString();
   win.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl)) event.preventDefault();
+    if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl, !app.isPackaged))
+      event.preventDefault();
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (rendererUrl) void win.loadURL(rendererEntryUrl);

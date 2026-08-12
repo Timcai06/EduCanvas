@@ -144,6 +144,46 @@ describe('remote assistant proxy', () => {
     expect(cancelOperation).toHaveBeenCalledWith('operation:one');
   });
 
+  it('still cancels remotely when the user aborts before operation.accepted arrives', async () => {
+    const cancelOperation = vi.fn(async () => ({
+      status: 'cancelling' as const,
+    }));
+    let releaseAccepted!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      releaseAccepted = resolve;
+    });
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn(_request, options) {
+          await accepted;
+          if (options?.signal?.aborted) return;
+          yield event(0, { type: 'operation.accepted' });
+          await new Promise<void>((_resolve, reject) =>
+            options?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('aborted', 'AbortError')),
+              { once: true },
+            ),
+          );
+        },
+        cancelOperation,
+      }),
+    });
+    const controller = new AbortController();
+    const pending = proxy.turn({ text: '停止' }, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    releaseAccepted();
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      code: 'aborted',
+    });
+    expect(cancelOperation).toHaveBeenCalledWith('operation:one');
+  });
+
   it('does not accept operation.completed after a user cancellation wins', async () => {
     let releaseCancel!: () => void;
     const cancelOperation = vi.fn(

@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { EXPANDED_CHAT_WINDOW_OPTIONS } from '../shared/chat-window-layout';
 import { isTrustedDesktopRendererUrl } from './desktop-renderer-url';
@@ -15,13 +15,16 @@ export function createExpandedChatWindow(): BrowserWindow {
       sandbox: true,
     },
   });
-  const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
+  const rendererUrl = app.isPackaged
+    ? undefined
+    : process.env['ELECTRON_RENDERER_URL'];
   const rendererEntryUrl = rendererUrl
     ? new URL(rendererUrl).toString()
     : new URL(`file:///${join(__dirname, '../renderer/index.html').replaceAll('\\', '/')}`).toString();
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl)) event.preventDefault();
+    if (!isTrustedDesktopRendererUrl(url, rendererEntryUrl, !app.isPackaged))
+      event.preventDefault();
   });
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) win.show();

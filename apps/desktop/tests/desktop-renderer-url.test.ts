@@ -13,4 +13,15 @@ describe('desktop renderer URL pinning', () => {
     expect(isTrustedDesktopRendererUrl('https://example.com/', appUrl)).toBe(false);
     expect(isTrustedDesktopRendererUrl('file:///D:/EduCanvas/secrets.html', appUrl)).toBe(false);
   });
+
+  it('trusts a loopback development entry only when development mode is explicit', () => {
+    const developmentUrl = 'http://127.0.0.1:5173/';
+    expect(isTrustedDesktopRendererUrl(developmentUrl, developmentUrl)).toBe(false);
+    expect(
+      isTrustedDesktopRendererUrl(developmentUrl, developmentUrl, true),
+    ).toBe(true);
+    expect(
+      isTrustedDesktopRendererUrl('https://attacker.example/', 'https://attacker.example/', true),
+    ).toBe(false);
+  });
 });

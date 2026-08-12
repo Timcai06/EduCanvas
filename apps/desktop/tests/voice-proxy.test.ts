@@ -187,6 +187,34 @@ describe('voice-proxy', () => {
     });
   });
 
+  it('在读取 chunked TTS 响应时立即拒绝超过 20 MiB 的内容', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(20 * 1024 * 1024));
+        controller.enqueue(Uint8Array.of(1));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const proxy = createVoiceProxy({
+      ...authenticated,
+      fetchImpl: fakeFetch(
+        () =>
+          new Response(body, {
+            headers: { 'content-type': 'audio/mpeg' },
+          }),
+      ).impl,
+    });
+
+    await expect(proxy.synthesize({ text: '很长的回答' })).resolves.toMatchObject({
+      ok: false,
+      code: 'invalid_response',
+    });
+    expect(cancelled).toBe(true);
+  });
+
   it('没有桌面 session 时不发出语音请求', async () => {
     const { impl, calls } = fakeFetch(() => new Response());
     const proxy = createVoiceProxy({

@@ -62,11 +62,8 @@ export function createAssistantProxy(options: {
 
       const cancelRemoteThenStream = (): void => {
         if (cancelStarted) return;
+        if (!operationId) return;
         cancelStarted = true;
-        if (!operationId) {
-          streamAbort.abort();
-          return;
-        }
         void client
           .cancelOperation(operationId)
           .catch(() => undefined)

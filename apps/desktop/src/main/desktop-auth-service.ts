@@ -19,6 +19,7 @@ interface DesktopSessionStorePort {
 }
 
 const PENDING_AUTH_TTL_MS = 10 * 60_000;
+const DEFAULT_REVOKE_TIMEOUT_MS = 5_000;
 
 /**
  * Main-process-only native authorization coordinator. RFC 8252 requires the system
@@ -35,6 +36,7 @@ export function createDesktopAuthCoordinator(options: {
   now?: () => Date;
   randomBytes?: (size: number) => Buffer;
   revokeSession?(session: StoredDesktopSession): Promise<void>;
+  revokeTimeoutMs?: number;
 }) {
   const now = options.now ?? (() => new Date());
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -45,6 +47,7 @@ export function createDesktopAuthCoordinator(options: {
     createdAtMs: number;
   } | null = null;
   let status: DesktopAuthStatus = { state: 'signed_out' };
+  let sessionGeneration = 0;
 
   const publish = (next: DesktopAuthStatus): DesktopAuthStatus => {
     status = next;
@@ -119,6 +122,7 @@ export function createDesktopAuthCoordinator(options: {
       }
       // Callback credential is single-use from this point even when the network fails.
       pending = null;
+      const exchangeGeneration = sessionGeneration;
       try {
         const response = await fetchImpl(
           new URL('/api/v1/desktop-auth/token', options.webBaseUrl),
@@ -151,7 +155,12 @@ export function createDesktopAuthCoordinator(options: {
           notebookId: grant.notebook_id,
           conversationId: grant.conversation_id,
         };
+        if (exchangeGeneration !== sessionGeneration) return status;
         await options.sessionStore.save(session);
+        if (exchangeGeneration !== sessionGeneration) {
+          await options.sessionStore.clear();
+          return status;
+        }
         cachedSession = session;
         return publish({ state: 'signed_in' });
       } catch {
@@ -163,26 +172,38 @@ export function createDesktopAuthCoordinator(options: {
     },
 
     async invalidateSession(): Promise<DesktopAuthStatus> {
+      sessionGeneration += 1;
       await clearSession();
       return publish({ state: 'signed_out' });
     },
 
     async signOut(): Promise<DesktopAuthStatus> {
       const session = await loadSession();
+      sessionGeneration += 1;
+      await clearSession();
+      publish({ state: 'signed_out' });
       try {
         if (session) {
-          if (options.revokeSession) await options.revokeSession(session);
-          else
-            await revokeGatewayDesktopSession(
-              session.gatewayBaseUrl,
-              session.token,
-            );
+          const revoke = options.revokeSession
+            ? options.revokeSession(session)
+            : revokeGatewayDesktopSession(
+                session.gatewayBaseUrl,
+                session.token,
+              );
+          await Promise.race([
+            revoke,
+            new Promise<void>((resolve) =>
+              setTimeout(
+                resolve,
+                options.revokeTimeoutMs ?? DEFAULT_REVOKE_TIMEOUT_MS,
+              ),
+            ),
+          ]);
         }
       } catch {
         // Local credential removal is still mandatory when the network is unavailable.
       }
-      await clearSession();
-      return publish({ state: 'signed_out' });
+      return status;
     },
   };
 }

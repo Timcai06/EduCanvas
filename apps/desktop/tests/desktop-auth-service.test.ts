@@ -11,15 +11,20 @@ const grant = {
   conversation_id: 'conversation:one',
 };
 
-function harness() {
+function harness(overrides?: {
+  fetchImpl?: typeof fetch;
+  revokeSession?: (session: StoredDesktopSession) => Promise<void>;
+  revokeTimeoutMs?: number;
+}) {
   let randomFill = 4;
   let stored: StoredDesktopSession | null = null;
   const opened: string[] = [];
   const statuses: string[] = [];
-  const fetchImpl = vi.fn<typeof fetch>(async () =>
-    Response.json(grant, { status: 200 }),
+  const fetchImpl = vi.fn<typeof fetch>(
+    overrides?.fetchImpl ??
+      (async () => Response.json(grant, { status: 200 })),
   );
-  const revoke = vi.fn(async () => undefined);
+  const revoke = vi.fn(overrides?.revokeSession ?? (async () => undefined));
   const coordinator = createDesktopAuthCoordinator({
     webBaseUrl: 'https://learn.educanvas.example',
     gatewayBaseUrl: 'https://gateway.educanvas.example',
@@ -41,6 +46,7 @@ function harness() {
     },
     fetchImpl,
     revokeSession: revoke,
+    revokeTimeoutMs: overrides?.revokeTimeoutMs,
     onStatus(status) {
       statuses.push(status.state);
     },
@@ -115,7 +121,7 @@ describe('desktop auth coordinator', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('revokes remotely before clearing local encrypted state on sign out', async () => {
+  it('clears local encrypted state and revokes remotely on sign out', async () => {
     const { coordinator, opened, revoke, stored } = harness();
     await coordinator.signIn();
     const state = new URL(opened[0]!).searchParams.get('state')!;
@@ -128,6 +134,46 @@ describe('desktop auth coordinator', () => {
     expect(revoke).toHaveBeenCalledWith(
       expect.objectContaining({ token: grant.access_token }),
     );
+    expect(stored()).toBeNull();
+  });
+
+  it('does not let a stale token exchange sign the user back in after sign out', async () => {
+    let finishExchange!: () => void;
+    const exchangeReady = new Promise<void>((resolve) => {
+      finishExchange = resolve;
+    });
+    const { coordinator, opened, stored, statuses } = harness({
+      fetchImpl: async () => {
+        await exchangeReady;
+        return Response.json(grant, { status: 200 });
+      },
+    });
+    await coordinator.signIn();
+    const state = new URL(opened[0]!).searchParams.get('state')!;
+    const exchange = coordinator.handleDeepLink(
+      `educanvas://auth/callback?code=eca1.${'p'.repeat(48)}.${'x'.repeat(43)}&state=${state}`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await coordinator.signOut();
+    finishExchange();
+
+    await expect(exchange).resolves.toEqual({ state: 'signed_out' });
+    expect(stored()).toBeNull();
+    expect(statuses.at(-1)).toBe('signed_out');
+  });
+
+  it('clears local credentials even when remote revocation never responds', async () => {
+    const { coordinator, opened, stored } = harness({
+      revokeSession: () => new Promise(() => {}),
+      revokeTimeoutMs: 5,
+    });
+    await coordinator.signIn();
+    const state = new URL(opened[0]!).searchParams.get('state')!;
+    await coordinator.handleDeepLink(
+      `educanvas://auth/callback?code=eca1.${'p'.repeat(48)}.${'x'.repeat(43)}&state=${state}`,
+    );
+
+    await expect(coordinator.signOut()).resolves.toEqual({ state: 'signed_out' });
     expect(stored()).toBeNull();
   });
 });
