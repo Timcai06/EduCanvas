@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceSurface } from './workspace-surface';
 import {
   fetchSurfacePositions,
   saveSurfacePosition,
+  SurfacePositionClientError,
   type SaveSurfacePosition,
   type SurfacePosition,
 } from './surface-position-client';
@@ -26,6 +27,38 @@ export function getSurfacePositionTarget(
   return null;
 }
 
+export function restoreSurfacePositions(loaded: readonly SurfacePosition[]): {
+  readonly positions: readonly SurfacePosition[];
+  readonly active: SurfacePosition | null;
+} {
+  const active =
+    loaded.find((position) => position.restState === 'open') ??
+    loaded.find((position) => position.restState === 'pinned') ??
+    null;
+  if (!active) return { positions: loaded, active: null };
+  return {
+    active,
+    positions: loaded.map((position) =>
+      position !== active && position.restState === 'open'
+        ? {
+            ...position,
+            zone: 'periphery' as const,
+            restState: 'folded' as const,
+          }
+        : position,
+    ),
+  };
+}
+
+function clientError(
+  error: unknown,
+  fallback: 'surface_layout_load_failed' | 'surface_layout_save_failed',
+): SurfacePositionClientError {
+  return error instanceof SurfacePositionClientError
+    ? error
+    : new SurfacePositionClientError(fallback);
+}
+
 /**
  * 将工作面的空间记忆隔离在主控制器之外。
  *
@@ -43,14 +76,24 @@ export function useSurfacePositionPersistence(options: {
     readonly notebookId: string;
     readonly positions: readonly SurfacePosition[];
   }>({ notebookId, positions: [] });
-  const positions =
-    positionState.notebookId === notebookId ? positionState.positions : [];
+  const positions = useMemo(
+    () =>
+      positionState.notebookId === notebookId ? positionState.positions : [],
+    [notebookId, positionState],
+  );
+  const positionsRef = useRef<readonly SurfacePosition[]>(positions);
+  const [error, setError] = useState<SurfacePositionClientError | null>(null);
   const previousTargetRef = useRef<SurfaceTarget | null>(null);
+
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
 
   const persist = useCallback(
     (position: SaveSurfacePosition) => {
       void saveSurfacePosition(position)
         .then((saved) => {
+          setError(null);
           setPositionState((current) =>
             current.notebookId !== notebookId
               ? current
@@ -67,7 +110,9 @@ export function useSurfacePositionPersistence(options: {
                 },
           );
         })
-        .catch(() => undefined);
+        .catch((reason: unknown) => {
+          setError(clientError(reason, 'surface_layout_save_failed'));
+        });
     },
     [notebookId],
   );
@@ -78,16 +123,18 @@ export function useSurfacePositionPersistence(options: {
     void fetchSurfacePositions(controller.signal)
       .then((loaded) => {
         if (controller.signal.aborted) return;
-        setPositionState({ notebookId, positions: loaded });
-        const active = loaded.find(
-          (position) =>
-            position.restState === 'open' || position.restState === 'pinned',
-        );
+        const restored = restoreSurfacePositions(loaded);
+        setError(null);
+        setPositionState({ notebookId, positions: restored.positions });
+        const active = restored.active;
         if (!active) return;
         if (active.resourceKind === 'source') openSource(active.resourceId);
         else openArtifact(active.resourceId);
       })
-      .catch(() => undefined);
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(clientError(reason, 'surface_layout_load_failed'));
+      });
     return () => controller.abort();
   }, [notebookId, openArtifact, openSource]);
 
@@ -96,29 +143,48 @@ export function useSurfacePositionPersistence(options: {
     const previous = previousTargetRef.current;
     previousTargetRef.current = current;
     const timer = window.setTimeout(() => {
+      const remembered = (target: SurfaceTarget) =>
+        positionsRef.current.find(
+          (position) =>
+            position.resourceKind === target.resourceKind &&
+            position.resourceId === target.resourceId,
+        );
       if (
         previous &&
         (!current ||
           previous.resourceKind !== current.resourceKind ||
           previous.resourceId !== current.resourceId)
       ) {
+        const previousPosition = remembered(previous);
         persist({
           ...previous,
-          zone: 'periphery',
-          x: 0.88,
-          y: 0.18,
-          z: 0,
-          restState: 'folded',
+          zone:
+            previousPosition?.restState === 'pinned'
+              ? previousPosition.zone
+              : 'periphery',
+          x:
+            previousPosition?.restState === 'pinned'
+              ? previousPosition.x
+              : 0.88,
+          y:
+            previousPosition?.restState === 'pinned'
+              ? previousPosition.y
+              : 0.18,
+          z: previousPosition?.restState === 'pinned' ? previousPosition.z : 0,
+          restState:
+            previousPosition?.restState === 'pinned' ? 'pinned' : 'folded',
         });
       }
       if (current) {
+        const currentPosition = remembered(current);
+        const pinned = currentPosition?.restState === 'pinned';
         persist({
           ...current,
-          zone: 'center',
-          x: 0.5,
-          y: 0.5,
-          z: 10,
-          restState: 'open',
+          zone: pinned ? currentPosition.zone : 'center',
+          x: pinned ? currentPosition.x : 0.5,
+          y: pinned ? currentPosition.y : 0.5,
+          z: pinned ? currentPosition.z : 10,
+          restState: pinned ? 'pinned' : 'open',
         });
       }
     }, 320);
@@ -133,5 +199,5 @@ export function useSurfacePositionPersistence(options: {
     [openArtifact, openSource],
   );
 
-  return { positions, openRestingSurface } as const;
+  return { positions, openRestingSurface, error } as const;
 }

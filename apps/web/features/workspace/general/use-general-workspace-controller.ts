@@ -62,6 +62,7 @@ import {
 } from '@/features/canvas/resource-error';
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
+import { useResourceDock } from './use-resource-dock';
 import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 
 /**
@@ -145,13 +146,18 @@ export function useGeneralWorkspaceController(options: {
     },
   });
 
-  const { positions: surfacePositions, openRestingSurface } =
-    useSurfacePositionPersistence({
-      notebookId,
-      surface,
-      openSource: studioOpenActions.actions.openSource,
-      openArtifact: studioOpenActions.actions.openArtifact,
-    });
+  const resourceDock = useResourceDock(notebookId);
+
+  const {
+    positions: surfacePositions,
+    openRestingSurface,
+    error: surfacePositionError,
+  } = useSurfacePositionPersistence({
+    notebookId,
+    surface,
+    openSource: studioOpenActions.actions.openSource,
+    openArtifact: studioOpenActions.actions.openArtifact,
+  });
 
   /* Artifact 详情新打开时同步 surface：`artifactFlow.confirm`（openWhenReady）与
      `observeProposedArtifact` 只在 artifactFlow 内部 setOpenDetail，不会 dispatch
@@ -348,20 +354,20 @@ export function useGeneralWorkspaceController(options: {
     });
     pendingGeneralTurnReadKeys.forEach((key) => sessionStorage.removeItem(key));
     if (restored.kind === 'turn') {
-      setOutputPreference(restored.payload.outputPreference);
-      queueMicrotask(() =>
+      queueMicrotask(() => {
+        setOutputPreference(restored.payload.outputPreference);
         send(
           restored.payload.prompt,
           undefined,
           restored.payload.outputPreference,
-        ),
-      );
+        );
+      });
     } else if (restored.kind === 'legacy_menu_action') {
       queueMicrotask(() =>
         handleMenuAction(restored.action as PlusMenuActionId),
       );
     }
-  }, [handleMenuAction]);
+  }, [handleMenuAction, send]);
 
   /* W03：作品列表加载失败不转成空列表——保留已有项并把失败语义上报到错误状态。 */
   const openStudio = useCallback(() => {
@@ -521,5 +527,7 @@ export function useGeneralWorkspaceController(options: {
     surfaceSlotProps,
     surfacePositions,
     openRestingSurface,
+    surfacePositionError,
+    resourceDock,
   };
 }
