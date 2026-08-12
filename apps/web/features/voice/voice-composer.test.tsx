@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { VoiceComposerRuntime } from './voice-composer';
 import {
   filterLiveSessionTranscript,
   mergeDictationTranscript,
   resolveLiveVoiceVisualPhase,
-  VoiceComposerRuntime,
-} from './voice-composer';
+} from './voice-composer-projection';
 import {
   LIVE_ASR_RECOVERY_STABLE_MS,
   LIVE_ASR_ROTATION_MS,
