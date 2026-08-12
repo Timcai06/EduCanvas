@@ -36,19 +36,21 @@ describe('MVP pet controls', () => {
 
   it('keeps transient pet behavior outside the conversation history log', () => {
     const source = readFileSync(
-      new URL('../src/renderer/src/App.tsx', import.meta.url),
+      new URL('../src/renderer/src/pet-chat-panel.tsx', import.meta.url),
       'utf8',
     );
     const historyView = source.slice(
-      source.indexOf('const historyView = ('),
-      source.indexOf('const chatPanel = ('),
+      source.indexOf('className="pet-chat__history"'),
+      source.indexOf('className="pet-chat__status"'),
     );
-    const chatPanel = source.slice(source.indexOf('const chatPanel = ('));
+    const chatPanel = source.slice(
+      source.indexOf('className="pet-chat__status"'),
+    );
 
     expect(historyView).not.toContain('pet-chat__status');
     expect(historyView).not.toContain('{message}');
     expect(historyView).toContain('还没有对话。');
-    expect(chatPanel).toContain('className="pet-chat__status" role="status"');
+    expect(chatPanel).toContain('role="status"');
   });
 
   it('hides the dialog content and renders a restore control when folded', () => {
