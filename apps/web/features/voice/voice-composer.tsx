@@ -30,7 +30,6 @@ import { LiveVoiceLaunchButton } from './live-voice-launch-button';
 import {
   LiveVoicePanel,
   type LiveVoiceTranscriptEntry,
-  type LiveVoiceVisualPhase,
 } from './live-voice-panel';
 import type { ChatMessageStatus } from '@/features/chat/messages';
 import {
@@ -53,6 +52,16 @@ import {
   type LiveVoiceAnnotationDraft,
   type LiveVoiceExitPayload,
 } from './live-voice-bring-back';
+import {
+  LiveInterruptionCoordinator,
+  type LiveInterruptionCoordinatorDecision,
+} from './live-interruption-coordinator';
+import {
+  filterLiveSessionTranscript,
+  LIVE_STATUS,
+  mergeDictationTranscript,
+  resolveLiveVoiceVisualPhase,
+} from './voice-composer-projection';
 
 type BaseComposerProps = Omit<
   ComponentProps<typeof Composer>,
@@ -85,58 +94,6 @@ export interface VoiceComposerRuntimeProps extends BaseComposerProps {
   ) => void;
   /** 出室瞬间同步回调（EXIT 时触发，不等退场动画）：信笺等带回写库与动画并行。 */
   readonly onLiveExit?: (payload: LiveVoiceExitPayload) => void;
-}
-
-const LIVE_STATUS = {
-  idle: '准备就绪',
-  starting: '正在连接…',
-  authorizing: '请允许麦克风访问',
-  recording: '正在聆听',
-  finalizing: '正在整理你的话…',
-  stopped: '等待下一轮',
-  cancelled: '已静音',
-  failed: '连接中断',
-} as const;
-
-export function resolveLiveVoiceVisualPhase(input: {
-  readonly muted: boolean;
-  readonly busy: boolean;
-  readonly preparing?: boolean;
-  readonly recovering?: boolean;
-  readonly speaking: boolean;
-  readonly status: keyof typeof LIVE_STATUS;
-}): LiveVoiceVisualPhase {
-  if (input.muted) return 'muted';
-  if (input.recovering) return 'connecting';
-  if (input.status === 'failed') return 'error';
-  if (input.speaking) return 'speaking';
-  if (input.preparing) return 'thinking';
-  if (input.busy) return 'thinking';
-  if (input.status === 'starting' || input.status === 'authorizing') {
-    return 'connecting';
-  }
-  if (input.status === 'recording' || input.status === 'finalizing')
-    return 'listening';
-  return 'idle';
-}
-
-export function mergeDictationTranscript(
-  base: string,
-  transcript: string,
-): string {
-  const existing = base.trimEnd();
-  const text = transcript.trim();
-  if (!text) return base;
-  return existing ? `${existing} ${text}` : text;
-}
-
-/** 进入 Live 前已有的消息永远不属于本次会话，即使父级滑动窗口淘汰了锚点。 */
-export function filterLiveSessionTranscript(
-  transcript: readonly LiveVoiceTranscriptEntry[],
-  baselineIds: readonly string[],
-): readonly LiveVoiceTranscriptEntry[] {
-  const baseline = new Set(baselineIds);
-  return transcript.filter((entry) => !baseline.has(entry.id));
 }
 
 /** Dictation 与 Live Voice 共用 Composer 草稿，但只有 Dictation 能写入草稿。 */
@@ -181,10 +138,11 @@ export function VoiceComposerRuntime({
     'realtime' | 'batch' | null
   >(null);
   const liveLaunchButtonRef = useRef<HTMLButtonElement>(null);
-  const pendingInterruptionRef = useRef<{
-    readonly text: string;
-    readonly context: LiveVoiceContextSnapshot;
-  } | null>(null);
+  const interruptionRef = useRef(
+    new LiveInterruptionCoordinator<LiveVoiceContextSnapshot>(),
+  );
+  const activeAsrGenerationRef = useRef(0);
+  const liveAssetsRef = useRef(liveAssets);
   const realtimeDictationBaseRef = useRef('');
   const appendDictation = useCallback((text: string) => {
     setDraft((current) => mergeDictationTranscript(current, text));
@@ -251,31 +209,45 @@ export function VoiceComposerRuntime({
     });
   }, []);
 
+  useEffect(() => {
+    liveAssetsRef.current = liveAssets;
+  }, [liveAssets]);
+
+  const applyInterruptionActions = useCallback(
+    (
+      actions: readonly LiveInterruptionCoordinatorDecision<LiveVoiceContextSnapshot>[],
+    ) => {
+      for (const action of actions) {
+        if (action.type === 'cancel-agent') {
+          onStop?.();
+          continue;
+        }
+        expectNextSpeechResponse();
+        if (onLiveSend) {
+          onLiveSend(action.text, action.context);
+        } else {
+          onSend(action.text);
+        }
+      }
+    },
+    [expectNextSpeechResponse, onLiveSend, onSend, onStop],
+  );
+
   const handleLiveFinal = useCallback(
     (text: string) => {
       if (isPlaybackEcho(text)) return;
       interruptSpeech();
-      expectNextSpeechResponse();
-      const context = freezeLiveVoiceContext(liveAssets);
+      const context = freezeLiveVoiceContext(liveAssetsRef.current);
       setLiveContextSnapshot(context);
-      if (busy) {
-        pendingInterruptionRef.current = { text, context };
-        onStop?.();
-        return;
-      }
-      if (onLiveSend) onLiveSend(text, context);
-      else onSend(text);
+      const generation =
+        activeAsrGenerationRef.current ||
+        interruptionRef.current.beginAsrTurn();
+      activeAsrGenerationRef.current = generation;
+      applyInterruptionActions(
+        interruptionRef.current.onAsrFinal({ generation, text, context }),
+      );
     },
-    [
-      busy,
-      expectNextSpeechResponse,
-      interruptSpeech,
-      isPlaybackEcho,
-      liveAssets,
-      onLiveSend,
-      onSend,
-      onStop,
-    ],
+    [applyInterruptionActions, interruptSpeech, isPlaybackEcho],
   );
   const live = useVoiceSession({
     notebookId,
@@ -285,24 +257,29 @@ export function VoiceComposerRuntime({
     onFinalText: handleLiveFinal,
   });
   const liveStart = live.start;
+  const startLiveAsrGeneration = useCallback(() => {
+    activeAsrGenerationRef.current = interruptionRef.current.beginAsrTurn();
+    liveStart();
+  }, [liveStart]);
   const liveStop = live.stop;
   const liveCancel = live.cancel;
   const liveContinuity = useLiveTranscriptionContinuity({
     active: threshold === 'voice' && !muted,
     status: live.status,
     partialText: live.partialText,
-    start: liveStart,
+    start: startLiveAsrGeneration,
     stop: liveStop,
     cancel: liveCancel,
   });
 
   useEffect(() => {
-    if (busy || pendingInterruptionRef.current === null) return;
-    const pending = pendingInterruptionRef.current;
-    pendingInterruptionRef.current = null;
-    if (onLiveSend) onLiveSend(pending.text, pending.context);
-    else onSend(pending.text);
-  }, [busy, onLiveSend, onSend]);
+    applyInterruptionActions(
+      interruptionRef.current.setBusy({
+        busy,
+        turnId: busy ? liveAssistantId : null,
+      }),
+    );
+  }, [applyInterruptionActions, busy, liveAssistantId]);
 
   useEffect(() => {
     if (
@@ -311,8 +288,15 @@ export function VoiceComposerRuntime({
       !isPlaybackEcho(live.partialText)
     ) {
       cancelPendingSpeech();
+      applyInterruptionActions(interruptionRef.current.onBargeIn());
     }
-  }, [cancelPendingSpeech, isPlaybackEcho, live.inputLevel, live.partialText]);
+  }, [
+    applyInterruptionActions,
+    cancelPendingSpeech,
+    isPlaybackEcho,
+    live.inputLevel,
+    live.partialText,
+  ]);
 
   const realtimeDictationReady = realtimeDictation.capability.enabled;
   const useRealtimeDictation =

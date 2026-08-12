@@ -97,11 +97,11 @@ describe('LiveVoicePanel', () => {
     ).toEqual({
       id: 'live-assistant:assistant-current',
       speaker: 'AI',
-      text: '完整回答继续增长。这里是新到达的文字。',
+      text: '正在读的这一句。',
     });
   });
 
-  it('渲染时同时保留增长回答与当前可听 cue', () => {
+  it('渲染时仅显示可听 cue，不将完整回答冒充主字幕', () => {
     const html = renderToStaticMarkup(
       <LiveVoicePanel
         phase="speaking"
@@ -117,53 +117,55 @@ describe('LiveVoicePanel', () => {
       />,
     );
 
-    expect(html).toContain('完整回答已经增长到这里。');
+    expect(html).not.toContain('完整回答已经增长到这里。');
     expect(html).toContain('data-live-audible-cue="true"');
     expect(html).toContain('当前正在播放的短语。');
   });
 
-  it('TTS 尚未产生 cue 时直接显示同一 Assistant 消息的增量文本', () => {
-    const first = resolveLiveVoiceActiveTranscript({
-      phase: 'thinking',
-      userSubtitle: null,
-      assistantMessageId: 'assistant-current',
-      assistantText: '先看定义',
-      assistantStatus: 'streaming',
-      assistantSubtitle: null,
-      transcript: [],
-    });
-    const next = resolveLiveVoiceActiveTranscript({
-      phase: 'thinking',
-      userSubtitle: null,
-      assistantMessageId: 'assistant-current',
-      assistantText: '先看定义，再比较两个例子。',
-      assistantStatus: 'streaming',
-      assistantSubtitle: null,
-      transcript: [],
-    });
-
-    expect(first).toMatchObject({
-      id: 'live-assistant:assistant-current',
-      text: '先看定义',
-    });
-    expect(next).toMatchObject({
-      id: 'live-assistant:assistant-current',
-      text: '先看定义，再比较两个例子。',
-    });
+  it('思考阶段未有字幕时显示已提交用户问题', () => {
+    expect(
+      resolveLiveVoiceActiveTranscript({
+        phase: 'thinking',
+        userSubtitle: null,
+        assistantMessageId: null,
+        assistantText: null,
+        assistantStatus: null,
+        assistantSubtitle: null,
+        transcript: [
+          { id: 'ai-old', speaker: 'AI', text: '旧回答' },
+          { id: 'user-current', speaker: '你', text: '本轮问题' },
+          { id: 'ai-now', speaker: 'AI', text: '新回答' },
+        ],
+      }),
+    ).toMatchObject({ id: 'user-current', speaker: '你', text: '本轮问题' });
   });
 
-  it('静音不清空正在增长的 Assistant 文本', () => {
+  it('思考/接管期不提前显示尚未进入播放相位的 subtitle', () => {
+    expect(
+      resolveLiveVoiceActiveTranscript({
+        phase: 'thinking',
+        userSubtitle: null,
+        assistantMessageId: 'assistant-current',
+        assistantText: '先看定义，再比较两个例子。',
+        assistantStatus: 'streaming',
+        assistantSubtitle: '接管到这一句。',
+        transcript: [],
+      }),
+    ).toBeNull();
+  });
+
+  it('静音时不展示完整 Assistant 文本', () => {
     expect(
       resolveLiveVoiceActiveTranscript({
         phase: 'muted',
         userSubtitle: null,
         assistantMessageId: 'assistant-current',
-        assistantText: '这段文字仍应可见。',
+        assistantText: '完整回答仍不应可见。',
         assistantStatus: 'streaming',
         assistantSubtitle: null,
         transcript: [],
       }),
-    ).toMatchObject({ speaker: 'AI', text: '这段文字仍应可见。' });
+    ).toBeNull();
   });
 
   it('静音态给出明确恢复动作', () => {

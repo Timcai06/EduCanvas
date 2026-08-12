@@ -7,6 +7,7 @@ import type {
 } from './messages';
 import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
 import type { TeachingTurnEvent } from './turn-events';
+import { reconcileToolSteps } from './tool-step-continuity';
 
 export interface ActiveTeachingTurn {
   clientMessageId: string;
@@ -156,26 +157,9 @@ function applyToolStep(
   >,
 ): AssistantMessage {
   const steps = message.toolSteps ?? [];
-  if (event.type === 'tool.started') {
-    if (steps.some((step) => step.id === event.toolCallId)) return message;
-    return {
-      ...message,
-      toolSteps: [
-        ...steps,
-        {
-          id: event.toolCallId,
-          label: event.label ?? '正在使用工具',
-          status: 'running',
-        },
-      ],
-    };
-  }
-  const status = event.type === 'tool.completed' ? 'completed' : 'failed';
   return {
     ...message,
-    toolSteps: steps.map((step) =>
-      step.id === event.toolCallId ? { ...step, status } : step,
-    ),
+    toolSteps: reconcileToolSteps(steps, event),
   };
 }
 

@@ -88,7 +88,8 @@ export function toLiveVoiceDisplayText(text: string): string {
 
 /**
  * 沉浸层不承担聊天记录浏览：用户 partial 优先；本轮 Assistant 消息开始增长后，
- * 直接显示消息账本中的文本。PCM cue 由独立视觉层表达，不能覆盖完整回答。
+ * 直接显示本次可听 cue。PCM cue 由独立文本片段表达，完整回答仅保留在
+ * 外层消息账本。
  */
 export function resolveLiveVoiceActiveTranscript(input: {
   readonly phase: LiveVoiceVisualPhase;
@@ -110,42 +111,38 @@ export function resolveLiveVoiceActiveTranscript(input: {
     };
   }
 
-  const assistantText = input.assistantText
-    ? toLiveVoiceDisplayText(input.assistantText)
-    : '';
-  const showsCurrentAssistant =
-    input.phase === 'thinking' ||
-    input.phase === 'speaking' ||
-    input.phase === 'muted' ||
-    input.phase === 'error' ||
-    input.assistantStatus === 'pending' ||
-    input.assistantStatus === 'streaming';
-  if (showsCurrentAssistant && assistantText) {
-    return {
-      id: `live-assistant:${input.assistantMessageId ?? 'current'}`,
-      speaker: 'AI',
-      text: assistantText,
-    };
-  }
-
   const assistantSubtitle = input.assistantSubtitle
     ? toLiveVoiceDisplayText(input.assistantSubtitle)
     : '';
+
   if (input.phase === 'speaking' && assistantSubtitle) {
     return {
-      id: 'live-speaking-current',
+      id: `live-assistant:${input.assistantMessageId ?? 'current'}`,
       speaker: 'AI',
       text: assistantSubtitle,
     };
   }
 
-  if (input.phase !== 'thinking') return null;
+  if (
+    input.phase !== 'thinking' &&
+    input.phase !== 'connecting' &&
+    input.phase !== 'error'
+  ) {
+    return null;
+  }
+
   const latestUserEntry = [...input.transcript]
     .reverse()
     .find((entry) => entry.speaker === '你' && entry.text.trim().length > 0);
   if (!latestUserEntry) return null;
   const text = toLiveVoiceDisplayText(latestUserEntry.text);
-  return text ? { ...latestUserEntry, text } : null;
+  return text
+    ? {
+        id: latestUserEntry.id,
+        speaker: latestUserEntry.speaker,
+        text,
+      }
+    : null;
 }
 
 /**

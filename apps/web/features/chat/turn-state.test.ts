@@ -385,6 +385,19 @@ describe('工具轨迹', () => {
     return message?.role === 'assistant' ? message.toolSteps : undefined;
   }
 
+  function delta(text: string) {
+    return {
+      type: 'stream.event' as const,
+      event: {
+        schemaVersion: '1' as const,
+        turnId: 'turn-1',
+        type: 'message.delta' as const,
+        messageId: 'assistant-1',
+        delta: text,
+      },
+    };
+  }
+
   it('并发的多个工具各自留痕，不互相覆盖', () => {
     let state = withTurn();
     state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
@@ -438,5 +451,39 @@ describe('工具轨迹', () => {
     state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
 
     expect(assistantSteps(state)).toHaveLength(1);
+  });
+
+  it('工具生命周期不重置 assistant 正文游标，完成后可继续 append 文本', () => {
+    let state = withTurn();
+    state = teachingTurnReducer(state, delta('先看定义。'));
+    state = teachingTurnReducer(state, started('call-1', '正在搜索网页'));
+
+    const assistant = state.messages.at(-1);
+    expect(assistant?.role).toBe('assistant');
+    expect(assistant?.clientMessageId).toBe('client-1');
+    expect(assistant?.text).toBe('先看定义。');
+
+    state = teachingTurnReducer(state, delta('再看例子。'));
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        type: 'tool.completed',
+        toolCallId: 'call-1',
+      },
+    });
+    state = teachingTurnReducer(state, delta('最后一段。'));
+
+    const final = state.messages.at(-1);
+    expect(final).toMatchObject({
+      role: 'assistant',
+      clientMessageId: 'client-1',
+      text: '先看定义。再看例子。最后一段。',
+      status: 'streaming',
+    });
+    expect(assistantSteps(state)).toEqual([
+      { id: 'call-1', label: '正在搜索网页', status: 'completed' },
+    ]);
   });
 });
