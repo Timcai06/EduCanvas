@@ -9,6 +9,7 @@ import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
+import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
 import { VoiceComposer } from '@/features/voice';
 import {
   MAX_LIVE_CONTEXT_ASSETS,
@@ -124,9 +125,13 @@ function LearnWorkspaceSession({
   const teachingTurn = useTeachingTurn(initialData.initialMessages);
   const sendTeachingTurn = teachingTurn.send;
   const messages = teachingTurn.messages;
-  const liveAssistantMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === 'assistant');
+  const {
+    assistantId,
+    assistantText,
+    assistantStatus,
+    assistantCitations,
+    assistantToolSteps,
+  } = useAssistantMessageProjection(messages);
   const liveTranscript = messages
     .slice(-6)
     .filter((message) => message.text.trim().length > 0)
@@ -376,19 +381,13 @@ function LearnWorkspaceSession({
     selectable: asset.selectable,
     previewUrl: null,
   }));
-  const liveCitations =
-    liveAssistantMessage?.role === 'assistant'
-      ? (liveAssistantMessage.citations ?? []).map((citation) => ({
-          id: citation.id,
-          label: citation.label,
-          pageStart: citation.pageStart,
-          pageEnd: citation.pageEnd,
-        }))
-      : [];
-  const liveTools =
-    liveAssistantMessage?.role === 'assistant'
-      ? (liveAssistantMessage.toolSteps ?? [])
-      : [];
+  const liveCitations = assistantCitations.map((citation) => ({
+    id: citation.id,
+    label: citation.label,
+    pageStart: citation.pageStart,
+    pageEnd: citation.pageEnd,
+  }));
+  const liveTools = assistantToolSteps;
   const uploadLiveAsset = useCallback(
     async (file: File) => {
       const asset = await uploadAsset({ file, scope: 'turn' });
@@ -525,11 +524,9 @@ function LearnWorkspaceSession({
                   availableMenuActions={LEARN_MENU_ACTIONS}
                   stopAvailable={teachingTurn.stopAvailable}
                   onStop={() => void teachingTurn.stop()}
-                  liveAssistantId={
-                    liveAssistantMessage?.clientMessageId ?? null
-                  }
-                  liveAssistantText={liveAssistantMessage?.text ?? null}
-                  liveAssistantStatus={liveAssistantMessage?.status ?? null}
+                  liveAssistantId={assistantId}
+                  liveAssistantText={assistantText}
+                  liveAssistantStatus={assistantStatus}
                   liveTranscript={liveTranscript}
                   liveAssets={liveAssetItems}
                   onLiveSend={handleLiveSend}
