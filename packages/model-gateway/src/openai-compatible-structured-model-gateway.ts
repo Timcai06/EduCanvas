@@ -57,7 +57,8 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       model: modelId,
       stream: false,
       response_format: { type: 'json_object' },
-      max_tokens: this.config.maxOutputTokens,
+      max_tokens:
+        this.config.structuredMaxOutputTokens ?? this.config.maxOutputTokens,
       ...(this.config.provider === 'deepseek'
         ? { thinking: { type: 'disabled' } }
         : {}),
@@ -121,21 +122,22 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
         payload = await response.json();
       } catch (cause) {
         throw invocationError(
-          { code: 'invalid_response', retryable: false },
+          { code: 'invalid_response', retryable: true },
           cause,
         );
       }
 
       const parsedPayload = completionPayloadSchema.safeParse(payload);
       if (!parsedPayload.success) {
-        throw invocationError({ code: 'invalid_response', retryable: false });
+        throw invocationError({ code: 'invalid_response', retryable: true });
       }
       const choice = parsedPayload.data.choices[0];
       if (!choice) {
-        throw invocationError({ code: 'invalid_response', retryable: false });
+        throw invocationError({ code: 'invalid_response', retryable: true });
       }
       if (choice.finish_reason === 'length') {
-        throw invocationError({ code: 'output_limit', retryable: true });
+        // 不改变预算或输入的原样重试仍会截断，只会重复计费并拖长失败时间。
+        throw invocationError({ code: 'output_limit', retryable: false });
       }
       if (choice.finish_reason === 'content_filter') {
         throw invocationError({ code: 'content_filtered', retryable: false });
@@ -146,14 +148,15 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
         parsedJson = JSON.parse(choice.message.content);
       } catch (cause) {
         throw invocationError(
-          { code: 'invalid_response', retryable: false },
+          { code: 'invalid_response', retryable: true },
           cause,
         );
       }
       const output = request.schema.safeParse(parsedJson);
       if (!output.success) {
         throw invocationError(
-          { code: 'invalid_response', retryable: false },
+          // 模型的结构化输出具有随机性；Worker 只在有界 Graphile 窗口内重试。
+          { code: 'invalid_response', retryable: true },
           output.error,
         );
       }

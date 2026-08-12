@@ -91,6 +91,7 @@ const modelGatewayEnvKeys = [
   'MODEL_GATEWAY_IMAGE_API_KEY',
   'MODEL_GATEWAY_TIMEOUT_MS',
   'MODEL_GATEWAY_MAX_OUTPUT_TOKENS',
+  'MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS',
 ] as const;
 
 const savedEnvironment = new Map(

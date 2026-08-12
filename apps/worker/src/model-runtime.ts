@@ -80,6 +80,8 @@ export function readModelGatewayEnvironment(): ModelGatewayEnvironment {
     MODEL_GATEWAY_TIMEOUT_MS: process.env.MODEL_GATEWAY_TIMEOUT_MS,
     MODEL_GATEWAY_MAX_OUTPUT_TOKENS:
       process.env.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
+    MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS:
+      process.env.MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS,
   };
 }
 

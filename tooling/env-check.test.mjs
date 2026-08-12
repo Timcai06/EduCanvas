@@ -141,6 +141,13 @@ describe('env-check', () => {
     const invalidTokenLimit = runEnvCheck(
       await writeEnv(providerEnv({ MODEL_GATEWAY_MAX_OUTPUT_TOKENS: '65537' })),
     );
+    const invalidStructuredTokenLimit = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS: '65537',
+        }),
+      ),
+    );
 
     assert.equal(invalidModel.status, 1);
     assert.match(invalidModel.stderr, /PRIMARY_MODEL is not a valid model id/);
@@ -148,6 +155,11 @@ describe('env-check', () => {
     assert.match(invalidTimeout.stderr, /integer between 1000 and 120000/);
     assert.equal(invalidTokenLimit.status, 1);
     assert.match(invalidTokenLimit.stderr, /integer between 1 and 65536/);
+    assert.equal(invalidStructuredTokenLimit.status, 1);
+    assert.match(
+      invalidStructuredTokenLimit.stderr,
+      /integer between 1 and 65536/,
+    );
   });
 
   it('accepts a complete production openai-compatible configuration', async () => {

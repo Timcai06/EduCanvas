@@ -16,14 +16,21 @@ export function DeskSheet({ children }: { children: ReactNode }) {
       media.add('(prefers-reduced-motion: no-preference)', () => {
         gsap.fromTo(
           rootRef.current,
-          { xPercent: 5, scale: 0.985, opacity: 0 },
+          {
+            xPercent: 5,
+            scale: 0.985,
+            opacity: 0,
+            willChange: 'transform,opacity',
+          },
           {
             xPercent: 0,
             scale: 1,
             opacity: 1,
             duration: motionDuration('slow'),
             ease: 'power3.out',
-            clearProps: 'transform,opacity',
+            // 永久的 will-change: transform 会把 fixed Canvas 困在右侧栏的
+            // containing block 中，导致“全屏”无法覆盖浏览器视口。
+            clearProps: 'transform,opacity,willChange',
           },
         );
       });
@@ -34,7 +41,7 @@ export function DeskSheet({ children }: { children: ReactNode }) {
   return (
     <div
       ref={rootRef}
-      className="relative flex min-h-0 min-w-0 flex-1 will-change-transform"
+      className="relative flex min-h-0 min-w-0 flex-1"
       data-desk-sheet
     >
       {children}

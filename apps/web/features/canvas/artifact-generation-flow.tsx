@@ -40,7 +40,6 @@ export interface GenerationState {
 export interface ConfirmArtifactOptions {
   openWhenReady?: boolean;
 }
-
 export interface ProposedArtifact {
   artifactId: string;
   kind: ObservableArtifactKind;
@@ -58,11 +57,7 @@ export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   web_app: 'Web App',
 };
 
-/**
- * 「生成思维导图」的确认 → 轮询 → 打开回路(M1 PR-J5b)。
- * 确认卡是显式用户动作:绝不静默生成(受控产物纪律);
- * 生成中关闭浏览器任务照跑,回来后经产物列表/详情恢复。
- */
+/** 显式确认后轮询；关闭页面不取消后端任务，资源列表与详情负责恢复。 */
 export function useArtifactGeneration() {
   const [generation, setGeneration] = useState<GenerationState | null>(null);
   const [openDetail, setOpenDetail] = useState<ArtifactDetail | null>(null);
@@ -481,6 +476,7 @@ export function ArtifactCanvas({
     'markdown_document',
     'web_app',
   ].includes(detail.artifact.kind);
+  const usesSpatialCanvas = detail.artifact.kind === 'mind_map';
   /* W04：内容分发收敛到纯函数，组件只消费结果（契约由 characterization 钉住）。 */
   const contentView = resolveArtifactContentView(detail, revising);
   return (
@@ -518,7 +514,11 @@ export function ArtifactCanvas({
         <div
           role="region"
           aria-label="Canvas 内容"
-          className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5"
+          className={
+            usesSpatialCanvas
+              ? 'flex min-h-0 flex-1 overflow-hidden p-2 lg:p-3'
+              : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
+          }
         >
           <ArtifactCanvasContent
             contentView={contentView}

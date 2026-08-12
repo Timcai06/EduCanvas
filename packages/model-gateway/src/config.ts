@@ -92,6 +92,11 @@ export interface EnabledModelGatewayConfiguration extends MediaCapabilityLimits 
   timeoutMs: number;
   maxOutputTokens: number;
   /**
+   * JSON Artifact 等结构化任务的独立输出预算。结构化内容包含字段名、节点和边，
+   * 不能沿用短对话的默认上限；手工构造的旧测试配置缺省时 Adapter 兼容回退。
+   */
+  structuredMaxOutputTokens?: number;
+  /**
    * 当前 primary 模型能否直接读取图片像素。默认 false：多数
    * OpenAI-compatible 文本模型收到图片片段会整轮报错，宁可让物化层明确拒绝
    * 并给出可读提示，也不要把一轮对话赌在供应商的容错上。
@@ -249,6 +254,12 @@ export function parseModelGatewayConfiguration(
     maxOutputTokens: parseBoundedInteger(
       environmentValues.MODEL_GATEWAY_MAX_OUTPUT_TOKENS,
       2_048,
+      { min: 1, max: 65_536 },
+      'INVALID_MAX_OUTPUT_TOKENS',
+    ),
+    structuredMaxOutputTokens: parseBoundedInteger(
+      environmentValues.MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS,
+      8_192,
       { min: 1, max: 65_536 },
       'INVALID_MAX_OUTPUT_TOKENS',
     ),

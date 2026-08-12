@@ -89,8 +89,8 @@ export function MindMapRenderer({
       : (visibleNodeIds[0] ?? null);
 
   const fitView = useCallback(() => {
-    if (!layout || !rootRef.current) return;
-    const rect = rootRef.current.getBoundingClientRect();
+    if (!layout || !nodeRootRef.current) return;
+    const rect = nodeRootRef.current.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     const scale = clampScale(
       Math.min(
@@ -107,6 +107,13 @@ export function MindMapRenderer({
 
   useLayoutEffect(() => {
     fitView();
+
+    const viewport = nodeRootRef.current;
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+
+    const resizeObserver = new ResizeObserver(() => fitView());
+    resizeObserver.observe(viewport);
+    return () => resizeObserver.disconnect();
   }, [fitView]);
 
   useEffect(() => {
@@ -145,8 +152,8 @@ export function MindMapRenderer({
   ) => {
     setTransform((previous) => {
       const to = clampScale(nextScale);
-      if (origin && rootRef.current) {
-        const rect = rootRef.current.getBoundingClientRect();
+      if (origin && nodeRootRef.current) {
+        const rect = nodeRootRef.current.getBoundingClientRect();
         const cursorX = origin.x - rect.left;
         const cursorY = origin.y - rect.top;
         const worldX = (cursorX - previous.offsetX) / previous.scale;
@@ -294,19 +301,16 @@ export function MindMapRenderer({
     rootRef.current?.releasePointerCapture?.(event.pointerId);
   };
 
-  const zoomIn = () => requestZoom(transform.scale + ZOOM_STEP);
-  const zoomOut = () => requestZoom(transform.scale - ZOOM_STEP);
-  const resetZoom = fitView;
-
   return (
     <CanvasSurface
       ref={rootRef}
-      className="min-h-[560px] min-w-0"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       data-mind-map
     >
       <section
         ref={nodeRootRef}
-        className="mind-map-viewport relative h-full min-h-0 overflow-hidden rounded-xl border border-line/60 bg-card/80 p-2 outline-none"
+        className="mind-map-viewport relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line/60 bg-card/80 p-2 outline-none"
+        data-mind-map-viewport
         role="tree"
         tabIndex={0}
         aria-label="思维导图"
@@ -426,39 +430,6 @@ export function MindMapRenderer({
           })}
         </div>
       </section>
-      <div
-        className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted"
-        aria-label="思维导图视图操作区"
-      >
-        <button
-          type="button"
-          className="rounded-md border px-2 py-1"
-          onClick={zoomIn}
-          data-mindmap-control
-        >
-          放大 (+)
-        </button>
-        <button
-          type="button"
-          className="rounded-md border px-2 py-1"
-          onClick={zoomOut}
-          data-mindmap-control
-        >
-          缩小 (-)
-        </button>
-        <button
-          type="button"
-          className="rounded-md border px-2 py-1"
-          onClick={resetZoom}
-          data-mindmap-control
-        >
-          重置 (0)
-        </button>
-        <span>
-          交互说明：拖拽平移，滚轮缩放，↑↓ 选择节点，←→
-          展开/折叠并移动，Enter/空格 提问
-        </span>
-      </div>
       <span className="sr-only">
         {contentVersion === 1
           ? 'mind map v1 历史格式'

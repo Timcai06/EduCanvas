@@ -33,6 +33,11 @@ describe('MindMapRenderer', () => {
     expect(html).toContain('根节点');
     expect(html).toContain('一级节点');
     expect(html).toContain('提问：一级节点');
+    expect(html).toContain('data-mind-map-viewport');
+    expect(html).not.toContain('思维导图视图操作区');
+    expect(html).not.toContain('交互说明');
+    expect(html).not.toContain('放大 (+)');
+    expect(html).not.toContain('缩小 (-)');
   });
 
   it('非法内容显示稳定错误态而不是抛出', () => {
