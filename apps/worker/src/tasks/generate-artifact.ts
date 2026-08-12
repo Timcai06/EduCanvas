@@ -31,6 +31,8 @@ import { generateMindMapContent } from './mind-map-generation.js';
 import { generateFlashcardsContent } from './flashcards-generation.js';
 import { generateSlidesContent } from './slides-generation.js';
 import { generateNoteContent } from './note-generation.js';
+import { generateMarkdownDocumentContent } from './markdown-document-generation.js';
+import { generateWebAppContent } from './web-app-generation.js';
 
 const payloadSchema = z
   .object({
@@ -312,7 +314,9 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       'flashcards',
       'audio_overview',
       'generated_image',
+      'markdown_document',
       'note',
+      'web_app',
     ] as const;
     if (!(supportedKinds as readonly string[]).includes(artifact.kind)) {
       await failJob('unsupported_kind');
@@ -420,7 +424,11 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
           ? await generateSlidesContent(generatorInput)
           : artifact.kind === 'flashcards'
             ? await generateFlashcardsContent(generatorInput)
-            : await generateNoteContent(generatorInput);
+            : artifact.kind === 'markdown_document'
+              ? await generateMarkdownDocumentContent(generatorInput)
+              : artifact.kind === 'web_app'
+                ? await generateWebAppContent(generatorInput)
+                : await generateNoteContent(generatorInput);
 
     const version = await artifacts.appendVersionAndCompleteGenerationJob({
       jobId: payload.jobId,

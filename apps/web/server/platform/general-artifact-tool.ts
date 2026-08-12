@@ -6,6 +6,10 @@ import type {
   TurnApplicationProfileEvent,
 } from '@educanvas/agent-runtime';
 import {
+  artifactProposalKindSchema,
+  artifactProposalSchema,
+} from '@educanvas/agent-core';
+import {
   ARTIFACT_GENERATE_TASK,
   DrizzlePlatformArtifactRepository,
   type PlatformArtifact,
@@ -14,26 +18,13 @@ import {
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 
-const canvasArtifactKindSchema = z.enum([
-  'mind_map',
-  'slides',
-  'flashcards',
-  'note',
-]);
-
-const createCanvasArtifactInputSchema = z
-  .object({
-    kind: canvasArtifactKindSchema,
-    title: z.string().trim().min(1).max(120),
-    instruction: z.string().trim().min(1).max(2_000),
-  })
-  .strict();
+const createCanvasArtifactInputSchema = artifactProposalSchema;
 
 const createCanvasArtifactOutputSchema = z
   .object({
     artifactId: z.uuid(),
     jobId: z.uuid(),
-    kind: canvasArtifactKindSchema,
+    kind: artifactProposalKindSchema,
     title: z.string().trim().min(1).max(120),
     status: z.literal('proposed'),
   })
@@ -46,7 +37,7 @@ interface ArtifactGenerationRepository {
     trustedSubjectId: string;
     operationId: string;
     kind: string;
-    trustTier: 'tier1';
+    trustTier: 'tier1' | 'tier2';
     title: string;
     taskIdentifier: typeof ARTIFACT_GENERATE_TASK;
     params: { generation: { instruction: string } };
@@ -80,7 +71,7 @@ export class WebOperationArtifacts {
     return {
       name: 'createCanvasArtifact',
       description:
-        '在当前 Notebook 的 Canvas 中创建持久产物。仅当用户明确要求思维导图、Slides、闪卡或笔记时调用；instruction 必须概括本轮用户希望产物讲什么，不能只重复标题；返回 proposed 表示后台已开始生成，不代表已经完成。',
+        '在当前 Notebook 的 Canvas 中提议持久产物。只选择契约闭集中的 Markdown 文档、思维导图、Slides、闪卡、笔记或 Web App；instruction 必须概括用户要求；返回 proposed 只表示服务端已原子创建任务，不代表已完成。',
       inputSchema: createCanvasArtifactInputSchema,
       outputSchema: createCanvasArtifactOutputSchema,
       timeoutMs: 15_000,
@@ -109,7 +100,7 @@ export class WebOperationArtifacts {
       trustedSubjectId: this.input.identity.studentId,
       operationId: this.input.operationId,
       kind: toolInput.kind,
-      trustTier: 'tier1',
+      trustTier: toolInput.kind === 'web_app' ? 'tier2' : 'tier1',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
       params: { generation: { instruction: toolInput.instruction } },
@@ -120,7 +111,7 @@ export class WebOperationArtifacts {
       type: 'artifact.proposed',
       artifactId: created.artifact.id,
       artifactKind: toolInput.kind,
-      trustTier: 'tier1',
+      trustTier: toolInput.kind === 'web_app' ? 'tier2' : 'tier1',
       title: created.artifact.title,
     });
     return {

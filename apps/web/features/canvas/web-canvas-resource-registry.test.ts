@@ -5,6 +5,7 @@ vi.mock('./canvas-resource-renderers', () => ({
   MindMapResourceRenderer: () => null,
   SlidesResourceRenderer: () => null,
   FlashcardsResourceRenderer: () => null,
+  MarkdownDocumentResourceRenderer: () => null,
   AudioOverviewResourceRenderer: () => null,
   GeneratedImageResourceRenderer: () => null,
   SourcePdfResourceRenderer: () => null,
@@ -63,7 +64,7 @@ afterEach(() => {
 
 describe('webCanvasResourceRegistry', () => {
   it('registry 不为空且已冻结', () => {
-    expect(webCanvasResourceRegistry.size).toBe(12);
+    expect(webCanvasResourceRegistry.size).toBe(13);
   });
 
   describe('Source rendererId 选择', () => {
@@ -247,6 +248,22 @@ describe('webCanvasResourceRegistry', () => {
           },
           trustTier: 'tier2',
           allowedActions: ['view', 'annotate', 'download', 'delete'],
+        }),
+      );
+      expect(result.kind).toBe('available');
+    });
+
+    it('artifact.markdown-document 选择正确 Renderer', () => {
+      const result = selectWebCanvasResourceRenderer(
+        makeResource('artifact.markdown-document', {
+          resourceKind: 'artifact',
+          representation: {
+            kind: 'structured',
+            mimeType: 'application/vnd.educanvas.markdown+text',
+            byteSize: null,
+          },
+          trustTier: 'tier1',
+          allowedActions: ['view', 'edit', 'regenerate', 'download'],
         }),
       );
       expect(result.kind).toBe('available');

@@ -80,7 +80,7 @@ describe('teaching turn request boundary', () => {
     });
   });
 
-  it('接受有界 Canvas 展示偏好但拒绝它伪装成能力声明', async () => {
+  it('兼容旧 Canvas 别名并归一化为 canonical outputPreference', async () => {
     await expect(
       parseTeachingTurnRequest(
         request(
@@ -91,7 +91,33 @@ describe('teaching turn request boundary', () => {
           }),
         ),
       ),
-    ).resolves.toMatchObject({ outputPreference: 'canvas' });
+    ).resolves.toMatchObject({ outputPreference: 'interactive_artifact' });
+  });
+
+  it('接受 provider-neutral outputPreference 枚举并拒绝不可信值', async () => {
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-markdown-1',
+            text: '写一个小结',
+            outputPreference: 'markdown_document',
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({ outputPreference: 'markdown_document' });
+
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-web-app-1',
+            text: '做一个 Web 小玩具',
+            outputPreference: 'web_app',
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({ outputPreference: 'web_app' });
 
     await expect(
       parseTeachingTurnRequest(
@@ -100,6 +126,30 @@ describe('teaching turn request boundary', () => {
             clientMessageId: 'msg-canvas-2',
             text: '帮我整理',
             outputPreference: 'root.shell',
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-canvas-3',
+            text: '帮我整理',
+            outputPreference: 'AUTO',
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-canvas-4',
+            text: '帮我整理',
+            outputPreference: null,
           }),
         ),
       ),

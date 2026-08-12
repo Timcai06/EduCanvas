@@ -3,8 +3,10 @@ import 'server-only';
 import {
   agentMessageInputSchema,
   extractAgentMessageText,
+  normalizeOutputPreference,
   normalizeAgentMessageParts,
   type AgentMessagePart,
+  type OutputPreference,
 } from '@educanvas/agent-core';
 
 const MAX_TURN_REQUEST_BYTES = 64 * 1024;
@@ -29,8 +31,11 @@ export interface TeachingTurnRequestBody {
   clientMessageId: string;
   text: string;
   parts: readonly AgentMessagePart[];
-  /** 不可信的展示偏好，只能影响回答形态，不能授予 Tool 或数据权限。 */
-  outputPreference?: 'canvas';
+  /**
+   * 不可信的展示偏好，只影响回答形态，不授予额外 tool/capability。
+   * `canvas` 为旧别名，服务端已归一化为 `interactive_artifact`。
+   */
+  outputPreference?: OutputPreference;
 }
 
 async function readLimitedUtf8(request: Request): Promise<string> {
@@ -108,12 +113,7 @@ export async function parseTeachingTurnRequest(
     throw new TurnRequestValidationError('invalid_request');
   }
 
-  const outputPreference =
-    record.outputPreference === undefined
-      ? undefined
-      : record.outputPreference === 'canvas'
-        ? 'canvas'
-        : null;
+  const outputPreference = normalizeOutputPreference(record.outputPreference);
   if (outputPreference === null) {
     throw new TurnRequestValidationError('invalid_request');
   }

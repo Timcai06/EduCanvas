@@ -1,7 +1,7 @@
 import {
   MIND_MAP_CONTENT_VERSION,
   mindMapContentSchema,
-  type MindMapContent,
+  type MindMapContentV1,
   type MindMapNode,
 } from '@educanvas/canvas-protocol';
 
@@ -29,7 +29,7 @@ const toLabel = (text: string): string => {
 export function buildConversationOutline(
   title: string,
   messages: readonly OutlineSourceMessage[],
-): MindMapContent {
+): MindMapContentV1 {
   const branches: MindMapNode[] = [];
   let sequence = 0;
   for (const message of messages) {
@@ -58,7 +58,7 @@ export function buildConversationOutline(
     branches.push(node);
   }
 
-  const content: MindMapContent = {
+  const content: MindMapContentV1 = {
     contentVersion: MIND_MAP_CONTENT_VERSION,
     root: {
       id: 'root',
@@ -67,5 +67,5 @@ export function buildConversationOutline(
     },
   };
   /* 出口自校验:生成器自己的产物必须过公开 Schema,坏结构在 worker 内失败。 */
-  return mindMapContentSchema.parse(content);
+  return mindMapContentSchema.parse(content) as MindMapContentV1;
 }

@@ -10,6 +10,7 @@ import {
   MindMapResourceRenderer,
   SlidesResourceRenderer,
   FlashcardsResourceRenderer,
+  MarkdownDocumentResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
   SourcePdfResourceRenderer,
@@ -36,6 +37,7 @@ const COMPONENT_MAP: Record<
   'artifact.mind-map': MindMapResourceRenderer,
   'artifact.slides': SlidesResourceRenderer,
   'artifact.flashcards': FlashcardsResourceRenderer,
+  'artifact.markdown-document': MarkdownDocumentResourceRenderer,
   'artifact.audio-overview': AudioOverviewResourceRenderer,
   'artifact.generated-image': GeneratedImageResourceRenderer,
 };

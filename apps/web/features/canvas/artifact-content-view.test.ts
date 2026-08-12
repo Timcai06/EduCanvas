@@ -5,6 +5,7 @@ import type {
   AudioOverviewMedia,
   GeneratedImageMedia,
 } from './artifact-client';
+import type { WebAppContent } from '@educanvas/canvas-protocol';
 import { resolveArtifactContentView } from './artifact-content-view';
 import { makeArtifactResource } from './canvas-resource-fixtures';
 
@@ -36,6 +37,39 @@ function withVersion(detail: ArtifactDetail, content: unknown, version = 1) {
   return {
     ...detail,
     version: { id: 'v1', version, content, media: null },
+  };
+}
+
+function makeWebAppContent(
+  overrides: Partial<WebAppContent> = {},
+): WebAppContent {
+  return {
+    schemaVersion: 1,
+    manifest: {
+      entry: 'index.html',
+      files: [
+        {
+          path: 'index.html',
+          mediaType: 'text/html',
+          content: '<!doctype html><html><body><div>hello</div></body></html>',
+          hash: 'a'.repeat(64),
+        },
+      ],
+    },
+    lockedDependencies: [],
+    capabilities: ['dom-manipulation'],
+    budget: {
+      maxInputBytes: 512,
+      maxMessageBytes: 512,
+      maxOutputBytes: 512,
+      maxDurationMs: 10000,
+      maxConcurrentInstances: 1,
+      maxQueueDepth: 1,
+      maxMessagesPerSecond: 10,
+    },
+    diagnostics: [],
+    generatedByModel: false,
+    ...overrides,
   };
 }
 
@@ -118,6 +152,22 @@ describe('resolveArtifactContentView（Artifact 内容分发契约）', () => {
     });
   });
 
+  it('markdown_document + version → markdown_document，携带 isLatest', () => {
+    const view = resolveArtifactContentView(
+      withVersion(makeDetail('markdown_document'), {
+        contentVersion: 1,
+        markdown: '# 文档',
+      }),
+      false,
+    );
+    expect(view).toEqual({
+      kind: 'markdown_document',
+      content: { contentVersion: 1, markdown: '# 文档' },
+      key: 1,
+      isLatest: true,
+    });
+  });
+
   it('audio_overview + audio/mpeg media → audio_overview', () => {
     const detail = withVersion(makeDetail('audio_overview'), null);
     const view = resolveArtifactContentView(
@@ -175,6 +225,26 @@ describe('resolveArtifactContentView（Artifact 内容分发契约）', () => {
       false,
     );
     expect(view).toEqual({ kind: 'dom_exploration', versionId: 'v1' });
+  });
+
+  it('web_app + version → web_app，携带 versionId', () => {
+    const view = resolveArtifactContentView(
+      withVersion(makeDetail('web_app'), makeWebAppContent()),
+      false,
+    );
+    expect(view).toEqual({
+      kind: 'web_app',
+      versionId: 'v1',
+      content: makeWebAppContent(),
+    });
+  });
+
+  it('web_app + 无效内容 → web_app_unavailable（strict fail-closed）', () => {
+    const detail = withVersion(makeDetail('web_app'), {
+      not: 'content',
+    });
+    const view = resolveArtifactContentView(detail, false);
+    expect(view).toEqual({ kind: 'web_app_unavailable', versionId: 'v1' });
   });
 
   it('生成中且最新版无内容 → skeleton（而非空态）', () => {

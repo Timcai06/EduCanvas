@@ -38,22 +38,32 @@ function structuredFixture(schemaPrompt: string, prompt: string): unknown {
   const revisionInstruction = /修改要求:\s*([\s\S]*?)\n\nNotebook对话记录:/
     .exec(prompt)?.[1]
     ?.trim();
+  const revisionNode = revisionInstruction
+    ? {
+        id: 'revision-1',
+        label: `修改：${revisionInstruction.slice(0, 110)}`,
+        semanticRole: 'topic' as const,
+      }
+    : null;
   return {
-    contentVersion: 1,
-    root: {
-      id: 'root',
-      label: '对话思维导图',
-      ...(revisionInstruction
-        ? {
-            children: [
-              {
-                id: 'revision-1',
-                label: `修改：${revisionInstruction.slice(0, 110)}`,
-              },
-            ],
-          }
-        : {}),
-    },
+    /* 生产生成链从 C04 起要求 v2；fixture 必须经过同一严格 Schema，不能用
+       历史 v1 响应让 E2E 绕过模型输出契约。 */
+    contentVersion: 2,
+    rootNodeId: 'root',
+    nodes: [
+      { id: 'root', label: '对话思维导图', semanticRole: 'root' },
+      ...(revisionNode ? [revisionNode] : []),
+    ],
+    edges: revisionNode
+      ? [
+          {
+            from: 'root',
+            to: revisionNode.id,
+            semanticRole: 'hierarchy',
+          },
+        ]
+      : [],
+    groups: [],
   };
 }
 
@@ -116,7 +126,9 @@ async function startFixtureProvider(): Promise<{
   });
   /* Provider 崩溃要立刻浮出，而不是让 worker 以 unavailable 重试掩盖故障。 */
   server.on('error', (error) => {
-    process.stderr.write(`[e2e-fixture-provider] error: ${error.stack ?? error}\n`);
+    process.stderr.write(
+      `[e2e-fixture-provider] error: ${error.stack ?? error}\n`,
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();

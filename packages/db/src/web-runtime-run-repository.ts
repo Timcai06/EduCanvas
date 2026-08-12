@@ -1,8 +1,11 @@
 import {
   domExplorationContentSchema,
+  webAppContentSchema,
   validateWebRuntimePolicy,
   webRuntimePolicy,
   type DomExplorationContent,
+  type WebAppContent,
+  type WebAppManifestFile,
 } from '@educanvas/canvas-protocol/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -43,7 +46,7 @@ export interface WebRuntimeRunSnapshot {
 
 export interface ClaimedWebRuntimeBootstrap {
   run: WebRuntimeRunSnapshot;
-  content: DomExplorationContent;
+  content: ParsedWebRuntimeContent;
 }
 
 const digest = (value: string): string =>
@@ -58,28 +61,115 @@ const safeHashEqual = (left: string, right: string): boolean => {
   );
 };
 
-function parseContent(value: unknown): DomExplorationContent {
-  const parsed = domExplorationContentSchema.safeParse(value);
-  if (!parsed.success || parsed.data.dependencies.length !== 0) {
+type ParsedWebRuntimeContent = DomExplorationContent | WebAppContent;
+
+function isInvalidPath(path: string): boolean {
+  return (
+    path.includes('..') ||
+    path.startsWith('/') ||
+    path.includes('\\') ||
+    path.includes('://')
+  );
+}
+
+function validateWebAppContent(content: WebAppContent): WebAppContent {
+  const seen = new Set<string>();
+  const fileByPath = new Map<string, WebAppManifestFile>();
+  for (const file of content.manifest.files) {
+    if (seen.has(file.path) || isInvalidPath(file.path)) {
+      throw new WebRuntimeAdmissionError();
+    }
+    seen.add(file.path);
+    const actualHash = createHash('sha256')
+      .update(file.content, 'utf8')
+      .digest('hex');
+    if (!safeHashEqual(file.hash, actualHash)) {
+      throw new WebRuntimeAdmissionError();
+    }
+    const networkSyntax =
+      file.mediaType === 'text/html'
+        ? /(href|src|action|formaction|poster|srcset)\s*=\s*["']\s*(?:https?:\/\/|\/\/)/i.test(
+            file.content,
+          )
+        : file.mediaType === 'text/css'
+          ? /url\(\s*["']?\s*(?:https?:\/\/|\/\/)|@import\s+(?:url\()?\s*["']?\s*(?:https?:\/\/|\/\/)/i.test(
+              file.content,
+            )
+          : /\b(?:fetch|WebSocket|EventSource|XMLHttpRequest|importScripts)\s*\(|navigator\.sendBeacon\s*\(/.test(
+              file.content,
+            );
+    if (networkSyntax) throw new WebRuntimeAdmissionError();
+    fileByPath.set(file.path, file);
+  }
+  const entry = fileByPath.get(content.manifest.entry);
+  if (!entry || entry.mediaType !== 'text/html') {
+    throw new WebRuntimeAdmissionError();
+  }
+  return content;
+}
+
+function parseContent(value: unknown): ParsedWebRuntimeContent {
+  const dom = domExplorationContentSchema.safeParse(value);
+  if (dom.success && dom.data.dependencies.length === 0) {
+    if (contentByteSize(dom.data) > contentParseBytesLimit) {
+      throw new WebRuntimeAdmissionError();
+    }
+    return dom.data;
+  }
+  const webApp = webAppContentSchema.safeParse(value);
+  if (!webApp.success) {
+    throw new WebRuntimeAdmissionError();
+  }
+  /* v1 Runtime 只执行自包含 manifest，尚未提供本地依赖装载器。即使依赖名在
+     全局 allowlist，也不能在未供给字节时假装可运行。 */
+  if (webApp.data.lockedDependencies.length > 0) {
     throw new WebRuntimeAdmissionError();
   }
   const policy = validateWebRuntimePolicy({
-    dependencies: parsed.data.dependencies,
-    limits: webRuntimePolicy.limits,
+    dependencies: webApp.data.lockedDependencies,
+    limits: webApp.data.budget,
     network: webRuntimePolicy.network,
     iframeSandbox: webRuntimePolicy.iframeSandbox,
     csp: webRuntimePolicy.csp,
   });
-  const bytes = Buffer.byteLength(JSON.stringify(parsed.data), 'utf8');
-  if (!policy.ok || bytes > webRuntimePolicy.limits.maxInputBytes) {
+  if (!policy.ok) {
     throw new WebRuntimeAdmissionError();
   }
-  return parsed.data;
+  if (
+    !isPolicyBudgetStrictlyBounded(webApp.data.budget, webRuntimePolicy.limits)
+  ) {
+    throw new WebRuntimeAdmissionError();
+  }
+  if (contentByteSize(webApp.data) > contentParseBytesLimit) {
+    throw new WebRuntimeAdmissionError();
+  }
+  return validateWebAppContent(webApp.data);
 }
 
-function contentHash(content: DomExplorationContent): string {
+function isPolicyBudgetStrictlyBounded(
+  requested: WebAppContent['budget'],
+  policy: (typeof webRuntimePolicy)['limits'],
+): boolean {
+  return (
+    requested.maxInputBytes <= policy.maxInputBytes &&
+    requested.maxMessageBytes <= policy.maxMessageBytes &&
+    requested.maxOutputBytes <= policy.maxOutputBytes &&
+    requested.maxDurationMs <= policy.maxDurationMs &&
+    requested.maxConcurrentInstances <= policy.maxConcurrentInstances &&
+    requested.maxQueueDepth <= policy.maxQueueDepth &&
+    requested.maxMessagesPerSecond <= policy.maxMessagesPerSecond
+  );
+}
+
+function contentHash(content: ParsedWebRuntimeContent): string {
   return digest(JSON.stringify(content));
 }
+
+function contentByteSize(content: ParsedWebRuntimeContent): number {
+  return Buffer.byteLength(JSON.stringify(content), 'utf8');
+}
+
+const contentParseBytesLimit = webRuntimePolicy.limits.maxInputBytes;
 
 function snapshot(
   row: typeof webRuntimeRuns.$inferSelect,
@@ -146,7 +236,7 @@ export class DrizzleWebRuntimeRunRepository {
         .limit(1);
       if (
         !version ||
-        version.kind !== 'dom_exploration' ||
+        (version.kind !== 'dom_exploration' && version.kind !== 'web_app') ||
         version.trustTier !== 'tier2' ||
         version.status !== 'active'
       ) {

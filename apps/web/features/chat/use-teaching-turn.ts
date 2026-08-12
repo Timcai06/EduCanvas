@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
+import type {
+  AgentAssetPart,
+  AgentMessagePart,
+  OutputPreference,
+} from '@educanvas/agent-core';
 import type { InitialChatMessageDTO } from './messages';
 import {
   createTeachingTurnState,
@@ -38,7 +42,8 @@ export interface AgentTurnClientCallbacks {
 }
 
 export interface AgentTurnSendOptions {
-  outputPreference?: 'canvas';
+  /** 非可信的呈现偏好；服务端仍独立决定工具授权与输出能力。 */
+  outputPreference?: OutputPreference;
 }
 
 const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {

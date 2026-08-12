@@ -154,10 +154,12 @@ describe('GET /api/v1/chat/artifacts', () => {
           'mind_map',
           'slides',
           'flashcards',
+          'markdown_document',
           'note',
           'audio_overview',
           'generated_image',
           'dom_exploration',
+          'web_app',
         ],
         limit: 50,
         cursor: null,
@@ -234,6 +236,66 @@ describe('POST /api/v1/chat/artifacts', () => {
         kind: 'mind_map',
         trustTier: 'tier1',
         title: '要点',
+        taskIdentifier: ARTIFACT_GENERATE_TASK,
+        params: {},
+      }),
+    );
+  });
+
+  it('creates a markdown document artifact for valid request', async () => {
+    artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
+      artifact: { ...validArtifact, kind: 'markdown_document' },
+      job: {
+        id: 'jobs-2',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
+    });
+    const response = await POST(
+      postRequest(
+        JSON.stringify({ kind: 'markdown_document', title: '课程文档' }),
+      ),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload.artifact.kind).toBe('markdown_document');
+    expect(payload.artifact.trustTier).toBe('tier1');
+    expect(artifactRepo.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'markdown_document',
+        trustTier: 'tier1',
+        title: '课程文档',
+        taskIdentifier: ARTIFACT_GENERATE_TASK,
+        params: {},
+      }),
+    );
+  });
+
+  it('creates a web_app artifact with tier2 trust', async () => {
+    artifactRepo.createArtifactWithGenerationJob.mockResolvedValue({
+      artifact: { ...validArtifact, kind: 'web_app', trustTier: 'tier2' },
+      job: {
+        id: 'jobs-web',
+        status: 'queued',
+        progress: null,
+        failureCode: null,
+      },
+    });
+    const response = await POST(
+      postRequest(JSON.stringify({ kind: 'web_app', title: '课程网页' })),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload.artifact.kind).toBe('web_app');
+    expect(payload.artifact.trustTier).toBe('tier2');
+    expect(artifactRepo.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'web_app',
+        trustTier: 'tier2',
+        title: '课程网页',
         taskIdentifier: ARTIFACT_GENERATE_TASK,
         params: {},
       }),

@@ -4,6 +4,8 @@ import {
   createArtifact,
   deleteArtifact,
   fetchArtifactDetail,
+  saveMarkdownDocumentArtifact,
+  restoreArtifactVersion,
   reviseArtifact,
   saveNoteArtifact,
 } from './artifact-client';
@@ -47,6 +49,52 @@ describe('artifact client mutation contracts', () => {
     });
   });
 
+  it('支持创建 markdown_document 产物而不带额外字段', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifact: { ...artifact, kind: 'markdown_document' },
+          job: { id: 'job-md-1', status: 'queued' },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      createArtifact('markdown_document', '课程文档'),
+    ).resolves.toMatchObject({
+      artifact: { ...artifact, kind: 'markdown_document' },
+      job: { id: 'job-md-1' },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      kind: 'markdown_document',
+      title: '课程文档',
+    });
+  });
+
+  it('支持创建 web_app 产物', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifact: { ...artifact, kind: 'web_app', trustTier: 'tier2' },
+          job: { id: 'job-web-1', status: 'queued' },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createArtifact('web_app', '课程网页')).resolves.toMatchObject({
+      artifact: { ...artifact, kind: 'web_app', trustTier: 'tier2' },
+      job: { id: 'job-web-1' },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      kind: 'web_app',
+      title: '课程网页',
+    });
+  });
+
   it('AI 修改使用 generate 动作并要求任务标识', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -64,6 +112,60 @@ describe('artifact client mutation contracts', () => {
       action: 'generate',
       baseVersion: 2,
       instruction: '补充例题',
+    });
+  });
+
+  it('Markdown 文档直接保存为新版本且返回 null job', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifact: {
+            ...artifact,
+            kind: 'markdown_document',
+            latestVersion: 3,
+          },
+          job: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      saveMarkdownDocumentArtifact(artifact.id, 2, '# 新文档版本'),
+    ).resolves.toEqual({
+      artifact: { ...artifact, kind: 'markdown_document', latestVersion: 3 },
+      job: null,
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      action: 'save_markdown_document',
+      baseVersion: 2,
+      markdown: '# 新文档版本',
+    });
+  });
+
+  it('恢复历史版本走 restore 动作并返回新版本响应', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifact: { ...artifact, status: 'active', latestVersion: 3 },
+          job: { id: '20000000-0000-4000-8000-000000000002' },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(restoreArtifactVersion(artifact.id, 1, 2)).resolves.toEqual({
+      artifact: { ...artifact, status: 'active', latestVersion: 3 },
+      job: { id: '20000000-0000-4000-8000-000000000002' },
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      action: 'restore',
+      sourceVersion: 1,
+      expectedLatestVersion: 2,
     });
   });
 

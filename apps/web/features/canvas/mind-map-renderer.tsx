@@ -2,50 +2,123 @@
 
 import {
   mindMapContentSchema,
+  type MindMapContent,
   type MindMapNode,
 } from '@educanvas/canvas-protocol';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { useMemo, useRef } from 'react';
-import { motionDuration } from '@/features/theme/motion';
+import {
+  ArrowBendDownRight,
+  CaretDown,
+  CaretRight,
+  Question,
+} from '@phosphor-icons/react';
+import {
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react';
 import { CanvasSurface } from './canvas-surface';
+import {
+  MIND_MAP_ASK_NODE_EVENT,
+  MIND_MAP_NODE_HEIGHT,
+  MIND_MAP_NODE_WIDTH,
+  buildAskNodeEventPayload,
+  buildMindMapLayout,
+  nextVisibleNode,
+  type MindMapKeyDirection,
+} from './mind-map-layout';
 
-gsap.registerPlugin(useGSAP);
+const MAX_ZOOM = 2.4;
+const MIN_ZOOM = 0.12;
+const ZOOM_STEP = 0.15;
+const clampScale = (scale: number) =>
+  Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
+
+type OnAskNode = (payload: {
+  nodeId: string;
+  nodeLabel: string;
+  requestedAt: number;
+}) => void;
 
 /**
  * 思维导图渲染器(Tier 1 预注册组件)。入口重新过公开 Schema:
  * 数据库内容理论上已校验,但渲染器不信任上游,坏结构显示错误而不是崩溃。
+ * v1 与 v2 同时支持：v1 做树形兼容转换后按同一布局链路绘制。
  */
-export function MindMapRenderer({ content }: { content: unknown }) {
+export function MindMapRenderer({
+  content,
+  onAskNode,
+}: {
+  content: unknown;
+  onAskNode?: OnAskNode;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const nodeRootRef = useRef<HTMLDivElement>(null);
+  const activePointerRef = useRef<number | null>(null);
+  const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+
   const parsed = useMemo(
     () => mindMapContentSchema.safeParse(content),
     [content],
   );
 
-  useGSAP(
-    () => {
-      if (!parsed.success) return;
-      const media = gsap.matchMedia();
-      media.add('(prefers-reduced-motion: no-preference)', () => {
-        gsap.fromTo(
-          '.mind-map-node',
-          { autoAlpha: 0, x: -8 },
-          {
-            autoAlpha: 1,
-            x: 0,
-            duration: motionDuration('standard'),
-            stagger: 0.04,
-            ease: 'power2.out',
-          },
-        );
-      });
-      return () => media.revert();
-    },
-    { scope: rootRef, dependencies: [parsed] },
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(
+    new Set(),
   );
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [transform, setTransform] = useState({
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  });
 
-  if (!parsed.success) {
+  const layout = useMemo(
+    () =>
+      parsed.success ? buildMindMapLayout(parsed.data, collapsedNodeIds) : null,
+    [parsed, collapsedNodeIds],
+  );
+  const visibleNodeIds = useMemo(() => layout?.visibleNodeIds ?? [], [layout]);
+  const effectiveFocusedNodeId =
+    focusedNodeId && visibleNodeIds.includes(focusedNodeId)
+      ? focusedNodeId
+      : (visibleNodeIds[0] ?? null);
+
+  const fitView = useCallback(() => {
+    if (!layout || !rootRef.current) return;
+    const rect = rootRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const scale = clampScale(
+      Math.min(
+        (rect.width - 32) / layout.width,
+        (rect.height - 32) / layout.height,
+      ),
+    );
+    setTransform({
+      scale,
+      offsetX: (rect.width - layout.width * scale) / 2,
+      offsetY: (rect.height - layout.height * scale) / 2,
+    });
+  }, [layout]);
+
+  useLayoutEffect(() => {
+    fitView();
+  }, [fitView]);
+
+  useEffect(() => {
+    if (!effectiveFocusedNodeId || !nodeRootRef.current) return;
+    nodeRootRef.current
+      .querySelector<HTMLElement>(
+        `[data-mindmap-node="${effectiveFocusedNodeId}"]`,
+      )
+      ?.focus();
+  }, [effectiveFocusedNodeId, layout]);
+
+  if (!parsed.success || layout === null) {
     return (
       <p role="alert" className="rounded-xl bg-bad-soft p-3 text-bad">
         这份思维导图的内容格式有问题，无法显示。
@@ -53,9 +126,344 @@ export function MindMapRenderer({ content }: { content: unknown }) {
     );
   }
 
+  const contentVersion = (parsed.data as MindMapContent).contentVersion;
+
+  const emitAskNode = (nodeId: string, label: string) => {
+    const payload = buildAskNodeEventPayload(nodeId, label);
+    if (onAskNode) onAskNode(payload);
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent(MIND_MAP_ASK_NODE_EVENT, {
+        detail: payload,
+      }),
+    );
+  };
+
+  const requestZoom = (
+    nextScale: number,
+    origin?: { x: number; y: number },
+  ) => {
+    setTransform((previous) => {
+      const to = clampScale(nextScale);
+      if (origin && rootRef.current) {
+        const rect = rootRef.current.getBoundingClientRect();
+        const cursorX = origin.x - rect.left;
+        const cursorY = origin.y - rect.top;
+        const worldX = (cursorX - previous.offsetX) / previous.scale;
+        const worldY = (cursorY - previous.offsetY) / previous.scale;
+        const offsetX = cursorX - worldX * to;
+        const offsetY = cursorY - worldY * to;
+        return { scale: to, offsetX, offsetY };
+      }
+      return { ...previous, scale: to };
+    });
+  };
+
+  const toggleCollapse = (nodeId: string) => {
+    setCollapsedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  };
+
+  const moveFocus = (direction: MindMapKeyDirection) => {
+    const next = nextVisibleNode(
+      visibleNodeIds,
+      effectiveFocusedNodeId,
+      direction,
+    );
+    if (next === null) return;
+    setFocusedNodeId(next);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveFocus('up');
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveFocus('down');
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      const node = layout.nodes.find(
+        (item) => item.id === effectiveFocusedNodeId,
+      );
+      if (!node) {
+        moveFocus('left');
+        return;
+      }
+      if (node.hasChildren) {
+        setCollapsedNodeIds((current) => {
+          const next = new Set(current);
+          next.add(node.id);
+          return next;
+        });
+      }
+      moveFocus('left');
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      const node = layout.nodes.find(
+        (item) => item.id === effectiveFocusedNodeId,
+      );
+      if (node?.hasChildren) {
+        setCollapsedNodeIds((current) => {
+          const next = new Set(current);
+          next.delete(node.id);
+          return next;
+        });
+        if (node.children.length > 0) {
+          setFocusedNodeId(node.children[0]!);
+          return;
+        }
+      }
+      moveFocus('right');
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!effectiveFocusedNodeId) return;
+      const node = layout.nodes.find(
+        (item) => item.id === effectiveFocusedNodeId,
+      );
+      if (node) emitAskNode(node.id, node.label);
+      return;
+    }
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      requestZoom(transform.scale + ZOOM_STEP, {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      return;
+    }
+    if (event.key === '-') {
+      event.preventDefault();
+      requestZoom(transform.scale - ZOOM_STEP, {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      return;
+    }
+    if (event.key === '0') {
+      event.preventDefault();
+      setTransform({ scale: 1, offsetX: 0, offsetY: 0 });
+    }
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const next = transform.scale + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+    requestZoom(next, { x: event.clientX, y: event.clientY });
+  };
+
+  const startDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('[data-mindmap-control]')) return;
+    activePointerRef.current = event.pointerId;
+    dragStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: transform.offsetX,
+      offsetY: transform.offsetY,
+    };
+    rootRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    const deltaX = event.clientX - dragStart.current.x;
+    const deltaY = event.clientY - dragStart.current.y;
+    setTransform((previous) => ({
+      ...previous,
+      offsetX: dragStart.current.offsetX + deltaX,
+      offsetY: dragStart.current.offsetY + deltaY,
+    }));
+  };
+
+  const stopDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    activePointerRef.current = null;
+    rootRef.current?.releasePointerCapture?.(event.pointerId);
+  };
+
+  const zoomIn = () => requestZoom(transform.scale + ZOOM_STEP);
+  const zoomOut = () => requestZoom(transform.scale - ZOOM_STEP);
+  const resetZoom = fitView;
+
   return (
-    <CanvasSurface ref={rootRef} className="min-w-0" data-mind-map>
-      <MindMapBranch node={parsed.data.root} depth={0} />
+    <CanvasSurface
+      ref={rootRef}
+      className="min-h-[560px] min-w-0"
+      data-mind-map
+    >
+      <section
+        ref={nodeRootRef}
+        className="mind-map-viewport relative h-full min-h-0 overflow-hidden rounded-xl border border-line/60 bg-card/80 p-2 outline-none"
+        role="tree"
+        tabIndex={0}
+        aria-label="思维导图"
+        onKeyDown={handleKeyDown}
+        onWheel={handleWheel}
+        onPointerDown={startDrag}
+        onPointerMove={handleDrag}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={stopDrag}
+        style={{ touchAction: 'none' }}
+      >
+        <div
+          className="mind-map-canvas pointer-events-none absolute inset-0"
+          style={{
+            transform: `translate(${transform.offsetX}px, ${transform.offsetY}px) scale(${transform.scale})`,
+            transformOrigin: '0 0',
+          }}
+        >
+          <svg
+            className="pointer-events-none"
+            width={layout.width}
+            height={layout.height}
+            aria-hidden="true"
+          >
+            {layout.edges.map((edge) => (
+              <path
+                key={`${edge.from}->${edge.to}`}
+                d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
+                stroke="currentColor"
+                strokeWidth={2}
+                fill="none"
+                strokeDasharray={
+                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
+                    ? '5 5'
+                    : undefined
+                }
+                className={
+                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
+                    ? 'text-ink-muted/45'
+                    : 'text-accent/45'
+                }
+              />
+            ))}
+          </svg>
+          {layout.nodes.map((node) => {
+            const isCollapsed = collapsedNodeIds.has(node.id);
+            const isFocused = node.id === effectiveFocusedNodeId;
+            return (
+              <div
+                key={node.id}
+                data-mindmap-node={node.id}
+                role="treeitem"
+                aria-level={node.depth + 1}
+                aria-expanded={
+                  node.children.length > 0 ? !isCollapsed : undefined
+                }
+                aria-selected={isFocused}
+                tabIndex={isFocused ? 0 : -1}
+                onFocus={() => setFocusedNodeId(node.id)}
+                onClick={() => setFocusedNodeId(node.id)}
+                className={`pointer-events-auto absolute flex items-center gap-1 rounded-2xl border bg-card/95 px-3 py-2 text-sm text-ink shadow-[0_12px_36px_rgb(41_33_63_/_0.08)] backdrop-blur transition-[border-color,background-color,box-shadow] motion-reduce:transition-none ${
+                  isFocused
+                    ? 'border-accent bg-accent-soft/80 shadow-[0_14px_42px_rgb(101_79_155_/_0.2)]'
+                    : 'border-line/70 hover:border-accent/60 hover:bg-card'
+                }`}
+                style={{
+                  left: node.x,
+                  top: node.y,
+                  width: MIND_MAP_NODE_WIDTH,
+                  minHeight: MIND_MAP_NODE_HEIGHT,
+                }}
+              >
+                {node.hasChildren ? (
+                  <button
+                    type="button"
+                    data-mindmap-control
+                    aria-label={
+                      isCollapsed ? '展开节点子分支' : '折叠节点子分支'
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleCollapse(node.id);
+                    }}
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line/60 text-ink-muted transition hover:bg-line/20"
+                  >
+                    {isCollapsed ? (
+                      <CaretRight size={12} />
+                    ) : (
+                      <CaretDown size={12} />
+                    )}
+                  </button>
+                ) : (
+                  <span className="inline-flex h-5 w-5 shrink-0" />
+                )}
+                <span className="inline-flex grow truncate text-left">
+                  {node.label}
+                </span>
+                <button
+                  type="button"
+                  data-mindmap-control
+                  aria-label={`提问：${node.label}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    emitAskNode(node.id, node.label);
+                  }}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line/60 text-ink-muted transition hover:bg-line/20"
+                >
+                  <Question size={13} />
+                </button>
+                <span className="sr-only">{node.semanticRole ?? '节点'}</span>
+                {node.id === layout.rootId ? (
+                  <ArrowBendDownRight size={12} />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      <div
+        className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted"
+        aria-label="思维导图视图操作区"
+      >
+        <button
+          type="button"
+          className="rounded-md border px-2 py-1"
+          onClick={zoomIn}
+          data-mindmap-control
+        >
+          放大 (+)
+        </button>
+        <button
+          type="button"
+          className="rounded-md border px-2 py-1"
+          onClick={zoomOut}
+          data-mindmap-control
+        >
+          缩小 (-)
+        </button>
+        <button
+          type="button"
+          className="rounded-md border px-2 py-1"
+          onClick={resetZoom}
+          data-mindmap-control
+        >
+          重置 (0)
+        </button>
+        <span>
+          交互说明：拖拽平移，滚轮缩放，↑↓ 选择节点，←→
+          展开/折叠并移动，Enter/空格 提问
+        </span>
+      </div>
+      <span className="sr-only">
+        {contentVersion === 1
+          ? 'mind map v1 历史格式'
+          : 'mind map v2 图结构格式'}
+      </span>
     </CanvasSurface>
   );
 }
@@ -64,11 +472,19 @@ const DEPTH_STYLES = [
   'text-lg font-semibold text-ink',
   'text-body font-medium text-ink',
   'text-sm text-ink-muted',
-  /* 最深层节点仍是可读内容，用 ink-muted 保 AA；层级差由左缩进承载而非更淡的字色 */
   'text-sm text-ink-muted',
 ] as const;
 
-function MindMapBranch({ node, depth }: { node: MindMapNode; depth: number }) {
+/**
+ * v1 回退展示兼容：保留仅对树渲染器场景的导出，避免其他上下文误用。
+ */
+export function MindMapBranch({
+  node,
+  depth,
+}: {
+  node: MindMapNode;
+  depth: number;
+}) {
   return (
     <div className={depth === 0 ? '' : 'border-l border-line/70 pl-4'}>
       <p

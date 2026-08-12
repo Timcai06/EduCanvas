@@ -1,19 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { deleteArtifact, type ArtifactDetail } from './artifact-client';
+import {
+  deleteArtifact,
+  restoreArtifactVersion,
+  type ArtifactDetail,
+} from './artifact-client';
 
 function versionLabel(
-  version: { version: number; revisionInstruction: string | null },
+  version: {
+    version: number;
+    revisionInstruction: string | null;
+    generatedBy?: string | null;
+  },
   latestVersion: number,
 ): string {
   const latest = version.version === latestVersion ? ' · 最新' : '';
   const origin =
     version.version === 1
       ? '初始生成'
-      : version.revisionInstruction
-        ? `你的修改：${version.revisionInstruction.slice(0, 24)}`
-        : '共创修改';
+      : version.generatedBy?.startsWith('user:restore:v')
+        ? `从 v${version.generatedBy.slice('user:restore:v'.length)} 恢复`
+        : version.revisionInstruction
+          ? `你的修改：${version.revisionInstruction.slice(0, 24)}`
+          : '共创修改';
   return `v${version.version}${latest} · ${origin}`;
 }
 
@@ -26,18 +36,32 @@ export function ArtifactCanvasToolbar({
   displayedVersion,
   onSelectVersion,
   onDeleted,
+  onRestored,
 }: {
   detail: ArtifactDetail;
   displayedVersion: number;
   onSelectVersion: (version: number) => void;
   onDeleted: (artifactId: string) => void;
+  onRestored: (artifactId: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreFailed, setRestoreFailed] = useState(false);
   const isLatest = displayedVersion === detail.artifact.latestVersion;
-  const canDelete =
-    detail.canvasResource?.allowedActions.includes('delete') ?? false;
+  const allowedActions = detail.canvasResource?.allowedActions ?? [];
+  const canRestore =
+    !isLatest &&
+    ['mind_map', 'markdown_document', 'web_app'].includes(
+      detail.artifact.kind,
+    ) &&
+    (allowedActions.includes('edit') || allowedActions.includes('regenerate'));
+  const canDelete = allowedActions.includes('delete');
+  const canDownload = allowedActions.includes('download');
+  const downloadUrl = canDownload
+    ? `/api/v1/chat/artifacts/${detail.artifact.id}/download?version=${displayedVersion}`
+    : null;
 
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2.5">
@@ -102,9 +126,47 @@ export function ArtifactCanvasToolbar({
           </button>
         </span>
       ) : null}
+      {canRestore ? (
+        <button
+          type="button"
+          disabled={restoring}
+          onClick={async () => {
+            setRestoring(true);
+            setRestoreFailed(false);
+            try {
+              await restoreArtifactVersion(
+                detail.artifact.id,
+                displayedVersion,
+                detail.artifact.latestVersion,
+              );
+              onRestored(detail.artifact.id);
+            } catch {
+              setRestoreFailed(true);
+            } finally {
+              setRestoring(false);
+            }
+          }}
+          className="ml-auto text-xs text-accent transition-colors hover:text-accent-strong"
+        >
+          {restoring ? '恢复中…' : '恢复为新版本'}
+        </button>
+      ) : null}
+      {canDownload ? (
+        <a
+          href={downloadUrl ?? '#'}
+          className="ml-2 text-xs text-ink-muted transition-colors hover:text-ink"
+        >
+          下载
+        </a>
+      ) : null}
       {deleteFailed ? (
         <span role="alert" className="ml-auto text-xs text-cinnabar">
           删除失败，请重试。
+        </span>
+      ) : null}
+      {restoreFailed ? (
+        <span role="alert" className="ml-auto text-xs text-cinnabar">
+          恢复失败，请重试。
         </span>
       ) : null}
     </div>

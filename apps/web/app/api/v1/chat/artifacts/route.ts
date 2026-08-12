@@ -39,10 +39,12 @@ const WEB_ARTIFACT_KINDS = [
   'mind_map',
   'slides',
   'flashcards',
+  'markdown_document',
   'note',
   'audio_overview',
   'generated_image',
   'dom_exploration',
+  'web_app',
 ] as const;
 
 /**
@@ -96,9 +98,21 @@ const createArtifactSchema = z.discriminatedUnion('kind', [
     .strict(),
   z
     .object({
+      kind: z.literal('markdown_document'),
+      title: titleSchema,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal('note'),
       title: titleSchema,
       markdown: z.string().max(NOTE_MARKDOWN_MAX_CHARS).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('web_app'),
+      title: titleSchema,
     })
     .strict(),
   z
@@ -226,7 +240,10 @@ export async function POST(request: Request): Promise<Response> {
       conversationId: conversation.id,
       trustedSubjectId: identity.studentId,
       kind: parsed.data.kind,
-      trustTier: parsed.data.kind === 'audio_overview' ? 'tier2' : 'tier1',
+      trustTier:
+        parsed.data.kind === 'audio_overview' || parsed.data.kind === 'web_app'
+          ? 'tier2'
+          : 'tier1',
       title: parsed.data.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
       params,

@@ -16,7 +16,9 @@ const AGENT_ARTIFACT_KINDS = new Set<ObservableArtifactKind>([
   'mind_map',
   'slides',
   'flashcards',
+  'markdown_document',
   'note',
+  'web_app',
   'audio_overview',
   'generated_image',
 ]);

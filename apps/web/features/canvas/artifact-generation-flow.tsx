@@ -14,6 +14,7 @@ import {
   pollArtifactUntilSettled,
   reviseArtifact,
   saveNoteArtifact,
+  saveMarkdownDocumentArtifact,
   type ArtifactDetail,
   type ArtifactSourceReference,
   type CreatableArtifactKind,
@@ -24,6 +25,7 @@ import { resolveArtifactContentView } from './artifact-content-view';
 import { ArtifactProvenanceStrip } from './artifact-provenance';
 import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
 import { ArtifactCanvasContent } from './artifact-canvas-content';
+import { MarkdownVersionDiffPanel } from './markdown-version-diff';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
 
@@ -52,6 +54,8 @@ export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   audio_overview: '音频概览',
   note: '笔记',
   generated_image: '生成图片',
+  markdown_document: 'Markdown 文档',
+  web_app: 'Web App',
 };
 
 /**
@@ -248,12 +252,20 @@ export function useArtifactGeneration() {
         title: detail.artifact.title,
       });
       try {
-        await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
+        if (detail.artifact.kind === 'markdown_document') {
+          await saveMarkdownDocumentArtifact(
+            detail.artifact.id,
+            baseVersion,
+            markdown,
+          );
+        } else {
+          await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
+        }
         const updated = await fetchArtifactDetail(detail.artifact.id);
         setOpenDetail(updated);
         setGeneration({
           phase: 'ready',
-          kind: 'note',
+          kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
           detail: updated,
@@ -261,7 +273,7 @@ export function useArtifactGeneration() {
       } catch {
         setGeneration({
           phase: 'failed',
-          kind: 'note',
+          kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });
@@ -461,9 +473,14 @@ export function ArtifactCanvas({
   const [instruction, setInstruction] = useState('');
   const displayedVersion = detail.version?.version ?? 0;
   const isLatest = displayedVersion === detail.artifact.latestVersion;
-  const canRevise = ['mind_map', 'slides', 'flashcards', 'note'].includes(
-    detail.artifact.kind,
-  );
+  const canRevise = [
+    'mind_map',
+    'slides',
+    'flashcards',
+    'note',
+    'markdown_document',
+    'web_app',
+  ].includes(detail.artifact.kind);
   /* W04：内容分发收敛到纯函数，组件只消费结果（契约由 characterization 钉住）。 */
   const contentView = resolveArtifactContentView(detail, revising);
   return (
@@ -483,7 +500,21 @@ export function ArtifactCanvas({
           displayedVersion={displayedVersion}
           onSelectVersion={onSelectVersion}
           onDeleted={onDeleted}
+          onRestored={() => onSelectVersion(detail.artifact.latestVersion + 1)}
         />
+        {detail.artifact.kind === 'markdown_document' &&
+        !isLatest &&
+        detail.version ? (
+          <MarkdownVersionDiffPanel
+            artifactId={detail.artifact.id}
+            displayedVersion={displayedVersion}
+            version={{
+              content: detail.version.content,
+              contentVersion: 1,
+              version: detail.version.version,
+            }}
+          />
+        ) : null}
         <div
           role="region"
           aria-label="Canvas 内容"

@@ -128,4 +128,106 @@ describe('WebOperationArtifacts', () => {
     ).rejects.toThrow('canvas_artifact_scope_mismatch');
     expect(repository.createArtifactWithGenerationJob).not.toHaveBeenCalled();
   });
+
+  it('允许提交 markdown_document 并归一化为 tier1', async () => {
+    const repository = {
+      createArtifactWithGenerationJob: vi.fn().mockResolvedValue({
+        artifact: { ...artifact, kind: 'markdown_document' },
+        job: { ...job, artifactId: artifact.id },
+      }),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      repository,
+    );
+
+    const output = await operationArtifacts.createTool().handler(
+      {
+        kind: 'markdown_document',
+        title: '课程文档',
+        instruction: '生成一份课程结构化文档。',
+      },
+      context,
+    );
+
+    expect(repository.createArtifactWithGenerationJob).toHaveBeenCalledWith({
+      spaceId: artifact.spaceId,
+      conversationId: context.conversationId,
+      trustedSubjectId: identity.studentId,
+      operationId: 'operation-1',
+      kind: 'markdown_document',
+      trustTier: 'tier1',
+      title: '课程文档',
+      taskIdentifier: 'artifact:generate',
+      params: {
+        generation: {
+          instruction: '生成一份课程结构化文档。',
+        },
+      },
+    });
+    expect(output).toEqual({
+      artifactId: artifact.id,
+      jobId: job.id,
+      kind: 'markdown_document',
+      title: artifact.title,
+      status: 'proposed',
+    });
+  });
+
+  it('允许提交 web_app 并将 trustTier 设为 tier2', async () => {
+    const repository = {
+      createArtifactWithGenerationJob: vi.fn().mockResolvedValue({
+        artifact: { ...artifact, kind: 'web_app', trustTier: 'tier2' },
+        job: { ...job, artifactId: artifact.id },
+      }),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      repository,
+    );
+
+    const output = await operationArtifacts.createTool().handler(
+      {
+        kind: 'web_app',
+        title: '课程网页',
+        instruction: '基于对话生成一页课程网站。',
+      },
+      context,
+    );
+
+    expect(repository.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: artifact.spaceId,
+        conversationId: context.conversationId,
+        trustedSubjectId: identity.studentId,
+        operationId: 'operation-1',
+        kind: 'web_app',
+        trustTier: 'tier2',
+        title: '课程网页',
+        taskIdentifier: 'artifact:generate',
+        params: {
+          generation: {
+            instruction: '基于对话生成一页课程网站。',
+          },
+        },
+      }),
+    );
+    expect(output).toMatchObject({
+      artifactId: artifact.id,
+      jobId: job.id,
+      kind: 'web_app',
+      title: artifact.title,
+      status: 'proposed',
+    });
+  });
 });

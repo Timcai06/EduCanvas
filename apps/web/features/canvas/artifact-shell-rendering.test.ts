@@ -48,10 +48,11 @@ function makeResource(
  * ArtifactCanvas 壳显式渲染，不能被判为"没有可用的渲染器"。
  */
 describe('isShellRenderedArtifactResource', () => {
-  it('壳渲染集合只含 note 与 dom_exploration', () => {
+  it('壳渲染集合只含 note 与两类隔离 Web Runtime', () => {
     expect([...SHELL_RENDERED_ARTIFACT_RENDERER_IDS].sort()).toEqual([
       'artifact.dom-exploration',
       'artifact.note',
+      'artifact.web-app',
     ]);
   });
 
@@ -64,6 +65,12 @@ describe('isShellRenderedArtifactResource', () => {
   it('dom_exploration → true（壳渲染，Registry 无条目）', () => {
     expect(
       isShellRenderedArtifactResource(makeResource('artifact.dom-exploration')),
+    ).toBe(true);
+  });
+
+  it('web_app → true（复用 Tier 2 壳与持久 Runtime）', () => {
+    expect(
+      isShellRenderedArtifactResource(makeResource('artifact.web-app')),
     ).toBe(true);
   });
 

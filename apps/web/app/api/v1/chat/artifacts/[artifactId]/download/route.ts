@@ -8,7 +8,10 @@ import { LocalObjectStorage } from '@educanvas/agent-runtime';
 import {
   audioOverviewMetadataSchema,
   generatedImageMetadataSchema,
+  markdownDocumentContentSchema,
+  mindMapContentSchema,
 } from '@educanvas/canvas-protocol';
+import { webAppContentSchema } from '@educanvas/canvas-protocol/server';
 import {
   ArtifactOwnershipError,
   DrizzlePlatformArtifactRepository,
@@ -29,7 +32,7 @@ const UUID_PATTERN =
 function sanitizeFilename(raw: string): string {
   return (
     raw
-      .replace(/[\r\n"'/\\:]/g, '_')
+      .replace(/[\r\n"'\\/:]/g, '_')
       .replace(/[^\x20-\x7e]/g, '')
       .replace(/_{2,}/g, '_')
       .replace(/^_+|_+$/g, '')
@@ -47,9 +50,21 @@ function extensionForMime(mime: string): string {
       return '.webp';
     case 'audio/mpeg':
       return '.mp3';
+    case 'text/markdown':
+      return '.md';
+    case 'application/json':
+      return '.json';
     default:
       return '';
   }
+}
+
+function parseRequestedVersion(raw: string | null): number | null {
+  if (raw === null) return null;
+  if (!/^[1-9]\d*$/.test(raw)) return null;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value > 2_147_483_647) return null;
+  return value;
 }
 
 /**
@@ -59,18 +74,27 @@ function extensionForMime(mime: string): string {
  * 不向客户端返回存储地址或签名信息。
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<Response> {
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
     return jsonError(404, 'artifact_not_found', '产物不存在。');
   }
+
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) {
     return jsonError(401, 'unauthorized', '请先开始对话。');
+  }
+
+  const url = new URL(request.url);
+  const requestedVersion = parseRequestedVersion(
+    url.searchParams.get('version'),
+  );
+  if (requestedVersion === null && url.searchParams.has('version')) {
+    return jsonError(404, 'artifact_not_found', '产物不存在。');
   }
 
   try {
@@ -79,6 +103,7 @@ export async function GET(
       artifactId,
       trustedSubjectId: identity.studentId,
     });
+
     if (detail.artifact.spaceId !== conversation.spaceId) {
       return jsonError(404, 'artifact_not_found', '产物不存在。');
     }
@@ -95,63 +120,174 @@ export async function GET(
       return jsonError(404, 'artifact_not_found', '产物不存在。');
     }
 
-    const version = detail.latestVersion;
-    if (!version?.objectKey || !version.checksum) {
+    const selectedVersion =
+      requestedVersion !== null
+        ? await repository.getVersion({
+            artifactId,
+            version: requestedVersion,
+            trustedSubjectId: identity.studentId,
+          })
+        : detail.latestVersion;
+
+    if (!selectedVersion) {
       return jsonError(404, 'artifact_not_found', '产物不存在。');
     }
 
-    let contentType: string;
-    let expectedByteSize: number;
-    let title: string;
+    const safeTitle = sanitizeFilename(detail.artifact.title);
+    const encoder = new TextEncoder();
+
     if (detail.artifact.kind === 'generated_image') {
-      const metadata = generatedImageMetadataSchema.safeParse(version.metadata);
-      if (!metadata.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
-      }
-      contentType = metadata.data.contentType;
-      expectedByteSize = metadata.data.byteSize;
-      title = detail.artifact.title;
-    } else if (detail.artifact.kind === 'audio_overview') {
-      const metadata = audioOverviewMetadataSchema.safeParse(version.metadata);
-      if (!metadata.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
-      }
-      contentType = metadata.data.contentType;
-      expectedByteSize = metadata.data.byteSize;
-      title = detail.artifact.title;
-    } else {
-      return jsonError(404, 'artifact_not_found', '产物不支持下载。');
-    }
-
-    const bytes = await new LocalObjectStorage().readVerified(
-      version.objectKey,
-      version.checksum,
-    );
-    if (bytes.byteLength !== expectedByteSize) {
-      return jsonError(
-        503,
-        'download_integrity_failed',
-        '下载内容完整性校验失败。',
+      const metadata = generatedImageMetadataSchema.safeParse(
+        selectedVersion.metadata,
       );
+      if (!metadata.success) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+      if (!selectedVersion.objectKey || !selectedVersion.checksum) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+
+      const bytes = await new LocalObjectStorage().readVerified(
+        selectedVersion.objectKey,
+        selectedVersion.checksum,
+      );
+      if (bytes.byteLength !== metadata.data.byteSize) {
+        return jsonError(
+          503,
+          'download_integrity_failed',
+          '下载内容完整性校验失败。',
+        );
+      }
+
+      const contentType = metadata.data.contentType;
+      const filename = `${safeTitle}${extensionForMime(contentType)}`;
+      const body = new Uint8Array(bytes.byteLength);
+      body.set(bytes);
+      return new Response(body.buffer, {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': contentType,
+          'content-length': String(body.byteLength),
+          'content-disposition': `attachment; filename="${filename}"`,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      });
     }
 
-    const ext = extensionForMime(contentType);
-    const safeTitle = sanitizeFilename(title);
-    const filename = `${safeTitle}${ext}`;
+    if (detail.artifact.kind === 'audio_overview') {
+      const metadata = audioOverviewMetadataSchema.safeParse(
+        selectedVersion.metadata,
+      );
+      if (!metadata.success) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+      if (!selectedVersion.objectKey || !selectedVersion.checksum) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
 
-    const body = new Uint8Array(bytes.byteLength);
-    body.set(bytes);
-    return new Response(body.buffer, {
-      status: 200,
-      headers: {
-        'cache-control': 'private, no-store',
-        'content-type': contentType,
-        'content-length': String(body.byteLength),
-        'content-disposition': `attachment; filename="${filename}"`,
-        'x-content-type-options': 'nosniff',
-        'content-security-policy': "default-src 'none'; sandbox",
-      },
-    });
+      const bytes = await new LocalObjectStorage().readVerified(
+        selectedVersion.objectKey,
+        selectedVersion.checksum,
+      );
+      if (bytes.byteLength !== metadata.data.byteSize) {
+        return jsonError(
+          503,
+          'download_integrity_failed',
+          '下载内容完整性校验失败。',
+        );
+      }
+
+      const contentType = metadata.data.contentType;
+      const filename = `${safeTitle}${extensionForMime(contentType)}`;
+      const body = new Uint8Array(bytes.byteLength);
+      body.set(bytes);
+      return new Response(body.buffer, {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': contentType,
+          'content-length': String(body.byteLength),
+          'content-disposition': `attachment; filename="${filename}"`,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      });
+    }
+
+    if (detail.artifact.kind === 'markdown_document') {
+      const parsed = markdownDocumentContentSchema.safeParse(
+        selectedVersion.content,
+      );
+      if (!parsed.success) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+      const payload = parsed.data.markdown ?? '';
+      const filename = `${safeTitle}${extensionForMime('text/markdown')}`;
+      const body = encoder.encode(payload);
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': 'text/markdown; charset=utf-8',
+          'content-length': String(body.byteLength),
+          'content-disposition': `attachment; filename="${filename}"`,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      });
+    }
+
+    if (detail.artifact.kind === 'mind_map') {
+      const parsed = mindMapContentSchema.safeParse(selectedVersion.content);
+      if (!parsed.success) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+      const payload = JSON.stringify(parsed.data);
+      const body = encoder.encode(payload);
+      const filename = `${safeTitle}${extensionForMime('application/json')}`;
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': 'application/json; charset=utf-8',
+          'content-length': String(body.byteLength),
+          'content-disposition': `attachment; filename="${filename}"`,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      });
+    }
+
+    if (detail.artifact.kind === 'web_app') {
+      const parsed = webAppContentSchema.safeParse(selectedVersion.content);
+      if (!parsed.success) {
+        return jsonError(404, 'artifact_not_found', '产物不存在。');
+      }
+      /* sourceConversationId 只用于服务端 provenance；导出包不得变成读取
+         私有会话或来源的侧信道。代码、hash、预算与诊断仍属于可移植产物。 */
+      const exportableContent = {
+        ...parsed.data,
+        sourceConversationId: undefined,
+      };
+      const payload = JSON.stringify(exportableContent);
+      const body = encoder.encode(payload);
+      const filename = `${safeTitle}${extensionForMime('application/json')}`;
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': 'application/json; charset=utf-8',
+          'content-length': String(body.byteLength),
+          'content-disposition': `attachment; filename="${filename}"`,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      });
+    }
+
+    return jsonError(404, 'artifact_not_found', '产物不支持下载。');
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
       return jsonError(404, 'artifact_not_found', '产物不存在。');

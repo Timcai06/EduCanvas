@@ -1,14 +1,16 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { webRuntimePolicy } from '@educanvas/canvas-protocol/server';
 import { DrizzleManualArtifactRepository } from './manual-artifact-repository';
 import * as schema from './schema';
 import {
   DrizzleWebRuntimeRunRepository,
+  WebRuntimeAdmissionError,
   WebRuntimeRunNotFoundError,
 } from './web-runtime-run-repository';
 
@@ -35,6 +37,61 @@ describeDatabase('Web Runtime run authorization and audit', () => {
   let notebookId = '';
   let artifactId = '';
   let artifactVersionId = '';
+
+  function webAppFile(path: string, mediaType: string, content: string) {
+    return {
+      path,
+      mediaType,
+      content,
+      hash: createHash('sha256').update(content, 'utf8').digest('hex'),
+    };
+  }
+
+  function webAppArtifact(overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          webAppFile(
+            'index.html',
+            'text/html',
+            '<div id="app"></div><script src="main.js"></script>',
+          ),
+          webAppFile('main.js', 'text/javascript', 'console.log("app")'),
+          webAppFile('styles.css', 'text/css', 'body{font-family:sans-serif;}'),
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation', 'css-render', 'javascript-runtime'],
+      budget: {
+        ...webRuntimePolicy.limits,
+        maxMessageBytes: 1_000,
+      },
+      diagnostics: [],
+      generatedByModel: false,
+      ...overrides,
+    };
+  }
+
+  async function createArtifactWithContent(
+    kind: string,
+    content: unknown,
+  ): Promise<{ artifactId: string; artifactVersionId: string }> {
+    const created = await artifacts.createWithInitialVersion({
+      spaceId: notebookId,
+      trustedSubjectId: owner,
+      kind,
+      trustTier: 'tier2',
+      title: `runtime-${kind}`,
+      content,
+      generatedBy: 'user:manual',
+    });
+    return {
+      artifactId: created.artifact.id,
+      artifactVersionId: created.version.id,
+    };
+  }
 
   beforeAll(async () => {
     await migrate(database!, {
@@ -82,12 +139,16 @@ describeDatabase('Web Runtime run authorization and audit', () => {
 
   afterAll(async () => connection?.end());
 
-  async function createRun(token = randomBytes(32).toString('base64url')) {
+  async function createRun(
+    token = randomBytes(32).toString('base64url'),
+    selectedArtifactId = artifactId,
+    selectedArtifactVersionId = artifactVersionId,
+  ) {
     const run = await runs.createAuthorizedRun({
       requestId: randomUUID(),
       notebookId,
-      artifactId,
-      artifactVersionId,
+      artifactId: selectedArtifactId,
+      artifactVersionId: selectedArtifactVersionId,
       trustedSubjectId: owner,
       bootstrapToken: token,
     });
@@ -130,6 +191,111 @@ describeDatabase('Web Runtime run authorization and audit', () => {
       .from(schema.webRuntimeRuns)
       .where(sql`${schema.webRuntimeRuns.id} = ${run.id}`);
     expect(storedAfter!.bootstrapTokenHash).toBeNull();
+  });
+
+  it('accepts tier2 self-contained web_app artifacts and manifest runtime payload', async () => {
+    const { artifactId: webArtifactId, artifactVersionId: webVersionId } =
+      await createArtifactWithContent('web_app', webAppArtifact());
+    const { run, token } = await createRun(
+      randomBytes(32).toString('base64url'),
+      webArtifactId,
+      webVersionId,
+    );
+    const claimed = await runs.claimBootstrap({
+      runId: run.id,
+      bootstrapToken: token,
+    });
+    expect(claimed.run.artifactVersionId).toBe(webVersionId);
+    expect(claimed.content).toMatchObject({
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+      },
+      lockedDependencies: [],
+    });
+  });
+
+  it('accepts web_app without locked dependencies for self-contained first pass', async () => {
+    const artifact = await createArtifactWithContent(
+      'web_app',
+      webAppArtifact({
+        lockedDependencies: [],
+      }),
+    );
+    const token = randomBytes(32).toString('base64url');
+    const run = await runs.createAuthorizedRun({
+      requestId: randomUUID(),
+      notebookId,
+      ...artifact,
+      trustedSubjectId: owner,
+      bootstrapToken: token,
+    });
+    const claimed = await runs.claimBootstrap({
+      runId: run.id,
+      bootstrapToken: token,
+    });
+    expect(claimed.run.artifactVersionId).toBe(artifact.artifactVersionId);
+    expect(claimed.content).toMatchObject({
+      lockedDependencies: [],
+      manifest: { entry: 'index.html' },
+    });
+  });
+
+  it('rejects web_app with unknown dependency when non-empty', async () => {
+    const artifact = await createArtifactWithContent(
+      'web_app',
+      webAppArtifact({
+        lockedDependencies: [{ name: 'vite', version: '5.0.0' }],
+      }),
+    );
+    await expect(
+      runs.createAuthorizedRun({
+        requestId: randomUUID(),
+        notebookId,
+        artifactId: artifact.artifactId,
+        artifactVersionId: artifact.artifactVersionId,
+        trustedSubjectId: owner,
+        bootstrapToken: randomBytes(32).toString('base64url'),
+      }),
+    ).rejects.toBeInstanceOf(WebRuntimeAdmissionError);
+  });
+
+  it('rejects web_app with mismatched dependency version when non-empty', async () => {
+    const artifact = await createArtifactWithContent(
+      'web_app',
+      webAppArtifact({
+        lockedDependencies: [{ name: 'react', version: '19.2.6' }],
+      }),
+    );
+    await expect(
+      runs.createAuthorizedRun({
+        requestId: randomUUID(),
+        notebookId,
+        artifactId: artifact.artifactId,
+        artifactVersionId: artifact.artifactVersionId,
+        trustedSubjectId: owner,
+        bootstrapToken: randomBytes(32).toString('base64url'),
+      }),
+    ).rejects.toBeInstanceOf(WebRuntimeAdmissionError);
+  });
+
+  it('rejects web_app with manifest hash mismatch at admission', async () => {
+    const invalidWebApp = webAppArtifact({
+      manifest: {
+        entry: 'index.html',
+        files: [webAppFile('index.html', 'text/html', '<div>invalid</div>')],
+      },
+    });
+    invalidWebApp.manifest.files[0]!.hash = 'a'.repeat(64);
+    await expect(
+      runs.createAuthorizedRun({
+        requestId: randomUUID(),
+        notebookId,
+        ...(await createArtifactWithContent('web_app', invalidWebApp)),
+        trustedSubjectId: owner,
+        bootstrapToken: randomBytes(32).toString('base64url'),
+      }),
+    ).rejects.toBeInstanceOf(WebRuntimeAdmissionError);
   });
 
   it('expires unclaimed bootstrap credentials inside the locked claim transaction', async () => {

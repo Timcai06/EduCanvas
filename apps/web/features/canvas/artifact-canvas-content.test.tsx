@@ -1,3 +1,4 @@
+import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { makeArtifactResource } from './canvas-resource-fixtures';
 import { describe, expect, it } from 'vitest';
@@ -6,6 +7,7 @@ import type {
   AudioOverviewMedia,
   GeneratedImageMedia,
 } from './artifact-client';
+import type { WebAppContent } from '@educanvas/canvas-protocol';
 import {
   ArtifactCanvasContent,
   toArtifactVersionData,
@@ -40,7 +42,9 @@ function makeDetail(
             ? makeArtifactResource('slides')
             : kind === 'flashcards'
               ? makeArtifactResource('flashcards')
-              : makeArtifactResource('mind_map'),
+              : kind === 'markdown_document'
+                ? makeArtifactResource('markdown_document')
+                : makeArtifactResource('mind_map'),
     ...overrides,
   };
 }
@@ -49,6 +53,45 @@ function withVersion(detail: ArtifactDetail, content: unknown, version = 1) {
   return {
     ...detail,
     version: { id: 'v1', version, content, media: null },
+  };
+}
+
+function makeWebAppContent(
+  overrides: Partial<WebAppContent> = {},
+): WebAppContent {
+  return {
+    schemaVersion: 1,
+    manifest: {
+      entry: 'index.html',
+      files: [
+        {
+          path: 'index.html',
+          mediaType: 'text/html',
+          content: '<!doctype html><html><body>ok</body></html>',
+          hash: 'b'.repeat(64),
+        },
+        {
+          path: 'main.js',
+          mediaType: 'text/javascript',
+          content: 'console.log("hello")',
+          hash: 'c'.repeat(64),
+        },
+      ],
+    },
+    lockedDependencies: [],
+    capabilities: ['javascript-runtime', 'dom-manipulation'],
+    budget: {
+      maxInputBytes: 1024,
+      maxMessageBytes: 512,
+      maxOutputBytes: 1024,
+      maxDurationMs: 12000,
+      maxConcurrentInstances: 1,
+      maxQueueDepth: 1,
+      maxMessagesPerSecond: 10,
+    },
+    diagnostics: [{ code: 'build_succeeded' }],
+    generatedByModel: true,
+    ...overrides,
   };
 }
 
@@ -94,6 +137,7 @@ function render(
   view: ReturnType<typeof resolveArtifactContentView>,
   detail: ArtifactDetail,
   readOnly = false,
+  presentation: 'canvas' | 'live-preview' = 'canvas',
 ) {
   return renderToStaticMarkup(
     <ArtifactCanvasContent
@@ -102,6 +146,7 @@ function render(
       revising={false}
       readOnly={readOnly}
       onSaveNote={() => {}}
+      presentation={presentation}
     />,
   );
 }
@@ -201,11 +246,130 @@ describe('ArtifactCanvasContent（W04-3 内容区分发）', () => {
     expect(html).not.toContain('<audio');
   });
 
+  it('web_app → Canvas 模式渲染持久 Web Runtime 壳', () => {
+    const detail = withVersion(makeDetail('web_app'), makeWebAppContent());
+    const html = render(resolveArtifactContentView(detail, false), detail);
+    expect(html).toContain('data-testid="persistent-web-runtime"');
+    expect(html).toContain('预览');
+    expect(html).toContain('正在启动隔离运行环境');
+  });
+
+  it('web_app → live-preview 不启动持久运行时', () => {
+    const detail = withVersion(makeDetail('web_app'), makeWebAppContent());
+    const html = render(
+      resolveArtifactContentView(detail, false),
+      detail,
+      false,
+      'live-preview',
+    );
+    expect(html).toContain('交互网页需在 Canvas 打开');
+    expect(html).not.toContain('data-runtime-state');
+  });
+
+  it('web_app 源码面板仅显示文本源码，不执行 raw HTML', () => {
+    const detail = withVersion(makeDetail('web_app'), makeWebAppContent());
+    const html = render(
+      resolveArtifactContentView(
+        {
+          ...detail,
+          version: {
+            ...detail.version!,
+            content: makeWebAppContent({
+              manifest: {
+                entry: 'index.html',
+                files: [
+                  {
+                    path: 'index.html',
+                    mediaType: 'text/html',
+                    content: '<script>alert(1)</script>',
+                    hash: 'd'.repeat(64),
+                  },
+                ],
+              },
+            }),
+          },
+        },
+        false,
+      ),
+      detail,
+    );
+    expect(html).toContain('源码');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  });
+
+  it('web_app 构建面板展示诊断与预算信息', () => {
+    const detail = withVersion(makeDetail('web_app'), makeWebAppContent());
+    const html = render(resolveArtifactContentView(detail, false), detail);
+    expect(html).toContain('构建');
+    expect(html).toContain('build_succeeded');
+    expect(html).toContain('输入预算');
+    expect(html).toContain('无锁定依赖');
+  });
+
+  it('web_app parse 失败→不可用提示（fail-closed）', () => {
+    const view = resolveArtifactContentView(
+      withVersion(makeDetail('web_app'), { invalid: 'content' }),
+      false,
+    );
+    const html = render(view, makeDetail('web_app'));
+    expect(html).toContain('Web App 内容不可用');
+  });
+
+  it('web_app 不可信 schema（未知媒体类型）→ fail-closed 不启动运行时', () => {
+    const view = resolveArtifactContentView(
+      withVersion(
+        makeDetail('web_app'),
+        {
+          schemaVersion: 1,
+          manifest: {
+            entry: 'index.html',
+            files: [
+              {
+                path: 'index.html',
+                mediaType: 'application/x-binary',
+                content: 'bad',
+                hash: 'f'.repeat(64),
+              },
+            ],
+          },
+          lockedDependencies: [],
+          capabilities: ['javascript-runtime'],
+          budget: {
+            maxInputBytes: 1_000,
+            maxMessageBytes: 512,
+            maxOutputBytes: 1_000,
+            maxDurationMs: 5_000,
+            maxConcurrentInstances: 1,
+            maxQueueDepth: 1,
+            maxMessagesPerSecond: 10,
+          },
+          diagnostics: [{ code: 'build_failed' }],
+        },
+        1,
+      ),
+      false,
+    );
+    const html = render(view, makeDetail('web_app'));
+    expect(html).toContain('Web App 内容不可用');
+    expect(html).not.toContain('data-testid="persistent-web-runtime"');
+  });
+
   it('note → 壳内 NoteRenderer（prose），不落到 Registry 占位', () => {
     const detail = withVersion(makeDetail('note'), '# 笔记');
     const html = render(resolveArtifactContentView(detail, false), detail);
     expect(html).toContain('prose');
     expect(html).not.toContain('需要交互式 Canvas 壳');
+  });
+
+  it('markdown_document → Registry 渲染只读 NoteRenderer（无编辑交互）', () => {
+    const detail = withVersion(makeDetail('markdown_document'), {
+      contentVersion: 1,
+      generatedByModel: false,
+      markdown: '# 课程文档',
+    });
+    const html = render(resolveArtifactContentView(detail, false), detail);
+    expect(html).toContain('prose');
+    expect(html).toContain('课程文档');
   });
 
   it('Live 等内嵌宿主可强制最新版 note 只读', () => {
