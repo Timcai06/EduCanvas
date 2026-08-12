@@ -1,7 +1,11 @@
 'use client';
 
 import type { RefObject } from 'react';
-import type { ChatMessage } from '@/features/chat/messages';
+import type {
+  AssistantMessage,
+  ChatMessage,
+  MessageArtifactDTO,
+} from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
 import type { ComposerToolChip } from '@/features/composer/composer';
@@ -65,6 +69,49 @@ export interface ConversationPaneProps {
   onLiveExit?: (payload: LiveVoiceExitPayload) => void;
 }
 
+export function projectArtifactGenerationIntoMessages(
+  messages: readonly ChatMessage[],
+  generation: GenerationState | null,
+): readonly ChatMessage[] {
+  if (!generation?.artifactId) return messages;
+  const latestVersion = Math.max(
+    ...messages.flatMap((message) =>
+      message.role === 'assistant'
+        ? (message.artifacts ?? [])
+            .filter((artifact) => artifact.id === generation.artifactId)
+            .map((artifact) => artifact.latestVersion)
+        : [],
+    ),
+    generation.detail?.artifact.latestVersion ?? 0,
+  );
+  const status: MessageArtifactDTO['status'] =
+    generation.outcome === 'cancelled'
+      ? 'cancelled'
+      : generation.phase === 'failed'
+        ? 'failed'
+        : generation.phase === 'ready'
+          ? 'active'
+          : latestVersion > 0
+            ? 'active'
+            : 'proposed';
+  let matched = false;
+  const projected = messages.map((message) => {
+    if (message.role !== 'assistant' || !message.artifacts) return message;
+    const artifacts = message.artifacts.map((artifact) => {
+      if (artifact.id !== generation.artifactId) return artifact;
+      matched = true;
+      return {
+        ...artifact,
+        title: generation.title || artifact.title,
+        status,
+        latestVersion,
+      };
+    });
+    return { ...message, artifacts } satisfies AssistantMessage;
+  });
+  return matched ? projected : messages;
+}
+
 export function ConversationPane({
   isLanding,
   notebookId,
@@ -98,7 +145,24 @@ export function ConversationPane({
   onDismissStatusCard,
   onLiveExit,
 }: ConversationPaneProps) {
-  const showStatusCard = generation !== null && generation.phase !== 'confirm';
+  const generationHasMessageCard = Boolean(
+    generation?.artifactId &&
+    messages.some(
+      (message) =>
+        message.role === 'assistant' &&
+        message.artifacts?.some(
+          (artifact) => artifact.id === generation.artifactId,
+        ),
+    ),
+  );
+  const showStatusCard =
+    generation !== null &&
+    generation.phase !== 'confirm' &&
+    !generationHasMessageCard;
+  const projectedMessages = projectArtifactGenerationIntoMessages(
+    messages,
+    generation,
+  );
   const {
     assistantId,
     assistantText,
@@ -106,40 +170,18 @@ export function ConversationPane({
     assistantArtifacts,
     assistantCitations,
     assistantToolSteps,
-  } = useAssistantMessageProjection(messages);
-  const liveArtifacts = [
-    ...assistantArtifacts.map((artifact) => ({
-      id: artifact.id,
-      kind: artifact.kind,
-      title: artifact.title,
-      status: artifact.status,
-      previewUrl: null,
-    })),
-    ...(generation?.artifactId &&
-    !assistantArtifacts.some(
-      (artifact) => artifact.id === generation.artifactId,
-    )
-      ? [
-          {
-            id: generation.artifactId,
-            kind: generation.kind,
-            title: generation.title,
-            status:
-              generation.phase === 'failed'
-                ? ('failed' as const)
-                : generation.phase === 'ready'
-                  ? ('active' as const)
-                  : ('generating' as const),
-            previewUrl:
-              generation.detail?.version?.media?.contentType.startsWith(
-                'image/',
-              )
-                ? generation.detail.version.media.url
-                : null,
-          },
-        ]
-      : []),
-  ];
+  } = useAssistantMessageProjection(projectedMessages);
+  const liveArtifacts = assistantArtifacts.map((artifact) => ({
+    id: artifact.id,
+    kind: artifact.kind,
+    title: artifact.title,
+    status: artifact.status,
+    previewUrl:
+      artifact.id === generation?.artifactId &&
+      generation.detail?.version?.media?.contentType.startsWith('image/')
+        ? generation.detail.version.media.url
+        : null,
+  }));
   const liveCitations = assistantCitations.map((citation) => ({
     id: citation.id,
     label: citation.label,
@@ -234,7 +276,7 @@ export function ConversationPane({
         }}
       >
         <ChatPanel
-          messages={messages}
+          messages={projectedMessages}
           canvasOpen={false}
           artifactTitle=""
           onOpenCanvas={() => undefined}

@@ -408,40 +408,6 @@ export async function saveMarkdownDocumentArtifact(
   return { artifact: result.artifact, job: null };
 }
 
-/**
- * 轮询直到生成任务落入 terminal 态或产生版本。超时不抛错而是返回最后一次
- * 详情——任务仍在后台跑(持久任务的本意),UI 应展示"仍在生成"而不是失败。
- */
-export async function pollArtifactUntilSettled(
-  artifactId: string,
-  options: {
-    intervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    minimumVersion?: number;
-  } = {},
-): Promise<ArtifactDetail> {
-  const interval = options.intervalMs ?? 1_500;
-  const deadline = Date.now() + (options.timeoutMs ?? 60_000);
-  let detail = await fetchArtifactDetail(artifactId);
-  while (Date.now() < deadline && !options.signal?.aborted) {
-    const jobStatus = detail.latestJob?.status;
-    const minimumVersion = options.minimumVersion ?? 1;
-    if (jobStatus === 'failed' || jobStatus === 'cancelled') {
-      return detail;
-    }
-    if (
-      detail.artifact.latestVersion >= minimumVersion &&
-      (jobStatus === 'succeeded' || jobStatus === undefined)
-    ) {
-      return detail;
-    }
-    await new Promise((resolve) => setTimeout(resolve, interval));
-    detail = await fetchArtifactDetail(artifactId);
-  }
-  return detail;
-}
-
 export async function deleteArtifact(
   artifactId: string,
 ): Promise<{ deleted: boolean }> {

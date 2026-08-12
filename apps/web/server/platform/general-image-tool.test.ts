@@ -65,6 +65,23 @@ function createOperationImages(
 }
 
 describe('WebOperationImageArtifacts', () => {
+  it('拒绝把同一 Turn 已有的文档 Artifact 伪装成图片', async () => {
+    const { operationImages } = createOperationImages(
+      vi.fn().mockResolvedValue({
+        artifact: { ...artifact, kind: 'mind_map' },
+        job,
+        replayed: true,
+      }),
+    );
+
+    await expect(
+      operationImages
+        .createTool()
+        .handler({ title: '示意图', prompt: '画一张示意图' }, context),
+    ).rejects.toThrow('artifact_already_proposed_for_turn');
+    expect(operationImages.events()).toEqual([]);
+  });
+
   it('以可信 Notebook 范围原子入队并投影 tier2 proposed 事件', async () => {
     const { repository, operationImages } = createOperationImages();
 
@@ -86,6 +103,8 @@ describe('WebOperationImageArtifacts', () => {
       trustTier: 'tier2',
       title: artifact.title,
       taskIdentifier: 'artifact:generate',
+      idempotencyKey: 'general-turn-artifact:operation-1',
+      requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       params: {
         image: {
           prompt: '一张展示光合作用过程的示意图，标注光照、二氧化碳与水。',

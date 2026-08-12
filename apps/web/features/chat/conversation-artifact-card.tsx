@@ -64,7 +64,9 @@ export function ConversationArtifactCard({
             ? ` · v${artifact.latestVersion}`
             : artifact.status === 'failed'
               ? ' · 生成失败'
-              : ' · 正在生成'}
+              : artifact.status === 'cancelled'
+                ? ' · 已取消'
+                : ' · 正在生成'}
         </span>
       </span>
       <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-accent">

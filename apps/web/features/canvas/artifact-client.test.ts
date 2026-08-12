@@ -9,6 +9,7 @@ import {
   reviseArtifact,
   saveNoteArtifact,
 } from './artifact-client';
+import { pollArtifactUntilSettled } from './artifact-polling-client';
 
 const artifact = {
   id: '10000000-0000-4000-8000-000000000001',
@@ -294,5 +295,142 @@ describe('artifact client mutation contracts', () => {
       `/api/v1/chat/artifacts/${artifact.id}`,
       { method: 'DELETE' },
     );
+  });
+
+  it('轮询可在超时后返回 timed_out 状态', async () => {
+    vi.useFakeTimers();
+    const runningDetail = {
+      artifact: {
+        id: artifact.id,
+        kind: artifact.kind,
+        trustTier: artifact.trustTier,
+        title: artifact.title,
+        status: 'active',
+        latestVersion: 0,
+        fromConversation: false,
+        createdAt: '2026-07-27T00:00:00.000Z',
+        updatedAt: '2026-07-27T00:01:00.000Z',
+      },
+      version: null,
+      versions: [],
+      latestJob: {
+        id: '30000000-0000-4000-8000-000000000001',
+        status: 'running',
+        progress: 3,
+        failureCode: null,
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(runningDetail), { status: 200 }),
+        ),
+      ),
+    );
+
+    const pollResult = pollArtifactUntilSettled(
+      '30000000-0000-4000-8000-000000000001',
+      {
+        intervalMs: 5,
+        timeoutMs: 20,
+      },
+    );
+    await vi.advanceTimersByTimeAsync(30);
+    const result = await pollResult;
+    expect(result.outcome).toBe('timed_out');
+    expect(result.detail.latestJob?.status).toBe('running');
+    vi.useRealTimers();
+  });
+
+  it('轮询识别服务端 canceled 状态', async () => {
+    const cancelledDetail = {
+      artifact: {
+        id: artifact.id,
+        kind: artifact.kind,
+        trustTier: artifact.trustTier,
+        title: artifact.title,
+        status: 'active',
+        latestVersion: 0,
+        fromConversation: false,
+        createdAt: '2026-07-27T00:00:00.000Z',
+        updatedAt: '2026-07-27T00:01:00.000Z',
+      },
+      version: null,
+      versions: [],
+      latestJob: {
+        id: '30000000-0000-4000-8000-000000000002',
+        status: 'cancelled',
+        progress: 100,
+        failureCode: null,
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(cancelledDetail), { status: 200 }),
+        ),
+      ),
+    );
+
+    const result = await pollArtifactUntilSettled(
+      '30000000-0000-4000-8000-000000000002',
+      { timeoutMs: 100 },
+    );
+    expect(result).toMatchObject({
+      outcome: 'cancelled',
+      detail: { latestJob: { status: 'cancelled' } },
+    });
+  });
+
+  it('区分本地停止观察与服务端 cancelled 事实', async () => {
+    const runningDetail = {
+      artifact: {
+        id: artifact.id,
+        kind: artifact.kind,
+        trustTier: artifact.trustTier,
+        title: artifact.title,
+        status: 'active',
+        latestVersion: 0,
+        fromConversation: false,
+        createdAt: '2026-07-27T00:00:00.000Z',
+        updatedAt: '2026-07-27T00:01:00.000Z',
+      },
+      version: null,
+      versions: [],
+      latestJob: {
+        id: '30000000-0000-4000-8000-000000000003',
+        status: 'running',
+        progress: 5,
+        failureCode: null,
+      },
+    };
+    const abortController = new AbortController();
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(runningDetail), { status: 200 }),
+        )
+        .mockImplementation(async (_url, options: RequestInit | undefined) => {
+          if (options?.signal?.aborted) {
+            throw new DOMException('The operation was aborted.', 'AbortError');
+          }
+          return new Response(JSON.stringify(runningDetail), { status: 200 });
+        }),
+    );
+
+    const resultPromise = pollArtifactUntilSettled(
+      '30000000-0000-4000-8000-000000000003',
+      {
+        intervalMs: 5,
+        timeoutMs: 100,
+        signal: abortController.signal,
+      },
+    );
+    abortController.abort();
+    await expect(resultPromise).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

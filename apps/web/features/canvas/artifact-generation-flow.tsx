@@ -1,17 +1,9 @@
 'use client';
 
-import {
-  CircleNotch,
-  Headphones,
-  TreeStructure,
-  Warning,
-} from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sheet } from '@/components/sheet';
 import {
   createArtifact,
   fetchArtifactDetail,
-  pollArtifactUntilSettled,
   reviseArtifact,
   saveNoteArtifact,
   saveMarkdownDocumentArtifact,
@@ -20,17 +12,18 @@ import {
   type CreatableArtifactKind,
   type ObservableArtifactKind,
 } from './artifact-client';
-import { CanvasHost } from './canvas-host';
-import { resolveArtifactContentView } from './artifact-content-view';
-import { ArtifactProvenanceStrip } from './artifact-provenance';
-import { ArtifactCanvasToolbar } from './artifact-canvas-toolbar';
-import { ArtifactCanvasContent } from './artifact-canvas-content';
-import { MarkdownVersionDiffPanel } from './markdown-version-diff';
+import {
+  pollArtifactUntilSettled,
+  type PollArtifactResult,
+  type PollOutcome,
+} from './artifact-polling-client';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
+export type GenerationOutcome = 'pending' | 'ready' | 'failed' | 'cancelled';
 
 export interface GenerationState {
   phase: GenerationPhase;
+  outcome: GenerationOutcome;
   kind: ObservableArtifactKind;
   artifactId?: string;
   title: string;
@@ -44,6 +37,51 @@ export interface ProposedArtifact {
   artifactId: string;
   kind: ObservableArtifactKind;
   title: string;
+}
+
+export const isPollOutcomeGenerating = (outcome: PollOutcome) =>
+  outcome === 'pending' || outcome === 'timed_out';
+
+export const phaseFromPollOutcome = (outcome: PollOutcome): GenerationPhase => {
+  if (outcome === 'ready') return 'ready';
+  if (isPollOutcomeGenerating(outcome)) return 'generating';
+  return 'failed';
+};
+
+export const outcomeFromPollOutcome = (
+  outcome: PollOutcome,
+): GenerationOutcome =>
+  isPollOutcomeGenerating(outcome)
+    ? 'pending'
+    : outcome === 'cancelled'
+      ? 'cancelled'
+      : outcome === 'ready'
+        ? 'ready'
+        : 'failed';
+
+export interface ObservationEpochController {
+  begin: () => number;
+  isCurrent: (epoch: number) => boolean;
+}
+
+export const createObservationEpochController =
+  (): ObservationEpochController => {
+    let epoch = 0;
+    return {
+      begin: () => ++epoch,
+      isCurrent: (candidate) => candidate === epoch,
+    };
+  };
+
+/** Long-running durable jobs re-enter bounded poll windows until a real terminal fact arrives. */
+export async function pollArtifactToTerminal(
+  artifactId: string,
+  options: { signal?: AbortSignal; minimumVersion?: number } = {},
+): Promise<PollArtifactResult> {
+  for (;;) {
+    const result = await pollArtifactUntilSettled(artifactId, options);
+    if (result.outcome !== 'timed_out') return result;
+  }
 }
 
 export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
@@ -63,12 +101,65 @@ export function useArtifactGeneration() {
   const [openDetail, setOpenDetail] = useState<ArtifactDetail | null>(null);
   const [canvasFull, setCanvasFull] = useState(false);
   const pollAbort = useRef<AbortController | null>(null);
+  const observationEpoch = useRef(createObservationEpochController());
+  const detailEpoch = useRef(createObservationEpochController());
 
-  useEffect(() => () => pollAbort.current?.abort(), []);
+  const beginObservation = useCallback(() => {
+    pollAbort.current?.abort();
+    return observationEpoch.current.begin();
+  }, []);
+
+  const isCurrentObservation = useCallback((epoch: number) => {
+    return observationEpoch.current.isCurrent(epoch);
+  }, []);
+
+  useEffect(
+    () => () => {
+      observationEpoch.current.begin();
+      detailEpoch.current.begin();
+      pollAbort.current?.abort();
+    },
+    [],
+  );
+
+  const applyPollResult = useCallback(
+    (
+      artifactId: string,
+      kind: ObservableArtifactKind,
+      result: PollArtifactResult,
+      titleFallback: string,
+      options: ConfirmArtifactOptions = {},
+    ) => {
+      const phase = phaseFromPollOutcome(result.outcome);
+      const outcome = outcomeFromPollOutcome(result.outcome);
+      setGeneration({
+        phase,
+        outcome,
+        kind,
+        artifactId,
+        title: result.detail.artifact.title || titleFallback,
+        detail: result.detail,
+      });
+      if (
+        phase === 'ready' &&
+        options.openWhenReady &&
+        result.outcome !== 'cancelled'
+      ) {
+        setOpenDetail(result.detail);
+        setCanvasFull(false);
+      }
+    },
+    [],
+  );
 
   const beginConfirm = useCallback(
     (kind: CreatableArtifactKind, defaultTitle: string) => {
-      setGeneration({ phase: 'confirm', kind, title: defaultTitle });
+      setGeneration({
+        phase: 'confirm',
+        outcome: 'pending',
+        kind,
+        title: defaultTitle,
+      });
     },
     [],
   );
@@ -80,32 +171,33 @@ export function useArtifactGeneration() {
       sources: readonly ArtifactSourceReference[] = [],
       options: ConfirmArtifactOptions = {},
     ) => {
-      setGeneration({ phase: 'generating', kind, title });
+      const epoch = beginObservation();
+      setGeneration({ phase: 'generating', outcome: 'pending', kind, title });
       try {
         const created = await createArtifact(kind, title, sources);
-        pollAbort.current = new AbortController();
-        const detail = await pollArtifactUntilSettled(created.artifact.id, {
-          signal: pollAbort.current.signal,
+        if (!isCurrentObservation(epoch)) return;
+        const controller = new AbortController();
+        pollAbort.current = controller;
+        const result = await pollArtifactToTerminal(created.artifact.id, {
+          signal: controller.signal,
         });
-        const succeeded =
-          detail.artifact.latestVersion > 0 &&
-          detail.latestJob?.status !== 'failed';
-        setGeneration({
-          phase: succeeded ? 'ready' : 'failed',
-          kind,
-          artifactId: created.artifact.id,
-          title: detail.artifact.title,
-          detail,
-        });
-        if (succeeded && options.openWhenReady) {
-          setOpenDetail(detail);
-          setCanvasFull(false);
+        if (!isCurrentObservation(epoch)) return;
+        applyPollResult(created.artifact.id, kind, result, title, options);
+      } catch (error) {
+        if (!isCurrentObservation(epoch)) return;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setGeneration({
+            phase: 'failed',
+            outcome: 'cancelled',
+            kind,
+            title,
+          });
+          return;
         }
-      } catch {
-        setGeneration({ phase: 'failed', kind, title });
+        setGeneration({ phase: 'failed', outcome: 'failed', kind, title });
       }
     },
-    [],
+    [applyPollResult, beginObservation, isCurrentObservation],
   );
 
   /**
@@ -117,58 +209,70 @@ export function useArtifactGeneration() {
       artifact: ProposedArtifact,
       options: ConfirmArtifactOptions = {},
     ) => {
-      pollAbort.current?.abort();
+      const epoch = beginObservation();
       setGeneration({
         phase: 'generating',
+        outcome: 'pending',
         kind: artifact.kind,
         artifactId: artifact.artifactId,
         title: artifact.title,
       });
       try {
-        pollAbort.current = new AbortController();
-        const detail = await pollArtifactUntilSettled(artifact.artifactId, {
-          signal: pollAbort.current.signal,
+        const controller = new AbortController();
+        pollAbort.current = controller;
+        const result = await pollArtifactToTerminal(artifact.artifactId, {
+          signal: controller.signal,
         });
-        const succeeded =
-          detail.artifact.latestVersion > 0 &&
-          detail.latestJob?.status !== 'failed';
-        setGeneration({
-          phase: succeeded ? 'ready' : 'failed',
-          kind: artifact.kind,
-          artifactId: artifact.artifactId,
-          title: detail.artifact.title,
-          detail,
-        });
-        if (succeeded && options.openWhenReady) {
-          setOpenDetail(detail);
-          setCanvasFull(false);
+        if (!isCurrentObservation(epoch)) return;
+        applyPollResult(
+          artifact.artifactId,
+          artifact.kind,
+          result,
+          artifact.title,
+          options,
+        );
+      } catch (error) {
+        if (!isCurrentObservation(epoch)) return;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setGeneration({
+            phase: 'failed',
+            outcome: 'cancelled',
+            kind: artifact.kind,
+            artifactId: artifact.artifactId,
+            title: artifact.title,
+          });
+          return;
         }
-      } catch {
         setGeneration({
           phase: 'failed',
+          outcome: 'failed',
           kind: artifact.kind,
           artifactId: artifact.artifactId,
           title: artifact.title,
         });
       }
     },
-    [],
+    [applyPollResult, beginObservation, isCurrentObservation],
   );
 
   const openArtifact = useCallback(async (artifactId: string) => {
+    const epoch = detailEpoch.current.begin();
     try {
-      setOpenDetail(await fetchArtifactDetail(artifactId));
+      const detail = await fetchArtifactDetail(artifactId);
+      if (detailEpoch.current.isCurrent(epoch)) setOpenDetail(detail);
     } catch {
-      setOpenDetail(null);
+      if (detailEpoch.current.isCurrent(epoch)) setOpenDetail(null);
     }
   }, []);
 
   const openArtifactVersion = useCallback(
     async (artifactId: string, version: number) => {
+      const epoch = detailEpoch.current.begin();
       try {
-        setOpenDetail(await fetchArtifactDetail(artifactId, version));
+        const detail = await fetchArtifactDetail(artifactId, version);
+        if (detailEpoch.current.isCurrent(epoch)) setOpenDetail(detail);
       } catch {
-        setOpenDetail(null);
+        if (detailEpoch.current.isCurrent(epoch)) setOpenDetail(null);
       }
     },
     [],
@@ -177,71 +281,112 @@ export function useArtifactGeneration() {
   const revise = useCallback(
     async (detail: ArtifactDetail, instruction: string) => {
       const baseVersion = detail.artifact.latestVersion;
+      const epoch = beginObservation();
       setGeneration({
         phase: 'generating',
+        outcome: 'pending',
         kind: detail.artifact.kind as ObservableArtifactKind,
         artifactId: detail.artifact.id,
         title: detail.artifact.title,
       });
       try {
         await reviseArtifact(detail.artifact.id, baseVersion, instruction);
-        pollAbort.current?.abort();
-        pollAbort.current = new AbortController();
-        const updated = await pollArtifactUntilSettled(detail.artifact.id, {
-          signal: pollAbort.current.signal,
+        if (!isCurrentObservation(epoch)) return;
+        const controller = new AbortController();
+        pollAbort.current = controller;
+        const result = await pollArtifactToTerminal(detail.artifact.id, {
+          signal: controller.signal,
           minimumVersion: baseVersion + 1,
         });
-        const succeeded =
-          updated.artifact.latestVersion >= baseVersion + 1 &&
-          updated.latestJob?.status !== 'failed';
-        setGeneration({
-          phase: succeeded ? 'ready' : 'failed',
+        if (!isCurrentObservation(epoch)) return;
+        const phase = phaseFromPollOutcome(result.outcome);
+        const next = {
+          outcome: outcomeFromPollOutcome(result.outcome),
           kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
-          title: detail.artifact.title,
-          detail: updated,
-        });
-        if (succeeded) {
+          title: result.detail.artifact.title,
+          detail: result.detail,
+        };
+        setGeneration({ phase, ...next });
+        if (phase === 'ready') {
           setOpenDetail((current) =>
-            current?.artifact.id === detail.artifact.id ? updated : current,
+            current?.artifact.id === detail.artifact.id
+              ? result.detail
+              : current,
           );
         }
-      } catch {
+      } catch (error) {
+        if (!isCurrentObservation(epoch)) return;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setGeneration({
+            phase: 'failed',
+            outcome: 'cancelled',
+            kind: detail.artifact.kind as ObservableArtifactKind,
+            artifactId: detail.artifact.id,
+            title: detail.artifact.title,
+          });
+          return;
+        }
         setGeneration({
           phase: 'failed',
+          outcome: 'failed',
           kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });
       }
     },
-    [],
+    [beginObservation, isCurrentObservation, pollAbort],
   );
 
-  const createBlankNote = useCallback(async (title: string) => {
-    setGeneration({ phase: 'generating', kind: 'note', title });
-    try {
-      const created = await createArtifact('note', title, [], `# ${title}\n\n`);
-      const detail = await fetchArtifactDetail(created.artifact.id);
+  const createBlankNote = useCallback(
+    async (title: string) => {
+      const epoch = beginObservation();
       setGeneration({
-        phase: 'ready',
+        phase: 'generating',
+        outcome: 'pending',
         kind: 'note',
-        artifactId: created.artifact.id,
         title,
-        detail,
       });
-      setOpenDetail(detail);
-      setCanvasFull(false);
-    } catch {
-      setGeneration({ phase: 'failed', kind: 'note', title });
-    }
-  }, []);
+      try {
+        const created = await createArtifact(
+          'note',
+          title,
+          [],
+          `# ${title}\n\n`,
+        );
+        if (!isCurrentObservation(epoch)) return;
+        const detail = await fetchArtifactDetail(created.artifact.id);
+        if (!isCurrentObservation(epoch)) return;
+        setGeneration({
+          phase: 'ready',
+          outcome: 'ready',
+          kind: 'note',
+          artifactId: created.artifact.id,
+          title,
+          detail,
+        });
+        setOpenDetail(detail);
+        setCanvasFull(false);
+      } catch {
+        setGeneration({
+          phase: 'failed',
+          outcome: 'failed',
+          kind: 'note',
+          title,
+        });
+      }
+    },
+    [beginObservation, isCurrentObservation],
+  );
 
   const saveNote = useCallback(
     async (detail: ArtifactDetail, markdown: string) => {
       const baseVersion = detail.artifact.latestVersion;
+      const epoch = beginObservation();
       setGeneration({
         phase: 'generating',
+        outcome: 'pending',
         kind: 'note',
         artifactId: detail.artifact.id,
         title: detail.artifact.title,
@@ -256,10 +401,13 @@ export function useArtifactGeneration() {
         } else {
           await saveNoteArtifact(detail.artifact.id, baseVersion, markdown);
         }
+        if (!isCurrentObservation(epoch)) return;
         const updated = await fetchArtifactDetail(detail.artifact.id);
+        if (!isCurrentObservation(epoch)) return;
         setOpenDetail(updated);
         setGeneration({
           phase: 'ready',
+          outcome: 'ready',
           kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
@@ -268,19 +416,20 @@ export function useArtifactGeneration() {
       } catch {
         setGeneration({
           phase: 'failed',
+          outcome: 'failed',
           kind: detail.artifact.kind as ObservableArtifactKind,
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });
       }
     },
-    [],
+    [beginObservation, isCurrentObservation],
   );
 
   const dismiss = useCallback(() => {
-    pollAbort.current?.abort();
+    beginObservation();
     setGeneration(null);
-  }, []);
+  }, [beginObservation]);
 
   return {
     generation,
@@ -296,6 +445,7 @@ export function useArtifactGeneration() {
     openArtifact,
     openArtifactVersion,
     closeCanvas: () => {
+      detailEpoch.current.begin();
       setOpenDetail(null);
       setCanvasFull(false);
     },
@@ -303,275 +453,8 @@ export function useArtifactGeneration() {
   };
 }
 
-/** 确认卡:标题可改,显式点击才创建。 */
-export function ArtifactConfirmSheet({
-  kind,
-  defaultTitle,
-  sourceCount = 0,
-  onConfirm,
-  onClose,
-}: {
-  kind: CreatableArtifactKind;
-  defaultTitle: string;
-  sourceCount?: number;
-  onConfirm: (title: string) => void;
-  onClose: () => void;
-}) {
-  const [title, setTitle] = useState(defaultTitle);
-  const trimmed = title.trim();
-  const kindLabel = ARTIFACT_KIND_LABELS[kind];
-  return (
-    <Sheet label={`生成${kindLabel}`} onClose={onClose}>
-      <div className="space-y-4">
-        <p className="text-sm leading-6 text-ink-muted">
-          {kind === 'audio_overview'
-            ? `将根据当前勾选的 ${sourceCount} 项 PDF / 网页来源生成脚本与语音。关闭页面不会中断。`
-            : `将根据当前对话生成一份${kindLabel}，由后台任务完成——关闭页面也不会中断。`}
-        </p>
-        {kind === 'audio_overview' && sourceCount === 0 ? (
-          <p role="alert" className="text-sm text-danger">
-            请先在来源面板勾选至少一项已解析的 PDF 或网页。
-          </p>
-        ) : null}
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-muted">产物标题</span>
-          <input
-            value={title}
-            maxLength={120}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink outline-none focus-visible:border-accent/55 focus-visible:ring-2 focus-visible:ring-accent/30"
-          />
-        </label>
-        <button
-          type="button"
-          disabled={
-            trimmed.length === 0 ||
-            (kind === 'audio_overview' && sourceCount === 0)
-          }
-          onClick={() => onConfirm(trimmed)}
-          className="min-h-10 w-full rounded-full bg-accent px-5 py-2 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:bg-surface-strong disabled:text-ink-faint"
-        >
-          开始生成
-        </button>
-      </div>
-    </Sheet>
-  );
-}
-
-/** 生成状态卡:悬浮在输入坞上方,不进消息账本(它不是对话消息)。 */
-export function ArtifactStatusCard({
-  generation,
-  onOpen,
-  onDismiss,
-  dismissable = true,
-}: {
-  generation: GenerationState;
-  onOpen: () => void;
-  onDismiss: () => void;
-  dismissable?: boolean;
-}) {
-  return (
-    <div
-      role="status"
-      className="mx-auto mb-2 flex w-full max-w-3xl items-center gap-3 rounded-2xl border border-line bg-card/95 px-4 py-3 shadow-[var(--shadow-float)] backdrop-blur"
-    >
-      <span
-        aria-hidden="true"
-        className={`grid size-9 shrink-0 place-items-center rounded-xl ${
-          generation.phase === 'failed'
-            ? 'bg-cinnabar-soft text-cinnabar-strong'
-            : 'bg-accent-soft text-accent'
-        }`}
-      >
-        {generation.phase === 'generating' ? (
-          <CircleNotch
-            size={18}
-            className="animate-spin motion-reduce:animate-none"
-          />
-        ) : generation.phase === 'failed' ? (
-          <Warning size={18} />
-        ) : generation.kind === 'audio_overview' ? (
-          <Headphones size={18} />
-        ) : (
-          <TreeStructure size={18} />
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-ink">
-          {generation.title}
-        </span>
-        <span
-          className={`block text-xs ${
-            generation.phase === 'failed'
-              ? 'text-cinnabar-strong'
-              : 'text-ink-muted'
-          }`}
-        >
-          {generation.phase === 'generating'
-            ? '后台生成中…关闭页面也不会中断'
-            : generation.phase === 'ready'
-              ? generation.detail &&
-                generation.detail.artifact.latestVersion > 1
-                ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
-                : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-              : '生成失败，可稍后从产物列表重试'}
-        </span>
-      </span>
-      {generation.phase === 'ready' ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          className="min-h-9 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          打开
-        </button>
-      ) : null}
-      {dismissable ? (
-        <button
-          type="button"
-          aria-label="关闭生成提示"
-          onClick={onDismiss}
-          className="min-h-9 shrink-0 rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          关闭
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-/** 产物 Canvas：统一承载结构化产物、只读历史与基于最新版本的共创入口。 */
-export function ArtifactCanvas({
-  detail,
-  isFull,
-  onToggleFull,
-  onClose,
-  onDeleted,
-  onSelectVersion,
-  onRevise,
-  onSaveNote,
-  revising = false,
-  canExitFullscreen,
-}: {
-  detail: ArtifactDetail;
-  isFull: boolean;
-  onToggleFull: () => void;
-  onClose: () => void;
-  onDeleted: (artifactId: string) => void;
-  onSelectVersion: (version: number) => void;
-  onRevise: (instruction: string) => void;
-  onSaveNote: (markdown: string) => void;
-  revising?: boolean;
-  /** landing 强制全屏时置 false，Escape 直接关闭（见 CanvasHost）。 */
-  canExitFullscreen?: boolean;
-}) {
-  const [instruction, setInstruction] = useState('');
-  const displayedVersion = detail.version?.version ?? 0;
-  const isLatest = displayedVersion === detail.artifact.latestVersion;
-  const canRevise = [
-    'mind_map',
-    'slides',
-    'flashcards',
-    'note',
-    'markdown_document',
-    'web_app',
-  ].includes(detail.artifact.kind);
-  const usesSpatialCanvas = detail.artifact.kind === 'mind_map';
-  /* W04：内容分发收敛到纯函数，组件只消费结果（契约由 characterization 钉住）。 */
-  const contentView = resolveArtifactContentView(detail, revising);
-  return (
-    <CanvasHost
-      ariaLabel="产物Canvas"
-      title={detail.artifact.title}
-      closeLabel="关闭"
-      onClose={onClose}
-      isFull={isFull}
-      onToggleFull={onToggleFull}
-      canExitFullscreen={canExitFullscreen}
-    >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <ArtifactProvenanceStrip detail={detail} revising={revising} />
-        <ArtifactCanvasToolbar
-          detail={detail}
-          displayedVersion={displayedVersion}
-          onSelectVersion={onSelectVersion}
-          onDeleted={onDeleted}
-          onRestored={() => onSelectVersion(detail.artifact.latestVersion + 1)}
-        />
-        {detail.artifact.kind === 'markdown_document' &&
-        !isLatest &&
-        detail.version ? (
-          <MarkdownVersionDiffPanel
-            artifactId={detail.artifact.id}
-            displayedVersion={displayedVersion}
-            version={{
-              content: detail.version.content,
-              contentVersion: 1,
-              version: detail.version.version,
-            }}
-          />
-        ) : null}
-        <div
-          role="region"
-          aria-label="Canvas 内容"
-          className={
-            usesSpatialCanvas
-              ? 'flex min-h-0 flex-1 overflow-hidden p-2 lg:p-3'
-              : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
-          }
-        >
-          <ArtifactCanvasContent
-            contentView={contentView}
-            detail={detail}
-            revising={revising}
-            onSaveNote={onSaveNote}
-          />
-        </div>
-        {canRevise ? (
-          <form
-            className="shrink-0 border-t border-line bg-canvas/90 p-3 backdrop-blur"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const trimmed = instruction.trim();
-              if (!trimmed || !isLatest || revising) return;
-              onRevise(trimmed);
-              setInstruction('');
-            }}
-          >
-            <label className="sr-only" htmlFor={`revise-${detail.artifact.id}`}>
-              告诉 AI 如何修改
-            </label>
-            <div className="flex items-end gap-2">
-              <textarea
-                id={`revise-${detail.artifact.id}`}
-                aria-label="告诉 AI 如何修改"
-                value={instruction}
-                maxLength={2_000}
-                rows={2}
-                disabled={!isLatest || revising}
-                placeholder={
-                  isLatest
-                    ? '告诉 AI 如何修改这个 Canvas…'
-                    : '请先切回最新版本再继续修改'
-                }
-                onChange={(event) => setInstruction(event.target.value)}
-                className="ec-input min-h-12 flex-1 resize-none rounded-xl px-3 py-2 text-sm text-ink disabled:text-ink-faint"
-              />
-              <button
-                type="submit"
-                disabled={!instruction.trim() || !isLatest || revising}
-                className="min-h-10 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:bg-surface-strong disabled:text-ink-faint"
-              >
-                {revising ? '生成中…' : '生成新版本'}
-              </button>
-            </div>
-            <p className="mt-1.5 text-xs text-ink-muted">
-              修改会基于 v{detail.artifact.latestVersion}、当前 Notebook
-              对话和这条要求生成完整新版本。
-            </p>
-          </form>
-        ) : null}
-      </div>
-    </CanvasHost>
-  );
-}
+export {
+  ArtifactCanvas,
+  ArtifactConfirmSheet,
+  ArtifactStatusCard,
+} from './artifact-generation-ui';

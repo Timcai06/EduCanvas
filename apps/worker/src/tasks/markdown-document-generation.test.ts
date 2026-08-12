@@ -62,7 +62,7 @@ describe('generateMarkdownDocumentContent', () => {
       async (request: StructuredModelRequest<unknown>) => ({
         output: markdownDocumentContentSchema.parse({
           contentVersion: 1,
-          markdown: '# 二次函数\\n\\n- a=1\\n- h=0\\n- k=0',
+          markdown: '# 二次函数\n\n- a=1\n- h=0\n- k=0',
           generatedByModel: true,
         }),
         metadata: {} as never,
@@ -92,7 +92,7 @@ describe('generateMarkdownDocumentContent', () => {
       async (request: StructuredModelRequest<unknown>) => ({
         output: markdownDocumentContentSchema.parse({
           contentVersion: 1,
-          markdown: '# 二次函数\\n\\n## 修订版',
+          markdown: '# 二次函数\n\n## 修订版',
           generatedByModel: true,
         }),
         metadata: {} as never,
@@ -149,7 +149,7 @@ describe('generateMarkdownDocumentContent', () => {
     const generateStructured = vi.fn(async () => ({
       output: markdownDocumentContentSchema.parse({
         contentVersion: 1,
-        markdown: '# 二次函数\\n\\n- revision',
+        markdown: '# 二次函数\n\n- revision',
         generatedByModel: true,
       }),
       metadata: {} as never,
@@ -173,5 +173,105 @@ describe('generateMarkdownDocumentContent', () => {
     });
 
     expect(result.generatedBy).toBe(MODEL_REVISION_GENERATOR);
+  });
+
+  it('有网关时校验模型输出不允许包含未解码的 \\n 字面量', async () => {
+    const generateStructured = vi.fn(async () => ({
+      output: markdownDocumentContentSchema.parse({
+        contentVersion: 1,
+        markdown: '# 二次函数\\\\n\\\\n- a=1',
+        generatedByModel: true,
+      }),
+      metadata: {} as never,
+    }));
+    const gateway = { generateStructured } as StructuredModelGateway;
+
+    await expect(
+      generateMarkdownDocumentContent({
+        title: '二次函数',
+        messages,
+        gateway,
+        traceId: 'trace-doc-invalid-model',
+        operationId: 'job-doc-invalid-model',
+      }),
+    ).rejects.toThrow('markdown_document_invalid_output');
+  });
+
+  it('即使同时有真实换行也拒绝其余坍塌的 Markdown 分块', async () => {
+    const generateStructured = vi.fn(async () => ({
+      output: markdownDocumentContentSchema.parse({
+        contentVersion: 1,
+        markdown: '# 主标题\n正文\\n\\n## 未解码小节',
+        generatedByModel: true,
+      }),
+      metadata: {} as never,
+    }));
+
+    await expect(
+      generateMarkdownDocumentContent({
+        title: '混合换行',
+        messages,
+        gateway: { generateStructured } as StructuredModelGateway,
+        traceId: 'trace-doc-mixed-newline',
+        operationId: 'job-doc-mixed-newline',
+      }),
+    ).rejects.toThrow('markdown_document_invalid_output');
+  });
+
+  it('保留普通正文中不代表 Markdown 分块的 \\n 字面量', async () => {
+    const generateStructured = vi.fn(async () => ({
+      output: markdownDocumentContentSchema.parse({
+        contentVersion: 1,
+        markdown: '正则表达式 `\\n` 匹配换行符。',
+        generatedByModel: true,
+      }),
+      metadata: {} as never,
+    }));
+
+    const result = await generateMarkdownDocumentContent({
+      title: '正则说明',
+      messages,
+      gateway: { generateStructured } as StructuredModelGateway,
+      traceId: 'trace-doc-literal-newline',
+      operationId: 'job-doc-literal-newline',
+    });
+
+    expect(result.content.markdown).toContain('`\\n`');
+  });
+
+  it('有网关 revision 时透传当前文档真实换行（不再 JSON 字符串化 base content）', async () => {
+    const generateStructured = vi.fn(async () => ({
+      output: markdownDocumentContentSchema.parse({
+        contentVersion: 1,
+        markdown: '# 二次函数\n\n- revision',
+        generatedByModel: true,
+      }),
+      metadata: {} as never,
+    }));
+    const gateway = { generateStructured } as StructuredModelGateway;
+
+    await generateMarkdownDocumentContent({
+      title: '二次函数',
+      messages,
+      gateway,
+      traceId: 'trace-doc-revision-model-3',
+      operationId: 'job-doc-revision-model-3',
+      revision: {
+        instruction: '增强结论',
+        baseContent: {
+          contentVersion: 1,
+          markdown: '# 二次函数\n\n- 原始',
+          generatedByModel: true,
+        },
+      },
+    });
+
+    expect(generateStructured.mock.calls).toHaveLength(1);
+    const request = (
+      generateStructured.mock.calls[0] as unknown as [
+        StructuredModelRequest<unknown>,
+      ]
+    )[0];
+    expect(request.messages.at(-1)?.content).toContain('# 二次函数\n\n- 原始');
   });
 });

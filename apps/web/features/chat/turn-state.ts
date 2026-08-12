@@ -318,29 +318,29 @@ export function teachingTurnReducer(
       ),
     };
   }
-
   const assistantId = active.assistantMessageId ?? active.localAssistantId;
   if (event.type === 'artifact.proposed' || event.type === 'artifact.created') {
     return {
       ...state,
       messages: updateAssistant(state.messages, assistantId, (message) => ({
         ...message,
-        artifacts: [
-          ...(message.artifacts ?? []).filter(
-            (artifact) => artifact.id !== event.artifactId,
-          ),
-          {
-            id: event.artifactId,
-            kind: event.kind,
-            title: event.title,
-            status: 'proposed',
-            latestVersion: 0,
-          },
-        ],
+        artifacts: (message.artifacts ?? []).some(
+          (artifact) => artifact.id === event.artifactId,
+        )
+          ? message.artifacts
+          : [
+              ...(message.artifacts ?? []),
+              {
+                id: event.artifactId,
+                kind: event.kind,
+                title: event.title,
+                status: 'proposed',
+                latestVersion: 0,
+              },
+            ],
       })),
     };
   }
-
   if (
     event.type === 'artifact.version_added' ||
     event.type === 'artifact.generation_progress' ||

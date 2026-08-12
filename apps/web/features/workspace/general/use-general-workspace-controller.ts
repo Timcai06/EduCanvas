@@ -16,7 +16,6 @@ import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flo
 import {
   createArtifact,
   type ArtifactDetail,
-  type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
@@ -99,9 +98,6 @@ export function useGeneralWorkspaceController(options: {
   const [sourceDetail, setSourceDetail] = useState<SourceSurfaceDetail | null>(
     null,
   );
-  const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
-    [],
-  );
   const [outputPreference, setOutputPreference] =
     useState<OutputPreference>('auto');
   const activeTurnOutputPreferenceRef = useRef<OutputPreference>('auto');
@@ -112,22 +108,20 @@ export function useGeneralWorkspaceController(options: {
     null,
   );
 
+  const resourceDock = useResourceDock(notebookId);
   const artifactFlow = useArtifactGeneration();
   const closeArtifactCanvas = useCallback(() => {
     workspace.dispatch({ type: 'close' });
     artifactFlow.closeCanvas();
   }, [artifactFlow, workspace]);
-  const handleArtifactDeleted = useCallback(
-    (artifactId: string) => {
-      closeArtifactCanvas();
-      setStudioItems((items) => items.filter((item) => item.id !== artifactId));
-    },
-    [closeArtifactCanvas],
-  );
+  const handleArtifactDeleted = useCallback(() => {
+    closeArtifactCanvas();
+    void resourceDock.reload();
+  }, [closeArtifactCanvas, resourceDock]);
 
   const handleArtifactProposed = useAgentArtifactEvents({
     shouldOpenWhenReady: () => activeTurnOutputPreferenceRef.current !== 'auto',
-    setStudioItems,
+    onArtifactChanged: resourceDock.reload,
     observeProposedArtifact: artifactFlow.observeProposedArtifact,
   });
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS, {
@@ -146,8 +140,6 @@ export function useGeneralWorkspaceController(options: {
       void artifactFlow.openArtifact(resource.resourceId);
     },
   });
-
-  const resourceDock = useResourceDock(notebookId);
 
   const {
     positions: surfacePositions,
@@ -312,17 +304,14 @@ export function useGeneralWorkspaceController(options: {
       );
       void createArtifact('note', title, [], markdown)
         .then(({ artifact }) => {
-          setStudioItems((items) => [
-            artifact,
-            ...items.filter((item) => item.id !== artifact.id),
-          ]);
+          void resourceDock.reload();
           studioOpenActions.actions.openArtifact(artifact.id);
         })
         .catch((reason: unknown) => {
           setError(toClientError(reason, '会话信笺保存失败。'));
         });
     },
-    [studioOpenActions],
+    [resourceDock, studioOpenActions],
   );
 
   const handleMenuAction = useCallback((action: PlusMenuActionId) => {
@@ -487,7 +476,6 @@ export function useGeneralWorkspaceController(options: {
     surface,
     workspace,
     sourceDetail,
-    studioItems,
     outputPreference,
     setOutputPreference,
     assetPanel,

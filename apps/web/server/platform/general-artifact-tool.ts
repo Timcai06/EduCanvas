@@ -19,6 +19,7 @@ import {
 } from '@educanvas/db';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { generalTurnArtifactIdempotency } from './operation-artifact-idempotency';
 
 const createCanvasArtifactInputSchema = artifactProposalSchema;
 
@@ -42,13 +43,19 @@ interface ArtifactGenerationRepository {
     trustTier: 'tier1' | 'tier2';
     title: string;
     taskIdentifier: typeof ARTIFACT_GENERATE_TASK;
+    idempotencyKey: string;
+    requestFingerprint: string;
     params: {
       generation: { instruction: string };
       provenance: {
         sources: readonly ArtifactInputSourceReference[];
       };
     };
-  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }>;
+  }): Promise<{
+    artifact: PlatformArtifact;
+    job: PlatformArtifactJob;
+    replayed?: boolean;
+  }>;
 }
 
 export interface ArtifactInputSourceReference {
@@ -159,6 +166,7 @@ export class WebOperationArtifacts {
       trustTier: toolInput.kind === 'web_app' ? 'tier2' : 'tier1',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
+      ...generalTurnArtifactIdempotency(this.input.operationId),
       params: {
         generation: { instruction: toolInput.instruction },
         provenance: {
@@ -166,6 +174,9 @@ export class WebOperationArtifacts {
         },
       },
     });
+    if (created.artifact.kind !== toolInput.kind) {
+      throw new Error('artifact_already_proposed_for_turn');
+    }
     this.proposed.set(created.artifact.id, {
       protocol: 'educanvas.turn.v2',
       operationId: this.input.operationId,

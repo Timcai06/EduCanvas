@@ -343,6 +343,20 @@ describe('teaching turn browser state machine', () => {
         expect.objectContaining({ id: 'artifact-1', status: 'failed' }),
       ],
     });
+
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: proposed,
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      artifacts: [
+        expect.objectContaining({
+          id: 'artifact-1',
+          status: 'failed',
+          latestVersion: 2,
+        }),
+      ],
+    });
   });
 });
 

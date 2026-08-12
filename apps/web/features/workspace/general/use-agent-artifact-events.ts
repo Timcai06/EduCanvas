@@ -1,16 +1,12 @@
 'use client';
 
-import {
-  fetchNotebookArtifacts,
-  type ArtifactSummary,
-  type ObservableArtifactKind,
-} from '@/features/canvas/artifact-client';
+import { type ObservableArtifactKind } from '@/features/canvas/artifact-client';
 import type {
   ConfirmArtifactOptions,
   ProposedArtifact,
 } from '@/features/canvas/artifact-generation-flow';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
-import { type Dispatch, type SetStateAction, useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 const AGENT_ARTIFACT_KINDS = new Set<ObservableArtifactKind>([
   'mind_map',
@@ -33,14 +29,15 @@ function isAgentArtifactKind(kind: string): kind is ObservableArtifactKind {
  */
 export function useAgentArtifactEvents(input: {
   shouldOpenWhenReady: () => boolean;
-  setStudioItems: Dispatch<SetStateAction<readonly ArtifactSummary[]>>;
+  onArtifactChanged: () => void | Promise<unknown>;
   observeProposedArtifact: (
     artifact: ProposedArtifact,
     options?: ConfirmArtifactOptions,
   ) => Promise<void>;
 }) {
-  const { shouldOpenWhenReady, setStudioItems, observeProposedArtifact } =
+  const { shouldOpenWhenReady, onArtifactChanged, observeProposedArtifact } =
     input;
+  const observing = useRef(new Set<string>());
   return useCallback(
     (
       event: Extract<
@@ -49,6 +46,9 @@ export function useAgentArtifactEvents(input: {
       >,
     ) => {
       if (!isAgentArtifactKind(event.kind)) return;
+      if (observing.current.has(event.artifactId)) return;
+      observing.current.add(event.artifactId);
+      void onArtifactChanged();
       void observeProposedArtifact(
         {
           artifactId: event.artifactId,
@@ -56,11 +56,11 @@ export function useAgentArtifactEvents(input: {
           title: event.title,
         },
         { openWhenReady: shouldOpenWhenReady() },
-      );
-      void fetchNotebookArtifacts()
-        .then(setStudioItems)
-        .catch(() => undefined);
+      ).finally(() => {
+        observing.current.delete(event.artifactId);
+        void onArtifactChanged();
+      });
     },
-    [observeProposedArtifact, setStudioItems, shouldOpenWhenReady],
+    [observeProposedArtifact, onArtifactChanged, shouldOpenWhenReady],
   );
 }

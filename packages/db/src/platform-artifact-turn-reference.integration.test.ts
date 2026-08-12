@@ -83,10 +83,15 @@ describeWithDatabase('Agent Turn 产物引用', () => {
       trustTier: 'tier1',
       title: '函数思维导图',
     });
-    await artifacts.createGenerationJob({
+    const job = await artifacts.createGenerationJob({
       artifactId: artifact.id,
       trustedSubjectId: owner,
       operationId: turn.turnId,
+    });
+    await artifacts.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
     });
 
     await expect(
@@ -98,6 +103,7 @@ describeWithDatabase('Agent Turn 产物引用', () => {
     ).resolves.toMatchObject([
       {
         operationId: turn.turnId,
+        generationStatus: 'cancelled',
         artifact: {
           id: artifact.id,
           title: '函数思维导图',

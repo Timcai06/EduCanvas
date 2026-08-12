@@ -27,6 +27,18 @@ const MAX_TRANSCRIPT_CHARS = 12_000;
 const clip = (value: string, max: number): string =>
   value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 
+const stripCodeBlocks = (markdown: string): string => {
+  return markdown.replace(/```[\s\S]*?```/g, '');
+};
+
+const stripInlineCode = (markdown: string): string =>
+  markdown.replace(/`[^`]*`/g, '');
+
+const hasCollapsedMarkdownBlocks = (markdown: string): boolean => {
+  const sanitized = stripInlineCode(stripCodeBlocks(markdown));
+  return /\\n(?:\\n)*(?:#{1,6}\s|[-*+]\s|>\s|\d+\.\s)/.test(sanitized);
+};
+
 const buildTranscript = (messages: readonly OutlineSourceMessage[]): string => {
   const lines = messages.map(
     (message) =>
@@ -122,6 +134,10 @@ export async function generateMarkdownDocumentContent(input: {
   }
 
   let transcript = buildTranscript(input.messages);
+  const revisionBase = input.revision
+    ? markdownDocumentContentSchema.parse(input.revision.baseContent)
+    : null;
+
   const result = await input.gateway.generateStructured({
     taskAlias: 'artifact.generate',
     modelAlias: 'structured',
@@ -150,11 +166,16 @@ export async function generateMarkdownDocumentContent(input: {
       {
         role: 'user',
         content: input.revision
-          ? `标题：${input.title}\n\n当前文档：\n${JSON.stringify(input.revision.baseContent)}\n\n修改要求：\n${input.revision.instruction}\n\n对话记录：\n${transcript}`
+          ? `标题：${input.title}\n\n当前文档：\n${revisionBase!.markdown}\n\n修改要求：\n${input.revision.instruction}\n\n对话记录：\n${transcript}`
           : `标题：${input.title}\n\n对话记录：\n${transcript}`,
       },
     ],
   });
+
+  if (hasCollapsedMarkdownBlocks(result.output.markdown)) {
+    throw new Error('markdown_document_invalid_output');
+  }
+
   return {
     content: { ...result.output, generatedByModel: true },
     generatedBy: input.revision ? MODEL_REVISION_GENERATOR : MODEL_GENERATOR,

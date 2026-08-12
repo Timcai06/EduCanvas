@@ -126,12 +126,12 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
   });
   const artifactsByOperation = new Map<
     string,
-    (typeof referencedArtifacts)[number]['artifact'][]
+    (typeof referencedArtifacts)[number][]
   >();
   for (const reference of referencedArtifacts) {
     artifactsByOperation.set(reference.operationId, [
       ...(artifactsByOperation.get(reference.operationId) ?? []),
-      reference.artifact,
+      reference,
     ]);
   }
   const citationsByMessage = new Map<string, typeof citations>();
@@ -154,11 +154,16 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       artifacts:
         message.role === 'assistant'
           ? (artifactsByOperation.get(message.operationId) ?? []).map(
-              (artifact) => ({
+              ({ artifact, generationStatus }) => ({
                 id: artifact.id,
                 kind: artifact.kind,
                 title: artifact.title,
-                status: artifact.status,
+                status:
+                  artifact.latestVersion === 0 &&
+                  (generationStatus === 'failed' ||
+                    generationStatus === 'cancelled')
+                    ? generationStatus
+                    : artifact.status,
                 latestVersion: artifact.latestVersion,
               }),
             )

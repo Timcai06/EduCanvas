@@ -24,7 +24,8 @@ export interface LiveVoiceArtifactItem {
   readonly id: string;
   readonly kind: string;
   readonly title: string;
-  readonly status: 'proposed' | 'active' | 'archived' | 'generating' | 'failed';
+  readonly status:
+    'proposed' | 'active' | 'archived' | 'generating' | 'failed' | 'cancelled';
   readonly previewUrl?: string | null;
 }
 

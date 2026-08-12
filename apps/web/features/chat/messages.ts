@@ -13,7 +13,7 @@ export interface MessageArtifactDTO {
   id: string;
   kind: string;
   title: string;
-  status: 'proposed' | 'active' | 'archived' | 'failed';
+  status: 'proposed' | 'active' | 'archived' | 'failed' | 'cancelled';
   latestVersion: number;
 }
 

@@ -18,6 +18,7 @@ import {
 } from '@educanvas/model-gateway';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import { generalTurnArtifactIdempotency } from './operation-artifact-idempotency';
 
 /** 生成图像的 Artifact 类型；与 worker 分支和 Renderer 注册表共用同一字面量。 */
 export const GENERATED_IMAGE_ARTIFACT_KIND = 'generated_image' as const;
@@ -57,8 +58,14 @@ interface ImageArtifactRepository {
     trustTier: 'tier2';
     title: string;
     taskIdentifier: typeof ARTIFACT_GENERATE_TASK;
+    idempotencyKey: string;
+    requestFingerprint: string;
     params: { image: { prompt: string; size: string } };
-  }): Promise<{ artifact: PlatformArtifact; job: PlatformArtifactJob }>;
+  }): Promise<{
+    artifact: PlatformArtifact;
+    job: PlatformArtifactJob;
+    replayed?: boolean;
+  }>;
 }
 
 /**
@@ -184,8 +191,12 @@ export class WebOperationImageArtifacts {
       trustTier: 'tier2',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
+      ...generalTurnArtifactIdempotency(this.input.operationId),
       params: { image: { prompt: toolInput.prompt, size: toolInput.size } },
     });
+    if (created.artifact.kind !== GENERATED_IMAGE_ARTIFACT_KIND) {
+      throw new Error('artifact_already_proposed_for_turn');
+    }
     this.proposed.set(created.artifact.id, {
       protocol: 'educanvas.turn.v2',
       operationId: this.input.operationId,
