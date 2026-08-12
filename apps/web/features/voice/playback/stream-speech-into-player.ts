@@ -18,7 +18,7 @@ interface StreamSpeechOptions {
   readonly fetchImpl?: typeof fetch;
 }
 
-function pcmLevel(bytes: Uint8Array): number {
+export function pcmLevel(bytes: Uint8Array): number {
   if (bytes.byteLength < 2) return 0;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let sum = 0;

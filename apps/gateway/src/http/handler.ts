@@ -43,6 +43,7 @@ export function createGatewayHttpHandler(input: GatewayHttpDependencies) {
         protocol: 'gateway.v1',
         streamingTranscriptionEnabled:
           input.health?.streamingTranscriptionEnabled ?? false,
+        streamingSpeechEnabled: input.health?.streamingSpeechEnabled ?? false,
       });
       return;
     }

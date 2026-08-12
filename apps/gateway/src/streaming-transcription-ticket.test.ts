@@ -48,6 +48,27 @@ describe('StreamingTranscriptionTicketStore', () => {
     expect(store.redeem('never-issued')).toBeNull();
   });
 
+  it('语音 ticket 与转录 ticket 隔离且 scope mismatch 立即失效', () => {
+    const { store } = fixedNowStore(1_000_000);
+    const speech = store.issue({
+      userId: 'user:A',
+      notebookId: 'notebook:A',
+      scope: 'speech',
+    });
+    expect(store.redeem(speech.ticket, 'transcription')).toBeNull();
+    expect(store.redeem(speech.ticket, 'speech')).toBeNull();
+
+    const validSpeech = store.issue({
+      userId: 'user:A',
+      notebookId: 'notebook:A',
+      scope: 'speech',
+    });
+    expect(store.redeem(validSpeech.ticket, 'speech')).toEqual({
+      userId: 'user:A',
+      notebookId: 'notebook:A',
+    });
+  });
+
   it('过期 ticket 兑换失败', () => {
     const { store, advance } = fixedNowStore(1_000_000);
     const grant = store.issue({ userId: 'user:A', notebookId: 'notebook:A' });

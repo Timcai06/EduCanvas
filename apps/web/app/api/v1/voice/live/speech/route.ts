@@ -45,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
   const abort = new AbortController();
   request.signal.addEventListener('abort', () => abort.abort(), { once: true });
   const events = gateway.streamSpeech({
-    taskAlias: 'speech.synthesize',
+    taskAlias: 'speech.generate',
     modelAlias: 'speech',
     input: parsed.data.text,
     operationId: randomUUID(),

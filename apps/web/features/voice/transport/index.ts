@@ -31,3 +31,11 @@ export {
   type StreamingTranscriptionTicketErrorCode,
   type StreamingTranscriptionTicketGrant,
 } from './streaming-transcription-ticket-client';
+
+export {
+  StreamingSpeechClient,
+  type LiveSpeechSessionClient,
+  type StreamingSpeechAudioFrame,
+  type StreamingSpeechClientHandlers,
+  type StreamingSpeechClientOptions,
+} from './streaming-speech-client';

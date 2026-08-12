@@ -32,7 +32,10 @@ import {
   requireNotebookAccess,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
-import { resolveDashScopeStreamingTranscriptionGateway } from '@educanvas/model-gateway';
+import {
+  resolveDashScopeStreamingSpeechGateway,
+  resolveDashScopeStreamingTranscriptionGateway,
+} from '@educanvas/model-gateway';
 import {
   createDefaultGatewayConnectionProviders,
   GatewayConnectionService,
@@ -54,6 +57,11 @@ import { createStreamingTranscriptionUpgradeHandler } from './streaming-transcri
 import { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
 import { StreamingTranscriptionQuotaManager } from './streaming-transcription-quota-manager';
 import { readStreamingTranscriptionQuotas } from './streaming-transcription-quotas';
+import {
+  createStreamingSpeechUpgradeHandler,
+  STREAMING_SPEECH_WS_PATH,
+} from './streaming-speech-ws-transport';
+import { STREAMING_TRANSCRIPTION_WS_PATH } from './streaming-transcription-ws-transport';
 
 function loadWorkspaceEnvFiles(): void {
   let current = process.cwd();
@@ -125,6 +133,7 @@ const service = new GatewayService(
 const streamingTranscription = resolveDashScopeStreamingTranscriptionGateway(
   process.env,
 );
+const streamingSpeech = resolveDashScopeStreamingSpeechGateway(process.env);
 // V13：流式转录资源配额（单一配额源，fail-closed：非法配置直接启动失败）
 // 与进程内连接槽协调器。协调器只在握手成功后、创建 recognizer 前申请
 // 槽位；ticket 签发不占槽。
@@ -139,6 +148,8 @@ const server = createServer(
     health: {
       streamingTranscriptionEnabled:
         streamingTranscription.gateway !== null && clientSessionAuth !== null,
+      streamingSpeechEnabled:
+        streamingSpeech !== null && clientSessionAuth !== null,
     },
     effectReconciliation: config.internalToken
       ? createGatewayEffectReconciliationControl()
@@ -189,6 +200,8 @@ server.listen(config.port, config.host, () => {
       localOnboardingEnabled: config.localOnboardingEnabled,
       streamingTranscriptionEnabled:
         streamingTranscription.gateway !== null && clientSessionAuth !== null,
+      streamingSpeechEnabled:
+        streamingSpeech !== null && clientSessionAuth !== null,
       streamingTranscriptionReason: streamingTranscription.reason,
       streamingTranscriptionOrigins: config.wsAllowedOrigins,
       telemetry: telemetry.health(),
@@ -199,32 +212,57 @@ server.listen(config.port, config.host, () => {
 // V12：双向流式转录通道挂在现有 HTTP server 的 upgrade 事件上，不另起
 // 端口/服务。**无条件注册**：client transport 未启用（tickets === null）时
 // 握手返回稳定 503 CLIENT_TRANSPORT_DISABLED，而不是被 node 静默断开。
-server.on(
-  'upgrade',
-  createStreamingTranscriptionUpgradeHandler({
-    tickets: streamingTickets,
-    checkNotebookAccess: checkStreamingNotebookAccess,
-    // 严格 Origin 白名单（EDUCANVAS_GATEWAY_WS_ALLOWED_ORIGINS）：无 Origin
-    // （非浏览器客户端，如 node ws / TUI）允许；浏览器 Origin 经同一规范化
-    // 后必须命中白名单——带路径/凭据/非法 URL 的 Origin 一律拒绝。
-    isAllowedOrigin: (origin) => {
-      if (origin === undefined || origin === null) return true;
-      const normalized = normalizeWsAllowedOrigin(origin);
-      return (
-        normalized !== null && config.wsAllowedOrigins.includes(normalized)
-      );
-    },
-    gateway: streamingTranscription.gateway,
-    unavailableReason: streamingTranscription.reason,
-    quotaManager: streamingQuotaManager,
-    quotas: streamingQuotas,
-    log: (entry) => {
-      process.stdout.write(
-        `${JSON.stringify({ event: 'streaming.transcription', ...entry })}\n`,
-      );
-    },
-  }),
-);
+const isAllowedVoiceOrigin = (origin: string | null | undefined): boolean => {
+  if (origin === undefined || origin === null) return true;
+  const normalized = normalizeWsAllowedOrigin(origin);
+  return normalized !== null && config.wsAllowedOrigins.includes(normalized);
+};
+const transcriptionUpgrade = createStreamingTranscriptionUpgradeHandler({
+  tickets: streamingTickets,
+  checkNotebookAccess: checkStreamingNotebookAccess,
+  // 严格 Origin 白名单（EDUCANVAS_GATEWAY_WS_ALLOWED_ORIGINS）：无 Origin
+  // （非浏览器客户端，如 node ws / TUI）允许；浏览器 Origin 经同一规范化
+  // 后必须命中白名单——带路径/凭据/非法 URL 的 Origin 一律拒绝。
+  isAllowedOrigin: isAllowedVoiceOrigin,
+  gateway: streamingTranscription.gateway,
+  unavailableReason: streamingTranscription.reason,
+  quotaManager: streamingQuotaManager,
+  quotas: streamingQuotas,
+  log: (entry) => {
+    process.stdout.write(
+      `${JSON.stringify({ event: 'streaming.transcription', ...entry })}\n`,
+    );
+  },
+});
+const speechUpgrade = createStreamingSpeechUpgradeHandler({
+  tickets: streamingTickets,
+  checkNotebookAccess: checkStreamingNotebookAccess,
+  isAllowedOrigin: isAllowedVoiceOrigin,
+  gateway: streamingSpeech,
+  quotaManager: streamingQuotaManager,
+  quotas: streamingQuotas,
+  log: (entry) => {
+    process.stdout.write(
+      `${JSON.stringify({ event: 'streaming.speech', ...entry })}\n`,
+    );
+  },
+});
+server.on('upgrade', (request, socket, head) => {
+  let pathname: string;
+  try {
+    pathname = new URL(request.url ?? '/', 'http://gateway.internal').pathname;
+  } catch {
+    socket.destroy();
+    return;
+  }
+  if (pathname === STREAMING_TRANSCRIPTION_WS_PATH) {
+    transcriptionUpgrade(request, socket, head);
+  } else if (pathname === STREAMING_SPEECH_WS_PATH) {
+    speechUpgrade(request, socket, head);
+  } else {
+    socket.destroy();
+  }
+});
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { ChatMessageStatus } from '@/features/chat/messages';
+import type {
+  LiveSpeechSessionClient,
+  StreamingSpeechClientHandlers,
+} from '../transport';
+import type { LiveStreamingSpeechPlayback } from './live-streaming-speech-playback';
 import { Pcm16Player } from './pcm-player';
+import { pumpLiveStreamingSpeech } from './pump-live-streaming-speech';
 import {
   createLiveSubtitleCues,
   prepareLiveSpeechText,
@@ -13,6 +19,10 @@ import {
   type LiveSpeechQueueState,
 } from './live-speech-queue';
 import { LiveSpeechResponseGate } from './live-speech-response-gate';
+import {
+  INITIAL_PLAYBACK_STATE,
+  reduceLiveSpeechPlayback,
+} from './live-speech-playback-state';
 import {
   nextLiveSpeechSourceCursor,
   reduceLiveSpeechCursors,
@@ -31,6 +41,10 @@ export interface UseLiveSpeechPlaybackOptions {
   readonly assistantId: string | null;
   readonly assistantText: string | null;
   readonly assistantStatus?: ChatMessageStatus | null;
+  readonly notebookId?: string;
+  readonly createSpeechClient?: (
+    handlers: StreamingSpeechClientHandlers,
+  ) => LiveSpeechSessionClient;
 }
 
 export interface LiveSpeechPlaybackState {
@@ -46,54 +60,11 @@ export interface LiveSpeechPlaybackState {
   readonly interrupt: () => void;
 }
 
-export interface LiveSpeechPlaybackViewState {
-  readonly phase: 'idle' | 'preparing' | 'speaking';
-  readonly subtitle: string | null;
-  readonly playbackFailed: boolean;
-}
-
-export type LiveSpeechPlaybackAction =
-  | { readonly type: 'prepare' }
-  | { readonly type: 'start' }
-  | { readonly type: 'cue'; readonly text: string }
-  | { readonly type: 'finish' | 'interrupt' }
-  | { readonly type: 'fail' };
-
-const INITIAL_PLAYBACK_STATE: LiveSpeechPlaybackViewState = {
-  phase: 'idle',
-  subtitle: null,
-  playbackFailed: false,
-};
-
-/** 播放终态必须原子清空字幕，避免最后一个 cue 泄漏到下一轮聆听状态。 */
-export function reduceLiveSpeechPlayback(
-  state: LiveSpeechPlaybackViewState,
-  action: LiveSpeechPlaybackAction,
-): LiveSpeechPlaybackViewState {
-  if (action.type === 'prepare') {
-    /* 下一语义段可以在上一段仍播放时预取，状态与字幕不能倒退成“准备中”。 */
-    if (state.phase === 'speaking') {
-      return { ...state, playbackFailed: false };
-    }
-    return { phase: 'preparing', subtitle: null, playbackFailed: false };
-  }
-  if (action.type === 'start') {
-    return {
-      phase: 'speaking',
-      subtitle: state.subtitle,
-      playbackFailed: false,
-    };
-  }
-  if (action.type === 'cue') {
-    return state.phase === 'speaking'
-      ? { ...state, subtitle: action.text }
-      : state;
-  }
-  if (action.type === 'fail') {
-    return { phase: 'idle', subtitle: null, playbackFailed: true };
-  }
-  return { ...state, phase: 'idle', subtitle: null };
-}
+export {
+  reduceLiveSpeechPlayback,
+  type LiveSpeechPlaybackAction,
+  type LiveSpeechPlaybackViewState,
+} from './live-speech-playback-state';
 
 /**
  * Assistant 的安全 message.delta 到达后立即分段播报。当前 HTTP 路由保持兼容，
@@ -105,6 +76,8 @@ export function useLiveSpeechPlayback({
   assistantId,
   assistantText,
   assistantStatus = null,
+  notebookId,
+  createSpeechClient,
 }: UseLiveSpeechPlaybackOptions): LiveSpeechPlaybackState {
   const [viewState, dispatch] = useReducer(
     reduceLiveSpeechPlayback,
@@ -125,6 +98,12 @@ export function useLiveSpeechPlayback({
   const wasEnabledRef = useRef(false);
   const assistantIdRef = useRef(assistantId);
   const responseGateRef = useRef(new LiveSpeechResponseGate());
+  const streamingPlaybackRef = useRef<LiveStreamingSpeechPlayback | null>(null);
+  const streamingSegmentsRef = useRef<LiveSpeechQueueState['queue'][number][]>(
+    [],
+  );
+  const forceHttpRef = useRef(false);
+  const pumpRef = useRef<() => void>(() => undefined);
 
   const replaceQueue = useCallback(
     (
@@ -158,6 +137,10 @@ export function useLiveSpeechPlayback({
       queue.pumping = false;
       queue.lastWindow = null;
       queue.suppressed = suppressCurrent;
+      streamingPlaybackRef.current?.cancel();
+      streamingPlaybackRef.current = null;
+      streamingSegmentsRef.current = [];
+      forceHttpRef.current = false;
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       markerCancelsRef.current.splice(0).forEach((cancel) => cancel());
@@ -221,7 +204,7 @@ export function useLiveSpeechPlayback({
     );
   }, []);
 
-  const pump = useCallback(() => {
+  const pumpHttp = useCallback(() => {
     const queue = queueRef.current;
     if (queue.pumping || queue.suppressed || !enabledRef.current) return;
     queue.pumping = true;
@@ -313,6 +296,37 @@ export function useLiveSpeechPlayback({
       }
     })();
   }, [finishWhenPlaybackEnds]);
+
+  const pumpStreaming = useCallback(() => {
+    if (!createSpeechClient || !notebookId) return;
+    pumpLiveStreamingSpeech({
+      notebookId,
+      createSpeechClient,
+      queueRef,
+      enabledRef,
+      playerRef,
+      abortControllerRef,
+      markerCancelsRef,
+      streamingPlaybackRef,
+      streamingSegmentsRef,
+      forceHttpRef,
+      requestPump: () => pumpRef.current(),
+      dispatch,
+      setOutputLevel,
+      finishWhenPlaybackEnds,
+    });
+  }, [createSpeechClient, finishWhenPlaybackEnds, notebookId]);
+
+  const pump = useCallback(() => {
+    if (createSpeechClient && notebookId && !forceHttpRef.current) {
+      pumpStreaming();
+    } else {
+      pumpHttp();
+    }
+  }, [createSpeechClient, notebookId, pumpHttp, pumpStreaming]);
+  useEffect(() => {
+    pumpRef.current = pump;
+  }, [pump]);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -409,8 +423,12 @@ export function useLiveSpeechPlayback({
         !current.suppressed
       );
     });
-    if (queue.queue.length > 0) pump();
-    else finishWhenPlaybackEnds(queue.cursor.runId);
+    if (
+      queue.queue.length > 0 ||
+      (queue.complete && streamingPlaybackRef.current !== null)
+    ) {
+      pump();
+    } else finishWhenPlaybackEnds(queue.cursor.runId);
   }, [
     assistantId,
     assistantStatus,

@@ -143,18 +143,16 @@ async function postTickets(
   baseUrl: string,
   token: string,
   body: unknown,
+  path = '/v1/client/streaming-transcription/tickets',
 ): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(
-    `${baseUrl}/v1/client/streaming-transcription/tickets`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
     },
-  );
+    body: JSON.stringify(body),
+  });
   return { status: response.status, body: await response.json() };
 }
 
@@ -184,6 +182,20 @@ describe('POST /v1/client/streaming-transcription/tickets', () => {
       userId: 'user:A',
       notebookId: 'notebook:A',
     });
+  });
+
+  it('speech 端点签发只能兑换到 speech 通道的 ticket', async () => {
+    const harness = await startHarness();
+    const token = harness.auth.issue('user:A').token;
+    const { status, body } = await postTickets(
+      harness.baseUrl,
+      token,
+      { notebookId: 'notebook:A' },
+      '/v1/client/streaming-speech/tickets',
+    );
+    expect(status).toBe(201);
+    const ticket = (body as { ticket: string }).ticket;
+    expect(harness.tickets.redeem(ticket, 'transcription')).toBeNull();
   });
 
   it('无 Notebook 访问权限 → 404', async () => {

@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { issueVoiceStreamingTicket } from './voice-gateway-client';
+import {
+  issueVoiceSpeechTicket,
+  issueVoiceStreamingTicket,
+} from './voice-gateway-client';
 
 describe('issueVoiceStreamingTicket', () => {
   afterEach(() => {
@@ -60,6 +63,41 @@ describe('issueVoiceStreamingTicket', () => {
       body: { notebookId: 'notebook:1' },
     });
     expect(JSON.stringify(result)).not.toContain('session-token');
+  });
+
+  it('Speech ticket 使用独立 Gateway scope 端点', async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      urls.push(url);
+      return url.endsWith('/v1/client/bootstrap')
+        ? Response.json({
+            userId: 'user:1',
+            token: 'session-token',
+            expiresAt: '2099-08-11T00:00:00.000Z',
+          })
+        : Response.json(
+            {
+              ticket: 'speech-ticket',
+              expiresAt: '2099-08-11T00:01:00.000Z',
+            },
+            { status: 201 },
+          );
+    }) as typeof fetch;
+    await issueVoiceSpeechTicket(
+      { subjectUserId: 'user:1', notebookId: 'notebook:1' },
+      {
+        env: {
+          NODE_ENV: 'test',
+          EDUCANVAS_GATEWAY_URL: 'http://127.0.0.1:3200',
+          EDUCANVAS_GATEWAY_BOOTSTRAP_TOKEN: 's'.repeat(32),
+        },
+        fetchImpl,
+      },
+    );
+    expect(urls.at(-1)).toBe(
+      'http://127.0.0.1:3200/v1/client/streaming-speech/tickets',
+    );
   });
 
   it('缺配置 fail closed，不发请求', async () => {

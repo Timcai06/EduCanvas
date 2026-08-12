@@ -70,6 +70,7 @@ export interface GatewayHttpDependencies {
   /** 公共健康检查仅暴露布尔能力事实，不泄漏模型目录或解析失败细节。 */
   health?: {
     readonly streamingTranscriptionEnabled: boolean;
+    readonly streamingSpeechEnabled?: boolean;
   };
   effectReconciliation?: Pick<
     GatewayEffectReconciliationControl,

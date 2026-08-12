@@ -7,6 +7,7 @@ export interface PcmPlaybackWindow {
 export class Pcm16Player {
   private context: AudioContext | null = null;
   private nextStart = 0;
+  private generation = 0;
   private readonly sources = new Set<AudioBufferSourceNode>();
   private readonly markers = new Map<
     AudioBufferSourceNode,
@@ -29,7 +30,9 @@ export class Pcm16Player {
 
   async enqueue(bytes: Uint8Array): Promise<PcmPlaybackWindow | null> {
     if (bytes.byteLength < 2) return null;
+    const expectedGeneration = this.generation;
     await this.prepare();
+    if (expectedGeneration !== this.generation) return null;
     const context = this.context;
     if (!context) return null;
     const samples = new Float32Array(Math.floor(bytes.byteLength / 2));
@@ -80,6 +83,7 @@ export class Pcm16Player {
   }
 
   stop(): void {
+    this.generation += 1;
     for (const source of this.sources) {
       try {
         source.stop();

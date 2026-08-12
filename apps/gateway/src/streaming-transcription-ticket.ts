@@ -27,9 +27,12 @@ export const STREAMING_TICKET_TTL_MS = 60_000 as const;
 interface TicketRecord {
   readonly userId: string;
   readonly notebookId: string;
+  readonly scope: StreamingVoiceTicketScope;
   readonly expiresAt: number;
   consumed: boolean;
 }
+
+export type StreamingVoiceTicketScope = 'transcription' | 'speech';
 
 export interface StreamingTranscriptionTicketStoreOptions {
   /** ticket 有效期毫秒；默认 60 秒。 */
@@ -79,6 +82,7 @@ export class StreamingTranscriptionTicketStore {
   issue(input: {
     userId: string;
     notebookId: string;
+    scope?: StreamingVoiceTicketScope;
   }): StreamingTranscriptionTicketGrant {
     this.expireStale();
     const ticket = this.createRandom();
@@ -87,6 +91,7 @@ export class StreamingTranscriptionTicketStore {
     this.tickets.set(ticket, {
       userId: input.userId,
       notebookId: input.notebookId,
+      scope: input.scope ?? 'transcription',
       expiresAt,
       consumed: false,
     });
@@ -97,17 +102,28 @@ export class StreamingTranscriptionTicketStore {
    * 兑换 ticket：返回绑定的主体与 Notebook，并将该 ticket 标记为已消费
    * （单次使用）。过期、未知或已消费统一返回 null。
    */
-  redeem(ticket: string): { userId: string; notebookId: string } | null {
+  redeem(
+    ticket: string,
+    expectedScope: StreamingVoiceTicketScope = 'transcription',
+  ): { userId: string; notebookId: string } | null {
     this.expireStale();
     const record = this.tickets.get(ticket);
     if (record === undefined) return null;
     // 单次使用：已消费（防御纵深；正常路径下 redeem 后记录即被删除）
     // 或过期都拒绝。delete 放在 guard 之后，让 consumed 分支真正可达。
-    if (record.consumed || record.expiresAt <= this.now()) {
+    if (
+      record.consumed ||
+      record.expiresAt <= this.now() ||
+      record.scope !== expectedScope
+    ) {
       this.tickets.delete(ticket);
       this.log({
         label: 'ticket_rejected',
-        code: record.consumed ? 'consumed' : 'expired',
+        code: record.consumed
+          ? 'consumed'
+          : record.scope !== expectedScope
+            ? 'scope_mismatch'
+            : 'expired',
       });
       return null;
     }

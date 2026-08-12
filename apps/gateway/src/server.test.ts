@@ -155,6 +155,7 @@ describe('Gateway HTTP composition root', () => {
       status: 'ok',
       protocol: 'gateway.v1',
       streamingTranscriptionEnabled: true,
+      streamingSpeechEnabled: false,
     });
     const disabled = await fetch(`${base}/v1/internal/envelopes`, {
       method: 'POST',
