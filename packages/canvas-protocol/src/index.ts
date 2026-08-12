@@ -120,6 +120,20 @@ export {
   type CanvasRendererManifest,
 } from './renderer-manifest';
 export {
+  WORKSPACE_RESOURCE_SUMMARY_SCHEMA_VERSION,
+  parseWorkspaceResourceSummary,
+  workspaceArtifactResourceSummarySchema,
+  workspaceResourceSummarySchema,
+  workspaceResourceSurfaceRestStates,
+  workspaceResourceSurfaceRestStateSchema,
+  workspaceSourceResourceSummarySchema,
+  type WorkspaceArtifactResourceSummary,
+  type WorkspaceResourceSummary,
+  type WorkspaceResourceSummaryValidation,
+  type WorkspaceResourceSurfaceRestState,
+  type WorkspaceSourceResourceSummary,
+} from './workspace-resource-summary';
+export {
   canvasNonWebOpenModes,
   canvasNonWebUnavailableReasons,
   projectCanvasResourceForNonWeb,

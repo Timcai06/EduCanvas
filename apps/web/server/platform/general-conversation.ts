@@ -75,13 +75,23 @@ export async function createGeneralConversation(
 export async function loadOwnedGeneralConversation(
   identity: AnonymousIdentity,
 ): Promise<PlatformConversationSnapshot | null> {
+  return loadOwnedGeneralConversationForSubject(identity.studentId);
+}
+
+/**
+ * 已解析 effective subject 的只读入口。调用方只能传服务端可信 dataOwnerId，
+ * 避免为复用旧接口伪造匿名 token 或重复读取 session/cookie 身份。
+ */
+export async function loadOwnedGeneralConversationForSubject(
+  ownerSubjectId: string,
+): Promise<PlatformConversationSnapshot | null> {
   const conversationId = await readActiveConversationId();
   if (!conversationId) {
-    if (!identity.studentId.startsWith('anon:')) {
+    if (!ownerSubjectId.startsWith('anon:')) {
       return (
         (
           await conversations.listOwnedRecent({
-            trustedSubjectId: identity.studentId,
+            trustedSubjectId: ownerSubjectId,
             limit: 1,
           })
         )[0] ?? null
@@ -91,7 +101,7 @@ export async function loadOwnedGeneralConversation(
   }
   return conversations.getOwned({
     conversationId,
-    trustedSubjectId: identity.studentId,
+    trustedSubjectId: ownerSubjectId,
   });
 }
 
