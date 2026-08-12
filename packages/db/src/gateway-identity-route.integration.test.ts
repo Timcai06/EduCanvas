@@ -176,7 +176,7 @@ describeWithDatabase(
       expect(
         await store.describe(operation.operationId, member.userId, now),
       ).toMatchObject({
-        status: 'running',
+        status: 'completed',
       });
       await store.append(
         operation.operationId,
