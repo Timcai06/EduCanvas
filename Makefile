@@ -34,10 +34,10 @@ doctor:
 	command -v pnpm >/dev/null
 	command -v docker >/dev/null
 	test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@node tooling/node-runtime-check.mjs
+	@pnpm node:gate >/dev/null
+	@pnpm env:check .env
 	docker info >/dev/null
-	@set -a; . ./.env; set +a; \
-		test -n "$${DATABASE_URL:-}" || { printf '%s\n' 'DATABASE_URL 未设置'; exit 1; }; \
-		test -n "$${MODEL_GATEWAY_API_KEY:-}" || { printf '%s\n' 'MODEL_GATEWAY_API_KEY 未设置'; exit 1; }
 	printf 'Node %s · pnpm %s · Docker 已连接 · 环境变量已加载\n' "$$(node --version)" "$$(pnpm --version)"
 
 deps:

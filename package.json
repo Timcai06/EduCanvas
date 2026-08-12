@@ -14,6 +14,7 @@
     "lint": "turbo lint && pnpm lint:format",
     "lint:format": "prettier --check \"apps/**/*.{js,mjs,cjs,ts,tsx}\" \"packages/**/*.{js,mjs,cjs,ts,tsx}\" \"tooling/**/*.{js,mjs,cjs,ts,tsx}\" \"*.{js,mjs,cjs,ts,tsx}\"",
     "node:gate": "node tooling/node-version-gate.mjs",
+    "node:runtime": "node tooling/node-runtime-check.mjs",
     "env:check": "node tooling/env-check.mjs",
     "file:check": "node tooling/quality/file-governance.mjs",
     "setup:local": "pnpm install --frozen-lockfile && pnpm db:up && pnpm db:migrate",

@@ -106,7 +106,7 @@ EduCanvas 已落地学习者画像、6–12 节点 Notebook Goal、无答案短�
 
 ### 环境要求
 
-- Node.js 22
+- Node.js 24.18.0 or newer in the Node 24 release line (`.nvmrc` is authoritative)
 - pnpm 10
 - Docker Desktop 或兼容 Docker Runtime
 
@@ -119,6 +119,10 @@ cp .env.example .env
 make setup
 make all
 ```
+
+`make doctor` validates the active Node runtime, the workspace version declarations,
+Docker, and `.env`. A model Provider is optional for the local shell; once any primary
+Provider field is configured, `pnpm env:check` requires the complete configuration group.
 
 启动后访问 Web <http://localhost:3101>；Gateway 默认监听 <http://127.0.0.1:3200>。
 
