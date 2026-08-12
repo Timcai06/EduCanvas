@@ -6,6 +6,7 @@ export interface FakeLiveVoiceSnapshot {
   readonly cancelRequests: readonly string[];
   readonly speechRequests: number;
   readonly speechAborts: number;
+  readonly playbackStops: number;
   readonly clientFrameTypes: readonly string[];
   readonly events: readonly string[];
 }
@@ -36,6 +37,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
     let readyConnections = 0;
     let speechRequests = 0;
     let speechAborts = 0;
+    let playbackStops = 0;
     let holdNext = false;
     let nextAssistantText = '';
 
@@ -136,6 +138,13 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
       configurable: true,
       value: FakeWebSocket,
     });
+
+    const nativeBufferSourceStop = AudioBufferSourceNode.prototype.stop;
+    AudioBufferSourceNode.prototype.stop = function (...args) {
+      playbackStops += 1;
+      events.push('playback.stop');
+      return nativeBufferSourceStop.apply(this, args);
+    };
 
     const nativeCreateScriptProcessor =
       AudioContext.prototype.createScriptProcessor;
@@ -362,6 +371,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         cancelRequests: [...cancelRequests],
         speechRequests,
         speechAborts,
+        playbackStops,
         clientFrameTypes: [...clientFrameTypes],
         events: [...events],
       }),

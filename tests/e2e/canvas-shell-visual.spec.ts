@@ -153,8 +153,10 @@ test.describe('Canvas shell 响应式布局', () => {
 });
 
 test.describe('Canvas shell 极端内容与失败状态', () => {
-  test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
-    const longTitle = '超长标题'.repeat(50);
+  test('协议上限标题和超长内容不挤掉操作按钮或产生横向溢出', async ({
+    page,
+  }) => {
+    const longTitle = '超长标题'.repeat(20);
     const longLabel = '长内容'.repeat(40);
     await page.route(
       '**/api/v1/canvas/resources/artifact/**',
@@ -198,13 +200,16 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         } | null;
       };
       const content = payload.version?.content;
+      if (payload.artifact) payload.artifact.title = longTitle;
       if (content?.contentVersion === 2 && content.rootNodeId) {
         const rootNodeId = content.rootNodeId;
         content.nodes = [
           { id: rootNodeId, label: longLabel },
           ...Array.from({ length: 24 }, (_, index) => ({
             id: `long-${index + 1}`,
-            label: `${longLabel} ${index + 1}`,
+            // Keep every node within the protocol's 120-character label ceiling.
+            // The root exercises the exact ceiling; the remaining nodes exercise scrolling.
+            label: `长内容节点 ${index + 1}`,
           })),
         ];
         content.edges = content.nodes.slice(1).map((node) => ({
@@ -234,22 +239,15 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
 
-    const contentScroller = canvas.getByRole('region', {
+    const contentViewport = canvas.getByRole('region', {
       name: 'Canvas 内容',
     });
-    await expect(contentScroller).toBeVisible();
-    const overflow = await contentScroller.evaluate((element) => {
-      const style = window.getComputedStyle(element);
-      return {
-        overflowY: style.overflowY,
-        scrollHeight: element.scrollHeight,
-        clientHeight: element.clientHeight,
-        bodyOverflow: document.body.style.overflow,
-      };
-    });
-    expect(overflow.overflowY).toBe('auto');
-    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
-    expect(overflow.bodyOverflow).toBe('hidden');
+    await expect(contentViewport).toBeVisible();
+    await expect(canvas.locator('[data-mindmap-node]')).toHaveCount(25);
+    // Mind maps are spatial canvases (fit/pan), not vertical document scrollers.
+    expect(
+      await contentViewport.evaluate(() => document.body.style.overflow),
+    ).toBe('hidden');
   });
 
   test('资源验证失败展示可重试的安全失败状态', async ({ page }) => {
