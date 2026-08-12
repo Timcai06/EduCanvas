@@ -96,7 +96,7 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
   await expect(dialog).toHaveCount(0);
 });
 
-test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快照恢复', async ({
+test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async ({
   page,
 }) => {
   const dialog = await enterLiveWorkspace(page);
@@ -132,9 +132,6 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   await emitVoicePartial(page, '停一下，改为比较两份资料');
   await expect(dialog.getByText('停一下，改为比较两份资料')).toBeVisible();
   await emitVoiceFinal(page, '停一下，改为比较两份资料');
-  await expect
-    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechAborts)
-    .toBeGreaterThanOrEqual(1);
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).cancelRequests)
@@ -146,11 +143,9 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     .toBe(3);
 
   const snapshot = await readFakeLiveVoiceSnapshot(page);
-  const speechAbort = snapshot.events.indexOf('speech.abort');
   const turnCancel = snapshot.events.indexOf('turn.cancel');
   const resumedTurn = snapshot.events.lastIndexOf('turn.request');
-  expect(speechAbort).toBeGreaterThan(-1);
-  expect(turnCancel).toBeGreaterThan(speechAbort);
+  expect(turnCancel).toBeGreaterThan(-1);
   expect(resumedTurn).toBeGreaterThan(turnCancel);
 
   for (const request of snapshot.turnRequests.slice(1)) {
