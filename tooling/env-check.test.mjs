@@ -345,7 +345,23 @@ describe('env-check', () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /live-voice=enabled provider=dashscope/);
+    assert.match(result.stdout, /desktop-voice=enabled provider=dashscope/);
     assert.doesNotMatch(result.stdout, new RegExp(secret));
+  });
+
+  it('rejects an invalid DashScope desktop dictation model alias', async () => {
+    const result = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          DASHSCOPE_API_KEY: 'dashscope-fixture-secret',
+          DASHSCOPE_WORKSPACE_ID: 'workspace_fixture',
+          DASHSCOPE_DICTATION_MODEL: 'bad model',
+        }),
+      ),
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /DASHSCOPE_DICTATION_MODEL is not a valid/);
   });
 
   it('rejects a one-sided DashScope TTS profile override', async () => {

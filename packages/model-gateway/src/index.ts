@@ -50,6 +50,19 @@ export {
   type OpenAICompatibleAudioTranscriptionModelGatewayOptions,
 } from './openai-compatible-audio-transcription-model-gateway';
 export {
+  DashScopeSpeechModelGateway,
+  type DashScopeSpeechModelGatewayOptions,
+} from './dashscope-speech-model-gateway';
+export {
+  DashScopeAudioTranscriptionModelGateway,
+  type DashScopeAudioTranscriptionModelGatewayOptions,
+} from './dashscope-audio-transcription-model-gateway';
+export {
+  parseDashScopeSpeechConfiguration,
+  type DashScopeSpeechConfiguration,
+  type DashScopeSpeechResolution,
+} from './dashscope-speech-config';
+export {
   OpenAICompatibleImageGenerationModelGateway,
   type OpenAICompatibleImageGenerationModelGatewayOptions,
 } from './openai-compatible-image-generation-model-gateway';

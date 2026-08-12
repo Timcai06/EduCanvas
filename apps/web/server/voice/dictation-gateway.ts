@@ -2,7 +2,9 @@ import 'server-only';
 
 import type { AudioTranscriptionModelGateway } from '@educanvas/agent-core';
 import {
+  DashScopeAudioTranscriptionModelGateway,
   OpenAICompatibleAudioTranscriptionModelGateway,
+  parseDashScopeSpeechConfiguration,
   parseModelGatewayConfiguration,
   resolveCapabilityGatewayConfiguration,
 } from '@educanvas/model-gateway';
@@ -16,14 +18,21 @@ export function resolveDictationGateway(
 ): AudioTranscriptionModelGateway | null {
   try {
     const primary = parseModelGatewayConfiguration(environment);
-    if (!primary.enabled) return null;
-    const transcription = resolveCapabilityGatewayConfiguration(
-      environment,
-      'transcription',
-      primary,
-    );
-    return transcription
-      ? new OpenAICompatibleAudioTranscriptionModelGateway(transcription)
+    if (primary.enabled) {
+      const transcription = resolveCapabilityGatewayConfiguration(
+        environment,
+        'transcription',
+        primary,
+      );
+      if (transcription)
+        return new OpenAICompatibleAudioTranscriptionModelGateway(
+          transcription,
+        );
+    }
+    if (environment.MODEL_GATEWAY_TRANSCRIPTION_PROVIDER?.trim()) return null;
+    const dashscope = parseDashScopeSpeechConfiguration(environment);
+    return dashscope.enabled
+      ? new DashScopeAudioTranscriptionModelGateway(dashscope.configuration)
       : null;
   } catch {
     return null;

@@ -282,6 +282,7 @@ function validateDashScopeLiveVoice() {
 
   for (const name of [
     'DASHSCOPE_ASR_MODEL',
+    'DASHSCOPE_DICTATION_MODEL',
     'DASHSCOPE_TTS_MODEL',
     'DASHSCOPE_TTS_VOICE',
   ]) {
@@ -319,7 +320,7 @@ function validateDashScopeLiveVoice() {
       );
     }
   }
-  return 'live-voice=enabled provider=dashscope';
+  return 'live-voice=enabled provider=dashscope desktop-voice=enabled provider=dashscope';
 }
 
 const liveVoiceSummary = validateDashScopeLiveVoice();

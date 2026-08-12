@@ -13,6 +13,7 @@ describe('parseDashScopeSpeechConfiguration', () => {
         websocketUrl:
           'wss://ws-test.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
         asrModel: 'paraformer-realtime-v2',
+        dictationModel: 'qwen3-asr-flash',
         ttsModel: 'qwen-audio-3.0-tts-flash',
         voice: 'longanhuan_v3.6',
       },
@@ -97,6 +98,16 @@ describe('parseDashScopeSpeechConfiguration', () => {
       parseDashScopeSpeechConfiguration({
         ...base,
         DASHSCOPE_TTS_VOICE: 'longanyang',
+      }),
+    ).toEqual({ enabled: false, reason: 'invalid_configuration' });
+  });
+
+  it('拒绝非法的桌宠听写模型别名', () => {
+    expect(
+      parseDashScopeSpeechConfiguration({
+        DASHSCOPE_API_KEY: 'k'.repeat(32),
+        DASHSCOPE_WORKSPACE_ID: 'ws-test',
+        DASHSCOPE_DICTATION_MODEL: 'bad model',
       }),
     ).toEqual({ enabled: false, reason: 'invalid_configuration' });
   });

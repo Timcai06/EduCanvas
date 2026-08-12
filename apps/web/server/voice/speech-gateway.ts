@@ -2,7 +2,9 @@ import 'server-only';
 
 import type { SpeechModelGateway } from '@educanvas/agent-core';
 import {
+  DashScopeSpeechModelGateway,
   OpenAICompatibleSpeechModelGateway,
+  parseDashScopeSpeechConfiguration,
   parseModelGatewayConfiguration,
   resolveCapabilityGatewayConfiguration,
 } from '@educanvas/model-gateway';
@@ -16,13 +18,19 @@ export function resolveSpeechGateway(
 ): SpeechModelGateway | null {
   try {
     const primary = parseModelGatewayConfiguration(environment);
-    if (!primary.enabled) return null;
-    const speech = resolveCapabilityGatewayConfiguration(
-      environment,
-      'speech',
-      primary,
-    );
-    return speech ? new OpenAICompatibleSpeechModelGateway(speech) : null;
+    if (primary.enabled) {
+      const speech = resolveCapabilityGatewayConfiguration(
+        environment,
+        'speech',
+        primary,
+      );
+      if (speech) return new OpenAICompatibleSpeechModelGateway(speech);
+    }
+    if (environment.MODEL_GATEWAY_SPEECH_PROVIDER?.trim()) return null;
+    const dashscope = parseDashScopeSpeechConfiguration(environment);
+    return dashscope.enabled
+      ? new DashScopeSpeechModelGateway(dashscope.configuration)
+      : null;
   } catch {
     return null;
   }

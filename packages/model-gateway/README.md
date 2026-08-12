@@ -3,7 +3,8 @@
 ## 这个包是什么
 
 `model-gateway` 是供应商适配层。它把 OpenAI-compatible Chat Completions、结构化JSON、
-`/audio/speech`与`/audio/transcriptions`映射为 `@educanvas/agent-core` 的稳定Port，
+`/audio/speech`、`/audio/transcriptions`与DashScope语音HTTP接口映射为
+`@educanvas/agent-core` 的稳定Port，
 不承载垂直Agent编排、数据库事务、HTTP Route、业务重试或 UI 状态。
 
 Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter。两种实现都
@@ -34,6 +35,9 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
   20 MiB，且不在Adapter内自动重试。
 - `AudioTranscriptionModelGateway`只接收服务端验证的音频字节与MIME，只返回有界文本、
   语言、可选Provider时长和安全审计metadata；Provider原始JSON止步于Adapter。
+- DashScope桌宠语音复用`DASHSCOPE_API_KEY/WORKSPACE_ID`：听写使用
+  `DASHSCOPE_DICTATION_MODEL`（默认`qwen3-asr-flash`），播报使用既有TTS model/voice；
+  临时音频URL只在Adapter内受限下载，不跨到Web或桌面端。
 
 ## 配置闸门
 
