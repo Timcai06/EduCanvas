@@ -38,7 +38,10 @@ export interface StreamingSpeechAudioFrame {
 }
 
 export interface StreamingSpeechClientHandlers {
-  readonly onAudio: (frame: StreamingSpeechAudioFrame) => void;
+  readonly onAudio: (
+    frame: StreamingSpeechAudioFrame,
+    onConsumed: () => void,
+  ) => void;
   readonly onFinished: () => void;
   readonly onFailed: (failureCode: string) => void;
 }
@@ -61,7 +64,7 @@ export interface LiveSpeechSessionClient {
 export class StreamingSpeechClient implements LiveSpeechSessionClient {
   private socket: WebSocket | null = null;
   private commandSequence = 0;
-  private expectedAudioSequence = 0;
+  private nextExpectedAudioSequence = 0;
   private terminal = false;
   private started = false;
   private finishing = false;
@@ -241,13 +244,27 @@ export class StreamingSpeechClient implements LiveSpeechSessionClient {
     ).getUint32(4, false);
     const pcmBytes = bytes.slice(FRAME_HEADER_BYTES);
     if (
-      sequence !== this.expectedAudioSequence ||
-      pcmBytes.byteLength % 2 !== 0
+      pcmBytes.byteLength % 2 !== 0 ||
+      sequence !== this.nextExpectedAudioSequence
     ) {
       throw new Error('SPEECH_PROTOCOL_ERROR');
     }
-    this.expectedAudioSequence += 1;
-    this.options.onAudio({ sequence, pcmBytes });
+    this.nextExpectedAudioSequence += 1;
+    let consumed = false;
+    const onConsumed = () => {
+      if (consumed || this.terminal) return;
+      consumed = true;
+      try {
+        this.send({
+          type: 'speech.ack',
+          sequence: this.commandSequence++,
+          audioSequence: sequence,
+        });
+      } catch {
+        /* 与 cancel/fail 竞争时，连接终态负责释放服务端有界缓冲。 */
+      }
+    };
+    this.options.onAudio({ sequence, pcmBytes }, onConsumed);
   }
 
   private send(message: object): void {

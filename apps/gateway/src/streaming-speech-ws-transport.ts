@@ -82,19 +82,8 @@ function attachSpeechChannel(
 ): void {
   const sendEvent = (event: unknown): void => {
     if (ws.readyState !== WebSocket.OPEN) return;
-    const payload = JSON.stringify(event);
-    const buffered = deps.readBufferedAmount
-      ? deps.readBufferedAmount(ws)
-      : ws.bufferedAmount;
-    if (
-      buffered + Buffer.byteLength(payload) >
-      deps.quotas.maxOutputBufferedBytes
-    ) {
-      channel.outputBackpressureExceeded();
-      return;
-    }
     try {
-      ws.send(payload);
+      ws.send(JSON.stringify(event));
     } catch {
       channel.disconnect();
     }
@@ -120,6 +109,7 @@ function attachSpeechChannel(
       }
     },
     onTerminal: () => closeWebSocket(ws, 1000),
+    quotas: deps.quotas,
   });
   ws.on('message', (data, isBinary) => {
     if (isBinary) {

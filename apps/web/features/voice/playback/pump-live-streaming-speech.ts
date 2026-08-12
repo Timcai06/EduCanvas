@@ -8,6 +8,7 @@ import type { LiveSpeechPlaybackAction } from './live-speech-playback-state';
 import type { LiveSpeechQueueState } from './live-speech-queue';
 import { LiveStreamingSpeechPlayback } from './live-streaming-speech-playback';
 import { Pcm16Player } from './pcm-player';
+import type { SubtitleDurationClock } from './subtitle-clock/recovery';
 
 interface PumpLiveStreamingSpeechOptions {
   readonly notebookId: string;
@@ -28,6 +29,7 @@ interface PumpLiveStreamingSpeechOptions {
   readonly dispatch: Dispatch<LiveSpeechPlaybackAction>;
   readonly setOutputLevel: Dispatch<SetStateAction<number>>;
   readonly finishWhenPlaybackEnds: (runId: number) => void;
+  readonly durationClock: SubtitleDurationClock;
 }
 
 /** 启动或继续当前 Assistant response 的单一 TTS session。 */
@@ -51,6 +53,7 @@ export function pumpLiveStreamingSpeech(
           player,
           signal: controller.signal,
           createClient: options.createSpeechClient,
+          durationClock: options.durationClock,
           onMarker: (at, callback) => {
             options.markerCancelsRef.current.push(
               player.scheduleMarker(at, callback),
@@ -107,6 +110,10 @@ export function pumpLiveStreamingSpeech(
             }
             options.streamingSegmentsRef.current = [];
             options.queueRef.current.suppressed = true;
+            options.markerCancelsRef.current
+              .splice(0)
+              .forEach((cancel) => cancel());
+            player.stop();
             options.dispatch({ type: 'fail' });
             options.setOutputLevel(0);
           },
@@ -146,6 +153,10 @@ export function pumpLiveStreamingSpeech(
         );
       } else {
         options.queueRef.current.suppressed = true;
+        options.markerCancelsRef.current
+          .splice(0)
+          .forEach((cancel) => cancel());
+        player.stop();
         options.dispatch({ type: 'fail' });
         options.setOutputLevel(0);
       }

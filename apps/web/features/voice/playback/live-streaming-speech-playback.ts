@@ -12,6 +12,7 @@ import {
   pcmLevel,
   type LiveSpeechPcmPlayer,
 } from './stream-speech-into-player';
+import type { SubtitleDurationClock } from './subtitle-clock/recovery';
 
 interface ScheduledCue {
   readonly atContentSeconds: number;
@@ -37,6 +38,7 @@ export interface LiveStreamingSpeechPlaybackOptions {
   readonly onAudioLevel: (level: number) => void;
   readonly onFinished: (lastWindow: PcmPlaybackWindow | null) => void;
   readonly onFailed: (beforeFirstAudio: boolean) => void;
+  readonly durationClock?: SubtitleDurationClock;
 }
 
 /**
@@ -49,6 +51,7 @@ export class LiveStreamingSpeechPlayback {
   private readonly cues: ScheduledCue[] = [];
   private readonly cursors: ScheduledCursor[] = [];
   private submittedDurationSeconds = 0;
+  private rawEstimatedDurationSeconds = 0;
   private queuedContentSeconds = 0;
   private nextCue = 0;
   private nextCursor = 0;
@@ -60,7 +63,8 @@ export class LiveStreamingSpeechPlayback {
 
   constructor(private readonly options: LiveStreamingSpeechPlaybackOptions) {
     this.client = options.createClient({
-      onAudio: ({ pcmBytes }) => this.acceptAudio(pcmBytes),
+      onAudio: ({ sequence, pcmBytes }, onConsumed) =>
+        this.acceptAudio(sequence, pcmBytes, onConsumed),
       onFinished: () => this.finishFromServer(),
       onFailed: () => this.fail(),
     });
@@ -81,7 +85,14 @@ export class LiveStreamingSpeechPlayback {
     if (this.terminal) return false;
     const text = prepareLiveSpeechText(segment.text);
     if (!text) return true;
-    const cues = createLiveSubtitleCues(text);
+    const rawCues = createLiveSubtitleCues(text);
+    const cues = createLiveSubtitleCues(text, {
+      durationClock: this.options.durationClock,
+    });
+    this.rawEstimatedDurationSeconds += rawCues.reduce(
+      (total, cue) => total + cue.estimatedDurationSeconds,
+      0,
+    );
     const base = this.submittedDurationSeconds;
     for (const cue of cues) {
       this.cues.push({
@@ -116,7 +127,11 @@ export class LiveStreamingSpeechPlayback {
     this.client.cancel();
   }
 
-  private acceptAudio(bytes: Uint8Array): void {
+  private acceptAudio(
+    _sequence: number,
+    bytes: Uint8Array,
+    onConsumed: () => void,
+  ): void {
     if (this.terminal) return;
     this.audioChain = this.audioChain.then(async () => {
       if (this.terminal || this.options.signal.aborted) return;
@@ -126,6 +141,9 @@ export class LiveStreamingSpeechPlayback {
       if (!window || this.terminal || this.options.signal.aborted) return;
       this.lastWindow = window;
       this.queuedContentSeconds += window.durationSeconds;
+      // ACK 绑定到已成功排期的真实 Web Audio 起点，服务端窗口因此代表浏览器
+      // 已开始消费，而不是仅仅把整段音频塞进一个可能无限增长的本地队列。
+      this.options.onMarker(window.startAt, onConsumed);
       this.options.onMarker(window.startAt, () =>
         this.options.onAudioLevel(level),
       );
@@ -165,6 +183,10 @@ export class LiveStreamingSpeechPlayback {
     void this.audioChain.then(() => {
       if (this.terminal) return;
       this.terminal = true;
+      this.options.durationClock?.observe(
+        this.queuedContentSeconds,
+        this.rawEstimatedDurationSeconds,
+      );
       if (this.lastWindow) {
         const lastCursor = this.cursors.at(-1);
         if (lastCursor && this.nextCursor < this.cursors.length) {

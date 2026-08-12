@@ -22,6 +22,16 @@ describe('streaming speech wire', () => {
       ),
     ).toBeNull();
     expect(decodeStreamingSpeechClientMessage('{bad-json')).toBeNull();
+    expect(
+      decodeStreamingSpeechClientMessage(
+        JSON.stringify({ type: 'speech.ack', sequence: 1, audioSequence: 0 }),
+      ),
+    ).toEqual({ type: 'speech.ack', sequence: 1, audioSequence: 0 });
+    expect(
+      decodeStreamingSpeechClientMessage(
+        JSON.stringify({ type: 'speech.ack', sequence: 1, audioSequence: -1 }),
+      ),
+    ).toBeNull();
   });
 
   it('用固定 header 编码偶数字节 PCM 并拒绝非法帧', () => {

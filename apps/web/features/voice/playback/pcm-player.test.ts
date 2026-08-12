@@ -26,10 +26,13 @@ class FakeAudioContext {
   currentTime = 0;
   destination = {} as AudioDestinationNode;
   readonly sources: FakeSource[] = [];
+  closeCount = 0;
 
   async resume() {}
 
-  async close() {}
+  async close() {
+    this.closeCount += 1;
+  }
 
   createBuffer(_channels: number, length: number, sampleRate: number) {
     return {
@@ -42,6 +45,23 @@ class FakeAudioContext {
     const source = new FakeSource();
     this.sources.push(source);
     return source;
+  }
+}
+
+class ControlledResumeAudioContext extends FakeAudioContext {
+  override state: AudioContextState = 'suspended';
+  private resumeResolve: (() => void) | null = null;
+  readonly resumeSignal = new Promise<void>((resolve) => {
+    this.resumeResolve = resolve;
+  });
+
+  override async resume() {
+    await this.resumeSignal;
+  }
+
+  releaseResume() {
+    this.resumeResolve?.();
+    this.resumeResolve = null;
   }
 }
 
@@ -82,5 +102,24 @@ describe('Pcm16Player', () => {
     player.scheduleMarker(0.16, cancelled);
     player.stop();
     expect(cancelled).not.toHaveBeenCalled();
+  });
+
+  it('空/奇数长度 PCM 不能进入播放窗口', async () => {
+    const context = new FakeAudioContext();
+    const player = new Pcm16Player(() => context as unknown as AudioContext);
+    expect(await player.enqueue(new Uint8Array())).toBeNull();
+    expect(await player.enqueue(new Uint8Array([1]))).toBeNull();
+  });
+
+  it('stop 与 enqueue 竞争时不产生幽灵 source', async () => {
+    const context = new ControlledResumeAudioContext();
+    const player = new Pcm16Player(() => context as unknown as AudioContext);
+    const pendingWindow = player.enqueue(new Uint8Array(2_400));
+    player.stop();
+    context.releaseResume();
+    const window = await pendingWindow;
+    expect(window).toBeNull();
+    expect(context.sources).toHaveLength(0);
+    expect(context.closeCount).toBe(1);
   });
 });
