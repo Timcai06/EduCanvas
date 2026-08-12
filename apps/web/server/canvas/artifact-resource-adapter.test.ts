@@ -76,7 +76,7 @@ describe('Artifact CanvasResource adapter', () => {
       version: { versionId: version.id, sequence: 1, checksum: null },
       representation: { kind: 'structured' },
       renderer: { rendererId: 'artifact.mind-map' },
-      allowedActions: ['view', 'regenerate', 'annotate'],
+      allowedActions: ['view', 'regenerate', 'delete', 'annotate'],
       runtime: { kind: 'none' },
     });
     expect(serialized).not.toMatch(
@@ -313,7 +313,7 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'structured' },
       renderer: { rendererId: 'artifact.markdown-document' },
       trustTier: 'tier1',
-      allowedActions: ['view', 'edit', 'regenerate', 'download'],
+      allowedActions: ['view', 'edit', 'regenerate', 'download', 'delete'],
     });
   });
 
@@ -341,7 +341,12 @@ describe('Artifact CanvasResource adapter', () => {
       allowedActions: ['run'],
       rendererId: 'attacker.renderer',
     } as Parameters<typeof projectOwnedArtifactResource>[0]);
-    expect(resource.allowedActions).toEqual(['view', 'regenerate', 'annotate']);
+    expect(resource.allowedActions).toEqual([
+      'view',
+      'regenerate',
+      'delete',
+      'annotate',
+    ]);
     expect(resource.renderer.rendererId).toBe('artifact.mind-map');
   });
 
