@@ -114,7 +114,17 @@ export function SourcePreviewPanel({
           ) : !preview ? (
             <div className="m-4 h-52 animate-pulse rounded-2xl bg-surface-strong" />
           ) : preview.kind === 'pdf' && preview.fileUrl ? (
-            <PdfPreview fileUrl={preview.fileUrl} />
+            preview.representation?.quality === 'structured' &&
+            preview.representation.markdown ? (
+              <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
+                <p className="mb-2 text-xs font-medium text-ink-muted">
+                  结构化阅读 · MinerU 派生表示
+                </p>
+                <MessageMarkdown text={preview.representation.markdown} />
+              </article>
+            ) : (
+              <PdfPreview fileUrl={preview.fileUrl} />
+            )
           ) : preview.kind === 'image' && preview.fileUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
