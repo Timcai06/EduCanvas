@@ -64,6 +64,8 @@ function toSnapshot(
     builderVersion: row.builderVersion,
     includedMessageIds: row.includedMessageIds,
     selectedAssetVersionIds: row.selectedAssetVersionIds,
+    /* 旧行（0054 前）默认 '[]'：历史 Turn 未冻结表示身份，允许读取。 */
+    selectedAssetRepresentations: row.selectedAssetRepresentations,
     omittedMessageCount: row.omittedMessageCount,
     characterCount: row.characterCount,
     contextHash: row.contextHash,
@@ -164,6 +166,21 @@ function immutableFieldsMatch(
   row: typeof turnContextSnapshots.$inferSelect,
   input: ReturnType<typeof prepareTurnContextMaterial>,
 ): boolean {
+  /* ADR-0026 第 5 节：旧行（0054 前）未冻结表示身份，selected_asset_representations
+     默认 '[]'，且 contextHash 不含表示字段。对其只比较当时能表达的事实
+     （构建器/消息/版本/预算），hash 与表示身份跳过——重试不能改变这些事实，
+     历史 Turn 允许继续读取；新行（0055 后）仍做全字段含 hash 核对。 */
+  if (row.selectedAssetRepresentations.length === 0) {
+    return (
+      row.builderVersion === input.builderVersion &&
+      row.omittedMessageCount === input.omittedMessageCount &&
+      row.characterCount === input.characterCount &&
+      JSON.stringify(row.includedMessageIds) ===
+        JSON.stringify(input.includedMessageIds) &&
+      JSON.stringify(row.selectedAssetVersionIds) ===
+        JSON.stringify(input.selectedAssetVersionIds)
+    );
+  }
   return (
     row.builderVersion === input.builderVersion &&
     row.contextHash === input.contextHash &&
@@ -172,7 +189,10 @@ function immutableFieldsMatch(
     JSON.stringify(row.includedMessageIds) ===
       JSON.stringify(input.includedMessageIds) &&
     JSON.stringify(row.selectedAssetVersionIds) ===
-      JSON.stringify(input.selectedAssetVersionIds)
+      JSON.stringify(input.selectedAssetVersionIds) &&
+    /* ADR-0026 第 5 节：表示身份是不可变上下文事实，重放必须逐字段核对。 */
+    JSON.stringify(row.selectedAssetRepresentations) ===
+      JSON.stringify(input.selectedAssetRepresentations)
   );
 }
 
@@ -225,6 +245,7 @@ export class DrizzleAgentTurnContextRepository implements AgentTurnContextLedger
           builderVersion: prepared.builderVersion,
           includedMessageIds: prepared.includedMessageIds,
           selectedAssetVersionIds: prepared.selectedAssetVersionIds,
+          selectedAssetRepresentations: prepared.selectedAssetRepresentations,
           omittedMessageCount: prepared.omittedMessageCount,
           characterCount: prepared.characterCount,
           contextHash: prepared.contextHash,

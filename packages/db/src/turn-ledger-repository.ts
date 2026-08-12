@@ -594,6 +594,9 @@ export class DrizzleTeachingTurnLedger {
             includedMessageIds: prepared.contextSnapshot.includedMessageIds,
             selectedAssetVersionIds:
               prepared.contextSnapshot.selectedAssetVersionIds,
+            /* ADR-0026 第 5 节：教学侧上下文同样冻结表示身份（prepared 已校验同序同数）。 */
+            selectedAssetRepresentations:
+              prepared.contextSnapshot.selectedAssetRepresentations,
             omittedMessageCount: prepared.contextSnapshot.omittedMessageCount,
             characterCount: prepared.contextSnapshot.characterCount,
             contextHash: prepared.contextSnapshot.contextHash,

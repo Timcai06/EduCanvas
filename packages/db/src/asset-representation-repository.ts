@@ -3,8 +3,10 @@ import {
   assetRepresentationKindSchema,
   DEFAULT_REPRESENTATION_IDENTITY,
   representationIdentitySchema,
+  representationQualitySchema,
   type AssetRepresentationKind,
   type RepresentationIdentity,
+  type RepresentationQuality,
 } from '@educanvas/agent-core';
 import type { Database, DatabaseTransaction } from './internal/database-types';
 
@@ -32,6 +34,14 @@ export interface RepresentationWriteInput {
   producerVersion?: string;
   mimeType: string;
   status: AssetRepresentationStatus;
+  /**
+   * ADR-0026 质量状态（决定 6）。缺省时按 status + kind 推导：
+   * processing/failed/unavailable 一一对应；text/ready 缺省为
+   * degraded_plain_text（最保守语义），非文本 kind ready 为
+   * 'unavailable'。结构化流程（MinerU、直接 Markdown 解码）应显式传
+   * 'structured'，否则质量会被保守标记。
+   */
+  quality?: RepresentationQuality;
   derivedStorageKey?: string | null;
   byteSize?: number | null;
   checksum?: string | null;
@@ -48,6 +58,7 @@ export interface AssetRepresentationRow {
   producerVersion: string;
   mimeType: string;
   status: AssetRepresentationStatus;
+  quality: RepresentationQuality;
   derivedStorageKey: string | null;
   byteSize: number | null;
   checksum: string | null;
@@ -66,6 +77,7 @@ const rowProjection = {
   producerVersion: assetRepresentations.producerVersion,
   mimeType: assetRepresentations.mimeType,
   status: assetRepresentations.status,
+  quality: assetRepresentations.quality,
   derivedStorageKey: assetRepresentations.derivedStorageKey,
   byteSize: assetRepresentations.byteSize,
   checksum: assetRepresentations.checksum,
@@ -86,6 +98,29 @@ export function defaultRepresentationOrderBy() {
     asc(assetRepresentations.createdAt),
     asc(assetRepresentations.id),
   ] as const;
+}
+
+/**
+ * 未显式传 quality 时按 status + kind 推导（ADR-0026 决定 6 形状约束）。
+ * - text/ready 缺省按最保守语义取 degraded_plain_text（纯文本抽取）；
+ *   调用方显式传 structured 才代表结构化表示（如 MinerU）。
+ * - 非文本 kind（preview/thumbnail 等）ready → unavailable：不携带文档
+ *   质量维度。
+ */
+function deriveQuality(
+  status: AssetRepresentationStatus,
+  kind: string,
+): RepresentationQuality {
+  switch (status) {
+    case 'processing':
+      return 'processing';
+    case 'failed':
+      return 'failed';
+    case 'unavailable':
+      return 'unavailable';
+    case 'ready':
+      return kind === 'text' ? 'degraded_plain_text' : 'unavailable';
+  }
 }
 
 /** 在调用方事务中按完整 identity 收敛派生表示，并回收被替换的旧对象。 */
@@ -128,9 +163,14 @@ export async function upsertAssetRepresentation(
       .onConflictDoNothing();
   }
 
+  const quality =
+    input.quality === undefined
+      ? deriveQuality(input.status, kind)
+      : representationQualitySchema.parse(input.quality);
   const values = {
     status: input.status,
     mimeType: input.mimeType,
+    quality,
     derivedStorageKey: nextKey,
     byteSize: input.byteSize ?? null,
     checksum: input.checksum ?? null,
