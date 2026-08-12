@@ -720,3 +720,28 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - Data migration: none——只创建空的私人布局表，不读取或回填既有资源。
 - Estimated scale: 新表初始 0 行；上界随每位成员摆放的资源数线性增长，生产规模尚未验证。
 - 风险: 低——个人布局是可重建派生状态，失败不影响资源或对话事实。
+## 0056_glorious_tiger_shark.sql
+
+- 状态: active
+- 语义: ADR-0026 派生表示质量四态列与上下文选择冻结。
+  `asset_representations.quality`（processing/structured/degraded_plain_text/
+  failed/unavailable）表达文本派生质量：text/plain、text/markdown 直解为
+  structured，pdf/docx 纯文本抽取为 degraded_plain_text；两个 CHECK 把 quality
+  与 status/kind 生命周期绑死（ready+text 必为 structured 或 degraded，
+  ready+非 text 必为 unavailable）。`turn_context_snapshots.
+  selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
+  selected_asset_version_ids 同序冻结实际使用的表示身份（assetId+versionId+
+  representation），null=无派生表示；历史 Turn 以空数组表示未冻结。
+- 锁表: 只加列与约束，不重写行；backfill UPDATE 按 asset_versions 主键
+  JOIN 逐行更新 quality，行数 O(表示数)。
+- 回滚: 删两列两约束；回滚后旧应用不读取新列，兼容。
+- N-1: 新列可空态由 DEFAULT 兜底（'[]' / 'unavailable'），旧应用不写新列，
+  读侧无影响。
+- Fresh install: 可重放。
+- Data migration: 有——backfill 在加列后、加 CHECK 前执行（先 backfill 再
+  约束），按原文件 MIME 区分 quality，避免非空表 ADD COLUMN NOT NULL 失败
+  与约束违例。
+- Estimated scale: O(现有 asset_representations 行数) 的一次性 UPDATE，
+  无新表。
+- 风险: 低——quality 派生自既有 status/kind/mime，不引入新事实；缺外键
+  JOIN 匹配的孤儿表示行保持 unavailable。

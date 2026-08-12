@@ -28,6 +28,7 @@ describe('E2E suite routing', () => {
       'hydration.spec.ts',
       'learning-journey.spec.ts',
       'live-voice-flow.spec.ts',
+      'pdf-reading-switch.spec.ts',
       'profile-activity.spec.ts',
       'sandbox-preview.spec.ts',
     ]);
