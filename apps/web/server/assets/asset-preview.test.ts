@@ -225,6 +225,107 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
   });
 });
 
+describe('loadOwnedAssetPreviewDetail pdf 分支（结构化阅读接入）', () => {
+  const PDF_MIME = 'application/pdf';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({ mimeType: PDF_MIME, displayName: '网络编程.pdf' }),
+    );
+    getAccessPolicy.mockResolvedValue({ role: 'owner' });
+    readStoredAssetBytes.mockImplementation((key: string) => {
+      if (key.endsWith('/index.md')) {
+        return Buffer.from(MD_TEXT, 'utf8');
+      }
+      throw new Error('asset_object_missing');
+    });
+  });
+
+  it('结构化表示可用时投影图片引用，保留原 PDF 预览地址', async () => {
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({
+        mimeType: PDF_MIME,
+        displayName: '网络编程.pdf',
+        textRepresentation: textRepresentation('structured'),
+      }),
+    );
+
+    const { preview } = await loadOwnedAssetPreviewDetail({
+      identity,
+      spaceId,
+      assetId: ASSET_ID,
+    });
+
+    expect(preview.kind).toBe('pdf');
+    if (preview.kind !== 'pdf') return;
+    expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
+    expect(preview.representation).toMatchObject({ quality: 'structured' });
+    /* C4 投影：images/ 引用被重写为鉴权资源 URL，不暴露对象 key。 */
+    expect(preview.representation?.markdown).toContain(
+      `/api/v1/chat/assets/${ASSET_ID}/resources/images/001.jpg`,
+    );
+    expect(preview.representation?.markdown).not.toContain('derived/');
+  });
+
+  it('降级纯文本时透传质量、不带 markdown，仍保留原 PDF 预览', async () => {
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({
+        mimeType: PDF_MIME,
+        displayName: '网络编程.pdf',
+        textRepresentation: textRepresentation('degraded_plain_text'),
+      }),
+    );
+
+    const { preview } = await loadOwnedAssetPreviewDetail({
+      identity,
+      spaceId,
+      assetId: ASSET_ID,
+    });
+
+    if (preview.kind !== 'pdf') return;
+    expect(preview.representation?.quality).toBe('degraded_plain_text');
+    expect(preview.representation?.markdown).toBeUndefined();
+    expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
+  });
+
+  it('无 text 表示（旧资产）时 representation 为 null，仍可原 PDF 预览', async () => {
+    const { preview } = await loadOwnedAssetPreviewDetail({
+      identity,
+      spaceId,
+      assetId: ASSET_ID,
+    });
+
+    if (preview.kind !== 'pdf') return;
+    expect(preview.representation).toBeNull();
+    expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
+  });
+
+  it('派生对象校验和与声明不一致时回退（markdown 不展示），质量透传', async () => {
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({
+        mimeType: PDF_MIME,
+        displayName: '网络编程.pdf',
+        textRepresentation: {
+          ...textRepresentation('structured'),
+          checksum: 'a'.repeat(64),
+        },
+      }),
+    );
+
+    const { preview } = await loadOwnedAssetPreviewDetail({
+      identity,
+      spaceId,
+      assetId: ASSET_ID,
+    });
+
+    if (preview.kind !== 'pdf') return;
+    expect(preview.representation?.quality).toBe('structured');
+    expect(preview.representation?.markdown).toBeUndefined();
+    expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
+  });
+});
+
 describe('readOwnedAssetDownload（ADR-0026 决定 1 原件下载）', () => {
   beforeEach(() => {
     vi.clearAllMocks();

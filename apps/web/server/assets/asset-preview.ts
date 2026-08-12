@@ -182,12 +182,27 @@ export async function loadOwnedAssetPreviewDetail(input: {
     },
   });
   if (version.mimeType === 'application/pdf') {
+    /* ADR-0026 决定 2/6：MinerU 结构化派生可用时优先提供结构化阅读视图，
+       与 docx 分支同构；无结构化表示时前端回退 pdf.js 原样预览原件。 */
+    const representation = version.textRepresentation;
+    const structured =
+      representation &&
+      representation.status === 'ready' &&
+      representation.quality === 'structured'
+        ? await resolveStructuredMarkdown(representation, version.assetId)
+        : null;
     return {
       preview: {
         kind: 'pdf',
         fileName: version.displayName,
         mimeType: version.mimeType,
         fileUrl,
+        representation: representation
+          ? {
+              quality: representation.quality,
+              markdown: structured ?? undefined,
+            }
+          : null,
       },
       canvasResource,
     };
