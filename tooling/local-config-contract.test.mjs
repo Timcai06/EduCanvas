@@ -50,4 +50,20 @@ describe('local configuration contract', () => {
     const desktop = JSON.parse(source('apps/desktop/package.json'));
     assert.equal(desktop.scripts.build, 'electron-vite build');
   });
+
+  it('builds both production processes before starting the local E2E matrix', () => {
+    const makefile = source('Makefile');
+    const e2eRecipe = makefile.match(/\ne2e:[\s\S]*?(?=\n[^\t\n][^\n]*:|$)/)?.[0];
+    assert.ok(e2eRecipe);
+    assert.match(e2eRecipe, /--filter @educanvas\/web build/);
+    assert.match(e2eRecipe, /--filter @educanvas\/worker build/);
+    assert.ok(
+      e2eRecipe.indexOf('--filter @educanvas/web build') <
+        e2eRecipe.indexOf('pnpm test:e2e'),
+    );
+    assert.ok(
+      e2eRecipe.indexOf('--filter @educanvas/worker build') <
+        e2eRecipe.indexOf('pnpm test:e2e'),
+    );
+  });
 });

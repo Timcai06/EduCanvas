@@ -106,4 +106,6 @@ integration: deps db-integration-prepare
 
 e2e: deps db-e2e-prepare
 	@DATABASE_URL=$(E2E_DATABASE_URL) pnpm db:migrate
+	@DATABASE_URL=$(E2E_DATABASE_URL) pnpm --filter @educanvas/web build
+	@pnpm --filter @educanvas/worker build
 	E2E_DATABASE_URL=$(E2E_DATABASE_URL) PLAYWRIGHT_PORT=$(PLAYWRIGHT_PORT) pnpm test:e2e
