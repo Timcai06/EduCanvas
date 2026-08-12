@@ -1,7 +1,6 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: educanvas-db
     environment:
       POSTGRES_USER: educanvas
       POSTGRES_PASSWORD: educanvas
@@ -9,7 +8,7 @@ services:
     ports:
       # 宿主机 5432 常被本机原生 PostgreSQL（如 brew postgresql@15）占用；
       # 映射到 5434 避让，容器内部仍为 5432。Makefile/.env 默认 URL 同步为 5434。
-      - '5434:5432'
+      - '127.0.0.1:${EDUCANVAS_POSTGRES_PORT:-5434}:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

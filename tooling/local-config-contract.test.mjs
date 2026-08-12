@@ -9,14 +9,35 @@ describe('local configuration contract', () => {
     const compose = source('docker-compose.yml');
     const env = source('.env.example');
     const drizzle = source('packages/db/drizzle.config.ts');
-    const hostPort = compose.match(/- ['"](\d+):5432['"]/)?.[1];
+    const hostPort = compose.match(
+      /\$\{EDUCANVAS_POSTGRES_PORT:-(\d+)\}:5432/,
+    )?.[1];
     assert.equal(hostPort, '5434');
+    assert.doesNotMatch(compose, /container_name:/);
+    assert.match(
+      compose,
+      /127\.0\.0\.1:\$\{EDUCANVAS_POSTGRES_PORT:-5434\}:5432/,
+    );
     assert.match(env, new RegExp(`localhost:${hostPort}/educanvas`));
     assert.match(drizzle, new RegExp(`localhost:${hostPort}/educanvas`));
     const canonicalUrl = env.match(/^DATABASE_URL=(.+)$/m)?.[1];
     assert.ok(canonicalUrl);
     assert.ok(
       source('docs/04-data/04-D00-数据架构基线.md').includes(canonicalUrl),
+    );
+  });
+
+  it('isolates Compose projects while routing shared test URLs through one host-port override', () => {
+    const makefile = source('Makefile');
+    assert.match(makefile, /EDUCANVAS_POSTGRES_PORT \?= 5434/);
+    assert.match(makefile, /export EDUCANVAS_POSTGRES_PORT/);
+    assert.match(
+      makefile,
+      /TEST_DATABASE_URL \?=.*\$\(EDUCANVAS_POSTGRES_PORT\)\/educanvas_integration/,
+    );
+    assert.match(
+      makefile,
+      /E2E_DATABASE_URL \?=.*\$\(EDUCANVAS_POSTGRES_PORT\)\/educanvas_e2e/,
     );
   });
 
@@ -53,7 +74,9 @@ describe('local configuration contract', () => {
 
   it('builds both production processes before starting the local E2E matrix', () => {
     const makefile = source('Makefile');
-    const e2eRecipe = makefile.match(/\ne2e:[\s\S]*?(?=\n[^\t\n][^\n]*:|$)/)?.[0];
+    const e2eRecipe = makefile.match(
+      /\ne2e:[\s\S]*?(?=\n[^\t\n][^\n]*:|$)/,
+    )?.[0];
     assert.ok(e2eRecipe);
     assert.match(e2eRecipe, /--filter @educanvas\/web build/);
     assert.match(e2eRecipe, /--filter @educanvas\/worker build/);
