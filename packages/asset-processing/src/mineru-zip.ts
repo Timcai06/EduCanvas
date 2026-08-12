@@ -42,7 +42,11 @@ export type MineruZipLimits = {
   maxTotalBytes?: number;
 };
 
-/** MinerU 输出的 Markdown 文件名（固定，不随输入文件名变化）。 */
+/**
+ * 派生存储中的 Markdown 文件名（worker 落盘与 manifest 记录用，固定不随
+ * 输入变化）。注意这不是 MinerU 结果 zip 内的文件名——zip 内是
+ * `<base>/<parse_dir>/<base>.md`（见 locateMineruOutput），落盘时归一化。
+ */
 export const MINERU_MD_FILENAME = 'index.md';
 
 /** md 文本字节上限：与字符上限一致，UTF-8 最坏 4 字节/码点。 */
@@ -186,15 +190,51 @@ export function decodeMineruMarkdown(bytes: Uint8Array): string {
 }
 
 /**
- * 从已下载的 MinerU 结果 zip 中读取 `index.md` 文本。
+ * 识别 MinerU 结果 zip 的派生布局。
+ *
+ * 真实 API（3.4.4 实测）的 zip 条目由 `build_zip_arcname` 生成，形状固定
+ * 为 `<base>/<parse_dir>/<base>.md`：base = 提交的原始文件名 stem，
+ * parse_dir = office / vlm / hybrid_<method> / <method>（随服务端后端与
+ * 解析方式变化，见 MinerU cli/output_paths.py 的 build_parse_dir）。
+ * 旧假设的根级 `index.md` 与真实服务不符（G2 真 GPU canary 实测暴露）。
+ *
+ * 识别规则（保守）：恰好一个 md 条目，路径三节均为单段，且文件名 stem
+ * 与 base 一致；parse_dir 不枚举（供应商会演进），单段即可。不符合或
+ * md 多个 → null，由调用方判结果损坏。
+ */
+export type MineruOutputLayout = {
+  base: string;
+  parseDir: string;
+  markdown: MineruZipEntry;
+};
+
+export function locateMineruOutput(
+  entries: MineruZipEntry[],
+): MineruOutputLayout | null {
+  let found: MineruOutputLayout | null = null;
+  for (const entry of entries) {
+    const parts = entry.name.split('/');
+    if (parts.length !== 3) continue;
+    const [base, parseDir, file] = parts;
+    if (!base || !parseDir || !file || !file.endsWith('.md')) continue;
+    /* 文件名必须为 <base>.md：stem 与顶层目录一致，防伪装目录下的 md。 */
+    if (file.slice(0, -3) !== base) continue;
+    if (found) return null;
+    found = { base, parseDir, markdown: entry };
+  }
+  return found;
+}
+
+/**
+ * 从已下载的 MinerU 结果 zip 中读取 Markdown 文本（布局识别后解码）。
  *
  * 纯函数：不做网络、不读对象存储。失败一律抛 `MineruClientError`
  * （`mineru_result_invalid`），调用方据此决定降级还是终止。
  */
 export function readMineruMarkdown(bytes: Uint8Array): string {
-  const md = unpackMineruZip(bytes).find((e) => e.name === MINERU_MD_FILENAME);
-  if (!md) throw invalid();
-  return decodeMineruMarkdown(md.bytes);
+  const layout = locateMineruOutput(unpackMineruZip(bytes));
+  if (!layout) throw invalid();
+  return decodeMineruMarkdown(layout.markdown.bytes);
 }
 
 /** fatal 模式：文件名或内容非 UTF-8 必须报错，不静默替换。 */

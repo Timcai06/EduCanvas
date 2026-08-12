@@ -108,9 +108,16 @@ afterEach(async () => {
 describe('extract-asset-text × fake MinerU（ADR-0026 验证方式 7）', () => {
   it('成功链路：structured 落库并写出 index.md/images/manifest 三件套', async () => {
     const server = await start({
+      /* 真实 MinerU zip 布局（G2 实测对齐）：<base>/<parse_dir>/<base>.md + images/。 */
       customZipEntries: [
-        { name: 'index.md', bytes: new TextEncoder().encode(SAMPLE_MD) },
-        { name: 'images/001.jpg', bytes: new Uint8Array([0xff, 0xd8, 0xff]) },
+        {
+          name: 'syllabus/office/syllabus.md',
+          bytes: new TextEncoder().encode(SAMPLE_MD),
+        },
+        {
+          name: 'syllabus/office/images/001.jpg',
+          bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+        },
       ],
     });
     pending();

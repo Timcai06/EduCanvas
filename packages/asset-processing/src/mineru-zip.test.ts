@@ -1,7 +1,6 @@
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
-  MINERU_MD_FILENAME,
   MINERU_ZIP_MAX_ENTRIES,
   readMineruMarkdown,
   unpackMineruZip,
@@ -76,11 +75,14 @@ function buildZip(
 }
 
 const utf8 = (value: string) => new TextEncoder().encode(value);
+/* 真实 MinerU 3.4.4 zip 布局：<base>/<parse_dir>/<base>.md（G2 实测对齐）。 */
+const MD_BASE = 'syllabus';
+const MD_ENTRY = `${MD_BASE}/office/${MD_BASE}.md`;
 const mdZip = (md: string, extra?: { name: string; data: Uint8Array }[]) =>
-  buildZip([{ name: MINERU_MD_FILENAME, data: utf8(md) }, ...(extra ?? [])]);
+  buildZip([{ name: MD_ENTRY, data: utf8(md) }, ...(extra ?? [])]);
 
 describe('readMineruMarkdown', () => {
-  it('读取 index.md 文本（stored 条目）', () => {
+  it('读取 <base>/<parse_dir>/<base>.md 文本（stored 条目）', () => {
     const zip = mdZip('# 光合作用\n\n**叶绿体**是场所。');
 
     expect(readMineruMarkdown(zip)).toBe('# 光合作用\n\n**叶绿体**是场所。');
@@ -88,22 +90,30 @@ describe('readMineruMarkdown', () => {
 
   it('deflate 条目正确解压', () => {
     const zip = buildZip([
-      { name: MINERU_MD_FILENAME, data: utf8('# 标题'), deflate: true },
+      { name: MD_ENTRY, data: utf8('# 标题'), deflate: true },
     ]);
 
     expect(readMineruMarkdown(zip)).toBe('# 标题');
   });
 
-  it('与图片条目共存时只取 index.md', () => {
+  it('与图片条目共存时只取 markdown', () => {
     const zip = mdZip('# 正文', [
-      { name: 'images/001.jpg', data: new Uint8Array([0xff, 0xd8]) },
+      {
+        name: `${MD_BASE}/office/images/001.jpg`,
+        data: new Uint8Array([0xff, 0xd8]),
+      },
     ]);
 
     expect(readMineruMarkdown(zip)).toBe('# 正文');
   });
 
-  it('缺 index.md 视为结果损坏', () => {
-    const zip = buildZip([{ name: 'content_list.json', data: utf8('[]') }]);
+  it('缺 markdown 视为结果损坏', () => {
+    const zip = buildZip([
+      {
+        name: `${MD_BASE}/office/${MD_BASE}_content_list.json`,
+        data: utf8('[]'),
+      },
+    ]);
 
     expect(() => readMineruMarkdown(zip)).toThrow(
       expect.objectContaining({ code: 'mineru_result_invalid' }),
@@ -130,7 +140,7 @@ describe('readMineruMarkdown', () => {
         data: new Uint8Array([1]),
       }),
     );
-    entries[0] = { name: MINERU_MD_FILENAME, data: utf8('# md') };
+    entries[0] = { name: MD_ENTRY, data: utf8('# md') };
 
     expect(() => readMineruMarkdown(buildZip(entries))).toThrow(
       expect.objectContaining({ code: 'mineru_result_invalid' }),
@@ -146,7 +156,7 @@ describe('readMineruMarkdown', () => {
     );
   });
 
-  it('index.md 超字符上限时截断而不是拒绝', () => {
+  it('markdown 超字符上限时截断而不是拒绝', () => {
     const zip = mdZip('# 前\n\n' + '段'.repeat(ASSET_TEXT_MAX_CHARACTERS));
 
     const text = readMineruMarkdown(zip);
@@ -156,7 +166,7 @@ describe('readMineruMarkdown', () => {
   it('central directory 签名损坏视为结果损坏', () => {
     const zip = mdZip('# ok');
     /* 破坏 central directory 区（local 之后第一个字节）。 */
-    const localEnd = 30 + MINERU_MD_FILENAME.length + utf8('# ok').length;
+    const localEnd = 30 + MD_ENTRY.length + utf8('# ok').length;
     const corrupted = zip.slice();
     corrupted[localEnd] = 0xff;
 
@@ -168,7 +178,7 @@ describe('readMineruMarkdown', () => {
   it('local header 偏移越界视为结果损坏', () => {
     const zip = mdZip('# ok');
     /* 把 central directory 里的 local offset 指向容器末尾之后。 */
-    const cdStart = 30 + MINERU_MD_FILENAME.length + utf8('# ok').length;
+    const cdStart = 30 + MD_ENTRY.length + utf8('# ok').length;
     const corrupted = zip.slice();
     const view = new DataView(
       corrupted.buffer,
@@ -184,7 +194,7 @@ describe('readMineruMarkdown', () => {
 
   it('md 内容非 UTF-8 视为结果损坏', () => {
     const zip = buildZip([
-      { name: MINERU_MD_FILENAME, data: new Uint8Array([0xff, 0xfe, 0x00]) },
+      { name: MD_ENTRY, data: new Uint8Array([0xff, 0xfe, 0x00]) },
     ]);
 
     expect(() => readMineruMarkdown(zip)).toThrow(
@@ -200,7 +210,7 @@ describe('readMineruMarkdown', () => {
 
   it('未知压缩方法视为结果损坏', () => {
     const zip = buildZip([
-      { name: MINERU_MD_FILENAME, data: utf8('# x'), deflate: true },
+      { name: MD_ENTRY, data: utf8('# x'), deflate: true },
     ]);
     /* 把 method 字段改成 99（LZMA），读取端应拒绝。 */
     const corrupted = zip.slice();
@@ -209,8 +219,7 @@ describe('readMineruMarkdown', () => {
       corrupted.byteOffset,
       corrupted.byteLength,
     );
-    const cdStart =
-      30 + MINERU_MD_FILENAME.length + deflateRawSync(utf8('# x')).length;
+    const cdStart = 30 + MD_ENTRY.length + deflateRawSync(utf8('# x')).length;
     view.setUint16(cdStart + 10, 99, true);
 
     expect(() => readMineruMarkdown(corrupted)).toThrow(
@@ -224,16 +233,22 @@ describe('readMineruMarkdown', () => {
 describe('unpackMineruZip', () => {
   it('解包全部条目，保留 name 与解压后的字节', () => {
     const zip = mdZip('# 正文', [
-      { name: 'images/001.jpg', data: new Uint8Array([0xff, 0xd8]) },
-      { name: 'content_list.json', data: utf8('[]') },
+      {
+        name: `${MD_BASE}/office/images/001.jpg`,
+        data: new Uint8Array([0xff, 0xd8]),
+      },
+      {
+        name: `${MD_BASE}/office/${MD_BASE}_content_list.json`,
+        data: utf8('[]'),
+      },
     ]);
 
     const entries = unpackMineruZip(zip);
 
     expect(entries.map((e) => e.name)).toEqual([
-      MINERU_MD_FILENAME,
-      'images/001.jpg',
-      'content_list.json',
+      MD_ENTRY,
+      `${MD_BASE}/office/images/001.jpg`,
+      `${MD_BASE}/office/${MD_BASE}_content_list.json`,
     ]);
     expect(entries[1]?.bytes).toEqual(new Uint8Array([0xff, 0xd8]));
   });
@@ -241,7 +256,7 @@ describe('unpackMineruZip', () => {
   it('deflate 条目解压后字节正确', () => {
     const zip = buildZip([
       {
-        name: 'images/001.png',
+        name: `${MD_BASE}/office/images/001.png`,
         data: new Uint8Array([1, 2, 3, 4]),
         deflate: true,
       },
@@ -254,7 +269,9 @@ describe('unpackMineruZip', () => {
 
   it('单条目解压后超过上限明确失败（不静默截断）', () => {
     const big = new Uint8Array(1024);
-    const zip = buildZip([{ name: 'images/big.bin', data: big }]);
+    const zip = buildZip([
+      { name: `${MD_BASE}/office/images/big.bin`, data: big },
+    ]);
 
     expect(() => unpackMineruZip(zip, { maxEntryBytes: 512 })).toThrow(
       expect.objectContaining({ code: 'mineru_result_invalid' }),
@@ -276,7 +293,7 @@ describe('unpackMineruZip', () => {
 
   it('自定义条目数上限低于容器声明时拒绝', () => {
     const zip = mdZip('# 正文', [
-      { name: 'images/001.jpg', data: new Uint8Array([1]) },
+      { name: `${MD_BASE}/office/images/001.jpg`, data: new Uint8Array([1]) },
     ]);
 
     expect(() => unpackMineruZip(zip, { maxEntries: 1 })).toThrow(
