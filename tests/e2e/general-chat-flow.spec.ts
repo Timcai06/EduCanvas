@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const STUDIO_TRIGGER_NAME = '打开全部资源';
 
 /* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
    移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
@@ -59,7 +59,7 @@ async function openStudioOutput(page: Page) {
 }
 
 async function closeStudio(page: Page) {
-  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  await page.getByRole('button', { name: '关闭 Studio' }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);

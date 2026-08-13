@@ -80,7 +80,8 @@ async function generateMindMap(page: Page) {
   ).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  /* Studio 打开时触发按钮被 inert，关闭走 overlay 自带的关闭按钮。 */
+  await page.getByRole('button', { name: '关闭 Studio' }).click();
 }
 
 test('键盘-only 打开 AI 产物 Canvas、键盘关闭并归还焦点', async ({ page }) => {

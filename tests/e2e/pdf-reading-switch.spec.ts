@@ -5,7 +5,7 @@ import path from 'node:path';
 import { openLearningWorkspace } from './study-onboarding';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const STUDIO_TRIGGER_NAME = '打开全部资源';
 const PDF_FIXTURE = path.resolve('tests/fixtures/sample-1page.pdf');
 const OBJECT_STORAGE_ROOT = path.resolve('output/playwright/object-storage');
 const MD_TEXT = '# 网络编程讲义\n\nMinerU 结构化阅读验收内容。';

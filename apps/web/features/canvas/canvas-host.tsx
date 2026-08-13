@@ -157,8 +157,11 @@ export function CanvasHost({
           : durableCanvasOpener?.isConnected
             ? durableCanvasOpener
             : null;
+        /* Canvas 入口已收敛到 Dock 的「全部资源」：即使 opener 捕获失败
+           （例如打开瞬间焦点在 body），关闭后焦点也要回到当前唯一入口，
+           键盘用户不会失去操作锚点（W06-1）。 */
         const stableWorkspaceFallback = document.querySelector<HTMLElement>(
-          '[data-studio-trigger]',
+          '[data-studio-trigger], #resource-dock-tab-all',
         );
         durableCanvasOpener = null;
         durableCanvasOpenerSelector = null;

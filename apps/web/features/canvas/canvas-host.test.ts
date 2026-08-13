@@ -261,4 +261,9 @@ describe('CanvasHost 全屏转场契约', () => {
     expect(hostSource).toContain('lg:rounded-3xl');
     expect(hostSource).toContain('shadow-[var(--shadow-float)]');
   });
+
+  it('关闭时焦点兜底回到 Dock 入口：opener 捕获失败也不失操作锚点', () => {
+    expect(hostSource).toContain('resource-dock-tab-all');
+    expect(hostSource).toContain('stableWorkspaceFallback');
+  });
 });

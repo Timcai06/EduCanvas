@@ -4,7 +4,7 @@ import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const STUDIO_TRIGGER_NAME = '打开全部资源';
 const TEXT_FIXTURE = path.resolve('tests/fixtures/sample.txt');
 const OBJECT_STORAGE_ROOT = path.resolve('output/playwright/object-storage');
 
