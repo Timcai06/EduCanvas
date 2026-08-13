@@ -311,28 +311,6 @@ describe('teaching turn browser state machine', () => {
     state = teachingTurnReducer(state, {
       type: 'stream.event',
       event: {
-        type: 'artifact.generation_progress',
-        schemaVersion: '1',
-        turnId: 'turn-artifact',
-        artifactId: 'artifact-1',
-        jobId: 'job-1',
-        progress: 42,
-      },
-    });
-    expect(state.messages.at(-1)).toMatchObject({
-      artifacts: [
-        expect.objectContaining({
-          id: 'artifact-1',
-          progress: 42,
-          /* 进度不改变生命周期状态：仍是 proposed。 */
-          status: 'proposed',
-        }),
-      ],
-    });
-
-    state = teachingTurnReducer(state, {
-      type: 'stream.event',
-      event: {
         type: 'artifact.version_added',
         schemaVersion: '1',
         turnId: 'turn-artifact',

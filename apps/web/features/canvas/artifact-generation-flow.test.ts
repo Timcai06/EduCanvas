@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createObservationEpochController,
-  pollArtifactToTerminal,
   projectGenerationPollResult,
   shouldNotifySettled,
   isPollOutcomeGenerating,
   phaseFromPollOutcome,
   outcomeFromPollOutcome,
 } from './artifact-generation-flow';
+import { pollArtifactToTerminal } from './artifact-polling-client';
 import type { PollOutcome } from './artifact-polling-client';
 
 describe('artifact generation flow polling state mapping', () => {

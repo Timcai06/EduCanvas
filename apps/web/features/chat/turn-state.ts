@@ -343,7 +343,6 @@ export function teachingTurnReducer(
   }
   if (
     event.type === 'artifact.version_added' ||
-    event.type === 'artifact.generation_progress' ||
     event.type === 'artifact.failed'
   ) {
     return {
@@ -364,9 +363,7 @@ export function teachingTurnReducer(
                 }
               : event.type === 'artifact.failed'
                 ? { ...artifact, status: 'failed' as const }
-                : event.type === 'artifact.generation_progress'
-                  ? { ...artifact, progress: event.progress }
-                  : artifact,
+                : artifact,
         ),
       })),
     };

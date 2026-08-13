@@ -3,7 +3,7 @@ import type { ArtifactDetail } from '@/features/canvas/artifact-client';
 import type { GenerationState } from '@/features/canvas/artifact-generation-flow';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
-import { describeGenerationSettledToast } from './use-general-workspace-controller';
+import { describeGenerationSettledToast } from './generation-toast';
 
 const detail = {
   artifact: {
