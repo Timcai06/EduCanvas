@@ -77,7 +77,9 @@ describe('pollArtifactUntilSettled progress reporting', () => {
     };
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify(withoutJob), { status: 200 })),
+      vi.fn(
+        async () => new Response(JSON.stringify(withoutJob), { status: 200 }),
+      ),
     );
 
     const seen: number[] = [];

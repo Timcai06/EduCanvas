@@ -57,7 +57,8 @@ export function ConversationArtifactCard({
   };
   const Icon = presentation.icon;
   const generating = artifact.status === 'proposed';
-  const failed = artifact.status === 'failed' || artifact.status === 'cancelled';
+  const failed =
+    artifact.status === 'failed' || artifact.status === 'cancelled';
   const progress =
     artifact.progress !== undefined ? clampProgress(artifact.progress) : null;
   const detail =

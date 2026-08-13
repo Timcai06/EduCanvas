@@ -1,12 +1,7 @@
 'use client';
 
 import { useGSAP } from '@gsap/react';
-import {
-  CheckCircle,
-  Info,
-  WarningCircle,
-  X,
-} from '@phosphor-icons/react';
+import { CheckCircle, Info, WarningCircle, X } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useEffect, useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';

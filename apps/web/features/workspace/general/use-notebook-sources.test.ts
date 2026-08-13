@@ -27,10 +27,10 @@ describe('hasSettledAssetTransition', () => {
 
   it('新增即终态的资产返回 true（图片直传等无解析阶段）', () => {
     expect(
-      hasSettledAssetTransition([asset('a', 'ready')], [
-        asset('a', 'ready'),
-        asset('b', 'ready'),
-      ]),
+      hasSettledAssetTransition(
+        [asset('a', 'ready')],
+        [asset('a', 'ready'), asset('b', 'ready')],
+      ),
     ).toBe(true);
   });
 
@@ -45,10 +45,7 @@ describe('hasSettledAssetTransition', () => {
       hasSettledAssetTransition([asset('a', 'ready')], [asset('a', 'ready')]),
     ).toBe(false);
     expect(
-      hasSettledAssetTransition(
-        [asset('a', 'ready')],
-        [asset('a', 'failed')],
-      ),
+      hasSettledAssetTransition([asset('a', 'ready')], [asset('a', 'failed')]),
     ).toBe(false);
   });
 

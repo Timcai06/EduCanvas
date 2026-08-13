@@ -62,7 +62,10 @@ export function resolveQualityNote(
 ): { text: string; tone: 'info' | 'error' } | null {
   switch (representation?.quality) {
     case 'processing':
-      return { text: '文档转换处理中，完成后可切换到结构化阅读。', tone: 'info' };
+      return {
+        text: '文档转换处理中，完成后可切换到结构化阅读。',
+        tone: 'info',
+      };
     case 'failed':
       return { text: '结构化转换失败；仍可预览原件。', tone: 'error' };
     case 'degraded_plain_text':
@@ -100,9 +103,8 @@ export function ReadingViewSwitcher({
   const [view, setView] = useState<'original' | 'structured'>(initialView);
   /* 记录被关闭提示对应的 quality：按值记忆，quality 变为其他值后重新出现，
      回到同一值时保持关闭（用户已看过该状态）。 */
-  const [dismissedQuality, setDismissedQuality] = useState<ReadingQuality | null>(
-    null,
-  );
+  const [dismissedQuality, setDismissedQuality] =
+    useState<ReadingQuality | null>(null);
   const availability = resolveReadingAvailability(representation);
   const readableMarkdown = availability.markdown;
   const qualityNote = resolveQualityNote(representation);
@@ -181,7 +183,9 @@ export function ReadingViewSwitcher({
             <button
               type="button"
               aria-label="关闭提示"
-              onClick={() => setDismissedQuality(representation?.quality ?? null)}
+              onClick={() =>
+                setDismissedQuality(representation?.quality ?? null)
+              }
               className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <X aria-hidden="true" size={12} />

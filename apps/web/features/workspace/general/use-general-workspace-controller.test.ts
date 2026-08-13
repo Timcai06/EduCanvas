@@ -55,9 +55,7 @@ describe('shouldConsumeTurnScopedInputs（Turn 一次性输入消费）', () => 
   });
 });
 
-function generation(
-  partial: Partial<GenerationState>,
-): GenerationState {
+function generation(partial: Partial<GenerationState>): GenerationState {
   return {
     phase: 'ready',
     outcome: 'ready',
@@ -70,9 +68,7 @@ function generation(
 describe('describeGenerationSettledToast（生成终态 toast 判定）', () => {
   it('ready 报成功并带打开动作（有 artifactId 时）', () => {
     expect(
-      describeGenerationSettledToast(
-        generation({ artifactId: 'artifact-1' }),
-      ),
+      describeGenerationSettledToast(generation({ artifactId: 'artifact-1' })),
     ).toMatchObject({
       title: '产物已生成',
       tone: 'success',
@@ -93,7 +89,9 @@ describe('describeGenerationSettledToast（生成终态 toast 判定）', () => 
 
   it('修订观察的 pending/cancelled/timed_out 不产生通知', () => {
     expect(
-      describeGenerationSettledToast(generation({ revisionOutcome: 'pending' })),
+      describeGenerationSettledToast(
+        generation({ revisionOutcome: 'pending' }),
+      ),
     ).toBeNull();
     expect(
       describeGenerationSettledToast(
