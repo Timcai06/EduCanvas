@@ -5,7 +5,7 @@ import { openLearningWorkspace } from '../study-onboarding';
 
 export const ACTIVE_CONVERSATION_COOKIE =
   '__Host-educanvas_active_conversation';
-export const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+export const STUDIO_TRIGGER_NAME = '打开全部资源';
 export const PLUS_MENU_TRIGGER_NAME = '添加来源';
 
 /* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
@@ -61,7 +61,7 @@ export async function openStudioOutput(page: Page) {
 }
 
 export async function closeStudio(page: Page) {
-  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  await page.getByRole('button', { name: '关闭 Studio' }).click();
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
   ).toHaveCount(0);

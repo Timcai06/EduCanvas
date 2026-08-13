@@ -36,7 +36,7 @@ export interface AppendedVersionInput {
 
 export const ACTIVE_CONVERSATION_COOKIE =
   '__Host-educanvas_active_conversation';
-export const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+export const STUDIO_TRIGGER_NAME = '打开全部资源';
 export const PLUS_MENU_TRIGGER_NAME = '添加来源';
 export const OBJECT_STORAGE_ROOT = path.resolve(
   'output/playwright/object-storage',

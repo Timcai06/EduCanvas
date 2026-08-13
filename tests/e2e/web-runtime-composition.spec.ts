@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const STUDIO_TRIGGER_NAME = '打开全部资源';
 
 interface RuntimeFixture {
   artifactId: string;
