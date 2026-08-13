@@ -6,6 +6,9 @@ export interface FakeLiveVoiceSnapshot {
   readonly cancelRequests: readonly string[];
   readonly speechRequests: number;
   readonly speechAborts: number;
+  readonly playbackStarts: number;
+  readonly playbackStops: number;
+  readonly activePlaybackSources: number;
   readonly clientFrameTypes: readonly string[];
   readonly events: readonly string[];
 }
@@ -36,6 +39,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
     let readyConnections = 0;
     let speechRequests = 0;
     let speechAborts = 0;
+    let playbackStarts = 0;
+    let playbackStops = 0;
+    let activePlaybackSources = 0;
     let holdNext = false;
     let holdNextSpeech = false;
     let nextAssistantText = '';
@@ -159,6 +165,39 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         disconnect();
       };
       return processor;
+    };
+
+    const nativeCreateBufferSource = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function () {
+      const source = nativeCreateBufferSource.call(this);
+      const nativeStart = source.start.bind(source);
+      const nativeStop = source.stop.bind(source);
+      let audible = false;
+      let settled = false;
+      source.start = (...args: Parameters<AudioBufferSourceNode['start']>) => {
+        audible = (source.buffer?.duration ?? 0) >= 0.1;
+        if (audible) {
+          playbackStarts += 1;
+          activePlaybackSources += 1;
+          events.push('playback.start');
+        }
+        nativeStart(...args);
+      };
+      source.stop = (...args: Parameters<AudioBufferSourceNode['stop']>) => {
+        if (audible && !settled) {
+          settled = true;
+          playbackStops += 1;
+          activePlaybackSources -= 1;
+          events.push('playback.stop');
+        }
+        nativeStop(...args);
+      };
+      source.addEventListener('ended', () => {
+        if (!audible || settled) return;
+        settled = true;
+        activePlaybackSources -= 1;
+      });
+      return source;
     };
 
     const audioContext = new AudioContext();
@@ -329,7 +368,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         const shouldHold = holdNextSpeech;
         holdNextSpeech = false;
         let aborted = false;
-        const pcm = new Uint8Array(96_000);
+        /* Held speech stays audibly scheduled long enough for the barge-in
+         * assertion to observe Pcm16Player.stop(), not only transport abort. */
+        const pcm = new Uint8Array(shouldHold ? 480_000 : 96_000);
         const view = new DataView(pcm.buffer);
         for (let offset = 0; offset < pcm.byteLength; offset += 2) {
           view.setInt16(offset, offset % 8 === 0 ? 2_048 : -2_048, true);
@@ -338,7 +379,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           start(controller) {
             /* 先交付首包让产品进入 audible 状态；hold turn 的剩余响应
              * 保持在途，插话必须通过真实 AbortSignal 停止 speech fetch。 */
-            controller.enqueue(shouldHold ? pcm.slice(0, 12_000) : pcm);
+            controller.enqueue(pcm);
             if (!shouldHold) {
               controller.close();
               return;
@@ -382,6 +423,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         cancelRequests: [...cancelRequests],
         speechRequests,
         speechAborts,
+        playbackStarts,
+        playbackStops,
+        activePlaybackSources,
         clientFrameTypes: [...clientFrameTypes],
         events: [...events],
       }),

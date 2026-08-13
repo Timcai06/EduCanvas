@@ -134,6 +134,14 @@ test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechAborts)
     .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).playbackStops)
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).activePlaybackSources,
+    )
+    .toBe(0);
   await emitVoiceFinal(page, '停一下，改为比较两份资料');
 
   await expect
@@ -147,11 +155,14 @@ test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async 
 
   const snapshot = await readFakeLiveVoiceSnapshot(page);
   const speechAbort = snapshot.events.indexOf('speech.abort');
+  const playbackStop = snapshot.events.indexOf('playback.stop');
   const turnCancel = snapshot.events.indexOf('turn.cancel');
   const resumedTurn = snapshot.events.lastIndexOf('turn.request');
   expect(speechAbort).toBeGreaterThan(-1);
+  expect(playbackStop).toBeGreaterThan(-1);
   expect(turnCancel).toBeGreaterThan(-1);
   expect(turnCancel).toBeGreaterThan(speechAbort);
+  expect(turnCancel).toBeGreaterThan(playbackStop);
   expect(resumedTurn).toBeGreaterThan(turnCancel);
 
   for (const request of snapshot.turnRequests.slice(1)) {
