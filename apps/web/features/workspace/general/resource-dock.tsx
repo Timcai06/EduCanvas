@@ -226,7 +226,7 @@ export function ResourceDock({
               }
               data-dock-category
               onClick={() => toggleCategory(candidate.id)}
-              className={`${RAIL_BUTTON_CLASS} ${candidate.id === 'all' ? 'mt-2' : ''}`}
+              className={RAIL_BUTTON_CLASS}
             >
               <Icon size={17} weight="duotone" aria-hidden="true" />
               {failed || processingCount > 0 ? (
