@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import {
   type GatewayOperationEvent,
   type GatewayResolvedRoute,
-  type NotebookPermission,
 } from '@educanvas/gateway-core';
 import { and, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import { getDb } from '../client';
@@ -15,8 +14,6 @@ import {
 import {
   findCurrentOperationAccess,
   listCurrentGatewayOperationEvents,
-  listRecentCurrentGatewayOperations,
-  requestCurrentGatewayOperationCancellation,
 } from './operation-access';
 import {
   resolveGatewayApproval,
@@ -31,6 +28,11 @@ import {
   normalizeOperationStatus,
   type GatewayEventPayload,
 } from './operation-event-writer';
+import {
+  describeTerminalAwareGatewayOperation,
+  listRecentTerminalAwareGatewayOperations,
+  requestTerminalAwareGatewayOperationCancellation,
+} from './operation-store-control-plane';
 import type { DatabaseTransaction } from './persistence';
 import type { GatewayTerminalReconciliationMode } from './terminal-reconciliation-mode';
 
@@ -83,34 +85,6 @@ export class DrizzleGatewayOperationStore {
       operationId,
       now,
     );
-  }
-
-  private async loadTerminalAwareStatus(
-    transaction: DatabaseTransaction,
-    input: {
-      operationId: string;
-      actorUserId: string;
-      requiredPermission: NotebookPermission;
-      now: Date;
-    },
-  ) {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
-    );
-    const access = await findCurrentOperationAccess(transaction, {
-      ...input,
-      mutation: true,
-    });
-    if (!access) return null;
-    return {
-      access,
-      status: await this.reconcileTerminal(
-        transaction,
-        input.operationId,
-        access.status,
-        input.now,
-      ),
-    };
   }
 
   async begin(input: {
@@ -514,19 +488,11 @@ export class DrizzleGatewayOperationStore {
     actorUserId: string;
     status: 'running' | 'completed' | 'failed' | 'cancelled';
   } | null> {
-    return this.database.transaction(async (transaction) => {
-      const loaded = await this.loadTerminalAwareStatus(transaction, {
-        operationId,
-        actorUserId,
-        requiredPermission: 'conversation.reply',
-        now,
-      });
-      if (!loaded) return null;
-      return {
-        operationId,
-        actorUserId: loaded.access.actorUserId,
-        status: loaded.status,
-      };
+    return describeTerminalAwareGatewayOperation(this.database, {
+      operationId,
+      actorUserId,
+      now,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
   }
 
@@ -539,17 +505,9 @@ export class DrizzleGatewayOperationStore {
     recorded: boolean;
     continuation: 'none' | 'running' | 'cancelled';
   }> {
-    return requestCurrentGatewayOperationCancellation(this.database, {
+    return requestTerminalAwareGatewayOperationCancellation(this.database, {
       ...input,
-      reconcileTerminal:
-        this.terminalReconciliationMode === 'enabled'
-          ? (transaction, operationId, now) =>
-              reconcileGatewayTerminalWithinTransaction(
-                transaction,
-                operationId,
-                now,
-              )
-          : undefined,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
   }
 
@@ -570,24 +528,12 @@ export class DrizzleGatewayOperationStore {
       createdAt: string;
     }[]
   > {
-    const candidates = await listRecentCurrentGatewayOperations(this.database, {
+    return listRecentTerminalAwareGatewayOperations(this.database, {
       actorUserId,
       limit,
       now,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
-    const result: (typeof candidates)[number][] = [];
-    for (const candidate of candidates) {
-      const loaded = await this.database.transaction((transaction) =>
-        this.loadTerminalAwareStatus(transaction, {
-          operationId: candidate.operationId,
-          actorUserId,
-          requiredPermission: 'notebook.read',
-          now,
-        }),
-      );
-      if (loaded) result.push({ ...candidate, status: loaded.status });
-    }
-    return result;
   }
 
   async listEvents(
