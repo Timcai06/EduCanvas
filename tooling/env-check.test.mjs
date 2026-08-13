@@ -50,8 +50,8 @@ after(async () => {
 });
 
 describe('env-check', () => {
-  it('operator env gate只允许阶段一legacy或observe且不回显非法原值', async () => {
-    for (const stage of ['legacy', 'observe']) {
+  it('operator env gate只允许闭合authority stage且不回显非法原值', async () => {
+    for (const stage of ['legacy', 'observe', 'platform']) {
       const result = await runEnvCheck(
         await writeEnv(
           providerEnv({ EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE: stage }),

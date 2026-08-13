@@ -327,7 +327,7 @@ const liveVoiceSummary = validateDashScopeLiveVoice();
 
 const k12AuthorityStage =
   value('EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE') || 'legacy';
-if (!['legacy', 'observe'].includes(k12AuthorityStage)) {
+if (!['legacy', 'observe', 'platform'].includes(k12AuthorityStage)) {
   fail('EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE is not valid');
 }
 

@@ -83,6 +83,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
             'assets', 'asset_versions', 'agent_message_parts',
             'turn_context_snapshots', 'spaces', 'conversations',
             'agent_operations', 'conversation_messages', 'tool_effects',
+            'k12_conversation_message_projections',
             'operation_continuations', 'learner_profiles', 'learning_goals',
             'learning_objectives', 'diagnostic_attempts', 'diagnostic_responses'
           )
@@ -98,6 +99,7 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
         'conversations',
         'diagnostic_attempts',
         'diagnostic_responses',
+        'k12_conversation_message_projections',
         'knowledge_chunk_embeddings',
         'knowledge_chunks',
         'knowledge_documents',
@@ -1601,6 +1603,79 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
           )
         `,
       ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
+  it('从0056升级时只新增K12 provenance sidecar并保留既有平台消息', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0057_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const owner = 'ca08b-n1-owner';
+      const spaceId = '8a000000-0000-4000-8000-000000000001';
+      const conversationId = '8a000000-0000-4000-8000-000000000002';
+      const messageId = '8a000000-0000-4000-8000-000000000003';
+      await connection`
+        insert into platform_users (id, kind, status)
+        values (${owner}, 'registered', 'active')
+      `;
+      await connection`
+        insert into spaces (id, owner_subject_id, kind, title, status)
+        values (${spaceId}, ${owner}, 'notebook', 'CA08B N-1', 'active')
+      `;
+      await connection`
+        insert into conversations (
+          id, space_id, owner_subject_id, agent_profile_id, status
+        ) values (
+          ${conversationId}, ${spaceId}, ${owner}, 'general', 'active'
+        )
+      `;
+      await connection`
+        insert into conversation_messages (
+          id, conversation_id, role, status, content, parts, completed_at
+        ) values (
+          ${messageId}, ${conversationId}, 'user', 'completed',
+          'N-1 existing message', '[]'::jsonb, now()
+        )
+      `;
+
+      await applyMigrationFile(connection, '0057_faulty_corsair.sql');
+
+      expect(
+        await connection`
+          select id, content from conversation_messages where id = ${messageId}
+        `,
+      ).toEqual([{ id: messageId, content: 'N-1 existing message' }]);
+      expect(
+        await connection<{ indexname: string }[]>`
+          select indexname from pg_indexes
+          where schemaname = 'public'
+            and tablename = 'k12_conversation_message_projections'
+          order by indexname
+        `,
+      ).toEqual([
+        {
+          indexname: 'k12_conversation_message_projections_conversation_idx',
+        },
+        {
+          indexname:
+            'k12_conversation_message_projections_conversation_message_id_un',
+        },
+        {
+          indexname: 'k12_conversation_message_projections_pkey',
+        },
+        { indexname: 'k12_conversation_message_projections_session_idx' },
+      ]);
+      expect(
+        await connection`
+          select count(*)::int as n
+          from k12_conversation_message_projections
+        `,
+      ).toEqual([{ n: 0 }]);
     });
   });
 });

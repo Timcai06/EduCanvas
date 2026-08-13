@@ -66,7 +66,7 @@ export class WebTeachingProfile implements TurnApplicationProfilePort {
   }
 
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
-    const history = await webTeachingPersistence.chat.listRecentHistory({
+    const history = await webTeachingPersistence.history.listRecentHistory({
       sessionId: this.session.id,
       trustedStudentId: this.identity.studentId,
       limit: 40,

@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   K12_CONVERSATION_AUTHORITY_STAGE_ENV,
   K12ConversationAuthorityConfigurationError,
+  insertOrVerifyK12ConversationMessageProjection,
   isK12ConversationDualWriteEnabled,
   resolveK12ConversationAuthorityContract,
+  shouldCreateK12ConversationProjection,
 } from './k12-conversation-dual-write';
 import {
   deterministicConversationMessageId,
@@ -20,6 +22,7 @@ describe('K12 消息双写', () => {
         runtimeAuthority: 'chat_messages',
         longTermTarget: 'conversation_messages',
         productionReadSource: 'chat_messages',
+        cutoverSupported: false,
         rollback: {
           stage: 'legacy',
           visibleAuthority: 'chat_messages',
@@ -43,6 +46,7 @@ describe('K12 消息双写', () => {
           runtimeAuthority: 'chat_messages',
           longTermTarget: 'conversation_messages',
           productionReadSource: 'chat_messages',
+          cutoverSupported: false,
           rollback: {
             stage: 'legacy',
             visibleAuthority: 'chat_messages',
@@ -55,8 +59,29 @@ describe('K12 消息双写', () => {
       },
     );
 
-    it.each(['platform', '', 'OBSERVE', 'legacy ', 'secret=provider-key'])(
-      '明确拒绝platform或非法stage且错误不回显原值：%s',
+    it('platform阶段把可见读源切到conversation_messages且运行态仍在legacy', () => {
+      expect(
+        resolveK12ConversationAuthorityContract({
+          [K12_CONVERSATION_AUTHORITY_STAGE_ENV]: 'platform',
+        }),
+      ).toEqual({
+        stage: 'platform',
+        currentVisibleAuthority: 'conversation_messages',
+        runtimeAuthority: 'chat_messages',
+        longTermTarget: 'conversation_messages',
+        productionReadSource: 'conversation_messages',
+        cutoverSupported: true,
+        rollback: {
+          stage: 'legacy',
+          visibleAuthority: 'chat_messages',
+          runtimeAuthority: 'chat_messages',
+          dualWriteEnabled: false,
+        },
+      });
+    });
+
+    it.each(['', 'OBSERVE', 'legacy ', 'secret=provider-key'])(
+      '拒绝非法stage且错误不回显原值：%s',
       (stage) => {
         let error: unknown;
         try {
@@ -152,14 +177,164 @@ describe('K12 消息双写', () => {
       process.env.EDUCANVAS_K12_CONVERSATION_DUAL_WRITE = 'TRUE';
       expect(isK12ConversationDualWriteEnabled()).toBe(false);
     });
+
+    it('platform authority强制新消息建副本，rollback则保持显式关闭', () => {
+      expect(
+        shouldCreateK12ConversationProjection({
+          EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE: 'platform',
+          EDUCANVAS_K12_CONVERSATION_DUAL_WRITE: 'false',
+        }),
+      ).toBe(true);
+      expect(
+        shouldCreateK12ConversationProjection({
+          EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE: 'legacy',
+          EDUCANVAS_K12_CONVERSATION_DUAL_WRITE: 'false',
+        }),
+      ).toBe(false);
+    });
   });
 
   describe('K12历史回填', () => {
+    it('preview只读取映射事实而不写provenance，apply为新平台行原子补映射', async () => {
+      const createdAt = new Date('2026-08-12T00:00:00.000Z');
+      const completedAt = new Date('2026-08-12T00:00:01.000Z');
+      const sourceRow = {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        sessionId: '6ba7b810-9dad-41d1-80b4-00c04fd430c8',
+        role: 'student',
+        status: 'completed',
+        content: '公开问题',
+        failureCode: null,
+        createdAt,
+        completedAt,
+        conversationId: '7ba7b810-9dad-41d1-80b4-00c04fd430c8',
+        operationId: null,
+      };
+      const projectionId = deterministicConversationMessageId(sourceRow.id);
+
+      const run = async (mode: 'preview' | 'apply') => {
+        let selectCall = 0;
+        const selectedPages = [[sourceRow], [], []] as const;
+        const insertedValues: unknown[] = [];
+        let insertCall = 0;
+        const transaction = {
+          select() {
+            const rows = selectedPages[selectCall++] ?? [];
+            const builder = {
+              from: () => builder,
+              innerJoin: () => builder,
+              leftJoin: () => builder,
+              where: () => builder,
+              orderBy: () => builder,
+              limit: async () => rows,
+              then: (
+                resolve: (value: readonly unknown[]) => unknown,
+                reject: (reason: unknown) => unknown,
+              ) => Promise.resolve(rows).then(resolve, reject),
+            };
+            return builder;
+          },
+          insert() {
+            const currentCall = insertCall++;
+            const builder = {
+              values: (value: unknown) => {
+                insertedValues.push(value);
+                return builder;
+              },
+              onConflictDoNothing: () => builder,
+              returning: async () =>
+                currentCall === 0
+                  ? [{ id: projectionId }]
+                  : [{ sourceChatMessageId: sourceRow.id }],
+            };
+            return builder;
+          },
+        };
+        const database = {
+          transaction: async (
+            callback: (executor: typeof transaction) => Promise<unknown>,
+          ) => callback(transaction),
+        };
+        const repository = new DrizzleK12ConversationBackfillRepository(
+          database as never,
+        );
+        const result =
+          mode === 'preview'
+            ? await repository.previewPage({ limit: 100 })
+            : await repository.applyPage({ limit: 100 });
+        return { result, insertedValues };
+      };
+
+      const preview = await run('preview');
+      expect(preview.result).toMatchObject({
+        mode: 'dry-run',
+        insertedCount: 0,
+      });
+      expect(preview.insertedValues).toEqual([]);
+
+      const applied = await run('apply');
+      expect(applied.result).toMatchObject({
+        mode: 'apply',
+        insertedCount: 1,
+      });
+      expect(applied.insertedValues[1]).toEqual({
+        sourceChatMessageId: sourceRow.id,
+        conversationMessageId: projectionId,
+        sessionId: sourceRow.sessionId,
+        conversationId: sourceRow.conversationId,
+      });
+    });
+
+    it('provenance字段冲突抛稳定invariant且不回显输入', async () => {
+      const privateMarker = 'secret=provider-config';
+      const expected = {
+        sourceChatMessageId: '550e8400-e29b-41d4-a716-446655440000',
+        conversationMessageId: '6ba7b810-9dad-41d1-80b4-00c04fd430c8',
+        sessionId: privateMarker,
+        conversationId: '7ba7b810-9dad-41d1-80b4-00c04fd430c8',
+      };
+      const transaction = {
+        insert() {
+          const builder = {
+            values: () => builder,
+            onConflictDoNothing: () => builder,
+            returning: async () => [],
+          };
+          return builder;
+        },
+        select() {
+          const builder = {
+            from: () => builder,
+            where: () => builder,
+            limit: async () => [
+              {
+                ...expected,
+                conversationId: '8ba7b810-9dad-41d1-80b4-00c04fd430c8',
+                createdAt: new Date(),
+              },
+            ],
+          };
+          return builder;
+        },
+      };
+
+      const result = insertOrVerifyK12ConversationMessageProjection(
+        transaction as never,
+        expected,
+      );
+      await expect(result).rejects.toMatchObject({
+        code: 'k12_dual_write_invariant_failed',
+        message: 'K12 message dual-write invariant failed',
+      });
+      await expect(result).rejects.not.toThrow(privateMarker);
+    });
+
     it('并发写者触发onConflictDoNothing少插入时fail closed', async () => {
       const createdAt = new Date('2026-08-12T00:00:00.000Z');
       const completedAt = new Date('2026-08-12T00:00:01.000Z');
       const sourceRow = {
         id: '550e8400-e29b-41d4-a716-446655440000',
+        sessionId: '6ba7b810-9dad-41d1-80b4-00c04fd430c8',
         role: 'student',
         status: 'completed',
         content: '不得进入错误响应的私密正文',

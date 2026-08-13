@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   agentOperations,
@@ -14,6 +14,7 @@ import {
   conversationMessageCitations,
   conversationMessages,
   conversations,
+  k12ConversationMessageProjections,
   learningEvents,
   lessonSessions,
   masteryStates,
@@ -60,6 +61,7 @@ export type AnonymousDataOwnershipPath =
   | 'message_id -> chat_messages.session_id'
   | 'artifact_record_id -> canvas_artifacts.session_id'
   | 'message_id -> conversation_messages.conversation_id'
+  | 'session_id | conversation_id'
   | 'operation_id -> agent_operations.conversation_id'
   | 'artifact_id -> artifacts.owner_subject_id'
   | 'conversation_id -> conversations.owner_subject_id'
@@ -166,6 +168,36 @@ async function deleteConversationMessages(
         ]),
       )
       .returning({ id: conversationMessages.id })
+  ).length;
+}
+
+async function deleteK12ConversationMessageProjections(
+  context: AnonymousLifecycleDeletionContext,
+): Promise<number> {
+  if (context.sessionIds.length === 0 && context.conversationIds.length === 0) {
+    return 0;
+  }
+  return (
+    await context.transaction
+      .delete(k12ConversationMessageProjections)
+      .where(
+        or(
+          context.sessionIds.length > 0
+            ? inArray(k12ConversationMessageProjections.sessionId, [
+                ...context.sessionIds,
+              ])
+            : undefined,
+          context.conversationIds.length > 0
+            ? inArray(k12ConversationMessageProjections.conversationId, [
+                ...context.conversationIds,
+              ])
+            : undefined,
+        ),
+      )
+      .returning({
+        sourceChatMessageId:
+          k12ConversationMessageProjections.sourceChatMessageId,
+      })
   ).length;
 }
 
@@ -479,6 +511,11 @@ const lifecycleDefinitions = [
     tableName: 'artifacts',
     ownershipPath: 'owner_subject_id',
     deleteRows: deletePlatformArtifacts,
+  },
+  {
+    tableName: 'k12_conversation_message_projections',
+    ownershipPath: 'session_id | conversation_id',
+    deleteRows: deleteK12ConversationMessageProjections,
   },
   {
     tableName: 'conversation_messages',

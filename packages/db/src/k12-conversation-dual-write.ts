@@ -18,14 +18,15 @@
  * - **开关只控制 `begin`**（创建新副本）；`settle` 始终运行，不受开关影响
  * - **设计理由**：已经创建的副本必须跨部署切换继续收敛，避免平台副本永久留在 pending
  *
- * `EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE` 只描述 CA08A 第一阶段：
+ * `EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE` 是 CA08B 唯一读权威配置：
  * - `legacy`（默认）与 `observe` 都保持可见消息和教学运行态从 `chat_messages` 读取；
  * - `observe` 只允许对账/观测，不授予 `conversation_messages` 生产读权威；
- * - `platform` 与其他值必须拒绝，切读只能由后续独立阶段增加新枚举后执行。
+ * - `platform` 只切可见字段，并强制新消息继续建立平台副本；教学运行态仍由 legacy 承载；
+ * - 其他值安全失败且不回显原始配置。回退必须显式设回 `legacy` 并重启。
  *
  * ## 退出条件（R08）
  *
- * `chat_messages` 目前仍是 K12 运行权威，`conversation_messages` 是迁移中的长期平台事实。
+ * `chat_messages` 继续承载 K12 运行权威；可见权威由上述 stage 冻结。
  * 退出方向受 accepted ADR-0013 约束：先回填并对账，再把可见消息消费者切到
  * `conversation_messages`；`chat_messages` 中 lease、取消、heartbeat 等教学运行态在获得
  * 新归属前不得删除。
@@ -38,14 +39,14 @@
  *   2. 对账零差异持续 ≥ 1 个完整发布周期（`auditK12Parity` 全量扫描
  *      `missingInConversation=0` 且 `mismatchedInConversation=0`）；
  *   3. `chat_messages` 的教学运行态字段已有明确长期归属，并完成独立退役批准；
- * - **回退路径**：关闭开关（设 `EDUCANVAS_K12_CONVERSATION_DUAL_WRITE=false`）即可停止新
- *   平台投影创建；已创建的投影 `settle` 仍继续收敛；切读与旧表退役各自需要独立任务
- * - **当前阶段**：read-only with deadline — 开关默认关闭，已有副本继续 settle 收敛
+ * - **回退路径**：设 authority=`legacy`、dual-write=`false` 并重启即可恢复 legacy 可见读；
+ *   已创建的投影 `settle` 仍继续收敛，旧表与引用、lease、cancel、heartbeat 均不删除
+ * - **当前阶段**：受控切读；缺失、漂移或 orphan 任一非零时 platform 读 fail closed
  *
  * ## 数据流
  *
  * ```
- * begin:  chat_messages (INSERT) ──[开关门控]──→ conversation_messages (INSERT)
+ * begin:  chat_messages (INSERT) ──[观察开关或platform权威]──→ conversation_messages (INSERT)
  * settle: chat_messages (UPDATE) ──[始终运行]──→ conversation_messages (UPDATE)
  * ```
  *
@@ -57,7 +58,7 @@ import {
   agentMessagePartSchema,
   type AgentMessagePart,
 } from '@educanvas/agent-core';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseTransaction } from './internal/database-types';
 import {
@@ -69,6 +70,7 @@ import {
   agentOperations,
   chatMessages,
   conversationMessages,
+  k12ConversationMessageProjections,
   lessonSessions,
 } from './schema';
 
@@ -93,17 +95,21 @@ interface K12SourceProjection {
   completedAt: Date | null;
 }
 
+export interface K12ConversationMessageProjectionIdentity {
+  sourceChatMessageId: string;
+  conversationMessageId: string;
+  sessionId: string;
+  conversationId: string;
+}
+
 export const K12_CONVERSATION_AUTHORITY_STAGE_ENV =
   'EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE';
 
-export type K12ConversationAuthorityStage = 'legacy' | 'observe';
+export type K12ConversationAuthorityStage = 'legacy' | 'observe' | 'platform';
 
-export interface K12ConversationAuthorityContract {
-  stage: K12ConversationAuthorityStage;
-  currentVisibleAuthority: 'chat_messages';
+interface K12ConversationAuthorityBase {
   runtimeAuthority: 'chat_messages';
   longTermTarget: 'conversation_messages';
-  productionReadSource: 'chat_messages';
   rollback: Readonly<{
     stage: 'legacy';
     visibleAuthority: 'chat_messages';
@@ -111,6 +117,21 @@ export interface K12ConversationAuthorityContract {
     dualWriteEnabled: false;
   }>;
 }
+
+/** 单一 authority 配置在类型上同时冻结可见读源与可回退能力。 */
+export type K12ConversationAuthorityContract =
+  | (K12ConversationAuthorityBase & {
+      stage: 'legacy' | 'observe';
+      currentVisibleAuthority: 'chat_messages';
+      productionReadSource: 'chat_messages';
+      cutoverSupported: false;
+    })
+  | (K12ConversationAuthorityBase & {
+      stage: 'platform';
+      currentVisibleAuthority: 'conversation_messages';
+      productionReadSource: 'conversation_messages';
+      cutoverSupported: true;
+    });
 
 /** 配置错误不回显原值，避免把误填的Secret带入日志或HTTP错误。 */
 export class K12ConversationAuthorityConfigurationError extends Error {
@@ -138,8 +159,19 @@ export function resolveK12ConversationAuthorityContract(
 ): Readonly<K12ConversationAuthorityContract> {
   const configured = env[K12_CONVERSATION_AUTHORITY_STAGE_ENV];
   const stage = configured === undefined ? 'legacy' : configured;
-  if (stage !== 'legacy' && stage !== 'observe') {
+  if (stage !== 'legacy' && stage !== 'observe' && stage !== 'platform') {
     throw new K12ConversationAuthorityConfigurationError();
+  }
+  if (stage === 'platform') {
+    return Object.freeze({
+      stage,
+      currentVisibleAuthority: 'conversation_messages',
+      runtimeAuthority: 'chat_messages',
+      longTermTarget: 'conversation_messages',
+      productionReadSource: 'conversation_messages',
+      cutoverSupported: true,
+      rollback: STAGE_ONE_ROLLBACK,
+    });
   }
   return Object.freeze({
     stage,
@@ -147,6 +179,7 @@ export function resolveK12ConversationAuthorityContract(
     runtimeAuthority: 'chat_messages',
     longTermTarget: 'conversation_messages',
     productionReadSource: 'chat_messages',
+    cutoverSupported: false,
     rollback: STAGE_ONE_ROLLBACK,
   });
 }
@@ -156,6 +189,16 @@ export function isK12ConversationDualWriteEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.EDUCANVAS_K12_CONVERSATION_DUAL_WRITE === 'true';
+}
+
+/** platform 可见权威必须持续创建副本；legacy/observe 仍服从独立双写观察开关。 */
+export function shouldCreateK12ConversationProjection(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    resolveK12ConversationAuthorityContract(env).stage === 'platform' ||
+    isK12ConversationDualWriteEnabled(env)
+  );
 }
 
 export function mapK12ConversationRole(role: string): 'user' | 'assistant' {
@@ -202,6 +245,65 @@ export function sameK12ConversationParts(
 ): boolean {
   // PostgreSQL jsonb 不保留对象键顺序，Part 对账必须比较结构语义而非序列化文本。
   return isDeepStrictEqual(left, right);
+}
+
+async function findProjectionIdentities(
+  transaction: DatabaseTransaction,
+  expected: K12ConversationMessageProjectionIdentity,
+) {
+  return transaction
+    .select()
+    .from(k12ConversationMessageProjections)
+    .where(
+      or(
+        eq(
+          k12ConversationMessageProjections.sourceChatMessageId,
+          expected.sourceChatMessageId,
+        ),
+        eq(
+          k12ConversationMessageProjections.conversationMessageId,
+          expected.conversationMessageId,
+        ),
+      ),
+    )
+    .limit(2);
+}
+
+function isExactProjectionIdentity(
+  actual: typeof k12ConversationMessageProjections.$inferSelect,
+  expected: K12ConversationMessageProjectionIdentity,
+): boolean {
+  return (
+    actual.sourceChatMessageId === expected.sourceChatMessageId &&
+    actual.conversationMessageId === expected.conversationMessageId &&
+    actual.sessionId === expected.sessionId &&
+    actual.conversationId === expected.conversationId
+  );
+}
+
+/** 插入或验证 provenance 身份；任何稳定键或作用域漂移都只抛稳定 invariant。 */
+export async function insertOrVerifyK12ConversationMessageProjection(
+  transaction: DatabaseTransaction,
+  expected: K12ConversationMessageProjectionIdentity,
+): Promise<void> {
+  const [inserted] = await transaction
+    .insert(k12ConversationMessageProjections)
+    .values(expected)
+    .onConflictDoNothing()
+    .returning({
+      sourceChatMessageId:
+        k12ConversationMessageProjections.sourceChatMessageId,
+    });
+  if (inserted) return;
+
+  const existing = await findProjectionIdentities(transaction, expected);
+  if (
+    existing.length !== 1 ||
+    !existing[0] ||
+    !isExactProjectionIdentity(existing[0], expected)
+  ) {
+    throw new K12ConversationDualWriteInvariantError();
+  }
 }
 
 async function insertOrVerifyBeginProjection(
@@ -307,8 +409,8 @@ export async function dualWriteBeginMessages(
     student.id,
     assistant.id,
   ]);
-  const projections: K12SourceProjection[] = [student, assistant].map(
-    (row) => ({
+  const projections = [student, assistant].map((row) => {
+    const projection: K12SourceProjection = {
       id: deterministicConversationMessageId(row.id),
       conversationId: input.conversationId,
       operationId: input.operationId,
@@ -319,10 +421,23 @@ export async function dualWriteBeginMessages(
       failureCode: row.failureCode,
       createdAt: row.createdAt,
       completedAt: row.completedAt,
-    }),
-  );
-  for (const projection of projections) {
+    };
+    return {
+      projection,
+      identity: {
+        sourceChatMessageId: row.id,
+        conversationMessageId: projection.id,
+        sessionId: input.sessionId,
+        conversationId: input.conversationId,
+      },
+    };
+  });
+  for (const { projection, identity } of projections) {
     await insertOrVerifyBeginProjection(input.transaction, projection);
+    await insertOrVerifyK12ConversationMessageProjection(
+      input.transaction,
+      identity,
+    );
   }
 }
 
@@ -390,6 +505,24 @@ export async function dualWriteSettleAssistant(
     createdAt: source.createdAt,
     completedAt: source.completedAt,
   };
+  const identity: K12ConversationMessageProjectionIdentity = {
+    sourceChatMessageId: source.id,
+    conversationMessageId: projection.id,
+    sessionId: input.sessionId,
+    conversationId: projection.conversationId,
+  };
+  const existingIdentities = await findProjectionIdentities(
+    input.transaction,
+    identity,
+  );
+  if (
+    existingIdentities.length > 0 &&
+    (existingIdentities.length !== 1 ||
+      !existingIdentities[0] ||
+      !isExactProjectionIdentity(existingIdentities[0], identity))
+  ) {
+    throw new K12ConversationDualWriteInvariantError();
+  }
   const [updated] = await input.transaction
     .update(conversationMessages)
     .set({
@@ -410,14 +543,20 @@ export async function dualWriteSettleAssistant(
       ),
     )
     .returning({ id: conversationMessages.id });
-  if (updated) return;
+  if (updated) {
+    await insertOrVerifyK12ConversationMessageProjection(
+      input.transaction,
+      identity,
+    );
+    return;
+  }
 
   const [conflicting] = await input.transaction
     .select({ id: conversationMessages.id })
     .from(conversationMessages)
     .where(eq(conversationMessages.id, projection.id))
     .limit(1);
-  if (conflicting) {
+  if (conflicting || existingIdentities.length > 0) {
     throw new K12ConversationDualWriteInvariantError();
   }
 }

@@ -229,6 +229,7 @@ describeWithDatabase('K12 消息双写', () => {
   beforeEach(async () => {
     await getDatabase().execute(sql`
       truncate table
+        k12_conversation_message_projections,
         conversation_messages,
         model_runs,
         chat_messages,
@@ -605,14 +606,13 @@ describeWithDatabase('K12 消息双写', () => {
       expect(result).toHaveProperty('dualWrittenCount');
       expect(result).toHaveProperty('missingInConversation');
       expect(result).toHaveProperty('mismatchedInConversation');
-      expect(result).toHaveProperty('orphanedConversationMessages', null);
+      expect(result).toHaveProperty('orphanedConversationMessages', 0);
       expect(result).toMatchObject({
         orphanDetection: {
-          status: 'unavailable',
-          count: null,
-          reason: 'k12_projection_provenance_unavailable',
+          status: 'available',
+          count: 0,
         },
-        readCutoverEligible: false,
+        readCutoverEligible: true,
       });
       expect(result).toHaveProperty('nextCursor');
 

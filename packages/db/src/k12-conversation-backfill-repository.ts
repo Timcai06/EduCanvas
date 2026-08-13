@@ -3,6 +3,7 @@ import { getDb } from './client';
 import type { Database, DatabaseTransaction } from './internal/database-types';
 import { isUuid } from './internal/identifiers';
 import {
+  insertOrVerifyK12ConversationMessageProjection,
   mapK12ConversationRole,
   mapK12ConversationStatus,
   projectK12ConversationParts,
@@ -44,6 +45,8 @@ export interface K12ConversationBackfillResult {
 }
 
 interface ExpectedProjection {
+  sourceChatMessageId: string;
+  sessionId: string;
   id: string;
   conversationId: string;
   operationId: string | null;
@@ -123,6 +126,7 @@ async function runPage(
       createdAt: chatMessages.createdAt,
       completedAt: chatMessages.completedAt,
       conversationId: lessonSessions.conversationId,
+      sessionId: chatMessages.sessionId,
       operationId: agentOperations.id,
     })
     .from(chatMessages)
@@ -152,6 +156,8 @@ async function runPage(
       throw new K12ConversationDualWriteInvariantError();
     }
     return {
+      sourceChatMessageId: row.id,
+      sessionId: row.sessionId,
       id: deterministicConversationMessageId(row.id),
       conversationId: row.conversationId,
       operationId: row.operationId,
@@ -193,7 +199,12 @@ async function runPage(
   if (mode === 'apply' && mismatchedBeforeCount === 0 && missing.length > 0) {
     const inserted = await transaction
       .insert(conversationMessages)
-      .values(missing.map((row) => ({ ...row, parts: [...row.parts] })))
+      .values(
+        missing.map(({ sourceChatMessageId, sessionId, ...row }) => ({
+          ...row,
+          parts: [...row.parts],
+        })),
+      )
       .onConflictDoNothing({ target: conversationMessages.id })
       .returning({ id: conversationMessages.id });
     insertedCount = inserted.length;
@@ -202,6 +213,16 @@ async function runPage(
     // the transaction preserves an operator-visible, retryable boundary.
     if (insertedCount !== missing.length) {
       throw new K12ConversationDualWriteInvariantError();
+    }
+  }
+  if (mode === 'apply' && mismatchedBeforeCount === 0) {
+    for (const row of expected) {
+      await insertOrVerifyK12ConversationMessageProjection(transaction, {
+        sourceChatMessageId: row.sourceChatMessageId,
+        conversationMessageId: row.id,
+        sessionId: row.sessionId,
+        conversationId: row.conversationId,
+      });
     }
   }
   const last = pageRows.at(-1);

@@ -720,6 +720,7 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
 - Data migration: none——只创建空的私人布局表，不读取或回填既有资源。
 - Estimated scale: 新表初始 0 行；上界随每位成员摆放的资源数线性增长，生产规模尚未验证。
 - 风险: 低——个人布局是可重建派生状态，失败不影响资源或对话事实。
+
 ## 0056_glorious_tiger_shark.sql
 
 - 状态: active
@@ -729,7 +730,7 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
   structured，pdf/docx 纯文本抽取为 degraded_plain_text；两个 CHECK 把 quality
   与 status/kind 生命周期绑死（ready+text 必为 structured 或 degraded，
   ready+非 text 必为 unavailable）。`turn_context_snapshots.
-  selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
+selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
   selected_asset_version_ids 同序冻结实际使用的表示身份（assetId+versionId+
   representation），null=无派生表示；历史 Turn 以空数组表示未冻结。
 - 锁表: 只加列与约束，不重写行；backfill UPDATE 按 asset_versions 主键
@@ -745,3 +746,25 @@ agent_operations.id`（cascade）；(4) 建立 `assets_space_fk_idx`。
   无新表。
 - 风险: 低——quality 派生自既有 status/kind/mime，不引入新事实；缺外键
   JOIN 匹配的孤儿表示行保持 unavailable。
+
+## 0057_faulty_corsair.sql
+
+- 状态: active（CA08B，2026-08-13）
+- 语义: 新增 `k12_conversation_message_projections` provenance sidecar，以
+  `source_chat_message_id` 主键和 `conversation_message_id` 唯一键冻结 K12
+  legacy 消息到平台消息的一对一映射，并记录 session/conversation 作用域。
+  新 begin 与受信 operator backfill 在同一事务插入或验证映射；settle 只允许
+  已存在的两侧事实继续收敛。
+- 锁表: 仅 CREATE TABLE 与两个普通索引，不改既有表、不扫描或锁定历史消息表。
+- 回滚: 切回 `legacy` 并重启后可删除 sidecar；回滚不删除 `chat_messages`、
+  `conversation_messages`、引用或教学运行态。平台切读期间不得先删 sidecar。
+- N-1: 全新无外键表，旧应用不读取也不写入；部署后需由受信 operator 运行
+  bounded backfill，为既有已验证副本补映射，完成全量 missing/mismatch/orphan
+  零差异证据前不得启用 platform authority。
+- Fresh install: 可重放；表初始为空，新写入由应用事务建立 provenance。
+- Data migration: none——历史映射不能由 DDL 猜测；使用已有确定性 ID 的受控
+  repository backfill，发现 mismatch 或并发部分写时整页回滚。
+- Estimated scale: 每条 K12 可见消息一条窄映射；实际生产规模尚未验证。
+- 风险: 中——刻意不为两侧消息加级联 FK，否则删除一侧会抹掉 orphan/missing
+  审计证据。匿名主体删除闭包显式先删 sidecar；日常一致性由双唯一键、原子写入
+  与 parity/read fail-closed 共同保证。

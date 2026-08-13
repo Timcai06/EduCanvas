@@ -79,9 +79,10 @@ async function prepare(input: {
 }
 
 beforeEach(() => {
-  vi.spyOn(webTeachingPersistence.chat, 'listRecentHistory').mockResolvedValue(
-    [],
-  );
+  vi.spyOn(
+    webTeachingPersistence.history,
+    'listRecentHistory',
+  ).mockResolvedValue([]);
   process.env.EDUCANVAS_DEPLOYMENT_ENV = 'test';
 });
 
