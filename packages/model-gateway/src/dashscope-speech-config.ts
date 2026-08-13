@@ -3,6 +3,7 @@ export interface DashScopeSpeechConfiguration {
   readonly workspaceId: string;
   readonly websocketUrl: string;
   readonly asrModel: string;
+  readonly dictationModel: string;
   readonly ttsModel: string;
   readonly voice: string;
 }
@@ -40,6 +41,8 @@ export function parseDashScopeSpeechConfiguration(
     env.DASHSCOPE_BEIJING_WS_URL?.trim() ||
     `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`;
   const asrModel = env.DASHSCOPE_ASR_MODEL?.trim() || 'paraformer-realtime-v2';
+  const dictationModel =
+    env.DASHSCOPE_DICTATION_MODEL?.trim() || 'qwen3-asr-flash';
   const hasTtsModel = Boolean(env.DASHSCOPE_TTS_MODEL?.trim());
   const hasTtsVoice = Boolean(env.DASHSCOPE_TTS_VOICE?.trim());
   /* Model 与系统音色构成同一 Provider profile；单边遗留变量不能与
@@ -61,7 +64,9 @@ export function parseDashScopeSpeechConfiguration(
       url.password ||
       url.hostname.toLowerCase() !==
         `${workspaceId}.cn-beijing.maas.aliyuncs.com`.toLowerCase() ||
-      ![asrModel, ttsModel, voice].every((value) => SAFE_ALIAS.test(value))
+      ![asrModel, dictationModel, ttsModel, voice].every((value) =>
+        SAFE_ALIAS.test(value),
+      )
     ) {
       return { enabled: false, reason: 'invalid_configuration' };
     }
@@ -75,6 +80,7 @@ export function parseDashScopeSpeechConfiguration(
       workspaceId,
       websocketUrl,
       asrModel,
+      dictationModel,
       ttsModel,
       voice,
     },

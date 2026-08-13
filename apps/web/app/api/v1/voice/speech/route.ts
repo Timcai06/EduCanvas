@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import { readAuthenticatedRequestIdentity } from '@/server/auth/request-identity';
 import { readExperienceMode } from '@/server/experience-mode';
 import {
   isTrustedSameOriginWrite,
@@ -24,10 +24,9 @@ export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request))
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
 
-  const identity = await readAnonymousIdentity();
-  if (!identity || identity.studentId.startsWith('anon:v1:'))
-    return jsonError(401, 'unauthorized', '请先登录后使用语音。');
-  if ((await readExperienceMode()) === null)
+  const identity = await readAuthenticatedRequestIdentity(request);
+  if (!identity) return jsonError(401, 'unauthorized', '请先登录后使用语音。');
+  if (identity.source === 'web' && (await readExperienceMode()) === null)
     return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
 
   let raw: unknown;

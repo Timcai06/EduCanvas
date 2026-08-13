@@ -1,116 +1,162 @@
 import { randomUUID } from 'node:crypto';
+import { GatewayClient, GatewayClientError } from '@educanvas/gateway-client';
+import type {
+  GatewayClientTurnRequest,
+  GatewayOperationEvent,
+} from '@educanvas/gateway-core';
+import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
 
 export interface AssistantProxy {
   turn(input: { text: string }, signal?: AbortSignal): Promise<TurnResult>;
 }
 
-const DEFAULT_TIMEOUT_MS = 20_000;
-const FALLBACK_MESSAGE = '抱歉，暂时无法处理。';
+interface GatewayClientPort {
+  streamTurn(
+    request: GatewayClientTurnRequest,
+    options?: { signal?: AbortSignal },
+  ): AsyncIterable<GatewayOperationEvent>;
+  cancelOperation(operationId: string): Promise<unknown>;
+}
+
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
- * 桌面壳 → 本地 web 的 turn 代理。
- *
- * 关键设计：Node fetch 默认不带 Origin / sec-fetch-site 头，恰好通过后端
- * isTrustedSameOriginWrite 的无 Origin 分支（sec-fetch-site !== 'cross-site'）；
- * 本地部署模式身份回退 local:owner，无需 cookie。
- * 与 electron 解耦（fetch/baseUrl 注入），单测不启动 Electron。
+ * Desktop first-party Client → gateway.v1. The bearer stays in Electron main and
+ * GatewayClient sends it only in Authorization; Renderer receives a stable projection.
  */
 export function createAssistantProxy(options: {
+  getSession(): Promise<StoredDesktopSession | null>;
+  invalidateSession(): Promise<unknown>;
   fetchImpl?: typeof fetch;
-  baseUrl?: string;
   timeoutMs?: number;
+  clientFactory?: (session: StoredDesktopSession) => GatewayClientPort;
 }): AssistantProxy {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const baseUrl = (options.baseUrl ?? 'http://localhost:3000').replace(
-    /\/$/,
-    '',
-  );
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  const parseBody = async (response: Response): Promise<unknown> => {
-    try {
-      return await response.json();
-    } catch {
-      return null;
-    }
-  };
-
-  const httpError = (
-    status: number,
-    body: unknown,
-  ): TurnResult & { ok: false } => {
-    const message =
-      (body as { error?: { message?: string } } | null)?.error?.message ??
-      FALLBACK_MESSAGE;
-    return { ok: false, code: 'http', message };
-  };
 
   return {
     async turn(input, signal) {
-      const userSignal = signal ?? null;
-      const controller = new AbortController();
-      const onUserAbort = () => controller.abort();
-      if (userSignal) {
-        if (userSignal.aborted)
-          return { ok: false, code: 'aborted', message: '已取消。' };
-        userSignal.addEventListener('abort', onUserAbort, { once: true });
+      if (signal?.aborted) {
+        return { ok: false, code: 'aborted', message: '已取消。' };
       }
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const session = await options.getSession();
+      if (!session) {
+        return {
+          ok: false,
+          code: 'unauthenticated',
+          message: '请先登录 EduCanvas。',
+        };
+      }
+      const client = options.clientFactory
+        ? options.clientFactory(session)
+        : new GatewayClient(
+            session.gatewayBaseUrl,
+            session.token,
+            options.fetchImpl,
+          );
+      const streamAbort = new AbortController();
+      let operationId: string | null = null;
+      let userAborted = false;
+      let timedOut = false;
+      let cancelStarted = false;
+
+      const cancelRemoteThenStream = (): void => {
+        if (cancelStarted) return;
+        if (!operationId) return;
+        cancelStarted = true;
+        void client
+          .cancelOperation(operationId)
+          .catch(() => undefined)
+          .finally(() => streamAbort.abort());
+      };
+      const onUserAbort = (): void => {
+        userAborted = true;
+        cancelRemoteThenStream();
+      };
+      signal?.addEventListener('abort', onUserAbort, { once: true });
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        cancelRemoteThenStream();
+      }, timeoutMs);
 
       try {
-        // 竞速保护：超时/取消由代理自身保证生效，不依赖 fetchImpl 对 signal 的支持
-        const abortPromise = new Promise<never>((_resolve, reject) => {
-          controller.signal.addEventListener('abort', () =>
-            reject(new DOMException('aborted', 'AbortError')),
-          );
-        });
-        const response = await Promise.race([
-          fetchImpl(`${baseUrl}/api/v1/assistant/turn`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              clientMessageId: randomUUID(),
-              text: input.text,
-            }),
-            signal: controller.signal,
-          }),
-          abortPromise,
-        ]);
-        const body = await parseBody(response);
-        if (!response.ok) return httpError(response.status, body);
-        const data = body as {
-          action?: string;
-          message?: string;
-          artifactId?: string;
-          panel?: string;
-        };
-        return {
-          ok: true,
-          action: data.action ?? 'unknown',
-          message: data.message ?? '完成',
-          ...(data.artifactId ? { artifactId: data.artifactId } : {}),
-          ...(data.panel ? { panel: data.panel } : {}),
-        };
+        let answer = '';
+        for await (const event of client.streamTurn(
+          {
+            clientMessageId: `desktop:${randomUUID()}`,
+            notebookId: session.notebookId,
+            conversationId: session.conversationId,
+            parts: [{ type: 'text', text: input.text }],
+          },
+          { signal: streamAbort.signal },
+        )) {
+          if (event.type === 'operation.accepted') {
+            operationId = event.operationId;
+            if (userAborted || timedOut) cancelRemoteThenStream();
+          } else if (event.type === 'message.delta') {
+            if (timedOut) {
+              return {
+                ok: false,
+                code: 'timeout',
+                message: '请求超时，请重试。',
+              };
+            }
+            if (userAborted || signal?.aborted) {
+              return { ok: false, code: 'aborted', message: '已取消。' };
+            }
+            answer += event.delta;
+          } else if (event.type === 'operation.failed') {
+            return {
+              ok: false,
+              code: 'http',
+              message: event.retryable
+                ? 'AI 老师暂时失败，请重试。'
+                : 'AI 老师暂时无法完成。',
+            };
+          } else if (event.type === 'operation.cancelled') {
+            return { ok: false, code: 'aborted', message: '已取消。' };
+          } else if (event.type === 'operation.completed') {
+            if (timedOut) {
+              return {
+                ok: false,
+                code: 'timeout',
+                message: '请求超时，请重试。',
+              };
+            }
+            if (userAborted || signal?.aborted) {
+              return { ok: false, code: 'aborted', message: '已取消。' };
+            }
+            return {
+              ok: true,
+              action: 'answered',
+              message: answer.trim() || '完成',
+            };
+          }
+        }
+        return { ok: false, code: 'http', message: '回答流意外结束，请重试。' };
       } catch (error) {
-        if (userSignal?.aborted)
+        if (signal?.aborted || userAborted) {
           return { ok: false, code: 'aborted', message: '已取消。' };
-        if (controller.signal.aborted) {
-          // 超时与用户取消共用 AbortController；用户取消在上面分支已拦截
+        }
+        if (timedOut) {
           return { ok: false, code: 'timeout', message: '请求超时，请重试。' };
         }
-        const cause = (error as { cause?: { code?: string } }).cause;
-        if (cause?.code === 'ECONNREFUSED') {
+        const status =
+          error instanceof GatewayClientError
+            ? error.status
+            : (error as { status?: unknown }).status;
+        if (status === 401) {
+          await options.invalidateSession();
           return {
             ok: false,
-            code: 'backend_offline',
-            message: '本地服务未启动（先 pnpm dev:all）。',
+            code: 'unauthenticated',
+            message: '登录已失效，请重新登录。',
           };
         }
         return { ok: false, code: 'http', message: '连接中断，请重试。' };
       } finally {
         clearTimeout(timeout);
-        if (userSignal) userSignal.removeEventListener('abort', onUserAbort);
+        signal?.removeEventListener('abort', onUserAbort);
       }
     },
   };

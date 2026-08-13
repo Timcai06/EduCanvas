@@ -28,4 +28,14 @@ describe('IPC 请求取消注册表', () => {
     expect(() => registry.begin('')).toThrow(/requestId/);
     expect(() => registry.begin('x'.repeat(129))).toThrow(/requestId/);
   });
+
+  it('按 renderer owner 取消窗口销毁后遗留的请求', () => {
+    const registry = new IpcAbortRegistry();
+    const first = registry.begin('request-1', 7);
+    const second = registry.begin('request-2', 8);
+
+    expect(registry.cancelOwner(7)).toBe(1);
+    expect(first.aborted).toBe(true);
+    expect(second.aborted).toBe(false);
+  });
 });

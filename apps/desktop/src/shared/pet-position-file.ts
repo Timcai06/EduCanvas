@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Rect } from './pet-clamp';
 
@@ -8,5 +8,28 @@ import type { Rect } from './pet-clamp';
  */
 export function savePetPositionFile(posFile: string, bounds: Rect): void {
   mkdirSync(dirname(posFile), { recursive: true });
-  writeFileSync(posFile, JSON.stringify({ x: bounds.x, y: bounds.y }));
+  writeFileSync(
+    posFile,
+    JSON.stringify({ version: 2, x: bounds.x, y: bounds.y }),
+  );
+}
+
+export function loadPetPositionFile(
+  posFile: string,
+): { x: number; y: number } | null {
+  try {
+    const value = JSON.parse(readFileSync(posFile, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    return value.version === 2 &&
+      typeof value.x === 'number' &&
+      Number.isFinite(value.x) &&
+      typeof value.y === 'number' &&
+      Number.isFinite(value.y)
+      ? { x: value.x, y: value.y }
+      : null;
+  } catch {
+    return null;
+  }
 }

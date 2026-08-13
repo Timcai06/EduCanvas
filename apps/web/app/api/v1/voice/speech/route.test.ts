@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   generateSpeech: vi.fn(),
 }));
 
-vi.mock('@/server/identity/anonymous-identity', () => ({
-  readAnonymousIdentity: mocks.readIdentity,
+vi.mock('@/server/auth/request-identity', () => ({
+  readAuthenticatedRequestIdentity: mocks.readIdentity,
 }));
 vi.mock('@/server/experience-mode', () => ({
   readExperienceMode: mocks.readMode,
@@ -42,7 +42,7 @@ describe('POST /api/v1/voice/speech', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.trustedOrigin.mockReturnValue(true);
-    mocks.readIdentity.mockResolvedValue({ token: '', studentId: 'user:1' });
+    mocks.readIdentity.mockResolvedValue({ userId: 'user:1', source: 'web' });
     mocks.readMode.mockResolvedValue('restricted');
     mocks.resolveGateway.mockReturnValue({
       generateSpeech: mocks.generateSpeech,
@@ -65,13 +65,23 @@ describe('POST /api/v1/voice/speech', () => {
     );
   });
 
+  it('桌面 bearer 主体不依赖浏览器的体验模式 Cookie', async () => {
+    mocks.readIdentity.mockResolvedValue({
+      userId: 'user:desktop',
+      source: 'desktop',
+    });
+    mocks.readMode.mockResolvedValue(null);
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.readMode).not.toHaveBeenCalled();
+  });
+
   it('同源、登录、体验模式、文本和 Provider 配置均 fail closed', async () => {
     mocks.trustedOrigin.mockReturnValue(false);
     expect((await POST(request())).status).toBe(403);
     mocks.trustedOrigin.mockReturnValue(true);
     mocks.readIdentity.mockResolvedValue(null);
     expect((await POST(request())).status).toBe(401);
-    mocks.readIdentity.mockResolvedValue({ token: '', studentId: 'user:1' });
+    mocks.readIdentity.mockResolvedValue({ userId: 'user:1', source: 'web' });
     mocks.readMode.mockResolvedValue(null);
     expect((await POST(request())).status).toBe(409);
     mocks.readMode.mockResolvedValue('restricted');

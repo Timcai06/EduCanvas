@@ -11,6 +11,7 @@ const configuration = {
   websocketUrl:
     'wss://ws-test.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
   asrModel: 'paraformer-realtime-v2',
+  dictationModel: 'qwen3-asr-flash',
   ttsModel: 'qwen-audio-3.0-tts-flash',
   voice: 'longanhuan_v3.6',
 };

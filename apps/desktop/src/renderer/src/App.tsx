@@ -1,343 +1,383 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
-import { parseManifest } from '../../shared/pet-manifest';
-import type { PetManifest } from '../../shared/pet-manifest';
-import type { PetState } from '../../shared/pet-state';
-import { PetSprite } from './pet-sprite';
-import { playSpeech } from './speech-player';
+import { useEffect, useRef, useState } from 'react';
+import { createPetSubmitGate, submitPetText } from './pet-mvp-text';
+import {
+  petTransientResetDelay,
+  petUiStateForAuthTransition,
+  petUiStateForFailureCode,
+  petUiStateForTurnAction,
+  petVisualForState,
+  type PetUiState,
+} from './pet-visual-state';
+import { PET_VISUALS, PetDesktopShell, type PetAppProps } from './pet-view';
+import { PetChatPanel } from './pet-chat-panel';
 import { recordVoice } from './voice-recorder';
+import { playSpeech } from './speech-player';
 import { runVoiceSession } from './voice-session';
-import type { VoiceSessionPhase, VoiceSessionSnapshot } from './voice-session';
-import sheetUrl from '../../../assets/pet/sprite-sheet.png';
-import manifestRaw from '../../../assets/pet/manifest.json';
+import {
+  isBusyState,
+  latestAssistantReply,
+  voiceSnapshotState,
+} from './voice-view-state';
+import type { DesktopAuthStatus } from '../../shared/desktop-auth';
+import type {
+  DesktopChatHistorySnapshot,
+  DesktopChatSource,
+} from '../../shared/chat-history';
 import './styles.css';
-
-interface DragState {
-  sx: number;
-  sy: number;
-  ox: number;
-  oy: number;
-  dragging: boolean;
-}
-
-type UiPhase = 'idle' | VoiceSessionPhase;
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-const ACTIVE_PHASES = new Set<UiPhase>([
-  'starting',
-  'listening',
-  'transcribing',
-  'thinking',
-  'speaking',
-]);
-
-function petStateFor(phase: UiPhase): PetState {
-  if (phase === 'starting' || phase === 'listening') return 'listen';
-  if (phase === 'transcribing' || phase === 'thinking') return 'think';
-  if (phase === 'speaking') return 'speak';
-  if (phase === 'success') return 'success';
-  if (phase === 'error') return 'error';
-  return 'idle';
-}
-
-function phaseCopy(phase: UiPhase): { eyebrow: string; title: string } {
-  switch (phase) {
-    case 'starting':
-      return { eyebrow: '语音助手', title: '正在准备麦克风…' };
-    case 'listening':
-      return { eyebrow: '正在聆听', title: '请说，我在听' };
-    case 'transcribing':
-      return { eyebrow: '正在识别', title: '让我听清楚一点…' };
-    case 'thinking':
-      return { eyebrow: '正在思考', title: '正在处理你的请求…' };
-    case 'speaking':
-      return { eyebrow: '回复', title: '这是我的回答' };
-    case 'success':
-      return { eyebrow: '已完成', title: '处理好了' };
-    case 'error':
-      return { eyebrow: '没有完成', title: '再试一次吧' };
-    default:
-      return { eyebrow: 'EduCanvas', title: '点击开始说话' };
-  }
-}
-
-export default function App() {
-  const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>({
-    phase: 'cancelled',
+export default function App({
+  initialChatCollapsed = false,
+  view = 'pet',
+}: PetAppProps = {}) {
+  const expandedView = view === 'chat';
+  const [text, setText] = useState('');
+  const [chatCollapsed, setChatCollapsed] = useState(initialChatCollapsed);
+  const [state, setState] = useState<PetUiState>('ready');
+  const [visualState, setVisualState] = useState<PetUiState>('greeting');
+  const [message, setMessage] = useState(
+    '你好，我在这里。输入一句话和我聊聊吧。',
+  );
+  const [history, setHistory] = useState<DesktopChatHistorySnapshot>({
+    revision: 0,
+    messages: [],
   });
-  const phase: UiPhase =
-    snapshot.phase === 'cancelled' ? 'idle' : snapshot.phase;
-  const [reduced, setReduced] = useState(false);
-  const [walking, setWalking] = useState(false);
-  const [manifest, setManifest] = useState<PetManifest | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const sessionRef = useRef<AbortController | null>(null);
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const walkingRef = useRef(false);
-  const pet = window.desktopPet;
-  const copy = useMemo(() => phaseCopy(phase), [phase]);
-  const expanded = phase !== 'idle';
-  const active = ACTIVE_PHASES.has(phase);
+  const requestIdRef = useRef<string | null>(null);
+  const operationLeaseRef = useRef<string | null>(null);
+  const operationControllerRef = useRef<AbortController | null>(null);
+  const submitGateRef = useRef(createPetSubmitGate());
+  const authStateRef = useRef<DesktopAuthStatus['state'] | null>(null);
+  const historyEndRef = useRef<HTMLDivElement | null>(null);
+  const petVisual = petVisualForState(visualState);
+  const petAsset = PET_VISUALS[petVisual];
+  const lastAssistantReply = latestAssistantReply(history);
+  const busy = isBusyState(state);
 
-  useEffect(() => {
-    walkingRef.current = walking;
-  }, [walking]);
-
-  useEffect(() => {
-    try {
-      setManifest(parseManifest(manifestRaw));
-    } catch (error) {
-      console.error('manifest 无效', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = (): void => setReduced(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, []);
-
-  // forward:true 让透明区域穿透后仍可收到 mousemove，从而在指针回到交互区时恢复命中。
-  useEffect(() => {
-    let passthrough = false;
-    const updateHitTesting = (event: MouseEvent): void => {
-      const target = document.elementFromPoint(event.clientX, event.clientY);
-      const next = !target?.closest('.pet-button, .voice-card');
-      if (next === passthrough) return;
-      passthrough = next;
-      pet?.setMousePassthrough(next);
-    };
-    window.addEventListener('mousemove', updateHitTesting);
-    return () => {
-      window.removeEventListener('mousemove', updateHitTesting);
-      pet?.setMousePassthrough(false);
-    };
-  }, [pet]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !manifest) return;
-    const sprite = new PetSprite(canvas, manifest, sheetUrl);
-    const state = petStateFor(phase);
-    const renderState = walking && state === 'idle' ? 'walk' : state;
-    let raf = 0;
-    const tick = (time: number): void => {
-      sprite.draw(renderState, time);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [manifest, phase, walking]);
-
-  const collapse = (): void => {
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-    resetTimerRef.current = null;
-    setSnapshot({ phase: 'cancelled' });
-    void pet?.setExpanded(false);
+  const publishVisual = (next: PetUiState): void => {
+    setVisualState(next);
+    window.desktopPet.setVisual(next);
   };
-
-  const startSession = async (): Promise<void> => {
-    sessionRef.current?.abort();
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-    resetTimerRef.current = null;
-    setWalking(false);
-    const controller = new AbortController();
-    sessionRef.current = controller;
-    setSnapshot({ phase: 'starting' });
-    try {
-      await pet?.setExpanded(true);
-    } catch {
-      // 窗口 resize 失败不阻断语音能力，Renderer 仍可呈现当前内容区。
-    }
-    if (sessionRef.current !== controller) return;
-    const result = await runVoiceSession(
-      {
-        record: (options) => recordVoice(options),
-        transcribe: (input, requestId) =>
-          window.desktopVoice.transcribe(input, requestId),
-        turn: (text, requestId) =>
-          window.desktopAssistant.turn(text, requestId),
-        synthesize: (text, requestId) =>
-          window.desktopVoice.synthesize(text, requestId),
-        play: (bytes, signal) => playSpeech(bytes, { signal }),
-        cancelRemote: (requestId) => {
-          window.desktopVoice.cancel(requestId);
-          window.desktopAssistant.cancel(requestId);
-        },
-        createRequestId: () => crypto.randomUUID(),
-      },
-      { signal: controller.signal, onChange: setSnapshot },
+  const appendHistory = async (
+    role: 'user' | 'assistant' | 'system',
+    content: string,
+    source: DesktopChatSource,
+  ): Promise<void> => {
+    const next = await window.desktopChat.append({ role, content, source });
+    setHistory((current) =>
+      next.revision >= current.revision ? next : current,
     );
-    if (sessionRef.current !== controller) return;
-    sessionRef.current = null;
-    if (result.outcome === 'cancelled') {
-      collapse();
-    } else if (result.outcome === 'success') {
-      resetTimerRef.current = setTimeout(collapse, 5000);
-    }
   };
 
-  const activatePet = (): void => {
-    if (active) {
-      sessionRef.current?.abort();
-      return;
-    }
-    void startSession();
-  };
+  useEffect(() => {
+    const accept = (next: DesktopChatHistorySnapshot): void =>
+      setHistory((current) =>
+        next.revision >= current.revision ? next : current,
+      );
+    const unsubscribe = window.desktopChat.onHistory(accept);
+    void window.desktopChat.getHistory().then(accept);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.desktopPet.onVisual((next) => {
+      setVisualState(next);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(
     () => () => {
-      sessionRef.current?.abort();
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      operationControllerRef.current?.abort();
+      const requestId = requestIdRef.current;
+      if (requestId) {
+        window.desktopAssistant.cancel(requestId);
+        window.desktopVoice.cancel(requestId);
+      }
+      const lease = operationLeaseRef.current;
+      if (lease) window.desktopOperation.release(lease);
     },
     [],
   );
 
-  const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    dragRef.current = {
-      sx: event.screenX,
-      sy: event.screenY,
-      ox: event.clientX,
-      oy: event.clientY,
-      dragging: false,
+  useEffect(() => {
+    const unsubscribe = window.desktopAuth.onStatus((status) => {
+      const previousAuthState = authStateRef.current;
+      authStateRef.current = status.state;
+      if (status.state === 'signed_in') {
+        setState('ready');
+        const authVisual = petUiStateForAuthTransition(
+          previousAuthState,
+          status.state,
+        );
+        if (authVisual) publishVisual(authVisual);
+        setMessage('已经连接 EduCanvas，可以开始聊天。');
+      } else if (status.state === 'error') {
+        setState('auth-failed');
+        publishVisual('auth-failed');
+        setMessage(status.message);
+      }
+    });
+    return () => {
+      unsubscribe();
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    if (
-      !drag.dragging &&
-      Math.hypot(event.screenX - drag.sx, event.screenY - drag.sy) > 6
-    ) {
-      drag.dragging = true;
-      setWalking(false);
-    }
-    if (drag.dragging && pet) {
-      void pet.dragMove({
-        screenX: event.screenX,
-        screenY: event.screenY,
-        offsetX: drag.ox,
-        offsetY: drag.oy,
-      });
-    }
-  };
-  const onPointerUp = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    if (drag && !drag.dragging) activatePet();
-  };
+  }, []);
 
   useEffect(() => {
-    if (reduced || phase !== 'idle' || walking || !pet) return;
-    const delay = 15000 + Math.random() * 15000;
-    const timer = setTimeout(async () => {
-      walkingRef.current = true;
-      setWalking(true);
-      try {
-        for (let index = 0; index < 3; index++) {
-          if (!walkingRef.current) return;
-          const direction = Math.random() > 0.5 ? 1 : -1;
-          const before = (await pet.getBounds()).x;
-          const after = (await pet.moveBy(direction * 20, 0)).x;
-          if (after === before) return;
-          await sleep(250);
-        }
-      } finally {
-        setWalking(false);
-      }
+    const delay = petTransientResetDelay(visualState);
+    if (delay === null) return;
+    const timeout = setTimeout(() => {
+      setVisualState((current) =>
+        current === visualState ? 'ready' : current,
+      );
     }, delay);
-    return () => clearTimeout(timer);
-  }, [phase, reduced, walking, pet]);
+    return () => clearTimeout(timeout);
+  }, [visualState]);
+
+  useEffect(() => {
+    if (!expandedView) window.desktopPet.setChatExpanded(!chatCollapsed);
+  }, [chatCollapsed, expandedView]);
+
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [history.messages.length]);
+
+  const requireAuth = async (): Promise<boolean> => {
+    const auth = await window.desktopAuth.getStatus();
+    if (auth.state === 'signed_in') return true;
+    setState('authorizing');
+    publishVisual('authorizing');
+    setMessage('请在浏览器完成登录与授权，然后回到这里继续。');
+    if (auth.state !== 'authorizing') await window.desktopAuth.signIn();
+    return false;
+  };
+
+  const acquireOperation = async (): Promise<string | null> => {
+    const result = await window.desktopOperation.acquire();
+    if (!result.ok) {
+      setMessage(result.message);
+      return null;
+    }
+    operationLeaseRef.current = result.token;
+    return result.token;
+  };
+
+  const releaseOperation = (token: string | null): void => {
+    if (!token) return;
+    window.desktopOperation.release(token);
+    if (operationLeaseRef.current === token) operationLeaseRef.current = null;
+  };
+
+  const submit = async (): Promise<void> => {
+    const submitToken = submitGateRef.current.enter();
+    if (!submitToken) return;
+    let leaseToken: string | null = null;
+    try {
+      const prompt = text.trim();
+      if (!prompt) {
+        setState('confused');
+        publishVisual('confused');
+        setMessage('请输入内容。');
+        return;
+      }
+      if (!(await requireAuth())) return;
+      leaseToken = await acquireOperation();
+      if (!leaseToken) return;
+
+      const requestId = crypto.randomUUID();
+      requestIdRef.current = requestId;
+      setState('sending');
+      publishVisual('sending');
+      setMessage('EduCanvas 正在回复…');
+      await appendHistory('user', prompt, 'text');
+      const result = await submitPetText(
+        prompt,
+        requestId,
+        window.desktopAssistant.turn,
+      );
+      if (requestIdRef.current !== requestId) return;
+      requestIdRef.current = null;
+      if (result.ok) {
+        setText('');
+        setState('ready');
+        publishVisual(petUiStateForTurnAction(result.action));
+        setMessage(result.reply);
+      } else {
+        const failureState = petUiStateForFailureCode(result.code);
+        setState(failureState);
+        publishVisual(failureState);
+        setMessage(result.error);
+      }
+    } finally {
+      releaseOperation(leaseToken);
+      submitGateRef.current.leave(submitToken);
+    }
+  };
+
+  const startVoice = async (): Promise<void> => {
+    const submitToken = submitGateRef.current.enter();
+    if (!submitToken) return;
+    if (!(await requireAuth())) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    const leaseToken = await acquireOperation();
+    if (!leaseToken) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    const controller = new AbortController();
+    operationControllerRef.current = controller;
+    let transcriptAdded = false;
+    let terminalState: PetUiState = 'ready';
+    try {
+      const result = await runVoiceSession(
+        {
+          record: recordVoice,
+          transcribe: window.desktopVoice.transcribe,
+          turn: (prompt, requestId) =>
+            window.desktopAssistant.turn(prompt, requestId, 'voice'),
+          synthesize: window.desktopVoice.synthesize,
+          play: (bytes, signal) => playSpeech(bytes, { signal }),
+          cancelRemote: (requestId) => {
+            window.desktopVoice.cancel(requestId);
+            window.desktopAssistant.cancel(requestId);
+          },
+          createRequestId: () => crypto.randomUUID(),
+        },
+        {
+          signal: controller.signal,
+          onChange(snapshot) {
+            const nextState = voiceSnapshotState(snapshot);
+            if (snapshot.phase === 'error') terminalState = nextState;
+            setState(nextState);
+            publishVisual(nextState);
+            if (snapshot.transcript && !transcriptAdded) {
+              transcriptAdded = true;
+              void appendHistory('user', snapshot.transcript, 'voice');
+            }
+            if (snapshot.error) setMessage(snapshot.error);
+            else if (snapshot.notice) setMessage(snapshot.notice);
+            else if (snapshot.phase === 'listening')
+              setMessage('正在听你说话…');
+            else if (snapshot.phase === 'transcribing')
+              setMessage('正在识别语音…');
+            else if (snapshot.phase === 'thinking')
+              setMessage('EduCanvas 正在思考…');
+            else if (snapshot.phase === 'speaking')
+              setMessage(snapshot.reply ?? '正在播报回答…');
+          },
+        },
+      );
+      if (result.outcome === 'success') setMessage(result.reply);
+      else if (result.outcome === 'cancelled')
+        setMessage('已停止。你可以继续输入。');
+    } finally {
+      if (operationControllerRef.current === controller)
+        operationControllerRef.current = null;
+      setState(terminalState);
+      publishVisual(terminalState);
+      releaseOperation(leaseToken);
+      submitGateRef.current.leave(submitToken);
+    }
+  };
+
+  const speakLatest = async (): Promise<void> => {
+    if (!lastAssistantReply) return;
+    const submitToken = submitGateRef.current.enter();
+    if (!submitToken) return;
+    if (!(await requireAuth())) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    const leaseToken = await acquireOperation();
+    if (!leaseToken) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    const controller = new AbortController();
+    operationControllerRef.current = controller;
+    const requestId = crypto.randomUUID();
+    requestIdRef.current = requestId;
+    let terminalState: PetUiState = 'ready';
+    setState('speaking');
+    publishVisual('speaking');
+    setMessage(lastAssistantReply);
+    try {
+      const speech = await window.desktopVoice.synthesize(
+        lastAssistantReply,
+        requestId,
+      );
+      requestIdRef.current = null;
+      if (!speech.ok) {
+        if (speech.code === 'aborted' || controller.signal.aborted) return;
+        const failureState =
+          speech.code === 'unauthenticated' ? 'auth-failed' : 'backend-failed';
+        terminalState = failureState;
+        setState(failureState);
+        publishVisual(failureState);
+        setMessage(speech.message);
+        return;
+      }
+      const playback = await playSpeech(speech.bytes, {
+        signal: controller.signal,
+      });
+      if (playback === 'failed') setMessage('语音播报失败，文字回复仍可查看。');
+    } finally {
+      if (operationControllerRef.current === controller)
+        operationControllerRef.current = null;
+      setState(terminalState);
+      publishVisual(terminalState);
+      releaseOperation(leaseToken);
+      submitGateRef.current.leave(submitToken);
+    }
+  };
+
+  const cancel = (): void => {
+    operationControllerRef.current?.abort();
+    operationControllerRef.current = null;
+    const requestId = requestIdRef.current;
+    if (requestId) {
+      window.desktopAssistant.cancel(requestId);
+      window.desktopVoice.cancel(requestId);
+    }
+    submitGateRef.current.cancel();
+    requestIdRef.current = null;
+    setState('ready');
+    publishVisual('ready');
+    setMessage('已停止。你可以继续输入。');
+  };
+
+  const chatPanel = (
+    <PetChatPanel
+      expandedView={expandedView}
+      state={state}
+      message={message}
+      history={history}
+      historyEndRef={historyEndRef}
+      text={text}
+      busy={busy}
+      lastAssistantReply={lastAssistantReply}
+      setText={setText}
+      collapse={() => setChatCollapsed(true)}
+      submit={submit}
+      startVoice={startVoice}
+      speakLatest={speakLatest}
+      cancel={cancel}
+    />
+  );
+
+  if (expandedView)
+    return <main className="expanded-chat-shell">{chatPanel}</main>;
 
   return (
-    <main className={`pet-shell${expanded ? ' is-expanded' : ''}`}>
-      {expanded ? (
-        <section
-          className={`voice-card phase-${phase}`}
-          role={phase === 'error' ? 'alert' : 'status'}
-          aria-live={phase === 'error' ? 'assertive' : 'polite'}
-        >
-          <div className="voice-card__header">
-            <span className="voice-card__eyebrow">{copy.eyebrow}</span>
-            {phase === 'listening' ? (
-              <span className="level-bars" aria-hidden="true">
-                {[0.25, 0.45, 0.7, 0.45, 0.25].map((weight, index) => (
-                  <i
-                    key={weight + index}
-                    style={{
-                      transform: `scaleY(${Math.max(
-                        0.2,
-                        Math.min(1, (snapshot.level ?? 0) * 6 * weight),
-                      )})`,
-                    }}
-                  />
-                ))}
-              </span>
-            ) : null}
-          </div>
-          <h1>{copy.title}</h1>
-          {snapshot.transcript && !snapshot.reply ? (
-            <p className="voice-card__transcript">“{snapshot.transcript}”</p>
-          ) : null}
-          {snapshot.reply ? (
-            <p className="voice-card__reply">{snapshot.reply}</p>
-          ) : null}
-          {snapshot.error ? (
-            <p className="voice-card__error">{snapshot.error}</p>
-          ) : null}
-          {snapshot.notice ? (
-            <p className="voice-card__notice">{snapshot.notice}</p>
-          ) : null}
-          <div className="voice-card__actions">
-            {phase === 'error' ? (
-              <button
-                type="button"
-                className="action-primary"
-                onClick={() => void startSession()}
-              >
-                重试
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="action-quiet"
-              onClick={() =>
-                active ? sessionRef.current?.abort() : collapse()
-              }
-            >
-              {active ? '停止' : '关闭'}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      <button
-        type="button"
-        className="pet-button"
-        aria-label={active ? '停止语音助手' : '开始语音助手'}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            activatePet();
-          }
-        }}
-      >
-        <canvas ref={canvasRef} width={128} height={128} aria-hidden="true" />
-      </button>
-    </main>
+    <PetDesktopShell
+      chatCollapsed={chatCollapsed}
+      chatPanel={chatPanel}
+      petVisual={petVisual}
+      petAsset={petAsset}
+      expandChat={() => setChatCollapsed(false)}
+    />
   );
 }

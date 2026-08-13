@@ -41,4 +41,43 @@ describe('resolveSpeechGateway', () => {
       ),
     ).toBeNull();
   });
+
+  it('桌宠非流式播报复用已配置的 DashScope 语音账户', () => {
+    const gateway = resolveSpeechGateway({
+      NODE_ENV: 'test',
+      DASHSCOPE_API_KEY: 'd'.repeat(32),
+      DASHSCOPE_WORKSPACE_ID: 'workspace-test',
+    });
+
+    expect(gateway?.constructor.name).toBe('DashScopeSpeechModelGateway');
+  });
+
+  it('显式 capability override 优先于 DashScope 默认桌宠语音', () => {
+    const gateway = resolveSpeechGateway(
+      configured({
+        MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+        MODEL_GATEWAY_SPEECH_BASE_URL: 'https://speech.example.test/v1',
+        MODEL_GATEWAY_SPEECH_API_KEY: 'speech-fixture-key',
+        DASHSCOPE_API_KEY: 'd'.repeat(32),
+        DASHSCOPE_WORKSPACE_ID: 'workspace-test',
+      }),
+    );
+
+    expect(gateway?.constructor.name).toBe(
+      'OpenAICompatibleSpeechModelGateway',
+    );
+  });
+
+  it('非法显式 capability override 不会静默回退 DashScope', () => {
+    expect(
+      resolveSpeechGateway({
+        ...configured(),
+        MODEL_GATEWAY_SPEECH_PROVIDER: 'openai-compatible',
+        MODEL_GATEWAY_SPEECH_BASE_URL: undefined,
+        MODEL_GATEWAY_SPEECH_API_KEY: undefined,
+        DASHSCOPE_API_KEY: 'd'.repeat(32),
+        DASHSCOPE_WORKSPACE_ID: 'workspace-test',
+      }),
+    ).toBeNull();
+  });
 });

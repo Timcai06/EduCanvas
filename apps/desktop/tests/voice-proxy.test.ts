@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { createVoiceProxy } from '../src/main/voice-proxy';
 
+const desktopSession = {
+  token: `ecs1_${'t'.repeat(43)}`,
+  expiresAt: '2026-09-10T08:00:00.000Z',
+  webBaseUrl: 'https://learn.educanvas.example',
+  gatewayBaseUrl: 'https://gateway.educanvas.example',
+  userId: 'user:one',
+  notebookId: 'notebook:one',
+  conversationId: 'conversation:one',
+};
+const authenticated = {
+  getSession: async () => desktopSession,
+  invalidateSession: async () => undefined,
+};
+
 interface FetchCall {
   url: string;
   headers: Headers;
@@ -38,15 +52,20 @@ describe('voice-proxy', () => {
         }),
     );
     const proxy = createVoiceProxy({
+      ...authenticated,
       fetchImpl: impl,
-      baseUrl: 'http://127.0.0.1:3101/',
     });
 
     await expect(
       proxy.transcribe({ bytes, mimeType: 'audio/webm' }),
     ).resolves.toEqual({ ok: true, text: '帮我复习分数' });
-    expect(calls[0]!.url).toBe('http://127.0.0.1:3101/api/v1/voice/dictation');
+    expect(calls[0]!.url).toBe(
+      'https://learn.educanvas.example/api/v1/voice/dictation',
+    );
     expect(calls[0]!.headers.get('content-type')).toBe('audio/webm');
+    expect(calls[0]!.headers.get('authorization')).toBe(
+      `Bearer ${desktopSession.token}`,
+    );
     expect(new Uint8Array(calls[0]!.body as ArrayBuffer)).toEqual(bytes);
     expect(calls[0]!.headers.get('origin')).toBeNull();
   });
@@ -59,7 +78,7 @@ describe('voice-proxy', () => {
           headers: { 'content-type': 'audio/mpeg', 'x-secret': 'provider' },
         }),
     );
-    const proxy = createVoiceProxy({ fetchImpl: impl });
+    const proxy = createVoiceProxy({ ...authenticated, fetchImpl: impl });
 
     await expect(proxy.synthesize({ text: '答案是四。' })).resolves.toEqual({
       ok: true,
@@ -78,7 +97,7 @@ describe('voice-proxy', () => {
           { status: 409, headers: { 'content-type': 'application/json' } },
         ),
     );
-    const proxy = createVoiceProxy({ fetchImpl: impl });
+    const proxy = createVoiceProxy({ ...authenticated, fetchImpl: impl });
 
     await expect(proxy.synthesize({ text: '你好' })).resolves.toEqual({
       ok: false,
@@ -93,13 +112,14 @@ describe('voice-proxy', () => {
       if (signal) signals.push(signal);
       return new Promise(() => {});
     });
-    const proxy = createVoiceProxy({ fetchImpl: impl });
+    const proxy = createVoiceProxy({ ...authenticated, fetchImpl: impl });
     const controller = new AbortController();
 
     const pending = proxy.transcribe(
       { bytes: Uint8Array.from([1]), mimeType: 'audio/webm' },
       controller.signal,
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
     controller.abort();
 
     await expect(pending).resolves.toMatchObject({
@@ -112,6 +132,7 @@ describe('voice-proxy', () => {
   it('代理超时与本地服务离线使用不同稳定错误', async () => {
     const timeoutFetch = fakeFetch(() => new Promise(() => {}));
     const timed = createVoiceProxy({
+      ...authenticated,
       fetchImpl: timeoutFetch.impl,
       timeoutMs: 20,
     });
@@ -125,7 +146,10 @@ describe('voice-proxy', () => {
         cause: { code: 'ECONNREFUSED' },
       });
     });
-    const offline = createVoiceProxy({ fetchImpl: offlineFetch.impl });
+    const offline = createVoiceProxy({
+      ...authenticated,
+      fetchImpl: offlineFetch.impl,
+    });
     await expect(offline.synthesize({ text: '你好' })).resolves.toMatchObject({
       ok: false,
       code: 'backend_offline',
@@ -134,6 +158,7 @@ describe('voice-proxy', () => {
 
   it('拒绝空 ASR 文本和伪造的音频响应', async () => {
     const emptyText = createVoiceProxy({
+      ...authenticated,
       fetchImpl: fakeFetch(
         () => new Response(JSON.stringify({ text: '  ' }), { status: 200 }),
       ).impl,
@@ -146,6 +171,7 @@ describe('voice-proxy', () => {
     ).resolves.toMatchObject({ ok: false, code: 'invalid_response' });
 
     const wrongAudio = createVoiceProxy({
+      ...authenticated,
       fetchImpl: fakeFetch(
         () =>
           new Response(Uint8Array.from([1]).buffer, {
@@ -159,5 +185,49 @@ describe('voice-proxy', () => {
       ok: false,
       code: 'invalid_response',
     });
+  });
+
+  it('在读取 chunked TTS 响应时立即拒绝超过 20 MiB 的内容', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(20 * 1024 * 1024));
+        controller.enqueue(Uint8Array.of(1));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const proxy = createVoiceProxy({
+      ...authenticated,
+      fetchImpl: fakeFetch(
+        () =>
+          new Response(body, {
+            headers: { 'content-type': 'audio/mpeg' },
+          }),
+      ).impl,
+    });
+
+    await expect(
+      proxy.synthesize({ text: '很长的回答' }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'invalid_response',
+    });
+    expect(cancelled).toBe(true);
+  });
+
+  it('没有桌面 session 时不发出语音请求', async () => {
+    const { impl, calls } = fakeFetch(() => new Response());
+    const proxy = createVoiceProxy({
+      getSession: async () => null,
+      invalidateSession: async () => undefined,
+      fetchImpl: impl,
+    });
+    await expect(proxy.synthesize({ text: '你好' })).resolves.toMatchObject({
+      ok: false,
+      code: 'unauthenticated',
+    });
+    expect(calls).toHaveLength(0);
   });
 });

@@ -1,4 +1,15 @@
-import { app, ipcMain, session } from 'electron';
+import { promises as fileSystem } from 'node:fs';
+import { join, resolve } from 'node:path';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  safeStorage,
+  screen,
+  session,
+  shell,
+} from 'electron';
+import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
@@ -6,28 +17,227 @@ import { createAssistantProxy } from './assistant-proxy';
 import { createVoiceProxy } from './voice-proxy';
 import { isAllowedVoicePermission } from './voice-permission';
 import { IpcAbortRegistry } from './ipc-abort-registry';
-import type { DragPoint } from '../shared/pet-drag';
+import { createDesktopSessionStore } from './desktop-session-store';
+import {
+  createDesktopAuthCoordinator,
+  type DesktopAuthCoordinator,
+} from './desktop-auth-service';
+import type { DesktopAuthStatus } from '../shared/desktop-auth';
+import { findDesktopDeepLink } from './native-auth';
 import type { VoiceAudioInput } from '../shared/voice-result';
+import { createPetMouseTracker } from './pet-mouse-tracker';
+import { createExpandedChatWindow } from './chat-window';
+import { createChatHistoryStore } from './chat-history-store';
+import type { DesktopChatMessageInput } from '../shared/chat-history';
+import { isPetVisualSignal } from '../shared/pet-visual-signal';
+import { createOperationLease } from './operation-lease';
 
-// 仓库本地 Web 约定端口 3101（tooling/local-orchestrator-config.mjs 默认值）。
-// 非标准端口部署可用 EDUCANVAS_DESKTOP_API_BASE 覆盖。
-const BASE_URL =
-  process.env['EDUCANVAS_DESKTOP_API_BASE'] ?? 'http://127.0.0.1:3101';
+const WEB_BASE_URL =
+  process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
+  process.env['EDUCANVAS_DESKTOP_API_BASE'] ??
+  'http://127.0.0.1:3101';
+const GATEWAY_BASE_URL =
+  process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
 
-// 单实例锁：二次启动聚焦已有窗口而非再开一个
+// Electron deep-link registration and platform callbacks follow the official pattern:
+// https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
+if (process.defaultApp && process.argv[1]) {
+  app.setAsDefaultProtocolClient(gatewayDesktopProtocol, process.execPath, [
+    resolve(process.argv[1]),
+  ]);
+} else {
+  app.setAsDefaultProtocolClient(gatewayDesktopProtocol);
+}
+
+let authCoordinator: DesktopAuthCoordinator | null = null;
+let queuedDeepLink: string | null = null;
+let petController: PetWindowController | null = null;
+let expandedChatWindow: BrowserWindow | null = null;
+let petChatExpanded = true;
+
+function focusPet(): void {
+  if (!petController || petController.win.isDestroyed()) return;
+  petController.win.show();
+  petController.win.focus();
+}
+
+function dispatchDeepLink(raw: string): void {
+  if (!authCoordinator) {
+    queuedDeepLink = raw;
+    return;
+  }
+  void authCoordinator.handleDeepLink(raw).finally(focusPet);
+}
+
+// macOS delivers both cold and warm custom-scheme launches through open-url.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  dispatchDeepLink(url);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  const proxy = createAssistantProxy({ baseUrl: BASE_URL });
-  const voiceProxy = createVoiceProxy({ baseUrl: BASE_URL });
+  const authAccess = {
+    getSession: () => authCoordinator?.getSession() ?? Promise.resolve(null),
+    invalidateSession: () =>
+      authCoordinator?.invalidateSession() ??
+      Promise.resolve({ state: 'signed_out' as const }),
+  };
+  const proxy = createAssistantProxy(authAccess);
+  const voiceProxy = createVoiceProxy(authAccess);
   const abortRegistry = new IpcAbortRegistry();
+  const chatHistory = createChatHistoryStore();
+  const operationLease = createOperationLease();
+  const petMouseTracker = createPetMouseTracker<ReturnType<typeof setInterval>>(
+    {
+      readCursor: () => screen.getCursorScreenPoint(),
+      readWindowBounds: () => petController!.win.getBounds(),
+      isChatExpanded: () => petChatExpanded,
+      setMousePassthrough: (passthrough) =>
+        petController!.win.setIgnoreMouseEvents(passthrough),
+      schedule: (callback) => setInterval(callback, 16),
+      cancelSchedule: (handle) => clearInterval(handle),
+    },
+  );
 
+  const isPetSender = (senderId: number): boolean =>
+    petController?.win.isDestroyed() === false &&
+    petController.win.webContents.id === senderId;
+  const isExpandedChatSender = (senderId: number): boolean =>
+    expandedChatWindow?.isDestroyed() === false &&
+    expandedChatWindow.webContents.id === senderId;
+  const isDesktopSender = (senderId: number): boolean =>
+    isPetSender(senderId) || isExpandedChatSender(senderId);
+  const sendToDesktopRenderers = (channel: string, payload: unknown): void => {
+    for (const win of [petController?.win, expandedChatWindow]) {
+      if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  };
+  const openExpandedChat = (): void => {
+    if (expandedChatWindow && !expandedChatWindow.isDestroyed()) {
+      expandedChatWindow.show();
+      expandedChatWindow.focus();
+      return;
+    }
+    expandedChatWindow = createExpandedChatWindow();
+    const senderId = expandedChatWindow.webContents.id;
+    expandedChatWindow.webContents.once('destroyed', () => {
+      abortRegistry.cancelOwner(senderId);
+      operationLease.releaseOwner(senderId);
+    });
+    expandedChatWindow.on('closed', () => {
+      expandedChatWindow = null;
+    });
+  };
+
+  ipcMain.on('pet:hide', (event) => {
+    if (!isPetSender(event.sender.id)) return;
+    petController!.win.hide();
+  });
+
+  ipcMain.on('pet:set-chat-expanded', (event, expanded: boolean) => {
+    if (!isPetSender(event.sender.id) || typeof expanded !== 'boolean') return;
+    petChatExpanded = expanded;
+  });
+  ipcMain.on('chat:open-window', (event) => {
+    if (!isDesktopSender(event.sender.id)) return;
+    openExpandedChat();
+  });
+  ipcMain.handle('chat:get-history', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return chatHistory.state();
+  });
+  ipcMain.handle('chat:append', (event, input: DesktopChatMessageInput) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    if (
+      !input ||
+      !['user', 'assistant', 'system'].includes(input.role) ||
+      !['text', 'voice'].includes(input.source) ||
+      typeof input.content !== 'string' ||
+      input.content.length > 20_000
+    ) {
+      throw new Error('Invalid chat message');
+    }
+    chatHistory.append(input);
+    const snapshot = chatHistory.state();
+    sendToDesktopRenderers('chat:history', snapshot);
+    return snapshot;
+  });
+  ipcMain.on('pet:set-visual', (event, state: unknown) => {
+    if (!isDesktopSender(event.sender.id) || !isPetVisualSignal(state)) return;
+    sendToDesktopRenderers('pet:visual', state);
+  });
+  ipcMain.handle('operation:acquire', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    const token = operationLease.acquire(event.sender.id);
+    return token
+      ? { ok: true as const, token }
+      : { ok: false as const, message: '另一个对话窗口正在处理，请稍候。' };
+  });
+  ipcMain.on('operation:release', (event, token: unknown) => {
+    if (!isDesktopSender(event.sender.id) || typeof token !== 'string') return;
+    operationLease.release(event.sender.id, token);
+  });
+
+  ipcMain.handle('auth:get-status', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.getStatus() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
+  ipcMain.handle('auth:sign-in', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.signIn() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
+  ipcMain.handle('auth:sign-out', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return (
+      authCoordinator?.signOut() ?? Promise.resolve({ state: 'signed_out' })
+    );
+  });
   ipcMain.handle(
     'assistant:turn',
-    async (_event, payload: { requestId: string; text: string }) => {
-      const signal = abortRegistry.begin(payload.requestId);
+    async (
+      event,
+      payload: {
+        requestId: string;
+        text: string;
+        source?: 'text' | 'voice';
+        leaseToken: string;
+      },
+    ) => {
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
+      if (
+        !payload ||
+        typeof payload.leaseToken !== 'string' ||
+        !operationLease.holds(event.sender.id, payload.leaseToken) ||
+        typeof payload.text !== 'string' ||
+        payload.text.length > 4_000 ||
+        !['text', 'voice'].includes(payload.source ?? 'text')
+      )
+        throw new Error('Invalid assistant turn');
+      const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
-        return await proxy.turn({ text: payload.text }, signal);
+        const result = await proxy.turn({ text: payload.text }, signal);
+        if (result.ok) {
+          chatHistory.append({
+            role: 'assistant',
+            content: result.message,
+            source: payload.source ?? 'text',
+          });
+          sendToDesktopRenderers('chat:history', chatHistory.state());
+        }
+        return result;
       } finally {
         abortRegistry.finish(payload.requestId, signal);
       }
@@ -35,8 +245,27 @@ if (!app.requestSingleInstanceLock()) {
   );
   ipcMain.handle(
     'voice:transcribe',
-    async (_event, payload: { requestId: string; input: VoiceAudioInput }) => {
-      const signal = abortRegistry.begin(payload.requestId);
+    async (
+      event,
+      payload: {
+        requestId: string;
+        input: VoiceAudioInput;
+        leaseToken: string;
+      },
+    ) => {
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
+      if (
+        !payload?.input ||
+        typeof payload.leaseToken !== 'string' ||
+        !operationLease.holds(event.sender.id, payload.leaseToken) ||
+        payload.input.mimeType !== 'audio/webm' ||
+        !(payload.input.bytes instanceof Uint8Array) ||
+        payload.input.bytes.byteLength === 0 ||
+        payload.input.bytes.byteLength > 2 * 1024 * 1024
+      )
+        throw new Error('Invalid voice input');
+      const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
         return await voiceProxy.transcribe(payload.input, signal);
       } finally {
@@ -46,8 +275,21 @@ if (!app.requestSingleInstanceLock()) {
   );
   ipcMain.handle(
     'voice:synthesize',
-    async (_event, payload: { requestId: string; text: string }) => {
-      const signal = abortRegistry.begin(payload.requestId);
+    async (
+      event,
+      payload: { requestId: string; text: string; leaseToken: string },
+    ) => {
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
+      if (
+        !payload ||
+        typeof payload.leaseToken !== 'string' ||
+        !operationLease.holds(event.sender.id, payload.leaseToken) ||
+        typeof payload.text !== 'string' ||
+        payload.text.length > 3_500
+      )
+        throw new Error('Invalid speech input');
+      const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
         return await voiceProxy.synthesize({ text: payload.text }, signal);
       } finally {
@@ -55,42 +297,51 @@ if (!app.requestSingleInstanceLock()) {
       }
     },
   );
-  ipcMain.on('operation:cancel', (_event, requestId: string) => {
-    abortRegistry.cancel(requestId);
+  ipcMain.on('operation:cancel', (event, requestId: string) => {
+    if (!isDesktopSender(event.sender.id)) return;
+    abortRegistry.cancel(requestId, event.sender.id);
   });
 
-  // 桌宠窗口动作 IPC（controller 在 whenReady 后创建，注册期为空则安全 no-op）
-  let petController: PetWindowController | null = null;
-  ipcMain.handle('pet:drag-move', (_event, p: DragPoint) =>
-    petController?.dragMove(p),
-  );
-  ipcMain.handle('pet:move-by', (_event, dx: number, dy: number) =>
-    petController?.moveBy(dx, dy),
-  );
-  ipcMain.handle('pet:get-bounds', () => petController?.getBounds());
-  ipcMain.handle('pet:set-expanded', (_event, expanded: boolean) =>
-    petController?.setExpanded(expanded),
-  );
-  ipcMain.on('pet:set-mouse-passthrough', (_event, passthrough: boolean) =>
-    petController?.setMousePassthrough(passthrough),
-  );
-
-  app.on('second-instance', () => {
-    if (petController && !petController.win.isDestroyed()) {
-      petController.win.show();
-      petController.win.focus();
-    }
+  // Windows/Linux send custom schemes to the existing single instance command line.
+  app.on('second-instance', (_event, commandLine) => {
+    const deepLink = findDesktopDeepLink(commandLine);
+    if (deepLink) dispatchDeepLink(deepLink);
+    focusPet();
   });
 
-  app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     petController = createPetWindow();
-    const petWebContentsId = petController.win.webContents.id;
+    petController.win.on('show', petMouseTracker.start);
+    petController.win.on('hide', petMouseTracker.stop);
+    petController.win.on('closed', petMouseTracker.stop);
+    const petSenderId = petController.win.webContents.id;
+    petController.win.webContents.once('destroyed', () => {
+      abortRegistry.cancelOwner(petSenderId);
+      operationLease.releaseOwner(petSenderId);
+    });
+    if (petController.win.isVisible()) petMouseTracker.start();
+    const publishAuthStatus = (status: DesktopAuthStatus): void => {
+      sendToDesktopRenderers('auth:status', status);
+    };
+    authCoordinator = createDesktopAuthCoordinator({
+      webBaseUrl: WEB_BASE_URL,
+      gatewayBaseUrl: GATEWAY_BASE_URL,
+      sessionStore: createDesktopSessionStore({
+        filePath: join(app.getPath('userData'), 'desktop-session.enc'),
+        safeStorage,
+        fileSystem,
+      }),
+      openExternal: (url) => shell.openExternal(url),
+      onStatus: publishAuthStatus,
+    });
+    await authCoordinator.getStatus();
+
     session.defaultSession.setPermissionRequestHandler(
       (webContents, permission, callback, details) => {
         const mediaTypes =
           'mediaTypes' in details ? details.mediaTypes : undefined;
         callback(
-          webContents.id === petWebContentsId &&
+          isDesktopSender(webContents.id) &&
             isAllowedVoicePermission({
               permission,
               isMainFrame: details.isMainFrame,
@@ -103,7 +354,8 @@ if (!app.requestSingleInstanceLock()) {
     );
     session.defaultSession.setPermissionCheckHandler(
       (webContents, permission, _origin, details) =>
-        webContents?.id === petWebContentsId &&
+        webContents !== null &&
+        isDesktopSender(webContents.id) &&
         isAllowedVoicePermission({
           permission,
           isMainFrame: details.isMainFrame,
@@ -115,13 +367,24 @@ if (!app.requestSingleInstanceLock()) {
           documentUrl: webContents.getURL(),
         }),
     );
-    createTray(petController.win);
+    createTray(petController.win, {
+      onSignOut: () => authCoordinator?.signOut(),
+    });
+
+    const initialDeepLink =
+      queuedDeepLink ??
+      (process.platform === 'darwin'
+        ? null
+        : findDesktopDeepLink(process.argv));
+    queuedDeepLink = null;
+    if (initialDeepLink) dispatchDeepLink(initialDeepLink);
   });
 
-  app.on('before-quit', () => abortRegistry.cancelAll());
-
-  // 覆盖默认「全部窗口关闭即退出」：关闭=隐藏到托盘，仅托盘「退出」结束进程
+  app.on('before-quit', () => {
+    petMouseTracker.stop();
+    abortRegistry.cancelAll();
+  });
   app.on('window-all-closed', () => {
-    /* no-op */
+    /* Closing hides to tray; only the tray Quit action terminates the process. */
   });
 }
