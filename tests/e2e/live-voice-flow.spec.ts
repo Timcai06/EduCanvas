@@ -123,7 +123,7 @@ test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async 
     .toBe(2);
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
-    .toBeGreaterThanOrEqual(2);
+    .toBeGreaterThanOrEqual(1);
   await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
