@@ -58,6 +58,7 @@ async function loadTelegramArtifactResource(input: {
     artifact: detail.artifact,
     version: detail.latestVersion,
     latestJob: detail.latestJob,
+    versionJob: detail.versionJob,
     accessRole: access.role,
   });
 }

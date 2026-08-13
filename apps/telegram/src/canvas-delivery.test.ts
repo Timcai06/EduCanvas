@@ -100,4 +100,46 @@ describe('telegramCanvasSummaries', () => {
     );
     expect(summaries).toEqual([]);
   });
+
+  it('keeps a usable artifact ready when the latest revision was failed/cancelled', async () => {
+    const readyResource = {
+      ...resource,
+      provenance: {
+        ...resource.provenance,
+        sourceResourceIds: ['source:old-version'],
+      },
+      status: 'ready' as const,
+    };
+    const loader = vi.fn(async () => readyResource);
+    const summaries = await telegramCanvasSummaries(
+      [
+        {
+          ...eventBase,
+          type: 'artifact.failed',
+          artifactId: 'artifact:1',
+          jobId: 'job:failed',
+          code: 'RUNTIME_FAILED',
+        },
+        {
+          ...eventBase,
+          eventId: 'event:2',
+          sequence: 1,
+          type: 'artifact.version_added',
+          artifactId: 'artifact:1',
+          versionId: 'version:1',
+        },
+      ],
+      { userId: 'user:1', notebookId: 'notebook:1' },
+      loader,
+    );
+    expect(loader).toHaveBeenCalledOnce();
+    expect(loader).toHaveBeenCalledWith({
+      userId: 'user:1',
+      notebookId: 'notebook:1',
+      artifactId: 'artifact:1',
+    });
+    expect(summaries).toEqual([
+      '▣ 图像产物\n资源已就绪；请在 EduCanvas Web 中安全查看或下载。',
+    ]);
+  });
 });

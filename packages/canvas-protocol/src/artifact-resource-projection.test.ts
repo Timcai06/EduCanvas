@@ -51,6 +51,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version,
       latestJob: null,
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -107,6 +108,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         checkpoint: {},
         queueJobKey: null,
       },
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -146,6 +148,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         checkpoint: {},
         queueJobKey: null,
       },
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -217,6 +220,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version,
       latestJob: null,
+      versionJob: null,
       accessRole: 'viewer',
     });
 
@@ -241,6 +245,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
           checkpoint: {},
           queueJobKey: null,
         },
+        versionJob: null,
         accessRole: 'owner',
       });
 
@@ -278,6 +283,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
           checkpoint: {},
           queueJobKey: null,
         },
+        versionJob: null,
         accessRole: 'owner',
       });
 
@@ -286,6 +292,53 @@ describe('artifact-resource-projection（markdown_document）', () => {
       expect(resource.allowedActions).toEqual([]);
     },
   );
+
+  it('rejects non-null version without explicit versionJob', () => {
+    expect(() =>
+      projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: { ...artifactBase, kind: 'markdown_document' },
+        version,
+        latestJob: null,
+        accessRole: 'owner',
+      } as any),
+    ).toThrow(
+      expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
+        code: 'resource_invalid',
+      }),
+    );
+  });
+
+  it('rejects version=null with non-null versionJob', () => {
+    expect(() =>
+      projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: {
+          ...artifactBase,
+          kind: 'markdown_document',
+          latestVersion: 0,
+        },
+        version: null,
+        latestJob: null,
+        versionJob: {
+          id: '70000000-0000-4000-8000-000000000007',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status: 'succeeded',
+          progress: 100,
+          failureCode: null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        accessRole: 'owner',
+      } as any),
+    ).toThrow(
+      expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
+        code: 'resource_invalid',
+      }),
+    );
+  });
 
   it('rejects markdown_document trust mismatch', () => {
     expect(() =>
@@ -298,6 +351,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         },
         version,
         latestJob: null,
+        versionJob: null,
         accessRole: 'owner',
       }),
     ).toThrow(
@@ -317,6 +371,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version: webAppVersion,
       latestJob: null,
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -349,6 +404,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version: webAppVersion,
       latestJob: null,
+      versionJob: null,
       accessRole: 'viewer',
     });
 
@@ -371,6 +427,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         },
         version: webAppVersion,
         latestJob: null,
+        versionJob: null,
         accessRole: 'owner',
       }),
     ).toThrow(

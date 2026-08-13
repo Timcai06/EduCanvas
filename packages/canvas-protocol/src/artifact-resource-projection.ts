@@ -295,11 +295,26 @@ export function projectOwnedArtifactResource(input: {
   artifact: ArtifactProjectionArtifact;
   version: ArtifactProjectionVersion | null;
   latestJob: ArtifactProjectionJob | null;
-  versionJob?: ArtifactProjectionJob | null;
+  /** Generation job that owns `version`; explicitly null for manual/legacy versions. */
+  versionJob: ArtifactProjectionJob | null;
   accessRole: CanvasAccessRole;
 }): CanvasResource {
   if (input.artifact.spaceId !== input.notebookId) {
     throw new ArtifactResourceProjectionError('resource_not_found', 422);
+  }
+  const hasExplicitVersionJob = Object.prototype.hasOwnProperty.call(
+    input,
+    'versionJob',
+  );
+  if (input.version !== null && !hasExplicitVersionJob) {
+    throw new ArtifactResourceProjectionError('resource_invalid', 422);
+  }
+  if (
+    input.version === null &&
+    hasExplicitVersionJob &&
+    input.versionJob !== null
+  ) {
+    throw new ArtifactResourceProjectionError('resource_invalid', 422);
   }
   const kind = input.artifact.kind as keyof typeof ARTIFACT_RENDERERS;
   const renderer = ARTIFACT_RENDERERS[kind];
@@ -314,7 +329,7 @@ export function projectOwnedArtifactResource(input: {
   const sourceReferences = projectSourceReferences(
     input.version,
     input.latestJob,
-    input.versionJob ?? null,
+    input.versionJob,
   );
   const parsed = canvasResourceSchema.safeParse({
     schemaVersion: 1,

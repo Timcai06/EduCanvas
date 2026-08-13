@@ -10,6 +10,7 @@ const artifactRepo = {
   getArtifactDetail: vi.fn(),
   listVersionProvenance: vi.fn(),
   getVersion: vi.fn(),
+  getGenerationJob: vi.fn(),
   getArtifact: vi.fn(),
   appendVersion: vi.fn(),
   createRevisionGenerationJob: vi.fn(),
@@ -153,6 +154,7 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     artifactRepo.getArtifactDetail.mockReset();
     artifactRepo.listVersionProvenance.mockReset();
     artifactRepo.getVersion.mockReset();
+    artifactRepo.getGenerationJob.mockReset();
     artifactRepo.getArtifact.mockReset();
     artifactRepo.appendVersion.mockReset();
     artifactRepo.createRevisionGenerationJob.mockReset();
@@ -174,6 +176,7 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
       },
     ]);
     artifactRepo.getVersion.mockResolvedValue(detail.latestVersion);
+    artifactRepo.getGenerationJob.mockResolvedValue(null);
     artifactRepo.getArtifact.mockResolvedValue(validArtifact);
     artifactRepo.createRevisionGenerationJob.mockResolvedValue({
       artifact: validArtifact,
@@ -225,6 +228,84 @@ describe('GET /api/v1/chat/artifacts/[artifactId]', () => {
     expect(JSON.stringify(payload)).not.toContain('audio.mp3');
     expect(payload).not.toHaveProperty('objectKey');
     expect(payload).not.toHaveProperty('checksum');
+  });
+
+  it('loads historical version provenance from selected version generation job', async () => {
+    const historicalVersion = {
+      id: '33333333-3333-4333-8333-333333333333',
+      artifactId: validArtifact.id,
+      version: 1,
+      content: { nodes: [] },
+      metadata: { contentVersion: 1 },
+      objectKey: null,
+      checksum: null,
+      createdByOperationId: null,
+      generatedBy: 'model:artifact.generate:v1',
+      generationJobId: 'historical-job',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    artifactRepo.getArtifactDetail.mockResolvedValue({
+      ...detail,
+      latestVersion: {
+        ...detail.latestVersion,
+        generationJobId: 'latest-job',
+      },
+      latestJob: {
+        id: 'latest-job',
+        status: 'failed',
+        progress: null,
+        failureCode: 'rate_limited',
+      },
+    });
+    artifactRepo.getVersion.mockResolvedValue(historicalVersion);
+    artifactRepo.getGenerationJob.mockResolvedValue({
+      id: 'historical-job',
+      artifactId: validArtifact.id,
+      status: 'succeeded',
+      progress: 100,
+      failureCode: null,
+      params: {
+        provenance: {
+          sources: [
+            {
+              assetId: 'source-a',
+              versionId: 'v1',
+              sourceType: 'note',
+            },
+          ],
+        },
+      },
+      operationId: null,
+      checkpoint: {},
+      queueJobKey: null,
+    });
+
+    const response = await GET(
+      getRequest(validArtifact.id),
+      params(validArtifact.id),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(artifactRepo.getVersion).toHaveBeenCalledWith({
+      artifactId: validArtifact.id,
+      version: 1,
+      trustedSubjectId: identity.studentId,
+    });
+    expect(artifactRepo.getGenerationJob).toHaveBeenCalledWith({
+      jobId: 'historical-job',
+      trustedSubjectId: identity.studentId,
+    });
+    expect(payload).toMatchObject({
+      artifact: { id: validArtifact.id },
+      latestJob: { id: 'latest-job', status: 'failed' },
+      canvasResource: {
+        provenance: {
+          sourceResourceIds: ['source-a'],
+          sourceReferences: [{ resourceId: 'source-a', versionId: 'v1' }],
+        },
+      },
+    });
   });
 
   it('returns a queued artifact before its first immutable version exists', async () => {
