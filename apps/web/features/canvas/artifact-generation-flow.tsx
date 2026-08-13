@@ -31,6 +31,8 @@ export interface GenerationState {
   artifactId?: string;
   title: string;
   detail?: ArtifactDetail;
+  /** 服务端 generation job 的百分比进度（0-100）；轮询拉取，未拿到时缺省。 */
+  progress?: number;
 }
 
 export interface ConfirmArtifactOptions {
@@ -97,6 +99,8 @@ export interface PollArtifactToTerminalOptions {
   /** A second independent stop condition protects mocked/clockless environments. */
   maxPollWindows?: number;
   maxAttempts?: number;
+  /** 每次轮询窗口拉取到服务端 job 进度时回调（0-100）。 */
+  onProgress?: (progress: number) => void;
 }
 
 const DEFAULT_POLL_TOTAL_TIMEOUT_MS = 5 * 60_000;
@@ -151,6 +155,7 @@ export async function pollArtifactToTerminal(
       minimumVersion: options.minimumVersion,
       intervalMs,
       timeoutMs: Math.min(windowTimeoutMs, remainingMs),
+      onProgress: options.onProgress,
     });
     if (result.outcome !== 'timed_out') return result;
     if (attempt + 1 >= maxPollWindows || Date.now() >= deadline) return result;
@@ -327,6 +332,12 @@ export function useArtifactGeneration(
         pollAbort.current = controller;
         const result = await pollArtifactToTerminal(created.artifact.id, {
           signal: controller.signal,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         applyPollResult(created.artifact.id, kind, result, title, options);
@@ -370,6 +381,12 @@ export function useArtifactGeneration(
         pollAbort.current = controller;
         const result = await pollArtifactToTerminal(artifact.artifactId, {
           signal: controller.signal,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         applyPollResult(
@@ -446,6 +463,12 @@ export function useArtifactGeneration(
         const result = await pollArtifactToTerminal(detail.artifact.id, {
           signal: controller.signal,
           minimumVersion: baseVersion + 1,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         const next = projectRevisionPollResult(

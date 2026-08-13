@@ -50,13 +50,22 @@ export async function pollArtifactUntilSettled(
     timeoutMs?: number;
     signal?: AbortSignal;
     minimumVersion?: number;
+    /** 每次拉取到 detail 后回报服务端 job 进度（0-100）。 */
+    onProgress?: (progress: number) => void;
   } = {},
 ): Promise<PollArtifactResult> {
   const interval = options.intervalMs ?? 1_500;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
+  const reportProgress = (detail: ArtifactDetail) => {
+    const progress = detail.latestJob?.progress;
+    if (progress !== null && progress !== undefined) {
+      options.onProgress?.(progress);
+    }
+  };
   let detail = await fetchArtifactDetail(artifactId, undefined, {
     signal: options.signal,
   });
+  reportProgress(detail);
   while (Date.now() < deadline && !options.signal?.aborted) {
     const outcome = classifyPollOutcome(detail, options.minimumVersion ?? 1);
     if (outcome !== 'pending') return { detail, outcome };
@@ -64,6 +73,7 @@ export async function pollArtifactUntilSettled(
     detail = await fetchArtifactDetail(artifactId, undefined, {
       signal: options.signal,
     });
+    reportProgress(detail);
   }
   if (options.signal?.aborted) {
     throw new DOMException('The operation was aborted.', 'AbortError');
