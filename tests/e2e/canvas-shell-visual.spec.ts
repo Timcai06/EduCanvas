@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import {
+  openMindMapCanvasByDbFixture,
+  openStudioOutput,
+} from './fixtures/general-artifact-fixture';
 
 /**
  * Canvas shell 视觉与无障碍回归（F04）。
@@ -6,45 +10,23 @@ import { expect, test, type Page } from '@playwright/test';
  * 只验证 CanvasHost 外壳的响应式、焦点、滚动与状态展示，
  * 不测试任何 Renderer 内容、产物协议或 Gateway。
  *
- * 使用仓库现有可控 fixture：通过对话→生成思维导图打开 Canvas，
- * 该链路由 worker 规则生成，不依赖模型 Provider。
+ * 使用仓库现有可控 fixture：通过 DB 事务创建思维导图 artifact，
+ * 内容直接入库后由 Studio 打开，不依赖 Composer 旧“生成思维导图”入口或模型调用。
  *
  * Lane 划分（W06-2）：稳定状态矩阵（基础语义/响应式/长内容/失败/加载/
  * reduced-motion）进默认 CI lane；高波动视觉（暗色）与键盘焦点（W06-1 的
  * keyboard-navigation 已覆盖默认 lane）保留 @ui lane。
  */
 
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const MIND_MAP_TITLE = '对话思维导图';
 
-/**
- * <lg 视口（如 Pixel 7 移动端）Canvas 全屏切换按钮不渲染（`hidden lg:flex`），
- * 操作入口是关闭按钮；桌面端才有「退出全屏」。断言按此区分（W06-2 窄屏矩阵）。
- */
 async function isDesktop(page: Page): Promise<boolean> {
   const viewport = page.viewportSize();
   return viewport !== null && viewport.width >= 1024;
 }
 
 async function openCanvasViaMindMap(page: Page) {
-  await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: '今天想学什么？' }),
-  ).toBeVisible();
-
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
-
-  const confirmSheet = page.getByRole('dialog', { name: '生成思维导图' });
-  await expect(confirmSheet).toBeVisible();
-  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
-
-  await expect(page.getByText('思维导图已生成')).toBeVisible({
-    timeout: 30_000,
-  });
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
-  await expect(canvas).toBeVisible();
+  const { canvas } = await openMindMapCanvasByDbFixture(page);
   return canvas;
 }
 
@@ -270,10 +252,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         });
       },
     );
-    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-    const studio = page.getByRole('complementary', {
-      name: '当前笔记本的 Studio',
-    });
+    const studio = await openStudioOutput(page);
     await studio
       .getByRole('combobox', { name: '资源分类' })
       .selectOption('artifact');
@@ -312,10 +291,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         await route.continue();
       },
     );
-    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-    const studio = page.getByRole('complementary', {
-      name: '当前笔记本的 Studio',
-    });
+    const studio = await openStudioOutput(page);
     await studio
       .getByRole('combobox', { name: '资源分类' })
       .selectOption('artifact');

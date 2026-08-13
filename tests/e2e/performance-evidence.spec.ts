@@ -1,4 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
+import {
+  STUDIO_TRIGGER_NAME,
+  createMindMapArtifactFixture,
+  ensureGeneralNotebook,
+  openStudioOutput,
+} from './fixtures/general-artifact-fixture';
 
 /**
  * W06-4 性能证据：Canvas 打开无重复请求 + 交互耗时基线。
@@ -17,20 +23,22 @@ import { expect, test, type Page } from '@playwright/test';
 /** 产物详情与资源验证的核心 URL 形态（打开资源的真实数据请求）。 */
 const RESOURCE_REQUEST_PATTERN =
   /\/api\/v1\/chat\/artifacts\/[0-9a-f-]+$|\/api\/v1\/canvas\/resources\/artifact\/[0-9a-f-]+$/i;
+const MIND_MAP_TITLE = '对话思维导图';
 
 async function generateMindMap(page: Page) {
   await page.goto('/');
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
-  const confirmSheet = page.getByRole('dialog', { name: '生成思维导图' });
-  await expect(confirmSheet).toBeVisible();
-  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
-  await expect(page.getByText('思维导图已生成')).toBeVisible({
+  await ensureGeneralNotebook(page);
+  await createMindMapArtifactFixture(page, MIND_MAP_TITLE);
+  const studio = await openStudioOutput(page);
+  await expect(
+    studio.getByRole('button', { name: MIND_MAP_TITLE }),
+  ).toBeVisible({
     timeout: 30_000,
   });
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
 }
 
 test('Canvas 打开产物时同一资源 URL 只请求一轮，关闭重开不累积重复', async ({
@@ -46,12 +54,16 @@ test('Canvas 打开产物时同一资源 URL 只请求一轮，关闭重开不�
     const url = request.url();
     if (!RESOURCE_REQUEST_PATTERN.test(url)) return;
     const normalized = url.split('?')[0]!;
-    resourceRequests.set(normalized, (resourceRequests.get(normalized) ?? 0) + 1);
+    resourceRequests.set(
+      normalized,
+      (resourceRequests.get(normalized) ?? 0) + 1,
+    );
   });
 
   const openCanvas = async (): Promise<{ elapsedMs: number }> => {
     const start = Date.now();
-    await page.getByRole('button', { name: '打开', exact: true }).click();
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: /对话思维导图/ }).click();
     const canvas = page.getByRole('dialog', { name: '产物Canvas' });
     await expect(canvas).toBeVisible();
     await expect(
@@ -63,10 +75,9 @@ test('Canvas 打开产物时同一资源 URL 只请求一轮，关闭重开不�
   // 首次打开：每个资源 URL 恰好一轮，不因 React 严格模式/双挂载重复。
   const firstOpen = await openCanvas();
   for (const [url, count] of resourceRequests) {
-    expect(
-      count,
-      `${url} 在首次打开期间应只请求一次（实际 ${count} 次）`,
-    ).toBe(1);
+    expect(count, `${url} 在首次打开期间应只请求一次（实际 ${count} 次）`).toBe(
+      1,
+    );
   }
   expect(resourceRequests.size).toBeGreaterThanOrEqual(1);
 
