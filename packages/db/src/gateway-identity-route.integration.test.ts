@@ -167,12 +167,16 @@ describeWithDatabase(
         status: 'completed',
         content: '回答',
         operationTerminalWriter: 'gateway',
+        gatewayTerminalIntent: {
+          status: 'completed',
+          messageId: turn.assistantMessage.id,
+        },
         now,
       });
       expect(
         await store.describe(operation.operationId, member.userId, now),
       ).toMatchObject({
-        status: 'running',
+        status: 'completed',
       });
       await store.append(
         operation.operationId,

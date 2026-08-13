@@ -19,6 +19,18 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 const [, , resultsPath = 'output/playwright/results.json'] = process.argv;
 const writeSummary = process.argv.includes('--summary');
 const resultsRequired = process.env.PLAYWRIGHT_RESULTS_REQUIRED === 'true';
+const evidenceScope = process.env.PLAYWRIGHT_EVIDENCE_SCOPE ?? 'affected';
+const EXPECTED_PROJECTS = {
+  affected: ['chromium-pr-smoke'],
+  full: ['chromium', 'chromium-mobile', 'firefox'],
+  nightly: ['chromium', 'chromium-mobile', 'firefox'],
+};
+if (!(evidenceScope in EXPECTED_PROJECTS)) {
+  process.stderr.write(
+    'PLAYWRIGHT_EVIDENCE_SCOPE must be affected, full, or nightly.\n',
+  );
+  process.exit(1);
+}
 const goldenEvidenceIndex = process.argv.indexOf('--golden-evidence');
 const goldenEvidencePath =
   goldenEvidenceIndex >= 0 ? process.argv[goldenEvidenceIndex + 1] : undefined;
@@ -31,6 +43,8 @@ const evidenceSha = (
 if (!existsSync(resultsPath)) {
   const summary = [
     '### Playwright 结果汇总（Q05）',
+    '',
+    `证据范围：\`${evidenceScope}\``,
     '',
     resultsRequired
       ? `结果文件缺失：\`${resultsPath}\`（测试步骤成功，证据不完整）`
@@ -127,6 +141,9 @@ if (goldenEvidencePath) {
 }
 
 const projects = [...new Set(tests.map((t) => t.projectName))].sort();
+const missingExpectedProjects = EXPECTED_PROJECTS[evidenceScope].filter(
+  (project) => !projects.includes(project),
+);
 const byProject = Object.fromEntries(
   projects.map((p) => [
     p,
@@ -154,14 +171,16 @@ const retriedTests = tests.filter((t) => t.retry > 0);
 const flakyTests = tests.filter((t) => t.status === 'flaky');
 const failedTests = tests.filter((t) => t.status === 'unexpected');
 
-// 覆盖矩阵：真实跑过的 device 环境 vs 期望集合。
+// 覆盖矩阵只陈述报告内的真实执行。Safari/WebKit、Provider canary、真实麦克风
+// 与外部服务不属于这些本地浏览器 suite，必须继续标记待验证。
 const COVERED_DEVICES = projects.length
   ? projects.map((p) => `- ${p} ✓`).join('\n')
   : '- （无测试执行）';
-const UNCOVERED = ['firefox', 'webkit']
-  .filter((browser) => !projects.some((p) => p.toLowerCase().includes(browser)))
-  .map((browser) => `- ${browser} ✗（未覆盖；视觉 QA 在 ui lane 覆盖 firefox）`)
-  .join('\n');
+const UNCOVERED = missingExpectedProjects.length
+  ? missingExpectedProjects
+      .map((project) => `- ${project} ✗（本范围要求但报告缺失）`)
+      .join('\n')
+  : '- 本范围要求的 project 均有执行记录';
 
 // ── Golden journey section for summary ──
 const journeySummaryLines = [
@@ -194,12 +213,18 @@ const journeySummaryLines = [
 const summary = [
   '### Playwright 结果汇总（Q05）',
   '',
+  `证据范围：\`${evidenceScope}\``,
+  '',
   `总计 ${tests.length} | 通过 ${tests.filter((t) => t.status === 'expected').length} | flaky ${flakyTests.length} | 失败 ${failedTests.length} | 跳过 ${tests.filter((t) => t.status === 'skipped').length} | retry 总次数 ${tests.reduce((sum, t) => sum + t.retry, 0)}`,
   '',
   '#### 设备/浏览器覆盖矩阵',
   '',
   COVERED_DEVICES,
   UNCOVERED,
+  '',
+  '#### 待验证边界',
+  '',
+  '- Safari/WebKit、真实 Provider canary、真实麦克风与真实外部服务不在本报告范围内。',
   '',
   ...(retriedTests.length
     ? [
@@ -219,3 +244,6 @@ if (writeSummary && process.env.GITHUB_STEP_SUMMARY) {
   writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, 'utf8');
 }
 process.stdout.write(summary + '\n');
+if (missingExpectedProjects.length > 0) {
+  process.exitCode = 1;
+}

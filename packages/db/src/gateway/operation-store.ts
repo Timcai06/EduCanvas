@@ -12,10 +12,8 @@ import {
   operationContinuations,
 } from '../schema';
 import {
-  describeCurrentGatewayOperation,
+  findCurrentOperationAccess,
   listCurrentGatewayOperationEvents,
-  listRecentCurrentGatewayOperations,
-  requestCurrentGatewayOperationCancellation,
 } from './operation-access';
 import {
   resolveGatewayApproval,
@@ -23,12 +21,20 @@ import {
   type ResolvedGatewayApproval,
 } from './operation-approval-control';
 import { GatewayPersistenceError, type Database } from './persistence';
+import { reconcileGatewayTerminalWithinTransaction } from './terminal-reconciliation';
 import {
   appendGatewayOperationEvent,
   cancelContinuationWithinTransaction,
   normalizeOperationStatus,
   type GatewayEventPayload,
 } from './operation-event-writer';
+import {
+  describeTerminalAwareGatewayOperation,
+  listRecentTerminalAwareGatewayOperations,
+  requestTerminalAwareGatewayOperationCancellation,
+} from './operation-store-control-plane';
+import type { DatabaseTransaction } from './persistence';
+import type { GatewayTerminalReconciliationMode } from './terminal-reconciliation-mode';
 
 /**
  * Gateway Operation 的公开持久化边界。
@@ -47,10 +53,38 @@ export interface GatewayStoredOperationSnapshot {
 }
 
 export class DrizzleGatewayOperationStore {
-  constructor(private readonly providedDatabase?: Database) {}
+  private readonly terminalReconciliationMode: GatewayTerminalReconciliationMode;
+
+  constructor(
+    private readonly providedDatabase?: Database,
+    options: {
+      terminalReconciliationMode?: GatewayTerminalReconciliationMode;
+    } = {},
+  ) {
+    this.terminalReconciliationMode =
+      options.terminalReconciliationMode ?? 'enabled';
+  }
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
+  }
+
+  private async reconcileTerminal(
+    transaction: DatabaseTransaction,
+    operationId: string,
+    rawStatus: string,
+    now: Date,
+  ): Promise<'running' | 'completed' | 'failed' | 'cancelled'> {
+    if (this.terminalReconciliationMode === 'legacy-disabled') {
+      return rawStatus === 'running' || rawStatus === 'pending'
+        ? 'running'
+        : normalizeOperationStatus(rawStatus);
+    }
+    return reconcileGatewayTerminalWithinTransaction(
+      transaction,
+      operationId,
+      now,
+    );
   }
 
   async begin(input: {
@@ -89,13 +123,22 @@ export class DrizzleGatewayOperationStore {
             'Idempotency key is bound to a different request',
           );
         }
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${existing.id}`}, 0))`,
+        );
+        const status = await this.reconcileTerminal(
+          transaction,
+          existing.id,
+          existing.status,
+          input.now,
+        );
         return {
           operationId: existing.id,
           traceId: existing.traceId,
           envelopeId: existing.gatewayEnvelopeId,
           idempotencyKey: existing.idempotencyKey,
           requestFingerprint: existing.requestFingerprint,
-          status: normalizeOperationStatus(existing.status),
+          status,
           replayed: true,
         };
       }
@@ -145,6 +188,16 @@ export class DrizzleGatewayOperationStore {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
       );
+      // A lifecycle may have committed assistant/citations plus its durable
+      // intent before this append. Reconcile first so a retry cannot overwrite
+      // that terminal with GatewayService's generic catch fallback.
+      if (this.terminalReconciliationMode === 'enabled') {
+        await reconcileGatewayTerminalWithinTransaction(
+          transaction,
+          operationId,
+          now,
+        );
+      }
       return appendGatewayOperationEvent(
         transaction,
         operationId,
@@ -251,6 +304,13 @@ export class DrizzleGatewayOperationStore {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${input.operationId}`}, 0))`,
       );
+      if (this.terminalReconciliationMode === 'enabled') {
+        await reconcileGatewayTerminalWithinTransaction(
+          transaction,
+          input.operationId,
+          now,
+        );
+      }
       const [operation] = await transaction
         .select({
           status: agentOperations.status,
@@ -260,13 +320,17 @@ export class DrizzleGatewayOperationStore {
         .from(agentOperations)
         .where(eq(agentOperations.id, input.operationId))
         .limit(1);
-      if (!operation?.actorUserId || operation.status !== 'running') {
+      if (
+        !operation?.actorUserId ||
+        (operation.status !== 'running' &&
+          operation.status !== input.result.status)
+      ) {
         throw new GatewayPersistenceError(
           'invalid_event_sequence',
           'Operation is no longer running for continuation settlement',
         );
       }
-      if (operation.cancelRequestedAt) {
+      if (operation.status === 'running' && operation.cancelRequestedAt) {
         const cancelled = await cancelContinuationWithinTransaction(
           transaction,
           {
@@ -424,10 +488,11 @@ export class DrizzleGatewayOperationStore {
     actorUserId: string;
     status: 'running' | 'completed' | 'failed' | 'cancelled';
   } | null> {
-    return describeCurrentGatewayOperation(this.database, {
+    return describeTerminalAwareGatewayOperation(this.database, {
       operationId,
       actorUserId,
       now,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
   }
 
@@ -440,7 +505,10 @@ export class DrizzleGatewayOperationStore {
     recorded: boolean;
     continuation: 'none' | 'running' | 'cancelled';
   }> {
-    return requestCurrentGatewayOperationCancellation(this.database, input);
+    return requestTerminalAwareGatewayOperationCancellation(this.database, {
+      ...input,
+      terminalReconciliationMode: this.terminalReconciliationMode,
+    });
   }
 
   /**
@@ -460,10 +528,11 @@ export class DrizzleGatewayOperationStore {
       createdAt: string;
     }[]
   > {
-    return listRecentCurrentGatewayOperations(this.database, {
+    return listRecentTerminalAwareGatewayOperations(this.database, {
       actorUserId,
       limit,
       now,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
   }
 
@@ -473,11 +542,47 @@ export class DrizzleGatewayOperationStore {
     actorUserId: string,
     now: Date = new Date(),
   ): Promise<readonly GatewayOperationEvent[]> {
-    return listCurrentGatewayOperationEvents(this.database, {
+    const access = await findCurrentOperationAccess(this.database, {
       operationId,
-      afterSequence,
       actorUserId,
+      requiredPermission: 'notebook.read',
       now,
+    });
+    if (!access) {
+      throw new GatewayPersistenceError(
+        'operation_not_found',
+        'Operation not found',
+      );
+    }
+    return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
+      );
+      const lockedAccess = await findCurrentOperationAccess(transaction, {
+        operationId,
+        actorUserId,
+        requiredPermission: 'notebook.read',
+        now,
+      });
+      if (!lockedAccess) {
+        throw new GatewayPersistenceError(
+          'operation_not_found',
+          'Operation not found',
+        );
+      }
+      if (this.terminalReconciliationMode === 'enabled') {
+        await reconcileGatewayTerminalWithinTransaction(
+          transaction,
+          operationId,
+          now,
+        );
+      }
+      return listCurrentGatewayOperationEvents(transaction, {
+        operationId,
+        afterSequence,
+        actorUserId,
+        now,
+      });
     });
   }
 }

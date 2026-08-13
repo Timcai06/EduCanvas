@@ -39,6 +39,28 @@ async function closeStudio(page: Page) {
   ).toHaveCount(0);
 }
 
+async function closeCanvasAndWaitForFold(page: Page) {
+  const folded = page.waitForResponse((response) => {
+    if (
+      response.request().method() !== 'PUT' ||
+      !response.url().endsWith('/api/v1/canvas/surface-layout') ||
+      !response.ok()
+    ) {
+      return false;
+    }
+    try {
+      return response.request().postDataJSON()?.restState === 'folded';
+    } catch {
+      return false;
+    }
+  });
+  await page
+    .getByRole('dialog', { name: '产物Canvas' })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
+  await folded;
+}
+
 /**
  * M1 验收场景:生成思维导图全链路
  * 对话 → 「+」菜单 → 确认卡 → 后台任务(真实 worker 进程消费)→ 产物卡 → Canvas 打开。
@@ -75,7 +97,7 @@ test('@smoke 生成思维导图全链路经真实 worker 完成并可在 Canvas 
   ).toBeVisible();
 
   /* 断连恢复读取面:刷新后产物仍在当前笔记本的 Studio 中 */
-  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await closeCanvasAndWaitForFold(page);
   await page.reload();
   const studio = await openStudioOutput(page);
   await expect(studio.getByText('对话思维导图')).toBeVisible();
@@ -148,7 +170,7 @@ test('Canvas 可在同一产物上跨轮生成新版本并查看历史', async (
 
   await versionSelect.selectOption('2');
   await expect(canvas.getByText('当前版本')).toBeVisible();
-  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await closeCanvasAndWaitForFold(page);
   await page.reload();
   const studio = await openStudioOutput(page);
   await expect(studio.getByText('v2')).toBeVisible();
@@ -268,7 +290,7 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   await expect(versionSelect).toHaveValue('2', { timeout: 10_000 });
   await expect(canvas.getByText('勾股定理')).toBeVisible();
 
-  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await closeCanvasAndWaitForFold(page);
   await page.reload();
   const outputStudio = await openStudioOutput(page);
   const updatedNote = outputStudio.getByRole('option', {
@@ -385,7 +407,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
     byteLength: 3,
   });
 
-  await canvas.getByRole('button', { name: '关闭', exact: true }).click();
+  await closeCanvasAndWaitForFold(page);
   await page.reload();
   const studio = await openStudioOutput(page);
   await studio.getByRole('option', { name: /来源音频概览/ }).click();

@@ -313,6 +313,28 @@ export const conversationMessages = pgTable(
   ],
 );
 
+/** K12 源消息与平台消息的不可级联 provenance 账本，供缺失/孤儿审计保留两侧身份。 */
+export const k12ConversationMessageProjections = pgTable(
+  'k12_conversation_message_projections',
+  {
+    sourceChatMessageId: uuid('source_chat_message_id').primaryKey(),
+    conversationMessageId: uuid('conversation_message_id').notNull().unique(),
+    sessionId: uuid('session_id').notNull(),
+    conversationId: uuid('conversation_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('k12_conversation_message_projections_session_idx').on(
+      table.sessionId,
+    ),
+    index('k12_conversation_message_projections_conversation_idx').on(
+      table.conversationId,
+    ),
+  ],
+);
+
 /**
  * 通用 Agent Operation 本轮实际读取的来源白名单。网页正文先落为不可变
  * AssetVersion，再由这里冻结本轮编号和公开定位；搜索摘要不能直接进入该表。

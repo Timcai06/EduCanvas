@@ -65,6 +65,8 @@ export interface TurnApplicationLifecyclePort {
     status: 'completed' | 'failed' | 'cancelled';
     content: string;
     failureCode?: TurnApplicationFailureCode | null;
+    /** Gateway terminal intent must preserve the public retry decision across restart. */
+    retryable?: boolean;
     citationMarkers?: readonly number[];
   }): Promise<readonly TurnApplicationProfileEvent[]>;
 }

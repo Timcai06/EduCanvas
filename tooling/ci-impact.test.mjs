@@ -55,7 +55,7 @@ describe('CI impact classification', () => {
     assert.equal(result.checks, true);
   });
 
-  it('runs all lanes for dependency, CI workflow, manual, or unknown changes', () => {
+  it('runs all lanes for dependency, CI workflow, full events, or unknown changes', () => {
     assert.ok(
       Object.values(classifyChangedPaths(['pnpm-lock.yaml'])).every(Boolean),
     );
@@ -72,6 +72,11 @@ describe('CI impact classification', () => {
     assert.ok(
       Object.values(
         classifyChangedPaths(['docs/a.md'], { eventName: 'workflow_dispatch' }),
+      ).every(Boolean),
+    );
+    assert.ok(
+      Object.values(
+        classifyChangedPaths(['docs/a.md'], { eventName: 'schedule' }),
       ).every(Boolean),
     );
     assert.ok(Object.values(classifyChangedPaths([])).every(Boolean));

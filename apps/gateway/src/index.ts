@@ -83,7 +83,9 @@ function loadWorkspaceEnvFiles(): void {
 
 loadWorkspaceEnvFiles();
 const config = readGatewayConfig();
-const operationStore = new DrizzleGatewayOperationStore();
+const operationStore = new DrizzleGatewayOperationStore(undefined, {
+  terminalReconciliationMode: config.terminalReconciliationMode,
+});
 const identities = new DrizzleGatewayIdentityRepository();
 const directory = new DrizzleGatewayDirectoryRepository();
 const connections = new GatewayConnectionService(

@@ -28,6 +28,9 @@ vi.mock('@educanvas/db', () => ({
   DrizzleKnowledgeRetrievalRepository: vi.fn(function () {
     return {};
   }),
+  DrizzleK12VisibleMessageHistoryRepository: vi.fn(function () {
+    return {};
+  }),
   DrizzleLearningSessionRepository: vi.fn(function () {
     return learningSessions;
   }),

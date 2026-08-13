@@ -9,12 +9,20 @@ import {
 } from './message-parts';
 import { requireNotebookAccess } from './notebook-access';
 import {
+  samePlatformMessageParts,
+  settlePlatformTurn,
+  type SettlePlatformTurnInput,
+} from './platform-turn-settlement-repository';
+export type {
+  PlatformSettledCitationSnapshot,
+  PlatformTurnSettlementSnapshot,
+  PlatformTurnTerminalStatus,
+} from './platform-turn-settlement-repository';
+import type { PlatformTurnSettlementSnapshot } from './platform-turn-settlement-repository';
+import {
   agentOperations,
-  assetVersions,
-  conversationMessageCitations,
   conversationMessages,
   conversations,
-  operationSources,
   personalAgents,
   spaces,
 } from './schema';
@@ -24,9 +32,6 @@ type DatabaseTransaction = Parameters<
   Parameters<Database['transaction']>[0]
 >[0];
 type DatabaseExecutor = Database | DatabaseTransaction;
-
-export type PlatformTurnTerminalStatus =
-  'completed' | 'failed' | 'cancelled' | 'interrupted';
 
 export interface PlatformTurnMessageSnapshot {
   id: string;
@@ -55,21 +60,6 @@ export interface PlatformTurnSnapshot {
   replayed: boolean;
   studentMessage: PlatformTurnMessageSnapshot;
   assistantMessage: PlatformTurnMessageSnapshot;
-}
-
-/** 与Message终态在同一事务插入的网页引用，避免提交后再查询制造伪失败。 */
-export interface PlatformSettledCitationSnapshot {
-  citationId: string;
-  assistantMessageId: string;
-  ordinal: number;
-  assetId: string;
-  assetVersionId: string;
-  label: string;
-  url: string;
-}
-
-export interface PlatformTurnSettlementSnapshot extends PlatformTurnSnapshot {
-  settledCitations: readonly PlatformSettledCitationSnapshot[];
 }
 
 export class PlatformTurnOwnershipError extends Error {
@@ -190,36 +180,6 @@ async function loadTurn(
   };
 }
 
-function sameParts(
-  left: readonly AgentMessagePart[],
-  right: readonly AgentMessagePart[],
-): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((part, index) => {
-    const candidate = right[index];
-    if (!candidate || part.type !== candidate.type) return false;
-    if (part.type === 'text' && candidate.type === 'text') {
-      return part.text === candidate.text;
-    }
-    if (part.type === 'asset_ref' && candidate.type === 'asset_ref') {
-      return (
-        part.usage === candidate.usage &&
-        part.reference.assetId === candidate.reference.assetId &&
-        part.reference.versionId === candidate.reference.versionId &&
-        part.reference.kind === candidate.reference.kind
-      );
-    }
-    if (part.type === 'artifact_ref' && candidate.type === 'artifact_ref') {
-      return (
-        part.artifactId === candidate.artifactId &&
-        part.versionId === candidate.versionId &&
-        part.kind === candidate.kind
-      );
-    }
-    return false;
-  });
-}
-
 /** 通用Agent Turn账本；它只依赖Conversation/Asset，不接触任何K12领域表。 */
 export class DrizzlePlatformTurnRepository {
   constructor(private readonly providedDatabase?: Database) {}
@@ -260,7 +220,9 @@ export class DrizzlePlatformTurnRepository {
         .limit(1);
       if (existing) {
         const turn = await loadTurn(transaction, existing.id, true);
-        if (!sameParts(turn.studentMessage.parts, prepared.parts)) {
+        if (
+          !samePlatformMessageParts(turn.studentMessage.parts, prepared.parts)
+        ) {
           throw new PlatformMessageIdConflictError();
         }
         return turn;
@@ -410,7 +372,9 @@ export class DrizzlePlatformTurnRepository {
         .limit(1);
       if (existingMessage) {
         const turn = await loadTurn(transaction, input.operationId, true);
-        if (!sameParts(turn.studentMessage.parts, prepared.parts)) {
+        if (
+          !samePlatformMessageParts(turn.studentMessage.parts, prepared.parts)
+        ) {
           throw new PlatformMessageIdConflictError();
         }
         return turn;
@@ -482,206 +446,15 @@ export class DrizzlePlatformTurnRepository {
     });
   }
 
-  async settleTurn(input: {
-    conversationId: string;
-    trustedSubjectId: string;
-    turnId: string;
-    status: PlatformTurnTerminalStatus;
-    content: string;
-    failureCode?: string | null;
-    /** 最终正文实际出现的本轮来源编号；与消息终态在同一事务落账。 */
-    sourceMarkers?: readonly number[];
-    /** Gateway入口由Gateway Event循环独占Operation终态；本仓储只结算消息。 */
-    operationTerminalWriter?: 'turn_application' | 'gateway';
-    now?: Date;
-  }): Promise<PlatformTurnSettlementSnapshot> {
-    const sourceMarkers = input.sourceMarkers ?? [];
-    const validMarkers = sourceMarkers.every(
-      (marker, index) =>
-        Number.isInteger(marker) &&
-        marker >= 1 &&
-        marker <= 99 &&
-        (index === 0 || marker > sourceMarkers[index - 1]!),
-    );
-    if (
-      !validMarkers ||
-      (input.status !== 'completed' && sourceMarkers.length > 0)
-    ) {
-      throw new PlatformTurnLifecycleError('通用Turn引用编号无效');
-    }
-    const now = input.now ?? new Date();
-    return this.database.transaction(async (transaction) => {
-      await requireConversationAccess(
-        transaction,
-        input.conversationId,
-        input.trustedSubjectId,
-      );
-      const [operation] = await transaction
-        .select({
-          id: agentOperations.id,
-          cancelRequestedAt: agentOperations.cancelRequestedAt,
-          gatewayEnvelopeId: agentOperations.gatewayEnvelopeId,
-          status: agentOperations.status,
-        })
-        .from(agentOperations)
-        .where(
-          and(
-            eq(agentOperations.id, input.turnId),
-            eq(agentOperations.conversationId, input.conversationId),
-            eq(agentOperations.kind, 'turn'),
-            or(
-              eq(agentOperations.actorUserId, input.trustedSubjectId),
-              isNull(agentOperations.actorUserId),
-            ),
-          ),
-        )
-        .limit(1);
-      if (!operation) throw new PlatformTurnOwnershipError();
-      if (input.status === 'cancelled' && !operation.cancelRequestedAt) {
-        throw new PlatformTurnLifecycleError(
-          '只有已请求取消的通用Turn才能进入cancelled终态',
-        );
-      }
-      const gatewayOwnsTerminal = input.operationTerminalWriter === 'gateway';
-      if (gatewayOwnsTerminal && operation.gatewayEnvelopeId === null) {
-        throw new PlatformTurnLifecycleError(
-          '只有Gateway附着Turn可以把Operation终态交给Gateway',
-        );
-      }
-      let settleMessage = false;
-      const settledCitations: PlatformSettledCitationSnapshot[] = [];
-      if (gatewayOwnsTerminal) {
-        const normalizedOperationStatus =
-          operation.status === 'interrupted' ? 'failed' : operation.status;
-        settleMessage =
-          ['pending', 'running'].includes(operation.status) ||
-          normalizedOperationStatus === input.status;
-      } else {
-        const [updated] = await transaction
-          .update(agentOperations)
-          .set({
-            status: input.status,
-            failureCode: input.failureCode ?? null,
-            completedAt: now,
-          })
-          .where(
-            and(
-              eq(agentOperations.id, input.turnId),
-              inArray(agentOperations.status, ['pending', 'running']),
-            ),
-          )
-          .returning({ id: agentOperations.id });
-        settleMessage = Boolean(updated);
-      }
-      if (settleMessage) {
-        const [assistant] = await transaction
-          .select({ id: conversationMessages.id })
-          .from(conversationMessages)
-          .where(
-            and(
-              eq(conversationMessages.operationId, input.turnId),
-              eq(conversationMessages.role, 'assistant'),
-            ),
-          )
-          .limit(1);
-        if (!assistant) {
-          throw new PlatformTurnLifecycleError('通用Turn缺少assistant消息');
-        }
-        if (sourceMarkers.length > 0) {
-          const citedSources = await transaction
-            .select({
-              id: operationSources.id,
-              ordinal: operationSources.ordinal,
-              assetId: assetVersions.assetId,
-              assetVersionId: operationSources.assetVersionId,
-              label: operationSources.label,
-              url: operationSources.locatorUrl,
-            })
-            .from(operationSources)
-            .innerJoin(
-              assetVersions,
-              eq(assetVersions.id, operationSources.assetVersionId),
-            )
-            .where(
-              and(
-                eq(operationSources.operationId, input.turnId),
-                inArray(operationSources.ordinal, [...sourceMarkers]),
-              ),
-            )
-            .orderBy(asc(operationSources.ordinal));
-          if (
-            citedSources.length !== sourceMarkers.length ||
-            citedSources.some(
-              (source, index) => source.ordinal !== sourceMarkers[index],
-            )
-          ) {
-            throw new PlatformTurnLifecycleError(
-              '通用Turn引用不属于本轮来源白名单',
-            );
-          }
-          const inserted = await transaction
-            .insert(conversationMessageCitations)
-            .values(
-              citedSources.map((source) => ({
-                assistantMessageId: assistant.id,
-                operationSourceId: source.id,
-                createdAt: now,
-              })),
-            )
-            .returning({
-              citationId: conversationMessageCitations.id,
-              operationSourceId: conversationMessageCitations.operationSourceId,
-            });
-          const citationIds = new Map(
-            inserted.map((citation) => [
-              citation.operationSourceId,
-              citation.citationId,
-            ]),
-          );
-          settledCitations.push(
-            ...citedSources.map((source) => {
-              const citationId = citationIds.get(source.id);
-              if (!citationId) {
-                throw new PlatformTurnLifecycleError(
-                  '通用Turn引用写入结果不完整',
-                );
-              }
-              return {
-                citationId,
-                assistantMessageId: assistant.id,
-                ordinal: source.ordinal,
-                assetId: source.assetId,
-                assetVersionId: source.assetVersionId,
-                label: source.label,
-                url: source.url,
-              };
-            }),
-          );
-        }
-        await transaction
-          .update(conversationMessages)
-          .set({
-            status: input.status,
-            content: input.content,
-            failureCode: input.failureCode ?? null,
-            completedAt: now,
-          })
-          .where(
-            and(
-              eq(conversationMessages.operationId, input.turnId),
-              eq(conversationMessages.role, 'assistant'),
-              inArray(conversationMessages.status, ['pending', 'streaming']),
-            ),
-          );
-        await transaction
-          .update(conversations)
-          .set({ lastActivityAt: now, updatedAt: now })
-          .where(eq(conversations.id, input.conversationId));
-      }
-      return {
-        ...(await loadTurn(transaction, input.turnId, false)),
-        settledCitations,
-      };
+  async settleTurn(
+    input: SettlePlatformTurnInput,
+  ): Promise<PlatformTurnSettlementSnapshot> {
+    return settlePlatformTurn(input, {
+      database: this.database,
+      requireConversationAccess,
+      loadTurn,
+      ownershipError: () => new PlatformTurnOwnershipError(),
+      lifecycleError: (message) => new PlatformTurnLifecycleError(message),
     });
   }
 

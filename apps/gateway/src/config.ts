@@ -1,3 +1,8 @@
+import {
+  resolveGatewayTerminalReconciliationMode,
+  type GatewayTerminalReconciliationMode,
+} from '@educanvas/db';
+
 export interface GatewayConfig {
   host: string;
   port: number;
@@ -8,6 +13,7 @@ export interface GatewayConfig {
   localUserId: string;
   /** 实时语音 WebSocket 握手允许的浏览器 Origin（严格白名单，已规范化）。 */
   wsAllowedOrigins: string[];
+  terminalReconciliationMode: GatewayTerminalReconciliationMode;
 }
 
 /**
@@ -98,5 +104,8 @@ export function readGatewayConfig(
       ),
     localUserId,
     wsAllowedOrigins,
+    terminalReconciliationMode: resolveGatewayTerminalReconciliationMode(
+      env.EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE,
+    ),
   };
 }

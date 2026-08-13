@@ -7,6 +7,7 @@ import {
   DrizzleTurnLeaseRepository,
   DrizzleTurnSafetyDecisionRepository,
 } from '@educanvas/db';
+import { webTeachingVisibleMessageHistory } from '../message-history';
 
 const ledger = new DrizzleTeachingTurnLedger();
 const chat = new DrizzleChatRepository();
@@ -18,6 +19,7 @@ const knowledge = new DrizzleKnowledgeRetrievalRepository();
 export const webTeachingPersistence = {
   ledger,
   chat,
+  history: webTeachingVisibleMessageHistory,
   leases,
   safetyDecisions,
   knowledge,

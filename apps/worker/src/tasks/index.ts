@@ -6,6 +6,7 @@ import {
   ASSET_PROCESS_VIDEO_TASK,
   ASSET_RENDER_PREVIEW_TASK,
   ASSET_TRANSCRIBE_AUDIO_TASK,
+  type GatewayTerminalReconciliationMode,
 } from '@educanvas/db';
 import {
   recordMetricSafely,
@@ -24,10 +25,6 @@ import { recoverOperationContinuations } from './recover-operation-continuations
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
 import { systemHeartbeat } from './system-heartbeat.js';
 import { createProductionContinueOperationTask } from './continue-operation.js';
-import {
-  backfillK12Conversation,
-  K12_CONVERSATION_BACKFILL_TASK,
-} from './backfill-k12-conversation.js';
 import { deleteObjectOutbox } from './delete-object-outbox.js';
 import { extractAssetTextTask } from './extract-asset-text.js';
 import { renderPreviewTask } from './render-preview.js';
@@ -85,6 +82,7 @@ export function withTaskMetrics(
 export function createTaskList(input: {
   continuationTrace: ContinuationTracePort;
   metrics: MetricsPort;
+  terminalReconciliationMode?: GatewayTerminalReconciliationMode;
 }): TaskList {
   const wrap = withTaskMetrics(input.metrics);
   return {
@@ -111,7 +109,10 @@ export function createTaskList(input: {
     ),
     [OPERATION_CONTINUATION_TASK]: wrap(
       OPERATION_CONTINUATION_TASK,
-      createProductionContinueOperationTask(input.continuationTrace),
+      createProductionContinueOperationTask(
+        input.continuationTrace,
+        input.terminalReconciliationMode ?? 'enabled',
+      ),
     ),
     'knowledge:ingest_document': wrap(
       'knowledge:ingest_document',
@@ -136,10 +137,6 @@ export function createTaskList(input: {
     'maintenance:reconcile_tool_approval_intents': wrap(
       'maintenance:reconcile_tool_approval_intents',
       reconcileToolApprovalIntents,
-    ),
-    [K12_CONVERSATION_BACKFILL_TASK]: wrap(
-      K12_CONVERSATION_BACKFILL_TASK,
-      backfillK12Conversation,
     ),
     'system.heartbeat': wrap('system.heartbeat', systemHeartbeat),
   };

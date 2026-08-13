@@ -37,6 +37,7 @@ export interface OperationContinuationExecutionScope {
   agentId: string;
   notebookId: string;
   conversationId: string;
+  assistantMessageId: string;
   profileId: string;
   traceId: string;
   capability: string;

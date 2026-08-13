@@ -6,6 +6,10 @@ export interface FakeLiveVoiceSnapshot {
   readonly cancelRequests: readonly string[];
   readonly speechRequests: number;
   readonly speechAborts: number;
+  readonly audiblePlaybackStartedSourceIds: readonly number[];
+  readonly audiblePlaybackStoppedSourceIds: readonly number[];
+  readonly activeAudiblePlaybackSourceIds: readonly number[];
+  readonly activeAudiblePlaybackSourceIdsAtCancel: readonly (readonly number[])[];
   readonly clientFrameTypes: readonly string[];
   readonly events: readonly string[];
 }
@@ -14,6 +18,8 @@ interface BrowserLiveVoiceDriver {
   emitPartial(text: string): void;
   emitFinal(text: string): void;
   holdNextTurn(assistantText: string): void;
+  waitForAudiblePlaybackStart(): Promise<void>;
+  waitForAudiblePlaybackSilence(): Promise<void>;
   snapshot(): FakeLiveVoiceSnapshot;
 }
 
@@ -36,6 +42,17 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
     let readyConnections = 0;
     let speechRequests = 0;
     let speechAborts = 0;
+    let nextAudiblePlaybackSourceId = 1;
+    const audiblePlaybackSourceIds = new WeakMap<
+      AudioBufferSourceNode,
+      number
+    >();
+    const audiblePlaybackStartedSourceIds: number[] = [];
+    const audiblePlaybackStoppedSourceIds: number[] = [];
+    const activeAudiblePlaybackSourceIds = new Set<number>();
+    const activeAudiblePlaybackSourceIdsAtCancel: number[][] = [];
+    const audiblePlaybackStartWaiters = new Set<() => void>();
+    const audiblePlaybackSilenceWaiters = new Set<() => void>();
     let holdNext = false;
     let nextAssistantText = '';
 
@@ -136,6 +153,52 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
       configurable: true,
       value: FakeWebSocket,
     });
+
+    const nativeBufferSourceStart = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      const result = nativeBufferSourceStart.apply(this, args);
+      // Pcm16Player 的字幕 marker 是单采样静音 buffer；只追踪真正承载 PCM 的 source。
+      if (this.buffer && this.buffer.length > 1) {
+        const sourceId = nextAudiblePlaybackSourceId;
+        nextAudiblePlaybackSourceId += 1;
+        audiblePlaybackSourceIds.set(this, sourceId);
+        audiblePlaybackStartedSourceIds.push(sourceId);
+        activeAudiblePlaybackSourceIds.add(sourceId);
+        events.push(`playback.audible.start:${sourceId}`);
+        for (const resolve of audiblePlaybackStartWaiters) resolve();
+        audiblePlaybackStartWaiters.clear();
+        this.addEventListener(
+          'ended',
+          () => {
+            activeAudiblePlaybackSourceIds.delete(sourceId);
+            if (activeAudiblePlaybackSourceIds.size === 0) {
+              for (const resolve of audiblePlaybackSilenceWaiters) resolve();
+              audiblePlaybackSilenceWaiters.clear();
+            }
+          },
+          { once: true },
+        );
+      }
+      return result;
+    };
+
+    const nativeBufferSourceStop = AudioBufferSourceNode.prototype.stop;
+    AudioBufferSourceNode.prototype.stop = function (...args) {
+      const result = nativeBufferSourceStop.apply(this, args);
+      const sourceId = audiblePlaybackSourceIds.get(this);
+      if (
+        sourceId !== undefined &&
+        activeAudiblePlaybackSourceIds.delete(sourceId)
+      ) {
+        audiblePlaybackStoppedSourceIds.push(sourceId);
+        events.push(`playback.audible.stop:${sourceId}`);
+        if (activeAudiblePlaybackSourceIds.size === 0) {
+          for (const resolve of audiblePlaybackSilenceWaiters) resolve();
+          audiblePlaybackSilenceWaiters.clear();
+        }
+      }
+      return result;
+    };
 
     const nativeCreateScriptProcessor =
       AudioContext.prototype.createScriptProcessor;
@@ -318,6 +381,11 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           : null;
       if (cancelMatch) {
         cancelRequests.push(decodeURIComponent(cancelMatch[1]!));
+        activeAudiblePlaybackSourceIdsAtCancel.push(
+          [...activeAudiblePlaybackSourceIds].sort(
+            (left, right) => left - right,
+          ),
+        );
         events.push('turn.cancel');
         return Response.json({ accepted: true, status: 'cancelled' });
       }
@@ -335,7 +403,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           },
           { once: true },
         );
-        const pcm = new Uint8Array(96_000);
+        // Ten seconds keeps the audible source active until the test-driven interruption without
+        // timing sleeps or retry loops; the bytes remain synthetic and never leave this response.
+        const pcm = new Uint8Array(480_000);
         const view = new DataView(pcm.buffer);
         for (let offset = 0; offset < pcm.byteLength; offset += 2) {
           view.setInt16(offset, offset % 8 === 0 ? 2_048 : -2_048, true);
@@ -356,12 +426,33 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         holdNext = true;
         nextAssistantText = assistantText;
       },
+      waitForAudiblePlaybackStart: () =>
+        activeAudiblePlaybackSourceIds.size > 0
+          ? Promise.resolve()
+          : new Promise<void>((resolve) =>
+              audiblePlaybackStartWaiters.add(resolve),
+            ),
+      waitForAudiblePlaybackSilence: () =>
+        activeAudiblePlaybackSourceIds.size === 0
+          ? Promise.resolve()
+          : new Promise<void>((resolve) =>
+              audiblePlaybackSilenceWaiters.add(resolve),
+            ),
       snapshot: () => ({
         readyConnections,
         turnRequests: structuredClone(turnRequests),
         cancelRequests: [...cancelRequests],
         speechRequests,
         speechAborts,
+        audiblePlaybackStartedSourceIds: [...audiblePlaybackStartedSourceIds],
+        audiblePlaybackStoppedSourceIds: [...audiblePlaybackStoppedSourceIds],
+        activeAudiblePlaybackSourceIds: [
+          ...activeAudiblePlaybackSourceIds,
+        ].sort((left, right) => left - right),
+        activeAudiblePlaybackSourceIdsAtCancel:
+          activeAudiblePlaybackSourceIdsAtCancel.map((sourceIds) => [
+            ...sourceIds,
+          ]),
         clientFrameTypes: [...clientFrameTypes],
         events: [...events],
       }),
@@ -385,6 +476,18 @@ export async function holdNextVoiceTurn(page: Page, assistantText: string) {
   await page.evaluate((value) => {
     window.__EDUCANVAS_E2E_LIVE_VOICE__!.holdNextTurn(value);
   }, assistantText);
+}
+
+export async function waitForAudiblePlaybackStart(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.waitForAudiblePlaybackStart(),
+  );
+}
+
+export async function waitForAudiblePlaybackSilence(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.waitForAudiblePlaybackSilence(),
+  );
 }
 
 export async function readFakeLiveVoiceSnapshot(

@@ -3,6 +3,7 @@ import { and, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
 import { isUuid } from '../internal/identifiers';
 import {
   agentOperations,
+  conversationMessages,
   conversations,
   gatewayApprovals,
   notebookMemberships,
@@ -220,6 +221,25 @@ export async function claimContinuationForExecution(
       };
     }
 
+    const [assistant] = await transaction
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.operationId, scope.operationId),
+          eq(conversationMessages.conversationId, scope.conversationId),
+          eq(conversationMessages.role, 'assistant'),
+        ),
+      )
+      .limit(1);
+    if (!assistant) {
+      return {
+        status: 'reauthorization_failed',
+        operationId: base.operationId,
+        actorId: base.actorId,
+      };
+    }
+
     const claimed = await claimRow(transaction, input, now, expiresAt);
     if (!claimed) {
       const [current] = await transaction
@@ -251,6 +271,7 @@ export async function claimContinuationForExecution(
         agentId: scope.agentId,
         notebookId: scope.notebookId,
         conversationId: scope.conversationId,
+        assistantMessageId: assistant.id,
         profileId: scope.profileId,
         traceId: scope.traceId,
         capability: scope.capability,

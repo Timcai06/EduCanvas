@@ -19,8 +19,10 @@ import {
   CANVAS_HOST_LAYOUT_CLASS,
   CANVAS_TITLE_CLASS,
   handleCanvasEscape,
-  scheduleFocusRestore,
 } from './canvas-host-utils';
+
+let durableCanvasOpener: HTMLElement | null = null;
+let durableCanvasOpenerSelector: string | null = null;
 
 /**
  * 分栏 Canvas 的统一宿主外壳:桌面端在对话右侧作为分栏列展开,窄屏或全屏
@@ -60,7 +62,6 @@ export function CanvasHost({
   children: ReactNode;
 }) {
   const rootRef = useRef<HTMLElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
   const fullscreenRef = useRef<HTMLButtonElement>(null);
   const [isCompact, setIsCompact] = useState(false);
   const isModal = isFull || isCompact;
@@ -82,10 +83,36 @@ export function CanvasHost({
 
   // 打开时保存焦点来源并聚焦 Canvas；关闭时归还焦点。
   useEffect(() => {
-    openerRef.current = document.activeElement as HTMLElement | null;
+    const active = document.activeElement as HTMLElement | null;
+    if (
+      durableCanvasOpener === null &&
+      active !== document.body &&
+      active !== document.documentElement &&
+      !active?.closest('[data-canvas-host]')
+    ) {
+      durableCanvasOpener = active;
+      durableCanvasOpenerSelector = active?.matches('[data-studio-trigger]')
+        ? '[data-studio-trigger]'
+        : null;
+    }
     rootRef.current?.focus();
     return () => {
-      scheduleFocusRestore(openerRef.current);
+      queueMicrotask(() => {
+        // Pending/ready Canvas hosts may replace one another in the same resource open. Preserve the
+        // external opener across that handoff and restore only after the final host unmounts.
+        if (document.querySelector('[data-canvas-host]')) return;
+        const opener = durableCanvasOpenerSelector
+          ? document.querySelector<HTMLElement>(durableCanvasOpenerSelector)
+          : durableCanvasOpener?.isConnected
+            ? durableCanvasOpener
+            : null;
+        const stableWorkspaceFallback = document.querySelector<HTMLElement>(
+          '[data-studio-trigger]',
+        );
+        durableCanvasOpener = null;
+        durableCanvasOpenerSelector = null;
+        (opener ?? stableWorkspaceFallback)?.focus();
+      });
     };
   }, []);
 
@@ -165,6 +192,7 @@ export function CanvasHost({
   return (
     <section
       ref={rootRef}
+      data-canvas-host
       role={isModal ? 'dialog' : 'region'}
       aria-label={ariaLabel}
       aria-modal={isModal || undefined}

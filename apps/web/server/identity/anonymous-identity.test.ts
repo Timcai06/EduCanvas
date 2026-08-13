@@ -13,8 +13,10 @@ import {
   isEphemeralAnonymousIdentity,
   parseAnonymousToken,
   readAnonymousIdentity,
+  readDataOwnerIdentity,
 } from './anonymous-identity';
 import { readRegisteredSessionIdentity } from '../auth/session';
+import { cookies } from 'next/headers';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -93,5 +95,46 @@ describe('anonymous identity token', () => {
       token: '',
       studentId: 'user:registered',
     });
+  });
+
+  it('local部署的数据归属不会被注册session静默替换', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'local');
+    vi.stubEnv('EDUCANVAS_LOCAL_USER_ID', 'local:owner');
+
+    await expect(
+      readDataOwnerIdentity({ userId: 'user:registered' }),
+    ).resolves.toEqual({ token: '', studentId: 'local:owner' });
+    expect(cookies).not.toHaveBeenCalled();
+  });
+
+  it('cloud部署把已验证注册session作为数据主体', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'cloud');
+
+    await expect(
+      readDataOwnerIdentity({ userId: 'user:registered' }),
+    ).resolves.toEqual({ token: '', studentId: 'user:registered' });
+    expect(cookies).not.toHaveBeenCalled();
+  });
+
+  it('cloud部署无注册session时只接受规范匿名Cookie', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'cloud');
+    const token = tokenFor(7);
+    vi.mocked(cookies).mockResolvedValue({
+      get: vi.fn(() => ({ value: token })),
+    } as never);
+
+    await expect(readDataOwnerIdentity(null)).resolves.toEqual({
+      token,
+      studentId: deriveAnonymousStudentId(token),
+    });
+  });
+
+  it('cloud部署没有任何有效身份时不隐式创建数据主体', async () => {
+    vi.stubEnv('EDUCANVAS_DEPLOYMENT_ENV', 'cloud');
+    vi.mocked(cookies).mockResolvedValue({
+      get: vi.fn(() => undefined),
+    } as never);
+
+    await expect(readDataOwnerIdentity(null)).resolves.toBeNull();
   });
 });

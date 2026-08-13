@@ -505,6 +505,7 @@ jobs:
           # success. When the suite failed before producing JSON, keep the
           # original failure singular instead of adding a misleading second red.
           PLAYWRIGHT_RESULTS_REQUIRED: ${{ steps.browser_e2e_smoke.outcome == 'success' || steps.browser_e2e_full.outcome == 'success' }}
+          PLAYWRIGHT_EVIDENCE_SCOPE: ${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && 'full' || 'affected' }}
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
@@ -519,6 +520,7 @@ jobs:
         if: always() && (steps.browser_e2e_smoke.outcome == 'success' || steps.browser_e2e_full.outcome == 'success')
         env:
           EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PLAYWRIGHT_EVIDENCE_SCOPE: ${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && 'full' || 'affected' }}
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --golden-evidence output/playwright/golden-journey-evidence.json
 
       - name: Upload E2E results for evidence v2

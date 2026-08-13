@@ -88,6 +88,7 @@ export async function settleTurnFailure(input: {
     status: cancelled ? 'cancelled' : 'failed',
     content: input.answer,
     failureCode: input.code,
+    retryable: cancelled ? false : input.retryable,
   });
   input.terminal.emitted = true;
   input.trace.end(cancelled ? 'cancelled' : 'failed');

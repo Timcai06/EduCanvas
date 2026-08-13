@@ -5,6 +5,8 @@ import {
   holdNextVoiceTurn,
   installFakeLiveVoice,
   readFakeLiveVoiceSnapshot,
+  waitForAudiblePlaybackSilence,
+  waitForAudiblePlaybackStart,
 } from './fixtures/live-voice-fixture';
 
 async function enterLiveWorkspace(page: Page) {
@@ -62,11 +64,15 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
       async () => (await readFakeLiveVoiceSnapshot(page)).turnRequests.length,
     )
     .toBe(2);
-  await expect(dialog.getByText('正在检索资料')).toBeVisible();
+  await expect(
+    dialog.locator('[data-status="completed"]').filter({
+      hasText: '正在检索资料',
+    }),
+  ).toContainText('已完成');
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
     .toBeGreaterThanOrEqual(1);
-  await expect(dialog.getByText('正在回答')).toBeVisible();
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
@@ -92,6 +98,16 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
     snapshot.clientFrameTypes.filter((type) => type === 'start'),
   ).toHaveLength(3);
 
+  await expect
+    .poll(
+      async () =>
+        (await readFakeLiveVoiceSnapshot(page)).audiblePlaybackStartedSourceIds
+          .length,
+    )
+    .toBe(2);
+  // 第三轮 TTS 仍可能处于可听播放；等待播放器自己的 ended/active-set 事实，
+  // 不用固定时间猜测状态何时回到 listening。
+  await waitForAudiblePlaybackSilence(page);
   await expect(dialog.getByText('正在聆听')).toBeVisible({ timeout: 8_000 });
   await dialog.getByRole('button', { name: '结束 Live Voice' }).click();
   await expect(dialog).toHaveCount(0);
@@ -101,8 +117,13 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   page,
 }) => {
   const dialog = await enterLiveWorkspace(page);
-  await expect(dialog.getByText('电路图.png')).toBeVisible();
-  await expect(dialog.getByText('实验记录.pdf')).toBeVisible();
+  const contextRail = dialog.getByRole('list', { name: 'Live 上下文' });
+  await expect(
+    contextRail.getByRole('listitem').filter({ hasText: '电路图.png' }),
+  ).toBeVisible();
+  await expect(
+    contextRail.getByRole('listitem').filter({ hasText: '实验记录.pdf' }),
+  ).toBeVisible();
   await expect(
     dialog.getByTitle(/处理中资料\.pdf · 处理中 · 本轮暂不带入/),
   ).toBeVisible();
@@ -121,16 +142,22 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
     .toBeGreaterThanOrEqual(1);
-  await expect(dialog.getByText('正在回答')).toBeVisible();
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
     .toBeGreaterThanOrEqual(2);
+  await waitForAudiblePlaybackStart(page);
+  const audibleSourcesBeforeInterruption = (
+    await readFakeLiveVoiceSnapshot(page)
+  ).activeAudiblePlaybackSourceIds;
+  expect(audibleSourcesBeforeInterruption).not.toEqual([]);
   await emitVoicePartial(page, '停一下，改为比较两份资料');
+  await waitForAudiblePlaybackSilence(page);
   await expect(dialog.getByText('停一下，改为比较两份资料')).toBeVisible();
-  await expect
-    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechAborts)
-    .toBeGreaterThanOrEqual(1);
+  expect(
+    (await readFakeLiveVoiceSnapshot(page)).activeAudiblePlaybackSourceIds,
+  ).toEqual([]);
   await emitVoiceFinal(page, '停一下，改为比较两份资料');
 
   await expect
@@ -143,11 +170,19 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     .toBe(3);
 
   const snapshot = await readFakeLiveVoiceSnapshot(page);
-  const speechAbort = snapshot.events.indexOf('speech.abort');
+  expect(snapshot.activeAudiblePlaybackSourceIdsAtCancel).toEqual([[]]);
+  expect(snapshot.audiblePlaybackStoppedSourceIds).toEqual(
+    expect.arrayContaining([...audibleSourcesBeforeInterruption]),
+  );
   const turnCancel = snapshot.events.indexOf('turn.cancel');
+  const lastAudiblePlaybackStop = Math.max(
+    ...audibleSourcesBeforeInterruption.map((sourceId) =>
+      snapshot.events.indexOf(`playback.audible.stop:${sourceId}`),
+    ),
+  );
   const resumedTurn = snapshot.events.lastIndexOf('turn.request');
-  expect(speechAbort).toBeGreaterThan(-1);
-  expect(turnCancel).toBeGreaterThan(speechAbort);
+  expect(lastAudiblePlaybackStop).toBeGreaterThan(-1);
+  expect(turnCancel).toBeGreaterThan(lastAudiblePlaybackStop);
   expect(resumedTurn).toBeGreaterThan(turnCancel);
 
   for (const request of snapshot.turnRequests.slice(1)) {

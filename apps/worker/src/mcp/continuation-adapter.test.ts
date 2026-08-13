@@ -28,6 +28,7 @@ const ids = {
   actorId: 'local:owner',
   agentId: '30000000-0000-4000-8000-000000000001',
   conversationId: '40000000-0000-4000-8000-000000000001',
+  assistantMessageId: '70000000-0000-4000-8000-000000000001',
   resumeRef: `mcp.intent:${'a'.repeat(64)}`,
 };
 
@@ -99,6 +100,7 @@ function resumeInput() {
       agentId: ids.agentId,
       notebookId: '60000000-0000-4000-8000-000000000001',
       conversationId: ids.conversationId,
+      assistantMessageId: ids.assistantMessageId,
       profileId: 'general.default',
       traceId: 'trace:mcp',
       capability: registration.capability,
@@ -166,6 +168,19 @@ describe('MCP高风险continuation Adapter', () => {
     expect(repos.effects.settle).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'committed' }),
     );
+    expect(repos.turns.settleTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: ids.conversationId,
+        trustedSubjectId: ids.actorId,
+        turnId: ids.operationId,
+        status: 'completed',
+        operationTerminalWriter: 'gateway',
+        gatewayTerminalIntent: {
+          status: 'completed',
+          messageId: ids.assistantMessageId,
+        },
+      }),
+    );
   });
 
   it('重领dispatching意图时禁止重放并收敛outcome_unknown', async () => {
@@ -185,6 +200,21 @@ describe('MCP高风险continuation Adapter', () => {
     expect(client.callTool).not.toHaveBeenCalled();
     expect(repos.calls.settle).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'outcome_unknown' }),
+    );
+    expect(repos.turns.settleTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: ids.conversationId,
+        trustedSubjectId: ids.actorId,
+        turnId: ids.operationId,
+        status: 'failed',
+        failureCode: 'mcp_dispatch_outcome_unknown',
+        operationTerminalWriter: 'gateway',
+        gatewayTerminalIntent: {
+          status: 'failed',
+          code: 'RUNTIME_FAILED',
+          retryable: false,
+        },
+      }),
     );
   });
 
@@ -206,6 +236,19 @@ describe('MCP高风险continuation Adapter', () => {
       expect.objectContaining({
         status: 'succeeded',
         result: { status: 'committed', recovered: true },
+      }),
+    );
+    expect(repos.turns.settleTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: ids.conversationId,
+        trustedSubjectId: ids.actorId,
+        turnId: ids.operationId,
+        status: 'completed',
+        operationTerminalWriter: 'gateway',
+        gatewayTerminalIntent: {
+          status: 'completed',
+          messageId: ids.assistantMessageId,
+        },
       }),
     );
   });

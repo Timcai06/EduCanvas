@@ -37,6 +37,17 @@ function restoreStudioOpenerFocus(): void {
     ?.focus();
 }
 
+/**
+ * React 必须先提交 Studio overlay 的卸载，背景 trigger 才不再 inert。
+ * 下一帧先恢复 opener，再打开资源，让 Canvas 捕获稳定且仍挂载的焦点来源。
+ */
+function openResourceAfterStudioCloses(openResource: () => void): void {
+  window.requestAnimationFrame(() => {
+    restoreStudioOpenerFocus();
+    openResource();
+  });
+}
+
 export interface GeneralWorkspaceLayoutProps {
   readonly ctrl: GeneralWorkspaceController;
   readonly notebookTitle: string | null;
@@ -129,14 +140,16 @@ export function GeneralWorkspaceLayout({
               outputs={ctrl.studioItems}
               onOpenSource={(asset) => {
                 ctrl.workspace.closeStudio();
-                restoreStudioOpenerFocus();
                 ctrl.artifactFlow.closeCanvas();
-                ctrl.studioOpenActions.actions.openSource(asset.id);
+                openResourceAfterStudioCloses(() =>
+                  ctrl.studioOpenActions.actions.openSource(asset.id),
+                );
               }}
               onOpenOutput={(artifactId) => {
                 ctrl.workspace.closeStudio();
-                restoreStudioOpenerFocus();
-                ctrl.studioOpenActions.actions.openArtifact(artifactId);
+                openResourceAfterStudioCloses(() =>
+                  ctrl.studioOpenActions.actions.openArtifact(artifactId),
+                );
               }}
               onToggleSource={ctrl.sources.toggle}
               onRenameSource={ctrl.sources.rename}

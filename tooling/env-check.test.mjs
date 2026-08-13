@@ -50,6 +50,31 @@ after(async () => {
 });
 
 describe('env-check', () => {
+  it('operator env gate只允许闭合authority stage且不回显非法原值', async () => {
+    for (const stage of ['legacy', 'observe', 'platform']) {
+      const result = await runEnvCheck(
+        await writeEnv(
+          providerEnv({ EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE: stage }),
+        ),
+      );
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, new RegExp(`k12-authority=${stage}`));
+    }
+
+    const secret = 'platform-secret-cutover';
+    const result = await runEnvCheck(
+      await writeEnv(
+        providerEnv({ EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE: secret }),
+      ),
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /EDUCANVAS_K12_CONVERSATION_AUTHORITY_STAGE is not valid/,
+    );
+    assert.doesNotMatch(result.stderr, new RegExp(secret));
+  });
+
   it('accepts the repository example environment', () => {
     const result = runEnvCheck('.env.example');
 

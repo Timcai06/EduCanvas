@@ -52,6 +52,42 @@ describe('TurnApplicationService (server-confirmed cancellation)', () => {
       status: 'cancelled',
       errorCode: 'model_aborted',
     });
-    expect(lifecycle.settlements[0]?.status).toBe('cancelled');
+    expect(lifecycle.settlements[0]).toMatchObject({
+      status: 'cancelled',
+      retryable: false,
+    });
+  });
+
+  it('取消监听建立失败时冻结为可重试的Runtime终态', async () => {
+    const lifecycle = new MemoryLifecycle();
+    const events = await collect(
+      new TurnApplicationService({
+        lifecycle,
+        profile: profile(),
+        contextLedger: new MemoryContextLedger(),
+        modelRunLedger: new MemoryModelRunLedger(),
+        modelGateway: {
+          async *streamTurnText() {
+            throw new Error('provider_must_not_run');
+          },
+        },
+        cancellation: {
+          async open() {
+            throw new Error('watcher_unavailable');
+          },
+        },
+      }),
+    );
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'turn.failed',
+      code: 'RUNTIME_FAILED',
+      retryable: true,
+    });
+    expect(lifecycle.settlements[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'RUNTIME_FAILED',
+      retryable: true,
+    });
   });
 });

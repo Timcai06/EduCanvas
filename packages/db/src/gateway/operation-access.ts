@@ -22,6 +22,7 @@ import {
   GatewayPersistenceError,
   type Database,
   type DatabaseExecutor,
+  type DatabaseTransaction,
 } from './persistence';
 
 export interface GatewayCurrentOperationAccess {
@@ -130,6 +131,11 @@ export async function requestCurrentGatewayOperationCancellation(
     operationId: string;
     actorUserId: string;
     now: Date;
+    reconcileTerminal?: (
+      transaction: DatabaseTransaction,
+      operationId: string,
+      now: Date,
+    ) => Promise<'running' | 'completed' | 'failed' | 'cancelled'>;
   },
 ): Promise<{
   recorded: boolean;
@@ -144,10 +150,15 @@ export async function requestCurrentGatewayOperationCancellation(
       requiredPermission: 'conversation.reply',
       mutation: true,
     });
-    if (
-      !access ||
-      (access.status !== 'pending' && access.status !== 'running')
-    ) {
+    if (!access) {
+      return { recorded: false, continuation: 'none' };
+    }
+    const status = input.reconcileTerminal
+      ? await input.reconcileTerminal(transaction, input.operationId, input.now)
+      : access.status === 'pending' || access.status === 'running'
+        ? 'running'
+        : normalizeOperationStatus(access.status);
+    if (status !== 'running') {
       return { recorded: false, continuation: 'none' };
     }
     await transaction
@@ -273,7 +284,7 @@ export async function listRecentCurrentGatewayOperations(
 }
 
 export async function listCurrentGatewayOperationEvents(
-  database: Database,
+  database: DatabaseExecutor,
   input: {
     operationId: string;
     afterSequence: number;

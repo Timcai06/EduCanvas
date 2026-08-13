@@ -33,12 +33,42 @@ export function buildCiEvidence({
   if (!Number.isFinite(Date.parse(generatedAt))) {
     throw new Error('generatedAt must be ISO-8601 compatible');
   }
+  const e2eScope =
+    event === 'schedule'
+      ? 'nightly'
+      : event === 'workflow_dispatch'
+        ? 'full'
+        : 'affected';
+  const e2eExpected = expected.e2e === true;
+  const e2eVerification = !e2eExpected
+    ? 'not_applicable'
+    : results.e2e === 'success'
+      ? 'verified'
+      : results.e2e === 'failure' || results.e2e === 'cancelled'
+        ? 'failed'
+        : 'pending';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sha: sha.toLowerCase(),
     event,
     expected: { ...expected },
     results: { ...results },
+    e2eEvidence: {
+      scope: e2eScope,
+      decision: e2eExpected ? 'run' : 'skip',
+      verification: e2eVerification,
+      requiredProjects: !e2eExpected
+        ? []
+        : e2eScope === 'affected'
+          ? ['chromium-pr-smoke']
+          : ['chromium', 'chromium-mobile', 'firefox'],
+      pendingExternal: [
+        'safari_webkit',
+        'real_provider_canary',
+        'real_microphone',
+        'real_external_services',
+      ],
+    },
     requiredFailures: requiredResultFailures({
       eventName: event,
       expected,

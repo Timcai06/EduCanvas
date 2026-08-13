@@ -13,6 +13,7 @@ describe('Gateway config', () => {
       localUserId: 'local:owner',
       // 本地 Web 默认 3101（README），127.0.0.1 与 localhost 两种访问形态。
       wsAllowedOrigins: ['http://127.0.0.1:3101', 'http://localhost:3101'],
+      terminalReconciliationMode: 'enabled',
     });
   });
 
@@ -92,5 +93,20 @@ describe('Gateway config', () => {
     expect(() =>
       readGatewayConfig({ EDUCANVAS_GATEWAY_PORT: '70000' }),
     ).toThrow(/1..65535/);
+  });
+
+  it('validates the terminal reconciliation rollback mode without reflecting raw values', () => {
+    expect(
+      readGatewayConfig({
+        EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE: 'legacy-disabled',
+      }).terminalReconciliationMode,
+    ).toBe('legacy-disabled');
+    expect(() =>
+      readGatewayConfig({
+        EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE: 'secret-like-value',
+      }),
+    ).toThrow(
+      'EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE must be enabled or legacy-disabled',
+    );
   });
 });

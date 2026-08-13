@@ -1,10 +1,10 @@
 # 代码与架构可信化
 
 - 任务分配名：`CA 代码与架构可信化`
-- 状态：`draft`
+- 状态：`active`（协调状态 `WAITING_REVIEW`；最终 PASS 与两线集成仍由 reviewer 执行）
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex
-- 最后验证时间：2026-08-12
+- 最后验证时间：2026-08-13
 - 默认分支审计基线：`origin/main@b0d0ddb21430b28d37dd663eb7fcb6963315b7e8`
 - 计划编写工作区：`fix/live-voice-orb@a33c225398bd4dda069e79ed84d5fc02a3efff96`
 - 关联计划：[LC Live 与 Canvas 输出](../completed/LC-Live与Canvas输出产品化.md)、
@@ -15,8 +15,21 @@
 
 > 本计划记录的是上述 `origin/main` 快照的审计结论。工作区未提交文件、当前分支新增能力和
 > 未合并 PR 不得写成默认分支既有事实。计划激活前必须重新核对 `origin/main` SHA、当前分支、
-> 工作树、CI 和 RM/CA 文件所有权；本文件目前不进入分配索引。本轮只以同一分支实际代码为
-> 输入，任何远端 PR 都不构成任务前置或完成证据。
+> 工作树、CI 和 RM/CA 文件所有权；本文件已在 reviewer 授权后进入 active 分配索引。本轮只以
+> 同一分支实际代码为输入，任何远端 PR 都不构成任务前置或完成证据。
+
+## 本地候选收口（2026-08-13）
+
+- 阶段一候选 `3395c272fb80172a687a4b0d45c0f670d40ca205` 已获 reviewer 阶段接受；
+- CA08B `f40568aa67cbd76a635ac0b96d4339e18da46bcc` 完成 K12 provenance、全量
+  parity/orphan、受控 platform 读与显式 legacy 回退，未删除 legacy；
+- CA09 `8fa9d6b143e33a75038de608cbc730966c9ea3d4` 仅拆实际触达热点，保持公开 API、
+  事务与锁顺序；
+- CX02 `673087a9ab96316d0edac3d521a861b66d97dddf` 只读核对
+  `EduCanvas-rm@ae7c82276c4d44fa2d7821947513eb5e3a4db4b5`，没有复制或合并 RM 代码；
+- CX03 回写当前实现事实与本地证据。计划在 reviewer 最终接受前保留于 `active/`；最终候选
+  SHA、同 SHA 门禁与残余冲突以 `CA_STATUS.md` 为准。本地完成不等于 PASS；CA06 继续
+  `DEFERRED`。
 
 ## 一、执行结论
 
@@ -494,22 +507,22 @@ Canvas 和 Worker 保留，不推倒重写。图中的 Desktop 接线是长期�
 `CA` 是代码/架构主线，`CX` 是跨层证据收口。每项只有在对应证据完整后才能由 Codex 判定
 `PASS`；实现者不得自行宣布最终验收。
 
-| 任务                          | 状态       | 单一交付与验收                                                                                                                                              |
-| ----------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CA00 基线与事实冻结           | `PENDING`  | 与 RM00 在同一干净 `HEAD` 冻结当前分支 SHA、核心调用链、现有失败、脏文件归属和文件租约；不等待或审计远端 PR，不改业务代码                                   |
-| CA01 Turn 终态一致性契约      | `PENDING`  | 选择最小 atomic commit 或 durable reconciliation 方案；冻结状态机、幂等键、故障点与回退；重大取舍先写 ADR                                                   |
-| CA02 Turn 终态实现            | `PENDING`  | 消息、引用、operation、terminal event 最终一致；重复、取消、断流、append 失败和重启不产生双终态或重复副作用                                                 |
-| CA03 本地配置单一事实源       | `PENDING`  | 等当前配置改动所属任务提交后，收口 Node、5434、可选 Provider、doctor、README、`.env.example` 与 Turbo output；clean bootstrap 通过；本轮不改 Desktop 打包链 |
-| CA04 完整 E2E 本地基线恢复    | `PENDING`  | 在 RM 功能代码前修复焦点实现、Canvas persistence/endpoint 契约、locator、route cleanup 和移动端断言；禁止用 sleep/retry 掩盖                                |
-| CA05 CI 证据语义              | `PENDING`  | 保留 affected smoke，明确 full/nightly 的 run/skip/待验证语义；当前门禁以本地完整矩阵和 workflow 契约测试为准，远端连续 nightly 留到远端阶段补证            |
-| CA06 Desktop 主链后续立项     | `DEFERRED` | 只保留默认分支旁路事实、长期目标与未来验收条件；本轮不审计远端 PR，不改 Desktop/Gateway，不进入 CA/RM 完成门禁                                              |
-| CA07 effective subject 契约   | `PENDING`  | 明确 local/anonymous/registered/Gateway 四种主体的 UI、session、data owner；正式切换另设迁移，不暗改归属                                                    |
-| CA08A 消息账本权威读源与对账  | `PENDING`  | 冻结当前权威读源、双写 parity、指标、失败处理和回退条件；提供 RM07/RM08 可消费契约，但不切读、不删除旧表                                                    |
-| CA08B 消息账本受控切读        | `PENDING`  | 等 RM RX03 冻结聊天/Artifact/Live 产品事实后再切读并验证回退；legacy 删除另设后续任务，不与本次切读同提交                                                   |
-| CA09 热点边界拆分             | `PENDING`  | 只拆 CA01/CA08A/CA08B 实际触达且超过职责预算的 repository/state machine；行为和公开 API 不变                                                                |
-| CX01 故障与重放矩阵           | `PENDING`  | 模型、工具、DB、terminal append、SSE 断流、重复提交、取消、重启和未登录负例全部可复现                                                                       |
-| CX02 RM/CA 跨计划契约审计     | `PENDING`  | 在 RM RX03 与 CA08B 后核对 artifact/context snapshot、terminal、identity、ledger 和 Live 接缝；KM/O 只读当前 accepted contract，不要求其实施计划完成        |
-| CX03 Canonical 单一回写与归档 | `PENDING`  | 最后唯一写入共享架构/工程/质量/运维文档；记录本地 commit SHA、验证结果和残余待验证后归档，不等待远端 PR                                                     |
+| 任务                          | 状态        | 单一交付与验收                                                                                                                                              |
+| ----------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CA00 基线与事实冻结           | `COMPLETED` | 与 RM00 在同一干净 `HEAD` 冻结当前分支 SHA、核心调用链、现有失败、脏文件归属和文件租约；不等待或审计远端 PR，不改业务代码                                   |
+| CA01 Turn 终态一致性契约      | `COMPLETED` | 选择最小 atomic commit 或 durable reconciliation 方案；冻结状态机、幂等键、故障点与回退；重大取舍先写 ADR                                                   |
+| CA02 Turn 终态实现            | `COMPLETED` | 消息、引用、operation、terminal event 最终一致；重复、取消、断流、append 失败和重启不产生双终态或重复副作用                                                 |
+| CA03 本地配置单一事实源       | `COMPLETED` | 等当前配置改动所属任务提交后，收口 Node、5434、可选 Provider、doctor、README、`.env.example` 与 Turbo output；clean bootstrap 通过；本轮不改 Desktop 打包链 |
+| CA04 完整 E2E 本地基线恢复    | `COMPLETED` | 在 RM 功能代码前修复焦点实现、Canvas persistence/endpoint 契约、locator、route cleanup 和移动端断言；禁止用 sleep/retry 掩盖                                |
+| CA05 CI 证据语义              | `COMPLETED` | 保留 affected smoke，明确 full/nightly 的 run/skip/待验证语义；当前门禁以本地完整矩阵和 workflow 契约测试为准，远端连续 nightly 留到远端阶段补证            |
+| CA06 Desktop 主链后续立项     | `DEFERRED`  | 只保留默认分支旁路事实、长期目标与未来验收条件；本轮不审计远端 PR，不改 Desktop/Gateway，不进入 CA/RM 完成门禁                                              |
+| CA07 effective subject 契约   | `COMPLETED` | 明确 local/anonymous/registered/Gateway 四种主体的 UI、session、data owner；正式切换另设迁移，不暗改归属                                                    |
+| CA08A 消息账本权威读源与对账  | `COMPLETED` | 冻结当前权威读源、双写 parity、指标、失败处理和回退条件；提供 RM07/RM08 可消费契约，但不切读、不删除旧表                                                    |
+| CA08B 消息账本受控切读        | `COMPLETED` | 等 RM RX03 冻结聊天/Artifact/Live 产品事实后再切读并验证回退；legacy 删除另设后续任务，不与本次切读同提交                                                   |
+| CA09 热点边界拆分             | `COMPLETED` | 只拆 CA01/CA08A/CA08B 实际触达且超过职责预算的 repository/state machine；行为和公开 API 不变                                                                |
+| CX01 故障与重放矩阵           | `COMPLETED` | 模型、工具、DB、terminal append、SSE 断流、重复提交、取消、重启和未登录负例全部可复现                                                                       |
+| CX02 RM/CA 跨计划契约审计     | `COMPLETED` | 在 RM RX03 与 CA08B 后核对 artifact/context snapshot、terminal、identity、ledger 和 Live 接缝；KM/O 只读当前 accepted contract，不要求其实施计划完成        |
+| CX03 Canonical 单一回写与归档 | `COMPLETED` | 最后唯一写入共享架构/工程/质量/运维文档；记录本地 commit SHA、验证结果和残余待验证后归档，不等待远端 PR                                                     |
 
 硬依赖：
 
