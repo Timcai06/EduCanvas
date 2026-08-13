@@ -3,6 +3,7 @@ import {
   createObservationEpochController,
   pollArtifactToTerminal,
   projectGenerationPollResult,
+  shouldNotifySettled,
   isPollOutcomeGenerating,
   phaseFromPollOutcome,
   outcomeFromPollOutcome,
@@ -24,6 +25,14 @@ describe('artifact generation flow polling state mapping', () => {
     expect(outcomeFromPollOutcome('ready')).toBe('ready');
     expect(outcomeFromPollOutcome('failed')).toBe('failed');
     expect(outcomeFromPollOutcome('timed_out')).toBe('timed_out');
+  });
+
+  it('终态通知判定：ready/failed 通知，cancelled 与未收敛不通知', () => {
+    expect(shouldNotifySettled('ready', 'ready')).toBe(true);
+    expect(shouldNotifySettled('failed', 'failed')).toBe(true);
+    expect(shouldNotifySettled('failed', 'cancelled')).toBe(false);
+    expect(shouldNotifySettled('generating', 'ready')).toBe(false);
+    expect(shouldNotifySettled('generating', 'timed_out')).toBe(false);
   });
 
   it('A-B反序：旧 epoch 不可覆盖新观察状态', () => {

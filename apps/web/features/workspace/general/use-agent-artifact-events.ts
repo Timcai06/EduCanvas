@@ -57,8 +57,9 @@ export function useAgentArtifactEvents(input: {
         },
         { openWhenReady: shouldOpenWhenReady() },
       ).finally(() => {
+        /* 终态刷新由 useArtifactGeneration 的 onSettled 统一负责，
+           这里不再二次刷新，避免同一生成任务触发重复列表请求。 */
         observing.current.delete(event.artifactId);
-        void onArtifactChanged();
       });
     },
     [observeProposedArtifact, onArtifactChanged, shouldOpenWhenReady],

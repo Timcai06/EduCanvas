@@ -62,6 +62,13 @@ export const outcomeFromPollOutcome = (
         ? 'ready'
         : 'failed';
 
+/** 观察收敛到终态后是否值得通知只读列表刷新；本地取消不通知（任务仍在后台运行）。 */
+export const shouldNotifySettled = (
+  phase: GenerationPhase,
+  resultOutcome: PollOutcome,
+): boolean =>
+  (phase === 'ready' || phase === 'failed') && resultOutcome !== 'cancelled';
+
 export interface ObservationEpochController {
   begin: () => number;
   isCurrent: (epoch: number) => boolean;
@@ -226,8 +233,16 @@ export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   web_app: 'Web App',
 };
 
+export interface ArtifactGenerationFlowOptions {
+  /* 本地观察收敛到终态时回调；Dock 等只读列表借此保持最新，不负责重试语义。 */
+  readonly onSettled?: () => void;
+}
+
 /** 显式确认后轮询；关闭页面不取消后端任务，资源列表与详情负责恢复。 */
-export function useArtifactGeneration() {
+export function useArtifactGeneration(
+  options: ArtifactGenerationFlowOptions = {},
+) {
+  const { onSettled } = options;
   const [generation, setGeneration] = useState<GenerationState | null>(null);
   const [openDetail, setOpenDetail] = useState<ArtifactDetail | null>(null);
   const [canvasFull, setCanvasFull] = useState(false);
@@ -268,6 +283,10 @@ export function useArtifactGeneration() {
         titleFallback,
       );
       setGeneration(next);
+      /* 终态收敛后联动只读列表；本地取消不算终态（任务仍在后台运行）。 */
+      if (shouldNotifySettled(next.phase, result.outcome)) {
+        onSettled?.();
+      }
       if (
         next.phase === 'ready' &&
         options.openWhenReady &&
@@ -277,7 +296,7 @@ export function useArtifactGeneration() {
         setCanvasFull(false);
       }
     },
-    [],
+    [onSettled],
   );
 
   const beginConfirm = useCallback(
@@ -323,9 +342,10 @@ export function useArtifactGeneration() {
           return;
         }
         setGeneration({ phase: 'failed', outcome: 'failed', kind, title });
+        onSettled?.();
       }
     },
-    [applyPollResult, beginObservation, isCurrentObservation],
+    [applyPollResult, beginObservation, isCurrentObservation, onSettled],
   );
 
   /**
@@ -378,9 +398,10 @@ export function useArtifactGeneration() {
           artifactId: artifact.artifactId,
           title: artifact.title,
         });
+        onSettled?.();
       }
     },
-    [applyPollResult, beginObservation, isCurrentObservation],
+    [applyPollResult, beginObservation, isCurrentObservation, onSettled],
   );
 
   const openArtifact = useCallback(async (artifactId: string) => {
@@ -440,6 +461,7 @@ export function useArtifactGeneration() {
               ? result.detail
               : current,
           );
+          onSettled?.();
         }
       } catch (error) {
         if (!isCurrentObservation(epoch)) return;
@@ -450,9 +472,10 @@ export function useArtifactGeneration() {
           return;
         }
         setGeneration(projectRevisionFailure(detail, 'failed'));
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation, pollAbort],
+    [beginObservation, isCurrentObservation, onSettled, pollAbort],
   );
 
   const createBlankNote = useCallback(
@@ -484,6 +507,7 @@ export function useArtifactGeneration() {
         });
         setOpenDetail(detail);
         setCanvasFull(false);
+        onSettled?.();
       } catch {
         setGeneration({
           phase: 'failed',
@@ -491,9 +515,10 @@ export function useArtifactGeneration() {
           kind: 'note',
           title,
         });
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation],
+    [beginObservation, isCurrentObservation, onSettled],
   );
 
   const saveNote = useCallback(
@@ -529,6 +554,7 @@ export function useArtifactGeneration() {
           title: detail.artifact.title,
           detail: updated,
         });
+        onSettled?.();
       } catch {
         setGeneration({
           phase: 'failed',
@@ -537,9 +563,10 @@ export function useArtifactGeneration() {
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation],
+    [beginObservation, isCurrentObservation, onSettled],
   );
 
   const dismiss = useCallback(() => {

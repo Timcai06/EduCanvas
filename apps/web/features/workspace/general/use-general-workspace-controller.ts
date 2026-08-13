@@ -110,7 +110,16 @@ export function useGeneralWorkspaceController(options: {
   );
 
   const resourceDock = useResourceDock(notebookId);
-  const artifactFlow = useArtifactGeneration();
+  const { reload: reloadResourceDock } = resourceDock;
+  /* onSettled 引用保持稳定（reload 依赖 [notebookId, requestPage]），
+     避免轮询/观察链随每次渲染重建失效。 */
+  const refreshResourceDock = useCallback(
+    () => void reloadResourceDock(),
+    [reloadResourceDock],
+  );
+  const artifactFlow = useArtifactGeneration({
+    onSettled: refreshResourceDock,
+  });
   const closeArtifactCanvas = useCallback(() => {
     workspace.dispatch({ type: 'close' });
     artifactFlow.closeCanvas();
@@ -172,6 +181,7 @@ export function useGeneralWorkspaceController(options: {
     endpoint: GENERAL_ASSET_ENDPOINT,
     onError: setError,
     onStatus: setSourceNotice,
+    onSettled: refreshResourceDock,
   });
   const { assets, setAssets } = sources;
   const refreshAssets = sources.refresh;
@@ -383,12 +393,14 @@ export function useGeneralWorkspaceController(options: {
           assetsRef.current = next;
           return next;
         });
+        /* 新来源即刻进入 Dock 摘要，不必等下一轮手动刷新。 */
+        void resourceDock.reload();
       } catch (reason: unknown) {
         setError(toClientError(reason, '文件上传暂时不可用。'));
         throw reason;
       }
     },
-    [setAssets],
+    [resourceDock, setAssets],
   );
 
   /* W02：landing 与对话共享同一组 ConversationPane props（两态只差 isLanding）。 */

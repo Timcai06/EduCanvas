@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceResourceSummary } from '@educanvas/canvas-protocol';
 import { appendResourceDockPage } from './use-resource-dock';
+
+const source = readFileSync(
+  fileURLToPath(new URL('./use-resource-dock.ts', import.meta.url)),
+  'utf8',
+);
 
 function summary(
   resourceKind: 'source' | 'artifact',
@@ -95,5 +102,12 @@ describe('useResourceDock page seam', () => {
         ),
       ).size,
     ).toBe(500);
+  });
+
+  it('reload 保留旧列表只置 loading：展开 Dock 触发刷新时不先清空闪屏', () => {
+    expect(source).toContain('items: current.items');
+    expect(source).toContain('loading: true');
+    expect(source).toContain('itemsRef.current = [];');
+    expect(source).toContain('cursorRef.current = null;');
   });
 });

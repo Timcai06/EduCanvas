@@ -149,7 +149,13 @@ export function useResourceDock(notebookId: string): UseResourceDockResult {
     loadingRef.current = false;
     itemsRef.current = [];
     cursorRef.current = null;
-    setState({ ...initialState, notebookId });
+    /* 保留旧列表只置 loading：展开 Dock 触发刷新时不先清空闪屏，新页返回后整体替换。 */
+    setState((current) => ({
+      ...initialState,
+      notebookId,
+      loading: true,
+      items: current.items,
+    }));
     await requestPage(null, true, generationRef.current, notebookId);
   }, [notebookId, requestPage]);
 

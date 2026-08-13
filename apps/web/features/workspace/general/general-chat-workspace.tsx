@@ -160,6 +160,8 @@ export function GeneralChatWorkspace({
             { ...asset, enabled: asset.selectable },
             ...current.filter((item) => item.id !== asset.id),
           ]);
+          /* 新来源即刻进入 Dock 摘要（processing 态也可见，收敛后由 onSettled 再刷新）。 */
+          void ctrl.resourceDock.reload();
           ctrl.setAssetPanel(null);
         }}
       />

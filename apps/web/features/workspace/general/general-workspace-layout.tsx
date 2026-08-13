@@ -124,6 +124,7 @@ export function GeneralWorkspaceLayout({
           loading={ctrl.resourceDock.loading}
           error={ctrl.resourceDock.error?.message ?? null}
           hasMore={ctrl.resourceDock.hasMore}
+          onExpand={() => void ctrl.resourceDock.reload()}
           onLoadMore={() => void ctrl.resourceDock.loadMore()}
           onRetry={() => void ctrl.resourceDock.reload()}
           onOpenLibrary={ctrl.openStudio}
