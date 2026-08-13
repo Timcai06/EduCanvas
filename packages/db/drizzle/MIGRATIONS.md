@@ -756,8 +756,9 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
   新 begin 与受信 operator backfill 在同一事务插入或验证映射；settle 只允许
   已存在的两侧事实继续收敛。
 - 锁表: 仅 CREATE TABLE 与两个普通索引，不改既有表、不扫描或锁定历史消息表。
-- 回滚: 切回 `legacy` 并重启后可删除 sidecar；回滚不删除 `chat_messages`、
-  `conversation_messages`、引用或教学运行态。平台切读期间不得先删 sidecar。
+- 回滚: 切回 `legacy` 并重启；配置回退不删除 sidecar，因为当前应用的 settle 与审计路径仍会
+  读取它。只有先回滚到完全不引用该表的旧应用，并通过独立 migration 与批准后才能 drop。
+  回滚不删除 `chat_messages`、`conversation_messages`、引用、教学运行态或 provenance 证据。
 - N-1: 全新无外键表，旧应用不读取也不写入；部署后需由受信 operator 运行
   bounded backfill，为既有已验证副本补映射，完成全量 missing/mismatch/orphan
   零差异证据前不得启用 platform authority。
