@@ -187,6 +187,80 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
     expect(html).toContain('后台仍在处理，可关闭提示并稍后从资源库查看');
   });
 
+  it('成功 revision 且已有消息卡时不显示重复浮动状态卡', () => {
+    const html = renderToStaticMarkup(
+      <ConversationPane
+        isLanding={false}
+        notebookId="notebook-1"
+        messages={[
+          {
+            id: 'assistant-1',
+            turnId: 'turn-1',
+            clientMessageId: 'client-1',
+            role: 'assistant',
+            status: 'completed',
+            text: '已存在的产物',
+            attachments: [],
+            artifacts: [
+              {
+                id: 'artifact-1',
+                kind: 'mind_map',
+                title: '思维导图',
+                status: 'active',
+                latestVersion: 2,
+              },
+            ],
+          },
+        ]}
+        busy={false}
+        stopAvailable={false}
+        statusText={null}
+        statusTone="info"
+        generation={{
+          artifactId: 'artifact-1',
+          kind: 'mind_map',
+          title: '思维导图',
+          phase: 'ready',
+          outcome: 'ready',
+          revisionOutcome: undefined,
+          detail: {
+            artifact: {
+              id: 'artifact-1',
+              kind: 'mind_map',
+              status: 'active',
+              latestVersion: 2,
+            } as never,
+          } as never,
+        }}
+        revisingOpenArtifact={false}
+        composerTools={[]}
+        outputPreference="auto"
+        liveAssets={[]}
+        turnContextSnapshot={buildTurnContextSnapshot([])}
+        composerDockRef={{ current: null }}
+        scrollRef={{ current: null }}
+        nearBottomRef={{ current: true }}
+        onSend={vi.fn()}
+        onLiveSend={vi.fn()}
+        onStop={vi.fn()}
+        onMenuAction={vi.fn()}
+        onToolAction={vi.fn()}
+        onOutputPreferenceChange={vi.fn()}
+        onRetry={vi.fn()}
+        onPreviewHtml={vi.fn()}
+        onOpenArtifact={vi.fn()}
+        onToggleLiveAsset={vi.fn()}
+        onUploadLiveAsset={vi.fn()}
+        onOpenStatusCard={vi.fn()}
+        onDismissStatusCard={vi.fn()}
+      />,
+    );
+
+    expect(html).not.toContain('打开');
+    expect(html).not.toContain('已生成');
+    expect(html).not.toContain('已更新至');
+  });
+
   it('将 outputPreference 与 onOutputPreferenceChange 透传给 VoiceComposer', () => {
     const onOutputPreferenceChange = vi.fn();
     renderToStaticMarkup(

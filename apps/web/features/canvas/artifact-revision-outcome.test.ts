@@ -67,4 +67,22 @@ describe('Artifact revision outcome', () => {
     expect(state.revisionOutcome).toBe('timed_out');
     expect(state.detail).toBe(detail);
   });
+
+  it('ready revision 不会携带 revisionOutcome，避免重复成功状态卡', () => {
+    const detail = detailWithVersion(2);
+    const state = projectRevisionPollResult(
+      'mind_map',
+      'artifact-1',
+      'fallback',
+      { detail, outcome: 'ready' },
+    );
+
+    expect(state).toMatchObject({
+      phase: 'ready',
+      outcome: 'ready',
+      revisionOutcome: undefined,
+      artifactId: 'artifact-1',
+      detail,
+    });
+  });
 });
