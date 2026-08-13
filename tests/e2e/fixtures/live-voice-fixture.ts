@@ -93,6 +93,10 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
       readonly bufferedAmount = 0;
       binaryType: BinaryType = 'blob';
       readyState = FakeWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
 
       private operationId: string | null = null;
       private segmentId: string | null = null;
@@ -120,7 +124,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           } else {
             events.push('asr.socket.open');
           }
-          this.dispatchEvent(new Event('open'));
+          const event = new Event('open');
+          this.dispatchEvent(event);
+          this.onopen?.(event);
         });
       }
 
@@ -200,11 +206,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         view.setUint32(4, this.streamingSequence, false);
         message.set(pcmBytes, FRAME_HEADER_BYTES);
         this.streamingSequence += 1;
-        this.dispatchEvent(
-          new MessageEvent('message', {
-            data: message.buffer,
-          }),
-        );
+        const event = new MessageEvent('message', { data: message.buffer });
+        this.dispatchEvent(event);
+        this.onmessage?.(event);
         events.push('streaming.speech.frame');
       }
 
@@ -243,11 +247,11 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
 
       private dispatchMessage(message: object): void {
         if (this.readyState === FakeWebSocket.CLOSED) return;
-        this.dispatchEvent(
-          new MessageEvent('message', {
-            data: JSON.stringify(message),
-          }),
-        );
+        const event = new MessageEvent('message', {
+          data: JSON.stringify(message),
+        });
+        this.dispatchEvent(event);
+        this.onmessage?.(event);
       }
 
       close(): void {
@@ -266,7 +270,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           }
         }
         this.readyState = FakeWebSocket.CLOSING;
-        this.dispatchEvent(new CloseEvent('close', { code: 1000 }));
+        const event = new CloseEvent('close', { code: 1000 });
+        this.dispatchEvent(event);
+        this.onclose?.(event);
         this.readyState = FakeWebSocket.CLOSED;
       }
 
@@ -288,7 +294,9 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           text,
         });
         this.serverSequence += 1;
-        this.dispatchEvent(new MessageEvent('message', { data }));
+        const event = new MessageEvent('message', { data });
+        this.dispatchEvent(event);
+        this.onmessage?.(event);
         events.push(`voice.${type}`);
       }
     }

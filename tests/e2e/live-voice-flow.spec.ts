@@ -52,8 +52,8 @@ test.beforeEach(async ({ page }) => {
 test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈现回答', async ({
   page,
 }) => {
-  await setSpeechTransportMode(page, 'fallback');
   const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'fallback');
 
   await emitVoicePartial(page, '请先检索实验资料');
   await expect(dialog.getByText('请先检索实验资料')).toBeVisible();
@@ -102,8 +102,8 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
 test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async ({
   page,
 }) => {
-  await setSpeechTransportMode(page, 'fallback');
   const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'fallback');
   await expect(
     dialog.getByRole('listitem', { name: '电路图.png · 长期上下文' }),
   ).toBeVisible();
@@ -200,8 +200,8 @@ test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async 
 });
 
 test('Live Voice 插话取消（默认 streaming speech）', async ({ page }) => {
-  await setSpeechTransportMode(page, 'streaming');
   const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'streaming');
 
   await holdNextVoiceTurn(
     page,
