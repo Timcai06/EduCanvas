@@ -135,9 +135,7 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
         latestVersion: 1,
       }),
     ]);
-    expect(
-      readyArtifacts[0] && 'progress' in readyArtifacts[0],
-    ).toBe(false);
+    expect(readyArtifacts[0] && 'progress' in readyArtifacts[0]).toBe(false);
   });
 
   it.each(['failed', 'cancelled', 'timed_out'] as const)(

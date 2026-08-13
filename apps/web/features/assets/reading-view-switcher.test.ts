@@ -10,9 +10,9 @@ const source = readFileSync(
 
 describe('resolveQualityNote', () => {
   it('四种质量状态返回一行提示与色调', () => {
-    expect(
-      resolveQualityNote({ quality: 'processing' }),
-    ).toMatchObject({ tone: 'info' });
+    expect(resolveQualityNote({ quality: 'processing' })).toMatchObject({
+      tone: 'info',
+    });
     expect(resolveQualityNote({ quality: 'failed' })).toMatchObject({
       text: '结构化转换失败；仍可预览原件。',
       tone: 'error',
@@ -20,9 +20,9 @@ describe('resolveQualityNote', () => {
     expect(
       resolveQualityNote({ quality: 'degraded_plain_text' })?.text,
     ).toContain('降级为纯文本');
-    expect(
-      resolveQualityNote({ quality: 'unavailable' })?.text,
-    ).toContain('仍可查看原件');
+    expect(resolveQualityNote({ quality: 'unavailable' })?.text).toContain(
+      '仍可查看原件',
+    );
   });
 
   it('无质量状态或可读状态不产生提示', () => {
