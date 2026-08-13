@@ -311,8 +311,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       '**/api/v1/canvas/resources/artifact/**',
       async (route) => {
         await resourceGate;
-        const response = await route.fetch();
-        await route.fulfill({ response });
+        await route.continue();
       },
     );
     await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
