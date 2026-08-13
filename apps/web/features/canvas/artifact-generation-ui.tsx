@@ -99,14 +99,16 @@ export function ArtifactStatusCard({
           ? `本次修改仍在后台处理，当前可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
           : generation.outcome === 'cancelled'
             ? '生成已取消'
-            : generation.phase === 'generating'
-              ? '后台生成中…关闭页面也不会中断'
-              : generation.phase === 'ready'
-                ? generation.detail &&
-                  generation.detail.artifact.latestVersion > 1
-                  ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
-                  : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-                : '生成失败，可稍后从产物列表重试';
+            : generation.outcome === 'timed_out'
+              ? '后台仍在处理，可关闭提示并稍后从资源库查看'
+              : generation.phase === 'generating'
+                ? '后台生成中…关闭页面也不会中断'
+                : generation.phase === 'ready'
+                  ? generation.detail &&
+                    generation.detail.artifact.latestVersion > 1
+                    ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
+                    : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
+                  : '生成失败，可稍后从产物列表重试';
   return (
     <div
       role="status"

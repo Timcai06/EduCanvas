@@ -13,6 +13,25 @@ const detail = {
 } as ArtifactDetail;
 
 describe('ArtifactStatusCard revision outcome', () => {
+  it('初次生成达到总轮询上限时显示可恢复提示', () => {
+    const html = renderToStaticMarkup(
+      <ArtifactStatusCard
+        generation={{
+          phase: 'generating',
+          outcome: 'timed_out',
+          kind: 'mind_map',
+          artifactId: 'artifact-1',
+          title: '函数思维导图',
+        }}
+        onOpen={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('后台仍在处理，可关闭提示并稍后从资源库查看');
+    expect(html).not.toContain('>打开</button>');
+  });
+
   it.each([
     ['failed', '本次修改失败，仍可打开 v2'],
     ['cancelled', '本次修改已取消，仍可打开 v2'],

@@ -19,7 +19,8 @@ import {
 } from './artifact-polling-client';
 
 export type GenerationPhase = 'confirm' | 'generating' | 'ready' | 'failed';
-export type GenerationOutcome = 'pending' | 'ready' | 'failed' | 'cancelled';
+export type GenerationOutcome =
+  'pending' | 'ready' | 'failed' | 'cancelled' | 'timed_out';
 
 export interface GenerationState {
   phase: GenerationPhase;
@@ -53,8 +54,8 @@ export const phaseFromPollOutcome = (outcome: PollOutcome): GenerationPhase => {
 export const outcomeFromPollOutcome = (
   outcome: PollOutcome,
 ): GenerationOutcome =>
-  isPollOutcomeGenerating(outcome)
-    ? 'pending'
+  outcome === 'pending' || outcome === 'timed_out'
+    ? outcome
     : outcome === 'cancelled'
       ? 'cancelled'
       : outcome === 'ready'
@@ -75,15 +76,84 @@ export const createObservationEpochController =
     };
   };
 
-/** Long-running durable jobs re-enter bounded poll windows until a real terminal fact arrives. */
+export interface PollArtifactToTerminalOptions {
+  signal?: AbortSignal;
+  minimumVersion?: number;
+  /** Upper bound across every poll window, including retry/backoff time. */
+  totalTimeoutMs?: number;
+  /** Compatibility alias for callers that think in terms of one total timeout. */
+  timeoutMs?: number;
+  windowTimeoutMs?: number;
+  initialIntervalMs?: number;
+  maxIntervalMs?: number;
+  backoffFactor?: number;
+  /** A second independent stop condition protects mocked/clockless environments. */
+  maxPollWindows?: number;
+  maxAttempts?: number;
+}
+
+const DEFAULT_POLL_TOTAL_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_POLL_WINDOW_TIMEOUT_MS = 60_000;
+const DEFAULT_POLL_INTERVAL_MS = 1_500;
+const DEFAULT_POLL_MAX_INTERVAL_MS = 8_000;
+const DEFAULT_POLL_BACKOFF_FACTOR = 1.5;
+const DEFAULT_POLL_MAX_WINDOWS = 5;
+
+/** Long-running durable jobs use bounded windows with backoff and an explicit stop. */
 export async function pollArtifactToTerminal(
   artifactId: string,
-  options: { signal?: AbortSignal; minimumVersion?: number } = {},
+  options: PollArtifactToTerminalOptions = {},
 ): Promise<PollArtifactResult> {
-  for (;;) {
-    const result = await pollArtifactUntilSettled(artifactId, options);
+  const totalTimeoutMs = Math.max(
+    0,
+    options.totalTimeoutMs ??
+      options.timeoutMs ??
+      DEFAULT_POLL_TOTAL_TIMEOUT_MS,
+  );
+  const windowTimeoutMs = Math.max(
+    0,
+    options.windowTimeoutMs ?? DEFAULT_POLL_WINDOW_TIMEOUT_MS,
+  );
+  const maxPollWindows = Math.max(
+    1,
+    Math.floor(
+      options.maxPollWindows ?? options.maxAttempts ?? DEFAULT_POLL_MAX_WINDOWS,
+    ),
+  );
+  const maxIntervalMs = Math.max(
+    0,
+    options.maxIntervalMs ?? DEFAULT_POLL_MAX_INTERVAL_MS,
+  );
+  const backoffFactor = Math.max(
+    1,
+    options.backoffFactor ?? DEFAULT_POLL_BACKOFF_FACTOR,
+  );
+  let intervalMs = Math.max(
+    0,
+    options.initialIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+  );
+  const deadline = Date.now() + totalTimeoutMs;
+
+  for (let attempt = 0; attempt < maxPollWindows; attempt += 1) {
+    if (options.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const remainingMs = Math.max(0, deadline - Date.now());
+    const result = await pollArtifactUntilSettled(artifactId, {
+      signal: options.signal,
+      minimumVersion: options.minimumVersion,
+      intervalMs,
+      timeoutMs: Math.min(windowTimeoutMs, remainingMs),
+    });
     if (result.outcome !== 'timed_out') return result;
+    if (attempt + 1 >= maxPollWindows || Date.now() >= deadline) return result;
+    intervalMs = Math.min(
+      maxIntervalMs,
+      Math.max(intervalMs, intervalMs * backoffFactor),
+    );
   }
+
+  throw new Error('artifact_poll_window_invariant');
 }
 
 export const hasUsableArtifactVersion = (detail: ArtifactDetail): boolean =>
