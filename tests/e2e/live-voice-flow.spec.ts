@@ -142,7 +142,7 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechRequests)
     .toBeGreaterThanOrEqual(1);
-  await expect(dialog.getByText('正在回答')).toBeVisible();
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
 
   await expect
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
