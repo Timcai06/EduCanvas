@@ -113,6 +113,7 @@ async function loadArtifact(input: {
       artifact: detail.artifact,
       version: detail.latestVersion,
       latestJob: detail.latestJob,
+      versionJob: detail.versionJob,
       accessRole: access.role,
     });
   } catch (error) {

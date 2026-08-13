@@ -117,6 +117,15 @@ export interface WorkspaceArtifactSummaryFact {
     readonly failureCode: string | null;
     readonly params: Readonly<Record<string, unknown>>;
   } | null;
+  readonly versionJob: {
+    readonly id: string;
+    readonly artifactId: string;
+    readonly operationId: string | null;
+    readonly status: string;
+    readonly progress: number | null;
+    readonly failureCode: string | null;
+    readonly params: Readonly<Record<string, unknown>>;
+  } | null;
 }
 
 export interface WorkspaceResourceMemberFacts {
@@ -284,7 +293,7 @@ export class DrizzleWorkspaceResourceSummaryRepository {
         const pageRows = artifactRows.slice(0, limit);
         const artifactIds = pageRows.map((artifact) => artifact.id);
 
-        const [versionRows, jobRows] =
+        const [versionRows, latestJobRows] =
           artifactIds.length === 0
             ? [[], []]
             : await Promise.all([
@@ -326,21 +335,59 @@ export class DrizzleWorkspaceResourceSummaryRepository {
                     desc(artifactGenerationJobs.id),
                   ),
               ]);
+        const versionJobIds = Array.from(
+          new Set(
+            versionRows
+              .map((version) => version.generationJobId)
+              .filter((jobId): jobId is string => Boolean(jobId)),
+          ),
+        );
+        const versionJobRows =
+          versionJobIds.length === 0
+            ? []
+            : await tx
+                .select({
+                  id: artifactGenerationJobs.id,
+                  artifactId: artifactGenerationJobs.artifactId,
+                  operationId: artifactGenerationJobs.operationId,
+                  status: artifactGenerationJobs.status,
+                  progress: artifactGenerationJobs.progress,
+                  failureCode: artifactGenerationJobs.failureCode,
+                  provenanceSources: sql<unknown>`${artifactGenerationJobs.params} #> '{provenance,sources}'`,
+                  selectedSources: sql<unknown>`${artifactGenerationJobs.params} -> 'selectedSources'`,
+                })
+                .from(artifactGenerationJobs)
+                .where(inArray(artifactGenerationJobs.id, versionJobIds));
 
         const latestVersions = new Map(
           versionRows.map((version) => [version.artifactId, version]),
         );
-        const latestJobs = new Map(jobRows.map((job) => [job.artifactId, job]));
+        const latestJobs = new Map(
+          latestJobRows.map((job) => [job.artifactId, job]),
+        );
+        const versionJobsById = new Map(
+          versionJobRows.map((job) => [job.id, job]),
+        );
 
         const last = pageRows.at(-1);
         return {
           items: pageRows.map((artifact) => {
-            const version = latestVersions.get(artifact.id);
+            const version = latestVersions.get(artifact.id) ?? null;
             const job = latestJobs.get(artifact.id);
             const provenanceSources = safeSourceReferences(
               job?.provenanceSources,
             );
             const selectedSources = safeSourceReferences(job?.selectedSources);
+            const versionGenerationJobId = version?.generationJobId;
+            const versionJob = versionGenerationJobId
+              ? (versionJobsById.get(versionGenerationJobId) ?? null)
+              : null;
+            const versionJobProvenanceSources = safeSourceReferences(
+              versionJob?.provenanceSources,
+            );
+            const versionJobSelectedSources = safeSourceReferences(
+              versionJob?.selectedSources,
+            );
             return {
               accessRole: access.role,
               artifact: {
@@ -377,6 +424,28 @@ export class DrizzleWorkspaceResourceSummaryRepository {
                       ...(selectedSources.length === 0
                         ? {}
                         : { selectedSources }),
+                    },
+                  }
+                : null,
+              versionJob: versionJob
+                ? {
+                    id: versionJob.id,
+                    artifactId: versionJob.artifactId,
+                    operationId: versionJob.operationId,
+                    status: versionJob.status,
+                    progress: versionJob.progress,
+                    failureCode: versionJob.failureCode,
+                    params: {
+                      ...(versionJobProvenanceSources.length === 0
+                        ? {}
+                        : {
+                            provenance: {
+                              sources: versionJobProvenanceSources,
+                            },
+                          }),
+                      ...(versionJobSelectedSources.length === 0
+                        ? {}
+                        : { selectedSources: versionJobSelectedSources }),
                     },
                   }
                 : null,

@@ -1,14 +1,45 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockGeneralConversation,
+  mockListArtifactFactsPage,
+  mockListSourceFactsPage,
+  mockLoadWorkspaceMemberFacts,
+} = vi.hoisted(() => ({
+  mockGeneralConversation: vi.fn(),
+  mockListArtifactFactsPage: vi.fn(),
+  mockListSourceFactsPage: vi.fn(),
+  mockLoadWorkspaceMemberFacts: vi.fn(),
+}));
+
+vi.mock('../platform/general-conversation', () => ({
+  loadOwnedGeneralConversationForSubject: mockGeneralConversation,
+}));
+
+vi.mock('@educanvas/db/workspace-resource-summary', () => ({
+  DrizzleWorkspaceResourceMemberFactsRepository: class {
+    load = mockLoadWorkspaceMemberFacts;
+  },
+  DrizzleWorkspaceResourceSummaryRepository: class {
+    listArtifactFactsPage = mockListArtifactFactsPage;
+    listSourceFactsPage = mockListSourceFactsPage;
+  },
+}));
 
 vi.mock('server-only', () => ({}));
 
 import {
   buildWorkspaceResourceCacheKey,
+  listWorkspaceResourceSummaries,
   mergeWorkspaceResourceCandidates,
   validateWorkspaceArtifactFact,
 } from './workspace-resource-read-model';
 
 describe('workspace resource cache authority key', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const base = {
     dataOwnerKind: 'registered' as const,
     dataOwnerId: 'same-visible-id',
@@ -69,6 +100,7 @@ describe('workspace artifact fact validation', () => {
       createdAt: '2026-08-12T12:00:00.000Z',
     },
     latestJob: null,
+    versionJob: null,
   };
 
   it('requires the immutable row to match the aggregate counter', () => {
@@ -158,5 +190,199 @@ describe('workspace resource dual cursor merge', () => {
     });
     expect(result.items).toHaveLength(1);
     expect(result.hasMore).toBe(false);
+  });
+});
+
+describe('workspace resource summary projection', () => {
+  it('preserves version-bound provenance when latest revision has failed job', async () => {
+    mockGeneralConversation.mockResolvedValue({ spaceId: 'space-1' });
+    mockListSourceFactsPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    mockListArtifactFactsPage.mockResolvedValue({
+      items: [
+        {
+          accessRole: 'owner',
+          artifact: {
+            id: 'artifact-1',
+            spaceId: 'space-1',
+            conversationId: null,
+            ownerSubjectId: 'owner-1',
+            kind: 'markdown_document',
+            trustTier: 'tier1',
+            title: 'Markdown',
+            status: 'active',
+            latestVersion: 2,
+            createdAt: '2026-08-12T12:00:00.000Z',
+            updatedAt: '2026-08-12T12:00:00.000Z',
+          },
+          latestVersion: {
+            id: 'version-2',
+            artifactId: 'artifact-1',
+            version: 2,
+            generatedBy: 'model:artifact.generate:v1',
+            createdByOperationId: null,
+            generationJobId: 'generation-job-v1',
+            createdAt: '2026-08-12T12:00:00.000Z',
+          },
+          latestJob: {
+            id: 'revised-failed-job',
+            artifactId: 'artifact-1',
+            operationId: null,
+            status: 'failed',
+            progress: 100,
+            failureCode: 'timeout',
+            params: {},
+          },
+          versionJob: {
+            id: 'generation-job-v1',
+            artifactId: 'artifact-1',
+            operationId: null,
+            status: 'succeeded',
+            progress: 100,
+            failureCode: null,
+            params: {
+              provenance: {
+                sources: [
+                  {
+                    assetId: 'source-usable',
+                    versionId: 'source-version-usable',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    mockLoadWorkspaceMemberFacts.mockResolvedValue({
+      sourceBindings: new Map(),
+      surfacePositions: new Map(),
+    });
+
+    const result = await listWorkspaceResourceSummaries({
+      dataOwnerKind: 'registered',
+      dataOwnerId: 'owner-1',
+      cursor: null,
+      filter: 'artifact',
+      limit: 10,
+    });
+
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    expect(item.status).toBe('ready');
+    expect(item.version?.sequence).toBe(2);
+    expect(item.provenance.sourceResourceIds).toEqual(['source-usable']);
+    expect(item.provenance.sourceReferences).toEqual([
+      {
+        resourceId: 'source-usable',
+        versionId: 'source-version-usable',
+      },
+    ]);
+    expect(item.allowedActions).toEqual([
+      'view',
+      'edit',
+      'regenerate',
+      'download',
+      'delete',
+    ]);
+  });
+
+  it('preserves version-bound provenance when latest revision has cancelled job', async () => {
+    mockGeneralConversation.mockResolvedValue({ spaceId: 'space-1' });
+    mockListSourceFactsPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    mockListArtifactFactsPage.mockResolvedValue({
+      items: [
+        {
+          accessRole: 'owner',
+          artifact: {
+            id: 'artifact-2',
+            spaceId: 'space-1',
+            conversationId: null,
+            ownerSubjectId: 'owner-1',
+            kind: 'markdown_document',
+            trustTier: 'tier1',
+            title: 'Markdown',
+            status: 'active',
+            latestVersion: 3,
+            createdAt: '2026-08-12T12:00:00.000Z',
+            updatedAt: '2026-08-12T12:00:00.000Z',
+          },
+          latestVersion: {
+            id: 'version-3',
+            artifactId: 'artifact-2',
+            version: 3,
+            generatedBy: 'model:artifact.generate:v1',
+            createdByOperationId: null,
+            generationJobId: 'generation-job-v2',
+            createdAt: '2026-08-12T12:00:00.000Z',
+          },
+          latestJob: {
+            id: 'cancelled-job',
+            artifactId: 'artifact-2',
+            operationId: null,
+            status: 'cancelled',
+            progress: 100,
+            failureCode: null,
+            params: {},
+          },
+          versionJob: {
+            id: 'generation-job-v2',
+            artifactId: 'artifact-2',
+            operationId: null,
+            status: 'succeeded',
+            progress: 100,
+            failureCode: null,
+            params: {
+              provenance: {
+                sources: [
+                  {
+                    assetId: 'source-usable-2',
+                    versionId: 'source-version-usable-2',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    mockLoadWorkspaceMemberFacts.mockResolvedValue({
+      sourceBindings: new Map(),
+      surfacePositions: new Map(),
+    });
+
+    const result = await listWorkspaceResourceSummaries({
+      dataOwnerKind: 'registered',
+      dataOwnerId: 'owner-1',
+      cursor: null,
+      filter: 'artifact',
+      limit: 10,
+    });
+
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    expect(item.status).toBe('ready');
+    expect(item.version?.sequence).toBe(3);
+    expect(item.provenance.sourceResourceIds).toEqual(['source-usable-2']);
+    expect(item.provenance.sourceReferences).toEqual([
+      {
+        resourceId: 'source-usable-2',
+        versionId: 'source-version-usable-2',
+      },
+    ]);
+    expect(item.allowedActions).toEqual([
+      'view',
+      'edit',
+      'regenerate',
+      'download',
+      'delete',
+    ]);
   });
 });

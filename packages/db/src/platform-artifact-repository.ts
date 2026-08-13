@@ -1008,6 +1008,7 @@ export class DrizzlePlatformArtifactRepository {
     artifact: PlatformArtifact;
     latestVersion: PlatformArtifactVersion | null;
     latestJob: PlatformArtifactJob | null;
+    versionJob: PlatformArtifactJob | null;
   }> {
     return this.database.transaction(
       async (tx) => {
@@ -1023,21 +1024,37 @@ export class DrizzlePlatformArtifactRepository {
           permission: 'notebook.read',
         });
 
-        const [versionRow] = await tx
-          .select()
+        const versionAndJob = await tx
+          .select({
+            version: artifactVersions,
+            versionJob: artifactGenerationJobs,
+          })
           .from(artifactVersions)
+          .leftJoin(
+            artifactGenerationJobs,
+            eq(artifactVersions.generationJobId, artifactGenerationJobs.id),
+          )
           .where(eq(artifactVersions.artifactId, artifactRow.id))
-          .orderBy(desc(artifactVersions.version))
+          .orderBy(desc(artifactVersions.version), desc(artifactVersions.id))
           .limit(1);
+        const [versionRow] = versionAndJob;
+        const versionJobRow = versionRow?.versionJob;
+        const version = versionRow ? toVersion(versionRow.version) : null;
+        const versionJob = versionJobRow ? toJob(versionJobRow) : null;
+
         const [jobRow] = await tx
           .select()
           .from(artifactGenerationJobs)
           .where(eq(artifactGenerationJobs.artifactId, artifactRow.id))
-          .orderBy(desc(artifactGenerationJobs.createdAt))
+          .orderBy(
+            desc(artifactGenerationJobs.createdAt),
+            desc(artifactGenerationJobs.id),
+          )
           .limit(1);
         return {
           artifact: toArtifact(artifactRow),
-          latestVersion: versionRow ? toVersion(versionRow) : null,
+          latestVersion: version,
+          versionJob,
           latestJob: jobRow ? toJob(jobRow) : null,
         };
       },

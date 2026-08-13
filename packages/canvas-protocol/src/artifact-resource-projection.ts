@@ -78,12 +78,19 @@ function projectMediaGenerator(
 
 function projectSourceReferences(
   version: ArtifactProjectionVersion | null,
-  job: ArtifactProjectionJob | null,
+  latestJob: ArtifactProjectionJob | null,
+  versionJob: ArtifactProjectionJob | null,
 ): { resourceId: string; versionId: string }[] {
-  if (!version?.generationJobId || version.generationJobId !== job?.id) {
+  const sourceJob =
+    versionJob &&
+    version?.generationJobId &&
+    versionJob.id === version.generationJobId
+      ? versionJob
+      : latestJob;
+  if (!version?.generationJobId || sourceJob?.id !== version.generationJobId) {
     return [];
   }
-  const provenance = job.params.provenance;
+  const provenance = sourceJob.params.provenance;
   const explicitSources =
     typeof provenance === 'object' &&
     provenance !== null &&
@@ -92,7 +99,7 @@ function projectSourceReferences(
       ? provenance.sources
       : null;
   /* audio_overview 是早于统一 Artifact Tool provenance 的兼容形状。 */
-  const selectedSources = explicitSources ?? job.params.selectedSources;
+  const selectedSources = explicitSources ?? sourceJob.params.selectedSources;
   if (!Array.isArray(selectedSources)) return [];
   return [
     ...new Set(
@@ -288,6 +295,7 @@ export function projectOwnedArtifactResource(input: {
   artifact: ArtifactProjectionArtifact;
   version: ArtifactProjectionVersion | null;
   latestJob: ArtifactProjectionJob | null;
+  versionJob?: ArtifactProjectionJob | null;
   accessRole: CanvasAccessRole;
 }): CanvasResource {
   if (input.artifact.spaceId !== input.notebookId) {
@@ -306,6 +314,7 @@ export function projectOwnedArtifactResource(input: {
   const sourceReferences = projectSourceReferences(
     input.version,
     input.latestJob,
+    input.versionJob ?? null,
   );
   const parsed = canvasResourceSchema.safeParse({
     schemaVersion: 1,

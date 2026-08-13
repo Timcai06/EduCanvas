@@ -141,6 +141,90 @@ describe('resource-access boundary', () => {
   });
 
   describe('loadOwnedCanvasResource - Artifact', () => {
+    it.each(['failed', 'cancelled'] as const)(
+      'uses version-bound provenance when latest revision is %s',
+      async (status) => {
+        mockRequireNotebookAccess.mockResolvedValue({ role: 'viewer' });
+        mockGetArtifactDetail.mockResolvedValue({
+          artifact: {
+            id: artifactId,
+            spaceId: notebookId,
+            conversationId: null,
+            ownerSubjectId: identity.studentId,
+            kind: 'mind_map',
+            trustTier: 'tier1',
+            title: '回归产物',
+            status: 'active',
+            latestVersion: 1,
+            createdAt: '2026-08-13T00:00:00.000Z',
+            updatedAt: '2026-08-13T00:01:00.000Z',
+          },
+          latestVersion: {
+            id: 'version-v1',
+            artifactId,
+            version: 1,
+            content: { contentVersion: 1, nodes: [] },
+            metadata: null,
+            objectKey: null,
+            checksum: null,
+            generatedBy: 'model:artifact.generate:v1',
+            createdByOperationId: null,
+            generationJobId: 'generation-job-v1',
+            createdAt: '2026-08-13T00:01:00.000Z',
+          },
+          latestJob: {
+            id: 'revision-job-2',
+            artifactId,
+            operationId: null,
+            status,
+            progress: 100,
+            failureCode: status === 'failed' ? 'timeout' : null,
+            params: {
+              provenance: {
+                sources: [{ assetId: 'bad-source', versionId: 'bad-version' }],
+              },
+            },
+            checkpoint: {},
+            queueJobKey: null,
+          },
+          versionJob: {
+            id: 'generation-job-v1',
+            artifactId,
+            operationId: null,
+            status: 'succeeded',
+            progress: 100,
+            failureCode: null,
+            params: {
+              provenance: {
+                sources: [
+                  {
+                    assetId: 'usable-source',
+                    versionId: 'usable-version',
+                  },
+                ],
+              },
+            },
+            checkpoint: {},
+            queueJobKey: null,
+          },
+        });
+
+        const projected = await loadOwnedCanvasResource({
+          identity,
+          notebookId,
+          resourceKind: 'artifact',
+          resourceId: artifactId,
+        });
+
+        expect(projected.provenance.sourceResourceIds).toEqual([
+          'usable-source',
+        ]);
+        expect(projected.provenance.sourceReferences).toEqual([
+          { resourceId: 'usable-source', versionId: 'usable-version' },
+        ]);
+      },
+    );
+
     it('throws resource_not_found/404 for cross-Notebook artifact', async () => {
       mockRequireNotebookAccess.mockResolvedValue({ role: 'owner' });
       mockGetArtifactDetail.mockResolvedValue({

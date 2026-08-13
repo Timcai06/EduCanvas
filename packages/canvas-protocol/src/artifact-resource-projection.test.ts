@@ -153,6 +153,61 @@ describe('artifact-resource-projection（markdown_document）', () => {
     expect(resource.provenance.sourceReferences).toEqual([]);
   });
 
+  it('uses the version-owning job for provenance when version and lifecycle jobs diverge', () => {
+    const versionJobId = '30000000-0000-4000-8000-000000000013';
+    const resource = projectOwnedArtifactResource({
+      notebookId: artifactBase.spaceId,
+      artifact: { ...artifactBase, kind: 'markdown_document' },
+      version: {
+        ...version,
+        generationJobId: versionJobId,
+      },
+      latestJob: {
+        id: '50000000-0000-4000-8000-000000000005',
+        artifactId: artifactBase.id,
+        operationId: null,
+        status: 'failed',
+        progress: 100,
+        failureCode: 'generation_failed',
+        params: {
+          provenance: {
+            sources: [
+              {
+                assetId: 'asset-stale',
+                versionId: 'asset-version-stale',
+              },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      versionJob: {
+        id: versionJobId,
+        artifactId: artifactBase.id,
+        operationId: null,
+        status: 'succeeded',
+        progress: 100,
+        failureCode: null,
+        params: {
+          provenance: {
+            sources: [
+              { assetId: 'asset-usable', versionId: 'asset-version-usable' },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual(['asset-usable']);
+    expect(resource.provenance.sourceReferences).toEqual([
+      { resourceId: 'asset-usable', versionId: 'asset-version-usable' },
+    ]);
+  });
+
   it('keeps viewer markdown_document to read-only actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId: artifactBase.spaceId,

@@ -340,6 +340,13 @@ export async function listWorkspaceResourceSummaries(input: {
           queueJobKey: null,
         }
       : null;
+    const versionJob = fact.versionJob
+      ? {
+          ...fact.versionJob,
+          checkpoint: {},
+          queueJobKey: null,
+        }
+      : null;
     const resource = projectOwnedArtifactResource({
       notebookId: conversation.spaceId,
       artifact: {
@@ -349,6 +356,7 @@ export async function listWorkspaceResourceSummaries(input: {
       },
       version,
       latestJob,
+      versionJob,
       accessRole: fact.accessRole,
     });
     return {

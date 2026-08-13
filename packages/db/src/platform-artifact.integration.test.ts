@@ -129,6 +129,66 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     transactionSpy.mockRestore();
   });
 
+  it('getArtifactDetail 返回版本所属任务的 provenance 而非最新生命周期任务', async () => {
+    const artifact = await createArtifact();
+    const generationJob = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      operationId: '10000000-0000-4000-8000-000000000100',
+      params: {
+        provenance: {
+          sources: [
+            {
+              assetId: 'source-usable',
+              versionId: 'source-version-usable',
+            },
+          ],
+        },
+      },
+    });
+    await repository.appendVersion({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { contentVersion: 1, markdown: '# v1' },
+      generationJobId: generationJob.id,
+      generatedBy: 'model:artifact.generate:v1',
+    });
+    const lifecycleJob = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      operationId: '10000000-0000-4000-8000-000000000101',
+      params: { revision: { instruction: '失败重试修订' } },
+    });
+
+    const detail = await repository.getArtifactDetail({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+    });
+
+    expect(detail.latestVersion).toMatchObject({
+      id: expect.any(String),
+      artifactId: artifact.id,
+      version: 1,
+      generationJobId: generationJob.id,
+    });
+    expect(detail.versionJob).toMatchObject({
+      id: generationJob.id,
+      operationId: '10000000-0000-4000-8000-000000000100',
+      status: 'queued',
+      params: {
+        provenance: {
+          sources: [
+            { assetId: 'source-usable', versionId: 'source-version-usable' },
+          ],
+        },
+      },
+    });
+    expect(detail.latestJob).toMatchObject({
+      id: lifecycleJob.id,
+      operationId: '10000000-0000-4000-8000-000000000101',
+    });
+  });
+
   it('创建产物要求主体拥有 Space,越权与不存在同错', async () => {
     await expect(
       repository.createArtifact({
