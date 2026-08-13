@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildCloseAriaLabel,
@@ -12,6 +14,11 @@ import {
   resolveEscapeAction,
   scheduleFocusRestore,
 } from './canvas-host-utils';
+
+const hostSource = readFileSync(
+  fileURLToPath(new URL('./canvas-host.tsx', import.meta.url)),
+  'utf8',
+);
 
 // ── resolveEscapeAction ──
 
@@ -234,5 +241,24 @@ describe('CanvasHost 响应式布局契约', () => {
 
     expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
     expect(classes).not.toMatch(/rgb\(/);
+  });
+});
+
+describe('CanvasHost 全屏转场契约', () => {
+  it('isFull 变化播放位置/尺寸补间，只动 transform 且支持 reduced-motion', () => {
+    expect(hostSource).toContain('dependencies: [isFull]');
+    expect(hostSource).toContain('previousRectRef');
+    expect(hostSource).toContain('getBoundingClientRect');
+    expect(hostSource).toContain('scaleX');
+    expect(hostSource).toContain('scaleY');
+    expect(hostSource).toContain("transformOrigin: 'left top'");
+    expect(hostSource).toContain('prefers-reduced-motion');
+    expect(hostSource).toContain('clearProps');
+  });
+
+  it('全屏沉浸式：卡片圆角/边框/阴影仅在非全屏保留', () => {
+    expect(hostSource).toContain('isFull');
+    expect(hostSource).toContain('lg:rounded-3xl');
+    expect(hostSource).toContain('shadow-[var(--shadow-float)]');
   });
 });

@@ -8,7 +8,7 @@ import { motionDuration } from '@/features/theme/motion';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   buildCloseAriaLabel,
   buildCanvasHostPositionClass,
@@ -63,6 +63,7 @@ export function CanvasHost({
 }) {
   const rootRef = useRef<HTMLElement>(null);
   const fullscreenRef = useRef<HTMLButtonElement>(null);
+  const previousRectRef = useRef<DOMRect | null>(null);
   const [isCompact, setIsCompact] = useState(false);
   const isModal = isFull || isCompact;
 
@@ -80,6 +81,56 @@ export function CanvasHost({
     },
     { scope: rootRef },
   );
+
+  /* 分栏 ↔ 全屏的位置/尺寸连续过渡：从上一布局的 rect 补间到新 rect。
+     只动 transform，reduced-motion 直接跳切。 */
+  useGSAP(
+    () => {
+      const from = previousRectRef.current;
+      const root = rootRef.current;
+      if (!from || !root) return;
+      const to = root.getBoundingClientRect();
+      const dx = from.left - to.left;
+      const dy = from.top - to.top;
+      const scaleX = to.width > 0 ? from.width / to.width : 1;
+      const scaleY = to.height > 0 ? from.height / to.height : 1;
+      if (
+        Math.abs(dx) < 1 &&
+        Math.abs(dy) < 1 &&
+        Math.abs(scaleX - 1) < 0.001 &&
+        Math.abs(scaleY - 1) < 0.001
+      ) {
+        return;
+      }
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        gsap.fromTo(
+          root,
+          { x: dx, y: dy, scaleX, scaleY, transformOrigin: 'left top' },
+          {
+            x: 0,
+            y: 0,
+            scaleX: 1,
+            scaleY: 1,
+            duration: motionDuration('standard'),
+            ease: 'power2.inOut',
+            clearProps: 'transform',
+            /* 动画结束同步终态 rect，避免后续 layout 记录混入中间帧 transform。 */
+            onComplete: () => {
+              previousRectRef.current = root.getBoundingClientRect();
+            },
+          },
+        );
+      });
+      return () => media.revert();
+    },
+    { scope: rootRef, dependencies: [isFull] },
+  );
+
+  /* 声明在动效 effect 之后：layout effect 晚于前者执行，动效先读到上一布局的 rect。 */
+  useLayoutEffect(() => {
+    previousRectRef.current = rootRef.current?.getBoundingClientRect() ?? null;
+  });
 
   // 打开时保存焦点来源并聚焦 Canvas；关闭时归还焦点。
   useEffect(() => {
@@ -200,7 +251,13 @@ export function CanvasHost({
       tabIndex={-1}
       className={`${buildCanvasHostPositionClass(isFull)} ${CANVAS_HOST_LAYOUT_CLASS}`}
     >
-      <div className="flex min-h-0 flex-1 flex-col bg-canvas shadow-[var(--shadow-float)] lg:rounded-3xl lg:border lg:border-line">
+      <div
+        className={`flex min-h-0 flex-1 flex-col bg-canvas ${
+          isFull
+            ? ''
+            : 'shadow-[var(--shadow-float)] lg:rounded-3xl lg:border lg:border-line'
+        }`}
+      >
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 lg:px-5">
           <h2 className={CANVAS_TITLE_CLASS}>{title}</h2>
           {onToggleFull ? (
