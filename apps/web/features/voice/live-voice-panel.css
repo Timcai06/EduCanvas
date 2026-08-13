@@ -641,12 +641,27 @@
   position: relative;
   top: auto;
   right: auto;
+  /* 初始 absolute 态的 z-index:2 已不再适用：新布局里 stage 与 preview 是
+     flex 兄弟，保留残留层级会在窄屏 sticky orb-column 之上造成叠盖。 */
+  z-index: auto;
   width: 100%;
   max-height: 100%;
   border-color: color-mix(in srgb, var(--color-line) 78%, transparent);
   background: color-mix(in srgb, var(--color-card) 92%, transparent);
   box-shadow: 0 1rem 3rem color-mix(in srgb, var(--color-ink) 7%, transparent);
   backdrop-filter: blur(12px);
+}
+
+/* 上下文条吸顶：stage 被压缩到 11.5rem 后内容滚动时，标题与滚动内容
+   不再视觉交叠（实色底 + 自身层级，滚动卡片从条下方穿过）。 */
+.live-voice-visual-stage .live-voice-context-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--color-card) 90%, transparent);
+  backdrop-filter: blur(10px);
 }
 
 .live-voice-stage[data-has-content='true'] .live-voice-visual-stage {

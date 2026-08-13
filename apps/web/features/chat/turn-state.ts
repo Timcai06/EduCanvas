@@ -343,7 +343,6 @@ export function teachingTurnReducer(
   }
   if (
     event.type === 'artifact.version_added' ||
-    event.type === 'artifact.generation_progress' ||
     event.type === 'artifact.failed'
   ) {
     return {

@@ -13,6 +13,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { uploadWorkspaceSource } from '@/features/assets/source-intake';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
+import type { GenerationPhase } from '@/features/canvas/artifact-generation-flow';
 import {
   createArtifact,
   type ArtifactDetail,
@@ -62,9 +63,11 @@ import {
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
 import { useResourceDock } from './use-resource-dock';
+import { showToast } from '@/components/ui/toast';
 import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
+import { describeGenerationSettledToast } from './generation-toast';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -110,7 +113,16 @@ export function useGeneralWorkspaceController(options: {
   );
 
   const resourceDock = useResourceDock(notebookId);
-  const artifactFlow = useArtifactGeneration();
+  const { reload: reloadResourceDock } = resourceDock;
+  /* onSettled 引用保持稳定（reload 依赖 [notebookId, requestPage]），
+     避免轮询/观察链随每次渲染重建失效。 */
+  const refreshResourceDock = useCallback(
+    () => void reloadResourceDock(),
+    [reloadResourceDock],
+  );
+  const artifactFlow = useArtifactGeneration({
+    onSettled: refreshResourceDock,
+  });
   const closeArtifactCanvas = useCallback(() => {
     workspace.dispatch({ type: 'close' });
     artifactFlow.closeCanvas();
@@ -165,6 +177,32 @@ export function useGeneralWorkspaceController(options: {
     prevOpenDetailRef.current = detail;
   }, [artifactFlow.openDetail, workspace]);
 
+  /* 生成完成/失败 toast：只在 generating→终态转换时通知一次，刷新页面不重放。
+     本地取消（cancelled）不通知——任务仍在后台运行。 */
+  const prevGenerationPhaseRef = useRef<GenerationPhase | undefined>(undefined);
+  useEffect(() => {
+    const generation = artifactFlow.generation;
+    const phase = generation?.phase;
+    const previous = prevGenerationPhaseRef.current;
+    prevGenerationPhaseRef.current = phase;
+    if (previous !== 'generating' || !generation) return;
+    const spec = describeGenerationSettledToast(generation);
+    if (!spec) return;
+    showToast({
+      ...spec,
+      ...(spec.actionLabel && generation.artifactId
+        ? {
+            onAction: () => {
+              const artifactId = generation.artifactId;
+              if (artifactId) {
+                studioOpenActions.actions.openArtifact(artifactId);
+              }
+            },
+          }
+        : {}),
+    });
+  }, [artifactFlow.generation, studioOpenActions]);
+
   const flipStateRef = useRef<Flip.FlipState | null>(null);
   const pendingMenuConsumed = useRef(false);
 
@@ -172,6 +210,7 @@ export function useGeneralWorkspaceController(options: {
     endpoint: GENERAL_ASSET_ENDPOINT,
     onError: setError,
     onStatus: setSourceNotice,
+    onSettled: refreshResourceDock,
   });
   const { assets, setAssets } = sources;
   const refreshAssets = sources.refresh;
@@ -383,12 +422,14 @@ export function useGeneralWorkspaceController(options: {
           assetsRef.current = next;
           return next;
         });
+        /* 新来源即刻进入 Dock 摘要，不必等下一轮手动刷新。 */
+        void resourceDock.reload();
       } catch (reason: unknown) {
         setError(toClientError(reason, '文件上传暂时不可用。'));
         throw reason;
       }
     },
-    [setAssets],
+    [resourceDock, setAssets],
   );
 
   /* W02：landing 与对话共享同一组 ConversationPane props（两态只差 isLanding）。 */

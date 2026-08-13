@@ -13,7 +13,7 @@ import {
   type ObservableArtifactKind,
 } from './artifact-client';
 import {
-  pollArtifactUntilSettled,
+  pollArtifactToTerminal,
   type PollArtifactResult,
   type PollOutcome,
 } from './artifact-polling-client';
@@ -31,6 +31,8 @@ export interface GenerationState {
   artifactId?: string;
   title: string;
   detail?: ArtifactDetail;
+  /** 服务端 generation job 的百分比进度（0-100）；轮询拉取，未拿到时缺省。 */
+  progress?: number;
 }
 
 export interface ConfirmArtifactOptions {
@@ -62,6 +64,13 @@ export const outcomeFromPollOutcome = (
         ? 'ready'
         : 'failed';
 
+/** 观察收敛到终态后是否值得通知只读列表刷新；本地取消不通知（任务仍在后台运行）。 */
+export const shouldNotifySettled = (
+  phase: GenerationPhase,
+  resultOutcome: PollOutcome,
+): boolean =>
+  (phase === 'ready' || phase === 'failed') && resultOutcome !== 'cancelled';
+
 export interface ObservationEpochController {
   begin: () => number;
   isCurrent: (epoch: number) => boolean;
@@ -75,86 +84,6 @@ export const createObservationEpochController =
       isCurrent: (candidate) => candidate === epoch,
     };
   };
-
-export interface PollArtifactToTerminalOptions {
-  signal?: AbortSignal;
-  minimumVersion?: number;
-  /** Upper bound across every poll window, including retry/backoff time. */
-  totalTimeoutMs?: number;
-  /** Compatibility alias for callers that think in terms of one total timeout. */
-  timeoutMs?: number;
-  windowTimeoutMs?: number;
-  initialIntervalMs?: number;
-  maxIntervalMs?: number;
-  backoffFactor?: number;
-  /** A second independent stop condition protects mocked/clockless environments. */
-  maxPollWindows?: number;
-  maxAttempts?: number;
-}
-
-const DEFAULT_POLL_TOTAL_TIMEOUT_MS = 5 * 60_000;
-const DEFAULT_POLL_WINDOW_TIMEOUT_MS = 60_000;
-const DEFAULT_POLL_INTERVAL_MS = 1_500;
-const DEFAULT_POLL_MAX_INTERVAL_MS = 8_000;
-const DEFAULT_POLL_BACKOFF_FACTOR = 1.5;
-const DEFAULT_POLL_MAX_WINDOWS = 5;
-
-/** Long-running durable jobs use bounded windows with backoff and an explicit stop. */
-export async function pollArtifactToTerminal(
-  artifactId: string,
-  options: PollArtifactToTerminalOptions = {},
-): Promise<PollArtifactResult> {
-  const totalTimeoutMs = Math.max(
-    0,
-    options.totalTimeoutMs ??
-      options.timeoutMs ??
-      DEFAULT_POLL_TOTAL_TIMEOUT_MS,
-  );
-  const windowTimeoutMs = Math.max(
-    0,
-    options.windowTimeoutMs ?? DEFAULT_POLL_WINDOW_TIMEOUT_MS,
-  );
-  const maxPollWindows = Math.max(
-    1,
-    Math.floor(
-      options.maxPollWindows ?? options.maxAttempts ?? DEFAULT_POLL_MAX_WINDOWS,
-    ),
-  );
-  const maxIntervalMs = Math.max(
-    0,
-    options.maxIntervalMs ?? DEFAULT_POLL_MAX_INTERVAL_MS,
-  );
-  const backoffFactor = Math.max(
-    1,
-    options.backoffFactor ?? DEFAULT_POLL_BACKOFF_FACTOR,
-  );
-  let intervalMs = Math.max(
-    0,
-    options.initialIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
-  );
-  const deadline = Date.now() + totalTimeoutMs;
-
-  for (let attempt = 0; attempt < maxPollWindows; attempt += 1) {
-    if (options.signal?.aborted) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
-    const remainingMs = Math.max(0, deadline - Date.now());
-    const result = await pollArtifactUntilSettled(artifactId, {
-      signal: options.signal,
-      minimumVersion: options.minimumVersion,
-      intervalMs,
-      timeoutMs: Math.min(windowTimeoutMs, remainingMs),
-    });
-    if (result.outcome !== 'timed_out') return result;
-    if (attempt + 1 >= maxPollWindows || Date.now() >= deadline) return result;
-    intervalMs = Math.min(
-      maxIntervalMs,
-      Math.max(intervalMs, intervalMs * backoffFactor),
-    );
-  }
-
-  throw new Error('artifact_poll_window_invariant');
-}
 
 export const hasUsableArtifactVersion = (detail: ArtifactDetail): boolean =>
   detail.artifact.latestVersion > 0;
@@ -226,8 +155,16 @@ export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   web_app: 'Web App',
 };
 
+export interface ArtifactGenerationFlowOptions {
+  /* 本地观察收敛到终态时回调；Dock 等只读列表借此保持最新，不负责重试语义。 */
+  readonly onSettled?: () => void;
+}
+
 /** 显式确认后轮询；关闭页面不取消后端任务，资源列表与详情负责恢复。 */
-export function useArtifactGeneration() {
+export function useArtifactGeneration(
+  options: ArtifactGenerationFlowOptions = {},
+) {
+  const { onSettled } = options;
   const [generation, setGeneration] = useState<GenerationState | null>(null);
   const [openDetail, setOpenDetail] = useState<ArtifactDetail | null>(null);
   const [canvasFull, setCanvasFull] = useState(false);
@@ -268,6 +205,10 @@ export function useArtifactGeneration() {
         titleFallback,
       );
       setGeneration(next);
+      /* 终态收敛后联动只读列表；本地取消不算终态（任务仍在后台运行）。 */
+      if (shouldNotifySettled(next.phase, result.outcome)) {
+        onSettled?.();
+      }
       if (
         next.phase === 'ready' &&
         options.openWhenReady &&
@@ -277,7 +218,7 @@ export function useArtifactGeneration() {
         setCanvasFull(false);
       }
     },
-    [],
+    [onSettled],
   );
 
   const beginConfirm = useCallback(
@@ -308,6 +249,12 @@ export function useArtifactGeneration() {
         pollAbort.current = controller;
         const result = await pollArtifactToTerminal(created.artifact.id, {
           signal: controller.signal,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         applyPollResult(created.artifact.id, kind, result, title, options);
@@ -323,9 +270,10 @@ export function useArtifactGeneration() {
           return;
         }
         setGeneration({ phase: 'failed', outcome: 'failed', kind, title });
+        onSettled?.();
       }
     },
-    [applyPollResult, beginObservation, isCurrentObservation],
+    [applyPollResult, beginObservation, isCurrentObservation, onSettled],
   );
 
   /**
@@ -350,6 +298,12 @@ export function useArtifactGeneration() {
         pollAbort.current = controller;
         const result = await pollArtifactToTerminal(artifact.artifactId, {
           signal: controller.signal,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         applyPollResult(
@@ -378,9 +332,10 @@ export function useArtifactGeneration() {
           artifactId: artifact.artifactId,
           title: artifact.title,
         });
+        onSettled?.();
       }
     },
-    [applyPollResult, beginObservation, isCurrentObservation],
+    [applyPollResult, beginObservation, isCurrentObservation, onSettled],
   );
 
   const openArtifact = useCallback(async (artifactId: string) => {
@@ -425,6 +380,12 @@ export function useArtifactGeneration() {
         const result = await pollArtifactToTerminal(detail.artifact.id, {
           signal: controller.signal,
           minimumVersion: baseVersion + 1,
+          onProgress: (progress) => {
+            if (!isCurrentObservation(epoch)) return;
+            setGeneration((current) =>
+              current ? { ...current, progress } : current,
+            );
+          },
         });
         if (!isCurrentObservation(epoch)) return;
         const next = projectRevisionPollResult(
@@ -440,6 +401,7 @@ export function useArtifactGeneration() {
               ? result.detail
               : current,
           );
+          onSettled?.();
         }
       } catch (error) {
         if (!isCurrentObservation(epoch)) return;
@@ -450,9 +412,10 @@ export function useArtifactGeneration() {
           return;
         }
         setGeneration(projectRevisionFailure(detail, 'failed'));
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation, pollAbort],
+    [beginObservation, isCurrentObservation, onSettled, pollAbort],
   );
 
   const createBlankNote = useCallback(
@@ -484,6 +447,7 @@ export function useArtifactGeneration() {
         });
         setOpenDetail(detail);
         setCanvasFull(false);
+        onSettled?.();
       } catch {
         setGeneration({
           phase: 'failed',
@@ -491,9 +455,10 @@ export function useArtifactGeneration() {
           kind: 'note',
           title,
         });
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation],
+    [beginObservation, isCurrentObservation, onSettled],
   );
 
   const saveNote = useCallback(
@@ -529,6 +494,7 @@ export function useArtifactGeneration() {
           title: detail.artifact.title,
           detail: updated,
         });
+        onSettled?.();
       } catch {
         setGeneration({
           phase: 'failed',
@@ -537,9 +503,10 @@ export function useArtifactGeneration() {
           artifactId: detail.artifact.id,
           title: detail.artifact.title,
         });
+        onSettled?.();
       }
     },
-    [beginObservation, isCurrentObservation],
+    [beginObservation, isCurrentObservation, onSettled],
   );
 
   const dismiss = useCallback(() => {

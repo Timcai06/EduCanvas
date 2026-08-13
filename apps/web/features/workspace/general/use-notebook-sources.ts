@@ -25,10 +25,42 @@ import {
  * 启停、重命名、删除三者的乐观策略和授权层级各不相同，混在渲染组件里
  * 很难看清差别。组件仍持有 UI 状态，这里只负责来源事实。
  */
+const TRANSIENT_ASSET_STATUSES: ReadonlySet<AssetItem['status']> = new Set([
+  'pending',
+  'processing',
+]);
+const TERMINAL_ASSET_STATUSES: ReadonlySet<AssetItem['status']> = new Set([
+  'ready',
+  'failed',
+  'tombstoned',
+]);
+
+/** 集合里是否存在「处理中 → 终态」或「新增即终态」的转变；供只读列表联动刷新。 */
+export function hasSettledAssetTransition(
+  previous: readonly Pick<AssetItem, 'id' | 'status'>[],
+  next: readonly Pick<AssetItem, 'id' | 'status'>[],
+): boolean {
+  const previousStatusById = new Map(
+    previous.map((asset) => [asset.id, asset.status]),
+  );
+  return next.some((asset) => {
+    const previousStatus = previousStatusById.get(asset.id);
+    if (previousStatus === undefined) {
+      return TERMINAL_ASSET_STATUSES.has(asset.status);
+    }
+    return (
+      TRANSIENT_ASSET_STATUSES.has(previousStatus) &&
+      TERMINAL_ASSET_STATUSES.has(asset.status)
+    );
+  });
+}
+
 export function useNotebookSources(input: {
   endpoint: string;
   onError: (error: ResourceClientError) => void;
   onStatus?: (notice: AssetStatusNotice) => void;
+  /* 资产收敛到终态时回调；announce=false 的初始装载不算转变。 */
+  onSettled?: () => void;
 }): {
   assets: readonly AssetItem[];
   setAssets: React.Dispatch<React.SetStateAction<readonly AssetItem[]>>;
@@ -37,7 +69,7 @@ export function useNotebookSources(input: {
   rename: (asset: AssetItem, displayName: string) => void;
   remove: (asset: AssetItem) => void;
 } {
-  const { endpoint, onError, onStatus } = input;
+  const { endpoint, onError, onSettled, onStatus } = input;
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const assetsRef = useRef<readonly AssetItem[]>([]);
   const pollFailuresRef = useRef(0);
@@ -65,11 +97,15 @@ export function useNotebookSources(input: {
         )) {
           onStatus?.(notice);
         }
+        /* 处理中资产收敛到终态后联动只读列表（初始装载 announce=false，不算转变）。 */
+        if (hasSettledAssetTransition(assetsRef.current, next)) {
+          onSettled?.();
+        }
       }
       assetsRef.current = next;
       setAssets(next);
     },
-    [onStatus],
+    [onSettled, onStatus],
   );
 
   /* 启停已由服务端按成员持久化，刷新时不再用本地值覆盖服务端结果——

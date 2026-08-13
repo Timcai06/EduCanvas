@@ -75,6 +75,71 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
     ]);
   });
 
+  it('生成中的轮询进度投影进 proposed 卡片；终态后不再携带', () => {
+    const messages: readonly ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        turnId: 'turn-1',
+        clientMessageId: 'client-1',
+        role: 'assistant',
+        status: 'completed',
+        text: '已开始生成',
+        attachments: [],
+        artifacts: [
+          {
+            id: 'artifact-1',
+            kind: 'mind_map',
+            title: '思维导图',
+            status: 'proposed',
+            latestVersion: 0,
+          },
+        ],
+      },
+    ];
+
+    const generating = projectArtifactGenerationIntoMessages(messages, {
+      artifactId: 'artifact-1',
+      kind: 'mind_map',
+      title: '思维导图',
+      phase: 'generating',
+      outcome: 'pending',
+      progress: 42,
+    });
+    expect(
+      generating[0]?.role === 'assistant' ? generating[0].artifacts : [],
+    ).toEqual([
+      expect.objectContaining({
+        id: 'artifact-1',
+        status: 'proposed',
+        progress: 42,
+      }),
+    ]);
+
+    const ready = projectArtifactGenerationIntoMessages(messages, {
+      artifactId: 'artifact-1',
+      kind: 'mind_map',
+      title: '思维导图',
+      phase: 'ready',
+      outcome: 'ready',
+      progress: 85,
+      detail: {
+        artifact: { latestVersion: 1 },
+      } as ArtifactDetail,
+    });
+    const readyArtifacts =
+      ready[0]?.role === 'assistant' ? (ready[0].artifacts ?? []) : [];
+    expect(readyArtifacts).toEqual([
+      expect.objectContaining({
+        id: 'artifact-1',
+        status: 'active',
+        latestVersion: 1,
+      }),
+    ]);
+    expect(
+      readyArtifacts[0] && 'progress' in readyArtifacts[0],
+    ).toBe(false);
+  });
+
   it.each(['failed', 'cancelled', 'timed_out'] as const)(
     '已有版本的 revision %s 保持聊天与 Live 的对象级 active 事实',
     (revisionOutcome) => {

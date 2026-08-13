@@ -15,6 +15,8 @@ export interface MessageArtifactDTO {
   title: string;
   status: 'proposed' | 'active' | 'archived' | 'failed' | 'cancelled';
   latestVersion: number;
+  /** 服务端 generation job 的百分比进度（0-100）；仅 proposed 期间有意义。 */
+  progress?: number;
 }
 
 /**

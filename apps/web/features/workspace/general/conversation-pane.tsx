@@ -102,6 +102,10 @@ export function projectArtifactGenerationIntoMessages(
         title: generation.title || artifact.title,
         status,
         latestVersion,
+        /* 生成中的卡片消费轮询拿到的服务端进度；终态后不再带 progress。 */
+        ...(status === 'proposed' && generation.progress !== undefined
+          ? { progress: generation.progress }
+          : {}),
       };
     });
     return { ...message, artifacts } satisfies AssistantMessage;

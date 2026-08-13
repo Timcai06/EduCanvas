@@ -460,6 +460,49 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
     );
   });
 
+  it('结构化生成按阶段推进进度档：running 5 → 15 → 85（100 由版本事务原子提交）', async () => {
+    repository.getArtifact.mockResolvedValue({
+      ...artifactBase,
+      kind: 'markdown_document',
+      trustTier: 'tier1',
+      latestVersion: 0,
+    });
+    repository.getGenerationJob.mockResolvedValue({
+      id: JOB_ID,
+      artifactId: ARTIFACT_ID,
+      operationId: null,
+      status: 'running',
+      progress: 1,
+      failureCode: null,
+      params: {
+        generation: {
+          instruction: '生成课程文档',
+        },
+      },
+      checkpoint: {},
+      queueJobKey: 'artifact-generate',
+    });
+    const content: MarkdownDocumentContent = {
+      contentVersion: 1,
+      markdown: '# 课程文档',
+      generatedByModel: true,
+    };
+    (
+      generateMarkdownDocumentContent as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      content,
+      generatedBy: 'model:artifact.generate:markdown-document-v1',
+    });
+
+    await runTask();
+
+    expect(
+      repository.transitionGenerationJob.mock.calls.map(
+        (call) => (call[0] as { progress?: number | null }).progress,
+      ),
+    ).toEqual([5, 15, 85]);
+  });
+
   it('支持 web_app 使用 web_app 生成器产出版本', async () => {
     repository.getArtifact.mockResolvedValue({
       ...artifactBase,

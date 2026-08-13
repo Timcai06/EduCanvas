@@ -695,6 +695,14 @@ describeWithDatabase('平台 Artifact 仓储', () => {
       progress: 15,
     });
     expect(resumed).toMatchObject({ status: 'running', progress: 15 });
+    /* 进度单调：重投把 running 重新标小档时不得倒退。 */
+    const regressed = await repository.transitionGenerationJob({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      to: 'running',
+      progress: 5,
+    });
+    expect(regressed).toMatchObject({ status: 'running', progress: 15 });
     await repository.updateGenerationJobCheckpoint({
       jobId: job.id,
       trustedSubjectId: owner,

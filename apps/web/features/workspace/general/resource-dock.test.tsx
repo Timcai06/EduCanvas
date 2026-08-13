@@ -23,8 +23,11 @@ describe('ResourceDock boundary', () => {
     expect(source).toContain("document.removeEventListener('pointerdown'");
     expect(source).toContain('dockRef.current?.contains(target)');
     expect(source).toContain('focus-visible:ring-2');
-    expect(source).toContain('max-h-[min(32rem,70vh)]');
+    expect(source).toContain('max-h-[min(32rem,calc(50dvh_-_2.5rem))]');
     expect(source).toContain('overflow-y-auto');
+    expect(source).toContain('onExpand');
+    expect(source).toContain('gsap.matchMedia');
+    expect(source).toContain('prefers-reduced-motion');
     expect(source).toContain('此分类暂无资源');
     expect(source).toContain('正在加载资源…');
     expect(source).toContain('role="status"');

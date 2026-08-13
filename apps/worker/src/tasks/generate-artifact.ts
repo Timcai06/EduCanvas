@@ -21,6 +21,7 @@ import {
   readModelGatewayEnvironment,
   type WorkerModelRuntime,
 } from '../model-runtime.js';
+import { reportGenerationProgress } from './generation-progress.js';
 import {
   appendGeneratedImageVersion,
   ImageArtifactGenerationFailure,
@@ -340,7 +341,10 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       }
       return runtime;
     };
+    /* 阶段进度档：任务进入 running 后按真实阶段推进，客户端轮询可见。
+       进度倒退由仓储层 GREATEST 单调保证；上报失败不阻塞生成主链。 */
     if (artifact.kind === 'audio_overview') {
+      await reportGenerationProgress(artifacts, payload, 15, helpers.logger);
       const version = await appendAudioOverviewVersion({
         artifact,
         job,
@@ -355,6 +359,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       return;
     }
     if (artifact.kind === 'generated_image') {
+      await reportGenerationProgress(artifacts, payload, 15, helpers.logger);
       const version = await appendGeneratedImageVersion({
         artifact,
         job,
@@ -373,6 +378,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       await failJob('generation_params_invalid');
       return;
     }
+    await reportGenerationProgress(artifacts, payload, 15, helpers.logger);
     const baseVersion =
       generationIntent.kind === 'revision'
         ? await artifacts.getVersion({
@@ -429,6 +435,8 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
               : artifact.kind === 'web_app'
                 ? await generateWebAppContent(generatorInput)
                 : await generateNoteContent(generatorInput);
+
+    await reportGenerationProgress(artifacts, payload, 85, helpers.logger);
 
     const version = await artifacts.appendVersionAndCompleteGenerationJob({
       jobId: payload.jobId,

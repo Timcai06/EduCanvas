@@ -662,6 +662,7 @@ export class DrizzlePlatformArtifactRepository {
         .select({
           id: artifactGenerationJobs.id,
           status: artifactGenerationJobs.status,
+          progress: artifactGenerationJobs.progress,
           startedAt: artifactGenerationJobs.startedAt,
           spaceId: artifacts.spaceId,
         })
@@ -692,7 +693,14 @@ export class DrizzlePlatformArtifactRepository {
         .update(artifactGenerationJobs)
         .set({
           status: input.to,
-          progress: input.progress ?? null,
+          /* 进度只前进不回退：重投（graphile 重试）把 running 重新标小档时
+             不能覆盖更大值；未传时保持原值，显式 null 才清空。 */
+          progress:
+            input.progress === undefined
+              ? row.progress
+              : input.progress === null
+                ? null
+                : sql`GREATEST(COALESCE(${artifactGenerationJobs.progress}, 0), ${input.progress})`,
           failureCode:
             input.to === 'failed' ? (input.failureCode ?? null) : null,
           startedAt:
