@@ -4,8 +4,17 @@ export interface FakeLiveVoiceSnapshot {
   readonly readyConnections: number;
   readonly turnRequests: readonly Record<string, unknown>[];
   readonly cancelRequests: readonly string[];
+  readonly speechTicketsRequests: number;
   readonly speechRequests: number;
   readonly speechAborts: number;
+  readonly streamingSpeechRequests: number;
+  readonly streamingSpeechStarts: number;
+  readonly streamingSpeechAbortEvents: number;
+  readonly streamingSpeechCloseEvents: number;
+  readonly streamingSpeechFinished: number;
+  readonly streamingSpeechFailed: number;
+  readonly streamingSpeechCancelled: number;
+  readonly streamingSpeechTransportMode: 'streaming' | 'fallback';
   readonly playbackStarts: number;
   readonly playbackStops: number;
   readonly activePlaybackSources: number;
@@ -17,6 +26,7 @@ interface BrowserLiveVoiceDriver {
   emitPartial(text: string): void;
   emitFinal(text: string): void;
   holdNextTurn(assistantText: string): void;
+  setSpeechTransportMode(mode: 'streaming' | 'fallback'): void;
   snapshot(): FakeLiveVoiceSnapshot;
 }
 
@@ -31,17 +41,32 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const originalFetch = globalThis.fetch.bind(globalThis);
     const encoder = new TextEncoder();
+
+    const FRAME_HEADER_BYTES = 8;
+    const FRAME_MAGIC = [0x45, 0x44, 0x54, 0x53] as const;
+
     const turnRequests: Record<string, unknown>[] = [];
     const cancelRequests: string[] = [];
     const clientFrameTypes: string[] = [];
     const events: string[] = [];
     const sockets: FakeWebSocket[] = [];
+
     let readyConnections = 0;
+    let speechTicketsRequests = 0;
     let speechRequests = 0;
     let speechAborts = 0;
+    let streamingSpeechRequests = 0;
+    let streamingSpeechStarts = 0;
+    let streamingSpeechAbortEvents = 0;
+    let streamingSpeechCloseEvents = 0;
+    let streamingSpeechFinished = 0;
+    let streamingSpeechFailed = 0;
+    let streamingSpeechCancelled = 0;
     let playbackStarts = 0;
     let playbackStops = 0;
     let activePlaybackSources = 0;
+    let speechTransportMode: 'streaming' | 'fallback' = 'streaming';
+
     let holdNext = false;
     let holdNextSpeech = false;
     let nextAssistantText = '';
@@ -62,21 +87,39 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
       static readonly CLOSED = 3;
 
       readonly url: string;
+      readonly mode: 'asr' | 'streaming';
       readonly protocol = '';
       readonly extensions = '';
       readonly bufferedAmount = 0;
       binaryType: BinaryType = 'blob';
       readyState = FakeWebSocket.CONNECTING;
+
       private operationId: string | null = null;
       private segmentId: string | null = null;
       private serverSequence = 0;
+      private streamingSequence = 0;
+      private streamingCompleted = false;
+      private streamingHold = false;
+      private streamingFrameTimer:
+        (number | ReturnType<typeof window.setInterval>) | null = null;
 
       constructor(url: string | URL, _protocols?: string | string[]) {
         super();
         this.url = String(url);
+        const parsed = new URL(this.url, location.origin);
+        this.mode = parsed.pathname.includes('/v1/client/streaming-speech')
+          ? 'streaming'
+          : 'asr';
         sockets.push(this);
+
         queueMicrotask(() => {
           this.readyState = FakeWebSocket.OPEN;
+          if (this.mode === 'streaming') {
+            streamingSpeechRequests += 1;
+            events.push('streaming.speech.open');
+          } else {
+            events.push('asr.socket.open');
+          }
           this.dispatchEvent(new Event('open'));
         });
       }
@@ -87,14 +130,124 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           type?: string;
           operationId?: string;
           segmentId?: string;
+          text?: string;
         };
         if (message.type) clientFrameTypes.push(message.type);
+        if (this.mode === 'streaming') {
+          if (message.type === 'speech.start') {
+            streamingSpeechStarts += 1;
+            events.push('streaming.speech.start');
+            this.streamingHold = holdNextSpeech;
+            events.push('speech.started');
+            this.dispatchMessage({
+              type: 'speech.started',
+              format: 'pcm_s16le',
+              sampleRate: 24_000,
+              channels: 1,
+            });
+          }
+          if (message.type === 'speech.submit') {
+            events.push('streaming.speech.submit');
+            this.beginStreaming();
+          }
+          if (message.type === 'speech.finish') {
+            events.push('streaming.speech.finish');
+            if (!this.streamingCompleted && !this.streamingHold) {
+              this.finish();
+            }
+          }
+          if (message.type === 'speech.cancel') {
+            events.push('streaming.speech.cancel');
+            streamingSpeechCancelled += 1;
+            this.cancel();
+          }
+          return;
+        }
+
         if (message.type === 'start') {
           this.operationId = message.operationId ?? null;
           this.segmentId = message.segmentId ?? null;
           readyConnections += 1;
           events.push('voice.ready');
         }
+      }
+
+      private beginStreaming(): void {
+        if (this.streamingCompleted || this.streamingFrameTimer !== null) {
+          return;
+        }
+        this.streamingFrameTimer = window.setInterval(() => {
+          this.emitFrame();
+        }, 40);
+        this.emitFrame();
+      }
+
+      private emitFrame(): void {
+        if (this.streamingCompleted || this.readyState !== FakeWebSocket.OPEN) {
+          return;
+        }
+        // Each frame spans 200 ms so the real AudioBufferSource is observable
+        // as audible playback before barge-in stops the scheduled source.
+        const pcm = new Int16Array(4_800);
+        for (let index = 0; index < pcm.length; index += 1) {
+          const sample = index % 80 < 20 ? 2_048 : -2_048;
+          pcm[index] = sample;
+        }
+        const pcmBytes = new Uint8Array(pcm.buffer);
+        const message = new Uint8Array(FRAME_HEADER_BYTES + pcm.byteLength);
+        message.set(FRAME_MAGIC, 0);
+        const view = new DataView(message.buffer, message.byteOffset);
+        view.setUint32(4, this.streamingSequence, false);
+        message.set(pcmBytes, FRAME_HEADER_BYTES);
+        this.streamingSequence += 1;
+        this.dispatchEvent(
+          new MessageEvent('message', {
+            data: message.buffer,
+          }),
+        );
+        events.push('streaming.speech.frame');
+      }
+
+      private finish(): void {
+        if (this.streamingCompleted) return;
+        this.streamingCompleted = true;
+        this.stopStreaming();
+        this.dispatchMessage({ type: 'speech.finished' });
+        events.push('speech.finished');
+        streamingSpeechFinished += 1;
+      }
+
+      private fail(code: 'CANCELLED' | 'CONNECTION_LOST'): void {
+        if (this.streamingCompleted) return;
+        this.streamingCompleted = true;
+        this.stopStreaming();
+        this.dispatchMessage({
+          type: 'speech.failed',
+          failureCode: code,
+        });
+        events.push('speech.failed');
+        streamingSpeechFailed += 1;
+      }
+
+      private cancel(): void {
+        streamingSpeechAbortEvents += 1;
+        if (this.streamingCompleted) return;
+        this.fail('CANCELLED');
+      }
+
+      private stopStreaming(): void {
+        if (this.streamingFrameTimer === null) return;
+        window.clearInterval(this.streamingFrameTimer);
+        this.streamingFrameTimer = null;
+      }
+
+      private dispatchMessage(message: object): void {
+        if (this.readyState === FakeWebSocket.CLOSED) return;
+        this.dispatchEvent(
+          new MessageEvent('message', {
+            data: JSON.stringify(message),
+          }),
+        );
       }
 
       close(): void {
@@ -104,6 +257,14 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         ) {
           return;
         }
+        if (this.mode === 'streaming') {
+          streamingSpeechCloseEvents += 1;
+          events.push('streaming.speech.close');
+          this.stopStreaming();
+          if (!this.streamingCompleted) {
+            this.fail('CONNECTION_LOST');
+          }
+        }
         this.readyState = FakeWebSocket.CLOSING;
         this.dispatchEvent(new CloseEvent('close', { code: 1000 }));
         this.readyState = FakeWebSocket.CLOSED;
@@ -111,6 +272,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
 
       emit(type: 'partial' | 'final', text: string): void {
         if (
+          this.mode !== 'asr' ||
           this.readyState !== FakeWebSocket.OPEN ||
           !this.operationId ||
           !this.segmentId
@@ -134,7 +296,11 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
     const activeSocket = () => {
       const socket = [...sockets]
         .reverse()
-        .find((candidate) => candidate.readyState === FakeWebSocket.OPEN);
+        .find(
+          (candidate) =>
+            candidate.readyState === FakeWebSocket.OPEN &&
+            candidate.mode === 'asr',
+        );
       if (!socket) throw new Error('no active fake voice socket');
       return socket;
     };
@@ -236,6 +402,27 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         return Response.json(
           {
             ticket: 'synthetic-e2e-ticket',
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+          { status: 201 },
+        );
+      }
+      if (
+        url.pathname === '/api/v1/voice/speech-tickets' &&
+        method === 'POST'
+      ) {
+        speechTicketsRequests += 1;
+        if (speechTransportMode === 'fallback') {
+          return Response.json(
+            { error: { code: 'STREAMING_SPEECH_UNSUPPORTED' } },
+            {
+              status: 503,
+            },
+          );
+        }
+        return Response.json(
+          {
+            ticket: 'streaming-speech-ticket',
             expiresAt: '2030-01-01T00:00:00.000Z',
           },
           { status: 201 },
@@ -368,8 +555,6 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         const shouldHold = holdNextSpeech;
         holdNextSpeech = false;
         let aborted = false;
-        /* Held speech stays audibly scheduled long enough for the barge-in
-         * assertion to observe Pcm16Player.stop(), not only transport abort. */
         const pcm = new Uint8Array(shouldHold ? 480_000 : 96_000);
         const view = new DataView(pcm.buffer);
         for (let offset = 0; offset < pcm.byteLength; offset += 2) {
@@ -377,8 +562,6 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         }
         const body = new ReadableStream<Uint8Array>({
           start(controller) {
-            /* 先交付首包让产品进入 audible 状态；hold turn 的剩余响应
-             * 保持在途，插话必须通过真实 AbortSignal 停止 speech fetch。 */
             controller.enqueue(pcm);
             if (!shouldHold) {
               controller.close();
@@ -417,12 +600,24 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         holdNext = true;
         nextAssistantText = assistantText;
       },
+      setSpeechTransportMode: (mode) => {
+        speechTransportMode = mode;
+      },
       snapshot: () => ({
         readyConnections,
         turnRequests: structuredClone(turnRequests),
         cancelRequests: [...cancelRequests],
+        speechTicketsRequests,
         speechRequests,
         speechAborts,
+        streamingSpeechRequests,
+        streamingSpeechStarts,
+        streamingSpeechAbortEvents,
+        streamingSpeechCloseEvents,
+        streamingSpeechFinished,
+        streamingSpeechFailed,
+        streamingSpeechCancelled,
+        streamingSpeechTransportMode: speechTransportMode,
         playbackStarts,
         playbackStops,
         activePlaybackSources,
@@ -449,6 +644,15 @@ export async function holdNextVoiceTurn(page: Page, assistantText: string) {
   await page.evaluate((value) => {
     window.__EDUCANVAS_E2E_LIVE_VOICE__!.holdNextTurn(value);
   }, assistantText);
+}
+
+export async function setSpeechTransportMode(
+  page: Page,
+  mode: 'streaming' | 'fallback',
+) {
+  await page.evaluate((value) => {
+    window.__EDUCANVAS_E2E_LIVE_VOICE__!.setSpeechTransportMode(value);
+  }, mode);
 }
 
 export async function readFakeLiveVoiceSnapshot(
