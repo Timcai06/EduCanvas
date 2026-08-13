@@ -144,6 +144,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
             streamingSpeechStarts += 1;
             events.push('streaming.speech.start');
             this.streamingHold = holdNextSpeech;
+            holdNextSpeech = false;
             events.push('speech.started');
             this.dispatchMessage({
               type: 'speech.started',
@@ -221,7 +222,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         streamingSpeechFinished += 1;
       }
 
-      private fail(code: 'CANCELLED' | 'CONNECTION_LOST'): void {
+      private fail(code: 'CANCELLED'): void {
         if (this.streamingCompleted) return;
         this.streamingCompleted = true;
         this.stopStreaming();
@@ -265,9 +266,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
           streamingSpeechCloseEvents += 1;
           events.push('streaming.speech.close');
           this.stopStreaming();
-          if (!this.streamingCompleted) {
-            this.fail('CONNECTION_LOST');
-          }
+          this.streamingCompleted = true;
         }
         this.readyState = FakeWebSocket.CLOSING;
         const event = new CloseEvent('close', { code: 1000 });
