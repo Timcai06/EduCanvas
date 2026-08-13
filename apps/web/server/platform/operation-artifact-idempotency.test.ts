@@ -22,12 +22,12 @@ describe('general Turn Artifact idempotency', () => {
 
     expect(identity.idempotencyKey).toBe('general-turn-artifact:operation-1');
     expect(identity.requestFingerprint).toMatch(/^[a-f0-9]{64}$/);
-    expect(
-      generalTurnArtifactIdempotency('operation-1', request),
-    ).toEqual(identity);
-    expect(
-      generalTurnArtifactIdempotency('operation-2', request),
-    ).not.toEqual(identity);
+    expect(generalTurnArtifactIdempotency('operation-1', request)).toEqual(
+      identity,
+    );
+    expect(generalTurnArtifactIdempotency('operation-2', request)).not.toEqual(
+      identity,
+    );
   });
 
   it('将语义字段和 provenance 绑定到指纹，而保留 Turn 级幂等键', () => {

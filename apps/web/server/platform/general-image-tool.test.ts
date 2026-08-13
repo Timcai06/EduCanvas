@@ -208,22 +208,34 @@ describe('WebOperationImageArtifacts', () => {
     await tool.handler(exactRequest, context);
     await tool.handler({ ...exactRequest }, context);
     await tool.handler({ ...exactRequest, size: '1024x1536' }, context);
-    await tool.handler({ ...exactRequest, prompt: '画出叶绿体结构。' }, context);
+    await tool.handler(
+      { ...exactRequest, prompt: '画出叶绿体结构。' },
+      context,
+    );
     await tool.handler({ ...exactRequest, title: '叶绿体示意图' }, context);
 
     const calls = createArtifactWithGenerationJob.mock.calls;
     expect(calls[0]![0].idempotencyKey).toBe(
       'general-turn-artifact:operation-1',
     );
-    expect(calls.slice(1).every(
-      ([input]) => input.idempotencyKey === calls[0]![0].idempotencyKey,
-    )).toBe(true);
+    expect(
+      calls
+        .slice(1)
+        .every(
+          ([input]) => input.idempotencyKey === calls[0]![0].idempotencyKey,
+        ),
+    ).toBe(true);
     expect(calls[1]![0].requestFingerprint).toBe(
       calls[0]![0].requestFingerprint,
     );
-    expect(calls.slice(2).every(
-      ([input]) => input.requestFingerprint !== calls[0]![0].requestFingerprint,
-    )).toBe(true);
+    expect(
+      calls
+        .slice(2)
+        .every(
+          ([input]) =>
+            input.requestFingerprint !== calls[0]![0].requestFingerprint,
+        ),
+    ).toBe(true);
   });
 });
 

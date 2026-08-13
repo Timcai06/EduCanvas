@@ -26,9 +26,15 @@ export interface GeneralTurnArtifactSemanticRequest {
   };
 }
 
-type CanonicalValue = null | boolean | number | string | CanonicalValue[] | {
-  readonly [key: string]: CanonicalValue;
-};
+type CanonicalValue =
+  | null
+  | boolean
+  | number
+  | string
+  | CanonicalValue[]
+  | {
+      readonly [key: string]: CanonicalValue;
+    };
 
 /** Stable JSON: object keys are sorted; arrays retain their semantic order. */
 function canonicalize(value: CanonicalValue): string {
@@ -51,7 +57,8 @@ function canonicalSemanticRequest(
     kind: request.kind,
     title: request.title,
   };
-  if (request.instruction !== undefined) material.instruction = request.instruction;
+  if (request.instruction !== undefined)
+    material.instruction = request.instruction;
   if (request.prompt !== undefined) material.prompt = request.prompt;
   if (request.size !== undefined) material.size = request.size;
   if (request.provenance !== undefined) {
