@@ -18,6 +18,10 @@ import {
   type TeachingTurnEvent,
   TurnStreamProtocolError,
 } from './turn-events';
+import {
+  terminalEventTypeToSendOutcome,
+  type InFlightTurn,
+} from './turn-send-outcome';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
 
@@ -46,30 +50,12 @@ export interface AgentTurnSendOptions {
   outputPreference?: OutputPreference;
 }
 
-/** 浏览器 Turn 的闭合结果；调用方只能在 completed 后消费一次性输入。 */
-export type AgentTurnSendOutcome =
-  'completed' | 'failed' | 'cancelled' | 'interrupted' | 'rejected';
-
 const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
   endpoint: '/api/v1/learn/turn',
   assistantLabel: 'AI 老师',
   cancelEndpoint: (turnId) =>
     `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
 };
-
-interface InFlightTurn {
-  clientMessageId: string;
-  controller: AbortController;
-  turnId: string | null;
-  assistantMessageId: string | null;
-  terminalReceived: boolean;
-  terminalOutcome: Extract<
-    AgentTurnSendOutcome,
-    'completed' | 'failed' | 'cancelled'
-  > | null;
-  stopConfirmed: boolean;
-  cancelRequested: boolean;
-}
 
 interface PublicRouteError {
   error?: { code?: unknown; message?: unknown };
@@ -290,12 +276,9 @@ export function useAgentTurn(
               event.type === 'turn.cancelled'
             ) {
               current.terminalReceived = true;
-              current.terminalOutcome =
-                event.type === 'turn.completed'
-                  ? 'completed'
-                  : event.type === 'turn.failed'
-                    ? 'failed'
-                    : 'cancelled';
+              current.terminalOutcome = terminalEventTypeToSendOutcome(
+                event.type,
+              );
               setControlError(null);
             }
             if (
