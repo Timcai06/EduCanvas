@@ -159,6 +159,22 @@ export async function pollArtifactToTerminal(
 export const hasUsableArtifactVersion = (detail: ArtifactDetail): boolean =>
   detail.artifact.latestVersion > 0;
 
+export function projectGenerationPollResult(
+  artifactId: string,
+  kind: ObservableArtifactKind,
+  result: PollArtifactResult,
+  titleFallback: string,
+): GenerationState {
+  return {
+    phase: phaseFromPollOutcome(result.outcome),
+    outcome: outcomeFromPollOutcome(result.outcome),
+    kind,
+    artifactId,
+    title: result.detail.artifact.title || titleFallback,
+    detail: result.detail,
+  };
+}
+
 /**
  * Project a revision result without letting a failed/cancelled revision hide
  * the last committed version. The revision outcome stays available separately.
@@ -186,7 +202,7 @@ export function projectRevisionPollResult(
 
 function projectRevisionFailure(
   detail: ArtifactDetail,
-  outcome: Extract<PollOutcome, 'failed' | 'cancelled'>,
+  outcome: Extract<PollOutcome, 'failed' | 'pending'>,
 ): GenerationState {
   return {
     phase: 'ready',
@@ -245,18 +261,15 @@ export function useArtifactGeneration() {
       titleFallback: string,
       options: ConfirmArtifactOptions = {},
     ) => {
-      const phase = phaseFromPollOutcome(result.outcome);
-      const outcome = outcomeFromPollOutcome(result.outcome);
-      setGeneration({
-        phase,
-        outcome,
-        kind,
+      const next = projectGenerationPollResult(
         artifactId,
-        title: result.detail.artifact.title || titleFallback,
-        detail: result.detail,
-      });
+        kind,
+        result,
+        titleFallback,
+      );
+      setGeneration(next);
       if (
-        phase === 'ready' &&
+        next.phase === 'ready' &&
         options.openWhenReady &&
         result.outcome !== 'cancelled'
       ) {
@@ -431,7 +444,9 @@ export function useArtifactGeneration() {
       } catch (error) {
         if (!isCurrentObservation(epoch)) return;
         if (error instanceof DOMException && error.name === 'AbortError') {
-          setGeneration(projectRevisionFailure(detail, 'cancelled'));
+          /* Local observation cancellation is not a durable job cancellation.
+             Keep the committed version usable and leave the revision pending. */
+          setGeneration(projectRevisionFailure(detail, 'pending'));
           return;
         }
         setGeneration(projectRevisionFailure(detail, 'failed'));

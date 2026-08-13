@@ -95,7 +95,8 @@ export function ArtifactStatusCard({
       ? `本次修改已取消，仍可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
       : generation.revisionOutcome === 'failed'
         ? `本次修改失败，仍可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
-        : generation.revisionOutcome === 'timed_out'
+        : generation.revisionOutcome === 'timed_out' ||
+            generation.revisionOutcome === 'pending'
           ? `本次修改仍在后台处理，当前可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
           : generation.outcome === 'cancelled'
             ? '生成已取消'

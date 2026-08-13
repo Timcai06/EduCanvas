@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createObservationEpochController,
   pollArtifactToTerminal,
+  projectGenerationPollResult,
   isPollOutcomeGenerating,
   phaseFromPollOutcome,
   outcomeFromPollOutcome,
@@ -75,6 +76,13 @@ describe('artifact generation flow polling state mapping', () => {
 
     expect(result.outcome).toBe('timed_out');
     expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(
+      projectGenerationPollResult('artifact-1', 'mind_map', result, 'fallback'),
+    ).toMatchObject({
+      phase: 'generating',
+      outcome: 'timed_out',
+      artifactId: 'artifact-1',
+    });
   });
 });
 

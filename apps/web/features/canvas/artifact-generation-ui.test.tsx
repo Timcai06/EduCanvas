@@ -36,6 +36,7 @@ describe('ArtifactStatusCard revision outcome', () => {
     ['failed', '本次修改失败，仍可打开 v2'],
     ['cancelled', '本次修改已取消，仍可打开 v2'],
     ['timed_out', '本次修改仍在后台处理，当前可打开 v2'],
+    ['pending', '本次修改仍在后台处理，当前可打开 v2'],
   ] as const)(
     '单独显示 revision %s 且保留 Canvas 打开动作',
     (outcome, text) => {

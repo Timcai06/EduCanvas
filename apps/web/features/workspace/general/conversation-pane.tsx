@@ -158,7 +158,9 @@ export function ConversationPane({
   const showStatusCard =
     generation !== null &&
     generation.phase !== 'confirm' &&
-    (!generationHasMessageCard || generation.revisionOutcome !== undefined);
+    (!generationHasMessageCard ||
+      generation.revisionOutcome !== undefined ||
+      generation.outcome === 'timed_out');
   const projectedMessages = projectArtifactGenerationIntoMessages(
     messages,
     generation,
