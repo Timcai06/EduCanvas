@@ -179,11 +179,6 @@ export function useGeneralWorkspaceController(options: {
   useLayoutEffect(() => {
     assetsRef.current = assets;
   }, [assets]);
-  const [activeTurnContextSnapshot, setActiveTurnContextSnapshot] =
-    useState<ReturnType<typeof buildTurnContextSnapshot> | null>(null);
-  const turnContextSnapshot =
-    activeTurnContextSnapshot ?? buildTurnContextSnapshot(assets);
-
   /* 消息列跟随新消息滚底；用户上翻阅读时不打断（nearBottom 由组合层滚动容器更新）。 */
   useEffect(() => {
     const container = scrollRef.current;
@@ -206,7 +201,6 @@ export function useGeneralWorkspaceController(options: {
       const snapshot = buildTurnContextSnapshot(
         frozenAssets ?? assetsRef.current,
       );
-      setActiveTurnContextSnapshot(snapshot);
       const selected = snapshot.parts.map((part, index) => ({
         ...part,
         label: snapshot.included[index]!.label,
@@ -218,7 +212,6 @@ export function useGeneralWorkspaceController(options: {
         })
         .then((outcome) => {
           if (!shouldConsumeTurnScopedInputs(outcome)) return;
-          setActiveTurnContextSnapshot(null);
           setOutputPreference('auto');
           activeTurnOutputPreferenceRef.current = 'auto';
           setAssets((current) =>
@@ -414,7 +407,6 @@ export function useGeneralWorkspaceController(options: {
     composerTools,
     outputPreference,
     liveAssets: assets,
-    turnContextSnapshot,
     composerDockRef,
     scrollRef,
     nearBottomRef: nearBottom,

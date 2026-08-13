@@ -19,6 +19,9 @@ describe('ResourceDock boundary', () => {
     expect(source).toContain('motion-safe:');
     expect(source).toContain("['ArrowUp', 'ArrowDown', 'Home', 'End']");
     expect(source).toContain('event.preventDefault()');
+    expect(source).toContain("document.addEventListener('pointerdown'");
+    expect(source).toContain("document.removeEventListener('pointerdown'");
+    expect(source).toContain('dockRef.current?.contains(target)');
     expect(source).toContain('focus-visible:ring-2');
     expect(source).toContain('max-h-[min(32rem,70vh)]');
     expect(source).toContain('overflow-y-auto');

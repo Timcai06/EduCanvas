@@ -27,14 +27,12 @@ export type GeneralWorkspaceController = ReturnType<
 >;
 
 /**
- * Studio 打开资源即关闭 overlay：把焦点还给 banner 里的 Studio trigger，
+ * Studio 打开资源即关闭 overlay：把焦点还给资源 Dock 的“全部资源”入口，
  * 让随后挂载的 Canvas 把它当作 opener。否则焦点掉到 body，Canvas 关闭后
  * 键盘用户会失去操作入口（W06-1）。选择器与 StudioOverlay 归还逻辑一致。
  */
 function restoreStudioOpenerFocus(): void {
-  document
-    .querySelector<HTMLButtonElement>('[aria-controls="notebook-studio-layer"]')
-    ?.focus();
+  document.querySelector<HTMLButtonElement>('#resource-dock-tab-all')?.focus();
 }
 
 /**
@@ -77,15 +75,7 @@ export function GeneralWorkspaceLayout({
         notebookTitle={notebookTitle}
         conversationId={conversationId}
         sidebarOpen={sidebarOpen}
-        studioOpen={surface.type === 'studio'}
         onToggleSidebar={onToggleSidebar}
-        onOpenStudio={() => {
-          if (surface.type === 'studio') {
-            ctrl.workspace.closeStudio();
-            return;
-          }
-          ctrl.openStudio();
-        }}
       />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">

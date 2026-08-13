@@ -10,7 +10,7 @@ import {
   VideoCamera,
 } from '@phosphor-icons/react';
 import type { WorkspaceResourceSummary } from '@educanvas/canvas-protocol';
-import { useRef, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import {
   buildResourceDockModel,
   type ResourceDockCategory,
@@ -75,6 +75,7 @@ export function ResourceDock({
   onRetry: () => void;
 }) {
   const [expanded, setExpanded] = useState<ExpandableCategory | null>(null);
+  const dockRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
   const model = buildResourceDockModel(summaries, {
     visibleLimit: VISIBLE_RESOURCE_COUNT,
@@ -90,6 +91,18 @@ export function ResourceDock({
   const section = expanded
     ? expandableSections.find((candidate) => candidate.id === expanded)
     : undefined;
+
+  useEffect(() => {
+    if (!expanded) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && dockRef.current?.contains(target)) return;
+      setExpanded(null);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [expanded]);
 
   const moveFocus = (key: string) => {
     const buttons = [
@@ -112,6 +125,7 @@ export function ResourceDock({
 
   return (
     <aside
+      ref={dockRef}
       aria-label="资源 Dock"
       data-resource-dock
       className="absolute top-1/2 right-2 z-40 -translate-y-1/2"
@@ -165,8 +179,10 @@ export function ResourceDock({
               }
               data-dock-category
               onClick={() => {
-                if (candidate.id === 'all') onOpenLibrary();
-                else setExpanded(selected ? null : candidate.id);
+                if (candidate.id === 'all') {
+                  setExpanded(null);
+                  onOpenLibrary();
+                } else setExpanded(selected ? null : candidate.id);
               }}
               className="relative flex h-12 w-12 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent motion-safe:transition-[color,background-color,transform] motion-safe:duration-200 aria-expanded:bg-surface-strong aria-expanded:text-ink"
             >

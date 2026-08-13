@@ -7,7 +7,6 @@ import {
 } from './conversation-pane';
 import type { ChatMessage } from '@/features/chat/messages';
 import type { ArtifactDetail } from '@/features/canvas/artifact-client';
-import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 
 let composerProps: Record<string, unknown> = {};
 
@@ -19,7 +18,7 @@ vi.mock('@/features/voice', () => ({
 }));
 
 vi.mock('@/features/chat/chat-panel', () => ({
-  ChatPanel: () => null,
+  ChatPanel: () => <div data-chat-panel />,
 }));
 
 vi.mock('@/features/chat/assistant-message-projection', () => ({
@@ -164,7 +163,6 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
         composerTools={[]}
         outputPreference="auto"
         liveAssets={[]}
-        turnContextSnapshot={buildTurnContextSnapshot([])}
         composerDockRef={{ current: null }}
         scrollRef={{ current: null }}
         nearBottomRef={{ current: true }}
@@ -185,6 +183,10 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
     );
 
     expect(html).toContain('后台仍在处理，可关闭提示并稍后从资源库查看');
+    expect(html).not.toContain('data-turn-context-strip');
+    expect(html.indexOf('data-chat-panel')).toBeLessThan(
+      html.indexOf('data-conversation-tail-artifact'),
+    );
   });
 
   it('成功 revision 且已有消息卡时不显示重复浮动状态卡', () => {
@@ -236,7 +238,6 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
         composerTools={[]}
         outputPreference="auto"
         liveAssets={[]}
-        turnContextSnapshot={buildTurnContextSnapshot([])}
         composerDockRef={{ current: null }}
         scrollRef={{ current: null }}
         nearBottomRef={{ current: true }}
@@ -277,7 +278,6 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
         composerTools={[]}
         outputPreference="web_app"
         liveAssets={[]}
-        turnContextSnapshot={buildTurnContextSnapshot([])}
         composerDockRef={{ current: null }}
         scrollRef={{ current: null }}
         nearBottomRef={{ current: true }}
