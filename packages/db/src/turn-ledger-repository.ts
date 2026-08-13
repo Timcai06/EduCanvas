@@ -35,7 +35,7 @@ import {
 } from './message-parts';
 import {
   dualWriteBeginMessages,
-  isK12ConversationDualWriteEnabled,
+  shouldCreateK12ConversationProjection,
 } from './k12-conversation-dual-write';
 
 type Database = ReturnType<typeof getDb>;
@@ -340,6 +340,7 @@ async function beginTeachingMessages(
   input: BeginTeachingApplicationTurnInput | BeginTeachingTurnInput,
   prepared: PreparedTeachingMessageTurn,
   now: Date,
+  createConversationProjection: boolean,
 ): Promise<{ turnId: string; replayed: boolean }> {
   const [session] = await transaction
     .select({
@@ -516,7 +517,7 @@ async function beginTeachingMessages(
   await insertMessageParts(transaction, student.id, prepared.parts);
 
   // K12 消息双写到 conversation_messages（同一事务，幂等）
-  if (isK12ConversationDualWriteEnabled() && session.conversationId) {
+  if (createConversationProjection && session.conversationId) {
     await dualWriteBeginMessages({
       transaction,
       sessionId: input.sessionId,
@@ -540,7 +541,16 @@ async function beginTeachingMessages(
 
 /** 在一个短事务内写入学生消息、pending 老师消息和 pending answer run。 */
 export class DrizzleTeachingTurnLedger {
-  constructor(private readonly providedDatabase?: Database) {}
+  private readonly createConversationProjection: boolean;
+
+  constructor(
+    private readonly providedDatabase?: Database,
+    options: { createConversationProjection?: boolean } = {},
+  ) {
+    this.createConversationProjection =
+      options.createConversationProjection ??
+      shouldCreateK12ConversationProjection();
+  }
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
@@ -561,6 +571,7 @@ export class DrizzleTeachingTurnLedger {
         input,
         prepared,
         now,
+        this.createConversationProjection,
       );
       if (!begun.replayed) {
         const snapshot = await loadApplicationSnapshot(
@@ -632,6 +643,7 @@ export class DrizzleTeachingTurnLedger {
         input,
         prepared,
         now,
+        this.createConversationProjection,
       );
       return loadApplicationSnapshot(
         transaction,

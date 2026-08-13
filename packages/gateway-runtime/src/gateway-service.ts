@@ -154,12 +154,31 @@ export class GatewayService {
       }
     } catch {
       if (!terminalSeen) {
-        terminalSeen = true;
-        yield await this.operationStore.append(
-          operation.operationId,
-          failurePayload('RUNTIME_FAILED'),
-          this.now(),
-        );
+        try {
+          terminalSeen = true;
+          yield await this.operationStore.append(
+            operation.operationId,
+            failurePayload('RUNTIME_FAILED'),
+            this.now(),
+          );
+        } catch (appendError) {
+          // The Turn lifecycle may already have committed a durable terminal
+          // intent before the first append failed. A DB adapter reconciles it
+          // during listEvents; replay that fact instead of overwriting it with
+          // the generic catch failure or executing the runner again.
+          const recovered = [
+            ...(await this.operationStore.listEvents(
+              operation.operationId,
+              -1,
+              route.actorUserId,
+              this.now(),
+            )),
+          ]
+            .reverse()
+            .find(isGatewayTerminalEvent);
+          if (!recovered) throw appendError;
+          yield recovered;
+        }
       }
     } finally {
       this.cancellation.release(operation.operationId);

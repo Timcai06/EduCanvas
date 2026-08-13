@@ -10,7 +10,7 @@ import { ConversationPane } from './conversation-pane';
 import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import type { useGeneralWorkspaceController } from './use-general-workspace-controller';
-import { DeskRestRail } from './desk-rest-rail';
+import { ResourceDock } from './resource-dock';
 
 /**
  * 页面框架（W02）：header + sidebar + main + studio overlay 的纯布局组件。
@@ -27,14 +27,23 @@ export type GeneralWorkspaceController = ReturnType<
 >;
 
 /**
- * Studio 打开资源即关闭 overlay：把焦点还给 banner 里的 Studio trigger，
+ * Studio 打开资源即关闭 overlay：把焦点还给资源 Dock 的“全部资源”入口，
  * 让随后挂载的 Canvas 把它当作 opener。否则焦点掉到 body，Canvas 关闭后
  * 键盘用户会失去操作入口（W06-1）。选择器与 StudioOverlay 归还逻辑一致。
  */
 function restoreStudioOpenerFocus(): void {
-  document
-    .querySelector<HTMLButtonElement>('[aria-controls="notebook-studio-layer"]')
-    ?.focus();
+  document.querySelector<HTMLButtonElement>('#resource-dock-tab-all')?.focus();
+}
+
+/**
+ * React 必须先提交 Studio overlay 的卸载，背景 trigger 才不再 inert。
+ * 下一帧先恢复 opener，再打开资源，让 Canvas 捕获稳定且仍挂载的焦点来源。
+ */
+function openResourceAfterStudioCloses(openResource: () => void): void {
+  window.requestAnimationFrame(() => {
+    restoreStudioOpenerFocus();
+    openResource();
+  });
 }
 
 export interface GeneralWorkspaceLayoutProps {
@@ -66,15 +75,7 @@ export function GeneralWorkspaceLayout({
         notebookTitle={notebookTitle}
         conversationId={conversationId}
         sidebarOpen={sidebarOpen}
-        studioOpen={surface.type === 'studio'}
         onToggleSidebar={onToggleSidebar}
-        onOpenStudio={() => {
-          if (surface.type === 'studio') {
-            ctrl.workspace.closeStudio();
-            return;
-          }
-          ctrl.openStudio();
-        }}
       />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -118,25 +119,50 @@ export function GeneralWorkspaceLayout({
             </div>
           )}
         </main>
-        <DeskRestRail
-          positions={ctrl.surfacePositions}
-          onOpen={ctrl.openRestingSurface}
+        <ResourceDock
+          summaries={ctrl.resourceDock.items}
+          loading={ctrl.resourceDock.loading}
+          error={ctrl.resourceDock.error?.message ?? null}
+          hasMore={ctrl.resourceDock.hasMore}
+          onLoadMore={() => void ctrl.resourceDock.loadMore()}
+          onRetry={() => void ctrl.resourceDock.reload()}
+          onOpenLibrary={ctrl.openStudio}
+          onOpen={(summary) => {
+            ctrl.artifactFlow.closeCanvas();
+            if (summary.resourceKind === 'source') {
+              ctrl.studioOpenActions.actions.openSource(summary.resourceId);
+            } else {
+              ctrl.studioOpenActions.actions.openArtifact(summary.resourceId);
+            }
+          }}
         />
+        {ctrl.surfacePositionError ? (
+          <p className="sr-only" role="status">
+            案面位置同步失败，资源仍可正常打开。
+          </p>
+        ) : null}
         {surface.type === 'studio' ? (
           <StudioOverlay onClose={() => ctrl.workspace.closeStudio()}>
             <StudioWorkspace
+              summaries={ctrl.resourceDock.items}
               assets={ctrl.notebookSources}
-              outputs={ctrl.studioItems}
-              onOpenSource={(asset) => {
+              loading={ctrl.resourceDock.loading}
+              error={ctrl.resourceDock.error?.message ?? null}
+              hasMore={ctrl.resourceDock.hasMore}
+              onLoadMore={() => void ctrl.resourceDock.loadMore()}
+              onRetry={() => void ctrl.resourceDock.reload()}
+              onOpen={(summary) => {
                 ctrl.workspace.closeStudio();
-                restoreStudioOpenerFocus();
                 ctrl.artifactFlow.closeCanvas();
-                ctrl.studioOpenActions.actions.openSource(asset.id);
-              }}
-              onOpenOutput={(artifactId) => {
-                ctrl.workspace.closeStudio();
-                restoreStudioOpenerFocus();
-                ctrl.studioOpenActions.actions.openArtifact(artifactId);
+                openResourceAfterStudioCloses(() =>
+                  summary.resourceKind === 'source'
+                    ? ctrl.studioOpenActions.actions.openSource(
+                        summary.resourceId,
+                      )
+                    : ctrl.studioOpenActions.actions.openArtifact(
+                        summary.resourceId,
+                      ),
+                );
               }}
               onToggleSource={ctrl.sources.toggle}
               onRenameSource={ctrl.sources.rename}

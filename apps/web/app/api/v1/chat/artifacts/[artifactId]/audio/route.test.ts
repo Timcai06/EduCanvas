@@ -276,6 +276,20 @@ describe('GET /api/v1/chat/artifacts/[artifactId]/audio', () => {
     });
   });
 
+  it('contains revoked-membership diagnostics and never reads private bytes', async () => {
+    artifactRepo.getArtifactDetail.mockRejectedValueOnce(
+      new ArtifactOwnershipError(),
+    );
+    const response = await GET(request(), {
+      params: Promise.resolve({ artifactId }),
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(objectStorage.readVerified).not.toHaveBeenCalled();
+    expect(body).not.toMatch(/objectKey|checksum|providerBody|prompt|stack/i);
+  });
+
   it('returns 404 for archived artifacts', async () => {
     artifactRepo.getArtifactDetail.mockResolvedValueOnce({
       ...artifactDetail,

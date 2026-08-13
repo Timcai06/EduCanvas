@@ -58,6 +58,7 @@ describe('continue operation trace boundary', () => {
         agentId: 'agent:test',
         notebookId: 'notebook:test',
         conversationId: 'conversation:test',
+        assistantMessageId: 'message:assistant:test',
         profileId: 'profile:test',
         traceId: 'application-trace-id',
         capability: 'filesystem.read_allowlisted',

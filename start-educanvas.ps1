@@ -117,13 +117,15 @@ function Ensure-DockerDb {
   }
   if (-not $dockerOk) { throw 'Docker is not running. Start Docker Desktop, then run this script again.' }
 
-  $dbExists = [bool](docker ps -a --filter 'name=^/educanvas-db$' --format '{{.Names}}')
-  if ($dbExists) { Write-Step 'Starting existing database container...'; docker start educanvas-db *> $null }
-  else { Write-Step 'Creating database container...'; docker compose up -d db }
+  # Resolve the database through this worktree's Compose project. A global
+  # container name can collide with another checkout and escape project ownership.
+  Write-Step 'Starting project database service...'
+  docker compose up -d db
+  if ($LASTEXITCODE -ne 0) { throw 'Docker Compose could not start the database service.' }
 
   $deadline = (Get-Date).AddSeconds(60)
   while ((Get-Date) -lt $deadline) {
-    docker exec educanvas-db pg_isready -U educanvas *> $null
+    docker compose exec -T db pg_isready -U educanvas *> $null
     if ($LASTEXITCODE -eq 0) { Write-Step 'Database is ready.'; return }
     Start-Sleep -Seconds 1
   }
@@ -143,7 +145,14 @@ function Get-MigrationFingerprint {
 
 function Run-Migrations {
   $fingerprint = Get-MigrationFingerprint
-  $databaseId = (docker inspect -f '{{.Id}}' educanvas-db 2>$null).Trim()
+  $databaseContainerId = "$(docker compose ps -q db 2>$null)".Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($databaseContainerId)) {
+    throw 'Docker Compose database service is unavailable.'
+  }
+  $databaseId = "$(docker inspect -f '{{.Id}}' $databaseContainerId 2>$null)".Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($databaseId)) {
+    throw 'Docker database identity is unavailable.'
+  }
   $cached = $null
   if (Test-Path -LiteralPath $MigrationStatePath) {
     try { $cached = Get-Content -Encoding utf8 -Raw -LiteralPath $MigrationStatePath | ConvertFrom-Json } catch { $cached = $null }

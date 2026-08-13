@@ -78,12 +78,19 @@ function projectMediaGenerator(
 
 function projectSourceReferences(
   version: ArtifactProjectionVersion | null,
-  job: ArtifactProjectionJob | null,
+  latestJob: ArtifactProjectionJob | null,
+  versionJob: ArtifactProjectionJob | null,
 ): { resourceId: string; versionId: string }[] {
-  if (!version?.generationJobId || version.generationJobId !== job?.id) {
+  const sourceJob =
+    versionJob &&
+    version?.generationJobId &&
+    versionJob.id === version.generationJobId
+      ? versionJob
+      : latestJob;
+  if (!version?.generationJobId || sourceJob?.id !== version.generationJobId) {
     return [];
   }
-  const provenance = job.params.provenance;
+  const provenance = sourceJob.params.provenance;
   const explicitSources =
     typeof provenance === 'object' &&
     provenance !== null &&
@@ -92,7 +99,7 @@ function projectSourceReferences(
       ? provenance.sources
       : null;
   /* audio_overview 是早于统一 Artifact Tool provenance 的兼容形状。 */
-  const selectedSources = explicitSources ?? job.params.selectedSources;
+  const selectedSources = explicitSources ?? sourceJob.params.selectedSources;
   if (!Array.isArray(selectedSources)) return [];
   return [
     ...new Set(
@@ -227,7 +234,12 @@ function projectStatus(
   ) {
     return 'unavailable';
   }
-  if (job?.status === 'failed' || job?.status === 'cancelled') return 'failed';
+  /* A failed/cancelled revision does not invalidate an already committed
+     immutable version. The revision outcome remains a job fact; the Artifact
+     resource stays openable and authorized from its last usable version. */
+  if (job?.status === 'failed' || job?.status === 'cancelled') {
+    return version ? 'ready' : 'failed';
+  }
   if (version) return 'ready';
   return 'unavailable';
 }
@@ -251,17 +263,27 @@ function projectActions(
       : ['view', 'annotate'];
   }
   if (kind === 'markdown_document')
-    return ['view', 'edit', 'regenerate', 'download'];
-  if (kind === 'dom_exploration') return ['view', 'run', 'cancel', 'annotate'];
+    return ['view', 'edit', 'regenerate', 'download', 'delete'];
+  if (kind === 'dom_exploration')
+    return ['view', 'run', 'cancel', 'delete', 'annotate'];
   if (kind === 'web_app')
-    return ['view', 'run', 'cancel', 'regenerate', 'download', 'annotate'];
-  if (kind === 'note') return ['view', 'edit', 'regenerate', 'annotate'];
+    return [
+      'view',
+      'run',
+      'cancel',
+      'regenerate',
+      'download',
+      'delete',
+      'annotate',
+    ];
+  if (kind === 'note')
+    return ['view', 'edit', 'regenerate', 'delete', 'annotate'];
   /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
      这两类；不开放 regenerate 才与实际后端能力一致。
      删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
   if (kind === 'audio_overview' || kind === 'generated_image')
     return ['view', 'download', 'delete', 'annotate'];
-  return ['view', 'regenerate', 'annotate'];
+  return ['view', 'regenerate', 'delete', 'annotate'];
 }
 
 /**
@@ -273,10 +295,26 @@ export function projectOwnedArtifactResource(input: {
   artifact: ArtifactProjectionArtifact;
   version: ArtifactProjectionVersion | null;
   latestJob: ArtifactProjectionJob | null;
+  /** Generation job that owns `version`; explicitly null for manual/legacy versions. */
+  versionJob: ArtifactProjectionJob | null;
   accessRole: CanvasAccessRole;
 }): CanvasResource {
   if (input.artifact.spaceId !== input.notebookId) {
     throw new ArtifactResourceProjectionError('resource_not_found', 422);
+  }
+  const hasExplicitVersionJob = Object.prototype.hasOwnProperty.call(
+    input,
+    'versionJob',
+  );
+  if (input.version !== null && !hasExplicitVersionJob) {
+    throw new ArtifactResourceProjectionError('resource_invalid', 422);
+  }
+  if (
+    input.version === null &&
+    hasExplicitVersionJob &&
+    input.versionJob !== null
+  ) {
+    throw new ArtifactResourceProjectionError('resource_invalid', 422);
   }
   const kind = input.artifact.kind as keyof typeof ARTIFACT_RENDERERS;
   const renderer = ARTIFACT_RENDERERS[kind];
@@ -291,6 +329,7 @@ export function projectOwnedArtifactResource(input: {
   const sourceReferences = projectSourceReferences(
     input.version,
     input.latestJob,
+    input.versionJob,
   );
   const parsed = canvasResourceSchema.safeParse({
     schemaVersion: 1,

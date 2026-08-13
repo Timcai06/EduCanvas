@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretDown, GraduationCap, List } from '@phosphor-icons/react';
+import { GraduationCap, List } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import { PillNav, type PillNavItem } from '@/components/PillNav';
 import { ProductMark } from '@/components/ProductMark';
@@ -8,23 +8,19 @@ import { UserMenu } from '@/features/auth/user-menu';
 
 /**
  * 通用笔记本顶部导航。只负责入口与可访问状态，不读取会话或产物数据；
- * 侧栏和 Studio 的业务动作由工作区组合根注入；新建只保留在侧栏，账号、外观与通信方式统一
+ * 侧栏业务动作由工作区组合根注入；新建只保留在侧栏，账号、外观与通信方式统一
  * 收进头像入口，顶栏不再维护重复的齿轮按钮。
  */
 export function GeneralWorkspaceHeader({
   notebookTitle,
   conversationId,
   sidebarOpen,
-  studioOpen,
   onToggleSidebar,
-  onOpenStudio,
 }: {
   notebookTitle: string | null;
   conversationId: string;
   sidebarOpen: boolean;
-  studioOpen: boolean;
   onToggleSidebar: () => void;
-  onOpenStudio: () => void;
 }) {
   const items = useMemo<readonly PillNavItem[]>(
     () => [
@@ -44,27 +40,8 @@ export function GeneralWorkspaceHeader({
         href: '/learn',
         icon: <GraduationCap size={17} weight="duotone" />,
       },
-      {
-        id: 'studio',
-        label: 'Studio',
-        ariaLabel: '展开当前笔记本的输入与输出',
-        icon: (
-          <CaretDown
-            size={15}
-            weight="bold"
-            className={`transition-transform duration-300 ${
-              studioOpen ? 'rotate-180' : ''
-            }`}
-          />
-        ),
-        active: studioOpen,
-        ariaExpanded: studioOpen,
-        ariaControls: 'notebook-studio-layer',
-        dataStudioTrigger: true,
-        onSelect: onOpenStudio,
-      },
     ],
-    [onOpenStudio, onToggleSidebar, sidebarOpen, studioOpen],
+    [onToggleSidebar, sidebarOpen],
   );
 
   return (
@@ -79,6 +56,11 @@ export function GeneralWorkspaceHeader({
       </span>
       <span className="flex-1" />
       <PillNav items={items} />
+      <span
+        data-studio-placeholder
+        aria-hidden="true"
+        className="h-10 w-10 shrink-0 md:h-[2.65rem] md:w-[6.5rem]"
+      />
       <UserMenu conversationId={conversationId} notebookTitle={notebookTitle} />
     </header>
   );

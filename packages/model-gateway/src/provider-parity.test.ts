@@ -6,7 +6,7 @@ import type {
 import { AgentLoopEngine } from '@educanvas/agent-runtime';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { EnabledModelGatewayConfiguration } from './config';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
@@ -361,25 +361,36 @@ describe('native and AI SDK provider golden parity', () => {
 
   it('does not expose provider errors or create a second terminal', async () => {
     const secret = 'provider-secret-never-forward';
-    const native = new OpenAICompatibleTurnModelGateway(config, {
-      fetchImpl: (async () => {
-        throw new Error(secret);
-      }) as typeof fetch,
-    });
-    const model = new MockLanguageModelV3({
-      doStream: async () => {
-        throw new Error(secret);
-      },
-    });
+    const rawConsoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const native = new OpenAICompatibleTurnModelGateway(config, {
+        fetchImpl: (async () => {
+          throw new Error(secret);
+        }) as typeof fetch,
+      });
+      const model = new MockLanguageModelV3({
+        doStream: async () => {
+          throw new Error(secret);
+        },
+      });
 
-    const nativeEvents = await collect(native);
-    const candidateEvents = await collect(aiGateway(model));
-    expect(semanticTranscript(candidateEvents)).toEqual(
-      semanticTranscript(nativeEvents),
-    );
-    expect(JSON.stringify({ nativeEvents, candidateEvents })).not.toContain(
-      secret,
-    );
-    expect(semanticTranscript(candidateEvents).terminalCount).toBe(1);
+      const nativeEvents = await collect(native);
+      const candidateEvents = await collect(aiGateway(model));
+      expect(semanticTranscript(candidateEvents)).toEqual(
+        semanticTranscript(nativeEvents),
+      );
+      expect(JSON.stringify({ nativeEvents, candidateEvents })).not.toContain(
+        secret,
+      );
+      expect(semanticTranscript(candidateEvents).terminalCount).toBe(1);
+      expect(rawConsoleError).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: secret }),
+      );
+      expect(JSON.stringify(rawConsoleError.mock.calls)).not.toContain(secret);
+    } finally {
+      rawConsoleError.mockRestore();
+    }
   });
 });

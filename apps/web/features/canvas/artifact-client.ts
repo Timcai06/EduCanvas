@@ -150,8 +150,19 @@ const audioOverviewMediaSchema = z
 
 const generatedImageMediaSchema = z
   .object({
-    url: z.string(),
-    downloadUrl: z.string().optional(),
+    url: z
+      .string()
+      .regex(
+        /^\/api\/v1\/chat\/artifacts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/image$/i,
+        '生成图片必须使用同源受控读取路径',
+      ),
+    downloadUrl: z
+      .string()
+      .regex(
+        /^\/api\/v1\/chat\/artifacts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/download$/i,
+        '生成图片必须使用同源受控下载路径',
+      )
+      .optional(),
     contentVersion: z.literal(1),
     contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
     byteSize: z
@@ -406,40 +417,6 @@ export async function saveMarkdownDocumentArtifact(
     throw new Error('Markdown 文档保存不应创建生成任务。');
   }
   return { artifact: result.artifact, job: null };
-}
-
-/**
- * 轮询直到生成任务落入 terminal 态或产生版本。超时不抛错而是返回最后一次
- * 详情——任务仍在后台跑(持久任务的本意),UI 应展示"仍在生成"而不是失败。
- */
-export async function pollArtifactUntilSettled(
-  artifactId: string,
-  options: {
-    intervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    minimumVersion?: number;
-  } = {},
-): Promise<ArtifactDetail> {
-  const interval = options.intervalMs ?? 1_500;
-  const deadline = Date.now() + (options.timeoutMs ?? 60_000);
-  let detail = await fetchArtifactDetail(artifactId);
-  while (Date.now() < deadline && !options.signal?.aborted) {
-    const jobStatus = detail.latestJob?.status;
-    const minimumVersion = options.minimumVersion ?? 1;
-    if (jobStatus === 'failed' || jobStatus === 'cancelled') {
-      return detail;
-    }
-    if (
-      detail.artifact.latestVersion >= minimumVersion &&
-      (jobStatus === 'succeeded' || jobStatus === undefined)
-    ) {
-      return detail;
-    }
-    await new Promise((resolve) => setTimeout(resolve, interval));
-    detail = await fetchArtifactDetail(artifactId);
-  }
-  return detail;
 }
 
 export async function deleteArtifact(

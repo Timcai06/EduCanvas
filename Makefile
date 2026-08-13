@@ -3,8 +3,10 @@ SHELL := /bin/sh
 
 PORT ?= 3101
 PLAYWRIGHT_PORT ?= 3100
-TEST_DATABASE_URL ?= postgresql://educanvas:educanvas@localhost:5434/educanvas_integration
-E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@localhost:5434/educanvas_e2e
+EDUCANVAS_POSTGRES_PORT ?= 5434
+export EDUCANVAS_POSTGRES_PORT
+TEST_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_integration
+E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_e2e
 
 .PHONY: help doctor deps setup all dev tui status stop check lint typecheck test build \
 	db-up db-migrate db-logs db-integration-prepare db-e2e-prepare \
@@ -27,17 +29,17 @@ help:
 		'  make e2e          准备隔离数据库并运行 Playwright E2E' \
 		'  make db-logs      持续查看 PostgreSQL 日志' \
 		'' \
-		'可覆盖变量：PORT=3000 PLAYWRIGHT_PORT=3100'
+		'可覆盖变量：PORT=3000 PLAYWRIGHT_PORT=3100 EDUCANVAS_POSTGRES_PORT=5435'
 
 doctor:
 	@command -v node >/dev/null
 	command -v pnpm >/dev/null
 	command -v docker >/dev/null
 	test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@node tooling/node-runtime-check.mjs
+	@pnpm node:gate >/dev/null
+	@pnpm env:check .env
 	docker info >/dev/null
-	@set -a; . ./.env; set +a; \
-		test -n "$${DATABASE_URL:-}" || { printf '%s\n' 'DATABASE_URL 未设置'; exit 1; }; \
-		test -n "$${MODEL_GATEWAY_API_KEY:-}" || { printf '%s\n' 'MODEL_GATEWAY_API_KEY 未设置'; exit 1; }
 	printf 'Node %s · pnpm %s · Docker 已连接 · 环境变量已加载\n' "$$(node --version)" "$$(pnpm --version)"
 
 deps:
@@ -106,4 +108,6 @@ integration: deps db-integration-prepare
 
 e2e: deps db-e2e-prepare
 	@DATABASE_URL=$(E2E_DATABASE_URL) pnpm db:migrate
+	@DATABASE_URL=$(E2E_DATABASE_URL) pnpm --filter @educanvas/web build
+	@pnpm --filter @educanvas/worker build
 	E2E_DATABASE_URL=$(E2E_DATABASE_URL) PLAYWRIGHT_PORT=$(PLAYWRIGHT_PORT) pnpm test:e2e

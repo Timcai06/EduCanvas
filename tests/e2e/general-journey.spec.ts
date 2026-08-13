@@ -66,9 +66,7 @@ test('@smoke General 黄金旅程：Turn 生命周期', async ({ context, page }
   await expect(sidebar.getByText('来源', { exact: true })).toHaveCount(0);
   await closeNotebookSidebar(page);
   const studio = await openStudioInput(page);
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
-  ).toBeVisible();
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
 
   const cookieNames = (await context.cookies())
     .filter((cookie) => cookie.httpOnly && cookie.path === '/')

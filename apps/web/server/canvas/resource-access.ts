@@ -113,6 +113,7 @@ async function loadArtifact(input: {
       artifact: detail.artifact,
       version: detail.latestVersion,
       latestJob: detail.latestJob,
+      versionJob: detail.versionJob,
       accessRole: access.role,
     });
   } catch (error) {
@@ -145,11 +146,24 @@ export async function projectOwnedSourceResources(input: {
   notebookId: string;
   snapshots: readonly AssetSnapshot[];
 }): Promise<ReadonlyMap<string, CanvasResource>> {
+  return projectOwnedSourceResourcesForSubject({
+    ownerSubjectId: input.identity.studentId,
+    notebookId: input.notebookId,
+    snapshots: input.snapshots,
+  });
+}
+
+/** CA07 effective subject 消费入口；只接受服务端已解析的数据归属 ID。 */
+export async function projectOwnedSourceResourcesForSubject(input: {
+  ownerSubjectId: string;
+  notebookId: string;
+  snapshots: readonly AssetSnapshot[];
+}): Promise<ReadonlyMap<string, CanvasResource>> {
   const projected = new Map<string, CanvasResource>();
   if (input.snapshots.length === 0) return projected;
   const access = await requireNotebookAccess(getDb(), {
     notebookId: input.notebookId,
-    trustedSubjectId: input.identity.studentId,
+    trustedSubjectId: input.ownerSubjectId,
     requiredPermission: 'notebook.read',
   }).catch(() => null);
   if (!access) throw new CanvasResourceAccessError('resource_not_found', 404);

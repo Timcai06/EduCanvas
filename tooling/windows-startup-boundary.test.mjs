@@ -47,6 +47,20 @@ describe('Windows startup boundary', () => {
     );
   });
 
+  it('keeps database lifecycle inside the current Compose project', () => {
+    assert.match(launcher, /docker compose up -d db/);
+    assert.match(launcher, /docker compose exec -T db pg_isready -U educanvas/);
+    assert.match(launcher, /docker compose ps -q db/);
+    assert.match(
+      launcher,
+      /docker inspect -f '\{\{\.Id\}\}' \$databaseContainerId/,
+    );
+    assert.doesNotMatch(launcher, /educanvas-db/);
+    assert.doesNotMatch(launcher, /docker ps -a/);
+    assert.doesNotMatch(launcher, /docker start/);
+    assert.doesNotMatch(launcher, /docker exec/);
+  });
+
   it('normalizes common quoted .env values without evaluating them', () => {
     assert.match(launcher, /\$Value = \$matches\[2\]\.Trim\(\)/);
     assert.match(launcher, /\$Value\.StartsWith\('"'\)/);

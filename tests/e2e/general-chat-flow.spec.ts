@@ -39,11 +39,10 @@ async function openStudioInput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('source');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -52,12 +51,10 @@ async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('artifact');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 

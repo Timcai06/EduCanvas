@@ -145,6 +145,10 @@ describe('Graphile异常退出后的continuation恢复', () => {
           status: 'completed',
           content: 'SIGKILL恢复后完成。',
           operationTerminalWriter: 'gateway',
+          gatewayTerminalIntent: {
+            status: 'completed',
+            messageId: input.scope.assistantMessageId,
+          },
         });
         return {
           status: 'completed' as const,

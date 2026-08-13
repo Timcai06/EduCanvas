@@ -65,6 +65,7 @@ describe('TurnApplicationService (core orchestration)', () => {
       status: 'completed',
       content: '你好，我来帮你。',
     });
+    expect(lifecycle.settlements[0]?.retryable).toBeUndefined();
   });
 
   it('由Profile选择稳定taskAlias并贯穿Provider与统一Model Run账本', async () => {
@@ -186,6 +187,11 @@ describe('TurnApplicationService (core orchestration)', () => {
     expect(models.runs[0]).toMatchObject({
       status: 'failed',
       errorCode: 'model_invalid_response',
+    });
+    expect(lifecycle.settlements[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'MODEL_FAILED',
+      retryable: false,
     });
   });
 

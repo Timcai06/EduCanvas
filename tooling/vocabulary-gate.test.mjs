@@ -92,17 +92,14 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
 });
 
 test('最新 migration 的 CREATE TABLE CHECK 与 schema 使用同一分类规则', () => {
-  // 0056_glorious_tiger_shark（ADR-0026）是当前最新迁移：2 个 quality 约束
-  // （值域 + 形状），均登记为 closed。迁移演进时同步更新本断言。
+  // 0057 只新增 provenance sidecar 的键、唯一约束和索引，不新增 CHECK。
+  // 最新 migration 没有 CHECK 是合法结果；schema 全量闭集仍由上方断言审计。
   const checks = extractLatestMigrationChecks();
-  assert.equal(checks.length, 2);
+  assert.equal(checks.length, 0);
   const closed = checks
     .filter((check) => isLiteralVocabularyClosure(check.body))
     .map((check) => check.name);
-  assert.deepEqual(closed, [
-    'asset_representations_quality_check',
-    'asset_representations_quality_shape_check',
-  ]);
+  assert.deepEqual(closed, []);
   for (const name of closed)
     assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
 });

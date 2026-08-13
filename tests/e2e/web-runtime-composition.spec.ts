@@ -25,7 +25,7 @@ async function activeConversationId(page: Page): Promise<string> {
 
 async function ensureGeneralNotebook(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
   await page
     .getByRole('dialog', { name: '添加文档来源' })
@@ -88,12 +88,10 @@ async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('artifact');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -128,7 +126,7 @@ test.describe('Runtime Composition: real Web, Runtime and PostgreSQL', () => {
     await page.reload();
 
     const studio = await openStudioOutput(page);
-    await studio.getByRole('option', { name: title }).click();
+    await studio.getByRole('button', { name: title }).click();
 
     const runtime = page.getByTestId('persistent-web-runtime');
     await expect(runtime).toBeVisible();

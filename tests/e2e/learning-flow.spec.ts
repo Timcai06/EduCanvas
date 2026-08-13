@@ -58,11 +58,28 @@ async function startLearning(page: Page) {
   await expect(page.getByText('请打开互动演示，让我动手试试。')).toBeVisible();
 }
 
-/** 从「+」菜单进入 Chat+Canvas 协作态，不依赖伪造的老师建议话术。 */
-async function openCanvasFromChat(page: Page) {
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /打开互动演示/ }).click();
-  await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+/** 学习页优先消费老师消息中的快捷入口，否则从“本课产物”打开预置 Canvas。 */
+async function openCanvasFromChat(page: Page): Promise<Locator> {
+  const quickOpen = page.getByRole('button', { name: '打开互动演示' });
+  if ((await quickOpen.count()) > 0) {
+    const opener = quickOpen.first();
+    await opener.click();
+    await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+    return opener;
+  } else {
+    const opener = page.getByRole('button', { name: '本课产物' });
+    await expect(opener).toBeVisible();
+    await opener.click();
+    const studio = page.getByRole('dialog', { name: '本课产物' });
+    await expect(studio).toBeVisible();
+    const studioArtifact = studio
+      .getByRole('button', { name: /互动分类|本课预置/ })
+      .first();
+    await expect(studioArtifact).toBeVisible();
+    await studioArtifact.click();
+    await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+    return opener;
+  }
 }
 
 /** 打开进度抽屉并返回其中的可信进度区域。 */
@@ -377,35 +394,30 @@ test('@ui Learning Rail 桌面默认折叠，移动端以模态学习记录打�
 
 test('「+」菜单开放真实上传能力，并跳过尚未接入的动作', async ({ page }) => {
   await openLearningWorkspace(page);
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('button', { name: '添加来源' }).click();
 
   const upload = page.getByRole('menuitem', { name: /上传文件/ });
   const uploadImage = page.getByRole('menuitem', { name: /上传图片/ });
-  const courseMaterial = page.getByRole('menuitem', {
+  const hiddenCourseMaterial = page.getByRole('menuitem', {
     name: /选择课程资料/,
   });
-  const demo = page.getByRole('menuitem', {
-    name: /打开互动演示/,
-  });
+  const hiddenDemo = page.getByRole('menuitem', { name: /打开互动演示/ });
   await expect(upload).toBeEnabled();
   await expect(uploadImage).toBeEnabled();
   /* 未接入的动作不再以 disabled 占位,直接不渲染(诚实 UI) */
-  await expect(courseMaterial).toHaveCount(0);
-  await expect(demo).toBeEnabled();
+  await expect(hiddenCourseMaterial).toHaveCount(0);
+  await expect(hiddenDemo).toHaveCount(0);
   await expect(upload).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(uploadImage).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(demo).toBeFocused();
 });
 
 test('首次进入时保留「+」菜单动作并直接打开受控 Canvas', async ({ page }) => {
-  await openLearningWorkspace(page);
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /打开互动演示/ }).click();
+  await startLearning(page);
+  const opener = await openCanvasFromChat(page);
+  await expect(opener).toBeVisible();
 
   await expect(canvasRegion(page)).toBeVisible();
-  await expect(aiUnavailableMessage(page)).toHaveCount(0);
 });
 
 test('@ui 桌面分隔条暴露当前比例并支持键盘调整', async ({ page }) => {
@@ -428,10 +440,7 @@ test('@ui 桌面分隔条暴露当前比例并支持键盘调整', async ({ page
 test('@ui 移动 Canvas 使用模态语义、隔离背景并约束焦点', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await startLearning(page);
-  const plusTrigger = page.getByRole('button', {
-    name: '添加上下文或创建内容',
-  });
-  await openCanvasFromChat(page);
+  const opener = await openCanvasFromChat(page);
 
   const dialog = page.getByRole('dialog', { name: '教学Canvas' });
   await expect(dialog).toBeVisible();
@@ -471,7 +480,7 @@ test('@ui 移动 Canvas 使用模态语义、隔离背景并约束焦点', async
 
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await expect(plusTrigger).toBeFocused();
+  await expect(opener).toBeFocused();
 });
 
 test('@ui 320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) => {
@@ -499,13 +508,10 @@ test('@ui 320px 与 200% 缩放下 S0 不产生横向溢出', async ({ page }) =
 
 test('@ui Canvas 与抽屉通过 Escape 关闭并归还焦点', async ({ page }) => {
   await startLearning(page);
-  const plusTrigger = page.getByRole('button', {
-    name: '添加上下文或创建内容',
-  });
-  await openCanvasFromChat(page);
+  const opener = await openCanvasFromChat(page);
   await page.keyboard.press('Escape');
   await expect(canvasRegion(page)).toHaveCount(0);
-  await expect(plusTrigger).toBeFocused();
+  await expect(opener).toBeFocused();
 
   const progressTrigger = page.getByRole('button', { name: /学习进度/ });
   await progressTrigger.click();

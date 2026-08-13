@@ -8,6 +8,7 @@ import type {
   TurnApplicationLifecyclePort,
   TurnApplicationLifecycleSnapshot,
 } from '@educanvas/agent-runtime';
+import { toGatewayFailureCode } from '@educanvas/gateway-runtime';
 import {
   DrizzlePlatformTurnRepository,
   type PlatformTurnSnapshot,
@@ -100,6 +101,27 @@ export class GatewayTurnLifecycle implements TurnApplicationLifecyclePort {
   async settle(
     input: Parameters<TurnApplicationLifecyclePort['settle']>[0],
   ): ReturnType<TurnApplicationLifecyclePort['settle']> {
+    if (
+      input.status === 'failed' &&
+      (input.failureCode === null ||
+        input.failureCode === undefined ||
+        input.retryable === undefined)
+    ) {
+      throw new Error('gateway_failure_intent_missing');
+    }
+    const gatewayTerminalIntent =
+      input.status === 'completed'
+        ? {
+            status: 'completed' as const,
+            messageId: input.turn.assistantMessageId,
+          }
+        : input.status === 'cancelled'
+          ? { status: 'cancelled' as const }
+          : {
+              status: 'failed' as const,
+              code: toGatewayFailureCode(input.failureCode!),
+              retryable: input.retryable!,
+            };
     await this.turns.settleTurn({
       conversationId: input.command.notebook.conversationId,
       trustedSubjectId: input.command.actor.actorId,
@@ -109,6 +131,7 @@ export class GatewayTurnLifecycle implements TurnApplicationLifecyclePort {
       failureCode: input.failureCode,
       sourceMarkers: input.citationMarkers,
       operationTerminalWriter: 'gateway',
+      gatewayTerminalIntent,
     });
     return [];
   }

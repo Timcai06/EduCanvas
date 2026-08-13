@@ -2,7 +2,6 @@ import 'server-only';
 
 import { canvasInteractionEventSchema } from '@educanvas/canvas-protocol';
 import {
-  DrizzleChatRepository,
   DrizzleKnowledgeRetrievalRepository,
   DrizzleLearningSessionRepository,
   DrizzleSessionRepository,
@@ -26,13 +25,13 @@ import {
   type OwnedStudyContext,
 } from '../study/study-service';
 import { demoLesson } from './demo-lesson';
+import { webTeachingVisibleMessageHistory } from './message-history';
 import {
   gradeCanvasSubmissionService,
   progressTeachingStateService,
 } from './teaching-runtime';
 
 const learningSessions = new DrizzleLearningSessionRepository();
-const chatMessages = new DrizzleChatRepository();
 const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
 const studyPlans = new DrizzleStudyPlanRepository();
 const bootstrapCompensator = new DrizzleStudyBootstrapCompensator();
@@ -172,7 +171,7 @@ export async function loadLearningPageData(
   );
   if (!snapshot) return null;
   const [history, recent] = await Promise.all([
-    chatMessages.listHistory({
+    webTeachingVisibleMessageHistory.listHistory({
       sessionId: snapshot.sessionId,
       trustedStudentId: identity.studentId,
       limit: 100,

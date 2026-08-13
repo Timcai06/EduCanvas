@@ -44,11 +44,23 @@ describe('SHA-bound CI evidence', () => {
         generatedAt: '2026-08-11T00:00:00.000Z',
       }),
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         sha,
         event: 'pull_request',
         expected,
         results: successfulResults,
+        e2eEvidence: {
+          scope: 'affected',
+          decision: 'skip',
+          verification: 'not_applicable',
+          requiredProjects: [],
+          pendingExternal: [
+            'safari_webkit',
+            'real_provider_canary',
+            'real_microphone',
+            'real_external_services',
+          ],
+        },
         requiredFailures: [],
         generatedAt: '2026-08-11T00:00:00.000Z',
       },
@@ -65,6 +77,42 @@ describe('SHA-bound CI evidence', () => {
     assert.deepEqual(evidence.requiredFailures, [
       'agent_eval was required but concluded: failure',
     ]);
+  });
+
+  it('records full and nightly E2E as distinct pending evidence scopes', () => {
+    for (const [event, scope] of [
+      ['workflow_dispatch', 'full'],
+      ['schedule', 'nightly'],
+    ]) {
+      const evidence = buildCiEvidence({
+        sha,
+        event,
+        expected: { ...expected, e2e: true },
+        results: { ...successfulResults, e2e: 'skipped' },
+      });
+      assert.deepEqual(evidence.e2eEvidence, {
+        scope,
+        decision: 'run',
+        verification: 'pending',
+        requiredProjects: ['chromium', 'chromium-mobile', 'firefox'],
+        pendingExternal: [
+          'safari_webkit',
+          'real_provider_canary',
+          'real_microphone',
+          'real_external_services',
+        ],
+      });
+    }
+  });
+
+  it('records an executed E2E failure as failed rather than pending', () => {
+    const evidence = buildCiEvidence({
+      sha,
+      event: 'schedule',
+      expected: { ...expected, e2e: true },
+      results: { ...successfulResults, e2e: 'failure' },
+    });
+    assert.equal(evidence.e2eEvidence.verification, 'failed');
   });
 
   it('rejects unbound or unsupported evidence identities', () => {

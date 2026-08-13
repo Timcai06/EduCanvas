@@ -4,8 +4,8 @@ import { X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef } from 'react';
 
 /**
- * Studio 的透明浮层。它只为 OptionWheel 与动作气泡提供定位空间，不绘制面板、
- * 遮罩或轨道，也不改变对话与历史列表的布局。
+ * Studio 的透明浮层。它为统一资源库提供定位空间，不绘制遮罩或焦点陷阱，
+ * 也不改变对话与历史列表的布局。
  */
 export function StudioOverlay({
   onClose,

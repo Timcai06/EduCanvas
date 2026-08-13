@@ -42,7 +42,11 @@ export function classifyChangedPaths(
   paths,
   { eventName = 'pull_request' } = {},
 ) {
-  if (eventName === 'workflow_dispatch') return { ...ALL };
+  // Scheduled and manually dispatched runs are full-matrix evidence events.
+  // Do not let a missing comparison SHA turn that contract into an accidental
+  // fail-open: both events intentionally pay every lane.
+  if (eventName === 'schedule' || eventName === 'workflow_dispatch')
+    return { ...ALL };
   if (paths.length === 0) return { ...ALL };
   const knownRoots = new Set([
     '.github',
@@ -300,9 +304,14 @@ function main() {
     argument('--event') ?? process.env.GITHUB_EVENT_NAME ?? 'pull_request';
   let result;
   try {
-    const paths = changedPaths(argument('--base'), argument('--head'));
-    result = classifyChangedPaths(paths, { eventName });
-    console.log(`Changed paths: ${paths.join(', ') || '(none; fail-open)'}`);
+    if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
+      result = classifyChangedPaths([], { eventName });
+      console.log(`${eventName} explicitly selects the full CI matrix.`);
+    } else {
+      const paths = changedPaths(argument('--base'), argument('--head'));
+      result = classifyChangedPaths(paths, { eventName });
+      console.log(`Changed paths: ${paths.join(', ') || '(none; fail-open)'}`);
+    }
   } catch (error) {
     console.warn(`CI impact classification failed open: ${error.message}`);
     result = { ...ALL };

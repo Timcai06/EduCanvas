@@ -73,6 +73,16 @@ describe('Source CanvasResource adapter', () => {
     expect(resource.renderer.rendererId).toBe(rendererId);
   });
 
+  it('projects the guarded original-download action for DOCX', () => {
+    const resource = projectOwnedSourceResource({
+      ...readySource,
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml',
+    });
+
+    expect(resource.allowedActions).toContain('download');
+  });
+
   it('allows a processing source without a content version', () => {
     const resource = projectOwnedSourceResource({
       ...readySource,

@@ -7,6 +7,7 @@ import {
 import {
   DrizzleGatewayOperationStore,
   DrizzleOperationContinuationRepository,
+  type GatewayTerminalReconciliationMode,
   type OperationContinuationExecutionScope,
 } from '@educanvas/db';
 import type { ContinuationTracePort } from '@educanvas/telemetry';
@@ -236,10 +237,14 @@ export function createContinueOperationTask(input: {
 /** 生产只注册配置完整的耐久Adapter；缺密钥/配置时仍以adapter_unavailable诚实失败。 */
 export function createProductionContinueOperationTask(
   trace: ContinuationTracePort,
+  terminalReconciliationMode: GatewayTerminalReconciliationMode,
 ): Task {
   return createContinueOperationTask({
     adapters: createProductionMcpContinuationAdapters(),
     trace,
+    operations: new DrizzleGatewayOperationStore(undefined, {
+      terminalReconciliationMode,
+    }),
   });
 }
 

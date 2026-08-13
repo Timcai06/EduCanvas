@@ -45,6 +45,37 @@ const job: PlatformArtifactJob = {
 };
 
 describe('WebOperationArtifacts', () => {
+  it('拒绝把同一 Turn 已有的其他类型 Artifact 伪装成新提议', async () => {
+    const repository = {
+      createArtifactWithGenerationJob: vi.fn().mockResolvedValue({
+        artifact: { ...artifact, kind: 'generated_image' },
+        job,
+        replayed: true,
+      }),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      repository,
+    );
+
+    await expect(
+      operationArtifacts.createTool().handler(
+        {
+          kind: 'mind_map',
+          title: '思维导图',
+          instruction: '整理课程内容。',
+        },
+        context,
+      ),
+    ).rejects.toThrow('artifact_already_proposed_for_turn');
+    expect(operationArtifacts.events()).toEqual([]);
+  });
+
   it('从实际物化计划按首见顺序冻结文本与原生版本并去重', () => {
     expect(
       collectArtifactInputSourceReferences({
@@ -144,6 +175,8 @@ describe('WebOperationArtifacts', () => {
       trustTier: 'tier1',
       title: artifact.title,
       taskIdentifier: 'artifact:generate',
+      idempotencyKey: 'general-turn-artifact:operation-1',
+      requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       params: {
         generation: {
           instruction: '围绕分数的意义、运算规则和常见错误整理。',
@@ -247,6 +280,8 @@ describe('WebOperationArtifacts', () => {
       trustTier: 'tier1',
       title: '课程文档',
       taskIdentifier: 'artifact:generate',
+      idempotencyKey: 'general-turn-artifact:operation-1',
+      requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       params: {
         generation: {
           instruction: '生成一份课程结构化文档。',
@@ -299,6 +334,8 @@ describe('WebOperationArtifacts', () => {
         trustTier: 'tier2',
         title: '课程网页',
         taskIdentifier: 'artifact:generate',
+        idempotencyKey: 'general-turn-artifact:operation-1',
+        requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
         params: {
           generation: {
             instruction: '基于对话生成一页课程网站。',
@@ -314,5 +351,49 @@ describe('WebOperationArtifacts', () => {
       title: artifact.title,
       status: 'proposed',
     });
+  });
+
+  it('同一 Turn 的精确请求稳定重试，语义字段变化保持同键但产生不同指纹', async () => {
+    const createArtifactWithGenerationJob = vi
+      .fn()
+      .mockResolvedValue({ artifact, job });
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+        sourceReferences: [
+          { assetId: 'asset-1', versionId: 'version-1', representation: null },
+        ],
+      },
+      { createArtifactWithGenerationJob },
+    );
+    const tool = operationArtifacts.createTool();
+    const exactRequest = {
+      kind: 'mind_map' as const,
+      title: '分数思维导图',
+      instruction: '整理课程内容。',
+    };
+
+    await tool.handler(exactRequest, context);
+    await tool.handler({ ...exactRequest }, context);
+    await tool.handler(
+      { ...exactRequest, instruction: '改写课程内容。' },
+      context,
+    );
+
+    const calls = createArtifactWithGenerationJob.mock.calls;
+    expect(calls[0]![0].idempotencyKey).toBe(
+      'general-turn-artifact:operation-1',
+    );
+    expect(calls[1]![0].idempotencyKey).toBe(calls[0]![0].idempotencyKey);
+    expect(calls[1]![0].requestFingerprint).toBe(
+      calls[0]![0].requestFingerprint,
+    );
+    expect(calls[2]![0].idempotencyKey).toBe(calls[0]![0].idempotencyKey);
+    expect(calls[2]![0].requestFingerprint).not.toBe(
+      calls[0]![0].requestFingerprint,
+    );
   });
 });

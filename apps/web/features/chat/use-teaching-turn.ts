@@ -18,6 +18,10 @@ import {
   type TeachingTurnEvent,
   TurnStreamProtocolError,
 } from './turn-events';
+import {
+  terminalEventTypeToSendOutcome,
+  type InFlightTurn,
+} from './turn-send-outcome';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
 
@@ -52,16 +56,6 @@ const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
   cancelEndpoint: (turnId) =>
     `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
 };
-
-interface InFlightTurn {
-  clientMessageId: string;
-  controller: AbortController;
-  turnId: string | null;
-  assistantMessageId: string | null;
-  terminalReceived: boolean;
-  stopConfirmed: boolean;
-  cancelRequested: boolean;
-}
 
 interface PublicRouteError {
   error?: { code?: unknown; message?: unknown };
@@ -164,7 +158,7 @@ export function useAgentTurn(
     ) => {
       const normalizedText = text.trim();
       if ((!normalizedText && assetParts.length === 0) || inFlight.current)
-        return false;
+        return 'rejected' as const;
 
       const clientMessageId = suppliedId ?? crypto.randomUUID();
       const current: InFlightTurn = {
@@ -173,6 +167,7 @@ export function useAgentTurn(
         turnId: null,
         assistantMessageId: null,
         terminalReceived: false,
+        terminalOutcome: null,
         stopConfirmed: false,
         cancelRequested: false,
       };
@@ -236,7 +231,7 @@ export function useAgentTurn(
               retryable: response.status >= 500 || response.status === 429,
             });
           }
-          return false;
+          return 'rejected' as const;
         }
 
         await consumeTeachingTurnResponse(
@@ -281,6 +276,9 @@ export function useAgentTurn(
               event.type === 'turn.cancelled'
             ) {
               current.terminalReceived = true;
+              current.terminalOutcome = terminalEventTypeToSendOutcome(
+                event.type,
+              );
               setControlError(null);
             }
             if (
@@ -313,7 +311,7 @@ export function useAgentTurn(
             retryable: resolved.retryable,
           });
         }
-        return current.terminalReceived;
+        return current.terminalOutcome ?? 'interrupted';
       } catch (error) {
         const aborted =
           error instanceof DOMException && error.name === 'AbortError';
@@ -338,7 +336,7 @@ export function useAgentTurn(
             retryable: resolved.retryable,
           });
         }
-        return false;
+        return current.stopConfirmed ? 'cancelled' : 'interrupted';
       } finally {
         if (inFlight.current === current) inFlight.current = null;
       }

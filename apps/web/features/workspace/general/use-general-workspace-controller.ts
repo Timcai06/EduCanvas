@@ -3,20 +3,19 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type RefObject,
 } from 'react';
 import { Flip } from 'gsap/Flip';
 import type { AssetItem } from '@/features/assets/assets-drawer';
-import { uploadAsset } from '@/features/assets/asset-client';
+import { uploadWorkspaceSource } from '@/features/assets/source-intake';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
 import {
   createArtifact,
-  fetchNotebookArtifacts,
   type ArtifactDetail,
-  type ArtifactSummary,
 } from '@/features/canvas/artifact-client';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
@@ -47,16 +46,13 @@ import {
   GENERAL_ASSET_ENDPOINT,
   GENERAL_TURN_OPTIONS,
 } from './general-chat-config';
+import type { OutputPreference } from '@educanvas/agent-core';
 import {
-  PENDING_GENERAL_MENU_ACTION_KEY,
-  PENDING_GENERAL_PROMPT_KEY,
-  PENDING_GENERAL_CANVAS_KEY,
-  PENDING_GENERAL_OUTPUT_PREFERENCE_KEY,
-} from './general-chat-entry';
-import {
-  outputPreferenceSchema,
-  type OutputPreference,
-} from '@educanvas/agent-core';
+  pendingGeneralTurnLegacyKeys,
+  pendingGeneralTurnReadKeys,
+  PENDING_GENERAL_TURN_KEY,
+  restorePendingGeneralTurn,
+} from './pending-general-turn';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 import {
@@ -65,7 +61,10 @@ import {
 } from '@/features/canvas/resource-error';
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
+import { useResourceDock } from './use-resource-dock';
+import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
+import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -100,12 +99,9 @@ export function useGeneralWorkspaceController(options: {
   const [sourceDetail, setSourceDetail] = useState<SourceSurfaceDetail | null>(
     null,
   );
-  const [studioItems, setStudioItems] = useState<readonly ArtifactSummary[]>(
-    [],
-  );
-  const [canvasSelected, setCanvasSelected] = useState(false);
   const [outputPreference, setOutputPreference] =
     useState<OutputPreference>('auto');
+  const activeTurnOutputPreferenceRef = useRef<OutputPreference>('auto');
   const [assetPanel, setAssetPanel] = useState<AssetItem['kind'] | null>(null);
   /* W03：来源加载/变更错误保留结构化语义，UI 据此决定可重试性与文案。 */
   const [error, setError] = useState<ResourceClientError | null>(null);
@@ -113,23 +109,20 @@ export function useGeneralWorkspaceController(options: {
     null,
   );
 
+  const resourceDock = useResourceDock(notebookId);
   const artifactFlow = useArtifactGeneration();
   const closeArtifactCanvas = useCallback(() => {
     workspace.dispatch({ type: 'close' });
     artifactFlow.closeCanvas();
   }, [artifactFlow, workspace]);
-  const handleArtifactDeleted = useCallback(
-    (artifactId: string) => {
-      closeArtifactCanvas();
-      setStudioItems((items) => items.filter((item) => item.id !== artifactId));
-    },
-    [closeArtifactCanvas],
-  );
+  const handleArtifactDeleted = useCallback(() => {
+    closeArtifactCanvas();
+    void resourceDock.reload();
+  }, [closeArtifactCanvas, resourceDock]);
 
   const handleArtifactProposed = useAgentArtifactEvents({
-    canvasSelected,
-    setCanvasSelected,
-    setStudioItems,
+    shouldOpenWhenReady: () => activeTurnOutputPreferenceRef.current !== 'auto',
+    onArtifactChanged: resourceDock.reload,
     observeProposedArtifact: artifactFlow.observeProposedArtifact,
   });
   const turn = useAgentTurn(initialMessages, GENERAL_TURN_OPTIONS, {
@@ -149,13 +142,16 @@ export function useGeneralWorkspaceController(options: {
     },
   });
 
-  const { positions: surfacePositions, openRestingSurface } =
-    useSurfacePositionPersistence({
-      notebookId,
-      surface,
-      openSource: studioOpenActions.actions.openSource,
-      openArtifact: studioOpenActions.actions.openArtifact,
-    });
+  const {
+    positions: surfacePositions,
+    openRestingSurface,
+    error: surfacePositionError,
+  } = useSurfacePositionPersistence({
+    notebookId,
+    surface,
+    openSource: studioOpenActions.actions.openSource,
+    openArtifact: studioOpenActions.actions.openArtifact,
+  });
 
   /* Artifact 详情新打开时同步 surface：`artifactFlow.confirm`（openWhenReady）与
      `observeProposedArtifact` 只在 artifactFlow 内部 setOpenDetail，不会 dispatch
@@ -170,9 +166,7 @@ export function useGeneralWorkspaceController(options: {
   }, [artifactFlow.openDetail, workspace]);
 
   const flipStateRef = useRef<Flip.FlipState | null>(null);
-  const pendingConsumed = useRef(false);
   const pendingMenuConsumed = useRef(false);
-  const pendingToolsConsumed = useRef(false);
 
   const sources = useNotebookSources({
     endpoint: GENERAL_ASSET_ENDPOINT,
@@ -181,7 +175,10 @@ export function useGeneralWorkspaceController(options: {
   });
   const { assets, setAssets } = sources;
   const refreshAssets = sources.refresh;
-
+  const assetsRef = useRef(assets);
+  useLayoutEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
   /* 消息列跟随新消息滚底；用户上翻阅读时不打断（nearBottom 由组合层滚动容器更新）。 */
   useEffect(() => {
     const container = scrollRef.current;
@@ -190,45 +187,33 @@ export function useGeneralWorkspaceController(options: {
   }, [nearBottom, scrollRef, turn.messages]);
 
   const send = useCallback(
-    (text: string, frozenAssets?: readonly LiveVoiceContextAsset[]) => {
+    (
+      text: string,
+      frozenAssets?: readonly LiveVoiceContextAsset[],
+      preference = outputPreference,
+    ) => {
       setError(null);
       setSourceNotice(null);
       /* Flip 三段式:状态翻转前捕获输入坞位置,渲染后由组合层 useGSAP 播放位移。 */
       if (turn.messages.length === 0 && composerDockRef.current) {
         flipStateRef.current = Flip.getState(composerDockRef.current);
       }
-      const selected = (frozenAssets ?? assets).flatMap((asset) =>
-        asset.enabled &&
-        asset.versionId &&
-        (asset.kind === 'image' || asset.kind === 'document')
-          ? [
-              {
-                type: 'asset_ref' as const,
-                reference: {
-                  assetId: asset.id,
-                  versionId: asset.versionId,
-                  kind: asset.kind,
-                },
-                /* usage 跟随 scope：笔记本长期来源是背景上下文，只在 Studio 里管理；
-                   仅本轮的附件才属于这条消息，会在气泡里留痕。此前一律写死
-                   'context'，导致每条提问都把全部来源重新盖一遍章。 */
-                usage:
-                  asset.scope === 'space'
-                    ? ('context' as const)
-                    : ('attachment' as const),
-                label: asset.label,
-              },
-            ]
-          : [],
+      const snapshot = buildTurnContextSnapshot(
+        frozenAssets ?? assetsRef.current,
       );
+      const selected = snapshot.parts.map((part, index) => ({
+        ...part,
+        label: snapshot.included[index]!.label,
+      }));
+      activeTurnOutputPreferenceRef.current = preference;
       void turn
         .send(text, undefined, selected, {
-          outputPreference,
+          outputPreference: preference,
         })
-        .then((accepted) => {
-          if (!accepted) return;
-          if (canvasSelected) setCanvasSelected(false);
+        .then((outcome) => {
+          if (!shouldConsumeTurnScopedInputs(outcome)) return;
           setOutputPreference('auto');
+          activeTurnOutputPreferenceRef.current = 'auto';
           setAssets((current) =>
             current.map((asset) =>
               asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
@@ -241,8 +226,6 @@ export function useGeneralWorkspaceController(options: {
         });
     },
     [
-      assets,
-      canvasSelected,
       outputPreference,
       composerDockRef,
       flipStateRef,
@@ -315,123 +298,65 @@ export function useGeneralWorkspaceController(options: {
       );
       void createArtifact('note', title, [], markdown)
         .then(({ artifact }) => {
-          setStudioItems((items) => [
-            artifact,
-            ...items.filter((item) => item.id !== artifact.id),
-          ]);
+          void resourceDock.reload();
           studioOpenActions.actions.openArtifact(artifact.id);
         })
         .catch((reason: unknown) => {
           setError(toClientError(reason, '会话信笺保存失败。'));
         });
     },
-    [studioOpenActions],
+    [resourceDock, studioOpenActions],
   );
 
-  useEffect(() => {
-    if (pendingConsumed.current) return;
-    pendingConsumed.current = true;
-    const prompt = sessionStorage.getItem(PENDING_GENERAL_PROMPT_KEY);
-    if (!prompt) return;
-    sessionStorage.removeItem(PENDING_GENERAL_PROMPT_KEY);
-    queueMicrotask(() => send(prompt));
-  }, [send]);
-
-  const handleMenuAction = useCallback(
-    (action: PlusMenuActionId) => {
-      if (action === 'upload_file') setAssetPanel('document');
-      else if (action === 'upload_image') setAssetPanel('image');
-      else if (action === 'add_link') setAssetPanel('link');
-      else if (action === 'create_mind_map') {
-        artifactFlow.beginConfirm('mind_map', '对话思维导图');
-      } else if (action === 'create_slides') {
-        artifactFlow.beginConfirm('slides', '对话小结 Slides');
-      } else if (action === 'create_flashcards') {
-        artifactFlow.beginConfirm('flashcards', '复习闪卡');
-      } else if (action === 'create_audio_overview') {
-        artifactFlow.beginConfirm('audio_overview', '来源音频概览');
-      } else if (action === 'create_note') {
-        artifactFlow.beginConfirm('note', '对话笔记');
-      }
-    },
-    [artifactFlow],
-  );
+  const handleMenuAction = useCallback((action: PlusMenuActionId) => {
+    if (action === 'upload_file') setAssetPanel('document');
+    else if (action === 'upload_image') setAssetPanel('image');
+    else if (action === 'add_link') setAssetPanel('link');
+  }, []);
 
   useEffect(() => {
     if (pendingMenuConsumed.current) return;
     pendingMenuConsumed.current = true;
-    const action = sessionStorage.getItem(
-      PENDING_GENERAL_MENU_ACTION_KEY,
-    ) as PlusMenuActionId | null;
-    if (!action) return;
-    sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
-    queueMicrotask(() => handleMenuAction(action));
-  }, [handleMenuAction]);
-
-  useEffect(() => {
-    if (pendingToolsConsumed.current) return;
-    pendingToolsConsumed.current = true;
-    const restoreCanvas = Boolean(
-      sessionStorage.getItem(PENDING_GENERAL_CANVAS_KEY),
-    );
-    const pendingOutput = outputPreferenceSchema.safeParse(
-      sessionStorage.getItem(PENDING_GENERAL_OUTPUT_PREFERENCE_KEY),
-    );
-    sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
-    sessionStorage.removeItem(PENDING_GENERAL_OUTPUT_PREFERENCE_KEY);
-    queueMicrotask(() => {
-      const restored = pendingOutput.success
-        ? pendingOutput.data
-        : restoreCanvas
-          ? 'interactive_artifact'
-          : 'auto';
-      setOutputPreference(restored);
-      setCanvasSelected(restored !== 'auto');
+    const restored = restorePendingGeneralTurn({
+      current: sessionStorage.getItem(PENDING_GENERAL_TURN_KEY),
+      legacyPrompt: sessionStorage.getItem(pendingGeneralTurnLegacyKeys.prompt),
+      legacyMenuAction: sessionStorage.getItem(
+        pendingGeneralTurnLegacyKeys.menuAction,
+      ),
+      legacyCanvas: sessionStorage.getItem(pendingGeneralTurnLegacyKeys.canvas),
+      legacyOutputPreference: sessionStorage.getItem(
+        pendingGeneralTurnLegacyKeys.outputPreference,
+      ),
     });
-  }, []);
+    pendingGeneralTurnReadKeys.forEach((key) => sessionStorage.removeItem(key));
+    if (restored.kind === 'turn') {
+      queueMicrotask(() => {
+        setOutputPreference(restored.payload.outputPreference);
+        send(
+          restored.payload.prompt,
+          undefined,
+          restored.payload.outputPreference,
+        );
+      });
+    } else if (restored.kind === 'legacy_menu_action') {
+      queueMicrotask(() =>
+        handleMenuAction(restored.action as PlusMenuActionId),
+      );
+    }
+  }, [handleMenuAction, send]);
 
-  /* W03：作品列表加载失败不转成空列表——保留已有项并把失败语义上报到错误状态。 */
   const openStudio = useCallback(() => {
     workspace.openStudio();
-    void fetchNotebookArtifacts()
-      .then((items) => {
-        setStudioItems(items);
-        setError(null);
-      })
-      .catch((reason: unknown) => {
-        setError(toClientError(reason, '暂时无法加载作品列表。'));
-      });
-  }, [workspace]);
+    void resourceDock.reload().then(resourceDock.loadAll);
+  }, [resourceDock, workspace]);
 
   const online = useOnlineStatus();
   const isLanding = turn.messages.length === 0;
   const notebookSources = assets.filter((asset) => asset.scope === 'space');
-  const composerTools = [
-    {
-      id: 'canvas' as const,
-      label: 'Canvas',
-      selected: canvasSelected,
-      detail:
-        outputPreference === 'markdown_document'
-          ? 'Markdown'
-          : outputPreference === 'web_app'
-            ? 'Web App'
-            : outputPreference === 'interactive_artifact'
-              ? '互动产物'
-              : undefined,
-    },
-  ];
-  const handleToolAction = useCallback(() => {
-    setCanvasSelected((selected) => {
-      const next = !selected;
-      setOutputPreference(next ? 'interactive_artifact' : 'auto');
-      return next;
-    });
-  }, []);
+  const composerTools = [] as const;
   const handleOutputPreferenceChange = useCallback(
     (preference: OutputPreference) => {
       setOutputPreference(preference);
-      setCanvasSelected(preference !== 'auto');
     },
     [],
   );
@@ -440,14 +365,14 @@ export function useGeneralWorkspaceController(options: {
   const uploadLiveAsset = useCallback(
     async (file: File) => {
       try {
-        const asset = await uploadAsset({
+        const asset = await uploadWorkspaceSource({
           file,
           scope: 'space',
           endpoint: GENERAL_ASSET_ENDPOINT,
         });
         setAssets((current) => {
           const enabledCount = current.filter((item) => item.enabled).length;
-          return [
+          const next = [
             {
               ...asset,
               enabled:
@@ -455,6 +380,8 @@ export function useGeneralWorkspaceController(options: {
             },
             ...current.filter((item) => item.id !== asset.id),
           ];
+          assetsRef.current = next;
+          return next;
         });
       } catch (reason: unknown) {
         setError(toClientError(reason, '文件上传暂时不可用。'));
@@ -488,7 +415,7 @@ export function useGeneralWorkspaceController(options: {
     onLiveExit: handleLiveExit,
     onStop: () => void turn.stop(),
     onMenuAction: handleMenuAction,
-    onToolAction: handleToolAction,
+    onToolAction: () => undefined,
     onOutputPreferenceChange: handleOutputPreferenceChange,
     onRetry: (messageId: string) => turn.retry(messageId),
     onPreviewHtml: (source: string) => workspace.openHtml(source),
@@ -542,9 +469,8 @@ export function useGeneralWorkspaceController(options: {
     surface,
     workspace,
     sourceDetail,
-    studioItems,
-    canvasSelected,
-    setCanvasSelected,
+    outputPreference,
+    setOutputPreference,
     assetPanel,
     setAssetPanel,
     setAssets,
@@ -559,7 +485,6 @@ export function useGeneralWorkspaceController(options: {
     send,
     openStudio,
     handleMenuAction,
-    handleToolAction,
     closeArtifactCanvas,
     handleArtifactDeleted,
     isLanding,
@@ -571,5 +496,7 @@ export function useGeneralWorkspaceController(options: {
     surfaceSlotProps,
     surfacePositions,
     openRestingSurface,
+    surfacePositionError,
+    resourceDock,
   };
 }

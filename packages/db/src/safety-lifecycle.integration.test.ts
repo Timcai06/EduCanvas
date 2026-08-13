@@ -456,7 +456,7 @@ async function seedGeneralWebGraph(input: {
     generationJobId: job.id,
     createdAt: input.lastActivityAt,
   });
-  return { spaceId, conversationId };
+  return { spaceId, conversationId, assistantMessageId };
 }
 
 async function countGraphRows(graphs: readonly SeededGraph[]) {
@@ -576,6 +576,7 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
         artifact_generation_jobs,
         artifact_versions,
         artifacts,
+        k12_conversation_message_projections,
         conversation_messages,
         agent_operations,
         conversations,
@@ -731,11 +732,20 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
     const oldAt = new Date(
       baseTime.getTime() - ANONYMOUS_SUBJECT_RETENTION_MS - 60_000,
     );
-    await seedGeneralWebGraph({
+    const graph = await seedGeneralWebGraph({
       subjectId,
       lastActivityAt: oldAt,
       suffix: 'general-only',
     });
+    await getDatabase()
+      .insert(schema.k12ConversationMessageProjections)
+      .values({
+        sourceChatMessageId: randomUUID(),
+        conversationMessageId: graph.assistantMessageId,
+        sessionId: randomUUID(),
+        conversationId: graph.conversationId,
+        createdAt: oldAt,
+      });
 
     const lifecycle = new DrizzleAnonymousDataLifecycleService(getDatabase());
     await expect(
@@ -749,6 +759,7 @@ describeWithDatabase('S1安全决策与匿名数据生命周期', () => {
         artifact_generation_jobs: 1,
         artifact_versions: 1,
         artifacts: 1,
+        k12_conversation_message_projections: 1,
         conversation_messages: 2,
         agent_operations: 1,
         conversations: 1,

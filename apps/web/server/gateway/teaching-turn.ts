@@ -32,6 +32,7 @@ import {
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
   LearningSessionOwnershipError,
+  resolveGatewayTerminalReconciliationMode,
 } from '@educanvas/db';
 import {
   GatewayService,
@@ -54,7 +55,11 @@ import { gatewayToLegacy } from './turn-application-projection';
 
 const identities = new DrizzleGatewayIdentityRepository();
 const routes = new DrizzleGatewayRouteResolver();
-const operations = new DrizzleGatewayOperationStore();
+const operations = new DrizzleGatewayOperationStore(undefined, {
+  terminalReconciliationMode: resolveGatewayTerminalReconciliationMode(
+    process.env.EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE,
+  ),
+});
 const fingerprints = new Sha256GatewayRequestFingerprint();
 
 class TeachingTurnApplicationRunner implements GatewayTurnRunnerPort {

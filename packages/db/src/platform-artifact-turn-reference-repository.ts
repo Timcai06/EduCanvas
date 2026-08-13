@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { getDb } from './client';
 import { artifactGenerationJobs, artifacts } from './schema';
 import type {
+  ArtifactJobStatus,
   ArtifactStatus,
   ArtifactTrustTier,
   PlatformArtifact,
@@ -13,6 +14,7 @@ type Database = ReturnType<typeof getDb>;
 export interface PlatformArtifactTurnReference {
   operationId: string;
   artifact: PlatformArtifact;
+  generationStatus: ArtifactJobStatus;
 }
 
 /**
@@ -43,6 +45,7 @@ export class DrizzlePlatformArtifactTurnReferenceRepository {
     const rows = await this.database
       .select({
         operationId: artifactGenerationJobs.operationId,
+        generationStatus: artifactGenerationJobs.status,
         artifact: artifacts,
       })
       .from(artifactGenerationJobs)
@@ -64,6 +67,7 @@ export class DrizzlePlatformArtifactTurnReferenceRepository {
         ? [
             {
               operationId: row.operationId,
+              generationStatus: row.generationStatus as ArtifactJobStatus,
               artifact: {
                 id: row.artifact.id,
                 spaceId: row.artifact.spaceId,

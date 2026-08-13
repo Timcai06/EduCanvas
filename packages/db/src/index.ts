@@ -464,13 +464,31 @@ export {
   type MessageHistoryStatus,
   type UnifiedMessageHistoryPort,
 } from './unified-message-history';
-export { isK12ConversationDualWriteEnabled } from './k12-conversation-dual-write';
+export {
+  K12_CONVERSATION_AUTHORITY_STAGE_ENV,
+  K12ConversationAuthorityConfigurationError,
+  isK12ConversationDualWriteEnabled,
+  resolveK12ConversationAuthorityContract,
+  shouldCreateK12ConversationProjection,
+  type K12ConversationAuthorityContract,
+  type K12ConversationAuthorityStage,
+} from './k12-conversation-dual-write';
+export {
+  DrizzleK12VisibleMessageHistoryRepository,
+  K12VisibleHistoryConsistencyError,
+  type K12VisibleMessageHistoryPort,
+} from './k12-visible-message-history';
+export {
+  resolveGatewayTerminalReconciliationMode,
+  type GatewayTerminalReconciliationMode,
+} from './gateway/terminal-reconciliation-mode';
 export {
   deterministicConversationMessageId,
   K12ConversationDualWriteInvariantError,
 } from './k12-conversation-message-identity';
 export {
   auditK12Parity,
+  DrizzleK12ConversationParityRepository,
   type K12ParityAuditCursor,
   type ParityAuditResult,
 } from './k12-conversation-parity';

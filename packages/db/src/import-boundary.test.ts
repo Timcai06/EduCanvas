@@ -55,6 +55,18 @@ const INTERNAL_GET_DB_PRODUCTION_ALLOWLIST = new Set([
   'apps/web/server/teaching/teaching-tools.ts',
 ]);
 
+// RM01 的统一资源摘要只向 Web BFF 暴露两项窄读模型实现；它不提供连接、schema
+// 或写仓库能力。新增消费者或符号必须显式经过本门禁复核。
+const WORKSPACE_RESOURCE_SUMMARY_PRODUCTION_ALLOWLIST = new Map([
+  [
+    'apps/web/server/canvas/workspace-resource-read-model.ts',
+    new Set([
+      'DrizzleWorkspaceResourceMemberFactsRepository',
+      'DrizzleWorkspaceResourceSummaryRepository',
+    ]),
+  ],
+]);
+
 // R04 台账 R04.2：默认入口按需保留的 schema 表（曾经 export * 全量泄漏）。生产引用基线为 0。
 const SCHEMA_TABLE_DENYLIST = new Set([
   'agentOperations',
@@ -210,6 +222,7 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
     expect(Object.keys(pkgJson.exports ?? {})).toEqual([
       '.',
       './internal',
+      './workspace-resource-summary',
       './testing',
       './package.json',
     ]);
@@ -235,6 +248,16 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
   it('生产 subpath 仅允许获准组合点从 internal 导入 getDb', () => {
     const violations = prodImports.filter((i) => {
       if (i.subpath === '') return false;
+      if (i.subpath === '/workspace-resource-summary') {
+        const allowed = WORKSPACE_RESOURCE_SUMMARY_PRODUCTION_ALLOWLIST.get(
+          i.file,
+        );
+        return (
+          !allowed ||
+          i.symbols.length !== allowed.size ||
+          i.symbols.some((symbol) => !allowed.has(symbol))
+        );
+      }
       return !(
         i.subpath === '/internal' &&
         i.symbols.length === 1 &&

@@ -14,9 +14,11 @@ type DocxPreviewData = Extract<AssetPreview, { kind: 'docx' }>;
  */
 export function DocxReadingSwitcher({
   preview,
+  canDownload,
   initialView,
 }: {
   preview: DocxPreviewData;
+  canDownload: boolean;
   initialView?: 'original' | 'structured';
 }) {
   return (
@@ -32,15 +34,17 @@ export function DocxReadingSwitcher({
               原件已保留，可下载查看。
             </div>
           )}
-          <div className="flex justify-center">
-            <a
-              href={preview.downloadUrl}
-              download
-              className="inline-flex min-h-9 items-center rounded-full border border-line px-4 text-xs font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              下载原件（{preview.fileName}）
-            </a>
-          </div>
+          {canDownload ? (
+            <div className="flex justify-center">
+              <a
+                href={preview.downloadUrl}
+                download
+                className="inline-flex min-h-9 items-center rounded-full border border-line px-4 text-xs font-medium text-ink transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                下载原件（{preview.fileName}）
+              </a>
+            </div>
+          ) : null}
         </div>
       )}
     />

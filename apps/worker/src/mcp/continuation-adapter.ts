@@ -232,6 +232,10 @@ export function createMcpContinuationAdapter(input: {
           status: 'completed',
           content: `已完成已批准的外部工具操作：${intent.modelToolName}。`,
           operationTerminalWriter: 'gateway',
+          gatewayTerminalIntent: {
+            status: 'completed',
+            messageId: resume.scope.assistantMessageId,
+          },
         });
         return { status: 'completed', messageId: settled.assistantMessage.id };
       } catch {

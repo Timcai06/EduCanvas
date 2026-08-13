@@ -146,6 +146,15 @@ describe('PdfReadingSwitcher', () => {
     expect(html).not.toContain('阅读视图切换');
   });
 
+  it('派生内容完整性失败时诚实显示 unavailable', () => {
+    const html = render(
+      pdfPreview({ representation: { quality: 'unavailable' } }),
+    );
+
+    expect(html).toContain('结构化内容暂不可用');
+    expect(html).not.toContain('阅读视图切换');
+  });
+
   it('结构化视图标注 quality + producer 并渲染派生 Markdown', () => {
     const html = render(
       pdfPreview({

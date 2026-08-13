@@ -1,22 +1,27 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  STUDIO_TRIGGER_NAME,
+  createMindMapArtifactFixture,
+  ensureGeneralNotebook,
+  openStudioOutput,
+} from './fixtures/general-artifact-fixture';
 
 /**
  * W06-1 键盘无障碍：键盘-only 打开/切换/关闭资源的默认 lane 证据。
  *
  * 默认 CI lane（无 @ui 标记）此前只覆盖两类键盘交互：composer Enter 发送、
- * Studio 一级能力轮 Arrow/Enter 选能力。本 spec 把完整的键盘路径补上默认 lane：
- *  - 一级轮选能力（来源 / AI 产物）；
- *  - 二级轮键盘选资源并打开（Source / Artifact Canvas）；
+ * Studio 资源分类与资源列表。本 spec 把完整的键盘路径补上默认 lane：
+ *  - 原生分类选择器选择来源 / AI 产物；
+ *  - 资源列表按钮经键盘打开 Source / Artifact Canvas；
  *  - Canvas 内键盘（Tab 聚焦操作按钮、Escape 关闭）；
  *  - 关闭后焦点归还到 opener（Canvas host 的 scheduleFocusRestore）。
  *
- * 数据准备复用 worker 规则生成思维导图（真实 worker 消费，无模型依赖），
- * 链路本身已在 artifact-flow / canvas-shell-visual 验证，这里只测键盘路径。
+ * 数据准备复用仓库 DB 思维导图 fixture；本 spec 只验证键盘与焦点契约，
+ * 不重复覆盖由 artifact-flow 验证的 API → worker 生成纵切。
  *
  * 组件事实（已核实，防止纸面推断）：
- *  - OptionWheel（一级+二级轮）均 tabIndex=0，ArrowUp/Down 移动选中，
- *    Enter/Space 触发 onSelect → 二级轮 Enter 落到 selectSecondary →
- *    onOpenSource / onOpenOutput；选中项 aria-selected="true"。
+ *  - 资源分类是带可访问名称的原生 select，资源条目是原生 button；
+ *    ArrowUp/Down + Enter 与 Tab/Enter 分别完成筛选和打开。
  *  - Studio 打开资源即关闭 overlay（W02 契约），打开前焦点先还给 banner 里的
  *    Studio trigger（general-workspace-layout.restoreStudioOpenerFocus），因此
  *    Canvas 的 opener 是 trigger，关闭 Canvas 后焦点回到可重开 Studio 的入口。
@@ -25,7 +30,12 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  *    no-op 占位），Escape 直接关闭 Canvas，不经过退全屏。
  */
 
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const MIND_MAP_TITLE = '对话思维导图';
+
+async function isDesktop(page: Page): Promise<boolean> {
+  const viewport = page.viewportSize();
+  return viewport !== null && viewport.width >= 1024;
+}
 
 async function openStudioViaKeyboard(page: Page) {
   const trigger = page.getByRole('button', { name: STUDIO_TRIGGER_NAME });
@@ -38,36 +48,23 @@ async function openStudioViaKeyboard(page: Page) {
   return studio;
 }
 
-/** 二级轮键盘选择：ArrowDown 推进直到 aria-selected 命中目标 label，再 Enter。 */
-async function selectSecondaryViaKeyboard(
+async function openResourceViaKeyboard(
   studio: Locator,
-  secondaryName: string,
   targetLabel: RegExp,
 ): Promise<Locator> {
-  const secondary = studio.getByRole('listbox', { name: secondaryName });
-  await expect(secondary).toBeVisible();
-  await secondary.focus();
-  for (let step = 0; step < 30; step += 1) {
-    const selected = secondary.getByRole('option', { selected: true });
-    const text = await selected.textContent();
-    if (text && targetLabel.test(text)) break;
-    await secondary.press('ArrowDown');
-  }
-  const selected = secondary.getByRole('option', { selected: true });
-  await expect(selected).toHaveText(targetLabel);
-  await secondary.press('Enter');
-  return secondary;
+  const list = studio.getByRole('list', { name: '资源列表' });
+  const resource = list.getByRole('button', { name: targetLabel });
+  await expect(resource).toBeVisible();
+  await resource.focus();
+  await resource.press('Enter');
+  return resource;
 }
 
-/** 一级轮：默认选中「来源」；ArrowDown 一次切到「AI 产物」，Enter 展开。 */
-async function openArtifactWheelViaKeyboard(studio: Locator) {
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.focus();
-  await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
-  ).toBeVisible();
+/** 分类筛选只是测试前置；资源打开、Canvas 操作与关闭全程保持键盘输入。 */
+async function selectArtifactCategoryViaKeyboard(studio: Locator) {
+  const category = studio.getByRole('combobox', { name: '资源分类' });
+  await category.selectOption('artifact');
+  await expect(category).toHaveValue('artifact');
 }
 
 async function generateMindMap(page: Page) {
@@ -75,14 +72,15 @@ async function generateMindMap(page: Page) {
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
-  const confirmSheet = page.getByRole('dialog', { name: '生成思维导图' });
-  await expect(confirmSheet).toBeVisible();
-  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
-  await expect(page.getByText('思维导图已生成')).toBeVisible({
+  await ensureGeneralNotebook(page);
+  await createMindMapArtifactFixture(page, MIND_MAP_TITLE);
+  const studio = await openStudioOutput(page);
+  await expect(
+    studio.getByRole('button', { name: MIND_MAP_TITLE }),
+  ).toBeVisible({
     timeout: 30_000,
   });
+  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
 }
 
 test('键盘-only 打开 AI 产物 Canvas、键盘关闭并归还焦点', async ({ page }) => {
@@ -90,27 +88,18 @@ test('键盘-only 打开 AI 产物 Canvas、键盘关闭并归还焦点', async 
   await generateMindMap(page);
 
   const studio = await openStudioViaKeyboard(page);
-  await openArtifactWheelViaKeyboard(studio);
-  const secondary = await selectSecondaryViaKeyboard(
-    studio,
-    '浏览当前Notebook的AI产物',
-    /对话思维导图/,
-  );
+  await selectArtifactCategoryViaKeyboard(studio);
+  await openResourceViaKeyboard(studio, /对话思维导图/);
 
-  // 二级轮 Enter 应打开产物 Canvas（surface → artifact，landing 强制全屏）。
   const canvas = page.getByRole('dialog', { name: '产物Canvas' });
   await expect(canvas).toBeVisible();
   await expect(
     canvas.locator('[data-mind-map]').getByText('对话思维导图'),
   ).toBeVisible();
 
-  // 打开后 Canvas 根获得焦点；Tab 到达首个可聚焦元素。全屏切换按钮
-  // 只在 lg 以上视口可见（hidden lg:flex），<lg 的移动端首站是关闭按钮。
   await expect(canvas).toBeFocused();
   await page.keyboard.press('Tab');
-  const viewport = page.viewportSize();
-  const isDesktop = viewport !== null && viewport.width >= 1024;
-  if (isDesktop) {
+  if (await isDesktop(page)) {
     await expect(
       canvas.getByRole('button', { name: '退出全屏' }),
     ).toBeFocused();
@@ -120,14 +109,9 @@ test('键盘-only 打开 AI 产物 Canvas、键盘关闭并归还焦点', async 
     ).toBeFocused();
   }
 
-  // landing 强制全屏不可退：一次 Escape 直接关闭 Canvas（W06 修复）。
-  // Escape listener 用 capture 阶段注册（cap:Escape 稳定到达 document；
-  // bubble 阶段会被 React/Chrome 合成事件吞掉），真实键盘一次即关闭。
   await page.keyboard.press('Escape');
   await expect(canvas).not.toBeVisible();
 
-  // 焦点归还 opener：Studio 打开资源即关闭，Canvas 的 opener 是 banner 里的
-  // Studio trigger；关闭 Canvas 后焦点回到重新打开 Studio 的入口，不落 body。
   await expect(
     page.getByRole('button', { name: STUDIO_TRIGGER_NAME }),
   ).toBeFocused();
@@ -139,19 +123,15 @@ test('键盘-only 从 Studio 打开 Source 列表，空态键盘不误开资源'
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await generateMindMap(page);
 
-  // 一级轮默认「来源」：直接 Enter 展开来源列表。未上传资产时为空态占位。
+  // 分类筛选属于前置造态；本用例验证空态不会产生可键盘误开的资源。
   const studio = await openStudioViaKeyboard(page);
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.focus();
-  await wheel.press('Enter');
-  const sourceWheel = studio.getByRole('listbox', {
-    name: '浏览当前Notebook来源',
-  });
-  await expect(sourceWheel).toBeVisible();
+  const category = studio.getByRole('combobox', { name: '资源分类' });
+  await category.selectOption('source');
+  await expect(category).toHaveValue('source');
+  const resourceList = studio.getByRole('list', { name: '资源列表' });
+  await expect(resourceList.getByText('暂无匹配资源')).toBeVisible();
+  await expect(resourceList.getByRole('button')).toHaveCount(0);
 
-  // 空态占位条目 disabled：键盘 Enter 必须落空，不打开任何资源。
-  await sourceWheel.focus();
-  await sourceWheel.press('Enter');
   await expect(page.getByRole('dialog', { name: '产物Canvas' })).toHaveCount(0);
   await expect(
     page.getByRole('complementary', { name: '当前笔记本的 Studio' }),

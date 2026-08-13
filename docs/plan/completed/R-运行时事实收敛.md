@@ -842,9 +842,9 @@ ADR-0013 冲突的权威方向；最终结论 `PASS`，无 BLOCKED 项。
   `DrizzleToolCallRepository`（基线 = audited-model-gateway.ts）与绕过
   `DrizzleAgentTurnContextRepository` 直写 turn_context_snapshots；
 - A2：`DrizzleModelRunRepository`/`DrizzleToolCallRepository` 加 `@deprecated` 标注（不删导出，R08 移除）；
-- A3：新增 `DrizzleK12ConversationBackfillRepository` 与手工 Graphile 任务
-  `maintenance:backfill_k12_conversation`。任务未加入 crontab，空 payload 默认 `dry-run`；只有显式
-  `{mode:'apply'}` 才写入。每页 1-500 条、稳定游标续跑、repeatable-read 快照、幂等补缺；发现
+- A3：新增 `DrizzleK12ConversationBackfillRepository` 与只读预览适配器。默认 Worker registry 与
+  crontab 均不注册回填任务，payload 不具备 apply；受信 operator 直接调用 repository apply。每页
+  1-500 条、稳定游标续跑、repeatable-read 快照、幂等补缺；发现
   既有副本不一致时整页零写入且任务失败。返回和日志只含计数/游标，不含消息正文；
 - A3 真实 PostgreSQL 证据：双写关闭后 dry-run 零写入 → apply 补齐 → 重跑零新增 →
   `auditK12Parity` 零差异；另覆盖 limit=1 游标续跑和“既有错配 + 缺失”整页零写入；
@@ -1008,7 +1008,7 @@ R07 为核验既有实现（web-turn.ts 与 turn-application-projection.ts 在�
 | `DrizzleToolCallRepository`（旧） | **read-only with deadline**  | `packages/db/src/tool-call-repository.ts:241`                                                                   | 生产零调用（全仓 grep 确认）；仅 db 集成测试引用 `agent-ledger.integration.test.ts:403`；已 @deprecated                                                                                                                     |
 | `beginOrReplay`（旧 Turn ledger） | **read-only with deadline**  | `packages/db/src/turn-ledger-repository.ts:549`                                                                 | 仅 db 集成测试引用；生产代码走 `DrizzleTeachingTurnLedger.beginOrReplay`                                                                                                                                                    |
 | K12 conversation 双写             | **read-only with deadline**  | `packages/db/src/k12-conversation-dual-write.ts`                                                                | 开关门控（`EDUCANVAS_K12_CONVERSATION_DUAL_WRITE==='true'`），关闭即停止新投影创建；settle 始终收敛。退出路线遵循 ADR-0013：回填并对账后把可见消息切读到 `conversation_messages`，教学运行态另行迁移和批准后才退役旧字段/表 |
-| K12 历史回填                      | **bounded maintenance path** | `packages/db/src/k12-conversation-backfill-repository.ts`、`apps/worker/src/tasks/backfill-k12-conversation.ts` | 手工 Graphile 任务；默认 dry-run、显式 apply、每页最多 500、稳定游标、幂等补缺、错配整页零写入；不进 crontab                                                                                                                |
+| K12 历史回填                      | **bounded maintenance path** | `packages/db/src/k12-conversation-backfill-repository.ts`、`apps/worker/src/tasks/backfill-k12-conversation.ts` | 默认 Worker 不注册且 payload 无 apply；受信 operator 直接调用 repository；每页最多 500、稳定游标、幂等补缺、错配整页零写入                                                                                                  |
 | `getDb` 默认出口                  | **removed**                  | `packages/db/src/index.ts`                                                                                      | 默认入口已移除；10 个获准服务端组合点经 internal 单符号 allowlist 使用，后续只可迁往 Repository 并减量                                                                                                                      |
 
 #### R08.2 明确删除候选（不在本任务删除）

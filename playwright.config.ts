@@ -34,7 +34,9 @@ export default defineConfig({
   grepInvert: /@ui/,
   forbidOnly: Boolean(process.env.CI),
   failOnFlakyTests: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  // A retry can turn a real ordering/race defect into green evidence. CI and
+  // local runs therefore share one attempt; flaky failures stay observable.
+  retries: 0,
   outputDir: 'output/playwright/test-results',
   reporter: [
     ['line'],

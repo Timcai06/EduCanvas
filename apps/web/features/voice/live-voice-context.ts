@@ -1,3 +1,5 @@
+import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
+
 export type LiveVoiceAssetKind =
   'image' | 'document' | 'link' | 'audio' | 'video';
 
@@ -22,7 +24,8 @@ export interface LiveVoiceArtifactItem {
   readonly id: string;
   readonly kind: string;
   readonly title: string;
-  readonly status: 'proposed' | 'active' | 'archived' | 'generating' | 'failed';
+  readonly status:
+    'proposed' | 'active' | 'archived' | 'generating' | 'failed' | 'cancelled';
   readonly previewUrl?: string | null;
 }
 
@@ -49,13 +52,11 @@ export function freezeLiveVoiceContext(
   assets: readonly LiveVoiceContextAsset[],
   now = Date.now(),
 ): LiveVoiceContextSnapshot {
+  const decision = buildTurnContextSnapshot(assets);
   return {
     capturedAt: now,
     assets: assets
-      .filter(
-        (asset) =>
-          asset.enabled && asset.status === 'ready' && asset.versionId !== null,
-      )
+      .filter((_, index) => decision.entries[index]?.included === true)
       .map((asset) => ({ ...asset })),
   };
 }

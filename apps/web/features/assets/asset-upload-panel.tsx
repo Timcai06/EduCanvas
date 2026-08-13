@@ -9,7 +9,7 @@ import {
 import gsap from 'gsap';
 import { useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
-import { uploadAsset } from './asset-client';
+import { uploadWorkspaceSource } from './source-intake';
 import type { AssetItem } from './assets-drawer';
 
 gsap.registerPlugin(useGSAP);
@@ -145,7 +145,7 @@ export function AssetUploadPanel({
           if (!file || busy) return;
           setBusy(true);
           setError(null);
-          void uploadAsset({ file, scope, endpoint })
+          void uploadWorkspaceSource({ file, scope, endpoint })
             .then(onUploaded)
             .catch((reason: unknown) => {
               setError(

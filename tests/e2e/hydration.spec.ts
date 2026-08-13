@@ -109,13 +109,13 @@ test.describe('hydration 与客户端运行时健康', () => {
       page.getByRole('heading', { name: '今天想学什么？' }),
     ).toBeVisible();
     const createMenuTrigger = page.getByRole('button', {
-      name: '添加上下文或创建内容',
+      name: '添加来源',
     });
     await createMenuTrigger.focus();
     await expect(createMenuTrigger).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(
-      page.getByRole('menuitem', { name: /生成思维导图/ }),
+      page.getByRole('menuitem', { name: '上传文件' }),
     ).toBeVisible();
     await page.keyboard.press('Escape');
 

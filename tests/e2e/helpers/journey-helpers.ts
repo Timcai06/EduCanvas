@@ -6,6 +6,7 @@ import { openLearningWorkspace } from '../study-onboarding';
 export const ACTIVE_CONVERSATION_COOKIE =
   '__Host-educanvas_active_conversation';
 export const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+export const PLUS_MENU_TRIGGER_NAME = '添加来源';
 
 /* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
    移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
@@ -40,11 +41,10 @@ export async function openStudioInput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('source');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -53,12 +53,10 @@ export async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('artifact');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -171,11 +169,28 @@ export async function startLearning(page: Page) {
   await expect(page.getByText('请打开互动演示，让我动手试试。')).toBeVisible();
 }
 
-/** 从「+」菜单进入 Chat+Canvas 协作态，不依赖伪造的老师建议话术。 */
+/** 优先消费老师消息中的快捷入口，否则从“本课产物”打开预置 Canvas。 */
 export async function openCanvasFromChat(page: Page) {
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /打开互动演示/ }).click();
-  await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+  const quickOpen = page.getByRole('button', { name: '打开互动演示' });
+  if ((await quickOpen.count()) > 0) {
+    const opener = quickOpen.first();
+    await opener.click();
+    await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+    return opener;
+  } else {
+    const studioTrigger = page.getByRole('button', { name: '本课产物' });
+    await expect(studioTrigger).toBeVisible();
+    await studioTrigger.click();
+    const studio = page.getByRole('dialog', { name: '本课产物' });
+    await expect(studio).toBeVisible();
+    const studioArtifact = studio
+      .getByRole('button', { name: /互动分类|本课预置/ })
+      .first();
+    await expect(studioArtifact).toBeVisible();
+    await studioArtifact.click();
+    await expect(page.locator('[aria-label="教学Canvas"]')).toBeVisible();
+    return studioTrigger;
+  }
 }
 
 /** 打开进度抽屉并返回其中的可信进度区域。 */

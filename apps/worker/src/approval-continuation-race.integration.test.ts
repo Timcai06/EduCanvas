@@ -19,7 +19,7 @@ import { createContinueOperationTask } from './tasks/continue-operation.js';
 describe('Gateway approval到continuation队列的原子边界', () => {
   installApprovalContinuationIntegrationHooks();
 
-  it('取消与Adapter完成竞速时由持久请求赢得唯一终态', async () => {
+  it('取消与Adapter完成竞速时由先提交的assistant终态收敛唯一Operation终态', async () => {
     const fixture = await createWaitingApproval();
     await fixture.operations.resolveApproval({
       approvalId: fixture.approvalId,
@@ -64,6 +64,10 @@ describe('Gateway approval到continuation队列的原子边界', () => {
               status: 'completed',
               content: '业务已完成，但取消请求先于Operation终态。',
               operationTerminalWriter: 'gateway',
+              gatewayTerminalIntent: {
+                status: 'completed',
+                messageId: input.scope.assistantMessageId,
+              },
             });
             return {
               status: 'completed',
@@ -95,14 +99,14 @@ describe('Gateway approval到continuation队列的原子边界', () => {
         .select({ status: operationContinuations.status })
         .from(operationContinuations)
         .where(eq(operationContinuations.id, fixture.continuationId)),
-    ).toEqual([{ status: 'cancelled' }]);
+    ).toEqual([{ status: 'completed' }]);
     const events = await fixture.operations.listEvents(
       fixture.operationId,
       -1,
       fixture.actorId,
     );
-    expect(events.at(-1)).toMatchObject({ type: 'operation.cancelled' });
-    expect(events.some((event) => event.type === 'operation.completed')).toBe(
+    expect(events.at(-1)).toMatchObject({ type: 'operation.completed' });
+    expect(events.some((event) => event.type === 'operation.cancelled')).toBe(
       false,
     );
   });

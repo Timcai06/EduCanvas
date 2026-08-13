@@ -87,6 +87,10 @@ export function ReadingViewSwitcher({
       <div className="rounded-2xl border border-line bg-card p-3 text-sm text-ink-muted">
         结构化转换当前不可用，已降级为纯文本；原件保留。
       </div>
+    ) : representation?.quality === 'unavailable' ? (
+      <div className="rounded-2xl border border-line bg-card p-3 text-sm text-ink-muted">
+        结构化内容暂不可用；仍可查看原件。
+      </div>
     ) : null;
 
   if (view === 'structured' && readableMarkdown) {

@@ -1,99 +1,23 @@
-.studio-cascade {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-/* React Bits 的多层遮罩负责从左到右逐级增加模糊；外层只补纸色和入场，
-   避免组件挂载首帧直接以满强度出现。 */
-.studio-cascade__gradual-blur {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--color-canvas) 32%, transparent) 24%,
-    color-mix(in srgb, var(--color-card) 66%, transparent) 62%,
-    color-mix(in srgb, var(--color-card) 82%, transparent) 100%
-  );
-  animation: studio-gradual-blur-in var(--duration-emphasis)
-    var(--ease-emphasis) both;
-  will-change: opacity, transform;
-}
-
-@keyframes studio-gradual-blur-in {
-  from {
-    opacity: 0;
-    transform: translateX(2rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.studio-cascade__wheel {
-  position: absolute;
-  inset-block: 0;
-  pointer-events: auto;
-  will-change: transform, opacity, filter;
-}
-
-.studio-cascade__wheel--primary {
-  right: 0;
-  z-index: 2;
-  width: 24rem;
-}
-
-.studio-cascade__wheel--secondary {
-  right: 18.5rem;
-  z-index: 1;
-  width: 27rem;
-}
-
-.studio-cascade__hint {
-  position: absolute;
-  right: var(--space-6);
-  bottom: var(--space-5);
-  color: var(--color-ink-faint);
-  font-size: var(--text-overline);
-  pointer-events: none;
-}
-
-/* 动作气泡贴在二级轮左侧的居中项旁：它是浮层里唯一需要命中的非滚轮元素，
-   所以在 pointer-events: none 的 .studio-cascade 里单独打开命中。 */
-.studio-cascade__actions {
-  position: absolute;
-  top: 50%;
-  right: 46rem;
-  z-index: 3;
-  transform: translateY(-50%);
-  pointer-events: auto;
-}
-
 .studio-actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.375rem;
   padding: 0.375rem;
   border: 1px solid var(--color-line);
   border-radius: 9999px;
   background: var(--color-card);
-  box-shadow: var(--shadow-float);
 }
 
 .studio-actions__button {
   display: grid;
-  place-items: center;
   min-width: var(--space-8);
   min-height: var(--space-8);
+  place-items: center;
   padding: 0 var(--space-2);
   border-radius: 9999px;
   color: var(--color-ink-muted);
   font-size: var(--text-caption);
-  transition:
-    background-color var(--duration-micro) ease,
-    color var(--duration-micro) ease;
 }
 
 .studio-actions__button--wide {
@@ -126,55 +50,4 @@
   background: transparent;
   font-size: var(--text-note);
   outline: none;
-}
-
-@media (max-width: 760px) {
-  .studio-cascade__gradual-blur {
-    background: color-mix(in srgb, var(--color-card) 84%, transparent);
-  }
-
-  .studio-cascade__wheel--primary {
-    right: calc(-1 * var(--space-4));
-    width: 17rem;
-  }
-
-  .studio-cascade__wheel--secondary {
-    right: 11.5rem;
-    width: 18rem;
-  }
-
-  .studio-cascade__hint {
-    right: var(--space-3);
-    max-width: 16rem;
-    text-align: right;
-  }
-
-  /* 窄屏放不下两轮 + 气泡的横排，气泡改挂在轮组上方。 */
-  .studio-cascade__actions {
-    top: var(--space-4);
-    right: var(--space-3);
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .studio-cascade__gradual-blur {
-    animation-duration: var(--duration-instant);
-    animation-timing-function: linear;
-  }
-
-  .studio-cascade__wheel {
-    will-change: auto;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .studio-cascade__gradual-blur {
-    background: var(--color-card);
-  }
-
-  .studio-cascade__gradual-blur .gradual-blur-inner > div {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
 }

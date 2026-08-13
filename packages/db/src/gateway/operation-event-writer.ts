@@ -76,10 +76,39 @@ export async function appendGatewayOperationEvent(
           ? 'failed'
           : null;
   const normalizedStatus = normalizeOperationStatus(operation.status);
-  if (
-    operation.status !== 'running' &&
-    (terminalStatus === null || terminalStatus !== normalizedStatus)
-  ) {
+  if (operation.status !== 'running') {
+    if (terminalStatus !== null && terminalStatus === normalizedStatus) {
+      const existingRows = await transaction
+        .select({ payload: gatewayOperationEvents.payload })
+        .from(gatewayOperationEvents)
+        .where(
+          and(
+            eq(gatewayOperationEvents.operationId, operationId),
+            inArray(gatewayOperationEvents.type, [
+              'operation.completed',
+              'operation.failed',
+              'operation.cancelled',
+            ]),
+          ),
+        )
+        .orderBy(desc(gatewayOperationEvents.sequence));
+      if (existingRows.length === 1) {
+        const existing = gatewayOperationEventSchema.parse(
+          existingRows[0]!.payload,
+        );
+        const matches =
+          (existing.type === 'operation.completed' &&
+            payload.type === 'operation.completed' &&
+            existing.messageId === payload.messageId) ||
+          (existing.type === 'operation.failed' &&
+            payload.type === 'operation.failed' &&
+            existing.code === payload.code &&
+            existing.retryable === payload.retryable) ||
+          (existing.type === 'operation.cancelled' &&
+            payload.type === 'operation.cancelled');
+        if (matches) return existing;
+      }
+    }
     throw new GatewayPersistenceError(
       'invalid_event_sequence',
       'Cannot append after operation terminal state',

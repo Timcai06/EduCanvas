@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import {
+  openMindMapCanvasByDbFixture,
+  openStudioOutput,
+} from './fixtures/general-artifact-fixture';
 
 /**
  * Canvas shell 视觉与无障碍回归（F04）。
@@ -6,45 +10,23 @@ import { expect, test, type Page } from '@playwright/test';
  * 只验证 CanvasHost 外壳的响应式、焦点、滚动与状态展示，
  * 不测试任何 Renderer 内容、产物协议或 Gateway。
  *
- * 使用仓库现有可控 fixture：通过对话→生成思维导图打开 Canvas，
- * 该链路由 worker 规则生成，不依赖模型 Provider。
+ * 使用仓库现有可控 fixture：通过 DB 事务创建思维导图 artifact，
+ * 内容直接入库后由 Studio 打开，不依赖 Composer 旧“生成思维导图”入口或模型调用。
  *
  * Lane 划分（W06-2）：稳定状态矩阵（基础语义/响应式/长内容/失败/加载/
  * reduced-motion）进默认 CI lane；高波动视觉（暗色）与键盘焦点（W06-1 的
  * keyboard-navigation 已覆盖默认 lane）保留 @ui lane。
  */
 
-const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
+const MIND_MAP_TITLE = '对话思维导图';
 
-/**
- * <lg 视口（如 Pixel 7 移动端）Canvas 全屏切换按钮不渲染（`hidden lg:flex`），
- * 操作入口是关闭按钮；桌面端才有「退出全屏」。断言按此区分（W06-2 窄屏矩阵）。
- */
 async function isDesktop(page: Page): Promise<boolean> {
   const viewport = page.viewportSize();
   return viewport !== null && viewport.width >= 1024;
 }
 
 async function openCanvasViaMindMap(page: Page) {
-  await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: '今天想学什么？' }),
-  ).toBeVisible();
-
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /生成思维导图/ }).click();
-
-  const confirmSheet = page.getByRole('dialog', { name: '生成思维导图' });
-  await expect(confirmSheet).toBeVisible();
-  await confirmSheet.getByRole('button', { name: '开始生成' }).click();
-
-  await expect(page.getByText('思维导图已生成')).toBeVisible({
-    timeout: 30_000,
-  });
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
-  await expect(canvas).toBeVisible();
+  const { canvas } = await openMindMapCanvasByDbFixture(page);
   return canvas;
 }
 
@@ -153,9 +135,26 @@ test.describe('Canvas shell 响应式布局', () => {
 });
 
 test.describe('Canvas shell 极端内容与失败状态', () => {
-  test('200 字标题和超长内容不挤掉操作按钮或产生横向溢出', async ({ page }) => {
-    const longTitle = '超长标题'.repeat(50);
+  test('协议上限标题和超长内容不挤掉操作按钮或产生横向溢出', async ({
+    page,
+  }) => {
+    const longTitle = '超长标题'.repeat(20);
     const longLabel = '长内容'.repeat(40);
+    await page.route(
+      '**/api/v1/canvas/resources/artifact/**',
+      async (route) => {
+        const response = await route.fetch();
+        if (!response.ok()) {
+          await route.fulfill({ response });
+          return;
+        }
+        const payload = (await response.json()) as {
+          resource?: { title?: string };
+        };
+        if (payload.resource) payload.resource.title = longTitle;
+        await route.fulfill({ response, json: payload });
+      },
+    );
     await page.route('**/api/v1/chat/artifacts/*', async (route) => {
       const request = route.request();
       const pathname = new URL(request.url()).pathname;
@@ -175,29 +174,30 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         artifact?: { title?: string };
         version?: {
           content?: {
-            root?: {
-              children?: Array<{
-                id: string;
-                label: string;
-                children?: Array<{ id: string; label: string }>;
-              }>;
-            };
+            contentVersion?: number;
+            rootNodeId?: string;
+            nodes?: Array<{ id: string; label: string }>;
+            edges?: Array<{ from: string; to: string }>;
           };
         } | null;
       };
+      const content = payload.version?.content;
       if (payload.artifact) payload.artifact.title = longTitle;
-      if (payload.version?.content?.root) {
-        payload.version.content.root.children = Array.from(
-          { length: 8 },
-          (_, index) => ({
+      if (content?.contentVersion === 2 && content.rootNodeId) {
+        const rootNodeId = content.rootNodeId;
+        content.nodes = [
+          { id: rootNodeId, label: longLabel },
+          ...Array.from({ length: 24 }, (_, index) => ({
             id: `long-${index + 1}`,
-            label: longLabel,
-            children: Array.from({ length: 3 }, (_, childIndex) => ({
-              id: `long-${index + 1}-${childIndex + 1}`,
-              label: `嵌套长内容 ${index + 1}-${childIndex + 1}`,
-            })),
-          }),
-        );
+            // Keep every node within the protocol's 120-character label ceiling.
+            // The root exercises the exact ceiling; the remaining nodes exercise scrolling.
+            label: `长内容节点 ${index + 1}`,
+          })),
+        ];
+        content.edges = content.nodes.slice(1).map((node) => ({
+          from: rootNodeId,
+          to: node.id,
+        }));
       }
       await route.fulfill({ response, json: payload });
     });
@@ -221,22 +221,15 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
 
-    const contentScroller = canvas.getByRole('region', {
+    const contentViewport = canvas.getByRole('region', {
       name: 'Canvas 内容',
     });
-    await expect(contentScroller).toBeVisible();
-    const overflow = await contentScroller.evaluate((element) => {
-      const style = window.getComputedStyle(element);
-      return {
-        overflowY: style.overflowY,
-        scrollHeight: element.scrollHeight,
-        clientHeight: element.clientHeight,
-        bodyOverflow: document.body.style.overflow,
-      };
-    });
-    expect(overflow.overflowY).toBe('auto');
-    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
-    expect(overflow.bodyOverflow).toBe('hidden');
+    await expect(contentViewport).toBeVisible();
+    await expect(canvas.locator('[data-mindmap-node]')).toHaveCount(25);
+    // Mind maps are spatial canvases (fit/pan), not vertical document scrollers.
+    expect(
+      await contentViewport.evaluate(() => document.body.style.overflow),
+    ).toBe('hidden');
   });
 
   test('资源验证失败展示可重试的安全失败状态', async ({ page }) => {
@@ -259,21 +252,16 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
         });
       },
     );
-    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-    const studio = page.getByRole('complementary', {
-      name: '当前笔记本的 Studio',
-    });
-    const wheel = studio.getByRole('listbox', {
-      name: '选择 Studio 能力',
-    });
-    await wheel.press('ArrowDown');
-    await wheel.press('Enter');
+    const studio = await openStudioOutput(page);
+    await studio
+      .getByRole('combobox', { name: '资源分类' })
+      .selectOption('artifact');
     const failedResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/v1/canvas/resources/artifact/') &&
         response.status() === 503,
     );
-    await studio.getByRole('option', { name: /对话思维导图/ }).click();
+    await studio.getByRole('button', { name: /对话思维导图/ }).click();
     await failedResponse;
 
     const statusSurface = page.getByLabel('Canvas 资源状态');
@@ -291,20 +279,23 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     const canvas = await openCanvasViaMindMap(page);
     await canvas.getByRole('button', { name: /关闭/ }).click();
 
-    // 拦截资源验证接口并延迟响应，制造可稳定捕获的加载态窗口
-    await page.route('**/api/v1/canvas/resources/artifact/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const response = await route.fetch();
-      await route.fulfill({ response });
+    let releaseResource = () => undefined as void;
+    const resourceGate = new Promise<void>((resolve) => {
+      releaseResource = resolve;
     });
-    await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-    const studio = page.getByRole('complementary', {
-      name: '当前笔记本的 Studio',
-    });
-    const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-    await wheel.press('ArrowDown');
-    await wheel.press('Enter');
-    await studio.getByRole('option', { name: /对话思维导图/ }).click();
+    // 测试显式释放受控请求；加载态由因果门控制，不依赖机器速度或固定 sleep。
+    await page.route(
+      '**/api/v1/canvas/resources/artifact/**',
+      async (route) => {
+        await resourceGate;
+        await route.continue();
+      },
+    );
+    const studio = await openStudioOutput(page);
+    await studio
+      .getByRole('combobox', { name: '资源分类' })
+      .selectOption('artifact');
+    await studio.getByRole('button', { name: /对话思维导图/ }).click();
 
     // 验证中间态：Canvas 打开，加载态（aria-busy + 稳定文案，不泄露内部错误码）
     const statusSurface = page.getByLabel('Canvas 资源状态');
@@ -313,6 +304,7 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
     await expect(statusSurface.getByRole('status')).toHaveText(/正在打开作品/);
 
     // 验证成功：加载态关闭，切换真实内容
+    releaseResource();
     await expect(statusSurface).not.toBeVisible();
     const artifactCanvas = page.getByRole('dialog', { name: '产物Canvas' });
     await expect(artifactCanvas).toBeVisible();

@@ -121,7 +121,12 @@ export function SourcePreviewPanel({
             /* ADR-0026 决定 6：默认原件预览（mammoth），结构化/降级显式切换，
                下载入口始终保留。与 SourceResourceRenderer 共用同一组件，避免
                两条渲染路径行为漂移。 */
-            <DocxReadingSwitcher preview={preview} />
+            <DocxReadingSwitcher
+              preview={preview}
+              canDownload={
+                asset.resource?.allowedActions.includes('download') === true
+              }
+            />
           ) : preview.kind === 'markdown' && preview.content ? (
             <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
               <MessageMarkdown text={preview.content} />

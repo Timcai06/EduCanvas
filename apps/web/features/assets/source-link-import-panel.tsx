@@ -2,7 +2,7 @@
 
 import { LinkSimple } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { importLinkAsset } from './asset-client';
+import { importWorkspaceLink } from './source-intake';
 import type { AssetItem } from './assets-drawer';
 
 /** 输入框加号中的网页来源入口；Studio只浏览和管理，不承担创建动作。 */
@@ -20,7 +20,7 @@ export function SourceLinkImportPanel({
     if (!url || busy) return;
     setBusy(true);
     setError(null);
-    void importLinkAsset({ url })
+    void importWorkspaceLink(url)
       .then(onImported)
       .catch((reason: unknown) => {
         setError(

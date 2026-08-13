@@ -11,6 +11,7 @@ const currentSubjectOwnedTables = [
   'artifact_versions',
   'artifact_generation_jobs',
   'artifacts',
+  'k12_conversation_message_projections',
   'conversation_messages',
   'agent_operations',
   'diagnostic_responses',
@@ -48,7 +49,7 @@ describe('匿名数据生命周期注册表', () => {
     ).toEqual(currentSubjectOwnedTables);
     expect(
       ANONYMOUS_DATA_LIFECYCLE_REGISTRY.map((entry) => entry.deletionOrder),
-    ).toEqual(Array.from({ length: 33 }, (_, index) => index + 1));
+    ).toEqual(Array.from({ length: 34 }, (_, index) => index + 1));
     expect(() =>
       assertAnonymousDataLifecycleRegistryCoverage(currentSubjectOwnedTables),
     ).not.toThrow();

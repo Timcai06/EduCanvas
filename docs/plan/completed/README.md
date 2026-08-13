@@ -30,3 +30,5 @@
 | 2026-08-09 | [`D-数据架构与扩展性收敛.md`](D-数据架构与扩展性收敛.md)                             | 事实权威、完整性、开放扩展、派生多版本、Migration治理与真实PostgreSQL审计收口          |
 | 2026-08-10 | [`UV-画布语音.md`](UV-画布语音.md)                                                   | Canvas、Web/Experiment Runtime、跨入口投影与实时语音按竞赛级范围全部收口               |
 | 2026-08-12 | [`LC-Live与Canvas输出产品化.md`](LC-Live与Canvas输出产品化.md)                       | Live 增量语音、Canvas 三类纵切、联合 provenance 与真实产品验收收口；资源体验缺口转 RM  |
+| 2026-08-13 | [`RM-统一资源工作台.md`](RM-统一资源工作台.md)                                       | Source/Artifact 统一摘要、Composer 单链、Dock/资源库、Canvas/Live 与 provenance 闭环   |
+| 2026-08-13 | [`CA-代码与架构可信化.md`](CA-代码与架构可信化.md)                                   | Turn 终态、配置/E2E/CI、身份、消息切读和热点边界收口；CA06 Desktop 延后                |

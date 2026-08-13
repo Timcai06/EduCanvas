@@ -9,6 +9,7 @@
  */
 
 import type { TelemetryRuntime } from '@educanvas/telemetry';
+import { resolveGatewayTerminalReconciliationMode } from '@educanvas/db';
 import type { TaskList } from 'graphile-worker';
 import { loadWorkspaceEnvFiles } from './workspace-env.js';
 
@@ -56,6 +57,9 @@ export async function prepareWorkerBootstrap(
       taskList: taskModule.createTaskList({
         continuationTrace: telemetry.continuationTrace,
         metrics: telemetry.metrics,
+        terminalReconciliationMode: resolveGatewayTerminalReconciliationMode(
+          environment.EDUCANVAS_GATEWAY_TERMINAL_RECONCILIATION_MODE,
+        ),
       }),
     };
   } catch (error) {
