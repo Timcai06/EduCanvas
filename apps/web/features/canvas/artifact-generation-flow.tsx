@@ -24,6 +24,8 @@ export type GenerationOutcome = 'pending' | 'ready' | 'failed' | 'cancelled';
 export interface GenerationState {
   phase: GenerationPhase;
   outcome: GenerationOutcome;
+  /** A revision can fail while the previously committed Artifact remains usable. */
+  revisionOutcome?: PollOutcome;
   kind: ObservableArtifactKind;
   artifactId?: string;
   title: string;
@@ -82,6 +84,49 @@ export async function pollArtifactToTerminal(
     const result = await pollArtifactUntilSettled(artifactId, options);
     if (result.outcome !== 'timed_out') return result;
   }
+}
+
+export const hasUsableArtifactVersion = (detail: ArtifactDetail): boolean =>
+  detail.artifact.latestVersion > 0;
+
+/**
+ * Project a revision result without letting a failed/cancelled revision hide
+ * the last committed version. The revision outcome stays available separately.
+ */
+export function projectRevisionPollResult(
+  kind: ObservableArtifactKind,
+  artifactId: string,
+  titleFallback: string,
+  result: PollArtifactResult,
+): GenerationState {
+  const hasUsableVersion = hasUsableArtifactVersion(result.detail);
+  const objectOutcome = hasUsableVersion
+    ? 'ready'
+    : outcomeFromPollOutcome(result.outcome);
+  return {
+    phase: hasUsableVersion ? 'ready' : phaseFromPollOutcome(result.outcome),
+    outcome: objectOutcome,
+    revisionOutcome: result.outcome,
+    kind,
+    artifactId,
+    title: result.detail.artifact.title || titleFallback,
+    detail: result.detail,
+  };
+}
+
+function projectRevisionFailure(
+  detail: ArtifactDetail,
+  outcome: Extract<PollOutcome, 'failed' | 'cancelled'>,
+): GenerationState {
+  return {
+    phase: 'ready',
+    outcome: 'ready',
+    revisionOutcome: outcome,
+    kind: detail.artifact.kind as ObservableArtifactKind,
+    artifactId: detail.artifact.id,
+    title: detail.artifact.title,
+    detail,
+  };
 }
 
 export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
@@ -299,16 +344,14 @@ export function useArtifactGeneration() {
           minimumVersion: baseVersion + 1,
         });
         if (!isCurrentObservation(epoch)) return;
-        const phase = phaseFromPollOutcome(result.outcome);
-        const next = {
-          outcome: outcomeFromPollOutcome(result.outcome),
-          kind: detail.artifact.kind as ObservableArtifactKind,
-          artifactId: detail.artifact.id,
-          title: result.detail.artifact.title,
-          detail: result.detail,
-        };
-        setGeneration({ phase, ...next });
-        if (phase === 'ready') {
+        const next = projectRevisionPollResult(
+          detail.artifact.kind as ObservableArtifactKind,
+          detail.artifact.id,
+          detail.artifact.title,
+          result,
+        );
+        setGeneration(next);
+        if (next.phase === 'ready') {
           setOpenDetail((current) =>
             current?.artifact.id === detail.artifact.id
               ? result.detail
@@ -318,22 +361,10 @@ export function useArtifactGeneration() {
       } catch (error) {
         if (!isCurrentObservation(epoch)) return;
         if (error instanceof DOMException && error.name === 'AbortError') {
-          setGeneration({
-            phase: 'failed',
-            outcome: 'cancelled',
-            kind: detail.artifact.kind as ObservableArtifactKind,
-            artifactId: detail.artifact.id,
-            title: detail.artifact.title,
-          });
+          setGeneration(projectRevisionFailure(detail, 'cancelled'));
           return;
         }
-        setGeneration({
-          phase: 'failed',
-          outcome: 'failed',
-          kind: detail.artifact.kind as ObservableArtifactKind,
-          artifactId: detail.artifact.id,
-          title: detail.artifact.title,
-        });
+        setGeneration(projectRevisionFailure(detail, 'failed'));
       }
     },
     [beginObservation, isCurrentObservation, pollAbort],

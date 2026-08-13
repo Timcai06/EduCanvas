@@ -6,6 +6,7 @@ import {
   projectArtifactGenerationIntoMessages,
 } from './conversation-pane';
 import type { ChatMessage } from '@/features/chat/messages';
+import type { ArtifactDetail } from '@/features/canvas/artifact-client';
 import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 
 let composerProps: Record<string, unknown> = {};
@@ -74,6 +75,54 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
       }),
     ]);
   });
+
+  it.each(['failed', 'cancelled', 'timed_out'] as const)(
+    '已有版本的 revision %s 保持聊天与 Live 的对象级 active 事实',
+    (revisionOutcome) => {
+      const messages: readonly ChatMessage[] = [
+        {
+          id: 'assistant-1',
+          turnId: 'turn-1',
+          clientMessageId: 'client-1',
+          role: 'assistant',
+          status: 'completed',
+          text: '已有产物',
+          attachments: [],
+          artifacts: [
+            {
+              id: 'artifact-1',
+              kind: 'mind_map',
+              title: '思维导图',
+              status: 'active',
+              latestVersion: 2,
+            },
+          ],
+        },
+      ];
+
+      const projected = projectArtifactGenerationIntoMessages(messages, {
+        artifactId: 'artifact-1',
+        kind: 'mind_map',
+        title: '思维导图',
+        phase: 'ready',
+        outcome: 'ready',
+        revisionOutcome,
+        detail: {
+          artifact: { latestVersion: 2 },
+        } as ArtifactDetail,
+      });
+
+      expect(
+        projected[0]?.role === 'assistant' ? projected[0].artifacts : [],
+      ).toEqual([
+        expect.objectContaining({
+          id: 'artifact-1',
+          status: 'active',
+          latestVersion: 2,
+        }),
+      ]);
+    },
+  );
 
   it('将 outputPreference 与 onOutputPreferenceChange 透传给 VoiceComposer', () => {
     const onOutputPreferenceChange = vi.fn();

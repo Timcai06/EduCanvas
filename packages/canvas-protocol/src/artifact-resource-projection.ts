@@ -227,7 +227,12 @@ function projectStatus(
   ) {
     return 'unavailable';
   }
-  if (job?.status === 'failed' || job?.status === 'cancelled') return 'failed';
+  /* A failed/cancelled revision does not invalidate an already committed
+     immutable version. The revision outcome remains a job fact; the Artifact
+     resource stays openable and authorized from its last usable version. */
+  if (job?.status === 'failed' || job?.status === 'cancelled') {
+    return version ? 'ready' : 'failed';
+  }
   if (version) return 'ready';
   return 'unavailable';
 }

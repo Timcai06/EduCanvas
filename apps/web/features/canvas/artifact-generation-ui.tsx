@@ -86,17 +86,27 @@ export function ArtifactStatusCard({
   dismissable?: boolean;
 }) {
   const failed =
-    generation.phase === 'failed' || generation.outcome === 'cancelled';
+    generation.phase === 'failed' ||
+    generation.outcome === 'cancelled' ||
+    generation.revisionOutcome === 'failed' ||
+    generation.revisionOutcome === 'cancelled';
   const label =
-    generation.outcome === 'cancelled'
-      ? '生成已取消'
-      : generation.phase === 'generating'
-        ? '后台生成中…关闭页面也不会中断'
-        : generation.phase === 'ready'
-          ? generation.detail && generation.detail.artifact.latestVersion > 1
-            ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
-            : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-          : '生成失败，可稍后从产物列表重试';
+    generation.revisionOutcome === 'cancelled'
+      ? `本次修改已取消，仍可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
+      : generation.revisionOutcome === 'failed'
+        ? `本次修改失败，仍可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
+        : generation.revisionOutcome === 'timed_out'
+          ? `本次修改仍在后台处理，当前可打开 v${generation.detail?.artifact.latestVersion ?? 1}`
+          : generation.outcome === 'cancelled'
+            ? '生成已取消'
+            : generation.phase === 'generating'
+              ? '后台生成中…关闭页面也不会中断'
+              : generation.phase === 'ready'
+                ? generation.detail &&
+                  generation.detail.artifact.latestVersion > 1
+                  ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
+                  : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
+                : '生成失败，可稍后从产物列表重试';
   return (
     <div
       role="status"
@@ -129,7 +139,7 @@ export function ArtifactStatusCard({
           {label}
         </span>
       </span>
-      {generation.phase === 'ready' ? (
+      {generation.phase === 'ready' && generation.detail ? (
         <button
           type="button"
           onClick={onOpen}

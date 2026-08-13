@@ -168,6 +168,70 @@ describe('artifact-resource-projection（markdown_document）', () => {
     expect(resource.allowedActions).toEqual(['view', 'download']);
   });
 
+  it.each(['failed', 'cancelled'] as const)(
+    'keeps the committed version openable when the latest revision is %s',
+    (status) => {
+      const resource = projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: { ...artifactBase, kind: 'markdown_document' },
+        version,
+        latestJob: {
+          id: '30000000-0000-4000-8000-000000000003',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status,
+          progress: 100,
+          failureCode: status === 'failed' ? 'generation_failed' : null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        accessRole: 'owner',
+      });
+
+      expect(resource.status).toBe('ready');
+      expect(resource.version?.sequence).toBe(1);
+      expect(resource.allowedActions).toEqual([
+        'view',
+        'edit',
+        'regenerate',
+        'download',
+        'delete',
+      ]);
+    },
+  );
+
+  it.each(['failed', 'cancelled'] as const)(
+    'keeps a first-generation %s Artifact unavailable',
+    (status) => {
+      const resource = projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: {
+          ...artifactBase,
+          kind: 'markdown_document',
+          latestVersion: 0,
+        },
+        version: null,
+        latestJob: {
+          id: '30000000-0000-4000-8000-000000000003',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status,
+          progress: 100,
+          failureCode: status === 'failed' ? 'generation_failed' : null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        accessRole: 'owner',
+      });
+
+      expect(resource.status).toBe('failed');
+      expect(resource.version).toBeNull();
+      expect(resource.allowedActions).toEqual([]);
+    },
+  );
+
   it('rejects markdown_document trust mismatch', () => {
     expect(() =>
       projectOwnedArtifactResource({
