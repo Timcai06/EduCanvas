@@ -515,7 +515,7 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.status).toBe('archived');
   });
 
-  it('失败终态带版本时不投影为 ready', () => {
+  it('失败 revision 不覆盖已有可用版本', () => {
     const resource = projectOwnedArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 1 },
@@ -531,14 +531,14 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
     });
 
-    expect(resource.status).toBe('failed');
+    expect(resource.status).toBe('ready');
     expect(resource.version).toMatchObject({
       versionId: version.id,
       sequence: version.version,
     });
   });
 
-  it('cancelled 终态不投影 ready', () => {
+  it('cancelled revision 保留已有版本与 fresh actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 1 },
@@ -551,8 +551,13 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
     });
 
-    expect(resource.status).toBe('failed');
-    expect(resource.allowedActions).toEqual([]);
+    expect(resource.status).toBe('ready');
+    expect(resource.allowedActions).toEqual([
+      'view',
+      'regenerate',
+      'delete',
+      'annotate',
+    ]);
   });
 
   it('不能从未知 job 状态猜测 ready', () => {
@@ -571,7 +576,7 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.status).toBe('unavailable');
   });
 
-  it('可恢复对账结果直接进入失败/不可用，不吞并投影', () => {
+  it('可恢复 revision 对账失败不吞掉旧版本，未知初次结果仍不可用', () => {
     expect(
       projectOwnedArtifactResource({
         notebookId,
@@ -584,7 +589,7 @@ describe('Artifact CanvasResource adapter', () => {
         },
         accessRole: 'owner',
       }).status,
-    ).toBe('failed');
+    ).toBe('ready');
     expect(
       projectOwnedArtifactResource({
         notebookId,
