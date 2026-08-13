@@ -40,10 +40,7 @@ export const dynamic = 'force-dynamic';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * 产物详情:结构化 JSONB 直接返回；媒体版本只返回受控读取 URL 与公开
- * metadata，绝不返回私有 objectKey/checksum。越权与不存在同错(404)。
- */
+/** 产物详情不返回 objectKey/checksum，越权与不存在同错（404）。 */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
@@ -97,6 +94,12 @@ export async function GET(
             trustedSubjectId: identity.studentId,
           })
         : detail.latestVersion;
+    const versionProvenanceJob = selectedVersion?.generationJobId
+      ? await repository.getGenerationJob({
+          jobId: selectedVersion.generationJobId,
+          trustedSubjectId: identity.studentId,
+        })
+      : null;
     const versions = await repository.listVersionProvenance({
       artifactId,
       trustedSubjectId: identity.studentId,
@@ -109,21 +112,20 @@ export async function GET(
       detail.artifact.kind === 'generated_image' && selectedVersion
         ? generatedImageMetadataSchema.safeParse(selectedVersion.metadata)
         : null;
-    /* queued/running 产物在首版落库前仍是合法详情。轮询客户端需要读取
-       latestJob，但此时不存在可渲染的不可变版本，因此不构造 CanvasResource。 */
+    /* 首版前只返回 latestJob；没有不可变版本就不构造 CanvasResource。 */
     const canvasResource = selectedVersion
       ? projectOwnedArtifactResource({
           notebookId: conversation.spaceId,
           artifact: detail.artifact,
           version: selectedVersion,
           latestJob: detail.latestJob,
+          versionJob: versionProvenanceJob,
           accessRole: access.role,
         })
       : null;
     const canDownload =
       canvasResource?.allowedActions.includes('download') ?? false;
-    /* 媒体投影只暴露受控读取 URL 与公开 metadata；两类媒体互斥，由 kind 决定。
-       download URL 仅在服务端授权后包含，UI 据此决定是否显示下载按钮。 */
+    /* 媒体只暴露授权 URL 与公开 metadata；download URL 由服务端权限决定。 */
     const media =
       audioMetadata?.success === true
         ? {
@@ -156,8 +158,7 @@ export async function GET(
         latestVersion: detail.artifact.latestVersion,
         createdAt: detail.artifact.createdAt,
         updatedAt: detail.artifact.updatedAt,
-        /* 溯源:产物确由本笔记本对话生成时为 true。不泄露 conversationId 本身，
-           只给 UI 一个可信的"从对话生长出来"标记。 */
+        /* 只公开可信来源标记，不泄露 conversationId。 */
         fromConversation: detail.artifact.conversationId !== null,
       },
       version: selectedVersion
@@ -257,10 +258,7 @@ function supportsMutation(
   ].includes(kind);
 }
 
-/**
- * Canvas 共创入口：AI 修改进入持久生成任务，笔记直接保存只追加不可变
- * 版本。两种动作使用显式判别字段，禁止用正文前缀推断调用意图。
- */
+/** Canvas 共创按显式动作区分持久生成任务与不可变笔记版本。 */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ artifactId: string }> },

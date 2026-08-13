@@ -99,6 +99,18 @@ describe('web runtime v1 security matrix', () => {
     );
   });
 
+  it('R10 rejects oversized output before it can consume the host bridge', () => {
+    rejected(
+      startedSession(),
+      'sandbox_to_host',
+      message('output', 1, {
+        kind: 'text',
+        value: 'x'.repeat(16_385),
+      }),
+      'invalid_message',
+    );
+  });
+
   it('R11 rejects missing identity fields and non-contiguous sequences', () => {
     const state = createWebRuntimeSession(binding);
     const { runtimeId: _removed, ...missingRuntime } = message('start', 0);
@@ -213,6 +225,19 @@ describe('web runtime v1 security matrix', () => {
       { ...message('start', 0), channelId: 'sibling-channel' },
       'binding_mismatch',
     );
+  });
+
+  it('R25 rejects every mismatched sandbox identity and immutable version field', () => {
+    const state = startedSession();
+    for (const candidate of [
+      { ...message('ready', 1), channelId: 'other-channel' },
+      { ...message('ready', 1), runtimeId: 'other-runtime' },
+      { ...message('ready', 1), notebookId: 'other-notebook' },
+      { ...message('ready', 1), artifactVersionId: 'other-version' },
+      { ...message('ready', 1), artifactContentHash: 'b'.repeat(64) },
+    ]) {
+      rejected(state, 'sandbox_to_host', candidate, 'binding_mismatch');
+    }
   });
 
   it('R26 rejects messages replayed from a pre-reload runtime instance', () => {

@@ -42,7 +42,7 @@ const webAppVersion = {
 };
 
 describe('artifact-resource-projection（markdown_document）', () => {
-  it('maps markdown_document as structured tier1 with edit/regenerate/download actions', () => {
+  it('maps markdown_document as structured tier1 with authorized owner actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId: artifactBase.spaceId,
       artifact: {
@@ -51,6 +51,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version,
       latestJob: null,
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -64,7 +65,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         rendererVersion: 1,
       },
       trustTier: 'tier1',
-      allowedActions: ['view', 'edit', 'regenerate', 'download'],
+      allowedActions: ['view', 'edit', 'regenerate', 'download', 'delete'],
     });
   });
 
@@ -107,6 +108,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         checkpoint: {},
         queueJobKey: null,
       },
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -146,11 +148,67 @@ describe('artifact-resource-projection（markdown_document）', () => {
         checkpoint: {},
         queueJobKey: null,
       },
+      versionJob: null,
       accessRole: 'owner',
     });
 
     expect(resource.provenance.sourceResourceIds).toEqual([]);
     expect(resource.provenance.sourceReferences).toEqual([]);
+  });
+
+  it('uses the version-owning job for provenance when version and lifecycle jobs diverge', () => {
+    const versionJobId = '30000000-0000-4000-8000-000000000013';
+    const resource = projectOwnedArtifactResource({
+      notebookId: artifactBase.spaceId,
+      artifact: { ...artifactBase, kind: 'markdown_document' },
+      version: {
+        ...version,
+        generationJobId: versionJobId,
+      },
+      latestJob: {
+        id: '50000000-0000-4000-8000-000000000005',
+        artifactId: artifactBase.id,
+        operationId: null,
+        status: 'failed',
+        progress: 100,
+        failureCode: 'generation_failed',
+        params: {
+          provenance: {
+            sources: [
+              {
+                assetId: 'asset-stale',
+                versionId: 'asset-version-stale',
+              },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      versionJob: {
+        id: versionJobId,
+        artifactId: artifactBase.id,
+        operationId: null,
+        status: 'succeeded',
+        progress: 100,
+        failureCode: null,
+        params: {
+          provenance: {
+            sources: [
+              { assetId: 'asset-usable', versionId: 'asset-version-usable' },
+            ],
+          },
+        },
+        checkpoint: {},
+        queueJobKey: null,
+      },
+      accessRole: 'owner',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual(['asset-usable']);
+    expect(resource.provenance.sourceReferences).toEqual([
+      { resourceId: 'asset-usable', versionId: 'asset-version-usable' },
+    ]);
   });
 
   it('keeps viewer markdown_document to read-only actions', () => {
@@ -162,10 +220,124 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version,
       latestJob: null,
+      versionJob: null,
       accessRole: 'viewer',
     });
 
     expect(resource.allowedActions).toEqual(['view', 'download']);
+  });
+
+  it.each(['failed', 'cancelled'] as const)(
+    'keeps the committed version openable when the latest revision is %s',
+    (status) => {
+      const resource = projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: { ...artifactBase, kind: 'markdown_document' },
+        version,
+        latestJob: {
+          id: '30000000-0000-4000-8000-000000000003',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status,
+          progress: 100,
+          failureCode: status === 'failed' ? 'generation_failed' : null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        versionJob: null,
+        accessRole: 'owner',
+      });
+
+      expect(resource.status).toBe('ready');
+      expect(resource.version?.sequence).toBe(1);
+      expect(resource.allowedActions).toEqual([
+        'view',
+        'edit',
+        'regenerate',
+        'download',
+        'delete',
+      ]);
+    },
+  );
+
+  it.each(['failed', 'cancelled'] as const)(
+    'keeps a first-generation %s Artifact unavailable',
+    (status) => {
+      const resource = projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: {
+          ...artifactBase,
+          kind: 'markdown_document',
+          latestVersion: 0,
+        },
+        version: null,
+        latestJob: {
+          id: '30000000-0000-4000-8000-000000000003',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status,
+          progress: 100,
+          failureCode: status === 'failed' ? 'generation_failed' : null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        versionJob: null,
+        accessRole: 'owner',
+      });
+
+      expect(resource.status).toBe('failed');
+      expect(resource.version).toBeNull();
+      expect(resource.allowedActions).toEqual([]);
+    },
+  );
+
+  it('rejects non-null version without explicit versionJob', () => {
+    expect(() =>
+      projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: { ...artifactBase, kind: 'markdown_document' },
+        version,
+        latestJob: null,
+        accessRole: 'owner',
+      } as any),
+    ).toThrow(
+      expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
+        code: 'resource_invalid',
+      }),
+    );
+  });
+
+  it('rejects version=null with non-null versionJob', () => {
+    expect(() =>
+      projectOwnedArtifactResource({
+        notebookId: artifactBase.spaceId,
+        artifact: {
+          ...artifactBase,
+          kind: 'markdown_document',
+          latestVersion: 0,
+        },
+        version: null,
+        latestJob: null,
+        versionJob: {
+          id: '70000000-0000-4000-8000-000000000007',
+          artifactId: artifactBase.id,
+          operationId: null,
+          status: 'succeeded',
+          progress: 100,
+          failureCode: null,
+          params: {},
+          checkpoint: {},
+          queueJobKey: null,
+        },
+        accessRole: 'owner',
+      } as any),
+    ).toThrow(
+      expect.objectContaining<Partial<ArtifactResourceProjectionError>>({
+        code: 'resource_invalid',
+      }),
+    );
   });
 
   it('rejects markdown_document trust mismatch', () => {
@@ -179,6 +351,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         },
         version,
         latestJob: null,
+        versionJob: null,
         accessRole: 'owner',
       }),
     ).toThrow(
@@ -198,6 +371,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version: webAppVersion,
       latestJob: null,
+      versionJob: null,
       accessRole: 'owner',
     });
 
@@ -214,6 +388,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         'cancel',
         'regenerate',
         'download',
+        'delete',
         'annotate',
       ],
     });
@@ -229,6 +404,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
       },
       version: webAppVersion,
       latestJob: null,
+      versionJob: null,
       accessRole: 'viewer',
     });
 
@@ -251,6 +427,7 @@ describe('artifact-resource-projection（markdown_document）', () => {
         },
         version: webAppVersion,
         latestJob: null,
+        versionJob: null,
         accessRole: 'owner',
       }),
     ).toThrow(

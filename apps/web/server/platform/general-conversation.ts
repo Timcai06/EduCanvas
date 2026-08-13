@@ -75,13 +75,23 @@ export async function createGeneralConversation(
 export async function loadOwnedGeneralConversation(
   identity: AnonymousIdentity,
 ): Promise<PlatformConversationSnapshot | null> {
+  return loadOwnedGeneralConversationForSubject(identity.studentId);
+}
+
+/**
+ * 已解析 effective subject 的只读入口。调用方只能传服务端可信 dataOwnerId，
+ * 避免为复用旧接口伪造匿名 token 或重复读取 session/cookie 身份。
+ */
+export async function loadOwnedGeneralConversationForSubject(
+  ownerSubjectId: string,
+): Promise<PlatformConversationSnapshot | null> {
   const conversationId = await readActiveConversationId();
   if (!conversationId) {
-    if (!identity.studentId.startsWith('anon:')) {
+    if (!ownerSubjectId.startsWith('anon:')) {
       return (
         (
           await conversations.listOwnedRecent({
-            trustedSubjectId: identity.studentId,
+            trustedSubjectId: ownerSubjectId,
             limit: 1,
           })
         )[0] ?? null
@@ -91,7 +101,7 @@ export async function loadOwnedGeneralConversation(
   }
   return conversations.getOwned({
     conversationId,
-    trustedSubjectId: identity.studentId,
+    trustedSubjectId: ownerSubjectId,
   });
 }
 
@@ -116,12 +126,12 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
   });
   const artifactsByOperation = new Map<
     string,
-    (typeof referencedArtifacts)[number]['artifact'][]
+    (typeof referencedArtifacts)[number][]
   >();
   for (const reference of referencedArtifacts) {
     artifactsByOperation.set(reference.operationId, [
       ...(artifactsByOperation.get(reference.operationId) ?? []),
-      reference.artifact,
+      reference,
     ]);
   }
   const citationsByMessage = new Map<string, typeof citations>();
@@ -144,11 +154,16 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       artifacts:
         message.role === 'assistant'
           ? (artifactsByOperation.get(message.operationId) ?? []).map(
-              (artifact) => ({
+              ({ artifact, generationStatus }) => ({
                 id: artifact.id,
                 kind: artifact.kind,
                 title: artifact.title,
-                status: artifact.status,
+                status:
+                  artifact.latestVersion === 0 &&
+                  (generationStatus === 'failed' ||
+                    generationStatus === 'cancelled')
+                    ? generationStatus
+                    : artifact.status,
                 latestVersion: artifact.latestVersion,
               }),
             )

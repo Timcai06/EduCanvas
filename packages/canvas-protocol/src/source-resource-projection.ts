@@ -45,7 +45,9 @@ const SOURCE_RENDERERS = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml': {
     representation: 'document',
     rendererId: 'source.docx',
-    downloadable: false,
+    /* ADR-0026 保留 Office 原件下载；实际字节读取仍在服务端逐次复验主体、
+       Notebook 归属、长度与校验和。 */
+    downloadable: true,
   },
   'audio/mpeg': {
     representation: 'audio',

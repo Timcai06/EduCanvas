@@ -91,6 +91,14 @@ export function useStudioOpenActions(input: {
           !gateRef.current.isCurrent(activeRequest, currentScopeKeyRef.current)
         )
           return;
+        if (!resource.allowedActions.includes('view')) {
+          setPendingKind(null);
+          setValidationError({
+            kind: 'unavailable',
+            message: '当前没有查看该资源的权限。',
+          });
+          return;
+        }
         if (
           resourceKind === 'artifact' &&
           isShellRenderedArtifactResource(resource)

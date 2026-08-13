@@ -111,7 +111,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'annotate', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate', 'delete'],
     },
   },
   {
@@ -123,7 +123,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'annotate', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate', 'delete'],
     },
   },
   {
@@ -135,7 +135,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'annotate', 'regenerate'],
+      supportedActions: ['view', 'annotate', 'regenerate', 'delete'],
     },
   },
   {
@@ -171,7 +171,7 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
       representations: ['structured'],
       trustTiers: ['tier1'],
       runtimeKinds: ['none'],
-      supportedActions: ['view', 'edit', 'regenerate', 'download'],
+      supportedActions: ['view', 'edit', 'regenerate', 'download', 'delete'],
     },
   },
 ];

@@ -5,6 +5,7 @@ import {
   holdNextVoiceTurn,
   installFakeLiveVoice,
   readFakeLiveVoiceSnapshot,
+  setSpeechTransportMode,
   waitForAudiblePlaybackSilence,
   waitForAudiblePlaybackStart,
 } from './fixtures/live-voice-fixture';
@@ -54,6 +55,7 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
   page,
 }) => {
   const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'fallback');
 
   await emitVoicePartial(page, '请先检索实验资料');
   await expect(dialog.getByText('请先检索实验资料')).toBeVisible();
@@ -90,6 +92,7 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
     .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
     .toBeGreaterThanOrEqual(3);
   const snapshot = await readFakeLiveVoiceSnapshot(page);
+  expect(snapshot.playbackStarts).toBeGreaterThanOrEqual(1);
   expect(snapshot.turnRequests.slice(1).map(textFromTurn)).toEqual([
     '请先检索实验资料',
     '再给出第二个结论',
@@ -113,10 +116,11 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
   await expect(dialog).toHaveCount(0);
 });
 
-test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快照恢复', async ({
+test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async ({
   page,
 }) => {
   const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'fallback');
   const contextRail = dialog.getByRole('list', { name: 'Live 上下文' });
   await expect(
     contextRail.getByRole('listitem').filter({ hasText: '电路图.png' }),
@@ -125,7 +129,9 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     contextRail.getByRole('listitem').filter({ hasText: '实验记录.pdf' }),
   ).toBeVisible();
   await expect(
-    dialog.getByTitle(/处理中资料\.pdf · 处理中 · 本轮暂不带入/),
+    dialog.getByRole('listitem', {
+      name: '处理中资料.pdf · 处理中 · 本轮暂不带入',
+    }),
   ).toBeVisible();
 
   await holdNextVoiceTurn(
@@ -158,6 +164,18 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   expect(
     (await readFakeLiveVoiceSnapshot(page)).activeAudiblePlaybackSourceIds,
   ).toEqual([]);
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).speechAborts)
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).playbackStops)
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).activePlaybackSources,
+    )
+    .toBe(0);
+
   await emitVoiceFinal(page, '停一下，改为比较两份资料');
 
   await expect
@@ -174,6 +192,8 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
   expect(snapshot.audiblePlaybackStoppedSourceIds).toEqual(
     expect.arrayContaining([...audibleSourcesBeforeInterruption]),
   );
+  const speechAbort = snapshot.events.indexOf('speech.abort');
+  const playbackStop = snapshot.events.indexOf('playback.stop');
   const turnCancel = snapshot.events.indexOf('turn.cancel');
   const lastAudiblePlaybackStop = Math.max(
     ...audibleSourcesBeforeInterruption.map((sourceId) =>
@@ -181,8 +201,14 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     ),
   );
   const resumedTurn = snapshot.events.lastIndexOf('turn.request');
+  expect(snapshot.streamingSpeechRequests).toBe(0);
+  expect(snapshot.speechTicketsRequests).toBeGreaterThanOrEqual(1);
+  expect(speechAbort).toBeGreaterThan(-1);
+  expect(playbackStop).toBeGreaterThan(-1);
   expect(lastAudiblePlaybackStop).toBeGreaterThan(-1);
   expect(turnCancel).toBeGreaterThan(lastAudiblePlaybackStop);
+  expect(turnCancel).toBeGreaterThan(speechAbort);
+  expect(turnCancel).toBeGreaterThan(playbackStop);
   expect(resumedTurn).toBeGreaterThan(turnCancel);
 
   for (const request of snapshot.turnRequests.slice(1)) {
@@ -209,6 +235,111 @@ test('Live Voice 插话先清空播放并取消 Turn，再用不可变 Asset 快
     ]);
     expect(JSON.stringify(request)).not.toContain('asset-processing-1');
   }
+
+  await dialog.getByRole('button', { name: '结束 Live Voice' }).click();
+});
+
+test('Live Voice 插话取消（默认 streaming speech）', async ({ page }) => {
+  const dialog = await enterLiveWorkspace(page);
+  await setSpeechTransportMode(page, 'streaming');
+
+  await holdNextVoiceTurn(
+    page,
+    '这是一个持续播报中的回答，用来验证 streaming 场景下插话会立即停止声音。',
+  );
+  await emitVoicePartial(page, '分析当前图片和文档');
+  await emitVoiceFinal(page, '分析当前图片和文档');
+
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).speechTicketsRequests,
+    )
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () =>
+        (await readFakeLiveVoiceSnapshot(page)).streamingSpeechRequests,
+    )
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).streamingSpeechStarts,
+    )
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).turnRequests.length,
+    )
+    .toBe(2);
+
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).readyConnections)
+    .toBeGreaterThanOrEqual(2);
+
+  await expect(dialog.getByText('正在回答', { exact: true })).toBeVisible();
+
+  await emitVoicePartial(page, '停一下，改为比较两份资料');
+  await expect(dialog.getByText('停一下，改为比较两份资料')).toBeVisible();
+
+  await expect
+    .poll(
+      async () =>
+        (await readFakeLiveVoiceSnapshot(page)).streamingSpeechAbortEvents,
+    )
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).playbackStops)
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).activePlaybackSources,
+    )
+    .toBe(0);
+
+  await emitVoiceFinal(page, '停一下，改为比较两份资料');
+
+  await expect
+    .poll(async () => (await readFakeLiveVoiceSnapshot(page)).cancelRequests)
+    .toEqual(['fake-turn-2']);
+  await expect
+    .poll(
+      async () => (await readFakeLiveVoiceSnapshot(page)).turnRequests.length,
+    )
+    .toBe(3);
+
+  const snapshot = await readFakeLiveVoiceSnapshot(page);
+  const speechStarted = snapshot.events.indexOf('speech.started');
+  const playbackStart = snapshot.events.indexOf('playback.start');
+  const speechFinished = snapshot.events.indexOf('speech.finished');
+  const speechFailed = snapshot.events.indexOf('speech.failed');
+  const streamingCancel = snapshot.events.indexOf('streaming.speech.cancel');
+  const streamingClose = snapshot.events.indexOf('streaming.speech.close');
+  const playbackStop = snapshot.events.indexOf('playback.stop');
+  const turnCancel = snapshot.events.indexOf('turn.cancel');
+  const resumedTurn = snapshot.events.lastIndexOf('turn.request');
+  const streamingFrame = snapshot.events.indexOf('streaming.speech.frame');
+
+  expect(speechStarted).toBeGreaterThanOrEqual(0);
+  expect(playbackStart).toBeGreaterThanOrEqual(0);
+  expect(streamingFrame).toBeGreaterThanOrEqual(0);
+  expect(
+    streamingCancel > -1 ||
+      streamingClose > -1 ||
+      (speechFailed > -1 && speechFailed > speechFinished),
+  ).toBeTruthy();
+  expect(playbackStop).toBeGreaterThan(-1);
+  expect(turnCancel).toBeGreaterThan(-1);
+  if (streamingCancel > -1 || streamingClose > -1) {
+    const transportDone =
+      streamingCancel > -1
+        ? Math.max(streamingCancel, streamingFrame)
+        : streamingClose;
+    expect(turnCancel).toBeGreaterThan(transportDone);
+  }
+  expect(playbackStop).toBeLessThan(turnCancel);
+  expect(resumedTurn).toBeGreaterThan(turnCancel);
+  expect(snapshot.streamingSpeechTransportMode).toBe('streaming');
+  expect(speechFinished > -1 || speechFailed > -1).toBeTruthy();
 
   await dialog.getByRole('button', { name: '结束 Live Voice' }).click();
 });

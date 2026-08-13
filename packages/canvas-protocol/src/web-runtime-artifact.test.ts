@@ -147,4 +147,59 @@ describe('web app runtime artifact schema', () => {
     });
     expect(schema.success).toBe(false);
   });
+
+  it('rejects external URLs, traversal paths, and secret-bearing manifest fields', () => {
+    const baseFile = {
+      path: 'index.html',
+      mediaType: WEB_APP_MEDIA_TYPES[0],
+      content: '<div />',
+      hash: 'a'.repeat(64),
+    };
+    const base = {
+      schemaVersion: 1,
+      manifest: { entry: 'index.html', files: [baseFile] },
+      lockedDependencies: [],
+      capabilities: [WEB_APP_CAPABILITIES[0]],
+      budget: {
+        maxInputBytes: 1_000,
+        maxMessageBytes: 1_000,
+        maxOutputBytes: 1_000,
+        maxDurationMs: 1_000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 1,
+        maxMessagesPerSecond: 1,
+      },
+      diagnostics: [],
+      generatedByModel: true,
+    };
+
+    for (const path of [
+      'https://attacker.invalid/app.js',
+      '../secret.txt',
+      '/absolute/index.html',
+      'nested/../../secret.txt',
+      'C:\\secret.txt',
+    ]) {
+      expect(
+        webAppContentSchema.safeParse({
+          ...base,
+          manifest: { ...base.manifest, files: [{ ...baseFile, path }] },
+        }).success,
+      ).toBe(false);
+    }
+
+    for (const hostileField of [
+      { objectKey: 'private/web-app/index.html' },
+      { prompt: 'system prompt' },
+      { providerBody: { raw: true } },
+      { secret: 'do-not-expose' },
+    ]) {
+      expect(
+        webAppContentSchema.safeParse({
+          ...base,
+          manifest: { ...base.manifest, ...hostileField },
+        }).success,
+      ).toBe(false);
+    }
+  });
 });

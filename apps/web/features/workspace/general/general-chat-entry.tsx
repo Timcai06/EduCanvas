@@ -12,6 +12,10 @@ import { UserMenu } from '@/features/auth/user-menu';
 import { ProductMark } from '@/components/ProductMark';
 import { PillNav, type PillNavItem } from '@/components/PillNav';
 import type { OutputPreference } from '@educanvas/agent-core';
+import {
+  createPendingGeneralTurnWrite,
+  pendingGeneralTurnReadKeys,
+} from './pending-general-turn';
 
 /**
  * 空态入口此时还没有 Notebook/Studio 上下文，只暴露「学习计划」一个入口，
@@ -29,33 +33,27 @@ const ENTRY_NAV: readonly PillNavItem[] = [
 export const PENDING_GENERAL_PROMPT_KEY = 'educanvas.pending-general-prompt.v1';
 export const PENDING_GENERAL_MENU_ACTION_KEY =
   'educanvas.pending-general-menu-action.v1';
-export const PENDING_GENERAL_CANVAS_KEY = 'educanvas.pending-general-canvas.v1';
 export const PENDING_GENERAL_OUTPUT_PREFERENCE_KEY =
   'educanvas.pending-general-output-preference.v1';
 const ENTRY_MENU_ACTIONS: readonly PlusMenuActionId[] = [
   'upload_file',
   'upload_image',
-  'create_mind_map',
-  'create_slides',
-  'create_flashcards',
-  'create_audio_overview',
+  'add_link',
 ];
 
 export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   const [draft, setDraft] = useState('');
   const online = useOnlineStatus();
   const [isPending, startTransition] = useTransition();
-  const [canvasSelected, setCanvasSelected] = useState(false);
   const [outputPreference, setOutputPreference] =
     useState<OutputPreference>('auto');
   const begin = useCallback(
     (prompt: string) => {
-      sessionStorage.removeItem(PENDING_GENERAL_MENU_ACTION_KEY);
-      sessionStorage.setItem(PENDING_GENERAL_PROMPT_KEY, prompt);
-      sessionStorage.setItem(
-        PENDING_GENERAL_OUTPUT_PREFERENCE_KEY,
-        outputPreference,
+      pendingGeneralTurnReadKeys.forEach((key) =>
+        sessionStorage.removeItem(key),
       );
+      const write = createPendingGeneralTurnWrite({ prompt, outputPreference });
+      sessionStorage.setItem(write.key, write.value);
       startTransition(async () => {
         await startGeneralChatAction();
       });
@@ -64,18 +62,10 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
   );
 
   const beginWithMenuAction = useCallback((action: PlusMenuActionId) => {
-    sessionStorage.removeItem(PENDING_GENERAL_PROMPT_KEY);
+    pendingGeneralTurnReadKeys.forEach((key) => sessionStorage.removeItem(key));
     sessionStorage.setItem(PENDING_GENERAL_MENU_ACTION_KEY, action);
     startTransition(async () => {
       await startGeneralChatAction();
-    });
-  }, []);
-
-  const handleToolAction = useCallback(() => {
-    setCanvasSelected((selected) => {
-      if (selected) sessionStorage.removeItem(PENDING_GENERAL_CANVAS_KEY);
-      else sessionStorage.setItem(PENDING_GENERAL_CANVAS_KEY, '1');
-      return !selected;
     });
   }, []);
 
@@ -106,14 +96,10 @@ export function GeneralChatEntry({ nickname }: { nickname?: string | null }) {
           onRemoveChip={() => undefined}
           onMenuAction={beginWithMenuAction}
           availableMenuActions={ENTRY_MENU_ACTIONS}
-          toolChips={[
-            { id: 'canvas', label: 'Canvas', selected: canvasSelected },
-          ]}
-          onToolAction={handleToolAction}
+          toolChips={[]}
           outputPreference={outputPreference}
           onOutputPreferenceChange={(preference) => {
             setOutputPreference(preference);
-            setCanvasSelected(preference !== 'auto');
           }}
           variant="landing"
         />

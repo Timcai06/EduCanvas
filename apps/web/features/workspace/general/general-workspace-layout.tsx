@@ -10,7 +10,7 @@ import { ConversationPane } from './conversation-pane';
 import { WorkspaceSurfaceSlot } from './workspace-surface-slot';
 import { GeneralWorkspaceHeader } from './general-workspace-header';
 import type { useGeneralWorkspaceController } from './use-general-workspace-controller';
-import { DeskRestRail } from './desk-rest-rail';
+import { ResourceDock } from './resource-dock';
 
 /**
  * 页面框架（W02）：header + sidebar + main + studio overlay 的纯布局组件。
@@ -129,26 +129,49 @@ export function GeneralWorkspaceLayout({
             </div>
           )}
         </main>
-        <DeskRestRail
-          positions={ctrl.surfacePositions}
-          onOpen={ctrl.openRestingSurface}
+        <ResourceDock
+          summaries={ctrl.resourceDock.items}
+          loading={ctrl.resourceDock.loading}
+          error={ctrl.resourceDock.error?.message ?? null}
+          hasMore={ctrl.resourceDock.hasMore}
+          onLoadMore={() => void ctrl.resourceDock.loadMore()}
+          onRetry={() => void ctrl.resourceDock.reload()}
+          onOpenLibrary={ctrl.openStudio}
+          onOpen={(summary) => {
+            ctrl.artifactFlow.closeCanvas();
+            if (summary.resourceKind === 'source') {
+              ctrl.studioOpenActions.actions.openSource(summary.resourceId);
+            } else {
+              ctrl.studioOpenActions.actions.openArtifact(summary.resourceId);
+            }
+          }}
         />
+        {ctrl.surfacePositionError ? (
+          <p className="sr-only" role="status">
+            案面位置同步失败，资源仍可正常打开。
+          </p>
+        ) : null}
         {surface.type === 'studio' ? (
           <StudioOverlay onClose={() => ctrl.workspace.closeStudio()}>
             <StudioWorkspace
+              summaries={ctrl.resourceDock.items}
               assets={ctrl.notebookSources}
-              outputs={ctrl.studioItems}
-              onOpenSource={(asset) => {
+              loading={ctrl.resourceDock.loading}
+              error={ctrl.resourceDock.error?.message ?? null}
+              hasMore={ctrl.resourceDock.hasMore}
+              onLoadMore={() => void ctrl.resourceDock.loadMore()}
+              onRetry={() => void ctrl.resourceDock.reload()}
+              onOpen={(summary) => {
                 ctrl.workspace.closeStudio();
                 ctrl.artifactFlow.closeCanvas();
                 openResourceAfterStudioCloses(() =>
-                  ctrl.studioOpenActions.actions.openSource(asset.id),
-                );
-              }}
-              onOpenOutput={(artifactId) => {
-                ctrl.workspace.closeStudio();
-                openResourceAfterStudioCloses(() =>
-                  ctrl.studioOpenActions.actions.openArtifact(artifactId),
+                  summary.resourceKind === 'source'
+                    ? ctrl.studioOpenActions.actions.openSource(
+                        summary.resourceId,
+                      )
+                    : ctrl.studioOpenActions.actions.openArtifact(
+                        summary.resourceId,
+                      ),
                 );
               }}
               onToggleSource={ctrl.sources.toggle}

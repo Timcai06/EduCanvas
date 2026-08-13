@@ -34,6 +34,7 @@ function resolveLiveArtifactStatusLabel(
 ): string {
   if (status === 'generating' || status === 'proposed') return '生成中';
   if (status === 'failed') return '生成失败';
+  if (status === 'cancelled') return '已取消';
   if (status === 'archived') return '已归档';
   return '已生成';
 }
@@ -345,6 +346,7 @@ export function LiveVoiceVisualStage({
                 artifact.status === 'generating' ||
                 artifact.status === 'proposed' ||
                 artifact.status === 'failed' ||
+                artifact.status === 'cancelled' ||
                 artifact.status === 'archived'
               }
               onClick={(event) =>

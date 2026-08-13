@@ -36,4 +36,16 @@ describe('ConversationArtifactCard', () => {
     expect(onOpen).toHaveBeenNthCalledWith(1, 'artifact-1');
     expect(onOpen).toHaveBeenNthCalledWith(2, 'artifact-1');
   });
+
+  it('区分取消与生成失败', () => {
+    const html = renderToStaticMarkup(
+      ConversationArtifactCard({
+        artifact: { ...artifact, status: 'cancelled' },
+        onOpen: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('已取消');
+    expect(html).not.toContain('生成失败');
+  });
 });

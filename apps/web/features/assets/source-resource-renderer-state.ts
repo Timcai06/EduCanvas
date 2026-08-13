@@ -18,19 +18,23 @@ export interface SourceRendererStateInfo {
   readonly errorMessage: string | null;
 }
 
+export function shouldPollSourceResource(resource: CanvasResource): boolean {
+  return resource.status === 'processing';
+}
+
+export function canLoadSourcePreview(resource: CanvasResource): boolean {
+  return (
+    resource.status === 'ready' &&
+    resource.version !== null &&
+    resource.allowedActions.includes('view')
+  );
+}
+
 export function resolveSourceRendererState(
   resource: CanvasResource,
   preview: AssetPreview | null,
-  previewFailed: boolean,
+  previewError: CanvasResourceClientErrorKind | null,
 ): SourceRendererStateInfo {
-  if (resource.status === 'processing') {
-    return {
-      state: 'loading',
-      error: null,
-      errorMessage: null,
-    };
-  }
-
   if (resource.status === 'failed') {
     return {
       state: 'failed',
@@ -55,7 +59,10 @@ export function resolveSourceRendererState(
     };
   }
 
-  if (!resource.allowedActions.includes('view')) {
+  if (
+    resource.status === 'ready' &&
+    !resource.allowedActions.includes('view')
+  ) {
     return {
       state: 'forbidden',
       error: 'forbidden',
@@ -63,11 +70,26 @@ export function resolveSourceRendererState(
     };
   }
 
-  if (previewFailed) {
+  if (previewError) {
+    const messages: Record<CanvasResourceClientErrorKind, string> = {
+      forbidden: '没有权限预览这个来源。',
+      not_found: '这个来源不存在或已被删除。',
+      offline: '网络连接不可用，请检查网络后重试。',
+      unavailable: '来源预览服务暂时不可用。',
+      failed: '暂时无法预览这个来源。',
+    };
     return {
-      state: 'failed',
-      error: 'failed',
-      errorMessage: '暂时无法预览这个来源。',
+      state: previewError,
+      error: previewError,
+      errorMessage: messages[previewError],
+    };
+  }
+
+  if (resource.status === 'processing') {
+    return {
+      state: 'loading',
+      error: null,
+      errorMessage: null,
     };
   }
 

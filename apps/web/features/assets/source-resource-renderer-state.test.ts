@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSourceRendererState } from './source-resource-renderer-state';
+import {
+  canLoadSourcePreview,
+  resolveSourceRendererState,
+  shouldPollSourceResource,
+} from './source-resource-renderer-state';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import type { AssetPreview } from './asset-preview-contract';
 import { readFileSync } from 'node:fs';
@@ -47,12 +51,62 @@ function makeResource(overrides: Partial<CanvasResource> = {}): CanvasResource {
   };
 }
 
+describe('source resource transition guards', () => {
+  it.each([
+    ['processing', true],
+    ['ready', false],
+    ['failed', false],
+    ['unavailable', false],
+    ['archived', false],
+  ] as const)('仅 processing 状态轮询：%s', (status, expected) => {
+    expect(shouldPollSourceResource(makeResource({ status }))).toBe(expected);
+  });
+
+  it('仅 ready + version + view 允许加载预览', () => {
+    expect(canLoadSourcePreview(makeResource())).toBe(true);
+    expect(canLoadSourcePreview(makeResource({ allowedActions: [] }))).toBe(
+      false,
+    );
+    expect(canLoadSourcePreview(makeResource({ version: null }))).toBe(false);
+  });
+
+  it.each(['processing', 'failed', 'unavailable', 'archived'] as const)(
+    '终态或处理中不加载预览：%s',
+    (status) => {
+      expect(canLoadSourcePreview(makeResource({ status }))).toBe(false);
+    },
+  );
+});
+
 describe('resolveSourceRendererState', () => {
+  it.each([
+    ['forbidden', 'forbidden', '没有权限'],
+    ['not_found', 'not_found', '不存在'],
+    ['offline', 'offline', '网络'],
+    ['unavailable', 'unavailable', '暂时'],
+    ['failed', 'failed', '暂时'],
+  ] as const)(
+    '保留 preview %s 错误语义，不压成通用 failed',
+    (previewError, expectedState, expectedMessage) => {
+      const result = resolveSourceRendererState(
+        makeResource(),
+        null,
+        previewError,
+      );
+
+      expect(result).toMatchObject({
+        state: expectedState,
+        error: previewError,
+      });
+      expect(result.errorMessage).toContain(expectedMessage);
+    },
+  );
+
   it('processing 状态返回 loading', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'processing' }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('loading');
   });
@@ -61,7 +115,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'failed' }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('failed');
     expect(result.errorMessage).toContain('处理失败');
@@ -71,7 +125,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'unavailable' }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('unavailable');
   });
@@ -80,7 +134,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'archived' }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('unavailable');
   });
@@ -89,7 +143,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'ready' }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('loading');
   });
@@ -104,7 +158,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'ready' }),
       preview,
-      false,
+      null,
     );
     expect(result.state).toBe('ready');
   });
@@ -113,16 +167,26 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'ready', allowedActions: [] }),
       null,
-      false,
+      null,
     );
     expect(result.state).toBe('forbidden');
+  });
+
+  it('ready 但缺少 view 时优先 fail closed，不被 preview 错误改写', () => {
+    const result = resolveSourceRendererState(
+      makeResource({ status: 'ready', allowedActions: [] }),
+      null,
+      'offline',
+    );
+
+    expect(result).toMatchObject({ state: 'forbidden', error: 'forbidden' });
   });
 
   it('预览读取失败返回 failed', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'ready' }),
       null,
-      true,
+      'failed',
     );
     expect(result.state).toBe('failed');
   });
@@ -136,7 +200,7 @@ describe('resolveSourceRendererState', () => {
         mimeType: 'text/plain',
         content: '   ',
       },
-      false,
+      null,
     );
     expect(result.state).toBe('empty');
   });
@@ -145,7 +209,7 @@ describe('resolveSourceRendererState', () => {
     const result = resolveSourceRendererState(
       makeResource({ status: 'failed' }),
       null,
-      false,
+      null,
     );
     expect(result.errorMessage).not.toContain('stack');
     expect(result.errorMessage).not.toContain('storageKey');

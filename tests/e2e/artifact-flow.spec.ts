@@ -10,11 +10,10 @@ async function openStudioInput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook来源' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('source');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -23,12 +22,10 @@ async function openStudioOutput(page: Page) {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', { name: '浏览当前Notebook的AI产物' }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption('artifact');
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -276,7 +273,7 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   });
   expect(created).toEqual({ ok: true, status: 201 });
   const studio = await openStudioOutput(page);
-  const createdNote = studio.getByRole('option', { name: /^未命名笔记/ });
+  const createdNote = studio.getByRole('button', { name: /^未命名笔记/ });
   await expect(createdNote.getByText('v1', { exact: true })).toBeVisible();
   await createdNote.click();
 
@@ -293,7 +290,7 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   const outputStudio = await openStudioOutput(page);
-  const updatedNote = outputStudio.getByRole('option', {
+  const updatedNote = outputStudio.getByRole('button', {
     name: /^未命名笔记/,
   });
   await expect(updatedNote.getByText('v2', { exact: true })).toBeVisible();
@@ -367,10 +364,10 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
 
   await page.reload();
   const inputStudio = await openStudioInput(page);
-  const source = inputStudio.getByRole('option', {
+  const source = inputStudio.getByRole('button', {
     name: /音频来源讲义\.pdf/,
   });
-  await expect(source.getByText('已用于对话', { exact: true })).toBeVisible();
+  await expect(source.getByText('已加入上下文', { exact: true })).toBeVisible();
   await closeStudio(page);
   await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
   await page.getByRole('menuitem', { name: /生成音频概览/ }).click();
@@ -410,7 +407,7 @@ test('音频概览冻结勾选来源，断线后可恢复播放与文字稿', as
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   const studio = await openStudioOutput(page);
-  await studio.getByRole('option', { name: /来源音频概览/ }).click();
+  await studio.getByRole('button', { name: /来源音频概览/ }).click();
   await expect(
     page
       .getByRole('dialog', { name: '产物Canvas' })

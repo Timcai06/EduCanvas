@@ -56,7 +56,8 @@ export function GeneralChatWorkspace({
     scrollRef,
     nearBottom,
   });
-  useAssistantArtifacts(ctrl.artifactFlow);
+  /* 桌面助手与 Dock/资源库共用 fresh CanvasResource view gate。 */
+  useAssistantArtifacts(ctrl.studioOpenActions.actions);
   const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
   const deskPresence = deriveDeskAgentPresence(
     ctrl.turn.messages,
@@ -136,10 +137,10 @@ export function GeneralChatWorkspace({
           defaultTitle={ctrl.artifactFlow.generation.title}
           sourceCount={ctrl.selectedAudioSources.length}
           onConfirm={(title) => {
-            const openWhenReady = ctrl.canvasSelected;
+            const openWhenReady = ctrl.outputPreference !== 'auto';
             const kind = ctrl.artifactFlow.generation?.kind;
             if (!kind || !isCreatableArtifactKind(kind)) return;
-            ctrl.setCanvasSelected(false);
+            ctrl.setOutputPreference('auto');
             void ctrl.artifactFlow.confirm(
               kind,
               title,

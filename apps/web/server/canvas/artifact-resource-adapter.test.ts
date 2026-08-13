@@ -59,9 +59,30 @@ const runningJob: PlatformArtifactJob = {
   queueJobKey: 'private-queue-key',
 };
 
+type ProjectionInput = Parameters<typeof projectOwnedArtifactResource>[0];
+type TestProjectionInput = Omit<ProjectionInput, 'versionJob'> & {
+  versionJob?: ProjectionInput['versionJob'];
+};
+
+/** Test helper keeps legacy fixtures terse while production callers must be explicit. */
+function projectArtifactResource(input: TestProjectionInput) {
+  const hasVersionJob = Object.prototype.hasOwnProperty.call(
+    input,
+    'versionJob',
+  );
+  const inferredVersionJob =
+    input.version?.generationJobId === input.latestJob?.id
+      ? input.latestJob
+      : null;
+  return projectOwnedArtifactResource({
+    ...input,
+    versionJob: hasVersionJob ? (input.versionJob ?? null) : inferredVersionJob,
+  });
+}
+
 describe('Artifact CanvasResource adapter', () => {
   it('maps a ready structured artifact and exposes no private fields', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact,
       version,
@@ -76,7 +97,7 @@ describe('Artifact CanvasResource adapter', () => {
       version: { versionId: version.id, sequence: 1, checksum: null },
       representation: { kind: 'structured' },
       renderer: { rendererId: 'artifact.mind-map' },
-      allowedActions: ['view', 'regenerate', 'annotate'],
+      allowedActions: ['view', 'regenerate', 'delete', 'annotate'],
       runtime: { kind: 'none' },
     });
     expect(serialized).not.toMatch(
@@ -85,7 +106,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('uses version=null while an initial latestVersion=0 job is processing', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 0, status: 'proposed' },
       version: null,
@@ -100,7 +121,7 @@ describe('Artifact CanvasResource adapter', () => {
 
   it('rejects ready facts that claim a version but provide none', () => {
     expect(() =>
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId,
         artifact,
         version: null,
@@ -116,7 +137,7 @@ describe('Artifact CanvasResource adapter', () => {
 
   it('fails closed for unknown kinds and trust-policy mismatches', () => {
     expect(() =>
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId,
         artifact: { ...artifact, kind: 'unknown_kind' },
         version,
@@ -129,7 +150,7 @@ describe('Artifact CanvasResource adapter', () => {
       }),
     );
     expect(() =>
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId,
         artifact: { ...artifact, trustTier: 'tier2' },
         version,
@@ -144,7 +165,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('maps audio overview from policy without granting a runtime', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -168,7 +189,7 @@ describe('Artifact CanvasResource adapter', () => {
   it('projects trusted media provenance without exposing job parameters', () => {
     const operationId = '50000000-0000-4000-8000-000000000005';
     const sourceId = '60000000-0000-4000-8000-000000000006';
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -243,7 +264,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('maps a generated image as tier2 without granting a runtime or regenerate', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -290,7 +311,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('maps markdown 文档为结构化 tier1 renderer，允许编辑与重生成', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -313,13 +334,13 @@ describe('Artifact CanvasResource adapter', () => {
       representation: { kind: 'structured' },
       renderer: { rendererId: 'artifact.markdown-document' },
       trustTier: 'tier1',
-      allowedActions: ['view', 'edit', 'regenerate', 'download'],
+      allowedActions: ['view', 'edit', 'regenerate', 'download', 'delete'],
     });
   });
 
   it('rejects cross-Notebook projection and ignores caller-shaped policy fields', () => {
     expect(() =>
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId: 'different-notebook',
         artifact,
         version,
@@ -332,7 +353,7 @@ describe('Artifact CanvasResource adapter', () => {
       }),
     );
 
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact,
       version,
@@ -340,13 +361,18 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
       allowedActions: ['run'],
       rendererId: 'attacker.renderer',
-    } as Parameters<typeof projectOwnedArtifactResource>[0]);
-    expect(resource.allowedActions).toEqual(['view', 'regenerate', 'annotate']);
+    } as Parameters<typeof projectArtifactResource>[0]);
+    expect(resource.allowedActions).toEqual([
+      'view',
+      'regenerate',
+      'delete',
+      'annotate',
+    ]);
     expect(resource.renderer.rendererId).toBe('artifact.mind-map');
   });
 
   it('keeps a viewer read-only even when the artifact kind is editable', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'note' },
       version,
@@ -357,8 +383,40 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.allowedActions).toEqual(['view', 'annotate']);
   });
 
+  it('does not turn provenance references into authority over a foreign Source', () => {
+    const foreignSourceId = '90000000-0000-4000-8000-000000000009';
+    const job = {
+      ...runningJob,
+      status: 'succeeded' as const,
+      params: {
+        provenance: {
+          sources: [
+            {
+              assetId: foreignSourceId,
+              versionId: '90000000-0000-4000-8000-000000000010',
+              kind: 'document',
+            },
+          ],
+        },
+      },
+    };
+    const resource = projectArtifactResource({
+      notebookId,
+      artifact,
+      version: { ...version, generationJobId: job.id },
+      latestJob: job,
+      accessRole: 'viewer',
+    });
+
+    expect(resource.provenance.sourceResourceIds).toEqual([foreignSourceId]);
+    expect(resource.allowedActions).toEqual(['view', 'annotate']);
+    expect(JSON.stringify(resource)).not.toMatch(
+      /source\.read|source\.download|notebook\.read|notebook\.write/i,
+    );
+  });
+
   it('grants download and delete for media artifacts with owner role', () => {
-    const audioResource = projectOwnedArtifactResource({
+    const audioResource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
       version,
@@ -372,7 +430,7 @@ describe('Artifact CanvasResource adapter', () => {
       'annotate',
     ]);
 
-    const imageResource = projectOwnedArtifactResource({
+    const imageResource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'generated_image', trustTier: 'tier2' },
       version,
@@ -388,7 +446,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('grants download and delete for media artifacts with editor role', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
       version,
@@ -404,7 +462,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('grants download but not delete for media artifacts with viewer role', () => {
-    const audioResource = projectOwnedArtifactResource({
+    const audioResource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
       version,
@@ -417,7 +475,7 @@ describe('Artifact CanvasResource adapter', () => {
       'annotate',
     ]);
 
-    const imageResource = projectOwnedArtifactResource({
+    const imageResource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'generated_image', trustTier: 'tier2' },
       version,
@@ -432,7 +490,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('grants download but not delete for media artifacts with contributor role', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, kind: 'audio_overview', trustTier: 'tier2' },
       version,
@@ -443,7 +501,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('restricts media actions to view-only when archived', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -460,7 +518,7 @@ describe('Artifact CanvasResource adapter', () => {
   });
 
   it('web_app 归档后移除 live 运行动作，避免旁路重放', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: {
         ...artifact,
@@ -478,8 +536,8 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.status).toBe('archived');
   });
 
-  it('失败终态带版本时不投影为 ready', () => {
-    const resource = projectOwnedArtifactResource({
+  it('失败 revision 不覆盖已有可用版本', () => {
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 1 },
       version: {
@@ -494,15 +552,15 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
     });
 
-    expect(resource.status).toBe('failed');
+    expect(resource.status).toBe('ready');
     expect(resource.version).toMatchObject({
       versionId: version.id,
       sequence: version.version,
     });
   });
 
-  it('cancelled 终态不投影 ready', () => {
-    const resource = projectOwnedArtifactResource({
+  it('cancelled revision 保留已有版本与 fresh actions', () => {
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 1 },
       version,
@@ -514,12 +572,17 @@ describe('Artifact CanvasResource adapter', () => {
       accessRole: 'owner',
     });
 
-    expect(resource.status).toBe('failed');
-    expect(resource.allowedActions).toEqual([]);
+    expect(resource.status).toBe('ready');
+    expect(resource.allowedActions).toEqual([
+      'view',
+      'regenerate',
+      'delete',
+      'annotate',
+    ]);
   });
 
   it('不能从未知 job 状态猜测 ready', () => {
-    const resource = projectOwnedArtifactResource({
+    const resource = projectArtifactResource({
       notebookId,
       artifact: { ...artifact, latestVersion: 1 },
       version,
@@ -534,9 +597,9 @@ describe('Artifact CanvasResource adapter', () => {
     expect(resource.status).toBe('unavailable');
   });
 
-  it('可恢复对账结果直接进入失败/不可用，不吞并投影', () => {
+  it('可恢复 revision 对账失败不吞掉旧版本，未知初次结果仍不可用', () => {
     expect(
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId,
         artifact: { ...artifact, latestVersion: 1 },
         version,
@@ -547,9 +610,9 @@ describe('Artifact CanvasResource adapter', () => {
         },
         accessRole: 'owner',
       }).status,
-    ).toBe('failed');
+    ).toBe('ready');
     expect(
-      projectOwnedArtifactResource({
+      projectArtifactResource({
         notebookId,
         artifact: { ...artifact, latestVersion: 0 },
         version: null,

@@ -19,6 +19,7 @@ import { projectOwnedSourceResource } from '../canvas/source-resource-adapter';
 import { readStoredAssetBytes } from './asset-storage';
 import type { AssetPreview } from '@/features/assets/asset-preview-contract';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
+import { projectTextRepresentation } from './asset-preview-representation';
 
 const assets = new DrizzleAssetRepository();
 const BINARY_PREVIEW_MIME_TYPES = new Set([
@@ -200,12 +201,7 @@ export async function loadOwnedAssetPreviewDetail(input: {
         mimeType: version.mimeType,
         fileUrl,
         representation: representation
-          ? {
-              quality: representation.quality,
-              markdown: derivedMarkdown ?? undefined,
-              producer: representation.producer ?? null,
-              producerVersion: representation.producerVersion ?? null,
-            }
+          ? projectTextRepresentation(representation, derivedMarkdown)
           : null,
       },
       canvasResource,
@@ -285,12 +281,7 @@ export async function loadOwnedAssetPreviewDetail(input: {
         content,
         warnings,
         representation: representation
-          ? {
-              quality: representation.quality,
-              markdown: derivedMarkdown ?? undefined,
-              producer: representation.producer ?? null,
-              producerVersion: representation.producerVersion ?? null,
-            }
+          ? projectTextRepresentation(representation, derivedMarkdown)
           : null,
         downloadUrl: `/api/v1/chat/assets/${encodeURIComponent(version.assetId)}/file?download=1`,
       },

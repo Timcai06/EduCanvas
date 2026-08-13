@@ -39,9 +39,14 @@ function docxPreview(
 function render(
   preview: Extract<AssetPreview, { kind: 'docx' }>,
   initialView?: 'original' | 'structured',
+  canDownload = true,
 ) {
   return renderToStaticMarkup(
-    createElement(DocxReadingSwitcher, { preview, initialView }),
+    createElement(DocxReadingSwitcher, {
+      preview,
+      initialView,
+      canDownload,
+    }),
   );
 }
 
@@ -82,6 +87,13 @@ describe('DocxReadingSwitcher（ADR-0026 决定 6，与 PDF 同构）', () => {
     expect(html).not.toContain('暂不支持预览');
   });
 
+  it('服务端未授予 download 动作时不展示原件下载入口', () => {
+    const html = render(docxPreview(), undefined, false);
+
+    expect(html).not.toContain('下载原件（讲义.docx）');
+    expect(html).not.toContain(DOWNLOAD_URL);
+  });
+
   it('degraded 时切换标签为"纯文本降级"而非"结构化阅读"', () => {
     const html = render(
       docxPreview({
@@ -113,6 +125,15 @@ describe('DocxReadingSwitcher（ADR-0026 决定 6，与 PDF 同构）', () => {
   it('failed 时原件视图显示失败提示且不可切换', () => {
     const html = render(docxPreview({ representation: { quality: 'failed' } }));
     expect(html).toContain('结构化转换失败');
+    expect(html).not.toContain('阅读视图切换');
+  });
+
+  it('派生内容完整性失败时诚实显示 unavailable', () => {
+    const html = render(
+      docxPreview({ representation: { quality: 'unavailable' } }),
+    );
+
+    expect(html).toContain('结构化内容暂不可用');
     expect(html).not.toContain('阅读视图切换');
   });
 

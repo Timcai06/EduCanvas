@@ -46,6 +46,10 @@ export interface AgentTurnSendOptions {
   outputPreference?: OutputPreference;
 }
 
+/** 浏览器 Turn 的闭合结果；调用方只能在 completed 后消费一次性输入。 */
+export type AgentTurnSendOutcome =
+  'completed' | 'failed' | 'cancelled' | 'interrupted' | 'rejected';
+
 const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
   endpoint: '/api/v1/learn/turn',
   assistantLabel: 'AI 老师',
@@ -59,6 +63,10 @@ interface InFlightTurn {
   turnId: string | null;
   assistantMessageId: string | null;
   terminalReceived: boolean;
+  terminalOutcome: Extract<
+    AgentTurnSendOutcome,
+    'completed' | 'failed' | 'cancelled'
+  > | null;
   stopConfirmed: boolean;
   cancelRequested: boolean;
 }
@@ -164,7 +172,7 @@ export function useAgentTurn(
     ) => {
       const normalizedText = text.trim();
       if ((!normalizedText && assetParts.length === 0) || inFlight.current)
-        return false;
+        return 'rejected' as const;
 
       const clientMessageId = suppliedId ?? crypto.randomUUID();
       const current: InFlightTurn = {
@@ -173,6 +181,7 @@ export function useAgentTurn(
         turnId: null,
         assistantMessageId: null,
         terminalReceived: false,
+        terminalOutcome: null,
         stopConfirmed: false,
         cancelRequested: false,
       };
@@ -236,7 +245,7 @@ export function useAgentTurn(
               retryable: response.status >= 500 || response.status === 429,
             });
           }
-          return false;
+          return 'rejected' as const;
         }
 
         await consumeTeachingTurnResponse(
@@ -281,6 +290,12 @@ export function useAgentTurn(
               event.type === 'turn.cancelled'
             ) {
               current.terminalReceived = true;
+              current.terminalOutcome =
+                event.type === 'turn.completed'
+                  ? 'completed'
+                  : event.type === 'turn.failed'
+                    ? 'failed'
+                    : 'cancelled';
               setControlError(null);
             }
             if (
@@ -313,7 +328,7 @@ export function useAgentTurn(
             retryable: resolved.retryable,
           });
         }
-        return current.terminalReceived;
+        return current.terminalOutcome ?? 'interrupted';
       } catch (error) {
         const aborted =
           error instanceof DOMException && error.name === 'AbortError';
@@ -338,7 +353,7 @@ export function useAgentTurn(
             retryable: resolved.retryable,
           });
         }
-        return false;
+        return current.stopConfirmed ? 'cancelled' : 'interrupted';
       } finally {
         if (inFlight.current === current) inFlight.current = null;
       }

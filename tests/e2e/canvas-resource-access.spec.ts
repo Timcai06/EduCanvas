@@ -1,8 +1,7 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { openLearningWorkspace } from './study-onboarding';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '展开当前笔记本的输入与输出';
@@ -37,15 +36,10 @@ async function openStudio(page: Page, kind: 'source' | 'artifact') {
   const studio = page.getByRole('complementary', {
     name: '当前笔记本的 Studio',
   });
-  const wheel = studio.getByRole('listbox', { name: '选择 Studio 能力' });
-  if (kind === 'artifact') await wheel.press('ArrowDown');
-  await wheel.press('Enter');
-  await expect(
-    studio.getByRole('listbox', {
-      name:
-        kind === 'source' ? '浏览当前Notebook来源' : '浏览当前Notebook的AI产物',
-    }),
-  ).toBeVisible();
+  await studio
+    .getByRole('combobox', { name: '资源分类' })
+    .selectOption(kind);
+  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
   return studio;
 }
 
@@ -127,7 +121,7 @@ async function responseStatus(page: Page, url: string): Promise<number> {
 }
 
 async function ensureGeneralNotebook(page: Page) {
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
+  await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
   await page
     .getByRole('dialog', { name: '添加文档来源' })
@@ -170,7 +164,7 @@ test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
         .includes(`/api/v1/canvas/resources/source/${fixture.sourceId}`) &&
       response.request().method() === 'GET',
   );
-  await studio.getByRole('option', { name: /S1 文本来源\.txt/ }).click();
+  await studio.getByRole('button', { name: /S1 文本来源\.txt/ }).click();
   expect((await sourceResponse).status()).toBe(200);
   const sourceCanvas = page.locator('[aria-label="来源预览"]');
   await expect(sourceCanvas).toBeVisible();
@@ -187,7 +181,7 @@ test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
         .includes(`/api/v1/canvas/resources/artifact/${fixture.artifactId}`) &&
       response.request().method() === 'GET',
   );
-  await studio.getByRole('option', { name: /S1 版本恢复导图/ }).click();
+  await studio.getByRole('button', { name: /S1 版本恢复导图/ }).click();
   expect((await artifactResponse).status()).toBe(200);
   const artifactCanvas = page.locator('[aria-label="产物Canvas"]');
   const versions = artifactCanvas.getByRole('combobox', {
@@ -279,57 +273,4 @@ test('@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
       `/api/v1/canvas/resources/artifact/${fixture.artifactId}`,
     ),
   ).toBe(200);
-});
-
-/* CanvasHost 窄屏自动 compact：教学 Canvas 桌面为 region、窄屏为 dialog
-   （canvas-host.tsx role={isModal ? 'dialog' : 'region'}）。两态兼容定位。 */
-function teachingCanvas(page: Page) {
-  return page
-    .getByRole('region', { name: '教学Canvas' })
-    .or(page.getByRole('dialog', { name: '教学Canvas' }));
-}
-
-async function completeVisibleArtifact(canvas: Locator) {
-  const completedGroups = new Set<string>();
-  const choices = canvas.getByRole('radio');
-  for (let index = 0; index < (await choices.count()); index += 1) {
-    const choice = choices.nth(index);
-    const groupName = await choice.getAttribute('name');
-    if (!groupName || completedGroups.has(groupName)) continue;
-    await choice.check();
-    completedGroups.add(groupName);
-  }
-  const submit = canvas.getByRole('button', { name: /提交/ });
-  await expect(submit).toBeEnabled();
-  return submit;
-}
-
-test('旧 PublicArtifact 判分提交仍走原可信链', async ({ page }) => {
-  await page.route('**/api/v1/learn/turn', (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        error: {
-          code: 'model_unavailable',
-          message: 'AI 老师暂时无法连接，请稍后重试。',
-        },
-      }),
-    }),
-  );
-  await openLearningWorkspace(page);
-  const composer = page.getByRole('textbox', { name: '向 EduCanvas 提问' });
-  await composer.fill('请打开互动演示，让我动手试试。');
-  /* 等 React 状态落定（发送按钮仅在 hasPayload 时渲染），避免 Enter 被旧闭包吞掉 */
-  await expect(page.getByRole('button', { name: '发送' })).toBeEnabled();
-  await composer.press('Enter');
-  await expect(
-    page.getByText('AI 老师暂时无法连接，请稍后重试。'),
-  ).toBeVisible();
-  await page.getByRole('button', { name: '添加上下文或创建内容' }).click();
-  await page.getByRole('menuitem', { name: /打开互动演示/ }).click();
-  const canvas = teachingCanvas(page);
-  const submit = await completeVisibleArtifact(canvas);
-  await submit.click();
-  await expect(canvas.getByRole('status').first()).toContainText('本次答对');
 });

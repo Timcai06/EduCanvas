@@ -111,6 +111,7 @@ export class GatewayCanvasResourceService {
             artifact: detail.artifact,
             version: detail.latestVersion,
             latestJob: detail.latestJob,
+            versionJob: detail.versionJob,
             accessRole: access.role,
           }),
         );
@@ -173,6 +174,7 @@ export class GatewayCanvasResourceService {
         artifact: detail.artifact,
         version: detail.latestVersion,
         latestJob: detail.latestJob,
+        versionJob: detail.versionJob,
         accessRole: access.role,
       });
     } catch (error) {

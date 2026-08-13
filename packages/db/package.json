@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./internal": "./src/internal/index.ts",
+    "./workspace-resource-summary": "./src/workspace-resource-summary.ts",
     "./testing": "./src/testing/index.ts",
     "./package.json": "./package.json"
   },

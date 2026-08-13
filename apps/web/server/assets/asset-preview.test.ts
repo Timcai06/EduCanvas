@@ -206,6 +206,7 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
 
     if (preview.kind !== 'docx') return;
     expect(preview.content).toBe('<p>正文</p>');
+    expect(preview.representation?.quality).toBe('unavailable');
     expect(preview.representation?.markdown).toBeUndefined();
   });
 
@@ -227,6 +228,7 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
 
     if (preview.kind !== 'docx') return;
     expect(preview.content).toBe('<p>正文</p>');
+    expect(preview.representation?.quality).toBe('unavailable');
   });
 });
 
@@ -313,7 +315,7 @@ describe('loadOwnedAssetPreviewDetail pdf 分支（结构化阅读接入）', ()
     expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
   });
 
-  it('派生对象校验和与声明不一致时回退（markdown 不展示），质量透传', async () => {
+  it('派生对象校验和与声明不一致时回退并诚实标为 unavailable', async () => {
     loadOwnedCurrentStoredVersion.mockResolvedValue(
       version({
         mimeType: PDF_MIME,
@@ -332,7 +334,7 @@ describe('loadOwnedAssetPreviewDetail pdf 分支（结构化阅读接入）', ()
     });
 
     if (preview.kind !== 'pdf') return;
-    expect(preview.representation?.quality).toBe('structured');
+    expect(preview.representation?.quality).toBe('unavailable');
     expect(preview.representation?.markdown).toBeUndefined();
     expect(preview.fileUrl).toBe(`/api/v1/chat/assets/${ASSET_ID}/file`);
   });

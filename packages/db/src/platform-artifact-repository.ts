@@ -14,6 +14,7 @@ import {
   conversations,
 } from './schema';
 import { archiveOwnedArtifactTransaction } from './platform-artifact-archive';
+import { loadArtifactDetailRows } from './platform-artifact-detail-read';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
 
 type Database = ReturnType<typeof getDb>;
@@ -1008,6 +1009,7 @@ export class DrizzlePlatformArtifactRepository {
     artifact: PlatformArtifact;
     latestVersion: PlatformArtifactVersion | null;
     latestJob: PlatformArtifactJob | null;
+    versionJob: PlatformArtifactJob | null;
   }> {
     return this.database.transaction(
       async (tx) => {
@@ -1023,22 +1025,12 @@ export class DrizzlePlatformArtifactRepository {
           permission: 'notebook.read',
         });
 
-        const [versionRow] = await tx
-          .select()
-          .from(artifactVersions)
-          .where(eq(artifactVersions.artifactId, artifactRow.id))
-          .orderBy(desc(artifactVersions.version))
-          .limit(1);
-        const [jobRow] = await tx
-          .select()
-          .from(artifactGenerationJobs)
-          .where(eq(artifactGenerationJobs.artifactId, artifactRow.id))
-          .orderBy(desc(artifactGenerationJobs.createdAt))
-          .limit(1);
+        const detail = await loadArtifactDetailRows(tx, artifactRow.id);
         return {
           artifact: toArtifact(artifactRow),
-          latestVersion: versionRow ? toVersion(versionRow) : null,
-          latestJob: jobRow ? toJob(jobRow) : null,
+          latestVersion: detail.version ? toVersion(detail.version) : null,
+          versionJob: detail.versionJob ? toJob(detail.versionJob) : null,
+          latestJob: detail.latestJob ? toJob(detail.latestJob) : null,
         };
       },
       // Worker 在同一事务提交 Version 与 latestVersion；详情读取必须共享快照，
