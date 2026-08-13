@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from '@phosphor-icons/react';
 import { MessageMarkdown } from '@/features/chat/markdown';
 import { useState, type ReactNode } from 'react';
 
@@ -22,6 +23,8 @@ export type ReadingRepresentation =
     }
   | null
   | undefined;
+
+export type ReadingQuality = NonNullable<ReadingRepresentation>['quality'];
 
 /** 四态质量 → 阅读入口决策：structured/degraded 有派生文本可读，其余只提示。 */
 export function resolveReadingAvailability(
@@ -53,12 +56,36 @@ export function resolveReadingAvailability(
   };
 }
 
+/** 质量提示文案与色调：只返回一行说明，视觉由浮层胶囊统一承载。 */
+export function resolveQualityNote(
+  representation: ReadingRepresentation,
+): { text: string; tone: 'info' | 'error' } | null {
+  switch (representation?.quality) {
+    case 'processing':
+      return { text: '文档转换处理中，完成后可切换到结构化阅读。', tone: 'info' };
+    case 'failed':
+      return { text: '结构化转换失败；仍可预览原件。', tone: 'error' };
+    case 'degraded_plain_text':
+      return {
+        text: '结构化转换当前不可用，已降级为纯文本；原件保留。',
+        tone: 'info',
+      };
+    case 'unavailable':
+      return { text: '结构化内容暂不可用；仍可查看原件。', tone: 'info' };
+    default:
+      return null;
+  }
+}
+
 /**
  * 原件/结构化阅读切换壳（ADR-0026 决定 6）。原件视图始终是默认视图，
  * 结构化/降级文本派生可用时提供显式切换，不默认用派生 Markdown 顶替原件
  * renderer。structured 与 degraded_plain_text 在切换标签与标注上严格区分
  * （降级结果绝不标成 structured）。initialView 仅供测试注入结构化视图的
  * 静态渲染；真实交互从原件视图开始。
+ *
+ * 质量提示是文档流外的底部浮动胶囊：不占原件可视高度、不随内容滚动，
+ * 可手动关闭；quality 变化时重新出现。
  */
 export function ReadingViewSwitcher({
   representation,
@@ -71,27 +98,15 @@ export function ReadingViewSwitcher({
   initialView?: 'original' | 'structured';
 }) {
   const [view, setView] = useState<'original' | 'structured'>(initialView);
+  /* 记录被关闭提示对应的 quality：按值记忆，quality 变为其他值后重新出现，
+     回到同一值时保持关闭（用户已看过该状态）。 */
+  const [dismissedQuality, setDismissedQuality] = useState<ReadingQuality | null>(
+    null,
+  );
   const availability = resolveReadingAvailability(representation);
   const readableMarkdown = availability.markdown;
-
-  const qualityNote =
-    representation?.quality === 'processing' ? (
-      <div className="rounded-2xl border border-line bg-card p-3 text-sm text-ink-muted">
-        文档转换处理中，完成后可切换到结构化阅读。
-      </div>
-    ) : representation?.quality === 'failed' ? (
-      <div className="rounded-2xl border border-cinnabar/25 bg-cinnabar-soft p-3 text-sm text-cinnabar">
-        结构化转换失败；仍可预览原件。
-      </div>
-    ) : representation?.quality === 'degraded_plain_text' ? (
-      <div className="rounded-2xl border border-line bg-card p-3 text-sm text-ink-muted">
-        结构化转换当前不可用，已降级为纯文本；原件保留。
-      </div>
-    ) : representation?.quality === 'unavailable' ? (
-      <div className="rounded-2xl border border-line bg-card p-3 text-sm text-ink-muted">
-        结构化内容暂不可用；仍可查看原件。
-      </div>
-    ) : null;
+  const qualityNote = resolveQualityNote(representation);
+  const noteDismissed = dismissedQuality === representation?.quality;
 
   if (view === 'structured' && readableMarkdown) {
     const degraded = availability.degraded;
@@ -123,7 +138,7 @@ export function ReadingViewSwitcher({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
         <p className="text-xs text-ink-muted">原件预览</p>
         {readableMarkdown ? (
@@ -152,8 +167,27 @@ export function ReadingViewSwitcher({
         ) : null}
       </div>
       <div className="min-h-0 flex-1">{renderOriginal()}</div>
-      {qualityNote ? (
-        <div className="shrink-0 px-4 pb-4">{qualityNote}</div>
+      {qualityNote && !noteDismissed ? (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 w-max max-w-[calc(100%-2rem)] -translate-x-1/2">
+          <div
+            role="status"
+            className={`pointer-events-auto flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-[var(--shadow-float)] backdrop-blur-md ${
+              qualityNote.tone === 'error'
+                ? 'border-cinnabar/25 bg-cinnabar-soft text-cinnabar'
+                : 'border-line bg-card/95 text-ink-muted'
+            }`}
+          >
+            <span className="min-w-0">{qualityNote.text}</span>
+            <button
+              type="button"
+              aria-label="关闭提示"
+              onClick={() => setDismissedQuality(representation?.quality ?? null)}
+              className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <X aria-hidden="true" size={12} />
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );
