@@ -98,6 +98,9 @@ test('@smoke Live Voice 连续两轮只提交唯一 Turn，并按播放时钟呈
     snapshot.clientFrameTypes.filter((type) => type === 'start'),
   ).toHaveLength(3);
 
+  // 第三轮 TTS 仍可能处于可听播放；等待播放器自己的 ended/active-set 事实，
+  // 不用固定时间猜测状态何时回到 listening。
+  await waitForAudiblePlaybackSilence(page);
   await expect(dialog.getByText('正在聆听')).toBeVisible({ timeout: 8_000 });
   await dialog.getByRole('button', { name: '结束 Live Voice' }).click();
   await expect(dialog).toHaveCount(0);
