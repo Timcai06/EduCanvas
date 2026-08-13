@@ -13,6 +13,10 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import { uploadWorkspaceSource } from '@/features/assets/source-intake';
 import type { AssetStatusNotice } from '@/features/assets/asset-status';
 import { useArtifactGeneration } from '@/features/canvas/artifact-generation-flow';
+import type {
+  GenerationPhase,
+  GenerationState,
+} from '@/features/canvas/artifact-generation-flow';
 import {
   createArtifact,
   type ArtifactDetail,
@@ -62,9 +66,57 @@ import {
 import { saveResourceAnnotation } from '@/features/canvas/resource-annotation-client';
 import { useSurfacePositionPersistence } from './use-surface-position-persistence';
 import { useResourceDock } from './use-resource-dock';
+import { showToast } from '@/components/ui/toast';
 import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
 import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
+
+export interface GenerationSettledToastSpec {
+  readonly title: string;
+  readonly description: string;
+  readonly tone: 'success' | 'error';
+  readonly actionLabel?: string;
+}
+
+/**
+ * 生成观察收敛到终态时的 toast 文案判定（纯函数，便于测试）：
+ * 修订失败虽然 phase='ready'（旧版本仍可用），但必须报失败而非成功。
+ */
+export function describeGenerationSettledToast(
+  generation: GenerationState,
+): GenerationSettledToastSpec | null {
+  if (generation.phase !== 'ready' && generation.phase !== 'failed') {
+    return null;
+  }
+  if (generation.phase === 'failed') {
+    if (generation.outcome === 'cancelled') return null;
+    return {
+      title: '产物生成失败',
+      description: `《${generation.title}》未能完成`,
+      tone: 'error',
+    };
+  }
+  if (generation.revisionOutcome === 'failed') {
+    return {
+      title: '产物修订失败',
+      description: `《${generation.title}》保持原版本`,
+      tone: 'error',
+    };
+  }
+  if (
+    generation.revisionOutcome !== undefined &&
+    generation.revisionOutcome !== 'ready'
+  ) {
+    /* 本地取消观察（pending）或任务仍在后台（cancelled/timed_out）：不通知。 */
+    return null;
+  }
+  return {
+    title: '产物已生成',
+    description: `《${generation.title}》已就绪`,
+    tone: 'success',
+    ...(generation.artifactId ? { actionLabel: '打开' } : {}),
+  };
+}
 
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
@@ -173,6 +225,32 @@ export function useGeneralWorkspaceController(options: {
     }
     prevOpenDetailRef.current = detail;
   }, [artifactFlow.openDetail, workspace]);
+
+  /* 生成完成/失败 toast：只在 generating→终态转换时通知一次，刷新页面不重放。
+     本地取消（cancelled）不通知——任务仍在后台运行。 */
+  const prevGenerationPhaseRef = useRef<GenerationPhase | undefined>(undefined);
+  useEffect(() => {
+    const generation = artifactFlow.generation;
+    const phase = generation?.phase;
+    const previous = prevGenerationPhaseRef.current;
+    prevGenerationPhaseRef.current = phase;
+    if (previous !== 'generating' || !generation) return;
+    const spec = describeGenerationSettledToast(generation);
+    if (!spec) return;
+    showToast({
+      ...spec,
+      ...(spec.actionLabel && generation.artifactId
+        ? {
+            onAction: () => {
+              const artifactId = generation.artifactId;
+              if (artifactId) {
+                studioOpenActions.actions.openArtifact(artifactId);
+              }
+            },
+          }
+        : {}),
+    });
+  }, [artifactFlow.generation, studioOpenActions]);
 
   const flipStateRef = useRef<Flip.FlipState | null>(null);
   const pendingMenuConsumed = useRef(false);

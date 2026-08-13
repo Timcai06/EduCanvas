@@ -1,51 +1,40 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import type { ReactElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { ConversationArtifactCard } from './conversation-artifact-card';
-import type { MessageArtifactDTO } from './messages';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { clampProgress } from './conversation-artifact-card';
 
-const artifact: MessageArtifactDTO = {
-  id: 'artifact-1',
-  kind: 'mind_map',
-  title: '函数思维导图',
-  status: 'proposed',
-  latestVersion: 0,
-};
+const source = readFileSync(
+  fileURLToPath(new URL('./conversation-artifact-card.tsx', import.meta.url)),
+  'utf8',
+);
 
 describe('ConversationArtifactCard', () => {
-  it('提供稳定的产物打开名称和生成状态', () => {
-    const html = renderToStaticMarkup(
-      ConversationArtifactCard({ artifact, onOpen: vi.fn() }),
-    );
-
-    expect(html).toContain('aria-label="打开产物：函数思维导图"');
-    expect(html).toContain('思维导图');
-    expect(html).toContain('正在生成');
+  it('clampProgress 把服务端进度夹到 0-100', () => {
+    expect(clampProgress(42)).toBe(42);
+    expect(clampProgress(-3)).toBe(0);
+    expect(clampProgress(130)).toBe(100);
+    expect(clampProgress(66.6)).toBe(67);
   });
 
-  it('每次点击都使用同一 Artifact ID 重新打开 Canvas', () => {
-    const onOpen = vi.fn();
-    const element = ConversationArtifactCard({
-      artifact: { ...artifact, status: 'active', latestVersion: 2 },
-      onOpen,
-    }) as ReactElement<{ onClick: () => void }>;
-
-    element.props.onClick();
-    element.props.onClick();
-
-    expect(onOpen).toHaveBeenNthCalledWith(1, 'artifact-1');
-    expect(onOpen).toHaveBeenNthCalledWith(2, 'artifact-1');
+  it('proposed 态渲染 spinner 与进度条，完成时只播放一次脉冲', () => {
+    expect(source).toContain('CircleNotch');
+    expect(source).toContain('animate-spin');
+    expect(source).toContain('role="progressbar"');
+    expect(source).toContain('aria-valuenow');
+    expect(source).toContain('生成中 ');
+    expect(source).toContain("previous !== 'proposed'");
+    expect(source).toContain("artifact.status !== 'active'");
+    expect(source).toContain('prefers-reduced-motion');
   });
 
-  it('区分取消与生成失败', () => {
-    const html = renderToStaticMarkup(
-      ConversationArtifactCard({
-        artifact: { ...artifact, status: 'cancelled' },
-        onOpen: vi.fn(),
-      }),
-    );
+  it('失败与取消有独立视觉与文案', () => {
+    expect(source).toContain('bg-danger-soft');
+    expect(source).toContain('生成失败');
+    expect(source).toContain('已取消');
+  });
 
-    expect(html).toContain('已取消');
-    expect(html).not.toContain('生成失败');
+  it('卡片不复制 Canvas 内容或详情请求', () => {
+    expect(source).not.toContain('fetchArtifactDetail');
+    expect(source).not.toContain('fetchCanvasResource');
   });
 });

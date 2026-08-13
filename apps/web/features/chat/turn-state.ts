@@ -364,7 +364,9 @@ export function teachingTurnReducer(
                 }
               : event.type === 'artifact.failed'
                 ? { ...artifact, status: 'failed' as const }
-                : artifact,
+                : event.type === 'artifact.generation_progress'
+                  ? { ...artifact, progress: event.progress }
+                  : artifact,
         ),
       })),
     };

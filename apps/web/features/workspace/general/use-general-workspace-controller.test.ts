@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtifactDetail } from '@/features/canvas/artifact-client';
+import type { GenerationState } from '@/features/canvas/artifact-generation-flow';
 import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
 import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
+import { describeGenerationSettledToast } from './use-general-workspace-controller';
 
 const detail = {
   artifact: {
@@ -50,5 +52,88 @@ describe('shouldConsumeTurnScopedInputs（Turn 一次性输入消费）', () => 
     expect(shouldConsumeTurnScopedInputs('cancelled')).toBe(false);
     expect(shouldConsumeTurnScopedInputs('interrupted')).toBe(false);
     expect(shouldConsumeTurnScopedInputs('rejected')).toBe(false);
+  });
+});
+
+function generation(
+  partial: Partial<GenerationState>,
+): GenerationState {
+  return {
+    phase: 'ready',
+    outcome: 'ready',
+    kind: 'note',
+    title: '课堂笔记',
+    ...partial,
+  };
+}
+
+describe('describeGenerationSettledToast（生成终态 toast 判定）', () => {
+  it('ready 报成功并带打开动作（有 artifactId 时）', () => {
+    expect(
+      describeGenerationSettledToast(
+        generation({ artifactId: 'artifact-1' }),
+      ),
+    ).toMatchObject({
+      title: '产物已生成',
+      tone: 'success',
+      actionLabel: '打开',
+    });
+  });
+
+  it('修订失败虽 phase=ready 也必须报失败，不报成功', () => {
+    expect(
+      describeGenerationSettledToast(
+        generation({
+          artifactId: 'artifact-1',
+          revisionOutcome: 'failed',
+        }),
+      ),
+    ).toMatchObject({ title: '产物修订失败', tone: 'error' });
+  });
+
+  it('修订观察的 pending/cancelled/timed_out 不产生通知', () => {
+    expect(
+      describeGenerationSettledToast(generation({ revisionOutcome: 'pending' })),
+    ).toBeNull();
+    expect(
+      describeGenerationSettledToast(
+        generation({ revisionOutcome: 'cancelled' }),
+      ),
+    ).toBeNull();
+    expect(
+      describeGenerationSettledToast(
+        generation({ revisionOutcome: 'timed_out' }),
+      ),
+    ).toBeNull();
+  });
+
+  it('无 artifactId 的 ready 成功通知不带打开动作', () => {
+    const spec = describeGenerationSettledToast(generation({}));
+    expect(spec).toMatchObject({
+      title: '产物已生成',
+      tone: 'success',
+    });
+    expect(spec?.actionLabel).toBe(undefined);
+  });
+
+  it('生成失败报错误文案；本地取消不产生任何通知', () => {
+    expect(
+      describeGenerationSettledToast(
+        generation({ phase: 'failed', outcome: 'failed' }),
+      ),
+    ).toMatchObject({ title: '产物生成失败', tone: 'error' });
+    expect(
+      describeGenerationSettledToast(
+        generation({ phase: 'failed', outcome: 'cancelled' }),
+      ),
+    ).toBeNull();
+  });
+
+  it('未收敛（generating/confirm）不产生通知', () => {
+    expect(
+      describeGenerationSettledToast(
+        generation({ phase: 'generating', outcome: 'pending' }),
+      ),
+    ).toBeNull();
   });
 });

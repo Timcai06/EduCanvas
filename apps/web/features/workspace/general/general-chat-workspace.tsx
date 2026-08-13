@@ -19,6 +19,7 @@ import { GENERAL_ASSET_ENDPOINT } from './general-chat-config';
 import { isCreatableArtifactKind } from '@/features/canvas/artifact-client';
 import { deriveDeskAgentPresence } from './desk-agent-phase';
 import { DeskInkstoneIndicator } from './desk-inkstone-indicator';
+import { ToastViewport } from '@/components/ui/toast';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -165,6 +166,7 @@ export function GeneralChatWorkspace({
           ctrl.setAssetPanel(null);
         }}
       />
+      <ToastViewport />
     </div>
   );
 }
