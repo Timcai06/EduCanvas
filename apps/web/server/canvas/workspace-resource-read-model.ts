@@ -159,6 +159,9 @@ type ArtifactFact = Awaited<
   ReturnType<DrizzleWorkspaceResourceSummaryRepository['listArtifactFactsPage']>
 >['items'][number];
 
+const asProjectionJob = (job: ArtifactFact['latestJob']) =>
+  job ? { ...job, checkpoint: {}, queueJobKey: null } : null;
+
 export function validateWorkspaceArtifactFact(fact: ArtifactFact): void {
   if (!['proposed', 'active', 'archived'].includes(fact.artifact.status)) {
     throw new WorkspaceResourceReadModelError('resource_not_found');
@@ -333,20 +336,8 @@ export async function listWorkspaceResourceSummaries(input: {
           checksum: null,
         }
       : null;
-    const latestJob = fact.latestJob
-      ? {
-          ...fact.latestJob,
-          checkpoint: {},
-          queueJobKey: null,
-        }
-      : null;
-    const versionJob = fact.versionJob
-      ? {
-          ...fact.versionJob,
-          checkpoint: {},
-          queueJobKey: null,
-        }
-      : null;
+    const latestJob = asProjectionJob(fact.latestJob);
+    const versionJob = asProjectionJob(fact.versionJob);
     const resource = projectOwnedArtifactResource({
       notebookId: conversation.spaceId,
       artifact: {

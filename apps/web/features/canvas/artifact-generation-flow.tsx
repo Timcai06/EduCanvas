@@ -189,12 +189,10 @@ export function projectRevisionPollResult(
   const objectOutcome = hasUsableVersion
     ? 'ready'
     : outcomeFromPollOutcome(result.outcome);
-  const revisionOutcome =
-    result.outcome === 'ready' ? undefined : result.outcome;
   return {
     phase: hasUsableVersion ? 'ready' : phaseFromPollOutcome(result.outcome),
     outcome: objectOutcome,
-    revisionOutcome,
+    revisionOutcome: result.outcome === 'ready' ? undefined : result.outcome,
     kind,
     artifactId,
     title: result.detail.artifact.title || titleFallback,

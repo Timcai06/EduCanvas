@@ -20,6 +20,16 @@ import {
   assetVersions,
   assets,
 } from './schema';
+import {
+  safeWorkspaceSourceReferences,
+  type WorkspaceArtifactSummaryFact,
+  type WorkspaceResourceMemberFacts,
+} from './workspace-resource-summary-types';
+
+export type {
+  WorkspaceArtifactSummaryFact,
+  WorkspaceResourceMemberFacts,
+} from './workspace-resource-summary-types';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -67,79 +77,6 @@ function toSourceSnapshot(
   };
 }
 
-function safeSourceReferences(value: unknown): readonly {
-  assetId: string;
-  versionId: string;
-}[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((candidate) =>
-    typeof candidate === 'object' &&
-    candidate !== null &&
-    'assetId' in candidate &&
-    typeof candidate.assetId === 'string' &&
-    'versionId' in candidate &&
-    typeof candidate.versionId === 'string'
-      ? [{ assetId: candidate.assetId, versionId: candidate.versionId }]
-      : [],
-  );
-}
-
-export interface WorkspaceArtifactSummaryFact {
-  readonly accessRole: 'owner' | 'editor' | 'contributor' | 'viewer';
-  readonly artifact: {
-    readonly id: string;
-    readonly spaceId: string;
-    readonly conversationId: string | null;
-    readonly ownerSubjectId: string;
-    readonly kind: string;
-    readonly trustTier: string;
-    readonly title: string;
-    readonly status: string;
-    readonly latestVersion: number;
-    readonly createdAt: string;
-    readonly updatedAt: string;
-  };
-  readonly latestVersion: {
-    readonly id: string;
-    readonly artifactId: string;
-    readonly version: number;
-    readonly generatedBy: string | null;
-    readonly createdByOperationId: string | null;
-    readonly generationJobId: string | null;
-    readonly createdAt: string;
-  } | null;
-  readonly latestJob: {
-    readonly id: string;
-    readonly artifactId: string;
-    readonly operationId: string | null;
-    readonly status: string;
-    readonly progress: number | null;
-    readonly failureCode: string | null;
-    readonly params: Readonly<Record<string, unknown>>;
-  } | null;
-  readonly versionJob: {
-    readonly id: string;
-    readonly artifactId: string;
-    readonly operationId: string | null;
-    readonly status: string;
-    readonly progress: number | null;
-    readonly failureCode: string | null;
-    readonly params: Readonly<Record<string, unknown>>;
-  } | null;
-}
-
-export interface WorkspaceResourceMemberFacts {
-  readonly sourceBindings: ReadonlyMap<string, boolean>;
-  readonly surfacePositions: ReadonlyMap<
-    string,
-    {
-      readonly zone: 'center' | 'periphery' | 'margin';
-      readonly restState: 'open' | 'folded' | 'pinned';
-      readonly updatedAt: string;
-    }
-  >;
-}
-
 async function requireReadAccess(
   database: Database,
   input: {
@@ -155,13 +92,8 @@ async function requireReadAccess(
   });
 }
 
-/**
- * 资源工作台专用的窄只读模型。
- *
- * 查询只选择摘要投影需要的字段；Artifact 正文、objectKey、完整任务参数、
- * checkpoint 与 queue key 不会进入内存。版本与任务按整页 ID 批量读取，查询数
- * 随条目数保持不变，避免列表阶段调用 getArtifactDetail 形成 N+1。
- */
+/** 资源工作台窄读模型只选摘要字段，不载入正文、objectKey 或完整任务参数。
+ * 版本与任务按整页 ID 批量读取，查询数保持有界，避免详情 N+1。 */
 export class DrizzleWorkspaceResourceSummaryRepository {
   constructor(private readonly providedDatabase?: Database) {}
 
@@ -374,18 +306,20 @@ export class DrizzleWorkspaceResourceSummaryRepository {
           items: pageRows.map((artifact) => {
             const version = latestVersions.get(artifact.id) ?? null;
             const job = latestJobs.get(artifact.id);
-            const provenanceSources = safeSourceReferences(
+            const provenanceSources = safeWorkspaceSourceReferences(
               job?.provenanceSources,
             );
-            const selectedSources = safeSourceReferences(job?.selectedSources);
+            const selectedSources = safeWorkspaceSourceReferences(
+              job?.selectedSources,
+            );
             const versionGenerationJobId = version?.generationJobId;
             const versionJob = versionGenerationJobId
               ? (versionJobsById.get(versionGenerationJobId) ?? null)
               : null;
-            const versionJobProvenanceSources = safeSourceReferences(
+            const versionJobProvenanceSources = safeWorkspaceSourceReferences(
               versionJob?.provenanceSources,
             );
-            const versionJobSelectedSources = safeSourceReferences(
+            const versionJobSelectedSources = safeWorkspaceSourceReferences(
               versionJob?.selectedSources,
             );
             return {
