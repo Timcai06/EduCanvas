@@ -37,6 +37,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
     let speechRequests = 0;
     let speechAborts = 0;
     let holdNext = false;
+    let holdNextSpeech = false;
     let nextAssistantText = '';
 
     const frame = (
@@ -259,6 +260,7 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
         const shouldHold = holdNext;
         holdNext = false;
         nextAssistantText = '';
+        holdNextSpeech = shouldHold;
         events.push('turn.request');
 
         const stream = new ReadableStream<Uint8Array>({
@@ -324,23 +326,41 @@ export async function installFakeLiveVoice(page: Page): Promise<void> {
       if (url.pathname === '/api/v1/voice/live/speech' && method === 'POST') {
         speechRequests += 1;
         events.push('speech.request');
+        const shouldHold = holdNextSpeech;
+        holdNextSpeech = false;
         let aborted = false;
-        init?.signal?.addEventListener(
-          'abort',
-          () => {
-            if (aborted) return;
-            aborted = true;
-            speechAborts += 1;
-            events.push('speech.abort');
-          },
-          { once: true },
-        );
         const pcm = new Uint8Array(96_000);
         const view = new DataView(pcm.buffer);
         for (let offset = 0; offset < pcm.byteLength; offset += 2) {
           view.setInt16(offset, offset % 8 === 0 ? 2_048 : -2_048, true);
         }
-        return new Response(pcm, {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            /* 先交付首包让产品进入 audible 状态；hold turn 的剩余响应
+             * 保持在途，插话必须通过真实 AbortSignal 停止 speech fetch。 */
+            controller.enqueue(shouldHold ? pcm.slice(0, 12_000) : pcm);
+            if (!shouldHold) {
+              controller.close();
+              return;
+            }
+            init?.signal?.addEventListener(
+              'abort',
+              () => {
+                if (aborted) return;
+                aborted = true;
+                speechAborts += 1;
+                events.push('speech.abort');
+                try {
+                  controller.error(new DOMException('aborted', 'AbortError'));
+                } catch {
+                  // The stream may already have been closed by the consumer.
+                }
+              },
+              { once: true },
+            );
+          },
+        });
+        return new Response(body, {
           headers: {
             'content-type': 'audio/L16; rate=24000; channels=1',
           },
