@@ -190,6 +190,41 @@ describe('WebOperationImageArtifacts', () => {
 
     expect(operationImages.events()).toHaveLength(1);
   });
+
+  it('同一 Turn 的精确请求稳定重试，标题/提示词/尺寸变化保持同键但产生不同指纹', async () => {
+    const createArtifactWithGenerationJob = vi
+      .fn()
+      .mockResolvedValue({ artifact, job });
+    const { operationImages } = createOperationImages(
+      createArtifactWithGenerationJob,
+    );
+    const tool = operationImages.createTool();
+    const exactRequest = {
+      title: '光合作用示意图',
+      prompt: '画出光合作用过程。',
+      size: '1024x1024' as const,
+    };
+
+    await tool.handler(exactRequest, context);
+    await tool.handler({ ...exactRequest }, context);
+    await tool.handler({ ...exactRequest, size: '1024x1536' }, context);
+    await tool.handler({ ...exactRequest, prompt: '画出叶绿体结构。' }, context);
+    await tool.handler({ ...exactRequest, title: '叶绿体示意图' }, context);
+
+    const calls = createArtifactWithGenerationJob.mock.calls;
+    expect(calls[0]![0].idempotencyKey).toBe(
+      'general-turn-artifact:operation-1',
+    );
+    expect(calls.slice(1).every(
+      ([input]) => input.idempotencyKey === calls[0]![0].idempotencyKey,
+    )).toBe(true);
+    expect(calls[1]![0].requestFingerprint).toBe(
+      calls[0]![0].requestFingerprint,
+    );
+    expect(calls.slice(2).every(
+      ([input]) => input.requestFingerprint !== calls[0]![0].requestFingerprint,
+    )).toBe(true);
+  });
 });
 
 describe('isImageGenerationConfigured', () => {

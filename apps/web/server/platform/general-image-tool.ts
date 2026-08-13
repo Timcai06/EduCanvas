@@ -18,7 +18,10 @@ import {
 } from '@educanvas/model-gateway';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { generalTurnArtifactIdempotency } from './operation-artifact-idempotency';
+import {
+  generalTurnArtifactIdempotency,
+  type GeneralTurnArtifactSemanticRequest,
+} from './operation-artifact-idempotency';
 
 /** 生成图像的 Artifact 类型；与 worker 分支和 Renderer 注册表共用同一字面量。 */
 export const GENERATED_IMAGE_ARTIFACT_KIND = 'generated_image' as const;
@@ -191,7 +194,12 @@ export class WebOperationImageArtifacts {
       trustTier: 'tier2',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
-      ...generalTurnArtifactIdempotency(this.input.operationId),
+      ...generalTurnArtifactIdempotency(this.input.operationId, {
+        kind: GENERATED_IMAGE_ARTIFACT_KIND,
+        title: toolInput.title,
+        prompt: toolInput.prompt,
+        size: toolInput.size,
+      } satisfies GeneralTurnArtifactSemanticRequest),
       params: { image: { prompt: toolInput.prompt, size: toolInput.size } },
     });
     if (created.artifact.kind !== GENERATED_IMAGE_ARTIFACT_KIND) {

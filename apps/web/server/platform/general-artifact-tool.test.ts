@@ -352,4 +352,48 @@ describe('WebOperationArtifacts', () => {
       status: 'proposed',
     });
   });
+
+  it('同一 Turn 的精确请求稳定重试，语义字段变化保持同键但产生不同指纹', async () => {
+    const createArtifactWithGenerationJob = vi
+      .fn()
+      .mockResolvedValue({ artifact, job });
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+        sourceReferences: [
+          { assetId: 'asset-1', versionId: 'version-1', representation: null },
+        ],
+      },
+      { createArtifactWithGenerationJob },
+    );
+    const tool = operationArtifacts.createTool();
+    const exactRequest = {
+      kind: 'mind_map' as const,
+      title: '分数思维导图',
+      instruction: '整理课程内容。',
+    };
+
+    await tool.handler(exactRequest, context);
+    await tool.handler({ ...exactRequest }, context);
+    await tool.handler(
+      { ...exactRequest, instruction: '改写课程内容。' },
+      context,
+    );
+
+    const calls = createArtifactWithGenerationJob.mock.calls;
+    expect(calls[0]![0].idempotencyKey).toBe(
+      'general-turn-artifact:operation-1',
+    );
+    expect(calls[1]![0].idempotencyKey).toBe(calls[0]![0].idempotencyKey);
+    expect(calls[1]![0].requestFingerprint).toBe(
+      calls[0]![0].requestFingerprint,
+    );
+    expect(calls[2]![0].idempotencyKey).toBe(calls[0]![0].idempotencyKey);
+    expect(calls[2]![0].requestFingerprint).not.toBe(
+      calls[0]![0].requestFingerprint,
+    );
+  });
 });

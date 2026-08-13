@@ -19,7 +19,10 @@ import {
 } from '@educanvas/db';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { generalTurnArtifactIdempotency } from './operation-artifact-idempotency';
+import {
+  generalTurnArtifactIdempotency,
+  type GeneralTurnArtifactSemanticRequest,
+} from './operation-artifact-idempotency';
 
 const createCanvasArtifactInputSchema = artifactProposalSchema;
 
@@ -166,7 +169,14 @@ export class WebOperationArtifacts {
       trustTier: toolInput.kind === 'web_app' ? 'tier2' : 'tier1',
       title: toolInput.title,
       taskIdentifier: ARTIFACT_GENERATE_TASK,
-      ...generalTurnArtifactIdempotency(this.input.operationId),
+      ...generalTurnArtifactIdempotency(this.input.operationId, {
+        kind: toolInput.kind,
+        title: toolInput.title,
+        instruction: toolInput.instruction,
+        provenance: {
+          sources: [...(this.input.sourceReferences ?? [])],
+        },
+      } satisfies GeneralTurnArtifactSemanticRequest),
       params: {
         generation: { instruction: toolInput.instruction },
         provenance: {
