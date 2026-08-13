@@ -216,6 +216,12 @@ describe('resource-access boundary', () => {
           resourceId: artifactId,
         });
 
+        expect(projected.status).toBe('ready');
+        expect(projected.version).toMatchObject({
+          versionId: 'version-v1',
+          sequence: 1,
+        });
+        expect(projected.allowedActions).toEqual(['view', 'annotate']);
         expect(projected.provenance.sourceResourceIds).toEqual([
           'usable-source',
         ]);
