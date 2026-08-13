@@ -134,7 +134,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     const generationJob = await repository.createGenerationJob({
       artifactId: artifact.id,
       trustedSubjectId: owner,
-      operationId: '10000000-0000-4000-8000-000000000100',
+      operationId: null,
       params: {
         provenance: {
           sources: [
@@ -156,7 +156,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     const lifecycleJob = await repository.createGenerationJob({
       artifactId: artifact.id,
       trustedSubjectId: owner,
-      operationId: '10000000-0000-4000-8000-000000000101',
+      operationId: null,
       params: { revision: { instruction: '失败重试修订' } },
     });
 
@@ -173,7 +173,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     });
     expect(detail.versionJob).toMatchObject({
       id: generationJob.id,
-      operationId: '10000000-0000-4000-8000-000000000100',
+      operationId: null,
       status: 'queued',
       params: {
         provenance: {
@@ -185,7 +185,7 @@ describeWithDatabase('平台 Artifact 仓储', () => {
     });
     expect(detail.latestJob).toMatchObject({
       id: lifecycleJob.id,
-      operationId: '10000000-0000-4000-8000-000000000101',
+      operationId: null,
     });
   });
 
