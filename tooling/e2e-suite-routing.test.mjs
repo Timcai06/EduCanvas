@@ -101,7 +101,8 @@ describe('E2E suite routing', () => {
     );
 
     assert.equal(story.match(/test\(\s*['"]@smoke\b/g)?.length, 1);
-    assert.match(story, /speechAbort/);
+    assert.match(story, /audibleSourcesBeforeInterruption/);
+    assert.match(story, /playback\.audible\.stop/);
     assert.match(story, /asset-processing-1/);
     assert.match(fixture, /MediaStreamDestination/);
     assert.match(fixture, /voice-fixture\.invalid/);
