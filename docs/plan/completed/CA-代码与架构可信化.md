@@ -1,15 +1,15 @@
 # 代码与架构可信化
 
 - 任务分配名：`CA 代码与架构可信化`
-- 状态：`active`（协调状态 `WAITING_REVIEW`；最终 PASS 与两线集成仍由 reviewer 执行）
+- 状态：`completed`（唯一 reviewer 已验收并完成本地 RM/CA 集成；CA06 保持 `DEFERRED`）
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-13
 - 默认分支审计基线：`origin/main@b0d0ddb21430b28d37dd663eb7fcb6963315b7e8`
 - 计划编写工作区：`fix/live-voice-orb@a33c225398bd4dda069e79ed84d5fc02a3efff96`
-- 关联计划：[LC Live 与 Canvas 输出](../completed/LC-Live与Canvas输出产品化.md)、
-  [RM 统一资源工作台](RM-统一资源工作台.md)、[KM 知识记忆](KM-知识记忆.md)、
-  [O 删除队列](O-删除队列.md)、[G 产品发布闭环](G-产品发布闭环.md)
+- 关联计划：[LC Live 与 Canvas 输出](LC-Live与Canvas输出产品化.md)、
+  [RM 统一资源工作台](RM-统一资源工作台.md)、[KM 知识记忆](../active/KM-知识记忆.md)、
+  [O 删除队列](../active/O-删除队列.md)、[G 产品发布闭环](../active/G-产品发布闭环.md)
 - 联合执行模式：同一分支、同一工作树、单一代码任务队列
 - 远端 PR 策略：本轮不审计、不合并、不依赖远端 PR；Desktop 主链任务延后
 
@@ -28,8 +28,24 @@
 - CX02 `673087a9ab96316d0edac3d521a861b66d97dddf` 只读核对
   `EduCanvas-rm@ae7c82276c4d44fa2d7821947513eb5e3a4db4b5`，没有复制或合并 RM 代码；
 - CX03 回写当前实现事实与本地证据。计划在 reviewer 最终接受前保留于 `active/`；最终候选
-  SHA、同 SHA 门禁与残余冲突以 `CA_STATUS.md` 为准。本地完成不等于 PASS；CA06 继续
-  `DEFERRED`。
+  SHA、同 SHA 门禁与残余冲突以 `CA_STATUS.md` 为准；最终 CA 候选 `e3bf580` 已由唯一
+  reviewer 接受并集成。CA06 继续 `DEFERRED`，不冒充本轮已交付能力。
+
+## 最终 Reviewer 结档（2026-08-13）
+
+- CA 候选 `e3bf580a3610ca64b6b2deaf560eeaaf2ed67659` 与 RM 候选
+  `ae7c82276c4d44fa2d7821947513eb5e3a4db4b5` 已合入本地集成分支；代码与 E2E 接缝候选为
+  `908489bc186d4f28e3cffe37c6167e436aca5881`。
+- Reviewer 解决了 `general-workspace-layout.tsx`、ADR-0028、typed Turn outcome 与陈旧
+  PlusMenu E2E 接缝；失败、取消、拒绝或中断的 Turn 不再错误消费一次性上下文。
+- 联合门禁通过：Turbo unit 25/25（Web 213 files / 1596 tests）、typecheck 25/25 加 E2E、
+  PostgreSQL DB 366 与 Worker 54、Migration 17/17、Desktop Chromium 50/50、build 8/8、
+  file governance 2002 files 与 `git diff --check`。
+- 根 `pnpm lint` 的 workspace lint 4/4 通过；wrapper 仅因扫描三个被 Git 忽略的
+  `apps/desktop/out/**` 生成 bundle 返回 1，未修改生成物，不能写成全绿。
+- 按项目负责人指示，集成候选没有重跑移动 Chromium 或 Firefox；Safari、真实麦克风、真实
+  Provider/MinerU、远端 nightly 与发布环境继续标记为未验证，不阻塞本地竞赛范围结档。
+- 完整联合证据见[RM/CA 最终集成交付与结档证据](../../06-quality/22-RM-CA最终集成交付与结档证据.md)。
 
 ## 一、执行结论
 

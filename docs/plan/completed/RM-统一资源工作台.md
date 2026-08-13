@@ -1,17 +1,33 @@
 # 统一资源工作台产品化
 
 - 任务分配名：`RM 统一资源工作台`
-- 状态：`active`
+- 状态：`completed`（唯一 reviewer 已验收并完成本地 RM/CA 集成）
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex
 - 最后验证时间：2026-08-12
 - 起始本地基线：`a33c225398bd4dda069e79ed84d5fc02a3efff96`
-- 前置计划：[LC Live 与 Canvas 输出](../completed/LC-Live与Canvas输出产品化.md)
+- 前置计划：[LC Live 与 Canvas 输出](LC-Live与Canvas输出产品化.md)
 - 输入决策：[ADR-0026](../../09-decisions/0026-多模态输入原件与派生表示边界.md)
 - 输出决策：[ADR-0027](../../09-decisions/0027-Canvas多形态输出与交互运行时边界.md)
 - 工作面架构：[统一 Canvas 工作面](../../02-architecture/04-统一画布工作面.md)
 - 联合执行计划：[CA 代码与架构可信化](CA-代码与架构可信化.md)
 - 联合执行模式：同一分支、同一工作树、单一代码任务队列
+
+## 最终 Reviewer 结档（2026-08-13）
+
+- RM 候选 `ae7c82276c4d44fa2d7821947513eb5e3a4db4b5` 已由唯一 reviewer 接受，并与
+  CA 候选 `e3bf580a3610ca64b6b2deaf560eeaaf2ed67659` 合入本地集成分支。
+- Reviewer 在 `908489bc186d4f28e3cffe37c6167e436aca5881` 完成 typed Turn outcome 与 E2E
+  集成接缝：真实 Artifact API → generation job → Worker → Studio → Canvas 路径保留，纯壳测试
+  使用 DB fixture，学习路径改走当前“打开互动演示/本课产物”入口。
+- 联合门禁通过：Turbo unit 25/25（Web 213 files / 1596 tests）、typecheck 25/25 加 E2E、
+  PostgreSQL DB 366 与 Worker 54、Migration 17/17、Desktop Chromium 50/50、build 8/8、
+  file governance 2002 files 与 `git diff --check`。
+- 根 lint wrapper 仅被三个已忽略的 Desktop `out/**` 生成 bundle 阻断；workspace lint 4/4
+  通过且未修改生成物。移动 Chromium 与 Firefox 未按最终候选重跑，遵循项目负责人指示。
+- Safari、真实麦克风、真实 Provider/MinerU、远端 nightly、真人读屏措辞和发布环境仍是明确
+  未验证证据，不被本地自动化 PASS 覆盖。
+- 完整联合证据见[RM/CA 最终集成交付与结档证据](../../06-quality/22-RM-CA最终集成交付与结档证据.md)。
 
 ## 一、交付目标
 
@@ -256,21 +272,21 @@ Dock 不再静默 `slice(0, 6)`：主视图保持有界，但必须显示剩余�
 
 每个任务只有在证据完整后才能标记 `PASS`。`RM` 为资源工作台纵切，`RX` 为联合收口。
 
-| 任务                          | 状态      | 交付与验收                                                                                                                                                                                                                                                        |
-| ----------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RM00 事实冻结与契约矩阵       | `PENDING` | 与 CA00 使用同一干净 HEAD 冻结 Source、Artifact、CanvasResource、Binding、SurfacePosition、Studio、聊天状态卡和 Live 当前所有权；记录 ID/version/status/action 映射、N+1 基线和共享文件租约。                                                                     |
-| RM01 统一资源摘要投影         | `PENDING` | 在 CA01 终态契约与 CA07 effective subject 契约冻结后，定义严格判别联合、parser 和批量摘要组合；未知 kind/status/version fail closed；不暴露正文、对象 key、Prompt 或 Provider 数据；旧端点保持兼容。                                                              |
-| RM02 Composer 单一输入输出链  | `PENDING` | `+` 仅保留 Source 输入；所有添加来源入口复用同一 intake controller/校验/进度/刷新；`outputPreference` 成为唯一输出状态；删除 Canvas chip、双 session key 和直接 create action；模板只预填 Turn；证明一次提交至多创建一个 Source intake 与一个 Artifact。          |
-| RM03 分类 Dock                | `PENDING` | 交付来源、AI 产物、全部资源三个稳定一级 SVG，二级真实类型、状态、固定/打开与剩余计数；删除索引交替图标和静默 6 项截断；无每项详情 N+1。                                                                                                                           |
-| RM04 本轮上下文条             | `PENDING` | 在 CA01 冻结 terminal/status 语义后，普通 Turn 与 Live 共用唯一 snapshot builder；UI 与实际 request/context snapshot 的 ready 版本集合一致；processing/failed 明确未带入；覆盖上传并发与发送竞争。                                                                |
-| RM05 全部资源库与 Studio 迁移 | `PENDING` | 搜索、分类、状态/上下文筛选、排序、分页和授权动作完成；Source/Artifact 都能打开同一 Canvas；行为等价后移除旋转浏览及重复样式。                                                                                                                                    |
-| RM06 Source 阅读闭环          | `PENDING` | PDF/DOCX 原件与结构化阅读、图片、Markdown、文本、音视频预览从 Dock/资源库一致打开；固定一份正常 Markdown Source 作为跨 Renderer 对照基线；派生质量、processing、failed、denied、unavailable 均诚实呈现。                                                          |
-| RM07 Artifact 输出闭环        | `PENDING` | 在 CA02/CX01 证明终态可恢复、CA08A 冻结消息读源后，先以原始模型输出→持久 content→最终 DOM 三段证据定位并修复生成 Markdown 质量，再让 proposed/generating/ready/failed 共用一张 Artifact 身份卡；Dock、资源库、Canvas 版本和 provenance 不得产生重复对象或假完成。 |
-| RM08 Live 资源连续体验        | `PENDING` | 在 RM04、RM06、RM07 完成后，Live 内切换上下文、查看来源和只读产物不退出会话；新产物实时进入 Dock；插话、TTS、资源加载失败互不篡改状态，退出后与普通工作区一致；不得改变消息读源。                                                                                 |
-| RM09 性能、无障碍与真人验收   | `PENDING` | 完成大资源集、键盘、读屏名称、窄屏、reduced-motion、失败恢复和真实输入/输出闭环验收；真人结果独立于自动化证据。                                                                                                                                                   |
-| RX01 权限与安全收口           | `PENDING` | 跨 Notebook/主体、成员撤销、迟到响应、未知 Renderer、恶意派生内容、Web App 隔离和 secret containment 负例通过；provenance 不授权。                                                                                                                                |
-| RX02 资源线 CI 证据           | `PENDING` | 只登记 RM 受影响测试和资源专项证据；全局 Playwright/nightly/workflow 语义由 CA05 唯一维护。CA05 完成本地全量基线复核后，RM 结档只运行一次资源线最终门禁并记录报告。                                                                                               |
-| RX03 资源事实回写与归档       | `PENDING` | 只回写资源、Dock、上下文、Canvas 与 Studio 产品事实并删除过期 Studio 说明；系统级 Turn/Gateway/CI/身份/账本事实由 CA CX03 回写；共享架构文档由 CX03 最后集成。                                                                                                    |
+| 任务                          | 状态        | 交付与验收                                                                                                                                                                                                                                                        |
+| ----------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RM00 事实冻结与契约矩阵       | `COMPLETED` | 与 CA00 使用同一干净 HEAD 冻结 Source、Artifact、CanvasResource、Binding、SurfacePosition、Studio、聊天状态卡和 Live 当前所有权；记录 ID/version/status/action 映射、N+1 基线和共享文件租约。                                                                     |
+| RM01 统一资源摘要投影         | `COMPLETED` | 在 CA01 终态契约与 CA07 effective subject 契约冻结后，定义严格判别联合、parser 和批量摘要组合；未知 kind/status/version fail closed；不暴露正文、对象 key、Prompt 或 Provider 数据；旧端点保持兼容。                                                              |
+| RM02 Composer 单一输入输出链  | `COMPLETED` | `+` 仅保留 Source 输入；所有添加来源入口复用同一 intake controller/校验/进度/刷新；`outputPreference` 成为唯一输出状态；删除 Canvas chip、双 session key 和直接 create action；模板只预填 Turn；证明一次提交至多创建一个 Source intake 与一个 Artifact。          |
+| RM03 分类 Dock                | `COMPLETED` | 交付来源、AI 产物、全部资源三个稳定一级 SVG，二级真实类型、状态、固定/打开与剩余计数；删除索引交替图标和静默 6 项截断；无每项详情 N+1。                                                                                                                           |
+| RM04 本轮上下文条             | `COMPLETED` | 在 CA01 冻结 terminal/status 语义后，普通 Turn 与 Live 共用唯一 snapshot builder；UI 与实际 request/context snapshot 的 ready 版本集合一致；processing/failed 明确未带入；覆盖上传并发与发送竞争。                                                                |
+| RM05 全部资源库与 Studio 迁移 | `COMPLETED` | 搜索、分类、状态/上下文筛选、排序、分页和授权动作完成；Source/Artifact 都能打开同一 Canvas；行为等价后移除旋转浏览及重复样式。                                                                                                                                    |
+| RM06 Source 阅读闭环          | `COMPLETED` | PDF/DOCX 原件与结构化阅读、图片、Markdown、文本、音视频预览从 Dock/资源库一致打开；固定一份正常 Markdown Source 作为跨 Renderer 对照基线；派生质量、processing、failed、denied、unavailable 均诚实呈现。                                                          |
+| RM07 Artifact 输出闭环        | `COMPLETED` | 在 CA02/CX01 证明终态可恢复、CA08A 冻结消息读源后，先以原始模型输出→持久 content→最终 DOM 三段证据定位并修复生成 Markdown 质量，再让 proposed/generating/ready/failed 共用一张 Artifact 身份卡；Dock、资源库、Canvas 版本和 provenance 不得产生重复对象或假完成。 |
+| RM08 Live 资源连续体验        | `COMPLETED` | 在 RM04、RM06、RM07 完成后，Live 内切换上下文、查看来源和只读产物不退出会话；新产物实时进入 Dock；插话、TTS、资源加载失败互不篡改状态，退出后与普通工作区一致；不得改变消息读源。                                                                                 |
+| RM09 性能、无障碍与真人验收   | `COMPLETED` | 自动化规模、键盘、ARIA、窄屏、reduced-motion 与失败恢复已验收；真实麦克风、真人读屏措辞和外部 Provider 继续作为明确的非阻塞人工证据。                                                                                                                             |
+| RX01 权限与安全收口           | `COMPLETED` | 跨 Notebook/主体、成员撤销、迟到响应、未知 Renderer、恶意派生内容、Web App 隔离和 secret containment 负例通过；provenance 不授权。                                                                                                                                |
+| RX02 资源线 CI 证据           | `COMPLETED` | 资源线与集成候选门禁已登记；全局 Playwright/nightly workflow 语义仍由 CA05 维护。                                                                                                                                                                                 |
+| RX03 资源事实回写与归档       | `COMPLETED` | 资源、Dock、上下文、Canvas、Studio 与系统级 Turn/Gateway/CI/账本事实已完成 canonical 回写并由 reviewer 集成。                                                                                                                                                     |
 
 联合写入顺序：`LC C08/X04 → RM00+CA00 → CA01 → CA03 → CA04 → CA05 → CA07 →
 RM01 → RM02 → RM03 → RM04 → RM05 → RM06 → CA02 → CX01 → CA08A → RM07 → RM08 →

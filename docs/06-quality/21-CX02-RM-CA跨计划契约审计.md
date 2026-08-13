@@ -3,7 +3,7 @@
 - CA 候选：`8fa9d6b143e33a75038de608cbc730966c9ea3d4`
 - RM 只读候选：`ae7c82276c4d44fa2d7821947513eb5e3a4db4b5`
 - 方式：两工作树静态只读审计；没有 cherry-pick、复制 RM 代码或修改 RM worktree
-- 边界：单线一致不等于集成 PASS；联合运行项仍由 integration reviewer 验证
+- 边界：本文件保留单线静态审计；联合运行项已由 integration reviewer 在 `908489b` 验证
 
 ## 契约矩阵
 
@@ -31,15 +31,17 @@
    迁移。
 5. Web、Gateway、Worker、Telegram 都从服务端或持久 binding/scope 取得主体，资源读取再次鉴权。
 
-## Reviewer-owned integration conflicts
+## Reviewer-owned integration conflicts（已解决）
 
-1. `apps/web/features/workspace/general/general-workspace-layout.tsx`：最终合并必须同时保留 CA
-   Studio→Canvas 焦点边界和 RM Dock/Studio 资源打开行为；CA 不修改 RM 产品实现。
-2. `docs/09-decisions/0028-Turn终态持久收敛边界.md`：两线 add/add 由 reviewer 整合，CA 本轮
-   未修改。终态事实以 accepted CA reconciliation 语义为准，RM 资源事实只能增补而不能改写。
-3. 两线尚未位于同一候选树。以下只能集成后确认：Artifact 单卡在 terminal ack-loss/replay 后不
-   重复；membership revoke 后 history/resource/Gateway/Telegram 同形拒绝；Turn/Live 选择与服务端
-   persisted context 一致；platform→legacy restart 后浏览器历史 identity 连续。
+1. `apps/web/features/workspace/general/general-workspace-layout.tsx` 已同时保留 CA Studio→Canvas
+   焦点边界和 RM Dock/Studio 资源打开行为。
+2. `docs/09-decisions/0028-Turn终态持久收敛边界.md` 已保留 accepted CA reconciliation 的
+   fail-closed 终态语义，并整合 RM 资源事实。
+3. 两线已进入同一候选树。Reviewer 补充 typed Turn outcome，保留失败/取消/拒绝/中断时的
+   一次性输入，并通过真实 Artifact API→Worker→Studio→Canvas 纵切与 Desktop Chromium 50/50。
+
+联合门禁、命令设置失败归因与未验证范围见
+[RM/CA 最终集成交付与结档证据](22-RM-CA最终集成交付与结档证据.md)。
 
 ## 不属于 CA 本轮的缺口
 
