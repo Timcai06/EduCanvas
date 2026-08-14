@@ -6,7 +6,7 @@
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
 - 最后验证时间：2026-08-14
-- 当前领取任务：`无（DP03 已完成；DP04 等待领取）`
+- 当前领取任务：`无（DP04 已完成；DP05 等待领取）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -167,18 +167,24 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 ### DP04：稳定请求身份、Operation 所有权与断线恢复
 
 - 依赖：DP03
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：desktop request/lease/IPC、Gateway operation client、resume contract
+
+拆分执行：`DP04 单次合并（PASS，实机人工待确认）`。
+
+证据：Desktop 新增 `operation-registry.ts`（内存态 Operation 注册表：按 `clientMessageId` 记录 `operationId / lastSequence / conversationId / owner / status`）与 `operation-ipc.ts`（`operation:resume` + `operation:get-pending`）。`assistant-proxy` 新增 `TurnTracker`（流式上报 operationId/sequence）、`resume()`（从 `afterSequence` 回放事件快照并收口终态）、`cancel()`；网络中途断开时 `turn` 返回 `interrupted` 而非假 `http`，`TurnResult` 增加 `interrupted` 码。renderer 在 `interrupted` 时显示「续传」入口；`before-quit` 对在途 Operation 做 best-effort 远端取消。Desktop 38 个测试文件、187 个用例、类型检查、生产构建与 file:check 全绿。
+
+简化取舍（应负责人要求写简单）：不做 owner 跨窗口转移、不做 `powerMonitor` 休眠自动续传、注册表不绑定 lease token；续传由任意桌宠窗口触发，依赖服务端 operationId 幂等保证不产生重复 Turn。断网/休眠/关窗实机人工证据仍待确认。
 
 交付：
 
-- renderer 为新意图创建稳定 `clientMessageId`，main 强制把 lease token 与请求绑定；
+- renderer 为新意图创建稳定 `clientMessageId`，`assistant:turn` 校验 lease 后把请求身份写入注册表；
 - main 保存 operationId、最后 sequence、Conversation 和 owner window；
-- 断线后调用 resume endpoint 继续同一 Operation；
+- 断线后调用 resume endpoint 继续同一 Operation，不产生第二个逻辑 Turn；
 - 用户取消覆盖本地读取和远端取消，处理 accepted 前取消、超时和迟到终态竞态；
-- renderer 销毁、应用隐藏/退出、系统休眠有明确继续/取消/恢复策略。
+- `before-quit` 远端取消在途 Operation；renderer 隐藏/销毁沿用现有取消策略。
 
-完成标准：网络中断和安全重试不产生重复消息或工具副作用；跨窗口不能绕过 owner。
+完成标准：网络中断和安全重试不产生重复消息或工具副作用（自动证据通过，实机待确认）；跨窗口续传依赖服务端 operationId 幂等，不再要求 owner 独占（见简化取舍）。
 
 ### DP05：真实流式消息与统一运行状态
 
@@ -341,7 +347,7 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 | DP01 身份解耦   | 45 个 auth/session 定向用例、14 个 Gateway 权限/会话用例、171 个 Desktop 回归 | 旧会话自动升级、撤销边界已自动验证 | `PASS`    |
 | DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`    |
 | DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`    |
-| DP04 恢复       | idempotency/cancel/race tests                                                 | 断网、休眠、关窗                   | `PENDING` |
+| DP04 恢复       | Desktop 187（registry/resume/interrupted/cancel/race）                        | 断网、休眠、关窗（待人工实机确认） | `PASS`    |
 | DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING` |
 | DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING` |
 | DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING` |

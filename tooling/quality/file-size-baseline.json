@@ -2,8 +2,8 @@
   "policy": "Review at 400 lines; split before 600 unless a named plan owns the debt.",
   "threshold": 400,
   "files": {
-    "apps/desktop/src/main/index.ts": 542,
-    "apps/desktop/src/renderer/src/App.tsx": 450,
+    "apps/desktop/src/main/index.ts": 581,
+    "apps/desktop/src/renderer/src/App.tsx": 475,
     "apps/gateway/src/http/client-routes.ts": 592,
     "apps/gateway/src/streaming-transcription-channel.ts": 549,
     "apps/gateway/src/streaming-transcription-ws-transport.ts": 449,

@@ -303,3 +303,90 @@ describe('remote assistant proxy', () => {
     releaseCancel();
   });
 });
+
+describe('remote assistant proxy resume & interrupted', () => {
+  it('resumes from afterSequence and re-terminates on operation.completed', async () => {
+    const resume = vi.fn(async (_operationId: string, _after?: number) => [
+      event(2, { type: 'message.delta', delta: '后半句' }),
+      event(3, { type: 'operation.completed', messageId: 'message:one' }),
+    ]);
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {},
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+        resume,
+      }),
+    });
+    await expect(
+      proxy.resume({ operationId: 'operation:one', afterSequence: 1 }),
+    ).resolves.toMatchObject({ ok: true, action: 'answered' });
+    expect(resume).toHaveBeenCalledWith('operation:one', 1);
+  });
+
+  it('reports interrupted when the resume snapshot has no terminal event', async () => {
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {},
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+        async resume() {
+          return [event(2, { type: 'message.delta', delta: '进行中' })];
+        },
+      }),
+    });
+    await expect(
+      proxy.resume({ operationId: 'operation:one', afterSequence: 1 }),
+    ).resolves.toMatchObject({ ok: false, code: 'interrupted' });
+  });
+
+  it('reports interrupted when the turn stream ends without a terminal event', async () => {
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '只说了一半' });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    await expect(proxy.turn({ text: '你好' })).resolves.toMatchObject({
+      ok: false,
+      code: 'interrupted',
+    });
+  });
+
+  it('reports the operationId and lastSequence through the tracker', async () => {
+    const tracker = { operationId: null as string | null, lastSequence: -1 };
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '你好' });
+          yield event(2, {
+            type: 'operation.completed',
+            messageId: 'message:one',
+          });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    await proxy.turn({ text: '你好' }, undefined, tracker);
+    expect(tracker.operationId).toBe('operation:one');
+    expect(tracker.lastSequence).toBe(2);
+  });
+});

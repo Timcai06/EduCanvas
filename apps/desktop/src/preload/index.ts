@@ -16,6 +16,7 @@ import type {
   DesktopConversationCreateInput,
   DesktopConversationDirectorySnapshot,
 } from '../shared/conversation-directory';
+import type { DesktopPendingOperationsSnapshot } from '../shared/pending-operation';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -75,6 +76,8 @@ declare global {
     desktopOperation: {
       acquire(): Promise<DesktopOperationLeaseResult>;
       release(token: string): void;
+      resume(clientMessageId: string): Promise<TurnResult>;
+      getPending(): Promise<DesktopPendingOperationsSnapshot>;
     };
     desktopVoice: {
       transcribe(
@@ -221,6 +224,15 @@ contextBridge.exposeInMainWorld('desktopOperation', {
   release(token: string): void {
     if (activeOperationLeaseToken === token) activeOperationLeaseToken = null;
     ipcRenderer.send('operation:release', token);
+  },
+  resume(clientMessageId: string): Promise<TurnResult> {
+    return ipcRenderer.invoke('operation:resume', {
+      clientMessageId,
+      leaseToken: activeOperationLeaseToken,
+    });
+  },
+  getPending(): Promise<DesktopPendingOperationsSnapshot> {
+    return ipcRenderer.invoke('operation:get-pending');
   },
 });
 

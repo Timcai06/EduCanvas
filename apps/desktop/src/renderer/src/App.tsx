@@ -53,6 +53,7 @@ export default function App({
       currentConversationId: null,
       error: null,
     });
+  const [pendingResume, setPendingResume] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
@@ -84,13 +85,6 @@ export default function App({
       next.revision >= current.revision ? next : current,
     );
   };
-  const loadEarlier = async (): Promise<void> => {
-    const next = await window.desktopChat.loadEarlier();
-    setHistory((current) =>
-      next.revision >= current.revision ? next : current,
-    );
-  };
-
   useEffect(() => {
     const accept = (next: DesktopChatHistorySnapshot): void =>
       setHistory((current) =>
@@ -207,6 +201,7 @@ export default function App({
   const submit = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
+    setPendingResume(null);
     let leaseToken: string | null = null;
     try {
       const prompt = text.trim();
@@ -249,6 +244,7 @@ export default function App({
         setState(failureState);
         publishVisual(failureState);
         setMessage(result.error);
+        if (result.code === 'interrupted') setPendingResume(clientMessageId);
       }
     } finally {
       releaseOperation(leaseToken);
@@ -390,9 +386,42 @@ export default function App({
     }
     submitGateRef.current.cancel();
     requestIdRef.current = null;
+    setPendingResume(null);
     setState('ready');
     publishVisual('ready');
     setMessage('已停止。你可以继续输入。');
+  };
+
+  const resumePending = async (): Promise<void> => {
+    const clientMessageId = pendingResume;
+    if (!clientMessageId) return;
+    const submitToken = submitGateRef.current.enter();
+    if (!submitToken) return;
+    let leaseToken: string | null = null;
+    try {
+      if (!(await requireAuth())) return;
+      leaseToken = await acquireOperation();
+      if (!leaseToken) return;
+      setState('sending');
+      publishVisual('sending');
+      setMessage('正在续传…');
+      const result = await window.desktopOperation.resume(clientMessageId);
+      if (result.ok) {
+        setPendingResume(null);
+        setState('ready');
+        publishVisual('ready');
+        setMessage('已恢复回答。');
+      } else {
+        const failureState = petUiStateForFailureCode(result.code);
+        setState(failureState);
+        publishVisual(failureState);
+        setMessage(result.message);
+        if (result.code !== 'interrupted') setPendingResume(null);
+      }
+    } finally {
+      releaseOperation(leaseToken);
+      submitGateRef.current.leave(submitToken);
+    }
   };
 
   const chatPanel = (
@@ -411,7 +440,8 @@ export default function App({
       startVoice={startVoice}
       speakLatest={speakLatest}
       cancel={cancel}
-      loadEarlier={loadEarlier}
+      resume={resumePending}
+      canResume={pendingResume !== null}
       directory={directory}
       selectConversation={async (conversationId) => {
         const next = await window.desktopConversation.select(conversationId);
@@ -425,11 +455,6 @@ export default function App({
         });
         setDirectory(next);
         setMessage(next.error ?? '新对话已创建。');
-      }}
-      reloadConversations={async () => {
-        const next = await window.desktopConversation.load();
-        setDirectory(next);
-        if (next.error) setMessage(next.error);
       }}
     />
   );

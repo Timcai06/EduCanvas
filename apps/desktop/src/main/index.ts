@@ -13,7 +13,9 @@ import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
-import { createAssistantProxy } from './assistant-proxy';
+import { createAssistantProxy, type TurnTracker } from './assistant-proxy';
+import { createOperationRegistry } from './operation-registry';
+import { registerOperationIpc } from './operation-ipc';
 import { createVoiceProxy } from './voice-proxy';
 import { isAllowedVoicePermission } from './voice-permission';
 import { IpcAbortRegistry } from './ipc-abort-registry';
@@ -91,6 +93,7 @@ if (!app.requestSingleInstanceLock()) {
   const abortRegistry = new IpcAbortRegistry();
   const chatHistory = createChatHistoryStore();
   const operationLease = createOperationLease();
+  const operationRegistry = createOperationRegistry();
   const conversations = createConversationCoordinator({
     getSession: authAccess.getSession,
     invalidateSession: authAccess.invalidateSession,
@@ -360,6 +363,23 @@ if (!app.requestSingleInstanceLock()) {
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       const cursor = conversations.currentCursor();
       const routeRevision = conversations.state().revision;
+      const clientMessageId = payload.clientMessageId;
+      const tracker: TurnTracker | undefined = clientMessageId
+        ? {
+            operationId: null,
+            lastSequence: -1,
+            onAccepted: (operationId) =>
+              operationRegistry.accept(clientMessageId, operationId),
+            onSequence: (sequence) =>
+              operationRegistry.recordSequence(clientMessageId, sequence),
+          }
+        : undefined;
+      if (clientMessageId) {
+        operationRegistry.begin(clientMessageId, {
+          conversationId: cursor?.conversationId ?? null,
+          ownerId: event.sender.id,
+        });
+      }
       try {
         const result = await proxy.turn(
           {
@@ -368,7 +388,15 @@ if (!app.requestSingleInstanceLock()) {
             clientMessageId: payload.clientMessageId,
           },
           signal,
+          tracker,
         );
+        if (clientMessageId) {
+          if (!result.ok && result.code === 'interrupted') {
+            operationRegistry.markInterrupted(clientMessageId);
+          } else {
+            operationRegistry.remove(clientMessageId);
+          }
+        }
         if (routeRevision !== conversations.state().revision) {
           return {
             ok: false as const,
@@ -443,6 +471,14 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on('operation:cancel', (event, requestId: string) => {
     if (!isDesktopSender(event.sender.id)) return;
     abortRegistry.cancel(requestId, event.sender.id);
+  });
+  registerOperationIpc({
+    ipcMain,
+    isDesktopSender,
+    operationLease,
+    operationRegistry,
+    proxy,
+    reloadChatForConversation,
   });
 
   // Windows/Linux send custom schemes to the existing single instance command line.
@@ -534,6 +570,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     petMouseTracker.stop();
     abortRegistry.cancelAll();
+    for (const op of operationRegistry.pending().operations) {
+      void proxy.cancel(op.operationId).catch(() => undefined);
+    }
   });
   app.on('window-all-closed', () => {
     /* Closing hides to tray; only the tray Quit action terminates the process. */

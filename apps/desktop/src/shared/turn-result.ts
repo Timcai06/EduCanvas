@@ -16,6 +16,7 @@ export type TurnResult =
         | 'backend_offline'
         | 'timeout'
         | 'aborted'
+        | 'interrupted'
         | 'http'
         | 'unauthenticated'
         | 'route_required';
