@@ -197,7 +197,11 @@ export function PetChatPanel(props: {
           <SpeakerIcon />
         </button>
         {busy && state !== 'authorizing' ? (
-          <button className="send-action is-stop" type="button" onClick={cancel}>
+          <button
+            className="send-action is-stop"
+            type="button"
+            onClick={cancel}
+          >
             停止
           </button>
         ) : (

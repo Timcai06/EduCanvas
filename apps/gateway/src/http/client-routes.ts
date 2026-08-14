@@ -203,9 +203,7 @@ export async function handleClientRoutes(
       const rawLimit = url.searchParams.get('limit');
       const limit = rawLimit === null ? 30 : Number(rawLimit);
       const rawCursor = url.searchParams.get('cursor');
-      const cursor = rawCursor
-        ? decodeMessageHistoryCursor(rawCursor)
-        : null;
+      const cursor = rawCursor ? decodeMessageHistoryCursor(rawCursor) : null;
       if (
         !conversationId.success ||
         !Number.isInteger(limit) ||

@@ -132,10 +132,10 @@ describe('desktop chat history store', () => {
   it('prepends an earlier page and dedups by messageId', () => {
     const store = createChatHistoryStore();
     store.setConversation('conv-1');
-    store.reconcile(
-      [canonical({ messageId: 'm-new', content: '最新消息' })],
-      { hasMore: true, nextCursor: 'gmh1.next' },
-    );
+    store.reconcile([canonical({ messageId: 'm-new', content: '最新消息' })], {
+      hasMore: true,
+      nextCursor: 'gmh1.next',
+    });
     store.prependEarlier(
       [canonical({ messageId: 'm-old', content: '更早消息' })],
       { hasMore: false, nextCursor: null },
