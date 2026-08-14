@@ -50,7 +50,7 @@
     "packages/db/src/learning-session-repository.ts": 512,
     "packages/db/src/model-run-repository.ts": 446,
     "packages/db/src/platform-artifact-repository.ts": 1094,
-    "packages/db/src/platform-turn-repository.ts": 758,
+    "packages/db/src/platform-turn-repository.ts": 771,
     "packages/db/src/platform-turn-settlement-repository.ts": 477,
     "packages/db/src/schema/asset.ts": 496,
     "packages/db/src/schema/conversation.ts": 424,
