@@ -56,7 +56,9 @@ const scope = {
   courseSlug: 'cat-dog-ai',
   knowledgeNodeId: 'cat-dog-classification',
 };
-const baseTime = new Date('2026-07-15T03:00:00.000Z');
+// 相对当前时间：listOwnedRecent 用 Date.now()-30 天 的 activeSessionCutoff 过滤，
+// 写死日期会在 TTL 到期后把种子会话过滤掉（时间炸弹）。
+const baseTime = new Date(Date.now() - 5 * 60 * 1_000);
 
 function at(offsetMs: number): Date {
   return new Date(baseTime.getTime() + offsetMs);
