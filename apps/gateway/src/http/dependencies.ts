@@ -39,7 +39,14 @@ export interface GatewayClientTransport {
     DrizzleGatewayIdentityRepository,
     'ensureRegistered' | 'getActive'
   >;
-  directory: Pick<DrizzleGatewayDirectoryRepository, 'listConversations'>;
+  directory: {
+    listConversations?: (
+      userId: string,
+      now?: Date,
+    ) => Promise<readonly unknown[]>;
+    listConversationPage?: DrizzleGatewayDirectoryRepository['listConversationPage'];
+    createConversation?: DrizzleGatewayDirectoryRepository['createConversation'];
+  };
   localOnboarding?: {
     userId: string;
     ensureWorkspace: (userId: string) => Promise<unknown>;

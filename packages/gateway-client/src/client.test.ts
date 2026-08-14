@@ -123,6 +123,79 @@ describe('GatewayClient', () => {
     });
   });
 
+  it('reads a versioned conversation page without putting the cursor in a body', async () => {
+    let seenUrl = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        seenUrl = String(input);
+        return Response.json({
+          schemaVersion: 1,
+          conversations: [
+            {
+              notebookId: 'notebook:1',
+              notebookTitle: '数学笔记本',
+              conversationId: 'conversation:1',
+              title: '分数运算',
+              agentProfileId: 'general',
+              membershipRole: 'owner',
+              lastActivityAt: '2026-08-13T07:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
+        });
+      },
+    );
+    await expect(
+      client.listConversationPage({ limit: 20, cursor: 'gdc1.Y3Vyc29y' }),
+    ).resolves.toMatchObject({
+      schemaVersion: 1,
+      conversations: [{ notebookTitle: '数学笔记本' }],
+    });
+    expect(seenUrl).toBe(
+      'http://127.0.0.1:3200/v1/client/conversations?limit=20&cursor=gdc1.Y3Vyc29y',
+    );
+  });
+
+  it('creates a conversation with only Notebook and title client input', async () => {
+    let body = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (_input, init) => {
+        body = String(init?.body);
+        return Response.json(
+          {
+            schemaVersion: 1,
+            conversation: {
+              notebookId: 'notebook:1',
+              notebookTitle: '数学笔记本',
+              conversationId: 'conversation:new',
+              title: '错题复习',
+              agentProfileId: 'general',
+              membershipRole: 'owner',
+              lastActivityAt: '2026-08-13T07:00:00.000Z',
+            },
+          },
+          { status: 201 },
+        );
+      },
+    );
+    await expect(
+      client.createConversation({
+        notebookId: 'notebook:1',
+        title: '错题复习',
+      }),
+    ).resolves.toMatchObject({
+      conversation: { conversationId: 'conversation:new' },
+    });
+    expect(JSON.parse(body)).toEqual({
+      notebookId: 'notebook:1',
+      title: '错题复习',
+    });
+  });
+
   it('lists Canvas resources within an authenticated Notebook selection', async () => {
     let seenUrl = '';
     const client = new GatewayClient(

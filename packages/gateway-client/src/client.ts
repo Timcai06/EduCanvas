@@ -1,5 +1,9 @@
 import {
   gatewayClientTurnRequestSchema,
+  gatewayConversationCreateRequestSchema,
+  gatewayConversationCreateResultSchema,
+  gatewayConversationDirectoryCursorSchema,
+  gatewayConversationDirectoryPageSchema,
   gatewayConnectionConnectRequestSchema,
   gatewayConnectionConnectResultSchema,
   gatewayConnectionListSchema,
@@ -9,6 +13,9 @@ import {
   gatewayHandoffIssueRequestSchema,
   gatewayOperationEventSchema,
   type GatewayClientTurnRequest,
+  type GatewayConversationCreateRequest,
+  type GatewayConversationCreateResult,
+  type GatewayConversationDirectoryPage,
   type GatewayConnectionConnectResult,
   type GatewayConnectionList,
   type GatewayConnectionProvider,
@@ -35,20 +42,6 @@ const bootstrapResponseSchema = z
     token: z.string().min(32),
     expiresAt: z.string().datetime({ offset: true }),
   })
-  .strict();
-
-const conversationSchema = z
-  .object({
-    notebookId: z.string().min(1),
-    conversationId: z.string().min(1),
-    title: z.string().nullable(),
-    agentProfileId: z.string().min(1),
-    membershipRole: z.enum(['owner', 'editor', 'contributor', 'viewer']),
-  })
-  .strict();
-
-const directorySchema = z
-  .object({ conversations: z.array(conversationSchema) })
   .strict();
 
 const resumeSchema = z
@@ -142,7 +135,14 @@ const cancelResultSchema = z
   })
   .strict();
 
-export type GatewayConversationEntry = z.infer<typeof conversationSchema>;
+export type GatewayConversationEntry = Pick<
+  GatewayConversationDirectoryPage['conversations'][number],
+  | 'notebookId'
+  | 'conversationId'
+  | 'title'
+  | 'agentProfileId'
+  | 'membershipRole'
+>;
 export type GatewayPendingApproval = z.infer<typeof pendingApprovalSchema>;
 export type GatewayRecentOperation = z.infer<typeof recentOperationSchema>;
 export type GatewayCancelResult = z.infer<typeof cancelResultSchema>;
@@ -207,13 +207,51 @@ export class GatewayClient {
     return { authorization: `Bearer ${this.token}` };
   }
 
+  async listConversationPage(
+    input: { limit?: number; cursor?: string } = {},
+  ): Promise<GatewayConversationDirectoryPage> {
+    const url = new URL(`${this.baseUrl}/v1/client/conversations`);
+    if (input.limit !== undefined) {
+      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50)
+        throw new Error('Invalid conversation page size');
+      url.searchParams.set('limit', String(input.limit));
+    }
+    if (input.cursor !== undefined) {
+      url.searchParams.set(
+        'cursor',
+        gatewayConversationDirectoryCursorSchema.parse(input.cursor),
+      );
+    }
+    const response = await this.fetcher(url, { headers: this.headers() });
+    if (!response.ok) throw await parseError(response);
+    return gatewayConversationDirectoryPageSchema.parse(await response.json());
+  }
+
   async listConversations(): Promise<readonly GatewayConversationEntry[]> {
+    const conversations: GatewayConversationEntry[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listConversationPage({ limit: 50, cursor });
+      conversations.push(...page.conversations);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return conversations;
+  }
+
+  async createConversation(
+    input: GatewayConversationCreateRequest,
+  ): Promise<GatewayConversationCreateResult> {
+    const body = gatewayConversationCreateRequestSchema.parse(input);
     const response = await this.fetcher(
       `${this.baseUrl}/v1/client/conversations`,
-      { headers: this.headers() },
+      {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
     );
     if (!response.ok) throw await parseError(response);
-    return directorySchema.parse(await response.json()).conversations;
+    return gatewayConversationCreateResultSchema.parse(await response.json());
   }
 
   /**

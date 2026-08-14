@@ -40,8 +40,8 @@ export function createDesktopAuthService(options: {
     async issueAuthorizationCode(input: {
       userId: string;
       codeChallenge: string;
-      notebookId: string;
-      conversationId: string;
+      notebookId?: string;
+      conversationId?: string;
     }): Promise<{ code: string; expiresAt: Date }> {
       let code: string;
       try {
@@ -111,8 +111,12 @@ export function createDesktopAuthService(options: {
         token_type: 'Bearer',
         expires_at: expiresAt.toISOString(),
         user_id: userId,
-        notebook_id: verified.notebookId,
-        conversation_id: verified.conversationId,
+        ...(verified.notebookId && verified.conversationId
+          ? {
+              notebook_id: verified.notebookId,
+              conversation_id: verified.conversationId,
+            }
+          : {}),
       });
     },
   };

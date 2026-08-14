@@ -95,6 +95,15 @@ describe('Gateway desktop native-client auth contract', () => {
         expires_at: '2026-09-10T08:00:00.000Z',
         user_id: 'user:one',
       }).success,
+    ).toBe(true);
+    expect(
+      gatewayDesktopTokenGrantSchema.safeParse({
+        access_token: token,
+        token_type: 'Bearer',
+        expires_at: '2026-09-10T08:00:00.000Z',
+        user_id: 'user:one',
+        notebook_id: 'notebook:one',
+      }).success,
     ).toBe(false);
     expect(
       gatewayDesktopSessionTokenSchema.safeParse('x'.repeat(48)).success,

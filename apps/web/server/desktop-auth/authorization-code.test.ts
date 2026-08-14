@@ -92,4 +92,17 @@ describe('desktop authorization code', () => {
       verifyDesktopAuthorizationCode(code, { secret, now: () => now }),
     ).toMatchObject({ notebookId, conversationId });
   });
+
+  it('can issue an identity-only code without an initial route cursor', () => {
+    const code = createDesktopAuthorizationCode(
+      { codeChallenge: challenge },
+      { secret, now: () => now, randomBytes: () => Buffer.alloc(16, 5) },
+    );
+    expect(
+      verifyDesktopAuthorizationCode(code, { secret, now: () => now }),
+    ).toEqual({
+      codeChallenge: challenge,
+      expiresAt: new Date('2026-08-11T08:02:00.000Z'),
+    });
+  });
 });

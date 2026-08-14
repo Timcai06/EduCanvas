@@ -56,10 +56,14 @@ export const gatewayDesktopTokenGrantSchema = z
     token_type: z.literal('Bearer'),
     expires_at: z.string().datetime({ offset: true }),
     user_id: gatewayOpaqueIdSchema,
-    notebook_id: gatewayOpaqueIdSchema,
-    conversation_id: gatewayOpaqueIdSchema,
+    notebook_id: gatewayOpaqueIdSchema.optional(),
+    conversation_id: gatewayOpaqueIdSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (grant) => Boolean(grant.notebook_id) === Boolean(grant.conversation_id),
+    'desktop_initial_cursor_incomplete',
+  );
 
 export type GatewayDesktopAuthorizationQuery = z.infer<
   typeof gatewayDesktopAuthorizationQuerySchema

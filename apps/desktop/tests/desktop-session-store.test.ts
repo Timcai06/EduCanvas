@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { createDesktopSessionStore } from '../src/main/desktop-session-store';
 
 const session = {
+  version: 2 as const,
   token: `ecs1_${'t'.repeat(43)}`,
   expiresAt: '2026-09-10T08:00:00.000Z',
   webBaseUrl: 'https://learn.educanvas.example',
   gatewayBaseUrl: 'https://gateway.educanvas.example',
   userId: 'user:one',
-  notebookId: 'notebook:one',
-  conversationId: 'conversation:one',
+  initialCursor: {
+    notebookId: 'notebook:one',
+    conversationId: 'conversation:one',
+  },
 };
 
 function harness(
@@ -104,5 +107,34 @@ describe('desktop session store', () => {
     files.set('C:\\user-data\\desktop-session.enc', Buffer.from('old-cipher'));
     await expect(store.load()).resolves.toEqual(session);
     expect(encryptions()).toBe(1);
+  });
+
+  it('migrates the legacy fixed-session shape into an initial cursor', async () => {
+    const legacy = {
+      token: session.token,
+      expiresAt: session.expiresAt,
+      webBaseUrl: session.webBaseUrl,
+      gatewayBaseUrl: session.gatewayBaseUrl,
+      userId: session.userId,
+      notebookId: 'notebook:one',
+      conversationId: 'conversation:one',
+    };
+    const { store, files, encryptions } = harness({
+      decrypt: async () => ({
+        result: JSON.stringify(legacy),
+        shouldReEncrypt: false,
+      }),
+    });
+    files.set('C:\\user-data\\desktop-session.enc', Buffer.from('old-cipher'));
+
+    await expect(store.load()).resolves.toEqual(session);
+    expect(encryptions()).toBe(1);
+  });
+
+  it('accepts an identity session without an initial cursor', async () => {
+    const identityOnly = { ...session, initialCursor: null };
+    const { store } = harness();
+    await store.save(identityOnly);
+    await expect(store.load()).resolves.toEqual(identityOnly);
   });
 });

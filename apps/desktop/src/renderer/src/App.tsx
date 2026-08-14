@@ -23,6 +23,7 @@ import type {
   DesktopChatHistorySnapshot,
   DesktopChatSource,
 } from '../../shared/chat-history';
+import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -40,6 +41,14 @@ export default function App({
     revision: 0,
     messages: [],
   });
+  const [directory, setDirectory] =
+    useState<DesktopConversationDirectorySnapshot>({
+      revision: 0,
+      loading: false,
+      conversations: [],
+      currentConversationId: null,
+      error: null,
+    });
   const requestIdRef = useRef<string | null>(null);
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
@@ -76,6 +85,16 @@ export default function App({
     return () => {
       unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const accept = (next: DesktopConversationDirectorySnapshot): void =>
+      setDirectory((current) =>
+        next.revision >= current.revision ? next : current,
+      );
+    const unsubscribe = window.desktopConversation.onState(accept);
+    void window.desktopConversation.getState().then(accept);
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -182,6 +201,10 @@ export default function App({
         return;
       }
       if (!(await requireAuth())) return;
+      if (!directory.currentConversationId) {
+        setMessage('请先选择一个对话。');
+        return;
+      }
       leaseToken = await acquireOperation();
       if (!leaseToken) return;
 
@@ -219,6 +242,11 @@ export default function App({
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     if (!(await requireAuth())) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    if (!directory.currentConversationId) {
+      setMessage('请先选择一个对话。');
       submitGateRef.current.leave(submitToken);
       return;
     }
@@ -365,6 +393,25 @@ export default function App({
       startVoice={startVoice}
       speakLatest={speakLatest}
       cancel={cancel}
+      directory={directory}
+      selectConversation={async (conversationId) => {
+        const next = await window.desktopConversation.select(conversationId);
+        setDirectory(next);
+        setMessage('已切换对话。');
+      }}
+      createConversation={async (notebookId, title) => {
+        const next = await window.desktopConversation.create({
+          notebookId,
+          title,
+        });
+        setDirectory(next);
+        setMessage(next.error ?? '新对话已创建。');
+      }}
+      reloadConversations={async () => {
+        const next = await window.desktopConversation.load();
+        setDirectory(next);
+        if (next.error) setMessage(next.error);
+      }}
     />
   );
 

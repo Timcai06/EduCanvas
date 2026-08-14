@@ -1,9 +1,12 @@
-import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
-import { type GatewayResolvedRoute } from '@educanvas/gateway-core';
+import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import {
+  type GatewayConversationDirectoryEntry as GatewayConversationDirectoryContractEntry,
+  type GatewayResolvedRoute,
+} from '@educanvas/gateway-core';
 import { getDb } from '../client';
 import { conversations, notebookMemberships, spaces } from '../schema';
 import { ensurePersonalIdentity } from './identity-repository';
-import { type Database } from './persistence';
+import { GatewayPersistenceError, type Database } from './persistence';
 
 /**
  * Conversation Directory 边界：列出用户可见的会话，并在本地/IdP 引导时原子确保一个可用的个人 Notebook。
@@ -15,6 +18,14 @@ export interface GatewayConversationDirectoryEntry {
   title: string | null;
   agentProfileId: string;
   membershipRole: GatewayResolvedRoute['membershipRole'];
+}
+
+export type GatewayConversationDirectoryPageEntry =
+  GatewayConversationDirectoryContractEntry;
+
+export interface GatewayConversationDirectoryCursor {
+  lastActivityAt: Date;
+  conversationId: string;
 }
 
 export class DrizzleGatewayDirectoryRepository {
@@ -58,6 +69,149 @@ export class DrizzleGatewayDirectoryRepository {
       membershipRole:
         row.membershipRole as GatewayResolvedRoute['membershipRole'],
     }));
+  }
+
+  async listConversationPage(input: {
+    userId: string;
+    limit: number;
+    cursor?: GatewayConversationDirectoryCursor | null;
+    now?: Date;
+  }): Promise<{
+    items: readonly GatewayConversationDirectoryPageEntry[];
+    nextCursor: GatewayConversationDirectoryCursor | null;
+  }> {
+    const now = input.now ?? new Date();
+    const cursorCondition = input.cursor
+      ? or(
+          lt(conversations.lastActivityAt, input.cursor.lastActivityAt),
+          and(
+            eq(conversations.lastActivityAt, input.cursor.lastActivityAt),
+            lt(conversations.id, input.cursor.conversationId),
+          ),
+        )
+      : undefined;
+    const rows = await this.database
+      .select({
+        notebookId: conversations.spaceId,
+        notebookTitle: spaces.title,
+        conversationId: conversations.id,
+        title: conversations.title,
+        agentProfileId: conversations.agentProfileId,
+        membershipRole: notebookMemberships.role,
+        lastActivityAt: conversations.lastActivityAt,
+      })
+      .from(conversations)
+      .innerJoin(spaces, eq(spaces.id, conversations.spaceId))
+      .innerJoin(
+        notebookMemberships,
+        eq(notebookMemberships.notebookId, conversations.spaceId),
+      )
+      .where(
+        and(
+          eq(notebookMemberships.userId, input.userId),
+          eq(spaces.status, 'active'),
+          eq(conversations.status, 'active'),
+          isNull(notebookMemberships.revokedAt),
+          or(
+            isNull(notebookMemberships.expiresAt),
+            gt(notebookMemberships.expiresAt, now),
+          ),
+          cursorCondition,
+        ),
+      )
+      .orderBy(desc(conversations.lastActivityAt), desc(conversations.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const last = page.at(-1);
+    return {
+      items: page.map((row) => ({
+        ...row,
+        lastActivityAt: row.lastActivityAt.toISOString(),
+        membershipRole:
+          row.membershipRole as GatewayResolvedRoute['membershipRole'],
+      })),
+      nextCursor:
+        hasMore && last
+          ? {
+              lastActivityAt: last.lastActivityAt,
+              conversationId: last.conversationId,
+            }
+          : null,
+    };
+  }
+
+  async createConversation(input: {
+    userId: string;
+    notebookId: string;
+    title: string;
+    now?: Date;
+  }): Promise<GatewayConversationDirectoryPageEntry> {
+    const now = input.now ?? new Date();
+    return this.database.transaction(async (transaction) => {
+      const [membership] = await transaction
+        .select({
+          notebookTitle: spaces.title,
+          membershipRole: notebookMemberships.role,
+        })
+        .from(spaces)
+        .innerJoin(
+          notebookMemberships,
+          and(
+            eq(notebookMemberships.notebookId, spaces.id),
+            eq(notebookMemberships.userId, input.userId),
+          ),
+        )
+        .where(
+          and(
+            eq(spaces.id, input.notebookId),
+            eq(spaces.status, 'active'),
+            isNull(notebookMemberships.revokedAt),
+            or(
+              isNull(notebookMemberships.expiresAt),
+              gt(notebookMemberships.expiresAt, now),
+            ),
+            or(
+              eq(notebookMemberships.role, 'owner'),
+              eq(notebookMemberships.role, 'editor'),
+            ),
+          ),
+        )
+        .limit(1);
+      if (!membership)
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'Conversation creation denied',
+        );
+      const [created] = await transaction
+        .insert(conversations)
+        .values({
+          spaceId: input.notebookId,
+          ownerSubjectId: input.userId,
+          agentProfileId: 'general',
+          title: input.title,
+          lastActivityAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({
+          conversationId: conversations.id,
+          title: conversations.title,
+          agentProfileId: conversations.agentProfileId,
+          lastActivityAt: conversations.lastActivityAt,
+        });
+      if (!created) throw new Error('Conversation write failed');
+      return {
+        notebookId: input.notebookId,
+        notebookTitle: membership.notebookTitle,
+        conversationId: created.conversationId,
+        title: created.title,
+        agentProfileId: created.agentProfileId,
+        membershipRole:
+          membership.membershipRole as GatewayResolvedRoute['membershipRole'],
+        lastActivityAt: created.lastActivityAt.toISOString(),
+      };
+    });
   }
 
   /** Local/IdP onboarding boundary: ensure one usable personal Notebook atomically. */

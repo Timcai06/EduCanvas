@@ -95,10 +95,13 @@ describe('desktop auth coordinator', () => {
     });
     expect(JSON.stringify(body)).not.toContain(state);
     expect(stored()).toMatchObject({
+      version: 2,
       token: grant.access_token,
       userId: 'user:one',
-      notebookId: 'notebook:one',
-      conversationId: 'conversation:one',
+      initialCursor: {
+        notebookId: 'notebook:one',
+        conversationId: 'conversation:one',
+      },
     });
   });
 

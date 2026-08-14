@@ -465,6 +465,22 @@ describe('Gateway HTTP composition root', () => {
               },
             ];
           },
+          async listConversationPage() {
+            return {
+              items: [
+                {
+                  notebookId: 'notebook:1',
+                  notebookTitle: '共享空间',
+                  conversationId: 'conversation:1',
+                  title: '共享会话',
+                  agentProfileId: 'general' as const,
+                  membershipRole: 'owner' as const,
+                  lastActivityAt: '2026-07-21T08:00:00.000Z',
+                },
+              ],
+              nextCursor: null,
+            };
+          },
         },
         approvals: {
           async listPending() {

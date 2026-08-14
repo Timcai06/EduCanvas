@@ -74,6 +74,57 @@ describeWithDatabase(
       });
     });
 
+    it('creates and pages conversations with no duplicates', async () => {
+      const directory = new DrizzleGatewayDirectoryRepository(getDatabase());
+      const initial = await directory.ensurePersonalWorkspace({
+        userId: 'user:owner',
+        now,
+      });
+      const second = await directory.createConversation({
+        userId: 'user:owner',
+        notebookId: initial.notebookId,
+        title: '第二个对话',
+        now: new Date(now.getTime() + 1_000),
+      });
+      const third = await directory.createConversation({
+        userId: 'user:owner',
+        notebookId: initial.notebookId,
+        title: '第三个对话',
+        now: new Date(now.getTime() + 2_000),
+      });
+
+      const firstPage = await directory.listConversationPage({
+        userId: 'user:owner',
+        limit: 2,
+        now: new Date(now.getTime() + 3_000),
+      });
+      const nextPage = await directory.listConversationPage({
+        userId: 'user:owner',
+        limit: 2,
+        cursor: firstPage.nextCursor,
+        now: new Date(now.getTime() + 3_000),
+      });
+
+      expect(firstPage.items.map((item) => item.conversationId)).toEqual([
+        third.conversationId,
+        second.conversationId,
+      ]);
+      expect(nextPage.items.map((item) => item.conversationId)).toEqual([
+        initial.conversationId,
+      ]);
+      expect(
+        new Set(
+          [...firstPage.items, ...nextPage.items].map(
+            (item) => item.conversationId,
+          ),
+        ).size,
+      ).toBe(3);
+      expect(firstPage.items[0]).toMatchObject({
+        notebookTitle: '我的学习笔记本',
+        membershipRole: 'owner',
+      });
+    });
+
     it('allows a contributor to use a shared Notebook without sharing Agent identity', async () => {
       const conversations = new DrizzlePlatformConversationRepository(
         getDatabase(),
@@ -195,6 +246,16 @@ describeWithDatabase(
         'message.started',
         'operation.completed',
       ]);
+      await expect(
+        new DrizzleGatewayDirectoryRepository(getDatabase()).createConversation(
+          {
+            userId: member.userId,
+            notebookId: conversation.spaceId,
+            title: '不允许创建',
+            now,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'forbidden' });
     });
 
     it('denies viewer replies and users without membership', async () => {

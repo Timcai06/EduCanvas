@@ -12,6 +12,10 @@ import type {
   DesktopChatMessageInput,
 } from '../shared/chat-history';
 import type { PetVisualSignal } from '../shared/pet-visual-signal';
+import type {
+  DesktopConversationCreateInput,
+  DesktopConversationDirectorySnapshot,
+} from '../shared/conversation-directory';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -51,6 +55,19 @@ declare global {
       ): Promise<DesktopChatHistorySnapshot>;
       onHistory(
         callback: (snapshot: DesktopChatHistorySnapshot) => void,
+      ): () => void;
+    };
+    desktopConversation: {
+      getState(): Promise<DesktopConversationDirectorySnapshot>;
+      load(): Promise<DesktopConversationDirectorySnapshot>;
+      select(
+        conversationId: string,
+      ): Promise<DesktopConversationDirectorySnapshot>;
+      create(
+        input: DesktopConversationCreateInput,
+      ): Promise<DesktopConversationDirectorySnapshot>;
+      onState(
+        callback: (snapshot: DesktopConversationDirectorySnapshot) => void,
       ): () => void;
     };
     desktopOperation: {
@@ -154,6 +171,35 @@ contextBridge.exposeInMainWorld('desktopChat', {
     ): void => callback(snapshot);
     ipcRenderer.on('chat:history', listener);
     return () => ipcRenderer.removeListener('chat:history', listener);
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopConversation', {
+  getState(): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:get-state');
+  },
+  load(): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:load');
+  },
+  select(
+    conversationId: string,
+  ): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:select', conversationId);
+  },
+  create(
+    input: DesktopConversationCreateInput,
+  ): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:create', input);
+  },
+  onState(
+    callback: (snapshot: DesktopConversationDirectorySnapshot) => void,
+  ): () => void {
+    const listener = (
+      _event: IpcRendererEvent,
+      snapshot: DesktopConversationDirectorySnapshot,
+    ): void => callback(snapshot);
+    ipcRenderer.on('conversation:state', listener);
+    return () => ipcRenderer.removeListener('conversation:state', listener);
   },
 });
 

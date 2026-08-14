@@ -8,7 +8,13 @@ import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
 
 export interface AssistantProxy {
-  turn(input: { text: string }, signal?: AbortSignal): Promise<TurnResult>;
+  turn(
+    input: {
+      text: string;
+      cursor?: { notebookId: string; conversationId: string };
+    },
+    signal?: AbortSignal,
+  ): Promise<TurnResult>;
 }
 
 interface GatewayClientPort {
@@ -45,6 +51,14 @@ export function createAssistantProxy(options: {
           ok: false,
           code: 'unauthenticated',
           message: '请先登录 EduCanvas。',
+        };
+      }
+      const cursor = input.cursor ?? session.initialCursor;
+      if (!cursor) {
+        return {
+          ok: false,
+          code: 'route_required',
+          message: '请先选择一个对话。',
         };
       }
       const client = options.clientFactory
@@ -84,8 +98,8 @@ export function createAssistantProxy(options: {
         for await (const event of client.streamTurn(
           {
             clientMessageId: `desktop:${randomUUID()}`,
-            notebookId: session.notebookId,
-            conversationId: session.conversationId,
+            notebookId: cursor.notebookId,
+            conversationId: cursor.conversationId,
             parts: [{ type: 'text', text: input.text }],
           },
           { signal: streamAbort.signal },

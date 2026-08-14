@@ -36,4 +36,11 @@ describe('desktop chat history store', () => {
     const snapshot = store.snapshot();
     expect(Object.isFrozen(snapshot)).toBe(true);
   });
+
+  it('clears history when the current conversation changes', () => {
+    const store = createChatHistoryStore();
+    store.append({ role: 'user', content: '旧会话', source: 'text' });
+    store.clear();
+    expect(store.state()).toMatchObject({ revision: 2, messages: [] });
+  });
 });

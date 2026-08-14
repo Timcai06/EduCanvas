@@ -7,6 +7,7 @@ import type {
 
 export interface ChatHistoryStore {
   append(input: DesktopChatMessageInput): DesktopChatMessage;
+  clear(): void;
   snapshot(): readonly DesktopChatMessage[];
   state(): DesktopChatHistorySnapshot;
   subscribe(
@@ -44,6 +45,12 @@ export function createChatHistoryStore(
       const current = snapshot();
       for (const listener of listeners) listener(current);
       return message;
+    },
+    clear() {
+      messages.splice(0, messages.length);
+      revision += 1;
+      const current = snapshot();
+      for (const listener of listeners) listener(current);
     },
     snapshot,
     state: () => Object.freeze({ revision, messages: snapshot() }),

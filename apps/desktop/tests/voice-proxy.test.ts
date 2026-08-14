@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { createVoiceProxy } from '../src/main/voice-proxy';
 
 const desktopSession = {
+  version: 2 as const,
   token: `ecs1_${'t'.repeat(43)}`,
   expiresAt: '2026-09-10T08:00:00.000Z',
   webBaseUrl: 'https://learn.educanvas.example',
   gatewayBaseUrl: 'https://gateway.educanvas.example',
   userId: 'user:one',
-  notebookId: 'notebook:one',
-  conversationId: 'conversation:one',
+  initialCursor: {
+    notebookId: 'notebook:one',
+    conversationId: 'conversation:one',
+  },
 };
 const authenticated = {
   getSession: async () => desktopSession,

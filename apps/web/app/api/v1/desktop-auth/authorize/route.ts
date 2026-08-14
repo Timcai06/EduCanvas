@@ -56,14 +56,15 @@ export async function POST(request: Request): Promise<Response> {
       return jsonError(409, 'no_conversation', '请先在 Web 端开始一个对话。');
     }
     const conversation = await loadOwnedGeneralConversation(runtimeIdentity);
-    if (!conversation) {
-      return jsonError(409, 'no_conversation', '请先在 Web 端开始一个对话。');
-    }
     const grant = await getDesktopAuthService().issueAuthorizationCode({
       userId: runtimeIdentity.studentId,
       codeChallenge: parsed.data.code_challenge,
-      notebookId: conversation.spaceId,
-      conversationId: conversation.id,
+      ...(conversation
+        ? {
+            notebookId: conversation.spaceId,
+            conversationId: conversation.id,
+          }
+        : {}),
     });
     const callback = new URL(parsed.data.redirect_uri);
     callback.searchParams.set('code', grant.code);
