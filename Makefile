@@ -8,7 +8,14 @@ export EDUCANVAS_POSTGRES_PORT
 TEST_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_integration
 E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_e2e
 
-.PHONY: help doctor deps setup all dev tui pet status stop check lint typecheck test build \
+# 统一启动事实源：Makefile 只做薄入口，启动/日志/状态/停止逻辑都在
+# tooling/local-orchestrator.mjs（跨平台）。.env 由 orchestrator 加载，
+# 且不覆盖 shell/CI 已显式设置的变量。
+RUNTIME := node tooling/local-orchestrator.mjs
+LOG_FILTER_ENV := SERVICE=$(SERVICE) LEVEL=$(LEVEL) EVENT=$(EVENT) OP=$(OP) TRACE=$(TRACE) JOB=$(JOB)
+
+.PHONY: help doctor deps setup all all-verbose dev dev-ui tui pet status stop stop-core stop-db \
+	logs logs-json logs-errors check lint typecheck test build \
 	db-up db-migrate db-logs db-integration-prepare db-e2e-prepare \
 	integration e2e
 
@@ -17,12 +24,19 @@ help:
 		'EduCanvas 本地开发命令' \
 		'' \
 		'  make setup        安装依赖、启动数据库并执行迁移' \
-		'  make all          启动全部已启用的非交互服务' \
+		'  make all          启动全部服务（默认安静：阶段摘要 ≤20 行）' \
+		'  make all-verbose  详细启动：实时 pretty 运行日志 + JSONL' \
 		'  make dev          启动 Web 验证环境并打开浏览器（PORT 默认 3101）' \
+		'  make dev-ui       使用 Turbo TUI 观察原始 task 日志' \
 		'  make tui          启动所需服务并进入交互式 TUI' \
 		'  make pet          启动桌宠（先 make all，另开终端运行）' \
-		'  make status       查看本地 Web、Gateway 与数据库状态' \
-		'  make stop         停止本地数据库容器并保留数据卷' \
+		'  make status       查看 Database/Gateway/Web/Worker/Runtime 状态' \
+		'  make logs         查看当前运行会话日志（SERVICE/LEVEL/EVENT/OP/TRACE/JOB 可过滤）' \
+		'  make logs-json    原始 JSONL 输出' \
+		'  make logs-errors  只显示 error/fatal' \
+		'  make stop         优雅停止当前 core 并停止数据库容器' \
+		'  make stop-core    只停止当前 core 进程' \
+		'  make stop-db      只停止数据库容器' \
 		'  make doctor       检查 Node、pnpm、Docker 与本地环境文件' \
 		'  make check        运行 lint、类型检查和单元测试' \
 		'  make build        执行生产构建' \
@@ -30,7 +44,8 @@ help:
 		'  make e2e          准备隔离数据库并运行 Playwright E2E' \
 		'  make db-logs      持续查看 PostgreSQL 日志' \
 		'' \
-		'可覆盖变量：PORT=3000 PLAYWRIGHT_PORT=3100 EDUCANVAS_POSTGRES_PORT=5435'
+		'可覆盖变量：PORT=3000 PLAYWRIGHT_PORT=3100 EDUCANVAS_POSTGRES_PORT=5435' \
+		'logs 过滤示例：make logs SERVICE=worker LEVEL=warn OP=<operation-id>'
 
 doctor:
 	@command -v node >/dev/null
@@ -49,28 +64,53 @@ deps:
 setup: deps db-up db-migrate
 	@printf '%s\n' 'EduCanvas 本地依赖已准备完成'
 
-all: db-migrate
+all:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs all
+	@PORT=$(PORT) $(RUNTIME) all
 
-dev: db-migrate
+all-verbose:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs web
+	@PORT=$(PORT) $(RUNTIME) all-verbose
 
-tui: db-migrate
+dev:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs tui
+	@PORT=$(PORT) $(RUNTIME) web
+
+dev-ui:
+	@pnpm dev:core
+
+tui:
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@PORT=$(PORT) $(RUNTIME) tui
 
 # 桌宠是 GUI 进程，不在 orchestrator 的进程树里：先 make all 再另开终端 make pet。
 pet:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; pnpm --dir apps/desktop dev
+	@pnpm --dir apps/desktop dev
+
+logs:
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@PORT=$(PORT) $(LOG_FILTER_ENV) $(RUNTIME) logs
+
+logs-json:
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@PORT=$(PORT) $(LOG_FILTER_ENV) LOGS_JSON=1 $(RUNTIME) logs
+
+logs-errors:
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@PORT=$(PORT) $(LOG_FILTER_ENV) LOGS_ERRORS=1 $(RUNTIME) logs
 
 status:
-	@PORT=$(PORT) node tooling/local-orchestrator.mjs status
+	@PORT=$(PORT) $(RUNTIME) status
 
 stop:
-	@docker compose stop
+	@$(RUNTIME) stop
+
+stop-core:
+	@$(RUNTIME) stop-core
+
+stop-db:
+	@$(RUNTIME) stop-db
 
 lint:
 	@pnpm lint
@@ -94,7 +134,7 @@ db-up:
 
 db-migrate: db-up
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
-	@set -a; . ./.env; set +a; pnpm db:migrate
+	@pnpm db:migrate
 
 db-logs:
 	@docker compose logs -f db

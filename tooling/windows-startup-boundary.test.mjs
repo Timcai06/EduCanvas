@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { resolveWebDevCommand } from './web-dev-command.mjs';
 
 const launcher = readFileSync('start-educanvas.ps1', 'utf8');
-const orchestrator = readFileSync('tooling/local-orchestrator.mjs', 'utf8');
+const serviceSpawn = readFileSync('tooling/local-service-spawn.mjs', 'utf8');
 
 describe('Windows startup boundary', () => {
   it('uses the Webpack dev compiler for Windows-safe Unicode diagnostics', () => {
@@ -23,69 +23,30 @@ describe('Windows startup boundary', () => {
     });
   });
 
-  it('keeps Windows-only startup concerns explicit and parameterized', () => {
-    // The launcher owns Docker, migration caching, port checks, and logs;
-    // the actual Web/Gateway/Worker process remains the shared dev command.
-    assert.match(launcher, /\[switch\]\$SkipMigrate/);
-    assert.match(launcher, /\[switch\]\$NoOpen/);
+  it('keeps the Windows launcher a thin wrapper around the shared orchestrator', () => {
+    // 启动/数据库/迁移/日志逻辑不再复制在 PowerShell 里，统一委托 orchestrator。
+    assert.match(launcher, /tooling\/local-orchestrator\.mjs/);
     assert.match(launcher, /\[int\]\$Port = 3101/);
-    assert.match(launcher, /Get-NetTCPConnection/);
-    assert.match(launcher, /pnpm dev:core/);
-    assert.match(launcher, /pnpm db:migrate/);
-    assert.match(launcher, /MigrationStatePath/);
-    assert.match(launcher, /LogPath/);
-  });
-
-  it('does not let -SkipMigrate skip starting PostgreSQL', () => {
-    const ensureIndex = launcher.lastIndexOf('\nEnsure-DockerDb');
-    const migrateBranchIndex = launcher.indexOf('if (-not $SkipMigrate)');
-
-    assert.ok(ensureIndex >= 0, 'launcher must start the local database');
-    assert.ok(
-      migrateBranchIndex > ensureIndex,
-      '-SkipMigrate should only affect Run-Migrations after the database is ready',
-    );
-  });
-
-  it('keeps database lifecycle inside the current Compose project', () => {
-    assert.match(launcher, /docker compose up -d db/);
-    assert.match(launcher, /docker compose exec -T db pg_isready -U educanvas/);
-    assert.match(launcher, /docker compose ps -q db/);
-    assert.match(
-      launcher,
-      /docker inspect -f '\{\{\.Id\}\}' \$databaseContainerId/,
-    );
-    assert.doesNotMatch(launcher, /educanvas-db/);
-    assert.doesNotMatch(launcher, /docker ps -a/);
-    assert.doesNotMatch(launcher, /docker start/);
-    assert.doesNotMatch(launcher, /docker exec/);
-  });
-
-  it('normalizes common quoted .env values without evaluating them', () => {
-    assert.match(launcher, /\$Value = \$matches\[2\]\.Trim\(\)/);
-    assert.match(launcher, /\$Value\.StartsWith\('"'\)/);
-    assert.match(launcher, /\$Value\.StartsWith\("'"\)/);
-    assert.match(
-      launcher,
-      /\$Value = \$Value\.Substring\(1, \$Value\.Length - 2\)/,
-    );
-    assert.match(
-      launcher,
-      /SetEnvironmentVariable\(\$Name, \$Value, 'Process'\)/,
-    );
-    assert.match(launcher, /GetEnvironmentVariable\(\$Name, 'Process'\)/);
-    assert.ok(
-      launcher.indexOf("Join-Path $ProjectRoot '.env.local'") <
-        launcher.lastIndexOf('Load-DotEnv $EnvPath'),
-      '.env.local must be loaded before .env so local values take precedence',
-    );
+    assert.doesNotMatch(launcher, /docker compose up/);
+    assert.doesNotMatch(launcher, /pnpm dev:core/);
+    assert.doesNotMatch(launcher, /pnpm db:migrate/);
+    assert.doesNotMatch(launcher, /MigrationStatePath/);
+    assert.doesNotMatch(launcher, /Get-NetTCPConnection/);
     assert.doesNotMatch(launcher, /Invoke-Expression/);
+  });
+
+  it('stop launcher keeps -KeepDb semantics by delegating stop-core', () => {
+    const stopLauncher = readFileSync('stop-educanvas.ps1', 'utf8');
+    assert.match(stopLauncher, /local-orchestrator\.mjs/);
+    assert.match(stopLauncher, /\$KeepDb/);
+    assert.match(stopLauncher, /stop-core/);
+    assert.match(stopLauncher, /stop/);
   });
 
   it('lets the shared orchestrator launch pnpm on Windows', () => {
     assert.match(
-      orchestrator,
-      /shell: process\.platform === 'win32' && command === 'pnpm'/,
+      serviceSpawn,
+      /process\.platform === 'win32' && this\.command === 'pnpm'/,
     );
   });
 });

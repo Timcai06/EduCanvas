@@ -99,6 +99,50 @@ function spawnFixture(port, mode) {
   return { child, exited, ready };
 }
 
+/**
+ * 注入式 fake runCommand：不依赖系统 lsof/ps（CI 沙箱可能禁止 spawn ps），
+ * 端口→pid 映射与 pid→命令行由测试显式提供；kill 走真实 process.kill。
+ * pid 已死则视为端口释放（killStaleCoreProcesses 轮询依赖此语义）。
+ */
+function makeFakeRunCommand({ portToPid, pidToCommandLine }) {
+  return async (command, args) => {
+    const joined = `${command} ${args.join(' ')}`;
+    if (joined.startsWith('lsof')) {
+      const match = joined.match(/-i\s+:(\d+)/);
+      const pid = match ? portToPid[Number(match[1])] : undefined;
+      if (pid === undefined) return { code: 1, stdout: '', stderr: '' };
+      let alive = true;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        alive = false;
+      }
+      return alive
+        ? { code: 0, stdout: `${pid}\n`, stderr: '' }
+        : { code: 1, stdout: '', stderr: '' };
+    }
+    if (joined.startsWith('ps')) {
+      const match = joined.match(/-p\s+([\d,]+)/);
+      const pids = match ? match[1].split(',') : [];
+      const stdout = pids
+        .filter((pid) => pidToCommandLine[Number(pid)] !== undefined)
+        .map((pid) => `${pid} ${pidToCommandLine[Number(pid)]}`)
+        .join('\n');
+      return { code: 0, stdout, stderr: '' };
+    }
+    if (joined.startsWith('kill')) {
+      const pid = Number(args[args.length - 1]);
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // 已退出。
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    return { code: 1, stdout: '', stderr: 'unsupported' };
+  };
+}
+
 async function waitForExit(exited, timeoutMs = 10_000) {
   const result = await Promise.race([
     exited.then(() => 'exited'),
@@ -112,7 +156,13 @@ test('cleans up a stale EduCanvas process holding a core port', async () => {
   const { child, exited, ready } = spawnFixture(port);
   await ready;
 
-  const result = await cleanupStaleCore([port]);
+  const runCommand = makeFakeRunCommand({
+    portToPid: { [port]: child.pid },
+    pidToCommandLine: {
+      [child.pid]: `node ${process.cwd()}/tooling/local-core-cleanup.fixture.mjs`,
+    },
+  });
+  const result = await cleanupStaleCore([port], { runCommand });
   assert.equal(result.killed, 1);
 
   await waitForExit(exited);
@@ -140,8 +190,13 @@ test('never kills a process whose command line lacks the EduCanvas marker', asyn
       .once('exit', () => reject(new Error('foreign server exited early'))),
   );
 
+  const runCommand = makeFakeRunCommand({
+    portToPid: { [port]: child.pid },
+    // 命令行不含 EduCanvas 特征 → isEduCanvasProcess 拒绝。
+    pidToCommandLine: { [child.pid]: 'node -e inline http server' },
+  });
   try {
-    const result = await cleanupStaleCore([port]);
+    const result = await cleanupStaleCore([port], { runCommand });
     assert.equal(result.killed, 0);
     assert.equal(child.exitCode, null); // 进程仍然存活
   } finally {
@@ -151,6 +206,10 @@ test('never kills a process whose command line lacks the EduCanvas marker', asyn
 });
 
 test('findStaleCoreProcesses reports empty when no port is in use', async () => {
-  const processes = await findStaleCoreProcesses([61_933]);
+  const runCommand = makeFakeRunCommand({
+    portToPid: {},
+    pidToCommandLine: {},
+  });
+  const processes = await findStaleCoreProcesses([61_933], { runCommand });
   assert.deepEqual(processes, []);
 });
