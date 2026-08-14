@@ -69,6 +69,8 @@ export interface PlatformTurnSnapshot {
 export interface PlatformMessageHistoryCursor {
   createdAt: Date;
   messageId: string;
+  /** 用于打破同一 turn 内 user/assistant 共享 createdAt 时的排序歧义。 */
+  role: 'user' | 'assistant';
 }
 
 export interface PlatformMessageHistoryCitationSnapshot {
@@ -632,11 +634,20 @@ export class DrizzlePlatformTurnRepository {
       'notebook.read',
     );
     const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    // 同一 turn 的 user/assistant 共享 createdAt，必须用 role 打破歧义，
+    // 否则 uuid 主键的随机顺序会让 assistant 与 user 颠倒。
+    const roleOrder = sql`case when ${conversationMessages.role} = 'assistant' then 0 else 1 end`;
+    const cursorRoleOrder = input.cursor?.role === 'assistant' ? 0 : 1;
     const cursorCondition = input.cursor
       ? or(
           lt(conversationMessages.createdAt, input.cursor.createdAt),
           and(
             eq(conversationMessages.createdAt, input.cursor.createdAt),
+            sql`${roleOrder} > ${cursorRoleOrder}`,
+          ),
+          and(
+            eq(conversationMessages.createdAt, input.cursor.createdAt),
+            sql`${roleOrder} = ${cursorRoleOrder}`,
             lt(conversationMessages.id, input.cursor.messageId),
           ),
         )
@@ -656,6 +667,7 @@ export class DrizzlePlatformTurnRepository {
       )
       .orderBy(
         desc(conversationMessages.createdAt),
+        asc(roleOrder),
         desc(conversationMessages.id),
       )
       .limit(limit + 1);
@@ -750,6 +762,7 @@ export class DrizzlePlatformTurnRepository {
           ? {
               createdAt: oldest.message.createdAt,
               messageId: oldest.message.id,
+              role: oldest.message.role === 'assistant' ? 'assistant' : 'user',
             }
           : null,
     };

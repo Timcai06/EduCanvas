@@ -5,12 +5,14 @@ const payloadSchema = z
   .object({
     t: z.string().datetime({ offset: true }),
     i: gatewayOpaqueIdSchema,
+    r: z.enum(['user', 'assistant']),
   })
   .strict();
 
 export interface MessageHistoryCursorValue {
   createdAt: Date;
   messageId: string;
+  role: 'user' | 'assistant';
 }
 
 export function encodeMessageHistoryCursor(
@@ -20,6 +22,7 @@ export function encodeMessageHistoryCursor(
     JSON.stringify({
       t: value.createdAt.toISOString(),
       i: value.messageId,
+      r: value.role,
     }),
     'utf8',
   ).toString('base64url')}`;
@@ -34,7 +37,11 @@ export function decodeMessageHistoryCursor(
     const decoded = Buffer.from(payload, 'base64url');
     if (decoded.toString('base64url') !== payload) return null;
     const value = payloadSchema.parse(JSON.parse(decoded.toString('utf8')));
-    return { createdAt: new Date(value.t), messageId: value.i };
+    return {
+      createdAt: new Date(value.t),
+      messageId: value.i,
+      role: value.r,
+    };
   } catch {
     return null;
   }
