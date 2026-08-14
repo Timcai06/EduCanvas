@@ -4,10 +4,12 @@ import { establishGatewaySession } from './session';
 
 const conversation = {
   notebookId: 'notebook-1',
+  notebookTitle: '我的学习笔记本',
   conversationId: 'conversation-1',
   title: '我的学习笔记本',
   agentProfileId: 'agent-1',
   membershipRole: 'owner',
+  lastActivityAt: '2026-08-14T00:00:00.000Z',
 } as const;
 
 function response(status: number, body: unknown): Response {
@@ -33,7 +35,13 @@ describe('TUI Gateway session', () => {
           expiresAt: '2099-01-01T00:00:00.000Z',
         }),
       )
-      .mockResolvedValueOnce(response(200, { conversations: [conversation] }));
+      .mockResolvedValueOnce(
+        response(200, {
+          schemaVersion: 1,
+          conversations: [conversation],
+          nextCursor: null,
+        }),
+      );
 
     const result = await establishGatewaySession('http://127.0.0.1:3200', {
       fetcher,
