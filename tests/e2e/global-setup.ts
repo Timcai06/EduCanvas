@@ -3,6 +3,10 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e-worker-log-audit.mjs';
+import {
+  createLineSplitter,
+  tryParseLogRecord,
+} from '../../tooling/local-process-pipe.mjs';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -202,17 +206,21 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await new Promise<void>((resolve, reject) => {
     // 90s：Linux CI 上 pnpm shim 冷启动约数秒；Windows 本地 pnpm --filter
     // 解析 workspace 并输出引擎 WARN 明显更慢，30s 是 CI 级偶发超时源。
-    // 真正启动后立即 resolve，超时只是兜底，不拖长通过路径。
+    // 只认统一日志协议的 worker.ready，避免展示文案变化破坏 readiness。
     const timeout = setTimeout(
       () => reject(new Error('worker 启动超时(90s)')),
       90_000,
     );
-    worker.stdout?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      if (chunk.toString().includes('已启动')) {
+    const readiness = createLineSplitter((line: string) => {
+      const record = tryParseLogRecord(line);
+      if (record?.service === 'worker' && record.event === 'worker.ready') {
         clearTimeout(timeout);
         resolve();
       }
+    });
+    worker.stdout?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
+      readiness.push(chunk);
     });
     worker.stderr?.on('data', (chunk: Buffer) => {
       workerLogAudit.ingest(chunk);
