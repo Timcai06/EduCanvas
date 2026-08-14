@@ -24,10 +24,13 @@ export const requiredString = (value: unknown): string => {
   return value;
 };
 
-/** @internal 读取供应商可选字符串；null与undefined均表示缺失。 */
+/** @internal 读取供应商可选字符串；null与undefined均表示缺失，空串同样视为缺失
+    （OpenAI 兼容流里 tool_calls 增量 chunk 的 id/name 允许为空串，DeepSeek
+    省略字段、qwen 系列显式发空串，二者语义相同）。 */
 export const optionalString = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
-  return requiredString(value);
+  if (typeof value !== 'string') throw new SseProtocolError();
+  return value.length === 0 ? undefined : value;
 };
 
 /** @internal 读取供应商非负安全整数，拒绝负数、小数与溢出值。 */
