@@ -670,7 +670,8 @@ export class DrizzlePlatformTurnRepository {
         ? []
         : await this.database
             .select({
-              assistantMessageId: conversationMessageCitations.assistantMessageId,
+              assistantMessageId:
+                conversationMessageCitations.assistantMessageId,
               citationId: conversationMessageCitations.id,
               ordinal: operationSources.ordinal,
               assetId: assetVersions.assetId,
@@ -705,8 +706,7 @@ export class DrizzlePlatformTurnRepository {
       PlatformMessageHistoryCitationSnapshot[]
     >();
     for (const row of citationRows) {
-      const citations =
-        citationsByMessage.get(row.assistantMessageId) ?? [];
+      const citations = citationsByMessage.get(row.assistantMessageId) ?? [];
       citations.push({
         citationId: row.citationId,
         marker: row.ordinal,
