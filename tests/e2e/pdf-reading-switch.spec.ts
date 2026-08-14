@@ -71,17 +71,23 @@ async function createPdfStructuredFixture(page: Page) {
   const checksum = createHash('sha256').update(MD_TEXT, 'utf8').digest('hex');
 
   const repo = new dbModule.DrizzleAssetRepository();
-  const created = await repo.createUploadedPending({
-    ownerSubjectId: conversation.ownerSubjectId,
-    spaceId: conversation.spaceId,
-    scope: 'space',
-    kind: 'document',
-    displayName: '网络编程.pdf',
-    mimeType: 'application/pdf',
-    byteSize: pdfStat.size,
-    contentHash: pdfContentHash,
-    storageKey: pdfStorageKey,
-  });
+  const created = await repo.createUploadedPending(
+    {
+      ownerSubjectId: conversation.ownerSubjectId,
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'document',
+      displayName: '网络编程.pdf',
+      mimeType: 'application/pdf',
+      byteSize: pdfStat.size,
+      contentHash: pdfContentHash,
+      storageKey: pdfStorageKey,
+    },
+    /* 不写 graphile job：fixture 由本测试直接结算，worker 领取会与测试
+       竞态（MinerU 未配置时秒级降级结算，把 job 推到 succeeded 导致
+       测试的 settle 返回 false）。 */
+    { enqueue: false },
+  );
   const settled = await repo.settleTextExtraction({
     jobId: created.jobId,
     outcome: {

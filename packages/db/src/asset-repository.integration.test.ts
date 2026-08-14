@@ -409,6 +409,51 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
     ]);
   });
 
+  it('enqueue:false 不写 graphile job 且仍可正常结算', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const created = await repository.createUploadedPending(
+      {
+        ownerSubjectId,
+        spaceId,
+        scope: 'space',
+        kind: 'document',
+        displayName: 'fixture.pdf',
+        mimeType: 'application/pdf',
+        byteSize: 12,
+        contentHash: 'f'.repeat(64),
+        storageKey: 'uploads/fixture/fixture.pdf',
+      },
+      { enqueue: false },
+    );
+
+    /* assetProcessingJobs 行保留（结算状态机依赖），但 graphile 队列无任务：
+       worker 永不领取，调用方（e2e fixture/数据导入）自行结算。 */
+    const [job] = await getDatabase()
+      .select({ status: schema.assetProcessingJobs.status })
+      .from(schema.assetProcessingJobs)
+      .where(eq(schema.assetProcessingJobs.id, created.jobId));
+    expect(job?.status).toBe('queued');
+    await expect(
+      getDatabase().execute(
+        sql`select count(*)::int as n from graphile_worker.jobs where key = ${`asset-extract_text:${created.jobId}`}`,
+      ),
+    ).resolves.toEqual([{ n: 0 }]);
+
+    await expect(
+      repository.settleTextExtraction({
+        jobId: created.jobId,
+        outcome: {
+          status: 'ready',
+          extractedText: '# fixture',
+          derivedStorageKey: `derived/text/${created.jobId}/fixture.md`,
+          checksum: 'c'.repeat(64),
+          quality: 'structured',
+          mimeType: 'text/markdown',
+        },
+      }),
+    ).resolves.toBe(true);
+  });
+
   it('音频转录从processing推进当前版本并生成安全派生表示', async () => {
     const repository = new DrizzleAssetRepository(getDatabase());
     const transcriptionRepository = new DrizzleAssetTranscriptionRepository(
