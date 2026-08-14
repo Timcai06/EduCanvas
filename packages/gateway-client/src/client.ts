@@ -11,6 +11,8 @@ import {
   gatewayConnectionRevokeResultSchema,
   gatewayHandoffCredentialSchema,
   gatewayHandoffIssueRequestSchema,
+  gatewayMessageHistoryCursorSchema,
+  gatewayMessageHistoryPageSchema,
   gatewayOperationEventSchema,
   type GatewayClientTurnRequest,
   type GatewayConversationCreateRequest,
@@ -21,6 +23,8 @@ import {
   type GatewayConnectionProvider,
   type GatewayConnectionRevokeResult,
   type GatewayHandoffCredential,
+  type GatewayMessageHistoryEntry,
+  type GatewayMessageHistoryPage,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import {
@@ -252,6 +256,51 @@ export class GatewayClient {
     );
     if (!response.ok) throw await parseError(response);
     return gatewayConversationCreateResultSchema.parse(await response.json());
+  }
+
+  async listMessagePage(input: {
+    conversationId: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<GatewayMessageHistoryPage> {
+    const url = new URL(
+      `${this.baseUrl}/v1/client/conversations/${encodeURIComponent(input.conversationId)}/messages`,
+    );
+    if (input.limit !== undefined) {
+      if (
+        !Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > 100
+      )
+        throw new Error('Invalid message page size');
+      url.searchParams.set('limit', String(input.limit));
+    }
+    if (input.cursor !== undefined) {
+      url.searchParams.set(
+        'cursor',
+        gatewayMessageHistoryCursorSchema.parse(input.cursor),
+      );
+    }
+    const response = await this.fetcher(url, { headers: this.headers() });
+    if (!response.ok) throw await parseError(response);
+    return gatewayMessageHistoryPageSchema.parse(await response.json());
+  }
+
+  async listMessages(
+    conversationId: string,
+  ): Promise<readonly GatewayMessageHistoryEntry[]> {
+    const messages: GatewayMessageHistoryEntry[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listMessagePage({
+        conversationId,
+        limit: 100,
+        cursor,
+      });
+      messages.push(...page.messages);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return messages;
   }
 
   /**

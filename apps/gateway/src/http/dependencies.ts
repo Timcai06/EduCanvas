@@ -9,6 +9,7 @@ import type {
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
+  DrizzlePlatformTurnRepository,
   DrizzleWebSessionRepository,
 } from '@educanvas/db';
 import type {
@@ -57,6 +58,9 @@ export interface GatewayClientTransport {
     'listRecent' | 'resolveApproval'
   >;
   handoffs: Pick<DrizzleGatewayHandoffRepository, 'issue'>;
+  messageHistory?: {
+    listMessagePage: DrizzlePlatformTurnRepository['listMessagePage'];
+  };
   connections: Pick<GatewayConnectionService, 'list' | 'connect' | 'revoke'>;
   canvasResources?: Pick<GatewayCanvasResourceService, 'list' | 'get'>;
   /** V12 实时语音握手 ticket store；缺省时 ticket 端点 503。 */

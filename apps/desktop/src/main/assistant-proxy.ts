@@ -2,19 +2,30 @@ import { randomUUID } from 'node:crypto';
 import { GatewayClient, GatewayClientError } from '@educanvas/gateway-client';
 import type {
   GatewayClientTurnRequest,
+  GatewayMessageHistoryEntry,
   GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
+import type { DesktopCanonicalMessage } from '../shared/chat-history';
 
 export interface AssistantProxy {
   turn(
     input: {
       text: string;
       cursor?: { notebookId: string; conversationId: string };
+      clientMessageId?: string;
     },
     signal?: AbortSignal,
   ): Promise<TurnResult>;
+  /** 读取当前会话的服务端 canonical Message 页（最旧→最新），供 View Cache 重建/去重/向上加载。 */
+  listMessagePage(
+    conversationId: string,
+    options?: { limit?: number; cursor?: string | null },
+  ): Promise<{
+    messages: DesktopCanonicalMessage[];
+    nextCursor: string | null;
+  }>;
 }
 
 interface GatewayClientPort {
@@ -23,6 +34,19 @@ interface GatewayClientPort {
     options?: { signal?: AbortSignal },
   ): AsyncIterable<GatewayOperationEvent>;
   cancelOperation(operationId: string): Promise<unknown>;
+}
+
+function toCanonicalMessage(
+  entry: GatewayMessageHistoryEntry,
+): DesktopCanonicalMessage {
+  return {
+    messageId: entry.messageId,
+    clientMessageId: entry.clientMessageId,
+    role: entry.role,
+    status: entry.status,
+    content: entry.content,
+    createdAt: entry.createdAt,
+  };
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -97,7 +121,7 @@ export function createAssistantProxy(options: {
         let answer = '';
         for await (const event of client.streamTurn(
           {
-            clientMessageId: `desktop:${randomUUID()}`,
+            clientMessageId: input.clientMessageId ?? `desktop:${randomUUID()}`,
             notebookId: cursor.notebookId,
             conversationId: cursor.conversationId,
             parts: [{ type: 'text', text: input.text }],
@@ -172,6 +196,25 @@ export function createAssistantProxy(options: {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', onUserAbort);
       }
+    },
+
+    async listMessagePage(conversationId, input) {
+      const session = await options.getSession();
+      if (!session) return { messages: [], nextCursor: null };
+      const client = new GatewayClient(
+        session.gatewayBaseUrl,
+        session.token,
+        options.fetchImpl,
+      );
+      const page = await client.listMessagePage({
+        conversationId,
+        limit: input?.limit,
+        cursor: input?.cursor ?? undefined,
+      });
+      return {
+        messages: page.messages.map(toCanonicalMessage),
+        nextCursor: page.nextCursor,
+      };
     },
   };
 }

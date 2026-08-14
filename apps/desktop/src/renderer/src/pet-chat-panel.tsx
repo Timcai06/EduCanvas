@@ -22,6 +22,7 @@ export function PetChatPanel(props: {
   startVoice(): Promise<void>;
   speakLatest(): Promise<void>;
   cancel(): void;
+  loadEarlier(): Promise<void>;
   directory: DesktopConversationDirectorySnapshot;
   selectConversation(conversationId: string): Promise<void>;
   createConversation(notebookId: string, title: string): Promise<void>;
@@ -42,6 +43,7 @@ export function PetChatPanel(props: {
     startVoice,
     speakLatest,
     cancel,
+    loadEarlier,
     directory,
     selectConversation,
     createConversation,
@@ -209,6 +211,17 @@ export function PetChatPanel(props: {
         <p className="conversation-error" role="alert">
           {directory.error}
         </p>
+      )}
+
+      {history.hasMore && (
+        <button
+          className="pet-chat__load-earlier"
+          type="button"
+          disabled={history.loading}
+          onClick={() => void loadEarlier()}
+        >
+          {history.loading ? '加载中…' : '加载更早消息'}
+        </button>
       )}
 
       <div

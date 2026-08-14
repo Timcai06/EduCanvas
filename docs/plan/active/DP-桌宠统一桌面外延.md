@@ -5,8 +5,8 @@
 - 负责人：@Timcai06
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
-- 最后验证时间：2026-08-13
-- 当前领取任务：`无（DP02 已完成；DP03 等待领取）`
+- 最后验证时间：2026-08-14
+- 当前领取任务：`无（DP03 已完成；DP04 等待领取）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -147,8 +147,12 @@ DP02-B 至 DP02-E 证据：Desktop 主进程统一保存当前游标并向桌宠
 ### DP03：Canonical Message 历史与 View Cache
 
 - 依赖：DP02
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：platform message repository、Gateway history contract/client、desktop cache/UI
+
+拆分执行：`DP03-A 后端分页历史（PASS）` → `DP03-B View Cache 分区/去重（PASS）` → `DP03-C 首屏最近页与切换重建（PASS）` → `DP03-D 向上加载更早页（PASS）` → `DP03-E 回归验收（PASS，实机人工待确认）`。
+
+DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游标、entry schema），DB `DrizzlePlatformTurnRepository.listMessagePage` 按 `(createdAt, id)` 键集游标翻页并内联加载 web 引用，Gateway HTTP 暴露 `/v1/client/conversations/:id/messages`，Gateway Client 新增 `listMessagePage`/`listMessages`。Core/Client/DB/Gateway 类型检查与单测通过。
 
 交付：
 
@@ -158,7 +162,7 @@ DP02-B 至 DP02-E 证据：Desktop 主进程统一保存当前游标并向桌宠
 - 首屏最近页、向上加载更早页、刷新校正、稳定滚动锚点和跨窗口 revision；
 - optimistic User Message 通过 `clientMessageId` 与服务端事实对齐并去重。
 
-完成标准：重启或删除缓存后完整恢复；Web/桌宠消息 ID 一致；状态文案不进入历史。
+完成标准：重启或删除缓存后完整恢复；Web/桌宠消息 ID 一致；状态文案不进入历史。桌面单测覆盖分区/去重/加载更早页；「重启恢复、长历史翻页」仍待实机人工确认。
 
 ### DP04：稳定请求身份、Operation 所有权与断线恢复
 
@@ -336,7 +340,7 @@ DP02-B 至 DP02-E 证据：Desktop 主进程统一保存当前游标并向桌宠
 | DP00 需求与决策 | 文档链接、矛盾扫描、Desktop/Gateway 基线                                      | 项目负责人已接受 ADR-0028          | `PASS`    |
 | DP01 身份解耦   | 45 个 auth/session 定向用例、14 个 Gateway 权限/会话用例、171 个 Desktop 回归 | 旧会话自动升级、撤销边界已自动验证 | `PASS`    |
 | DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`    |
-| DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PENDING` |
+| DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`    |
 | DP04 恢复       | idempotency/cancel/race tests                                                 | 断网、休眠、关窗                   | `PENDING` |
 | DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING` |
 | DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING` |

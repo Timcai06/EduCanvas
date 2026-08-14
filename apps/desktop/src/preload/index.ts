@@ -37,6 +37,7 @@ declare global {
         text: string,
         requestId: string,
         source?: 'text' | 'voice',
+        clientMessageId?: string,
       ): Promise<TurnResult>;
       cancel(requestId: string): void;
       onToast(callback: (message: string) => void): () => void;
@@ -53,6 +54,7 @@ declare global {
       append(
         input: DesktopChatMessageInput,
       ): Promise<DesktopChatHistorySnapshot>;
+      loadEarlier(): Promise<DesktopChatHistorySnapshot>;
       onHistory(
         callback: (snapshot: DesktopChatHistorySnapshot) => void,
       ): () => void;
@@ -113,11 +115,13 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     text: string,
     requestId: string,
     source: 'text' | 'voice' = 'text',
+    clientMessageId?: string,
   ): Promise<TurnResult> {
     return ipcRenderer.invoke('assistant:turn', {
       text,
       requestId,
       source,
+      clientMessageId,
       leaseToken: activeOperationLeaseToken,
     });
   },
@@ -161,6 +165,9 @@ contextBridge.exposeInMainWorld('desktopChat', {
   },
   append(input: DesktopChatMessageInput): Promise<DesktopChatHistorySnapshot> {
     return ipcRenderer.invoke('chat:append', input);
+  },
+  loadEarlier(): Promise<DesktopChatHistorySnapshot> {
+    return ipcRenderer.invoke('chat:load-earlier');
   },
   onHistory(
     callback: (snapshot: DesktopChatHistorySnapshot) => void,

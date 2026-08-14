@@ -31,11 +31,17 @@ export function createPetSubmitGate() {
 export async function submitPetText(
   rawText: string,
   requestId: string,
-  turn: (text: string, requestId: string) => Promise<TurnResult>,
+  turn: (
+    text: string,
+    requestId: string,
+    source?: 'text' | 'voice',
+    clientMessageId?: string,
+  ) => Promise<TurnResult>,
+  clientMessageId?: string,
 ): Promise<PetTextSubmitResult> {
   const text = rawText.trim();
   if (!text) return { ok: false, code: 'invalid_input', error: '请输入内容。' };
-  const result = await turn(text, requestId);
+  const result = await turn(text, requestId, 'text', clientMessageId);
   return result.ok
     ? { ok: true, action: result.action, reply: result.message }
     : { ok: false, code: result.code, error: result.message };

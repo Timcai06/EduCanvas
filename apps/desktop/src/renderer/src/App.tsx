@@ -39,7 +39,11 @@ export default function App({
   );
   const [history, setHistory] = useState<DesktopChatHistorySnapshot>({
     revision: 0,
+    conversationId: null,
     messages: [],
+    hasMore: false,
+    nextCursor: null,
+    loading: false,
   });
   const [directory, setDirectory] =
     useState<DesktopConversationDirectorySnapshot>({
@@ -68,8 +72,20 @@ export default function App({
     role: 'user' | 'assistant' | 'system',
     content: string,
     source: DesktopChatSource,
+    clientMessageId?: string,
   ): Promise<void> => {
-    const next = await window.desktopChat.append({ role, content, source });
+    const next = await window.desktopChat.append({
+      role,
+      content,
+      source,
+      clientMessageId,
+    });
+    setHistory((current) =>
+      next.revision >= current.revision ? next : current,
+    );
+  };
+  const loadEarlier = async (): Promise<void> => {
+    const next = await window.desktopChat.loadEarlier();
     setHistory((current) =>
       next.revision >= current.revision ? next : current,
     );
@@ -209,15 +225,17 @@ export default function App({
       if (!leaseToken) return;
 
       const requestId = crypto.randomUUID();
+      const clientMessageId = `desktop:${crypto.randomUUID()}`;
       requestIdRef.current = requestId;
       setState('sending');
       publishVisual('sending');
       setMessage('EduCanvas 正在回复…');
-      await appendHistory('user', prompt, 'text');
+      await appendHistory('user', prompt, 'text', clientMessageId);
       const result = await submitPetText(
         prompt,
         requestId,
         window.desktopAssistant.turn,
+        clientMessageId,
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
@@ -393,6 +411,7 @@ export default function App({
       startVoice={startVoice}
       speakLatest={speakLatest}
       cancel={cancel}
+      loadEarlier={loadEarlier}
       directory={directory}
       selectConversation={async (conversationId) => {
         const next = await window.desktopConversation.select(conversationId);

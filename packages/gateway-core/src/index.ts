@@ -8,6 +8,7 @@ export * from './channels';
 export * from './citations';
 export * from './common';
 export * from './conversation-directory';
+export * from './conversation-messages';
 export * from './delivery';
 export * from './envelopes';
 export * from './events';

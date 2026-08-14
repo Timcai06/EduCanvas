@@ -20,6 +20,10 @@ import {
   encodeConversationDirectoryCursor,
 } from './conversation-directory-cursor';
 import {
+  decodeMessageHistoryCursor,
+  encodeMessageHistoryCursor,
+} from './message-history-cursor';
+import {
   HANDLED,
   UNHANDLED,
   isAuthorized,
@@ -179,6 +183,52 @@ export async function handleClientRoutes(
         title: body.title,
       });
       writeJson(response, 201, { schemaVersion: 1, conversation });
+      return HANDLED;
+    }
+
+    const messageHistoryMatch =
+      request.method === 'GET'
+        ? url.pathname.match(/^\/v1\/client\/conversations\/([^/]+)\/messages$/)
+        : null;
+    if (messageHistoryMatch) {
+      if (!client.messageHistory) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const conversationId = gatewayOpaqueIdSchema.safeParse(
+        decodeURIComponent(messageHistoryMatch[1]!),
+      );
+      const rawLimit = url.searchParams.get('limit');
+      const limit = rawLimit === null ? 30 : Number(rawLimit);
+      const rawCursor = url.searchParams.get('cursor');
+      const cursor = rawCursor
+        ? decodeMessageHistoryCursor(rawCursor)
+        : null;
+      if (
+        !conversationId.success ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 100 ||
+        (rawCursor !== null && cursor === null)
+      ) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      const page = await client.messageHistory.listMessagePage({
+        conversationId: conversationId.data,
+        trustedSubjectId: identity.userId,
+        limit,
+        cursor,
+      });
+      writeJson(response, 200, {
+        schemaVersion: 1,
+        messages: page.items,
+        nextCursor: page.nextCursor
+          ? encodeMessageHistoryCursor(page.nextCursor)
+          : null,
+      });
       return HANDLED;
     }
 
