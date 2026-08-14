@@ -36,13 +36,20 @@ import {
 } from '@educanvas/telemetry';
 import { getWebTelemetryRuntime } from './telemetry/telemetry-runtime';
 
-/** 模型网关不可用时的诚实失败桩，不伪造空能力成功。 */
+/**
+ * 模型网关不可用时的诚实失败桩，不伪造空能力成功。
+ *
+ * retryable 固定为 false：本桩只在 `resolveTurnModelRuntime()` 判定 Provider
+ * 未配置（configuration.enabled 为假）时被选用，属于永久配置态而非瞬时网络
+ * 抖动。标记为 retryable 会让 Agent Loop 按指数退避空转重试（约 7~9s/turn），
+ * 既拖慢失败反馈又对真实可用性无益。
+ */
 export const unavailableModelGateway: TurnModelGateway = {
   async *streamTurnText(request) {
     yield {
       type: 'failed',
       phase: request.phase,
-      error: { code: 'unavailable', retryable: true },
+      error: { code: 'unavailable', retryable: false },
     };
   },
 };
