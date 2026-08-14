@@ -125,15 +125,27 @@ Docker, and `.env`. A model Provider is optional for the local shell; once any p
 Provider field is configured, `pnpm env:check` requires the complete configuration group.
 
 启动后访问 Web <http://localhost:3101>；Gateway 默认监听 <http://127.0.0.1:3200>。
+`make all` 默认安静启动：Database/Gateway/Web/Worker 全部就绪后只输出约 16 行
+阶段摘要，运行日志写入独立会话目录 `tmp/logs/local/<run-id>/`（JSONL，可按
+服务/级别/关联 ID 过滤）。
 
 ```bash
+make all          # 默认安静启动（阶段摘要 ≤20 行，日志入独立 run directory）
+make all-verbose  # 详细启动：实时 pretty 运行日志 + JSONL
 make dev          # Web 验证环境
+make dev-ui       # Turbo TUI 观察原始 task 日志
 make tui          # 交互式 TUI
 make pet          # 桌宠（先 make all，再另开终端启动）
+make status       # 查看 Database/Gateway/Web/Worker/Runtime 状态
+make logs         # 查看当前运行会话日志（SERVICE/LEVEL/EVENT/OP/TRACE/JOB 可过滤）
+make logs-json    # 原始 JSONL 输出
+make logs-errors  # 只显示 error/fatal
 make check        # lint + typecheck + unit tests
 make integration  # PostgreSQL 集成测试
 make e2e          # Playwright E2E
-make stop         # 停止数据库，保留数据
+make stop         # 优雅停止当前 core 并停止数据库（数据卷保留）
+make stop-core    # 只停止当前 core 进程
+make stop-db      # 只停止数据库容器
 make help         # 查看全部命令
 ```
 
