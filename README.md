@@ -129,6 +129,7 @@ Provider field is configured, `pnpm env:check` requires the complete configurati
 ```bash
 make dev          # Web 验证环境
 make tui          # 交互式 TUI
+make pet          # 桌宠（先 make all，再另开终端启动）
 make check        # lint + typecheck + unit tests
 make integration  # PostgreSQL 集成测试
 make e2e          # Playwright E2E

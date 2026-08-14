@@ -8,7 +8,7 @@ export EDUCANVAS_POSTGRES_PORT
 TEST_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_integration
 E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTGRES_PORT)/educanvas_e2e
 
-.PHONY: help doctor deps setup all dev tui status stop check lint typecheck test build \
+.PHONY: help doctor deps setup all dev tui pet status stop check lint typecheck test build \
 	db-up db-migrate db-logs db-integration-prepare db-e2e-prepare \
 	integration e2e
 
@@ -20,6 +20,7 @@ help:
 		'  make all          启动全部已启用的非交互服务' \
 		'  make dev          启动 Web 验证环境并打开浏览器（PORT 默认 3101）' \
 		'  make tui          启动所需服务并进入交互式 TUI' \
+		'  make pet          启动桌宠（先 make all，另开终端运行）' \
 		'  make status       查看本地 Web、Gateway 与数据库状态' \
 		'  make stop         停止本地数据库容器并保留数据卷' \
 		'  make doctor       检查 Node、pnpm、Docker 与本地环境文件' \
@@ -59,6 +60,11 @@ dev: db-migrate
 tui: db-migrate
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
 	@set -a; . ./.env; set +a; PORT=$(PORT) node tooling/local-orchestrator.mjs tui
+
+# 桌宠是 GUI 进程，不在 orchestrator 的进程树里：先 make all 再另开终端 make pet。
+pet:
+	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
+	@set -a; . ./.env; set +a; pnpm --dir apps/desktop dev
 
 status:
 	@PORT=$(PORT) node tooling/local-orchestrator.mjs status
