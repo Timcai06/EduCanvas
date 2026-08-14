@@ -56,7 +56,8 @@ const scope = {
   courseSlug: 'cat-dog-ai',
   knowledgeNodeId: 'cat-dog-classification',
 };
-const baseTime = new Date('2026-07-15T03:00:00.000Z');
+// 会话列表只返回 30 天有效期内的记录；使用相对基准避免固定日期夹具随时间失效。
+const baseTime = new Date(Date.now() - 60_000);
 
 function at(offsetMs: number): Date {
   return new Date(baseTime.getTime() + offsetMs);
