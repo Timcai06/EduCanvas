@@ -130,9 +130,13 @@ export type AgentLoopEvent<TDetail, TFailure> =
     )
   | { type: 'tool.failed'; failure: TFailure };
 
-const MAX_MODEL_RETRIES = 3;
+/* 429 限流在部分供应商（视觉模型等）常见 10-30 秒窗口：4 次重试 + 20s 退避
+   封顶约覆盖 15s（指数）到 80s（Retry-After 优先）的等待，且不会击穿
+   agent.turn 的 180s 墙钟预算；teaching.turn 的 60s 墙钟下超时会由预算
+   优雅截断，不会无限等待。 */
+const MAX_MODEL_RETRIES = 4;
 const RETRY_BASE_DELAY_MS = 1_000;
-const RETRY_MAX_DELAY_MS = 8_000;
+const RETRY_MAX_DELAY_MS = 20_000;
 
 const RETRYABLE_ERROR_CODES = new Set<NormalizedModelError['code']>([
   'rate_limit',
