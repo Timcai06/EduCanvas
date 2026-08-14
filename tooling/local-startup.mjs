@@ -11,7 +11,11 @@
 
 import { cleanupStaleCore } from './local-core-cleanup.mjs';
 import { runMigrations, startDatabase } from './local-db.mjs';
-import { renderSummaryLine } from './local-pretty.mjs';
+import {
+  buildFailure,
+  printStartupSummary,
+  renderFailureSummary,
+} from './local-startup-report.mjs';
 import {
   createRunSession,
   DEFAULT_LOGS_ROOT,
@@ -20,7 +24,6 @@ import {
   updateRunState,
 } from './local-run-session.mjs';
 import { launchService } from './local-service-spawn.mjs';
-import { renderFailureSummary } from './local-startup-report.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -129,77 +132,6 @@ function launchCoreServices({ session, verbose, colorEnabled }) {
       command: 'pnpm',
       args: ['--filter', '@educanvas/worker', 'dev'],
     }),
-  };
-}
-
-function printStartupSummary({
-  stages,
-  session,
-  webUrl,
-  gatewayUrl,
-  colorEnabled,
-  out,
-}) {
-  out('');
-  out('EduCanvas · Local Runtime');
-  out('─'.repeat(56));
-  out('');
-  out('  STARTUP');
-  out('');
-  for (const stage of stages) {
-    out(
-      `  ${renderSummaryLine(stage.ok ? '✓' : '✗', stage.label, stage.detail, { color: colorEnabled })}`,
-    );
-  }
-  out('');
-  out(`  Web       ${webUrl}`);
-  out(`  Gateway   ${gatewayUrl}`);
-  out(`  Logs      ${session.directory}`);
-  out('');
-  out('  make logs · make status · Ctrl-C to stop');
-}
-
-function buildFailure({ stages, session, services, error }) {
-  const message = error instanceof Error ? error.message : String(error);
-  const failures = [];
-  // 首个失败条目优先携带真实错误（readiness 退出/超时/fatal 原因）。
-  if (message !== '') failures.push({ reason: message });
-  if (services !== null) {
-    for (const service of Object.values(services)) {
-      if (!service.ready && service.fatalError) {
-        failures.push({
-          service: service.name,
-          reason: service.fatalError.message,
-          exitCode: service.exitCode,
-        });
-      }
-    }
-  }
-  if (failures.length === 0) failures.push({ reason: '未知错误' });
-  const recentRecords = {};
-  if (services !== null) {
-    for (const [name, service] of Object.entries(services)) {
-      // 摘要只包含失败/未就绪的服务，不倾倒已就绪服务的无关日志。
-      if (!service.ready && service.recent.length > 0) {
-        recentRecords[name] = service.recent;
-      }
-    }
-  }
-  const errorText = error instanceof Error ? error.message : String(error);
-  const suggestedCommands = [];
-  if (/DATABASE_URL/.test(errorText))
-    suggestedCommands.push('pnpm env:check .env');
-  if (/端口|port|EADDRINUSE|占用/.test(errorText)) {
-    suggestedCommands.push('检查并释放占用端口后重试');
-  }
-  if (suggestedCommands.length === 0)
-    suggestedCommands.push('make status', '查看日志目录中的失败服务 jsonl');
-  return {
-    stages,
-    failures,
-    recentRecords,
-    logDirectory: session.directory,
-    suggestedCommands,
   };
 }
 

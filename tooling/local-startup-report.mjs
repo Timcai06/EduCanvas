@@ -8,6 +8,7 @@
  */
 
 import path from 'node:path';
+import { renderSummaryLine } from './local-pretty.mjs';
 import { LOG_SCHEMA } from './log-protocol.mjs';
 
 const RESET = '\x1b[0m';
@@ -128,3 +129,80 @@ export function renderFailureSummaryPlain(input) {
 }
 
 export { LOG_SCHEMA, path };
+
+/**
+ * 启动阶段摘要渲染（成功路径）— 与失败摘要共用展示层。
+ */
+export function printStartupSummary({
+  stages,
+  session,
+  webUrl,
+  gatewayUrl,
+  colorEnabled,
+  out,
+}) {
+  out('');
+  out('EduCanvas · Local Runtime');
+  out('─'.repeat(56));
+  out('');
+  out('  STARTUP');
+  out('');
+  for (const stage of stages) {
+    out(
+      `  ${renderSummaryLine(stage.ok ? '✓' : '✗', stage.label, stage.detail, { color: colorEnabled })}`,
+    );
+  }
+  out('');
+  out(`  Web       ${webUrl}`);
+  out(`  Gateway   ${gatewayUrl}`);
+  out(`  Logs      ${session.directory}`);
+  out('');
+  out('  make logs · make status · Ctrl-C to stop');
+}
+
+/**
+ * 构建失败摘要输入：真实错误 + 失败/未就绪服务的最近记录。
+ */
+export function buildFailure({ stages, session, services, error }) {
+  const message = error instanceof Error ? error.message : String(error);
+  const failures = [];
+  // 首个失败条目优先携带真实错误（readiness 退出/超时/fatal 原因）。
+  if (message !== '') failures.push({ reason: message });
+  if (services !== null) {
+    for (const service of Object.values(services)) {
+      if (!service.ready && service.fatalError) {
+        failures.push({
+          service: service.name,
+          reason: service.fatalError.message,
+          exitCode: service.exitCode,
+        });
+      }
+    }
+  }
+  if (failures.length === 0) failures.push({ reason: '未知错误' });
+  const recentRecords = {};
+  if (services !== null) {
+    for (const [name, service] of Object.entries(services)) {
+      // 摘要只包含失败/未就绪的服务，不倾倒已就绪服务的无关日志。
+      if (!service.ready && service.recent.length > 0) {
+        recentRecords[name] = service.recent;
+      }
+    }
+  }
+  const errorText = error instanceof Error ? error.message : String(error);
+  const suggestedCommands = [];
+  if (/DATABASE_URL/.test(errorText))
+    suggestedCommands.push('pnpm env:check .env');
+  if (/端口|port|EADDRINUSE|占用/.test(errorText)) {
+    suggestedCommands.push('检查并释放占用端口后重试');
+  }
+  if (suggestedCommands.length === 0)
+    suggestedCommands.push('make status', '查看日志目录中的失败服务 jsonl');
+  return {
+    stages,
+    failures,
+    recentRecords,
+    logDirectory: session.directory,
+    suggestedCommands,
+  };
+}
