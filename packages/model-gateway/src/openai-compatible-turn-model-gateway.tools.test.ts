@@ -74,18 +74,17 @@ describe('OpenAI-compatible工具流', () => {
     };
     const gateway = new OpenAICompatibleTurnModelGateway(config, {
       fetchImpl: oneResponseFetch(() =>
-        createFixtureResponse(
-          [idChunk, argsChunk, finishChunk, usageChunk],
-          { splitEvery: 1 },
-        ),
+        createFixtureResponse([idChunk, argsChunk, finishChunk, usageChunk], {
+          splitEvery: 1,
+        }),
       ),
     });
     const events = await collect(gateway);
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
     /* 2 段参数增量 + finish 后的 done 信号。 */
-    expect(
-      events.filter((event) => event.type === 'tool_call'),
-    ).toHaveLength(3);
+    expect(events.filter((event) => event.type === 'tool_call')).toHaveLength(
+      3,
+    );
   });
 
   it('按索引累积工具参数并在finish_reason后显式关闭调用', async () => {
