@@ -26,7 +26,7 @@
     "apps/worker/src/tasks/generate-artifact.ts": 482,
     "packages/agent-core/src/index.ts": 446,
     "packages/agent-core/src/transcript-term-correction.ts": 580,
-    "packages/agent-runtime/src/agent-loop.ts": 631,
+    "packages/agent-runtime/src/agent-loop.ts": 635,
     "packages/asset-processing/src/mineru-client.ts": 455,
     "packages/asset-processing/src/mineru-fake-server.ts": 489,
     "packages/db/src/agent-model-run-repository.ts": 516,
