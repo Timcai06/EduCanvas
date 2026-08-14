@@ -93,7 +93,26 @@ async function startFixtureProvider(): Promise<{
     if (request.url === '/v1/chat/completions') {
       const payload = (await readBody(request)) as {
         messages?: Array<{ content?: string }>;
+        tools?: unknown;
       };
+      /* 主对话调用带 tools，fixture 无法产出合法主回复：直接快速失败
+         （invalid_request 不可重试），避免 e2e 每条消息白耗 agent-loop
+         指数退避（4 次约 15s），CI 慢 runner 上会把测试拖到超时。 */
+      if (payload.tools !== undefined) {
+        response.writeHead(400, {
+          'content-type': 'application/json',
+          connection: 'close',
+        });
+        response.end(
+          JSON.stringify({
+            error: {
+              message: 'e2e fixture: primary chat unavailable',
+              code: 'invalid_request',
+            },
+          }),
+        );
+        return;
+      }
       const schemaPrompt = payload.messages?.at(-1)?.content ?? '';
       const prompt =
         payload.messages
