@@ -374,12 +374,144 @@ select:focus-visible {
   background: #f4f1e9;
 }
 .pet-chat.is-expanded-window {
+  display: flex;
+  align-items: stretch;
   width: 100%;
   height: 100%;
-  padding: 20px;
+  overflow: hidden;
   border-radius: 18px;
   background: #fffdf8;
   box-shadow: 0 12px 40px rgba(73, 61, 43, 0.12);
+}
+.pet-chat__main {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  padding: 20px;
+}
+.conversation-sidebar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  width: 256px;
+  min-height: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  background: #f7f4ec;
+  transition:
+    width 160ms ease,
+    padding 160ms ease;
+}
+.conversation-sidebar.is-collapsed {
+  width: 44px;
+  padding: 12px 6px;
+}
+.conversation-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 0 2px 0 6px;
+}
+.conversation-sidebar__header strong {
+  font-size: 14px;
+}
+.conversation-sidebar__toggle {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.conversation-sidebar__toggle:hover {
+  background: rgba(57, 78, 68, 0.09);
+  color: var(--ink);
+}
+.conversation-sidebar__action {
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: #245c47;
+  padding: 0 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.conversation-sidebar__action:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.conversation-sidebar__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  margin: 2px -4px 0;
+  padding: 2px 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(82, 97, 89, 0.34) transparent;
+  scrollbar-width: thin;
+}
+.conversation-sidebar__empty {
+  margin: 6px 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.conversation-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.conversation-item:hover {
+  background: rgba(57, 78, 68, 0.06);
+}
+.conversation-item.is-active {
+  background: var(--accent-soft);
+}
+.conversation-item.is-active .conversation-item__title {
+  color: #245c47;
+  font-weight: 700;
+}
+.conversation-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.conversation-item__title {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-item__notebook {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-sidebar .conversation-create {
+  flex-direction: column;
+  margin-top: 0;
 }
 .pet-chat.is-expanded-window header {
   min-height: 40px;
