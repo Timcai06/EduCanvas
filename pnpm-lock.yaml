@@ -97,6 +97,9 @@ importers:
       '@educanvas/gateway-runtime':
         specifier: workspace:*
         version: link:../../packages/gateway-runtime
+      '@educanvas/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
       '@educanvas/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
@@ -302,6 +305,9 @@ importers:
       next:
         specifier: ^16.2.10
         version: 16.2.10(@opentelemetry/api@1.9.1)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      ogl:
+        specifier: ^1.0.11
+        version: 1.0.11
       pdfjs-dist:
         specifier: ^6.1.200
         version: 6.1.200
@@ -421,6 +427,9 @@ importers:
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@educanvas/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
       '@educanvas/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
@@ -690,6 +699,21 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
+
+  packages/logging:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      prettier:
+        specifier: ^3.9.5
+        version: 3.9.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -5116,6 +5140,9 @@ packages:
   obug@2.1.3:
     resolution: {integrity: sha512-9miFgM2OFba7hB+pRgvtV84pYTBaoTHohvmIgiRt6dRIzbwEOIaNaP+dIlGs2fNFoB0SeISs0Jz5WFVRid6Xyg==}
     engines: {node: '>=12.20.0'}
+
+  ogl@1.0.11:
+    resolution: {integrity: sha512-kUpC154AFfxi16pmZUK4jk3J+8zxwTWGPo03EoYA8QPbzikHoaC82n6pNTbd+oEaJonaE8aPWBlX7ad9zrqLsA==}
 
   on-finished@2.4.1:
     resolution: {integrity: sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==}
@@ -10587,6 +10614,8 @@ snapshots:
       es-object-atoms: 1.1.2
 
   obug@2.1.3: {}
+
+  ogl@1.0.11: {}
 
   on-finished@2.4.1:
     dependencies:
