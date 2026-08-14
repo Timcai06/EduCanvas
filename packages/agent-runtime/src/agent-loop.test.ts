@@ -210,6 +210,38 @@ describe('AgentLoopEngine', () => {
     expect(events.at(-1)).toMatchObject({ type: 'completed' });
   });
 
+  it('重试耗尽（4 次）后透传 rate_limit 失败，退避按指数推进且封顶', async () => {
+    const gateway: TurnModelGateway = {
+      async *streamTurnText() {
+        throw new ModelGatewayInvocationError({
+          code: 'rate_limit',
+          retryable: true,
+        });
+      },
+    };
+    const waits: number[] = [];
+    const events = await collect(
+      new AgentLoopEngine(gateway, {
+        random: () => 0,
+        async wait(ms) {
+          waits.push(ms);
+          return true;
+        },
+      }),
+      command({}),
+    );
+
+    /* 1 次初始 + 4 次重试，共 5 次尝试；退避 1s/2s/4s/8s 均低于 20s 封顶。 */
+    expect(waits).toEqual([1_000, 2_000, 4_000, 8_000]);
+    expect(events.filter((event) => event.type === 'model.retry')).toHaveLength(
+      4,
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      error: { code: 'rate_limit' },
+    });
+  });
+
   it('does not retry after any provider event has already been projected', async () => {
     let calls = 0;
     const gateway: TurnModelGateway = {
