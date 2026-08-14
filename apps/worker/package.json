@@ -20,6 +20,7 @@
     "@educanvas/asset-processing": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
+    "@educanvas/logging": "workspace:*",
     "@educanvas/model-gateway": "workspace:*",
     "@educanvas/mcp-runtime": "workspace:*",
     "@educanvas/telemetry": "workspace:*",
