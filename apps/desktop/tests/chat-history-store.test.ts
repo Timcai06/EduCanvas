@@ -129,6 +129,57 @@ describe('desktop chat history store', () => {
     });
   });
 
+  it('restores structured parts and citations from canonical history', () => {
+    const store = createChatHistoryStore();
+    store.setConversation('conversation:one');
+    store.reconcile([
+      {
+        ...canonical({ messageId: 'm-rich', content: '请查看这些结果' }),
+        parts: [
+          {
+            type: 'image',
+            assetId: 'asset:image',
+            versionId: 'version:image',
+            label: '生成的示意图',
+          },
+          {
+            type: 'unsupported',
+            partType: 'asset_ref:video',
+            label: '视频内容',
+            target: {
+              kind: 'asset',
+              assetId: 'asset:video',
+              assetVersionId: 'version:video',
+            },
+          },
+        ],
+        citations: [
+          {
+            citationId: 'citation:one',
+            marker: 1,
+            label: '课程讲义',
+            target: {
+              kind: 'knowledge',
+              sourceId: 'source:one',
+              documentId: 'document:one',
+              chunkId: 'chunk:one',
+              pageStart: 3,
+              pageEnd: 3,
+            },
+          },
+        ],
+      },
+    ] as unknown as Parameters<typeof store.reconcile>[0]);
+
+    expect(store.state().messages[0]).toMatchObject({
+      parts: [
+        { type: 'image', assetId: 'asset:image' },
+        { type: 'unsupported', partType: 'asset_ref:video' },
+      ],
+      citations: [{ citationId: 'citation:one', label: '课程讲义' }],
+    });
+  });
+
   it('prepends an earlier page and dedups by messageId', () => {
     const store = createChatHistoryStore();
     store.setConversation('conv-1');

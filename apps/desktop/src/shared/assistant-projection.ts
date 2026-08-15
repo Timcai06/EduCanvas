@@ -44,8 +44,9 @@ export type DesktopAssistantProjection =
       clientMessageId: string | null;
       conversationId: string;
       operationId: string;
-      /** 工具名仅在 started 阶段可得；completed/failed 只有 toolCallId，置 null。 */
-      tool: string | null;
+      toolCallId: string;
+      /** main 产生的安全摘要；completed/failed 由 renderer 按 toolCallId 保留 started 摘要。 */
+      summary: string | null;
       status: 'started' | 'completed' | 'failed';
     }
   | {

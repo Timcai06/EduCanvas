@@ -13,6 +13,16 @@ const FINAL_MESSAGES = {
   interrupted: '连接中断，可重试续传。',
 } as const;
 
+function safeToolSummary(tool: string): string {
+  const normalized = tool.toLowerCase();
+  if (/search|retrieve|browse|source|knowledge/.test(normalized))
+    return '正在查找相关资料';
+  if (/artifact|slide|mind|image|generate|create/.test(normalized))
+    return '正在生成学习内容';
+  if (/calculate|math|code|execute/.test(normalized)) return '正在计算和验证';
+  return '正在处理学习任务';
+}
+
 /**
  * 把 gateway Operation 事件白名单化为 renderer 可见的受限投影（DP05/DP06）。
  * 透出 accepted/流式增量/工具生命周期/citation/artifact/approval/终态；
@@ -45,12 +55,29 @@ export function toAssistantProjection(
         delta: event.delta,
       };
     case 'tool.started':
-      return { ...base, type: 'tool', tool: event.tool, status: 'started' };
+      return {
+        ...base,
+        type: 'tool',
+        toolCallId: event.toolCallId,
+        summary: safeToolSummary(event.tool),
+        status: 'started',
+      };
     case 'tool.completed':
-      // completed/failed 事件只带 toolCallId 不带工具名，名称以 started 阶段为准。
-      return { ...base, type: 'tool', tool: null, status: 'completed' };
+      return {
+        ...base,
+        type: 'tool',
+        toolCallId: event.toolCallId,
+        summary: null,
+        status: 'completed',
+      };
     case 'tool.failed':
-      return { ...base, type: 'tool', tool: null, status: 'failed' };
+      return {
+        ...base,
+        type: 'tool',
+        toolCallId: event.toolCallId,
+        summary: null,
+        status: 'failed',
+      };
     case 'message.citation':
       return {
         ...base,

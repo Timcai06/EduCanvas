@@ -26,6 +26,7 @@ import type {
 import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
 import { applyAssistantProjection } from './assistant-stream';
 import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
+import { openDesktopResult } from './result-actions';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -36,6 +37,9 @@ export default function App({
   const [chatCollapsed, setChatCollapsed] = useState(initialChatCollapsed);
   const [state, setState] = useState<PetUiState>('ready');
   const [visualState, setVisualState] = useState<PetUiState>('greeting');
+  const [authState, setAuthState] = useState<
+    DesktopAuthStatus['state'] | 'checking'
+  >('checking');
   const [message, setMessage] = useState(
     '你好，我在这里。输入一句话和我聊聊吧。',
   );
@@ -136,12 +140,9 @@ export default function App({
       if (projection.type === 'tool') {
         setMessage(
           projection.status === 'started'
-            ? projection.tool
-              ? `正在使用工具 ${projection.tool}…`
-              : '正在使用工具…'
+            ? (projection.summary ?? '正在处理学习任务')
             : 'EduCanvas 正在回复…',
         );
-        return;
       }
       if (projection.type === 'final') setCanStop(false);
       setHistory((current) => {
@@ -168,7 +169,8 @@ export default function App({
   );
 
   useEffect(() => {
-    const unsubscribe = window.desktopAuth.onStatus((status) => {
+    const accept = (status: DesktopAuthStatus): void => {
+      setAuthState(status.state);
       const previousAuthState = authStateRef.current;
       authStateRef.current = status.state;
       if (status.state === 'signed_in') {
@@ -184,7 +186,9 @@ export default function App({
         publishVisual('auth-failed');
         setMessage(status.message);
       }
-    });
+    };
+    const unsubscribe = window.desktopAuth.onStatus(accept);
+    void window.desktopAuth.getStatus().then(accept);
     return () => {
       unsubscribe();
     };
@@ -211,11 +215,15 @@ export default function App({
 
   const requireAuth = async (): Promise<boolean> => {
     const auth = await window.desktopAuth.getStatus();
+    setAuthState(auth.state);
     if (auth.state === 'signed_in') return true;
     setState('authorizing');
     publishVisual('authorizing');
     setMessage('请在浏览器完成登录与授权，然后回到这里继续。');
-    if (auth.state !== 'authorizing') await window.desktopAuth.signIn();
+    if (auth.state !== 'authorizing') {
+      const next = await window.desktopAuth.signIn();
+      setAuthState(next.state);
+    }
     return false;
   };
 
@@ -468,6 +476,7 @@ export default function App({
     <PetChatPanel
       expandedView={expandedView}
       state={state}
+      authState={authState}
       message={message}
       history={history}
       historyEndRef={historyEndRef}
@@ -478,6 +487,9 @@ export default function App({
       setText={setText}
       collapse={() => setChatCollapsed(true)}
       submit={submit}
+      signIn={async () => {
+        await requireAuth();
+      }}
       startVoice={startVoice}
       speakLatest={speakLatest}
       cancel={cancel}
@@ -497,6 +509,7 @@ export default function App({
         setDirectory(next);
         setMessage(next.error ?? '新对话已创建。');
       }}
+      openResult={(target) => openDesktopResult(target).then(setMessage)}
     />
   );
 

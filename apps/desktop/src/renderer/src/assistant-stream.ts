@@ -26,8 +26,8 @@ const streamingMessageId = (
 /**
  * 把受限流式投影应用到 renderer 的对话视图（DP05/DP06）。
  *
- * - 只处理 message.started / delta / final / citation / artifact / approval；
- *   accepted 与 tool 不改变消息列表，返回 null；
+ * - 处理 message.started / delta / final / tool / citation / artifact / approval；
+ *   accepted 不改变消息列表，返回 null；
  * - 用 conversationId 丢弃旧 operation 的迟到事件（防串会话）；
  * - message.started / delta 确保存在流式占位消息并原位追加 delta；
  * - citation / artifact / approval 原位保留结构化事件到同一流式占位消息
@@ -45,7 +45,8 @@ export function applyAssistantProjection(
     projection.type !== 'final' &&
     projection.type !== 'citation' &&
     projection.type !== 'artifact' &&
-    projection.type !== 'approval'
+    projection.type !== 'approval' &&
+    projection.type !== 'tool'
   ) {
     return null;
   }
@@ -88,6 +89,27 @@ export function applyAssistantProjection(
       return { ...message, pendingApproval: projection.approval };
     });
   }
+  if (projection.type === 'tool') {
+    return attachStructured(snapshot, projection, (message) => {
+      const activities = message.toolActivities ?? [];
+      const previous = activities.find(
+        (item) => item.toolCallId === projection.toolCallId,
+      );
+      const next = {
+        toolCallId: projection.toolCallId,
+        summary: projection.summary ?? previous?.summary ?? '正在处理学习任务',
+        status: projection.status,
+      };
+      return {
+        ...message,
+        toolActivities: previous
+          ? activities.map((item) =>
+              item.toolCallId === projection.toolCallId ? next : item,
+            )
+          : [...activities, next],
+      };
+    });
+  }
 
   const delta = projection.type === 'delta' ? projection.delta : '';
   if (index === -1) {
@@ -122,7 +144,7 @@ function attachStructured(
   snapshot: DesktopChatHistorySnapshot,
   projection: Extract<
     DesktopAssistantProjection,
-    { type: 'citation' | 'artifact' | 'approval' }
+    { type: 'citation' | 'artifact' | 'approval' | 'tool' }
   >,
   update: (message: DesktopChatMessage) => DesktopChatMessage | null,
 ): DesktopChatHistorySnapshot {

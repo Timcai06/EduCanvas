@@ -5,8 +5,8 @@
 - 负责人：@Timcai06
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
-- 最后验证时间：2026-08-14
-- 当前领取任务：`无（DP04 已完成；DP05 等待领取）`
+- 最后验证时间：2026-08-15
+- 当前领取任务：`无（DP07 已完成；DP08 等待领取）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -189,7 +189,7 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 ### DP05：真实流式消息与统一运行状态
 
 - 依赖：DP04
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：assistant proxy/preload event bridge、renderer message projection
 
 交付：
@@ -202,10 +202,12 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 
 完成标准：首个 delta 即可见；切窗和折叠不丢流；读屏不逐 token 播报。
 
+证据：PR #381 已实现 accepted、真实 delta、结构化事件广播、跨窗口同步和 canonical 终态校正；DP07 分支基于最新 `main` 重放该提交后，Desktop 42 个测试文件、214 个用例、类型检查与生产构建通过。
+
 ### DP06：Desktop capability manifest 与结构化事件投影
 
 - 依赖：DP03
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：gateway-core/client/http、desktop shared/proxy
 
 交付：
@@ -217,10 +219,12 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 
 完成标准：Gateway 按能力投影而非客户端名称分支；结构化资源身份不在代理层丢失。
 
+证据：PR #381 已实现版本化 Desktop capability manifest、未知版本 fail closed 和结构化事件白名单投影；该 PR 的 GitHub CI 通过，DP07 分支回归未改变 Gateway 契约。
+
 ### DP07：Citation、图片、工具进度与 Artifact 结果卡
 
 - 依赖：DP06
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：desktop message types、renderer components/styles、resource access client
 
 交付：
@@ -233,6 +237,8 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 - 卡片支持键盘、主题、缩放和历史恢复。
 
 完成标准：资源可追溯、不静默丢失、不伪装完成；复杂编辑能力不进入桌宠。
+
+证据：Desktop canonical 历史现在保留 Citation 与受限 Message Part；renderer 显示引用编号/页码、受界图片结果、Artifact 类型/标题/状态/版本、稳定工具摘要和未知 Part 的 Web 降级卡。所有打开动作均由用户点击触发，经受限 IPC 使用现有一次性 Conversation handoff；资源精确定位仍由 DP08 承担。Desktop 42 个测试文件、214 个用例、类型检查、生产构建与差异检查通过。
 
 ### DP08：用户点击式精确 Web handoff
 

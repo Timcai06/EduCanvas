@@ -32,6 +32,42 @@ export interface DesktopCitation {
   target: DesktopCitationTarget;
 }
 
+export type DesktopResultTarget =
+  | DesktopCitationTarget
+  | {
+      kind: 'artifact';
+      artifactId: string;
+      versionId: string | null;
+    };
+
+/** 桌面可直接预览或诚实降级的 canonical Message Part 投影。 */
+export type DesktopMessagePart =
+  | {
+      type: 'image';
+      assetId: string;
+      versionId: string;
+      label: string;
+    }
+  | {
+      type: 'artifact';
+      artifactId: string;
+      versionId: string;
+      artifactKind: string;
+      label: string;
+    }
+  | {
+      type: 'unsupported';
+      partType: string;
+      label: string;
+      target: DesktopResultTarget | null;
+    };
+
+export interface DesktopToolActivity {
+  toolCallId: string;
+  summary: string;
+  status: 'started' | 'completed' | 'failed';
+}
+
 export type DesktopArtifactStatus =
   'proposed' | 'version_added' | 'generating' | 'failed';
 
@@ -77,6 +113,8 @@ export interface DesktopChatMessage {
   citations?: readonly DesktopCitation[];
   artifacts?: readonly DesktopArtifactRef[];
   pendingApproval?: DesktopApprovalRef | null;
+  parts?: readonly DesktopMessagePart[];
+  toolActivities?: readonly DesktopToolActivity[];
 }
 
 export interface DesktopChatMessageInput {
@@ -105,4 +143,6 @@ export interface DesktopCanonicalMessage {
   status: DesktopChatMessageStatus;
   content: string;
   createdAt: string;
+  parts?: readonly DesktopMessagePart[];
+  citations?: readonly DesktopCitation[];
 }
