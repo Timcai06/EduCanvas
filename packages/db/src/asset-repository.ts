@@ -328,12 +328,17 @@ export class DrizzleAssetRepository {
    */
   async createUploadedPending(
     input: Omit<CreateUploadedAssetInput, 'extractedText' | 'outcome'>,
+    options?: { enqueue?: boolean },
   ): Promise<{ snapshot: AssetSnapshot; versionId: string; jobId: string }> {
     const validated = this.validateUploadInput(input);
     const now = input.now ?? new Date();
     const assetId = randomUUID();
     const versionId = randomUUID();
     const jobId = randomUUID();
+    /* 默认入队（现有行为）；enqueue:false 供测试 fixture 与数据导入使用：
+       仍插入 assetProcessingJobs 行（结算状态机依赖），但不写 graphile
+       job，worker 永不领取，避免与后台任务竞态结算。 */
+    const shouldEnqueue = options?.enqueue !== false;
 
     return this.database.transaction(async (transaction) => {
       await requireNotebookAccess(transaction, {
@@ -411,16 +416,18 @@ export class DrizzleAssetRepository {
           createdAt: now,
         })
         .returning();
-      await transaction.execute(sql`
-        select graphile_worker.add_job(
-          ${taskName},
-          payload := ${JSON.stringify({ jobId })}::json,
-          job_key := ${queueJobKey},
-          max_attempts := 3
-        )
-      `);
       if (!createdAsset || !createdVersion || !createdJob) {
         throw new AssetPersistenceError('Asset创建失败');
+      }
+      if (shouldEnqueue) {
+        await transaction.execute(sql`
+          select graphile_worker.add_job(
+            ${taskName},
+            payload := ${JSON.stringify({ jobId })}::json,
+            job_key := ${queueJobKey},
+            max_attempts := 3
+          )
+        `);
       }
       return {
         snapshot: toSnapshot(createdAsset, createdVersion, createdJob),
