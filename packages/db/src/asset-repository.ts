@@ -416,14 +416,6 @@ export class DrizzleAssetRepository {
           createdAt: now,
         })
         .returning();
-      await transaction.execute(sql`
-        select graphile_worker.add_job(
-          ${taskName},
-          payload := ${JSON.stringify({ jobId })}::json,
-          job_key := ${queueJobKey},
-          max_attempts := 3
-        )
-      `);
       if (!createdAsset || !createdVersion || !createdJob) {
         throw new AssetPersistenceError('Asset创建失败');
       }
