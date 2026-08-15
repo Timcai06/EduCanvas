@@ -4,13 +4,16 @@ import type { StoredDesktopSession } from '../src/main/desktop-session-store';
 import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 
 const session: StoredDesktopSession = {
+  version: 2,
   token: `ecs1_${'t'.repeat(43)}`,
   expiresAt: '2026-09-10T08:00:00.000Z',
   webBaseUrl: 'https://learn.educanvas.example',
   gatewayBaseUrl: 'https://gateway.educanvas.example',
   userId: 'user:one',
-  notebookId: 'notebook:bound',
-  conversationId: 'conversation:bound',
+  initialCursor: {
+    notebookId: 'notebook:bound',
+    conversationId: 'conversation:bound',
+  },
 };
 
 function event(
@@ -31,7 +34,7 @@ function event(
 }
 
 describe('remote assistant proxy', () => {
-  it('uses the authorization-bound Conversation/Notebook and aggregates deltas', async () => {
+  it('uses the initial Conversation/Notebook and aggregates deltas', async () => {
     const calls: Array<{
       url: string;
       authorization: string | null;
@@ -80,6 +83,41 @@ describe('remote assistant proxy', () => {
     });
   });
 
+  it('can route the same signed-in identity to another conversation', async () => {
+    let request: unknown;
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn(value) {
+          request = value;
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, {
+            type: 'operation.completed',
+            messageId: 'message:other',
+          });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+
+    await expect(
+      proxy.turn({
+        text: '继续',
+        cursor: {
+          notebookId: 'notebook:other',
+          conversationId: 'conversation:other',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(request).toMatchObject({
+      notebookId: 'notebook:other',
+      conversationId: 'conversation:other',
+    });
+  });
+
   it('requires a desktop session', async () => {
     const withoutSession = createAssistantProxy({
       getSession: async () => null,
@@ -89,6 +127,20 @@ describe('remote assistant proxy', () => {
       ok: false,
       code: 'unauthenticated',
     });
+  });
+
+  it('does not start a turn without an initial conversation cursor', async () => {
+    const clientFactory = vi.fn();
+    const proxy = createAssistantProxy({
+      getSession: async () => ({ ...session, initialCursor: null }),
+      invalidateSession: async () => undefined,
+      clientFactory,
+    });
+    await expect(proxy.turn({ text: 'hi' })).resolves.toMatchObject({
+      ok: false,
+      code: 'route_required',
+    });
+    expect(clientFactory).not.toHaveBeenCalled();
   });
 
   it('clears an invalid local session after Gateway 401', async () => {
@@ -249,5 +301,92 @@ describe('remote assistant proxy', () => {
       code: 'timeout',
     });
     releaseCancel();
+  });
+});
+
+describe('remote assistant proxy resume & interrupted', () => {
+  it('resumes from afterSequence and re-terminates on operation.completed', async () => {
+    const resume = vi.fn(async (_operationId: string, _after?: number) => [
+      event(2, { type: 'message.delta', delta: '后半句' }),
+      event(3, { type: 'operation.completed', messageId: 'message:one' }),
+    ]);
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {},
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+        resume,
+      }),
+    });
+    await expect(
+      proxy.resume({ operationId: 'operation:one', afterSequence: 1 }),
+    ).resolves.toMatchObject({ ok: true, action: 'answered' });
+    expect(resume).toHaveBeenCalledWith('operation:one', 1);
+  });
+
+  it('reports interrupted when the resume snapshot has no terminal event', async () => {
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {},
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+        async resume() {
+          return [event(2, { type: 'message.delta', delta: '进行中' })];
+        },
+      }),
+    });
+    await expect(
+      proxy.resume({ operationId: 'operation:one', afterSequence: 1 }),
+    ).resolves.toMatchObject({ ok: false, code: 'interrupted' });
+  });
+
+  it('reports interrupted when the turn stream ends without a terminal event', async () => {
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '只说了一半' });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    await expect(proxy.turn({ text: '你好' })).resolves.toMatchObject({
+      ok: false,
+      code: 'interrupted',
+    });
+  });
+
+  it('reports the operationId and lastSequence through the tracker', async () => {
+    const tracker = { operationId: null as string | null, lastSequence: -1 };
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '你好' });
+          yield event(2, {
+            type: 'operation.completed',
+            messageId: 'message:one',
+          });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    await proxy.turn({ text: '你好' }, undefined, tracker);
+    expect(tracker.operationId).toBe('operation:one');
+    expect(tracker.lastSequence).toBe(2);
   });
 });

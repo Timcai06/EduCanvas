@@ -13,6 +13,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import { GatewayClientSessionAuth } from '../client-auth';
 import { createGatewayHttpHandler } from '../server';
+import { GatewayPersistenceError } from '@educanvas/db';
 
 const servers: Server[] = [];
 const now = new Date('2026-08-11T08:00:00.000Z');
@@ -76,6 +77,7 @@ function service(
 
 async function start(
   onRun?: (input: Parameters<GatewayTurnRunnerPort['run']>[0]) => void,
+  options: { denyCreate?: boolean } = {},
 ) {
   const token = `ecs1_${'t'.repeat(43)}`;
   const active = new Map([[hash(token), 'user:desktop']]);
@@ -125,6 +127,39 @@ async function start(
                 ]
               : [];
           },
+          async listConversationPage({ userId, limit }) {
+            const items =
+              userId === 'user:desktop'
+                ? [
+                    {
+                      notebookId: 'notebook:one',
+                      notebookTitle: '桌面笔记本',
+                      conversationId: 'conversation:one',
+                      title: '桌宠会话',
+                      agentProfileId: 'general',
+                      membershipRole: 'owner' as const,
+                      lastActivityAt: now.toISOString(),
+                    },
+                  ]
+                : [];
+            return { items: items.slice(0, limit), nextCursor: null };
+          },
+          async createConversation(input) {
+            if (options.denyCreate)
+              throw new GatewayPersistenceError(
+                'forbidden',
+                'Conversation creation denied',
+              );
+            return {
+              notebookId: input.notebookId ?? 'notebook:personal',
+              notebookTitle: '桌面笔记本',
+              conversationId: 'conversation:new',
+              title: input.title,
+              agentProfileId: 'general',
+              membershipRole: 'owner' as const,
+              lastActivityAt: now.toISOString(),
+            };
+          },
         },
         approvals: {
           async listPending() {
@@ -172,13 +207,58 @@ describe('Gateway desktop client sessions', () => {
     });
     expect(accepted.status).toBe(200);
     expect(await accepted.json()).toMatchObject({
+      schemaVersion: 1,
       conversations: [{ conversationId: 'conversation:one' }],
+      nextCursor: null,
     });
 
     const rejected = await fetch(`${base}/v1/client/conversations`, {
       headers: { authorization: `Bearer ${'w'.repeat(43)}` },
     });
     expect(rejected.status).toBe(401);
+  });
+
+  it('creates a server-owned conversation and rejects invalid or unauthorized creation', async () => {
+    const { base, token } = await start();
+    const created = await fetch(`${base}/v1/client/conversations`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        notebookId: 'notebook:one',
+        title: '错题复习',
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({
+      schemaVersion: 1,
+      conversation: {
+        conversationId: 'conversation:new',
+        title: '错题复习',
+        agentProfileId: 'general',
+      },
+    });
+
+    const invalid = await fetch(`${base}/v1/client/conversations?limit=0`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(invalid.status).toBe(400);
+
+    const deniedServer = await start(undefined, { denyCreate: true });
+    const denied = await fetch(`${deniedServer.base}/v1/client/conversations`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${deniedServer.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        notebookId: 'notebook:one',
+        title: '不允许创建',
+      }),
+    });
+    expect(denied.status).toBe(403);
   });
 
   it('revokes the current desktop session immediately', async () => {

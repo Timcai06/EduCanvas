@@ -65,6 +65,123 @@ const turn = {
 };
 
 describe('Gateway General Profile Tool Policy', () => {
+  it('要求回复只包含对用户说的话，不生成桌宠动作或状态旁白', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+
+    const plan = await profile.prepare({ command, turn });
+    const systemPrompt = plan.context.profile[0]?.message.content;
+
+    expect(systemPrompt).toContain('只输出直接对用户说的话');
+    expect(systemPrompt).toContain(
+      '不要输出括号包裹的动作、表情、状态或舞台说明',
+    );
+  });
+
+  it('在公开和保存前移除被分片的开头动作旁白', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+    const guard = profile.createOutputGuard?.();
+
+    expect(guard).toBeDefined();
+    await expect(guard!.push('(轻轻晃了晃尾巴，')).resolves.toEqual({
+      kind: 'hold',
+    });
+    await expect(
+      guard!.push('头顶冒出一朵像素小花) 这是因为植物需要阳光。'),
+    ).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['这是因为植物需要阳光。'],
+    });
+    await expect(guard!.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [],
+    });
+  });
+
+  it('保留正常正文中的括号说明并继续流式输出', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+    const guard = profile.createOutputGuard?.();
+
+    expect(guard).toBeDefined();
+    await expect(guard!.push('答案是（x + 1）²。')).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['答案是（x + 1）²。'],
+    });
+  });
+
+  it('移除正常正文之后出现的全角括号动作旁白', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+    const guard = profile.createOutputGuard?.();
+
+    expect(guard).toBeDefined();
+    await expect(guard!.push('好的。')).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['好的。'],
+    });
+    await expect(
+      guard!.push('（开心地摇了摇尾巴）我们继续学习。'),
+    ).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['我们继续学习。'],
+    });
+  });
+
+  it('不把教学正文中的普通括号说明误判为桌宠动作', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+    const guard = profile.createOutputGuard?.();
+
+    expect(guard).toBeDefined();
+    await expect(
+      guard!.push('这个阶段（思考时间约 3 秒）不需要立即回答。'),
+    ).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['这个阶段（思考时间约 3 秒）不需要立即回答。'],
+    });
+  });
+
+  it('模型只生成动作旁白时返回正常提示而不是空回复', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+    );
+    const guard = profile.createOutputGuard?.();
+
+    expect(guard).toBeDefined();
+    await expect(guard!.push('(轻轻摇了摇尾巴)')).resolves.toEqual({
+      kind: 'hold',
+    });
+    await expect(guard!.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['我没有生成有效回答，请再试一次。'],
+    });
+  });
+
   it('只采用服务端MCP与当前Actor私人Node能力，不采用command manifest增权', async () => {
     const nodes = nodeInvocations(['device.status']);
     const profile = new GatewayGeneralProfile(

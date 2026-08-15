@@ -18,10 +18,11 @@ const codePayloadSchema = z
     c: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
     e: z.number().int().positive(),
     n: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
-    b: gatewayOpaqueIdSchema,
-    r: gatewayOpaqueIdSchema,
+    b: gatewayOpaqueIdSchema.optional(),
+    r: gatewayOpaqueIdSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((claims) => Boolean(claims.b) === Boolean(claims.r));
 
 interface CryptoOptions {
   readonly secret: string;
@@ -46,8 +47,8 @@ function sign(payload: string, secret: string): Buffer {
 export function createDesktopAuthorizationCode(
   input: {
     codeChallenge: string;
-    notebookId: string;
-    conversationId: string;
+    notebookId?: string;
+    conversationId?: string;
   },
   options: CryptoOptions,
 ): string {
@@ -80,8 +81,8 @@ export function verifyDesktopAuthorizationCode(
 ): {
   codeChallenge: string;
   expiresAt: Date;
-  notebookId: string;
-  conversationId: string;
+  notebookId?: string;
+  conversationId?: string;
 } | null {
   try {
     requireSecret(options.secret);
@@ -109,8 +110,9 @@ export function verifyDesktopAuthorizationCode(
     return {
       codeChallenge: claims.c,
       expiresAt: new Date(claims.e * 1_000),
-      notebookId: claims.b,
-      conversationId: claims.r,
+      ...(claims.b && claims.r
+        ? { notebookId: claims.b, conversationId: claims.r }
+        : {}),
     };
   } catch {
     return null;

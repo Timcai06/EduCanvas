@@ -13,6 +13,12 @@ export type TurnResult =
   | {
       ok: false;
       code:
-        'backend_offline' | 'timeout' | 'aborted' | 'http' | 'unauthenticated';
+        | 'backend_offline'
+        | 'timeout'
+        | 'aborted'
+        | 'interrupted'
+        | 'http'
+        | 'unauthenticated'
+        | 'route_required';
       message: string;
     };

@@ -29,6 +29,7 @@ import {
   DrizzleGatewayNodeRepository,
   DrizzleGatewayOperationStore,
   DrizzleGatewayRouteResolver,
+  DrizzlePlatformTurnRepository,
   DrizzleWebSessionRepository,
   requireNotebookAccess,
 } from '@educanvas/db';
@@ -91,6 +92,7 @@ const operationStore = new DrizzleGatewayOperationStore(undefined, {
 });
 const identities = new DrizzleGatewayIdentityRepository();
 const directory = new DrizzleGatewayDirectoryRepository();
+const turnRepository = new DrizzlePlatformTurnRepository();
 const connections = new GatewayConnectionService(
   new DrizzleGatewayConnectionRepository(),
   createDefaultGatewayConnectionProviders({
@@ -177,6 +179,9 @@ const server = createServer(
           approvals: new DrizzleGatewayApprovalRepository(),
           operations: operationStore,
           handoffs: new DrizzleGatewayHandoffRepository(),
+          messageHistory: {
+            listMessagePage: (input) => turnRepository.listMessagePage(input),
+          },
           connections,
           canvasResources: new GatewayCanvasResourceService(),
           streamingTickets,

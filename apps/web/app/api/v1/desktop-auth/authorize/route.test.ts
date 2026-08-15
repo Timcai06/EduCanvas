@@ -106,11 +106,14 @@ describe('POST /api/v1/desktop-auth/authorize', () => {
     });
   });
 
-  it('fails closed when the signed-in user has no Web conversation to bind', async () => {
+  it('still authorizes identity when there is no initial Web conversation', async () => {
     mocks.loadConversation.mockResolvedValueOnce(null);
     const response = await POST(request(validBody));
-    expect(response.status).toBe(409);
-    expect(mocks.issueAuthorizationCode).not.toHaveBeenCalled();
+    expect(response.status).toBe(303);
+    expect(mocks.issueAuthorizationCode).toHaveBeenCalledWith({
+      userId: 'user:one',
+      codeChallenge: validBody.code_challenge,
+    });
   });
 
   it('binds the same runtime identity used by Web in local deployment', async () => {

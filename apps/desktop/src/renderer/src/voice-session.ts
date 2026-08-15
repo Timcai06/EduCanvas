@@ -7,6 +7,21 @@ import type {
 import type { SpeechPlaybackResult } from './speech-player';
 import type { VoiceRecordingResult } from './voice-recorder';
 
+type DesktopVoiceTurn = (
+  text: string,
+  requestId: string,
+  source: 'voice',
+  clientMessageId: string,
+) => Promise<TurnResult>;
+
+/** 将一轮语音链路绑定到同一个稳定身份，供中断恢复和服务端幂等去重。 */
+export function bindVoiceTurn(
+  turn: DesktopVoiceTurn,
+  clientMessageId: string,
+): (text: string, requestId: string) => Promise<TurnResult> {
+  return (text, requestId) => turn(text, requestId, 'voice', clientMessageId);
+}
+
 export type VoiceSessionPhase =
   | 'starting'
   | 'listening'

@@ -122,4 +122,21 @@ describe('DesktopAuthService', () => {
       code: 'invalid_grant',
     });
   });
+
+  it('creates an identity-only grant when no initial cursor is available', async () => {
+    const { auth } = service();
+    const issued = await auth.issueAuthorizationCode({
+      userId: 'user:one',
+      codeChallenge: challenge,
+    });
+    await expect(
+      auth.exchange({
+        grant_type: 'authorization_code',
+        client_id: 'educanvas-desktop',
+        redirect_uri: 'educanvas://auth/callback',
+        code: issued.code,
+        code_verifier: verifier,
+      }),
+    ).resolves.not.toHaveProperty('notebook_id');
+  });
 });

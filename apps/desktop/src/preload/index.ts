@@ -12,6 +12,11 @@ import type {
   DesktopChatMessageInput,
 } from '../shared/chat-history';
 import type { PetVisualSignal } from '../shared/pet-visual-signal';
+import type {
+  DesktopConversationCreateInput,
+  DesktopConversationDirectorySnapshot,
+} from '../shared/conversation-directory';
+import type { DesktopPendingOperationsSnapshot } from '../shared/pending-operation';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -33,6 +38,7 @@ declare global {
         text: string,
         requestId: string,
         source?: 'text' | 'voice',
+        clientMessageId?: string,
       ): Promise<TurnResult>;
       cancel(requestId: string): void;
       onToast(callback: (message: string) => void): () => void;
@@ -49,13 +55,29 @@ declare global {
       append(
         input: DesktopChatMessageInput,
       ): Promise<DesktopChatHistorySnapshot>;
+      loadEarlier(): Promise<DesktopChatHistorySnapshot>;
       onHistory(
         callback: (snapshot: DesktopChatHistorySnapshot) => void,
+      ): () => void;
+    };
+    desktopConversation: {
+      getState(): Promise<DesktopConversationDirectorySnapshot>;
+      load(): Promise<DesktopConversationDirectorySnapshot>;
+      select(
+        conversationId: string,
+      ): Promise<DesktopConversationDirectorySnapshot>;
+      create(
+        input: DesktopConversationCreateInput,
+      ): Promise<DesktopConversationDirectorySnapshot>;
+      onState(
+        callback: (snapshot: DesktopConversationDirectorySnapshot) => void,
       ): () => void;
     };
     desktopOperation: {
       acquire(): Promise<DesktopOperationLeaseResult>;
       release(token: string): void;
+      resume(clientMessageId: string): Promise<TurnResult>;
+      getPending(): Promise<DesktopPendingOperationsSnapshot>;
     };
     desktopVoice: {
       transcribe(
@@ -96,11 +118,13 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     text: string,
     requestId: string,
     source: 'text' | 'voice' = 'text',
+    clientMessageId?: string,
   ): Promise<TurnResult> {
     return ipcRenderer.invoke('assistant:turn', {
       text,
       requestId,
       source,
+      clientMessageId,
       leaseToken: activeOperationLeaseToken,
     });
   },
@@ -145,6 +169,9 @@ contextBridge.exposeInMainWorld('desktopChat', {
   append(input: DesktopChatMessageInput): Promise<DesktopChatHistorySnapshot> {
     return ipcRenderer.invoke('chat:append', input);
   },
+  loadEarlier(): Promise<DesktopChatHistorySnapshot> {
+    return ipcRenderer.invoke('chat:load-earlier');
+  },
   onHistory(
     callback: (snapshot: DesktopChatHistorySnapshot) => void,
   ): () => void {
@@ -154,6 +181,35 @@ contextBridge.exposeInMainWorld('desktopChat', {
     ): void => callback(snapshot);
     ipcRenderer.on('chat:history', listener);
     return () => ipcRenderer.removeListener('chat:history', listener);
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopConversation', {
+  getState(): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:get-state');
+  },
+  load(): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:load');
+  },
+  select(
+    conversationId: string,
+  ): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:select', conversationId);
+  },
+  create(
+    input: DesktopConversationCreateInput,
+  ): Promise<DesktopConversationDirectorySnapshot> {
+    return ipcRenderer.invoke('conversation:create', input);
+  },
+  onState(
+    callback: (snapshot: DesktopConversationDirectorySnapshot) => void,
+  ): () => void {
+    const listener = (
+      _event: IpcRendererEvent,
+      snapshot: DesktopConversationDirectorySnapshot,
+    ): void => callback(snapshot);
+    ipcRenderer.on('conversation:state', listener);
+    return () => ipcRenderer.removeListener('conversation:state', listener);
   },
 });
 
@@ -168,6 +224,15 @@ contextBridge.exposeInMainWorld('desktopOperation', {
   release(token: string): void {
     if (activeOperationLeaseToken === token) activeOperationLeaseToken = null;
     ipcRenderer.send('operation:release', token);
+  },
+  resume(clientMessageId: string): Promise<TurnResult> {
+    return ipcRenderer.invoke('operation:resume', {
+      clientMessageId,
+      leaseToken: activeOperationLeaseToken,
+    });
+  },
+  getPending(): Promise<DesktopPendingOperationsSnapshot> {
+    return ipcRenderer.invoke('operation:get-pending');
   },
 });
 

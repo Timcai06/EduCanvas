@@ -12,7 +12,7 @@ import { PET_VISUALS, PetDesktopShell, type PetAppProps } from './pet-view';
 import { PetChatPanel } from './pet-chat-panel';
 import { recordVoice } from './voice-recorder';
 import { playSpeech } from './speech-player';
-import { runVoiceSession } from './voice-session';
+import { bindVoiceTurn, runVoiceSession } from './voice-session';
 import {
   isBusyState,
   latestAssistantReply,
@@ -23,6 +23,7 @@ import type {
   DesktopChatHistorySnapshot,
   DesktopChatSource,
 } from '../../shared/chat-history';
+import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -38,8 +39,21 @@ export default function App({
   );
   const [history, setHistory] = useState<DesktopChatHistorySnapshot>({
     revision: 0,
+    conversationId: null,
     messages: [],
+    hasMore: false,
+    nextCursor: null,
+    loading: false,
   });
+  const [directory, setDirectory] =
+    useState<DesktopConversationDirectorySnapshot>({
+      revision: 0,
+      loading: false,
+      conversations: [],
+      currentConversationId: null,
+      error: null,
+    });
+  const [pendingResume, setPendingResume] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
@@ -59,13 +73,18 @@ export default function App({
     role: 'user' | 'assistant' | 'system',
     content: string,
     source: DesktopChatSource,
+    clientMessageId?: string,
   ): Promise<void> => {
-    const next = await window.desktopChat.append({ role, content, source });
+    const next = await window.desktopChat.append({
+      role,
+      content,
+      source,
+      clientMessageId,
+    });
     setHistory((current) =>
       next.revision >= current.revision ? next : current,
     );
   };
-
   useEffect(() => {
     const accept = (next: DesktopChatHistorySnapshot): void =>
       setHistory((current) =>
@@ -76,6 +95,16 @@ export default function App({
     return () => {
       unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const accept = (next: DesktopConversationDirectorySnapshot): void =>
+      setDirectory((current) =>
+        next.revision >= current.revision ? next : current,
+      );
+    const unsubscribe = window.desktopConversation.onState(accept);
+    void window.desktopConversation.getState().then(accept);
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -172,6 +201,7 @@ export default function App({
   const submit = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
+    setPendingResume(null);
     let leaseToken: string | null = null;
     try {
       const prompt = text.trim();
@@ -182,19 +212,25 @@ export default function App({
         return;
       }
       if (!(await requireAuth())) return;
+      if (!directory.currentConversationId) {
+        setMessage('请先选择一个对话。');
+        return;
+      }
       leaseToken = await acquireOperation();
       if (!leaseToken) return;
 
       const requestId = crypto.randomUUID();
+      const clientMessageId = `desktop:${crypto.randomUUID()}`;
       requestIdRef.current = requestId;
       setState('sending');
       publishVisual('sending');
       setMessage('EduCanvas 正在回复…');
-      await appendHistory('user', prompt, 'text');
+      await appendHistory('user', prompt, 'text', clientMessageId);
       const result = await submitPetText(
         prompt,
         requestId,
         window.desktopAssistant.turn,
+        clientMessageId,
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
@@ -208,17 +244,22 @@ export default function App({
         setState(failureState);
         publishVisual(failureState);
         setMessage(result.error);
+        if (result.code === 'interrupted') setPendingResume(clientMessageId);
       }
     } finally {
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
     }
   };
-
   const startVoice = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     if (!(await requireAuth())) {
+      submitGateRef.current.leave(submitToken);
+      return;
+    }
+    if (!directory.currentConversationId) {
+      setMessage('请先选择一个对话。');
       submitGateRef.current.leave(submitToken);
       return;
     }
@@ -229,6 +270,7 @@ export default function App({
     }
     const controller = new AbortController();
     operationControllerRef.current = controller;
+    const voiceId = `desktop:${crypto.randomUUID()}`;
     let transcriptAdded = false;
     let terminalState: PetUiState = 'ready';
     try {
@@ -236,8 +278,7 @@ export default function App({
         {
           record: recordVoice,
           transcribe: window.desktopVoice.transcribe,
-          turn: (prompt, requestId) =>
-            window.desktopAssistant.turn(prompt, requestId, 'voice'),
+          turn: bindVoiceTurn(window.desktopAssistant.turn, voiceId),
           synthesize: window.desktopVoice.synthesize,
           play: (bytes, signal) => playSpeech(bytes, { signal }),
           cancelRemote: (requestId) => {
@@ -255,7 +296,7 @@ export default function App({
             publishVisual(nextState);
             if (snapshot.transcript && !transcriptAdded) {
               transcriptAdded = true;
-              void appendHistory('user', snapshot.transcript, 'voice');
+              void appendHistory('user', snapshot.transcript, 'voice', voiceId);
             }
             if (snapshot.error) setMessage(snapshot.error);
             else if (snapshot.notice) setMessage(snapshot.notice);
@@ -273,6 +314,7 @@ export default function App({
       if (result.outcome === 'success') setMessage(result.reply);
       else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
+      else if (result.code === 'interrupted') setPendingResume(voiceId);
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
@@ -344,9 +386,42 @@ export default function App({
     }
     submitGateRef.current.cancel();
     requestIdRef.current = null;
+    setPendingResume(null);
     setState('ready');
     publishVisual('ready');
     setMessage('已停止。你可以继续输入。');
+  };
+
+  const resumePending = async (): Promise<void> => {
+    const clientMessageId = pendingResume;
+    if (!clientMessageId) return;
+    const submitToken = submitGateRef.current.enter();
+    if (!submitToken) return;
+    let leaseToken: string | null = null;
+    try {
+      if (!(await requireAuth())) return;
+      leaseToken = await acquireOperation();
+      if (!leaseToken) return;
+      setState('sending');
+      publishVisual('sending');
+      setMessage('正在续传…');
+      const result = await window.desktopOperation.resume(clientMessageId);
+      if (result.ok) {
+        setPendingResume(null);
+        setState('ready');
+        publishVisual('ready');
+        setMessage('已恢复回答。');
+      } else {
+        const failureState = petUiStateForFailureCode(result.code);
+        setState(failureState);
+        publishVisual(failureState);
+        setMessage(result.message);
+        if (result.code !== 'interrupted') setPendingResume(null);
+      }
+    } finally {
+      releaseOperation(leaseToken);
+      submitGateRef.current.leave(submitToken);
+    }
   };
 
   const chatPanel = (
@@ -365,6 +440,22 @@ export default function App({
       startVoice={startVoice}
       speakLatest={speakLatest}
       cancel={cancel}
+      resume={resumePending}
+      canResume={pendingResume !== null}
+      directory={directory}
+      selectConversation={async (conversationId) => {
+        const next = await window.desktopConversation.select(conversationId);
+        setDirectory(next);
+        setMessage('已切换对话。');
+      }}
+      createConversation={async (notebookId, title) => {
+        const next = await window.desktopConversation.create({
+          notebookId,
+          title,
+        });
+        setDirectory(next);
+        setMessage(next.error ?? '新对话已创建。');
+      }}
     />
   );
 

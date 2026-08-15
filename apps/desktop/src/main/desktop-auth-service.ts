@@ -147,13 +147,19 @@ export function createDesktopAuthCoordinator(options: {
           await response.json(),
         );
         const session: StoredDesktopSession = {
+          version: 2,
           token: grant.access_token,
           expiresAt: grant.expires_at,
           webBaseUrl: options.webBaseUrl,
           gatewayBaseUrl: options.gatewayBaseUrl,
           userId: grant.user_id,
-          notebookId: grant.notebook_id,
-          conversationId: grant.conversation_id,
+          initialCursor:
+            grant.notebook_id && grant.conversation_id
+              ? {
+                  notebookId: grant.notebook_id,
+                  conversationId: grant.conversation_id,
+                }
+              : null,
         };
         if (exchangeGeneration !== sessionGeneration) return status;
         await options.sessionStore.save(session);

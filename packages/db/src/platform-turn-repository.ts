@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
 import type { NotebookPermission } from '@educanvas/gateway-core';
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   assertOwnedReadyAssetParts,
@@ -21,8 +21,11 @@ export type {
 import type { PlatformTurnSettlementSnapshot } from './platform-turn-settlement-repository';
 import {
   agentOperations,
+  assetVersions,
+  conversationMessageCitations,
   conversationMessages,
   conversations,
+  operationSources,
   personalAgents,
   spaces,
 } from './schema';
@@ -60,6 +63,38 @@ export interface PlatformTurnSnapshot {
   replayed: boolean;
   studentMessage: PlatformTurnMessageSnapshot;
   assistantMessage: PlatformTurnMessageSnapshot;
+}
+
+/** Message 历史分页游标：指向已加载窗口里最旧的一条消息（用于加载更早页）。 */
+export interface PlatformMessageHistoryCursor {
+  createdAt: Date;
+  messageId: string;
+  /** 用于打破同一 turn 内 user/assistant 共享 createdAt 时的排序歧义。 */
+  role: 'user' | 'assistant';
+}
+
+export interface PlatformMessageHistoryCitationSnapshot {
+  citationId: string;
+  marker: number;
+  label: string;
+  target: {
+    kind: 'web';
+    assetId: string;
+    assetVersionId: string;
+    url: string;
+  };
+}
+
+export interface PlatformMessageHistoryEntry {
+  messageId: string;
+  clientMessageId: string;
+  role: 'user' | 'assistant';
+  status: PlatformTurnMessageSnapshot['status'];
+  content: string;
+  parts: readonly AgentMessagePart[];
+  citations: readonly PlatformMessageHistoryCitationSnapshot[];
+  createdAt: string;
+  completedAt: string | null;
 }
 
 export class PlatformTurnOwnershipError extends Error {
@@ -577,5 +612,159 @@ export class DrizzlePlatformTurnRepository {
           row.message.role === 'user' || row.message.role === 'assistant',
       )
       .map((row) => toMessage(row.message, row.operation.idempotencyKey));
+  }
+
+  /**
+   * DP03 canonical Message 历史：按 (createdAt, id) 游标向后翻页读取更早消息，
+   * 并为页内 Assistant 消息附带已冻结的 web 引用。返回顺序为 oldest → newest。
+   */
+  async listMessagePage(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    limit?: number;
+    cursor?: PlatformMessageHistoryCursor | null;
+  }): Promise<{
+    items: readonly PlatformMessageHistoryEntry[];
+    nextCursor: PlatformMessageHistoryCursor | null;
+  }> {
+    await requireConversationAccess(
+      this.database,
+      input.conversationId,
+      input.trustedSubjectId,
+      'notebook.read',
+    );
+    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    // 同一 turn 的 user/assistant 共享 createdAt，必须用 role 打破歧义，
+    // 否则 uuid 主键的随机顺序会让 assistant 与 user 颠倒。
+    const roleOrder = sql`case when ${conversationMessages.role} = 'assistant' then 0 else 1 end`;
+    const cursorRoleOrder = input.cursor?.role === 'assistant' ? 0 : 1;
+    const cursorCondition = input.cursor
+      ? or(
+          lt(conversationMessages.createdAt, input.cursor.createdAt),
+          and(
+            eq(conversationMessages.createdAt, input.cursor.createdAt),
+            sql`${roleOrder} > ${cursorRoleOrder}`,
+          ),
+          and(
+            eq(conversationMessages.createdAt, input.cursor.createdAt),
+            sql`${roleOrder} = ${cursorRoleOrder}`,
+            lt(conversationMessages.id, input.cursor.messageId),
+          ),
+        )
+      : undefined;
+    const rows = await this.database
+      .select({ message: conversationMessages, operation: agentOperations })
+      .from(conversationMessages)
+      .innerJoin(
+        agentOperations,
+        eq(agentOperations.id, conversationMessages.operationId),
+      )
+      .where(
+        and(
+          eq(conversationMessages.conversationId, input.conversationId),
+          cursorCondition,
+        ),
+      )
+      .orderBy(
+        desc(conversationMessages.createdAt),
+        asc(roleOrder),
+        desc(conversationMessages.id),
+      )
+      .limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+
+    const assistantIds = page
+      .filter((row) => row.message.role === 'assistant')
+      .map((row) => row.message.id);
+    const citationRows =
+      assistantIds.length === 0
+        ? []
+        : await this.database
+            .select({
+              assistantMessageId:
+                conversationMessageCitations.assistantMessageId,
+              citationId: conversationMessageCitations.id,
+              ordinal: operationSources.ordinal,
+              assetId: assetVersions.assetId,
+              assetVersionId: operationSources.assetVersionId,
+              label: operationSources.label,
+              url: operationSources.locatorUrl,
+            })
+            .from(conversationMessageCitations)
+            .innerJoin(
+              operationSources,
+              eq(
+                operationSources.id,
+                conversationMessageCitations.operationSourceId,
+              ),
+            )
+            .innerJoin(
+              assetVersions,
+              eq(assetVersions.id, operationSources.assetVersionId),
+            )
+            .where(
+              inArray(
+                conversationMessageCitations.assistantMessageId,
+                assistantIds,
+              ),
+            )
+            .orderBy(
+              asc(conversationMessageCitations.assistantMessageId),
+              asc(operationSources.ordinal),
+            );
+    const citationsByMessage = new Map<
+      string,
+      PlatformMessageHistoryCitationSnapshot[]
+    >();
+    for (const row of citationRows) {
+      const citations = citationsByMessage.get(row.assistantMessageId) ?? [];
+      citations.push({
+        citationId: row.citationId,
+        marker: row.ordinal,
+        label: row.label,
+        target: {
+          kind: 'web',
+          assetId: row.assetId,
+          assetVersionId: row.assetVersionId,
+          url: row.url,
+        },
+      });
+      citationsByMessage.set(row.assistantMessageId, citations);
+    }
+
+    const oldest = page.at(-1);
+    const items = [...page]
+      .reverse()
+      .filter(
+        (row) =>
+          row.message.role === 'user' || row.message.role === 'assistant',
+      )
+      .map((row) => {
+        const message = toMessage(row.message, row.operation.idempotencyKey);
+        return {
+          messageId: message.id,
+          clientMessageId: message.clientMessageId,
+          role: message.role,
+          status: message.status,
+          content: message.content,
+          parts: message.parts,
+          citations: citationsByMessage.get(message.id) ?? [],
+          createdAt: message.createdAt,
+          completedAt: message.completedAt,
+        };
+      });
+
+    return {
+      items,
+      nextCursor:
+        hasMore && oldest
+          ? {
+              createdAt: oldest.message.createdAt,
+              messageId: oldest.message.id,
+              role: oldest.message.role === 'assistant' ? 'assistant' : 'user',
+            }
+          : null,
+    };
   }
 }

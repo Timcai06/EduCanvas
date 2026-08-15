@@ -12,12 +12,19 @@ describe('桌宠 MVP 文本对话', () => {
       message: '你好，我是 EduCanvas 助手。',
     }));
 
-    await expect(submitPetText(' 你好 ', 'request:1', turn)).resolves.toEqual({
+    await expect(
+      submitPetText(' 你好 ', 'request:1', turn, 'desktop:cm-1'),
+    ).resolves.toEqual({
       ok: true,
       action: 'answered',
       reply: '你好，我是 EduCanvas 助手。',
     });
-    expect(turn).toHaveBeenCalledWith('你好', 'request:1');
+    expect(turn).toHaveBeenCalledWith(
+      '你好',
+      'request:1',
+      'text',
+      'desktop:cm-1',
+    );
   });
 
   it('保留后端明确的答题正确动作，不从回复文字猜测', async () => {

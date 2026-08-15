@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   gatewayClientTurnRequestSchema,
+  gatewayConversationCreateRequestSchema,
   gatewayConnectionConnectRequestSchema,
   gatewayConnectionRevokeRequestSchema,
   gatewayHandoffCredentialSchema,
@@ -14,6 +15,14 @@ import { z } from 'zod';
 import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
 import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
+import {
+  decodeConversationDirectoryCursor,
+  encodeConversationDirectoryCursor,
+} from './conversation-directory-cursor';
+import {
+  decodeMessageHistoryCursor,
+  encodeMessageHistoryCursor,
+} from './message-history-cursor';
 import {
   HANDLED,
   UNHANDLED,
@@ -119,10 +128,104 @@ export async function handleClientRoutes(
       request.method === 'GET' &&
       url.pathname === '/v1/client/conversations'
     ) {
+      if (!client.directory.listConversationPage) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const rawLimit = url.searchParams.get('limit');
+      const limit = rawLimit === null ? 30 : Number(rawLimit);
+      const rawCursor = url.searchParams.get('cursor');
+      const cursor = rawCursor
+        ? decodeConversationDirectoryCursor(rawCursor)
+        : null;
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 50 ||
+        (rawCursor !== null && cursor === null)
+      ) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      const page = await client.directory.listConversationPage({
+        userId: identity.userId,
+        limit,
+        cursor,
+      });
       writeJson(response, 200, {
-        conversations: await client.directory.listConversations(
-          identity.userId,
-        ),
+        schemaVersion: 1,
+        conversations: page.items,
+        nextCursor: page.nextCursor
+          ? encodeConversationDirectoryCursor(page.nextCursor)
+          : null,
+      });
+      return HANDLED;
+    }
+
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/v1/client/conversations'
+    ) {
+      if (!client.directory.createConversation) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const body = gatewayConversationCreateRequestSchema.parse(
+        await readJsonBody(request),
+      );
+      const conversation = await client.directory.createConversation({
+        userId: identity.userId,
+        notebookId: body.notebookId,
+        title: body.title,
+      });
+      writeJson(response, 201, { schemaVersion: 1, conversation });
+      return HANDLED;
+    }
+
+    const messageHistoryMatch =
+      request.method === 'GET'
+        ? url.pathname.match(/^\/v1\/client\/conversations\/([^/]+)\/messages$/)
+        : null;
+    if (messageHistoryMatch) {
+      if (!client.messageHistory) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const conversationId = gatewayOpaqueIdSchema.safeParse(
+        decodeURIComponent(messageHistoryMatch[1]!),
+      );
+      const rawLimit = url.searchParams.get('limit');
+      const limit = rawLimit === null ? 30 : Number(rawLimit);
+      const rawCursor = url.searchParams.get('cursor');
+      const cursor = rawCursor ? decodeMessageHistoryCursor(rawCursor) : null;
+      if (
+        !conversationId.success ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 100 ||
+        (rawCursor !== null && cursor === null)
+      ) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      const page = await client.messageHistory.listMessagePage({
+        conversationId: conversationId.data,
+        trustedSubjectId: identity.userId,
+        limit,
+        cursor,
+      });
+      writeJson(response, 200, {
+        schemaVersion: 1,
+        messages: page.items,
+        nextCursor: page.nextCursor
+          ? encodeMessageHistoryCursor(page.nextCursor)
+          : null,
       });
       return HANDLED;
     }

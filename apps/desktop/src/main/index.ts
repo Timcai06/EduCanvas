@@ -13,7 +13,9 @@ import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
-import { createAssistantProxy } from './assistant-proxy';
+import { createAssistantProxy, type TurnTracker } from './assistant-proxy';
+import { createOperationRegistry } from './operation-registry';
+import { registerOperationIpc } from './operation-ipc';
 import { createVoiceProxy } from './voice-proxy';
 import { isAllowedVoicePermission } from './voice-permission';
 import { IpcAbortRegistry } from './ipc-abort-registry';
@@ -31,6 +33,8 @@ import { createChatHistoryStore } from './chat-history-store';
 import type { DesktopChatMessageInput } from '../shared/chat-history';
 import { isPetVisualSignal } from '../shared/pet-visual-signal';
 import { createOperationLease } from './operation-lease';
+import { createConversationCoordinator } from './conversation-coordinator';
+import type { DesktopConversationCreateInput } from '../shared/conversation-directory';
 
 const WEB_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
@@ -89,6 +93,11 @@ if (!app.requestSingleInstanceLock()) {
   const abortRegistry = new IpcAbortRegistry();
   const chatHistory = createChatHistoryStore();
   const operationLease = createOperationLease();
+  const operationRegistry = createOperationRegistry();
+  const conversations = createConversationCoordinator({
+    getSession: authAccess.getSession,
+    invalidateSession: authAccess.invalidateSession,
+  });
   const petMouseTracker = createPetMouseTracker<ReturnType<typeof setInterval>>(
     {
       readCursor: () => screen.getCursorScreenPoint(),
@@ -113,6 +122,64 @@ if (!app.requestSingleInstanceLock()) {
     for (const win of [petController?.win, expandedChatWindow]) {
       if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
     }
+  };
+  const publishConversationState = (snapshot = conversations.state()): void => {
+    sendToDesktopRenderers('conversation:state', snapshot);
+  };
+  /** 切换到当前会话并载入其最近一页 canonical Message，重建可删除的 View Cache。 */
+  const reloadChatForConversation = async (): Promise<void> => {
+    const cursor = conversations.currentCursor();
+    if (!cursor) {
+      chatHistory.setConversation(null);
+      sendToDesktopRenderers('chat:history', chatHistory.state());
+      return;
+    }
+    const conversationId = cursor.conversationId;
+    chatHistory.setConversation(conversationId);
+    chatHistory.setLoading(true);
+    sendToDesktopRenderers('chat:history', chatHistory.state());
+    try {
+      const page = await proxy.listMessagePage(conversationId, { limit: 50 });
+      if (conversations.currentCursor()?.conversationId !== conversationId)
+        return;
+      chatHistory.reconcile(page.messages, {
+        hasMore: page.nextCursor !== null,
+        nextCursor: page.nextCursor,
+      });
+    } catch {
+      // 历史载入失败不阻塞聊天；保留空视图等待下一次重建。
+      if (conversations.currentCursor()?.conversationId !== conversationId)
+        return;
+      chatHistory.setLoading(false);
+    }
+    sendToDesktopRenderers('chat:history', chatHistory.state());
+  };
+  /** 向上加载更早一页：以当前视图最旧一条的游标请求上一页并 prepend。 */
+  const loadEarlierChat = async (): Promise<void> => {
+    const cursor = conversations.currentCursor();
+    const state = chatHistory.state();
+    if (!cursor || !state.nextCursor) return;
+    const conversationId = cursor.conversationId;
+    chatHistory.setLoading(true);
+    sendToDesktopRenderers('chat:history', chatHistory.state());
+    try {
+      const page = await proxy.listMessagePage(conversationId, {
+        limit: 50,
+        cursor: state.nextCursor,
+      });
+      if (conversations.currentCursor()?.conversationId !== conversationId)
+        return;
+      chatHistory.prependEarlier(page.messages, {
+        hasMore: page.nextCursor !== null,
+        nextCursor: page.nextCursor,
+      });
+    } catch {
+      // 加载更早页失败不阻塞聊天。
+      if (conversations.currentCursor()?.conversationId !== conversationId)
+        return;
+      chatHistory.setLoading(false);
+    }
+    sendToDesktopRenderers('chat:history', chatHistory.state());
   };
   const openExpandedChat = (): void => {
     if (expandedChatWindow && !expandedChatWindow.isDestroyed()) {
@@ -149,6 +216,59 @@ if (!app.requestSingleInstanceLock()) {
       throw new Error('Untrusted renderer');
     return chatHistory.state();
   });
+  ipcMain.handle('conversation:get-state', (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    return conversations.state();
+  });
+  ipcMain.handle('conversation:load', async (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    const before = conversations.state().currentConversationId;
+    const snapshot = await conversations.load();
+    if (before !== snapshot.currentConversationId)
+      await reloadChatForConversation();
+    publishConversationState(snapshot);
+    return snapshot;
+  });
+  ipcMain.handle(
+    'conversation:select',
+    async (event, conversationId: unknown) => {
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
+      if (typeof conversationId !== 'string' || conversationId.length > 200)
+        throw new Error('Invalid conversation');
+      const before = conversations.state().currentConversationId;
+      const snapshot = conversations.select(conversationId);
+      if (before !== snapshot.currentConversationId)
+        await reloadChatForConversation();
+      publishConversationState(snapshot);
+      return snapshot;
+    },
+  );
+  ipcMain.handle(
+    'conversation:create',
+    async (event, input: DesktopConversationCreateInput) => {
+      if (!isDesktopSender(event.sender.id))
+        throw new Error('Untrusted renderer');
+      if (
+        !input ||
+        typeof input.notebookId !== 'string' ||
+        input.notebookId.length > 200 ||
+        typeof input.title !== 'string' ||
+        !input.title.trim() ||
+        input.title.length > 300
+      )
+        throw new Error('Invalid conversation input');
+      const snapshot = await conversations.create({
+        notebookId: input.notebookId,
+        title: input.title.trim(),
+      });
+      if (!snapshot.error) await reloadChatForConversation();
+      publishConversationState(snapshot);
+      return snapshot;
+    },
+  );
   ipcMain.handle('chat:append', (event, input: DesktopChatMessageInput) => {
     if (!isDesktopSender(event.sender.id))
       throw new Error('Untrusted renderer');
@@ -157,7 +277,10 @@ if (!app.requestSingleInstanceLock()) {
       !['user', 'assistant', 'system'].includes(input.role) ||
       !['text', 'voice'].includes(input.source) ||
       typeof input.content !== 'string' ||
-      input.content.length > 20_000
+      input.content.length > 20_000 ||
+      (input.clientMessageId !== undefined &&
+        (typeof input.clientMessageId !== 'string' ||
+          input.clientMessageId.length > 200))
     ) {
       throw new Error('Invalid chat message');
     }
@@ -165,6 +288,12 @@ if (!app.requestSingleInstanceLock()) {
     const snapshot = chatHistory.state();
     sendToDesktopRenderers('chat:history', snapshot);
     return snapshot;
+  });
+  ipcMain.handle('chat:load-earlier', async (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    await loadEarlierChat();
+    return chatHistory.state();
   });
   ipcMain.on('pet:set-visual', (event, state: unknown) => {
     if (!isDesktopSender(event.sender.id) || !isPetVisualSignal(state)) return;
@@ -212,6 +341,7 @@ if (!app.requestSingleInstanceLock()) {
         requestId: string;
         text: string;
         source?: 'text' | 'voice';
+        clientMessageId?: string;
         leaseToken: string;
       },
     ) => {
@@ -223,19 +353,59 @@ if (!app.requestSingleInstanceLock()) {
         !operationLease.holds(event.sender.id, payload.leaseToken) ||
         typeof payload.text !== 'string' ||
         payload.text.length > 4_000 ||
-        !['text', 'voice'].includes(payload.source ?? 'text')
+        !['text', 'voice'].includes(payload.source ?? 'text') ||
+        (payload.clientMessageId !== undefined &&
+          (typeof payload.clientMessageId !== 'string' ||
+            payload.clientMessageId.length > 200))
       )
         throw new Error('Invalid assistant turn');
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
+      const cursor = conversations.currentCursor();
+      const routeRevision = conversations.state().revision;
+      const clientMessageId = payload.clientMessageId;
+      const tracker: TurnTracker | undefined = clientMessageId
+        ? {
+            operationId: null,
+            lastSequence: -1,
+            onAccepted: (operationId) =>
+              operationRegistry.accept(clientMessageId, operationId),
+            onSequence: (sequence) =>
+              operationRegistry.recordSequence(clientMessageId, sequence),
+          }
+        : undefined;
+      if (clientMessageId) {
+        operationRegistry.begin(clientMessageId, {
+          conversationId: cursor?.conversationId ?? null,
+          ownerId: event.sender.id,
+        });
+      }
       try {
-        const result = await proxy.turn({ text: payload.text }, signal);
+        const result = await proxy.turn(
+          {
+            text: payload.text,
+            cursor: cursor ?? undefined,
+            clientMessageId: payload.clientMessageId,
+          },
+          signal,
+          tracker,
+        );
+        if (clientMessageId) {
+          if (!result.ok && result.code === 'interrupted') {
+            operationRegistry.markInterrupted(clientMessageId);
+          } else {
+            operationRegistry.remove(clientMessageId);
+          }
+        }
+        if (routeRevision !== conversations.state().revision) {
+          return {
+            ok: false as const,
+            code: 'aborted' as const,
+            message: '会话已切换。',
+          };
+        }
         if (result.ok) {
-          chatHistory.append({
-            role: 'assistant',
-            content: result.message,
-            source: payload.source ?? 'text',
-          });
-          sendToDesktopRenderers('chat:history', chatHistory.state());
+          // 用服务端 canonical Message 重建视图，乐观 User Message 按 clientMessageId 去重。
+          await reloadChatForConversation();
         }
         return result;
       } finally {
@@ -301,6 +471,14 @@ if (!app.requestSingleInstanceLock()) {
     if (!isDesktopSender(event.sender.id)) return;
     abortRegistry.cancel(requestId, event.sender.id);
   });
+  registerOperationIpc({
+    ipcMain,
+    isDesktopSender,
+    operationLease,
+    operationRegistry,
+    proxy,
+    reloadChatForConversation,
+  });
 
   // Windows/Linux send custom schemes to the existing single instance command line.
   app.on('second-instance', (_event, commandLine) => {
@@ -322,6 +500,15 @@ if (!app.requestSingleInstanceLock()) {
     if (petController.win.isVisible()) petMouseTracker.start();
     const publishAuthStatus = (status: DesktopAuthStatus): void => {
       sendToDesktopRenderers('auth:status', status);
+      if (status.state === 'signed_in') {
+        void conversations.load().then(async (snapshot) => {
+          publishConversationState(snapshot);
+          await reloadChatForConversation();
+        });
+      } else if (status.state === 'signed_out') {
+        publishConversationState(conversations.reset());
+        void reloadChatForConversation();
+      }
     };
     authCoordinator = createDesktopAuthCoordinator({
       webBaseUrl: WEB_BASE_URL,
@@ -383,6 +570,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     petMouseTracker.stop();
     abortRegistry.cancelAll();
+    for (const op of operationRegistry.pending().operations) {
+      void proxy.cancel(op.operationId).catch(() => undefined);
+    }
   });
   app.on('window-all-closed', () => {
     /* Closing hides to tray; only the tray Quit action terminates the process. */

@@ -23,6 +23,7 @@
 - [O 删除队列](active/O-删除队列.md)；
 - [KM 知识记忆](active/KM-知识记忆.md)；
 - [G 产品发布闭环](active/G-产品发布闭环.md)。
+- [DP 桌宠统一桌面外延](active/DP-桌宠统一桌面外延.md)。
 
 [A 账号会话](completed/A-账号会话.md)、[P 学习档案](completed/P-学习档案.md)、
 [F 画布界面](completed/F-画布界面.md)和[R 运行时收敛](completed/R-运行时事实收敛.md)

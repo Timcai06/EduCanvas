@@ -5,13 +5,16 @@ import {
 } from '@educanvas/gateway-core';
 
 export interface StoredDesktopSession {
+  readonly version: 2;
   readonly token: string;
   readonly expiresAt: string;
   readonly webBaseUrl: string;
   readonly gatewayBaseUrl: string;
   readonly userId: string;
-  readonly notebookId: string;
-  readonly conversationId: string;
+  readonly initialCursor: {
+    readonly notebookId: string;
+    readonly conversationId: string;
+  } | null;
 }
 
 interface SafeStoragePort {
@@ -51,16 +54,39 @@ function isAllowedRemoteBase(value: unknown): value is string {
   }
 }
 
-function parseSession(raw: string, now: Date): StoredDesktopSession | null {
+function parseSession(
+  raw: string,
+  now: Date,
+): { session: StoredDesktopSession; migrated: boolean } | null {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
+    const keys = Object.keys(value).sort().join(',');
+    const legacy =
+      keys ===
+      'conversationId,expiresAt,gatewayBaseUrl,notebookId,token,userId,webBaseUrl';
+    const current =
+      keys ===
+      'expiresAt,gatewayBaseUrl,initialCursor,token,userId,version,webBaseUrl';
+    const cursor = legacy
+      ? { notebookId: value.notebookId, conversationId: value.conversationId }
+      : value.initialCursor;
+    const validCursor =
+      cursor === null ||
+      (typeof cursor === 'object' &&
+        cursor !== null &&
+        Object.keys(cursor).sort().join(',') === 'conversationId,notebookId' &&
+        gatewayOpaqueIdSchema.safeParse(
+          (cursor as Record<string, unknown>).notebookId,
+        ).success &&
+        gatewayOpaqueIdSchema.safeParse(
+          (cursor as Record<string, unknown>).conversationId,
+        ).success);
     if (
-      Object.keys(value).sort().join(',') !==
-        'conversationId,expiresAt,gatewayBaseUrl,notebookId,token,userId,webBaseUrl' ||
+      (!legacy && !current) ||
+      (current && value.version !== 2) ||
       !gatewayDesktopSessionTokenSchema.safeParse(value.token).success ||
       !gatewayOpaqueIdSchema.safeParse(value.userId).success ||
-      !gatewayOpaqueIdSchema.safeParse(value.notebookId).success ||
-      !gatewayOpaqueIdSchema.safeParse(value.conversationId).success ||
+      !validCursor ||
       typeof value.expiresAt !== 'string' ||
       !isAllowedRemoteBase(value.webBaseUrl) ||
       !isAllowedRemoteBase(value.gatewayBaseUrl)
@@ -74,7 +100,18 @@ function parseSession(raw: string, now: Date): StoredDesktopSession | null {
     ) {
       return null;
     }
-    return value as unknown as StoredDesktopSession;
+    return {
+      session: {
+        version: 2,
+        token: value.token as string,
+        expiresAt: value.expiresAt,
+        webBaseUrl: value.webBaseUrl,
+        gatewayBaseUrl: value.gatewayBaseUrl,
+        userId: value.userId as string,
+        initialCursor: cursor as StoredDesktopSession['initialCursor'],
+      },
+      migrated: legacy,
+    };
   } catch {
     return null;
   }
@@ -103,12 +140,12 @@ export function createDesktopSessionStore(options: {
 
   const save = async (session: StoredDesktopSession): Promise<void> => {
     const parsed = parseSession(JSON.stringify(session), now());
-    if (!parsed) throw new Error('desktop_session_invalid');
+    if (!parsed || parsed.migrated) throw new Error('desktop_session_invalid');
     if (!(await options.safeStorage.isAsyncEncryptionAvailable())) {
       throw new Error('desktop_secure_storage_unavailable');
     }
     const encrypted = await options.safeStorage.encryptStringAsync(
-      JSON.stringify(parsed),
+      JSON.stringify(parsed.session),
     );
     await options.fileSystem.mkdir(dirname(options.filePath), {
       recursive: true,
@@ -131,13 +168,14 @@ export function createDesktopSessionStore(options: {
         const encrypted = await options.fileSystem.readFile(options.filePath);
         const decrypted =
           await options.safeStorage.decryptStringAsync(encrypted);
-        const session = parseSession(decrypted.result, now());
-        if (!session) {
+        const parsed = parseSession(decrypted.result, now());
+        if (!parsed) {
           await clear();
           return null;
         }
-        if (decrypted.shouldReEncrypt) await save(session);
-        return session;
+        if (decrypted.shouldReEncrypt || parsed.migrated)
+          await save(parsed.session);
+        return parsed.session;
       } catch (error) {
         if ((error as { code?: string }).code === 'ENOENT') return null;
         await clear();
