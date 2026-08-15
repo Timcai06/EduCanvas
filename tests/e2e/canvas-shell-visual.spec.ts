@@ -253,9 +253,6 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       },
     );
     const studio = await openStudioOutput(page);
-    await studio
-      .getByRole('combobox', { name: '资源分类' })
-      .selectOption('artifact');
     const failedResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/v1/canvas/resources/artifact/') &&
@@ -292,9 +289,6 @@ test.describe('Canvas shell 极端内容与失败状态', () => {
       },
     );
     const studio = await openStudioOutput(page);
-    await studio
-      .getByRole('combobox', { name: '资源分类' })
-      .selectOption('artifact');
     await studio.getByRole('button', { name: /对话思维导图/ }).click();
 
     // 验证中间态：Canvas 打开，加载态（aria-busy + 稳定文案，不泄露内部错误码）

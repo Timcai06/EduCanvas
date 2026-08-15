@@ -10,8 +10,8 @@ import {
  * W06-1 键盘无障碍：键盘-only 打开/切换/关闭资源的默认 lane 证据。
  *
  * 默认 CI lane（无 @ui 标记）此前只覆盖两类键盘交互：composer Enter 发送、
- * Studio 资源分类与资源列表。本 spec 把完整的键盘路径补上默认 lane：
- *  - 原生分类选择器选择来源 / AI 产物；
+ * Studio 资源类型标签与资源列表。本 spec 把完整的键盘路径补上默认 lane：
+ *  - 资源类型标签选择来源 / AI 输出；
  *  - 资源列表按钮经键盘打开 Source / Artifact Canvas；
  *  - Canvas 内键盘（Tab 聚焦操作按钮、Escape 关闭）；
  *  - 关闭后焦点归还到 opener（Canvas host 的 scheduleFocusRestore）。
@@ -20,8 +20,8 @@ import {
  * 不重复覆盖由 artifact-flow 验证的 API → worker 生成纵切。
  *
  * 组件事实（已核实，防止纸面推断）：
- *  - 资源分类是带可访问名称的原生 select，资源条目是原生 button；
- *    ArrowUp/Down + Enter 与 Tab/Enter 分别完成筛选和打开。
+ *  - 资源类型是带 tab 语义的原生 button，资源条目也是原生 button；
+ *    Tab/Enter 分别完成筛选和打开。
  *  - Studio 打开资源即关闭 overlay（W02 契约），打开前焦点先还给 banner 里的
  *    Studio trigger（general-workspace-layout.restoreStudioOpenerFocus），因此
  *    Canvas 的 opener 是 trigger，关闭 Canvas 后焦点回到可重开 Studio 的入口。
@@ -41,8 +41,8 @@ async function openStudioViaKeyboard(page: Page) {
   const trigger = page.getByRole('button', { name: STUDIO_TRIGGER_NAME });
   await trigger.focus();
   await page.keyboard.press('Enter');
-  const studio = page.getByRole('complementary', {
-    name: '当前笔记本的 Studio',
+  const studio = page.getByRole('region', {
+    name: '当前笔记本的资源控制台',
   });
   await expect(studio).toBeVisible();
   return studio;
@@ -52,7 +52,7 @@ async function openResourceViaKeyboard(
   studio: Locator,
   targetLabel: RegExp,
 ): Promise<Locator> {
-  const list = studio.getByRole('list', { name: '资源列表' });
+  const list = studio.getByRole('list', { name: '输出列表' });
   const resource = list.getByRole('button', { name: targetLabel });
   await expect(resource).toBeVisible();
   await resource.focus();
@@ -60,11 +60,12 @@ async function openResourceViaKeyboard(
   return resource;
 }
 
-/** 分类筛选只是测试前置；资源打开、Canvas 操作与关闭全程保持键盘输入。 */
+/** 类型筛选只是测试前置；资源打开、Canvas 操作与关闭全程保持键盘输入。 */
 async function selectArtifactCategoryViaKeyboard(studio: Locator) {
-  const category = studio.getByRole('combobox', { name: '资源分类' });
-  await category.selectOption('artifact');
-  await expect(category).toHaveValue('artifact');
+  const category = studio.getByRole('tab', { name: /^输出/ });
+  await category.focus();
+  await category.press('Enter');
+  await expect(category).toHaveAttribute('aria-selected', 'true');
 }
 
 async function generateMindMap(page: Page) {
@@ -80,8 +81,8 @@ async function generateMindMap(page: Page) {
   ).toBeVisible({
     timeout: 30_000,
   });
-  /* Studio 打开时触发按钮被 inert，关闭走 overlay 自带的关闭按钮。 */
-  await page.getByRole('button', { name: '关闭 Studio' }).click();
+  /* 资源控制台替换对话页面，返回后触发按钮重新进入可访问树。 */
+  await page.getByRole('button', { name: '返回对话页面' }).click();
 }
 
 test('键盘-only 打开 AI 产物 Canvas、键盘关闭并归还焦点', async ({ page }) => {
@@ -124,17 +125,18 @@ test('键盘-only 从 Studio 打开 Source 列表，空态键盘不误开资源'
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await generateMindMap(page);
 
-  // 分类筛选属于前置造态；本用例验证空态不会产生可键盘误开的资源。
+  // 类型筛选属于前置造态；本用例验证空态不会产生可键盘误开的资源。
   const studio = await openStudioViaKeyboard(page);
-  const category = studio.getByRole('combobox', { name: '资源分类' });
-  await category.selectOption('source');
-  await expect(category).toHaveValue('source');
-  const resourceList = studio.getByRole('list', { name: '资源列表' });
-  await expect(resourceList.getByText('暂无匹配资源')).toBeVisible();
+  const category = studio.getByRole('tab', { name: /^来源/ });
+  await category.focus();
+  await category.press('Enter');
+  await expect(category).toHaveAttribute('aria-selected', 'true');
+  const resourceList = studio.getByRole('list', { name: '来源列表' });
+  await expect(resourceList.getByText('还没有匹配的来源')).toBeVisible();
   await expect(resourceList.getByRole('button')).toHaveCount(0);
 
   await expect(page.getByRole('dialog', { name: '产物Canvas' })).toHaveCount(0);
   await expect(
-    page.getByRole('complementary', { name: '当前笔记本的 Studio' }),
+    page.getByRole('region', { name: '当前笔记本的资源控制台' }),
   ).toBeVisible();
 });

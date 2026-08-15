@@ -33,13 +33,17 @@ async function openNotebookSidebar(page: Page) {
 
 async function openStudio(page: Page, kind: 'source' | 'artifact') {
   await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-  const studio = page.getByRole('complementary', {
-    name: '当前笔记本的 Studio',
+  const studio = page.getByRole('region', {
+    name: '当前笔记本的资源控制台',
   });
-  await studio
-    .getByRole('combobox', { name: '资源分类' })
-    .selectOption(kind);
-  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
+  await expect(studio).toBeVisible();
+  const label = kind === 'source' ? '来源' : '输出';
+  await studio.getByRole('tab', { name: new RegExp(`^${label}`) }).click();
+  await expect(
+    studio.getByRole('list', {
+      name: kind === 'source' ? '来源列表' : '输出列表',
+    }),
+  ).toBeVisible();
   return studio;
 }
 
