@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
+  gatewayDesktopCapabilityManifest,
   gatewayProtocolVersion,
   type GatewayInboundEnvelope,
 } from '@educanvas/gateway-core';
@@ -418,7 +419,7 @@ describe('Gateway HTTP composition root', () => {
     });
   });
 
-  it('routes Web and TUI fixtures to the same conversation through Gateway', async () => {
+  it('routes Web and Desktop fixtures to the same conversation through Gateway', async () => {
     const sessionAuth = new GatewayClientSessionAuth(
       's'.repeat(32),
       60,
@@ -624,10 +625,11 @@ describe('Gateway HTTP composition root', () => {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        clientMessageId: 'tui:1',
+        clientMessageId: 'desktop:1',
         notebookId: 'notebook:1',
         conversationId: 'conversation:1',
         parts: [{ type: 'text', text: '你好' }],
+        capabilities: gatewayDesktopCapabilityManifest,
       }),
     });
     expect(turn.status).toBe(200);
@@ -645,10 +647,133 @@ describe('Gateway HTTP composition root', () => {
         conversationId: 'conversation:1',
       },
       {
-        transport: 'tui',
+        transport: 'desktop',
         notebookId: 'notebook:1',
         conversationId: 'conversation:1',
       },
     ]);
+    // 桌面信封按客户端声明的能力名投影，risk/version 由服务端解析，不再硬编码 TUI。
+    const desktopRun = runs.at(-1);
+    const resolvedCapabilities = desktopRun!.envelope.capabilities.capabilities;
+    expect(desktopRun?.envelope.connection.adapterId).toBe('educanvas.desktop');
+    expect(resolvedCapabilities).toHaveLength(6);
+    expect(resolvedCapabilities).toContainEqual({
+      name: 'input.text',
+      risk: 'l0',
+      version: '1',
+      constraints: {},
+    });
+    expect(resolvedCapabilities).toContainEqual({
+      name: 'approval.interactive',
+      risk: 'l1',
+      version: '1',
+      constraints: {},
+    });
+  });
+
+  it('rejects desktop turns without a capability manifest or with unknown capabilities', async () => {
+    const sessionAuth = new GatewayClientSessionAuth(
+      's'.repeat(32),
+      60,
+      () => now,
+    );
+    const base = await start(token, {
+      bootstrapToken: token,
+      sessionAuth,
+      identities: {
+        async ensureRegistered() {
+          return { userId: 'user:1', agentId: 'agent:1', kind: 'registered' };
+        },
+        async getActive() {
+          return { userId: 'user:1', agentId: 'agent:1', kind: 'registered' };
+        },
+      },
+      directory: {
+        async listConversationPage() {
+          return { items: [], nextCursor: null };
+        },
+      },
+      approvals: {
+        async listPending() {
+          return [];
+        },
+      },
+      operations: {
+        async resolveApproval() {
+          throw new Error('not used');
+        },
+        async listRecent() {
+          return [];
+        },
+      },
+      handoffs: {
+        async issue(input) {
+          return { expiresAt: input.expiresAt.toISOString() };
+        },
+      },
+      connections: {
+        async list() {
+          return { providers: [], connections: [] };
+        },
+        async connect() {
+          throw new Error('not used');
+        },
+        async revoke() {
+          throw new Error('not used');
+        },
+      },
+    });
+    const bootstrap = await fetch(`${base}/v1/client/bootstrap`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ userId: 'user:1' }),
+    });
+    expect(bootstrap.status).toBe(200);
+    const session = (await bootstrap.json()) as { token: string };
+
+    const postTurn = (body: unknown) =>
+      fetch(`${base}/v1/client/turns`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${session.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+    const missing = await postTurn({
+      clientMessageId: 'desktop:missing',
+      notebookId: 'notebook:1',
+      conversationId: 'conversation:1',
+      parts: [{ type: 'text', text: '你好' }],
+    });
+    expect(missing.status).toBe(400);
+
+    const unknownCapability = await postTurn({
+      clientMessageId: 'desktop:unknown',
+      notebookId: 'notebook:1',
+      conversationId: 'conversation:1',
+      parts: [{ type: 'text', text: '你好' }],
+      capabilities: {
+        manifestVersion: '1',
+        capabilities: ['input.text', 'output.unproven'],
+      },
+    });
+    expect(unknownCapability.status).toBe(400);
+    expect(await unknownCapability.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+
+    const wrongVersion = await postTurn({
+      clientMessageId: 'desktop:version',
+      notebookId: 'notebook:1',
+      conversationId: 'conversation:1',
+      parts: [{ type: 'text', text: '你好' }],
+      capabilities: { manifestVersion: '2', capabilities: ['input.text'] },
+    });
+    expect(wrongVersion.status).toBe(400);
   });
 });

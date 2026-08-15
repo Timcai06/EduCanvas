@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { gatewayDesktopCapabilityManifest } from '@educanvas/gateway-core';
 import {
   GatewayService,
   InMemoryGatewayOperationStore,
@@ -293,6 +294,7 @@ describe('Gateway desktop client sessions', () => {
         notebookId: 'notebook:one',
         conversationId: 'conversation:one',
         parts: [{ type: 'text', text: '继续刚才的话题' }],
+        capabilities: gatewayDesktopCapabilityManifest,
       }),
     });
     expect(response.status).toBe(200);

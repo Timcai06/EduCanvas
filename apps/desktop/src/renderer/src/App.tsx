@@ -24,6 +24,8 @@ import type {
   DesktopChatSource,
 } from '../../shared/chat-history';
 import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
+import { applyAssistantProjection } from './assistant-stream';
+import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -54,7 +56,9 @@ export default function App({
       error: null,
     });
   const [pendingResume, setPendingResume] = useState<string | null>(null);
+  const [canStop, setCanStop] = useState(false);
   const requestIdRef = useRef<string | null>(null);
+  const historyRef = useRef<DesktopChatHistorySnapshot>(history);
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
   const submitGateRef = useRef(createPetSubmitGate());
@@ -114,6 +118,39 @@ export default function App({
     return () => {
       unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
+    const acceptProjection = (projection: DesktopAssistantProjection): void => {
+      if (projection.conversationId !== historyRef.current.conversationId)
+        return;
+      if (projection.type === 'accepted') {
+        // Stop 只在服务端接受后可用（DP05）。
+        setCanStop(true);
+        return;
+      }
+      if (projection.type === 'tool') {
+        setMessage(
+          projection.status === 'started'
+            ? projection.tool
+              ? `正在使用工具 ${projection.tool}…`
+              : '正在使用工具…'
+            : 'EduCanvas 正在回复…',
+        );
+        return;
+      }
+      if (projection.type === 'final') setCanStop(false);
+      setHistory((current) => {
+        const next = applyAssistantProjection(current, projection);
+        return next ?? current;
+      });
+    };
+    const unsubscribe = window.desktopAssistant.onEvent(acceptProjection);
+    return unsubscribe;
   }, []);
 
   useEffect(
@@ -224,6 +261,7 @@ export default function App({
       requestIdRef.current = requestId;
       setState('sending');
       publishVisual('sending');
+      setCanStop(false);
       setMessage('EduCanvas 正在回复…');
       await appendHistory('user', prompt, 'text', clientMessageId);
       const result = await submitPetText(
@@ -387,6 +425,7 @@ export default function App({
     submitGateRef.current.cancel();
     requestIdRef.current = null;
     setPendingResume(null);
+    setCanStop(false);
     setState('ready');
     publishVisual('ready');
     setMessage('已停止。你可以继续输入。');
@@ -404,6 +443,7 @@ export default function App({
       if (!leaseToken) return;
       setState('sending');
       publishVisual('sending');
+      setCanStop(false);
       setMessage('正在续传…');
       const result = await window.desktopOperation.resume(clientMessageId);
       if (result.ok) {
@@ -433,6 +473,7 @@ export default function App({
       historyEndRef={historyEndRef}
       text={text}
       busy={busy}
+      canStop={canStop}
       lastAssistantReply={lastAssistantReply}
       setText={setText}
       collapse={() => setChatCollapsed(true)}

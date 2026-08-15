@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  gatewayCapabilityDefaultRisk,
   gatewayCapabilityManifestSchema,
+  gatewayCapabilityNameSchema,
+  gatewayClientTurnRequestSchema,
   gatewayDeliveryReceiptSchema,
+  gatewayDesktopCapabilityManifest,
+  gatewayDesktopCapabilityManifestSchema,
+  gatewayDesktopCapabilityNames,
   gatewayEventBatchSchema,
   gatewayInboundEnvelopeSchema,
   gatewayNodeInvocationRequestSchema,
@@ -16,7 +22,7 @@ import {
 
 const occurredAt = '2026-07-19T04:00:00.000Z';
 
-function makeEnvelope(transport: 'web' | 'tui') {
+function makeEnvelope(transport: 'web' | 'tui' | 'desktop') {
   return {
     protocol: gatewayProtocolVersion,
     envelopeId: `env:${transport}:1`,
@@ -216,5 +222,85 @@ describe('Gateway contracts', () => {
         failureCode: null,
       }),
     ).toThrow(/failure code/);
+  });
+});
+
+describe('Desktop capability manifest (DP06)', () => {
+  const makeClientTurn = (
+    capabilities: unknown = gatewayDesktopCapabilityManifest,
+  ) => ({
+    clientMessageId: 'desktop:1',
+    notebookId: 'notebook:1',
+    conversationId: 'conversation:1',
+    parts: [{ type: 'text', text: '你好' }],
+    capabilities,
+  });
+
+  it('freezes a v1 manifest whose names are all valid gateway capabilities', () => {
+    const manifest = gatewayDesktopCapabilityManifestSchema.parse(
+      gatewayDesktopCapabilityManifest,
+    );
+    expect(manifest.manifestVersion).toBe('1');
+    for (const name of manifest.capabilities) {
+      expect(gatewayCapabilityNameSchema.safeParse(name).success).toBe(true);
+    }
+    // 服务端 risk 表必须覆盖冻结清单全部能力名，防止客户端自报 L2/L3。
+    for (const name of gatewayDesktopCapabilityNames) {
+      expect(gatewayCapabilityDefaultRisk[name]).toBeDefined();
+    }
+    // 刻意不含 artifact.native：Artifact 走可验证 Web handoff 降级（DP08）。
+    expect(manifest.capabilities).not.toContain('artifact.native');
+  });
+
+  it('requires the client turn to explicitly carry the capability manifest', () => {
+    const { capabilities, ...rest } = makeClientTurn();
+    expect(() => gatewayClientTurnRequestSchema.parse(rest)).toThrow();
+    expect(
+      gatewayClientTurnRequestSchema.parse(makeClientTurn()).capabilities
+        .manifestVersion,
+    ).toBe('1');
+  });
+
+  it('rejects unknown capability names and unknown manifest versions', () => {
+    expect(() =>
+      gatewayClientTurnRequestSchema.parse(
+        makeClientTurn({
+          manifestVersion: '1',
+          capabilities: ['input.text', 'output.unproven'],
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      gatewayClientTurnRequestSchema.parse(
+        makeClientTurn({
+          manifestVersion: '2',
+          capabilities: ['input.text'],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('rejects duplicate capability declarations in the client manifest', () => {
+    expect(() =>
+      gatewayClientTurnRequestSchema.parse(
+        makeClientTurn({
+          manifestVersion: '1',
+          capabilities: ['input.text', 'input.text'],
+        }),
+      ),
+    ).toThrow(/unique/);
+  });
+
+  it('accepts desktop as a first-party transport kind', () => {
+    const envelope = gatewayInboundEnvelopeSchema.parse({
+      ...makeEnvelope('desktop'),
+      connection: {
+        ...makeEnvelope('desktop').connection,
+        transport: 'desktop',
+        adapterId: 'educanvas.desktop',
+      },
+    });
+    expect(envelope.connection.transport).toBe('desktop');
+    expect(envelope.connection.adapterId).toBe('educanvas.desktop');
   });
 });

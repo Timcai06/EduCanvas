@@ -10,6 +10,7 @@ export * from './common';
 export * from './conversation-directory';
 export * from './conversation-messages';
 export * from './delivery';
+export * from './desktop-capabilities';
 export * from './envelopes';
 export * from './events';
 export * from './handoffs';

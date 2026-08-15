@@ -1,6 +1,7 @@
 import {
   gatewayClientTurnRequestSchema,
   gatewayConversationCreateRequestSchema,
+  gatewayDesktopCapabilityManifest,
   gatewayConversationCreateResultSchema,
   gatewayConversationDirectoryCursorSchema,
   gatewayConversationDirectoryPageSchema,
@@ -439,10 +440,15 @@ export class GatewayClient {
    * - 每条 event 都经过 schema 校验；无效 JSON 或 schema 不匹配会抛异常中断消费。
    */
   async *streamTurn(
-    request: GatewayClientTurnRequest,
+    request: Omit<GatewayClientTurnRequest, 'capabilities'>,
     options: { signal?: AbortSignal } = {},
   ): AsyncIterable<GatewayOperationEvent> {
-    const body = gatewayClientTurnRequestSchema.parse(request);
+    // GatewayClient 是桌面第一方客户端：Turn 恒携带冻结的桌面 v1 capability manifest
+    // （DP06）。risk/version 由服务端解析，客户端只显式声明能力名，调用方无需重复携带。
+    const body = gatewayClientTurnRequestSchema.parse({
+      ...request,
+      capabilities: gatewayDesktopCapabilityManifest,
+    });
     const response = await this.fetcher(`${this.baseUrl}/v1/client/turns`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },

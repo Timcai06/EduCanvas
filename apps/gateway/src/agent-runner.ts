@@ -106,11 +106,20 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
   }
 }
 
+/**
+ * entrypoint 只用于服务端工具授权策略（general-tool-policy），不是渲染投影分支。
+ * 桌面与 TUI 同为已认证非浏览器客户端，映射到同一工具授权入口；
+ * 渲染投影按 capability manifest 而非 transport 名称决定（DP06）。
+ */
 function toEntrypoint(
   envelope: GatewayInboundEnvelope,
 ): 'web' | 'tui' | 'channel' | 'system' {
   if (envelope.connection.transport === 'web') return 'web';
-  if (envelope.connection.transport === 'tui') return 'tui';
+  if (
+    envelope.connection.transport === 'tui' ||
+    envelope.connection.transport === 'desktop'
+  )
+    return 'tui';
   if (envelope.connection.transport === 'telegram') return 'channel';
   return 'system';
 }

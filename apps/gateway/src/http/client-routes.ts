@@ -1,5 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
+  gatewayCapabilityDefaultRisk,
+  gatewayCapabilityDefaultVersion,
   gatewayClientTurnRequestSchema,
   gatewayConversationCreateRequestSchema,
   gatewayConnectionConnectRequestSchema,
@@ -8,10 +10,12 @@ import {
   gatewayHandoffIssueRequestSchema,
   gatewayOpaqueIdSchema,
   gatewayProtocolVersion,
+  type GatewayCapabilityManifest,
+  type GatewayClientTurnRequest,
   type GatewayInboundEnvelope,
 } from '@educanvas/gateway-core';
 import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
-import { z } from 'zod';
+import { ZodError, z } from 'zod';
 import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
 import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
@@ -35,6 +39,40 @@ import {
 } from './common';
 
 const HANDOFF_TTL_MS = 2 * 60 * 1_000;
+
+/**
+ * 把客户端声明的能力名解析为服务端受控的 capability manifest（DP06）。
+ * risk/version 只来自服务端 `gatewayCapabilityDefaultRisk` 表；未知能力名抛 ZodError
+ * 走统一 400 INVALID_REQUEST，避免客户端自报 L2/L3 或探测未登记能力。
+ */
+function resolveClientCapabilityManifest(
+  body: GatewayClientTurnRequest,
+  issuedAt: string,
+): GatewayCapabilityManifest {
+  const capabilities = body.capabilities.capabilities.map((name) => {
+    const risk = gatewayCapabilityDefaultRisk[name];
+    if (!risk) {
+      throw new ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ['capabilities', 'capabilities'],
+          message: `Unsupported capability: ${name}`,
+        },
+      ]);
+    }
+    return {
+      name,
+      risk,
+      version: gatewayCapabilityDefaultVersion,
+      constraints: {},
+    };
+  });
+  return {
+    manifestId: `client:${body.clientMessageId}`,
+    issuedAt,
+    capabilities,
+  };
+}
 
 /**
  * 本地 IdP 引导：仅接受回环地址，且服务端固定用户身份，绝不接收客户端传入的用户 id。
@@ -495,8 +533,8 @@ export async function handleClientRoutes(
         connection: {
           connectionId,
           role: 'client',
-          transport: 'tui',
-          adapterId: 'educanvas.tui',
+          transport: 'desktop',
+          adapterId: 'educanvas.desktop',
         },
         principal: {
           subjectId: identity.userId,
@@ -511,36 +549,7 @@ export async function handleClientRoutes(
           conversationId: body.conversationId,
         },
         parts: body.parts,
-        capabilities: {
-          manifestId: `tui:${body.clientMessageId}`,
-          issuedAt: now,
-          capabilities: [
-            {
-              name: 'input.text',
-              risk: 'l0',
-              version: '1',
-              constraints: {},
-            },
-            {
-              name: 'output.markdown',
-              risk: 'l0',
-              version: '1',
-              constraints: {},
-            },
-            {
-              name: 'output.stream',
-              risk: 'l0',
-              version: '1',
-              constraints: {},
-            },
-            {
-              name: 'approval.interactive',
-              risk: 'l1',
-              version: '1',
-              constraints: {},
-            },
-          ],
-        },
+        capabilities: resolveClientCapabilityManifest(body, now),
         replyTarget: { kind: 'connection', connectionId },
       };
       const iterator = deps.service.handle(envelope)[Symbol.asyncIterator]();

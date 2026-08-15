@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  gatewayCapabilityNameSchema,
+  gatewayDesktopCapabilityNames,
+} from '@educanvas/gateway-core';
+import {
   encodeGatewayConformanceNdjson,
   gatewayCrossEntryConformance,
 } from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
@@ -33,6 +37,7 @@ describe('GatewayClient跨入口合规', () => {
 
     expect(events).toEqual(gatewayCrossEntryConformance.completed);
     expect(Object.keys(body ?? {}).sort()).toEqual([
+      'capabilities',
       'clientMessageId',
       'conversationId',
       'notebookId',
@@ -40,6 +45,21 @@ describe('GatewayClient跨入口合规', () => {
     ]);
     expect(body).not.toHaveProperty('principal');
     expect(body).not.toHaveProperty('agentProfileId');
+  });
+
+  it('desktop 首版能力名全部是合法 gateway 能力名且不信任客户端身份', () => {
+    for (const name of gatewayDesktopCapabilityNames) {
+      expect(gatewayCapabilityNameSchema.safeParse(name).success).toBe(true);
+    }
+    expect(
+      gatewayCrossEntryConformance.request.capabilities.capabilities,
+    ).toEqual([...gatewayDesktopCapabilityNames]);
+    expect(gatewayCrossEntryConformance.request).not.toHaveProperty(
+      'principal',
+    );
+    expect(gatewayCrossEntryConformance.request).not.toHaveProperty(
+      'agentProfileId',
+    );
   });
 
   it('保留审批等待与取消的零终态/单终态语义', async () => {

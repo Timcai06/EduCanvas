@@ -15,6 +15,7 @@ export function PetChatPanel(props: {
   historyEndRef: RefObject<HTMLDivElement | null>;
   text: string;
   busy: boolean;
+  canStop: boolean;
   lastAssistantReply: string;
   setText(value: string): void;
   collapse(): void;
@@ -39,6 +40,7 @@ export function PetChatPanel(props: {
     historyEndRef,
     text,
     busy,
+    canStop,
     lastAssistantReply,
     setText,
     collapse,
@@ -132,7 +134,13 @@ export function PetChatPanel(props: {
         <p className="pet-chat__empty">还没有对话。</p>
       ) : (
         history.messages.map((item: DesktopChatMessage) => (
-          <article className={`chat-message is-${item.role}`} key={item.id}>
+          <article
+            className={`chat-message is-${item.role}${
+              item.status === 'streaming' ? ' is-streaming' : ''
+            }`}
+            key={item.id}
+            aria-hidden={item.status === 'streaming'}
+          >
             <span>
               {item.role === 'user'
                 ? '你'
@@ -140,7 +148,10 @@ export function PetChatPanel(props: {
                   ? 'EduCanvas'
                   : '提示'}
             </span>
-            <p>{item.content}</p>
+            <p>
+              {item.content}
+              {item.status === 'streaming' ? '▍' : ''}
+            </p>
           </article>
         ))
       )}
@@ -203,6 +214,7 @@ export function PetChatPanel(props: {
           <button
             className="send-action is-stop"
             type="button"
+            disabled={!canStop}
             onClick={cancel}
           >
             停止
