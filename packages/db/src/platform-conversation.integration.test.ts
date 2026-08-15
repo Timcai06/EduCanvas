@@ -143,6 +143,60 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     ]);
   });
 
+  it('canonical Message 游标从当前页最旧消息继续且不会重复上一页', async () => {
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const conversation = await conversations.create({
+      ownerSubjectId: 'message-page-user',
+      spaceKind: 'notebook',
+      spaceTitle: '分页会话',
+    });
+    for (let index = 1; index <= 3; index += 1) {
+      const turn = await turns.createOrGetTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'message-page-user',
+        clientMessageId: `page-${index}`,
+        text: `问题${index}`,
+        now: new Date(`2026-07-16T07:0${index}:00.000Z`),
+      });
+      await turns.settleTurn({
+        conversationId: conversation.id,
+        trustedSubjectId: 'message-page-user',
+        turnId: turn.turnId,
+        status: 'completed',
+        content: `回答${index}`,
+        now: new Date(`2026-07-16T07:0${index}:01.000Z`),
+      });
+    }
+
+    const first = await turns.listMessagePage({
+      conversationId: conversation.id,
+      trustedSubjectId: 'message-page-user',
+      limit: 2,
+    });
+    expect(first.items.map((message) => message.content)).toEqual([
+      '问题3',
+      '回答3',
+    ]);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await turns.listMessagePage({
+      conversationId: conversation.id,
+      trustedSubjectId: 'message-page-user',
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+    expect(second.items.map((message) => message.content)).toEqual([
+      '问题2',
+      '回答2',
+    ]);
+    expect(second.items.map((message) => message.messageId)).not.toEqual(
+      first.items.map((message) => message.messageId),
+    );
+  });
+
   it('拒绝跨主体写入和读取', async () => {
     const repository = new DrizzlePlatformConversationRepository(getDatabase());
     const conversation = await repository.create({

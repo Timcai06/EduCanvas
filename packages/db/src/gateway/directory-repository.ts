@@ -143,14 +143,26 @@ export class DrizzleGatewayDirectoryRepository {
 
   async createConversation(input: {
     userId: string;
-    notebookId: string;
+    notebookId?: string;
     title: string;
     now?: Date;
   }): Promise<GatewayConversationDirectoryPageEntry> {
     const now = input.now ?? new Date();
     return this.database.transaction(async (transaction) => {
-      const [membership] = await transaction
+      if (!input.notebookId) {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${input.userId}, 0))`,
+        );
+        await ensurePersonalIdentity(transaction, {
+          userId: input.userId,
+          kind: 'registered',
+          now,
+        });
+      }
+
+      const membershipQuery = transaction
         .select({
+          notebookId: spaces.id,
           notebookTitle: spaces.title,
           membershipRole: notebookMemberships.role,
         })
@@ -164,7 +176,7 @@ export class DrizzleGatewayDirectoryRepository {
         )
         .where(
           and(
-            eq(spaces.id, input.notebookId),
+            input.notebookId ? eq(spaces.id, input.notebookId) : undefined,
             eq(spaces.status, 'active'),
             isNull(notebookMemberships.revokedAt),
             or(
@@ -177,7 +189,34 @@ export class DrizzleGatewayDirectoryRepository {
             ),
           ),
         )
+        .orderBy(desc(spaces.updatedAt), desc(spaces.id))
         .limit(1);
+      let [membership] = await membershipQuery;
+      if (!membership && !input.notebookId) {
+        const [notebook] = await transaction
+          .insert(spaces)
+          .values({
+            ownerSubjectId: input.userId,
+            kind: 'notebook',
+            title: '我的学习笔记本',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: spaces.id, title: spaces.title });
+        if (!notebook) throw new Error('Default Notebook write failed');
+        await transaction.insert(notebookMemberships).values({
+          notebookId: notebook.id,
+          userId: input.userId,
+          role: 'owner',
+          grantedByUserId: input.userId,
+          grantedAt: now,
+        });
+        membership = {
+          notebookId: notebook.id,
+          notebookTitle: notebook.title,
+          membershipRole: 'owner',
+        };
+      }
       if (!membership)
         throw new GatewayPersistenceError(
           'forbidden',
@@ -186,7 +225,7 @@ export class DrizzleGatewayDirectoryRepository {
       const [created] = await transaction
         .insert(conversations)
         .values({
-          spaceId: input.notebookId,
+          spaceId: membership.notebookId,
           ownerSubjectId: input.userId,
           agentProfileId: 'general',
           title: input.title,
@@ -202,7 +241,7 @@ export class DrizzleGatewayDirectoryRepository {
         });
       if (!created) throw new Error('Conversation write failed');
       return {
-        notebookId: input.notebookId,
+        notebookId: membership.notebookId,
         notebookTitle: membership.notebookTitle,
         conversationId: created.conversationId,
         title: created.title,

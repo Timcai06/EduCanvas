@@ -125,6 +125,30 @@ describeWithDatabase(
       });
     });
 
+    it('creates the first conversation and personal Notebook when no cursor exists', async () => {
+      const directory = new DrizzleGatewayDirectoryRepository(getDatabase());
+
+      const created = await directory.createConversation({
+        userId: 'user:first-desktop-conversation',
+        title: '桌宠首次对话',
+        now,
+      });
+
+      expect(created).toMatchObject({
+        notebookTitle: '我的学习笔记本',
+        title: '桌宠首次对话',
+        membershipRole: 'owner',
+      });
+      await expect(
+        directory.listConversations('user:first-desktop-conversation', now),
+      ).resolves.toMatchObject([
+        {
+          notebookId: created.notebookId,
+          conversationId: created.conversationId,
+        },
+      ]);
+    });
+
     it('allows a contributor to use a shared Notebook without sharing Agent identity', async () => {
       const conversations = new DrizzlePlatformConversationRepository(
         getDatabase(),

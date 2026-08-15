@@ -12,7 +12,7 @@ import { PET_VISUALS, PetDesktopShell, type PetAppProps } from './pet-view';
 import { PetChatPanel } from './pet-chat-panel';
 import { recordVoice } from './voice-recorder';
 import { playSpeech } from './speech-player';
-import { runVoiceSession } from './voice-session';
+import { bindVoiceTurn, runVoiceSession } from './voice-session';
 import {
   isBusyState,
   latestAssistantReply,
@@ -251,7 +251,6 @@ export default function App({
       submitGateRef.current.leave(submitToken);
     }
   };
-
   const startVoice = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
@@ -271,6 +270,7 @@ export default function App({
     }
     const controller = new AbortController();
     operationControllerRef.current = controller;
+    const voiceId = `desktop:${crypto.randomUUID()}`;
     let transcriptAdded = false;
     let terminalState: PetUiState = 'ready';
     try {
@@ -278,8 +278,7 @@ export default function App({
         {
           record: recordVoice,
           transcribe: window.desktopVoice.transcribe,
-          turn: (prompt, requestId) =>
-            window.desktopAssistant.turn(prompt, requestId, 'voice'),
+          turn: bindVoiceTurn(window.desktopAssistant.turn, voiceId),
           synthesize: window.desktopVoice.synthesize,
           play: (bytes, signal) => playSpeech(bytes, { signal }),
           cancelRemote: (requestId) => {
@@ -297,7 +296,7 @@ export default function App({
             publishVisual(nextState);
             if (snapshot.transcript && !transcriptAdded) {
               transcriptAdded = true;
-              void appendHistory('user', snapshot.transcript, 'voice');
+              void appendHistory('user', snapshot.transcript, 'voice', voiceId);
             }
             if (snapshot.error) setMessage(snapshot.error);
             else if (snapshot.notice) setMessage(snapshot.notice);
@@ -315,6 +314,7 @@ export default function App({
       if (result.outcome === 'success') setMessage(result.reply);
       else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
+      else if (result.code === 'interrupted') setPendingResume(voiceId);
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;

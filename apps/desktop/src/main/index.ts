@@ -154,7 +154,6 @@ if (!app.requestSingleInstanceLock()) {
     }
     sendToDesktopRenderers('chat:history', chatHistory.state());
   };
-
   /** 向上加载更早一页：以当前视图最旧一条的游标请求上一页并 prepend。 */
   const loadEarlierChat = async (): Promise<void> => {
     const cursor = conversations.currentCursor();
@@ -502,8 +501,9 @@ if (!app.requestSingleInstanceLock()) {
     const publishAuthStatus = (status: DesktopAuthStatus): void => {
       sendToDesktopRenderers('auth:status', status);
       if (status.state === 'signed_in') {
-        void conversations.load().then((snapshot) => {
+        void conversations.load().then(async (snapshot) => {
           publishConversationState(snapshot);
+          await reloadChatForConversation();
         });
       } else if (status.state === 'signed_out') {
         publishConversationState(conversations.reset());

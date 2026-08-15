@@ -32,7 +32,9 @@ export const gatewayConversationDirectoryPageSchema = z
 
 export const gatewayConversationCreateRequestSchema = z
   .object({
-    notebookId: gatewayOpaqueIdSchema,
+    // 首次使用时目录可能尚无 Conversation，因而 renderer 无从推导 Notebook。
+    // 缺省值由 Gateway 在当前用户可写的个人 Notebook 边界内解析。
+    notebookId: gatewayOpaqueIdSchema.optional(),
     title: z.string().trim().min(1).max(300),
   })
   .strict();

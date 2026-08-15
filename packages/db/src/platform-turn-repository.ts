@@ -733,7 +733,8 @@ export class DrizzlePlatformTurnRepository {
       citationsByMessage.set(row.assistantMessageId, citations);
     }
 
-    const items = page
+    const oldest = page.at(-1);
+    const items = [...page]
       .reverse()
       .filter(
         (row) =>
@@ -754,7 +755,6 @@ export class DrizzlePlatformTurnRepository {
         };
       });
 
-    const oldest = page[page.length - 1];
     return {
       items,
       nextCursor:

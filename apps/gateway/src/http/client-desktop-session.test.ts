@@ -151,7 +151,7 @@ async function start(
                 'Conversation creation denied',
               );
             return {
-              notebookId: input.notebookId,
+              notebookId: input.notebookId ?? 'notebook:personal',
               notebookTitle: '桌面笔记本',
               conversationId: 'conversation:new',
               title: input.title,

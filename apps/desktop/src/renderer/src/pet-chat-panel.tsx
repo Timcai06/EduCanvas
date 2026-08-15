@@ -26,7 +26,10 @@ export function PetChatPanel(props: {
   canResume: boolean;
   directory: DesktopConversationDirectorySnapshot;
   selectConversation(conversationId: string): Promise<void>;
-  createConversation(notebookId: string, title: string): Promise<void>;
+  createConversation(
+    notebookId: string | undefined,
+    title: string,
+  ): Promise<void>;
 }) {
   const {
     expandedView,
@@ -260,11 +263,10 @@ export function PetChatPanel(props: {
           <button
             className="conversation-sidebar__action"
             type="button"
-            disabled={busy || creating || writableNotebooks.length === 0}
+            disabled={busy || creating}
             onClick={() => {
               const notebookId =
-                current?.notebookId ?? writableNotebooks[0]?.notebookId ?? '';
-              if (!notebookId) return;
+                current?.notebookId ?? writableNotebooks[0]?.notebookId;
               setCreating(true);
               const now = new Date();
               const title = `新对话 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;

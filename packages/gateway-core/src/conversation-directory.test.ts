@@ -35,7 +35,7 @@ describe('Gateway conversation directory contract', () => {
     ).toBe(false);
   });
 
-  it('accepts only a Notebook and trimmed title for conversation creation', () => {
+  it('accepts an optional Notebook and trimmed title for conversation creation', () => {
     expect(
       gatewayConversationCreateRequestSchema.parse({
         notebookId: 'notebook:one',
@@ -52,5 +52,8 @@ describe('Gateway conversation directory contract', () => {
         agentProfileId: 'admin',
       }).success,
     ).toBe(false);
+    expect(
+      gatewayConversationCreateRequestSchema.parse({ title: '  首次对话  ' }),
+    ).toEqual({ title: '首次对话' });
   });
 });
