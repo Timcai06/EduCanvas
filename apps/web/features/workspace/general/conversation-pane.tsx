@@ -7,6 +7,7 @@ import type {
   MessageArtifactDTO,
 } from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
+import { ChatMinimap } from '@/features/chat/chat-minimap';
 import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
 import type { ComposerToolChip } from '@/features/composer/composer';
 import { VoiceComposer } from '@/features/voice';
@@ -264,7 +265,7 @@ export function ConversationPane({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="chat-minimap-host relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         ref={scrollRef}
         className="workspace-edge-scrollbar min-h-0 flex-1 overflow-y-auto"
@@ -301,6 +302,7 @@ export function ConversationPane({
           </div>
         ) : null}
       </div>
+      <ChatMinimap messages={projectedMessages} scrollRef={scrollRef} />
       <div ref={composerDockRef} className="relative z-10 px-4">
         <VoiceComposer
           {...composerProps}

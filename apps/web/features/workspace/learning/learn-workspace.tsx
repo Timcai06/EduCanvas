@@ -8,6 +8,7 @@ import { AssetUploadPanel } from '@/features/assets/asset-upload-panel';
 import { CanvasPanel } from '@/features/canvas/canvas-panel';
 import { HtmlPreviewPanel } from '@/features/canvas/html-preview-panel';
 import { ChatPanel } from '@/features/chat/chat-panel';
+import { ChatMinimap } from '@/features/chat/chat-minimap';
 import { useTeachingTurn } from '@/features/chat/use-teaching-turn';
 import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
 import { VoiceComposer } from '@/features/voice';
@@ -444,7 +445,7 @@ function LearnWorkspaceSession({
         />
         <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
           <div
-            className="flex min-h-0 min-w-0 flex-col"
+            className="chat-minimap-host relative flex min-h-0 min-w-0 flex-col"
             style={{
               flexBasis: splitActive ? `${chatPct}%` : '100%',
               flexGrow: splitActive ? 0 : 1,
@@ -502,6 +503,7 @@ function LearnWorkspaceSession({
                     }}
                   />
                 </div>
+                <ChatMinimap messages={messages} scrollRef={chatScrollRef} />
                 <VoiceComposer
                   notebookId={initialData.notebookId}
                   chips={enabledAssets.map((asset) => ({
