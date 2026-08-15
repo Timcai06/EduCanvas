@@ -66,9 +66,13 @@ function AssistantMarker({ active }: { active: boolean }) {
 function AnimatedMessage({
   children,
   className,
+  messageId,
+  role,
 }: {
   children: ReactNode;
   className: string;
+  messageId: string;
+  role: ChatMessage['role'];
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   useGSAP(
@@ -96,7 +100,13 @@ function AnimatedMessage({
     { scope: rootRef },
   );
   return (
-    <div ref={rootRef} className={className}>
+    <div
+      ref={rootRef}
+      className={className}
+      data-chat-message-id={messageId}
+      data-chat-message-role={role}
+      tabIndex={-1}
+    >
       {children}
     </div>
   );
@@ -155,6 +165,8 @@ export function ChatPanel({
           return (
             <AnimatedMessage
               key={message.id}
+              messageId={message.id}
+              role={message.role}
               className="max-w-[80%] self-end rounded-[1.125rem] rounded-br-md border border-line bg-card px-4 py-2.5 text-ink shadow-[var(--shadow-float)]"
             >
               {message.text ? <p>{message.text}</p> : null}
@@ -180,7 +192,12 @@ export function ChatPanel({
           message.text.length > 0 &&
           message.failureCode?.startsWith('k12_') === true;
         return (
-          <AnimatedMessage key={message.id} className="flex gap-3">
+          <AnimatedMessage
+            key={message.id}
+            messageId={message.id}
+            role={message.role}
+            className="flex gap-3"
+          >
             <AssistantMarker
               active={
                 message.status === 'pending' || message.status === 'streaming'
