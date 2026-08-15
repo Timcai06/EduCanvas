@@ -18,6 +18,8 @@ export interface TurnTracker {
   lastSequence: number;
   onAccepted?: (operationId: string) => void;
   onSequence?: (sequence: number) => void;
+  /** 原始 gateway 事件上报，供 main 翻译为受限投影广播（DP05 真实流式）。 */
+  onEvent?: (event: GatewayOperationEvent) => void;
 }
 
 export interface AssistantProxy {
@@ -50,7 +52,8 @@ export interface AssistantProxy {
 
 interface GatewayClientPort {
   streamTurn(
-    request: GatewayClientTurnRequest,
+    // 桌面 Turn 由客户端注入冻结的 desktop capability manifest（DP06），调用方无需携带。
+    request: Omit<GatewayClientTurnRequest, 'capabilities'>,
     options?: { signal?: AbortSignal },
   ): AsyncIterable<GatewayOperationEvent>;
   cancelOperation(operationId: string): Promise<unknown>;
@@ -176,6 +179,7 @@ export function createAssistantProxy(options: {
           { signal: streamAbort.signal },
         )) {
           reportEvent(tracker, event);
+          tracker?.onEvent?.(event);
           if (event.type === 'operation.accepted') {
             operationId = event.operationId;
             acceptOperation(tracker, event.operationId);
@@ -290,6 +294,7 @@ export function createAssistantProxy(options: {
         );
         for (const event of events) {
           reportEvent(tracker, event);
+          tracker?.onEvent?.(event);
           if (event.type === 'operation.accepted') {
             acceptOperation(tracker, event.operationId);
           } else if (event.type === 'operation.completed') {

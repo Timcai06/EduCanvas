@@ -1,3 +1,4 @@
+import { gatewayDesktopCapabilityManifest } from '../../packages/gateway-core/src/desktop-capabilities';
 import type { GatewayClientTurnRequest } from '../../packages/gateway-core/src/envelopes';
 import type { GatewayOperationEvent } from '../../packages/gateway-core/src/events';
 import type { GatewayResolvedRoute } from '../../packages/gateway-core/src/routing';
@@ -25,6 +26,7 @@ export const gatewayCrossEntryConformance = {
     notebookId: 'notebook:cross-entry',
     conversationId: 'conversation:cross-entry',
     parts: [{ type: 'text', text: '解释为什么需要审批' }],
+    capabilities: gatewayDesktopCapabilityManifest,
   } satisfies GatewayClientTurnRequest,
   resolvedRoute: {
     actorUserId: 'user:cross-entry',

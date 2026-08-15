@@ -32,6 +32,7 @@ import {
   gatewayTimestampSchema,
 } from './common';
 import { gatewayCapabilityManifestSchema } from './capabilities';
+import { gatewayDesktopCapabilityManifestSchema } from './desktop-capabilities';
 import { gatewayCitationSchema } from './citations';
 import { gatewayConnectionSchema, gatewayPrincipalSchema } from './identity';
 import { gatewayRouteHintSchema } from './routing';
@@ -114,13 +115,18 @@ export type GatewayInboundEnvelope = z.infer<
   typeof gatewayInboundEnvelopeSchema
 >;
 
-/** Public clients send this untrusted shape; Gateway injects principal/connection. */
+/**
+ * Public clients send this untrusted shape; Gateway injects principal/connection.
+ * `capabilities` 是客户端显式声明的版本化能力 manifest（DP06）；risk/version 由服务端解析，
+ * 未知能力名或版本由网关明确拒绝，不再由网关按 TUI 硬编码。
+ */
 export const gatewayClientTurnRequestSchema = z
   .object({
     clientMessageId: gatewayIdempotencyKeySchema,
     notebookId: gatewayOpaqueIdSchema,
     conversationId: gatewayOpaqueIdSchema,
     parts: z.array(gatewayInboundPartSchema).min(1).max(32),
+    capabilities: gatewayDesktopCapabilityManifestSchema,
   })
   .strict();
 

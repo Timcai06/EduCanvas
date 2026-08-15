@@ -1,6 +1,9 @@
 import type { IpcMain } from 'electron';
+import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 import type { AssistantProxy, TurnTracker } from './assistant-proxy';
 import type { OperationRegistry } from './operation-registry';
+import { toAssistantProjection } from './assistant-projection';
+import type { DesktopAssistantProjection } from '../shared/assistant-projection';
 import type { TurnResult } from '../shared/turn-result';
 
 interface OperationLeasePort {
@@ -18,6 +21,8 @@ export function registerOperationIpc(options: {
   operationRegistry: OperationRegistry;
   proxy: Pick<AssistantProxy, 'resume'>;
   reloadChatForConversation: () => Promise<void>;
+  broadcastProjection: (projection: DesktopAssistantProjection) => void;
+  currentConversationId: () => string | null;
 }): void {
   const {
     ipcMain,
@@ -26,6 +31,8 @@ export function registerOperationIpc(options: {
     operationRegistry,
     proxy,
     reloadChatForConversation,
+    broadcastProjection,
+    currentConversationId,
   } = options;
 
   ipcMain.handle('operation:get-pending', (event) => {
@@ -61,6 +68,17 @@ export function registerOperationIpc(options: {
       const tracker: TurnTracker = {
         operationId: entry.operationId,
         lastSequence: entry.lastSequence,
+        onEvent: (rawEvent: GatewayOperationEvent) => {
+          if (!entry.conversationId) return;
+          // 会话已切换：迟到的续传事件不得写入新会话视图。
+          if (currentConversationId() !== entry.conversationId) return;
+          const projection = toAssistantProjection(rawEvent, {
+            requestId: `resume:${entry.clientMessageId}`,
+            clientMessageId: entry.clientMessageId,
+            conversationId: entry.conversationId,
+          });
+          if (projection) broadcastProjection(projection);
+        },
         onSequence: (sequence) =>
           operationRegistry.recordSequence(entry.clientMessageId, sequence),
       };

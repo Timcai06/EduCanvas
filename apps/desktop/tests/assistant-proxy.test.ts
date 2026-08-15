@@ -118,6 +118,40 @@ describe('remote assistant proxy', () => {
     });
   });
 
+  it('forwards stream events through tracker.onEvent for DP05 projection', async () => {
+    const seen: string[] = [];
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '你好，' });
+          yield event(2, { type: 'message.delta', delta: '我是老师。' });
+          yield event(3, {
+            type: 'operation.completed',
+            messageId: 'message:one',
+          });
+        },
+        async cancelOperation() {
+          return { status: 'cancelled' as const };
+        },
+      }),
+    });
+    const result = await proxy.turn({ text: '你好' }, undefined, {
+      operationId: null,
+      lastSequence: -1,
+      onEvent: (item) => seen.push(item.type),
+    });
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      'operation.accepted',
+      'message.delta',
+      'message.delta',
+      'operation.completed',
+    ]);
+  });
+
   it('requires a desktop session', async () => {
     const withoutSession = createAssistantProxy({
       getSession: async () => null,

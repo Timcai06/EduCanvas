@@ -6,8 +6,8 @@ build
 coverage
 .turbo
 output
+out
 tmp
 temp
-out
 apps/web/.next
 apps/web/next-env.d.ts

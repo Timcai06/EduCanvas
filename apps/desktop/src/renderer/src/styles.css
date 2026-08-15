@@ -244,6 +244,18 @@ select:focus-visible {
   background: var(--accent-soft);
   color: #245c47;
 }
+.chat-message.is-streaming > p {
+  opacity: 0.9;
+}
+.chat-message.is-streaming > p::after {
+  content: '▍';
+  animation: pet-stream-caret 1s step-end infinite;
+}
+@keyframes pet-stream-caret {
+  50% {
+    opacity: 0;
+  }
+}
 
 .pet-chat__composer {
   display: grid;

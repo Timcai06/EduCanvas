@@ -1,4 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import {
+  gatewayDesktopCapabilityManifest,
+  gatewayDesktopCapabilityNames,
+} from '@educanvas/gateway-core';
+import {
+  encodeGatewayConformanceNdjson,
+  gatewayCrossEntryConformance,
+} from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
 import { GatewayBootstrapClient, GatewayClient } from './client';
 
 /**
@@ -367,5 +375,33 @@ describe('GatewayClient', () => {
     }))
       events.push(item);
     expect(events).toHaveLength(1);
+  });
+
+  it('streamTurn always carries the frozen desktop capability manifest (DP06)', async () => {
+    let body: Record<string, unknown> | undefined;
+    const fetcher: typeof fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        encodeGatewayConformanceNdjson(gatewayCrossEntryConformance.completed),
+      );
+    };
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      fetcher,
+    );
+    for await (const _event of client.streamTurn({
+      clientMessageId: 'message:1',
+      notebookId: 'notebook:1',
+      conversationId: 'conversation:1',
+      parts: [{ type: 'text', text: 'hello' }],
+    })) {
+      // 消费完整个流
+    }
+    expect(body?.capabilities).toEqual(gatewayDesktopCapabilityManifest);
+    // 冻结能力名全部是桌面首版声明，且不声明 artifact.native（handoff 降级）。
+    expect(body?.capabilities).toMatchObject({
+      capabilities: gatewayDesktopCapabilityNames,
+    });
   });
 });

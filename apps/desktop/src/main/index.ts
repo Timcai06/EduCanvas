@@ -9,11 +9,15 @@ import {
   session,
   shell,
 } from 'electron';
-import { gatewayDesktopProtocol } from '@educanvas/gateway-core';
+import {
+  gatewayDesktopProtocol,
+  type GatewayOperationEvent,
+} from '@educanvas/gateway-core';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
 import { createAssistantProxy, type TurnTracker } from './assistant-proxy';
+import { toAssistantProjection } from './assistant-projection';
 import { createOperationRegistry } from './operation-registry';
 import { registerOperationIpc } from './operation-ipc';
 import { createVoiceProxy } from './voice-proxy';
@@ -363,19 +367,30 @@ if (!app.requestSingleInstanceLock()) {
       const cursor = conversations.currentCursor();
       const routeRevision = conversations.state().revision;
       const clientMessageId = payload.clientMessageId;
-      const tracker: TurnTracker | undefined = clientMessageId
-        ? {
-            operationId: null,
-            lastSequence: -1,
-            onAccepted: (operationId) =>
-              operationRegistry.accept(clientMessageId, operationId),
-            onSequence: (sequence) =>
-              operationRegistry.recordSequence(clientMessageId, sequence),
-          }
-        : undefined;
+      const conversationId = cursor?.conversationId ?? null;
+      const publishProjection = (rawEvent: GatewayOperationEvent): void => {
+        if (!conversationId) return;
+        // 路由已切换：旧 operation 的迟到事件不得投影到新会话视图。
+        if (conversations.state().revision !== routeRevision) return;
+        const projection = toAssistantProjection(rawEvent, {
+          requestId: payload.requestId,
+          clientMessageId: clientMessageId ?? null,
+          conversationId,
+        });
+        if (projection) sendToDesktopRenderers('assistant:event', projection);
+      };
+      const tracker: TurnTracker = {
+        operationId: null,
+        lastSequence: -1,
+        onEvent: publishProjection,
+      };
       if (clientMessageId) {
+        tracker.onAccepted = (operationId) =>
+          operationRegistry.accept(clientMessageId, operationId);
+        tracker.onSequence = (sequence) =>
+          operationRegistry.recordSequence(clientMessageId, sequence);
         operationRegistry.begin(clientMessageId, {
-          conversationId: cursor?.conversationId ?? null,
+          conversationId,
           ownerId: event.sender.id,
         });
       }
@@ -478,6 +493,10 @@ if (!app.requestSingleInstanceLock()) {
     operationRegistry,
     proxy,
     reloadChatForConversation,
+    broadcastProjection: (projection) =>
+      sendToDesktopRenderers('assistant:event', projection),
+    currentConversationId: () =>
+      conversations.currentCursor()?.conversationId ?? null,
   });
 
   // Windows/Linux send custom schemes to the existing single instance command line.

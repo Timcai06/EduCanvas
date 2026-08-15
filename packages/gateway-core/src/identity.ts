@@ -53,6 +53,7 @@ export type GatewayPrincipal = z.infer<typeof gatewayPrincipalSchema>;
 export const gatewayTransportKinds = [
   'web',
   'tui',
+  'desktop',
   'telegram',
   'node',
   'fixture',

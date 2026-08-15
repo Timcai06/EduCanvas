@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import type { TurnResult } from '../shared/turn-result';
+import type { DesktopAssistantProjection } from '../shared/assistant-projection';
 import type {
   VoiceAudioInput,
   VoiceSpeechResult,
@@ -42,6 +43,9 @@ declare global {
       ): Promise<TurnResult>;
       cancel(requestId: string): void;
       onToast(callback: (message: string) => void): () => void;
+      onEvent(
+        callback: (projection: DesktopAssistantProjection) => void,
+      ): () => void;
     };
     desktopPet: {
       hide(): void;
@@ -137,6 +141,18 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     ipcRenderer.on('assistant:toast', listener);
     return () => {
       ipcRenderer.removeListener('assistant:toast', listener);
+    };
+  },
+  onEvent(
+    callback: (projection: DesktopAssistantProjection) => void,
+  ): () => void {
+    const listener = (
+      _event: IpcRendererEvent,
+      projection: DesktopAssistantProjection,
+    ): void => callback(projection);
+    ipcRenderer.on('assistant:event', listener);
+    return () => {
+      ipcRenderer.removeListener('assistant:event', listener);
     };
   },
 });
