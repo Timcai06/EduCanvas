@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
+import { openFollowReader, readFollowed } from './local-log-viewer.mjs';
 
 const temporaryDirectories = [];
 
@@ -212,4 +213,125 @@ test('follow 模式可被 Ctrl-C 干净终止', async () => {
     new Promise((resolve) => setTimeout(() => resolve('timeout'), 5_000)),
   ]);
   assert.equal(code, 0);
+});
+
+test('follow 不重复首屏历史记录', async () => {
+  const logsRoot = await makeLogsFixture({ state: 'running' });
+  const child = spawn(
+    process.execPath,
+    ['tooling/local-log-viewer.mjs', '--json'],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, EDUCANVAS_LOGS_ROOT: logsRoot },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  let stdout = '';
+  child.stdout.on('data', (chunk) => (stdout += chunk));
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  const countLines = () => stdout.trim().split('\n').filter(Boolean).length;
+  const deadline = Date.now() + 5_000;
+  while (countLines() < 5 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(countLines(), 5, '首屏应恰好输出 5 条');
+  // 等待多个 follow tick（500ms 间隔），历史记录不得被重复输出。
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  assert.equal(countLines(), 5, 'follow 不应重复输出历史记录');
+  child.kill('SIGINT');
+  const code = await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 5_000)),
+  ]);
+  assert.equal(code, 0);
+});
+
+test('follow 追加记录恰好输出一次', async () => {
+  const logsRoot = await makeLogsFixture({ state: 'running' });
+  const runDir = path.join(logsRoot, 'local-20260814-112339-a7f2');
+  const child = spawn(
+    process.execPath,
+    ['tooling/local-log-viewer.mjs', '--json'],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, EDUCANVAS_LOGS_ROOT: logsRoot },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  let stdout = '';
+  child.stdout.on('data', (chunk) => (stdout += chunk));
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  const countLines = () => stdout.trim().split('\n').filter(Boolean).length;
+  const deadline = Date.now() + 5_000;
+  while (countLines() < 5 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(countLines(), 5);
+
+  // 运行时追加一条记录：follow 必须恰好输出一次。
+  await writeFile(
+    path.join(runDir, 'combined.jsonl'),
+    `${JSON.stringify({
+      schema: 'educanvas.log.v1',
+      ts: '2026-08-14T11:26:09.999Z',
+      level: 'info',
+      service: 'worker',
+      event: 'worker.job.started',
+      message: '追加记录',
+    })}\n`,
+    { flag: 'a' },
+  );
+  const appendDeadline = Date.now() + 5_000;
+  while (countLines() < 6 && Date.now() < appendDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(countLines(), 6, '追加记录应恰好输出一次');
+  assert.match(stdout, /追加记录/);
+  // 不再追加时不得反复输出。
+  await new Promise((resolve) => setTimeout(resolve, 1_200));
+  assert.equal(countLines(), 6);
+  child.kill('SIGINT');
+  const code = await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 5_000)),
+  ]);
+  assert.equal(code, 0);
+});
+
+test('readFollowed 只消费追加字节（大日志不全量重读）', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'educanvas-follow-'));
+  temporaryDirectories.push(root);
+  const file = path.join(root, 'combined.jsonl');
+  const bigLine = 'x'.repeat(1_024);
+  const initial = `${Array.from({ length: 1_024 }, () => bigLine).join('\n')}\n`;
+  await writeFile(file, initial, 'utf8');
+
+  const reader = await openFollowReader(file);
+  assert.ok(reader.offset >= 1_000_000, '起始偏移应为首屏文件大小');
+
+  await writeFile(file, `${initial}{"appended":true}\n`, 'utf8');
+  const slice = await readFollowed(reader);
+  assert.equal(slice, '{"appended":true}\n', '只应返回追加字节');
+  assert.equal(await readFollowed(reader), '', '无新增时返回空');
+});
+
+test('--tail=N 只显示最近 N 条', async () => {
+  const logsRoot = await makeLogsFixture();
+  const result = await runViewer(['--json', '--tail=2'], {
+    EDUCANVAS_LOGS_ROOT: logsRoot,
+  });
+  assert.equal(result.code, 0);
+  const lines = result.stdout.trim().split('\n');
+  assert.equal(lines.length, 2);
+  assert.match(lines[1], /trace-1/);
+});
+
+test('NO_FOLLOW=1 输出首屏后立即退出', async () => {
+  const logsRoot = await makeLogsFixture({ state: 'running' });
+  const result = await runViewer(['--json'], {
+    EDUCANVAS_LOGS_ROOT: logsRoot,
+    NO_FOLLOW: '1',
+  });
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout.trim().split('\n').length, 5);
 });

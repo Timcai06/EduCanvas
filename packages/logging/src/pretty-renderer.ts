@@ -131,7 +131,7 @@ export function renderRecord(
 
   let line = color ? colorize(time, DIM) : time;
   line += `  ${padDisplay(record.service.toUpperCase(), 7)}`;
-  line += `  ${padDisplay(color ? colorize(level, LEVEL_COLORS[record.level] ?? '') : level, 5)}`;
+  line += `  ${color ? colorize(padDisplay(level, 5), LEVEL_COLORS[record.level] ?? '') : padDisplay(level, 5)}`;
   const eventText = record.event;
   const eventColor = SUCCESS_EVENT_PATTERN.test(record.event) ? GREEN : DIM;
   line += `  ${color ? colorize(padDisplay(eventText, 28), eventColor) : padDisplay(eventText, 28)}`;

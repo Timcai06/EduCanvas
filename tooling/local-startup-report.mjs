@@ -202,7 +202,7 @@ export function buildFailure({ stages, session, services, error }) {
     stages,
     failures,
     recentRecords,
-    logDirectory: session.directory,
+    logDirectory: session?.directory ?? '',
     suggestedCommands,
   };
 }
