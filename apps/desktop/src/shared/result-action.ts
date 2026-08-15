@@ -1,6 +1,8 @@
 import type { DesktopResultTarget } from './chat-history';
 
 export type DesktopOpenResult = { ok: true } | { ok: false; message: string };
+export type DesktopImagePreviewResult =
+  { ok: true; dataUrl: string } | { ok: false; message: string };
 
 const boundedId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 300;

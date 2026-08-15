@@ -9,6 +9,7 @@ export {
   type GatewayBootstrapSession,
   type GatewayCancelResult,
   type GatewayConversationEntry,
+  type GatewayImagePreview,
   type GatewayPendingApproval,
   type GatewayRecentOperation,
 } from './client';

@@ -19,7 +19,10 @@ import type {
 } from '../shared/conversation-directory';
 import type { DesktopPendingOperationsSnapshot } from '../shared/pending-operation';
 import type { DesktopResultTarget } from '../shared/chat-history';
-import type { DesktopOpenResult } from '../shared/result-action';
+import type {
+  DesktopImagePreviewResult,
+  DesktopOpenResult,
+} from '../shared/result-action';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -87,6 +90,7 @@ declare global {
     };
     desktopResult: {
       open(target: DesktopResultTarget): Promise<DesktopOpenResult>;
+      preview(target: DesktopResultTarget): Promise<DesktopImagePreviewResult>;
     };
     desktopVoice: {
       transcribe(
@@ -237,6 +241,9 @@ contextBridge.exposeInMainWorld('desktopConversation', {
 contextBridge.exposeInMainWorld('desktopResult', {
   open(target: DesktopResultTarget): Promise<DesktopOpenResult> {
     return ipcRenderer.invoke('result:open', target);
+  },
+  preview(target: DesktopResultTarget): Promise<DesktopImagePreviewResult> {
+    return ipcRenderer.invoke('result:preview', target);
   },
 });
 

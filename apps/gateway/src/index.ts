@@ -56,6 +56,8 @@ import { GatewayObservability } from './observability';
 import { createGatewayObservabilitySink } from './gateway-observability-adapter';
 import { createGatewayLogger } from './logging';
 import { GatewayCanvasResourceService } from './canvas-resource-service';
+import { GatewayImagePreviewService } from './asset-image-preview-service';
+import { readGatewayImageBytes } from './asset-local-storage';
 import { getGatewayTelemetryRuntime } from './telemetry';
 import { createStreamingTranscriptionUpgradeHandler } from './streaming-transcription-ws-transport';
 import { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
@@ -93,6 +95,10 @@ const operationStore = new DrizzleGatewayOperationStore(undefined, {
 const identities = new DrizzleGatewayIdentityRepository();
 const directory = new DrizzleGatewayDirectoryRepository();
 const turnRepository = new DrizzlePlatformTurnRepository();
+const imagePreviews = new GatewayImagePreviewService({
+  find: (input) => turnRepository.findOwnedImagePreview(input),
+  readBytes: readGatewayImageBytes,
+});
 const connections = new GatewayConnectionService(
   new DrizzleGatewayConnectionRepository(),
   createDefaultGatewayConnectionProviders({
@@ -184,6 +190,7 @@ const server = createServer(
           },
           connections,
           canvasResources: new GatewayCanvasResourceService(),
+          imagePreviews,
           streamingTickets,
           checkNotebookAccess: checkStreamingNotebookAccess,
         }

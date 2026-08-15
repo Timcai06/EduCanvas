@@ -363,6 +363,11 @@ select:focus-visible {
   stroke-linejoin: round;
   stroke-width: 1.5;
 }
+.result-card__thumbnail[src] {
+  display: block;
+  height: auto;
+  object-fit: cover;
+}
 @keyframes pet-stream-caret {
   50% {
     opacity: 0;

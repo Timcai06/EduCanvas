@@ -40,6 +40,7 @@ describe('desktop result opener', () => {
       getSession: async () => session,
       currentConversationId: () => 'conversation:one',
       issueHandoff,
+      readImagePreview: vi.fn(),
       openExternal,
     });
 
@@ -50,12 +51,43 @@ describe('desktop result opener', () => {
     );
   });
 
+  it('returns a bounded image data URL without exposing the storage location', async () => {
+    const readImagePreview = vi.fn(async () => ({
+      mimeType: 'image/png' as const,
+      bytes: Uint8Array.from([137, 80, 78, 71]),
+    }));
+    const opener = createResultOpener({
+      getSession: async () => session,
+      currentConversationId: () => 'conversation:one',
+      issueHandoff: vi.fn(),
+      readImagePreview,
+      openExternal: vi.fn(),
+    });
+
+    await expect(
+      opener.preview({
+        kind: 'asset',
+        assetId: 'asset:one',
+        assetVersionId: 'version:one',
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      dataUrl: 'data:image/png;base64,iVBORw==',
+    });
+    expect(readImagePreview).toHaveBeenCalledWith(session, 'conversation:one', {
+      kind: 'asset',
+      assetId: 'asset:one',
+      assetVersionId: 'version:one',
+    });
+  });
+
   it('does not open a browser without an authenticated current conversation', async () => {
     const openExternal = vi.fn(async () => undefined);
     const opener = createResultOpener({
       getSession: async () => null,
       currentConversationId: () => null,
       issueHandoff: vi.fn(),
+      readImagePreview: vi.fn(),
       openExternal,
     });
 
@@ -73,6 +105,7 @@ describe('desktop result opener', () => {
       issueHandoff: async () => {
         throw new Error('private gateway detail');
       },
+      readImagePreview: vi.fn(),
       openExternal: vi.fn(),
     });
 

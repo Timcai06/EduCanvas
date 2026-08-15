@@ -105,6 +105,40 @@ describe('GatewayClient', () => {
     expect(seenUrl).toContain('/operations/operation-1/cancel');
   });
 
+  it('reads an image preview through the bearer session without exposing its token in the URL', async () => {
+    let seenUrl = '';
+    let seenHeaders: HeadersInit | undefined;
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input, init) => {
+        seenUrl = String(input);
+        seenHeaders = init?.headers;
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    );
+
+    await expect(
+      client.getImagePreview({
+        conversationId: 'conversation:one',
+        assetId: 'asset:one',
+        assetVersionId: 'version:one',
+      }),
+    ).resolves.toEqual({
+      mimeType: 'image/png',
+      bytes: Uint8Array.from([137, 80, 78, 71]),
+    });
+    expect(seenUrl).toContain(
+      '/conversations/conversation%3Aone/assets/asset%3Aone/versions/version%3Aone/image-preview',
+    );
+    expect(seenUrl).not.toContain('t'.repeat(32));
+    expect(seenHeaders).toMatchObject({
+      authorization: `Bearer ${'t'.repeat(32)}`,
+    });
+  });
+
   it('lists recent operations for the session', async () => {
     const fetcher: typeof fetch = async () =>
       Response.json({
