@@ -23,7 +23,7 @@
     "apps/web/features/voice/transport/streaming-transcription-client.ts": 793,
     "apps/web/features/voice/voice-composer.tsx": 577,
     "apps/web/features/workspace/general/use-general-workspace-controller.ts": 544,
-    "apps/web/features/workspace/learning/learn-workspace.tsx": 646,
+    "apps/web/features/workspace/learning/learn-workspace.tsx": 648,
     "apps/web/server/assets/asset-preview.ts": 439,
     "apps/worker/src/tasks/generate-artifact.ts": 482,
     "packages/agent-core/src/index.ts": 446,

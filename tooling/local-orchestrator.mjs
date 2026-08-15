@@ -23,6 +23,7 @@ import { applyResolvedLocalPorts } from './local-orchestrator-config.mjs';
 import { runStop, runStatus } from './local-runtime-ops.mjs';
 import { runStartup } from './local-startup.mjs';
 import { loadWorkspaceEnvFiles } from './workspace-env.mjs';
+import { detectTerminalCapabilities } from './terminal/capabilities.mjs';
 
 const SUPPORTED_PROFILES = new Set([
   'all',
@@ -49,11 +50,10 @@ const { port, gatewayPort } = applyResolvedLocalPorts(process.env);
 const webUrl = `http://127.0.0.1:${port}`;
 const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
 
-const colorEnabled =
-  process.env.NO_COLOR === undefined &&
-  process.env.NO_COLOR !== '' &&
-  process.stdout.isTTY &&
-  process.env.FORCE_COLOR !== '0';
+// 颜色语义单一决策点（NO_COLOR/FORCE_COLOR/non-TTY），与 log-viewer 一致。
+const { colorEnabled } = detectTerminalCapabilities({
+  stdout: process.stdout,
+});
 const verbose = profile === 'all-verbose';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -35,12 +35,14 @@ const ROOT_FILES = new Set([
   'playwright.ui.config.ts',
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
+  'skills-lock.json',
   'start-educanvas.ps1',
   'stop-educanvas.ps1',
   'tsconfig.base.json',
   'turbo.json',
 ]);
 const TOP_LEVEL_DIRECTORIES = new Set([
+  '.agents',
   '.github',
   '.vscode',
   'apps',

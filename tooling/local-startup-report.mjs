@@ -1,25 +1,24 @@
 /**
- * 启动失败摘要渲染 — 「成功路径摘要化，失败路径详细化」。
+ * 启动摘要渲染 — 「成功路径摘要化，失败路径详细化」。
  *
  * 纪律：
  * - 不倾倒所有服务日志；默认展示失败服务最近 20~40 条相关记录；
  * - 显示首个 fatal/error、退出码/signal、完整日志位置；
- * - 失败详情必须来自真实错误；无法确定建议时只给检查命令，不编造根因。
+ * - 失败详情必须来自真实错误；无法确定建议时只给检查命令，不编造根因；
+ * - 颜色只走语义 token（./terminal/theme.mjs），符号走 ./terminal/glyphs.mjs。
  */
 
 import path from 'node:path';
 import { renderSummaryLine } from './local-pretty.mjs';
 import { LOG_SCHEMA } from './log-protocol.mjs';
-
-const RESET = '\x1b[0m';
-const DIM = '\x1b[2m';
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-
-function color(text, code) {
-  return code === '' ? text : `${code}${text}${RESET}`;
-}
+import { paint } from './terminal/theme.mjs';
+import { GLYPHS, SUMMARY_RULE } from './terminal/glyphs.mjs';
+import {
+  displayWidth,
+  formatDuration,
+  padDisplay,
+  shortenPath,
+} from './terminal/format.mjs';
 
 /** 从记录中提取首个 error/fatal 级别记录。 */
 export function firstFailure(records) {
@@ -46,7 +45,7 @@ export function extractExitInfo(records) {
  * - stages: [{ label, ok, detail }] 各阶段结果
  * - failures: [{ service, reason, exitCode, signal }]
  * - recentRecords: { service: records[] }（最近记录，按时间序）
- * - logDirectory: 完整日志目录
+ * - logDirectory: 完整日志目录（失败摘要永远显示完整路径，不缩写）
  * - suggestedCommands: string[]
  */
 export function renderFailureSummary(input, { colorEnabled = false } = {}) {
@@ -58,14 +57,14 @@ export function renderFailureSummary(input, { colorEnabled = false } = {}) {
     suggestedCommands = [],
   } = input;
   const lines = [];
-  const c = (text, code) => (colorEnabled ? color(text, code) : text);
+  const c = (text, token) => (colorEnabled ? paint(token, text) : text);
 
-  lines.push('EduCanvas · Startup failed');
-  lines.push(c('─'.repeat(56), DIM));
+  lines.push(`${c(GLYPHS.fail, 'error')} EduCanvas · Startup failed`);
+  lines.push(c(SUMMARY_RULE, 'dim'));
   lines.push('');
   for (const stage of stages) {
-    const mark = stage.ok ? '✓' : '✗';
-    const markColor = stage.ok ? GREEN : RED;
+    const mark = stage.ok ? GLYPHS.ok : GLYPHS.fail;
+    const markColor = stage.ok ? 'success' : 'error';
     lines.push(
       `  ${c(mark, markColor)}  ${stage.label.padEnd(12)} ${stage.detail ?? ''}`.trimEnd(),
     );
@@ -75,18 +74,18 @@ export function renderFailureSummary(input, { colorEnabled = false } = {}) {
   if (failures.length > 0) {
     for (const failure of failures) {
       lines.push(
-        `  ${c('Error', YELLOW).padEnd(12)} ${failure.reason ?? '未知错误'}`,
+        `  ${c('Error', 'warning').padEnd(12)} ${failure.reason ?? '未知错误'}`,
       );
       if (failure.service !== undefined) {
-        lines.push(`  ${c('Service', DIM).padEnd(12)} ${failure.service}`);
+        lines.push(`  ${c('Service', 'dim').padEnd(12)} ${failure.service}`);
       }
       if (failure.exitCode !== undefined || failure.signal !== undefined) {
         lines.push(
-          `  ${c('Exit', DIM).padEnd(12)} code=${failure.exitCode ?? '-'} signal=${failure.signal ?? '-'}`,
+          `  ${c('Exit', 'dim').padEnd(12)} code=${failure.exitCode ?? '-'} signal=${failure.signal ?? '-'}`,
         );
       }
     }
-    lines.push(`  ${c('Log', DIM).padEnd(12)} ${logDirectory ?? ''}`);
+    lines.push(`  ${c('Log', 'dim').padEnd(12)} ${logDirectory ?? ''}`);
   }
 
   // 失败服务最近记录摘要（只含失败服务，最多 40 条）。
@@ -100,15 +99,15 @@ export function renderFailureSummary(input, { colorEnabled = false } = {}) {
       const time = (record.ts ?? '').slice(11, 23);
       const level = record.level.toUpperCase().padEnd(5);
       const levelColor =
-        record.level === 'error' || record.level === 'fatal' ? RED : DIM;
+        record.level === 'error' || record.level === 'fatal' ? 'error' : 'dim';
       const base = `  ${time}  ${record.service.toUpperCase().padEnd(7)} ${c(level, levelColor)}  ${record.event}`;
       lines.push(base);
       if (record.error) {
         lines.push(
-          `  ${' '.repeat(20)} ↳ ${c(record.error.message, RED)}${record.error.code ? ` · ${record.error.code}` : ''}`,
+          `  ${' '.repeat(20)} ${GLYPHS.indent} ${c(record.error.message, 'error')}${record.error.code ? ` ${GLYPHS.dot} ${record.error.code}` : ''}`,
         );
       } else if (record.message && record.event !== 'process.output') {
-        lines.push(`  ${' '.repeat(20)} ↳ ${record.message}`);
+        lines.push(`  ${' '.repeat(20)} ${GLYPHS.indent} ${record.message}`);
       }
     }
   }
@@ -117,7 +116,7 @@ export function renderFailureSummary(input, { colorEnabled = false } = {}) {
     lines.push('');
     lines.push('  Suggested action:');
     for (const command of suggestedCommands) {
-      lines.push(`  ${c(command, YELLOW)}`);
+      lines.push(`  ${c(command, 'warning')}`);
     }
   }
   return lines.join('\n');
@@ -131,7 +130,9 @@ export function renderFailureSummaryPlain(input) {
 export { LOG_SCHEMA, path };
 
 /**
- * 启动阶段摘要渲染（成功路径）— 与失败摘要共用展示层。
+ * 启动阶段摘要渲染（成功路径）。
+ * stages: [{ label, ok, detail, durationMs? }] — durationMs 可选，
+ * 存在时右对齐到同一列；ready-in 取各阶段最大时长。
  */
 export function printStartupSummary({
   stages,
@@ -141,23 +142,44 @@ export function printStartupSummary({
   colorEnabled,
   out,
 }) {
+  const c = (text, token) => (colorEnabled ? paint(token, text) : text);
+  const detailCol = Math.max(
+    0,
+    ...stages.map((s) => displayWidth(s.detail ?? '')),
+  );
+  const durations = stages
+    .map((s) => s.durationMs)
+    .filter((ms) => typeof ms === 'number');
+  const durationCol = Math.max(
+    0,
+    ...durations.map((ms) => formatDuration(ms).length),
+  );
+  const readyIn =
+    durations.length > 0 ? formatDuration(Math.max(...durations)) : '';
+
   out('');
-  out('EduCanvas · Local Runtime');
-  out('─'.repeat(56));
-  out('');
-  out('  STARTUP');
+  out(`${c(GLYPHS.brand, 'brand')} EduCanvas · Local Runtime`);
+  out(c(SUMMARY_RULE, 'dim'));
   out('');
   for (const stage of stages) {
+    const mark = stage.ok ? GLYPHS.ok : GLYPHS.fail;
+    const markColor = stage.ok ? 'success' : 'error';
+    const duration =
+      typeof stage.durationMs === 'number'
+        ? formatDuration(stage.durationMs).padStart(durationCol)
+        : '';
     out(
-      `  ${renderSummaryLine(stage.ok ? '✓' : '✗', stage.label, stage.detail, { color: colorEnabled })}`,
+      `  ${c(mark, markColor)}  ${padDisplay(stage.label, 10)} ${padDisplay(stage.detail ?? '', detailCol)}${duration ? `  ${c(duration, 'dim')}` : ''}`,
     );
   }
+  if (readyIn) {
+    out('');
+    out(`  ${c(`ready in ${readyIn}`, 'success')}`);
+  }
   out('');
-  out(`  Web       ${webUrl}`);
-  out(`  Gateway   ${gatewayUrl}`);
-  out(`  Logs      ${session.directory}`);
+  out(`  Logs      ${shortenPath(session.directory)}`);
   out('');
-  out('  make logs · make status · Ctrl-C to stop');
+  out('  make logs · make status · ^C stop');
 }
 
 /**
