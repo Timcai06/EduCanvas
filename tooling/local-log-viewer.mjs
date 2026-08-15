@@ -23,6 +23,12 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { readLatest, DEFAULT_LOGS_ROOT } from './local-run-session.mjs';
 import { renderRecord } from './local-pretty.mjs';
+import { detectTerminalCapabilities } from './terminal/capabilities.mjs';
+
+// 颜色语义单一决策点（NO_COLOR/FORCE_COLOR/non-TTY），与 orchestrator 一致。
+const { colorEnabled: capsColorEnabled } = detectTerminalCapabilities({
+  stdout: process.stdout,
+});
 
 const HELP = `usage: local-log-viewer [--service=X] [--level=Y] [--event=Z] [--op=ID] [--trace=ID] [--job=ID] [--run=runId] [--json] [--errors] [--tail=N] [--no-follow]`;
 
@@ -157,15 +163,6 @@ function matchesFilters(record, options) {
   return true;
 }
 
-function colorEnabled() {
-  return (
-    process.env.NO_COLOR === undefined &&
-    process.env.NO_COLOR !== '' &&
-    process.stdout.isTTY &&
-    process.env.FORCE_COLOR !== '0'
-  );
-}
-
 async function resolveRunDirectory(options) {
   if (options.run) {
     const directory = path.join(DEFAULT_LOGS_ROOT, options.run);
@@ -256,7 +253,7 @@ function outputRecord(line, options) {
     process.stdout.write(`${JSON.stringify(record)}\n`);
   } else {
     process.stdout.write(
-      `${renderRecord(record, { color: colorEnabled() })}\n`,
+      `${renderRecord(record, { color: capsColorEnabled })}\n`,
     );
   }
 }

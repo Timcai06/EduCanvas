@@ -21,6 +21,8 @@ import {
 } from './local-process-identity.mjs';
 import { renderSummaryLine } from './local-pretty.mjs';
 import { isDatabaseRunning } from './local-db.mjs';
+import { GLYPHS } from './terminal/glyphs.mjs';
+import { paint } from './terminal/theme.mjs';
 import {
   DEFAULT_LOGS_ROOT,
   readLatest,
@@ -29,6 +31,39 @@ import {
 } from './local-run-session.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 状态卡片渲染（纯函数，测试友好）。返回行数组（不含标题）。
+ * 状态词保持历史契约：ready/stopped/down/none，detail 含 dbPort/urls/pid。
+ */
+export function renderStatusCard({
+  database,
+  gateway,
+  web,
+  worker,
+  latest,
+  dbPort,
+  webUrl,
+  gatewayUrl,
+  colorEnabled,
+}) {
+  const rows = [
+    ['Database', database ? 'ready' : 'stopped', `127.0.0.1:${dbPort}`],
+    ['Gateway', gateway ? 'ready' : 'stopped', gatewayUrl],
+    ['Web', web ? 'ready' : 'stopped', webUrl],
+    [
+      'Worker',
+      worker ? 'ready' : 'down',
+      worker ? `pid=${latest?.services?.worker?.pid ?? '-'}` : '',
+    ],
+    ['Runtime', latest?.state ?? 'none', latest?.runId ?? ''],
+  ];
+  return rows.map(([name, state, detail]) => {
+    const mark =
+      state === 'ready' || state === 'running' ? GLYPHS.ok : GLYPHS.fail;
+    return `  ${renderSummaryLine(mark, name, `${state}${detail ? `  ${detail}` : ''}`, { color: colorEnabled })}`;
+  });
+}
 
 /** 输出当前状态表；返回是否全部就绪。 */
 export async function runStatus({ webUrl, gatewayUrl, colorEnabled }) {
@@ -43,24 +78,22 @@ export async function runStatus({ webUrl, gatewayUrl, colorEnabled }) {
   // 这里必须读同一环境变量，不能写死（默认 5434）。
   const dbPort = process.env.EDUCANVAS_POSTGRES_PORT ?? '5434';
   const out = (line = '') => process.stdout.write(`${line}\n`);
-  out('EduCanvas · Local Status');
+  out(
+    `${colorEnabled ? paint(GLYPHS.brand, 'brand') : GLYPHS.brand} EduCanvas · Local Status`,
+  );
   out('');
-  const rows = [
-    ['Database', database ? 'ready' : 'stopped', `127.0.0.1:${dbPort}`],
-    ['Gateway', gateway ? 'ready' : 'stopped', gatewayUrl],
-    ['Web', web ? 'ready' : 'stopped', webUrl],
-    [
-      'Worker',
-      worker ? 'ready' : 'down',
-      worker ? `pid=${latest?.services?.worker?.pid ?? '-'}` : '',
-    ],
-    ['Runtime', latest?.state ?? 'none', latest?.runId ?? ''],
-  ];
-  for (const [name, state, detail] of rows) {
-    const mark = state === 'ready' || state === 'running' ? '✓' : '✗';
-    out(
-      `  ${renderSummaryLine(mark, name, `${state}${detail ? `  ${detail}` : ''}`, { color: colorEnabled })}`,
-    );
+  for (const line of renderStatusCard({
+    database,
+    gateway,
+    web,
+    worker,
+    latest,
+    dbPort,
+    webUrl,
+    gatewayUrl,
+    colorEnabled,
+  })) {
+    out(line);
   }
   return gateway && web && worker && latest?.state === 'running';
 }

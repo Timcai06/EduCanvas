@@ -3,56 +3,33 @@
  *
  * 与 packages/logging/src/pretty-renderer.ts 保持同一套样式契约：
  * 时间弱化、service/level 定宽、warn 黄/error 红、成功事件绿、
- * 中文宽度按 2 计算；ANSI 只存在于展示层。协议常量经 log-protocol.mjs 共享。
+ * 中文宽度按 2 计算；ANSI 只存在于展示层。
+ *
+ * 颜色一律走语义 token（./terminal/theme.mjs），宽度/时长/路径工具走
+ * ./terminal/format.mjs，符号走 ./terminal/glyphs.mjs。
+ * 协议常量经 log-protocol.mjs 共享。
  */
 
-const RESET = '\x1b[0m';
-const DIM = '\x1b[2m';
-const GREEN = '\x1b[32m';
-const YELLOW = '\x1b[33m';
-const RED = '\x1b[31m';
+import { paint } from './terminal/theme.mjs';
+import { GLYPHS } from './terminal/glyphs.mjs';
+import {
+  displayWidth,
+  formatDuration,
+  padDisplay,
+  truncateDisplay,
+} from './terminal/format.mjs';
 
-const LEVEL_COLORS = {
-  debug: DIM,
-  info: '',
-  warn: YELLOW,
-  error: RED,
-  fatal: RED,
+export { displayWidth, padDisplay, truncateDisplay };
+
+const LEVEL_TOKENS = {
+  debug: 'dim',
+  info: null,
+  warn: 'warning',
+  error: 'error',
+  fatal: 'error',
 };
 const SUCCESS_EVENT_PATTERN =
   /(?:^|\.)(ready|completed|opened|accepted|started|stopped|checked|skipped)$/;
-
-export function displayWidth(text) {
-  let width = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0) ?? 0;
-    width +=
-      code >= 0x1100 &&
-      (code <= 0x115f ||
-        code === 0x2329 ||
-        code === 0x232a ||
-        (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
-        (code >= 0xac00 && code <= 0xd7a3) ||
-        (code >= 0xf900 && code <= 0xfaff) ||
-        (code >= 0xfe30 && code <= 0xfe4f) ||
-        (code >= 0xff00 && code <= 0xff60) ||
-        (code >= 0xffe0 && code <= 0xffe6) ||
-        (code >= 0x1f300 && code <= 0x1faff) ||
-        (code >= 0x20000 && code <= 0x3fffd))
-        ? 2
-        : 1;
-  }
-  return width;
-}
-
-export function padDisplay(text, width) {
-  const padding = width - displayWidth(text);
-  return padding > 0 ? text + ' '.repeat(padding) : text;
-}
-
-function colorize(text, code) {
-  return code === '' ? text : `${code}${text}${RESET}`;
-}
 
 function formatTime(iso) {
   const date = new Date(iso);
@@ -86,29 +63,49 @@ function formatFields(record) {
   for (const key of FIELD_ORDER) {
     const value = record[key];
     if (value === undefined) continue;
-    parts.push(key === 'durationMs' ? `${value}ms` : `${key}=${value}`);
+    parts.push(
+      key === 'durationMs' ? formatDuration(value) : `${key}=${value}`,
+    );
   }
-  return parts.length > 0 ? `  ${parts.join(' ')}` : '';
+  return parts.length > 0 ? `  ${parts.join(` ${GLYPHS.dot} `)}` : '';
+}
+
+/**
+ * 逐行按显示宽度截断。超宽行先剥离 ANSI 再截断（截断后的行是纯文本，
+ * 保证管道/窄终端下不出现残缺的颜色序列）。
+ */
+function applyLineLimit(line, maxLineWidth) {
+  if (maxLineWidth === undefined) return line;
+  return line
+    .split('\n')
+    .map((segment) => {
+      if (displayWidth(segment) <= maxLineWidth) return segment;
+      const plain = segment.replace(/\x1b\[[0-9;]*m/g, '');
+      return truncateDisplay(plain, maxLineWidth);
+    })
+    .join('\n');
 }
 
 /** 渲染单条记录为终端行（多行错误块用 ↳ 缩进）。 */
-export function renderRecord(record, { color = false } = {}) {
+export function renderRecord(record, { color = false, maxLineWidth } = {}) {
   const time = formatTime(record.ts ?? '');
   const level = String(record.level ?? 'info').toUpperCase();
-  let line = color ? colorize(time, DIM) : time;
+  let line = color ? paint('dim', time) : time;
   line += `  ${padDisplay(String(record.service ?? '?').toUpperCase(), 7)}`;
-  line += `  ${color ? colorize(padDisplay(level, 5), LEVEL_COLORS[record.level] ?? '') : padDisplay(level, 5)}`;
+  const levelText = padDisplay(level, 5);
+  const levelToken = LEVEL_TOKENS[record.level] ?? null;
+  line += `  ${color && levelToken ? paint(levelToken, levelText) : levelText}`;
   const eventText = String(record.event ?? '');
-  const eventColor = SUCCESS_EVENT_PATTERN.test(eventText) ? GREEN : DIM;
-  line += `  ${color ? colorize(padDisplay(eventText, 28), eventColor) : padDisplay(eventText, 28)}`;
+  const eventToken = SUCCESS_EVENT_PATTERN.test(eventText) ? 'success' : 'dim';
+  line += `  ${color ? paint(eventToken, padDisplay(eventText, 28)) : padDisplay(eventText, 28)}`;
   line += `  ${record.message ?? ''}`;
   line += formatFields(record);
   if (record.error) {
     const error = record.error;
-    const errorText = ` ↳ ${error.message ?? ''}${error.code ? ` · ${error.code}` : ''}${error.retryable === true ? ' · retryable' : ''}`;
-    line += `\n${' '.repeat(27)} ${color ? colorize(errorText.trimStart(), RED) : errorText.trimStart()}`;
+    const errorText = ` ↳ ${error.message ?? ''}${error.code ? ` ${GLYPHS.dot} ${error.code}` : ''}${error.retryable === true ? ` ${GLYPHS.dot} retryable` : ''}`;
+    line += `\n${' '.repeat(27)} ${color ? paint('error', errorText.trimStart()) : errorText.trimStart()}`;
   }
-  return line;
+  return applyLineLimit(line, maxLineWidth);
 }
 
 /** 阶段摘要行：✓/✗ + 名称 + 状态。 */
@@ -118,6 +115,8 @@ export function renderSummaryLine(
   detail,
   { color = false } = {},
 ) {
-  const mark = color ? colorize(symbol, symbol === '✓' ? GREEN : RED) : symbol;
+  const mark = color
+    ? paint(symbol === GLYPHS.ok ? 'success' : 'error', symbol)
+    : symbol;
   return `${mark}  ${padDisplay(label, 12)} ${detail}`;
 }

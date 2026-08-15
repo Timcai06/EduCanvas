@@ -124,7 +124,6 @@ export async function runStartup({
     ok: true,
     detail: `Node ${process.version.replace('v', '')} · Docker ready`,
   });
-
   let session = null;
   let services = null;
 
@@ -134,7 +133,8 @@ export async function runStartup({
       stages.push({
         label: 'Database',
         ok: true,
-        detail: `PostgreSQL ready · ${db.durationMs}ms`,
+        detail: 'PostgreSQL',
+        durationMs: db.durationMs,
       });
     } catch (error) {
       stages.push({ label: 'Database', ok: false, detail: 'failed' });
@@ -150,9 +150,8 @@ export async function runStartup({
       label: 'Migration',
       ok: true,
       detail:
-        migration.status === 'skipped'
-          ? 'schema unchanged · skipped'
-          : `schema current · ${migration.durationMs}ms`,
+        migration.status === 'skipped' ? 'schema unchanged' : 'schema current',
+      durationMs: migration.durationMs,
     });
 
     // 关键顺序：先基于「旧的 latest.json」探测已运行 core，再决定是否新建
@@ -178,9 +177,9 @@ export async function runStartup({
       stages.push({
         label: 'Gateway',
         ok: true,
-        detail: `ready · ${gatewayUrl}`,
+        detail: gatewayUrl,
       });
-      stages.push({ label: 'Web', ok: true, detail: `ready · ${webUrl}` });
+      stages.push({ label: 'Web', ok: true, detail: webUrl });
       stages.push({
         label: 'Worker',
         ok: true,
@@ -266,17 +265,20 @@ export async function runStartup({
     stages.push({
       label: 'Gateway',
       ok: true,
-      detail: `ready · ${gatewayUrl} · ${(readyMs.gateway / 1000).toFixed(2)}s`,
+      detail: gatewayUrl,
+      durationMs: readyMs.gateway,
     });
     stages.push({
       label: 'Web',
       ok: true,
-      detail: `ready · ${webUrl} · ${(readyMs.web / 1000).toFixed(2)}s`,
+      detail: webUrl,
+      durationMs: readyMs.web,
     });
     stages.push({
       label: 'Worker',
       ok: true,
-      detail: `ready · ${(readyMs.worker / 1000).toFixed(2)}s`,
+      detail: 'ready',
+      durationMs: readyMs.worker,
     });
     printStartupSummary({
       stages,
