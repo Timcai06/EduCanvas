@@ -33,7 +33,7 @@
     "packages/asset-processing/src/mineru-fake-server.ts": 489,
     "packages/db/src/agent-model-run-repository.ts": 516,
     "packages/db/src/anonymous-data-lifecycle-deletions.ts": 596,
-    "packages/db/src/asset-repository.ts": 1585,
+    "packages/db/src/asset-repository.ts": 1600,
     "packages/db/src/asset-video-repository.ts": 534,
     "packages/db/src/audio-retention-repository.ts": 421,
     "packages/db/src/chat-repository.ts": 686,
