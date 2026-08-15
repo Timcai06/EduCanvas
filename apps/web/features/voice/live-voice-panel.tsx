@@ -271,7 +271,7 @@ export function LiveVoicePanel({
 
         <div className="live-voice-experience">
           <div className="live-voice-orb-column">
-            <LiveVoiceOrb />
+            <LiveVoiceOrb phase={phase} audioLevel={audioLevel} />
             <div data-live-copy className="live-voice-transcript-deck">
               <div
                 data-live-active-line
@@ -303,6 +303,8 @@ export function LiveVoicePanel({
                 key={`${scopeKey}:${previewTarget.kind}:${previewTarget.id}`}
                 target={previewTarget}
                 scopeKey={scopeKey}
+                annotations={annotations}
+                onAnnotateAsset={onAnnotateAsset}
                 onClose={closePreview}
               />
             ) : null}
@@ -321,16 +323,20 @@ export function LiveVoicePanel({
               tools={tools}
               onToggleAsset={onToggleAsset}
               onUploadAsset={onUploadAsset}
-              onOpenAsset={(assetId, title, trigger) => {
+              onOpenAsset={(asset, trigger) => {
                 previewTriggerRef.current = trigger;
-                setPreviewTarget({ kind: 'source', id: assetId, title });
+                setPreviewTarget({
+                  kind: 'source',
+                  id: asset.id,
+                  title: asset.label,
+                  versionId: asset.versionId,
+                  previewUrl: asset.kind === 'image' ? asset.previewUrl : null,
+                });
               }}
               onOpenArtifact={(artifactId, title, trigger) => {
                 previewTriggerRef.current = trigger;
                 setPreviewTarget({ kind: 'artifact', id: artifactId, title });
               }}
-              annotations={annotations}
-              onAnnotateAsset={onAnnotateAsset}
             />
           </div>
         </div>

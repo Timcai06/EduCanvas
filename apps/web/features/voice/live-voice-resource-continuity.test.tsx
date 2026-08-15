@@ -155,20 +155,57 @@ describe('Live Voice resource continuity interactions', () => {
       );
 
       let root = renderPanel(onClose, onToggleMute);
-      const open = stage(root).props[action] as (
-        resourceId: string,
-        title: string,
-        trigger: HTMLButtonElement,
-      ) => void;
-      open(id, '函数讲义', trigger);
+      if (action === 'onOpenAsset') {
+        const open = stage(root).props[action] as (
+          asset: {
+            id: string;
+            versionId: string;
+            label: string;
+            kind: 'image';
+            scope: 'space';
+            status: 'ready';
+            enabled: boolean;
+            selectable: boolean;
+            previewUrl: string;
+          },
+          trigger: HTMLButtonElement,
+        ) => void;
+        open(
+          {
+            id,
+            versionId: 'version-a',
+            label: '函数讲义',
+            kind: 'image',
+            scope: 'space',
+            status: 'ready',
+            enabled: true,
+            selectable: true,
+            previewUrl: '/api/v1/chat/assets/source-a/file',
+          },
+          trigger,
+        );
+      } else {
+        const open = stage(root).props[action] as (
+          resourceId: string,
+          title: string,
+          trigger: HTMLButtonElement,
+        ) => void;
+        open(id, '函数讲义', trigger);
+      }
 
       root = renderPanel(onClose, onToggleMute);
       const openedPreview = preview(root);
-      expect(openedPreview.props.target).toEqual({
-        kind: action === 'onOpenAsset' ? 'source' : 'artifact',
-        id,
-        title: '函数讲义',
-      });
+      expect(openedPreview.props.target).toEqual(
+        action === 'onOpenAsset'
+          ? {
+              kind: 'source',
+              id,
+              title: '函数讲义',
+              versionId: 'version-a',
+              previewUrl: '/api/v1/chat/assets/source-a/file',
+            }
+          : { kind: 'artifact', id, title: '函数讲义' },
+      );
       expect(onClose).not.toHaveBeenCalled();
       expect(onToggleMute).not.toHaveBeenCalled();
 
@@ -200,11 +237,33 @@ describe('Live Voice resource continuity interactions', () => {
     let root = renderPanel(onClose, onToggleMute);
     (
       stage(root).props.onOpenAsset as (
-        id: string,
-        title: string,
+        asset: {
+          id: string;
+          versionId: string;
+          label: string;
+          kind: 'image';
+          scope: 'space';
+          status: 'ready';
+          enabled: boolean;
+          selectable: boolean;
+          previewUrl: string;
+        },
         trigger: HTMLButtonElement,
       ) => void
-    )('source-a', '讲义', { focus: vi.fn() } as unknown as HTMLButtonElement);
+    )(
+      {
+        id: 'source-a',
+        versionId: 'version-a',
+        label: '讲义',
+        kind: 'image',
+        scope: 'space',
+        status: 'ready',
+        enabled: true,
+        selectable: true,
+        previewUrl: '/api/v1/chat/assets/source-a/file',
+      },
+      { focus: vi.fn() } as unknown as HTMLButtonElement,
+    );
 
     root = renderPanel(onClose, onToggleMute);
     const dialog = findElement(root, (element) => element.type === 'dialog');

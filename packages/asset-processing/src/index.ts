@@ -4,6 +4,7 @@ export {
   assetExtractionFailureCodes,
   extractAssetText,
   routeDocumentExtraction,
+  sanitizeExtractedText,
   supportsTextExtraction,
   type AssetExtractionFailureCode,
 } from './text-extraction';

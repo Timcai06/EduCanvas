@@ -1,12 +1,22 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import {
+  ArrowDown,
+  ArrowUp,
+  File,
+  FilePdf,
+  Image,
+  MagnifyingGlass,
+  MusicNote,
+  Sparkle,
+  VideoCamera,
+} from '@phosphor-icons/react';
 import type { WorkspaceResourceSummary } from '@educanvas/canvas-protocol';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   canOpenResourceLibraryItem,
   getResourceLibraryActions,
   queryResourceLibrary,
-  type ResourceLibraryCategory,
   type ResourceLibrarySortKey,
   type ResourceLibrarySortOrder,
 } from './resource-library-model';
@@ -22,8 +32,120 @@ const statusLabels: Record<WorkspaceResourceSummary['status'], string> = {
 function versionLabel(summary: WorkspaceResourceSummary): string {
   if (!summary.version) return '暂无版本';
   return summary.version.sequence === null
-    ? `版本 ${summary.version.versionId}`
+    ? '冻结版本'
     : `v${summary.version.sequence}`;
+}
+
+function ResourceIcon({ summary }: { summary: WorkspaceResourceSummary }) {
+  const rendererId = summary.renderer.rendererId;
+  const Icon = rendererId.includes('pdf')
+    ? FilePdf
+    : rendererId.includes('image')
+      ? Image
+      : rendererId.includes('audio')
+        ? MusicNote
+        : rendererId.includes('video')
+          ? VideoCamera
+          : summary.resourceKind === 'artifact'
+            ? Sparkle
+            : File;
+  return <Icon size={19} weight="duotone" aria-hidden="true" />;
+}
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '时间未知';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function ResourceView({
+  label,
+  results,
+  loading,
+  onOpen,
+  renderActions,
+}: {
+  label: string;
+  results: readonly WorkspaceResourceSummary[];
+  loading: boolean;
+  onOpen: (summary: WorkspaceResourceSummary) => void;
+  renderActions?: (summary: WorkspaceResourceSummary) => ReactNode;
+}) {
+  return (
+    <div className="studio-resource-view">
+      <div className="studio-resource-table-head" aria-hidden="true">
+        <span>资料</span>
+        <span>状态</span>
+        <span>更新时间</span>
+        <span>操作</span>
+      </div>
+      <ul aria-label={label} className="studio-resource-list">
+        {results.map((summary) => (
+          <li key={`${summary.resourceKind}:${summary.resourceId}`}>
+            <button
+              type="button"
+              disabled={!canOpenResourceLibraryItem(summary)}
+              onClick={() => onOpen(summary)}
+              className="studio-resource-open"
+            >
+              <span className="studio-resource-icon">
+                <ResourceIcon summary={summary} />
+              </span>
+              <span className="studio-resource-title">
+                <strong>{summary.title}</strong>
+                <small>
+                  {summary.renderer.rendererId.split('.').at(-1)?.toUpperCase()}
+                  {' · '}
+                  {versionLabel(summary)}
+                  {summary.resourceKind === 'source'
+                    ? summary.context.enabled
+                      ? ' · 已加入上下文'
+                      : ' · 未加入上下文'
+                    : ' · AI 输出'}
+                </small>
+              </span>
+              <span
+                className="studio-resource-status"
+                data-status={summary.status}
+              >
+                <i aria-hidden="true" />
+                {statusLabels[summary.status]}
+              </span>
+              <time dateTime={summary.updatedAt}>
+                {formatUpdatedAt(summary.updatedAt)}
+              </time>
+            </button>
+            <div className="studio-resource-row-actions">
+              {renderActions?.(summary) ?? (
+                <span>
+                  {getResourceLibraryActions(summary).includes('view')
+                    ? '打开'
+                    : '只读'}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+        {!loading && results.length === 0 ? (
+          <li className="studio-resource-empty">
+            <span>
+              {label === '来源列表' ? '还没有匹配的来源' : '还没有匹配的输出'}
+            </span>
+            <small>
+              {label === '来源列表'
+                ? '把图片或文档加入对话后，会在这里统一管理。'
+                : '让 EduCanvas 生成笔记、图表或演示文稿后，会沉淀在这里。'}
+            </small>
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
 }
 
 export function StudioResourceLibrary({
@@ -46,132 +168,185 @@ export function StudioResourceLibrary({
   renderActions?: (summary: WorkspaceResourceSummary) => ReactNode;
 }) {
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<ResourceLibraryCategory>('all');
+  const [category, setCategory] = useState<'source' | 'artifact'>('source');
   const [status, setStatus] = useState<
     WorkspaceResourceSummary['status'] | 'all'
   >('all');
   const [contextEnabled, setContextEnabled] = useState<boolean | 'all'>('all');
   const [sort, setSort] = useState<ResourceLibrarySortKey>('updatedAt');
   const [order, setOrder] = useState<ResourceLibrarySortOrder>('desc');
-  const results = useMemo(
+
+  const sourceResults = useMemo(
     () =>
       queryResourceLibrary(summaries, {
         search,
-        category,
+        category: 'source',
         status,
         contextEnabled,
         sort,
         order,
       }),
-    [summaries, search, category, status, contextEnabled, sort, order],
+    [summaries, search, status, contextEnabled, sort, order],
   );
+  const artifactResults = useMemo(
+    () =>
+      queryResourceLibrary(summaries, {
+        search,
+        category: 'artifact',
+        status,
+        sort,
+        order,
+      }),
+    [summaries, search, status, sort, order],
+  );
+  const sourceCount = summaries.filter(
+    (summary) => summary.resourceKind === 'source',
+  ).length;
+  const artifactCount = summaries.length - sourceCount;
+  const contextCount = summaries.filter(
+    (summary) => summary.resourceKind === 'source' && summary.context.enabled,
+  ).length;
+  const attentionCount = summaries.filter((summary) =>
+    ['processing', 'failed'].includes(summary.status),
+  ).length;
+  const currentResults =
+    category === 'source' ? sourceResults : artifactResults;
 
   return (
     <section
-      aria-label="资源库"
+      aria-label="会话资源管理"
       data-studio-resource-library
-      className="flex min-h-0 flex-col gap-3"
+      className="studio-resource-library"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="sr-only" htmlFor="resource-library-search">
-          搜索资源
-        </label>
-        <input
-          id="resource-library-search"
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="搜索标题"
-          className="min-h-10 min-w-48 flex-1 rounded-xl border border-line bg-card px-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        />
-        <label className="sr-only" htmlFor="resource-library-category">
-          资源分类
-        </label>
-        <select
-          id="resource-library-category"
-          value={category}
-          onChange={(event) =>
-            setCategory(event.target.value as ResourceLibraryCategory)
-          }
-          className="min-h-10 rounded-xl border border-line bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-accent"
+      <header className="studio-resource-header">
+        <div>
+          <p>SESSION LIBRARY</p>
+          <h2>来源与输出</h2>
+          <span>当前笔记本的输入、上下文与 AI 产物在同一处管理。</span>
+        </div>
+        <div
+          className="studio-resource-tabs"
+          role="tablist"
+          aria-label="资源类型"
         >
-          <option value="all">全部</option>
-          <option value="source">来源</option>
-          <option value="artifact">AI 产物</option>
-        </select>
-        <label className="sr-only" htmlFor="resource-library-status">
-          资源状态
+          <button
+            type="button"
+            role="tab"
+            aria-selected={category === 'source'}
+            onClick={() => setCategory('source')}
+          >
+            来源 <span>{sourceCount}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={category === 'artifact'}
+            onClick={() => setCategory('artifact')}
+          >
+            输出 <span>{artifactCount}</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="studio-resource-metrics" aria-label="会话资源概览">
+        <article>
+          <span>全部资料</span>
+          <strong>{summaries.length}</strong>
+          <small>当前已加载</small>
+        </article>
+        <article>
+          <span>来源</span>
+          <strong>{sourceCount}</strong>
+          <small>用户输入与引用</small>
+        </article>
+        <article>
+          <span>AI 输出</span>
+          <strong>{artifactCount}</strong>
+          <small>可继续编辑与导出</small>
+        </article>
+        <article data-attention={attentionCount > 0 || undefined}>
+          <span>本轮上下文</span>
+          <strong>{contextCount}</strong>
+          <small>
+            {attentionCount > 0 ? `${attentionCount} 项待处理` : '状态正常'}
+          </small>
+        </article>
+      </div>
+
+      <div className="studio-resource-controls">
+        <label className="studio-resource-search">
+          <MagnifyingGlass size={17} aria-hidden="true" />
+          <span className="sr-only">搜索资源</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="搜索当前会话"
+          />
         </label>
-        <select
-          id="resource-library-status"
-          value={status}
-          onChange={(event) => setStatus(event.target.value as typeof status)}
-          className="min-h-10 rounded-xl border border-line bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <option value="all">全部状态</option>
-          {Object.entries(statusLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <label className="sr-only" htmlFor="resource-library-context">
-          上下文状态
+        <label>
+          <span className="sr-only">资源状态</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as typeof status)}
+          >
+            <option value="all">全部状态</option>
+            {Object.entries(statusLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </label>
-        <select
-          id="resource-library-context"
-          value={String(contextEnabled)}
-          onChange={(event) =>
-            setContextEnabled(
-              event.target.value === 'all'
-                ? 'all'
-                : event.target.value === 'true',
-            )
-          }
-          className="min-h-10 rounded-xl border border-line bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <option value="all">全部上下文</option>
-          <option value="true">已启用上下文</option>
-          <option value="false">未启用上下文</option>
-        </select>
-        <label className="sr-only" htmlFor="resource-library-sort">
-          排序字段
+        {category === 'source' ? (
+          <label>
+            <span className="sr-only">上下文状态</span>
+            <select
+              value={String(contextEnabled)}
+              onChange={(event) =>
+                setContextEnabled(
+                  event.target.value === 'all'
+                    ? 'all'
+                    : event.target.value === 'true',
+                )
+              }
+            >
+              <option value="all">全部上下文</option>
+              <option value="true">已加入本轮</option>
+              <option value="false">未加入本轮</option>
+            </select>
+          </label>
+        ) : null}
+        <label>
+          <span className="sr-only">排序字段</span>
+          <select
+            value={sort}
+            onChange={(event) =>
+              setSort(event.target.value as ResourceLibrarySortKey)
+            }
+          >
+            <option value="updatedAt">更新时间</option>
+            <option value="title">标题</option>
+            <option value="status">状态</option>
+          </select>
         </label>
-        <select
-          id="resource-library-sort"
-          value={sort}
-          onChange={(event) =>
-            setSort(event.target.value as ResourceLibrarySortKey)
-          }
-          className="min-h-10 rounded-xl border border-line bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <option value="updatedAt">更新时间</option>
-          <option value="title">标题</option>
-          <option value="status">状态</option>
-        </select>
         <button
           type="button"
           aria-label={order === 'desc' ? '改为升序' : '改为降序'}
           onClick={() =>
             setOrder((current) => (current === 'desc' ? 'asc' : 'desc'))
           }
-          className="min-h-10 rounded-xl border border-line px-3 text-sm focus-visible:ring-2 focus-visible:ring-accent"
         >
-          {order === 'desc' ? '新→旧' : '旧→新'}
+          {order === 'desc' ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+          {order === 'desc' ? '新到旧' : '旧到新'}
         </button>
       </div>
+
       {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger"
-        >
+        <div role="alert" className="studio-resource-error">
           <span>{error}</span>
           {onRetry ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="ml-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
+            <button type="button" onClick={onRetry}>
               重试
             </button>
           ) : null}
@@ -181,84 +356,41 @@ export function StudioResourceLibrary({
         {loading
           ? '正在加载完整资源库，搜索和排序结果仍在补充'
           : hasMore
-            ? `显示 ${results.length} 项已加载资源，仍有更多页面`
-            : `显示 ${results.length} 项资源，完整资源库已加载`}
+            ? `显示 ${currentResults.length} 项已加载资源，仍有更多页面`
+            : `显示 ${currentResults.length} 项资源，完整资源库已加载`}
       </div>
-      <ul
-        aria-label="资源列表"
-        className="min-h-0 overflow-y-auto divide-y divide-line rounded-2xl border border-line bg-card"
-      >
-        {results.map((summary) => (
-          <li
-            key={`${summary.resourceKind}:${summary.resourceId}`}
-            className="flex items-center gap-2 pr-3"
-          >
-            <button
-              type="button"
-              disabled={!canOpenResourceLibraryItem(summary)}
-              onClick={() => onOpen(summary)}
-              className="flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span
-                aria-hidden="true"
-                className="mt-1 size-2 shrink-0 rounded-full bg-accent"
-              />
-              <span className="min-w-0 flex-1">
-                <strong className="block truncate text-sm text-ink">
-                  {summary.title}
-                </strong>
-                <span className="mt-1 block truncate text-xs text-ink-muted">
-                  {summary.renderer.rendererId} · {statusLabels[summary.status]}{' '}
-                  · {versionLabel(summary)} ·{' '}
-                  {summary.resourceKind === 'source'
-                    ? summary.context.enabled
-                      ? '已加入上下文'
-                      : '未加入上下文'
-                    : 'AI 产物'}{' '}
-                  ·{' '}
-                  {summary.surface.restState
-                    ? `工作面 ${summary.surface.restState}`
-                    : '未打开'}
-                </span>
-                <span
-                  className="mt-1 flex flex-wrap gap-1"
-                  aria-label="打开资源后可用的服务端授权能力"
-                >
-                  {getResourceLibraryActions(summary).map((action) => (
-                    <span
-                      key={action}
-                      className="rounded bg-surface-strong px-1.5 py-0.5 text-[10px] text-ink-muted"
-                    >
-                      {action}
-                    </span>
-                  ))}
-                </span>
-              </span>
-            </button>
-            {renderActions?.(summary)}
-          </li>
-        ))}
-        {!loading && results.length === 0 ? (
-          <li className="px-4 py-8 text-center text-sm text-ink-muted">
-            暂无匹配资源
-          </li>
-        ) : null}
-      </ul>
-      {loading ? (
-        <p role="status" className="text-center text-xs text-ink-muted">
-          正在加载资源…
-        </p>
-      ) : null}
-      {hasMore && onLoadMore ? (
-        <button
-          type="button"
-          onClick={onLoadMore}
-          disabled={loading}
-          className="min-h-10 rounded-xl border border-line px-3 text-sm text-ink-muted hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-50"
-        >
-          加载更多
-        </button>
-      ) : null}
+
+      <div className="studio-resource-table-shell">
+        {category === 'source' ? (
+          <ResourceView
+            label="来源列表"
+            results={sourceResults}
+            loading={loading}
+            onOpen={onOpen}
+            renderActions={renderActions}
+          />
+        ) : (
+          <ResourceView
+            label="输出列表"
+            results={artifactResults}
+            loading={loading}
+            onOpen={onOpen}
+          />
+        )}
+      </div>
+
+      <footer className="studio-resource-footer">
+        <span>
+          {loading ? '正在同步资源…' : `当前显示 ${currentResults.length} 项`}
+        </span>
+        {hasMore && onLoadMore ? (
+          <button type="button" onClick={onLoadMore} disabled={loading}>
+            加载更多
+          </button>
+        ) : (
+          <span>已加载完整会话资源</span>
+        )}
+      </footer>
     </section>
   );
 }

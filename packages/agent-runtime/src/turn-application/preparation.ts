@@ -78,9 +78,30 @@ export async function prepareTurnApplication(input: {
   if (contextSnapshot.replayed) {
     throw new Error('context_replay_requires_continuation');
   }
-  const answerMessages = modelMessages(built.segments, allCandidates, 'answer');
+  const currentUserSegment = built.segments.find(
+    (segment) => segment.messageId === turn.userMessageId,
+  );
+  /*
+   * Profile candidates are grouped as conversation then sources/assets for
+   * deterministic budgeting. Provider prompts need one additional semantic
+   * invariant: the current user request must remain the final message. If an
+   * attachment message follows it, multimodal providers commonly answer the
+   * material preamble instead of the user's actual question.
+   *
+   * Reordering only the provider projection preserves the frozen Context
+   * Snapshot, selection budget, provenance and replay hash inputs.
+   */
+  const promptSegments = currentUserSegment
+    ? [
+        ...built.segments.filter(
+          (segment) => segment.id !== currentUserSegment.id,
+        ),
+        currentUserSegment,
+      ]
+    : built.segments;
+  const answerMessages = modelMessages(promptSegments, allCandidates, 'answer');
   const synthesisMessages = modelMessages(
-    built.segments,
+    promptSegments,
     allCandidates,
     'synthesis',
   );

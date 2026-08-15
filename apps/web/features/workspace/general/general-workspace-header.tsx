@@ -1,6 +1,6 @@
 'use client';
 
-import { GraduationCap, List } from '@phosphor-icons/react';
+import { GraduationCap, List, SquaresFour } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import { PillNav, type PillNavItem } from '@/components/PillNav';
 import { ProductMark } from '@/components/ProductMark';
@@ -15,12 +15,16 @@ export function GeneralWorkspaceHeader({
   notebookTitle,
   conversationId,
   sidebarOpen,
+  studioOpen,
   onToggleSidebar,
+  onOpenStudio,
 }: {
   notebookTitle: string | null;
   conversationId: string;
   sidebarOpen: boolean;
+  studioOpen: boolean;
   onToggleSidebar: () => void;
+  onOpenStudio: () => void;
 }) {
   const items = useMemo<readonly PillNavItem[]>(
     () => [
@@ -35,13 +39,21 @@ export function GeneralWorkspaceHeader({
         onSelect: onToggleSidebar,
       },
       {
+        id: 'resources',
+        label: '资源控制台',
+        ariaLabel: studioOpen ? '资源控制台已打开' : '打开资源控制台',
+        icon: <SquaresFour size={17} weight="duotone" />,
+        active: studioOpen,
+        onSelect: onOpenStudio,
+      },
+      {
         id: 'learning-plan',
         label: '学习计划',
         href: '/learn',
         icon: <GraduationCap size={17} weight="duotone" />,
       },
     ],
-    [onToggleSidebar, sidebarOpen],
+    [onOpenStudio, onToggleSidebar, sidebarOpen, studioOpen],
   );
 
   return (
@@ -56,11 +68,6 @@ export function GeneralWorkspaceHeader({
       </span>
       <span className="flex-1" />
       <PillNav items={items} />
-      <span
-        data-studio-placeholder
-        aria-hidden="true"
-        className="h-10 w-10 shrink-0 md:h-[2.65rem] md:w-[6.5rem]"
-      />
       <UserMenu conversationId={conversationId} notebookTitle={notebookTitle} />
     </header>
   );

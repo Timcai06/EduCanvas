@@ -112,8 +112,16 @@ function clamp(value: string): string {
   return [...value].slice(0, ASSET_TEXT_MAX_CHARACTERS).join('');
 }
 
+/** PDF 字体映射偶尔会产出 NUL；PostgreSQL 的 text 类型拒绝该字符。 */
+export function sanitizeExtractedText(value: string): string {
+  return value.replace(/\u0000/gu, '');
+}
+
 function normalize(value: string): string {
-  return value.normalize('NFC').replace(/\r\n?/g, '\n').trim();
+  return sanitizeExtractedText(value)
+    .normalize('NFC')
+    .replace(/\r\n?/g, '\n')
+    .trim();
 }
 
 async function extractPdfText(bytes: Uint8Array): Promise<string> {

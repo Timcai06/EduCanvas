@@ -6,9 +6,9 @@ import { spawnSync } from 'node:child_process';
 import { after, describe, it } from 'node:test';
 
 // 门禁测试用隔离的临时 fixture 仓库，不依赖真实仓库当前状态，
-// 这样既能证明“拒绝 Node 26 types 漂移 / 拒绝宽泛 engines 范围”的失败路径，
-// 也能覆盖未来的回归。策略：Node 24 是唯一主版本，engines 与 @types/node
-// 中：engines 必须统一为 >=24.18.0 <25，@types/node 必须限定在 24 主版本。
+// 这样既能证明“拒绝 Node 26 types 漂移 / 拒绝过低 engines 基线”的失败路径，
+// 也能覆盖未来的回归。策略：@types/node 限定在 CI 使用的 Node 24 主版本，
+// engines 统一为 >=24.18.0，并允许更新的运行时主版本。
 const temporaryDirectories = [];
 
 function runGate(repoRoot) {
@@ -34,7 +34,7 @@ async function writeFixture(packages = {}) {
   await writeFile(
     path.join(root, 'package.json'),
     JSON.stringify(
-      { name: 'fixture-root', engines: { node: '>=24.18.0 <25' } },
+      { name: 'fixture-root', engines: { node: '>=24.18.0' } },
       null,
       2,
     ),
@@ -68,7 +68,7 @@ function packageAt(name, extras = {}) {
     name,
     version: '0.1.0',
     private: true,
-    engines: { node: '>=24.18.0 <25' },
+    engines: { node: '>=24.18.0' },
     devDependencies: { '@types/node': '^24.13.3' },
     ...extras,
   };
@@ -88,7 +88,7 @@ describe('node-version-gate', () => {
       'apps/a': packageAt('@educanvas/a'),
       'packages/b': packageAt('@educanvas/b'),
       'packages/c': packageAt('@educanvas/c', {
-        engines: { node: '>=24.18.0 <25' },
+        engines: { node: '>=24.18.0' },
         devDependencies: { '@types/node': '>=24 <25' },
       }),
       'packages/d': packageAt('@educanvas/d'),
@@ -113,7 +113,7 @@ describe('node-version-gate', () => {
   });
 
   it('rejects @types/node declared with a loose lower bound', async () => {
-    // >=24 允许解析到 Node 26 types，必须与宽泛 engines 一样拒绝。
+    // 类型声明仍需固定在 CI 的 Node 24 主版本，避免环境 API 无意漂移。
     const root = await writeFixture({
       'packages/c': packageAt('@educanvas/c', {
         devDependencies: { '@types/node': '>=24' },
@@ -124,9 +124,9 @@ describe('node-version-gate', () => {
     assert.match(result.stdout, /FAIL @educanvas\/c @types\/node/);
   });
 
-  it('rejects engines that allow a higher Node major', async () => {
+  it('rejects non-canonical engine ranges while allowing future majors', async () => {
     const cases = [
-      { engines: { node: '>=24' } }, // 只写下限，允许 25/26 运行时漂移
+      { engines: { node: '>=24' } }, // 下限低于仓库基线
       { engines: { node: '>=26' } },
       { engines: { node: '>=24.18' } },
       { engines: { node: '>=24 <27' } },
@@ -169,7 +169,7 @@ describe('node-version-gate', () => {
 
   it('rejects engines with a lower floor or wildcard', async () => {
     const cases = [
-      { engines: { node: '>=22 <25' } }, // 下限低于唯一主版本
+      { engines: { node: '>=22 <25' } }, // 下限低于仓库基线，且重新引入无依据的上限
       { engines: { node: '*' } },
       { engines: { node: '>=18 <23' } }, // 完全不包含 24
     ];

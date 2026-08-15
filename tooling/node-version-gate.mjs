@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-// R01 静态门禁：拒绝 workspace 单独漂移到更高 Node 类型主版本（Node 24 runtime + Node 26 types 回归）。
-// 项目策略：Node 24 是 CI 与 runtime 的唯一主版本（.nvmrc 为权威，CI setup-node 与本地 nvm 都读取它），
-// 不扩大 engines 到未来主版本。
+// R01 静态门禁：拒绝 workspace 单独漂移 Node 类型或运行时最低版本。
+// 项目策略：.nvmrc 是 CI 与本地推荐版本的权威，但 engines 只规定最低版本，
+// 不对更新的 Node 主版本制造无依据的安装警告。
 // 规则（对根与全部 workspace 包）：
 //   1) devDependencies["@types/node"] 的 range 必须严格限定在 .nvmrc 主版本内（如 ^24.13.3、>=24 <25）；
-//   2) engines.node 必须等于由 .nvmrc 推导出的规范范围（24.18.0 → >=24.18.0 <25），
-//      既拒绝更低的 Node 24，也拒绝 25/26 或 workspace 自行漂移。
+//   2) engines.node 必须等于由 .nvmrc 推导出的最低版本（24.18.0 → >=24.18.0），
+//      拒绝更低版本或 workspace 自行漂移，但允许后续 Node 主版本运行。
 // 本门禁只校验版本声明一致性，不证明运行能力（esbuild --target、实验性 flag、真实执行仍由
 // CI 在 .nvmrc 指定的 Node 版本上验证），因此它不把“版本一致”冒充为“运行已通过”。
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -107,7 +107,7 @@ const authorityVersionMatch = nvmrc.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
 if (authorityVersionMatch === null)
   fail(`.nvmrc must pin an exact Node version: ${nvmrc}`);
 const authorityVersion = authorityVersionMatch.slice(1).join('.');
-const expectedEngineRange = `>=${authorityVersion} <${authorityMajor + 1}`;
+const expectedEngineRange = `>=${authorityVersion}`;
 
 // 展开 pnpm-workspace.yaml 的 packages glob（apps/*、packages/*）为具体包目录；
 // tooling/ 等非 workspace 目录不在检查范围。
@@ -184,9 +184,9 @@ for (const relativePath of workspacePackages.sort()) {
 
 if (driftCount > 0) {
   fail(
-    `FAILED: ${driftCount} 处版本声明未严格限定在唯一主版本 Node ${authorityMajor} 内`,
+    `FAILED: ${driftCount} 处版本声明未与 Node ${authorityVersion} 最低基线保持一致`,
   );
 }
 console.log(
-  `[node-version-gate] PASS: 全部 workspace 的 @types/node 与 engines 严格限定在唯一主版本 Node ${authorityMajor} 内`,
+  `[node-version-gate] PASS: 全部 workspace 的 @types/node 对齐 Node ${authorityMajor}，engines 允许 Node ${authorityVersion} 及以上版本`,
 );

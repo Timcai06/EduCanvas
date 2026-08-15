@@ -4,12 +4,17 @@ import {
   AssetExtractionError,
   extractAssetText,
   routeDocumentExtraction,
+  sanitizeExtractedText,
   supportsTextExtraction,
 } from './text-extraction';
 
 const utf8 = (value: string) => new TextEncoder().encode(value);
 
 describe('extractAssetText', () => {
+  it('清理 PDF 字体映射产生且 PostgreSQL text 无法存储的 NUL', () => {
+    expect(sanitizeExtractedText('第一段\u0000第二段')).toBe('第一段第二段');
+  });
+
   it('规范化换行与 NFC，并去掉 BOM', async () => {
     const text = await extractAssetText({
       bytes: utf8('\uFEFF第一行\r\n第二行\r第三行  '),

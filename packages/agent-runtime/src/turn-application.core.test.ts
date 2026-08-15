@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TurnModelGateway } from '@educanvas/agent-core';
+import { modelMessageText, type TurnModelGateway } from '@educanvas/agent-core';
 import {
   TurnApplicationService,
   type TurnApplicationProfilePort,
@@ -108,6 +108,65 @@ describe('TurnApplicationService (core orchestration)', () => {
     expect(requests).toEqual(['teaching.turn']);
     expect(models.createInputs[0]?.taskAlias).toBe('teaching.turn');
     expect(models.runs[0]?.taskAlias).toBe('teaching.turn');
+  });
+
+  it('即使本轮带有资料，Provider 看到的最后一条消息仍是当前用户输入', async () => {
+    const base = profile();
+    const material =
+      '<untrusted_user_material>附件中的旧问题</untrusted_user_material>';
+    const profileWithMaterial: TurnApplicationProfilePort = {
+      ...base,
+      async prepare(input) {
+        const plan = await base.prepare(input);
+        return {
+          ...plan,
+          context: {
+            ...plan.context,
+            sourcesAndAssets: [
+              {
+                segment: {
+                  id: 'asset:current-context',
+                  kind: 'asset' as const,
+                  content: material,
+                  priority: 95,
+                  required: true,
+                  assetVersionId: '20000000-0000-4000-8000-000000000001',
+                },
+                message: { role: 'user' as const, content: material },
+              },
+            ],
+          },
+        };
+      },
+    };
+    const prompts: string[][] = [];
+
+    await collect(
+      new TurnApplicationService({
+        lifecycle: new MemoryLifecycle(),
+        profile: profileWithMaterial,
+        contextLedger: new MemoryContextLedger(),
+        modelRunLedger: new MemoryModelRunLedger(),
+        modelGateway: {
+          async *streamTurnText(request) {
+            prompts.push(request.messages.map(modelMessageText));
+            yield {
+              type: 'text_delta',
+              phase: request.phase,
+              delta: '按当前问题回答。',
+            };
+            yield {
+              type: 'completed',
+              phase: request.phase,
+              metadata: metadata(request, 'stop'),
+            };
+          },
+        },
+      }),
+    );
+
+    expect(prompts[0]).toEqual(['你是诚实的AI老师。', material, '你好']);
+    expect(prompts[0]?.at(-1)).toBe('你好');
   });
 
   it('在结算成功后投影同一Lifecycle事务返回的引用事件', async () => {

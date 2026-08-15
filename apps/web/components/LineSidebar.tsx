@@ -86,6 +86,7 @@ export default function LineSidebar({
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   const targetsRef = useRef<number[]>([]);
   const currentRef = useRef<number[]>([]);
+  const rowCentersRef = useRef<number[]>([]);
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef(0);
   const activeRef = useRef<number | null>(activeIndex ?? defaultActive);
@@ -96,6 +97,12 @@ export default function LineSidebar({
   );
   const resolvedActiveIndex =
     activeIndex === undefined ? internalActiveIndex : activeIndex;
+
+  const measureRows = useCallback(() => {
+    rowCentersRef.current = itemRefs.current.map((element) =>
+      element ? element.offsetTop + element.offsetHeight / 2 : 0,
+    );
+  }, []);
 
   const runFrame = useCallback(function animateSidebar(now: number) {
     const deltaTime = Math.min((now - lastRef.current) / 1000, 0.05);
@@ -138,6 +145,12 @@ export default function LineSidebar({
     itemRefs.current.length = items.length;
     targetsRef.current.length = items.length;
     currentRef.current.length = items.length;
+    measureRows();
+
+    const list = listRef.current;
+    if (!list) return;
+    const observer = new ResizeObserver(measureRows);
+    observer.observe(list);
 
     if (reducedMotionRef.current) {
       itemRefs.current.forEach((element, index) => {
@@ -146,20 +159,23 @@ export default function LineSidebar({
           resolvedActiveIndex === index ? '1' : '0',
         );
       });
-      return;
+      return () => observer.disconnect();
     }
     startLoop();
-  }, [items.length, resolvedActiveIndex, smoothing, startLoop]);
+    return () => observer.disconnect();
+  }, [items.length, measureRows, resolvedActiveIndex, smoothing, startLoop]);
 
   const handlePointerMove = useCallback(
     (event: PointerEvent<HTMLUListElement>) => {
       if (reducedMotionRef.current) return;
       const ease = FALLOFF_CURVES[falloff] ?? FALLOFF_CURVES.linear;
+      const listTop = event.currentTarget.getBoundingClientRect().top;
+      const pointerY = event.clientY - listTop;
       itemRefs.current.forEach((element, index) => {
         if (!element) return;
-        const row = element.getBoundingClientRect();
-        const center = row.top + row.height / 2;
-        const distance = Math.abs(event.clientY - center);
+        const distance = Math.abs(
+          pointerY - (rowCentersRef.current[index] ?? 0),
+        );
         targetsRef.current[index] = ease(
           Math.max(0, 1 - distance / proximityRadius),
         );

@@ -8,6 +8,7 @@ import { BookOpen, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import {
+  formatNotebookActivityTime,
   groupNotebooksByRecency,
   type NotebookListItem,
 } from './notebook-groups';
@@ -16,19 +17,7 @@ import {
   SIDEBAR_WIDTH_MIN,
   useResizableSidebar,
 } from './use-resizable-sidebar';
-
-const formatWhen = (iso: string): string => {
-  const date = new Date(iso);
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  if (sameDay) {
-    return date.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-  return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-};
+import { useConversationSidebarMotion } from './use-conversation-sidebar-motion';
 
 /**
  * Notebook 侧栏：可展开的抽屉层（学习 Gemini/GPT/Claude 的 Web 交互）。
@@ -50,6 +39,8 @@ export function ConversationSidebar({
   onNewNotebook: () => void;
 }) {
   const router = useRouter();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
   const [items, setItems] = useState<readonly NotebookListItem[]>([]);
   const [listStatus, setListStatus] = useState<'loading' | 'ready' | 'failed'>(
@@ -60,6 +51,12 @@ export function ConversationSidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [isSwitchPending, startSwitchTransition] = useTransition();
   const sidebarResize = useResizableSidebar();
+  useConversationSidebarMotion({
+    open,
+    width: sidebarResize.width,
+    sidebarRef,
+    panelRef,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -183,7 +180,7 @@ export function ConversationSidebar({
         setListStatus('failed');
       });
     return () => controller.abort();
-  }, [activeConversationId, open, reloadToken]);
+  }, [activeConversationId, reloadToken]);
 
   const groups = groupNotebooksByRecency(items, new Date());
 
@@ -203,18 +200,22 @@ export function ConversationSidebar({
        * 内层固定 w-64 以免折叠动画时正文重排。
        */}
       <aside
+        ref={sidebarRef}
         id="conversation-sidebar"
         aria-label="笔记本侧栏"
         aria-hidden={!open}
         inert={!open}
         style={sidebarResize.style}
-        className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas transition-[width,transform] duration-300 ease-out ${
+        className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas ${
           open
-            ? 'w-72 translate-x-0 border-r lg:w-[var(--sidebar-width)]'
-            : 'w-72 -translate-x-full border-r-0 lg:w-0'
-        } fixed inset-y-0 left-0 lg:static lg:inset-auto lg:translate-x-0`}
+            ? 'w-72 border-r lg:w-[var(--sidebar-width)]'
+            : 'w-72 border-r-0 lg:w-0'
+        } fixed inset-y-0 left-0 -translate-x-full lg:static lg:inset-auto lg:translate-x-0`}
       >
-        <div className="flex h-full w-72 flex-col lg:w-[var(--sidebar-width)]">
+        <div
+          ref={panelRef}
+          className="flex h-full w-72 flex-col lg:w-[var(--sidebar-width)]"
+        >
           <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
             <button
               ref={firstActionRef}
@@ -313,7 +314,11 @@ export function ConversationSidebar({
                                 {label}
                               </span>
                               <span className="shrink-0 pt-0.5 text-[11px] text-ink-muted">
-                                {item ? formatWhen(item.lastActivityAt) : ''}
+                                {item
+                                  ? formatNotebookActivityTime(
+                                      item.lastActivityAt,
+                                    )
+                                  : ''}
                               </span>
                             </span>
                           );

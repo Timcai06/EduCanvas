@@ -47,9 +47,8 @@ describe('local configuration contract', () => {
 
   it('uses .nvmrc as the README and package engine authority', () => {
     const version = source('.nvmrc').trim().replace(/^v/, '');
-    const major = Number(version.split('.')[0]);
     const rootPackage = JSON.parse(source('package.json'));
-    assert.equal(rootPackage.engines.node, `>=${version} <${major + 1}`);
+    assert.equal(rootPackage.engines.node, `>=${version}`);
     assert.match(source('README.md'), new RegExp(`Node\\.js ${version}`));
     const collaboration = source('docs/08-collaboration/03-团队协作指南.md');
     assert.match(collaboration, new RegExp(`Node\\.js ${version}`));

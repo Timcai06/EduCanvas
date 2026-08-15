@@ -21,6 +21,21 @@
 
 EduCanvas 将其作为产品内部视觉层使用，不把该组件作为独立组件库销售或分发。
 
+## React Bits RippleDistortion
+
+`components/RippleDistortion.tsx` 与 `components/RippleDistortion.css` 由 shadcn
+registry 的 `@react-bits/RippleDistortion-TS-CSS` 安装；仅增加本仓库 strict TypeScript
+与 React ref lint 所需的等价适配：
+
+- 项目：https://github.com/DavidHDev/react-bits
+- Registry：https://reactbits.dev/r/{name}.json
+- Copyright (c) David Haz
+
+EduCanvas 仅在外层增加 WebGL 能力检测，并把效果裁切到 Live Voice 左侧液态球；右侧
+资源图片保持静态、无失真预览。不修改组件的 shader 或波纹算法。上游项目使用 MIT +
+Commons Clause License Condition v1.0；本组件只作为 EduCanvas 产品内部交互使用，
+不单独出售、再许可或重新分发。
+
 ## React Bits OptionWheel
 
 `features/studio/option-wheel*` 基于 Code Owner 在 2026-07-25 提供的 React Bits
