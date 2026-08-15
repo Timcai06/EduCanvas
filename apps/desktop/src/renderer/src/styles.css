@@ -251,6 +251,118 @@ select:focus-visible {
   content: '▍';
   animation: pet-stream-caret 1s step-end infinite;
 }
+
+.message-results {
+  display: grid;
+  width: min(92%, 390px);
+  gap: 7px;
+  margin-top: 6px;
+}
+.result-group {
+  display: grid;
+  gap: 7px;
+}
+.result-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-solid);
+  color: var(--ink);
+}
+.result-card__body,
+.result-card--tool > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.result-card__body strong,
+.result-card--tool strong {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-card__body span,
+.result-card--tool span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.result-card button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(45, 127, 94, 0.24);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: #245c47;
+  cursor: pointer;
+  font-size: 12px;
+}
+.result-card button:hover:not(:disabled) {
+  border-color: rgba(45, 127, 94, 0.42);
+  background: rgba(45, 127, 94, 0.18);
+}
+.result-card button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.result-card__marker,
+.result-card__kind {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: #245c47;
+  font-size: 12px;
+  font-weight: 700;
+}
+.result-card--tool {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.result-status {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #b28a35;
+}
+.result-status.is-completed {
+  background: var(--accent);
+}
+.result-status.is-failed {
+  background: #a4433d;
+}
+.result-card--media {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+.result-card--media button {
+  grid-column: 1 / -1;
+}
+.result-card__thumbnail {
+  display: grid;
+  width: 76px;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f0eee7;
+  color: var(--muted);
+}
+.result-card__thumbnail svg {
+  width: 34px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
 @keyframes pet-stream-caret {
   50% {
     opacity: 0;
@@ -262,6 +374,15 @@ select:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 7px;
+}
+.pet-chat__auth-gate {
+  display: flex;
+  min-height: 40px;
+  justify-content: center;
+  padding: 3px 0;
+}
+.pet-chat__login {
+  min-width: 112px;
 }
 .pet-chat__composer textarea {
   width: 100%;
@@ -549,6 +670,22 @@ select:focus-visible {
   padding: 11px 13px;
   font-size: 14px;
   line-height: 1.55;
+}
+.pet-chat.is-expanded-window .message-results {
+  width: min(78%, 650px);
+  gap: 9px;
+}
+.pet-chat.is-expanded-window .result-card {
+  gap: 11px;
+  padding: 10px 12px;
+}
+.pet-chat.is-expanded-window .result-card__body strong,
+.pet-chat.is-expanded-window .result-card--tool strong {
+  font-size: 13px;
+}
+.pet-chat.is-expanded-window .result-card button {
+  min-height: 36px;
+  font-size: 12px;
 }
 .pet-chat.is-expanded-window .pet-chat__empty {
   max-width: 46rem;

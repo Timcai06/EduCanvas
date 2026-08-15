@@ -18,6 +18,8 @@ import type {
   DesktopConversationDirectorySnapshot,
 } from '../shared/conversation-directory';
 import type { DesktopPendingOperationsSnapshot } from '../shared/pending-operation';
+import type { DesktopResultTarget } from '../shared/chat-history';
+import type { DesktopOpenResult } from '../shared/result-action';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -82,6 +84,9 @@ declare global {
       release(token: string): void;
       resume(clientMessageId: string): Promise<TurnResult>;
       getPending(): Promise<DesktopPendingOperationsSnapshot>;
+    };
+    desktopResult: {
+      open(target: DesktopResultTarget): Promise<DesktopOpenResult>;
     };
     desktopVoice: {
       transcribe(
@@ -226,6 +231,12 @@ contextBridge.exposeInMainWorld('desktopConversation', {
     ): void => callback(snapshot);
     ipcRenderer.on('conversation:state', listener);
     return () => ipcRenderer.removeListener('conversation:state', listener);
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopResult', {
+  open(target: DesktopResultTarget): Promise<DesktopOpenResult> {
+    return ipcRenderer.invoke('result:open', target);
   },
 });
 

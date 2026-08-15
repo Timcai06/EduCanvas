@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { GatewayClient, GatewayClientError } from '@educanvas/gateway-client';
 import type {
   GatewayClientTurnRequest,
-  GatewayMessageHistoryEntry,
   GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
 import type { DesktopCanonicalMessage } from '../shared/chat-history';
+import { toCanonicalMessage } from './message-history-projection';
 
 /**
  * 一次 Turn 的稳定身份上报通道。proxy 在流式消费过程中写回 operationId 与
@@ -61,19 +61,6 @@ interface GatewayClientPort {
     operationId: string,
     afterSequence?: number,
   ): Promise<readonly GatewayOperationEvent[]>;
-}
-
-function toCanonicalMessage(
-  entry: GatewayMessageHistoryEntry,
-): DesktopCanonicalMessage {
-  return {
-    messageId: entry.messageId,
-    clientMessageId: entry.clientMessageId,
-    role: entry.role,
-    status: entry.status,
-    content: entry.content,
-    createdAt: entry.createdAt,
-  };
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;

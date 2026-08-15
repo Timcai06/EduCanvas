@@ -40,6 +40,8 @@ function toDesktopMessage(
     source: 'text',
     status: canonical.status,
     createdAt: canonical.createdAt,
+    parts: canonical.parts ?? [],
+    citations: canonical.citations ?? [],
   };
 }
 

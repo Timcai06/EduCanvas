@@ -26,11 +26,9 @@ describe('MVP pet controls', () => {
     expect(html).toContain('aria-expanded="true"');
   });
 
-  it('exposes voice input, voice output, and an enlarged chat window', () => {
+  it('exposes the enlarged chat window before authentication', () => {
     const html = renderToStaticMarkup(createElement(App));
 
-    expect(html).toContain('aria-label="开始语音输入"');
-    expect(html).toContain('aria-label="朗读最新回复"');
     expect(html).toContain('aria-label="放大对话框"');
   });
 
