@@ -66,6 +66,13 @@ describe('desktop structured result cards', () => {
                   status: 'version_added',
                   versionId: 'version:artifact',
                 },
+                {
+                  artifactId: 'artifact:two',
+                  artifactKind: 'slides',
+                  title: '课程幻灯片',
+                  status: 'generating',
+                  progress: 0.5,
+                },
               ],
               toolActivities: [
                 {
@@ -110,6 +117,7 @@ describe('desktop structured result cards', () => {
     expect(html).toContain('aria-label="图片预览：几何示意图"');
     expect(html).toContain('函数思维导图');
     expect(html).toContain('已生成');
+    expect(html).toContain('生成中 50%');
     expect(html).toContain('正在查找相关资料');
     expect(html).toContain('处理完成');
     expect(html).toContain('此内容需要在 Web 查看');

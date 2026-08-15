@@ -30,7 +30,9 @@ function projectMessagePart(
         artifactId: part.artifactId,
         versionId: part.versionId,
         artifactKind: part.kind,
-        label: '生成内容',
+        // 历史 Message Part 只保存 artifact kind，不包含 proposed 阶段的自由标题。
+        // 用稳定的类型名作为可读回退，避免重启后把结果退化成“生成内容”。
+        label: artifactKindLabel(part.kind),
       },
     ];
   }
@@ -68,5 +70,17 @@ function assetKindLabel(kind: string): string {
       link: '链接',
       other: '其他',
     }[kind] ?? '其他'
+  );
+}
+
+function artifactKindLabel(kind: string): string {
+  return (
+    {
+      mind_map: '思维导图',
+      slides: '幻灯片',
+      image: '图片',
+      document: '文档',
+      canvas: 'Canvas',
+    }[kind] ?? '生成内容'
   );
 }
