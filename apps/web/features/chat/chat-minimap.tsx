@@ -47,7 +47,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** 用户问题只定义章节边界，不作为 minimap 的可见文案。 */
+/** 每个用户问题定义一个章节；原文只在单节点 hover/focus 预览中出现。 */
 export function buildChatMinimapSections(
   messages: readonly ChatMessage[],
 ): readonly ChatMinimapSection[] {
@@ -57,16 +57,12 @@ export function buildChatMinimapSections(
   const source = studentMessages.length > 0 ? studentMessages : messages;
   return source
     .map((message) => {
-      const assistant = messages.find(
-        (candidate) =>
-          candidate.role === 'assistant' && candidate.turnId === message.turnId,
-      );
-      const normalized = assistant?.text.replace(/\s+/g, ' ').trim() ?? '';
+      const normalized = message.text.replace(/\s+/g, ' ').trim();
       const preview = normalized
         ? normalized.length > PREVIEW_LENGTH
           ? `${normalized.slice(0, PREVIEW_LENGTH)}…`
           : normalized
-        : 'AI 正在回答';
+        : '包含附件的提问';
       return {
         id: message.turnId,
         messageId: message.id,
@@ -137,8 +133,8 @@ function contentTop(container: HTMLElement, element: HTMLElement): number {
 }
 
 /**
- * 长对话的抽象空间导航。minimap 不复制用户原文；章节、视区和点击目标全部使用
- * 同一个滚动内容坐标系，流式消息改变高度后由 ResizeObserver 重新计算边界。
+ * 长对话的抽象空间导航。常态只显示提问节点；章节、视区和点击目标全部使用同一个
+ * 滚动内容坐标系，流式消息改变高度后由 ResizeObserver 重新计算边界。
  */
 export function ChatMinimap({
   messages,
@@ -324,7 +320,7 @@ export function ChatMinimap({
         data-visible={Boolean(previewSection)}
         aria-hidden={!previewSection}
       >
-        <span>AI</span>
+        <span>你</span>
         <p>{previewSection?.preview}</p>
       </div>
     </nav>

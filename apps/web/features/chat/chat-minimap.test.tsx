@@ -54,7 +54,7 @@ describe('Chat minimap anchors', () => {
     expect(html.match(/tabindex="-1"/g)).toHaveLength(4);
   });
 
-  it('保留全部章节锚点，但不把用户原文复制进 minimap 数据', () => {
+  it('保留全部提问锚点并把节点绑定到对应学生消息', () => {
     const longConversation = Array.from({ length: 14 }, (_, index) =>
       turn(index + 1),
     ).flat();
@@ -64,9 +64,8 @@ describe('Chat minimap anchors', () => {
     expect(sections[0]).toEqual({
       id: 'turn-1',
       messageId: 'student-1',
-      preview: 'AI 回答 1',
+      preview: '用户问题 1',
     });
-    expect(JSON.stringify(sections)).not.toContain('用户问题');
   });
 
   it('用统一阅读线解析唯一 active 章节，并保持真实内容坐标', () => {
