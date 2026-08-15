@@ -202,7 +202,7 @@ function artifactStatusLabel(artifact: DesktopArtifactRef): string {
   if (artifact.status === 'generating')
     return artifact.progress === undefined
       ? '生成中'
-      : `生成中 ${Math.round(artifact.progress)}%`;
+      : `生成中 ${Math.round(artifact.progress * 100)}%`;
   if (artifact.status === 'failed') return '生成失败';
   return '准备生成';
 }
