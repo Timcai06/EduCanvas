@@ -140,6 +140,14 @@ const cancelResultSchema = z
   })
   .strict();
 
+const IMAGE_PREVIEW_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
+const MAX_IMAGE_PREVIEW_BYTES = 1_000_000;
+
 export type GatewayConversationEntry = Pick<
   GatewayConversationDirectoryPage['conversations'][number],
   | 'notebookId'
@@ -151,6 +159,49 @@ export type GatewayConversationEntry = Pick<
 export type GatewayPendingApproval = z.infer<typeof pendingApprovalSchema>;
 export type GatewayRecentOperation = z.infer<typeof recentOperationSchema>;
 export type GatewayCancelResult = z.infer<typeof cancelResultSchema>;
+export interface GatewayImagePreview {
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  bytes: Uint8Array;
+}
+
+async function readBoundedBytes(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const contentLength = response.headers.get('content-length');
+  if (contentLength !== null) {
+    const declaredLength = Number(contentLength);
+    if (!Number.isSafeInteger(declaredLength) || declaredLength < 0)
+      throw new GatewayClientError(502, 'INVALID_IMAGE_PREVIEW');
+    if (declaredLength > maxBytes)
+      throw new GatewayClientError(502, 'IMAGE_PREVIEW_TOO_LARGE');
+  }
+  if (!response.body) throw new GatewayClientError(502, 'EMPTY_IMAGE_PREVIEW');
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      byteLength += next.value.byteLength;
+      if (byteLength > maxBytes)
+        throw new GatewayClientError(502, 'IMAGE_PREVIEW_TOO_LARGE');
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
 
 /**
  * bootstrap/onboard 只用于换取短期 session token。
@@ -302,6 +353,43 @@ export class GatewayClient {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return messages;
+  }
+
+  /**
+   * 读取当前 bearer 主体在该 Conversation 中可见的图片缩略图。
+   * 私有存储地址从不离开 Gateway；这里仅接收受限大小的二进制响应。
+   */
+  async getImagePreview(input: {
+    conversationId: string;
+    assetId: string;
+    assetVersionId: string;
+  }): Promise<GatewayImagePreview> {
+    for (const value of [
+      input.conversationId,
+      input.assetId,
+      input.assetVersionId,
+    ]) {
+      if (!value || value.length > 256)
+        throw new Error('Invalid image preview selector');
+    }
+    const response = await this.fetcher(
+      `${this.baseUrl}/v1/client/conversations/${encodeURIComponent(input.conversationId)}/assets/${encodeURIComponent(input.assetId)}/versions/${encodeURIComponent(input.assetVersionId)}/image-preview`,
+      { headers: this.headers() },
+    );
+    if (!response.ok) throw await parseError(response);
+
+    const mimeType = response.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (!mimeType || !IMAGE_PREVIEW_MIME_TYPES.has(mimeType))
+      throw new GatewayClientError(502, 'INVALID_IMAGE_PREVIEW');
+
+    return {
+      mimeType: mimeType as GatewayImagePreview['mimeType'],
+      bytes: await readBoundedBytes(response, MAX_IMAGE_PREVIEW_BYTES),
+    };
   }
 
   /**

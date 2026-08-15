@@ -4,6 +4,8 @@ import type {
   DesktopMessagePart,
   DesktopResultTarget,
 } from '../../shared/chat-history';
+import { useEffect, useState } from 'react';
+import { loadDesktopImagePreview } from './result-actions';
 
 export function MessageResultCards(props: {
   message: DesktopChatMessage;
@@ -81,13 +83,7 @@ export function MessageResultCards(props: {
           className="result-card result-card--media"
           key={`${part.assetId}:${part.versionId}`}
         >
-          <div
-            className="result-card__thumbnail"
-            role="img"
-            aria-label={`图片预览：${part.label}`}
-          >
-            <ImageIcon />
-          </div>
+          <ImageThumbnail part={part} />
           <div className="result-card__body">
             <strong>{part.label}</strong>
             <span>图片结果</span>
@@ -228,5 +224,46 @@ function ImageIcon() {
     <svg viewBox="0 0 32 24" aria-hidden="true">
       <path d="M3 3.5h26v17H3zM7 17l6-6 4 4 3-3 5 5M22 8h.01" />
     </svg>
+  );
+}
+
+function ImageThumbnail(props: {
+  part: Extract<DesktopMessagePart, { type: 'image' }>;
+}) {
+  const { part } = props;
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void loadDesktopImagePreview({
+      kind: 'asset',
+      assetId: part.assetId,
+      assetVersionId: part.versionId,
+    })
+      .then((preview) => {
+        if (active) setDataUrl(preview);
+      })
+      .catch(() => {
+        if (active) setDataUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [part.assetId, part.versionId]);
+
+  return dataUrl ? (
+    <img
+      className="result-card__thumbnail"
+      src={dataUrl}
+      alt={`图片预览：${part.label}`}
+    />
+  ) : (
+    <div
+      className="result-card__thumbnail"
+      role="img"
+      aria-label={`图片预览：${part.label}`}
+    >
+      <ImageIcon />
+    </div>
   );
 }
