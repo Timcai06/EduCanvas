@@ -67,13 +67,11 @@ function AnimatedMessage({
   children,
   className,
   messageId,
-  turnId,
   role,
 }: {
   children: ReactNode;
   className: string;
   messageId: string;
-  turnId: string;
   role: ChatMessage['role'];
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -106,7 +104,6 @@ function AnimatedMessage({
       ref={rootRef}
       className={className}
       data-chat-message-id={messageId}
-      data-chat-turn-id={turnId}
       data-chat-message-role={role}
       tabIndex={-1}
     >
@@ -169,7 +166,6 @@ export function ChatPanel({
             <AnimatedMessage
               key={message.id}
               messageId={message.id}
-              turnId={message.turnId}
               role={message.role}
               className="max-w-[80%] self-end rounded-[1.125rem] rounded-br-md border border-line bg-card px-4 py-2.5 text-ink shadow-[var(--shadow-float)]"
             >
@@ -199,7 +195,6 @@ export function ChatPanel({
           <AnimatedMessage
             key={message.id}
             messageId={message.id}
-            turnId={message.turnId}
             role={message.role}
             className="flex gap-3"
           >

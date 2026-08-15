@@ -2,18 +2,30 @@
 
 import type { CSSProperties, RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CaretDown, CaretUp } from '@phosphor-icons/react';
 import type { ChatMessage } from './messages';
 import './chat-minimap.css';
 
 const MIN_SECTIONS = 4;
-const MAX_SECTIONS = 10;
 const MIN_OVERFLOW_PX = 96;
-const MAX_LABEL_LENGTH = 42;
+const READING_LINE_RATIO = 0.35;
+const VISIBLE_SECTION_COUNT = 6;
+const PREVIEW_LENGTH = 82;
 
-interface MarkerLayout {
+export interface ChatMinimapSection {
   id: string;
   messageId: string;
+  preview: string;
+}
+
+export interface ChatMinimapSectionMetric extends ChatMinimapSection {
+  startY: number;
+  endY: number;
+}
+
+interface MarkerLayout extends ChatMinimapSection {
   position: number;
+  active: boolean;
   visible: boolean;
 }
 
@@ -35,21 +47,76 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function chatMinimapMessageLabel(message: ChatMessage): string {
-  const speaker = message.role === 'student' ? '你' : 'AI';
-  const normalized = message.text.replace(/\s+/g, ' ').trim();
-  const fallback =
-    message.attachments.length > 0
-      ? `包含 ${message.attachments.length} 个附件`
-      : message.status === 'pending'
-        ? '正在回答'
-        : '空消息';
-  const text = normalized || fallback;
-  const clipped =
-    text.length > MAX_LABEL_LENGTH
-      ? `${text.slice(0, MAX_LABEL_LENGTH)}…`
-      : text;
-  return `${speaker} · ${clipped}`;
+/** 用户问题只定义章节边界，不作为 minimap 的可见文案。 */
+export function buildChatMinimapSections(
+  messages: readonly ChatMessage[],
+): readonly ChatMinimapSection[] {
+  const studentMessages = messages.filter(
+    (message) => message.role === 'student',
+  );
+  const source = studentMessages.length > 0 ? studentMessages : messages;
+  return source
+    .map((message) => {
+      const assistant = messages.find(
+        (candidate) =>
+          candidate.role === 'assistant' && candidate.turnId === message.turnId,
+      );
+      const normalized = assistant?.text.replace(/\s+/g, ' ').trim() ?? '';
+      const preview = normalized
+        ? normalized.length > PREVIEW_LENGTH
+          ? `${normalized.slice(0, PREVIEW_LENGTH)}…`
+          : normalized
+        : 'AI 正在回答';
+      return {
+        id: message.turnId,
+        messageId: message.id,
+        preview,
+      };
+    })
+    .filter(
+      (section, index, items) =>
+        items.findIndex((item) => item.id === section.id) === index,
+    );
+}
+
+export function resolveChatMinimapLayout({
+  sections,
+  scrollTop,
+  scrollHeight,
+  clientHeight,
+}: {
+  sections: readonly ChatMinimapSectionMetric[];
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}): MinimapLayout {
+  const safeScrollHeight = Math.max(scrollHeight, 1);
+  const safeClientHeight = Math.max(clientHeight, 1);
+  const readingY = scrollTop + safeClientHeight * READING_LINE_RATIO;
+  const viewportBottom = scrollTop + safeClientHeight;
+  const maxScrollTop = Math.max(0, safeScrollHeight - safeClientHeight);
+  const atTop = scrollTop <= 1;
+  const atBottom = scrollTop >= maxScrollTop - 1;
+
+  return {
+    shown:
+      sections.length >= MIN_SECTIONS &&
+      safeScrollHeight - safeClientHeight >= MIN_OVERFLOW_PX,
+    viewportTop: clamp(scrollTop / safeScrollHeight, 0, 1),
+    viewportHeight: clamp(safeClientHeight / safeScrollHeight, 0, 1),
+    markers: sections.map((section, index) => ({
+      id: section.id,
+      messageId: section.messageId,
+      preview: section.preview,
+      position: clamp(section.startY / safeScrollHeight, 0, 1),
+      active: atTop
+        ? index === 0
+        : atBottom
+          ? index === sections.length - 1
+          : readingY >= section.startY && readingY < section.endY,
+      visible: section.endY > scrollTop && section.startY < viewportBottom,
+    })),
+  };
 }
 
 function findMessageAnchor(
@@ -61,9 +128,17 @@ function findMessageAnchor(
   ).find((element) => element.dataset.chatMessageId === messageId);
 }
 
+function contentTop(container: HTMLElement, element: HTMLElement): number {
+  return (
+    element.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop
+  );
+}
+
 /**
- * 长对话的空间导航。每个用户问题是一段真实的 section label；一轮里的用户与 AI
- * 消息共同决定 active 状态，避免滚到回答中段时左侧锚点提前熄灭。
+ * 长对话的抽象空间导航。minimap 不复制用户原文；章节、视区和点击目标全部使用
+ * 同一个滚动内容坐标系，流式消息改变高度后由 ResizeObserver 重新计算边界。
  */
 export function ChatMinimap({
   messages,
@@ -73,31 +148,12 @@ export function ChatMinimap({
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
   const [layout, setLayout] = useState<MinimapLayout>(EMPTY_LAYOUT);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const focusTimerRef = useRef<number | null>(null);
-
-  const sections = useMemo(() => {
-    const studentMessages = messages.filter(
-      (message) => message.role === 'student',
-    );
-    const source = studentMessages.length > 0 ? studentMessages : messages;
-    const allSections = source
-      .map((message) => ({
-        id: message.turnId,
-        messageId: message.id,
-        label: chatMinimapMessageLabel(message),
-      }))
-      .filter(
-        (section, index, items) =>
-          items.findIndex((item) => item.id === section.id) === index,
-      );
-    if (allSections.length <= MAX_SECTIONS) return allSections;
-    return Array.from({ length: MAX_SECTIONS }, (_, index) => {
-      const sourceIndex = Math.round(
-        (index * (allSections.length - 1)) / (MAX_SECTIONS - 1),
-      );
-      return allSections[sourceIndex]!;
-    });
-  }, [messages]);
+  const sections = useMemo(
+    () => buildChatMinimapSections(messages),
+    [messages],
+  );
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -106,45 +162,23 @@ export function ChatMinimap({
     let frame = 0;
     const measure = () => {
       frame = 0;
-      const scrollHeight = Math.max(container.scrollHeight, 1);
-      const clientHeight = Math.max(container.clientHeight, 1);
-      const containerRect = container.getBoundingClientRect();
-      const messageAnchors = Array.from(
-        container.querySelectorAll<HTMLElement>('[data-chat-message-id]'),
-      );
-      const visibleTop = containerRect.top + clientHeight * 0.08;
-      const visibleBottom = containerRect.bottom - clientHeight * 0.08;
-
-      setLayout({
-        shown:
-          sections.length >= MIN_SECTIONS &&
-          scrollHeight - clientHeight >= MIN_OVERFLOW_PX,
-        viewportTop: clamp(container.scrollTop / scrollHeight, 0, 1),
-        viewportHeight: clamp(clientHeight / scrollHeight, 0, 1),
-        markers: sections.flatMap((section, sectionIndex) => {
-          const turnAnchors = messageAnchors.filter(
-            (anchor) => anchor.dataset.chatTurnId === section.id,
-          );
-          const anchor = turnAnchors[0];
-          if (!anchor) return [];
-          const turnRects = turnAnchors.map((element) =>
-            element.getBoundingClientRect(),
-          );
-          const turnTop = Math.min(...turnRects.map((rect) => rect.top));
-          const turnBottom = Math.max(...turnRects.map((rect) => rect.bottom));
-          return [
-            {
-              id: section.id,
-              messageId: section.messageId,
-              position:
-                sections.length === 1
-                  ? 0.5
-                  : sectionIndex / (sections.length - 1),
-              visible: turnBottom >= visibleTop && turnTop <= visibleBottom,
-            },
-          ];
-        }),
+      const measured = sections.flatMap((section) => {
+        const anchor = findMessageAnchor(container, section.messageId);
+        if (!anchor) return [];
+        return [{ ...section, startY: contentTop(container, anchor) }];
       });
+      const metrics = measured.map((section, index) => ({
+        ...section,
+        endY: measured[index + 1]?.startY ?? container.scrollHeight,
+      }));
+      setLayout(
+        resolveChatMinimapLayout({
+          sections: metrics,
+          scrollTop: container.scrollTop,
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight,
+        }),
+      );
     };
     const scheduleMeasure = () => {
       if (frame) return;
@@ -183,9 +217,15 @@ export function ChatMinimap({
       const reducedMotion = window.matchMedia(
         '(prefers-reduced-motion: reduce)',
       ).matches;
-      anchor.scrollIntoView({
+      const targetTop = clamp(
+        contentTop(container, anchor) -
+          container.clientHeight * READING_LINE_RATIO,
+        0,
+        Math.max(0, container.scrollHeight - container.clientHeight),
+      );
+      container.scrollTo({
+        top: targetTop,
         behavior: reducedMotion ? 'auto' : 'smooth',
-        block: 'center',
       });
       anchor.focus({ preventScroll: true });
       anchor.dataset.chatMinimapFocus = 'true';
@@ -200,41 +240,92 @@ export function ChatMinimap({
 
   if (!layout.shown) return null;
 
+  const activeIndex = Math.max(
+    0,
+    layout.markers.findIndex((marker) => marker.active),
+  );
+  const windowStart = clamp(
+    activeIndex - Math.floor(VISIBLE_SECTION_COUNT / 2),
+    0,
+    Math.max(0, layout.markers.length - VISIBLE_SECTION_COUNT),
+  );
+  const visibleMarkers = layout.markers.slice(
+    windowStart,
+    windowStart + VISIBLE_SECTION_COUNT,
+  );
+  const localActiveIndex = visibleMarkers.findIndex((marker) => marker.active);
+  const previewSection = sections.find((section) => section.id === previewId);
+
+  const jumpBy = (step: number) => {
+    const target = layout.markers[activeIndex + step];
+    if (target) jumpToMessage(target.messageId);
+  };
+
   return (
     <nav className="chat-minimap" aria-label="对话导航">
-      <div className="chat-minimap__rail">
+      <button
+        type="button"
+        className="chat-minimap__step"
+        aria-label="上一段对话"
+        disabled={activeIndex <= 0}
+        onClick={() => jumpBy(-1)}
+      >
+        <CaretUp aria-hidden="true" size={13} weight="bold" />
+      </button>
+      <div
+        className="chat-minimap__rail"
+        style={
+          {
+            '--chat-minimap-active-index': Math.max(0, localActiveIndex),
+            '--chat-minimap-section-count': visibleMarkers.length,
+          } as CSSProperties
+        }
+      >
         <span
           className="chat-minimap__viewport"
-          style={
-            {
-              '--chat-minimap-viewport-top': layout.viewportTop,
-              '--chat-minimap-viewport-height': layout.viewportHeight,
-            } as CSSProperties
-          }
+          data-visible={localActiveIndex >= 0}
           aria-hidden="true"
         />
-        {layout.markers.map((marker) => {
-          const section = sections.find((item) => item.id === marker.id);
+        {visibleMarkers.map((marker) => {
+          const globalIndex = layout.markers.findIndex(
+            (candidate) => candidate.id === marker.id,
+          );
           return (
             <button
               key={marker.id}
               type="button"
               className="chat-minimap__marker"
-              data-active={marker.visible}
-              style={
-                {
-                  '--chat-minimap-marker-position': marker.position,
-                } as CSSProperties
-              }
-              aria-label={`跳到${section?.label ?? '消息'}`}
-              aria-current={marker.visible ? 'location' : undefined}
+              data-active={marker.active}
+              data-visible={marker.visible}
+              aria-label={`跳到第 ${globalIndex + 1} 段对话`}
+              aria-current={marker.active ? 'location' : undefined}
               onClick={() => jumpToMessage(marker.messageId)}
+              onPointerEnter={() => setPreviewId(marker.id)}
+              onPointerLeave={() => setPreviewId(null)}
+              onFocus={() => setPreviewId(marker.id)}
+              onBlur={() => setPreviewId(null)}
             >
-              <span className="chat-minimap__marker-line" aria-hidden="true" />
-              <span className="chat-minimap__label">{section?.label}</span>
+              <span aria-hidden="true" />
             </button>
           );
         })}
+      </div>
+      <button
+        type="button"
+        className="chat-minimap__step"
+        aria-label="下一段对话"
+        disabled={activeIndex >= layout.markers.length - 1}
+        onClick={() => jumpBy(1)}
+      >
+        <CaretDown aria-hidden="true" size={13} weight="bold" />
+      </button>
+      <div
+        className="chat-minimap__preview"
+        data-visible={Boolean(previewSection)}
+        aria-hidden={!previewSection}
+      >
+        <span>AI</span>
+        <p>{previewSection?.preview}</p>
       </div>
     </nav>
   );
