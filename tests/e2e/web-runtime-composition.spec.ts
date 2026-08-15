@@ -85,13 +85,12 @@ async function createRuntimeFixture(
 
 async function openStudioOutput(page: Page) {
   await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
-  const studio = page.getByRole('complementary', {
-    name: '当前笔记本的 Studio',
+  const studio = page.getByRole('region', {
+    name: '当前笔记本的资源控制台',
   });
-  await studio
-    .getByRole('combobox', { name: '资源分类' })
-    .selectOption('artifact');
-  await expect(studio.getByRole('list', { name: '资源列表' })).toBeVisible();
+  await expect(studio).toBeVisible();
+  await studio.getByRole('tab', { name: /^输出/ }).click();
+  await expect(studio.getByRole('list', { name: '输出列表' })).toBeVisible();
   return studio;
 }
 

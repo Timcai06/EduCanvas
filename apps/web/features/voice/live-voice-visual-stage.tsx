@@ -3,6 +3,7 @@
 import {
   FileArrowUp,
   FilePdf,
+  FileText,
   Image as ImageIcon,
   LinkSimple,
   MagicWand,
@@ -11,7 +12,6 @@ import {
   Waveform,
 } from '@phosphor-icons/react';
 import { useRef, useState, type WheelEvent } from 'react';
-import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
 import {
   MAX_LIVE_CONTEXT_ASSETS,
   liveVoiceAssetStatusLabel,
@@ -20,6 +20,7 @@ import {
   type LiveVoiceContextAsset,
   type LiveVoiceToolItem,
 } from './live-voice-context';
+import { LiveVoiceImagePreview } from './live-voice-image-preview';
 
 function resolveLiveToolStatusLabel(
   status: LiveVoiceToolItem['status'],
@@ -50,8 +51,7 @@ export interface LiveVoiceVisualStageProps {
     kind: 'image' | 'document',
   ) => Promise<void>;
   readonly onOpenAsset?: (
-    assetId: string,
-    title: string,
+    asset: LiveVoiceContextAsset,
     trigger: HTMLButtonElement,
   ) => void;
   readonly onOpenArtifact?: (
@@ -59,16 +59,26 @@ export interface LiveVoiceVisualStageProps {
     title: string,
     trigger: HTMLButtonElement,
   ) => void;
-  readonly annotations?: readonly LiveVoiceAnnotationDraft[];
-  readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
 }
 
-function AssetKindIcon({ kind }: { kind: LiveVoiceContextAsset['kind'] }) {
-  if (kind === 'image') return <ImageIcon size={17} />;
-  if (kind === 'link') return <LinkSimple size={17} />;
-  if (kind === 'audio') return <Waveform size={17} />;
-  if (kind === 'video') return <VideoCamera size={17} />;
-  return <FilePdf size={17} />;
+function AssetKindIcon({
+  kind,
+  label,
+  size = 17,
+}: {
+  kind: LiveVoiceContextAsset['kind'];
+  label?: string;
+  size?: number;
+}) {
+  if (kind === 'image') return <ImageIcon size={size} />;
+  if (kind === 'link') return <LinkSimple size={size} />;
+  if (kind === 'audio') return <Waveform size={size} />;
+  if (kind === 'video') return <VideoCamera size={size} />;
+  return label?.toLowerCase().endsWith('.pdf') ? (
+    <FilePdf size={size} />
+  ) : (
+    <FileText size={size} />
+  );
 }
 
 /** 鼠标纵向滚轮在资料带仍可横移；到达两端后把滚动交还给外层卡片。 */
@@ -106,28 +116,47 @@ export function LiveVoiceVisualStage({
   onUploadAsset,
   onOpenAsset,
   onOpenArtifact,
-  annotations = [],
-  onAnnotateAsset,
 }: LiveVoiceVisualStageProps) {
-  const firstFocusable = assets.find(
-    (asset) => asset.enabled && asset.status === 'ready',
+  const [activeAssetId, setActiveAssetId] = useState<string | null>(
+    assets.find((asset) => asset.enabled)?.id ?? assets[0]?.id ?? null,
   );
-  const [focusedAssetId, setFocusedAssetId] = useState<string | null>(
-    firstFocusable?.id ?? null,
-  );
+  const [pendingAsset, setPendingAsset] = useState<{
+    label: string;
+    kind: 'image' | 'document';
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  const focusedAsset =
-    assets.find((asset) => asset.id === focusedAssetId) ?? firstFocusable;
+  const uploadedAsset = pendingAsset
+    ? [...assets]
+        .reverse()
+        .find(
+          (asset) =>
+            asset.label === pendingAsset.label &&
+            asset.kind === pendingAsset.kind,
+        )
+    : undefined;
+  const activeAsset =
+    assets.find((asset) => asset.id === activeAssetId) ??
+    uploadedAsset ??
+    assets.find((asset) => asset.enabled) ??
+    assets[0];
   const enabledAssetCount = assets.filter((asset) => asset.enabled).length;
 
-  const upload = (file: File | undefined, kind: 'image' | 'document') => {
-    if (!file || !onUploadAsset || uploading) return;
+  const upload = (
+    files: FileList | readonly File[] | null,
+    kind: 'image' | 'document',
+  ) => {
+    const pendingFiles = files ? Array.from(files) : [];
+    if (!pendingFiles.length || !onUploadAsset || uploading) return;
+    const newestFile = pendingFiles.at(-1);
+    if (!newestFile) return;
+    setActiveAssetId(null);
+    setPendingAsset({ label: newestFile.name, kind });
     setUploading(true);
     setUploadError(false);
-    void onUploadAsset(file, kind)
+    void Promise.all(pendingFiles.map((file) => onUploadAsset(file, kind)))
       .catch(() => setUploadError(true))
       .finally(() => setUploading(false));
   };
@@ -144,10 +173,11 @@ export function LiveVoiceVisualStage({
             <input
               ref={imageInputRef}
               type="file"
+              multiple
               accept="image/png,image/jpeg,image/webp"
               className="sr-only"
               onChange={(event) => {
-                upload(event.currentTarget.files?.[0], 'image');
+                upload(event.currentTarget.files, 'image');
                 event.currentTarget.value = '';
               }}
             />
@@ -157,7 +187,7 @@ export function LiveVoiceVisualStage({
               accept="application/pdf,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.md,.markdown,.txt,.docx"
               className="sr-only"
               onChange={(event) => {
-                upload(event.currentTarget.files?.[0], 'document');
+                upload(event.currentTarget.files, 'document');
                 event.currentTarget.value = '';
               }}
             />
@@ -168,6 +198,7 @@ export function LiveVoiceVisualStage({
               aria-label="在 Live 中添加图片"
             >
               <ImageIcon size={15} />
+              <span>图片</span>
             </button>
             <button
               type="button"
@@ -180,6 +211,7 @@ export function LiveVoiceVisualStage({
               ) : (
                 <FileArrowUp size={15} />
               )}
+              <span>文档</span>
             </button>
           </div>
         ) : null}
@@ -189,7 +221,7 @@ export function LiveVoiceVisualStage({
         <div
           className="live-voice-context-rail"
           role="list"
-          aria-label="Live 上下文"
+          aria-label="Live 资料"
           onWheel={scrollLiveVoiceContextRail}
         >
           {assets.map((asset) => (
@@ -199,19 +231,19 @@ export function LiveVoiceVisualStage({
               role="listitem"
               data-live-stage-asset={asset.id}
               data-active={asset.enabled || undefined}
-              data-focused={focusedAsset?.id === asset.id || undefined}
+              data-focused={activeAsset?.id === asset.id || undefined}
               disabled={
                 !asset.selectable &&
                 asset.status !== 'processing' &&
                 asset.status !== 'pending'
               }
               onClick={() => {
-                setFocusedAssetId(asset.id);
-                if (asset.selectable) onToggleAsset?.(asset.id);
+                setPendingAsset(null);
+                setActiveAssetId(asset.id);
               }}
               title={`${asset.label} · ${liveVoiceAssetStatusLabel(asset)}`}
             >
-              <AssetKindIcon kind={asset.kind} />
+              <AssetKindIcon kind={asset.kind} label={asset.label} />
               <span>{asset.label}</span>
               <i aria-hidden="true" />
             </button>
@@ -227,102 +259,64 @@ export function LiveVoiceVisualStage({
           文件暂时无法加入本轮上下文，请稍后重试。
         </p>
       ) : null}
+
+      {activeAsset ? (
+        <section
+          className="live-voice-resource-workspace"
+          aria-label="资料工作台"
+        >
+          {activeAsset.kind === 'image' && activeAsset.previewUrl ? (
+            <LiveVoiceImagePreview
+              key={`${activeAsset.id}:${activeAsset.versionId ?? 'current'}`}
+              src={activeAsset.previewUrl}
+              alt={activeAsset.label}
+            />
+          ) : (
+            <div className="live-voice-resource-workspace__document">
+              <span aria-hidden="true">
+                <AssetKindIcon
+                  kind={activeAsset.kind}
+                  label={activeAsset.label}
+                  size={32}
+                />
+              </span>
+            </div>
+          )}
+
+          <div className="live-voice-resource-workspace__meta">
+            <div>
+              <p>{activeAsset.label}</p>
+              <span>{liveVoiceAssetStatusLabel(activeAsset)}</span>
+            </div>
+            <div>
+              {activeAsset.selectable && onToggleAsset ? (
+                <button
+                  type="button"
+                  aria-pressed={activeAsset.enabled}
+                  onClick={() => onToggleAsset(activeAsset.id)}
+                >
+                  {activeAsset.enabled ? '移出本轮' : '加入本轮'}
+                </button>
+              ) : null}
+              {onOpenAsset && activeAsset.status === 'ready' ? (
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    onOpenAsset(activeAsset, event.currentTarget)
+                  }
+                >
+                  打开预览
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
       {enabledAssetCount > MAX_LIVE_CONTEXT_ASSETS ? (
         <p role="alert" className="live-voice-upload-error">
           本轮已选择 {enabledAssetCount} 份资料；最多可同时带入{' '}
           {MAX_LIVE_CONTEXT_ASSETS} 份，请取消少量资料后继续。
         </p>
-      ) : null}
-
-      {focusedAsset ? (
-        <article data-live-focus-card className="live-voice-focus-card">
-          {focusedAsset.kind === 'image' && focusedAsset.previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={focusedAsset.previewUrl} alt={focusedAsset.label} />
-          ) : (
-            <span className="live-voice-focus-icon">
-              <AssetKindIcon kind={focusedAsset.kind} />
-            </span>
-          )}
-          <div>
-            <p>{focusedAsset.label}</p>
-            <span>{liveVoiceAssetStatusLabel(focusedAsset)}</span>
-          </div>
-          {onOpenAsset && focusedAsset.status === 'ready' ? (
-            <button
-              type="button"
-              onClick={(event) =>
-                onOpenAsset(
-                  focusedAsset.id,
-                  focusedAsset.label,
-                  event.currentTarget,
-                )
-              }
-            >
-              在 Live 中预览
-            </button>
-          ) : null}
-        </article>
-      ) : null}
-
-      {focusedAsset?.kind === 'image' &&
-      focusedAsset.previewUrl &&
-      focusedAsset.status === 'ready' &&
-      onAnnotateAsset ? (
-        <div className="live-voice-annotation-wrap">
-          <p>轻点图片，把这一处带回书案</p>
-          <button
-            type="button"
-            className="live-voice-annotation-surface"
-            aria-label={`在 ${focusedAsset.label} 上圈点`}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              const centerX = (event.clientX - rect.left) / rect.width;
-              const centerY = (event.clientY - rect.top) / rect.height;
-              const width = 0.18;
-              const height = 0.13;
-              onAnnotateAsset({
-                clientId: crypto.randomUUID(),
-                resourceKind: 'source',
-                resourceId: focusedAsset.id,
-                resourceVersionId: focusedAsset.versionId ?? null,
-                kind: 'circle',
-                geometry: {
-                  x: Math.max(0, Math.min(1 - width, centerX - width / 2)),
-                  y: Math.max(0, Math.min(1 - height, centerY - height / 2)),
-                  width,
-                  height,
-                },
-              });
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={focusedAsset.previewUrl} alt="" />
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-              {annotations
-                .filter(
-                  (annotation) => annotation.resourceId === focusedAsset.id,
-                )
-                .map((annotation) => (
-                  <ellipse
-                    key={annotation.clientId}
-                    cx={
-                      (annotation.geometry.x +
-                        (annotation.geometry.width ?? 0.18) / 2) *
-                      100
-                    }
-                    cy={
-                      (annotation.geometry.y +
-                        (annotation.geometry.height ?? 0.13) / 2) *
-                      100
-                    }
-                    rx={((annotation.geometry.width ?? 0.18) / 2) * 100}
-                    ry={((annotation.geometry.height ?? 0.13) / 2) * 100}
-                  />
-                ))}
-            </svg>
-          </button>
-        </div>
       ) : null}
 
       {tools.length > 0 || artifacts.length > 0 || citations.length > 0 ? (

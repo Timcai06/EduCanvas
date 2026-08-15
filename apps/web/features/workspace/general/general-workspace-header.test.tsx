@@ -8,10 +8,11 @@ const source = readFileSync(
 );
 
 describe('GeneralWorkspaceHeader navigation boundary', () => {
-  it('removes the Studio action while preserving its layout slot', () => {
-    expect(source).toContain('data-studio-placeholder');
-    expect(source).not.toContain("id: 'studio'");
-    expect(source).not.toContain("label: 'Studio'");
-    expect(source).not.toContain('onOpenStudio');
+  it('exposes the dedicated resource console as a first-class page entry', () => {
+    expect(source).toContain("id: 'resources'");
+    expect(source).toContain("label: '资源控制台'");
+    expect(source).toContain('onOpenStudio');
+    expect(source).toContain('studioOpen');
+    expect(source).not.toContain('data-studio-placeholder');
   });
 });

@@ -2,7 +2,7 @@
   "name": "@educanvas/node",
   "version": "0.1.0",
   "engines": {
-    "node": ">=24.18.0 <25"
+    "node": ">=24.18.0"
   },
   "private": true,
   "type": "module",

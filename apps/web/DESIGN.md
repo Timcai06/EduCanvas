@@ -175,6 +175,9 @@ Token 定义在 `app/globals.css` 的 `@theme {}`（纸面亮态静态值）与
 - `stream-shimmer`：流式占位灰条 + GSAP 平移墨紫微光。
 - `aurora-ink` / `ink-flow-line` / PixelBlast 墨点场 / `agent-busy-overlay` 工作态氛围：
   纯装饰，`pointer-events: none`，reduced-motion 全部有降级（停帧或静态化）。
+- Live Voice 左侧液态球叠加 React Bits 原版 RippleDistortion；右侧图片工作台跟随图片
+  原始宽高比且保持无失真，缩略图切换不隐式改变上下文启停，原图查看与圈点仍走
+  安全 Renderer。
 
 ## 6. 动效与交互
 

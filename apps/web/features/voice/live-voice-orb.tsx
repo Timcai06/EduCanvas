@@ -1,10 +1,18 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, type CSSProperties } from 'react';
 import { ORB_SHAPES } from './live-voice-motion';
+import type { LiveVoiceVisualPhase } from './live-voice-motion';
+import { LiveVoiceRippleOrb } from './live-voice-ripple-orb';
 
-/** 纯视觉液态球；会话状态只通过父级 data-phase 与 GSAP selector 投影。 */
-export function LiveVoiceOrb() {
+/** 纯视觉液态球；相位同时投影到 SVG 轮廓、WebGL 色场与 GSAP 动势。 */
+export function LiveVoiceOrb({
+  phase,
+  audioLevel,
+}: {
+  readonly phase: LiveVoiceVisualPhase;
+  readonly audioLevel: number;
+}) {
   const instanceId = useId().replaceAll(':', '');
   const bodyGradientId = `live-voice-body-${instanceId}`;
   const warmGradientId = `live-voice-warm-${instanceId}`;
@@ -12,10 +20,31 @@ export function LiveVoiceOrb() {
   const glowGradientId = `live-voice-glow-${instanceId}`;
   const glowFilterId = `live-voice-glow-filter-${instanceId}`;
   const bodyClipId = `live-voice-body-clip-${instanceId}`;
+  const voiceActive = phase === 'listening' || phase === 'speaking';
+  const voiceEnergy = Math.min(1, Math.max(0, audioLevel));
 
   return (
-    <div data-live-orb-wrap className="live-voice-orb-wrap">
+    <div
+      data-live-orb-wrap
+      data-voice-active={voiceActive ? 'true' : 'false'}
+      data-voice-speaker={phase === 'speaking' ? 'agent' : 'user'}
+      className="live-voice-orb-wrap"
+      style={
+        {
+          '--live-voice-wave-glow': `${1.1 + voiceEnergy * 1.8}rem`,
+          '--live-voice-wave-opacity-start': 0.2 + voiceEnergy * 0.24,
+          '--live-voice-wave-opacity-mid': 0.1 + voiceEnergy * 0.14,
+          '--live-voice-wave-scale-start': 0.9 + voiceEnergy * 0.035,
+          '--live-voice-wave-scale-end': 1.14 + voiceEnergy * 0.13,
+        } as CSSProperties
+      }
+    >
       <div data-live-orb-reactive className="live-voice-orb-reactive">
+        <div className="live-voice-orb-waves" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <svg
           data-live-orb
           viewBox="0 0 200 200"
@@ -158,6 +187,7 @@ export function LiveVoiceOrb() {
             />
           </g>
         </svg>
+        <LiveVoiceRippleOrb phase={phase} audioLevel={audioLevel} />
       </div>
     </div>
   );

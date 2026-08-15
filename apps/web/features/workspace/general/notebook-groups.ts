@@ -31,6 +31,20 @@ const GROUP_ORDER: readonly { key: NotebookGroupKey; label: string }[] = [
 
 const DAY_MS = 86_400_000;
 
+export function formatNotebookActivityTime(
+  iso: string,
+  now = new Date(),
+): string {
+  const date = new Date(iso);
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+}
+
 /** 本地时区当日零点的毫秒时间戳，用于按整日差分桶而不受具体时刻影响。 */
 function startOfLocalDay(date: Date): number {
   return new Date(

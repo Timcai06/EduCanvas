@@ -6,6 +6,56 @@ import {
 } from './live-voice-visual-stage';
 
 describe('scrollLiveVoiceContextRail', () => {
+  it('图片和文档共用一个资料工作台与一个预览动作', () => {
+    const html = renderToStaticMarkup(
+      <LiveVoiceVisualStage
+        assets={[
+          {
+            id: 'image-a',
+            versionId: 'version-a',
+            label: '函数图像 A',
+            kind: 'image',
+            scope: 'space',
+            status: 'ready',
+            enabled: true,
+            selectable: true,
+            previewUrl: '/api/v1/chat/assets/image-a/file',
+          },
+          {
+            id: 'document-b',
+            versionId: 'version-b',
+            label: '函数说明 B.pdf',
+            kind: 'document',
+            scope: 'turn',
+            status: 'ready',
+            enabled: false,
+            selectable: true,
+          },
+        ]}
+        artifacts={[]}
+        citations={[]}
+        tools={[]}
+        onToggleAsset={vi.fn()}
+        onOpenAsset={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="资料工作台"');
+    expect(html).toContain('函数图像 A');
+    expect(html).toContain('函数说明 B.pdf');
+    expect(html).toContain('live-voice-image-preview');
+    expect(html).not.toContain('ripple-distortion');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('移出本轮');
+    expect(html).toContain('打开预览');
+    expect(html).not.toContain('原图预览');
+    expect(html).not.toContain('在 Live 中预览');
+    expect(html).not.toContain('image-deck');
+    expect(html).not.toContain('halftone');
+    expect(html).toContain('data-live-stage-asset="image-a"');
+    expect(html).toContain('data-live-stage-asset="document-b"');
+  });
+
   it('资料超过单轮上限时仍展示全部来源按钮供用户取消选择', () => {
     const html = renderToStaticMarkup(
       <LiveVoiceVisualStage

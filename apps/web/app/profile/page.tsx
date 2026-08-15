@@ -5,6 +5,7 @@ import { UserCircle } from '@phosphor-icons/react/dist/ssr';
 import { ProductMark } from '@/components/ProductMark';
 import { AuroraInk } from '@/features/profile/aurora-ink';
 import { LearningHeatmap } from '@/features/profile/learning-heatmap';
+import { LearningRhythm } from '@/features/profile/learning-rhythm';
 import { ProfileStats } from '@/features/profile/profile-stats';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import {
@@ -46,20 +47,20 @@ export default async function ProfilePage() {
   return (
     <main className="min-h-dvh bg-canvas text-ink">
       <header className="border-b border-line/70">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4 sm:px-8">
           <ProductMark href="/" />
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
         {/* 身份头图：水墨极光作底 */}
-        <div className="relative overflow-hidden rounded-3xl border border-line bg-card px-6 py-7 shadow-float sm:px-8">
+        <div className="relative overflow-hidden rounded-[2rem] border border-line bg-card px-6 py-7 shadow-float sm:px-8 sm:py-8">
           <AuroraInk />
           <div className="relative">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">
               Profile
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-5">
+            <div className="mt-4 flex flex-wrap items-center gap-5 lg:gap-7">
               <span className="grid size-20 place-items-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent shadow-float">
                 {user?.avatarAvailable ? (
                   <Image
@@ -85,6 +86,24 @@ export default async function ProfilePage() {
                   {ownershipExplanation}
                 </p>
               </div>
+              <div className="grid min-w-[15rem] grid-cols-2 gap-2 rounded-2xl border border-line/70 bg-canvas/45 p-2 backdrop-blur-sm">
+                <div className="rounded-xl bg-card/75 px-3 py-2">
+                  <strong className="block font-display text-xl tabular-nums">
+                    {activity.streakDays}
+                  </strong>
+                  <span className="text-[11px] text-ink-muted">
+                    当前连续天数
+                  </span>
+                </div>
+                <div className="rounded-xl bg-card/75 px-3 py-2">
+                  <strong className="block font-display text-xl tabular-nums">
+                    {activity.totalSessions}
+                  </strong>
+                  <span className="text-[11px] text-ink-muted">
+                    累计学习课次
+                  </span>
+                </div>
+              </div>
               {user ? null : (
                 <Link
                   href="/?auth=login"
@@ -107,27 +126,77 @@ export default async function ProfilePage() {
           />
         </div>
 
-        {/* 热力图 */}
-        <section className="mt-6 rounded-3xl border border-line bg-card p-5 shadow-float sm:p-6">
-          <h2 className="font-display text-lg font-semibold">学习热力图</h2>
-          <p className="mb-4 mt-1 text-sm text-ink-muted">
-            过去一年，每一格是一天；判分练习越多，墨色越深越密。
-          </p>
-          {hasActivity ? (
-            <LearningHeatmap days={activity.days} />
-          ) : (
-            <div className="rounded-2xl border border-dashed border-line bg-surface/50 px-5 py-10 text-center">
-              <p className="text-sm leading-6 text-ink-muted">
-                还没有学习记录。开始上课后，这里会一天天染上墨色。
-              </p>
-              <Link
-                href="/"
-                className="shine-sweep mt-4 inline-flex min-h-10 items-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-transform hover:-translate-y-0.5"
-              >
-                去开始学习
-              </Link>
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
+          <section className="rounded-3xl border border-line bg-card p-5 shadow-float sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">
+                  Activity archive
+                </p>
+                <h2 className="mt-1 font-display text-lg font-semibold">
+                  学习热力图
+                </h2>
+                <p className="mb-4 mt-1 text-sm text-ink-muted">
+                  过去一年，每一格是一天；判分练习越多，墨色越深。
+                </p>
+              </div>
+              <span className="rounded-full border border-line bg-surface px-3 py-1 text-[11px] text-ink-muted">
+                53 周可信活动
+              </span>
             </div>
-          )}
+            {hasActivity ? (
+              <LearningHeatmap days={activity.days} />
+            ) : (
+              <div className="rounded-2xl border border-dashed border-line bg-surface/50 px-5 py-10 text-center">
+                <p className="text-sm leading-6 text-ink-muted">
+                  还没有学习记录。开始上课后，这里会一天天染上墨色。
+                </p>
+                <Link
+                  href="/"
+                  className="shine-sweep mt-4 inline-flex min-h-10 items-center rounded-full bg-accent px-5 text-sm font-semibold text-card transition-transform hover:-translate-y-0.5"
+                >
+                  去开始学习
+                </Link>
+              </div>
+            )}
+          </section>
+          <LearningRhythm days={activity.days} />
+        </div>
+
+        <section className="mt-6 grid gap-3 rounded-3xl border border-line bg-card p-5 shadow-float sm:grid-cols-3 sm:p-6">
+          <div className="rounded-2xl border border-line/70 bg-surface/45 p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Sessions
+            </span>
+            <h3 className="mt-2 font-display text-base font-semibold">
+              学习会话
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
+              只统计服务端确认归属于当前学习主体的真实会话。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-line/70 bg-surface/45 p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Assessments
+            </span>
+            <h3 className="mt-2 font-display text-base font-semibold">
+              判分活动
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
+              热力图只记录完成作答并被评判的学习动作，不把浏览量当学习。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-line/70 bg-surface/45 p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Ownership
+            </span>
+            <h3 className="mt-2 font-display text-base font-semibold">
+              数据归属
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
+              {ownershipExplanation}
+            </p>
+          </div>
         </section>
       </div>
     </main>
