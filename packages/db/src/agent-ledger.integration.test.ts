@@ -56,9 +56,8 @@ const scope = {
   courseSlug: 'cat-dog-ai',
   knowledgeNodeId: 'cat-dog-classification',
 };
-// 相对当前时间：listOwnedRecent 用 Date.now()-30 天 的 activeSessionCutoff 过滤，
-// 写死日期会在 TTL 到期后把种子会话过滤掉（时间炸弹）。
-const baseTime = new Date(Date.now() - 5 * 60 * 1_000);
+// 会话列表只返回 30 天有效期内的记录；使用相对基准避免固定日期夹具随时间失效。
+const baseTime = new Date(Date.now() - 60_000);
 
 function at(offsetMs: number): Date {
   return new Date(baseTime.getTime() + offsetMs);

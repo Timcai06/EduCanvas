@@ -53,6 +53,8 @@ import {
   GatewayNodeSessionAuth,
 } from './client-auth';
 import { GatewayObservability } from './observability';
+import { createGatewayObservabilitySink } from './gateway-observability-adapter';
+import { createGatewayLogger } from './logging';
 import { GatewayCanvasResourceService } from './canvas-resource-service';
 import { getGatewayTelemetryRuntime } from './telemetry';
 import { createStreamingTranscriptionUpgradeHandler } from './streaming-transcription-ws-transport';
@@ -124,9 +126,10 @@ const checkStreamingNotebookAccess = async (input: {
     return false;
   }
 };
-const observability = new GatewayObservability((record) => {
-  process.stdout.write(`${JSON.stringify(record)}\n`);
-});
+const gatewayLogger = createGatewayLogger();
+const observability = new GatewayObservability(
+  createGatewayObservabilitySink(gatewayLogger),
+);
 const telemetry = getGatewayTelemetryRuntime();
 const service = new GatewayService(
   new DrizzleGatewayRouteResolver(),
@@ -199,23 +202,21 @@ const server = createServer(
 );
 
 server.listen(config.port, config.host, () => {
-  process.stdout.write(
-    `${JSON.stringify({
-      event: 'gateway.started',
-      host: config.host,
-      port: config.port,
-      internalTransportEnabled: config.internalToken !== null,
-      clientTransportEnabled: clientSessionAuth !== null,
-      localOnboardingEnabled: config.localOnboardingEnabled,
-      streamingTranscriptionEnabled:
-        streamingTranscription.gateway !== null && clientSessionAuth !== null,
-      streamingSpeechEnabled:
-        streamingSpeech !== null && clientSessionAuth !== null,
-      streamingTranscriptionReason: streamingTranscription.reason,
-      streamingTranscriptionOrigins: config.wsAllowedOrigins,
-      telemetry: telemetry.health(),
-    })}\n`,
-  );
+  // 统一协议 service.ready：orchestrator 探测 /healthz 之外的结构化就绪信号。
+  gatewayLogger.info('service.ready', 'Gateway 已就绪', {
+    host: config.host,
+    port: config.port,
+    internalTransportEnabled: config.internalToken !== null,
+    clientTransportEnabled: clientSessionAuth !== null,
+    localOnboardingEnabled: config.localOnboardingEnabled,
+    streamingTranscriptionEnabled:
+      streamingTranscription.gateway !== null && clientSessionAuth !== null,
+    streamingSpeechEnabled:
+      streamingSpeech !== null && clientSessionAuth !== null,
+    streamingTranscriptionReason: streamingTranscription.reason,
+    streamingTranscriptionOrigins: config.wsAllowedOrigins,
+    telemetry: telemetry.health(),
+  });
 });
 
 // V12：双向流式转录通道挂在现有 HTTP server 的 upgrade 事件上，不另起
@@ -226,6 +227,36 @@ const isAllowedVoiceOrigin = (origin: string | null | undefined): boolean => {
   const normalized = normalizeWsAllowedOrigin(origin);
   return normalized !== null && config.wsAllowedOrigins.includes(normalized);
 };
+
+/**
+ * 流式通道日志 sink：受控 label/code/reason 字段 → 统一协议事件。
+ * 只区分 opened/closed（info）与其余握手拒绝/会话失败（debug 降噪）。
+ */
+function createStreamingLogSink(
+  description: string,
+): (entry: {
+  label: string;
+  code?: string;
+  reason?: string;
+  notebookId?: string;
+}) => void {
+  return (entry) => {
+    const isLifecycle =
+      entry.label === 'connection_opened' ||
+      entry.label === 'connection_closed';
+    const event = isLifecycle
+      ? entry.label === 'connection_opened'
+        ? 'gateway.websocket.opened'
+        : 'gateway.websocket.closed'
+      : 'gateway.websocket.rejected';
+    gatewayLogger.log(isLifecycle ? 'info' : 'debug', event, description, {
+      label: entry.label,
+      code: entry.code,
+      reason: entry.reason,
+      notebookId: entry.notebookId,
+    });
+  };
+}
 const transcriptionUpgrade = createStreamingTranscriptionUpgradeHandler({
   tickets: streamingTickets,
   checkNotebookAccess: checkStreamingNotebookAccess,
@@ -237,11 +268,7 @@ const transcriptionUpgrade = createStreamingTranscriptionUpgradeHandler({
   unavailableReason: streamingTranscription.reason,
   quotaManager: streamingQuotaManager,
   quotas: streamingQuotas,
-  log: (entry) => {
-    process.stdout.write(
-      `${JSON.stringify({ event: 'streaming.transcription', ...entry })}\n`,
-    );
-  },
+  log: createStreamingLogSink('流式转录通道事件'),
 });
 const speechUpgrade = createStreamingSpeechUpgradeHandler({
   tickets: streamingTickets,
@@ -250,11 +277,7 @@ const speechUpgrade = createStreamingSpeechUpgradeHandler({
   gateway: streamingSpeech,
   quotaManager: streamingQuotaManager,
   quotas: streamingQuotas,
-  log: (entry) => {
-    process.stdout.write(
-      `${JSON.stringify({ event: 'streaming.speech', ...entry })}\n`,
-    );
-  },
+  log: createStreamingLogSink('流式语音通道事件'),
 });
 server.on('upgrade', (request, socket, head) => {
   let pathname: string;

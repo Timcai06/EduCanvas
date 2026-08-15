@@ -1,0 +1,12 @@
+{
+  "schema": "educanvas.log.v1",
+  "levels": ["debug", "info", "warn", "error", "fatal"],
+  "runSchema": "educanvas.local-run.v1",
+  "limits": {
+    "maxJsonDepth": 8,
+    "maxArrayItems": 100,
+    "maxStringLength": 800,
+    "maxLineLength": 4000,
+    "maxPendingChunk": 65536
+  }
+}

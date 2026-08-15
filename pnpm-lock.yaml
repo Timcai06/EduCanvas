@@ -97,6 +97,9 @@ importers:
       '@educanvas/gateway-runtime':
         specifier: workspace:*
         version: link:../../packages/gateway-runtime
+      '@educanvas/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
       '@educanvas/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
@@ -421,6 +424,9 @@ importers:
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@educanvas/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
       '@educanvas/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
@@ -690,6 +696,21 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
+
+  packages/logging:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      prettier:
+        specifier: ^3.9.5
+        version: 3.9.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -4084,7 +4105,7 @@ packages:
 
   glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   global-agent@3.0.0:
     resolution: {integrity: sha512-PT6XReJ+D07JvGoxQMkT6qji/jVNfX/h364XHZOWeRzy64sSFr+xJ5OX7LI3b4MPQzdL4H8Y8M0xzPpsVMwA8Q==}

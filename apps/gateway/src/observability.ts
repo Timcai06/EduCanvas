@@ -23,6 +23,8 @@ type SafeLogRecord =
       sequence: number;
     };
 
+export type { SafeLogRecord };
+
 const terminalEvents = new Set([
   'operation.completed',
   'operation.failed',

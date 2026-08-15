@@ -20,6 +20,7 @@
     "@educanvas/db": "workspace:*",
     "@educanvas/gateway-core": "workspace:*",
     "@educanvas/gateway-runtime": "workspace:*",
+    "@educanvas/logging": "workspace:*",
     "@educanvas/mcp-runtime": "workspace:*",
     "@educanvas/model-gateway": "workspace:*",
     "@educanvas/node-runtime": "workspace:*",

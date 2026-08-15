@@ -76,7 +76,9 @@ test('@smoke General 黄金旅程：Turn 生命周期', async ({ context, page }
 });
 
 test('@smoke General 黄金旅程：历史恢复', async ({ page }) => {
-  test.slow();
+  // 该旅程包含两次真实不可用模型收敛和两次服务端会话切换；慢 CI runner
+  // 已稳定完成全部断言但耗时约 96s，显式预算避免 90s 通用 slow 上限误杀。
+  test.setTimeout(120_000);
   const firstPrompt = '太阳能小车研究笔记本';
   const secondPrompt = '校园雨水花园笔记本';
 

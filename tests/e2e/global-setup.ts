@@ -3,6 +3,10 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e-worker-log-audit.mjs';
+import {
+  createLineSplitter,
+  tryParseLogRecord,
+} from '../../tooling/local-process-pipe.mjs';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -93,7 +97,26 @@ async function startFixtureProvider(): Promise<{
     if (request.url === '/v1/chat/completions') {
       const payload = (await readBody(request)) as {
         messages?: Array<{ content?: string }>;
+        tools?: unknown;
       };
+      /* 主对话调用带 tools，fixture 无法产出合法主回复：直接快速失败
+         （invalid_request 不可重试），避免 e2e 每条消息白耗 agent-loop
+         指数退避（4 次约 15s），CI 慢 runner 上会把测试拖到超时。 */
+      if (payload.tools !== undefined) {
+        response.writeHead(400, {
+          'content-type': 'application/json',
+          connection: 'close',
+        });
+        response.end(
+          JSON.stringify({
+            error: {
+              message: 'e2e fixture: primary chat unavailable',
+              code: 'invalid_request',
+            },
+          }),
+        );
+        return;
+      }
       const schemaPrompt = payload.messages?.at(-1)?.content ?? '';
       const prompt =
         payload.messages
@@ -183,17 +206,21 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await new Promise<void>((resolve, reject) => {
     // 90s：Linux CI 上 pnpm shim 冷启动约数秒；Windows 本地 pnpm --filter
     // 解析 workspace 并输出引擎 WARN 明显更慢，30s 是 CI 级偶发超时源。
-    // 真正启动后立即 resolve，超时只是兜底，不拖长通过路径。
+    // 只认统一日志协议的 worker.ready，避免展示文案变化破坏 readiness。
     const timeout = setTimeout(
       () => reject(new Error('worker 启动超时(90s)')),
       90_000,
     );
-    worker.stdout?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      if (chunk.toString().includes('已启动')) {
+    const readiness = createLineSplitter((line: string) => {
+      const record = tryParseLogRecord(line);
+      if (record?.service === 'worker' && record.event === 'worker.ready') {
         clearTimeout(timeout);
         resolve();
       }
+    });
+    worker.stdout?.on('data', (chunk: Buffer) => {
+      workerLogAudit.ingest(chunk);
+      readiness.push(chunk);
     });
     worker.stderr?.on('data', (chunk: Buffer) => {
       workerLogAudit.ingest(chunk);
