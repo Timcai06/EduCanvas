@@ -11,6 +11,7 @@
  */
 
 import { LOG_SCHEMA } from './log-protocol.mjs';
+import { sanitizeLegacyLine } from './legacy-sanitize.mjs';
 
 export const MAX_PENDING_CHUNK = 65_536;
 export const MAX_LINE_LENGTH = 4_000;
@@ -84,7 +85,9 @@ export function parseProcessLine(line, { service, stream }) {
     service,
     component: 'legacy',
     event: 'process.output',
-    message: line.slice(0, MAX_LINE_LENGTH),
+    // legacy 行在写入前统一清洗：strip ANSI → redact 凭据 → 截断，
+    // 保证「JSONL 无 ANSI / 安全日志」对所有输出源成立。
+    message: sanitizeLegacyLine(line),
     stream,
   };
 }

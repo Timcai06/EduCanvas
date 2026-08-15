@@ -177,3 +177,35 @@ export async function pruneRuns(
   }
   return { removed, warnings };
 }
+
+/**
+ * 监视服务退出并更新 run.json 状态。返回 dispose：shutdown 时先取消，
+ * 防止并发写 latest.json 与停止流程互相干扰（process.exit 会中断未完成
+ * 的 writeFile，留下半写文件）。
+ */
+export function monitorServiceExits(services, session) {
+  const active = new Set(Object.values(services));
+  const watchers = new Map();
+  for (const [name, service] of Object.entries(services)) {
+    const watcher = ({ code }) => {
+      if (!active.has(service)) return;
+      void (async () => {
+        const latest = await readLatest(DEFAULT_LOGS_ROOT);
+        await updateRunState(session.directory, {
+          services: {
+            ...(latest?.services ?? {}),
+            [name]: {
+              pid: service.child?.pid,
+              state: code === 0 ? 'stopped' : 'failed',
+            },
+          },
+        });
+      })();
+    };
+    service.exitPromise.then(watcher);
+    watchers.set(service, () => active.delete(service));
+  }
+  return () => {
+    for (const dispose of watchers.values()) dispose();
+  };
+}

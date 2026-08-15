@@ -92,7 +92,10 @@ async function main() {
     return;
   }
   if (profile === 'stop' || profile === 'stop-core' || profile === 'stop-db') {
-    await runStop({ stopDb: profile === 'stop' || profile === 'stop-db' });
+    await runStop({
+      stopCore: profile !== 'stop-db',
+      stopDb: profile !== 'stop-core',
+    });
     return;
   }
   if (profile === 'logs') {
@@ -110,17 +113,17 @@ async function main() {
   if (runtime.services === null) return; // 复用已运行的 core
 
   const { services, session } = runtime;
-  const { monitorServiceExits } = await import('./local-startup.mjs');
+  const { monitorServiceExits } = await import('./local-run-session.mjs');
   const disposeWatchers = monitorServiceExits(services, session);
   let stopped = false;
-  const shutdown = async (signal) => {
+  const shutdown = async (signal, { failed = false } = {}) => {
     if (stopped) return;
     stopped = true;
     disposeWatchers();
     await stopEverything(services);
     const { updateRunState } = await import('./local-run-session.mjs');
     await updateRunState(session.directory, {
-      state: 'stopped',
+      state: failed ? 'failed' : 'stopped',
       stoppedAt: new Date().toISOString(),
       exitReason: signal,
     });
@@ -155,13 +158,21 @@ async function main() {
     return;
   }
 
-  // all / all-verbose：前台 supervisor，等待任一服务退出。
-  const outcomes = await Promise.allSettled(
-    Object.values(services).map((service) => service.exitPromise),
+  // all / all-verbose / web：前台 supervisor。任一服务意外退出立即 fail-fast：
+  // 停止其余服务、run.json 标记 failed、非零退出——而不是等所有服务都退出。
+  const first = await Promise.race(
+    Object.entries(services).map(([name, service]) =>
+      service.exitPromise.then((outcome) => ({ name, outcome })),
+    ),
   );
-  if (outcomes.some((result) => result.status === 'rejected'))
+  if (!stopped) {
+    const { code, signal } = first.outcome;
+    out(
+      `[local] ${first.name} 意外退出（code=${code ?? '-'} · signal=${signal ?? '-'}），正在停止其余服务…`,
+    );
+    await shutdown(`${first.name}-crash`, { failed: true });
     process.exitCode = 1;
-  await shutdown('core-exit');
+  }
 }
 
 main().catch((error) => {

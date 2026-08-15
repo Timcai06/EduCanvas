@@ -13,6 +13,9 @@
  *   同一端口也可能是完全无关的程序在监听；
  * - 杀完轮询等待端口释放，确认干净后才把控制权交还给 orchestrator。
  *
+ * 注意：Worker（tsx watch）不监听端口，不在本模块覆盖范围；由
+ * local-startup.cleanupStaleRuntime 按旧会话 run.json 记录 PID 先行清理。
+ *
  * 所有外部命令通过注入的 runCommand 执行，便于测试注入假输出。
  */
 import { execFile } from 'node:child_process';

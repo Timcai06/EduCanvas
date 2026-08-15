@@ -84,3 +84,51 @@ test('超长 legacy 行被截断', () => {
   });
   assert.ok(record.message.length <= 4_000);
 });
+
+test('legacy 行 ANSI 转义被剥离，绝不进入 JSONL', () => {
+  const record = parseProcessLine('\x1b[32m ready \x1b[0m\x1b[1mbold\x1b[22m', {
+    service: 'web',
+    stream: 'stdout',
+  });
+  assert.ok(!record.message.includes('\x1b['));
+  assert.equal(record.message, ' ready bold');
+});
+
+test('legacy 行 Authorization/Bearer 凭据被脱敏', () => {
+  const record = parseProcessLine('Authorization: Bearer sk-abc12345', {
+    service: 'gateway',
+    stream: 'stderr',
+  });
+  assert.match(record.message, /\[REDACTED\]/);
+  assert.ok(!record.message.includes('sk-abc12345'));
+});
+
+test('legacy 行 DATABASE_URL 连接串被脱敏', () => {
+  const record = parseProcessLine(
+    'DATABASE_URL=postgresql://educanvas:secret@127.0.0.1:5434/educanvas',
+    { service: 'worker', stream: 'stdout' },
+  );
+  assert.match(record.message, /DATABASE_URL=\[REDACTED\]/);
+  assert.ok(!record.message.includes('postgresql://'));
+  assert.ok(!record.message.includes('secret'));
+});
+
+test('legacy 行 URL 内嵌凭据被脱敏', () => {
+  const record = parseProcessLine(
+    'fetching https://user:pass@example.com/api',
+    {
+      service: 'web',
+      stream: 'stdout',
+    },
+  );
+  assert.match(record.message, /\/\/\[REDACTED\]@example\.com/);
+  assert.ok(!record.message.includes('user:pass'));
+});
+
+test('普通 legacy 文本不受影响（不误伤）', () => {
+  const record = parseProcessLine('Compiled successfully in 1.2s', {
+    service: 'web',
+    stream: 'stdout',
+  });
+  assert.equal(record.message, 'Compiled successfully in 1.2s');
+});

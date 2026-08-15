@@ -31,7 +31,7 @@ help:
 		'  make tui          启动所需服务并进入交互式 TUI' \
 		'  make pet          启动桌宠（先 make all，另开终端运行）' \
 		'  make status       查看 Database/Gateway/Web/Worker/Runtime 状态' \
-		'  make logs         查看当前运行会话日志（SERVICE/LEVEL/EVENT/OP/TRACE/JOB 可过滤）' \
+		'  make logs         查看当前运行会话日志（SERVICE/LEVEL/EVENT/OP/TRACE/JOB 可过滤；TAIL=100 只看最近 N 条；NO_FOLLOW=1 首屏后退出）' \
 		'  make logs-json    原始 JSONL 输出' \
 		'  make logs-errors  只显示 error/fatal' \
 		'  make stop         优雅停止当前 core 并停止数据库容器' \
@@ -45,7 +45,7 @@ help:
 		'  make db-logs      持续查看 PostgreSQL 日志' \
 		'' \
 		'可覆盖变量：PORT=3000 PLAYWRIGHT_PORT=3100 EDUCANVAS_POSTGRES_PORT=5435' \
-		'logs 过滤示例：make logs SERVICE=worker LEVEL=warn OP=<operation-id>'
+		'logs 过滤示例：make logs SERVICE=worker LEVEL=warn OP=<operation-id> TAIL=100'
 
 doctor:
 	@command -v node >/dev/null

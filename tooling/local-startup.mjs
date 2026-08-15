@@ -11,6 +11,13 @@
 
 import { cleanupStaleCore } from './local-core-cleanup.mjs';
 import { runMigrations, startDatabase } from './local-db.mjs';
+import { gatewayProbe, probe } from './local-health-probe.mjs';
+import {
+  killOwnedProcessTree,
+  pidAlive,
+  verifyRecordedProcesses,
+  workerRunning,
+} from './local-process-identity.mjs';
 import {
   buildFailure,
   printStartupSummary,
@@ -21,53 +28,18 @@ import {
   DEFAULT_LOGS_ROOT,
   pruneRuns,
   readLatest,
+  readRunMeta,
+  runDirectoryFor,
   updateRunState,
 } from './local-run-session.mjs';
 import { launchService } from './local-service-spawn.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function probe(url) {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function gatewayProbe(gatewayUrl) {
-  try {
-    const response = await fetch(`${gatewayUrl}/healthz`, {
-      signal: AbortSignal.timeout(1_000),
-    });
-    if (!response.ok) return false;
-    const body = await response.json();
-    return (
-      body?.service === 'educanvas-gateway' && body?.protocol === 'gateway.v1'
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** worker 是否在跑：latest run.json 状态 + 服务 pid 存活。 */
-export async function workerRunning() {
-  const latest = await readLatest(DEFAULT_LOGS_ROOT);
-  if (!latest || latest.state !== 'running') return false;
-  const workerState = latest.services?.worker;
-  if (!workerState || workerState.state !== 'ready') return false;
-  const pid = workerState.pid;
-  if (typeof pid !== 'number' || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-/** 检测已运行 core：full=可复用；partial=半个 core（需清理）；none。 */
+/** 检测已运行 core：full=可复用；partial=半个 core（含「只有 worker 存活」的
+ * 情况——单 latest.json 指针无法承载两个并发 core，任何组件存活都算残留，
+ * 需清理）；none。
+ */
 export async function detectExistingCore({ webUrl, gatewayUrl }) {
   const [gateway, web, worker] = await Promise.all([
     gatewayProbe(gatewayUrl),
@@ -75,7 +47,7 @@ export async function detectExistingCore({ webUrl, gatewayUrl }) {
     workerRunning(),
   ]);
   if (gateway && web && worker) return 'full';
-  if (gateway || web) return 'partial';
+  if (gateway || web || worker) return 'partial';
   return 'none';
 }
 
@@ -153,8 +125,7 @@ export async function runStartup({
     detail: `Node ${process.version.replace('v', '')} · Docker ready`,
   });
 
-  const session = await createRunSession({ webUrl, gatewayUrl });
-  process.env.EDUCANVAS_RUN_ID = session.runId;
+  let session = null;
   let services = null;
 
   try {
@@ -184,29 +155,25 @@ export async function runStartup({
           : `schema current · ${migration.durationMs}ms`,
     });
 
+    // 关键顺序：先基于「旧的 latest.json」探测已运行 core，再决定是否新建
+    // 会话。若先 createRunSession 覆盖 latest.json，worker 探测就永远读不到
+    // 旧会话的 worker 信息，第二次 make all 会被误判为 partial 并误清残留。
     const existing = await detectExistingCore({ webUrl, gatewayUrl });
-    if (existing === 'partial') {
-      out('[local] 检测到不完整的 core，自动清理残留进程…');
-      try {
-        const { killed } = await cleanupStaleCore([
-          gatewayPortOf(gatewayUrl),
-          webPortOf(webUrl),
-        ]);
-        if (killed > 0) out(`[local] 已停止 ${killed} 个残留进程`);
-        // 清理后重新探测：仍残留（无关进程占端口）则明确报错，不带着
-        // 端口冲突继续启动，也绝不误杀仓库外进程。
-        const after = await detectExistingCore({ webUrl, gatewayUrl });
-        if (after === 'partial') {
-          throw new Error(
-            `端口 ${gatewayPortOf(gatewayUrl)}/${webPortOf(webUrl)} 在清理后仍被占用；请手动结束占用端口的进程后重试`,
-          );
-        }
-      } catch (error) {
-        throw new Error(`残留进程清理失败：${error.message}`);
-      }
-    }
     if (existing === 'full') {
-      await updateRunState(session.directory, { state: 'running' });
+      // 复用旧会话：不新建 run directory，不覆盖 latest.json，runId 不变。
+      const latest = await readLatest(DEFAULT_LOGS_ROOT);
+      const directory = latest?.runId
+        ? runDirectoryFor(DEFAULT_LOGS_ROOT, latest.runId)
+        : null;
+      if (!latest || !directory) {
+        throw new Error('复用检测失败：latest.json 缺失或损坏');
+      }
+      session = {
+        runId: latest.runId,
+        directory,
+        meta: (await readRunMeta(directory)) ?? latest,
+      };
+      process.env.EDUCANVAS_RUN_ID = session.runId;
       out('[local] 复用已运行的 EduCanvas core（Web/Gateway/Worker 均已就绪）');
       stages.push({
         label: 'Gateway',
@@ -229,6 +196,30 @@ export async function runStartup({
       });
       return { session, services: null, stages };
     }
+    if (existing === 'partial') {
+      out('[local] 检测到不完整的 core，自动清理残留进程…');
+      try {
+        const { killed } = await cleanupStaleRuntime({
+          webUrl,
+          gatewayUrl,
+          out,
+        });
+        if (killed > 0) out(`[local] 已停止 ${killed} 个残留进程`);
+        // 清理后重新探测：仍残留（无关进程占端口或旧 Worker 未死）则明确
+        // 报错，不带着端口冲突继续启动，也绝不误杀仓库外进程。
+        const after = await detectExistingCore({ webUrl, gatewayUrl });
+        if (after === 'partial') {
+          throw new Error(
+            `端口 ${gatewayPortOf(gatewayUrl)}/${webPortOf(webUrl)} 在清理后仍被占用（或旧 Worker 仍存在）；请手动结束后重试`,
+          );
+        }
+      } catch (error) {
+        throw new Error(`残留进程清理失败：${error.message}`);
+      }
+    }
+    // none（或清理后）：此时才创建新会话，latest.json 才会被覆盖。
+    session = await createRunSession({ webUrl, gatewayUrl });
+    process.env.EDUCANVAS_RUN_ID = session.runId;
 
     services = launchCoreServices({ session, verbose, colorEnabled });
     await updateRunState(session.directory, {
@@ -312,11 +303,15 @@ export async function runStartup({
       );
       for (const service of Object.values(services)) service.close();
     }
-    await updateRunState(session.directory, {
-      state: 'failed',
-      stoppedAt: new Date().toISOString(),
-      exitReason: error instanceof Error ? error.message : String(error),
-    }).catch(() => undefined);
+    // session 可能在 createRunSession 之前就失败（数据库/迁移/清理），
+    // 此时没有 run directory 可写，直接走失败摘要。
+    if (session !== null) {
+      await updateRunState(session.directory, {
+        state: 'failed',
+        stoppedAt: new Date().toISOString(),
+        exitReason: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
+    }
     // 失败摘要走 stderr（错误路径），stdout 保持干净供管道消费。
     process.stderr.write(
       `${renderFailureSummary(
@@ -330,44 +325,52 @@ export async function runStartup({
   }
 }
 
-/**
- * 监视服务退出并更新 run.json 状态。返回 dispose：shutdown 时先取消，
- * 防止并发写 latest.json 与停止流程互相干扰（process.exit 会中断未完成
- * 的 writeFile，留下半写文件）。
- */
-export function monitorServiceExits(services, session) {
-  const active = new Set(Object.values(services));
-  const watchers = new Map();
-  for (const [name, service] of Object.entries(services)) {
-    const watcher = ({ code }) => {
-      if (!active.has(service)) return;
-      void (async () => {
-        const latest = await readLatest(DEFAULT_LOGS_ROOT);
-        await updateRunState(session.directory, {
-          services: {
-            ...(latest?.services ?? {}),
-            [name]: {
-              pid: service.child?.pid,
-              state: code === 0 ? 'stopped' : 'failed',
-            },
-          },
-        });
-      })();
-    };
-    service.exitPromise.then(watcher);
-    watchers.set(service, () => active.delete(service));
-  }
-  return () => {
-    for (const dispose of watchers.values()) dispose();
-  };
-}
-
 function gatewayPortOf(url) {
   return Number(new URL(url).port);
 }
 
 function webPortOf(url) {
   return Number(new URL(url).port);
+}
+
+/**
+ * 清理半个 core：先停旧会话 run.json 记录在案的进程（含 worker——worker
+ * 不监听端口，纯端口扫描找不到它，这正是「第二次 make all 残留旧 worker」
+ * 的根源），再按端口清 Gateway/Web 残留（pnpm/next 孙进程可能未随记录
+ * PID 退出）。返回 { killed }。
+ *
+ * 记录 PID 一律先做 ownership 验证（local-process-identity）：PID 可能被
+ * 操作系统复用，命令行不含 EduCanvas 特征或无法读取的一律跳过并提示，
+ * 绝不误杀无关进程。
+ */
+async function cleanupStaleRuntime({ webUrl, gatewayUrl, out = () => {} }) {
+  const killedPids = new Set();
+  const latest = await readLatest(DEFAULT_LOGS_ROOT);
+  if (latest?.runId) {
+    const meta = await readRunMeta(
+      runDirectoryFor(DEFAULT_LOGS_ROOT, latest.runId),
+    );
+    const { owned, skipped } = await verifyRecordedProcesses(meta);
+    for (const skip of skipped) {
+      if (skip.reason === 'unowned' || skip.reason === 'unknown') {
+        out(`[local] 跳过 PID ${skip.pid}：无法确认属于当前 EduCanvas runtime`);
+      }
+    }
+    for (const { pid } of owned) {
+      killedPids.add(pid);
+      await killOwnedProcessTree(pid, 'SIGTERM');
+    }
+    // 给优雅退出一点时间（旧 orchestrator 会顺带停自己的服务），未退出的强杀。
+    if (killedPids.size > 0) await sleep(1_500);
+    for (const pid of [...killedPids]) {
+      if (pidAlive(pid)) await killOwnedProcessTree(pid, 'SIGKILL');
+    }
+  }
+  const { killed: portKilled } = await cleanupStaleCore([
+    gatewayPortOf(gatewayUrl),
+    webPortOf(webUrl),
+  ]);
+  return { killed: killedPids.size + portKilled };
 }
 
 /** readiness 超时可注入（测试用）：EDUCANVAS_READY_TIMEOUT_MS。 */
