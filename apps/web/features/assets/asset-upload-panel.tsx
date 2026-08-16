@@ -9,6 +9,7 @@ import {
 import gsap from 'gsap';
 import { useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { toClientError } from '../canvas/resource-error';
 import { uploadWorkspaceSource } from './source-intake';
 import type { AssetItem } from './assets-drawer';
 
@@ -30,6 +31,11 @@ export const DOCUMENT_UPLOAD_ACCEPT = [
   '.pptx',
   '.xlsx',
 ].join(',');
+
+/** 上传错误只展示项目稳定文案；浏览器/扩展抛出的原生错误不得透传给用户。 */
+export function uploadErrorText(reason: unknown): string {
+  return toClientError(reason, '文件上传失败，请重试。').message;
+}
 
 export function AssetUploadPanel({
   kind,
@@ -148,9 +154,9 @@ export function AssetUploadPanel({
           void uploadWorkspaceSource({ file, scope, endpoint })
             .then(onUploaded)
             .catch((reason: unknown) => {
-              setError(
-                reason instanceof Error ? reason.message : '文件上传失败。',
-              );
+              /* 只展示项目稳定文案；浏览器/扩展抛出的原生错误（如
+                 SecurityError: illegal path）不得直接透传给用户。 */
+              setError(uploadErrorText(reason));
             })
             .finally(() => setBusy(false));
         }}
