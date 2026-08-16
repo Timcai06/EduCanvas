@@ -68,9 +68,10 @@ test('check 调用提取', () => {
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
   // M2/M3 新增 12 个纸面批注与私人案面 CHECK，总数从 237 → 249；
-  // ADR-0026 新增 2 个 quality 约束（249 → 251）。
+  // ADR-0026 新增 2 个 quality 约束（249 → 251）；
+  // DP08 新增 handoff target 形状 CHECK（251 → 252）。
   // 其中协议判别联合登记为 closed，坐标/长度/形状仍是开放格式约束。
-  assert.equal(loadSchemaCheckCalls().length, 251);
+  assert.equal(loadSchemaCheckCalls().length, 252);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
 });
@@ -92,10 +93,9 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
 });
 
 test('最新 migration 的 CREATE TABLE CHECK 与 schema 使用同一分类规则', () => {
-  // 0057 只新增 provenance sidecar 的键、唯一约束和索引，不新增 CHECK。
-  // 最新 migration 没有 CHECK 是合法结果；schema 全量闭集仍由上方断言审计。
+  // 0058 新增 handoff target 形状 CHECK（jsonb_typeof = 'object'，开放形状约束，
+  // 非成员闭集）；schema 全量闭集仍由上方断言审计。
   const checks = extractLatestMigrationChecks();
-  assert.equal(checks.length, 0);
   const closed = checks
     .filter((check) => isLiteralVocabularyClosure(check.body))
     .map((check) => check.name);
