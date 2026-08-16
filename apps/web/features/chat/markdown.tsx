@@ -5,7 +5,11 @@ import { CodeBlock, Play } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { isCitationAnchor, linkifyCitationMarkers } from './citation-links';
-import { mathRemarkPlugins, mathRehypePlugins } from './math-markdown';
+import {
+  mathRemarkPlugins,
+  mathRehypePlugins,
+  structuredReadingRehypePlugins,
+} from './math-markdown';
 
 export interface HtmlPreviewRequest {
   source: string;
@@ -13,7 +17,9 @@ export interface HtmlPreviewRequest {
 
 /**
  * 助手消息的 Markdown 渲染层。安全边界：
- * - 不引入 rehype-raw,原始 HTML 一律不渲染(react-markdown 默认跳过);
+ * - 默认不引入 rehype-raw,原始 HTML 一律不渲染(react-markdown 默认跳过);
+ * - allowRawHtml 仅由结构化阅读视图启用（ADR-0030）：rehype-raw 后必须
+ *   紧跟 rehype-sanitize 白名单清洗，只放行表格系列与基础排版；
  * - ```html 代码块不执行,而是渲染为"沙箱预览"产物卡,点击后由宿主决定
  *   在哪个面（Sheet/Canvas）里用 HtmlSandbox 执行——遵循 ADR-0004 Tier 2;
  * - 链接强制 rel="noreferrer" 新窗口打开,不携带 referrer。
@@ -23,12 +29,15 @@ export function MessageMarkdown({
   onPreviewHtml,
   citationMarkers,
   citationAnchorPrefix,
+  allowRawHtml = false,
 }: {
   text: string;
   onPreviewHtml?: (request: HtmlPreviewRequest) => void;
   /** 该消息已持久化引用的标记号集合;缺省表示不启用行内引用改写 */
   citationMarkers?: readonly number[];
   citationAnchorPrefix?: string;
+  /** ADR-0030：结构化阅读视图启用受控表格 HTML 渲染，其余调用方保持默认不渲染 */
+  allowRawHtml?: boolean;
 }) {
   const rendered =
     citationMarkers && citationMarkers.length > 0 && citationAnchorPrefix
@@ -42,7 +51,9 @@ export function MessageMarkdown({
     <div className="chat-prose min-w-0">
       <ReactMarkdown
         remarkPlugins={mathRemarkPlugins}
-        rehypePlugins={mathRehypePlugins}
+        rehypePlugins={
+          allowRawHtml ? structuredReadingRehypePlugins : mathRehypePlugins
+        }
         components={{
           a: ({ href, children }) => {
             if (isCitationAnchor(href)) {
