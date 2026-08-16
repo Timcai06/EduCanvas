@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createResultOpener } from '../src/main/result-opener';
+import {
+  createResultOpener,
+  mapDesktopTargetToGatewayTarget,
+} from '../src/main/result-opener';
 import type { StoredDesktopSession } from '../src/main/desktop-session-store';
 import { isDesktopResultTarget } from '../src/shared/result-action';
 
@@ -45,10 +48,81 @@ describe('desktop result opener', () => {
     });
 
     await expect(opener.open()).resolves.toEqual({ ok: true });
-    expect(issueHandoff).toHaveBeenCalledWith(session, 'conversation:one');
+    expect(issueHandoff).toHaveBeenCalledWith(
+      session,
+      'conversation:one',
+      null,
+    );
     expect(openExternal).toHaveBeenCalledWith(
       `https://learn.educanvas.example/open?token=${'x'.repeat(43)}`,
     );
+  });
+
+  it('sinks an artifact target into the one-time credential', async () => {
+    const openExternal = vi.fn(async () => undefined);
+    const issueHandoff = vi.fn(async () => ({ token: 'x'.repeat(43) }));
+    const opener = createResultOpener({
+      getSession: async () => session,
+      currentConversationId: () => 'conversation:one',
+      issueHandoff,
+      readImagePreview: vi.fn(),
+      openExternal,
+    });
+
+    const artifactId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await expect(
+      opener.open({
+        kind: 'artifact',
+        artifactId,
+        versionId: null,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(issueHandoff).toHaveBeenCalledWith(session, 'conversation:one', {
+      kind: 'artifact',
+      artifactId,
+      versionId: null,
+    });
+  });
+
+  it('maps asset and web targets to a source resource target', () => {
+    const assetId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    expect(
+      mapDesktopTargetToGatewayTarget({
+        kind: 'asset',
+        assetId,
+        assetVersionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      }),
+    ).toEqual({
+      kind: 'resource',
+      resourceKind: 'source',
+      resourceId: assetId,
+      versionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+    expect(
+      mapDesktopTargetToGatewayTarget({
+        kind: 'web',
+        assetId,
+        assetVersionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        url: 'https://example.edu/source',
+      }),
+    ).toEqual({
+      kind: 'resource',
+      resourceKind: 'source',
+      resourceId: assetId,
+      versionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+    // knowledge 与空 target 一律回落到 conversation 级（null）。
+    expect(
+      mapDesktopTargetToGatewayTarget({
+        kind: 'knowledge',
+        sourceId: 'source:1',
+        documentId: 'doc:1',
+        chunkId: 'chunk:1',
+        pageStart: null,
+        pageEnd: null,
+      }),
+    ).toBeNull();
+    expect(mapDesktopTargetToGatewayTarget(null)).toBeNull();
   });
 
   it('returns a bounded image data URL without exposing the storage location', async () => {

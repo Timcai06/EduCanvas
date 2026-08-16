@@ -6,6 +6,7 @@ import type {
 import { isDesktopResultTarget } from '../shared/result-action';
 import { GatewayClient } from '@educanvas/gateway-client';
 import type { GatewayImagePreview } from '@educanvas/gateway-client';
+import type { GatewayHandoffTarget } from '@educanvas/gateway-core';
 import type { DesktopResultTarget } from '../shared/chat-history';
 import type { IpcMain } from 'electron';
 
@@ -14,7 +15,33 @@ interface HandoffCredential {
 }
 
 /**
- * DP07 使用现有 Conversation handoff 打开 Web；DP08 再把已校验 target
+ * 把桌面受限资源目标映射为 gateway 一次性凭证目标（DP08）。
+ * - artifact → artifact target；
+ * - asset/web citation → resource(source) target（resourceId = assetId）；
+ * - knowledge → null（conversation 级：知识来源不是 Canvas 资源，切对话即可）。
+ */
+export function mapDesktopTargetToGatewayTarget(
+  target: DesktopResultTarget | null,
+): GatewayHandoffTarget | null {
+  if (!target) return null;
+  if (target.kind === 'artifact')
+    return {
+      kind: 'artifact',
+      artifactId: target.artifactId,
+      versionId: target.versionId,
+    };
+  if (target.kind === 'asset' || target.kind === 'web')
+    return {
+      kind: 'resource',
+      resourceKind: 'source',
+      resourceId: target.assetId,
+      versionId: target.assetVersionId,
+    };
+  return null;
+}
+
+/**
+ * DP07 使用现有 Conversation handoff 打开 Web；DP08 把已校验 target
  * 下沉到一次性凭证，实现 Message/Artifact/Resource 精确定位。
  */
 export function createResultOpener(options: {
@@ -23,6 +50,7 @@ export function createResultOpener(options: {
   issueHandoff(
     session: StoredDesktopSession,
     conversationId: string,
+    target: GatewayHandoffTarget | null,
   ): Promise<HandoffCredential>;
   readImagePreview(
     session: StoredDesktopSession,
@@ -32,14 +60,21 @@ export function createResultOpener(options: {
   openExternal(url: string): Promise<void>;
 }) {
   return {
-    async open(): Promise<DesktopOpenResult> {
+    async open(
+      target: DesktopResultTarget | null = null,
+    ): Promise<DesktopOpenResult> {
       const session = await options.getSession();
       const conversationId = options.currentConversationId();
       if (!session || !conversationId) {
         return { ok: false, message: '请先登录并选择一个对话。' };
       }
       try {
-        const credential = await options.issueHandoff(session, conversationId);
+        const gatewayTarget = mapDesktopTargetToGatewayTarget(target);
+        const credential = await options.issueHandoff(
+          session,
+          conversationId,
+          gatewayTarget,
+        );
         const url = new URL('/open', session.webBaseUrl);
         url.searchParams.set('token', credential.token);
         await options.openExternal(url.toString());
@@ -84,9 +119,10 @@ export function registerDesktopResultActions(options: {
 }): void {
   const opener = createResultOpener({
     ...options,
-    issueHandoff: (session, conversationId) =>
+    issueHandoff: (session, conversationId, target) =>
       new GatewayClient(session.gatewayBaseUrl, session.token).createHandoff(
         conversationId,
+        target ?? undefined,
       ),
     readImagePreview: (session, conversationId, target) =>
       new GatewayClient(session.gatewayBaseUrl, session.token).getImagePreview({
@@ -100,8 +136,8 @@ export function registerDesktopResultActions(options: {
       throw new Error('Untrusted renderer');
     if (!isDesktopResultTarget(target))
       throw new Error('Invalid result target');
-    // DP07 使用当前 Conversation handoff；DP08 把 target 下沉到凭证以精确定位。
-    return opener.open();
+    // DP08 把已校验 target 下沉到一次性凭证以精确定位；无效目标在边界即拒绝。
+    return opener.open(target);
   });
   options.ipcMain.handle('result:preview', async (event, target: unknown) => {
     if (!options.isDesktopSender(event.sender.id))

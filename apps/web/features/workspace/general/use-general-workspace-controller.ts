@@ -34,6 +34,7 @@ import {
 } from '@/features/voice/live-voice-bring-back';
 import { useNotebookSources } from './use-notebook-sources';
 import { useWorkspaceSurface } from './use-workspace-surface';
+import type { HomeFocusTarget } from './home-focus';
 import {
   isArtifactRevisionInProgress,
   selectAudioArtifactSources,
@@ -83,6 +84,8 @@ export function useGeneralWorkspaceController(options: {
   conversationId: string;
   notebookId: string;
   nickname?: string | null;
+  /** DP08 Web handoff 落点：`?focus=<kind>:<id>` 解析后的精确资源目标。 */
+  focusTarget?: HomeFocusTarget | null;
   composerDockRef: RefObject<HTMLDivElement | null>;
   scrollRef: RefObject<HTMLDivElement | null>;
   nearBottom: RefObject<boolean>;
@@ -92,6 +95,7 @@ export function useGeneralWorkspaceController(options: {
     conversationId,
     notebookId,
     nickname,
+    focusTarget,
     composerDockRef,
     scrollRef,
     nearBottom,
@@ -176,6 +180,28 @@ export function useGeneralWorkspaceController(options: {
     }
     prevOpenDetailRef.current = detail;
   }, [artifactFlow.openDetail, workspace]);
+
+  /* DP08 Web handoff 落点：mount 时按 `?focus=<kind>:<id>` 打开精确资源并清掉 URL
+     参数（ref 防 StrictMode 双发；openSource/openArtifact 是稳定 useCallback，只跑一次；
+     无效/过期 id 由 useStudioOpenActions 校验 + CanvasResourceOpenStatus 重试 UI 兜底）。 */
+  const focusFiredRef = useRef(false);
+  useEffect(() => {
+    if (!focusTarget || focusFiredRef.current) return;
+    focusFiredRef.current = true;
+    if (focusTarget.kind === 'source') {
+      studioOpenActions.actions.openSource(focusTarget.resourceId);
+    } else {
+      studioOpenActions.actions.openArtifact(focusTarget.resourceId);
+    }
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('focus')) {
+        url.searchParams.delete('focus');
+        window.history.replaceState(null, '', url.toString());
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTarget]);
 
   /* 生成完成/失败 toast：只在 generating→终态转换时通知一次，刷新页面不重放。
      本地取消（cancelled）不通知——任务仍在后台运行。 */
