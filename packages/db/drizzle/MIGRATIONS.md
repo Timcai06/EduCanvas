@@ -769,3 +769,24 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - 风险: 中——刻意不为两侧消息加级联 FK，否则删除一侧会抹掉 orphan/missing
   审计证据。匿名主体删除闭包显式先删 sidecar；日常一致性由双唯一键、原子写入
   与 parity/read fail-closed 共同保证。
+
+## 0058_black_iron_patriot.sql
+
+- 状态: active（DP08，2026-08-16）
+- 语义: `gateway_handoff_tokens` 新增可空 `target` jsonb 列，承载 DP08 精确 Web
+  handoff 的一次性资源目标（message/artifact/resource）；`kind:'conversation'`
+  归一化为 null，保持 DP07 仅切对话语义向后兼容。jsonb_typeof CHECK 约束该列
+  只能为 null 或对象，杜绝标量/数组写入。
+- 锁表: 仅 ALTER TABLE ADD COLUMN（nullable + 常量默认）与 ADD CONSTRAINT，
+  属 ACCESS EXCLUSIVE 元数据锁，不重写或扫描既有行；无触发器。
+- 回滚: 回滚应用后 target 列闲置为 null 即兼容；彻底回滚通过新 migration
+  drop 该列与 CHECK，不修改 0058。
+- N-1: 可空列带常量默认，旧应用插入不指定 target 依旧成功，读写均不受影响；
+  新应用在旧 schema 上因列缺失读不到 target（该字段本就是可选增强，消费端对
+  null 语义与无 target 一致，不感知）。
+- Fresh install: 可重放；新库直接从 schema 建列，insert 不携带 target 时取
+  默认 null。
+- Data migration: none——新列默认 null，无既有行需回填。
+- Estimated scale: 每条 handoff 凭证一行窄 jsonb，与凭证表同量级，可忽略。
+- 风险: 低——纯增量可空列；目标归属由 repository 在 issue 时服务端校验，列只
+  作审计/消费侧重验依据，不作为权限判断来源。

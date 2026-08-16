@@ -58,7 +58,11 @@ describeWithDatabase(
           trustedSubjectId: 'user:owner',
           now: new Date(now.getTime() + 2_000),
         }),
-      ).toEqual({ status: 'consumed', conversationId: conversation.id });
+      ).toEqual({
+        status: 'consumed',
+        conversationId: conversation.id,
+        target: null,
+      });
       expect(
         await handoffs.consume({
           tokenDigest: validDigest,
