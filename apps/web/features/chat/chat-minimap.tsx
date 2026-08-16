@@ -187,7 +187,7 @@ export function ChatMinimap({
       .querySelectorAll<HTMLElement>('[data-chat-message-id]')
       .forEach((anchor) => resizeObserver.observe(anchor));
     container.addEventListener('scroll', scheduleMeasure, { passive: true });
-    measure();
+    scheduleMeasure();
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
