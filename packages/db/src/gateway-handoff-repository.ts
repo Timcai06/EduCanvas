@@ -1,7 +1,16 @@
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { getDb } from './client';
 import { GatewayPersistenceError } from './gateway-repository';
-import { conversations, gatewayHandoffTokens } from './schema';
+import {
+  artifactVersions,
+  artifacts,
+  assetVersions,
+  assets,
+  conversationMessages,
+  conversations,
+  gatewayHandoffTokens,
+} from './schema';
+import type { GatewayHandoffTarget } from '@educanvas/gateway-core';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -11,7 +20,12 @@ export type GatewayHandoffRejectionReason =
 
 /** 原子消费结果；只有 `consumed` 分支允许调用方写客户端 Conversation 游标。 */
 export type GatewayHandoffConsumeResult =
-  | { status: 'consumed'; conversationId: string }
+  | {
+      status: 'consumed';
+      conversationId: string;
+      /** 精确资源目标（DP08）；null 表示仅切对话（DP07 语义）。 */
+      target: GatewayHandoffTarget | null;
+    }
   | { status: 'rejected'; reason: GatewayHandoffRejectionReason };
 
 /**
@@ -31,9 +45,10 @@ export class DrizzleGatewayHandoffRepository {
     conversationId: string;
     issuedAt: Date;
     expiresAt: Date;
+    target?: GatewayHandoffTarget;
   }): Promise<{ expiresAt: string }> {
     const [owned] = await this.database
-      .select({ id: conversations.id })
+      .select({ id: conversations.id, spaceId: conversations.spaceId })
       .from(conversations)
       .where(
         and(
@@ -50,14 +65,138 @@ export class DrizzleGatewayHandoffRepository {
       );
     }
 
+    const target =
+      input.target && input.target.kind !== 'conversation'
+        ? await this.assertTargetOwned({
+            target: input.target,
+            userId: input.userId,
+            spaceId: owned.spaceId,
+            conversationId: owned.id,
+          })
+        : null;
+
     await this.database.insert(gatewayHandoffTokens).values({
       tokenDigest: input.tokenDigest,
       userId: input.userId,
       conversationId: owned.id,
       issuedAt: input.issuedAt,
       expiresAt: input.expiresAt,
+      target,
     });
     return { expiresAt: input.expiresAt.toISOString() };
+  }
+
+  /**
+   * 校验资源目标属于该用户与 Conversation 所在空间。归属失败一律抛
+   * `forbidden`（与 conversation 检查一致），不向调用方区分具体原因。
+   */
+  private async assertTargetOwned(input: {
+    target: GatewayHandoffTarget;
+    userId: string;
+    spaceId: string;
+    conversationId: string;
+  }): Promise<GatewayHandoffTarget> {
+    const { target } = input;
+    if (target.kind === 'message') {
+      const [message] = await this.database
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.id, target.messageId),
+            eq(conversationMessages.conversationId, input.conversationId),
+          ),
+        )
+        .limit(1);
+      if (!message) {
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'Handoff target is not accessible',
+        );
+      }
+      return target;
+    }
+    if (target.kind === 'artifact') {
+      const [artifact] = await this.database
+        .select({ id: artifacts.id })
+        .from(artifacts)
+        .where(
+          and(
+            eq(artifacts.id, target.artifactId),
+            eq(artifacts.ownerSubjectId, input.userId),
+            eq(artifacts.spaceId, input.spaceId),
+          ),
+        )
+        .limit(1);
+      if (!artifact) {
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'Handoff target is not accessible',
+        );
+      }
+      if (target.versionId) {
+        const [version] = await this.database
+          .select({ id: artifactVersions.id })
+          .from(artifactVersions)
+          .where(
+            and(
+              eq(artifactVersions.id, target.versionId),
+              eq(artifactVersions.artifactId, target.artifactId),
+            ),
+          )
+          .limit(1);
+        if (!version) {
+          throw new GatewayPersistenceError(
+            'forbidden',
+            'Handoff target is not accessible',
+          );
+        }
+      }
+      return target;
+    }
+    // resource（source 或 artifact 两种 resourceKind 在此统一按空间归属校验）
+    if (target.kind !== 'resource') {
+      throw new GatewayPersistenceError(
+        'forbidden',
+        'Handoff target is not accessible',
+      );
+    }
+    const [asset] = await this.database
+      .select({ id: assets.id })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.id, target.resourceId),
+          eq(assets.ownerSubjectId, input.userId),
+          eq(assets.spaceId, input.spaceId),
+        ),
+      )
+      .limit(1);
+    if (!asset) {
+      throw new GatewayPersistenceError(
+        'forbidden',
+        'Handoff target is not accessible',
+      );
+    }
+    if (target.versionId) {
+      const [version] = await this.database
+        .select({ id: assetVersions.id })
+        .from(assetVersions)
+        .where(
+          and(
+            eq(assetVersions.id, target.versionId),
+            eq(assetVersions.assetId, target.resourceId),
+          ),
+        )
+        .limit(1);
+      if (!version) {
+        throw new GatewayPersistenceError(
+          'forbidden',
+          'Handoff target is not accessible',
+        );
+      }
+    }
+    return target;
   }
 
   async consume(input: {
@@ -77,9 +216,16 @@ export class DrizzleGatewayHandoffRepository {
           gt(gatewayHandoffTokens.expiresAt, now),
         ),
       )
-      .returning({ conversationId: gatewayHandoffTokens.conversationId });
+      .returning({
+        conversationId: gatewayHandoffTokens.conversationId,
+        target: gatewayHandoffTokens.target,
+      });
     if (consumed) {
-      return { status: 'consumed', conversationId: consumed.conversationId };
+      return {
+        status: 'consumed',
+        conversationId: consumed.conversationId,
+        target: consumed.target ?? null,
+      };
     }
 
     const [record] = await this.database
