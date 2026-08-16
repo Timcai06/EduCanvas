@@ -473,6 +473,7 @@ export async function handleClientRoutes(
         tokenDigest: createHash('sha256').update(token, 'utf8').digest('hex'),
         userId: identity.userId,
         conversationId: body.conversationId,
+        ...(body.target ? { target: body.target } : {}),
         issuedAt,
         expiresAt,
       });
