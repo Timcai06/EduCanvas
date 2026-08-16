@@ -133,7 +133,8 @@ export function ReadingViewSwitcher({
           </button>
         </div>
         <article className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
-          <MessageMarkdown text={readableMarkdown} />
+          {/* ADR-0030：派生表示含 MinerU 原生 HTML 表格，启用受控白名单渲染 */}
+          <MessageMarkdown text={readableMarkdown} allowRawHtml />
         </article>
       </div>
     );

@@ -55,6 +55,8 @@ Composer、Canvas 或 Agent 工具可表达以下输出偏好：
 - 报告、教案、笔记、学习总结和可导出文档使用 `document.markdown` Artifact。
 - Markdown 原文是可编辑的 canonical content；Renderer 将其解析为受信任组件，不执行
   `rehype-raw`、内联脚本、事件属性或任意网络资源。
+  - 受控例外：ADR-0026 派生表示的结构化阅读视图经 [ADR-0030](./0030-受控表格HTML渲染边界.md)
+    启用 rehype-raw + allowlist sanitizer，仅渲染白名单表格 HTML；聊天与笔记渲染不受影响。
 - Mermaid 等声明式图形必须经过预注册 Renderer 或服务端安全预渲染；不能借代码块降级
   主页面 CSP。
 
