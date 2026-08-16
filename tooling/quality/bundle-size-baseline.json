@@ -1,9 +1,9 @@
 {
-  "recordedAt": "2026-08-07",
-  "totalBytes": 4120016,
+  "recordedAt": "2026-08-16",
+  "totalBytes": 4711153,
   "entry": {
-    "path": "static\\chunks\\1lqtnek80e9qs.js",
-    "bytes": 875476
+    "path": "static\\chunks\\0rnq3yhpxarq7.js",
+    "bytes": 1035502
   },
   "routes": [
     {
@@ -30,6 +30,6 @@
   "buildEnvironment": {
     "platform": "linux",
     "arch": "x64",
-    "node": "v22.14.0"
+    "node": "v24.18.0"
   }
 }
