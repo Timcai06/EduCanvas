@@ -29,6 +29,16 @@ describe('MessageMarkdown 受控表格 HTML（ADR-0030）', () => {
     expect(html).not.toContain('alert');
   });
 
+  it('markdown 语法元素（标题/任务列表/链接）不被 sanitize 误删', () => {
+    const md = '# 网络编程讲义\n\n- [x] 已完成\n\n[链接](https://example.com)';
+    const html = renderToStaticMarkup(
+      <MessageMarkdown text={md} allowRawHtml />,
+    );
+    expect(html).toContain('<h1>网络编程讲义</h1>');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('href="https://example.com"');
+  });
+
   it('默认路径（allowRawHtml 缺省）仍不渲染 raw HTML', () => {
     const html = renderToStaticMarkup(<MessageMarkdown text={TABLE_HTML} />);
     // raw HTML 只以转义文本出现，绝不生成真实 <table> 元素

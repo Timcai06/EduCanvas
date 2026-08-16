@@ -2,7 +2,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Schema } from 'hast-util-sanitize';
 
 /**
@@ -21,42 +21,21 @@ export const mathRehypePlugins: any[] = [
 ];
 
 /**
- * ADR-0030 白名单：只放行表格系列与表格内基础排版，禁 script/style/iframe/
- * 事件属性与任意 URL 协议。仅结构化阅读视图经 structuredReadingRehypePlugins
- * 使用；聊天与笔记渲染维持不渲染 raw HTML 的既有边界。
+ * ADR-0030 白名单：以 GitHub 默认 schema 为基底（保 markdown 原生元素：
+ * 标题/链接/图片/列表等不被误删），仅补充表格展示属性，并显式整体剥离
+ * 脚本、样式、iframe、表单与媒体标签。sanitize 作用于整棵渲染树，因此
+ * 不能自建最小 tagNames——那会连 markdown 语法生成的元素一起删除。
+ * 仅结构化阅读视图经 structuredReadingRehypePlugins 使用；聊天与笔记
+ * 渲染维持不渲染 raw HTML 的既有边界。
  */
 export const tableAllowlistSchema: Schema = {
-  tagNames: [
-    'table',
-    'thead',
-    'tbody',
-    'tfoot',
-    'tr',
-    'th',
-    'td',
-    'caption',
-    'colgroup',
-    'col',
-    'p',
-    'br',
-    'strong',
-    'em',
-    'b',
-    'i',
-    'u',
-    's',
-    'del',
-    'ins',
-    'sub',
-    'sup',
-    'span',
-    'ul',
-    'ol',
-    'li',
-  ],
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'caption', 'colgroup', 'col'],
   attributes: {
+    ...(defaultSchema.attributes ?? {}),
     // 属性名遵循 hast camelCase（colspan → colSpan），与 rehype-sanitize 匹配
     table: [
+      ...((defaultSchema.attributes ?? {}).table ?? []),
       'align',
       'border',
       'cellPadding',
@@ -64,22 +43,37 @@ export const tableAllowlistSchema: Schema = {
       'width',
       'summary',
     ],
-    th: ['align', 'colSpan', 'rowSpan', 'scope', 'valign', 'width'],
-    td: ['align', 'colSpan', 'rowSpan', 'valign', 'width'],
+    th: [
+      ...((defaultSchema.attributes ?? {}).th ?? []),
+      'align',
+      'colSpan',
+      'rowSpan',
+      'scope',
+      'valign',
+      'width',
+    ],
+    td: [
+      ...((defaultSchema.attributes ?? {}).td ?? []),
+      'align',
+      'colSpan',
+      'rowSpan',
+      'valign',
+      'width',
+    ],
     col: ['align', 'span', 'width'],
     colgroup: ['align', 'span', 'width'],
   },
-  // 不放行任何 URL 协议；on* 事件属性不在 attributes 白名单内即被剥离。
-  protocols: {},
-  // 整体剥离（含内容），不留 unwrap 文本：脚本、样式、交互与媒体一律不放行。
+  // 整体剥离（含内容），不留 unwrap 文本：样式、iframe、交互表单与媒体
+  // 一律不放行。input 不在其中——GFM 任务列表的 disabled checkbox 是
+  // markdown 语法生成的合法元素，defaultSchema 已将其属性限制为
+  // type=checkbox + disabled。
   strip: [
-    'script',
+    ...(defaultSchema.strip ?? []),
     'style',
     'iframe',
     'object',
     'embed',
     'form',
-    'input',
     'button',
     'textarea',
     'select',
