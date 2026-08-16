@@ -24,6 +24,7 @@ import {
   type GatewayConnectionProvider,
   type GatewayConnectionRevokeResult,
   type GatewayHandoffCredential,
+  type GatewayHandoffTarget,
   type GatewayMessageHistoryEntry,
   type GatewayMessageHistoryPage,
   type GatewayOperationEvent,
@@ -426,12 +427,17 @@ export class GatewayClient {
 
   /**
    * 为当前主体拥有的 Conversation 请求短期一次性 Web 交接凭证。
+   * `target` 可选：缺省为 conversation 级（DP07 语义）；携带时把精确资源
+   * 目标（message/artifact/resource）下沉到凭证，服务端在 issue 时重验归属。
    * 返回值只能立即用于 `/open?token=...`，不得缓存为身份或长期深链。
    */
   async createHandoff(
     conversationId: string,
+    target?: GatewayHandoffTarget,
   ): Promise<GatewayHandoffCredential> {
-    const body = gatewayHandoffIssueRequestSchema.parse({ conversationId });
+    const body = gatewayHandoffIssueRequestSchema.parse(
+      target ? { conversationId, target } : { conversationId },
+    );
     const response = await this.fetcher(`${this.baseUrl}/v1/client/handoffs`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },

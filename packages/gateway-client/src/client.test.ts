@@ -308,6 +308,39 @@ describe('GatewayClient', () => {
     expect(JSON.parse(seenBody)).toEqual({ conversationId: 'conversation:1' });
   });
 
+  it('sinks a precise handoff target into the issue body', async () => {
+    let seenUrl = '';
+    let seenBody = '';
+    const fetcher: typeof fetch = async (input, init) => {
+      seenUrl = String(input);
+      seenBody = String(init?.body ?? '');
+      return Response.json(
+        {
+          token: 'h'.repeat(43),
+          expiresAt: '2026-07-21T08:02:00.000Z',
+        },
+        { status: 201 },
+      );
+    };
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      fetcher,
+    );
+    const artifactId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await client.createHandoff('conversation:1', {
+      kind: 'artifact',
+      artifactId,
+      versionId: null,
+    });
+    expect(seenUrl).toBe('http://127.0.0.1:3200/v1/client/handoffs');
+    expect(seenUrl).not.toContain(artifactId);
+    expect(JSON.parse(seenBody)).toEqual({
+      conversationId: 'conversation:1',
+      target: { kind: 'artifact', artifactId, versionId: null },
+    });
+  });
+
   it('manages provider-neutral connections through authenticated client routes', async () => {
     const seen: string[] = [];
     const connection = {

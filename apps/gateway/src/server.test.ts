@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import {
   gatewayDesktopCapabilityManifest,
   gatewayProtocolVersion,
+  type GatewayHandoffTarget,
   type GatewayInboundEnvelope,
 } from '@educanvas/gateway-core';
 import {
@@ -430,6 +431,7 @@ describe('Gateway HTTP composition root', () => {
       userId: string;
       conversationId: string;
       tokenDigest: string;
+      target?: GatewayHandoffTarget;
     }> = [];
     const connectionActors: string[] = [];
     const connection = {
@@ -588,6 +590,36 @@ describe('Gateway HTTP composition root', () => {
         tokenDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
     ]);
+    const artifactId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const targetedHandoff = await fetch(`${base}/v1/client/handoffs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        conversationId: 'conversation:1',
+        target: { kind: 'artifact', artifactId, versionId: null },
+      }),
+    });
+    expect(targetedHandoff.status).toBe(201);
+    expect(issuedHandoffs.at(-1)).toMatchObject({
+      userId: 'user:1',
+      conversationId: 'conversation:1',
+      target: { kind: 'artifact', artifactId, versionId: null },
+    });
+    const badTarget = await fetch(`${base}/v1/client/handoffs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        conversationId: 'conversation:1',
+        target: { kind: 'artifact', artifactId: 'not-a-uuid', versionId: null },
+      }),
+    });
+    expect(badTarget.status).toBe(400);
     const listedConnections = await fetch(`${base}/v1/client/connections`, {
       headers: { authorization: `Bearer ${session.token}` },
     });
