@@ -7,6 +7,7 @@ export type TurnResult =
       ok: true;
       action: string;
       message: string;
+      assistantMessageId?: string;
       artifactId?: string;
       panel?: string;
     }

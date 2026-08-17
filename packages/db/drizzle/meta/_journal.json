@@ -414,6 +414,13 @@
       "when": 1786935370474,
       "tag": "0058_overrated_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1786956895598,
+      "tag": "0059_clumsy_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

@@ -6,10 +6,14 @@ import type {
 import type { PetUiState } from './pet-visual-state';
 import { ExpandIcon, MicIcon, SpeakerIcon } from './pet-view';
 import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
+import type { DesktopResultTarget } from '../../shared/chat-history';
+import { MessageResultCards } from './message-result-cards';
+import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 
 export function PetChatPanel(props: {
   expandedView: boolean;
   state: PetUiState;
+  authState: DesktopAuthStatus['state'] | 'checking';
   message: string;
   history: DesktopChatHistorySnapshot;
   historyEndRef: RefObject<HTMLDivElement | null>;
@@ -17,11 +21,14 @@ export function PetChatPanel(props: {
   busy: boolean;
   canStop: boolean;
   lastAssistantReply: string;
+  speakingMessageId: string | null;
   setText(value: string): void;
   collapse(): void;
   submit(): Promise<void>;
+  signIn(): Promise<void>;
   startVoice(): Promise<void>;
   speakLatest(): Promise<void>;
+  speakMessage(messageId: string, text: string): Promise<void>;
   cancel(): void;
   resume(): Promise<void>;
   canResume: boolean;
@@ -31,10 +38,12 @@ export function PetChatPanel(props: {
     notebookId: string | undefined,
     title: string,
   ): Promise<void>;
+  openResult(target: DesktopResultTarget): Promise<void> | void;
 }) {
   const {
     expandedView,
     state,
+    authState,
     message,
     history,
     historyEndRef,
@@ -42,17 +51,21 @@ export function PetChatPanel(props: {
     busy,
     canStop,
     lastAssistantReply,
+    speakingMessageId,
     setText,
     collapse,
     submit,
+    signIn,
     startVoice,
     speakLatest,
+    speakMessage,
     cancel,
     resume,
     canResume,
     directory,
     selectConversation,
     createConversation,
+    openResult,
   } = props;
   const [creating, setCreating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -148,10 +161,39 @@ export function PetChatPanel(props: {
                   ? 'EduCanvas'
                   : '提示'}
             </span>
+            {item.role === 'user' && item.source === 'voice' && (
+              <small className="chat-message__source">语音输入</small>
+            )}
             <p>
               {item.content}
               {item.status === 'streaming' ? '▍' : ''}
             </p>
+            {item.role === 'assistant' &&
+              item.status === 'completed' &&
+              item.content.trim() &&
+              (() => {
+                const selected =
+                  state === 'speaking' && speakingMessageId === item.id;
+                return (
+                  <button
+                    className={`chat-message__speak${selected ? ' is-active' : ''}`}
+                    type="button"
+                    aria-label={selected ? '停止朗读' : '朗读此回答'}
+                    title={selected ? '停止朗读' : '朗读此回答'}
+                    disabled={busy && !selected}
+                    onClick={() =>
+                      selected
+                        ? cancel()
+                        : void speakMessage(item.id, item.content)
+                    }
+                  >
+                    <SpeakerIcon />
+                  </button>
+                );
+              })()}
+            {item.role === 'assistant' && (
+              <MessageResultCards message={item} openResult={openResult} />
+            )}
           </article>
         ))
       )}
@@ -242,6 +284,31 @@ export function PetChatPanel(props: {
       </div>
     </form>
   );
+
+  const authGate = (
+    <div className="pet-chat__auth-gate">
+      <button
+        className="send-action pet-chat__login"
+        type="button"
+        disabled={authState === 'authorizing'}
+        onClick={() => void signIn()}
+      >
+        {authState === 'authorizing' ? '登录中…' : '请先登录'}
+      </button>
+    </div>
+  );
+
+  const authControl =
+    authState === 'checking' ? (
+      <div
+        className="pet-chat__auth-gate"
+        role="status"
+        aria-label="正在检查登录状态"
+        aria-busy="true"
+      />
+    ) : (
+      authGate
+    );
 
   const sidebar = expandedView ? (
     <aside
@@ -347,7 +414,7 @@ export function PetChatPanel(props: {
       )}
       {historyList}
       {statusLine}
-      {composer}
+      {authState === 'signed_in' ? composer : authControl}
     </>
   );
 

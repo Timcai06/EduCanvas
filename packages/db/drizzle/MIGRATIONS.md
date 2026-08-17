@@ -788,3 +788,22 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
   生产规模尚未验证。
 - 风险: 低——新增叶子表，不改变既有状态机；URL 和文本长度由 CHECK 与仓储双重约束，
   跨空间读取仍先校验 Notebook 权限。
+
+## 0059_clumsy_lady_bullseye.sql
+
+- 状态: active（DP08，2026-08-17）
+- 语义: 为 `gateway_handoff_tokens` 新增可空 `target` jsonb 列，承载一次性精确
+  Web handoff 的 message、artifact 或 resource 目标；开放形状 CHECK 只允许 null
+  或对象，具体目标仍由服务端契约解析与归属校验。
+- 锁表: `ALTER TABLE ADD COLUMN` 与 `ADD CONSTRAINT` 获取短时 ACCESS EXCLUSIVE
+  元数据锁；列可空且默认 null，不回写历史凭证。
+- 回滚: 先回滚应用到不读取 target 的版本，再由后续 migration 删除 CHECK 与列；
+  不修改或删除已消费、过期及未消费的 handoff 审计事实。
+- N-1: 旧应用不写 target 时继续得到 null；新应用把 null 解释为原有的对话级 handoff，
+  因此滚动部署期间保持向后兼容。
+- Fresh install: 可重放；0058 网页快照先建立，0059 再增量扩展 handoff 表。
+- Data migration: none——历史凭证保持 null，不从消息或资源记录反推目标。
+- Estimated scale: 每条新 handoff 凭证至多一个窄 jsonb 对象，与凭证表行数线性增长；
+  生产规模尚未验证。
+- 风险: 低——数据库只约束 JSON 顶层形状；issue/consume 路径仍按用户、空间、会话
+  与资源归属 fail closed，浏览器不能伪造服务端授权目标。

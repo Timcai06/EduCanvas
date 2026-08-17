@@ -26,14 +26,21 @@ vi.mock('@/server/http/request-security', async (importOriginal) => ({
 
 import { POST } from './route';
 
-function request(text = '答案是四。', signal?: AbortSignal): Request {
+function request(
+  text = '答案是四。',
+  signal?: AbortSignal,
+  assistantMessageId?: string,
+): Request {
   return new Request('http://localhost/api/v1/voice/speech', {
     method: 'POST',
     headers: {
       origin: 'http://localhost',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      ...(assistantMessageId ? { assistantMessageId } : {}),
+    }),
     signal,
   });
 }
@@ -62,6 +69,17 @@ describe('POST /api/v1/voice/speech', () => {
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(
       Uint8Array.from([0x49, 0x44, 0x33, 0x04]),
+    );
+  });
+
+  it('将 canonical assistant message 绑定到 TTS 请求', async () => {
+    const response = await POST(
+      request('请朗读答案', undefined, 'message:assistant:one'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.generateSpeech).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: 'message:assistant:one' }),
     );
   });
 

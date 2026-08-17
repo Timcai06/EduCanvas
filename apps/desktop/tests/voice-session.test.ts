@@ -21,6 +21,7 @@ function successfulDependencies(
       ok: true as const,
       action: 'none',
       message: '好的，我来帮你整理。',
+      assistantMessageId: 'message:assistant:one',
     })),
     synthesize: vi.fn(async () => ({
       ok: true as const,
@@ -39,8 +40,9 @@ describe('runVoiceSession', () => {
     const phases: string[] = [];
     const transcripts: string[] = [];
     const replies: string[] = [];
+    const deps = successfulDependencies();
 
-    const result = await runVoiceSession(successfulDependencies(), {
+    const result = await runVoiceSession(deps, {
       signal: new AbortController().signal,
       onChange(snapshot) {
         phases.push(snapshot.phase);
@@ -53,6 +55,7 @@ describe('runVoiceSession', () => {
       outcome: 'success',
       transcript: '整理今天的数学笔记',
       reply: '好的，我来帮你整理。',
+      assistantMessageId: 'message:assistant:one',
       speechPlayed: true,
     });
     expect(phases).toEqual([
@@ -65,6 +68,11 @@ describe('runVoiceSession', () => {
     ]);
     expect(transcripts).toContain('整理今天的数学笔记');
     expect(replies).toContain('好的，我来帮你整理。');
+    expect(deps.synthesize).toHaveBeenCalledWith(
+      '好的，我来帮你整理。',
+      expect.any(String),
+      'message:assistant:one',
+    );
   });
 
   it('TTS 失败时保留回复字幕并以降级成功结束', async () => {

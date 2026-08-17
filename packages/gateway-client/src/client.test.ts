@@ -105,6 +105,40 @@ describe('GatewayClient', () => {
     expect(seenUrl).toContain('/operations/operation-1/cancel');
   });
 
+  it('reads an image preview through the bearer session without exposing its token in the URL', async () => {
+    let seenUrl = '';
+    let seenHeaders: HeadersInit | undefined;
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input, init) => {
+        seenUrl = String(input);
+        seenHeaders = init?.headers;
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+    );
+
+    await expect(
+      client.getImagePreview({
+        conversationId: 'conversation:one',
+        assetId: 'asset:one',
+        assetVersionId: 'version:one',
+      }),
+    ).resolves.toEqual({
+      mimeType: 'image/png',
+      bytes: Uint8Array.from([137, 80, 78, 71]),
+    });
+    expect(seenUrl).toContain(
+      '/conversations/conversation%3Aone/assets/asset%3Aone/versions/version%3Aone/image-preview',
+    );
+    expect(seenUrl).not.toContain('t'.repeat(32));
+    expect(seenHeaders).toMatchObject({
+      authorization: `Bearer ${'t'.repeat(32)}`,
+    });
+  });
+
   it('lists recent operations for the session', async () => {
     const fetcher: typeof fetch = async () =>
       Response.json({
@@ -272,6 +306,39 @@ describe('GatewayClient', () => {
     expect(seenUrl).not.toContain('conversation:1');
     expect(seenUrl).not.toContain('t'.repeat(32));
     expect(JSON.parse(seenBody)).toEqual({ conversationId: 'conversation:1' });
+  });
+
+  it('sinks a precise handoff target into the issue body', async () => {
+    let seenUrl = '';
+    let seenBody = '';
+    const fetcher: typeof fetch = async (input, init) => {
+      seenUrl = String(input);
+      seenBody = String(init?.body ?? '');
+      return Response.json(
+        {
+          token: 'h'.repeat(43),
+          expiresAt: '2026-07-21T08:02:00.000Z',
+        },
+        { status: 201 },
+      );
+    };
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      fetcher,
+    );
+    const artifactId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await client.createHandoff('conversation:1', {
+      kind: 'artifact',
+      artifactId,
+      versionId: null,
+    });
+    expect(seenUrl).toBe('http://127.0.0.1:3200/v1/client/handoffs');
+    expect(seenUrl).not.toContain(artifactId);
+    expect(JSON.parse(seenBody)).toEqual({
+      conversationId: 'conversation:1',
+      target: { kind: 'artifact', artifactId, versionId: null },
+    });
   });
 
   it('manages provider-neutral connections through authenticated client routes', async () => {

@@ -17,7 +17,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const requestSchema = z
-  .object({ text: z.string().trim().min(1).max(3_500) })
+  .object({
+    text: z.string().trim().min(1).max(3_500),
+    assistantMessageId: z.string().min(1).max(200).optional(),
+  })
   .strict();
 
 export async function POST(request: Request): Promise<Response> {
@@ -53,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
       format: 'mp3',
       promptVersion: 'desktop.voice.reply.v1',
       traceId: randomUUID(),
-      operationId: randomUUID(),
+      operationId: parsed.data.assistantMessageId ?? randomUUID(),
       signal: request.signal,
     });
     return new Response(result.bytes.slice().buffer, {

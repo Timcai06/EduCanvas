@@ -20,6 +20,7 @@ import { isCreatableArtifactKind } from '@/features/canvas/artifact-client';
 import { deriveDeskAgentPresence } from './desk-agent-phase';
 import { DeskInkstoneIndicator } from './desk-inkstone-indicator';
 import { ToastViewport } from '@/components/ui/toast';
+import type { HomeFocusTarget } from './home-focus';
 
 gsap.registerPlugin(useGSAP, Flip);
 
@@ -37,12 +38,15 @@ export function GeneralChatWorkspace({
   notebookId,
   notebookTitle,
   nickname,
+  focusTarget,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
   notebookId: string;
   notebookTitle: string | null;
   nickname?: string | null;
+  /** DP08 Web handoff 落点：`?focus=<kind>:<id>` 解析后的精确资源目标。 */
+  focusTarget?: HomeFocusTarget | null;
 }) {
   const composerDockRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,6 +57,7 @@ export function GeneralChatWorkspace({
     conversationId,
     notebookId,
     nickname,
+    focusTarget,
     composerDockRef,
     scrollRef,
     nearBottom,

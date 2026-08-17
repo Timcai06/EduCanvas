@@ -21,6 +21,8 @@ export type {
 import type { PlatformTurnSettlementSnapshot } from './platform-turn-settlement-repository';
 import {
   agentOperations,
+  agentMessageParts,
+  assets,
   assetVersions,
   conversationMessageCitations,
   conversationMessages,
@@ -766,5 +768,57 @@ export class DrizzlePlatformTurnRepository {
             }
           : null,
     };
+  }
+
+  /**
+   * 仅从当前主体可读 Conversation 的 canonical Message Part 找到图片对象。
+   * 未直接按 asset id 读取，避免桌面预览端点成为跨会话资源枚举入口。
+   */
+  async findOwnedImagePreview(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    assetId: string;
+    assetVersionId: string;
+  }): Promise<{
+    storageKey: string;
+    mimeType: string;
+    byteSize: number;
+  } | null> {
+    await requireConversationAccess(
+      this.database,
+      input.conversationId,
+      input.trustedSubjectId,
+      'notebook.read',
+    );
+    const [row] = await this.database
+      .select({
+        storageKey: assetVersions.storageKey,
+        mimeType: assetVersions.mimeType,
+        byteSize: assetVersions.byteSize,
+      })
+      .from(conversationMessages)
+      .innerJoin(
+        agentMessageParts,
+        eq(agentMessageParts.messageId, conversationMessages.id),
+      )
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, agentMessageParts.assetVersionId),
+      )
+      .innerJoin(assets, eq(assets.id, assetVersions.assetId))
+      .where(
+        and(
+          eq(conversationMessages.conversationId, input.conversationId),
+          eq(agentMessageParts.partType, 'asset_ref'),
+          eq(agentMessageParts.assetId, input.assetId),
+          eq(agentMessageParts.assetVersionId, input.assetVersionId),
+          eq(assetVersions.assetId, input.assetId),
+          eq(assetVersions.kind, 'image'),
+          eq(assetVersions.status, 'ready'),
+          eq(assets.status, 'ready'),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 }

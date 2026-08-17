@@ -1,0 +1,2 @@
+ALTER TABLE "gateway_handoff_tokens" ADD COLUMN "target" jsonb DEFAULT null;--> statement-breakpoint
+ALTER TABLE "gateway_handoff_tokens" ADD CONSTRAINT "gateway_handoff_tokens_target_shape_check" CHECK ("gateway_handoff_tokens"."target" is null or jsonb_typeof("gateway_handoff_tokens"."target") = 'object');

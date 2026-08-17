@@ -13,11 +13,7 @@ import { PetChatPanel } from './pet-chat-panel';
 import { recordVoice } from './voice-recorder';
 import { playSpeech } from './speech-player';
 import { bindVoiceTurn, runVoiceSession } from './voice-session';
-import {
-  isBusyState,
-  latestAssistantReply,
-  voiceSnapshotState,
-} from './voice-view-state';
+import { isBusyState, voiceSnapshotState } from './voice-view-state';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 import type {
   DesktopChatHistorySnapshot,
@@ -26,6 +22,7 @@ import type {
 import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
 import { applyAssistantProjection } from './assistant-stream';
 import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
+import { openDesktopResult } from './result-actions';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -36,6 +33,9 @@ export default function App({
   const [chatCollapsed, setChatCollapsed] = useState(initialChatCollapsed);
   const [state, setState] = useState<PetUiState>('ready');
   const [visualState, setVisualState] = useState<PetUiState>('greeting');
+  const [authState, setAuthState] = useState<
+    DesktopAuthStatus['state'] | 'checking'
+  >('checking');
   const [message, setMessage] = useState(
     '你好，我在这里。输入一句话和我聊聊吧。',
   );
@@ -57,6 +57,9 @@ export default function App({
     });
   const [pendingResume, setPendingResume] = useState<string | null>(null);
   const [canStop, setCanStop] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
+    null,
+  );
   const requestIdRef = useRef<string | null>(null);
   const historyRef = useRef<DesktopChatHistorySnapshot>(history);
   const operationLeaseRef = useRef<string | null>(null);
@@ -66,7 +69,10 @@ export default function App({
   const historyEndRef = useRef<HTMLDivElement | null>(null);
   const petVisual = petVisualForState(visualState);
   const petAsset = PET_VISUALS[petVisual];
-  const lastAssistantReply = latestAssistantReply(history);
+  const lastAssistantMessage = history.messages.findLast(
+    (item) => item.role === 'assistant',
+  );
+  const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
 
   const publishVisual = (next: PetUiState): void => {
@@ -136,12 +142,9 @@ export default function App({
       if (projection.type === 'tool') {
         setMessage(
           projection.status === 'started'
-            ? projection.tool
-              ? `正在使用工具 ${projection.tool}…`
-              : '正在使用工具…'
+            ? (projection.summary ?? '正在处理学习任务')
             : 'EduCanvas 正在回复…',
         );
-        return;
       }
       if (projection.type === 'final') setCanStop(false);
       setHistory((current) => {
@@ -168,7 +171,8 @@ export default function App({
   );
 
   useEffect(() => {
-    const unsubscribe = window.desktopAuth.onStatus((status) => {
+    const accept = (status: DesktopAuthStatus): void => {
+      setAuthState(status.state);
       const previousAuthState = authStateRef.current;
       authStateRef.current = status.state;
       if (status.state === 'signed_in') {
@@ -184,7 +188,9 @@ export default function App({
         publishVisual('auth-failed');
         setMessage(status.message);
       }
-    });
+    };
+    const unsubscribe = window.desktopAuth.onStatus(accept);
+    void window.desktopAuth.getStatus().then(accept);
     return () => {
       unsubscribe();
     };
@@ -211,11 +217,15 @@ export default function App({
 
   const requireAuth = async (): Promise<boolean> => {
     const auth = await window.desktopAuth.getStatus();
+    setAuthState(auth.state);
     if (auth.state === 'signed_in') return true;
     setState('authorizing');
     publishVisual('authorizing');
     setMessage('请在浏览器完成登录与授权，然后回到这里继续。');
-    if (auth.state !== 'authorizing') await window.desktopAuth.signIn();
+    if (auth.state !== 'authorizing') {
+      const next = await window.desktopAuth.signIn();
+      setAuthState(next.state);
+    }
     return false;
   };
 
@@ -308,8 +318,8 @@ export default function App({
     }
     const controller = new AbortController();
     operationControllerRef.current = controller;
-    const voiceId = `desktop:${crypto.randomUUID()}`;
-    let transcriptAdded = false;
+    setCanStop(true);
+    const voiceId = `desktop:voice:${crypto.randomUUID()}`;
     let terminalState: PetUiState = 'ready';
     try {
       const result = await runVoiceSession(
@@ -317,7 +327,8 @@ export default function App({
           record: recordVoice,
           transcribe: window.desktopVoice.transcribe,
           turn: bindVoiceTurn(window.desktopAssistant.turn, voiceId),
-          synthesize: window.desktopVoice.synthesize,
+          synthesize: (text, requestId, assistantMessageId) =>
+            window.desktopVoice.synthesize(text, requestId, assistantMessageId),
           play: (bytes, signal) => playSpeech(bytes, { signal }),
           cancelRemote: (requestId) => {
             window.desktopVoice.cancel(requestId);
@@ -332,10 +343,6 @@ export default function App({
             if (snapshot.phase === 'error') terminalState = nextState;
             setState(nextState);
             publishVisual(nextState);
-            if (snapshot.transcript && !transcriptAdded) {
-              transcriptAdded = true;
-              void appendHistory('user', snapshot.transcript, 'voice', voiceId);
-            }
             if (snapshot.error) setMessage(snapshot.error);
             else if (snapshot.notice) setMessage(snapshot.notice);
             else if (snapshot.phase === 'listening')
@@ -349,13 +356,15 @@ export default function App({
           },
         },
       );
-      if (result.outcome === 'success') setMessage(result.reply);
-      else if (result.outcome === 'cancelled')
+      if (result.outcome === 'success') {
+        if (result.speechPlayed) setMessage(result.reply);
+      } else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
       else if (result.code === 'interrupted') setPendingResume(voiceId);
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
+      setCanStop(false);
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);
@@ -363,8 +372,11 @@ export default function App({
     }
   };
 
-  const speakLatest = async (): Promise<void> => {
-    if (!lastAssistantReply) return;
+  const speakMessage = async (
+    assistantMessageId: string,
+    reply: string,
+  ): Promise<void> => {
+    if (!reply.trim()) return;
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     if (!(await requireAuth())) {
@@ -380,14 +392,17 @@ export default function App({
     operationControllerRef.current = controller;
     const requestId = crypto.randomUUID();
     requestIdRef.current = requestId;
+    setSpeakingMessageId(assistantMessageId);
+    setCanStop(true);
     let terminalState: PetUiState = 'ready';
     setState('speaking');
     publishVisual('speaking');
-    setMessage(lastAssistantReply);
+    setMessage(reply);
     try {
       const speech = await window.desktopVoice.synthesize(
-        lastAssistantReply,
+        reply,
         requestId,
+        assistantMessageId,
       );
       requestIdRef.current = null;
       if (!speech.ok) {
@@ -407,11 +422,20 @@ export default function App({
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
+      setCanStop(false);
+      setSpeakingMessageId((current) =>
+        current === assistantMessageId ? null : current,
+      );
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
     }
+  };
+
+  const speakLatest = async (): Promise<void> => {
+    if (!lastAssistantMessage) return;
+    await speakMessage(lastAssistantMessage.id, lastAssistantMessage.content);
   };
 
   const cancel = (): void => {
@@ -426,6 +450,7 @@ export default function App({
     requestIdRef.current = null;
     setPendingResume(null);
     setCanStop(false);
+    setSpeakingMessageId(null);
     setState('ready');
     publishVisual('ready');
     setMessage('已停止。你可以继续输入。');
@@ -468,6 +493,7 @@ export default function App({
     <PetChatPanel
       expandedView={expandedView}
       state={state}
+      authState={authState}
       message={message}
       history={history}
       historyEndRef={historyEndRef}
@@ -475,11 +501,16 @@ export default function App({
       busy={busy}
       canStop={canStop}
       lastAssistantReply={lastAssistantReply}
+      speakingMessageId={speakingMessageId}
       setText={setText}
       collapse={() => setChatCollapsed(true)}
       submit={submit}
+      signIn={async () => {
+        await requireAuth();
+      }}
       startVoice={startVoice}
       speakLatest={speakLatest}
+      speakMessage={speakMessage}
       cancel={cancel}
       resume={resumePending}
       canResume={pendingResume !== null}
@@ -497,6 +528,7 @@ export default function App({
         setDirectory(next);
         setMessage(next.error ?? '新对话已创建。');
       }}
+      openResult={(target) => openDesktopResult(target).then(setMessage)}
     />
   );
 

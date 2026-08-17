@@ -76,7 +76,12 @@ describe('toAssistantProjection', () => {
         event(3, { type: 'tool.started', toolCallId: 't:1', tool: 'search' }),
         CONTEXT,
       ),
-    ).toMatchObject({ type: 'tool', tool: 'search', status: 'started' });
+    ).toMatchObject({
+      type: 'tool',
+      toolCallId: 't:1',
+      summary: '正在查找相关资料',
+      status: 'started',
+    });
     expect(
       toAssistantProjection(
         event(4, {
@@ -86,7 +91,12 @@ describe('toAssistantProjection', () => {
         }),
         CONTEXT,
       ),
-    ).toMatchObject({ type: 'tool', status: 'completed' });
+    ).toMatchObject({
+      type: 'tool',
+      toolCallId: 't:1',
+      summary: null,
+      status: 'completed',
+    });
     expect(
       toAssistantProjection(
         event(5, {
@@ -97,7 +107,12 @@ describe('toAssistantProjection', () => {
         }),
         CONTEXT,
       ),
-    ).toMatchObject({ type: 'tool', status: 'failed' });
+    ).toMatchObject({
+      type: 'tool',
+      toolCallId: 't:1',
+      summary: null,
+      status: 'failed',
+    });
   });
 
   it('projects terminal states with a stable user-facing message', () => {
@@ -344,7 +359,7 @@ describe('applyAssistantProjection', () => {
     expect(stale).toBeNull();
   });
 
-  it('ignores accepted and tool events for the message list', () => {
+  it('ignores accepted and retains safe tool progress on the message', () => {
     expect(
       applyAssistantProjection(baseSnapshot, {
         type: 'accepted',
@@ -352,15 +367,21 @@ describe('applyAssistantProjection', () => {
         operationId: 'operation:one',
       }),
     ).toBeNull();
-    expect(
-      applyAssistantProjection(baseSnapshot, {
-        type: 'tool',
-        ...CONTEXT,
-        operationId: 'operation:one',
-        tool: 'search',
+    const toolSnapshot = applyAssistantProjection(started(), {
+      type: 'tool',
+      ...CONTEXT,
+      operationId: 'operation:one',
+      toolCallId: 'tool:one',
+      summary: '正在查找相关资料',
+      status: 'started',
+    });
+    expect(toolSnapshot?.messages.at(-1)?.toolActivities).toEqual([
+      {
+        toolCallId: 'tool:one',
+        summary: '正在查找相关资料',
         status: 'started',
-      }),
-    ).toBeNull();
+      },
+    ]);
   });
 
   it('creates a streaming placeholder on message.started and appends deltas in place', () => {
