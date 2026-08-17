@@ -231,6 +231,43 @@ describe('remote assistant proxy', () => {
     expect(cancelOperation).toHaveBeenCalledWith('operation:one');
   });
 
+  it('ends the local stream immediately when remote cancellation hangs', async () => {
+    const cancelOperation = vi.fn(
+      () =>
+        new Promise<{ status: 'cancelling' }>((resolve) => {
+          setTimeout(() => resolve({ status: 'cancelling' }), 100);
+        }),
+    );
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn(_request, options) {
+          yield event(0, { type: 'operation.accepted' });
+          await new Promise<void>((_resolve, reject) =>
+            options?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('aborted', 'AbortError')),
+              { once: true },
+            ),
+          );
+        },
+        cancelOperation,
+      }),
+    });
+    const controller = new AbortController();
+    const pending = proxy.turn({ text: '停止' }, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+
+    const outcome = await Promise.race([
+      pending.then(() => 'settled' as const),
+      new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 30)),
+    ]);
+    expect(outcome).toBe('settled');
+    expect(cancelOperation).toHaveBeenCalledWith('operation:one');
+  });
+
   it('still cancels remotely when the user aborts before operation.accepted arrives', async () => {
     const cancelOperation = vi.fn(async () => ({
       status: 'cancelling' as const,

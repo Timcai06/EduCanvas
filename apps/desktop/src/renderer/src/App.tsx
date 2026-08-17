@@ -356,8 +356,9 @@ export default function App({
           },
         },
       );
-      if (result.outcome === 'success') setMessage(result.reply);
-      else if (result.outcome === 'cancelled')
+      if (result.outcome === 'success') {
+        if (result.speechPlayed) setMessage(result.reply);
+      } else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
       else if (result.code === 'interrupted') setPendingResume(voiceId);
     } finally {
@@ -392,6 +393,7 @@ export default function App({
     const requestId = crypto.randomUUID();
     requestIdRef.current = requestId;
     setSpeakingMessageId(assistantMessageId);
+    setCanStop(true);
     let terminalState: PetUiState = 'ready';
     setState('speaking');
     publishVisual('speaking');
@@ -420,6 +422,7 @@ export default function App({
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
+      setCanStop(false);
       setSpeakingMessageId((current) =>
         current === assistantMessageId ? null : current,
       );

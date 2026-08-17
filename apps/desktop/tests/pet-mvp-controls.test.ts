@@ -65,6 +65,31 @@ describe('MVP pet controls', () => {
     expect(startVoice).toContain('setCanStop(false);');
   });
 
+  it('keeps replay stoppable and preserves a voice playback warning', () => {
+    const source = readFileSync(
+      new URL('../src/renderer/src/App.tsx', import.meta.url),
+      'utf8',
+    );
+    const replay = source.slice(
+      source.indexOf('const speakMessage = async'),
+      source.indexOf('const speakLatest = async'),
+    );
+    const voiceCompletion = source.slice(
+      source.indexOf('const result = await runVoiceSession'),
+      source.indexOf(
+        '} finally',
+        source.indexOf('const result = await runVoiceSession'),
+      ),
+    );
+
+    expect(replay).toContain('setCanStop(true);');
+    expect(replay).toContain('setCanStop(false);');
+    expect(voiceCompletion).toContain("if (result.outcome === 'success')");
+    expect(voiceCompletion).toContain(
+      'if (result.speechPlayed) setMessage(result.reply);',
+    );
+  });
+
   it('hides the dialog content and renders a restore control when folded', () => {
     const html = renderToStaticMarkup(
       createElement(App as ComponentType<{ initialChatCollapsed?: boolean }>, {
