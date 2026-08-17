@@ -161,11 +161,9 @@ export function createAssistantProxy(options: {
         if (localTerminationSettled) return;
         localTerminationSettled = true;
         resolveLocalTermination(result);
-        if (!operationId) {
-          drainTimeout = setTimeout(() => {
-            streamAbort.abort();
-          }, CANCEL_DRAIN_TIMEOUT_MS);
-        }
+        drainTimeout = setTimeout(() => {
+          streamAbort.abort();
+        }, CANCEL_DRAIN_TIMEOUT_MS);
       };
       const onUserAbort = (): void => {
         userAborted = true;
@@ -201,6 +199,16 @@ export function createAssistantProxy(options: {
               },
               { signal: streamAbort.signal },
             )) {
+              // Once the renderer has received a local terminal result, keep
+              // draining only long enough to discover a late operation id.
+              // Do not project stale accepted/delta/final events into the UI.
+              if (localTerminationSettled) {
+                if (event.type === 'operation.accepted' && !operationId) {
+                  operationId = event.operationId;
+                  cancelRemoteThenStream();
+                }
+                continue;
+              }
               reportEvent(tracker, event);
               tracker?.onEvent?.(event);
               if (event.type === 'operation.accepted') {

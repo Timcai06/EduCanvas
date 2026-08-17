@@ -268,6 +268,55 @@ describe('remote assistant proxy', () => {
     expect(cancelOperation).toHaveBeenCalledWith('operation:one');
   });
 
+  it('does not project events that arrive after local cancellation', async () => {
+    const cancelOperation = vi.fn(async () => ({
+      status: 'cancelling' as const,
+    }));
+    let releaseAccepted!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      releaseAccepted = resolve;
+    });
+    const seen: string[] = [];
+    const tracker = {
+      operationId: null as string | null,
+      lastSequence: -1,
+      onEvent: (item: GatewayOperationEvent) => seen.push(item.type),
+    };
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      clientFactory: () => ({
+        async *streamTurn() {
+          await accepted;
+          yield event(0, { type: 'operation.accepted' });
+          yield event(1, { type: 'message.delta', delta: '迟到的回答' });
+          yield event(2, {
+            type: 'operation.completed',
+            messageId: 'message:late',
+          });
+        },
+        cancelOperation,
+      }),
+    });
+    const controller = new AbortController();
+    const pending = proxy.turn({ text: '停止' }, controller.signal, tracker);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      code: 'aborted',
+    });
+    releaseAccepted();
+    await vi.waitFor(() =>
+      expect(cancelOperation).toHaveBeenCalledWith('operation:one'),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(seen).toEqual([]);
+    expect(tracker.operationId).toBeNull();
+    expect(tracker.lastSequence).toBe(-1);
+  });
+
   it('still cancels remotely when the user aborts before operation.accepted arrives', async () => {
     const cancelOperation = vi.fn(async () => ({
       status: 'cancelling' as const,
