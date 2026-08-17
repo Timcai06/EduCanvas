@@ -1,6 +1,11 @@
 import 'server-only';
 
 import type { AgentTool } from '@educanvas/agent-runtime';
+import {
+  WebPageError,
+  fetchWebPage as fetchSafeWebPage,
+  type FetchWebPageOptions,
+} from '@educanvas/asset-processing';
 import { z } from 'zod';
 
 /**
@@ -13,10 +18,7 @@ import { z } from 'zod';
  * hardening 非目标,在此明示不伪装已解决。
  */
 
-const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_CHARS = 60_000;
-const MAX_REDIRECTS = 3;
-const FETCH_TIMEOUT_MS = 10_000;
 
 export class WebPageFetchError extends Error {
   constructor(
@@ -30,41 +32,6 @@ export class WebPageFetchError extends Error {
     super(code);
     this.name = 'WebPageFetchError';
   }
-}
-
-const PRIVATE_HOST_PATTERNS: readonly RegExp[] = [
-  /^localhost$/i,
-  /\.local$/i,
-  /^127\./,
-  /^0\./,
-  /^10\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^169\.254\./,
-  /^\[?::1\]?$/,
-  /^\[?f[cd][0-9a-f]{2}:/i,
-  /^\[?fe80:/i,
-];
-
-function assertPublicHttpUrl(rawUrl: string): URL {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new WebPageFetchError('invalid_url');
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new WebPageFetchError('invalid_url');
-  }
-  if (url.username || url.password) throw new WebPageFetchError('invalid_url');
-  if (url.port && url.port !== '80' && url.port !== '443') {
-    throw new WebPageFetchError('blocked_host');
-  }
-  const host = url.hostname;
-  if (PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
-    throw new WebPageFetchError('blocked_host');
-  }
-  return url;
 }
 
 const decodeEntities = (text: string): string =>
@@ -101,71 +68,48 @@ export function extractReadableText(html: string): {
 }
 
 export interface FetchedWebPage {
+  requestedUrl: string;
   url: string;
   title: string | null;
   text: string;
+  bytes: Uint8Array;
+  contentType: string;
+  fetchedAt: Date;
 }
 
 export async function fetchReadableWebPage(
   rawUrl: string,
   fetchImpl: typeof fetch = fetch,
+  resolveHostname?: FetchWebPageOptions['resolveHostname'],
 ): Promise<FetchedWebPage> {
-  let url = assertPublicHttpUrl(rawUrl);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    let response: Response | null = null;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-      const attempt = await fetchImpl(url.toString(), {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { accept: 'text/html,text/plain;q=0.9' },
-      }).catch(() => {
-        throw new WebPageFetchError('fetch_failed');
-      });
-      if ([301, 302, 303, 307, 308].includes(attempt.status)) {
-        const location = attempt.headers.get('location');
-        await attempt.body?.cancel().catch(() => undefined);
-        if (!location || hop === MAX_REDIRECTS) {
-          throw new WebPageFetchError('fetch_failed');
-        }
-        /* 每一跳都重过公网校验,重定向不能落进内网 */
-        url = assertPublicHttpUrl(new URL(location, url).toString());
-        continue;
-      }
-      response = attempt;
-      break;
-    }
-    if (!response || !response.ok) throw new WebPageFetchError('fetch_failed');
-
-    const contentType =
-      response.headers.get('content-type')?.toLowerCase() ?? '';
-    if (
-      !contentType.includes('text/html') &&
-      !contentType.includes('text/plain')
-    ) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new WebPageFetchError('unsupported_content');
-    }
-    const declaredLength = Number(
-      response.headers.get('content-length') ?? '0',
-    );
-    if (declaredLength > MAX_PAGE_BYTES) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new WebPageFetchError('too_large');
-    }
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_PAGE_BYTES) {
-      throw new WebPageFetchError('too_large');
-    }
-    const html = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-    const { title, text } = contentType.includes('text/plain')
-      ? { title: null, text: [...html].slice(0, MAX_TEXT_CHARS).join('') }
-      : extractReadableText(html);
-    if (!text) throw new WebPageFetchError('unsupported_content');
-    return { url: url.toString(), title, text };
-  } finally {
-    clearTimeout(timer);
+    const page = await fetchSafeWebPage(rawUrl, {
+      request: fetchImpl,
+      ...(resolveHostname ? { resolveHostname } : {}),
+    });
+    return {
+      requestedUrl: page.requestedUrl,
+      url: page.finalUrl,
+      title: page.title,
+      text: [...page.text].slice(0, MAX_TEXT_CHARS).join(''),
+      bytes: page.bytes,
+      contentType: page.contentType,
+      fetchedAt: page.fetchedAt,
+    };
+  } catch (error) {
+    if (!(error instanceof WebPageError)) throw error;
+    const code =
+      error.code === 'link_invalid_url'
+        ? 'invalid_url'
+        : error.code === 'link_blocked_host'
+          ? 'blocked_host'
+          : error.code === 'link_page_too_large'
+            ? 'too_large'
+            : error.code === 'link_no_extractable_content' ||
+                error.code === 'link_unsupported_format'
+              ? 'unsupported_content'
+              : 'fetch_failed';
+    throw new WebPageFetchError(code);
   }
 }
 
@@ -191,6 +135,7 @@ export type WebPageFetchedHook = (
 export function createFetchWebPageTool(
   fetchImpl: typeof fetch = fetch,
   onFetched?: WebPageFetchedHook,
+  resolveHostname?: FetchWebPageOptions['resolveHostname'],
 ): AgentTool<
   z.infer<typeof fetchPageInputSchema>,
   z.infer<typeof fetchPageOutputSchema>
@@ -203,7 +148,11 @@ export function createFetchWebPageTool(
     outputSchema: fetchPageOutputSchema,
     timeoutMs: 12_000,
     handler: async (input) => {
-      const page = await fetchReadableWebPage(input.url, fetchImpl);
+      const page = await fetchReadableWebPage(
+        input.url,
+        fetchImpl,
+        resolveHostname,
+      );
       const persisted = await onFetched?.(page);
       return {
         url: page.url,

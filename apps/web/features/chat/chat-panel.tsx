@@ -144,6 +144,7 @@ export function ChatPanel({
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
+  onOpenSource,
   assistantLabel = 'AI 老师',
 }: {
   messages: readonly ChatMessage[];
@@ -156,6 +157,8 @@ export function ChatPanel({
   onPreviewHtml?: (request: HtmlPreviewRequest) => void;
   /** 通用对话产物按 ID 重开；Canvas 点击时重新读取最新版本和状态。 */
   onOpenArtifact?: (artifactId: string) => void;
+  /** 网页引用优先回到当前 Notebook 的 Source，而不是直接离开产品。 */
+  onOpenSource?: (assetId: string) => void;
   assistantLabel?: string;
 }) {
   return (
@@ -287,7 +290,18 @@ export function ChatPanel({
                         : {}),
                       className: 'marginalia__item scroll-mt-24',
                     };
-                    return citation.kind === 'web' ? (
+                    return citation.kind === 'web' && onOpenSource ? (
+                      <button
+                        key={citation.id}
+                        {...shared}
+                        type="button"
+                        aria-label={`打开来源 ${citation.label}`}
+                        title="在当前笔记本中打开来源"
+                        onClick={() => onOpenSource(citation.assetId)}
+                      >
+                        {content}
+                      </button>
+                    ) : citation.kind === 'web' ? (
                       <a
                         key={citation.id}
                         {...shared}

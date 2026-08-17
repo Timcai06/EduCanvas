@@ -230,6 +230,7 @@ export function useGeneralWorkspaceController(options: {
       text: string,
       frozenAssets?: readonly LiveVoiceContextAsset[],
       preference = outputPreference,
+      mode: 'chat' | 'deep_research' = 'chat',
     ) => {
       setError(null);
       setSourceNotice(null);
@@ -248,6 +249,7 @@ export function useGeneralWorkspaceController(options: {
       void turn
         .send(text, undefined, selected, {
           outputPreference: preference,
+          mode,
         })
         .then((outcome) => {
           if (!shouldConsumeTurnScopedInputs(outcome)) return;
@@ -276,6 +278,10 @@ export function useGeneralWorkspaceController(options: {
   const sendLive = useCallback(
     (text: string, context: LiveVoiceContextSnapshot) =>
       send(text, context.assets),
+    [send],
+  );
+  const sendDeepResearch = useCallback(
+    (topic: string) => send(topic, undefined, 'auto', 'deep_research'),
     [send],
   );
 
@@ -458,10 +464,13 @@ export function useGeneralWorkspaceController(options: {
     onMenuAction: handleMenuAction,
     onToolAction: () => undefined,
     onOutputPreferenceChange: handleOutputPreferenceChange,
+    onDeepResearch: sendDeepResearch,
     onRetry: (messageId: string) => turn.retry(messageId),
     onPreviewHtml: (source: string) => workspace.openHtml(source),
     onOpenArtifact: (artifactId: string) =>
       studioOpenActions.actions.openArtifact(artifactId),
+    onOpenSource: (assetId: string) =>
+      studioOpenActions.actions.openSource(assetId),
     onToggleLiveAsset: (assetId: string) => {
       const asset = assets.find((candidate) => candidate.id === assetId);
       if (!asset?.selectable) return;

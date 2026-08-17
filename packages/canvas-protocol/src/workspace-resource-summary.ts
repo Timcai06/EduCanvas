@@ -144,7 +144,13 @@ export const workspaceSourceResourceSummarySchema = z
     ...commonShape,
     resourceKind: z.literal('source'),
     version: sourceVersionSchema.nullable(),
-    context: z.object({ enabled: z.boolean() }).strict(),
+    context: z
+      .object({
+        enabled: z.boolean(),
+        /** 只投影来源分类，不暴露搜索词、Provider 或任务内部状态。 */
+        researchSource: z.boolean().optional(),
+      })
+      .strict(),
   })
   .strict()
   .superRefine(addCommonInvariants);

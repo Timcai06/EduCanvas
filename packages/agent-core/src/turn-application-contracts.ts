@@ -29,6 +29,10 @@ import { agentMessageInputSchema } from './message-contracts';
 
 export const turnApplicationProtocolVersion = 'educanvas.turn.v2' as const;
 
+/** Browser-selectable workflow shape. It never grants tools or provider access. */
+export const turnModeSchema = z.enum(['chat', 'deep_research']);
+export type TurnMode = z.infer<typeof turnModeSchema>;
+
 const opaqueIdSchema = z
   .string()
   .min(1)
@@ -77,6 +81,7 @@ export const turnApplicationCommandSchema = z
       })
       .strict(),
     entrypoint: z.enum(['web', 'tui', 'channel', 'system']),
+    mode: turnModeSchema.optional(),
     input: agentMessageInputSchema,
     capabilities: z.array(capabilityNameSchema).max(128),
   })
@@ -108,6 +113,8 @@ export const turnApplicationFailureCodes = [
   'TOOL_FAILED',
   'RUNTIME_FAILED',
   'CANCELLED',
+  /** Deep Research ended without the minimum independently persisted evidence. */
+  'RESEARCH_REQUIREMENTS_UNMET',
   /** Q03：Turn 超预算后的稳定终态；retryable=false，客户端须新建 Turn 才能继续。 */
   'BUDGET_EXCEEDED',
 ] as const;

@@ -56,9 +56,11 @@ export interface ConversationPaneProps {
   onMenuAction: (action: PlusMenuActionId) => void;
   onToolAction: () => void;
   onOutputPreferenceChange: (preference: OutputPreference) => void;
+  onDeepResearch?: (topic: string) => void;
   onRetry: (messageId: string) => void;
   onPreviewHtml: (source: string) => void;
   onOpenArtifact: (artifactId: string) => void;
+  onOpenSource?: (assetId: string) => void;
   onToggleLiveAsset: (assetId: string) => void;
   onUploadLiveAsset: (file: File, kind: 'image' | 'document') => Promise<void>;
   onOpenStatusCard: (artifactId: string) => void;
@@ -137,9 +139,11 @@ export function ConversationPane({
   onMenuAction,
   onToolAction,
   onOutputPreferenceChange,
+  onDeepResearch,
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
+  onOpenSource,
   onToggleLiveAsset,
   onUploadLiveAsset,
   onOpenStatusCard,
@@ -235,6 +239,7 @@ export function ConversationPane({
     onToolAction,
     outputPreference,
     onOutputPreferenceChange,
+    onDeepResearch,
   };
 
   if (isLanding) {
@@ -286,6 +291,7 @@ export function ConversationPane({
           onRetry={onRetry}
           onPreviewHtml={({ source }) => onPreviewHtml(source)}
           onOpenArtifact={onOpenArtifact}
+          onOpenSource={onOpenSource}
           assistantLabel="AI"
         />
         {showStatusCard ? (

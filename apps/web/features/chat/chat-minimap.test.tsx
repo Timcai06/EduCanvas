@@ -35,6 +35,46 @@ function turn(index: number): readonly ChatMessage[] {
 const messages = [...turn(1), ...turn(2)];
 
 describe('Chat minimap anchors', () => {
+  it('把网页引用投影为当前 Notebook Source 操作而不是直接外链', () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[
+          {
+            id: 'assistant-research',
+            turnId: 'turn-research',
+            clientMessageId: 'client-research',
+            role: 'assistant',
+            status: 'completed',
+            text: '结论 [1]',
+            attachments: [],
+            citations: [
+              {
+                id: 'citation-1',
+                kind: 'web',
+                marker: 1,
+                label: '研究网页',
+                assetId: 'asset-1',
+                assetVersionId: 'version-1',
+                url: 'https://example.com/research',
+                pageStart: null,
+                pageEnd: null,
+              },
+            ],
+          },
+        ]}
+        canvasOpen={false}
+        artifactTitle=""
+        onOpenCanvas={vi.fn()}
+        onContinueText={vi.fn()}
+        onRetry={vi.fn()}
+        onOpenSource={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="打开来源 研究网页"');
+    expect(html).not.toContain('href="https://example.com/research"');
+  });
+
   it('为每条消息输出可聚焦的稳定锚点与角色', () => {
     const html = renderToStaticMarkup(
       <ChatPanel

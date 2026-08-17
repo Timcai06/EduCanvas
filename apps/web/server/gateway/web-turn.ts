@@ -23,6 +23,7 @@ import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 import type { TeachingTurnRequestBody } from '../http/turn-request';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { resolveTurnModelRuntime } from '../model/model-runtime';
+import { isWebSearchConfigured } from '../tools/web-search';
 import {
   beginGatewayGeneralTurnApplication,
   prepareGatewayGeneralTurnContext,
@@ -91,6 +92,11 @@ export async function beginWebGatewayTurn(
   events: AsyncIterable<TeachingTurnEvent>;
   cancel: () => Promise<void>;
 }> {
+  if (request.mode === 'deep_research' && !isWebSearchConfigured()) {
+    throw Object.assign(new Error('deep_research_unavailable'), {
+      code: 'deep_research_unavailable' as const,
+    });
+  }
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation || conversation.agentProfileId !== 'general') {
     throw new PlatformTurnOwnershipError();

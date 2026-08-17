@@ -769,3 +769,22 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - 风险: 中——刻意不为两侧消息加级联 FK，否则删除一侧会抹掉 orphan/missing
   审计证据。匿名主体删除闭包显式先删 sidecar；日常一致性由双唯一键、原子写入
   与 parity/read fail-closed 共同保证。
+
+## 0058_overrated_cyclops.sql
+
+- 状态: active（网页导入与 Deep Research，2026-08-17）
+- 语义: 新增 `asset_web_snapshots` 版本级网页溯源表，以
+  `asset_version_id` 作为主键和外键，保存请求 URL、最终 URL、响应类型、页面标题
+  与抓取时间；原始响应正文仍由对应 `asset_versions.storage_key` 指向私有对象。
+- 锁表: 仅创建新表与普通时间索引；新增指向 `asset_versions` 的外键只读取既有
+  主键，不改写历史 AssetVersion。
+- 回滚: 停止写入和读取网页溯源后 DROP TABLE `asset_web_snapshots`；资产原始对象、
+  已抽取正文与引用事实不删除，但将失去版本级网页来源元数据。
+- N-1: 全新可选子表，旧应用不读取也不写入；新应用只为网页版本写 sidecar，
+  因此旧应用可继续读取既有 Asset 与 AssetVersion。
+- Fresh install: 可重放；表初始为空，网页导入或研究来源创建时与版本同事务写入。
+- Data migration: none——不根据历史 displayName 或正文猜测 URL，不回填旧网页资产。
+- Estimated scale: 新表初始 0 行；每个新抓取网页版本至多 1 行，随网页版本数线性增长；
+  生产规模尚未验证。
+- 风险: 低——新增叶子表，不改变既有状态机；URL 和文本长度由 CHECK 与仓储双重约束，
+  跨空间读取仍先校验 Notebook 权限。

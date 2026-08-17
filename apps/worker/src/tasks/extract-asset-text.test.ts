@@ -22,6 +22,14 @@ vi.mock('@educanvas/agent-runtime', () => ({
   }),
 }));
 
+const { renderWebPage } = vi.hoisted(() => ({ renderWebPage: vi.fn() }));
+vi.mock('./render-web-page.js', async () => {
+  const actual = await vi.importActual<typeof import('./render-web-page.js')>(
+    './render-web-page.js',
+  );
+  return { ...actual, renderReadableStoredHtml: renderWebPage };
+});
+
 /* MinerU 三步协议与结果解包/校验/解码全部 mock（真网络在 fake server 集成测试覆盖）。 */
 const { extract, submit, wait, fetchResult, unpack, validate, decode } =
   vi.hoisted(() => ({
@@ -54,6 +62,7 @@ import {
   MineruClientError,
 } from '@educanvas/asset-processing';
 import { extractAssetTextTask } from './extract-asset-text';
+import { WebRenderError } from './render-web-page';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const SHA = expect.stringMatching(/^[a-f0-9]{64}$/);
@@ -67,12 +76,17 @@ function run(attempts = 1, maxAttempts = 3) {
   } as never);
 }
 
-function pending(mimeType: string, storageKey = 'assets/a') {
+function pending(
+  mimeType: string,
+  storageKey = 'assets/a',
+  webFinalUrl?: string,
+) {
   repo.beginTextExtractionAttempt.mockResolvedValue({
     storageKey,
     mimeType,
     assetVersionId: VERSION_ID,
     producer: 'default',
+    webFinalUrl: webFinalUrl ?? null,
   });
 }
 
@@ -82,6 +96,78 @@ describe('assets:extract_text', () => {
     delete process.env.MINERU_BASE_URL;
     read.mockResolvedValue(new Uint8Array([1]));
     put.mockResolvedValue(undefined);
+    renderWebPage.mockReset();
+  });
+
+  it('HTML 静态正文充足时直接抽取且不启动 Chromium', async () => {
+    pending('text/html', 'assets/page.html', 'https://example.com/page');
+    const body = `<!doctype html><title>Page</title><main>${'article content '.repeat(20)}</main>`;
+    read.mockResolvedValue(new TextEncoder().encode(body));
+
+    await run();
+
+    expect(renderWebPage).not.toHaveBeenCalled();
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: expect.objectContaining({
+        status: 'ready',
+        extractedText: expect.stringContaining('article content'),
+      }),
+    });
+  });
+
+  it('HTML 是 JS 壳时由 Chromium 渲染后结算', async () => {
+    pending('text/html', 'assets/spa.html', 'https://example.com/spa');
+    read.mockResolvedValue(
+      new TextEncoder().encode(
+        '<html><body><div id="root">Loading</div></body></html>',
+      ),
+    );
+    renderWebPage.mockResolvedValue('rendered article '.repeat(20));
+
+    await run();
+
+    expect(renderWebPage).toHaveBeenCalledWith(
+      expect.stringContaining('<div id="root">Loading</div>'),
+      'https://example.com/spa',
+    );
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: expect.objectContaining({
+        status: 'ready',
+        extractedText: expect.stringContaining('rendered article'),
+      }),
+    });
+  });
+
+  it('Chromium 不可用时写稳定失败码而不泄露启动错误', async () => {
+    pending('text/html', 'assets/spa.html', 'https://example.com/spa');
+    read.mockResolvedValue(
+      new TextEncoder().encode(
+        '<html><body><div id="root">Loading</div></body></html>',
+      ),
+    );
+    renderWebPage.mockRejectedValue(
+      new WebRenderError('link_render_unavailable', {
+        cause: new Error('private executable path'),
+      }),
+    );
+
+    await run();
+
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: {
+        status: 'failed',
+        failureCode: 'link_render_unavailable',
+      },
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('failureCode=link_render_unavailable'),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('private executable path'),
+    );
   });
 
   it('已终结的任务安静退出，不重复解析', async () => {

@@ -8,8 +8,15 @@ import { validateCanvasResource } from '@educanvas/canvas-protocol';
 import {
   ResourceClientError,
   classifyHttpStatus,
+  isRetryableResourceError,
   isAbortError,
 } from '../canvas/resource-error';
+import {
+  LinkAssetClientError,
+  linkErrorCodeSchema,
+  linkErrorCopy,
+  type LinkClientErrorCode,
+} from './link-client-contract';
 
 interface AssetResponseItem {
   descriptor: {
@@ -133,6 +140,51 @@ async function clientError(
   );
 }
 
+async function linkClientError(
+  response: Response,
+  fallbackCode: LinkClientErrorCode,
+): Promise<LinkAssetClientError> {
+  let parsedCode: LinkClientErrorCode = fallbackCode;
+  let explicitRetryable: boolean | undefined;
+  try {
+    const body = z
+      .object({
+        error: z.object({
+          code: linkErrorCodeSchema,
+          retryable: z.boolean().optional(),
+        }),
+      })
+      .safeParse(await response.json());
+    if (body.success) {
+      parsedCode = body.data.error.code;
+      explicitRetryable = body.data.error.retryable;
+    }
+  } catch {
+    // Unknown bodies are never shown; the stable fallback below remains safe.
+  }
+  const kind = classifyHttpStatus(response.status);
+  return new LinkAssetClientError(
+    parsedCode,
+    explicitRetryable ?? isRetryableResourceError(kind),
+    linkErrorCopy[parsedCode],
+    kind,
+  );
+}
+
+async function linkFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await resourceFetch(url, init);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    throw new LinkAssetClientError(
+      'link_network_unreachable',
+      true,
+      linkErrorCopy.link_network_unreachable,
+      'offline',
+    );
+  }
+}
+
 export async function loadAssets(
   endpoint = '/api/v1/assets',
   options: { enableSpaceByDefault?: boolean } = {},
@@ -161,17 +213,6 @@ async function parseAssetMutationResponse(
   return toItem(parsed.data.asset);
 }
 
-async function parseAssetMutationOrThrow(
-  response: Response,
-  fallback: string,
-  invalidMessage: string,
-): Promise<AssetItem> {
-  if (!response.ok) {
-    throw await clientError(response, fallback);
-  }
-  return parseAssetMutationResponse(response, invalidMessage);
-}
-
 export async function uploadAsset(input: {
   file: File;
   scope: AssetItem['scope'];
@@ -194,7 +235,7 @@ export async function importLinkAsset(input: {
   url: string;
   endpoint?: string;
 }): Promise<AssetItem> {
-  const response = await resourceFetch(
+  const response = await linkFetch(
     input.endpoint ?? '/api/v1/chat/assets/link',
     {
       method: 'POST',
@@ -202,11 +243,10 @@ export async function importLinkAsset(input: {
       body: JSON.stringify({ url: input.url }),
     },
   );
-  return parseAssetMutationOrThrow(
-    response,
-    '暂时无法导入链接。',
-    '导入响应格式不正确。',
-  );
+  if (!response.ok) {
+    throw await linkClientError(response, 'link_import_unavailable');
+  }
+  return parseAssetMutationResponse(response, '导入响应格式不正确。');
 }
 
 /**

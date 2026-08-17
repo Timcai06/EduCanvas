@@ -1,4 +1,23 @@
 export {
+  WEB_PAGE_DEFAULT_MAX_BYTES,
+  WEB_PAGE_DEFAULT_TIMEOUT_MS,
+  WEB_PAGE_MAX_REDIRECTS,
+  WEB_PAGE_MAX_TEXT_CHARACTERS,
+  WebPageError,
+  assertPublicWebUrl,
+  extractReadableHtml,
+  fetchPublicWebScript,
+  fetchWebPage,
+  isPublicIpAddress,
+  webPageFailureCodes,
+  type FetchedWebPage,
+  type FetchedWebScript,
+  type FetchWebPageOptions,
+  type ReadableHtml,
+  type WebPageFailureCode,
+} from './web-page';
+
+export {
   ASSET_TEXT_MAX_CHARACTERS,
   AssetExtractionError,
   assetExtractionFailureCodes,

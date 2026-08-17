@@ -46,6 +46,7 @@ import {
 import {
   assetProcessingJobs,
   assetRepresentations,
+  assetWebSnapshots,
   assets,
   assetVersions,
   assetVideoKeyframes,
@@ -67,6 +68,17 @@ import {
   defaultRepresentationOrderBy,
   upsertAssetRepresentation,
 } from './asset-representation-repository';
+import {
+  insertAssetWebSnapshot,
+  readOwnedAssetWebSnapshot,
+  type AssetWebSnapshot,
+  type CreateAssetWebSnapshotInput,
+} from './asset-web-snapshot-repository';
+
+export type {
+  AssetWebSnapshot,
+  CreateAssetWebSnapshotInput,
+} from './asset-web-snapshot-repository';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -174,7 +186,7 @@ export interface CreateUploadedAssetInput {
   scope: AssetScope;
   kind: Extract<AssetKind, 'image' | 'document' | 'link' | 'audio' | 'video'>;
   /** 缺省 upload;链接导入传 url_import,溯源与上传物理区分。 */
-  origin?: Extract<AssetOrigin, 'upload' | 'url_import'>;
+  origin?: Extract<AssetOrigin, 'upload' | 'url_import' | 'research_web'>;
   displayName: string;
   mimeType: string;
   byteSize: number;
@@ -183,6 +195,7 @@ export interface CreateUploadedAssetInput {
   extractedText?: string | null;
   outcome: { status: 'ready' } | { status: 'failed'; failureCode: string };
   now?: Date;
+  webSnapshot?: CreateAssetWebSnapshotInput;
 }
 
 const ORIGINAL_REPRESENTATION_KIND =
@@ -327,7 +340,9 @@ export class DrizzleAssetRepository {
    * 这与 `platform-artifact-repository` 创建生成任务的做法一致。
    */
   async createUploadedPending(
-    input: Omit<CreateUploadedAssetInput, 'extractedText' | 'outcome'>,
+    input: Omit<CreateUploadedAssetInput, 'extractedText' | 'outcome'> & {
+      webSnapshot?: CreateAssetWebSnapshotInput;
+    },
     options?: { enqueue?: boolean },
   ): Promise<{ snapshot: AssetSnapshot; versionId: string; jobId: string }> {
     const validated = this.validateUploadInput(input);
@@ -419,6 +434,23 @@ export class DrizzleAssetRepository {
       if (!createdAsset || !createdVersion || !createdJob) {
         throw new AssetPersistenceError('Asset创建失败');
       }
+      if (input.webSnapshot) {
+        if (
+          validated.kind !== 'link' ||
+          !['url_import', 'research_web'].includes(validated.origin)
+        ) {
+          throw new AssetPersistenceError('网页溯源只能绑定链接导入版本');
+        }
+        await insertAssetWebSnapshot(
+          transaction,
+          {
+            assetVersionId: versionId,
+            ...input.webSnapshot,
+            createdAt: now,
+          },
+          (message) => new AssetPersistenceError(message),
+        );
+      }
       if (shouldEnqueue) {
         await transaction.execute(sql`
           select graphile_worker.add_job(
@@ -438,6 +470,31 @@ export class DrizzleAssetRepository {
   }
 
   /**
+   * 返回可向浏览器投影的网页溯源；先按 Notebook 权限约束 Asset，避免仅凭版本
+   * UUID 枚举其他空间的来源 URL。对象键和抓取响应不会出现在返回值中。
+   */
+  async getOwnedWebSnapshot(input: {
+    ownerSubjectId: string;
+    spaceId: string;
+    assetId: string;
+    now?: Date;
+  }): Promise<AssetWebSnapshot | null> {
+    const ownerSubjectId = requireOwner(input.ownerSubjectId);
+    const spaceId = requireUuid(input.spaceId);
+    const assetId = requireUuid(input.assetId);
+    return readOwnedAssetWebSnapshot(
+      this.database,
+      {
+        ownerSubjectId,
+        spaceId,
+        assetId,
+        now: input.now ?? new Date(),
+      },
+      () => new AssetAccessError(),
+    );
+  }
+
+  /**
    * 供 worker 读取一个待解析任务的输入。
    *
    * 只返回解析所需的最小事实：storageKey 与 MIME。它不经过公共 API，
@@ -454,6 +511,7 @@ export class DrizzleAssetRepository {
     mimeType: string;
     assetVersionId: string;
     producer: string;
+    webFinalUrl: string | null;
   } | null> {
     const jobId = requireUuid(input.jobId);
     const now = input.now ?? new Date();
@@ -488,8 +546,13 @@ export class DrizzleAssetRepository {
         .select({
           storageKey: assetVersions.storageKey,
           mimeType: assetVersions.mimeType,
+          webFinalUrl: assetWebSnapshots.finalUrl,
         })
         .from(assetVersions)
+        .leftJoin(
+          assetWebSnapshots,
+          eq(assetWebSnapshots.assetVersionId, assetVersions.id),
+        )
         .where(eq(assetVersions.id, claimed.assetVersionId))
         .limit(1);
       if (!version) throw new AssetPersistenceError('Asset版本不存在');
@@ -498,6 +561,7 @@ export class DrizzleAssetRepository {
         mimeType: version.mimeType,
         assetVersionId: claimed.assetVersionId,
         producer: claimed.producer,
+        webFinalUrl: version.webFinalUrl,
       };
     });
   }
@@ -837,6 +901,23 @@ export class DrizzleAssetRepository {
         .returning();
       if (!createdAsset || !createdVersion) {
         throw new AssetPersistenceError('Asset或版本写入失败');
+      }
+      if (input.webSnapshot) {
+        if (
+          kind !== 'link' ||
+          !['url_import', 'research_web'].includes(origin)
+        ) {
+          throw new AssetPersistenceError('网页溯源只能绑定链接导入版本');
+        }
+        await insertAssetWebSnapshot(
+          transaction,
+          {
+            assetVersionId: versionId,
+            ...input.webSnapshot,
+            createdAt: now,
+          },
+          (message) => new AssetPersistenceError(message),
+        );
       }
       await transaction.insert(assetRepresentations).values({
         assetVersionId: versionId,

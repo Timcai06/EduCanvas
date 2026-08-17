@@ -14,6 +14,7 @@ const htmlResponse = (html: string, headers: Record<string, string> = {}) =>
     status: 200,
     headers: { 'content-type': 'text/html; charset=utf-8', ...headers },
   });
+const resolvePublic = async () => ['93.184.216.34'];
 
 describe('extractReadableText', () => {
   it('抽取标题与正文,去脚本样式,解码实体,收敛空白', () => {
@@ -65,6 +66,7 @@ describe('fetchReadableWebPage', () => {
       fetchReadableWebPage(
         'https://example.com/page',
         fetchStub as unknown as typeof fetch,
+        resolvePublic,
       ),
     ).rejects.toMatchObject({ code: 'blocked_host' });
   });
@@ -74,7 +76,11 @@ describe('fetchReadableWebPage', () => {
       htmlResponse(
         '<html><head><title>猫狗分类</title></head><body><p>神经网络提取特征。</p></body></html>',
       )) as unknown as typeof fetch;
-    const page = await fetchReadableWebPage('https://example.com/a', okStub);
+    const page = await fetchReadableWebPage(
+      'https://example.com/a',
+      okStub,
+      resolvePublic,
+    );
     expect(page.title).toBe('猫狗分类');
     expect(page.text).toContain('神经网络提取特征');
 
@@ -83,7 +89,7 @@ describe('fetchReadableWebPage', () => {
         headers: { 'content-type': 'application/pdf' },
       })) as unknown as typeof fetch;
     await expect(
-      fetchReadableWebPage('https://example.com/b', pdfStub),
+      fetchReadableWebPage('https://example.com/b', pdfStub, resolvePublic),
     ).rejects.toMatchObject({ code: 'unsupported_content' });
 
     const hugeStub = (async () =>
@@ -91,7 +97,7 @@ describe('fetchReadableWebPage', () => {
         'content-length': String(10 * 1024 * 1024),
       })) as unknown as typeof fetch;
     await expect(
-      fetchReadableWebPage('https://example.com/c', hugeStub),
+      fetchReadableWebPage('https://example.com/c', hugeStub, resolvePublic),
     ).rejects.toMatchObject({ code: 'too_large' });
   });
 
@@ -105,7 +111,7 @@ describe('fetchReadableWebPage', () => {
       expect(page.text.length).toBeGreaterThan(8_000);
       return { citationMarker: 2 };
     });
-    const tool = createFetchWebPageTool(fetchStub, onFetched);
+    const tool = createFetchWebPageTool(fetchStub, onFetched, resolvePublic);
 
     const result = await tool.handler(
       { url: 'https://example.com/research' },

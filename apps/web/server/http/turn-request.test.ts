@@ -94,6 +94,32 @@ describe('teaching turn request boundary', () => {
     ).resolves.toMatchObject({ outputPreference: 'interactive_artifact' });
   });
 
+  it('接受可选 deep_research 模式并默认保持普通对话', async () => {
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-research-1',
+            text: '光合作用的研究进展',
+            mode: 'deep_research',
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({ mode: 'deep_research' });
+
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            clientMessageId: 'msg-research-2',
+            text: '绕过权限',
+            mode: 'root',
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
   it('接受 provider-neutral outputPreference 枚举并拒绝不可信值', async () => {
     await expect(
       parseTeachingTurnRequest(

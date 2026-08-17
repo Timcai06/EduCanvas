@@ -4,9 +4,11 @@ import { DrizzleAssetRepository } from '@educanvas/db';
 import {
   AssetExtractionError,
   MineruClientError,
+  WebPageError,
   buildMineruManifest,
   decodeMineruMarkdown,
   extractAssetText,
+  extractReadableHtml,
   fetchMineruResult,
   imageMimeType,
   loadMineruConfig,
@@ -20,6 +22,7 @@ import { LocalObjectStorage } from '@educanvas/agent-runtime';
 import type { Logger, Task } from 'graphile-worker';
 import { z } from 'zod';
 import { sha256Hex } from './asset-task-storage.js';
+import { WebRenderError, renderReadableStoredHtml } from './render-web-page.js';
 
 const payloadSchema = z.object({ jobId: z.string().uuid() }).strict();
 
@@ -186,6 +189,40 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
     const storage = await getAssetStorage();
     const bytes = await storage.read(pending.storageKey);
 
+    if (pending.mimeType === 'text/html') {
+      const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      let extractedText = extractReadableHtml(html, {
+        allowEmptyText: true,
+      }).text;
+      if ([...extractedText].length < 200) {
+        extractedText = await renderReadableStoredHtml(
+          html,
+          pending.webFinalUrl ?? undefined,
+        );
+      }
+      const encoded = new TextEncoder().encode(extractedText);
+      const checksum = sha256Hex(encoded);
+      const textKey = `derived/text/${payload.jobId}/${checksum}.txt`;
+      await storage.put({
+        key: textKey,
+        bytes: encoded,
+        contentType: 'text/plain; charset=utf-8',
+      });
+      await assets.settleTextExtraction({
+        jobId: payload.jobId,
+        outcome: {
+          status: 'ready',
+          extractedText,
+          derivedStorageKey: textKey,
+          checksum,
+        },
+      });
+      helpers.logger.info(
+        `网页文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=degraded_plain_text mimeType=text/plain`,
+      );
+      return;
+    }
+
     if (route === 'mineru') {
       const config = loadMineruConfig(process.env);
       if (config === null) {
@@ -255,7 +292,11 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
       `文本抽取完成 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} quality=${directlyStructured ? 'structured' : 'degraded_plain_text'} mimeType=${directlyStructured ? 'text/markdown' : 'text/plain'}`,
     );
   } catch (error) {
-    if (error instanceof AssetExtractionError) {
+    if (
+      error instanceof AssetExtractionError ||
+      error instanceof WebPageError ||
+      error instanceof WebRenderError
+    ) {
       await assets.settleTextExtraction({
         jobId: payload.jobId,
         outcome: { status: 'failed', failureCode: error.code },

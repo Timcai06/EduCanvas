@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { PlusMenu, type PlusMenuActionId } from './plus-menu';
+import { DeepResearchLauncher } from './deep-research-launcher';
 import type { OutputPreference } from '@educanvas/agent-core';
 
 const subscribeToHydration = () => () => undefined;
@@ -44,6 +45,8 @@ export interface ComposerVoiceControl {
   onCancel: () => void;
 }
 
+export { normalizeDeepResearchTopic } from './deep-research-launcher';
+
 /**
  * 输入栏是页面最重要的操作入口：多行输入、「+」菜单、上下文标签、发送/生成状态。
  * 视觉上它是桌面上「刚铺开的一页纸」（card 层），墨紫描边为主，
@@ -71,6 +74,7 @@ export function Composer({
   voiceAccessory,
   outputPreference,
   onOutputPreferenceChange,
+  onDeepResearch,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -95,6 +99,8 @@ export function Composer({
   /** 本轮输出形态偏好；仅影响呈现，不授予工具或 Runtime 权限。 */
   outputPreference?: OutputPreference;
   onOutputPreferenceChange?: (preference: OutputPreference) => void;
+  /** 打开独立研究主题入口；研究仍通过同一 Turn API/Agent Loop 提交。 */
+  onDeepResearch?: (topic: string) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hydrated = useSyncExternalStore(
@@ -120,7 +126,6 @@ export function Composer({
     textarea.style.height = 'auto';
     onSend(text);
   };
-
   return (
     <div
       className={`mx-auto w-full px-4 ${
@@ -286,6 +291,9 @@ export function Composer({
             );
           })}
         </div>
+      ) : null}
+      {onDeepResearch ? (
+        <DeepResearchLauncher busy={busy} onSubmit={onDeepResearch} />
       ) : null}
       {onOutputPreferenceChange && outputPreference ? (
         <label className="mt-2 inline-flex items-center gap-2 px-1 text-xs text-ink-muted">

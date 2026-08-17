@@ -107,6 +107,10 @@ function ResourceView({
                       ? ' · 已加入上下文'
                       : ' · 未加入上下文'
                     : ' · AI 输出'}
+                  {summary.resourceKind === 'source' &&
+                  summary.context.researchSource
+                    ? ' · 研究来源'
+                    : null}
                 </small>
               </span>
               <span

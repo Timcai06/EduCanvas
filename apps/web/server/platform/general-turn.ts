@@ -57,6 +57,9 @@ export function beginGatewayGeneralTurnApplication(input: {
     conversationId: input.route.conversationId,
     spaceId: input.route.notebookId,
     operationId: input.operationId,
+    ...(input.request.mode === 'deep_research'
+      ? { maximumSources: 8, researchSource: true }
+      : {}),
   });
   const artifactSourceReferences = collectArtifactInputSourceReferences(
     input.assetContext,
@@ -101,6 +104,7 @@ export function beginGatewayGeneralTurnApplication(input: {
       tools.staticCapabilities,
       tools.nodeInvocations,
       input.route.membershipRole,
+      tools.searchProgress,
     ),
     contextLedger: ledgers.contextLedger,
     modelRunLedger: ledgers.modelRunLedger,
@@ -124,6 +128,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     },
     profile: { profileId: input.route.agentProfileId },
     entrypoint: 'web',
+    ...(input.request.mode ? { mode: input.request.mode } : {}),
     input: {
       clientMessageId: input.request.clientMessageId,
       parts: [...input.request.parts],

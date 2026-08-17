@@ -29,6 +29,8 @@ export {
   DrizzleAssetRepository,
   type AssetAccessPolicy,
   type AssetSnapshot,
+  type AssetWebSnapshot,
+  type CreateAssetWebSnapshotInput,
   type CreateUploadedAssetInput,
   type MaterializedAssetVersion,
   type OwnedStoredAssetVersion,

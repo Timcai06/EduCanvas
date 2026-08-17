@@ -1,4 +1,4 @@
-import type { AgentMessagePart } from '@educanvas/agent-core';
+import type { AgentMessagePart, TurnMode } from '@educanvas/agent-core';
 
 export type ChatMessageStatus =
   | 'pending'
@@ -112,6 +112,7 @@ export interface AssistantMessage extends ChatMessageBase {
   retryable?: boolean;
   retryText?: string;
   retryParts?: readonly AgentMessagePart[];
+  retryMode?: TurnMode;
   cite?: string;
   citations?: readonly MessageCitationDTO[];
   artifacts?: readonly MessageArtifactDTO[];

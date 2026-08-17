@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   assetDescriptorSchema,
+  assetOriginSchema,
   assetVersionDescriptorSchema,
   canTransitionAssetStatus,
 } from './asset-contracts';
 
 describe('generic asset contracts', () => {
+  it('将深度研究网页标记为受控来源类型', () => {
+    expect(assetOriginSchema.parse('research_web')).toBe('research_web');
+  });
+
   it('描述与课程无关的全模态资产和不可变版本', () => {
     expect(
       assetDescriptorSchema.parse({

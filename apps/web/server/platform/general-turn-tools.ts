@@ -19,7 +19,10 @@ import {
   createPlanNoteTool,
   planNoteModelInputSchema,
 } from '../tools/plan-note';
-import { resolveWebSearchTool } from '../tools/web-search';
+import {
+  resolveWebSearchTool,
+  type WebSearchProgress,
+} from '../tools/web-search';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import {
   IMAGE_GENERATION_CAPABILITY,
@@ -37,7 +40,12 @@ const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
 /** 单个Operation的网页来源账本；同一URL只分配一个稳定引用序号。 */
 export class WebOperationSources {
   private readonly byUrl = new Map<string, PlatformOperationSourceSnapshot>();
+  private readonly inFlight = new Map<
+    string,
+    Promise<{ citationMarker: number }>
+  >();
   private maximumOrdinal = 0;
+  private readonly maximumSources: number;
 
   constructor(
     private readonly input: {
@@ -45,8 +53,12 @@ export class WebOperationSources {
       conversationId: string;
       spaceId: string;
       operationId: string;
+      maximumSources?: number;
+      researchSource?: boolean;
     },
-  ) {}
+  ) {
+    this.maximumSources = input.maximumSources ?? Number.POSITIVE_INFINITY;
+  }
 
   get sourceCount(): number {
     return this.maximumOrdinal;
@@ -58,10 +70,29 @@ export class WebOperationSources {
     const sourceKey = sourceUrl.toString();
     const existing = this.byUrl.get(sourceKey);
     if (existing) return { citationMarker: existing.ordinal };
+    const pending = this.inFlight.get(sourceKey);
+    if (pending) return pending;
+    if (this.byUrl.size + this.inFlight.size >= this.maximumSources) {
+      throw new Error('web_source_budget_exceeded');
+    }
+    const persistence = this.persistNew(sourceKey, page);
+    this.inFlight.set(sourceKey, persistence);
+    try {
+      return await persistence;
+    } finally {
+      this.inFlight.delete(sourceKey);
+    }
+  }
+
+  private async persistNew(
+    sourceKey: string,
+    page: FetchedWebPage,
+  ): Promise<{ citationMarker: number }> {
     const asset = await persistFetchedWebPageAsset({
       identity: this.input.identity,
       spaceId: this.input.spaceId,
       page,
+      researchSource: this.input.researchSource,
     });
     if (!asset.version) throw new Error('web_asset_version_missing');
     const source = await webGeneralSources.createOrGetWebSource({
@@ -88,6 +119,7 @@ export function createGeneralToolKernel(
   kernel: ToolKernelPort;
   staticCapabilities: readonly string[];
   nodeInvocations: NodeInvocationPersistencePort;
+  searchProgress: WebSearchProgress;
 } {
   const fetchTool = createFetchWebPageTool(undefined, (page) =>
     operationSources.persist(page),
@@ -146,5 +178,6 @@ export function createGeneralToolKernel(
       ...mcpRuntime.capabilities,
     ],
     nodeInvocations,
+    searchProgress: searchTool ?? { successfulSearchCount: 0 },
   };
 }
