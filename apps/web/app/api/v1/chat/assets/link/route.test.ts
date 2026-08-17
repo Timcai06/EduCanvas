@@ -67,4 +67,23 @@ describe('POST /api/v1/chat/assets/link', () => {
       },
     });
   });
+
+  it('returns fake_ip_dns_detected with retryable=false and safe Chinese message', async () => {
+    mocks.importAsset.mockRejectedValue(
+      new AssetUploadError('fake_ip_dns_detected', 422),
+    );
+
+    const response = await POST(request({ url: 'https://example.com' }));
+
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      error: {
+        code: 'fake_ip_dns_detected',
+        retryable: false,
+        message:
+          '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
+      },
+    });
+  });
 });

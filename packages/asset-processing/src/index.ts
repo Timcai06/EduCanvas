@@ -8,6 +8,7 @@ export {
   extractReadableHtml,
   fetchPublicWebScript,
   fetchWebPage,
+  isFakeIpAddress,
   isPublicIpAddress,
   webPageFailureCodes,
   type FetchedWebPage,

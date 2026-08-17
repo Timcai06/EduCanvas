@@ -52,7 +52,8 @@ export class AssetUploadError extends Error {
       | 'session_not_found'
       | 'pdf_text_unavailable'
       | 'text_content_unavailable'
-      | `link_${string}`,
+      | `link_${string}`
+      | 'fake_ip_dns_detected',
     readonly status: number,
     options?: { cause?: unknown },
   ) {

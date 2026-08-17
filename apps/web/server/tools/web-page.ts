@@ -27,7 +27,8 @@ export class WebPageFetchError extends Error {
       | 'blocked_host'
       | 'fetch_failed'
       | 'unsupported_content'
-      | 'too_large',
+      | 'too_large'
+      | 'fake_ip_dns_detected',
   ) {
     super(code);
     this.name = 'WebPageFetchError';
@@ -103,12 +104,14 @@ export async function fetchReadableWebPage(
         ? 'invalid_url'
         : error.code === 'link_blocked_host'
           ? 'blocked_host'
-          : error.code === 'link_page_too_large'
-            ? 'too_large'
-            : error.code === 'link_no_extractable_content' ||
-                error.code === 'link_unsupported_format'
-              ? 'unsupported_content'
-              : 'fetch_failed';
+          : error.code === 'fake_ip_dns_detected'
+            ? 'fake_ip_dns_detected'
+            : error.code === 'link_page_too_large'
+              ? 'too_large'
+              : error.code === 'link_no_extractable_content' ||
+                  error.code === 'link_unsupported_format'
+                ? 'unsupported_content'
+                : 'fetch_failed';
     throw new WebPageFetchError(code);
   }
 }

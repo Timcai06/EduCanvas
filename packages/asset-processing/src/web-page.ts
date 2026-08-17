@@ -15,6 +15,7 @@ export const webPageFailureCodes = [
   'link_page_too_large',
   'link_no_extractable_content',
   'link_unsupported_format',
+  'fake_ip_dns_detected',
 ] as const;
 
 export type WebPageFailureCode = (typeof webPageFailureCodes)[number];
@@ -97,6 +98,23 @@ function ipv4InCidr(address: string, base: string, bits: number): boolean {
   return (ipv4Number(address) & mask) === (ipv4Number(base) & mask);
 }
 
+/**
+ * Detect addresses in the 198.18.0.0/15 range used by Fake-IP DNS proxies
+ * (Clash, mihomo, sing-box in Fake-IP mode, etc.). This range is reserved
+ * for benchmark testing (RFC 2544) but is commonly hijacked by transparent
+ * proxies to return synthetic IPs before real resolution happens.
+ *
+ * When ALL DNS answers for a domain fall in this range, the environment is
+ * running Fake-IP and cannot provide real IPs for SSRF validation.
+ */
+export function isFakeIpAddress(address: string): boolean {
+  const family = isIP(address);
+  if (family === 4) {
+    return ipv4InCidr(address, '198.18.0.0', 15);
+  }
+  return false;
+}
+
 /** Reject non-routable, private, metadata and documentation ranges. */
 export function isPublicIpAddress(address: string): boolean {
   const family = isIP(address);
@@ -162,18 +180,35 @@ async function assertPublicHost(
   if (url.hostname.toLowerCase() === 'localhost') {
     throw new WebPageError('link_blocked_host');
   }
+  const isIpAddress = isIP(url.hostname) !== 0;
   let addresses: readonly string[];
   try {
-    addresses = isIP(url.hostname)
+    addresses = isIpAddress
       ? [url.hostname]
       : await resolveHostname(url.hostname);
   } catch (cause) {
     throw new WebPageError('link_network_unreachable', { cause });
   }
+  if (addresses.length === 0) {
+    throw new WebPageError('link_blocked_host');
+  }
+  // Fake-IP DNS proxies (Clash, mihomo, sing-box in Fake-IP mode) resolve ALL
+  // domains to 198.18.0.0/15 synthetic IPs. When every answer falls in this
+  // range we cannot validate the real target, so we diagnose the environment
+  // rather than silently blocking. Mixed results (Fake-IP + private/public)
+  // fail closed because we cannot trust any individual answer.
+  //
+  // Only non-IP hostnames that go through DNS resolution can produce
+  // fake_ip_dns_detected. Direct IP literals (e.g. http://198.19.x.x)
+  // are simply blocked as non-public addresses.
   if (
-    addresses.length === 0 ||
-    addresses.some((address) => !isPublicIpAddress(address))
+    !isIpAddress &&
+    addresses.length > 0 &&
+    addresses.every((a) => isFakeIpAddress(a))
   ) {
+    throw new WebPageError('fake_ip_dns_detected');
+  }
+  if (addresses.some((a) => !isPublicIpAddress(a))) {
     throw new WebPageError('link_blocked_host');
   }
 }

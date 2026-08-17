@@ -13,6 +13,7 @@ export const linkErrorCodes = [
   'link_render_unavailable',
   'link_render_failed',
   'link_import_unavailable',
+  'fake_ip_dns_detected',
 ] as const;
 
 export type LinkClientErrorCode = (typeof linkErrorCodes)[number];
@@ -44,4 +45,6 @@ export const linkErrorCopy: Readonly<Record<LinkClientErrorCode, string>> = {
   link_render_unavailable: '网页渲染服务暂不可用。请稍后重试或上传 PDF。',
   link_render_failed: '网页渲染失败。请重试或上传 PDF。',
   link_import_unavailable: '暂时无法导入该网页。请稍后重试。',
+  fake_ip_dns_detected:
+    '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
 };
