@@ -12,7 +12,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { GatewayCapabilityManifest } from '@educanvas/gateway-core';
+import type {
+  GatewayCapabilityManifest,
+  GatewayHandoffTarget,
+} from '@educanvas/gateway-core';
 import { personalAgents, platformUsers } from './identity';
 import { spaces } from './workspace';
 import { agentOperations, conversations } from './conversation';
@@ -126,6 +129,14 @@ export const gatewayHandoffTokens = pgTable(
     issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    /**
+     * 一次性交接的精确资源目标（DP08）。`kind:'conversation'` 归一化为 null
+     * （= 仅切对话，与 DP07 语义一致）；message/artifact/resource 在 issue 时
+     * 已由服务端校验归属并绑定本行，消费时不再接受客户端提供的目标。
+     */
+    target: jsonb('target')
+      .$type<GatewayHandoffTarget | null>()
+      .default(sql`null`),
   },
   (table) => [
     index('gateway_handoff_tokens_conversation_fk_idx').on(
@@ -143,6 +154,10 @@ export const gatewayHandoffTokens = pgTable(
     check(
       'gateway_handoff_tokens_time_check',
       sql`${table.expiresAt} > ${table.issuedAt} and (${table.consumedAt} is null or ${table.consumedAt} >= ${table.issuedAt})`,
+    ),
+    check(
+      'gateway_handoff_tokens_target_shape_check',
+      sql`${table.target} is null or jsonb_typeof(${table.target}) = 'object'`,
     ),
   ],
 );

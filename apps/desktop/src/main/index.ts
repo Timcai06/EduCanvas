@@ -39,14 +39,13 @@ import { isPetVisualSignal } from '../shared/pet-visual-signal';
 import { createOperationLease } from './operation-lease';
 import { createConversationCoordinator } from './conversation-coordinator';
 import type { DesktopConversationCreateInput } from '../shared/conversation-directory';
-
+import { registerDesktopResultActions } from './result-opener';
 const WEB_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
   process.env['EDUCANVAS_DESKTOP_API_BASE'] ??
   'http://127.0.0.1:3101';
 const GATEWAY_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
-
 // Electron deep-link registration and platform callbacks follow the official pattern:
 // https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
 if (process.defaultApp && process.argv[1]) {
@@ -56,13 +55,11 @@ if (process.defaultApp && process.argv[1]) {
 } else {
   app.setAsDefaultProtocolClient(gatewayDesktopProtocol);
 }
-
 let authCoordinator: DesktopAuthCoordinator | null = null;
 let queuedDeepLink: string | null = null;
 let petController: PetWindowController | null = null;
 let expandedChatWindow: BrowserWindow | null = null;
 let petChatExpanded = true;
-
 function focusPet(): void {
   if (!petController || petController.win.isDestroyed()) return;
   petController.win.show();
@@ -122,6 +119,14 @@ if (!app.requestSingleInstanceLock()) {
     expandedChatWindow.webContents.id === senderId;
   const isDesktopSender = (senderId: number): boolean =>
     isPetSender(senderId) || isExpandedChatSender(senderId);
+  registerDesktopResultActions({
+    ipcMain,
+    isDesktopSender,
+    getSession: authAccess.getSession,
+    currentConversationId: () =>
+      conversations.currentCursor()?.conversationId ?? null,
+    openExternal: (url) => shell.openExternal(url),
+  });
   const sendToDesktopRenderers = (channel: string, payload: unknown): void => {
     for (const win of [petController?.win, expandedChatWindow]) {
       if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -201,12 +206,10 @@ if (!app.requestSingleInstanceLock()) {
       expandedChatWindow = null;
     });
   };
-
   ipcMain.on('pet:hide', (event) => {
     if (!isPetSender(event.sender.id)) return;
     petController!.win.hide();
   });
-
   ipcMain.on('pet:set-chat-expanded', (event, expanded: boolean) => {
     if (!isPetSender(event.sender.id) || typeof expanded !== 'boolean') return;
     petChatExpanded = expanded;
@@ -315,7 +318,6 @@ if (!app.requestSingleInstanceLock()) {
     if (!isDesktopSender(event.sender.id) || typeof token !== 'string') return;
     operationLease.release(event.sender.id, token);
   });
-
   ipcMain.handle('auth:get-status', (event) => {
     if (!isDesktopSender(event.sender.id))
       throw new Error('Untrusted renderer');
@@ -462,7 +464,12 @@ if (!app.requestSingleInstanceLock()) {
     'voice:synthesize',
     async (
       event,
-      payload: { requestId: string; text: string; leaseToken: string },
+      payload: {
+        requestId: string;
+        text: string;
+        assistantMessageId?: string;
+        leaseToken: string;
+      },
     ) => {
       if (!isDesktopSender(event.sender.id))
         throw new Error('Untrusted renderer');
@@ -471,12 +478,21 @@ if (!app.requestSingleInstanceLock()) {
         typeof payload.leaseToken !== 'string' ||
         !operationLease.holds(event.sender.id, payload.leaseToken) ||
         typeof payload.text !== 'string' ||
-        payload.text.length > 3_500
+        payload.text.length > 3_500 ||
+        (payload.assistantMessageId !== undefined &&
+          (typeof payload.assistantMessageId !== 'string' ||
+            payload.assistantMessageId.length > 200))
       )
         throw new Error('Invalid speech input');
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
-        return await voiceProxy.synthesize({ text: payload.text }, signal);
+        return await voiceProxy.synthesize(
+          {
+            text: payload.text,
+            assistantMessageId: payload.assistantMessageId,
+          },
+          signal,
+        );
       } finally {
         abortRegistry.finish(payload.requestId, signal);
       }
@@ -498,14 +514,12 @@ if (!app.requestSingleInstanceLock()) {
     currentConversationId: () =>
       conversations.currentCursor()?.conversationId ?? null,
   });
-
   // Windows/Linux send custom schemes to the existing single instance command line.
   app.on('second-instance', (_event, commandLine) => {
     const deepLink = findDesktopDeepLink(commandLine);
     if (deepLink) dispatchDeepLink(deepLink);
     focusPet();
   });
-
   void app.whenReady().then(async () => {
     petController = createPetWindow();
     petController.win.on('show', petMouseTracker.start);

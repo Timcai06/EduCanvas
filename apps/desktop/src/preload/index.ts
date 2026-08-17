@@ -18,6 +18,11 @@ import type {
   DesktopConversationDirectorySnapshot,
 } from '../shared/conversation-directory';
 import type { DesktopPendingOperationsSnapshot } from '../shared/pending-operation';
+import type { DesktopResultTarget } from '../shared/chat-history';
+import type {
+  DesktopImagePreviewResult,
+  DesktopOpenResult,
+} from '../shared/result-action';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -83,12 +88,20 @@ declare global {
       resume(clientMessageId: string): Promise<TurnResult>;
       getPending(): Promise<DesktopPendingOperationsSnapshot>;
     };
+    desktopResult: {
+      open(target: DesktopResultTarget): Promise<DesktopOpenResult>;
+      preview(target: DesktopResultTarget): Promise<DesktopImagePreviewResult>;
+    };
     desktopVoice: {
       transcribe(
         input: VoiceAudioInput,
         requestId: string,
       ): Promise<VoiceTranscriptionResult>;
-      synthesize(text: string, requestId: string): Promise<VoiceSpeechResult>;
+      synthesize(
+        text: string,
+        requestId: string,
+        assistantMessageId?: string,
+      ): Promise<VoiceSpeechResult>;
       cancel(requestId: string): void;
     };
   }
@@ -229,6 +242,15 @@ contextBridge.exposeInMainWorld('desktopConversation', {
   },
 });
 
+contextBridge.exposeInMainWorld('desktopResult', {
+  open(target: DesktopResultTarget): Promise<DesktopOpenResult> {
+    return ipcRenderer.invoke('result:open', target);
+  },
+  preview(target: DesktopResultTarget): Promise<DesktopImagePreviewResult> {
+    return ipcRenderer.invoke('result:preview', target);
+  },
+});
+
 contextBridge.exposeInMainWorld('desktopOperation', {
   async acquire(): Promise<DesktopOperationLeaseResult> {
     const result = (await ipcRenderer.invoke(
@@ -263,10 +285,15 @@ contextBridge.exposeInMainWorld('desktopVoice', {
       leaseToken: activeOperationLeaseToken,
     });
   },
-  synthesize(text: string, requestId: string): Promise<VoiceSpeechResult> {
+  synthesize(
+    text: string,
+    requestId: string,
+    assistantMessageId?: string,
+  ): Promise<VoiceSpeechResult> {
     return ipcRenderer.invoke('voice:synthesize', {
       text,
       requestId,
+      assistantMessageId,
       leaseToken: activeOperationLeaseToken,
     });
   },

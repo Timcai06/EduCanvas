@@ -12,7 +12,7 @@ export interface VoiceProxy {
     signal?: AbortSignal,
   ): Promise<VoiceTranscriptionResult>;
   synthesize(
-    input: { text: string },
+    input: { text: string; assistantMessageId?: string },
     signal?: AbortSignal,
   ): Promise<VoiceSpeechResult>;
 }
@@ -201,7 +201,12 @@ export function createVoiceProxy(options: {
               authorization: `Bearer ${session.token}`,
               'content-type': 'application/json',
             },
-            body: JSON.stringify({ text: input.text.trim() }),
+            body: JSON.stringify({
+              text: input.text.trim(),
+              ...(input.assistantMessageId
+                ? { assistantMessageId: input.assistantMessageId }
+                : {}),
+            }),
             signal: combinedSignal,
           },
         );

@@ -20,6 +20,7 @@ import type { TelemetryRuntime } from '@educanvas/telemetry';
 import type { GatewayEffectReconciliationControl } from '../effect-reconciliation-control';
 import type { GatewayObservability } from '../observability';
 import type { GatewayCanvasResourceService } from '../canvas-resource-service';
+import type { GatewayImagePreviewService } from '../asset-image-preview-service';
 import type { StreamingTranscriptionTicketStore } from '../streaming-transcription-ticket';
 
 /**
@@ -63,6 +64,8 @@ export interface GatewayClientTransport {
   };
   connections: Pick<GatewayConnectionService, 'list' | 'connect' | 'revoke'>;
   canvasResources?: Pick<GatewayCanvasResourceService, 'list' | 'get'>;
+  /** 图片预览必须按 bearer 主体和当前 Conversation 再授权，不能直接暴露对象存储。 */
+  imagePreviews?: Pick<GatewayImagePreviewService, 'read'>;
   /** V12 实时语音握手 ticket store；缺省时 ticket 端点 503。 */
   streamingTickets?: StreamingTranscriptionTicketStore | null;
   /** V12 实时语音 Notebook 访问校验（服务端重新绑定）；缺省时 ticket 端点 503。 */

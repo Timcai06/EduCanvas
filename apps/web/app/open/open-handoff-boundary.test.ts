@@ -31,4 +31,16 @@ describe('open handoff route', () => {
     expect(source).not.toContain("searchParams.get('conversation')");
     expect(source).not.toContain('writeActiveConversationCookie(parsed.data)');
   });
+
+  it('redirects with a focus param derived from the consumed precise target (DP08)', () => {
+    expect(source).toMatch(
+      /if\s*\(result\.status === 'consumed'\)[\s\S]*redirect\(toHomePathWithFocus\(result\.target\)\)/,
+    );
+    expect(source).toContain('return `/?focus=artifact:${target.artifactId}`');
+    expect(source).toContain(
+      "return `/?focus=${target.resourceKind === 'source' ? 'source' : 'artifact'}:${target.resourceId}`;",
+    );
+    // message/conversation/null 一律回首页，不携带资源 id。
+    expect(source).not.toContain("searchParams.get('resource')");
+  });
 });

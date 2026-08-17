@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { GatewayClient, GatewayClientError } from '@educanvas/gateway-client';
 import type {
   GatewayClientTurnRequest,
-  GatewayMessageHistoryEntry,
   GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
 import type { DesktopCanonicalMessage } from '../shared/chat-history';
+import { toCanonicalMessage } from './message-history-projection';
 
 /**
  * 一次 Turn 的稳定身份上报通道。proxy 在流式消费过程中写回 operationId 与
@@ -63,20 +63,13 @@ interface GatewayClientPort {
   ): Promise<readonly GatewayOperationEvent[]>;
 }
 
-function toCanonicalMessage(
-  entry: GatewayMessageHistoryEntry,
-): DesktopCanonicalMessage {
-  return {
-    messageId: entry.messageId,
-    clientMessageId: entry.clientMessageId,
-    role: entry.role,
-    status: entry.status,
-    content: entry.content,
-    createdAt: entry.createdAt,
-  };
-}
-
 const DEFAULT_TIMEOUT_MS = 120_000;
+/**
+ * If a caller cancels before the gateway tells us the operation id, keep the
+ * stream alive briefly so a late `operation.accepted` can still be cancelled.
+ * This is only a drain window; the renderer is released immediately.
+ */
+const CANCEL_DRAIN_TIMEOUT_MS = 5_000;
 
 function reportEvent(
   tracker: TurnTracker | undefined,
@@ -147,66 +140,139 @@ export function createAssistantProxy(options: {
       let userAborted = false;
       let timedOut = false;
       let cancelStarted = false;
+      let drainTimeout: ReturnType<typeof setTimeout> | undefined;
 
       const cancelRemoteThenStream = (): void => {
-        if (cancelStarted) return;
         if (!operationId) return;
-        cancelStarted = true;
-        void client
-          .cancelOperation(operationId)
-          .catch(() => undefined)
-          .finally(() => streamAbort.abort());
+        if (!cancelStarted) {
+          cancelStarted = true;
+          void client.cancelOperation(operationId).catch(() => undefined);
+        }
+        // The remote cancel is best effort. Never keep the local turn (and
+        // its renderer lease) waiting for a slow or unavailable cancel API.
+        streamAbort.abort();
+      };
+      let resolveLocalTermination!: (result: TurnResult) => void;
+      const localTermination = new Promise<TurnResult>((resolve) => {
+        resolveLocalTermination = resolve;
+      });
+      let localTerminationSettled = false;
+      const settleLocalTermination = (result: TurnResult): void => {
+        if (localTerminationSettled) return;
+        localTerminationSettled = true;
+        resolveLocalTermination(result);
+        drainTimeout = setTimeout(() => {
+          streamAbort.abort();
+        }, CANCEL_DRAIN_TIMEOUT_MS);
       };
       const onUserAbort = (): void => {
         userAborted = true;
         cancelRemoteThenStream();
+        settleLocalTermination({
+          ok: false,
+          code: 'aborted',
+          message: '已取消。',
+        });
       };
       signal?.addEventListener('abort', onUserAbort, { once: true });
       const timeout = setTimeout(() => {
         timedOut = true;
         cancelRemoteThenStream();
+        settleLocalTermination({
+          ok: false,
+          code: 'timeout',
+          message: '请求超时，请重试。',
+        });
       }, timeoutMs);
 
       try {
-        let answer = '';
-        for await (const event of client.streamTurn(
-          {
-            clientMessageId: input.clientMessageId ?? `desktop:${randomUUID()}`,
-            notebookId: cursor.notebookId,
-            conversationId: cursor.conversationId,
-            parts: [{ type: 'text', text: input.text }],
-          },
-          { signal: streamAbort.signal },
-        )) {
-          reportEvent(tracker, event);
-          tracker?.onEvent?.(event);
-          if (event.type === 'operation.accepted') {
-            operationId = event.operationId;
-            acceptOperation(tracker, event.operationId);
-            if (userAborted || timedOut) cancelRemoteThenStream();
-          } else if (event.type === 'message.delta') {
-            if (timedOut) {
+        const consumeStream = async (): Promise<TurnResult> => {
+          try {
+            let answer = '';
+            for await (const event of client.streamTurn(
+              {
+                clientMessageId:
+                  input.clientMessageId ?? `desktop:${randomUUID()}`,
+                notebookId: cursor.notebookId,
+                conversationId: cursor.conversationId,
+                parts: [{ type: 'text', text: input.text }],
+              },
+              { signal: streamAbort.signal },
+            )) {
+              // Once the renderer has received a local terminal result, keep
+              // draining only long enough to discover a late operation id.
+              // Do not project stale accepted/delta/final events into the UI.
+              if (localTerminationSettled) {
+                if (event.type === 'operation.accepted' && !operationId) {
+                  operationId = event.operationId;
+                  cancelRemoteThenStream();
+                }
+                continue;
+              }
+              reportEvent(tracker, event);
+              tracker?.onEvent?.(event);
+              if (event.type === 'operation.accepted') {
+                operationId = event.operationId;
+                acceptOperation(tracker, event.operationId);
+                if (userAborted || timedOut) cancelRemoteThenStream();
+              } else if (event.type === 'message.delta') {
+                if (timedOut) {
+                  return {
+                    ok: false,
+                    code: 'timeout',
+                    message: '请求超时，请重试。',
+                  };
+                }
+                if (userAborted || signal?.aborted) {
+                  return { ok: false, code: 'aborted', message: '已取消。' };
+                }
+                answer += event.delta;
+              } else if (event.type === 'operation.failed') {
+                return {
+                  ok: false,
+                  code: 'http',
+                  message: event.retryable
+                    ? 'AI 老师暂时失败，请重试。'
+                    : 'AI 老师暂时无法完成。',
+                };
+              } else if (event.type === 'operation.cancelled') {
+                return { ok: false, code: 'aborted', message: '已取消。' };
+              } else if (event.type === 'operation.completed') {
+                if (timedOut) {
+                  return {
+                    ok: false,
+                    code: 'timeout',
+                    message: '请求超时，请重试。',
+                  };
+                }
+                if (userAborted || signal?.aborted) {
+                  return { ok: false, code: 'aborted', message: '已取消。' };
+                }
+                return {
+                  ok: true,
+                  action: 'answered',
+                  message: answer.trim() || '完成',
+                  assistantMessageId: event.messageId,
+                };
+              }
+            }
+            // 流意外结束且无终态：operationId 已知则标记可续传，否则只能当普通失败。
+            if (operationId) {
               return {
                 ok: false,
-                code: 'timeout',
-                message: '请求超时，请重试。',
+                code: 'interrupted',
+                message: '连接中断，可重试续传。',
               };
             }
-            if (userAborted || signal?.aborted) {
-              return { ok: false, code: 'aborted', message: '已取消。' };
-            }
-            answer += event.delta;
-          } else if (event.type === 'operation.failed') {
             return {
               ok: false,
               code: 'http',
-              message: event.retryable
-                ? 'AI 老师暂时失败，请重试。'
-                : 'AI 老师暂时无法完成。',
+              message: '回答流意外结束，请重试。',
             };
-          } else if (event.type === 'operation.cancelled') {
-            return { ok: false, code: 'aborted', message: '已取消。' };
-          } else if (event.type === 'operation.completed') {
+          } catch (error) {
+            if (signal?.aborted || userAborted) {
+              return { ok: false, code: 'aborted', message: '已取消。' };
+            }
             if (timedOut) {
               return {
                 ok: false,
@@ -214,52 +280,39 @@ export function createAssistantProxy(options: {
                 message: '请求超时，请重试。',
               };
             }
-            if (userAborted || signal?.aborted) {
-              return { ok: false, code: 'aborted', message: '已取消。' };
+            const status =
+              error instanceof GatewayClientError
+                ? error.status
+                : (error as { status?: unknown }).status;
+            if (status === 401) {
+              await options.invalidateSession();
+              return {
+                ok: false,
+                code: 'unauthenticated',
+                message: '登录已失效，请重新登录。',
+              };
             }
-            return {
-              ok: true,
-              action: 'answered',
-              message: answer.trim() || '完成',
-            };
+            if (operationId) {
+              return {
+                ok: false,
+                code: 'interrupted',
+                message: '连接中断，可重试续传。',
+              };
+            }
+            return { ok: false, code: 'http', message: '连接中断，请重试。' };
           }
-        }
-        // 流意外结束且无终态：operationId 已知则标记可续传，否则只能当普通失败。
-        if (operationId) {
-          return {
-            ok: false,
-            code: 'interrupted',
-            message: '连接中断，可重试续传。',
-          };
-        }
-        return { ok: false, code: 'http', message: '回答流意外结束，请重试。' };
-      } catch (error) {
-        if (signal?.aborted || userAborted) {
-          return { ok: false, code: 'aborted', message: '已取消。' };
-        }
-        if (timedOut) {
-          return { ok: false, code: 'timeout', message: '请求超时，请重试。' };
-        }
-        const status =
-          error instanceof GatewayClientError
-            ? error.status
-            : (error as { status?: unknown }).status;
-        if (status === 401) {
-          await options.invalidateSession();
-          return {
-            ok: false,
-            code: 'unauthenticated',
-            message: '登录已失效，请重新登录。',
-          };
-        }
-        if (operationId) {
-          return {
-            ok: false,
-            code: 'interrupted',
-            message: '连接中断，可重试续传。',
-          };
-        }
-        return { ok: false, code: 'http', message: '连接中断，请重试。' };
+        };
+        const streamResult = consumeStream().finally(() => {
+          if (drainTimeout) clearTimeout(drainTimeout);
+        });
+        const winner = await Promise.race([
+          streamResult.then((result) => ({ kind: 'stream' as const, result })),
+          localTermination.then((result) => ({
+            kind: 'local' as const,
+            result,
+          })),
+        ]);
+        return winner.result;
       } finally {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', onUserAbort);

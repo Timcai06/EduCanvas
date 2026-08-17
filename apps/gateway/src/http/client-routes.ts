@@ -18,6 +18,7 @@ import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
 import { ZodError, z } from 'zod';
 import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
+import { GatewayImagePreviewError } from '../asset-image-preview-service';
 import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
 import {
   decodeConversationDirectoryCursor,
@@ -268,6 +269,59 @@ export async function handleClientRoutes(
       return HANDLED;
     }
 
+    const imagePreviewMatch =
+      request.method === 'GET'
+        ? url.pathname.match(
+            /^\/v1\/client\/conversations\/([^/]+)\/assets\/([^/]+)\/versions\/([^/]+)\/image-preview$/,
+          )
+        : null;
+    if (imagePreviewMatch) {
+      if (!client.imagePreviews) {
+        writeJson(response, 503, {
+          error: { code: 'CLIENT_TRANSPORT_DISABLED' },
+        });
+        return HANDLED;
+      }
+      const selectors = imagePreviewMatch.slice(1).map((value) => {
+        try {
+          return gatewayOpaqueIdSchema.safeParse(decodeURIComponent(value!));
+        } catch {
+          return gatewayOpaqueIdSchema.safeParse(null);
+        }
+      });
+      const [conversationId, assetId, assetVersionId] = selectors;
+      if (
+        !conversationId?.success ||
+        !assetId?.success ||
+        !assetVersionId?.success
+      ) {
+        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
+        return HANDLED;
+      }
+      try {
+        const preview = await client.imagePreviews.read({
+          conversationId: conversationId.data,
+          trustedSubjectId: identity.userId,
+          assetId: assetId.data,
+          assetVersionId: assetVersionId.data,
+        });
+        response.writeHead(200, {
+          'content-type': preview.mimeType,
+          'content-length': preview.bytes.byteLength,
+          'cache-control': 'private, no-store',
+          'x-content-type-options': 'nosniff',
+        });
+        response.end(preview.bytes);
+      } catch (error) {
+        if (error instanceof GatewayImagePreviewError) {
+          writeJson(response, error.status, { error: { code: error.code } });
+          return HANDLED;
+        }
+        throw error;
+      }
+      return HANDLED;
+    }
+
     if (request.method === 'GET' && url.pathname === '/v1/client/approvals') {
       writeJson(response, 200, {
         approvals: await client.approvals.listPending(identity.userId),
@@ -419,6 +473,7 @@ export async function handleClientRoutes(
         tokenDigest: createHash('sha256').update(token, 'utf8').digest('hex'),
         userId: identity.userId,
         conversationId: body.conversationId,
+        ...(body.target ? { target: body.target } : {}),
         issuedAt,
         expiresAt,
       });
