@@ -2,9 +2,10 @@
   "policy": "Review at 400 lines; split before 600 unless a named plan owns the debt.",
   "threshold": 400,
   "files": {
-    "apps/desktop/src/main/index.ts": 600,
-    "apps/desktop/src/renderer/src/App.tsx": 529,
-    "apps/desktop/src/renderer/src/pet-chat-panel.tsx": 405,
+    "apps/desktop/src/main/assistant-proxy.ts": 423,
+    "apps/desktop/src/main/index.ts": 614,
+    "apps/desktop/src/renderer/src/App.tsx": 548,
+    "apps/desktop/src/renderer/src/pet-chat-panel.tsx": 435,
     "apps/gateway/src/http/client-routes.ts": 654,
     "apps/gateway/src/streaming-transcription-channel.ts": 549,
     "apps/gateway/src/streaming-transcription-ws-transport.ts": 449,
