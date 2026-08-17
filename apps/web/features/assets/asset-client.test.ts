@@ -193,6 +193,46 @@ describe('asset browser client', () => {
       importLinkAsset({ url: 'https://example.com', endpoint: '/link' }),
     ).rejects.toThrow('导入响应格式不正确。');
   });
+
+  it('keeps stable link error code and retryability without exposing unknown server text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: 'link_access_blocked',
+              message: '/internal/provider stack',
+              retryable: false,
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(
+      importLinkAsset({ url: 'https://example.com' }),
+    ).rejects.toMatchObject({
+      code: 'link_access_blocked',
+      retryable: false,
+      message: '网页拒绝访问或需要登录。请保存为 PDF 后上传。',
+    });
+  });
+
+  it('maps a network failure to a retryable link error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    );
+
+    await expect(
+      importLinkAsset({ url: 'https://example.com' }),
+    ).rejects.toMatchObject({
+      code: 'link_network_unreachable',
+      retryable: true,
+    });
+  });
 });
 
 describe('loadAssets 错误分类（W03 六种语义）', () => {

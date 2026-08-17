@@ -78,6 +78,7 @@ export interface ToolLifecycleEvent extends TurnEventBase {
   toolCallId: string;
   label?: string;
   code?: string;
+  activity?: 'web_search' | 'web_fetch' | 'other';
 }
 
 /**
@@ -419,12 +420,25 @@ export function parseTeachingTurnEvent(
     parsed.code === undefined
       ? undefined
       : readString(parsed, 'code', eventName, MAX_CODE_LENGTH);
+  const activity = (() => {
+    if (parsed.activity === undefined) return undefined;
+    const candidate = readString(parsed, 'activity', eventName, 32);
+    if (
+      candidate !== 'web_search' &&
+      candidate !== 'web_fetch' &&
+      candidate !== 'other'
+    ) {
+      throw new TurnStreamProtocolError(`${eventName}.activity is invalid`);
+    }
+    return candidate;
+  })();
   return {
     type: eventName as ToolLifecycleEvent['type'],
     schemaVersion: TURN_EVENT_SCHEMA_VERSION,
     turnId,
     toolCallId: readString(parsed, 'toolCallId', eventName),
     ...(label ? { label } : {}),
+    ...(activity ? { activity } : {}),
     ...(eventName === 'tool.failed' && code ? { code } : {}),
   };
 }

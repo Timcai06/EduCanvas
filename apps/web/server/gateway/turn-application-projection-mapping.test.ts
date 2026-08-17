@@ -124,6 +124,7 @@ describe('gatewayToLegacy canonical→legacy 表驱动映射', () => {
           type: 'tool.started',
           toolCallId: 'tool-call:1',
           label: '正在搜索网页',
+          activity: 'web_search',
         },
       ],
     },

@@ -45,6 +45,7 @@ export type TeachingTurnAction =
         kind: 'image' | 'document';
       }[];
       assistantLabel?: string;
+      mode?: 'chat' | 'deep_research';
     }
   | { type: 'stream.event'; event: TeachingTurnEvent }
   | {
@@ -214,6 +215,7 @@ export function teachingTurnReducer(
       citations: [],
       retryText: action.text,
       retryParts: action.parts ?? [],
+      retryMode: action.mode,
     };
     return {
       ...state,

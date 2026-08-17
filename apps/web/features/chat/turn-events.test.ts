@@ -136,6 +136,26 @@ describe('teaching turn SSE protocol', () => {
     ).toBeNull();
   });
 
+  it('只接受服务端白名单中的安全工具活动分类', () => {
+    const event = {
+      type: 'tool.started',
+      schemaVersion: '1',
+      turnId: 'turn-research',
+      toolCallId: 'call-search-1',
+      label: '正在搜索网页',
+      activity: 'web_search',
+    };
+    expect(
+      parseTeachingTurnEvent('tool.started', JSON.stringify(event)),
+    ).toMatchObject({ activity: 'web_search' });
+    expect(() =>
+      parseTeachingTurnEvent(
+        'tool.started',
+        JSON.stringify({ ...event, activity: 'provider.raw.search' }),
+      ),
+    ).toThrow(TurnStreamProtocolError);
+  });
+
   it('严格解析服务端验证过的引用事件', () => {
     expect(
       parseTeachingTurnEvent(

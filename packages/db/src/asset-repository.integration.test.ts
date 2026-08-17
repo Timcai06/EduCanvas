@@ -291,6 +291,7 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
       /* assetVersionId/producer 供日志链路使用（ADR-0026 决定 6）。 */
       assetVersionId: versionId,
       producer: 'default',
+      webFinalUrl: null,
     });
     await expect(
       repository.settleTextExtraction({
@@ -452,6 +453,110 @@ describeWithDatabase('平台Asset仓储与消息引用', () => {
         },
       }),
     ).resolves.toBe(true);
+  });
+
+  it('链接待处理版本与网页溯源在同一事务落库并可安全读取', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const fetchedAt = new Date('2026-08-17T03:04:05.000Z');
+    const created = await repository.createUploadedPending(
+      {
+        ownerSubjectId,
+        spaceId,
+        scope: 'space',
+        kind: 'link',
+        origin: 'url_import',
+        displayName: 'Research article',
+        mimeType: 'text/html',
+        byteSize: 128,
+        contentHash: '9'.repeat(64),
+        storageKey: 'uploads/fixture/article.html',
+        webSnapshot: {
+          requestedUrl: 'https://example.com/article#section',
+          finalUrl: 'https://www.example.com/article',
+          responseContentType: 'text/html',
+          pageTitle: 'Research article',
+          fetchedAt,
+        },
+      },
+      { enqueue: false },
+    );
+
+    await expect(
+      getDatabase()
+        .select()
+        .from(schema.assetWebSnapshots)
+        .where(eq(schema.assetWebSnapshots.assetVersionId, created.versionId)),
+    ).resolves.toMatchObject([
+      {
+        requestedUrl: 'https://example.com/article',
+        finalUrl: 'https://www.example.com/article',
+        responseContentType: 'text/html',
+        pageTitle: 'Research article',
+        fetchedAt,
+      },
+    ]);
+
+    await repository.settleTextExtraction({
+      jobId: created.jobId,
+      outcome: {
+        status: 'ready',
+        extractedText: 'Readable article content',
+        derivedStorageKey: `derived/text/${created.jobId}/article.txt`,
+        checksum: 'd'.repeat(64),
+      },
+    });
+    await expect(
+      repository.getOwnedWebSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.snapshot.descriptor.assetId,
+      }),
+    ).resolves.toEqual({
+      assetVersionId: created.versionId,
+      requestedUrl: 'https://example.com/article',
+      finalUrl: 'https://www.example.com/article',
+      responseContentType: 'text/html',
+      pageTitle: 'Research article',
+      fetchedAt: fetchedAt.toISOString(),
+    });
+  });
+
+  it('已读取的研究网页正文与原始快照原子落库', async () => {
+    const repository = new DrizzleAssetRepository(getDatabase());
+    const fetchedAt = new Date('2026-08-17T04:05:06.000Z');
+    const created = await repository.createUploaded({
+      ownerSubjectId,
+      spaceId,
+      scope: 'space',
+      kind: 'link',
+      origin: 'research_web',
+      displayName: 'Research source',
+      mimeType: 'text/html',
+      byteSize: 64,
+      contentHash: '7'.repeat(64),
+      storageKey: 'uploads/fixture/research.html',
+      extractedText: 'Research body',
+      outcome: { status: 'ready' },
+      webSnapshot: {
+        requestedUrl: 'https://example.com/research',
+        finalUrl: 'https://example.com/research-final',
+        responseContentType: 'text/html',
+        pageTitle: 'Research source',
+        fetchedAt,
+      },
+    });
+
+    await expect(
+      repository.getOwnedWebSnapshot({
+        ownerSubjectId,
+        spaceId,
+        assetId: created.descriptor.assetId,
+      }),
+    ).resolves.toMatchObject({
+      requestedUrl: 'https://example.com/research',
+      finalUrl: 'https://example.com/research-final',
+      fetchedAt: fetchedAt.toISOString(),
+    });
   });
 
   it('音频转录从processing推进当前版本并生成安全派生表示', async () => {

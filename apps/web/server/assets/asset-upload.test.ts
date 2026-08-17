@@ -2,14 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-const { drizzleRepo, inspectSupportedAudioSource } = vi.hoisted(() => ({
-  drizzleRepo: {
-    createUploaded: vi.fn(),
-    createUploadedPending: vi.fn(),
-    listOwnedSpace: vi.fn(),
-  },
-  inspectSupportedAudioSource: vi.fn(),
-}));
+const { drizzleRepo, fetchWebPage, inspectSupportedAudioSource } = vi.hoisted(
+  () => ({
+    drizzleRepo: {
+      createUploaded: vi.fn(),
+      createUploadedPending: vi.fn(),
+      listOwnedSpace: vi.fn(),
+    },
+    fetchWebPage: vi.fn(),
+    inspectSupportedAudioSource: vi.fn(),
+  }),
+);
 
 vi.mock('@educanvas/db', async () => {
   const actual =
@@ -21,10 +24,10 @@ vi.mock('@educanvas/db', async () => {
     }),
   };
 });
-vi.mock('@/server/teaching/learning-session', () => ({
+vi.mock('../teaching/learning-session', () => ({
   loadOwnedTeachingGatewayTarget: vi.fn(),
 }));
-vi.mock('@/server/assets/asset-storage', () => ({
+vi.mock('./asset-storage', () => ({
   storeAssetBytes: vi.fn(),
   removeStoredAsset: vi.fn(),
 }));
@@ -41,12 +44,16 @@ vi.mock('@educanvas/asset-processing', async () => {
   const actual = await vi.importActual<
     typeof import('@educanvas/asset-processing')
   >('@educanvas/asset-processing');
-  return { ...actual, inspectSupportedAudioSource };
+  return { ...actual, fetchWebPage, inspectSupportedAudioSource };
 });
 
-import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
+import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import { removeStoredAsset, storeAssetBytes } from './asset-storage';
-import { uploadOwnedAsset } from './asset-upload';
+import {
+  importOwnedLinkAsset,
+  persistFetchedWebPageAsset,
+  uploadOwnedAsset,
+} from './asset-upload';
 import { extractText, getDocumentProxy } from 'unpdf';
 import mammoth from 'mammoth';
 import { AudioInspectionError } from '@educanvas/asset-processing';
@@ -104,6 +111,7 @@ describe('uploadOwnedAsset', () => {
     (getDocumentProxy as ReturnType<typeof vi.fn>).mockReset?.();
     vi.mocked(mammoth.extractRawText).mockReset();
     inspectSupportedAudioSource.mockReset();
+    fetchWebPage.mockReset();
     inspectSupportedAudioSource.mockResolvedValue({
       mimeType: 'audio/wav',
       extension: 'wav',
@@ -125,6 +133,93 @@ describe('uploadOwnedAsset', () => {
     });
     vi.mocked(removeStoredAsset).mockResolvedValue(undefined);
     vi.mocked(getDocumentProxy).mockResolvedValue({} as never);
+  });
+
+  it('网页导入保存原始 HTML 与安全溯源并异步入队', async () => {
+    const bytes = new TextEncoder().encode(
+      '<html><head><title>研究页面</title></head><body><div id="app"></div></body></html>',
+    );
+    const fetchedAt = new Date('2026-08-17T00:00:00.000Z');
+    fetchWebPage.mockResolvedValue({
+      requestedUrl: 'https://example.com/topic',
+      finalUrl: 'https://www.example.com/topic',
+      contentType: 'text/html',
+      bytes,
+      fetchedAt,
+      title: '研究页面',
+      summary: '',
+      text: '',
+    });
+
+    await importOwnedLinkAsset({
+      identity,
+      spaceId: 'space-1',
+      url: 'https://example.com/topic',
+    });
+
+    expect(fetchWebPage).toHaveBeenCalledWith('https://example.com/topic', {
+      allowEmptyText: true,
+    });
+    expect(storeAssetBytes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerSubjectId: identity.studentId,
+        bytes,
+        extension: 'html',
+      }),
+    );
+    expect(drizzleRepo.createUploadedPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'link',
+        origin: 'url_import',
+        mimeType: 'text/html',
+        webSnapshot: {
+          requestedUrl: 'https://example.com/topic',
+          finalUrl: 'https://www.example.com/topic',
+          responseContentType: 'text/html',
+          pageTitle: '研究页面',
+          fetchedAt,
+        },
+      }),
+    );
+  });
+
+  it('研究来源保存本次读取的原始网页和版本溯源', async () => {
+    const bytes = new TextEncoder().encode(
+      '<html><body>研究正文</body></html>',
+    );
+    const fetchedAt = new Date('2026-08-17T00:00:00.000Z');
+
+    await persistFetchedWebPageAsset({
+      identity,
+      spaceId: 'space-1',
+      researchSource: true,
+      page: {
+        requestedUrl: 'https://example.com/research',
+        url: 'https://www.example.com/research',
+        title: '研究页面',
+        text: '研究正文',
+        bytes,
+        contentType: 'text/html',
+        fetchedAt,
+      },
+    });
+
+    expect(storeAssetBytes).toHaveBeenCalledWith(
+      expect.objectContaining({ bytes, extension: 'html' }),
+    );
+    expect(drizzleRepo.createUploaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: 'research_web',
+        mimeType: 'text/html',
+        webSnapshot: {
+          requestedUrl: 'https://example.com/research',
+          finalUrl: 'https://www.example.com/research',
+          responseContentType: 'text/html',
+          pageTitle: '研究页面',
+          fetchedAt,
+        },
+      }),
+    );
   });
 
   it('可抽取类型落库为待解析并立即返回，不在请求内解析', async () => {

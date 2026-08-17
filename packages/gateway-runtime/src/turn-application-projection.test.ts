@@ -23,6 +23,9 @@ describe('Turn Application Gateway projection', () => {
     expect(toGatewayFailureCode('TOOL_FAILED')).toBe('RUNTIME_FAILED');
     expect(toGatewayFailureCode('RATE_LIMITED')).toBe('RATE_LIMITED');
     expect(toGatewayFailureCode('POLICY_BLOCKED')).toBe('POLICY_BLOCKED');
+    expect(toGatewayFailureCode('RESEARCH_REQUIREMENTS_UNMET')).toBe(
+      'RESEARCH_REQUIREMENTS_UNMET',
+    );
   });
 
   it('builds approvals only from supported L2/L3 Gateway capabilities', () => {

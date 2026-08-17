@@ -27,5 +27,7 @@ describe('StudioResourceLibrary boundary', () => {
     expect(source).not.toContain('getResourceDetail');
     expect(source).not.toMatch(/\b(?:content|objectKey|binary|byteStream)\b/);
     expect(source).toContain('getResourceLibraryActions(summary)');
+    expect(source).toContain('研究来源');
+    expect(source).toContain('summary.context.researchSource');
   });
 });

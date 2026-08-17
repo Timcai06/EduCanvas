@@ -29,6 +29,13 @@ import {
 import { webGeneralTurns } from './general-turn-persistence';
 import { resolveWebGeneralToolPolicy } from './general-turn-tool-policy';
 import type { WebOperationSources } from './general-turn-tools';
+import {
+  DEEP_RESEARCH_MAX_TOOL_ROUNDS,
+  DEEP_RESEARCH_SYSTEM_GUIDANCE,
+  DeepResearchOutputGuard,
+  createPassThroughOutputGuard,
+} from './general-deep-research';
+import type { WebSearchProgress } from '../tools/web-search';
 
 const PROMPT_VERSION = 'general-chat-v8';
 
@@ -116,9 +123,31 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
     private readonly staticToolCapabilities: readonly string[],
     private readonly nodeInvocations: NodeInvocationPersistencePort,
     private readonly membershipRole: NotebookMembershipRole,
+    private readonly searchProgress: WebSearchProgress,
   ) {}
 
+  createOutputGuard(
+    input: Parameters<
+      NonNullable<TurnApplicationProfilePort['createOutputGuard']>
+    >[0],
+  ) {
+    if (input.command.mode === 'deep_research') {
+      const searchProgress = this.searchProgress;
+      const operationSources = this.operationSources;
+      return new DeepResearchOutputGuard({
+        get successfulSearchCount() {
+          return searchProgress.successfulSearchCount;
+        },
+        get sourceCount() {
+          return operationSources.sourceCount;
+        },
+      });
+    }
+    return createPassThroughOutputGuard();
+  }
+
   async prepare(input: Parameters<TurnApplicationProfilePort['prepare']>[0]) {
+    const deepResearch = input.command.mode === 'deep_research';
     const basePrompt = this.staticToolCapabilities.includes(
       IMAGE_GENERATION_CAPABILITY,
     )
@@ -135,7 +164,7 @@ ${IMAGE_TOOL_GUIDANCE}`
             : WEB_APP_HINT;
     const systemPrompt = `${basePrompt}
 
-${outputPreferenceHint}`;
+${deepResearch ? DEEP_RESEARCH_SYSTEM_GUIDANCE : outputPreferenceHint}`;
     const history = await webGeneralTurns.listMessages({
       conversationId: input.command.notebook.conversationId,
       trustedSubjectId: input.command.actor.actorId,
@@ -240,7 +269,9 @@ ${outputPreferenceHint}`;
         taskAlias: 'agent.turn' as const,
         modelAlias: 'primary' as const,
         promptVersion: PROMPT_VERSION,
-        maxToolRounds: GENERAL_MAX_TOOL_ROUNDS,
+        maxToolRounds: deepResearch
+          ? DEEP_RESEARCH_MAX_TOOL_ROUNDS
+          : GENERAL_MAX_TOOL_ROUNDS,
         // Q03：通用 Turn 预算模板（服务端冻结，LOOP 阶段强制执行）。
         usageBudget: TURN_USAGE_BUDGET_TEMPLATES['agent.turn'],
       },

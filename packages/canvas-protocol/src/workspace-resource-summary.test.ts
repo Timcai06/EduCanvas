@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseWorkspaceResourceSummary,
   workspaceResourceSummarySchema,
+  workspaceSourceResourceSummarySchema,
   type WorkspaceArtifactResourceSummary,
   type WorkspaceSourceResourceSummary,
 } from './workspace-resource-summary';
@@ -59,6 +60,18 @@ describe('workspaceResourceSummarySchema', () => {
   it('接受 Source 的真实版本、context 和共享 surface 状态', () => {
     expect(workspaceResourceSummarySchema.parse(sourceSummary())).toEqual(
       sourceSummary(),
+    );
+  });
+
+  it('只用安全布尔值标记研究来源', () => {
+    const summary = sourceSummary({
+      context: { enabled: true, researchSource: true },
+    });
+    expect(workspaceSourceResourceSummarySchema.parse(summary).context).toEqual(
+      {
+        enabled: true,
+        researchSource: true,
+      },
     );
   });
 

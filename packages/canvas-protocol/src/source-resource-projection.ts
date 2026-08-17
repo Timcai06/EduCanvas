@@ -6,7 +6,8 @@ import {
 } from './resource';
 import type { CanvasResourceErrorCode } from './resource-errors';
 
-type SourceAssetOrigin = 'upload' | 'url_import' | 'generated' | 'library';
+type SourceAssetOrigin =
+  'upload' | 'url_import' | 'research_web' | 'generated' | 'library';
 type SourceAssetStatus =
   'pending' | 'processing' | 'ready' | 'failed' | 'tombstoned';
 type CanvasAccessRole = 'owner' | 'editor' | 'contributor' | 'viewer';
@@ -38,6 +39,11 @@ const SOURCE_RENDERERS = {
     downloadable: false,
   },
   'text/plain': {
+    representation: 'text',
+    rendererId: 'source.text',
+    downloadable: false,
+  },
+  'text/html': {
     representation: 'text',
     rendererId: 'source.text',
     downloadable: false,
@@ -151,6 +157,7 @@ function provenance(origin: SourceAssetOrigin): {
 } {
   switch (origin) {
     case 'url_import':
+    case 'research_web':
       return { origin: 'url_import', createdBy: 'import' };
     case 'generated':
       return { origin: 'derived', createdBy: 'agent' };

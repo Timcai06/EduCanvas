@@ -11,16 +11,14 @@ import {
   AUDIO_TRANSCRIPTION_MAX_INPUT_BYTES,
   AudioInspectionError,
   VIDEO_SOURCE_MAX_INPUT_BYTES,
+  WebPageError,
+  fetchWebPage,
   inspectSupportedAudioSource,
   supportsTextExtraction,
 } from '@educanvas/asset-processing';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
-import {
-  WebPageFetchError,
-  fetchReadableWebPage,
-  type FetchedWebPage,
-} from '../tools/web-page';
+import { type FetchedWebPage } from '../tools/web-page';
 import {
   removeStoredAsset,
   storeAssetBytes,
@@ -205,35 +203,63 @@ export async function importOwnedLinkAsset(input: {
 }): Promise<AssetSnapshot> {
   let page;
   try {
-    page = await fetchReadableWebPage(input.url);
+    page = await fetchWebPage(input.url, { allowEmptyText: true });
   } catch (error) {
-    const code =
-      error instanceof WebPageFetchError ? error.code : 'fetch_failed';
-    throw new AssetUploadError(`link_${code}`, 422);
+    throw new AssetUploadError(
+      error instanceof WebPageError ? error.code : 'link_network_unreachable',
+      422,
+    );
   }
-  return persistFetchedWebPageAsset({
-    identity: input.identity,
-    spaceId: input.spaceId,
-    page,
+  const stored = await storeAssetBytes({
+    ownerSubjectId: input.identity.studentId,
+    bytes: page.bytes,
+    extension: 'html',
   });
+  try {
+    const host = new URL(page.finalUrl).hostname;
+    return (
+      await assets.createUploadedPending({
+        ownerSubjectId: input.identity.studentId,
+        spaceId: input.spaceId,
+        scope: 'space',
+        kind: 'link',
+        origin: 'url_import',
+        displayName: safeDisplayName(page.title?.trim() || host),
+        mimeType: 'text/html',
+        byteSize: page.bytes.byteLength,
+        contentHash: createHash('sha256').update(page.bytes).digest('hex'),
+        storageKey: stored.storageKey,
+        webSnapshot: {
+          requestedUrl: page.requestedUrl,
+          finalUrl: page.finalUrl,
+          responseContentType: page.contentType,
+          pageTitle: page.title,
+          fetchedAt: page.fetchedAt,
+        },
+      })
+    ).snapshot;
+  } catch (error) {
+    await removeStoredAsset(stored).catch(() => undefined);
+    throw error;
+  }
 }
 
 /**
- * 将已经通过 fetchReadableWebPage 安全边界取得的完整正文保存为 Link Asset。
+ * 将已经通过网页 Tool 安全边界取得的完整正文保存为 Link Asset。
  * Tool 路径复用此函数，避免为了持久化再次请求同一 URL，确保引用对应本次读取快照。
  */
 export async function persistFetchedWebPageAsset(input: {
   identity: AnonymousIdentity;
   spaceId: string;
   page: FetchedWebPage;
+  researchSource?: boolean;
 }): Promise<AssetSnapshot> {
   const page = input.page;
   const text = [...page.text].slice(0, MAX_EXTRACTED_TEXT).join('');
-  const bytes = new TextEncoder().encode(text);
   const stored = await storeAssetBytes({
     ownerSubjectId: input.identity.studentId,
-    bytes,
-    extension: 'txt',
+    bytes: page.bytes,
+    extension: 'html',
   });
   try {
     const host = new URL(page.url).hostname;
@@ -242,14 +268,21 @@ export async function persistFetchedWebPageAsset(input: {
       spaceId: input.spaceId,
       scope: 'space',
       kind: 'link',
-      origin: 'url_import',
+      origin: input.researchSource ? 'research_web' : 'url_import',
       displayName: safeDisplayName(page.title?.trim() || host),
-      mimeType: 'text/plain',
-      byteSize: bytes.byteLength,
-      contentHash: createHash('sha256').update(bytes).digest('hex'),
+      mimeType: page.contentType,
+      byteSize: page.bytes.byteLength,
+      contentHash: createHash('sha256').update(page.bytes).digest('hex'),
       storageKey: stored.storageKey,
       extractedText: text,
       outcome: { status: 'ready' },
+      webSnapshot: {
+        requestedUrl: page.requestedUrl,
+        finalUrl: page.url,
+        responseContentType: page.contentType,
+        pageTitle: page.title,
+        fetchedAt: page.fetchedAt,
+      },
     });
   } catch (error) {
     await removeStoredAsset(stored).catch(() => undefined);

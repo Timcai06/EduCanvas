@@ -140,6 +140,7 @@ describe('teaching turn browser state machine', () => {
       clientMessageId: 'client-1',
       text: '再解释一次',
       parts: [{ type: 'text', text: '再解释一次' }, assetPart],
+      mode: 'deep_research',
     });
     state = teachingTurnReducer(state, {
       type: 'stream.event',
@@ -162,6 +163,7 @@ describe('teaching turn browser state machine', () => {
       status: 'interrupted',
       retryText: '再解释一次',
       retryParts: [{ type: 'text', text: '再解释一次' }, assetPart],
+      retryMode: 'deep_research',
       retryable: true,
     });
     expect(state.announcement?.text).toBe('AI 老师回答失败');

@@ -205,10 +205,12 @@ export {
   turnApplicationFailureCodeSchema,
   turnApplicationFailureCodes,
   turnApplicationProtocolVersion,
+  turnModeSchema,
   validateTurnApplicationEventSequence,
   type TurnApplicationCommand,
   type TurnApplicationEvent,
   type TurnApplicationFailureCode,
+  type TurnMode,
 } from './turn-application-contracts';
 
 export {

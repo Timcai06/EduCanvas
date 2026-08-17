@@ -60,6 +60,13 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof TurnRequestValidationError) {
       return validationErrorResponse(error);
     }
+    if (hasStableErrorCode(error, 'deep_research_unavailable')) {
+      return jsonError(
+        503,
+        'deep_research_unavailable',
+        '当前部署尚未配置网页搜索，暂时无法开始深度研究。',
+      );
+    }
     if (error instanceof PlatformMessageIdConflictError) {
       return jsonError(409, error.code, '这条消息标识已被其他内容使用。');
     }

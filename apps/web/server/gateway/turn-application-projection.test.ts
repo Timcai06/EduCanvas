@@ -114,6 +114,23 @@ describe('Turn Application Web/Gateway golden parity', () => {
       },
     ]);
   });
+
+  it('研究证据不足只投影稳定错误码和安全操作建议', () => {
+    expect(
+      projectTurnApplicationEventToWeb({
+        ...base,
+        type: 'turn.failed',
+        messageId: 'message:assistant:1',
+        code: 'RESEARCH_REQUIREMENTS_UNMET',
+        retryable: false,
+      }),
+    ).toMatchObject({
+      type: 'turn.failed',
+      code: 'RESEARCH_REQUIREMENTS_UNMET',
+      message: expect.stringContaining('研究材料不足'),
+      retryable: false,
+    });
+  });
 });
 
 describe('工具动作名投影', () => {

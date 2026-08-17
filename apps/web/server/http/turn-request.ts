@@ -7,6 +7,7 @@ import {
   normalizeAgentMessageParts,
   type AgentMessagePart,
   type OutputPreference,
+  type TurnMode,
 } from '@educanvas/agent-core';
 
 const MAX_TURN_REQUEST_BYTES = 64 * 1024;
@@ -36,6 +37,8 @@ export interface TeachingTurnRequestBody {
    * `canvas` 为旧别名，服务端已归一化为 `interactive_artifact`。
    */
   outputPreference?: OutputPreference;
+  /** Workflow selection only; capability grants remain server-owned. */
+  mode?: TurnMode;
 }
 
 async function readLimitedUtf8(request: Request): Promise<string> {
@@ -117,8 +120,17 @@ export async function parseTeachingTurnRequest(
   if (outputPreference === null) {
     throw new TurnRequestValidationError('invalid_request');
   }
+  const mode =
+    record.mode === undefined || record.mode === 'chat'
+      ? undefined
+      : record.mode === 'deep_research'
+        ? record.mode
+        : null;
+  if (mode === null) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
   const keys = Object.keys(record)
-    .filter((key) => key !== 'outputPreference')
+    .filter((key) => key !== 'outputPreference' && key !== 'mode')
     .sort()
     .join(',');
   const candidate =
@@ -147,5 +159,6 @@ export async function parseTeachingTurnRequest(
     text,
     parts,
     ...(outputPreference ? { outputPreference } : {}),
+    ...(mode ? { mode } : {}),
   };
 }

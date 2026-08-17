@@ -115,6 +115,7 @@ describe('gatewayToLegacy 未知枚举 fail closed', () => {
       type: 'tool.started',
       toolCallId: 'tool-call:1',
       label: '正在使用工具',
+      activity: 'other',
     });
   });
 
@@ -202,6 +203,7 @@ describe('UI 文案变化不改变协议标识', () => {
         type: 'tool.started',
         toolCallId: 'tool-call:1',
         label: '正在搜索网页',
+        activity: 'web_search',
       });
     }
   });

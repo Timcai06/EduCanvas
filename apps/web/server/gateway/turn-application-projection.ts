@@ -12,6 +12,9 @@ function safeFailureMessage(
   if (code === 'RATE_LIMITED') return '请求较多，请稍后重试。';
   if (code === 'POLICY_BLOCKED') return '这轮内容已由安全规则停止。';
   if (code === 'CAPABILITY_UNAVAILABLE') return '当前能力暂时不可用。';
+  if (code === 'RESEARCH_REQUIREMENTS_UNMET') {
+    return '研究材料不足，尚未达到完整报告所需的搜索、来源和引用数量。请重试或调整研究主题。';
+  }
   if (audience === 'teaching') {
     return 'AI 老师暂时无法连接，请稍后重试。';
   }
@@ -46,6 +49,19 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
 
 function displayToolLabel(tool: string): string {
   return TOOL_LABELS[tool] ?? '正在使用工具';
+}
+
+export type PublicToolActivity = 'web_search' | 'web_fetch' | 'other';
+
+/** Coarse, allowlisted progress only. Never project tool arguments or output. */
+function publicToolActivity(tool: string): PublicToolActivity {
+  if (tool === 'web.search' || tool === 'web_search' || tool === 'webSearch') {
+    return 'web_search';
+  }
+  if (tool === 'web.fetch' || tool === 'web_fetch' || tool === 'fetchWebPage') {
+    return 'web_fetch';
+  }
+  return 'other';
 }
 
 /**
@@ -95,6 +111,7 @@ export function projectTurnApplicationEventToWeb(
         type: 'tool.started',
         toolCallId: event.toolCallId,
         label: event.label ?? displayToolLabel(event.tool),
+        activity: publicToolActivity(event.tool),
       };
     case 'tool.completed':
       return { ...base, type: 'tool.completed', toolCallId: event.toolCallId };
@@ -217,6 +234,7 @@ export async function* gatewayToLegacy(
           type: 'tool.started',
           toolCallId: event.toolCallId,
           label: displayToolLabel(event.tool),
+          activity: publicToolActivity(event.tool),
         };
         break;
       case 'tool.completed':

@@ -69,10 +69,13 @@ function createProfile(input?: {
   outputPreference?:
     'auto' | 'markdown_document' | 'interactive_artifact' | 'web_app';
   assetContext?: MaterializedAssetPlan;
+  operationSources?: WebOperationSources;
+  successfulSearchCount?: number;
 }) {
   return new WebGeneralProfile(
     input?.assetContext ?? assetContext,
-    { sourceCount: 0 } as unknown as WebOperationSources,
+    input?.operationSources ??
+      ({ sourceCount: 0 } as unknown as WebOperationSources),
     input?.operationArtifacts ??
       ({ events: () => [] } as unknown as WebOperationArtifacts),
     input?.operationImages ??
@@ -81,6 +84,7 @@ function createProfile(input?: {
     input?.staticToolCapabilities ?? ['web.fetch', 'web.search'],
     input?.nodeInvocations ?? createNodeInvocations(),
     input?.membershipRole ?? 'owner',
+    { successfulSearchCount: input?.successfulSearchCount ?? 0 },
   );
 }
 
@@ -95,6 +99,63 @@ afterEach(() => {
 });
 
 describe('WebGeneralProfile trusted Tool Policy', () => {
+  it('Deep Research 复用同一 Profile Port，但提升到 4 个工具轮次并冻结研究提示', async () => {
+    const plan = await createProfile().prepare({
+      command: { ...command, mode: 'deep_research' },
+      turn,
+    });
+    const prompt = plan.context.profile[0]?.message.content ?? '';
+
+    expect(plan.model.maxToolRounds).toBe(4);
+    expect(prompt).toContain('至少完成三轮');
+    expect(prompt).toContain('分析证据缺口');
+    expect(prompt).toContain('关键结论与证据');
+    expect(prompt).toContain('不得引用搜索摘要');
+  });
+
+  it('Deep Research 仅在三轮搜索、五个来源和五个有效引用都满足时放行报告', async () => {
+    const profile = createProfile({
+      operationSources: { sourceCount: 5 } as WebOperationSources,
+      successfulSearchCount: 3,
+    });
+    const guard = profile.createOutputGuard!({
+      command: { ...command, mode: 'deep_research' },
+      turn,
+    });
+    const report =
+      '# 摘要\n结论一[1]，结论二[2]，结论三[3]，结论四[4]，结论五[5]。';
+
+    await expect(guard.push(report)).resolves.toEqual({ kind: 'hold' });
+    await expect(guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [report],
+    });
+  });
+
+  it.each([
+    { searches: 2, sources: 5, report: '[1][2][3][4][5]' },
+    { searches: 3, sources: 4, report: '[1][2][3][4]' },
+    { searches: 3, sources: 5, report: '[1][2][3][4]' },
+  ])('Deep Research 证据门槛不足时返回稳定安全失败 %#', async (scenario) => {
+    const profile = createProfile({
+      operationSources: {
+        sourceCount: scenario.sources,
+      } as WebOperationSources,
+      successfulSearchCount: scenario.searches,
+    });
+    const guard = profile.createOutputGuard!({
+      command: { ...command, mode: 'deep_research' },
+      turn,
+    });
+
+    await guard.push(scenario.report);
+    await expect(guard.finish()).resolves.toMatchObject({
+      kind: 'block',
+      failureCode: 'RESEARCH_REQUIREMENTS_UNMET',
+      publicContent: expect.stringContaining('研究材料不足'),
+    });
+  });
+
   it('仅按当前 Operation、Actor 与 Agent 解析私人 Node capability', async () => {
     const nodeInvocations = createNodeInvocations([
       'device.status',

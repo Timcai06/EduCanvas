@@ -316,7 +316,12 @@ export async function listWorkspaceResourceSummaries(input: {
           sourceResourceIds: [],
           sourceReferences: [],
         },
-        context: { enabled },
+        context: {
+          enabled,
+          ...(snapshot.descriptor.origin === 'research_web'
+            ? { researchSource: true }
+            : {}),
+        },
         surface: {
           restState:
             memberFacts.surfacePositions.get(`source:${resource.resourceId}`)

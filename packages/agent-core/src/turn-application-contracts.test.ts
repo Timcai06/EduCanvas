@@ -4,6 +4,7 @@ import {
   turnApplicationEventSchema,
   turnApplicationProtocolVersion,
   validateTurnApplicationEventSequence,
+  turnApplicationFailureCodeSchema,
   type TurnApplicationEvent,
 } from './turn-application-contracts';
 
@@ -36,8 +37,22 @@ const started = event({
 });
 
 describe('Turn Application contracts', () => {
+  it('publishes a stable failure for incomplete deep research evidence', () => {
+    expect(
+      turnApplicationFailureCodeSchema.parse('RESEARCH_REQUIREMENTS_UNMET'),
+    ).toBe('RESEARCH_REQUIREMENTS_UNMET');
+  });
   it('accepts one bounded server-routed command', () => {
     expect(turnApplicationCommandSchema.parse(command())).toEqual(command());
+    expect(
+      turnApplicationCommandSchema.parse({
+        ...command(),
+        mode: 'deep_research',
+      }).mode,
+    ).toBe('deep_research');
+    expect(() =>
+      turnApplicationCommandSchema.parse({ ...command(), mode: 'admin' }),
+    ).toThrow();
   });
 
   it('rejects client authority fields, duplicate capabilities and oversized input', () => {

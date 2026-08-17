@@ -22,6 +22,7 @@ import {
   terminalEventTypeToSendOutcome,
   type InFlightTurn,
 } from './turn-send-outcome';
+import { useDeepResearchProgress } from './use-deep-research-progress';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
 
@@ -48,6 +49,8 @@ export interface AgentTurnClientCallbacks {
 export interface AgentTurnSendOptions {
   /** 非可信的呈现偏好；服务端仍独立决定工具授权与输出能力。 */
   outputPreference?: OutputPreference;
+  /** 非可信的本轮意图；服务端据此选择既有 Agent Loop 的受限 Profile。 */
+  mode?: 'chat' | 'deep_research';
 }
 
 const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
@@ -95,6 +98,12 @@ export function useAgentTurn(
   const callbacksRef = useRef(callbacks);
   const mounted = useRef(true);
   const [controlError, setControlError] = useState<string | null>(null);
+  const {
+    progress: researchProgress,
+    begin: beginResearch,
+    consume: consumeResearch,
+    statusText: researchStatusText,
+  } = useDeepResearchProgress();
 
   const cancelAcceptedTurn = useCallback(
     async (current: InFlightTurn) => {
@@ -173,6 +182,7 @@ export function useAgentTurn(
       };
       inFlight.current = current;
       setControlError(null);
+      beginResearch(sendOptions.mode === 'deep_research');
       const requestParts: readonly AgentMessagePart[] = [
         ...(normalizedText
           ? [{ type: 'text' as const, text: normalizedText }]
@@ -201,6 +211,7 @@ export function useAgentTurn(
             kind: part.reference.kind === 'image' ? 'image' : 'document',
           })),
         assistantLabel: options.assistantLabel,
+        mode: sendOptions.mode,
       });
 
       try {
@@ -213,6 +224,9 @@ export function useAgentTurn(
               : { clientMessageId, text: normalizedText }),
             ...(sendOptions.outputPreference
               ? { outputPreference: sendOptions.outputPreference }
+              : {}),
+            ...(sendOptions.mode === 'deep_research'
+              ? { mode: sendOptions.mode }
               : {}),
           }),
           signal: current.controller.signal,
@@ -287,6 +301,7 @@ export function useAgentTurn(
             ) {
               callbacksRef.current.onArtifactProposed?.(event);
             }
+            consumeResearch(sendOptions.mode === 'deep_research', event);
             dispatch({ type: 'stream.event', event });
           },
         );
@@ -343,6 +358,8 @@ export function useAgentTurn(
     },
     [
       cancelAcceptedTurn,
+      beginResearch,
+      consumeResearch,
       options.assistantLabel,
       options.endpoint,
       safeConnectionError,
@@ -375,7 +392,9 @@ export function useAgentTurn(
         return false;
       }
       const assetParts = getRetryAssetParts(message);
-      void send(message.retryText ?? '', crypto.randomUUID(), assetParts);
+      void send(message.retryText ?? '', crypto.randomUUID(), assetParts, {
+        mode: message.retryMode,
+      });
       return true;
     },
     [send, state.messages],
@@ -384,13 +403,15 @@ export function useAgentTurn(
   const activeStatus = state.active?.status ?? null;
   const statusText = controlError
     ? controlError
-    : state.activeToolLabel
-      ? state.activeToolLabel
-      : activeStatus === 'streaming'
-        ? `${options.assistantLabel}正在回答…`
-        : activeStatus === 'pending'
-          ? `正在连接${options.assistantLabel}…`
-          : null;
+    : researchStatusText
+      ? researchStatusText
+      : state.activeToolLabel
+        ? state.activeToolLabel
+        : activeStatus === 'streaming'
+          ? `${options.assistantLabel}正在回答…`
+          : activeStatus === 'pending'
+            ? `正在连接${options.assistantLabel}…`
+            : null;
 
   return {
     messages: state.messages,
@@ -402,6 +423,7 @@ export function useAgentTurn(
     send,
     stop,
     retry,
+    researchProgress,
   } as const;
 }
 

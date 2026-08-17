@@ -21,6 +21,7 @@ export type AssetScope = z.infer<typeof assetScopeSchema>;
 export const assetOrigins = [
   'upload',
   'url_import',
+  'research_web',
   'generated',
   'library',
 ] as const;

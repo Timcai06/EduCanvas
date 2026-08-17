@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --external:graphile-worker --external:zod --external:drizzle-orm --external:drizzle-orm/* --external:postgres --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --external:graphile-worker --external:playwright --external:zod --external:drizzle-orm --external:drizzle-orm/* --external:postgres --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -25,6 +25,7 @@
     "@educanvas/mcp-runtime": "workspace:*",
     "@educanvas/telemetry": "workspace:*",
     "graphile-worker": "^0.16.6",
+    "playwright": "^1.61.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

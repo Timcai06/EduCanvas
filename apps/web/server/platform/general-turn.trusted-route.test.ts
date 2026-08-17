@@ -21,9 +21,18 @@ import {
   WebOperationSources,
 } from './general-turn-tools';
 
+const serviceRun = vi.hoisted(() => vi.fn(() => []));
+
 vi.mock('server-only', () => ({}));
 vi.mock('../turn-composition', () => ({
-  createWebTurnApplication: vi.fn(),
+  createWebTurnApplication: vi.fn(() => ({ run: serviceRun })),
+  createWebTurnLedgers: vi.fn(() => ({
+    contextLedger: {},
+    modelRunLedger: {},
+    usageBudgetLedger: {},
+    trace: {},
+  })),
+  unavailableModelGateway: {},
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
@@ -41,6 +50,13 @@ vi.mock('../telemetry/telemetry-runtime', () => ({
 vi.mock('./general-turn-lifecycle', () => ({
   WebGeneralCancellation: vi.fn(),
   WebGeneralLifecycle: vi.fn(),
+}));
+vi.mock('./general-artifact-tool', () => ({
+  collectArtifactInputSourceReferences: vi.fn(() => []),
+  WebOperationArtifacts: vi.fn(),
+}));
+vi.mock('./general-image-tool', () => ({
+  WebOperationImageArtifacts: vi.fn(),
 }));
 vi.mock('./general-turn-profile', () => ({
   WebGeneralProfile: vi.fn(),
@@ -74,13 +90,16 @@ const assetContext: MaterializedAssetPlan = {
   nativeImages: [],
 };
 
-function begin(routeOverride: GatewayResolvedRoute): void {
+function begin(
+  routeOverride: GatewayResolvedRoute,
+  requestOverride: TeachingTurnRequestBody = request,
+): void {
   beginGatewayGeneralTurnApplication({
     operationId: 'operation-1',
     traceId: 'trace-1',
     route: routeOverride,
     identity,
-    request,
+    request: requestOverride,
     assetContext,
     signal: new AbortController().signal,
     transportCapabilities: [],
@@ -103,6 +122,14 @@ function expectNoRuntimeComposition(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createGeneralToolKernel).mockReturnValue({
+    kernel: {} as ReturnType<typeof createGeneralToolKernel>['kernel'],
+    staticCapabilities: ['web.fetch', 'web.search'],
+    nodeInvocations: {} as ReturnType<
+      typeof createGeneralToolKernel
+    >['nodeInvocations'],
+    searchProgress: { successfulSearchCount: 0 },
+  });
 });
 
 describe('Web General可信Gateway路由边界', () => {
@@ -120,5 +147,25 @@ describe('Web General可信Gateway路由边界', () => {
     ).toThrowError('web_general_profile_unsupported');
 
     expectNoRuntimeComposition();
+  });
+
+  it('仅 Deep Research 注入 8 个来源上限并把 mode 交给同一 Turn Application', () => {
+    begin(route, { ...request, mode: 'deep_research' });
+
+    expect(WebOperationSources).toHaveBeenCalledWith(
+      expect.objectContaining({ maximumSources: 8 }),
+    );
+    expect(serviceRun).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'deep_research' }),
+    );
+
+    vi.clearAllMocks();
+    begin(route);
+    expect(WebOperationSources).toHaveBeenCalledWith(
+      expect.not.objectContaining({ maximumSources: expect.anything() }),
+    );
+    expect(serviceRun).toHaveBeenCalledWith(
+      expect.not.objectContaining({ mode: expect.anything() }),
+    );
   });
 });

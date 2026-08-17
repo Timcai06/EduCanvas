@@ -49,6 +49,7 @@ describe('Source CanvasResource adapter', () => {
     ['image/webp', 'image', 'source.image'],
     ['text/markdown', 'text', 'source.markdown'],
     ['text/plain', 'text', 'source.text'],
+    ['text/html', 'text', 'source.text'],
     [
       'application/vnd.openxmlformats-officedocument.wordprocessingml',
       'document',
