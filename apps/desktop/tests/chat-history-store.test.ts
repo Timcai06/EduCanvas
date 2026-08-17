@@ -102,6 +102,22 @@ describe('desktop chat history store', () => {
     expect(store.state()).toMatchObject({ hasMore: false, loading: false });
   });
 
+  it('preserves the voice source when canonical history is rebuilt', () => {
+    const store = createChatHistoryStore();
+    store.setConversation('conv-1');
+    store.reconcile([
+      canonical({
+        messageId: 'm-user',
+        clientMessageId: 'desktop:voice:1',
+      }),
+    ]);
+
+    expect(store.state().messages[0]).toMatchObject({
+      role: 'user',
+      source: 'voice',
+    });
+  });
+
   it('keeps optimistic user messages not yet persisted by the server', () => {
     const store = createChatHistoryStore();
     store.setConversation('conv-1');

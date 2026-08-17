@@ -18,6 +18,15 @@ describe('desktop structured result cards', () => {
           loading: false,
           messages: [
             {
+              id: 'message:voice-user',
+              clientMessageId: 'desktop:voice:one',
+              role: 'user',
+              content: '请帮我总结。',
+              source: 'voice',
+              status: 'completed',
+              createdAt: '2026-08-15T00:00:00.000Z',
+            },
+            {
               id: 'message:one',
               clientMessageId: 'desktop:one',
               role: 'assistant',
@@ -89,11 +98,13 @@ describe('desktop structured result cards', () => {
         busy: false,
         canStop: false,
         lastAssistantReply: '这是整理后的结果。',
+        speakingMessageId: null,
         setText: () => undefined,
         collapse: () => undefined,
         submit: async () => undefined,
         startVoice: async () => undefined,
         speakLatest: async () => undefined,
+        speakMessage: async () => undefined,
         cancel: () => undefined,
         resume: async () => undefined,
         canResume: false,
@@ -122,5 +133,7 @@ describe('desktop structured result cards', () => {
     expect(html).toContain('处理完成');
     expect(html).toContain('此内容需要在 Web 查看');
     expect(html).toContain('在 EduCanvas 中打开');
+    expect(html).toContain('aria-label="朗读此回答"');
+    expect(html).toContain('语音输入');
   });
 });

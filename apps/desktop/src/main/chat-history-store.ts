@@ -36,8 +36,13 @@ function toDesktopMessage(
     clientMessageId: canonical.clientMessageId,
     role: canonical.role,
     content: canonical.content,
-    // 服务端 canonical Message 不区分 text/voice；voice 归属对齐由 DP09 处理。
-    source: 'text',
+    // 服务端 canonical Message 暂不携带来源；桌面 voice Turn 使用稳定前缀，
+    // 因此历史重建和应用重启后仍能恢复语音标记。
+    source:
+      canonical.role === 'user' &&
+      canonical.clientMessageId.startsWith('desktop:voice:')
+        ? 'voice'
+        : 'text',
     status: canonical.status,
     createdAt: canonical.createdAt,
     parts: canonical.parts ?? [],

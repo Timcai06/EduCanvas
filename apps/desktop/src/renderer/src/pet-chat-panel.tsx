@@ -21,12 +21,14 @@ export function PetChatPanel(props: {
   busy: boolean;
   canStop: boolean;
   lastAssistantReply: string;
+  speakingMessageId: string | null;
   setText(value: string): void;
   collapse(): void;
   submit(): Promise<void>;
   signIn(): Promise<void>;
   startVoice(): Promise<void>;
   speakLatest(): Promise<void>;
+  speakMessage(messageId: string, text: string): Promise<void>;
   cancel(): void;
   resume(): Promise<void>;
   canResume: boolean;
@@ -49,12 +51,14 @@ export function PetChatPanel(props: {
     busy,
     canStop,
     lastAssistantReply,
+    speakingMessageId,
     setText,
     collapse,
     submit,
     signIn,
     startVoice,
     speakLatest,
+    speakMessage,
     cancel,
     resume,
     canResume,
@@ -157,10 +161,36 @@ export function PetChatPanel(props: {
                   ? 'EduCanvas'
                   : '提示'}
             </span>
+            {item.role === 'user' && item.source === 'voice' && (
+              <small className="chat-message__source">语音输入</small>
+            )}
             <p>
               {item.content}
               {item.status === 'streaming' ? '▍' : ''}
             </p>
+            {item.role === 'assistant' &&
+              item.status === 'completed' &&
+              item.content.trim() &&
+              (() => {
+                const selected =
+                  state === 'speaking' && speakingMessageId === item.id;
+                return (
+                  <button
+                    className={`chat-message__speak${selected ? ' is-active' : ''}`}
+                    type="button"
+                    aria-label={selected ? '停止朗读' : '朗读此回答'}
+                    title={selected ? '停止朗读' : '朗读此回答'}
+                    disabled={busy && !selected}
+                    onClick={() =>
+                      selected
+                        ? cancel()
+                        : void speakMessage(item.id, item.content)
+                    }
+                  >
+                    <SpeakerIcon />
+                  </button>
+                );
+              })()}
             {item.role === 'assistant' && (
               <MessageResultCards message={item} openResult={openResult} />
             )}

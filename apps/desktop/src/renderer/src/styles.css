@@ -236,6 +236,12 @@ select:focus-visible {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.chat-message__source {
+  margin: -1px 5px 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
 .chat-message.is-user {
   justify-items: end;
 }
@@ -250,6 +256,31 @@ select:focus-visible {
 .chat-message.is-streaming > p::after {
   content: '▍';
   animation: pet-stream-caret 1s step-end infinite;
+}
+.chat-message__speak {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  margin: 4px 4px 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(57, 78, 68, 0.08);
+  color: #526159;
+  cursor: pointer;
+}
+.chat-message__speak svg {
+  width: 14px;
+  height: 14px;
+}
+.chat-message__speak.is-active {
+  background: #a44d46;
+  color: #fff;
+}
+.chat-message__speak:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .message-results {

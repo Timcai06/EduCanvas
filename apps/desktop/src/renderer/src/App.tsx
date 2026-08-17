@@ -13,11 +13,7 @@ import { PetChatPanel } from './pet-chat-panel';
 import { recordVoice } from './voice-recorder';
 import { playSpeech } from './speech-player';
 import { bindVoiceTurn, runVoiceSession } from './voice-session';
-import {
-  isBusyState,
-  latestAssistantReply,
-  voiceSnapshotState,
-} from './voice-view-state';
+import { isBusyState, voiceSnapshotState } from './voice-view-state';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 import type {
   DesktopChatHistorySnapshot,
@@ -61,6 +57,9 @@ export default function App({
     });
   const [pendingResume, setPendingResume] = useState<string | null>(null);
   const [canStop, setCanStop] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
+    null,
+  );
   const requestIdRef = useRef<string | null>(null);
   const historyRef = useRef<DesktopChatHistorySnapshot>(history);
   const operationLeaseRef = useRef<string | null>(null);
@@ -70,7 +69,10 @@ export default function App({
   const historyEndRef = useRef<HTMLDivElement | null>(null);
   const petVisual = petVisualForState(visualState);
   const petAsset = PET_VISUALS[petVisual];
-  const lastAssistantReply = latestAssistantReply(history);
+  const lastAssistantMessage = history.messages.findLast(
+    (item) => item.role === 'assistant',
+  );
+  const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
 
   const publishVisual = (next: PetUiState): void => {
@@ -316,7 +318,7 @@ export default function App({
     }
     const controller = new AbortController();
     operationControllerRef.current = controller;
-    const voiceId = `desktop:${crypto.randomUUID()}`;
+    const voiceId = `desktop:voice:${crypto.randomUUID()}`;
     let terminalState: PetUiState = 'ready';
     try {
       const result = await runVoiceSession(
@@ -367,8 +369,11 @@ export default function App({
     }
   };
 
-  const speakLatest = async (): Promise<void> => {
-    if (!lastAssistantReply) return;
+  const speakMessage = async (
+    assistantMessageId: string,
+    reply: string,
+  ): Promise<void> => {
+    if (!reply.trim()) return;
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     if (!(await requireAuth())) {
@@ -384,14 +389,16 @@ export default function App({
     operationControllerRef.current = controller;
     const requestId = crypto.randomUUID();
     requestIdRef.current = requestId;
+    setSpeakingMessageId(assistantMessageId);
     let terminalState: PetUiState = 'ready';
     setState('speaking');
     publishVisual('speaking');
-    setMessage(lastAssistantReply);
+    setMessage(reply);
     try {
       const speech = await window.desktopVoice.synthesize(
-        lastAssistantReply,
+        reply,
         requestId,
+        assistantMessageId,
       );
       requestIdRef.current = null;
       if (!speech.ok) {
@@ -411,11 +418,19 @@ export default function App({
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
+      setSpeakingMessageId((current) =>
+        current === assistantMessageId ? null : current,
+      );
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
     }
+  };
+
+  const speakLatest = async (): Promise<void> => {
+    if (!lastAssistantMessage) return;
+    await speakMessage(lastAssistantMessage.id, lastAssistantMessage.content);
   };
 
   const cancel = (): void => {
@@ -430,6 +445,7 @@ export default function App({
     requestIdRef.current = null;
     setPendingResume(null);
     setCanStop(false);
+    setSpeakingMessageId(null);
     setState('ready');
     publishVisual('ready');
     setMessage('已停止。你可以继续输入。');
@@ -480,6 +496,7 @@ export default function App({
       busy={busy}
       canStop={canStop}
       lastAssistantReply={lastAssistantReply}
+      speakingMessageId={speakingMessageId}
       setText={setText}
       collapse={() => setChatCollapsed(true)}
       submit={submit}
@@ -488,6 +505,7 @@ export default function App({
       }}
       startVoice={startVoice}
       speakLatest={speakLatest}
+      speakMessage={speakMessage}
       cancel={cancel}
       resume={resumePending}
       canResume={pendingResume !== null}
