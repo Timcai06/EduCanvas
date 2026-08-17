@@ -318,6 +318,7 @@ export default function App({
     }
     const controller = new AbortController();
     operationControllerRef.current = controller;
+    setCanStop(true);
     const voiceId = `desktop:voice:${crypto.randomUUID()}`;
     let terminalState: PetUiState = 'ready';
     try {
@@ -362,6 +363,7 @@ export default function App({
     } finally {
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
+      setCanStop(false);
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);

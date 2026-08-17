@@ -51,6 +51,20 @@ describe('MVP pet controls', () => {
     expect(chatPanel).toContain('role="status"');
   });
 
+  it('arms the stop control for the whole voice session', () => {
+    const source = readFileSync(
+      new URL('../src/renderer/src/App.tsx', import.meta.url),
+      'utf8',
+    );
+    const startVoice = source.slice(
+      source.indexOf('const startVoice = async'),
+      source.indexOf('const speakMessage = async'),
+    );
+
+    expect(startVoice).toContain('setCanStop(true);');
+    expect(startVoice).toContain('setCanStop(false);');
+  });
+
   it('hides the dialog content and renders a restore control when folded', () => {
     const html = renderToStaticMarkup(
       createElement(App as ComponentType<{ initialChatCollapsed?: boolean }>, {
