@@ -4,6 +4,7 @@ import {
   extractReadableHtml,
   fetchPublicWebScript,
   fetchWebPage,
+  isFakeIpAddress,
   isPublicIpAddress,
 } from './web-page';
 
@@ -145,5 +146,137 @@ describe('web page processing', () => {
           }),
       }),
     ).rejects.toMatchObject({ code: 'link_blocked_host' });
+  });
+
+  describe('isFakeIpAddress', () => {
+    it.each([
+      ['198.18.0.1', true],
+      ['198.18.0.0', true],
+      ['198.19.255.254', true],
+      ['198.19.0.1', true],
+      ['198.17.255.255', false],
+      ['198.20.0.1', false],
+      ['10.0.0.1', false],
+      ['127.0.0.1', false],
+      ['93.184.216.34', false],
+    ])('classifies %s as Fake-IP = %s', (address, expected) => {
+      expect(isFakeIpAddress(address)).toBe(expected);
+    });
+  });
+
+  describe('Fake-IP DNS detection', () => {
+    it('throws fake_ip_dns_detected when all DNS answers are in 198.18.0.0/15', async () => {
+      const request = vi.fn();
+      await expect(
+        fetchWebPage('https://example.com', {
+          request,
+          resolveHostname: async () => ['198.19.2.3', '198.18.0.1'],
+        }),
+      ).rejects.toMatchObject({ code: 'fake_ip_dns_detected' });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('throws link_blocked_host when DNS answers mix Fake-IP with private addresses', async () => {
+      const request = vi.fn();
+      await expect(
+        fetchWebPage('https://example.com', {
+          request,
+          resolveHostname: async () => ['198.19.2.3', '10.0.0.1'],
+        }),
+      ).rejects.toMatchObject({ code: 'link_blocked_host' });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('throws link_blocked_host when DNS answers mix Fake-IP with public addresses', async () => {
+      const request = vi.fn();
+      await expect(
+        fetchWebPage('https://example.com', {
+          request,
+          resolveHostname: async () => ['198.19.2.3', '93.184.216.34'],
+        }),
+      ).rejects.toMatchObject({ code: 'link_blocked_host' });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('still throws link_blocked_host for non-Fake-IP private addresses', async () => {
+      const request = vi.fn();
+      for (const bad of [
+        '127.0.0.1',
+        '10.0.0.1',
+        '172.16.0.1',
+        '192.168.1.1',
+      ]) {
+        await expect(
+          fetchWebPage('https://example.com', {
+            request,
+            resolveHostname: async () => [bad],
+          }),
+        ).rejects.toMatchObject({ code: 'link_blocked_host' });
+      }
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('rejects redirects to Fake-IP targets via domain resolution', async () => {
+      const request = vi.fn(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { location: 'https://redirected.example/admin' },
+          }),
+      );
+      await expect(
+        fetchWebPage('https://public.example/start', {
+          request,
+          resolveHostname: async (hostname) =>
+            hostname === 'public.example' ? ['93.184.216.34'] : ['198.19.5.6'],
+        }),
+      ).rejects.toMatchObject({ code: 'fake_ip_dns_detected' });
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws link_blocked_host for direct IP literal in 198.18.0.0/15', async () => {
+      const request = vi.fn();
+      await expect(
+        fetchWebPage('http://198.19.5.6/admin', {
+          request,
+        }),
+      ).rejects.toMatchObject({ code: 'link_blocked_host' });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('throws link_blocked_host when redirecting to IP literal in 198.18.0.0/15', async () => {
+      const request = vi.fn(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { location: 'http://198.19.5.6/admin' },
+          }),
+      );
+      await expect(
+        fetchWebPage('https://public.example/start', {
+          request,
+          resolveHostname: async () => ['93.184.216.34'],
+        }),
+      ).rejects.toMatchObject({ code: 'link_blocked_host' });
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows all-public DNS answers', async () => {
+      const request = vi.fn(
+        async () =>
+          new Response('<html><title>OK</title><body>hi</body></html>', {
+            headers: { 'content-type': 'text/html' },
+          }),
+      );
+      await expect(
+        fetchWebPage('https://public.example', {
+          request,
+          resolveHostname: async () => ['93.184.216.34', '93.184.216.35'],
+        }),
+      ).resolves.toMatchObject({
+        requestedUrl: 'https://public.example/',
+        finalUrl: 'https://public.example/',
+      });
+    });
   });
 });

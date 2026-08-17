@@ -84,17 +84,33 @@ WS00-WS07 → WS08 → WS09
 ### WS01：Fake-IP 诊断与受控网络出口
 
 - 依赖：WS00
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：asset-processing URL guard、运行环境检查、运维文档与负向测试
+- 最后验证时间：2026-08-17
 
 交付：
 
 - 将所有域名解析到 `198.18.0.0/15` 的环境识别为稳定 `fake_ip_dns_detected` 运维错误；
-- 为本地代理给出可操作配置，而不是泛化为“地址不允许访问”；
+- 为本地代理给出可操作配置，而不是泛化为"地址不允许访问"；
 - 评估并实现可验证目标地址的受控 resolver/connector，或明确部署使用真实 DNS 的 egress；
 - 每次重定向继续重验目标，禁止直接放行保留地址段。
 
 完成标准：真实私网地址仍被阻止；Fake-IP 环境能被准确诊断；公开网页在受支持配置中可抓取。
+
+验证证据：
+
+- `pnpm --filter @educanvas/asset-processing exec vitest run src/web-page.test.ts`：32/32 通过
+- `pnpm --filter @educanvas/web exec vitest run app/api/v1/chat/assets/link/route.test.ts features/assets/asset-client.test.ts server/tools/web-page.test.ts`：24/24 通过
+- `pnpm typecheck`：26 tasks 通过
+- `pnpm lint`：All matched
+- `pnpm test:unit`：1714/1714 通过
+- `git diff --check`：无问题
+- 域名全部解析到 Fake-IP → `fake_ip_dns_detected`
+- IP 字面量 198.19.x.x → `link_blocked_host`
+- 重定向到 IP 字面量 → `link_blocked_host`
+- 重定向到域名且该域名解析为 Fake-IP → `fake_ip_dns_detected`
+- Agent Tool 保留专用错误码 `fake_ip_dns_detected`
+- 运维文档 `docs/07-operations/02-Fake-IP-DNS诊断.md` 已创建
 
 ### WS02：Provider-neutral SearchService
 

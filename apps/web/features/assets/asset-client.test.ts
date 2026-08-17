@@ -233,6 +233,33 @@ describe('asset browser client', () => {
       retryable: true,
     });
   });
+
+  it('uses local stable copy for fake_ip_dns_detected, not server message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: 'fake_ip_dns_detected',
+              message: '/internal/dns/stack-trace-leak',
+              retryable: false,
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(
+      importLinkAsset({ url: 'https://example.com' }),
+    ).rejects.toMatchObject({
+      code: 'fake_ip_dns_detected',
+      retryable: false,
+      message:
+        '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
+    });
+  });
 });
 
 describe('loadAssets 错误分类（W03 六种语义）', () => {

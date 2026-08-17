@@ -71,6 +71,37 @@ describe('fetchReadableWebPage', () => {
     ).rejects.toMatchObject({ code: 'blocked_host' });
   });
 
+  it('rejects Fake-IP DNS environments (all answers in 198.18.0.0/15)', async () => {
+    const fetchStub = vi.fn() as unknown as typeof fetch;
+    const fakeIpResolver = async () => ['198.19.2.3', '198.18.0.1'];
+    await expect(
+      fetchReadableWebPage(
+        'https://example.com/page',
+        fetchStub,
+        fakeIpResolver,
+      ),
+    ).rejects.toMatchObject({ code: 'fake_ip_dns_detected' });
+  });
+
+  it('rejects redirects to IP literals in 198.18.0.0/15', async () => {
+    const fetchStub = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('example.com')) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'http://198.19.5.6/admin' },
+        });
+      }
+      throw new Error('should not reach');
+    });
+    await expect(
+      fetchReadableWebPage(
+        'https://example.com/page',
+        fetchStub as unknown as typeof fetch,
+        resolvePublic,
+      ),
+    ).rejects.toMatchObject({ code: 'blocked_host' });
+  });
+
   it('正常页面返回标题与正文;非文本内容与超大页面被拒绝', async () => {
     const okStub = (async () =>
       htmlResponse(

@@ -210,15 +210,13 @@ test('@smoke General 黄金旅程：工具与引用结果', async ({ page }) => 
   await page.getByRole('button', { name: '发送' }).click();
 
   await expect(page.getByText(/第一份资料说明方案重视可达性/)).toBeVisible();
-  const firstSource = page.getByRole('link', { name: /1 可达性设计指南/ });
-  const secondSource = page.getByRole('link', { name: /2 学习收益研究/ });
-  await expect(firstSource).toHaveAttribute(
-    'href',
-    'https://example.com/accessibility',
-  );
-  await expect(secondSource).toHaveAttribute(
-    'href',
-    'https://example.org/learning-study',
-  );
-  await expect(firstSource).toHaveAttribute('target', '_blank');
+  const firstSource = page.getByRole('button', {
+    name: '打开来源 可达性设计指南',
+  });
+  const secondSource = page.getByRole('button', {
+    name: '打开来源 学习收益研究',
+  });
+  await expect(firstSource).toBeVisible();
+  await expect(secondSource).toBeVisible();
+  await expect(firstSource).toHaveAttribute('title', '在当前笔记本中打开来源');
 });
