@@ -464,7 +464,12 @@ if (!app.requestSingleInstanceLock()) {
     'voice:synthesize',
     async (
       event,
-      payload: { requestId: string; text: string; leaseToken: string },
+      payload: {
+        requestId: string;
+        text: string;
+        assistantMessageId?: string;
+        leaseToken: string;
+      },
     ) => {
       if (!isDesktopSender(event.sender.id))
         throw new Error('Untrusted renderer');
@@ -473,12 +478,21 @@ if (!app.requestSingleInstanceLock()) {
         typeof payload.leaseToken !== 'string' ||
         !operationLease.holds(event.sender.id, payload.leaseToken) ||
         typeof payload.text !== 'string' ||
-        payload.text.length > 3_500
+        payload.text.length > 3_500 ||
+        (payload.assistantMessageId !== undefined &&
+          (typeof payload.assistantMessageId !== 'string' ||
+            payload.assistantMessageId.length > 200))
       )
         throw new Error('Invalid speech input');
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
-        return await voiceProxy.synthesize({ text: payload.text }, signal);
+        return await voiceProxy.synthesize(
+          {
+            text: payload.text,
+            assistantMessageId: payload.assistantMessageId,
+          },
+          signal,
+        );
       } finally {
         abortRegistry.finish(payload.requestId, signal);
       }

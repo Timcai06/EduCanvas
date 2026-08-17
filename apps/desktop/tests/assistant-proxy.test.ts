@@ -69,6 +69,7 @@ describe('remote assistant proxy', () => {
       ok: true,
       action: 'answered',
       message: '你好，我是老师。',
+      assistantMessageId: 'message:one',
     });
     expect(calls).toHaveLength(1);
     expect(

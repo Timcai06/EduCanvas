@@ -51,7 +51,11 @@ export interface VoiceSessionDependencies {
     requestId: string,
   ): Promise<VoiceTranscriptionResult>;
   turn(text: string, requestId: string): Promise<TurnResult>;
-  synthesize(text: string, requestId: string): Promise<VoiceSpeechResult>;
+  synthesize(
+    text: string,
+    requestId: string,
+    assistantMessageId?: string,
+  ): Promise<VoiceSpeechResult>;
   play(bytes: Uint8Array, signal: AbortSignal): Promise<SpeechPlaybackResult>;
   cancelRemote(requestId: string): void;
   createRequestId(): string;
@@ -62,6 +66,7 @@ export type VoiceSessionResult =
       outcome: 'success';
       transcript: string;
       reply: string;
+      assistantMessageId?: string;
       speechPlayed: boolean;
     }
   | { outcome: 'cancelled' }
@@ -92,6 +97,7 @@ export async function runVoiceSession(
   let activeRequestId: string | null = null;
   let transcript: string | undefined;
   let reply: string | undefined;
+  let assistantMessageId: string | undefined;
   const emit = (snapshot: VoiceSessionSnapshot): void =>
     options.onChange({ ...snapshot, transcript, reply });
   const cancelled = (): VoiceSessionResult => {
@@ -153,11 +159,16 @@ export async function runVoiceSession(
     }
     if (options.signal.aborted) return cancelled();
     reply = turn.message.trim() || '已经处理好了';
+    assistantMessageId = turn.assistantMessageId;
 
     emit({ phase: 'speaking' });
     if (options.signal.aborted) return cancelled();
     activeRequestId = dependencies.createRequestId();
-    const speech = await dependencies.synthesize(reply, activeRequestId);
+    const speech = await dependencies.synthesize(
+      reply,
+      activeRequestId,
+      assistantMessageId,
+    );
     activeRequestId = null;
     if (!speech.ok) {
       if (speech.code === 'aborted' || options.signal.aborted)
@@ -166,7 +177,13 @@ export async function runVoiceSession(
         phase: 'success',
         notice: '语音播报暂不可用，已显示文字回复',
       });
-      return { outcome: 'success', transcript, reply, speechPlayed: false };
+      return {
+        outcome: 'success',
+        transcript,
+        reply,
+        assistantMessageId,
+        speechPlayed: false,
+      };
     }
     const playback = await dependencies.play(speech.bytes, options.signal);
     if (playback === 'aborted' || options.signal.aborted) return cancelled();
@@ -175,7 +192,13 @@ export async function runVoiceSession(
       phase: 'success',
       ...(speechPlayed ? {} : { notice: '语音播报暂不可用，已显示文字回复' }),
     });
-    return { outcome: 'success', transcript, reply, speechPlayed };
+    return {
+      outcome: 'success',
+      transcript,
+      reply,
+      assistantMessageId,
+      speechPlayed,
+    };
   } catch {
     if (options.signal.aborted) return cancelled();
     return fail('unexpected', '发生了意外错误，请重试');

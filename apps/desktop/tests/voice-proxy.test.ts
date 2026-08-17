@@ -83,13 +83,21 @@ describe('voice-proxy', () => {
     );
     const proxy = createVoiceProxy({ ...authenticated, fetchImpl: impl });
 
-    await expect(proxy.synthesize({ text: '答案是四。' })).resolves.toEqual({
+    await expect(
+      proxy.synthesize({
+        text: '答案是四。',
+        assistantMessageId: 'message:assistant:one',
+      }),
+    ).resolves.toEqual({
       ok: true,
       bytes: mp3,
       contentType: 'audio/mpeg',
     });
     expect(calls[0]!.url).toContain('/api/v1/voice/speech');
-    expect(JSON.parse(String(calls[0]!.body))).toEqual({ text: '答案是四。' });
+    expect(JSON.parse(String(calls[0]!.body))).toEqual({
+      text: '答案是四。',
+      assistantMessageId: 'message:assistant:one',
+    });
   });
 
   it('HTTP 错误只映射稳定 code 和服务端安全文案', async () => {

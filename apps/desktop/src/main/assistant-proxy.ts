@@ -208,6 +208,7 @@ export function createAssistantProxy(options: {
               ok: true,
               action: 'answered',
               message: answer.trim() || '完成',
+              assistantMessageId: event.messageId,
             };
           }
         }

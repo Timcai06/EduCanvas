@@ -317,7 +317,6 @@ export default function App({
     const controller = new AbortController();
     operationControllerRef.current = controller;
     const voiceId = `desktop:${crypto.randomUUID()}`;
-    let transcriptAdded = false;
     let terminalState: PetUiState = 'ready';
     try {
       const result = await runVoiceSession(
@@ -325,7 +324,8 @@ export default function App({
           record: recordVoice,
           transcribe: window.desktopVoice.transcribe,
           turn: bindVoiceTurn(window.desktopAssistant.turn, voiceId),
-          synthesize: window.desktopVoice.synthesize,
+          synthesize: (text, requestId, assistantMessageId) =>
+            window.desktopVoice.synthesize(text, requestId, assistantMessageId),
           play: (bytes, signal) => playSpeech(bytes, { signal }),
           cancelRemote: (requestId) => {
             window.desktopVoice.cancel(requestId);
@@ -340,10 +340,6 @@ export default function App({
             if (snapshot.phase === 'error') terminalState = nextState;
             setState(nextState);
             publishVisual(nextState);
-            if (snapshot.transcript && !transcriptAdded) {
-              transcriptAdded = true;
-              void appendHistory('user', snapshot.transcript, 'voice', voiceId);
-            }
             if (snapshot.error) setMessage(snapshot.error);
             else if (snapshot.notice) setMessage(snapshot.notice);
             else if (snapshot.phase === 'listening')

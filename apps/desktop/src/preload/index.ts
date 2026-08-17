@@ -97,7 +97,11 @@ declare global {
         input: VoiceAudioInput,
         requestId: string,
       ): Promise<VoiceTranscriptionResult>;
-      synthesize(text: string, requestId: string): Promise<VoiceSpeechResult>;
+      synthesize(
+        text: string,
+        requestId: string,
+        assistantMessageId?: string,
+      ): Promise<VoiceSpeechResult>;
       cancel(requestId: string): void;
     };
   }
@@ -281,10 +285,15 @@ contextBridge.exposeInMainWorld('desktopVoice', {
       leaseToken: activeOperationLeaseToken,
     });
   },
-  synthesize(text: string, requestId: string): Promise<VoiceSpeechResult> {
+  synthesize(
+    text: string,
+    requestId: string,
+    assistantMessageId?: string,
+  ): Promise<VoiceSpeechResult> {
     return ipcRenderer.invoke('voice:synthesize', {
       text,
       requestId,
+      assistantMessageId,
       leaseToken: activeOperationLeaseToken,
     });
   },
