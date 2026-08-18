@@ -70,7 +70,7 @@ async function cmdStatus() {
   const pids = findPids();
   if (health && pids.length) {
     console.log(
-      `[mineru] running  ${HOST_URL}/health → ${JSON.stringify(health)}  (pid ${pids.join(',')})`
+      `[mineru] running  ${HOST_URL}/health → ${JSON.stringify(health)}  (pid ${pids.join(',')})`,
     );
     return;
   }
@@ -85,7 +85,9 @@ async function cmdStart() {
     return;
   }
   if (!existsSync(API_BIN)) {
-    fail(`未找到 ${API_BIN}，先按部署手册第 1-2 步安装（venv 需至少装 mineru[pipeline,vlm]）`);
+    fail(
+      `未找到 ${API_BIN}，先按部署手册第 1-2 步安装（venv 需至少装 mineru[pipeline,vlm]）`,
+    );
   }
 
   // detached + unref：服务不随本脚本退出而退出；stdout/stderr 落归档日志，
@@ -93,7 +95,14 @@ async function cmdStart() {
   const outFd = openSync(LOG_PATH, 'a');
   const child = spawn(
     API_BIN,
-    ['--host', MINERU_HOST, '--port', MINERU_PORT, '--enable-vlm-preload', 'true'],
+    [
+      '--host',
+      MINERU_HOST,
+      '--port',
+      MINERU_PORT,
+      '--enable-vlm-preload',
+      'true',
+    ],
     {
       detached: true,
       stdio: ['ignore', outFd, outFd],
@@ -101,22 +110,28 @@ async function cmdStart() {
         ...process.env,
         MINERU_API_MAX_CONCURRENT_REQUESTS: '1',
       },
-    }
+    },
   );
   child.unref();
 
-  console.log(`[mineru] 启动中：${HOST_URL}（VLM 预载可能需要几十秒，最多等 ${VLM_PRELOAD_TIMEOUT_MS / 1000}s）`);
+  console.log(
+    `[mineru] 启动中：${HOST_URL}（VLM 预载可能需要几十秒，最多等 ${VLM_PRELOAD_TIMEOUT_MS / 1000}s）`,
+  );
   const startedAt = Date.now();
   while (Date.now() - startedAt < VLM_PRELOAD_TIMEOUT_MS) {
     const h = await probe();
     if (h) {
-      console.log(`[mineru] 就绪 ${HOST_URL}/health → ${JSON.stringify(h)} (pid ${child.pid ?? '?'})`);
+      console.log(
+        `[mineru] 就绪 ${HOST_URL}/health → ${JSON.stringify(h)} (pid ${child.pid ?? '?'})`,
+      );
       console.log(`         日志：${LOG_PATH}`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 3_000));
   }
-  fail(`等待就绪超时（${VLM_PRELOAD_TIMEOUT_MS / 1000}s）。查看日志 ${LOG_PATH}，排错见部署手册第三、五节`);
+  fail(
+    `等待就绪超时（${VLM_PRELOAD_TIMEOUT_MS / 1000}s）。查看日志 ${LOG_PATH}，排错见部署手册第三、五节`,
+  );
 }
 
 async function cmdStop() {
