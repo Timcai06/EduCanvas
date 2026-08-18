@@ -12,6 +12,7 @@ import type {
   AgentModelRunLedgerPort,
   AgentToolCallLedgerPort,
   AgentTurnContextLedgerPort,
+  AssetKind,
   ModelAbortSignal,
   ToolEffectLedgerPort,
   TurnModelGateway,
@@ -36,7 +37,10 @@ import {
 } from '@educanvas/db';
 import type { GatewayResolvedRoute } from '@educanvas/gateway-core';
 import {
-  createTurnModelGatewayFromEnvironment,
+  acceptsImageInput,
+  createTurnModelGateway,
+  createVisionTurnModelGateway,
+  parseModelGatewayConfiguration,
   type ModelGatewayEnvironment,
 } from '@educanvas/model-gateway';
 import {
@@ -53,6 +57,10 @@ import {
 } from '@educanvas/telemetry';
 import { getGatewayTelemetryRuntime } from './telemetry';
 import { GatewayGeneralProfile } from './turn-application/general-profile';
+import {
+  DrizzleGatewayAssetMaterializer,
+  type GatewayAssetMaterializer,
+} from './asset-context/asset-materialization';
 import {
   GatewayBoundCancellation,
   GatewayTurnLifecycle,
@@ -106,9 +114,53 @@ export interface GatewayDependencies {
   nodeInvocations: NodeInvocationPersistencePort;
   mcpRuntime: McpRuntime;
   modelGateway: TurnModelGateway;
+  /**
+   * asset_ref 物化器（DP10）。缺省为 null 时 agent-runner 保留对 asset_ref
+   * 的拒绝语义（CAPABILITY_UNAVAILABLE），桌面能力清单升级前不静默放行。
+   */
+  assetMaterializer?: GatewayAssetMaterializer | null;
+  /** 当前 Provider 能原生消费的输入模态；物化层据此决定原生图预算或明确失败。 */
+  nativeAssetKinds?: readonly AssetKind[];
+}
+
+/**
+ * 主 Provider 不读图但配置了视觉 Provider 时，按本轮是否真的含原生图片做
+ * 逐轮路由：图片轮走视觉 Provider，纯文本轮继续走主模型（ADR-0017 明确
+ * 不能用视觉模型无条件替换主 Gateway）。主 Provider 自带读图能力时恒用主。
+ */
+function routeNativeImageTurns(
+  main: TurnModelGateway,
+  vision: TurnModelGateway | null,
+  acceptsImages: boolean,
+): TurnModelGateway {
+  if (acceptsImages || vision === null) return main;
+  return {
+    async *streamTurnText(request) {
+      const hasNativeImages = request.messages.some(
+        (message) =>
+          Array.isArray(message.content) &&
+          message.content.some((part) => part.type === 'image'),
+      );
+      const gateway = hasNativeImages ? vision : main;
+      yield* gateway.streamTurnText(request);
+    },
+  };
 }
 
 export function createGatewayDependencies(): GatewayDependencies {
+  const environment = readModelEnvironment();
+  const configuration = parseModelGatewayConfiguration(environment);
+  const baseGateway = configuration.enabled
+    ? createTurnModelGateway(configuration)
+    : null;
+  const visionGateway = configuration.enabled
+    ? createVisionTurnModelGateway(configuration)
+    : null;
+  const acceptsImages =
+    configuration.enabled && acceptsImageInput(configuration);
+  /* 主模型读图或配了独立视觉 Provider，二者任一成立都允许原生图输入。 */
+  const nativeAssetKinds: readonly AssetKind[] =
+    acceptsImages || visionGateway !== null ? ['image'] : [];
   return {
     turns: new DrizzlePlatformTurnRepository(),
     contextLedger: new DrizzleAgentTurnContextRepository(),
@@ -121,9 +173,13 @@ export function createGatewayDependencies(): GatewayDependencies {
       durableIntents: new DrizzleMcpIntentRepository(),
       approvalIntents: new DrizzleToolApprovalIntentRepository(),
     }),
-    modelGateway:
-      createTurnModelGatewayFromEnvironment(readModelEnvironment()) ??
-      unavailableModelGateway,
+    modelGateway: routeNativeImageTurns(
+      baseGateway ?? unavailableModelGateway,
+      visionGateway,
+      acceptsImages,
+    ),
+    assetMaterializer: new DrizzleGatewayAssetMaterializer(),
+    nativeAssetKinds,
   };
 }
 
@@ -145,6 +201,8 @@ export function createGatewayTurnApplication(
       deps.nodeInvocations,
       deps.mcpRuntime.capabilities,
       input.route.membershipRole,
+      deps.assetMaterializer ?? null,
+      deps.nativeAssetKinds ?? [],
     ),
     contextLedger: deps.contextLedger,
     modelRunLedger: deps.modelRunLedger,

@@ -36,6 +36,13 @@ export {
   type OwnedStoredAssetVersion,
 } from './asset-repository';
 export {
+  readStoredAssetBytes,
+  removeStoredAsset,
+  removeStoredAssetByKey,
+  storeAssetBytes,
+  type StoredAssetObject,
+} from './asset-object-storage';
+export {
   ASSET_GENERATE_THUMBNAIL_TASK,
   ASSET_RENDER_PREVIEW_TASK,
   DrizzleAssetDerivedProcessingRepository,

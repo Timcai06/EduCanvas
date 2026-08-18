@@ -9,8 +9,8 @@ import {
  * Desktop 第一方客户端的版本化 capability manifest 契约（DP06）。
  *
  * 客户端只声明能力名；risk/version 由服务端用 `gatewayCapabilityDefaultRisk` 解析，
- * 客户端不得自报 L2/L3。冻结的 v1 能力集覆盖四轴：
- * - 可输入：`input.text`；
+ * 客户端不得自报 L2/L3。冻结的 v2 能力集覆盖四轴：
+ * - 可输入：`input.text`、`input.image`/`input.file`（DP10 图片与 PDF 统一 Asset 输入）；
  * - 可渲染：`output.markdown`/`output.stream`（真实流式，含取消反馈）、
  *   `output.card`/`output.action`（DP07 结果卡与动作）；
  * - 可取消：`output.stream` 提供实时 operation 反馈，取消是协议级操作；
@@ -18,7 +18,7 @@ import {
  */
 
 /** Desktop manifest 结构版本；未知版本由 `z.literal` 在契约层直接 400。 */
-export const gatewayDesktopCapabilityVersion = '1' as const;
+export const gatewayDesktopCapabilityVersion = '2' as const;
 export const gatewayDesktopCapabilityVersionSchema = z.literal(
   gatewayDesktopCapabilityVersion,
 );
@@ -28,6 +28,8 @@ export type GatewayDesktopCapabilityVersion = z.infer<
 
 export const gatewayDesktopCapabilityNames = [
   'input.text',
+  'input.image',
+  'input.file',
   'output.markdown',
   'output.stream',
   'output.card',
@@ -65,7 +67,7 @@ export type GatewayDesktopCapabilityManifest = z.infer<
   typeof gatewayDesktopCapabilityManifestSchema
 >;
 
-/** 桌面客户端直接发送的冻结 v1 manifest。 */
+/** 桌面客户端直接发送的冻结 v2 manifest。 */
 export const gatewayDesktopCapabilityManifest: GatewayDesktopCapabilityManifest =
   {
     manifestVersion: gatewayDesktopCapabilityVersion,
@@ -80,6 +82,8 @@ export const gatewayCapabilityDefaultRisk: Readonly<
   Partial<Record<GatewayCapabilityName, GatewayRiskLevel>>
 > = {
   'input.text': 'l0',
+  'input.image': 'l0',
+  'input.file': 'l0',
   'output.markdown': 'l0',
   'output.stream': 'l0',
   'output.card': 'l0',

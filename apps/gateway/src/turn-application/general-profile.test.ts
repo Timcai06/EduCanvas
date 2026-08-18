@@ -71,6 +71,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({ command, turn });
@@ -88,6 +90,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -113,6 +117,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -129,6 +135,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -151,6 +159,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -169,6 +179,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -189,6 +201,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodes,
       ['knowledge.lookup'],
       'contributor',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({ command, turn });
@@ -218,6 +232,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations(['device.status']),
       ['knowledge.lookup'],
       'owner',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({
@@ -227,5 +243,110 @@ describe('Gateway General Profile Tool Policy', () => {
 
     expect(plan.toolPolicy?.capabilities.channel).toEqual([]);
     expect(plan.toolPolicy?.approvedCapabilities).toEqual([]);
+  });
+});
+
+describe('Gateway General Profile asset 物化（DP10）', () => {
+  it('把asset_ref物化结果投影为sourcesAndAssets文本段与原生图候选', async () => {
+    const versionId = 'version:asset:1';
+    const materializer = {
+      materializeOwnedReferences: vi.fn(async () => ({
+        text: 'PDF文本',
+        textSegments: [
+          {
+            reference: {
+              assetId: 'asset:1',
+              versionId,
+              kind: 'document' as const,
+            },
+            text: 'PDF文本',
+            representation: null,
+          },
+        ],
+        nativeReferences: [],
+        nativeImages: [
+          {
+            versionId: 'version:img:1',
+            mimeType: 'image/png' as const,
+            data: 'aGVsbG8=',
+          },
+        ],
+      })),
+    };
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+      materializer,
+      ['image'],
+    );
+    const plan = await profile.prepare({
+      command: {
+        ...command,
+        input: {
+          clientMessageId: 'message:1',
+          parts: [
+            {
+              type: 'asset_ref',
+              reference: {
+                assetId: 'asset:1',
+                versionId,
+                kind: 'document',
+              },
+              usage: 'attachment',
+            },
+          ],
+        },
+      },
+      turn,
+    });
+
+    expect(materializer.materializeOwnedReferences).toHaveBeenCalledWith({
+      trustedSubjectId: 'user:1',
+      notebookId: 'notebook:1',
+      nativeAssetKinds: ['image'],
+      parts: [
+        {
+          type: 'asset_ref',
+          reference: { assetId: 'asset:1', versionId, kind: 'document' },
+          usage: 'attachment',
+        },
+      ],
+    });
+    const segments = plan.context.sourcesAndAssets;
+    expect(segments[0]).toMatchObject({
+      segment: {
+        id: `asset:${versionId}`,
+        kind: 'asset',
+        assetVersionId: versionId,
+      },
+      message: { role: 'user' },
+    });
+    expect(segments[0]?.segment.content).toContain('PDF文本');
+    expect(segments[1]?.segment).toMatchObject({
+      kind: 'asset',
+      id: 'asset-native:version:img:1',
+    });
+    expect(segments[1]?.message.content).toEqual([
+      {
+        type: 'text',
+        text: expect.stringContaining('untrusted_user_material'),
+      },
+      { type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' },
+    ]);
+  });
+
+  it('未注入materializer时保持空资产上下文（旧行为）', async () => {
+    const profile = new GatewayGeneralProfile(
+      turns,
+      nodeInvocations([]),
+      [],
+      'owner',
+      null,
+      [],
+    );
+    const plan = await profile.prepare({ command, turn });
+    expect(plan.context.sourcesAndAssets).toEqual([]);
   });
 });

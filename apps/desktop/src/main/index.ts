@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   safeStorage,
   screen,
@@ -13,6 +14,7 @@ import {
   gatewayDesktopProtocol,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
+import { GatewayClient } from '@educanvas/gateway-client';
 import { createPetWindow } from './pet-window';
 import type { PetWindowController } from './pet-window';
 import { createTray } from './tray';
@@ -35,7 +37,9 @@ import { createPetMouseTracker } from './pet-mouse-tracker';
 import { createExpandedChatWindow } from './chat-window';
 import { createChatHistoryStore } from './chat-history-store';
 import type { DesktopChatMessageInput } from '../shared/chat-history';
+import type { DesktopAttachmentRef } from '../shared/desktop-attachment';
 import { isPetVisualSignal } from '../shared/pet-visual-signal';
+import { createAttachmentUpload } from './attachment-upload';
 import { createOperationLease } from './operation-lease';
 import { createConversationCoordinator } from './conversation-coordinator';
 import type { DesktopConversationCreateInput } from '../shared/conversation-directory';
@@ -46,6 +50,29 @@ const WEB_BASE_URL =
   'http://127.0.0.1:3101';
 const GATEWAY_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
+
+/** renderer 提交的附件投影边界校验（DP10）：字段必须全部是非空短字符串。 */
+function isDesktopAttachmentRef(value: unknown): value is DesktopAttachmentRef {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.assetId === 'string' &&
+    record.assetId.length > 0 &&
+    record.assetId.length <= 160 &&
+    typeof record.versionId === 'string' &&
+    record.versionId.length > 0 &&
+    record.versionId.length <= 160 &&
+    typeof record.kind === 'string' &&
+    record.kind.length <= 64 &&
+    typeof record.mimeType === 'string' &&
+    record.mimeType.length <= 255 &&
+    typeof record.displayName === 'string' &&
+    record.displayName.length <= 300 &&
+    typeof record.notebookId === 'string' &&
+    record.notebookId.length > 0 &&
+    record.notebookId.length <= 160
+  );
+}
 // Electron deep-link registration and platform callbacks follow the official pattern:
 // https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
 if (process.defaultApp && process.argv[1]) {
@@ -99,6 +126,31 @@ if (!app.requestSingleInstanceLock()) {
     getSession: authAccess.getSession,
     invalidateSession: authAccess.invalidateSession,
   });
+  const attachmentUpload = createAttachmentUpload({
+    showOpenDialog: () =>
+      dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          {
+            name: '图片与 PDF',
+            extensions: ['png', 'jpg', 'jpeg', 'webp', 'pdf'],
+          },
+        ],
+      }),
+    readFileAsUpload: async (filePath) => {
+      const bytes = await fileSystem.readFile(filePath);
+      return new File(
+        [new Uint8Array(bytes)],
+        filePath.split(/[\\/]/).pop() ?? 'attachment',
+      );
+    },
+    uploadAsset: (client, notebookId, file) =>
+      client.uploadAsset({ notebookId, file, scope: 'space' }),
+    getAsset: (client, assetId, notebookId) =>
+      client.getAsset({ assetId, notebookId }),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now: () => Date.now(),
+  });
   const petMouseTracker = createPetMouseTracker<ReturnType<typeof setInterval>>(
     {
       readCursor: () => screen.getCursorScreenPoint(),
@@ -126,6 +178,19 @@ if (!app.requestSingleInstanceLock()) {
     currentConversationId: () =>
       conversations.currentCursor()?.conversationId ?? null,
     openExternal: (url) => shell.openExternal(url),
+  });
+  ipcMain.handle('attachment:pick', async (event) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    const session = await authAccess.getSession();
+    const notebookId = conversations.currentCursor()?.notebookId ?? null;
+    if (!session || !notebookId) {
+      return { ok: false, message: '请先登录并选择一个对话。' };
+    }
+    // 上传绑定 pick 时刻的 notebookId；renderer 随 assistant:turn 带 attachment
+    // 时由 assistant-proxy 再次校验 notebookId 是否仍是当前会话。
+    const client = new GatewayClient(session.gatewayBaseUrl, session.token);
+    return attachmentUpload.pickAndUpload(client, notebookId);
   });
   const sendToDesktopRenderers = (channel: string, payload: unknown): void => {
     for (const win of [petController?.win, expandedChatWindow]) {
@@ -287,7 +352,9 @@ if (!app.requestSingleInstanceLock()) {
       input.content.length > 20_000 ||
       (input.clientMessageId !== undefined &&
         (typeof input.clientMessageId !== 'string' ||
-          input.clientMessageId.length > 200))
+          input.clientMessageId.length > 200)) ||
+      (input.attachment !== undefined &&
+        !isDesktopAttachmentRef(input.attachment))
     ) {
       throw new Error('Invalid chat message');
     }
@@ -349,6 +416,7 @@ if (!app.requestSingleInstanceLock()) {
         source?: 'text' | 'voice';
         clientMessageId?: string;
         leaseToken: string;
+        attachment?: DesktopAttachmentRef;
       },
     ) => {
       if (!isDesktopSender(event.sender.id))
@@ -362,7 +430,8 @@ if (!app.requestSingleInstanceLock()) {
         !['text', 'voice'].includes(payload.source ?? 'text') ||
         (payload.clientMessageId !== undefined &&
           (typeof payload.clientMessageId !== 'string' ||
-            payload.clientMessageId.length > 200))
+            payload.clientMessageId.length > 200)) ||
+        !isDesktopAttachmentRef(payload.attachment)
       )
         throw new Error('Invalid assistant turn');
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
@@ -402,6 +471,7 @@ if (!app.requestSingleInstanceLock()) {
             text: payload.text,
             cursor: cursor ?? undefined,
             clientMessageId: payload.clientMessageId,
+            attachment: payload.attachment,
           },
           signal,
           tracker,

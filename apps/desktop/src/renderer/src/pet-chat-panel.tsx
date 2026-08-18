@@ -9,6 +9,27 @@ import type { DesktopConversationDirectorySnapshot } from '../../shared/conversa
 import type { DesktopResultTarget } from '../../shared/chat-history';
 import { MessageResultCards } from './message-result-cards';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
+import type { DesktopAttachmentRef } from '../../shared/desktop-attachment';
+
+function AttachmentIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path
+        d="M21 12a9 9 0 1 1-9-9c2.52 0 4.6 1.04 6.1 2.9L21 12z"
+        strokeLinecap="round"
+      />
+      <path d="M21 12v0H13" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export function PetChatPanel(props: {
   expandedView: boolean;
@@ -39,6 +60,9 @@ export function PetChatPanel(props: {
     title: string,
   ): Promise<void>;
   openResult(target: DesktopResultTarget): Promise<void> | void;
+  pendingAttachment: DesktopAttachmentRef | null;
+  pickAttachment(): Promise<void>;
+  clearAttachment(): void;
 }) {
   const {
     expandedView,
@@ -66,6 +90,9 @@ export function PetChatPanel(props: {
     selectConversation,
     createConversation,
     openResult,
+    pendingAttachment,
+    pickAttachment,
+    clearAttachment,
   } = props;
   const [creating, setCreating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -164,6 +191,11 @@ export function PetChatPanel(props: {
             {item.role === 'user' && item.source === 'voice' && (
               <small className="chat-message__source">语音输入</small>
             )}
+            {item.role === 'user' && item.attachment && (
+              <small className="chat-message__attachment">
+                📎 {item.attachment.displayName}
+              </small>
+            )}
             <p>
               {item.content}
               {item.status === 'streaming' ? '▍' : ''}
@@ -215,6 +247,25 @@ export function PetChatPanel(props: {
         void submit();
       }}
     >
+      {pendingAttachment && (
+        <span className="attachment-chip" role="status">
+          <span
+            className="attachment-chip__name"
+            title={pendingAttachment.displayName}
+          >
+            📎 {pendingAttachment.displayName}
+          </span>
+          <button
+            type="button"
+            className="attachment-chip__remove"
+            aria-label="移除附件"
+            title="移除附件"
+            onClick={clearAttachment}
+          >
+            ×
+          </button>
+        </span>
+      )}
       <textarea
         aria-label="输入消息"
         value={text}
@@ -232,6 +283,16 @@ export function PetChatPanel(props: {
         }}
       />
       <div className="pet-chat__actions">
+        <button
+          className="attach-action"
+          type="button"
+          aria-label="选择图片或 PDF"
+          title="选择图片或 PDF"
+          disabled={busy || !directory.currentConversationId}
+          onClick={() => void pickAttachment()}
+        >
+          <AttachmentIcon />
+        </button>
         <button
           className={`voice-action${state === 'listening' ? ' is-active' : ''}`}
           type="button"
@@ -275,7 +336,10 @@ export function PetChatPanel(props: {
             <button
               className="send-action"
               type="submit"
-              disabled={!text.trim() || !directory.currentConversationId}
+              disabled={
+                (!text.trim() && !pendingAttachment) ||
+                !directory.currentConversationId
+              }
             >
               发送
             </button>

@@ -47,6 +47,29 @@ describe('desktop chat history store', () => {
     expect(Object.isFrozen(snapshot)).toBe(true);
   });
 
+  it('persists an attachment and allows a blank prompt with it (DP10)', () => {
+    const store = createChatHistoryStore();
+    const attachment = {
+      assetId: 'asset:one',
+      versionId: 'version:one',
+      kind: 'image',
+      mimeType: 'image/png',
+      displayName: '截图.png',
+      notebookId: 'notebook:1',
+    };
+    const message = store.append({
+      role: 'user',
+      content: '',
+      source: 'text',
+      attachment,
+    });
+    expect(message.attachment).toEqual(attachment);
+    expect(store.snapshot()[0]?.attachment).toEqual(attachment);
+    expect(() =>
+      store.append({ role: 'user', content: '', source: 'text' }),
+    ).toThrow('Chat message cannot be blank');
+  });
+
   it('clears history when the current conversation changes', () => {
     const store = createChatHistoryStore();
     store.append({ role: 'user', content: '旧会话', source: 'text' });

@@ -510,4 +510,122 @@ describe('remote assistant proxy resume & interrupted', () => {
     expect(tracker.operationId).toBe('operation:one');
     expect(tracker.lastSequence).toBe(2);
   });
+
+  it('sinks an owned attachment into asset_ref parts with the cursor notebook (DP10)', async () => {
+    let requestBody: unknown;
+    const fetchImpl = (async (_input, init) => {
+      requestBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
+        [
+          event(0, { type: 'operation.accepted' }),
+          event(1, { type: 'operation.completed', messageId: 'message:one' }),
+        ]
+          .map((value) => JSON.stringify(value))
+          .join('\n'),
+        { headers: { 'content-type': 'application/x-ndjson' } },
+      );
+    }) as typeof fetch;
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      fetchImpl,
+    });
+    await proxy.turn({
+      text: '看看这张图',
+      attachment: {
+        assetId: 'asset:one',
+        versionId: 'version:one',
+        kind: 'image',
+        mimeType: 'image/png',
+        displayName: '截图.png',
+        notebookId: 'notebook:bound',
+      },
+    });
+    expect(requestBody).toMatchObject({
+      notebookId: 'notebook:bound',
+      parts: [
+        { type: 'text', text: '看看这张图' },
+        {
+          type: 'asset_ref',
+          reference: {
+            assetId: 'asset:one',
+            versionId: 'version:one',
+            kind: 'image',
+          },
+          usage: 'attachment',
+        },
+      ],
+    });
+  });
+
+  it('allows an empty prompt when an attachment is attached (only asset_ref) (DP10)', async () => {
+    let requestBody: unknown;
+    const fetchImpl = (async (_input, init) => {
+      requestBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
+        [
+          event(0, { type: 'operation.accepted' }),
+          event(1, { type: 'operation.completed', messageId: 'message:one' }),
+        ]
+          .map((value) => JSON.stringify(value))
+          .join('\n'),
+        { headers: { 'content-type': 'application/x-ndjson' } },
+      );
+    }) as typeof fetch;
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      fetchImpl,
+    });
+    await proxy.turn({
+      text: '',
+      attachment: {
+        assetId: 'asset:one',
+        versionId: 'version:one',
+        kind: 'image',
+        mimeType: 'image/png',
+        displayName: '截图.png',
+        notebookId: 'notebook:bound',
+      },
+    });
+    expect(requestBody).toMatchObject({
+      parts: [
+        {
+          type: 'asset_ref',
+          reference: {
+            assetId: 'asset:one',
+            versionId: 'version:one',
+            kind: 'image',
+          },
+          usage: 'attachment',
+        },
+      ],
+    });
+  });
+
+  it('rejects an attachment bound to a different notebook before streaming (DP10)', async () => {
+    const fetchImpl = vi.fn();
+    const proxy = createAssistantProxy({
+      getSession: async () => session,
+      invalidateSession: async () => undefined,
+      fetchImpl,
+    });
+    await expect(
+      proxy.turn({
+        text: '你好',
+        attachment: {
+          assetId: 'asset:one',
+          versionId: 'version:one',
+          kind: 'image',
+          mimeType: 'image/png',
+          displayName: '截图.png',
+          notebookId: 'notebook:other',
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'route_required',
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

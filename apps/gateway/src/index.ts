@@ -21,6 +21,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import {
+  DrizzleAssetRepository,
   DrizzleGatewayDirectoryRepository,
   DrizzleGatewayApprovalRepository,
   DrizzleGatewayConnectionRepository,
@@ -31,7 +32,9 @@ import {
   DrizzleGatewayRouteResolver,
   DrizzlePlatformTurnRepository,
   DrizzleWebSessionRepository,
+  removeStoredAsset,
   requireNotebookAccess,
+  storeAssetBytes,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
 import {
@@ -58,6 +61,7 @@ import { createGatewayLogger } from './logging';
 import { GatewayCanvasResourceService } from './canvas-resource-service';
 import { GatewayImagePreviewService } from './asset-image-preview-service';
 import { readGatewayImageBytes } from './asset-local-storage';
+import { GatewayAssetUploadService } from './asset-upload/asset-upload';
 import { getGatewayTelemetryRuntime } from './telemetry';
 import { createStreamingTranscriptionUpgradeHandler } from './streaming-transcription-ws-transport';
 import { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
@@ -98,6 +102,15 @@ const turnRepository = new DrizzlePlatformTurnRepository();
 const imagePreviews = new GatewayImagePreviewService({
   find: (input) => turnRepository.findOwnedImagePreview(input),
   readBytes: readGatewayImageBytes,
+});
+const assetRepository = new DrizzleAssetRepository();
+const gatewayAssetUploads = new GatewayAssetUploadService({
+  createUploaded: (input) => assetRepository.createUploaded(input),
+  createUploadedPending: (input, options) =>
+    assetRepository.createUploadedPending(input, options),
+  getOwnedSnapshot: (input) => assetRepository.getOwnedSnapshot(input),
+  storeBytes: storeAssetBytes,
+  removeStored: removeStoredAsset,
 });
 const connections = new GatewayConnectionService(
   new DrizzleGatewayConnectionRepository(),
@@ -191,6 +204,7 @@ const server = createServer(
           connections,
           canvasResources: new GatewayCanvasResourceService(),
           imagePreviews,
+          assets: gatewayAssetUploads,
           streamingTickets,
           checkNotebookAccess: checkStreamingNotebookAccess,
         }

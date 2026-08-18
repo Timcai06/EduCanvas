@@ -24,6 +24,7 @@ describe('桌宠 MVP 文本对话', () => {
       'request:1',
       'text',
       'desktop:cm-1',
+      undefined,
     );
   });
 
@@ -51,6 +52,32 @@ describe('桌宠 MVP 文本对话', () => {
       error: '请输入内容。',
     });
     expect(turn).not.toHaveBeenCalled();
+  });
+
+  it('纯附件（空文字）也允许发送，并透传附件到 turn（DP10）', async () => {
+    const turn = vi.fn(async () => ({
+      ok: true as const,
+      action: 'answered' as const,
+      message: '看到了。',
+    }));
+    const attachment = {
+      assetId: 'asset:one',
+      versionId: 'version:one',
+      kind: 'image' as const,
+      mimeType: 'image/png',
+      displayName: '截图.png',
+      notebookId: 'notebook:1',
+    };
+    await expect(
+      submitPetText('', 'request:4', turn, 'desktop:cm-4', attachment),
+    ).resolves.toEqual({ ok: true, action: 'answered', reply: '看到了。' });
+    expect(turn).toHaveBeenCalledWith(
+      '',
+      'request:4',
+      'text',
+      'desktop:cm-4',
+      attachment,
+    );
   });
 
   it('保留后端失败类型，供桌宠选择正确错误动作', async () => {

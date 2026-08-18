@@ -236,11 +236,11 @@ describe('Desktop capability manifest (DP06)', () => {
     capabilities,
   });
 
-  it('freezes a v1 manifest whose names are all valid gateway capabilities', () => {
+  it('freezes a v2 manifest whose names are all valid gateway capabilities', () => {
     const manifest = gatewayDesktopCapabilityManifestSchema.parse(
       gatewayDesktopCapabilityManifest,
     );
-    expect(manifest.manifestVersion).toBe('1');
+    expect(manifest.manifestVersion).toBe('2');
     for (const name of manifest.capabilities) {
       expect(gatewayCapabilityNameSchema.safeParse(name).success).toBe(true);
     }
@@ -258,14 +258,14 @@ describe('Desktop capability manifest (DP06)', () => {
     expect(
       gatewayClientTurnRequestSchema.parse(makeClientTurn()).capabilities
         .manifestVersion,
-    ).toBe('1');
+    ).toBe('2');
   });
 
   it('rejects unknown capability names and unknown manifest versions', () => {
     expect(() =>
       gatewayClientTurnRequestSchema.parse(
         makeClientTurn({
-          manifestVersion: '1',
+          manifestVersion: '2',
           capabilities: ['input.text', 'output.unproven'],
         }),
       ),
@@ -273,7 +273,7 @@ describe('Desktop capability manifest (DP06)', () => {
     expect(() =>
       gatewayClientTurnRequestSchema.parse(
         makeClientTurn({
-          manifestVersion: '2',
+          manifestVersion: '3',
           capabilities: ['input.text'],
         }),
       ),
@@ -284,7 +284,7 @@ describe('Desktop capability manifest (DP06)', () => {
     expect(() =>
       gatewayClientTurnRequestSchema.parse(
         makeClientTurn({
-          manifestVersion: '1',
+          manifestVersion: '2',
           capabilities: ['input.text', 'input.text'],
         }),
       ),

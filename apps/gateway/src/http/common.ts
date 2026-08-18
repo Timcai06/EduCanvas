@@ -74,6 +74,57 @@ export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
+export class BoundedMultipartError extends Error {
+  constructor(readonly code: 'invalid_multipart' | 'multipart_too_large') {
+    super(code);
+    this.name = 'BoundedMultipartError';
+  }
+}
+
+/**
+ * 桌面资产上传（DP10）：在交给平台 multipart 解析器前先流式执行请求体硬上限。
+ * `maxBytes` 包含 boundary 与普通字段，避免缺失/伪造 Content-Length 时无界缓冲。
+ * 已缓冲字节由 undici 的 `Response.formData()` 解析（Node ≥24 内置 multipart）。
+ */
+export async function readBoundedMultipartFormData(
+  request: IncomingMessage,
+  maxBytes: number,
+): Promise<FormData> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new Error('multipart_limit_invalid');
+  }
+  const contentType = request.headers['content-type'] ?? '';
+  if (!contentType.toLowerCase().startsWith('multipart/form-data;')) {
+    throw new BoundedMultipartError('invalid_multipart');
+  }
+  const declaredLength = Number(request.headers['content-length']);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new BoundedMultipartError('multipart_too_large');
+  }
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes)
+      throw new BoundedMultipartError('multipart_too_large');
+    chunks.push(buffer);
+  }
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return await new Response(body, {
+      headers: { 'content-type': contentType },
+    }).formData();
+  } catch {
+    throw new BoundedMultipartError('invalid_multipart');
+  }
+}
+
 export function writeEvent(
   response: ServerResponse,
   event: GatewayOperationEvent,

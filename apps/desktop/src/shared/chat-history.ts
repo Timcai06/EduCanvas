@@ -1,3 +1,5 @@
+import type { DesktopAttachmentRef } from './desktop-attachment';
+
 export type DesktopChatRole = 'user' | 'assistant' | 'system';
 export type DesktopChatSource = 'text' | 'voice';
 export type DesktopChatMessageStatus =
@@ -110,6 +112,8 @@ export interface DesktopChatMessage {
   source: DesktopChatSource;
   status: DesktopChatMessageStatus;
   createdAt: string;
+  /** DP10：随乐观 User Message 携带的附件；发送即持久化，切换 notebook 清空。 */
+  attachment?: DesktopAttachmentRef;
   citations?: readonly DesktopCitation[];
   artifacts?: readonly DesktopArtifactRef[];
   pendingApproval?: DesktopApprovalRef | null;
@@ -123,6 +127,8 @@ export interface DesktopChatMessageInput {
   source: DesktopChatSource;
   clientMessageId?: string;
   status?: DesktopChatMessageStatus;
+  /** DP10：随消息发出的附件（构造 asset_ref part）。 */
+  attachment?: DesktopAttachmentRef;
 }
 
 export interface DesktopChatHistorySnapshot {

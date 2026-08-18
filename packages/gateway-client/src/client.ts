@@ -1,4 +1,5 @@
 import {
+  gatewayAssetSnapshotSchema,
   gatewayClientTurnRequestSchema,
   gatewayConversationCreateRequestSchema,
   gatewayDesktopCapabilityManifest,
@@ -15,6 +16,7 @@ import {
   gatewayMessageHistoryCursorSchema,
   gatewayMessageHistoryPageSchema,
   gatewayOperationEventSchema,
+  type GatewayAssetSnapshot,
   type GatewayClientTurnRequest,
   type GatewayConversationCreateRequest,
   type GatewayConversationCreateResult,
@@ -423,6 +425,50 @@ export class GatewayClient {
     const response = await this.fetcher(url, { headers: this.headers() });
     if (!response.ok) throw await parseError(response);
     return canvasResourceSchema.parse(await response.json());
+  }
+
+  /**
+   * 把桌面选中的图片/PDF 上传到当前 Notebook（DP10）。multipart 里带 file 与
+   * scope；服务端按 bearer 主体 + notebookId 做归属校验后落库（图片即 ready，
+   * PDF 为 processing 待 worker 提取）。返回 `GatewayAssetSnapshot` 投影。
+   */
+  async uploadAsset(input: {
+    notebookId: string;
+    file: File;
+    scope: 'turn' | 'space';
+  }): Promise<GatewayAssetSnapshot> {
+    if (input.scope !== 'turn' && input.scope !== 'space') {
+      throw new Error('Invalid asset scope');
+    }
+    const url = new URL(`${this.baseUrl}/v1/client/assets`);
+    url.searchParams.set('notebookId', input.notebookId);
+    const form = new FormData();
+    form.append('file', input.file);
+    form.append('scope', input.scope);
+    const response = await this.fetcher(url, {
+      method: 'POST',
+      headers: this.headers(),
+      body: form,
+    });
+    if (!response.ok) throw await parseError(response);
+    return gatewayAssetSnapshotSchema.parse(await response.json());
+  }
+
+  /**
+   * 按 bearer 主体 + notebookId 轮询已上传资产的当前快照（DP10 ready-wait）。
+   * 调用方据此读取 `descriptor.status` 直至 ready/failed，并取得当前版本号。
+   */
+  async getAsset(input: {
+    assetId: string;
+    notebookId: string;
+  }): Promise<GatewayAssetSnapshot> {
+    const url = new URL(
+      `${this.baseUrl}/v1/client/assets/${encodeURIComponent(input.assetId)}`,
+    );
+    url.searchParams.set('notebookId', input.notebookId);
+    const response = await this.fetcher(url, { headers: this.headers() });
+    if (!response.ok) throw await parseError(response);
+    return gatewayAssetSnapshotSchema.parse(await response.json());
   }
 
   /**
