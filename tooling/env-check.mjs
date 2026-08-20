@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync } from 'node:fs';
+import { validateSearchEnvironment } from './search-env.mjs';
 
 const envPath = process.argv[2] ?? '.env';
 if (!existsSync(envPath)) {
@@ -65,36 +66,6 @@ function validateDashScopeAlias(name) {
     (current.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(current))
   ) {
     fail(`${name} is not a valid model or voice alias`);
-  }
-}
-
-function validateOptionalHttpBaseUrl(name) {
-  const raw = value(name);
-  if (raw === '') return;
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
-    fail(`${name} is not a valid URL`);
-  }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.search !== '' ||
-    url.hash !== ''
-  ) {
-    fail(`${name} must be http(s) without credentials, query, or fragment`);
-  }
-}
-
-function validateOptionalSecret(name) {
-  const secret = value(name);
-  if (
-    secret !== '' &&
-    (secret.length > 4_096 || !/^[\x21-\x7e]+$/.test(secret))
-  ) {
-    fail(`${name} has an invalid shape`);
   }
 }
 
@@ -284,21 +255,7 @@ validateInteger('MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES', 1024, 20 * 1024 * 1024);
 validateInteger('MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS', 1_000, 180_000);
 validateInteger('MODEL_GATEWAY_EMBEDDING_MAX_BATCH', 1, 256);
 
-const searchApiKey = value('SEARCH_API_KEY');
-const searchBaseUrl = value('SEARCH_BASE_URL');
-if (searchBaseUrl !== '' && searchApiKey === '') {
-  fail('missing search provider values: SEARCH_API_KEY');
-}
-validateOptionalSecret('SEARCH_API_KEY');
-validateOptionalHttpBaseUrl('SEARCH_BASE_URL');
-
-const searxngBaseUrl = value('SEARXNG_BASE_URL');
-const searxngApiKey = value('SEARXNG_API_KEY');
-if (searxngApiKey !== '' && searxngBaseUrl === '') {
-  fail('missing SearXNG provider values: SEARXNG_BASE_URL');
-}
-validateOptionalSecret('SEARXNG_API_KEY');
-validateOptionalHttpBaseUrl('SEARXNG_BASE_URL');
+validateSearchEnvironment({ value, fail });
 
 /*
  * Live Voice 由 DashScope ASR/TTS 共同提供。API Key 与 Workspace 必须成组

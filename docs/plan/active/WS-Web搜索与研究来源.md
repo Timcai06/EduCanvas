@@ -141,7 +141,7 @@ WS00-WS07 → WS08 → WS09
   - `apps/web/server/tools/web-search-provider.ts` — 保留旧 Tavily `{ results }` 契约的兼容适配层
   - `apps/web/server/tools/web-search.ts` — resolveWebSearchTool now uses SearchService + SearchProviderRegistry
   - `apps/web/server/tools/web-search.test.ts` — 26 tests covering primary success, timeout/network/429/500 failover, budget cancellation, cooldown, provider validation, compatibility, query dedup and candidate caps
-  - `.env.example`、`tooling/env-check.mjs`、`tooling/env-check.test.mjs` — 搜索 Provider 配置闭合、URL 与秘密形状校验
+  - `.env.example`、`tooling/env-check.mjs`、`tooling/search-env.mjs`、`tooling/env-check.test.mjs` — 搜索 Provider 配置闭合、URL 与秘密形状校验
 - 验证结果：
   - `pnpm typecheck` — clean
   - `pnpm lint` — clean (0 errors, 0 warnings)
