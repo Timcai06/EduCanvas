@@ -4,7 +4,7 @@
 - 状态：`active`
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex；电脑浏览器视觉验收由项目负责人确认
-- 最后验证时间：2026-08-17
+- 最后验证时间：2026-08-20
 - 起始本地基线：`ebf8d4a052f2c656644c9762d3c0dbb65113869d`
 - 关键决策：[ADR-0031](../../09-decisions/0031-Web搜索与网页来源获取边界.md)
 - 上游计划：[RM 统一资源工作台](../completed/RM-统一资源工作台.md)
@@ -115,7 +115,7 @@ WS00-WS07 → WS08 → WS09
 ### WS02：Provider-neutral SearchService
 
 - 依赖：WS01
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：Web server search adapters、配置检查、Provider 契约和测试
 
 交付：
@@ -126,6 +126,33 @@ WS00-WS07 → WS08 → WS09
 - 对所有 Provider 响应做严格 Schema 校验、URL 规范化和安全错误投影。
 
 完成标准：主 Provider 故障时可在预算内使用备用 Provider；普通聊天未配置搜索时诚实降级。
+
+实现与审核证据（2026-08-20）：
+
+- 新建文件：
+  - `apps/web/server/tools/search-contract.ts` — Provider-neutral contract (SearchRequest, SearchResult, SearchProviderError, ProviderHealth)
+  - `apps/web/server/tools/provider-health.ts` — ProviderHealthTracker with cooldown, failure threshold, controllable clock
+  - `apps/web/server/tools/search-registry.ts` — SearchProviderRegistry with registration order, enable/disable, health-aware selection
+  - `apps/web/server/tools/search-service.ts` — SearchService with bounded timeout, total budget, max attempts, abort signal, SearchServiceError short-circuit
+  - `apps/web/server/tools/search-url.ts` — Provider URL 与搜索结果 URL 的统一规范化和安全过滤
+  - `apps/web/server/tools/tavily-adapter.ts` — TavilyAdapter using new contract with strict Zod schema validation
+  - `apps/web/server/tools/searxng-adapter.ts` — SearXNGAdapter as second provider with SEARXNG_BASE_URL env validation
+- 重构文件：
+  - `apps/web/server/tools/web-search-provider.ts` — 保留旧 Tavily `{ results }` 契约的兼容适配层
+  - `apps/web/server/tools/web-search.ts` — resolveWebSearchTool now uses SearchService + SearchProviderRegistry
+  - `apps/web/server/tools/web-search.test.ts` — 26 tests covering primary success, timeout/network/429/500 failover, budget cancellation, cooldown, provider validation, compatibility, query dedup and candidate caps
+  - `.env.example`、`tooling/env-check.mjs`、`tooling/env-check.test.mjs` — 搜索 Provider 配置闭合、URL 与秘密形状校验
+- 验证结果：
+  - `pnpm typecheck` — clean
+  - `pnpm lint` — clean (0 errors, 0 warnings)
+  - `pnpm --filter @educanvas/web test` — 1737/1737 通过（236 files）
+  - `pnpm --filter @educanvas/web exec vitest run server/tools/web-search.test.ts` — 26/26 通过
+  - `node --test tooling/env-check.test.mjs` — 26/26 通过
+  - `git diff --check` — clean
+  - Prettier formatting — clean
+  - `pnpm test:unit` 未计入 PASS：当前机器的 `local-core-cleanup` / `local-orchestrator` 进程夹具失败并超过 12 分钟；WS02 所属 Web 全包与配置测试已独立通过，最终全仓结果交由 CI 判定
+- Codex 审核修正：服务级超时会中止底层 Provider I/O；冷却与未配置错误分离；原生网络错误可降级；非法 Provider payload 使用稳定错误；Provider URL 拒绝凭据、query、fragment；旧 Tavily `{ results }` 契约保留。
+- 审核结论：无 CRITICAL/HIGH 遗留，`PASS`；真实 Provider 与电脑浏览器验证仍归 WS09，不作为 WS02 自动化替代证据。
 
 ### WS03：内置网站搜索入口
 
