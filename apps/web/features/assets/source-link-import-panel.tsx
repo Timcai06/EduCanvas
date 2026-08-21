@@ -8,6 +8,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
+import { SourceWebSearchPanel } from './source-web-search-panel';
 import { LinkAssetClientError } from './link-client-contract';
 import {
   LINK_IMPORT_CONCURRENCY,
@@ -54,7 +55,7 @@ function initialItem(url: string): LinkBatchItem {
 }
 
 /** 输入框加号中的批量网页来源入口；导入结果由用户确认完成后一次交回 Workspace。 */
-export function SourceLinkImportPanel({
+function DirectLinkImportPanel({
   onImported,
 }: {
   onImported: (asset: AssetItem) => void;
@@ -286,6 +287,68 @@ export function SourceLinkImportPanel({
       <p className="text-sm text-ink-muted">
         每个链接独立处理；单项失败不会中断其他网页。
       </p>
+    </div>
+  );
+}
+
+/** 网页来源双入口：已知地址直接导入，未知地址可先搜索并多选导入。 */
+export function SourceLinkImportPanel({
+  onImported,
+}: {
+  onImported: (asset: AssetItem) => void;
+}) {
+  const [mode, setMode] = useState<'url' | 'search'>('url');
+
+  return (
+    <div className="space-y-5">
+      <div
+        className="grid grid-cols-2 rounded-2xl bg-surface p-1"
+        role="tablist"
+        aria-label="网页来源添加方式"
+      >
+        <button
+          type="button"
+          role="tab"
+          id="source-link-url-tab"
+          aria-selected={mode === 'url'}
+          aria-controls="source-link-url-panel"
+          onClick={() => setMode('url')}
+          className={`min-h-11 rounded-xl px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            mode === 'url'
+              ? 'bg-card text-ink shadow-sm'
+              : 'text-ink-muted hover:text-ink'
+          }`}
+        >
+          输入网址
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="source-link-search-tab"
+          aria-selected={mode === 'search'}
+          aria-controls="source-link-search-panel"
+          onClick={() => setMode('search')}
+          className={`min-h-11 rounded-xl px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            mode === 'search'
+              ? 'bg-card text-ink shadow-sm'
+              : 'text-ink-muted hover:text-ink'
+          }`}
+        >
+          搜索网页
+        </button>
+      </div>
+
+      {mode === 'url' ? (
+        <div
+          id="source-link-url-panel"
+          role="tabpanel"
+          aria-labelledby="source-link-url-tab"
+        >
+          <DirectLinkImportPanel onImported={onImported} />
+        </div>
+      ) : (
+        <SourceWebSearchPanel onImported={onImported} />
+      )}
     </div>
   );
 }
