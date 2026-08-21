@@ -157,7 +157,7 @@ WS00-WS07 → WS08 → WS09
 ### WS03：内置网站搜索入口
 
 - 依赖：WS02
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：Sources/网页导入 UI、Web BFF search route、客户端契约
 
 交付：
@@ -177,12 +177,12 @@ WS00-WS07 → WS08 → WS09
 - 浏览器客户端使用严格 Zod 契约拒绝额外 Provider 私有字段或畸形结果；取消浏览器请求会继续向下中止 Provider I/O；同步运行锁阻止搜索和批量导入重复提交；
 - `pnpm --filter @educanvas/web test` — 1745/1745 通过（239 files）；
 - `pnpm lint`、`pnpm typecheck`、`pnpm file:check`、`git diff --check` — clean；
-- 当前结论：实现与本地审核完成，状态保持 `IN_REVIEW`，待 PR CI 与集成合并后由审核者更新为 `PASS`；真实 Provider 与电脑浏览器验证继续归 WS09。
+- 集成结论：PR #395 的静态、单元、Secret Scan、Chromium E2E 与最终 checks 全绿，合并提交 `ad95bcad`；审核结论 `PASS`。真实 Provider 与电脑浏览器验证继续归 WS09。
 
 ### WS04：候选预检、排序与自动补位
 
 - 依赖：WS02
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：SearchService candidate pipeline、web fetch policy、测试 fixture
 
 交付：
@@ -194,6 +194,18 @@ WS00-WS07 → WS08 → WS09
 - 相关性排序同时约束域名、机构和内容类型多样性。
 
 完成标准：前五条中多数不可用时仍能从后续候选收敛出可读来源；不可用页面不占引用编号。
+
+实现证据（2026-08-21）：
+
+- 新增 Provider-neutral 候选管线：按目标数三倍超额获取、规范 URL 去重、最多 15 个候选、最多 3 个域并发预检；同域严格串行，首个失败后本轮同域候选冷却；
+- 预检复用正式网页导入的 SSRF、DNS、逐跳重定向、默认端口、响应大小与正文抽取边界，不持久化网页，也不分配引用编号；外部取消继续中止底层 I/O；
+- 稳定分类 blocked address、HTTP blocked/error、login wall、empty content、rate limit、timeout、unsupported format、render required/unavailable、too large、network error 与 domain cooled；
+- SearchService 在候选不足时继续下一个健康 Provider；Tavily 按官方 `max_results` 0–20 约束，在本管线预算内最多获取 15 条，单 Provider 也可从前五之后补位；
+- 可读候选按相关性贪心排序，同时限制每域最多 2 条，并对机构与 article/documentation/institution/other 内容类型重复施加多样性惩罚；重定向后的最终 URL 再次安全规范化与去重；
+- 浏览器 BFF 与 Agent `webSearch` 均使用预检管线；浏览器只看到可读取候选，Provider、失败明细和尝试记录留在服务端；不可用候选不会进入后续网页读取与引用账本；
+- `pnpm --filter @educanvas/web test` — 1760/1760 通过（240 files）；候选/搜索/BFF 定向测试 45/45 通过；
+- `pnpm lint`、`pnpm typecheck`、Prettier、`git diff --check` — clean；
+- Codex 审核结论：CRITICAL 0、HIGH 0；状态保持 `IN_REVIEW`，待 PR CI 与集成合并后更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
 
 ### WS05：Agent 自适应多轮研究
 

@@ -25,6 +25,8 @@ const tavilyResponseSchema = z.object({
     .optional(),
 });
 
+const TAVILY_MAX_RESULTS = 20;
+
 export interface TavilyAdapterConfig {
   readonly apiKey: string;
   readonly baseUrl?: string;
@@ -63,7 +65,7 @@ export function createTavilyAdapter(
           body: JSON.stringify({
             api_key: config.apiKey,
             query: request.query,
-            max_results: Math.min(5, request.limit),
+            max_results: Math.min(TAVILY_MAX_RESULTS, request.limit),
             include_answer: false,
             include_raw_content: false,
           }),
@@ -96,7 +98,9 @@ export function createTavilyAdapter(
             publishedAt: item.published_date,
           });
 
-          if (results.length >= Math.min(5, request.limit)) break;
+          if (results.length >= Math.min(TAVILY_MAX_RESULTS, request.limit)) {
+            break;
+          }
         }
 
         return results;

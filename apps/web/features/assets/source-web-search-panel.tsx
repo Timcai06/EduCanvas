@@ -47,6 +47,19 @@ function searchFailure(error: unknown): {
     : { message: '网页搜索暂时不可用。请稍后重试。', retryable: true };
 }
 
+function accessibilityCopy(
+  accessibility: WebSearchResult['accessibility'],
+): string {
+  switch (accessibility) {
+    case 'accessible':
+      return '可访问性：可读取';
+    case 'unavailable':
+      return '可访问性：暂不可用';
+    case 'unchecked':
+      return '可访问性：导入时检查';
+  }
+}
+
 /** WS03 浏览器搜索入口：结果只使用 Provider-neutral 客户端契约，并直接批量导入。 */
 export function SourceWebSearchPanel({
   onImported,
@@ -293,7 +306,7 @@ export function SourceWebSearchPanel({
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-surface px-2 py-1 text-ink-muted">
-                        可访问性：导入时检查
+                        {accessibilityCopy(item.accessibility)}
                       </span>
                       <span
                         className={`rounded-full px-2 py-1 ${

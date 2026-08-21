@@ -11,7 +11,7 @@ import {
   readLimitedJsonRequest,
 } from '@/server/http/json-request';
 import {
-  resolveSearchService,
+  resolveSearchCandidatePipeline,
   type SearchEnvironment,
 } from '@/server/tools/web-search';
 import { SearchServiceError } from '@/server/tools/search-service';
@@ -101,8 +101,8 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const service = resolveSearchService(environment());
-  if (!service) {
+  const pipeline = resolveSearchCandidatePipeline(environment());
+  if (!pipeline) {
     const failure = publicError.search_not_configured;
     return searchError(
       failure.status,
@@ -113,7 +113,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const output = await service.search(
+    const output = await pipeline.search(
       {
         query: parsed.data.query,
         limit: 10,
@@ -126,7 +126,7 @@ export async function POST(request: Request): Promise<Response> {
         url: result.url,
         domain: result.sourceDomain ?? new URL(result.url).hostname,
         snippet: result.snippet,
-        accessibility: 'unchecked' as const,
+        accessibility: result.accessibility,
         imported: false,
       })),
     });
