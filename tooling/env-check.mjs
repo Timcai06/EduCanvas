@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync } from 'node:fs';
+import { validateSearchEnvironment } from './search-env.mjs';
 
 const envPath = process.argv[2] ?? '.env';
 if (!existsSync(envPath)) {
@@ -253,6 +254,8 @@ validateInteger('MODEL_GATEWAY_IMAGE_TIMEOUT_MS', 5_000, 300_000);
 validateInteger('MODEL_GATEWAY_IMAGE_MAX_OUTPUT_BYTES', 1024, 20 * 1024 * 1024);
 validateInteger('MODEL_GATEWAY_EMBEDDING_TIMEOUT_MS', 1_000, 180_000);
 validateInteger('MODEL_GATEWAY_EMBEDDING_MAX_BATCH', 1, 256);
+
+validateSearchEnvironment({ value, fail });
 
 /*
  * Live Voice 由 DashScope ASR/TTS 共同提供。API Key 与 Workspace 必须成组

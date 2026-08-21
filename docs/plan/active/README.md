@@ -9,7 +9,7 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [KM 知识记忆](KM-知识记忆.md)                    | hzlgou     | K00、M00 待开始                          | 与 O 解耦；K/M 顺序执行                                                     |
 | [G 产品发布闭环](G-产品发布闭环.md)              | 项目负责人 | G00 待开始                               | 依赖已归档的 R/W/Q/UV，和 KM 关联                                           |
 | [DP 桌宠统一桌面外延](DP-桌宠统一桌面外延.md)    | @Timcai06  | DP00-DP02 PASS；DP03 PENDING             | 基于现有桌宠 MVP；依次收口统一会话、历史、Operation、结构化结果与双平台证据 |
-| [WS Web 搜索与研究来源](WS-Web搜索与研究来源.md) | @Timcai06  | WS00-WS01 PASS；WS02-WS09 PENDING        | 网页直接导入；内置搜索与唯一 Agent Loop 共用 SearchService；不做网页预览    |
+| [WS Web 搜索与研究来源](WS-Web搜索与研究来源.md) | @Timcai06  | WS00-WS02 PASS；WS03-WS09 PENDING        | 网页直接导入；内置搜索与唯一 Agent Loop 共用 SearchService；不做网页预览    |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
 [P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)、

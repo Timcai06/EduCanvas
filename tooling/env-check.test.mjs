@@ -82,6 +82,49 @@ describe('env-check', () => {
     assert.match(result.stdout, /model provider disabled/);
   });
 
+  it('validates Web search provider groups without printing secrets', async () => {
+    const missingSearxngBase = runEnvCheck(
+      await writeEnv(
+        providerEnv({ SEARXNG_API_KEY: 'searxng-secret-without-base' }),
+      ),
+    );
+    assert.equal(missingSearxngBase.status, 1);
+    assert.match(
+      missingSearxngBase.stderr,
+      /missing SearXNG provider values: SEARXNG_BASE_URL/,
+    );
+    assert.doesNotMatch(
+      missingSearxngBase.stderr,
+      /searxng-secret-without-base/,
+    );
+
+    const credentialUrl = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          SEARCH_API_KEY: 'tavily-secret',
+          SEARCH_BASE_URL: 'https://user:password@search.example.test',
+        }),
+      ),
+    );
+    assert.equal(credentialUrl.status, 1);
+    assert.match(
+      credentialUrl.stderr,
+      /SEARCH_BASE_URL must be http\(s\) without credentials/,
+    );
+    assert.doesNotMatch(credentialUrl.stderr, /user:password/);
+
+    const valid = runEnvCheck(
+      await writeEnv(
+        providerEnv({
+          SEARCH_API_KEY: 'tavily-secret',
+          SEARCH_BASE_URL: 'https://search.example.test',
+          SEARXNG_BASE_URL: 'http://127.0.0.1:8888',
+        }),
+      ),
+    );
+    assert.equal(valid.status, 0, valid.stderr);
+  });
+
   it('fails early when DeepSeek is selected without the explicit allow flag', async () => {
     const envPath = await writeEnv(
       providerEnv({
