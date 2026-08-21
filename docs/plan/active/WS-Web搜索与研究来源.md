@@ -157,7 +157,7 @@ WS00-WS07 → WS08 → WS09
 ### WS03：内置网站搜索入口
 
 - 依赖：WS02
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：Sources/网页导入 UI、Web BFF search route、客户端契约
 
 交付：
@@ -168,6 +168,16 @@ WS00-WS07 → WS08 → WS09
 - 搜索、选择、导入和失败重试支持键盘与读屏。
 
 完成标准：用户不依赖 Agent 即可搜索并导入多个网页；浏览器响应不含 Provider 私有字段。
+
+实现证据（2026-08-21）：
+
+- 新增同源、会话鉴权的 `POST /api/v1/chat/assets/link/search` BFF；只投影标题、URL、域名、摘要、可访问状态和导入状态，Provider 名称、健康、尝试记录与原始响应不进入浏览器；
+- 网页来源面板提供“输入网址 / 搜索网页”双入口；搜索结果使用原生复选框多选并直接有界并发导入，不增加预览确认步骤；
+- 搜索输入关联可见标签并兼容中文输入法组合态；标签页、选择、全选、搜索、批量导入与失败重试均可通过键盘和读屏语义操作；高频加载动画遵循 `motion-reduce`；
+- 浏览器客户端使用严格 Zod 契约拒绝额外 Provider 私有字段或畸形结果；取消浏览器请求会继续向下中止 Provider I/O；同步运行锁阻止搜索和批量导入重复提交；
+- `pnpm --filter @educanvas/web test` — 1745/1745 通过（239 files）；
+- `pnpm lint`、`pnpm typecheck`、`pnpm file:check`、`git diff --check` — clean；
+- 当前结论：实现与本地审核完成，状态保持 `IN_REVIEW`，待 PR CI 与集成合并后由审核者更新为 `PASS`；真实 Provider 与电脑浏览器验证继续归 WS09。
 
 ### WS04：候选预检、排序与自动补位
 
