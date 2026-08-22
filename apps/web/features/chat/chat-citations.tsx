@@ -40,7 +40,7 @@ export function ChatCitations({
                 <button
                   type="button"
                   aria-label={`打开来源 ${citation.label}`}
-                  title="打开 Notebook Source"
+                  title="在当前笔记本中打开来源"
                   onClick={() => onOpenSource(citation.assetId)}
                   className="text-xs text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
                 >

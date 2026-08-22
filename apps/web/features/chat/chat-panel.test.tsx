@@ -48,7 +48,7 @@ describe('ChatPanel web citations', () => {
     const html = renderCitation(vi.fn());
 
     expect(html).toContain('aria-label="打开来源 研究网页"');
-    expect(html).toContain('title="打开 Notebook Source"');
+    expect(html).toContain('title="在当前笔记本中打开来源"');
     expect(html).toContain('打开 Notebook Source');
     expect(html).toContain('href="https://example.com/research"');
     expect(html).toContain('aria-label="打开原网页 研究网页"');
