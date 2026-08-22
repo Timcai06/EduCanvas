@@ -459,6 +459,35 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         spaceId: conversation.spaceId,
       }),
     ).toHaveLength(2);
+    expect(
+      await assets.tombstoneOwnedAsset({
+        ownerSubjectId: 'web-source-user',
+        spaceId: conversation.spaceId,
+        assetId: secondAsset.descriptor.assetId,
+      }),
+    ).toBe(true);
+    expect(
+      await sources.listOwnedOperationSources({
+        conversationId: conversation.id,
+        trustedSubjectId: 'web-source-user',
+        operationId: started.turnId,
+      }),
+    ).toEqual([]);
+    expect(
+      await sources.listOwnedConversationCitations({
+        conversationId: conversation.id,
+        trustedSubjectId: 'web-source-user',
+      }),
+    ).toMatchObject([
+      {
+        assistantMessageId: started.assistantMessage.id,
+        ordinal: 2,
+        assetId: secondAsset.descriptor.assetId,
+        assetVersionId: secondAsset.version.versionId,
+        label: '网页乙',
+        url: 'https://example.com/b',
+      },
+    ]);
   });
 
   it('拒绝相同clientMessageId绑定不同通用消息内容', async () => {

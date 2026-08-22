@@ -175,11 +175,18 @@ export class DrizzlePlatformSourceRepository {
         assetVersions,
         eq(assetVersions.id, operationSources.assetVersionId),
       )
+      .innerJoin(assets, eq(assets.id, assetVersions.assetId))
       .where(
         and(
           eq(operationSources.operationId, input.operationId),
           eq(agentOperations.conversationId, input.conversationId),
           eq(conversations.ownerSubjectId, input.trustedSubjectId),
+          eq(assets.ownerSubjectId, input.trustedSubjectId),
+          eq(assets.spaceId, conversations.spaceId),
+          eq(assets.kind, 'link'),
+          eq(assets.status, 'ready'),
+          eq(assets.currentVersionId, operationSources.assetVersionId),
+          eq(assetVersions.status, 'ready'),
         ),
       )
       .orderBy(asc(operationSources.ordinal));

@@ -3,7 +3,6 @@
 import { useGSAP } from '@gsap/react';
 import {
   ArrowRight,
-  ArrowSquareOut,
   FilePdf,
   Image as ImageIcon,
   PresentationChart,
@@ -17,6 +16,7 @@ import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
 import { ConversationArtifactCard } from './conversation-artifact-card';
+import { ChatCitations } from './chat-citations';
 import { StreamShimmer } from './stream-shimmer';
 import { ToolTrace } from './tool-trace';
 
@@ -260,69 +260,11 @@ export function ChatPanel({
                 </p>
               ) : null}
               {message.citations && message.citations.length > 0 ? (
-                <div
-                  className="marginalia flex flex-col gap-0.5 pt-1"
-                  aria-label="回答引用"
-                >
-                  {message.citations.map((citation) => {
-                    const content = (
-                      <>
-                        {citation.marker !== undefined ? (
-                          <span className="marginalia__marker">
-                            {citation.marker}
-                          </span>
-                        ) : null}
-                        <span className="max-w-72 truncate">
-                          {citation.label}
-                        </span>
-                        {citation.kind === 'web' ? (
-                          <ArrowSquareOut
-                            aria-hidden="true"
-                            size={12}
-                            className="self-center"
-                          />
-                        ) : null}
-                      </>
-                    );
-                    const shared = {
-                      ...(citation.marker !== undefined
-                        ? { id: `cite-${message.id}-${citation.marker}` }
-                        : {}),
-                      className: 'marginalia__item scroll-mt-24',
-                    };
-                    return citation.kind === 'web' && onOpenSource ? (
-                      <button
-                        key={citation.id}
-                        {...shared}
-                        type="button"
-                        aria-label={`打开来源 ${citation.label}`}
-                        title="在当前笔记本中打开来源"
-                        onClick={() => onOpenSource(citation.assetId)}
-                      >
-                        {content}
-                      </button>
-                    ) : citation.kind === 'web' ? (
-                      <a
-                        key={citation.id}
-                        {...shared}
-                        href={citation.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="打开原网页"
-                      >
-                        {content}
-                      </a>
-                    ) : (
-                      <span
-                        key={citation.id}
-                        {...shared}
-                        title="来自本轮冻结的课程资料版本"
-                      >
-                        {content}
-                      </span>
-                    );
-                  })}
-                </div>
+                <ChatCitations
+                  citations={message.citations}
+                  messageId={message.id}
+                  onOpenSource={onOpenSource}
+                />
               ) : null}
               {message.artifacts &&
               message.artifacts.length > 0 &&

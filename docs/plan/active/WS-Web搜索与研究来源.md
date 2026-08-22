@@ -263,7 +263,7 @@ WS00-WS07 → WS08 → WS09
 ### WS07：来源、引用与后续追问闭环
 
 - 依赖：WS06
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：Source read model、Studio、Citation 和 Conversation hydration
 
 交付：
@@ -274,6 +274,14 @@ WS00-WS07 → WS08 → WS09
 - 刷新后报告、来源、引用和后续追问保持一致。
 
 完成标准：五个引用逐一对应正确 Source；刷新和删除不会造成编号漂移或悬空跳转。
+
+实现证据（2026-08-22）：
+
+- Web 引用同时提供“打开 Notebook Source”和独立的“打开原网页”动作；原网页使用新窗口与 `noopener noreferrer`，Notebook Source 不可用时仍保留审计定位；
+- 来源删除仅在服务端 tombstone 成功后更新本地列表，并触发统一 Resource Dock reload；失败不乐观移除，并发删除去重，卸载后忽略迟到回调；
+- 删除接口将 repository 的 `false` 稳定映射为 `asset_not_found/404`，避免客户端误报删除成功后刷新复现；
+- 历史 Citation 继续保留冻结的 AssetVersion、ordinal、label 与原始 URL；恢复同一 Operation 时只选入仍为 ready/current 的来源，tombstoned 来源不会重新进入有效上下文；
+- Web 聚焦回归 20/20 通过，Web/DB typecheck、lint、文件治理与 diff 检查通过。DB tombstone/hydration 集成测试已补充，交由 PR 的 `db-integration` lane 执行；当前结论为 `IN_REVIEW`。
 
 ### WS08：安全、观测与成本边界
 

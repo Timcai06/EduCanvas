@@ -120,11 +120,14 @@ export async function DELETE(
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
   try {
-    await tombstoneOwnedAsset({
+    const deleted = (await tombstoneOwnedAsset({
       identity,
       spaceId: conversation.spaceId,
       assetId: parsed.data.assetId,
-    });
+    })) as boolean | void;
+    if (deleted === false) {
+      return jsonError(404, 'asset_not_found', '来源不存在。');
+    }
     return new Response(null, { status: 204 });
   } catch (error) {
     if (error instanceof AssetPreviewError) {

@@ -73,6 +73,7 @@ export function useNotebookSources(input: {
   const [assets, setAssets] = useState<readonly AssetItem[]>([]);
   const assetsRef = useRef<readonly AssetItem[]>([]);
   const pollFailuresRef = useRef(0);
+  const pendingRemovalsRef = useRef(new Set<string>());
   /* W03 竞态保护：并发 refresh 只有最新一次可提交（guard），组件卸载后不再更新（mounted）。 */
   const requestGuardRef = useRef(new LatestRequestGuard());
   const mountedRef = useRef(true);
@@ -206,17 +207,31 @@ export function useNotebookSources(input: {
   /* 删除是软删且不可撤销，所以不做乐观移除：等服务端确认后再从列表里去掉。 */
   const remove = useCallback(
     (asset: AssetItem) => {
+      if (!mountedRef.current || pendingRemovalsRef.current.has(asset.id)) {
+        return;
+      }
+      pendingRemovalsRef.current.add(asset.id);
       void deleteAsset(asset.id)
         .then(() => {
+          if (!mountedRef.current) return;
           setAssets((current) =>
-            current.filter((item) => item.id !== asset.id),
+            (() => {
+              const next = current.filter((item) => item.id !== asset.id);
+              assetsRef.current = next;
+              return next;
+            })(),
           );
+          onSettled?.();
         })
         .catch((reason: unknown) => {
+          if (!mountedRef.current) return;
           onError(toClientError(reason, '暂时无法删除来源。'));
+        })
+        .finally(() => {
+          pendingRemovalsRef.current.delete(asset.id);
         });
     },
-    [onError],
+    [onError, onSettled],
   );
 
   return { assets, setAssets, refresh, toggle, rename, remove };

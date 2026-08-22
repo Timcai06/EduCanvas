@@ -35,7 +35,7 @@ function turn(index: number): readonly ChatMessage[] {
 const messages = [...turn(1), ...turn(2)];
 
 describe('Chat minimap anchors', () => {
-  it('把网页引用投影为当前 Notebook Source 操作而不是直接外链', () => {
+  it('把网页引用投影为 Notebook Source 与原网页两个独立动作', () => {
     const html = renderToStaticMarkup(
       <ChatPanel
         messages={[
@@ -72,7 +72,9 @@ describe('Chat minimap anchors', () => {
     );
 
     expect(html).toContain('aria-label="打开来源 研究网页"');
-    expect(html).not.toContain('href="https://example.com/research"');
+    expect(html).toContain('title="打开 Notebook Source"');
+    expect(html).toContain('href="https://example.com/research"');
+    expect(html).toContain('aria-label="打开原网页 研究网页"');
   });
 
   it('为每条消息输出可聚焦的稳定锚点与角色', () => {
