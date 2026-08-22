@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  consumeTeachingTurnResponse,
-  parseTeachingTurnEvent,
-  TurnStreamProtocolError,
-} from './turn-events';
+import { parseTeachingTurnEvent, TurnStreamProtocolError } from './turn-events';
+import { consumeTeachingTurnResponse } from './turn-stream-consumer';
 
 function responseFromChunks(chunks: readonly string[]): {
   response: Response;

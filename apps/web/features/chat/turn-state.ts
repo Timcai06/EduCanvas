@@ -2,7 +2,6 @@ import type {
   AssistantMessage,
   ChatMessage,
   ChatMessageStatus,
-  InitialChatMessageDTO,
   StudentMessage,
 } from './messages';
 import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
@@ -57,6 +56,11 @@ export type TeachingTurnAction =
     }
   | { type: 'stop.confirmed' };
 
+export {
+  createTeachingTurnState,
+  hydrateChatMessages,
+} from './turn-state-hydration';
+
 function announce(
   state: TeachingTurnState,
   text: string,
@@ -65,72 +69,6 @@ function announce(
   return {
     announcement: { id: nextSequence, text },
     announcementSequence: nextSequence,
-  };
-}
-
-export function hydrateChatMessages(
-  initialMessages: readonly InitialChatMessageDTO[],
-): readonly ChatMessage[] {
-  const studentInputByTurn = new Map(
-    initialMessages
-      .filter((message) => message.role === 'student')
-      .map((message) => [
-        message.turnId,
-        { content: message.content, parts: message.parts ?? [] },
-      ]),
-  );
-
-  return initialMessages.map((message): ChatMessage => {
-    if (message.role === 'student') {
-      const attachments = (message.parts ?? []).flatMap((part) =>
-        part.type === 'asset_ref' && part.usage === 'attachment'
-          ? [
-              {
-                id: `${part.reference.assetId}:${part.reference.versionId}`,
-                label: part.reference.kind === 'image' ? '图片附件' : 'PDF资料',
-                kind: part.reference.kind === 'image' ? 'image' : 'document',
-              } as const,
-            ]
-          : [],
-      );
-      return {
-        id: message.id,
-        turnId: message.turnId,
-        clientMessageId: message.clientMessageId,
-        role: 'student',
-        status: 'completed',
-        text: message.content,
-        attachments,
-      };
-    }
-    return {
-      id: message.id,
-      turnId: message.turnId,
-      clientMessageId: message.clientMessageId,
-      role: 'assistant',
-      status: message.status,
-      text: message.content,
-      attachments: [],
-      citations: message.citations ?? [],
-      artifacts: message.artifacts ?? [],
-      failureCode: message.failureCode,
-      retryText: studentInputByTurn.get(message.turnId)?.content,
-      retryParts: studentInputByTurn.get(message.turnId)?.parts,
-      retryable:
-        message.status === 'failed' || message.status === 'interrupted',
-    };
-  });
-}
-
-export function createTeachingTurnState(
-  initialMessages: readonly InitialChatMessageDTO[],
-): TeachingTurnState {
-  return {
-    messages: hydrateChatMessages(initialMessages),
-    active: null,
-    activeToolLabel: null,
-    announcement: null,
-    announcementSequence: 0,
   };
 }
 

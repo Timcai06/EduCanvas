@@ -95,6 +95,15 @@ interface WebSearchExecutor {
 
 export interface WebSearchToolOptions {
   readonly deepResearch?: boolean;
+  readonly initialProgress?: {
+    readonly completedQueries: readonly string[];
+    readonly candidateUrls: readonly string[];
+  };
+  readonly onSearching?: () => Promise<void>;
+  readonly onProgress?: (input: {
+    readonly completedQuery: string;
+    readonly candidateUrls: readonly string[];
+  }) => Promise<void>;
 }
 
 function queryKey(query: string): string {
@@ -105,10 +114,12 @@ export function createWebSearchTool(
   service: WebSearchExecutor,
   options: WebSearchToolOptions = {},
 ): OperationWebSearchTool {
-  const completedQueries = new Set<string>();
+  const completedQueries = new Set(
+    (options.initialProgress?.completedQueries ?? []).map(queryKey),
+  );
   const pendingQueries = new Set<string>();
-  const candidateUrls = new Set<string>();
-  let searchAttempts = 0;
+  const candidateUrls = new Set(options.initialProgress?.candidateUrls ?? []);
+  let searchAttempts = completedQueries.size;
   const maxSearches = options.deepResearch
     ? DEEP_RESEARCH_MAX_SEARCHES
     : STANDARD_MAX_SEARCHES;
@@ -142,18 +153,35 @@ export function createWebSearchTool(
       pendingQueries.add(key);
       searchAttempts += 1;
       try {
+        await options.onSearching?.();
         const output = await service.search({ query: query.trim(), limit: 5 });
         const results: { title: string; url: string; snippet: string }[] = [];
+        const addedCandidateUrls: string[] = [];
         for (const result of output.results) {
-          if (candidateUrls.size >= WEB_SEARCH_MAX_CANDIDATES) break;
-          if (candidateUrls.has(result.url)) continue;
-          candidateUrls.add(result.url);
+          if (
+            candidateUrls.size + addedCandidateUrls.length >=
+            WEB_SEARCH_MAX_CANDIDATES
+          ) {
+            break;
+          }
+          if (
+            candidateUrls.has(result.url) ||
+            addedCandidateUrls.includes(result.url)
+          ) {
+            continue;
+          }
+          addedCandidateUrls.push(result.url);
           results.push({
             title: result.title,
             url: result.url,
             snippet: result.snippet,
           });
         }
+        await options.onProgress?.({
+          completedQuery: key,
+          candidateUrls: addedCandidateUrls,
+        });
+        for (const url of addedCandidateUrls) candidateUrls.add(url);
         completedQueries.add(key);
         if (!options.deepResearch) return { results };
         const failures = output.failures ?? [];

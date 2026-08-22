@@ -654,4 +654,54 @@ describe('createWebSearchTool budget', () => {
       tool.handler({ query: 'over budget' }, context),
     ).rejects.toThrow('search_budget_exceeded');
   });
+
+  it('restores completed queries and candidates before continuing the same research operation', async () => {
+    const onSearching = vi.fn(async () => undefined);
+    const onProgress = vi.fn(async () => undefined);
+    const service = {
+      search: vi.fn(async () => ({
+        results: [
+          {
+            title: 'existing',
+            url: 'https://existing.example/article',
+            snippet: 'duplicate',
+          },
+          {
+            title: 'new',
+            url: 'https://new.example/article',
+            snippet: 'new',
+          },
+        ],
+      })),
+    };
+    const tool = createWebSearchTool(service, {
+      deepResearch: true,
+      initialProgress: {
+        completedQueries: [' broad  topic '],
+        candidateUrls: ['https://existing.example/article'],
+      },
+      onSearching,
+      onProgress,
+    });
+
+    expect(tool.successfulSearchCount).toBe(1);
+    await expect(
+      tool.handler({ query: 'BROAD TOPIC' }, context),
+    ).rejects.toThrow('search_query_duplicate');
+    const output = await tool.handler({ query: 'gap topic' }, context);
+
+    expect(output.results).toEqual([
+      {
+        title: 'new',
+        url: 'https://new.example/article',
+        snippet: 'new',
+      },
+    ]);
+    expect(onSearching).toHaveBeenCalledOnce();
+    expect(onProgress).toHaveBeenCalledWith({
+      completedQuery: 'gap topic',
+      candidateUrls: ['https://new.example/article'],
+    });
+    expect(tool.successfulSearchCount).toBe(2);
+  });
 });

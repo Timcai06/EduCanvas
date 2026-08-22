@@ -53,9 +53,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body = await parseTeachingTurnRequest(request);
     const turn = await beginWebGatewayTurn(identity, body);
-    return sseResponse(
-      createSseEventStream(turn.events, { onCancel: turn.cancel }),
-    );
+    return sseResponse(createSseEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {
       return validationErrorResponse(error);

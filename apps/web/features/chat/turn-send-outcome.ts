@@ -6,6 +6,8 @@ export interface InFlightTurn {
   clientMessageId: string;
   controller: AbortController;
   turnId: string | null;
+  /** Last operation event sequence acknowledged by the browser. */
+  nextSequence: number;
   assistantMessageId: string | null;
   terminalReceived: boolean;
   terminalOutcome: Extract<
@@ -14,6 +16,7 @@ export interface InFlightTurn {
   > | null;
   stopConfirmed: boolean;
   cancelRequested: boolean;
+  recoveryAttempted: boolean;
 }
 
 export function terminalEventTypeToSendOutcome(

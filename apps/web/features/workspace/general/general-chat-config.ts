@@ -8,6 +8,8 @@ export const GENERAL_TURN_OPTIONS: AgentTurnClientOptions = {
   assistantLabel: 'AI',
   cancelEndpoint: (turnId) =>
     `/api/v1/chat/turn/${encodeURIComponent(turnId)}/cancel`,
+  eventsEndpoint: (turnId) =>
+    `/api/v1/chat/turn/${encodeURIComponent(turnId)}/events`,
 };
 
 export const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [

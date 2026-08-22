@@ -80,7 +80,7 @@ describe('POST /api/v1/chat/turn', () => {
     expect(text).toContain('event: turn.completed');
   });
 
-  it('propagates a released SSE response to the accepted Gateway turn', async () => {
+  it('keeps the accepted Gateway turn running after an SSE disconnect', async () => {
     let finish!: () => void;
     const completed = new Promise<void>((resolve) => {
       finish = resolve;
@@ -109,7 +109,7 @@ describe('POST /api/v1/chat/turn', () => {
     await reader.cancel();
     finish();
 
-    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancel).not.toHaveBeenCalled();
   });
 
   it('forbids cross-origin writes before parsing payload', async () => {

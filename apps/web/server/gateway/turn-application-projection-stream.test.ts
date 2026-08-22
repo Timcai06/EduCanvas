@@ -45,6 +45,7 @@ describe('gatewayToLegacy 流序语义', () => {
       {
         schemaVersion: '1',
         turnId: 'operation:1',
+        sequence: 0,
         type: 'turn.accepted',
         studentMessageId: 'message:user:1',
         assistantMessageId: 'message:assistant:1',
@@ -53,6 +54,7 @@ describe('gatewayToLegacy 流序语义', () => {
       {
         schemaVersion: '1',
         turnId: 'operation:1',
+        sequence: 1,
         type: 'message.delta',
         messageId: 'message:assistant:1',
         delta: '你好',
@@ -60,6 +62,7 @@ describe('gatewayToLegacy 流序语义', () => {
       {
         schemaVersion: '1',
         turnId: 'operation:1',
+        sequence: 2,
         type: 'turn.completed',
         messageId: 'message:assistant:1',
       },
@@ -87,6 +90,7 @@ describe('gatewayToLegacy 流序语义', () => {
     expect(events[1]).toEqual({
       schemaVersion: '1',
       turnId: 'operation:1',
+      sequence: 1,
       type: 'turn.failed',
       messageId: 'message:assistant:1',
       code: 'CANCELLED',

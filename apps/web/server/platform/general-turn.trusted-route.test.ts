@@ -65,6 +65,23 @@ vi.mock('./general-turn-tools', () => ({
   createGeneralToolKernel: vi.fn(),
   WebOperationSources: vi.fn(),
 }));
+vi.mock('./general-turn-persistence', () => ({
+  webGeneralSources: { listOwnedOperationSources: vi.fn(async () => []) },
+  webResearchCheckpoints: {
+    createOrGet: vi.fn(async () => ({
+      checkpoint: {
+        operationId: 'operation-1',
+        protocolVersion: 'educanvas.research-checkpoint.v1',
+        phase: 'planning',
+        completedQueries: [],
+        candidateUrls: [],
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      },
+      replayed: false,
+    })),
+    advancePhase: vi.fn(async () => undefined),
+  },
+}));
 
 const identity: AnonymousIdentity = {
   token: 'test-token',
@@ -90,11 +107,11 @@ const assetContext: MaterializedAssetPlan = {
   nativeImages: [],
 };
 
-function begin(
+async function begin(
   routeOverride: GatewayResolvedRoute,
   requestOverride: TeachingTurnRequestBody = request,
-): void {
-  beginGatewayGeneralTurnApplication({
+): Promise<void> {
+  await beginGatewayGeneralTurnApplication({
     operationId: 'operation-1',
     traceId: 'trace-1',
     route: routeOverride,
@@ -133,24 +150,24 @@ beforeEach(() => {
 });
 
 describe('Web General可信Gateway路由边界', () => {
-  it('在Actor与当前身份不一致时同步拒绝且不进入运行时组合', () => {
-    expect(() => begin({ ...route, actorUserId: 'student-2' })).toThrowError(
-      'web_general_actor_scope_mismatch',
-    );
+  it('在Actor与当前身份不一致时同步拒绝且不进入运行时组合', async () => {
+    await expect(
+      begin({ ...route, actorUserId: 'student-2' }),
+    ).rejects.toThrowError('web_general_actor_scope_mismatch');
 
     expectNoRuntimeComposition();
   });
 
-  it('在Agent Profile不是general时同步拒绝且不进入运行时组合', () => {
-    expect(() =>
+  it('在Agent Profile不是general时同步拒绝且不进入运行时组合', async () => {
+    await expect(
       begin({ ...route, agentProfileId: 'k12.teacher' }),
-    ).toThrowError('web_general_profile_unsupported');
+    ).rejects.toThrowError('web_general_profile_unsupported');
 
     expectNoRuntimeComposition();
   });
 
-  it('仅 Deep Research 注入 8 个来源上限并把 mode 交给同一 Turn Application', () => {
-    begin(route, { ...request, mode: 'deep_research' });
+  it('仅 Deep Research 注入 8 个来源上限并把 mode 交给同一 Turn Application', async () => {
+    await begin(route, { ...request, mode: 'deep_research' });
 
     expect(WebOperationSources).toHaveBeenCalledWith(
       expect.objectContaining({ maximumSources: 8 }),
@@ -160,7 +177,7 @@ describe('Web General可信Gateway路由边界', () => {
     );
 
     vi.clearAllMocks();
-    begin(route);
+    await begin(route);
     expect(WebOperationSources).toHaveBeenCalledWith(
       expect.not.objectContaining({ maximumSources: expect.anything() }),
     );

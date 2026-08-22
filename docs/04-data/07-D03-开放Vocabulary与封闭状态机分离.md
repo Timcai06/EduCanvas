@@ -92,6 +92,15 @@
 - 当前 Schema 共 249 个 CHECK；该数字用于 AST 提取完整性回归，不改变 D03 原始
   231 个 CHECK 的历史审计结论。
 
+### 6.2 后继扩展：Deep Research 恢复游标（0060）
+
+- `research_checkpoints.protocol_version` 与 `phase` 是恢复协议判别联合；读取端无法
+  安全解释未知值，因此登记为 closed，扩展时必须同步迁移、仓储与浏览器投影。
+- `completed_queries` 与 `candidate_urls` 只约束 JSON 数组形状和有界长度，不把查询
+  或 URL 内容建成数据库 vocabulary；应用层继续负责规范化与公开地址校验。
+- 当前 Schema 共 258 个 CHECK；最新 0060 Migration 含 4 个 CHECK，其中仅 phase
+  被 SQL 迁移提取器识别为字面量成员闭集，协议版本同时由 Schema AST 门禁覆盖。
+
 ## 7. 可执行回退 SQL
 
 以下 SQL 仅在应用写入已回退、且 13 个字段不存在旧闭集外值时执行：

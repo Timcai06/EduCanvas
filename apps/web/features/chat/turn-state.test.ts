@@ -224,6 +224,45 @@ describe('teaching turn browser state machine', () => {
     });
   });
 
+  it('hydrates a streaming assistant as the same resumable operation', () => {
+    const state = createTeachingTurnState(
+      [
+        {
+          id: 'student-1',
+          turnId: 'turn-live',
+          clientMessageId: 'client-live',
+          role: 'student',
+          status: 'completed',
+          content: '继续刚才的解释',
+          failureCode: null,
+          createdAt: '2026-08-22T00:00:00.000Z',
+          completedAt: '2026-08-22T00:00:00.000Z',
+        },
+        {
+          id: 'assistant-1',
+          turnId: 'turn-live',
+          clientMessageId: 'client-live',
+          role: 'assistant',
+          status: 'streaming',
+          content: '已解释到一半',
+          failureCode: null,
+          createdAt: '2026-08-22T00:00:00.000Z',
+          completedAt: null,
+        },
+      ],
+      'AI',
+      true,
+    );
+
+    expect(state.active).toMatchObject({
+      clientMessageId: 'client-live',
+      turnId: 'turn-live',
+      assistantMessageId: 'assistant-1',
+      status: 'streaming',
+    });
+    expect(state.messages.at(-1)).toMatchObject({ text: '已解释到一半' });
+  });
+
   it('只把仅本轮附件写进气泡，笔记本长期来源不留痕', () => {
     /* 长期来源由 Studio 统一管理；若也进气泡，挂 N 个来源问 M 个问题就会
        在屏幕上重复 N×M 次同一份列表。 */
