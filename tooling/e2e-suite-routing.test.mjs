@@ -31,12 +31,13 @@ describe('E2E suite routing', () => {
       'pdf-reading-switch.spec.ts',
       'profile-activity.spec.ts',
       'sandbox-preview.spec.ts',
+      'web-search-research.spec.ts',
     ]);
     const count = files.reduce((total, name) => {
       const source = readFileSync(resolve(e2eRoot, name), 'utf8');
       return total + (source.match(/test\(\s*['"]@smoke\b/g)?.length ?? 0);
     }, 0);
-    assert.ok(count >= 6 && count <= 14, `PR smoke budget is ${count}`);
+    assert.ok(count >= 6 && count <= 15, `PR smoke budget is ${count}`);
     assert.deepEqual(
       files.filter((name) =>
         [

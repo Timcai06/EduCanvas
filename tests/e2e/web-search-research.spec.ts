@@ -238,7 +238,7 @@ test('@smoke WS09 内置搜索支持多选与批量导入', async ({ page }) => 
   ).toEqual(['检索结果一', '检索结果二']);
 });
 
-test('@smoke WS09 搜索失败投影稳定且可重试', async ({ page }) => {
+test('WS09 搜索失败投影稳定且可重试', async ({ page }) => {
   const state = {
     importedBodies: [] as string[],
     imported: [] as typeof IMPORTED_ASSETS,
@@ -263,7 +263,7 @@ test('@smoke WS09 搜索失败投影稳定且可重试', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('@smoke WS09 深度研究显示五源五引与综合进度', async ({ page }) => {
+test('WS09 深度研究显示五源五引与综合进度', async ({ page }) => {
   const state = {
     importedBodies: [] as string[],
     imported: [] as typeof IMPORTED_ASSETS,
