@@ -4,7 +4,7 @@
 - 状态：`active`
 - 负责人：@Timcai06
 - 代码审核与最终验收：Codex；电脑浏览器视觉验收由项目负责人确认
-- 最后验证时间：2026-08-20
+- 最后验证时间：2026-08-22
 - 起始本地基线：`ebf8d4a052f2c656644c9762d3c0dbb65113869d`
 - 关键决策：[ADR-0031](../../09-decisions/0031-Web搜索与网页来源获取边界.md)
 - 上游计划：[RM 统一资源工作台](../completed/RM-统一资源工作台.md)
@@ -182,7 +182,7 @@ WS00-WS07 → WS08 → WS09
 ### WS04：候选预检、排序与自动补位
 
 - 依赖：WS02
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：SearchService candidate pipeline、web fetch policy、测试 fixture
 
 交付：
@@ -205,12 +205,12 @@ WS00-WS07 → WS08 → WS09
 - 浏览器 BFF 与 Agent `webSearch` 均使用预检管线；浏览器只看到可读取候选，Provider、失败明细和尝试记录留在服务端；不可用候选不会进入后续网页读取与引用账本；
 - `pnpm --filter @educanvas/web test` — 1760/1760 通过（240 files）；候选/搜索/BFF 定向测试 45/45 通过；
 - `pnpm lint`、`pnpm typecheck`、Prettier、`git diff --check` — clean；
-- Codex 审核结论：CRITICAL 0、HIGH 0；状态保持 `IN_REVIEW`，待 PR CI 与集成合并后更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
+- Codex 审核结论：CRITICAL 0、HIGH 0；PR #396 的静态、单元、Secret Scan、Chromium E2E 与最终 checks 全绿，合并提交 `bad2d1c5`，状态更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
 
 ### WS05：Agent 自适应多轮研究
 
 - 依赖：WS04
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：General profile、Tool budgets、Deep Research guard 与测试
 
 交付：
@@ -221,6 +221,16 @@ WS00-WS07 → WS08 → WS09
 - 最终报告继续由确定性 `3 searches / 5 sources / 5 citations` 闸门收口。
 
 完成标准：研究任务在部分候选不可用时能够自动补位；未达标时返回稳定失败而不是伪造引用。
+
+实现证据（2026-08-22）：
+
+- Deep Research 仍复用唯一 `AgentLoopEngine`，仅将该 Profile 的工具轮次提升到 6，为广搜、缺口补搜、关键问题深搜、替代查询和替代来源读取保留顺序空间；普通 General Turn 仍为 3 轮；
+- `webSearch` 在研究模式返回受限 `research` 反馈：`broad / gap / deep / replacement` 阶段、最多 8 个失败域与稳定失败码、剩余搜索次数和下一步动作；Prompt 要求后续查询消费该反馈，不引用搜索摘要；
+- 候选管线把预检失败域保留在当前 Operation 的冷却集合中，后续搜索遇到同域候选直接标记 `candidate_domain_cooled`，不再发起网络预检；
+- 研究搜索最多 5 次（前三轮 + 最多两轮替代），全 Operation 最多保留 15 个候选；来源读取仍由 `WebOperationSources` 限制为 8 个，Turn 总工具调用 16 次、单工具结果 8,000 tokens、上下文 128,000 字符；
+- 确定性输出闸门保持不变：少于 3 次成功搜索、5 个实际持久来源或 5 个有效引用时，返回 `RESEARCH_REQUIREMENTS_UNMET`，不会放行或伪造报告；
+- `pnpm --filter @educanvas/web test` — 1762/1762 通过（240 files）；搜索/候选/Profile 定向测试 67/67 通过；`@educanvas/agent-runtime` 118/118 通过；相关包 typecheck clean；
+- 状态保持 `IN_REVIEW`，待全仓静态门禁、PR CI 与集成合并后更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
 
 ### WS06：研究任务恢复与进度事实
 

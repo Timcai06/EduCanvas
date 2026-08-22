@@ -164,6 +164,7 @@ function diverseRank(
 
 export class SearchCandidatePipeline {
   private readonly config: Required<SearchCandidatePipelineConfig>;
+  private readonly cooledDomains = new Set<string>();
 
   constructor(
     private readonly searchService: Pick<SearchService, 'search'>,
@@ -201,8 +202,18 @@ export class SearchCandidatePipeline {
     }
 
     const groups = new Map<string, SearchResult[]>();
+    const priorRoundFailures: SearchCandidateFailure[] = [];
     for (const candidate of unique) {
       const domain = domainOf(candidate.url);
+      if (this.cooledDomains.has(domain)) {
+        priorRoundFailures.push({
+          url: candidate.url,
+          domain,
+          code: 'candidate_domain_cooled',
+          retryable: true,
+        });
+        continue;
+      }
       const group = groups.get(domain) ?? [];
       group.push(candidate);
       groups.set(domain, group);
@@ -256,6 +267,7 @@ export class SearchCandidatePipeline {
                     true,
                   );
             cooled = true;
+            this.cooledDomains.add(domain);
             failures.push({
               url: candidate.url,
               domain,
@@ -267,7 +279,10 @@ export class SearchCandidatePipeline {
         return { readable, failures };
       },
     );
-    const failures = checkedGroups.flatMap((group) => group.failures);
+    const failures = [
+      ...priorRoundFailures,
+      ...checkedGroups.flatMap((group) => group.failures),
+    ];
     const readable: SearchCandidateResult[] = [];
     const seenFinalUrls = new Set<string>();
     for (const candidate of checkedGroups.flatMap((group) => group.readable)) {

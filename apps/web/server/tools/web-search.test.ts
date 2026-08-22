@@ -590,4 +590,68 @@ describe('createWebSearchTool budget', () => {
     });
     expect(tool.successfulSearchCount).toBe(1);
   });
+
+  it('guides three research phases and permits two bounded replacement searches', async () => {
+    let call = 0;
+    const service = {
+      search: vi.fn(async ({ query }: { query: string; limit: number }) => {
+        call += 1;
+        return {
+          results: Array.from({ length: 5 }, (_, index) => ({
+            title: `${query}-${index}`,
+            url: `https://source-${call}-${index}.example.com/article`,
+            snippet: '摘要',
+          })),
+          failures:
+            call === 1
+              ? [
+                  {
+                    domain: 'blocked.example.com',
+                    code: 'candidate_http_blocked',
+                  },
+                ]
+              : [],
+        };
+      }),
+    };
+    const tool = createWebSearchTool(service, { deepResearch: true });
+
+    const broad = await tool.handler({ query: 'broad' }, context);
+    const gap = await tool.handler({ query: 'gap' }, context);
+    const deep = await tool.handler({ query: 'deep' }, context);
+    const replacementOne = await tool.handler(
+      { query: 'replacement one' },
+      context,
+    );
+    const replacementTwo = await tool.handler(
+      { query: 'replacement two' },
+      context,
+    );
+
+    expect(broad.research).toEqual({
+      phase: 'broad',
+      failedDomains: ['blocked.example.com'],
+      failureCodes: ['candidate_http_blocked'],
+      remainingSearches: 4,
+      nextAction: 'analyze_gaps',
+    });
+    expect(gap.research?.phase).toBe('gap');
+    expect(deep.research?.phase).toBe('deep');
+    expect(deep.research?.nextAction).toBe('read_or_replace');
+    expect(replacementOne.research?.phase).toBe('replacement');
+    expect(replacementTwo.research).toMatchObject({
+      phase: 'replacement',
+      remainingSearches: 0,
+      nextAction: 'read_sources',
+    });
+    expect(tool.successfulSearchCount).toBe(5);
+    expect(
+      [broad, gap, deep, replacementOne, replacementTwo].flatMap(
+        (output) => output.results,
+      ),
+    ).toHaveLength(15);
+    await expect(
+      tool.handler({ query: 'over budget' }, context),
+    ).rejects.toThrow('search_budget_exceeded');
+  });
 });

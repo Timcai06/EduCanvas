@@ -115,6 +115,7 @@ export function createGeneralToolKernel(
   operationSources: WebOperationSources,
   operationArtifacts: WebOperationArtifacts,
   operationImages: WebOperationImageArtifacts,
+  options: { deepResearch?: boolean } = {},
 ): {
   kernel: ToolKernelPort;
   staticCapabilities: readonly string[];
@@ -124,7 +125,9 @@ export function createGeneralToolKernel(
   const fetchTool = createFetchWebPageTool(undefined, (page) =>
     operationSources.persist(page),
   );
-  const searchTool = resolveWebSearchTool();
+  const searchTool = resolveWebSearchTool(undefined, undefined, {
+    deepResearch: options.deepResearch,
+  });
   const localAdapters = [
     /* 无副作用的表达型工具：让模型能把「接下来打算做什么」变成一次可见的
        工具调用，而不必新开一条绕过输出闸门的推理通道。见 tools/plan-note.ts。 */
