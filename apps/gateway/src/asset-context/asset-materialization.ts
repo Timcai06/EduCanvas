@@ -57,6 +57,27 @@ export interface GatewayMaterializedAssetPlan extends BuiltAssetContext {
   nativeImages: readonly GatewayNativeAssetImage[];
 }
 
+export class AssetVersionIntegrityError extends Error {
+  readonly code = 'asset_version_integrity';
+
+  constructor(readonly versionId: string) {
+    super('资产版本在物化期间发生变化，本轮不能使用该资料');
+    this.name = 'AssetVersionIntegrityError';
+  }
+}
+
+export function requireReferencedStoredVersion(
+  reference: { assetId: string; versionId: string },
+  stored: { assetId: string; versionId: string },
+): void {
+  if (
+    stored.assetId !== reference.assetId ||
+    stored.versionId !== reference.versionId
+  ) {
+    throw new AssetVersionIntegrityError(reference.versionId);
+  }
+}
+
 /** ADR-0026 第 6 节：文档仍在转换或转换失败时，本轮不得静默带入空文本。 */
 export class AssetTextNotReadyError extends Error {
   readonly code = 'asset_text_not_ready';
@@ -207,6 +228,8 @@ async function loadUserNativeImages(
         spaceId: input.notebookId,
         assetId: reference.assetId,
       });
+      /* 当前版本可能在首次鉴权读取后被并发替换；禁止把新字节标记成旧 versionId。 */
+      requireReferencedStoredVersion(reference, version);
       if (!NATIVE_IMAGE_MIME_TYPES.has(version.mimeType)) {
         throw new UnsupportedAssetModalityError([reference.kind]);
       }

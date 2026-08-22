@@ -109,6 +109,9 @@ export class GatewayAssetUploadService {
       if (stored && !(error instanceof GatewayAssetUploadError)) {
         await this.deps.removeStored(stored).catch(() => undefined);
       }
+      if (error instanceof AssetAccessError) {
+        throw new GatewayAssetUploadError(404, 'NOT_FOUND');
+      }
       throw error;
     }
   }

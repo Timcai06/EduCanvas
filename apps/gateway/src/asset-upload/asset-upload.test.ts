@@ -151,6 +151,22 @@ describe('GatewayAssetUploadService (DP10)', () => {
     expect(deps.removeStored).toHaveBeenCalledOnce();
   });
 
+  it('maps an unauthorized upload to NOT_FOUND after removing stored bytes', async () => {
+    const deps = createStub({
+      createUploaded: vi.fn().mockRejectedValue(new AssetAccessError()),
+    });
+    await expect(
+      new GatewayAssetUploadService(deps).upload({
+        ...baseInput,
+        file: pngFile(),
+      }),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    } satisfies Partial<GatewayAssetUploadError>);
+    expect(deps.removeStored).toHaveBeenCalledOnce();
+  });
+
   it('does not clean up storage when the size guard itself fails', async () => {
     const deps = createStub();
     const service = new GatewayAssetUploadService(deps);
