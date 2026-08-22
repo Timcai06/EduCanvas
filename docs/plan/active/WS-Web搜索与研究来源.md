@@ -235,7 +235,7 @@ WS00-WS07 → WS08 → WS09
 ### WS06：研究任务恢复与进度事实
 
 - 依赖：WS03、WS05
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：Operation/Message 事实、研究 checkpoint、Web 安全投影
 
 交付：
@@ -257,7 +257,8 @@ WS00-WS07 → WS08 → WS09
 - 浏览器恢复接口只返回阶段、查询/候选/来源计数、引用 ordinal、Operation 状态及安全 Tool/Message 事件，不返回原始查询、候选 URL、Prompt、Tool summary、Provider Body 或异常；
 - Deep Research 进度按 `planning/searching/reading/synthesizing/terminal` 单调推进，最多显示 5 次搜索；重复 Tool 终态与重复序号 fail closed，不重复累计来源或正文；
 - `@educanvas/web` 全量单测 1774/1774 通过（242 files），`@educanvas/db` 125/125 通过（14 files）；`pnpm lint`、`pnpm typecheck`、`pnpm file:check` 与 `git diff --check` clean；
-- Drizzle 迁移 `0060_funny_vengeance.sql` 由 `drizzle-kit generate` 生成；提交后历史不可变、记录完整性、`drizzle-kit check` 与无差异生成均通过。fresh/N-1 本地验证因 Docker daemon 未运行而未执行，必须由 PR 的 `migration-integration` lane 补齐。当前结论仅为 `IN_REVIEW`，尚未宣告 `PASS`。
+- Drizzle 迁移 `0060_funny_vengeance.sql` 由 `drizzle-kit generate` 生成；提交后历史不可变、记录完整性、`drizzle-kit check` 与无差异生成均通过。fresh/N-1 本地验证因 Docker daemon 未运行而未执行，已由 PR #399 的 `migration-integration` lane 补齐并通过；
+- Codex 审核结论：CRITICAL 0、HIGH 0；PR #399 的静态、单元、DB/Migration 集成、Agent Eval、Secret Scan、Chromium E2E、Release Evidence 与最终 `checks` 全绿，合并提交 `06f277bc`，状态更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
 
 ### WS07：来源、引用与后续追问闭环
 
