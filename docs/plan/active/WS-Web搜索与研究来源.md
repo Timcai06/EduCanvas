@@ -286,7 +286,7 @@ WS00-WS07 → WS08 → WS09
 ### WS08：安全、观测与成本边界
 
 - 依赖：WS01-WS07
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：日志、指标、速率限制、Provider/抓取安全测试
 
 交付：
@@ -306,12 +306,12 @@ WS00-WS07 → WS08 → WS09
 - 浏览器搜索、直接导入与 Agent `web.search`/`web.fetch` 共享 actor + Notebook 的进程级边界：每分钟 20 次、最多 3 个并发、最多 10,000 个 key；全部 key 活跃时 fail closed，lease 在 `finally` 恰好释放，429 提供稳定错误和 `Retry-After`；当前部署契约是单 Web 进程，横向多实例前必须迁移到共享限流存储，不能把进程内计数宣称为集群全局事实；
 - 低基数指标覆盖固定 Provider、成功/失败结果、搜索耗时、候选/可读数量、闭集失败类别、研究轮次与补位次数、链接导入结果与耗时；指标注册表拒绝未声明标签，测试证明 query、URL、域名和自定义 Provider 名不会进入快照；Web 通过复用至少 32 字节的既有 Gateway internal token 提供只读 `/api/v1/internal/metrics`，未配置时 fail closed；
 - 浏览器路由只投影稳定 code、retryable 与固定操作建议；未知身份、解析、Provider、导入和异常路径不返回 Key、Prompt、Provider Body、网页正文、异常 message 或堆栈；
-- 聚焦与全量验证覆盖 asset-processing 网页/真实 socket connector、Web 搜索/候选/抓取/路由/限流、Worker 与 telemetry；相关包 typecheck、lint、文件治理与 diff 检查 clean。当前结论为 `IN_REVIEW`，等待 PR CI 与最终合并证据。
+- 聚焦与全量验证覆盖 asset-processing 网页/真实 socket connector、Web 搜索/候选/抓取/路由/限流、Worker 与 telemetry；相关包 typecheck、lint、文件治理与 diff 检查 clean；PR #402 的静态、单元、Worker integration、Agent Eval、Secret Scan、Chromium E2E 与最终 checks 全绿，管理员 squash 合并提交 `fd012c2a`。Codex 最终复审 CRITICAL 0、HIGH 0，状态更新为 `PASS`。
 
 ### WS09：电脑浏览器验收与收口
 
 - 依赖：WS00-WS08
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`（等待项目负责人真实浏览器签署）
 - 文件边界：自动化验证、电脑浏览器证据、canonical 文档与计划归档
 
 交付：
@@ -324,6 +324,8 @@ WS00-WS07 → WS08 → WS09
 - 视觉结论由项目负责人确认，不以自动化结果替代。
 
 完成标准：全部必需证据可复现；未验证项明确保留，计划完成后归档。
+
+验收记录：[`docs/06-quality/23-WS-Web搜索真实环境验收.md`](../../06-quality/23-WS-Web搜索真实环境验收.md)。自动化负责人只回写确定性测试和 CI 事实；真实 Provider、真实公开网页与电脑浏览器视觉结论必须由项目负责人 tim 签署。
 
 ## 七、验证矩阵
 

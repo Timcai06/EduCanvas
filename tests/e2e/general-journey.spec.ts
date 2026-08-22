@@ -219,4 +219,18 @@ test('@smoke General 黄金旅程：工具与引用结果', async ({ page }) => 
   await expect(firstSource).toBeVisible();
   await expect(secondSource).toBeVisible();
   await expect(firstSource).toHaveAttribute('title', '在当前笔记本中打开来源');
+  const firstExternal = page.getByRole('link', {
+    name: '打开原网页 可达性设计指南',
+  });
+  const secondExternal = page.getByRole('link', {
+    name: '打开原网页 学习收益研究',
+  });
+  await expect(firstExternal).toHaveAttribute(
+    'href',
+    'https://example.com/accessibility',
+  );
+  await expect(secondExternal).toHaveAttribute(
+    'href',
+    'https://example.org/learning-study',
+  );
 });
