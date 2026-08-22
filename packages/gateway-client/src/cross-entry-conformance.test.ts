@@ -91,6 +91,24 @@ describe('GatewayClient跨入口合规', () => {
     expect(collected[1]?.at(-1)?.type).toBe('operation.cancelled');
   });
 
+  it.each(['toolCompleted', 'toolFailed'] as const)(
+    'NDJSON传输不丢失%s工具生命周期',
+    async (fixture) => {
+      const script = gatewayCrossEntryConformance[fixture];
+      const client = new GatewayClient(
+        'http://127.0.0.1:3200',
+        't'.repeat(32),
+        async () => new Response(encodeGatewayConformanceNdjson(script)),
+      );
+      const events = [];
+      for await (const event of client.streamTurn(
+        gatewayCrossEntryConformance.request,
+      ))
+        events.push(event);
+      expect(events).toEqual(script);
+    },
+  );
+
   it('恢复请求只消费游标后的稳定事件且保留唯一终态', async () => {
     let requestedUrl = '';
     const suffix = gatewayCrossEntryConformance.completed.slice(2);

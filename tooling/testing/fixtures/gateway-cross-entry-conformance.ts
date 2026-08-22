@@ -52,6 +52,48 @@ export const gatewayCrossEntryConformance = {
       messageId: 'message:assistant:cross-entry',
     },
   ] satisfies readonly GatewayOperationEvent[],
+  toolCompleted: [
+    { ...eventBase(0), type: 'operation.accepted' },
+    {
+      ...eventBase(1),
+      type: 'tool.started',
+      toolCallId: 'tool-call:cross-entry',
+      tool: 'knowledge.search',
+    },
+    {
+      ...eventBase(2),
+      type: 'tool.completed',
+      toolCallId: 'tool-call:cross-entry',
+      summary: { resultCount: 2 },
+    },
+    {
+      ...eventBase(3),
+      type: 'operation.completed',
+      messageId: 'message:assistant:cross-entry',
+    },
+  ] satisfies readonly GatewayOperationEvent[],
+  toolFailed: [
+    { ...eventBase(0), type: 'operation.accepted' },
+    {
+      ...eventBase(1),
+      type: 'tool.started',
+      toolCallId: 'tool-call:cross-entry',
+      tool: 'knowledge.search',
+    },
+    {
+      ...eventBase(2),
+      type: 'tool.failed',
+      toolCallId: 'tool-call:cross-entry',
+      code: 'RUNTIME_FAILED',
+      retryable: false,
+    },
+    {
+      ...eventBase(3),
+      type: 'operation.failed',
+      code: 'RUNTIME_FAILED',
+      retryable: false,
+    },
+  ] satisfies readonly GatewayOperationEvent[],
   approvalPending: [
     { ...eventBase(0), type: 'operation.accepted' },
     {

@@ -34,11 +34,64 @@ function constructionFiles(className) {
     .sort();
 }
 
+function declarationFiles(className) {
+  const pattern = new RegExp(`(?:export\\s+)?class\\s+${className}\\b`, 'g');
+  return roots
+    .flatMap(sourceFiles)
+    .filter((path) => pattern.test(readFileSync(path, 'utf8')))
+    .map(posixRelative)
+    .sort();
+}
+
+function providerSdkImportFiles() {
+  const pattern =
+    /from\s+['"](?:ai(?:\/[^'"]*)?|@ai-sdk\/[^'"]+|openai|anthropic)['"]/;
+  return roots
+    .flatMap(sourceFiles)
+    .filter((path) => pattern.test(readFileSync(path, 'utf8')))
+    .map(posixRelative)
+    .sort();
+}
+
+export function containsSecondModelToolLoop(source) {
+  return /\.stream\s*\([\s\S]{0,5000}?\.execute\s*\([\s\S]{0,5000}?\.stream\s*\(/.test(
+    source,
+  );
+}
+
 describe('Turn composition production boundary', () => {
   it('allows exactly one AgentLoopEngine construction point', () => {
+    assert.deepEqual(declarationFiles('AgentLoopEngine'), [
+      'packages/agent-runtime/src/agent-loop.ts',
+    ]);
     assert.deepEqual(constructionFiles('AgentLoopEngine'), [
       'packages/agent-runtime/src/turn-application/loop-runner.ts',
     ]);
+  });
+
+  it('keeps Provider SDK imports inside model-gateway', () => {
+    assert.ok(
+      providerSdkImportFiles().every((path) =>
+        path.startsWith('packages/model-gateway/'),
+      ),
+    );
+  });
+
+  it('rejects a second model-tool-model loop outside agent-runtime', () => {
+    assert.equal(
+      containsSecondModelToolLoop(
+        'model.stream(input); tools.execute(call); model.stream(result);',
+      ),
+      true,
+    );
+    const offenders = roots
+      .flatMap(sourceFiles)
+      .filter(
+        (path) => !posixRelative(path).startsWith('packages/agent-runtime/'),
+      )
+      .filter((path) => containsSecondModelToolLoop(readFileSync(path, 'utf8')))
+      .map(posixRelative);
+    assert.deepEqual(offenders, []);
   });
 
   it('does not allow legacy tool runtimes to return', () => {

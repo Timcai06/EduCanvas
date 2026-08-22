@@ -9,6 +9,8 @@ import {
 describe('Gateway跨入口合规夹具', () => {
   it.each([
     'completed',
+    'toolCompleted',
+    'toolFailed',
     'approvalPending',
     'cancelled',
     'capabilityUnavailable',

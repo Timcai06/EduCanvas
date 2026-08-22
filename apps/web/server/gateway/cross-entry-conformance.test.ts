@@ -32,6 +32,19 @@ describe('Web SSE跨入口合规', () => {
     ]);
   });
 
+  it.each([
+    ['toolCompleted', 'turn.completed'],
+    ['toolFailed', 'turn.failed'],
+  ] as const)('保留%s工具生命周期对应的终态', async (fixture, terminal) => {
+    const canonical = gatewayCrossEntryConformance[fixture];
+    expect(canonical.map((event) => event.type)).toContain('tool.started');
+    expect(canonical.map((event) => event.type)).toContain(
+      fixture === 'toolCompleted' ? 'tool.completed' : 'tool.failed',
+    );
+    const projected = await project(canonical);
+    expect(projected.at(-1)?.type).toBe(terminal);
+  });
+
   it('取消使用唯一终态且不虚构steer事件', async () => {
     const events = await project(gatewayCrossEntryConformance.cancelled);
     expect(events.map((event) => event.type)).toEqual([
