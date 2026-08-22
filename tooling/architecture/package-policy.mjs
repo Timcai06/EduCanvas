@@ -3,6 +3,17 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  manifestDependencyViolations,
+  repositorySources,
+  sourceImportViolations,
+} from './package-policy-imports.mjs';
+
+export {
+  manifestDependencyViolations,
+  parseModuleSpecifiers,
+  sourceImportViolations,
+} from './package-policy-imports.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const defaultPolicyPath = resolve(
@@ -32,9 +43,24 @@ export const PACKAGE_OWNERS = new Set([
   'data',
   'developer-productivity',
 ]);
+export const KIND_DEPENDENCY_MATRIX = Object.freeze({
+  app: ['app', 'core', 'runtime', 'adapter', 'protocol', 'tooling'],
+  core: ['core', 'protocol'],
+  runtime: ['core', 'runtime', 'protocol'],
+  adapter: ['core', 'runtime', 'adapter', 'protocol'],
+  protocol: ['core', 'protocol'],
+  tooling: ['core', 'runtime', 'adapter', 'protocol', 'tooling'],
+});
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+function sameStringSet(left, right) {
+  return (
+    left.length === right.length &&
+    [...left].sort().every((value, index) => value === [...right].sort()[index])
+  );
 }
 
 export function discoverWorkspaces(root = repoRoot) {
@@ -129,6 +155,16 @@ export function validatePackageRegistry(policy, workspaces, options = {}) {
       violations.push(`${label}: publicEntrypoints must be an array`);
     if (!Array.isArray(entry.allowedDependencyKinds))
       violations.push(`${label}: allowedDependencyKinds must be an array`);
+    else if (
+      PACKAGE_KINDS.has(entry.kind) &&
+      !sameStringSet(
+        entry.allowedDependencyKinds,
+        KIND_DEPENDENCY_MATRIX[entry.kind],
+      )
+    )
+      violations.push(
+        `${label}: allowedDependencyKinds must match the ${entry.kind} dependency matrix`,
+      );
     if (!Array.isArray(entry.forbiddenDependencies))
       violations.push(`${label}: forbiddenDependencies must be an array`);
   }
@@ -161,10 +197,21 @@ export function auditPackagePolicy({
 } = {}) {
   const policy = readJson(policyPath);
   const workspaces = discoverWorkspaces(root);
+  const violations = validatePackageRegistry(policy, workspaces, { today });
+  if (violations.length === 0) {
+    violations.push(...manifestDependencyViolations(policy, workspaces));
+    violations.push(
+      ...sourceImportViolations(
+        policy,
+        workspaces,
+        repositorySources(root, workspaces),
+      ),
+    );
+  }
   return {
     policy,
     workspaces,
-    violations: validatePackageRegistry(policy, workspaces, { today }),
+    violations,
   };
 }
 
