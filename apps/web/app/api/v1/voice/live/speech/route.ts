@@ -22,26 +22,24 @@ const requestSchema = z
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request))
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   const identity = await readAnonymousIdentity();
   if (!identity || identity.studentId.startsWith('anon:v1:'))
-    return jsonError(401, 'unauthorized', '请先登录后使用语音。');
+    return jsonError(401, 'unauthorized');
   if ((await readExperienceMode()) === null)
-    return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
+    return jsonError(409, 'experience_mode_required');
   let raw: unknown;
   try {
     raw = await readLimitedJsonRequest(request, { maxBytes: 80_000 });
   } catch (error) {
     return error instanceof JsonRequestValidationError
       ? jsonRequestErrorResponse(error)
-      : jsonError(400, 'invalid_request', '语音请求格式不正确。');
+      : jsonError(400, 'invalid_request');
   }
   const parsed = requestSchema.safeParse(raw);
-  if (!parsed.success)
-    return jsonError(400, 'invalid_request', '语音请求格式不正确。');
+  if (!parsed.success) return jsonError(400, 'invalid_request');
   const gateway = resolveDashScopeStreamingSpeechGateway(process.env);
-  if (!gateway)
-    return jsonError(503, 'live_voice_unavailable', 'Live Voice 暂不可用。');
+  if (!gateway) return jsonError(503, 'live_voice_unavailable');
   const abort = new AbortController();
   request.signal.addEventListener('abort', () => abort.abort(), { once: true });
   const events = gateway.streamSpeech({

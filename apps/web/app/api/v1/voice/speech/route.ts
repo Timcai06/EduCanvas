@@ -25,12 +25,12 @@ const requestSchema = z
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request))
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
 
   const identity = await readAuthenticatedRequestIdentity(request);
-  if (!identity) return jsonError(401, 'unauthorized', '请先登录后使用语音。');
+  if (!identity) return jsonError(401, 'unauthorized');
   if (identity.source === 'web' && (await readExperienceMode()) === null)
-    return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
+    return jsonError(409, 'experience_mode_required');
 
   let raw: unknown;
   try {
@@ -38,15 +38,13 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     return error instanceof JsonRequestValidationError
       ? jsonRequestErrorResponse(error)
-      : jsonError(400, 'invalid_request', '语音请求格式不正确。');
+      : jsonError(400, 'invalid_request');
   }
   const parsed = requestSchema.safeParse(raw);
-  if (!parsed.success)
-    return jsonError(400, 'invalid_request', '语音请求格式不正确。');
+  if (!parsed.success) return jsonError(400, 'invalid_request');
 
   const gateway = resolveSpeechGateway();
-  if (!gateway)
-    return jsonError(503, 'speech_unavailable', '语音回答暂不可用。');
+  if (!gateway) return jsonError(503, 'speech_unavailable');
 
   try {
     const result = await gateway.generateSpeech({
@@ -67,6 +65,6 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch {
-    return jsonError(503, 'speech_failed', '语音回答暂时失败。');
+    return jsonError(503, 'speech_failed');
   }
 }

@@ -107,13 +107,13 @@ export function jsonRequestErrorResponse(
   error: JsonRequestValidationError,
 ): Response {
   if (error.code === 'invalid_content_type') {
-    return jsonError(415, error.code, '请求必须使用 JSON 格式。');
+    return jsonError(415, error.code);
   }
   if (error.code === 'request_too_large') {
-    return jsonError(413, error.code, '请求内容太大，请精简后再提交。');
+    return jsonError(413, error.code);
   }
   if (error.code === 'invalid_idempotency_key') {
-    return jsonError(400, error.code, '幂等键格式不正确。');
+    return jsonError(400, error.code);
   }
-  return jsonError(400, 'invalid_request', '请求格式不正确。');
+  return jsonError(400, 'invalid_request');
 }

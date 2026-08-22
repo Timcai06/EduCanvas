@@ -87,7 +87,7 @@ describe('Gateway internal effect reconciliation route', () => {
       },
     );
     expect(disabled.status).toBe(503);
-    expect(await disabled.json()).toEqual({
+    expect(await disabled.json()).toMatchObject({
       error: { code: 'EFFECT_RECONCILIATION_DISABLED' },
     });
   });
@@ -231,7 +231,7 @@ describe('Gateway internal effect reconciliation route', () => {
     });
     const response = await send(base);
     expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ error: { code } });
+    expect(await response.json()).toMatchObject({ error: { code } });
   });
 
   it('观测日志不记录对账正文、哈希或审计主体', async () => {

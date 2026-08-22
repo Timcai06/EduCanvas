@@ -254,7 +254,7 @@ describe('Gateway Client asset upload routes (DP10)', () => {
       },
     );
     expect(response.status).toBe(413);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: { code: 'FILE_TOO_LARGE' },
     });
   });
@@ -270,7 +270,7 @@ describe('Gateway Client asset upload routes (DP10)', () => {
       },
     );
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: { code: 'CLIENT_TRANSPORT_DISABLED' },
     });
   });
@@ -307,6 +307,8 @@ describe('Gateway Client asset upload routes (DP10)', () => {
       { headers: { authorization: `Bearer ${transport.token}` } },
     );
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: { code: 'NOT_FOUND' } });
+    expect(await response.json()).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
   });
 });

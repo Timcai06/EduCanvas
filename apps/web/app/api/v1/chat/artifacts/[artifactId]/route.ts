@@ -47,12 +47,12 @@ export async function GET(
 ): Promise<Response> {
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
-    return jsonError(404, 'artifact_not_found', '产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   try {
     const repository = new DrizzlePlatformArtifactRepository();
@@ -64,7 +64,7 @@ export async function GET(
       throw new ArtifactOwnershipError();
     }
     if (detail.artifact.status === 'archived') {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     const access = await requireNotebookAccess(getDb(), {
       notebookId: conversation.spaceId,
@@ -187,13 +187,13 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     if (error instanceof ArtifactResourceProjectionError) {
       const status = error.code === 'resource_not_found' ? 404 : error.status;
-      return jsonError(status, error.code, '这个产物暂时无法在Canvas中打开。');
+      return jsonError(status, error.code);
     }
-    return jsonError(503, 'artifact_detail_unavailable', '暂时无法读取产物。');
+    return jsonError(503, 'artifact_detail_unavailable');
   }
 }
 
@@ -264,16 +264,16 @@ export async function PATCH(
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
-    return jsonError(404, 'artifact_not_found', '产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   let body: unknown;
   try {
@@ -286,7 +286,7 @@ export async function PATCH(
   }
   const parsed = mutateArtifactSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '修改要求不正确。');
+    return jsonError(400, 'invalid_request');
   }
 
   try {
@@ -422,16 +422,12 @@ export async function PATCH(
     );
   } catch (error) {
     if (error instanceof ArtifactRevisionConflictError) {
-      return jsonError(409, error.code, error.message);
+      return jsonError(409, error.code);
     }
     if (error instanceof ArtifactOwnershipError) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
-    return jsonError(
-      503,
-      'artifact_revision_unavailable',
-      '暂时无法修改产物。',
-    );
+    return jsonError(503, 'artifact_revision_unavailable');
   }
 }
 
@@ -446,16 +442,16 @@ export async function DELETE(
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
-    return jsonError(404, 'artifact_not_found', '产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   try {
     const repository = new DrizzlePlatformArtifactRepository();
@@ -465,13 +461,13 @@ export async function DELETE(
       notebookId: conversation.spaceId,
     });
     if (!archived) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     return jsonResponse({ deleted: true }, { status: 200 });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
-    return jsonError(503, 'artifact_delete_unavailable', '暂时无法删除产物。');
+    return jsonError(503, 'artifact_delete_unavailable');
   }
 }

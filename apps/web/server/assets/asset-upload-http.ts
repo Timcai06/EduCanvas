@@ -26,7 +26,7 @@ export async function parseAssetUploadRequest(
 ): Promise<ParsedAssetUpload | Response> {
   const contentType = request.headers.get('content-type')?.toLowerCase() ?? '';
   if (!contentType.startsWith('multipart/form-data;')) {
-    return jsonError(415, 'invalid_upload', '上传必须使用表单格式。');
+    return jsonError(415, 'invalid_upload');
   }
   let form: FormData;
   try {
@@ -38,43 +38,18 @@ export async function parseAssetUploadRequest(
     if (error instanceof BoundedMultipartError) {
       return error.code === 'multipart_too_large'
         ? assetUploadErrorResponse(new AssetUploadError('file_too_large', 413))
-        : jsonError(400, 'invalid_upload', '上传参数不完整。');
+        : jsonError(400, 'invalid_upload');
     }
-    return jsonError(400, 'invalid_upload', '上传参数不完整。');
+    return jsonError(400, 'invalid_upload');
   }
   const file = form.get('file');
   const scope = form.get('scope');
   if (!(file instanceof File) || (scope !== 'turn' && scope !== 'space')) {
-    return jsonError(400, 'invalid_upload', '上传参数不完整。');
+    return jsonError(400, 'invalid_upload');
   }
   return { file, scope };
 }
 
 export function assetUploadErrorResponse(error: AssetUploadError): Response {
-  const message = (() => {
-    switch (error.code) {
-      case 'file_too_large':
-        return '文档、图片和音频不能超过25MB，视频不能超过50MB。';
-      case 'audio_too_large':
-        return '音频不能超过25MB。';
-      case 'video_too_large':
-        return '视频不能超过50MB。';
-      case 'audio_duration_exceeded':
-        return '音频时长不能超过60分钟。';
-      case 'audio_metadata_unavailable':
-        return '无法验证音频格式或时长，请检查文件是否完整。';
-      case 'unsupported_file_type':
-        return '目前支持PDF、Word、Markdown、TXT、PNG、JPEG、WebP以及受支持的音频和视频格式。';
-      case 'pdf_text_unavailable':
-        return '这个PDF没有可读取文本；扫描版PDF将在OCR能力上线后支持。';
-      /* DOCX 抽取失败与纯文本解码失败共用此码，文案必须同时说得通。 */
-      case 'text_content_unavailable':
-        return '这个文件没有可提取的文字，或编码不是有效的UTF-8。';
-      case 'session_not_found':
-        return '当前对话空间不存在。';
-      default:
-        return '文件格式不正确。';
-    }
-  })();
-  return jsonError(error.status, error.code, message);
+  return jsonError(error.status, error.code);
 }

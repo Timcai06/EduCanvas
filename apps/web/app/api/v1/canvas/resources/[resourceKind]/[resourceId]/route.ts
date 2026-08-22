@@ -27,12 +27,12 @@ export async function GET(
 ): Promise<Response> {
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) {
-    return jsonError(404, 'resource_not_found', '资源不存在。');
+    return jsonError(404, 'resource_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   try {
     const resource = await loadOwnedCanvasResource({
@@ -44,12 +44,8 @@ export async function GET(
     return jsonResponse({ resource });
   } catch (error) {
     if (error instanceof CanvasResourceAccessError) {
-      return jsonError(
-        error.status,
-        error.code,
-        error.status === 404 ? '资源不存在。' : '这个资源暂时无法打开。',
-      );
+      return jsonError(error.status, error.code);
     }
-    return jsonError(503, 'resource_unavailable', '资源读取暂时不可用。');
+    return jsonError(503, 'resource_unavailable');
   }
 }

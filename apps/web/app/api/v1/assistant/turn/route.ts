@@ -99,36 +99,32 @@ const CAPABILITY_MESSAGE =
  */
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
 
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
 
   const rateLimit = checkAssistantRateLimit(`assistant:${identity.studentId}`);
   if (!rateLimit.allowed) {
-    return jsonError(
-      429,
-      'rate_limited',
-      `请求太频繁，请${Math.ceil(rateLimit.retryAfterMs / 1000)}秒后再试。`,
-    );
+    return jsonError(429, 'rate_limited');
   }
 
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) {
-    return jsonError(404, 'conversation_not_found', '请先在主界面开始对话。');
+    return jsonError(404, 'conversation_not_found');
   }
 
   let body: { text?: string; clientMessageId?: string };
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, 'invalid_json', '消息格式不正确。');
+    return jsonError(400, 'invalid_json');
   }
 
   const text = (body.text ?? '').trim();
   if (!text || Buffer.byteLength(text, 'utf-8') > MAX_TEXT_BYTES) {
-    return jsonError(400, 'invalid_message', '请输入有效指令。');
+    return jsonError(400, 'invalid_message');
   }
 
   const repo = new DrizzlePlatformConversationRepository();
@@ -155,13 +151,9 @@ export async function POST(request: Request): Promise<Response> {
       error instanceof AssistantClassifyError &&
       error.code === 'budget_exceeded'
     ) {
-      return jsonError(
-        429,
-        'budget_exceeded',
-        '助手使用次数已达上限，请稍后再试。',
-      );
+      return jsonError(429, 'budget_exceeded');
     }
-    return jsonError(503, 'assistant_unavailable', '助手暂时不可用。');
+    return jsonError(503, 'assistant_unavailable');
   }
 
   try {
@@ -369,6 +361,6 @@ export async function POST(request: Request): Promise<Response> {
         return jsonResponse({ message: CAPABILITY_MESSAGE });
     }
   } catch {
-    return jsonError(500, 'assistant_error', '操作失败，请重试。');
+    return jsonError(500, 'assistant_error');
   }
 }

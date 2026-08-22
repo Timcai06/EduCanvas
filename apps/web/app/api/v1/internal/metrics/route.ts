@@ -25,10 +25,10 @@ function isAuthorized(request: Request, expectedToken: string): boolean {
 export async function GET(request: Request): Promise<Response> {
   const token = internalToken();
   if (!token) {
-    return jsonError(503, 'internal_metrics_disabled', '内部指标端点未启用。');
+    return jsonError(503, 'internal_metrics_disabled');
   }
   if (!isAuthorized(request, token)) {
-    return jsonError(401, 'unauthorized', '内部凭据无效。');
+    return jsonError(401, 'unauthorized');
   }
   try {
     const telemetry = getWebTelemetryRuntime();
@@ -39,6 +39,6 @@ export async function GET(request: Request): Promise<Response> {
       },
     });
   } catch {
-    return jsonError(503, 'internal_metrics_unavailable', '内部指标暂不可用。');
+    return jsonError(503, 'internal_metrics_unavailable');
   }
 }

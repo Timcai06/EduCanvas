@@ -30,14 +30,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   if (!authRateLimitDeploymentReady()) {
-    return jsonError(
-      503,
-      'auth_rate_limit_unavailable',
-      '当前部署尚未配置认证请求保护。',
-    );
+    return jsonError(503, 'auth_rate_limit_unavailable');
   }
   let raw: unknown;
   try {
@@ -50,12 +46,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   const parsed = registerInputSchema.safeParse(raw);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '注册信息格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   const attemptKey = `register:${parsed.data.username.trim().toLowerCase()}`;
   const attempt = checkAuthAttempt(attemptKey);
   if (!attempt.allowed) {
-    return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+    return jsonError(429, 'auth_rate_limited', {
       retryAfterMs: attempt.retryAfterMs,
     });
   }
@@ -76,26 +72,22 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof PasswordValidationError) {
       const failed = recordAuthFailure(attemptKey);
       if (!failed.allowed) {
-        return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+        return jsonError(429, 'auth_rate_limited', {
           retryAfterMs: failed.retryAfterMs,
         });
       }
-      return jsonError(400, 'password_too_short', '密码需为 8 至 128 位。');
+      return jsonError(400, 'password_too_short');
     }
     if (error instanceof AccountError) {
       const failed = recordAuthFailure(attemptKey);
       if (!failed.allowed) {
-        return jsonError(429, 'auth_rate_limited', '注册尝试过于频繁。', {
+        return jsonError(429, 'auth_rate_limited', {
           retryAfterMs: failed.retryAfterMs,
         });
       }
       const status = error.code === 'username_taken' ? 409 : 400;
-      const message =
-        error.code === 'username_taken'
-          ? '用户名已被使用。'
-          : '注册信息不符合要求。';
-      return jsonError(status, error.code, message);
+      return jsonError(status, error.code);
     }
-    return jsonError(503, 'register_unavailable', '暂时无法注册。');
+    return jsonError(503, 'register_unavailable');
   }
 }

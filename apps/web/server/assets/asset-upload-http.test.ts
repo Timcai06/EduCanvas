@@ -128,7 +128,6 @@ describe('asset upload HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'file_too_large',
-        message: '文档、图片和音频不能超过25MB，视频不能超过50MB。',
       },
     });
   });
@@ -145,7 +144,6 @@ describe('asset upload HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'audio_duration_exceeded',
-        message: '音频时长不能超过60分钟。',
       },
     });
     expect(responseText).not.toContain('/private/audio.wav');

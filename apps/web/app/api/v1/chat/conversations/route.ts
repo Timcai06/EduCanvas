@@ -31,12 +31,8 @@ export async function GET(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof PaginationRequestError) {
-      return jsonError(400, error.code, '分页参数不正确。');
+      return jsonError(400, error.code);
     }
-    return jsonError(
-      503,
-      'conversation_list_unavailable',
-      '暂时无法读取笔记本。',
-    );
+    return jsonError(503, 'conversation_list_unavailable');
   }
 }

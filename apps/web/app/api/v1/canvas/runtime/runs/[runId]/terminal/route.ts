@@ -41,7 +41,7 @@ export async function POST(
   context: { params: Promise<{ runId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const params = paramsSchema.safeParse(await context.params);
   const identity = await readAnonymousIdentity();
@@ -49,10 +49,10 @@ export async function POST(
     ? await loadOwnedGeneralConversation(identity)
     : null;
   if (!identity || !conversation) {
-    return jsonError(401, 'unauthorized', '请先开始对话。');
+    return jsonError(401, 'unauthorized');
   }
   if (!params.success) {
-    return jsonError(404, 'resource_not_found', '资源不存在。');
+    return jsonError(404, 'resource_not_found');
   }
   let value: unknown;
   try {
@@ -60,11 +60,11 @@ export async function POST(
   } catch (error) {
     return error instanceof JsonRequestValidationError
       ? jsonRequestErrorResponse(error)
-      : jsonError(400, 'invalid_request', '终态不正确。');
+      : jsonError(400, 'invalid_request');
   }
   const parsed = inputSchema.safeParse(value);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '终态不正确。');
+    return jsonError(400, 'invalid_request');
   }
   try {
     const run = await new DrizzleWebRuntimeRunRepository().settleAuthorizedRun({
@@ -82,8 +82,8 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof WebRuntimeRunNotFoundError) {
-      return jsonError(404, 'resource_not_found', '资源不存在。');
+      return jsonError(404, 'resource_not_found');
     }
-    return jsonError(503, 'runtime_unavailable', '终态写入暂时不可用。');
+    return jsonError(503, 'runtime_unavailable');
   }
 }

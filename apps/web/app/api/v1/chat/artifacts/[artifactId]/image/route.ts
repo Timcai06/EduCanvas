@@ -30,13 +30,13 @@ export async function GET(
 ): Promise<Response> {
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
-    return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) {
-    return jsonError(401, 'unauthorized', '请先开始对话。');
+    return jsonError(401, 'unauthorized');
   }
 
   try {
@@ -46,10 +46,10 @@ export async function GET(
         trustedSubjectId: identity.studentId,
       });
     if (detail.artifact.spaceId !== conversation.spaceId) {
-      return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     if (detail.artifact.status === 'archived') {
-      return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     const version = detail.latestVersion;
     const metadata = generatedImageMetadataSchema.safeParse(version?.metadata);
@@ -59,14 +59,14 @@ export async function GET(
       !version.checksum ||
       !metadata.success
     ) {
-      return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     const bytes = await new LocalObjectStorage().readVerified(
       version.objectKey,
       version.checksum,
     );
     if (bytes.byteLength !== metadata.data.byteSize) {
-      return jsonError(503, 'image_integrity_failed', '图像完整性校验失败。');
+      return jsonError(503, 'image_integrity_failed');
     }
 
     const body = new Uint8Array(bytes.byteLength);
@@ -84,11 +84,11 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
-      return jsonError(404, 'artifact_not_found', '图像产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     if (error instanceof ObjectStorageError) {
-      return jsonError(503, 'image_unavailable', '暂时无法读取图像。');
+      return jsonError(503, 'image_unavailable');
     }
-    return jsonError(503, 'image_unavailable', '暂时无法读取图像。');
+    return jsonError(503, 'image_unavailable');
   }
 }

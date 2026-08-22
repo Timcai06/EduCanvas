@@ -203,7 +203,7 @@ describe('GET /api/v1/chat/turn/[turnId]/events', () => {
     expect(response.status).toBe(404);
     const body = await response.json();
     expect(body).toMatchObject({
-      error: { code: 'turn_not_found', message: '回答不存在或不可访问。' },
+      error: { code: 'turn_not_found' },
     });
     expect(JSON.stringify(body)).not.toContain('database details');
   });

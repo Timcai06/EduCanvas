@@ -42,16 +42,16 @@ export async function GET(
   context: { params: Promise<{ turnId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
 
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
 
   const { turnId } = await context.params;
   const afterSequence = parseAfter(request);
   if (!TURN_ID_PATTERN.test(turnId) || afterSequence === null) {
-    return jsonError(400, 'invalid_request', '回答标识或恢复位置不正确。');
+    return jsonError(400, 'invalid_request');
   }
 
   try {
@@ -84,15 +84,11 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof ResearchCheckpointOwnershipError) {
-      return jsonError(404, 'turn_not_found', '回答不存在或不可访问。');
+      return jsonError(404, 'turn_not_found');
     }
     if (hasStableErrorCode(error, 'operation_not_found')) {
-      return jsonError(404, 'turn_not_found', '回答不存在或不可访问。');
+      return jsonError(404, 'turn_not_found');
     }
-    return jsonError(
-      503,
-      'events_unavailable',
-      '暂时无法恢复回答，请稍后重试。',
-    );
+    return jsonError(503, 'events_unavailable');
   }
 }

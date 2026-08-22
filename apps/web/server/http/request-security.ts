@@ -8,6 +8,13 @@ interface JsonResponseOptions {
   headers?: HeadersInit;
 }
 
+export interface PublicErrorEnvelope {
+  error: {
+    code: string;
+    requestId: string;
+  };
+}
+
 function secureJsonHeaders(options: JsonResponseOptions): Headers {
   const headers = new Headers(options.headers);
   headers.set('cache-control', 'private, no-store');
@@ -62,10 +69,15 @@ export function isTrustedSameOriginWrite(request: Request): boolean {
 export function jsonError(
   status: number,
   code: string,
-  message: string,
   options: { retryAfterMs?: number; requestId?: string } = {},
 ): Response {
-  const requestId = options.requestId ?? randomUUID();
+  const requestId =
+    options.requestId && /^[A-Za-z0-9_.:-]{1,128}$/.test(options.requestId)
+      ? options.requestId
+      : randomUUID();
+  const safeCode = /^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(code)
+    ? code
+    : 'internal_error';
   const headers = secureJsonHeaders({ requestId });
   if (options.retryAfterMs !== undefined) {
     headers.set(
@@ -76,14 +88,10 @@ export function jsonError(
   return new Response(
     JSON.stringify({
       error: {
-        code,
-        message,
+        code: safeCode,
         requestId,
-        ...(options.retryAfterMs === undefined
-          ? {}
-          : { retryAfterMs: options.retryAfterMs }),
       },
-    }),
+    } satisfies PublicErrorEnvelope),
     { status, headers },
   );
 }

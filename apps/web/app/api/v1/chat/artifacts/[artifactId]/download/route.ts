@@ -79,14 +79,14 @@ export async function GET(
 ): Promise<Response> {
   const { artifactId } = await params;
   if (!UUID_PATTERN.test(artifactId)) {
-    return jsonError(404, 'artifact_not_found', '产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
 
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
   if (!conversation) {
-    return jsonError(401, 'unauthorized', '请先开始对话。');
+    return jsonError(401, 'unauthorized');
   }
 
   const url = new URL(request.url);
@@ -94,7 +94,7 @@ export async function GET(
     url.searchParams.get('version'),
   );
   if (requestedVersion === null && url.searchParams.has('version')) {
-    return jsonError(404, 'artifact_not_found', '产物不存在。');
+    return jsonError(404, 'artifact_not_found');
   }
 
   try {
@@ -105,10 +105,10 @@ export async function GET(
     });
 
     if (detail.artifact.spaceId !== conversation.spaceId) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     if (detail.artifact.status === 'archived') {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
 
     const access = await requireNotebookAccess(getDb(), {
@@ -117,7 +117,7 @@ export async function GET(
       requiredPermission: 'notebook.read',
     }).catch(() => null);
     if (!access) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
 
     const selectedVersion =
@@ -130,7 +130,7 @@ export async function GET(
         : detail.latestVersion;
 
     if (!selectedVersion) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
 
     const safeTitle = sanitizeFilename(detail.artifact.title);
@@ -141,10 +141,10 @@ export async function GET(
         selectedVersion.metadata,
       );
       if (!metadata.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
       if (!selectedVersion.objectKey || !selectedVersion.checksum) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
 
       const bytes = await new LocalObjectStorage().readVerified(
@@ -152,11 +152,7 @@ export async function GET(
         selectedVersion.checksum,
       );
       if (bytes.byteLength !== metadata.data.byteSize) {
-        return jsonError(
-          503,
-          'download_integrity_failed',
-          '下载内容完整性校验失败。',
-        );
+        return jsonError(503, 'download_integrity_failed');
       }
 
       const contentType = metadata.data.contentType;
@@ -181,10 +177,10 @@ export async function GET(
         selectedVersion.metadata,
       );
       if (!metadata.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
       if (!selectedVersion.objectKey || !selectedVersion.checksum) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
 
       const bytes = await new LocalObjectStorage().readVerified(
@@ -192,11 +188,7 @@ export async function GET(
         selectedVersion.checksum,
       );
       if (bytes.byteLength !== metadata.data.byteSize) {
-        return jsonError(
-          503,
-          'download_integrity_failed',
-          '下载内容完整性校验失败。',
-        );
+        return jsonError(503, 'download_integrity_failed');
       }
 
       const contentType = metadata.data.contentType;
@@ -221,7 +213,7 @@ export async function GET(
         selectedVersion.content,
       );
       if (!parsed.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
       const payload = parsed.data.markdown ?? '';
       const filename = `${safeTitle}${extensionForMime('text/markdown')}`;
@@ -242,7 +234,7 @@ export async function GET(
     if (detail.artifact.kind === 'mind_map') {
       const parsed = mindMapContentSchema.safeParse(selectedVersion.content);
       if (!parsed.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
       const payload = JSON.stringify(parsed.data);
       const body = encoder.encode(payload);
@@ -263,7 +255,7 @@ export async function GET(
     if (detail.artifact.kind === 'web_app') {
       const parsed = webAppContentSchema.safeParse(selectedVersion.content);
       if (!parsed.success) {
-        return jsonError(404, 'artifact_not_found', '产物不存在。');
+        return jsonError(404, 'artifact_not_found');
       }
       /* sourceConversationId 只用于服务端 provenance；导出包不得变成读取
          私有会话或来源的侧信道。代码、hash、预算与诊断仍属于可移植产物。 */
@@ -287,14 +279,14 @@ export async function GET(
       });
     }
 
-    return jsonError(404, 'artifact_not_found', '产物不支持下载。');
+    return jsonError(404, 'artifact_not_found');
   } catch (error) {
     if (error instanceof ArtifactOwnershipError) {
-      return jsonError(404, 'artifact_not_found', '产物不存在。');
+      return jsonError(404, 'artifact_not_found');
     }
     if (error instanceof ObjectStorageError) {
-      return jsonError(503, 'download_unavailable', '暂时无法下载产物。');
+      return jsonError(503, 'download_unavailable');
     }
-    return jsonError(503, 'download_unavailable', '暂时无法下载产物。');
+    return jsonError(503, 'download_unavailable');
   }
 }

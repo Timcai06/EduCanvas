@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   let raw: unknown;
   try {
@@ -22,11 +22,11 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     return error instanceof JsonRequestValidationError
       ? jsonRequestErrorResponse(error)
-      : jsonError(400, 'invalid_request', '模式选择格式不正确。');
+      : jsonError(400, 'invalid_request');
   }
   const parsed = experienceModeSelectionSchema.safeParse(raw);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '模式选择格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   await writeExperienceMode(parsed.data.mode);
   return Response.json(

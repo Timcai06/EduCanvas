@@ -32,16 +32,16 @@ export async function DELETE(
   },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) {
-    return jsonError(404, 'annotation_not_found', '批注不存在。');
+    return jsonError(404, 'annotation_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
   try {
     const removed = await removeOwnedResourceAnnotation({
       identity,
@@ -49,13 +49,13 @@ export async function DELETE(
       ...params.data,
     });
     if (!removed) {
-      return jsonError(404, 'annotation_not_found', '批注不存在。');
+      return jsonError(404, 'annotation_not_found');
     }
     return jsonResponse({ removed: true });
   } catch (error) {
     if (error instanceof CanvasResourceAccessError) {
-      return jsonError(404, 'annotation_not_found', '批注不存在。');
+      return jsonError(404, 'annotation_not_found');
     }
-    return jsonError(503, 'annotation_unavailable', '批注暂时不可用。');
+    return jsonError(503, 'annotation_unavailable');
   }
 }

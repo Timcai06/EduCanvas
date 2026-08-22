@@ -32,14 +32,14 @@ const inputSchema = z
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAnonymousIdentity();
   const conversation = identity
     ? await loadOwnedGeneralConversation(identity)
     : null;
   if (!identity || !conversation) {
-    return jsonError(401, 'unauthorized', '请先开始对话。');
+    return jsonError(401, 'unauthorized');
   }
   let value: unknown;
   try {
@@ -47,11 +47,11 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     return error instanceof JsonRequestValidationError
       ? jsonRequestErrorResponse(error)
-      : jsonError(400, 'invalid_request', '运行请求不正确。');
+      : jsonError(400, 'invalid_request');
   }
   const parsed = inputSchema.safeParse(value);
   if (!parsed.success) {
-    return jsonError(404, 'resource_not_found', '资源不存在。');
+    return jsonError(404, 'resource_not_found');
   }
   try {
     const config = readWebRuntimeHostConfig();
@@ -84,8 +84,8 @@ export async function POST(request: Request): Promise<Response> {
       error instanceof WebRuntimeRunNotFoundError ||
       error instanceof WebRuntimeAdmissionError
     ) {
-      return jsonError(404, 'resource_not_found', '资源不存在。');
+      return jsonError(404, 'resource_not_found');
     }
-    return jsonError(503, 'runtime_unavailable', '运行环境暂时不可用。');
+    return jsonError(503, 'runtime_unavailable');
   }
 }

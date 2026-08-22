@@ -52,7 +52,7 @@ async function loadContext() {
 
 export async function GET(request: Request): Promise<Response> {
   const context = await loadContext();
-  if (!context) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!context) return jsonError(401, 'unauthorized');
   try {
     const pagination = parseListPagination(request);
     const page = await listOwnedSpaceAssetsPage(
@@ -83,18 +83,18 @@ export async function GET(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof PaginationRequestError) {
-      return jsonError(400, error.code, '分页参数不正确。');
+      return jsonError(400, error.code);
     }
-    return jsonError(503, 'asset_list_unavailable', '暂时无法读取资料。');
+    return jsonError(503, 'asset_list_unavailable');
   }
 }
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const context = await loadContext();
-  if (!context) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!context) return jsonError(401, 'unauthorized');
   try {
     const upload = await parseAssetUploadRequest(request);
     if (upload instanceof Response) return upload;
@@ -108,6 +108,6 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof AssetUploadError) {
       return assetUploadErrorResponse(error);
     }
-    return jsonError(503, 'asset_upload_unavailable', '文件上传暂时不可用。');
+    return jsonError(503, 'asset_upload_unavailable');
   }
 }

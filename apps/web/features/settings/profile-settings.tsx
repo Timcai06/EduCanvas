@@ -3,27 +3,13 @@
 import { UserCircle } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import { publicErrorMessage } from '@/features/errors/public-error';
 import { ChangePasswordForm } from './change-password-form';
 
 interface CurrentUser {
   username: string;
   nickname: string;
   avatarAvailable: boolean;
-}
-
-async function publicError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await response.json()) as {
-      error?: { message?: unknown };
-    };
-    if (typeof body.error?.message === 'string') return body.error.message;
-  } catch {
-    // Stable fallback below keeps raw server failures out of the UI.
-  }
-  return fallback;
 }
 
 /**
@@ -72,7 +58,9 @@ export function ProfileSettings({
         body: JSON.stringify({ nickname }),
       });
       if (!response.ok) {
-        throw new Error(await publicError(response, '暂时无法更新资料。'));
+        throw new Error(
+          await publicErrorMessage(response, '暂时无法更新资料。'),
+        );
       }
       const body = (await response.json()) as { user: CurrentUser };
       setUser(body.user);
@@ -99,7 +87,9 @@ export function ProfileSettings({
         body: form,
       });
       if (!response.ok) {
-        throw new Error(await publicError(response, '暂时无法上传头像。'));
+        throw new Error(
+          await publicErrorMessage(response, '暂时无法上传头像。'),
+        );
       }
       setUser((current) =>
         current ? { ...current, avatarAvailable: true } : current,

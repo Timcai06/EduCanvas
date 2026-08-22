@@ -71,11 +71,11 @@ import type {
 } from './streaming-transcription-quotas';
 import type { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
 import { decodeStreamingTranscriptionWireMessage } from './streaming-transcription-wire';
+import { serializePublicError } from './public-error';
 
 /** 本通道的 WebSocket 端点路径。 */
 export const STREAMING_TRANSCRIPTION_WS_PATH =
   '/v1/client/streaming-transcription' as const;
-
 /** 浏览器握手子协议前缀：`Sec-WebSocket-Protocol: ticket.<ticket>`。 */
 export const TICKET_SUBPROTOCOL_PREFIX = 'ticket.' as const;
 
@@ -127,7 +127,7 @@ export interface StreamingTranscriptionLogEntry {
 
 /** 握手拒绝：写 JSON 错误响应后销毁 socket，绝不升级。 */
 function rejectUpgrade(socket: Duplex, status: number, code: string): void {
-  const body = JSON.stringify({ error: { code } });
+  const body = serializePublicError(code);
   const statusText = HTTP_STATUS_TEXT[status] ?? 'Error';
   socket.write(
     `HTTP/1.1 ${status} ${statusText}\r\n` +
@@ -171,7 +171,7 @@ function parseNotebookId(url: URL): string | null {
 function makeProtocolErrorClose(ws: WebSocket): void {
   try {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ error: { code: 'INVALID_MESSAGE_SEQUENCE' } }));
+      ws.send(serializePublicError('INVALID_MESSAGE_SEQUENCE'));
     }
   } catch {
     // 连接已不可写：close 失败路径由 terminate 兜底。
@@ -185,7 +185,7 @@ function sendAndClose(
 ): void {
   try {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ error: { code: errorCode } }));
+      ws.send(serializePublicError(errorCode));
     }
   } catch {
     // 写失败不递归记录。
@@ -199,7 +199,7 @@ function sendQuotaErrorFrame(
 ): void {
   try {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ error: { code } }));
+      ws.send(serializePublicError(code));
     }
   } catch {
     // 写失败不递归记录；关闭路径由 closeWebSocket 兜底。

@@ -12,6 +12,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useEffect, useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { publicErrorMessage } from '@/features/errors/public-error';
 import { ConnectionAuthorization } from './connection-settings-authorization';
 import { ConnectionList } from './connection-settings-list';
 import { ConnectionProviderGrid } from './connection-settings-provider-grid';
@@ -20,17 +21,6 @@ gsap.registerPlugin(useGSAP);
 
 interface VisibleAuthorization extends GatewayConnectionAuthorization {
   provider: GatewayConnectionProvider;
-}
-
-async function errorMessage(response: Response, fallback: string) {
-  try {
-    const body = (await response.json()) as { error?: { message?: unknown } };
-    return typeof body.error?.message === 'string'
-      ? body.error.message
-      : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 /**
@@ -79,7 +69,7 @@ export function ConnectionSettings({
   const reload = async () => {
     const response = await fetch('/api/v1/connections', { cache: 'no-store' });
     if (!response.ok) {
-      throw new Error(await errorMessage(response, '暂时无法读取连接。'));
+      throw new Error(await publicErrorMessage(response, '暂时无法读取连接。'));
     }
     const next = gatewayConnectionListSchema.parse(await response.json());
     setData(next);
@@ -90,7 +80,9 @@ export function ConnectionSettings({
     void fetch('/api/v1/connections', { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(await errorMessage(response, '暂时无法读取连接。'));
+          throw new Error(
+            await publicErrorMessage(response, '暂时无法读取连接。'),
+          );
         }
         return gatewayConnectionListSchema.parse(await response.json());
       })
@@ -124,7 +116,9 @@ export function ConnectionSettings({
         body: JSON.stringify({ provider, conversationId }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response, '暂时无法发起连接。'));
+        throw new Error(
+          await publicErrorMessage(response, '暂时无法发起连接。'),
+        );
       }
       const result = gatewayConnectionConnectResultSchema.parse(
         await response.json(),
@@ -158,7 +152,9 @@ export function ConnectionSettings({
         body: JSON.stringify({ connectionId }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response, '暂时无法撤销连接。'));
+        throw new Error(
+          await publicErrorMessage(response, '暂时无法撤销连接。'),
+        );
       }
       gatewayConnectionRevokeResultSchema.parse(await response.json());
       if (

@@ -130,7 +130,6 @@ describe('POST /api/v1/voice/tickets', () => {
     expect(await response.json()).toMatchObject({
       error: {
         code: 'not_found',
-        message: '语音资源不存在或不可访问。',
       },
     });
   });

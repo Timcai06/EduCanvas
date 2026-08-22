@@ -19,12 +19,12 @@ export async function GET(
 ): Promise<Response> {
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) {
-    return jsonError(404, 'asset_not_found', '来源不存在。');
+    return jsonError(404, 'asset_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
   try {
     const detail = await loadOwnedAssetPreviewDetail({
       identity,
@@ -34,15 +34,11 @@ export async function GET(
     return jsonResponse(detail);
   } catch (error) {
     if (error instanceof SourceResourceProjectionError) {
-      return jsonError(error.status, error.code, '这个来源暂时不能预览。');
+      return jsonError(error.status, error.code);
     }
     if (error instanceof AssetPreviewError) {
-      return jsonError(
-        error.status,
-        error.code,
-        error.status === 404 ? '来源不存在。' : '这个来源暂时不能预览。',
-      );
+      return jsonError(error.status, error.code);
     }
-    return jsonError(503, 'preview_unavailable', '来源预览暂时不可用。');
+    return jsonError(503, 'preview_unavailable');
   }
 }

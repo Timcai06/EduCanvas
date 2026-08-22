@@ -26,22 +26,22 @@ export const dynamic = 'force-dynamic';
 
 function validationErrorResponse(error: TurnRequestValidationError): Response {
   if (error.code === 'invalid_content_type') {
-    return jsonError(415, error.code, '请求必须使用 JSON 格式。');
+    return jsonError(415, error.code);
   }
   if (error.code === 'request_too_large') {
-    return jsonError(413, error.code, '这条消息太长，请精简后再发送。');
+    return jsonError(413, error.code);
   }
-  return jsonError(400, error.code, '消息格式不正确。');
+  return jsonError(400, error.code);
 }
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
 
   const identity = await readAnonymousIdentity();
   if (!identity) {
-    return jsonError(401, 'unauthorized', '请先开始学习。');
+    return jsonError(401, 'unauthorized');
   }
 
   try {
@@ -53,47 +53,31 @@ export async function POST(request: Request): Promise<Response> {
       return validationErrorResponse(error);
     }
     if (error instanceof ChatMessageIdConflictError) {
-      return jsonError(409, error.code, '这条消息标识已被其他内容使用。');
+      return jsonError(409, error.code);
     }
     if (error instanceof TurnInProgressError) {
-      return jsonError(409, error.code, 'AI 老师仍在回答上一条消息。');
+      return jsonError(409, error.code);
     }
     if (error instanceof TurnRateLimitError) {
-      return jsonError(429, error.code, '提问太频繁，请稍后再试。', {
+      return jsonError(429, error.code, {
         retryAfterMs: error.retryAfterMs,
       });
     }
     if (error instanceof LearningSessionOwnershipError) {
-      return jsonError(404, error.code, '当前学习会话不存在。');
+      return jsonError(404, error.code);
     }
     if (
       error instanceof AssetAccessError ||
       error instanceof MessagePartValidationError
     ) {
-      return jsonError(
-        422,
-        'asset_not_available',
-        '附件不存在、未就绪或不属于当前对话。',
-      );
+      return jsonError(422, 'asset_not_available');
     }
     if (error instanceof UnsupportedAssetModalityError) {
-      return jsonError(
-        422,
-        error.code,
-        '文件已保存，但当前模型暂时不能理解图片；PDF文字资料可以直接用于对话。',
-      );
+      return jsonError(422, error.code);
     }
     if (error instanceof ModelGatewayConfigurationError) {
-      return jsonError(
-        503,
-        'model_configuration_invalid',
-        'AI 老师暂时无法连接，请稍后重试。',
-      );
+      return jsonError(503, 'model_configuration_invalid');
     }
-    return jsonError(
-      503,
-      'turn_unavailable',
-      'AI 老师暂时无法回答，请稍后重试。',
-    );
+    return jsonError(503, 'turn_unavailable');
   }
 }

@@ -8,7 +8,6 @@ import { validateCanvasResource } from '@educanvas/canvas-protocol';
 import {
   ResourceClientError,
   classifyHttpStatus,
-  isRetryableResourceError,
   isAbortError,
 } from '../canvas/resource-error';
 import {
@@ -17,6 +16,7 @@ import {
   linkErrorCopy,
   type LinkClientErrorCode,
 } from './link-client-contract';
+import { publicErrorMessage } from '@/features/errors/public-error';
 
 interface AssetResponseItem {
   descriptor: {
@@ -98,21 +98,6 @@ function toItem(
   };
 }
 
-async function publicError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await response.json()) as {
-      error?: { message?: unknown };
-    };
-    if (typeof body.error?.message === 'string') return body.error.message;
-  } catch {
-    // Stable fallback below; raw server errors never reach UI.
-  }
-  return fallback;
-}
-
 /* W03：网络层失败（fetch 抛 TypeError 等）统一捕获为 offline；取消（AbortError）不算失败。 */
 async function resourceFetch(
   url: string,
@@ -136,7 +121,7 @@ async function clientError(
 ): Promise<ResourceClientError> {
   return new ResourceClientError(
     classifyHttpStatus(response.status),
-    await publicError(response, fallback),
+    await publicErrorMessage(response, fallback),
   );
 }
 
@@ -145,19 +130,17 @@ async function linkClientError(
   fallbackCode: LinkClientErrorCode,
 ): Promise<LinkAssetClientError> {
   let parsedCode: LinkClientErrorCode = fallbackCode;
-  let explicitRetryable: boolean | undefined;
   try {
     const body = z
       .object({
         error: z.object({
           code: linkErrorCodeSchema,
-          retryable: z.boolean().optional(),
+          requestId: z.string(),
         }),
       })
       .safeParse(await response.json());
     if (body.success) {
       parsedCode = body.data.error.code;
-      explicitRetryable = body.data.error.retryable;
     }
   } catch {
     // Unknown bodies are never shown; the stable fallback below remains safe.
@@ -165,7 +148,9 @@ async function linkClientError(
   const kind = classifyHttpStatus(response.status);
   return new LinkAssetClientError(
     parsedCode,
-    explicitRetryable ?? isRetryableResourceError(kind),
+    response.status === 408 ||
+      response.status === 429 ||
+      response.status >= 500,
     linkErrorCopy[parsedCode],
     kind,
   );

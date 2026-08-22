@@ -61,7 +61,7 @@ function projectPosition(
 
 export async function GET(): Promise<Response> {
   const resolved = await identityAndNotebook();
-  if (!resolved) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!resolved) return jsonError(401, 'unauthorized');
   try {
     const rows = await new DrizzleNotebookSurfacePositionRepository().list({
       spaceId: resolved.notebookId,
@@ -69,22 +69,22 @@ export async function GET(): Promise<Response> {
     });
     return jsonResponse({ positions: rows.map(projectPosition) });
   } catch {
-    return jsonError(503, 'surface_layout_unavailable', '案面布局暂时不可用。');
+    return jsonError(503, 'surface_layout_unavailable');
   }
 }
 
 export async function PUT(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const resolved = await identityAndNotebook();
-  if (!resolved) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!resolved) return jsonError(401, 'unauthorized');
   try {
     const parsed = positionSchema.safeParse(
       await readLimitedJsonRequest(request, { maxBytes: 8 * 1024 }),
     );
     if (!parsed.success) {
-      return jsonError(400, 'invalid_surface_layout', '案面布局格式不正确。');
+      return jsonError(400, 'invalid_surface_layout');
     }
     await loadOwnedCanvasResource({
       ...resolved,
@@ -102,11 +102,11 @@ export async function PUT(request: Request): Promise<Response> {
       return jsonRequestErrorResponse(error);
     }
     if (error instanceof CanvasResourceAccessError) {
-      return jsonError(404, 'resource_not_found', '资源不存在。');
+      return jsonError(404, 'resource_not_found');
     }
     if (error instanceof NotebookSurfacePositionValidationError) {
-      return jsonError(400, 'invalid_surface_layout', '案面布局格式不正确。');
+      return jsonError(400, 'invalid_surface_layout');
     }
-    return jsonError(503, 'surface_layout_unavailable', '案面布局暂时不可用。');
+    return jsonError(503, 'surface_layout_unavailable');
   }
 }
