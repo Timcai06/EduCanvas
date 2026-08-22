@@ -139,6 +139,9 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'web_user_profiles_avatar_check',
   'turn_usage_budget_outcomes_reason_check',
   'operation_continuations_kind_check',
+  // Deep Research 恢复游标的协议与阶段由恢复投影联合解释；未知值必须 fail closed。
+  'research_checkpoints_protocol_version_check',
+  'research_checkpoints_phase_check',
   // 私人纸面批注与案面布局是协议判别联合；新值需要 renderer/repository 同步支持。
   'resource_annotations_resource_kind_check',
   'resource_annotations_author_pen_check',
