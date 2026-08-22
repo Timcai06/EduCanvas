@@ -182,14 +182,30 @@ function currentLargeSources(files) {
 }
 
 function writeBaseline(files) {
+  const reasonIndex = process.argv.indexOf('--bootstrap-reason');
+  const reason = reasonIndex >= 0 ? process.argv[reasonIndex + 1]?.trim() : '';
+  if (!reason) {
+    throw new Error(
+      '--write-size-baseline requires --bootstrap-reason <maintenance rationale>',
+    );
+  }
   const largeFiles = currentLargeSources(files);
+  let issueSequence = 1;
   const payload = {
     policy:
       'Review at 400 lines; split before 600 unless a named plan owns the debt.',
     threshold: 400,
-    files: Object.fromEntries(
-      Object.entries(largeFiles).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    files: Object.entries(largeFiles)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([file, acceptedLines]) => ({
+        file,
+        owner: ownerForFile(file),
+        reason,
+        targetLines: 400,
+        issue: `internal:ARCH-DEBT-${String(issueSequence++).padStart(4, '0')}`,
+        expiry: acceptedLines >= 600 ? '2026-11-30' : '2027-02-28',
+        acceptedLines,
+      })),
   };
   writeFileSync(baselinePath, `${JSON.stringify(payload, null, 2)}\n`);
   console.log(
@@ -207,16 +223,102 @@ function sizeViolations(files) {
 
 export function largeSourceBaselineViolations(current, acceptedFiles) {
   const violations = [];
+  if (!Array.isArray(acceptedFiles)) {
+    return ['file-size baseline files must be an accountable entry array'];
+  }
+  const entries = new Map();
+  const issues = new Set();
+  const today = new Date().toISOString().slice(0, 10);
+  for (const entry of acceptedFiles) {
+    const label = entry?.file ?? '<missing file>';
+    for (const field of [
+      'file',
+      'owner',
+      'reason',
+      'targetLines',
+      'issue',
+      'expiry',
+      'acceptedLines',
+    ]) {
+      if (entry?.[field] === undefined || entry[field] === '') {
+        violations.push(`${label}: baseline entry is missing ${field}`);
+      }
+    }
+    if (
+      !['agent-runtime', 'gateway', 'data', 'developer-productivity'].includes(
+        entry?.owner,
+      )
+    ) {
+      violations.push(
+        `${label}: invalid logical owner ${String(entry?.owner)}`,
+      );
+    }
+    if (entry?.targetLines !== 400) {
+      violations.push(`${label}: targetLines must remain 400`);
+    }
+    if (!/^internal:ARCH-DEBT-\d{4}$/.test(entry?.issue ?? '')) {
+      violations.push(`${label}: issue must be internal:ARCH-DEBT-####`);
+    } else if (issues.has(entry.issue)) {
+      violations.push(`${label}: duplicate debt issue ${entry.issue}`);
+    }
+    issues.add(entry?.issue);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(entry?.expiry ?? '') ||
+      entry.expiry < today
+    ) {
+      violations.push(`${label}: debt expiry is invalid or expired`);
+    }
+    if (entries.has(label))
+      violations.push(`${label}: duplicate baseline entry`);
+    entries.set(label, entry);
+  }
   for (const [path, lines] of Object.entries(current)) {
-    const accepted = acceptedFiles[path];
+    const accepted = entries.get(path);
     if (accepted === undefined)
       violations.push(
         `${path}: new ${lines}-line source requires split or an explicit baseline decision`,
       );
-    else if (lines > accepted)
-      violations.push(`${path}: grew from ${accepted} to ${lines} lines`);
+    else if (lines > accepted.acceptedLines)
+      violations.push(
+        `${path}: grew from ${accepted.acceptedLines} to ${lines} lines`,
+      );
+  }
+  for (const [path, entry] of entries) {
+    const lines = current[path];
+    if (lines === undefined) {
+      violations.push(
+        `${path}: baseline is stale because the file is below 400 lines or absent`,
+      );
+    } else if (lines < entry.targetLines) {
+      violations.push(
+        `${path}: baseline is stale because ${lines} is below target ${entry.targetLines}`,
+      );
+    }
   }
   return violations;
+}
+
+function ownerForFile(file) {
+  if (
+    file.startsWith('packages/db/') ||
+    file.startsWith('packages/asset-processing/')
+  )
+    return 'data';
+  if (
+    file.startsWith('packages/agent-') ||
+    file.startsWith('packages/teaching-') ||
+    file.startsWith('apps/worker/')
+  )
+    return 'agent-runtime';
+  if (
+    file.startsWith('apps/web/') ||
+    file.startsWith('apps/gateway/') ||
+    file.startsWith('apps/desktop/') ||
+    file.startsWith('apps/tui/') ||
+    file.startsWith('packages/gateway-')
+  )
+    return 'gateway';
+  return 'developer-productivity';
 }
 
 export function auditTrackedFiles(files) {
