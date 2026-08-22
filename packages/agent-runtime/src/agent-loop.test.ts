@@ -152,6 +152,79 @@ describe('AgentLoopEngine', () => {
     expect(events.filter((event) => event.type === 'failed')).toHaveLength(0);
   });
 
+  it('allows six bounded research tool rounds before tool-free synthesis', async () => {
+    let calls = 0;
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        calls += 1;
+        if (request.phase === 'synthesis') {
+          yield {
+            type: 'text_delta',
+            phase: request.phase,
+            delta: '研究综合',
+          };
+          yield {
+            type: 'completed',
+            phase: request.phase,
+            metadata: metadata(request, 'stop'),
+          };
+          return;
+        }
+        const index = request.toolResults.length + 1;
+        yield {
+          type: 'tool_call',
+          phase: request.phase,
+          callId: `call_${index}`,
+          tool: 'lookup',
+          argumentsDelta: '{}',
+          done: true,
+        };
+        yield {
+          type: 'completed',
+          phase: request.phase,
+          metadata: metadata(request, 'tool_calls'),
+        };
+      },
+    };
+    const events = await collect(
+      new AgentLoopEngine(gateway),
+      command({
+        maxToolRounds: 6,
+        answer: {
+          ...command().answer,
+          tools: [
+            {
+              name: 'lookup',
+              description: 'lookup',
+              inputSchema: { type: 'object' },
+            },
+          ],
+        },
+        async executeTools(toolCalls) {
+          return {
+            ok: true,
+            results: toolCalls.map((call) => ({
+              call,
+              modelResult: {
+                callId: call.callId,
+                tool: call.tool,
+                arguments: call.arguments,
+                output: { ok: true },
+              },
+              detail: undefined as never,
+            })),
+          };
+        },
+      }),
+    );
+
+    expect(calls).toBe(7);
+    expect(
+      events.filter((event) => event.type === 'tool.started'),
+    ).toHaveLength(6);
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+  });
+
   it('retries a clean transient failure and audits every provider attempt', async () => {
     let calls = 0;
     const gateway: TurnModelGateway = {

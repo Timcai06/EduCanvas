@@ -258,9 +258,9 @@ export class AgentLoopEngine {
   async *stream<TDetail, TFailure, TModelRunContext = never>(
     command: AgentLoopCommand<TDetail, TFailure, TModelRunContext>,
   ): AsyncGenerator<AgentLoopEvent<TDetail, TFailure>> {
-    // 圈数钳位：最少 1 圈，最多 4 圈，截断异常值
+    // 圈数钳位：最少 1 圈，最多 6 圈；深度研究需要为失败补位保留后续读取轮次。
     const maxToolRounds = Math.min(
-      4,
+      6,
       Math.max(1, Math.trunc(command.maxToolRounds)),
     );
     const accumulatedResults: ModelToolResult[] = [];

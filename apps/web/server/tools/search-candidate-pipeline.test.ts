@@ -114,6 +114,50 @@ describe('SearchCandidatePipeline', () => {
     ]);
   });
 
+  it('keeps failed domains cooled across later research queries', async () => {
+    const blocked = candidate(0, 'blocked.example.com');
+    const repeated = candidate(1, 'blocked.example.com');
+    const replacement = candidate(2, 'replacement.example.org');
+    const service = {
+      search: vi
+        .fn()
+        .mockResolvedValueOnce({
+          results: [blocked],
+          attemptedProviders: ['primary'],
+        })
+        .mockResolvedValueOnce({
+          results: [repeated, replacement],
+          attemptedProviders: ['primary'],
+        }),
+    };
+    const preflight = vi.fn(async (result: SearchResult) => {
+      if (result.url === blocked.url) {
+        throw new SearchCandidatePreflightError(
+          'candidate_http_blocked',
+          false,
+        );
+      }
+      return readable(result);
+    });
+    const pipeline = new SearchCandidatePipeline(service, preflight);
+
+    await pipeline.search({ query: 'broad', limit: 5 });
+    const output = await pipeline.search({ query: 'gap', limit: 5 });
+
+    expect(
+      preflight.mock.calls.map(([result]) => (result as SearchResult).url),
+    ).not.toContain(repeated.url);
+    expect(output.results.map((result) => result.url)).toEqual([
+      replacement.url,
+    ]);
+    expect(output.failures).toContainEqual(
+      expect.objectContaining({
+        domain: 'blocked.example.com',
+        code: 'candidate_domain_cooled',
+      }),
+    );
+  });
+
   it('bounds preflight concurrency', async () => {
     const results = Array.from({ length: 9 }, (_, index) => candidate(index));
     const service = searchService(results);

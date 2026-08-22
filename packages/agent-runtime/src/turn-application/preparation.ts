@@ -111,7 +111,7 @@ export async function prepareTurnApplication(input: {
     !answerMessages.some((message) => message.role === 'user') ||
     !Number.isSafeInteger(plan.model.maxToolRounds) ||
     plan.model.maxToolRounds < 1 ||
-    plan.model.maxToolRounds > 4 ||
+    plan.model.maxToolRounds > 6 ||
     !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(plan.model.promptVersion) ||
     (plan.model.synthesisPromptVersion !== undefined &&
       !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(plan.model.synthesisPromptVersion))

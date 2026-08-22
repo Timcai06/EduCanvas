@@ -33,11 +33,27 @@ const searchOutputSchema = z
           .strict(),
       )
       .max(5),
+    research: z
+      .object({
+        phase: z.enum(['broad', 'gap', 'deep', 'replacement']),
+        failedDomains: z.array(z.string().max(253)).max(8),
+        failureCodes: z.array(z.string().max(64)).max(8),
+        remainingSearches: z.number().int().min(0).max(5),
+        nextAction: z.enum([
+          'analyze_gaps',
+          'target_critical_gap',
+          'read_or_replace',
+          'read_sources',
+        ]),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
-const MAX_SEARCHES = 3;
-const MAX_CANDIDATES = 15;
+const STANDARD_MAX_SEARCHES = 3;
+export const DEEP_RESEARCH_MAX_SEARCHES = 5;
+export const WEB_SEARCH_MAX_CANDIDATES = 15;
 
 export interface WebSearchProgress {
   readonly successfulSearchCount: number;
@@ -71,7 +87,14 @@ interface WebSearchExecutor {
   search(
     request: { query: string; limit: number },
     signal?: AbortSignal,
-  ): Promise<{ results: readonly SearchResult[] }>;
+  ): Promise<{
+    results: readonly SearchResult[];
+    failures?: readonly { domain: string; code: string }[];
+  }>;
+}
+
+export interface WebSearchToolOptions {
+  readonly deepResearch?: boolean;
 }
 
 function queryKey(query: string): string {
@@ -80,17 +103,23 @@ function queryKey(query: string): string {
 
 export function createWebSearchTool(
   service: WebSearchExecutor,
+  options: WebSearchToolOptions = {},
 ): OperationWebSearchTool {
   const completedQueries = new Set<string>();
   const pendingQueries = new Set<string>();
   const candidateUrls = new Set<string>();
+  let searchAttempts = 0;
+  const maxSearches = options.deepResearch
+    ? DEEP_RESEARCH_MAX_SEARCHES
+    : STANDARD_MAX_SEARCHES;
   return {
     get successfulSearchCount() {
       return completedQueries.size;
     },
     name: 'webSearch',
-    description:
-      '搜索互联网获取时效性信息。输入检索词，返回最多5条候选结果；搜索摘要不可直接作为引用。',
+    description: options.deepResearch
+      ? '分阶段搜索互联网。按 broad、gap、deep 推进，并根据 research.failedDomains 避开失败域；资料不足时可在剩余预算内 replacement。搜索摘要不可直接引用。'
+      : '搜索互联网获取时效性信息。输入检索词，返回最多5条候选结果；搜索摘要不可直接作为引用。',
     inputSchema: searchInputSchema,
     outputSchema: searchOutputSchema,
     timeoutMs: 10_000,
@@ -99,15 +128,24 @@ export function createWebSearchTool(
       if (completedQueries.has(key) || pendingQueries.has(key)) {
         throw new Error('search_query_duplicate');
       }
-      if (completedQueries.size + pendingQueries.size >= MAX_SEARCHES) {
+      if (searchAttempts >= maxSearches) {
         throw new Error('search_budget_exceeded');
       }
+      const phase =
+        completedQueries.size === 0
+          ? 'broad'
+          : completedQueries.size === 1
+            ? 'gap'
+            : completedQueries.size === 2
+              ? 'deep'
+              : 'replacement';
       pendingQueries.add(key);
+      searchAttempts += 1;
       try {
         const output = await service.search({ query: query.trim(), limit: 5 });
         const results: { title: string; url: string; snippet: string }[] = [];
         for (const result of output.results) {
-          if (candidateUrls.size >= MAX_CANDIDATES) break;
+          if (candidateUrls.size >= WEB_SEARCH_MAX_CANDIDATES) break;
           if (candidateUrls.has(result.url)) continue;
           candidateUrls.add(result.url);
           results.push({
@@ -117,7 +155,29 @@ export function createWebSearchTool(
           });
         }
         completedQueries.add(key);
-        return { results };
+        if (!options.deepResearch) return { results };
+        const failures = output.failures ?? [];
+        return {
+          results,
+          research: {
+            phase,
+            failedDomains: [
+              ...new Set(failures.map((failure) => failure.domain)),
+            ].slice(0, 8),
+            failureCodes: [
+              ...new Set(failures.map((failure) => failure.code)),
+            ].slice(0, 8),
+            remainingSearches: maxSearches - searchAttempts,
+            nextAction:
+              phase === 'broad'
+                ? 'analyze_gaps'
+                : phase === 'gap'
+                  ? 'target_critical_gap'
+                  : phase === 'deep'
+                    ? 'read_or_replace'
+                    : 'read_sources',
+          },
+        };
       } finally {
         pendingQueries.delete(key);
       }
@@ -190,10 +250,11 @@ export function resolveSearchService(
 export function resolveWebSearchTool(
   env: SearchEnvironment = process.env as SearchEnvironment,
   fetchImpl?: typeof fetch,
+  options: WebSearchToolOptions = {},
 ): OperationWebSearchTool | null {
   const service = resolveSearchService(env, fetchImpl);
   if (!service) return null;
-  return createWebSearchTool(new SearchCandidatePipeline(service));
+  return createWebSearchTool(new SearchCandidatePipeline(service), options);
 }
 
 export function resolveSearchCandidatePipeline(

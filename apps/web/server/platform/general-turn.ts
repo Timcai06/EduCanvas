@@ -81,6 +81,7 @@ export function beginGatewayGeneralTurnApplication(input: {
     operationSources,
     operationArtifacts,
     operationImages,
+    { deepResearch: input.request.mode === 'deep_research' },
   );
   const runtime = input.modelRuntime;
   /**

@@ -99,16 +99,20 @@ afterEach(() => {
 });
 
 describe('WebGeneralProfile trusted Tool Policy', () => {
-  it('Deep Research 复用同一 Profile Port，但提升到 4 个工具轮次并冻结研究提示', async () => {
+  it('Deep Research 复用同一 Profile Port，并为失败补位保留 6 个工具轮次', async () => {
     const plan = await createProfile().prepare({
       command: { ...command, mode: 'deep_research' },
       turn,
     });
     const prompt = plan.context.profile[0]?.message.content ?? '';
 
-    expect(plan.model.maxToolRounds).toBe(4);
+    expect(plan.model.maxToolRounds).toBe(6);
+    expect(plan.context.maxCharacters).toBe(128_000);
+    expect(plan.model.usageBudget?.maxToolCalls).toBe(16);
+    expect(plan.model.usageBudget?.maxToolResultTokens).toBe(8_000);
     expect(prompt).toContain('至少完成三轮');
     expect(prompt).toContain('分析证据缺口');
+    expect(prompt).toContain('最多两轮替代查询');
     expect(prompt).toContain('关键结论与证据');
     expect(prompt).toContain('不得引用搜索摘要');
   });
