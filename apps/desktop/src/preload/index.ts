@@ -23,6 +23,8 @@ import type {
   DesktopImagePreviewResult,
   DesktopOpenResult,
 } from '../shared/result-action';
+import type { DesktopAttachmentRef } from '../shared/desktop-attachment';
+import type { DesktopAttachmentPickResult } from '../shared/desktop-attachment';
 
 export type DesktopOperationLeaseResult =
   { ok: true; token: string } | { ok: false; message: string };
@@ -45,12 +47,16 @@ declare global {
         requestId: string,
         source?: 'text' | 'voice',
         clientMessageId?: string,
+        attachment?: DesktopAttachmentRef,
       ): Promise<TurnResult>;
       cancel(requestId: string): void;
       onToast(callback: (message: string) => void): () => void;
       onEvent(
         callback: (projection: DesktopAssistantProjection) => void,
       ): () => void;
+    };
+    desktopAttachment: {
+      pick(): Promise<DesktopAttachmentPickResult>;
     };
     desktopPet: {
       hide(): void;
@@ -136,12 +142,14 @@ contextBridge.exposeInMainWorld('desktopAssistant', {
     requestId: string,
     source: 'text' | 'voice' = 'text',
     clientMessageId?: string,
+    attachment?: DesktopAttachmentRef,
   ): Promise<TurnResult> {
     return ipcRenderer.invoke('assistant:turn', {
       text,
       requestId,
       source,
       clientMessageId,
+      attachment,
       leaseToken: activeOperationLeaseToken,
     });
   },
@@ -248,6 +256,12 @@ contextBridge.exposeInMainWorld('desktopResult', {
   },
   preview(target: DesktopResultTarget): Promise<DesktopImagePreviewResult> {
     return ipcRenderer.invoke('result:preview', target);
+  },
+});
+
+contextBridge.exposeInMainWorld('desktopAttachment', {
+  pick(): Promise<DesktopAttachmentPickResult> {
+    return ipcRenderer.invoke('attachment:pick');
   },
 });
 

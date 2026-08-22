@@ -1,4 +1,7 @@
-import { TURN_USAGE_BUDGET_TEMPLATES } from '@educanvas/agent-core';
+import {
+  TURN_USAGE_BUDGET_TEMPLATES,
+  type AssetKind,
+} from '@educanvas/agent-core';
 import type {
   TurnApplicationOutputGuardPort,
   TurnApplicationProfilePort,
@@ -10,6 +13,8 @@ import {
 } from '@educanvas/node-runtime';
 import type { GatewayTurnRepositoryPort } from './lifecycle';
 import { resolveGatewayGeneralToolPolicy } from './general-tool-policy';
+import type { GatewayAssetMaterializer } from '../asset-context/asset-materialization';
+import { buildNativeImageCandidates } from './general-native-assets';
 
 const SYSTEM_PROMPT = `你是 EduCanvas，一个以教育能力见长的通用个人 Agent。
 根据用户真实意图工作；学习任务中要循序解释、检查理解并尊重可信教学证据，通用任务中不要强行课程化。
@@ -134,6 +139,8 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
     private readonly nodeInvocations: NodeInvocationPersistencePort,
     private readonly staticToolCapabilities: readonly string[],
     private readonly membershipRole: NotebookMembershipRole,
+    private readonly assetMaterializer: GatewayAssetMaterializer | null,
+    private readonly nativeAssetKinds: readonly AssetKind[],
   ) {}
 
   createOutputGuard(): TurnApplicationOutputGuardPort {
@@ -174,9 +181,19 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
       environment,
       environmentCapabilities: availableCapabilities,
     });
+    /* DP10：asset_ref part 由注入的物化器按当前会话归属读取并投影成
+       sourcesAndAssets；未注入物化器时保持旧行为（空资产上下文）。 */
+    const materialized = this.assetMaterializer
+      ? await this.assetMaterializer.materializeOwnedReferences({
+          trustedSubjectId: input.command.actor.actorId,
+          notebookId: input.command.notebook.notebookId,
+          parts: input.command.input.parts,
+          nativeAssetKinds: this.nativeAssetKinds,
+        })
+      : null;
     return {
       context: {
-        profileVersion: 'gateway-profile-v1',
+        profileVersion: 'gateway-profile-v2',
         profile: [
           {
             segment: {
@@ -201,7 +218,26 @@ export class GatewayGeneralProfile implements TurnApplicationProfilePort {
           },
           message: { role: message.role, content: message.content },
         })),
-        sourcesAndAssets: [],
+        sourcesAndAssets: materialized
+          ? [
+              ...materialized.textSegments.map((segment, index) => {
+                const content = `<untrusted_user_material>\n${segment.text}\n</untrusted_user_material>`;
+                return {
+                  segment: {
+                    id: `asset:${segment.reference.versionId}`,
+                    kind: 'asset' as const,
+                    content,
+                    priority: 90 - index,
+                    required: true,
+                    assetVersionId: segment.reference.versionId,
+                    assetRepresentation: segment.representation,
+                  },
+                  message: { role: 'user' as const, content },
+                };
+              }),
+              ...buildNativeImageCandidates(materialized.nativeImages),
+            ]
+          : [],
         memory: {
           status: 'unavailable' as const,
           reason: 'not_implemented' as const,

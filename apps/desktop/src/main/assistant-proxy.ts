@@ -6,6 +6,7 @@ import type {
 } from '@educanvas/gateway-core';
 import type { StoredDesktopSession } from './desktop-session-store';
 import type { TurnResult } from '../shared/turn-result';
+import type { DesktopAttachmentRef } from '../shared/desktop-attachment';
 import type { DesktopCanonicalMessage } from '../shared/chat-history';
 import { toCanonicalMessage } from './message-history-projection';
 
@@ -28,6 +29,8 @@ export interface AssistantProxy {
       text: string;
       cursor?: { notebookId: string; conversationId: string };
       clientMessageId?: string;
+      /** DP10：随本轮发出的已 ready 附件；服务端再验归属。 */
+      attachment?: DesktopAttachmentRef;
     },
     signal?: AbortSignal,
     tracker?: TurnTracker,
@@ -92,6 +95,33 @@ function acceptOperation(
 }
 
 /**
+ * DP10：文本 + 可选附件拼成 Turn parts。asset_ref 引用不可变版本
+ * （assetId/versionId/kind），usage 固定 attachment；kind 必须是服务端
+ * asset kind 枚举成员，桌面输入只可能是 image/document。
+ */
+function buildTurnParts(
+  text: string,
+  attachment?: DesktopAttachmentRef,
+): GatewayClientTurnRequest['parts'] {
+  /* 空文本 + 附件时只发 asset_ref（agentTextPartSchema 拒绝空文本）；纯附件
+     提交是合法输入，纯空文本在 renderer 层已被拦截。 */
+  const parts: GatewayClientTurnRequest['parts'] = [];
+  if (text.trim()) parts.push({ type: 'text', text });
+  if (attachment) {
+    parts.push({
+      type: 'asset_ref',
+      reference: {
+        assetId: attachment.assetId,
+        versionId: attachment.versionId,
+        kind: attachment.kind as 'image' | 'document',
+      },
+      usage: 'attachment',
+    });
+  }
+  return parts;
+}
+
+/**
  * Desktop first-party Client → gateway.v1. The bearer stays in Electron main and
  * GatewayClient sends it only in Authorization; Renderer receives a stable projection.
  */
@@ -132,6 +162,18 @@ export function createAssistantProxy(options: {
           ok: false,
           code: 'route_required',
           message: '请先选择一个对话。',
+        };
+      }
+      // 附件绑定 pick 时刻的 notebookId；会话已切换到其他 notebook 时不得随
+      // 新对话发出（服务端 requireNotebookAccess 兜底，这里在客户端即拒绝）。
+      if (
+        input.attachment &&
+        input.attachment.notebookId !== cursor.notebookId
+      ) {
+        return {
+          ok: false,
+          code: 'route_required',
+          message: '附件来自其他笔记本，请重新选择。',
         };
       }
       const client = makeClient(session);
@@ -195,7 +237,7 @@ export function createAssistantProxy(options: {
                   input.clientMessageId ?? `desktop:${randomUUID()}`,
                 notebookId: cursor.notebookId,
                 conversationId: cursor.conversationId,
-                parts: [{ type: 'text', text: input.text }],
+                parts: buildTurnParts(input.text, input.attachment),
               },
               { signal: streamAbort.signal },
             )) {

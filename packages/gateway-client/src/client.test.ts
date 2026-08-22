@@ -308,6 +308,97 @@ describe('GatewayClient', () => {
     expect(JSON.parse(seenBody)).toEqual({ conversationId: 'conversation:1' });
   });
 
+  it('uploads an owned asset through a multipart request without leaking the token (DP10)', async () => {
+    let seenUrl = '';
+    let seenBody: unknown = null;
+    let seenHeaders: HeadersInit | undefined;
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input, init) => {
+        seenUrl = String(input);
+        seenHeaders = init?.headers;
+        seenBody = init?.body ?? null;
+        return Response.json(
+          {
+            descriptor: {
+              assetId: 'asset:one',
+              scope: 'space',
+              kind: 'image',
+              origin: 'upload',
+              displayName: '截图.png',
+              mimeType: 'image/png',
+              status: 'ready',
+              currentVersionId: 'version:one',
+            },
+            version: {
+              assetId: 'asset:one',
+              versionId: 'version:one',
+              kind: 'image',
+              mimeType: 'image/png',
+              byteSize: 4,
+              contentHash: 'a'.repeat(64),
+              status: 'ready',
+            },
+          },
+          { status: 201 },
+        );
+      },
+    );
+    const snapshot = await client.uploadAsset({
+      notebookId: 'notebook:1',
+      file: new File([new Uint8Array([137, 80, 78, 71])], '截图.png', {
+        type: 'image/png',
+      }),
+      scope: 'space',
+    });
+    expect(snapshot.descriptor.status).toBe('ready');
+    expect(snapshot.version?.versionId).toBe('version:one');
+    expect(seenUrl).toContain('/v1/client/assets?notebookId=notebook%3A1');
+    expect(seenUrl).not.toContain('t'.repeat(32));
+    expect(seenHeaders).toMatchObject({
+      authorization: `Bearer ${'t'.repeat(32)}`,
+    });
+    expect(seenBody).toBeInstanceOf(FormData);
+    if (seenBody instanceof FormData) {
+      expect(seenBody.get('scope')).toBe('space');
+      expect(seenBody.get('file')).toBeInstanceOf(File);
+    }
+  });
+
+  it('polls an owned asset snapshot without putting the session token in the URL (DP10)', async () => {
+    let seenUrl = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        seenUrl = String(input);
+        return Response.json({
+          descriptor: {
+            assetId: 'asset:one',
+            scope: 'space',
+            kind: 'document',
+            origin: 'upload',
+            displayName: '笔记.pdf',
+            mimeType: 'application/pdf',
+            status: 'processing',
+            currentVersionId: null,
+          },
+          version: null,
+        });
+      },
+    );
+    const snapshot = await client.getAsset({
+      assetId: 'asset:one',
+      notebookId: 'notebook:1',
+    });
+    expect(snapshot.descriptor.status).toBe('processing');
+    expect(seenUrl).toContain(
+      '/v1/client/assets/asset%3Aone?notebookId=notebook%3A1',
+    );
+    expect(seenUrl).not.toContain('t'.repeat(32));
+  });
+
   it('sinks a precise handoff target into the issue body', async () => {
     let seenUrl = '';
     let seenBody = '';

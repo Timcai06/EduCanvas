@@ -21,6 +21,7 @@ import type { GatewayEffectReconciliationControl } from '../effect-reconciliatio
 import type { GatewayObservability } from '../observability';
 import type { GatewayCanvasResourceService } from '../canvas-resource-service';
 import type { GatewayImagePreviewService } from '../asset-image-preview-service';
+import type { GatewayAssetUploadService } from '../asset-upload/asset-upload';
 import type { StreamingTranscriptionTicketStore } from '../streaming-transcription-ticket';
 
 /**
@@ -66,6 +67,8 @@ export interface GatewayClientTransport {
   canvasResources?: Pick<GatewayCanvasResourceService, 'list' | 'get'>;
   /** 图片预览必须按 bearer 主体和当前 Conversation 再授权，不能直接暴露对象存储。 */
   imagePreviews?: Pick<GatewayImagePreviewService, 'read'>;
+  /** 桌面资产上传与 ready-wait 轮询（DP10）；缺省时资产端点 503。 */
+  assets?: Pick<GatewayAssetUploadService, 'upload' | 'get'>;
   /** V12 实时语音握手 ticket store；缺省时 ticket 端点 503。 */
   streamingTickets?: StreamingTranscriptionTicketStore | null;
   /** V12 实时语音 Notebook 访问校验（服务端重新绑定）；缺省时 ticket 端点 503。 */

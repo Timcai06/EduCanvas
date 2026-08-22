@@ -7,8 +7,17 @@ import {
   type GatewayInboundEnvelope,
   type GatewayResolvedRoute,
 } from '@educanvas/gateway-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 import { GatewayAgentTurnRunner } from './agent-runner';
+import type { GatewayDependencies } from './turn-composition';
+
+vi.mock('./turn-composition', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn-composition')>();
+  return {
+    ...actual,
+    createGatewayTurnApplication: vi.fn(),
+  };
+});
 
 const envelope: GatewayInboundEnvelope = {
   protocol: gatewayProtocolVersion,
@@ -193,6 +202,79 @@ describe('Gateway Turn Application adapter', () => {
     }
 
     expect(created).toBe(false);
+    expect(events).toEqual([
+      {
+        type: 'operation.failed',
+        code: 'CAPABILITY_UNAVAILABLE',
+        retryable: false,
+      },
+    ]);
+  });
+
+  it('注入assetMaterializer后透传text与asset_ref到命令输入（DP10）', async () => {
+    const { createGatewayTurnApplication } = await import('./turn-composition');
+    const captured: { command?: TurnApplicationCommand } = {};
+    (createGatewayTurnApplication as Mock).mockImplementation(
+      (_deps: GatewayDependencies, _input: unknown) => ({
+        async *run(command: TurnApplicationCommand) {
+          captured.command = command;
+          yield {
+            protocol: 'educanvas.turn.v2',
+            operationId: command.operationId,
+            type: 'turn.started',
+            userMessageId: 'u:1',
+            assistantMessageId: 'a:1',
+            replayed: false,
+          };
+          yield {
+            protocol: 'educanvas.turn.v2',
+            operationId: command.operationId,
+            type: 'turn.completed',
+            messageId: 'a:1',
+          };
+        },
+      }),
+    );
+    const runner = new GatewayAgentTurnRunner({
+      assetMaterializer: { materializeOwnedReferences: async () => ({}) },
+    } as unknown as GatewayDependencies);
+    const textPart = { type: 'text' as const, text: '看看这张图' };
+    const assetRefPart = {
+      type: 'asset_ref' as const,
+      reference: {
+        assetId: 'asset:1',
+        versionId: 'version:1',
+        kind: 'image' as const,
+      },
+      usage: 'attachment' as const,
+    };
+    const events = await collect(runner, {
+      ...envelope,
+      parts: [textPart, assetRefPart],
+    });
+    expect(captured.command?.input.parts).toEqual([textPart, assetRefPart]);
+    expect(events.map((event) => event.type)).toEqual([
+      'message.started',
+      'operation.completed',
+    ]);
+  });
+
+  it('注入materializer后仍拒绝非text/非asset_ref的part（DP10）', async () => {
+    const runner = new GatewayAgentTurnRunner({
+      assetMaterializer: { materializeOwnedReferences: async () => ({}) },
+    } as unknown as GatewayDependencies);
+    const events = await collect(runner, {
+      ...envelope,
+      parts: [
+        { type: 'text', text: 'hello' },
+        {
+          type: 'artifact_ref',
+          artifactId: 'artifact:1',
+          versionId: 'version:1',
+          kind: 'markdown_document',
+        },
+      ],
+    });
     expect(events).toEqual([
       {
         type: 'operation.failed',

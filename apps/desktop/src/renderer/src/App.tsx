@@ -15,6 +15,7 @@ import { playSpeech } from './speech-player';
 import { bindVoiceTurn, runVoiceSession } from './voice-session';
 import { isBusyState, voiceSnapshotState } from './voice-view-state';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
+import type { DesktopAttachmentRef } from '../../shared/desktop-attachment';
 import type {
   DesktopChatHistorySnapshot,
   DesktopChatSource,
@@ -56,6 +57,8 @@ export default function App({
       error: null,
     });
   const [pendingResume, setPendingResume] = useState<string | null>(null);
+  const [pendingAttachment, setPendingAttachment] =
+    useState<DesktopAttachmentRef | null>(null);
   const [canStop, setCanStop] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
     null,
@@ -84,12 +87,14 @@ export default function App({
     content: string,
     source: DesktopChatSource,
     clientMessageId?: string,
+    attachment?: DesktopAttachmentRef,
   ): Promise<void> => {
     const next = await window.desktopChat.append({
       role,
       content,
       source,
       clientMessageId,
+      attachment,
     });
     setHistory((current) =>
       next.revision >= current.revision ? next : current,
@@ -245,6 +250,33 @@ export default function App({
     if (operationLeaseRef.current === token) operationLeaseRef.current = null;
   };
 
+  const pickAttachment = async (): Promise<void> => {
+    const result = await window.desktopAttachment.pick();
+    if (result.ok) {
+      setPendingAttachment(result.attachment);
+      setMessage('已选择附件，点击发送。');
+    } else if (result.message !== '已取消选择附件。') {
+      setMessage(result.message);
+    }
+  };
+  const clearAttachment = (): void => setPendingAttachment(null);
+
+  // DP10：附件绑定 pick 时刻的 notebookId；切换 Notebook 后立即清空，
+  // 不把旧 notebook 资产泄漏进新会话（服务端 requireNotebookAccess 兜底）。
+  const currentNotebookId =
+    directory.conversations.find(
+      (item) => item.conversationId === directory.currentConversationId,
+    )?.notebookId ?? null;
+  const currentNotebookRef = useRef(currentNotebookId);
+  useEffect(() => {
+    if (currentNotebookRef.current !== currentNotebookId) {
+      currentNotebookRef.current = currentNotebookId;
+      setPendingAttachment((pending) =>
+        pending && pending.notebookId !== currentNotebookId ? null : pending,
+      );
+    }
+  }, [currentNotebookId]);
+
   const submit = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
@@ -252,10 +284,10 @@ export default function App({
     let leaseToken: string | null = null;
     try {
       const prompt = text.trim();
-      if (!prompt) {
+      if (!prompt && !pendingAttachment) {
         setState('confused');
         publishVisual('confused');
-        setMessage('请输入内容。');
+        setMessage('请输入内容或选择附件。');
         return;
       }
       if (!(await requireAuth())) return;
@@ -268,20 +300,29 @@ export default function App({
 
       const requestId = crypto.randomUUID();
       const clientMessageId = `desktop:${crypto.randomUUID()}`;
+      const attachment = pendingAttachment;
       requestIdRef.current = requestId;
       setState('sending');
       publishVisual('sending');
       setCanStop(false);
       setMessage('EduCanvas 正在回复…');
-      await appendHistory('user', prompt, 'text', clientMessageId);
+      await appendHistory(
+        'user',
+        prompt,
+        'text',
+        clientMessageId,
+        attachment ?? undefined,
+      );
       const result = await submitPetText(
         prompt,
         requestId,
         window.desktopAssistant.turn,
         clientMessageId,
+        attachment ?? undefined,
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
+      if (attachment) setPendingAttachment(null);
       if (result.ok) {
         setText('');
         setState('ready');
@@ -529,6 +570,9 @@ export default function App({
         setMessage(next.error ?? '新对话已创建。');
       }}
       openResult={(target) => openDesktopResult(target).then(setMessage)}
+      pendingAttachment={pendingAttachment}
+      pickAttachment={pickAttachment}
+      clearAttachment={clearAttachment}
     />
   );
 

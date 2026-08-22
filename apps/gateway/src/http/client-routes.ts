@@ -19,6 +19,7 @@ import { ZodError, z } from 'zod';
 import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
 import { GatewayImagePreviewError } from '../asset-image-preview-service';
+import { handleAssetRoutes } from './asset-routes';
 import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
 import {
   decodeConversationDirectoryCursor,
@@ -160,6 +161,9 @@ export async function handleClientRoutes(
     }
     const { identity } = auth;
     if (await handleDesktopRevoke(ctx, client, auth.desktopToken)) {
+      return HANDLED;
+    }
+    if ((await handleAssetRoutes(ctx, client, identity)).handled) {
       return HANDLED;
     }
 

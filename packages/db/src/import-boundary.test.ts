@@ -67,6 +67,22 @@ const WORKSPACE_RESOURCE_SUMMARY_PRODUCTION_ALLOWLIST = new Map([
   ],
 ]);
 
+// DP10：共享对象存储经专用 subpath 只向 web/gateway 服务端暴露；web 原
+// asset-storage.ts 已降级为 thin re-export shim（保留 server-only）。新增消费者
+// 或符号必须显式经过本门禁复核。
+const ASSET_OBJECT_STORAGE_PRODUCTION_ALLOWLIST = new Map([
+  [
+    'apps/web/server/assets/asset-storage.ts',
+    new Set([
+      'readStoredAssetBytes',
+      'removeStoredAsset',
+      'removeStoredAssetByKey',
+      'storeAssetBytes',
+      'StoredAssetObject',
+    ]),
+  ],
+]);
+
 // R04 台账 R04.2：默认入口按需保留的 schema 表（曾经 export * 全量泄漏）。生产引用基线为 0。
 const SCHEMA_TABLE_DENYLIST = new Set([
   'agentOperations',
@@ -193,7 +209,9 @@ function collectRawDbPathImports(files: string[]): string[] {
     /import\s*\(\s*['"]([^'"]*packages\/db\/src[^'"]*)['"]\s*\)/g;
   for (const file of files) {
     if (file.startsWith(join(ROOT, 'packages/db'))) continue;
-    if (relative(ROOT, file).startsWith('tests/e2e')) continue;
+    /* 豁免判断同样用 norm() 归一化：Windows 上 relative() 返回 \ 分隔路径，
+       直接 startsWith('tests/e2e') 会漏过豁免。 */
+    if (norm(relative(ROOT, file)).startsWith('tests/e2e')) continue;
     const src = readFileSync(file, 'utf8');
     for (const re of [staticRe, dynamicRe]) {
       let m: RegExpExecArray | null;
@@ -221,6 +239,7 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
   it('package.json exports 只暴露受控入口', () => {
     expect(Object.keys(pkgJson.exports ?? {})).toEqual([
       '.',
+      './asset-object-storage',
       './internal',
       './workspace-resource-summary',
       './testing',
@@ -252,6 +271,14 @@ describe('@educanvas/db 公共出口收口（R04）', () => {
         const allowed = WORKSPACE_RESOURCE_SUMMARY_PRODUCTION_ALLOWLIST.get(
           i.file,
         );
+        return (
+          !allowed ||
+          i.symbols.length !== allowed.size ||
+          i.symbols.some((symbol) => !allowed.has(symbol))
+        );
+      }
+      if (i.subpath === '/asset-object-storage') {
+        const allowed = ASSET_OBJECT_STORAGE_PRODUCTION_ALLOWLIST.get(i.file);
         return (
           !allowed ||
           i.symbols.length !== allowed.size ||

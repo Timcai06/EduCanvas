@@ -34,11 +34,22 @@ const SUPPORTED_GATEWAY_PROFILE_ID = 'general';
 /** Gateway只负责把可信路由投影成统一命令，再把统一事件投影回Gateway事件。 */
 export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
   private readonly createApplication: ApplicationFactory;
+  /**
+   * 是否启用了 asset_ref 物化（DP10）。依赖对象显式注入 materializer 时才允许
+   * asset_ref 进入命令；裸工厂/未注入时保留硬拒绝语义，避免能力清单未升级前
+   * 桌面声明的 input.image/input.file 被静默吞掉。
+   */
+  private readonly assetMaterializerActive: boolean;
 
   constructor(
     depsOrFactory:
       GatewayDependencies | ApplicationFactory = createGatewayDependencies(),
   ) {
+    this.assetMaterializerActive =
+      typeof depsOrFactory === 'function'
+        ? false
+        : depsOrFactory.assetMaterializer !== undefined &&
+          depsOrFactory.assetMaterializer !== null;
     this.createApplication =
       typeof depsOrFactory === 'function'
         ? depsOrFactory
@@ -56,12 +67,10 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
       };
       return;
     }
-    if (
-      input.envelope.parts.some(
-        (part) => part.type !== 'text' && part.type !== 'asset_ref',
-      ) ||
-      input.envelope.parts.some((part) => part.type === 'asset_ref')
-    ) {
+    const allowedPartTypes = this.assetMaterializerActive
+      ? new Set<string>(['text', 'asset_ref'])
+      : new Set<string>(['text']);
+    if (input.envelope.parts.some((part) => !allowedPartTypes.has(part.type))) {
       yield {
         type: 'operation.failed',
         code: 'CAPABILITY_UNAVAILABLE',
@@ -85,9 +94,14 @@ export class GatewayAgentTurnRunner implements GatewayTurnRunnerPort {
       entrypoint: toEntrypoint(input.envelope),
       input: {
         clientMessageId: input.envelope.idempotencyKey,
-        parts: input.envelope.parts.filter(
-          (part): part is AgentMessagePart => part.type === 'text',
-        ),
+        parts: this.assetMaterializerActive
+          ? input.envelope.parts.filter(
+              (part): part is AgentMessagePart =>
+                part.type === 'text' || part.type === 'asset_ref',
+            )
+          : input.envelope.parts.filter(
+              (part): part is AgentMessagePart => part.type === 'text',
+            ),
       },
       capabilities: input.envelope.capabilities.capabilities.map(
         (capability) => capability.name,

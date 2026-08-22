@@ -93,7 +93,9 @@ export function createChatHistoryStore(
     },
     append(input) {
       const content = input.content.trim();
-      if (!content) throw new Error('Chat message cannot be blank');
+      if (!content && !input.attachment) {
+        throw new Error('Chat message cannot be blank');
+      }
       const message = Object.freeze({
         id: dependencies.createId(),
         clientMessageId: input.clientMessageId ?? null,
@@ -102,6 +104,7 @@ export function createChatHistoryStore(
         source: input.source,
         status: input.status ?? 'completed',
         createdAt: dependencies.now().toISOString(),
+        ...(input.attachment ? { attachment: input.attachment } : {}),
       });
       messages.push(message);
       bump();

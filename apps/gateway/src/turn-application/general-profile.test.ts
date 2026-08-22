@@ -71,6 +71,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({ command, turn });
@@ -88,6 +90,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -113,6 +117,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -129,6 +135,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -151,6 +159,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -169,6 +179,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations([]),
       [],
       'owner',
+      null,
+      [],
     );
     const guard = profile.createOutputGuard?.();
 
@@ -189,6 +201,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodes,
       ['knowledge.lookup'],
       'contributor',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({ command, turn });
@@ -218,6 +232,8 @@ describe('Gateway General Profile Tool Policy', () => {
       nodeInvocations(['device.status']),
       ['knowledge.lookup'],
       'owner',
+      null,
+      [],
     );
 
     const plan = await profile.prepare({

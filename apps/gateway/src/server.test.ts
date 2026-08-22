@@ -688,9 +688,22 @@ describe('Gateway HTTP composition root', () => {
     const desktopRun = runs.at(-1);
     const resolvedCapabilities = desktopRun!.envelope.capabilities.capabilities;
     expect(desktopRun?.envelope.connection.adapterId).toBe('educanvas.desktop');
-    expect(resolvedCapabilities).toHaveLength(6);
+    /* DP10：桌面 manifest 升级到 v2，新增 input.image/input.file。 */
+    expect(resolvedCapabilities).toHaveLength(8);
     expect(resolvedCapabilities).toContainEqual({
       name: 'input.text',
+      risk: 'l0',
+      version: '1',
+      constraints: {},
+    });
+    expect(resolvedCapabilities).toContainEqual({
+      name: 'input.image',
+      risk: 'l0',
+      version: '1',
+      constraints: {},
+    });
+    expect(resolvedCapabilities).toContainEqual({
+      name: 'input.file',
       risk: 'l0',
       version: '1',
       constraints: {},
@@ -790,7 +803,7 @@ describe('Gateway HTTP composition root', () => {
       conversationId: 'conversation:1',
       parts: [{ type: 'text', text: '你好' }],
       capabilities: {
-        manifestVersion: '1',
+        manifestVersion: '2',
         capabilities: ['input.text', 'output.unproven'],
       },
     });
@@ -804,7 +817,7 @@ describe('Gateway HTTP composition root', () => {
       notebookId: 'notebook:1',
       conversationId: 'conversation:1',
       parts: [{ type: 'text', text: '你好' }],
-      capabilities: { manifestVersion: '2', capabilities: ['input.text'] },
+      capabilities: { manifestVersion: '3', capabilities: ['input.text'] },
     });
     expect(wrongVersion.status).toBe(400);
   });
