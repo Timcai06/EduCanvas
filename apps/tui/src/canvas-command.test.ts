@@ -50,7 +50,7 @@ describe('TuiCanvasCommand', () => {
     };
     const command = new TuiCanvasCommand(
       client,
-      'http://127.0.0.1:3101',
+      'http://127.0.0.1:3000',
       openWeb,
       out,
       vi.fn(),
@@ -60,7 +60,7 @@ describe('TuiCanvasCommand', () => {
     expect(out).toHaveBeenCalledWith(expect.stringContaining('实验结果'));
     expect(await command.handle('/canvas 1', conversation)).toBe(true);
     expect(openWeb).toHaveBeenCalledWith(
-      `http://127.0.0.1:3101/open?token=${'h'.repeat(43)}`,
+      `http://127.0.0.1:3000/open?token=${'h'.repeat(43)}`,
     );
     expect(client.createHandoff).toHaveBeenCalledWith('conversation:1');
   });
@@ -72,7 +72,7 @@ describe('TuiCanvasCommand', () => {
     };
     const command = new TuiCanvasCommand(
       client,
-      'http://127.0.0.1:3101',
+      'http://127.0.0.1:3000',
       vi.fn(),
       vi.fn(),
       vi.fn(),

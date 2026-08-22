@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gatewayCrossEntryConformance } from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
+import { gatewayCrossEntryConformance } from '../../../tooling/testing/fixtures/gateway-cross-entry-conformance';
 import {
   gatewayOperationEventSchema,
   isGatewayTerminalEvent,

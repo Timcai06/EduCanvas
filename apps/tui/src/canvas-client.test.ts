@@ -39,7 +39,7 @@ function input(overrides: Record<string, unknown> = {}) {
     resource: resource(),
     currentNotebookId: 'notebook:1',
     conversationId: 'conversation:1',
-    webBaseUrl: 'http://127.0.0.1:3101',
+    webBaseUrl: 'http://127.0.0.1:3000',
     issueHandoff: vi.fn(async () => ({
       token,
       expiresAt: '2026-08-04T00:02:00.000Z',
@@ -100,7 +100,7 @@ describe('openTuiCanvasResource', () => {
       expiresAt: '2026-08-04T00:02:00.000Z',
     });
     expect(result.kind === 'web_handoff' ? result.url : '').toBe(
-      `http://127.0.0.1:3101/open?token=${token}`,
+      `http://127.0.0.1:3000/open?token=${token}`,
     );
     expect(JSON.stringify(result)).not.toContain('source:1');
     expect(request.issueHandoff).toHaveBeenCalledWith('conversation:1');

@@ -6,7 +6,7 @@ import {
 import {
   encodeGatewayConformanceNdjson,
   gatewayCrossEntryConformance,
-} from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
+} from '../../../tooling/testing/fixtures/gateway-cross-entry-conformance';
 import { GatewayClient } from './client';
 
 /**

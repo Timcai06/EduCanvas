@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     >['connections'] = [];
     const canvasCommand = new TuiCanvasCommand(
       client,
-      process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101',
+      process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3000',
       openWeb,
       (text) => process.stdout.write(text),
       (text) => process.stderr.write(text),
@@ -405,7 +405,7 @@ async function main(): Promise<void> {
         }
         if (line === '/web') {
           const webBase =
-            process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3101';
+            process.env.EDUCANVAS_WEB_URL?.trim() || 'http://127.0.0.1:3000';
           try {
             const handoff = await client.createHandoff(current.conversationId);
             const handoffUrl = `${webBase.replace(/\/$/, '')}/open?token=${encodeURIComponent(handoff.token)}`;

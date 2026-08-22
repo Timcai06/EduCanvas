@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 import { type GatewayOperationEvent } from '@educanvas/gateway-core';
-import { gatewayCrossEntryConformance } from '../../../../tooling/test-fixtures/gateway-cross-entry-conformance';
+import { gatewayCrossEntryConformance } from '../../../../tooling/testing/fixtures/gateway-cross-entry-conformance';
 import { gatewayToLegacy } from './turn-application-projection';
 
 async function project(events: readonly GatewayOperationEvent[]) {

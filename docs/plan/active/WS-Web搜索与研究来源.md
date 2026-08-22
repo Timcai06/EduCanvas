@@ -141,13 +141,13 @@ WS00-WS07 → WS08 → WS09
   - `apps/web/server/tools/web-search-provider.ts` — 保留旧 Tavily `{ results }` 契约的兼容适配层
   - `apps/web/server/tools/web-search.ts` — resolveWebSearchTool now uses SearchService + SearchProviderRegistry
   - `apps/web/server/tools/web-search.test.ts` — 26 tests covering primary success, timeout/network/429/500 failover, budget cancellation, cooldown, provider validation, compatibility, query dedup and candidate caps
-  - `.env.example`、`tooling/env-check.mjs`、`tooling/search-env.mjs`、`tooling/env-check.test.mjs` — 搜索 Provider 配置闭合、URL 与秘密形状校验
+  - `config/env/local.env.example`、`tooling/local/env-check.mjs`、`tooling/local/search-env.mjs`、`tooling/local/env-check.test.mjs` — 搜索 Provider 配置闭合、URL 与秘密形状校验
 - 验证结果：
   - `pnpm typecheck` — clean
   - `pnpm lint` — clean (0 errors, 0 warnings)
   - `pnpm --filter @educanvas/web test` — 1737/1737 通过（236 files）
   - `pnpm --filter @educanvas/web exec vitest run server/tools/web-search.test.ts` — 26/26 通过
-  - `node --test tooling/env-check.test.mjs` — 26/26 通过
+  - `node --test tooling/local/env-check.test.mjs` — 26/26 通过
   - `git diff --check` — clean
   - Prettier formatting — clean
   - `pnpm test:unit` 未计入 PASS：当前机器的 `local-core-cleanup` / `local-orchestrator` 进程夹具失败并超过 12 分钟；WS02 所属 Web 全包与配置测试已独立通过，最终全仓结果交由 CI 判定
@@ -325,7 +325,7 @@ WS00-WS07 → WS08 → WS09
 
 完成标准：全部必需证据可复现；未验证项明确保留，计划完成后归档。
 
-验收记录：[`docs/06-quality/23-WS-Web搜索真实环境验收.md`](../../06-quality/23-WS-Web搜索真实环境验收.md)。自动化负责人只回写确定性测试和 CI 事实；真实 Provider、真实公开网页与电脑浏览器视觉结论必须由项目负责人 tim 签署。
+验收记录：[`docs/06-quality/evidence/23-WS-Web搜索真实环境验收.md`](../../06-quality/evidence/23-WS-Web搜索真实环境验收.md)。自动化负责人只回写确定性测试和 CI 事实；真实 Provider、真实公开网页与电脑浏览器视觉结论必须由项目负责人 tim 签署。
 
 ## 七、验证矩阵
 

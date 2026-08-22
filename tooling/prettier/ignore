@@ -1,0 +1,13 @@
+../../.git
+../../**/.next
+../../**/node_modules
+../../**/dist
+../../**/build
+../../**/coverage
+../../**/.turbo
+../../**/output
+../../**/out
+../../**/tmp
+../../**/temp
+../../apps/web/.next
+../../apps/web/next-env.d.ts

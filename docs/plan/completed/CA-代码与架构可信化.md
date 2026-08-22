@@ -45,7 +45,7 @@
   `apps/desktop/out/**` 生成 bundle 返回 1，未修改生成物，不能写成全绿。
 - 按项目负责人指示，集成候选没有重跑移动 Chromium 或 Firefox；Safari、真实麦克风、真实
   Provider/MinerU、远端 nightly 与发布环境继续标记为未验证，不阻塞本地竞赛范围结档。
-- 完整联合证据见[RM/CA 最终集成交付与结档证据](../../06-quality/22-RM-CA最终集成交付与结档证据.md)。
+- 完整联合证据见[RM/CA 最终集成交付与结档证据](../../06-quality/evidence/22-RM-CA最终集成交付与结档证据.md)。
 
 ## 一、执行结论
 

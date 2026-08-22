@@ -15,7 +15,7 @@ const processCache = globalThis as typeof globalThis & {
 function createDb() {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error('DATABASE_URL 未设置，请复制 .env.example 为 .env 并填写');
+    throw new Error('DATABASE_URL 未设置，请先运行 pnpm env:init 并填写 .env');
   }
   return drizzle(postgres(url), { schema });
 }

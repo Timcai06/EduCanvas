@@ -9,7 +9,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "lint": "prettier --check \"src/**/*.ts\"",
+    "lint": "prettier --config ../../tooling/prettier/config.json --ignore-path ../../tooling/prettier/ignore --check \"src/**/*.ts\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:coverage": "vitest run --coverage"

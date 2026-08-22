@@ -71,7 +71,7 @@ export function readGatewayConfig(
   if (localUserId.length > 160) {
     throw new Error('EDUCANVAS_LOCAL_USER_ID 最多 160 字符');
   }
-  // 实时语音 WS 握手 Origin 白名单；默认覆盖本地 Web（3101，见 README）
+  // 实时语音 WS 握手 Origin 白名单；默认覆盖本地 Web（3000，见 README）
   // 的 127.0.0.1/localhost 两种访问形态。配置值逐个严格规范化：带路径、
   // 凭据或非法 URL 的项直接使配置失败（fail-closed）。
   const configured = (
@@ -90,7 +90,7 @@ export function readGatewayConfig(
           }
           return normalized;
         })
-      : ['http://127.0.0.1:3101', 'http://localhost:3101'];
+      : ['http://127.0.0.1:3000', 'http://localhost:3000'];
   return {
     host: env.EDUCANVAS_GATEWAY_HOST?.trim() || '127.0.0.1',
     port,

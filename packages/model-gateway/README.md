@@ -20,7 +20,7 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 - `config-vision.ts` 只负责图片输入专用 Provider 的解析；它与主 Provider 不共享 Base URL 与 Key；
 - 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
 
-`tooling/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行
+`tooling/architecture/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行
 400 行可读性门禁。新增 Provider 或 SDK Adapter 必须新建独立模块，不得把协议、网络、
 配置选择和测试重新堆回同一文件。
 
@@ -41,7 +41,7 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 
 ## 配置闸门
 
-配置由组合根显式传给 `parseModelGatewayConfiguration(environment)`；包本身不读取 `process.env`。完整变量见仓库根目录 `.env.example`。
+配置由组合根显式传给 `parseModelGatewayConfiguration(environment)`；包本身不读取 `process.env`。完整变量见 `config/env/local.env.example`。
 
 - 未配置 `MODEL_GATEWAY_PROVIDER` 时返回 disabled，不静默回退脚本回答；
 - `MODEL_GATEWAY_RUNTIME`只接受`native | ai-sdk`，缺省为`native`；运行期不会在两者之间静默fallback；

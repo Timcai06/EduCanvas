@@ -47,7 +47,7 @@ import { registerDesktopResultActions } from './result-opener';
 const WEB_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
   process.env['EDUCANVAS_DESKTOP_API_BASE'] ??
-  'http://127.0.0.1:3101';
+  'http://127.0.0.1:3000';
 const GATEWAY_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
 

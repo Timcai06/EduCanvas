@@ -1,6 +1,6 @@
 import { type GatewayOperationEvent } from '@educanvas/gateway-core';
 import { describe, expect, it } from 'vitest';
-import { gatewayCrossEntryConformance } from '../../../tooling/test-fixtures/gateway-cross-entry-conformance';
+import { gatewayCrossEntryConformance } from '../../../tooling/testing/fixtures/gateway-cross-entry-conformance';
 import { TurnRenderer } from './renderer';
 import { createTheme } from './theme';
 

@@ -62,7 +62,7 @@ jobs:
 
       - name: Full UI review (@ui, Chromium + Firefox)
         id: ui_review
-        run: pnpm exec playwright test --config playwright.ui.config.ts
+        run: pnpm exec playwright test --config tooling/playwright/playwright.ui.config.ts
 
       - name: Summarize retries and coverage matrix
         if: always()

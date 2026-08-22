@@ -2,11 +2,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { createE2eWorkerLogAudit } from '../../tooling/e2e-worker-log-audit.mjs';
+import { createE2eWorkerLogAudit } from '../../tooling/e2e/e2e-worker-log-audit.mjs';
 import {
   createLineSplitter,
   tryParseLogRecord,
-} from '../../tooling/local-process-pipe.mjs';
+} from '../../tooling/local/local-process-pipe.mjs';
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];

@@ -100,7 +100,7 @@ EduCanvas 已落地学习者画像、6–12 节点 Notebook Goal、无答案短�
 | Canvas 统一资源、媒体闭环、Tier 2 Runtime | 对象删除闭环（O03/O04）              | 通用 Agent 产品知识 RAG    |
 | PostgreSQL FTS + pgvector 混合检索        | per-capability Provider              | 生产 SLO 与教师发布        |
 
-事实状态与原子任务以 [Active 计划索引](docs/plan/active/README.md) 为准；路线方向见 [项目路线图](docs/10-planning/01-路线图.md)。
+事实状态与原子任务以 [Active 计划索引](docs/plan/active/README.md) 为准；路线方向见 [项目路线图](docs/plan/路线图.md)。
 
 ## 快速开始
 
@@ -115,7 +115,7 @@ EduCanvas 已落地学习者画像、6–12 节点 Notebook Goal、无答案短�
 ```bash
 git clone https://github.com/Timcai06/EduCanvas.git
 cd EduCanvas
-cp .env.example .env
+pnpm env:init
 make setup
 make all
 ```
@@ -124,7 +124,7 @@ make all
 Docker, and `.env`. A model Provider is optional for the local shell; once any primary
 Provider field is configured, `pnpm env:check` requires the complete configuration group.
 
-启动后访问 Web <http://localhost:3101>；Gateway 默认监听 <http://127.0.0.1:3200>。
+启动后访问 Web <http://localhost:3000>；Gateway 默认监听 <http://127.0.0.1:3200>。
 `make all` 默认安静启动：Database/Gateway/Web/Worker 全部就绪后只输出约 16 行
 阶段摘要，运行日志写入独立会话目录 `tmp/logs/local/<run-id>/`（JSONL，可按
 服务/级别/关联 ID 过滤）。
@@ -149,7 +149,7 @@ make stop-db      # 只停止数据库容器
 make help         # 查看全部命令
 ```
 
-> Windows 用户请阅读 [Operations 文档](docs/07-operations/)；首次运行先执行 `corepack enable`、安装依赖并从 `.env.example` 创建 `.env`，再使用仓库根目录的 `Start EduCanvas.cmd`。
+> Windows 用户请阅读 [Operations 文档](docs/07-operations/)；首次运行先执行 `corepack enable`、安装依赖并运行 `pnpm env:init`，再使用仓库根目录的 `Start EduCanvas.cmd`。
 
 <details>
 <summary><strong>Provider 配置</strong></summary>
@@ -227,6 +227,23 @@ EduCanvas/
 │   ├── teaching-runtime/
 │   └── db/            # Drizzle schema, migrations, repositories
 ├── docs/              # product, architecture, data, ADRs and plans
+├── config/
+│   └── env/           # reviewed local environment templates
+├── infrastructure/
+│   └── compose/       # local infrastructure definitions
+├── tooling/
+│   ├── local/         # local startup, environment and process tooling
+│   ├── quality/       # repository policy and release gates
+│   ├── e2e/           # cross-system test support
+│   ├── architecture/  # architecture boundary verification
+│   ├── testing/       # shared fixtures and tooling test discovery
+│   ├── make/          # Makefile implementation fragments
+│   ├── playwright/    # browser test configurations and CI variants
+│   ├── prettier/      # formatting configuration and ignore policy
+│   └── terminal/      # shared terminal presentation primitives
+├── tests/             # cross-system browser and integration journeys
+├── scripts/
+│   └── windows/       # PowerShell startup implementations
 └── Makefile           # local development entry point
 ```
 
@@ -234,16 +251,16 @@ EduCanvas/
 
 ## 文档导航
 
-| 主题             | 入口                                                                                  |
-| ---------------- | ------------------------------------------------------------------------------------- |
-| 文档总览         | [docs/README.md](docs/README.md)                                                      |
-| 产品定义         | [docs/01-product/01-产品定义.md](docs/01-product/01-产品定义.md)                      |
-| 系统架构         | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md)    |
-| Agent 编排       | [docs/03-ai/01-智能体编排边界.md](docs/03-ai/01-智能体编排边界.md)                    |
-| RAG 与 Embedding | [docs/03-ai/04-检索增强与嵌入.md](docs/03-ai/04-检索增强与嵌入.md)                    |
-| 数据设计         | [docs/04-data/02-数据设计.md](docs/04-data/02-数据设计.md)                            |
-| ADR              | [docs/09-decisions/README.md](docs/09-decisions/README.md)                            |
-| 路线图与任务     | [长期路线](docs/10-planning/01-路线图.md) · [Active 计划](docs/plan/active/README.md) |
+| 主题             | 入口                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| 文档总览         | [docs/README.md](docs/README.md)                                                   |
+| 产品定义         | [docs/01-product/01-产品定义.md](docs/01-product/01-产品定义.md)                   |
+| 系统架构         | [docs/02-architecture/01-系统架构现状.md](docs/02-architecture/01-系统架构现状.md) |
+| Agent 编排       | [docs/03-ai/01-智能体编排边界.md](docs/03-ai/01-智能体编排边界.md)                 |
+| RAG 与 Embedding | [docs/03-ai/04-检索增强与嵌入.md](docs/03-ai/04-检索增强与嵌入.md)                 |
+| 数据设计         | [docs/04-data/02-数据设计.md](docs/04-data/02-数据设计.md)                         |
+| ADR              | [docs/09-decisions/README.md](docs/09-decisions/README.md)                         |
+| 路线图与任务     | [长期路线](docs/plan/路线图.md) · [Active 计划](docs/plan/active/README.md)        |
 
 ## 安全与贡献
 

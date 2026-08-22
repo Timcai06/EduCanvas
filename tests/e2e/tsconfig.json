@@ -6,5 +6,5 @@
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["node", "@playwright/test"]
   },
-  "include": ["./**/*.ts", "../../tooling/e2e-worker-log-audit.mjs"]
+  "include": ["./**/*.ts", "../../tooling/e2e/e2e-worker-log-audit.mjs"]
 }
