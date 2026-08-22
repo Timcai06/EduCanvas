@@ -39,7 +39,7 @@ describe('desktop native auth', () => {
       buildDesktopAuthorizationUrl('http://remote.example', request),
     ).toThrow('desktop_web_url_insecure');
     expect(() =>
-      buildDesktopAuthorizationUrl('http://127.0.0.1:3101', request),
+      buildDesktopAuthorizationUrl('http://127.0.0.1:3000', request),
     ).not.toThrow();
   });
 

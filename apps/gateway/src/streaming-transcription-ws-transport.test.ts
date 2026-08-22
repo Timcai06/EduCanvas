@@ -432,7 +432,7 @@ describe('V12 transport 握手授权', () => {
         const normalized = normalizeWsAllowedOrigin(origin);
         return (
           normalized !== null &&
-          ['http://127.0.0.1:3101', 'http://localhost:3101'].includes(
+          ['http://127.0.0.1:3000', 'http://localhost:3000'].includes(
             normalized,
           )
         );
@@ -440,13 +440,13 @@ describe('V12 transport 握手授权', () => {
     });
     const ticket = issueTicket(ctx);
     // 合法 Origin 通过。
-    const ok = connect(ctx, { ticket, origin: 'http://localhost:3101' });
+    const ok = connect(ctx, { ticket, origin: 'http://localhost:3000' });
     await open(ok);
     // 带路径的 Origin 被规范化拒绝。
     const forgedTicket = issueTicket(ctx);
     const bad = connect(ctx, {
       ticket: forgedTicket,
-      origin: 'http://localhost:3101/sneaky',
+      origin: 'http://localhost:3000/sneaky',
     });
     await expectHandshakeRejection(bad, 403, 'FORBIDDEN');
   });

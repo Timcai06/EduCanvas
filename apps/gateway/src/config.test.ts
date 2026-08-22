@@ -11,8 +11,8 @@ describe('Gateway config', () => {
       sessionSecret: null,
       localOnboardingEnabled: false,
       localUserId: 'local:owner',
-      // 本地 Web 默认 3101（README），127.0.0.1 与 localhost 两种访问形态。
-      wsAllowedOrigins: ['http://127.0.0.1:3101', 'http://localhost:3101'],
+      // 本地 Web 默认 3000（README），127.0.0.1 与 localhost 两种访问形态。
+      wsAllowedOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000'],
       terminalReconciliationMode: 'enabled',
     });
   });
@@ -21,14 +21,14 @@ describe('Gateway config', () => {
     expect(
       readGatewayConfig({
         EDUCANVAS_GATEWAY_WS_ALLOWED_ORIGINS:
-          'https://app.example.com, http://localhost:3101/',
+          'https://app.example.com, http://localhost:3000/',
       }).wsAllowedOrigins,
-    ).toEqual(['https://app.example.com', 'http://localhost:3101']);
+    ).toEqual(['https://app.example.com', 'http://localhost:3000']);
     expect(
       readGatewayConfig({
         EDUCANVAS_GATEWAY_WS_ALLOWED_ORIGINS: '  ,  ',
       }).wsAllowedOrigins,
-    ).toEqual(['http://127.0.0.1:3101', 'http://localhost:3101']);
+    ).toEqual(['http://127.0.0.1:3000', 'http://localhost:3000']);
   });
 
   it('拒绝带路径/凭据/非法 URL 的 Origin 配置', () => {
@@ -51,8 +51,8 @@ describe('Gateway config', () => {
   });
 
   it('normalizeWsAllowedOrigin 规范化合法 Origin 并拒绝非法形态', () => {
-    expect(normalizeWsAllowedOrigin('http://localhost:3101/')).toBe(
-      'http://localhost:3101',
+    expect(normalizeWsAllowedOrigin('http://localhost:3000/')).toBe(
+      'http://localhost:3000',
     );
     expect(normalizeWsAllowedOrigin('HTTPS://EXAMPLE.COM')).toBe(
       'https://example.com',

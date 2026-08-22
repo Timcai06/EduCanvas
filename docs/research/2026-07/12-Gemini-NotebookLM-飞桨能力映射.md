@@ -344,7 +344,7 @@ Provider dogfood。
 
 - [产品定义](../../01-product/01-产品定义.md)
 - [学生端核心 UI/UX 规格](../../01-product/02-学生界面规范.md)
-- [项目路线图](../../10-planning/01-路线图.md)
+- [项目路线图](../../plan/路线图.md)
 - [`@educanvas/web` 当前实现边界](../../../apps/web/README.md)
 - [`@educanvas/canvas-protocol` 当前实现边界](../../../packages/canvas-protocol/README.md)
 - [可信学习投影与下一节点推荐](../../../packages/teaching-core/src/learning-projection.ts)

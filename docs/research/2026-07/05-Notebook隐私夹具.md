@@ -3,7 +3,7 @@
 - 状态：`research`
 - 核验日期：2026-07-21
 - 适用分支：`test/20260721-notebook-privacy-fixture`
-- 测试入口：`packages/db/src/notebook-privacy.integration.test.ts`、`tooling/notebook-privacy-fixture.test.mjs`
+- 测试入口：`packages/db/src/notebook-privacy.integration.test.ts`、`tooling/architecture/notebook-privacy-fixture.test.mjs`
 - 决策状态：研究契约通过；尚未实现的能力保持 unavailable，不等于生产能力已完成
 
 ## 一、要证明的边界

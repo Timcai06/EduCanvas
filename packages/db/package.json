@@ -17,7 +17,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "lint": "prettier --check \"src/**/*.ts\" \"drizzle.config.ts\" \"vitest*.config.ts\"",
+    "lint": "prettier --config ../../tooling/prettier/config.json --ignore-path ../../tooling/prettier/ignore --check \"src/**/*.ts\" \"drizzle.config.ts\" \"vitest*.config.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",

@@ -20,6 +20,7 @@
 ## Commands
 
 - `pnpm env:check` validates the local `.env` without printing secrets.
+- `pnpm env:init` creates `.env` from the reviewed template and never overwrites an existing file.
 - `pnpm lint` runs workspace lint plus repository-wide Prettier coverage.
 - `pnpm typecheck` runs all workspace type checks.
 - `pnpm test:tooling` runs cross-platform boundary tests.

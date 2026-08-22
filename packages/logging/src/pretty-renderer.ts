@@ -9,7 +9,7 @@ import type { EduCanvasLogRecord } from './types.js';
  * - 路径/ID/端口弱化色；不使用 emoji/渐变/巨型 ASCII；
  * - 中文按显示宽度 2 计算对齐，不能直接用 padEnd 假设宽度 1。
  *
- * 与 tooling/local-pretty.mjs 保持输出等价（tooling-parity.test.ts 锁定）：
+ * 与 tooling/local/local-pretty.mjs 保持输出等价（tooling-parity.test.ts 锁定）：
  * 颜色码、字段分隔、时长格式、宽度计算必须逐字节一致。
  */
 

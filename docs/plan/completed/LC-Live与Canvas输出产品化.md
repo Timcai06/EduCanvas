@@ -52,7 +52,7 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 - `web_app.v1` 使用自包含 manifest、hash、预算与诊断进入 ADR-0019 Tier 2 Runtime；非空依赖、
   外部网络、未知 schema 和越权访问均 fail closed。
 - C01-C07 的实现与自动化证据见
-  [Canvas C01-C07 交付证据](../../06-quality/14-Canvas-C01-C07交付证据.md)；真实产品验收仍属于 C08。
+  [Canvas C01-C07 交付证据](../../06-quality/evidence/14-Canvas-C01-C07交付证据.md)；真实产品验收仍属于 C08。
 
 ## 三、范围与非目标
 
@@ -129,7 +129,7 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 | L05 音频与字幕时钟      | `PASS` | 逐帧消费 ACK、有界 PCM 窗口、最终 ACK、严格 PCM 校验、Web Audio 排期字幕和跨轮时长校准已由 PR #361 远端 CI 验证并合入主线。                                                                                                                                                                                               |
 | L06 插话和工具连续性    | `PASS` | 有效 partial 即原子失效 Speech Session/本地队列，并按稳定 operation identity 最多一次取消旧 Agent；ASR final 等旧轮终态后只提交最新一条。工具真实状态不改写 Assistant 身份或文本游标，failed 不被迟到 completed 覆盖。PR #363 的静态质量、测试、E2E 与 secret scan 已通过并合入主线。                                     |
 | L07 Live 壳连续体验     | `PASS` | 入室以当前 Assistant 游标为 baseline 接管后续 delta，出室只卸载语音壳；主字幕只显示用户 partial 或 PCM 排期 cue，完整回答留在普通消息列。来源、引用、Artifact 与工具继续来自 General/Learning 控制器。PR #363 已通过远端 CI 并合入主线。                                                                                  |
-| L08 Live 性能与真人验收 | `PASS` | fake 单调时钟 harness 已逐项阻断六项预算，空指标 fail closed；项目负责人已于 2026-08-12 完成并签署 Chrome/Safari 真麦克风、真实 Provider 连续对话、工具、插话与失败恢复验收。未记录的精确延迟不补造，详见[验收记录](../../06-quality/13-Live性能与真人验收记录.md)。                                                      |
+| L08 Live 性能与真人验收 | `PASS` | fake 单调时钟 harness 已逐项阻断六项预算，空指标 fail closed；项目负责人已于 2026-08-12 完成并签署 Chrome/Safari 真麦克风、真实 Provider 连续对话、工具、插话与失败恢复验收。未记录的精确延迟不补造，详见[验收记录](../../06-quality/evidence/13-Live性能与真人验收记录.md)。                                                      |
 
 ### Live 体验收口（LX）
 
@@ -158,7 +158,7 @@ Live 只投影这些 Artifact 的真实状态、预览和打开入口。两条�
 
 | 任务                     | 状态   | 交付与验收                                                                                                                                                                                                                                               |
 | ------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| X01 Live × Canvas        | `PASS` | Live 投影 canonical Assistant delta 与工具/Artifact 真实状态，就绪产物经同一 CanvasResource gate 打开；朗读净化阻止代码、公式、长 URL、链接目标和原始 JSON 进入 TTS。自动化证据见[联合收口记录](../../06-quality/15-LC联合收口自动化证据.md)。           |
+| X01 Live × Canvas        | `PASS` | Live 投影 canonical Assistant delta 与工具/Artifact 真实状态，就绪产物经同一 CanvasResource gate 打开；朗读净化阻止代码、公式、长 URL、链接目标和原始 JSON 进入 TTS。自动化证据见[联合收口记录](../../06-quality/evidence/15-LC联合收口自动化证据.md)。           |
 | X02 多模态 provenance    | `PASS` | Artifact Tool 从服务端已物化且实际进入本轮的 Asset plan 冻结 `assetId + versionId + representation identity`；CanvasResource 投影精确版本引用，打开原件仍逐次重授权，不以 provenance 授权。证据同上。                                                    |
 | X03 CI 路由与证据        | `PASS` | 契约/unit/fake-provider 按 changed-files 运行；PR smoke 有界覆盖 Live、Artifact、Canvas 资源访问；真实 Provider canary 与完整浏览器矩阵不在无关 PR 重跑，报告明确区分自动化、fake、真实 Provider 和真人证据。                                            |
 | X04 Canonical 回写与归档 | `PASS` | 稳定产品、架构、前后端、测试与运维事实已经回写；C08 已由项目负责人签署，相关 Web 测试、typecheck、lint、格式与 Ego 真实布局检查通过。项目负责人明确授权本收口提交以管理员身份直接合并且不等待重复 CI，未完成体验项全部转入 RM，本计划移入 `completed/`。 |
@@ -238,9 +238,9 @@ API Key、学生内容、Provider 原始响应或音频。
 | -------------------- | ------------------------------------------------------------------------------------------------ | ------ |
 | LC00-LC01 基线与契约 | 代码审计、测量点、失败矩阵与契约矩阵 PR                                                          | `pass` |
 | L01-L08 Live         | L01-L07 已合入；L08 自动化报告与真人记录                                                         | `pass` |
-| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/14-Canvas-C01-C07交付证据.md)         | `pass` |
+| C01-C07 Canvas       | [协议、Renderer、Runtime、版本与安全证据](../../06-quality/evidence/14-Canvas-C01-C07交付证据.md)         | `pass` |
 | C08 Canvas 验收      | 项目负责人签署；Ego 验证 mind map 分栏/全屏布局、27 节点可见与冗余控件移除                       | `pass` |
-| X01-X03 联合验收     | [Live/Canvas、provenance、安全与 CI 路由自动化证据](../../06-quality/15-LC联合收口自动化证据.md) | `pass` |
+| X01-X03 联合验收     | [Live/Canvas、provenance、安全与 CI 路由自动化证据](../../06-quality/evidence/15-LC联合收口自动化证据.md) | `pass` |
 | X04 结档             | canonical diff、受影响检查、项目负责人管理员直合授权与 completed 归档                            | `pass` |
 
 ## 十三、收尾检查表

@@ -1044,9 +1044,9 @@ R07 为核验既有实现（web-turn.ts 与 turn-application-projection.ts 在�
 | db import-boundary                    | `packages/db/src/import-boundary.test.ts`                                  | 13     | ✅ R04/R05       |
 | turn-application composition-boundary | `packages/agent-runtime/src/turn-application.composition-boundary.test.ts` | 9      | ✅ R06（新增 6） |
 | turn-application consistency          | `packages/agent-runtime/src/turn-application.consistency.test.ts`          | 5      | ✅ R06           |
-| Turn composition production boundary  | `tooling/turn-composition-boundary.test.mjs`                               | 2      | ✅ R00           |
-| Telemetry production boundary         | `tooling/telemetry-composition-boundary.test.mjs`                          | 2      | ✅ R03           |
-| Runtime module size boundary          | `tooling/runtime-module-size-boundary.test.mjs`                            | 3      | ✅ R06（已更新） |
+| Turn composition production boundary  | `tooling/architecture/turn-composition-boundary.test.mjs`                  | 2      | ✅ R00           |
+| Telemetry production boundary         | `tooling/architecture/telemetry-composition-boundary.test.mjs`             | 2      | ✅ R03           |
+| Runtime module size boundary          | `tooling/architecture/runtime-module-size-boundary.test.mjs`               | 3      | ✅ R06（已更新） |
 
 #### R08.6 Codex 复核结论
 

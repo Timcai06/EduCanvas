@@ -52,8 +52,11 @@ export function classifyChangedPaths(
     '.github',
     '.vscode',
     'apps',
+    'config',
     'docs',
+    'infrastructure',
     'packages',
+    'scripts',
     'tests',
     'tooling',
   ]);
@@ -63,30 +66,19 @@ export function classifyChangedPaths(
       ? !knownRoots.has(root)
       : ![
           '.editorconfig',
-          '.env.example',
           '.gitattributes',
           '.gitignore',
           '.gitleaksignore',
           '.nvmrc',
-          '.prettierignore',
-          '.prettierrc',
           'AGENTS.md',
           'CLAUDE.md',
           'Makefile',
           'README.md',
           'Start EduCanvas.cmd',
           'Stop EduCanvas.cmd',
-          'docker-compose.yml',
           'package.json',
-          'playwright.config.ts',
-          'playwright.pr.config.ts',
-          'playwright.runtime-composition.config.ts',
-          'playwright.runtime.config.ts',
-          'playwright.ui.config.ts',
           'pnpm-lock.yaml',
           'pnpm-workspace.yaml',
-          'start-educanvas.ps1',
-          'stop-educanvas.ps1',
           'tsconfig.base.json',
           'turbo.json',
         ].includes(path);
@@ -115,14 +107,14 @@ export function classifyChangedPaths(
   const dbAffected = matchesAny(paths, [
     /^packages\/db\//,
     /^tests\/integration\//,
-    /^docker-compose\.yml$/,
+    /^infrastructure\/compose\/local\.yml$/,
   ]);
   const migrationAffected = matchesAny(paths, [
     /^packages\/db\/drizzle\//,
     /^packages\/db\/src\/schema\//,
     /^packages\/db\/src\/migrations\.integration\.test\.ts$/,
     /^tooling\/quality\/migration-(?:governance|integration|records)\.mjs$/,
-    /^tooling\/migration-(?:governance|records)\.test\.mjs$/,
+    /^tooling\/quality\/migration-(?:governance|records)\.test\.mjs$/,
   ]);
   const workerAffected = matchesAny(paths, [
     /^apps\/worker\//,
@@ -134,17 +126,17 @@ export function classifyChangedPaths(
   result.worker_integration = workerAffected;
   result.windows = matchesAny(paths, [
     /^(?:Start|Stop) EduCanvas\.cmd$/,
-    /^(?:start|stop)-educanvas\.ps1$/,
-    /^\.env\.example$/,
+    /^scripts\/windows\/(?:start|stop)-educanvas\.ps1$/,
+    /^config\/env\/local\.env\.example$/,
     /^apps\/node\//,
     /^packages\/(?:node-host|node-runtime)\//,
-    /^tooling\/(?:env-check|local-|web-dev|windows-|workspace-env)/,
+    /^tooling\/local\//,
   ]);
   result.runtime_pressure = matchesAny(paths, [
     /^apps\/web-runtime\//,
     /^packages\/(?:canvas-protocol|experiment-runtime|gateway-runtime)\//,
     /^apps\/web\/(?:app\/api\/runtime|features\/canvas|server\/runtime)/,
-    /^playwright\.runtime(?:-composition)?\.config\.ts$/,
+    /^tooling\/playwright\/playwright\.runtime(?:-composition)?\.config\.ts$/,
     /^tests\/e2e\/.*runtime/,
     /^tooling\/.*runtime/,
   ]);
@@ -157,10 +149,9 @@ export function classifyChangedPaths(
     /^apps\/(?:gateway|web|web-runtime)\//,
     /^packages\//,
     /^tests\/e2e\//,
-    /^playwright\..*\.config\.ts$/,
-    /^playwright\.config\.ts$/,
-    /^docker-compose\.yml$/,
-    /^tooling\/(?:e2e-|quality\/bundle-size)/,
+    /^tooling\/playwright\/playwright(?:\..+)?\.config\.ts$/,
+    /^infrastructure\/compose\/local\.yml$/,
+    /^tooling\/(?:e2e\/|quality\/bundle-size)/,
   ];
   result.e2e = paths.some(
     (path) =>

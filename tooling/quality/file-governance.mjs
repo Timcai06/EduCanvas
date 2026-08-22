@@ -11,43 +11,35 @@ const baselinePath = resolve(
   'tooling/quality/file-size-baseline.json',
 );
 
-const ROOT_FILES = new Set([
-  '.editorconfig',
-  '.env.example',
-  '.gitattributes',
-  '.gitignore',
-  '.gitleaksignore',
-  '.nvmrc',
-  '.prettierignore',
-  '.prettierrc',
-  'AGENTS.md',
-  'CLAUDE.md',
-  'Makefile',
-  'README.md',
-  'Start EduCanvas.cmd',
-  'Stop EduCanvas.cmd',
-  'docker-compose.yml',
-  'package.json',
-  'playwright.config.ts',
-  'playwright.pr.config.ts',
-  'playwright.runtime-composition.config.ts',
-  'playwright.runtime.config.ts',
-  'playwright.ui.config.ts',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'skills-lock.json',
-  'start-educanvas.ps1',
-  'stop-educanvas.ps1',
-  'tsconfig.base.json',
-  'turbo.json',
+export const ROOT_FILE_POLICY = new Map([
+  ['.editorconfig', 'editor discovery'],
+  ['.gitattributes', 'Git behavior'],
+  ['.gitignore', 'Git ignore policy'],
+  ['.gitleaksignore', 'secret scanning discovery'],
+  ['.nvmrc', 'Node version discovery'],
+  ['AGENTS.md', 'Codex instruction discovery'],
+  ['CLAUDE.md', 'Claude instruction discovery'],
+  ['Makefile', 'make command discovery'],
+  ['README.md', 'repository documentation entrypoint'],
+  ['Start EduCanvas.cmd', 'Windows double-click compatibility'],
+  ['Stop EduCanvas.cmd', 'Windows double-click compatibility'],
+  ['package.json', 'Node workspace entrypoint'],
+  ['pnpm-lock.yaml', 'dependency lock'],
+  ['pnpm-workspace.yaml', 'pnpm workspace discovery'],
+  ['skills-lock.json', 'agent skill lock discovery'],
+  ['tsconfig.base.json', 'workspace TypeScript base'],
+  ['turbo.json', 'Turborepo discovery'],
 ]);
 const TOP_LEVEL_DIRECTORIES = new Set([
   '.agents',
   '.github',
   '.vscode',
   'apps',
+  'config',
   'docs',
+  'infrastructure',
   'packages',
+  'scripts',
   'tests',
   'tooling',
 ]);
@@ -113,6 +105,7 @@ function technicalRole(path) {
 
 function lifecycle(path) {
   if (
+    path.startsWith('docs/archive/') ||
     path.startsWith('docs/plan/completed/') ||
     path.startsWith('docs/00-overview/snapshots/')
   )
@@ -140,10 +133,16 @@ export function pathViolations(path) {
   const violations = [];
   const parts = path.split('/');
   if (parts.length === 1) {
-    if (!ROOT_FILES.has(path))
+    if (!ROOT_FILE_POLICY.has(path))
       violations.push('unclassified repository-root file');
   } else if (!TOP_LEVEL_DIRECTORIES.has(parts[0])) {
     violations.push(`unclassified top-level directory: ${parts[0]}`);
+  }
+  if (/^tooling\/[^/]+$/.test(path)) {
+    violations.push('loose tooling-root file');
+  }
+  if (/^docs\/[^/]+$/.test(path) && path !== 'docs/README.md') {
+    violations.push('loose docs-root file');
   }
   if (path.startsWith('.vscode/') && !SHARED_VSCODE_FILES.has(path)) {
     violations.push('personal VS Code state must not be tracked');

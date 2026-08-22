@@ -18,7 +18,7 @@ EduCanvas 当前同时存在通用 `AgentToolRegistry` 与教学 `TeachingToolEx
 
 ## 二、夹具结构
 
-`tooling/tool-kernel-fixture.mjs` 是研究专用、无生产调用者的最小语义模型。四类 Adapter 只声明：
+`tooling/architecture/tool-kernel-fixture.mjs` 是研究专用、无生产调用者的最小语义模型。四类 Adapter 只声明：
 
 - `source`：`local | teaching | mcp | node`；
 - `capability`、`risk` 与 `effect`；

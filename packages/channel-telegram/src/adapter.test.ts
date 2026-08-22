@@ -135,7 +135,7 @@ describe('Telegram channel adapter', () => {
 
   it('把取消、能力不可用、Runtime失败与审批投影为明确安全降级', async () => {
     const { gatewayCrossEntryConformance } =
-      await import('../../../tooling/test-fixtures/gateway-cross-entry-conformance');
+      await import('../../../tooling/testing/fixtures/gateway-cross-entry-conformance');
 
     expect(
       projectTelegramOperation(gatewayCrossEntryConformance.cancelled),

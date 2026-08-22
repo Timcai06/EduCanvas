@@ -1,19 +1,51 @@
 {
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "prettier.configPath": "tooling/prettier/config.json",
+  "prettier.ignorePath": "tooling/prettier/ignore",
   "typescript.tsdk": "node_modules/typescript/lib",
   "eslint.workingDirectories": [{ "mode": "auto" }],
   "files.exclude": {
     "**/.DS_Store": true,
+    "**/.next": true,
+    "**/.pnpm-store": true,
     "**/.turbo": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/dist": true,
     "**/node_modules": true,
+    "**/out": true,
+    "**/*.tsbuildinfo": true,
+    ".agents": true,
+    ".claude": true,
+    ".codegraph": true,
+    ".codex": true,
+    ".omo": true,
     ".omx": true,
-    "output": true
+    ".playwright-mcp": true,
+    "output": true,
+    "tmp": true,
+    "uploads": true
   },
   "search.exclude": {
+    "**/.next": true,
+    "**/.pnpm-store": true,
     "**/.turbo": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/dist": true,
     "**/node_modules": true,
+    "**/out": true,
+    "**/*.tsbuildinfo": true,
+    ".agents": true,
+    ".claude": true,
+    ".codegraph": true,
+    ".codex": true,
+    ".omo": true,
     ".omx": true,
-    "output": true
+    ".playwright-mcp": true,
+    "output": true,
+    "tmp": true,
+    "uploads": true
   }
 }

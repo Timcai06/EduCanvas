@@ -331,13 +331,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate local environment example
-        run: pnpm env:check .env.example
+        run: pnpm env:check config/env/local.env.example
 
       - name: Parse Windows startup scripts
         shell: pwsh
         run: |
-          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'start-educanvas.ps1'))
-          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'stop-educanvas.ps1'))
+          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'scripts/windows/start-educanvas.ps1'))
+          [void][scriptblock]::Create((Get-Content -Raw -Encoding UTF8 'scripts/windows/stop-educanvas.ps1'))
 
       - name: Windows unit smoke
         run: pnpm --filter @educanvas/node-host test

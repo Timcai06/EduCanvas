@@ -4,7 +4,7 @@
 # Environment and secrets
 .env
 .env.*
-!.env.example
+!config/env/local.env.example
 !.env.local.example.deepseek
 *.pem
 *.key

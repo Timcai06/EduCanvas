@@ -8,12 +8,12 @@ import type { EduCanvasLogRecord } from './types.js';
 import {
   renderRecord as mjsRenderRecord,
   renderSummaryLine as mjsRenderSummaryLine,
-} from '../../../tooling/local-pretty.mjs';
+} from '../../../tooling/local/local-pretty.mjs';
 import {
   redactLegacyString,
   sanitizeLegacyLine,
   stripAnsi,
-} from '../../../tooling/legacy-sanitize.mjs';
+} from '../../../tooling/local/legacy-sanitize.mjs';
 
 /**
  * tooling（.mjs）与 packages/logging（TS）双份渲染/脱敏实现的契约测试。
