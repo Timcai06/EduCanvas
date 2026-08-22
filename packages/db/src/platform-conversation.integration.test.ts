@@ -472,7 +472,15 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         trustedSubjectId: 'web-source-user',
         operationId: started.turnId,
       }),
-    ).toEqual([]);
+    ).toMatchObject([
+      {
+        ordinal: 1,
+        assetId: firstAsset.descriptor.assetId,
+        assetVersionId: firstAsset.version.versionId,
+        label: '网页甲',
+        url: 'https://example.com/a',
+      },
+    ]);
     expect(
       await sources.listOwnedConversationCitations({
         conversationId: conversation.id,
