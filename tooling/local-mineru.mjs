@@ -1,35 +1,65 @@
 #!/usr/bin/env node
 /**
- * MinerU 文档结构化转换服务（mineru-api）本地管理。
- *
- * 为什么单独是一个脚本而不是并入 local-orchestrator：MinerU 是独立部署的
- * GPU Python 服务（venv ~/mineru-env，见 docs/research/2026-08/03-MinerU部署手册.md），
- * 不在 orchestrator 的进程树里，`make dev`/`make stop` 管不到它；且 nohup 进程
- * 不跨重启存活，机器重启后它不会自动回来。本脚本提供 start/status/stop 三命令，
- * 挂到 Makefile 的 make mineru / mineru-status / mineru-stop，作为与 make dev 一致的入口。
- *
- * 用法：node tooling/local-mineru.mjs <start|status|stop>
- * 环境变量覆盖（按需）：
- *   MINERU_HOST  监听地址，默认 127.0.0.1（安全默认：mineru-api 无内置认证，不绑 0.0.0.0）
- *   MINERU_PORT  端口，默认 8000（与 .env 的 MINERU_BASE_URL 对齐）
- *   MINERU_ENV   venv 目录，默认 ~/mineru-env
+ * MinerU 独立 GPU 服务本地管理。服务不属于 `make dev` 进程树，因此使用仓库根
+ * 状态文件记录本脚本启动的唯一 PID；停止前还会复验绝对可执行路径与监听参数，
+ * 绝不扫描或终止未记录的 mineru-api 进程。
  */
 
 import { spawn, execFileSync } from 'node:child_process';
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { existsSync, openSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
+const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const STATE_SCHEMA = 'educanvas.local-mineru.v1';
 const MINERU_HOST = process.env.MINERU_HOST ?? '127.0.0.1';
 const MINERU_PORT = process.env.MINERU_PORT ?? '8000';
-const MINERU_ENV = process.env.MINERU_ENV ?? path.join(homedir(), 'mineru-env');
+const MINERU_ENV = path.resolve(
+  process.env.MINERU_ENV ?? path.join(homedir(), 'mineru-env'),
+);
 const API_BIN = path.join(MINERU_ENV, 'bin', 'mineru-api');
-const LOG_PATH =
-  process.env.MINERU_LOG ?? path.join(homedir(), 'mineru-api.log');
+const LOG_PATH = path.resolve(
+  process.env.MINERU_LOG ?? path.join(homedir(), 'mineru-api.log'),
+);
+const STATE_PATH = path.resolve(
+  process.env.MINERU_STATE_FILE ??
+    path.join(PROJECT_ROOT, '.educanvas-mineru-state.json'),
+);
 const HOST_URL = `http://${MINERU_HOST}:${MINERU_PORT}`;
+const VLM_PRELOAD_TIMEOUT_MS = Number(
+  process.env.MINERU_START_TIMEOUT_MS ?? 240_000,
+);
 
-/** 22GB 显存级别起步：并发拉满易 OOM，维持 1（部署手册第 5 步结论）。 */
-const VLM_PRELOAD_TIMEOUT_MS = 240_000;
+function fail(message, code = 1) {
+  console.error(`[mineru] ${message}`);
+  process.exit(code);
+}
+
+function validateConfiguration() {
+  const port = Number(MINERU_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    fail('MINERU_PORT 必须是 1-65535 的整数');
+  }
+  const loopback = ['127.0.0.1', 'localhost', '::1'].includes(MINERU_HOST);
+  if (!loopback && process.env.MINERU_ALLOW_REMOTE !== '1') {
+    fail('MinerU 无内置认证；非回环监听需显式设置 MINERU_ALLOW_REMOTE=1');
+  }
+  if (
+    !Number.isFinite(VLM_PRELOAD_TIMEOUT_MS) ||
+    VLM_PRELOAD_TIMEOUT_MS < 1_000
+  ) {
+    fail('MINERU_START_TIMEOUT_MS 必须至少为 1000');
+  }
+}
 
 async function probe() {
   try {
@@ -43,55 +73,120 @@ async function probe() {
   }
 }
 
-function fail(message, code = 1) {
-  console.error(`[mineru] ${message}`);
-  process.exit(code);
+function readState() {
+  try {
+    const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+    if (
+      state?.schema !== STATE_SCHEMA ||
+      !Number.isInteger(state.pid) ||
+      state.pid < 1 ||
+      state.apiBin !== API_BIN ||
+      state.host !== MINERU_HOST ||
+      state.port !== MINERU_PORT
+    ) {
+      return null;
+    }
+    return state;
+  } catch {
+    return null;
+  }
 }
 
-/** 找到正在运行的 mineru-api 主进程 PID（按 venv bin 的绝对路径精确匹配，避免误杀同名字面进程）。 */
-function findPids() {
+function writeState(pid) {
+  const state = {
+    schema: STATE_SCHEMA,
+    pid,
+    apiBin: API_BIN,
+    host: MINERU_HOST,
+    port: MINERU_PORT,
+    startedAt: new Date().toISOString(),
+  };
+  const temporary = `${STATE_PATH}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  renameSync(temporary, STATE_PATH);
+}
+
+function clearState() {
   try {
-    const stdout = execFileSync('pgrep', ['-f', `bin/mineru-api`], {
+    unlinkSync(STATE_PATH);
+  } catch {
+    // Missing state is already clear.
+  }
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readCommandLine(pid) {
+  try {
+    if (process.platform === 'win32') {
+      return execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    }
+    return execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return stdout
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((pid) => Number(pid));
+    }).trim();
   } catch {
-    return [];
+    return '';
   }
+}
+
+function ownedState() {
+  const state = readState();
+  if (!state || !pidAlive(state.pid)) return null;
+  const commandLine = readCommandLine(state.pid);
+  const owns =
+    commandLine.includes(state.apiBin) &&
+    commandLine.includes(`--host ${state.host}`) &&
+    commandLine.includes(`--port ${state.port}`);
+  return owns ? state : null;
 }
 
 async function cmdStatus() {
   const health = await probe();
-  const pids = findPids();
-  if (health && pids.length) {
+  const owned = ownedState();
+  if (health && owned) {
     console.log(
-      `[mineru] running  ${HOST_URL}/health → ${JSON.stringify(health)}  (pid ${pids.join(',')})`,
+      `[mineru] running  ${HOST_URL}/health → ${JSON.stringify(health)}  (pid ${owned.pid})`,
     );
     return;
   }
-  console.log('[mineru] down    (8000 无响应，无 mineru-api 进程)');
-  console.log('          启动：make mineru   查看归档日志：~/mineru-api.log');
+  if (health) {
+    console.log(
+      `[mineru] external ${HOST_URL}/health 有响应，但不是当前仓库记录的进程`,
+    );
+    return;
+  }
+  console.log(`[mineru] down    (${MINERU_HOST}:${MINERU_PORT} 无响应)`);
 }
 
 async function cmdStart() {
   const health = await probe();
   if (health) {
-    console.log(`[mineru] 已在运行 ${HOST_URL}/health → 跳过启动`);
+    const ownership = ownedState() ? '已由当前仓库启动' : '由外部进程提供';
+    console.log(`[mineru] ${ownership} ${HOST_URL}/health → 跳过启动`);
     return;
   }
   if (!existsSync(API_BIN)) {
-    fail(
-      `未找到 ${API_BIN}，先按部署手册第 1-2 步安装（venv 需至少装 mineru[pipeline,vlm]）`,
-    );
+    fail(`未找到 ${API_BIN}，请先安装 mineru[pipeline,vlm]`);
   }
 
-  // detached + unref：服务不随本脚本退出而退出；stdout/stderr 落归档日志，
-  // 与部署手册第 5 步 nohup 行为一致，便于事后排错。
   const outFd = openSync(LOG_PATH, 'a');
   const child = spawn(
     API_BIN,
@@ -106,66 +201,67 @@ async function cmdStart() {
     {
       detached: true,
       stdio: ['ignore', outFd, outFd],
-      env: {
-        ...process.env,
-        MINERU_API_MAX_CONCURRENT_REQUESTS: '1',
-      },
+      env: { ...process.env, MINERU_API_MAX_CONCURRENT_REQUESTS: '1' },
     },
   );
+  closeSync(outFd);
+  if (!child.pid) fail('MinerU 进程未能启动');
+  writeState(child.pid);
   child.unref();
 
   console.log(
-    `[mineru] 启动中：${HOST_URL}（VLM 预载可能需要几十秒，最多等 ${VLM_PRELOAD_TIMEOUT_MS / 1000}s）`,
+    `[mineru] 启动中：${HOST_URL}（最多等待 ${VLM_PRELOAD_TIMEOUT_MS / 1000}s）`,
   );
   const startedAt = Date.now();
   while (Date.now() - startedAt < VLM_PRELOAD_TIMEOUT_MS) {
-    const h = await probe();
-    if (h) {
+    const ready = await probe();
+    if (ready) {
       console.log(
-        `[mineru] 就绪 ${HOST_URL}/health → ${JSON.stringify(h)} (pid ${child.pid ?? '?'})`,
+        `[mineru] 就绪 ${HOST_URL}/health → ${JSON.stringify(ready)} (pid ${child.pid})`,
       );
       console.log(`         日志：${LOG_PATH}`);
       return;
     }
+    if (!pidAlive(child.pid)) {
+      clearState();
+      fail(`MinerU 启动进程已退出；查看日志 ${LOG_PATH}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 3_000));
   }
-  fail(
-    `等待就绪超时（${VLM_PRELOAD_TIMEOUT_MS / 1000}s）。查看日志 ${LOG_PATH}，排错见部署手册第三、五节`,
-  );
+  fail(`等待就绪超时；进程仍保留并记录在 ${STATE_PATH}，查看日志 ${LOG_PATH}`);
 }
 
 async function cmdStop() {
-  const pids = findPids();
-  if (!pids.length) {
-    console.log('[mineru] 没有运行中的进程');
+  const state = readState();
+  if (!state) {
+    console.log('[mineru] 没有当前配置对应的仓库状态记录；未停止任何进程');
     return;
   }
-  for (const pid of pids) {
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {
-      // 进程刚好退出，忽略
-    }
+  const owned = ownedState();
+  if (!owned) {
+    console.log(
+      `[mineru] 跳过 PID ${state.pid}：无法确认仍属于当前 MinerU 服务`,
+    );
+    return;
   }
-  // 优雅退出最多等 5s，SIGTERM 没退就 SIGKILL，避免残留 GPU 显存占用。
+  process.kill(owned.pid, 'SIGTERM');
   const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
-    if (!findPids().length) {
-      console.log('[mineru] 已停止');
-      return;
-    }
+  while (Date.now() < deadline && pidAlive(owned.pid)) {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
-  for (const pid of findPids()) {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // 同上
+  if (pidAlive(owned.pid)) {
+    const reverified = ownedState();
+    if (!reverified) {
+      console.log(`[mineru] 跳过 SIGKILL：PID ${owned.pid} 的身份已变化`);
+      return;
     }
+    process.kill(reverified.pid, 'SIGKILL');
   }
-  console.log('[mineru] 已强制停止（SIGKILL）');
+  clearState();
+  console.log('[mineru] 已停止');
 }
 
+validateConfiguration();
 const [, , command] = process.argv;
 if (command === 'start') await cmdStart();
 else if (command === 'status') await cmdStatus();
