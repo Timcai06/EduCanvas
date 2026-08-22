@@ -17,8 +17,9 @@ Agent Eval、Secret Scan、Chromium E2E 与最终 checks 全绿。该证据证�
 不证明下列真实环境项目已经执行。
 
 WS09 的确定性基线已覆盖内置搜索失败重试、多选批量导入、五来源/五引用投影
-与引用的 Notebook Source/原网页双动作；本地 Chromium PR 冒烟 17/17 通过。
-这些用例使用固定 fixture，仍不能充当真实 Provider 或人工视觉证据。
+与引用的 Notebook Source/原网页双动作；本地 Chromium PR 冒烟 15/15 通过，
+WS09 完整 Chromium 文件 3/3 通过。这些用例使用固定 fixture，仍不能充当
+真实 Provider 或人工视觉证据。
 
 ## 2. 验收前提
 
