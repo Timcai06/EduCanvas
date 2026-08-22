@@ -111,6 +111,55 @@ describe('workspace package policy registry', () => {
     );
   });
 
+  it('rejects undeclared subpaths and relative traversal into another package', () => {
+    const policy = {
+      packages: [
+        validEntry,
+        {
+          ...validEntry,
+          name: '@educanvas/gateway-core',
+          path: 'packages/gateway-core',
+          domain: 'gateway',
+        },
+      ],
+      allowlist: { dependencies: [], entrypoints: [] },
+    };
+    const workspaces = policy.packages.map(({ name, path }) => ({
+      name,
+      path,
+      manifest: {},
+    }));
+    const violations = sourceImportViolations(policy, workspaces, [
+      {
+        path: 'packages/example/src/index.ts',
+        imports: [
+          { specifier: '@educanvas/gateway-core/src/private', line: 1 },
+          { specifier: '../../gateway-core/src/private', line: 2 },
+        ],
+      },
+    ]);
+    assert.ok(
+      violations.some((item) => item.includes('undeclared public entrypoint')),
+    );
+    assert.ok(
+      violations.some((item) =>
+        item.includes('relative cross-package traversal'),
+      ),
+    );
+  });
+
+  it('resolves declared root and server-only package entrypoints', () => {
+    assert.match(
+      import.meta.resolve('@educanvas/agent-core'),
+      /src\/index\.ts$/,
+    );
+    assert.match(
+      import.meta.resolve('@educanvas/canvas-protocol/server'),
+      /src\/server\.ts$/,
+    );
+    assert.throws(() => import.meta.resolve('@educanvas/agent-core/src/index'));
+  });
+
   it('rejects missing, stale, duplicate and mismatched registrations', () => {
     const policy = {
       schemaVersion: 1,

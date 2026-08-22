@@ -1,7 +1,15 @@
-import corePackage from '../../teaching-core/package.json';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import runtimePackage from '../package.json';
 import { describe, expect, it } from 'vitest';
 import * as runtimePublicApi from './index';
+
+const corePackage = JSON.parse(
+  readFileSync(
+    resolve(import.meta.dirname, '../../teaching-core/package.json'),
+    'utf8',
+  ),
+) as { dependencies?: Record<string, string> };
 
 describe('Provider production boundary', () => {
   it('teaching-core与runtime不声明供应商或AI SDK运行时依赖', () => {

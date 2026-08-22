@@ -6,11 +6,11 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_PCM_CHUNK_BYTES } from '../../../packages/agent-core/src/index.ts';
+import { MAX_PCM_CHUNK_BYTES } from '@educanvas/agent-core';
 import {
   resolveDashScopeStreamingSpeechGateway,
   resolveDashScopeStreamingTranscriptionGateway,
-} from '../../../packages/model-gateway/src/index.ts';
+} from '@educanvas/model-gateway';
 import {
   PROVIDER_CANARY_PROFILES,
   buildProviderCanarySummary,

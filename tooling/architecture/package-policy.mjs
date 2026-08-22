@@ -180,6 +180,15 @@ export function validatePackageRegistry(policy, workspaces, options = {}) {
       violations.push(
         `${workspace.path}: manifest name ${workspace.name} does not match policy ${entry.name}`,
       );
+    const manifestEntrypoints = workspace.manifest.exports
+      ? Object.keys(workspace.manifest.exports)
+      : workspace.path.startsWith('packages/')
+        ? ['.']
+        : [];
+    if (!sameStringSet(entry.publicEntrypoints, manifestEntrypoints))
+      violations.push(
+        `${workspace.path}: policy publicEntrypoints do not match package.json exports`,
+      );
   }
   for (const entry of policy.packages) {
     const workspace = workspaces.find((item) => item.path === entry.path);

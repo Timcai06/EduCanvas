@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { createWebRuntimeHandler } from '../../apps/web-runtime/src/server';
-import type { WebRuntimeConfig } from '../../apps/web-runtime/src/config';
+import type { WebRuntimeConfig } from '@educanvas/web-runtime/config';
+import { createWebRuntimeHandler } from '@educanvas/web-runtime/server';
 
 const RUNS = {
   loop: '10000000-0000-4000-8000-000000000001',

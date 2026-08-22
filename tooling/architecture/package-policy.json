@@ -109,7 +109,7 @@
       "kind": "app",
       "domain": "canvas",
       "owner": "gateway",
-      "publicEntrypoints": [],
+      "publicEntrypoints": [".", "./config", "./server"],
       "allowedDependencyKinds": [
         "app",
         "core",

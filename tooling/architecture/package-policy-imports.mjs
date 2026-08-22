@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { extname, relative, resolve } from 'node:path';
+import { dirname, extname, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
 const SOURCE_EXTENSIONS = new Set([
@@ -39,6 +39,20 @@ function allowlistKey(entry) {
 function workspaceTarget(specifier) {
   if (!specifier.startsWith('@educanvas/')) return undefined;
   return specifier.split('/').slice(0, 2).join('/');
+}
+
+function packageEntrypoint(specifier, target) {
+  const suffix = specifier.slice(target.length);
+  return suffix === '' ? '.' : `.${suffix}`;
+}
+
+function relativeTraversalTarget(sourcePath, specifier, workspaces) {
+  if (!specifier.startsWith('.')) return undefined;
+  const resolved = resolve('/', dirname(sourcePath), specifier).slice(1);
+  return workspaces.find(
+    (workspace) =>
+      resolved === workspace.path || resolved.startsWith(`${workspace.path}/`),
+  );
 }
 
 export function manifestDependencyViolations(policy, workspaces) {
@@ -123,6 +137,8 @@ export function parseModuleSpecifiers(source, fileName = 'fixture.ts') {
   const visit = (node) => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier) record(node.moduleSpecifier);
+    } else if (ts.isImportTypeNode(node)) {
+      if (ts.isLiteralTypeNode(node.argument)) record(node.argument.literal);
     } else if (
       ts.isCallExpression(node) &&
       node.arguments.length === 1 &&
@@ -182,6 +198,28 @@ export function sourceImportViolations(policy, workspaces, sources) {
       if (target && !policy.packages.some((entry) => entry.name === target))
         violations.push(
           `${consumer} -> ${target}: unknown package import at ${location}; register the workspace or correct the specifier`,
+        );
+      if (target) {
+        const targetPolicy = policy.packages.find(
+          (entry) => entry.name === target,
+        );
+        const entrypoint = packageEntrypoint(imported.specifier, target);
+        if (
+          targetPolicy &&
+          !targetPolicy.publicEntrypoints.includes(entrypoint)
+        )
+          violations.push(
+            `${consumer} -> ${imported.specifier}: undeclared public entrypoint at ${location}; import one of ${targetPolicy.publicEntrypoints.join(', ') || '(none)'}`,
+          );
+      }
+      const traversed = relativeTraversalTarget(
+        source.path,
+        imported.specifier,
+        workspaces,
+      );
+      if (traversed && traversed.name !== consumer)
+        violations.push(
+          `${consumer} -> ${traversed.name}: relative cross-package traversal at ${location}; use a declared package entrypoint`,
         );
     }
   }

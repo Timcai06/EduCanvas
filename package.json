@@ -48,6 +48,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@educanvas/agent-core": "workspace:*",
+    "@educanvas/canvas-protocol": "workspace:*",
+    "@educanvas/db": "workspace:*",
+    "@educanvas/model-gateway": "workspace:*",
+    "@educanvas/web-runtime": "workspace:*",
     "@types/node": "^24.13.3",
     "prettier": "^3.9.5",
     "turbo": "^2.10.4",

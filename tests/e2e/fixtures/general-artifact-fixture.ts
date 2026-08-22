@@ -46,12 +46,15 @@ const AUDIO_BYTES = Buffer.from([
 ]);
 
 async function importArtifactDeps() {
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../../packages/db/src/index.ts'),
-    import('../../../packages/db/src/internal/index.ts'),
-    import('../../../packages/db/node_modules/drizzle-orm/index.js'),
+  const [dbModule, testingDbModule] = await Promise.all([
+    import('@educanvas/db'),
+    import('@educanvas/db/testing'),
   ]);
-  return { dbModule, internalDbModule, drizzleModule };
+  return {
+    dbModule,
+    internalDbModule: testingDbModule,
+    drizzleModule: testingDbModule,
+  };
 }
 
 export async function activeConversationId(page: Page): Promise<string> {
@@ -122,15 +125,11 @@ export async function createArtifactFixture(
 ): Promise<ArtifactFixture> {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-  const [
-    { DrizzlePlatformArtifactRepository, conversations },
-    { getDb },
-    { eq },
-  ] = await Promise.all([
-    import('../../../packages/db/src/index.ts'),
-    import('../../../packages/db/src/internal/index.ts'),
-    import('../../../packages/db/node_modules/drizzle-orm/index.js'),
-  ]);
+  const { dbModule, internalDbModule, drizzleModule } =
+    await importArtifactDeps();
+  const { DrizzlePlatformArtifactRepository, conversations } = dbModule;
+  const { getDb } = internalDbModule;
+  const { eq } = drizzleModule;
   const [conversation] = await getDb()
     .select()
     .from(conversations)
@@ -161,11 +160,8 @@ export async function appendVersions(
 ) {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../../packages/db/src/index.ts'),
-    import('../../../packages/db/src/internal/index.ts'),
-    import('../../../packages/db/node_modules/drizzle-orm/index.js'),
-  ]);
+  const { dbModule, internalDbModule, drizzleModule } =
+    await importArtifactDeps();
   const [conversation] = await internalDbModule
     .getDb()
     .select()
@@ -194,11 +190,8 @@ export async function createMindMapArtifactFixture(
 ): Promise<ArtifactFixture> {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../../packages/db/src/index.ts'),
-    import('../../../packages/db/src/internal/index.ts'),
-    import('../../../packages/db/node_modules/drizzle-orm/index.js'),
-  ]);
+  const { dbModule, internalDbModule, drizzleModule } =
+    await importArtifactDeps();
   const [conversation] = await internalDbModule
     .getDb()
     .select()
@@ -330,11 +323,8 @@ export async function createAudioOverviewFixture(
 ): Promise<ArtifactFixture> {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../../packages/db/src/index.ts'),
-    import('../../../packages/db/src/internal/index.ts'),
-    import('../../../packages/db/node_modules/drizzle-orm/index.js'),
-  ]);
+  const { dbModule, internalDbModule, drizzleModule } =
+    await importArtifactDeps();
   const [conversation] = await internalDbModule
     .getDb()
     .select()

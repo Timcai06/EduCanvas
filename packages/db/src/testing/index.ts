@@ -7,5 +7,6 @@
  * （遗留引用），其实际移除属于 R06/R08。
  */
 export { getDb } from '../client';
+export { eq } from 'drizzle-orm';
 export * from '../schema';
 export * from '../schema/study';

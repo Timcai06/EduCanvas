@@ -25,9 +25,7 @@ vi.mock(
   '../../../../packages/model-gateway/src/config',
   async (importOriginal) => {
     const original =
-      await importOriginal<
-        typeof import('../../../../packages/model-gateway/src/config')
-      >();
+      await importOriginal<typeof import('@educanvas/model-gateway')>();
     return {
       ...original,
       parseModelGatewayConfiguration: (
