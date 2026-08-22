@@ -27,6 +27,7 @@
 - [持久 Web Runtime 依赖与资源策略（U11）](06-quality/06-Web Runtime依赖与资源策略.md)
 - [可复现实验 Smoke（U16）](06-quality/07-可复现实验Smoke.md)
 - [仓库文件分类治理与 CI 影响分流](05-engineering/04-文件分类治理.md)
+- [工程逻辑所有权与包映射](engineering/ownership.md)
 
 ## 已接受的架构方向
 
