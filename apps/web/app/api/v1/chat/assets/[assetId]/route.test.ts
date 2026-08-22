@@ -138,4 +138,18 @@ describe('owned source preview routes', () => {
       assetId,
     });
   });
+
+  it('returns a stable 404 when deletion reports an absent source', async () => {
+    vi.mocked(tombstoneOwnedAsset).mockResolvedValue(false as never);
+
+    const response = await DELETE(
+      new Request(`http://localhost/assets/${assetId}`, {
+        method: 'DELETE',
+        headers: { origin: 'http://localhost' },
+      }),
+      params(),
+    );
+
+    expect(response.status).toBe(404);
+  });
 });
