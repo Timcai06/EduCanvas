@@ -112,6 +112,7 @@ describe('gatewayToLegacy 未知枚举 fail closed', () => {
     expect(events[0]).toEqual({
       schemaVersion: '1',
       turnId: 'operation:1',
+      sequence: 0,
       type: 'tool.started',
       toolCallId: 'tool-call:1',
       label: '正在使用工具',
@@ -200,6 +201,7 @@ describe('UI 文案变化不改变协议标识', () => {
       expect(events[0]).toEqual({
         schemaVersion: '1',
         turnId: 'operation:1',
+        sequence: 0,
         type: 'tool.started',
         toolCallId: 'tool-call:1',
         label: '正在搜索网页',

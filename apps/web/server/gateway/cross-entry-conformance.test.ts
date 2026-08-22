@@ -50,6 +50,7 @@ describe('Web SSE跨入口合规', () => {
       {
         schemaVersion: '1',
         turnId: 'operation:cross-entry',
+        sequence: 1,
         type: 'turn.failed',
         messageId: 'operation:cross-entry',
         code: 'CAPABILITY_UNAVAILABLE',

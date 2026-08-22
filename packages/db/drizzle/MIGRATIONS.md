@@ -807,3 +807,20 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
   生产规模尚未验证。
 - 风险: 低——数据库只约束 JSON 顶层形状；issue/consume 路径仍按用户、空间、会话
   与资源归属 fail closed，浏览器不能伪造服务端授权目标。
+
+## 0060_funny_vengeance.sql
+
+- 状态: active（WS06，2026-08-22）
+- 语义: 新增 `research_checkpoints`，按 Operation 保存 Deep Research 的版本化、
+  有界执行游标：四个非终态阶段、最多 5 个已完成规范化查询与 15 个候选 URL；
+  Operation 终态、Source 和 Citation 仍由既有权威表维护。
+- 锁表: 仅创建新叶子表并增加指向 `agent_operations` 的级联外键，不改写历史行。
+- 回滚: 先回滚应用到不读写研究检查点的版本，再 DROP TABLE；已有 Operation、
+  Gateway Event、Source、Citation 和消息事实不受影响。
+- N-1: 旧应用忽略新表并继续完成普通 Turn；新应用只为 `deep_research` 写入，
+  滚动部署期间不会要求旧实例理解新的公开事件或终态。
+- Fresh install: 可重放；表初始为空，研究 Operation 启动时按需创建。
+- Data migration: none——不从 Tool Call 摘要、Prompt 或历史消息猜测查询与候选 URL。
+- Estimated scale: 每个研究 Operation 至多 1 行，两个 JSONB 数组分别上限 5 与 15。
+- 风险: 低——仓储逐项校验查询与公开 URL，浏览器投影只返回计数、阶段及派生的
+  Source/Citation 序号，不返回原始查询或候选 URL。

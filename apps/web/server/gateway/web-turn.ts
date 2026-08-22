@@ -28,6 +28,7 @@ import {
   beginGatewayGeneralTurnApplication,
   prepareGatewayGeneralTurnContext,
 } from '../platform/general-turn';
+import { webResearchCheckpoints } from '../platform/general-turn-persistence';
 import { loadOwnedGeneralConversation } from '../platform/general-conversation';
 import { gatewayToLegacy } from './turn-application-projection';
 
@@ -59,7 +60,7 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
     this.operationId = input.operationId;
     let turn;
     try {
-      turn = beginGatewayGeneralTurnApplication({
+      turn = await beginGatewayGeneralTurnApplication({
         operationId: input.operationId,
         traceId: input.traceId,
         route: input.route,
@@ -77,6 +78,17 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
       throw error;
     }
     for await (const event of turn.events) {
+      if (
+        this.input.request.mode === 'deep_research' &&
+        event.type === 'message.delta'
+      ) {
+        await webResearchCheckpoints.advancePhase({
+          operationId: input.operationId,
+          conversationId: input.route.conversationId,
+          actorId: input.route.actorUserId,
+          phase: 'synthesizing',
+        });
+      }
       yield projectTurnApplicationEventToGateway(event, {
         actorUserId: input.route.actorUserId,
         occurredAt: new Date().toISOString(),
@@ -199,4 +211,19 @@ export async function beginWebGatewayTurn(
       });
     },
   };
+}
+
+/**
+ * 只从 GatewayOperationEvents 恢复已持久化的 Web Turn。
+ * 该入口不能构造 runner 或启动 Agent Loop；事件存储自身负责 actor ownership 校验。
+ */
+export async function resumeWebGatewayTurn(
+  identity: AnonymousIdentity,
+  input: { turnId: string; afterSequence: number },
+): Promise<readonly GatewayOperationEvent[]> {
+  return operations.listEvents(
+    input.turnId,
+    input.afterSequence,
+    identity.studentId,
+  );
 }

@@ -23,13 +23,17 @@ import {
   resolveWebSearchTool,
   type WebSearchProgress,
 } from '../tools/web-search';
+import type { ResearchCheckpointSnapshot } from '@educanvas/db';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import {
   IMAGE_GENERATION_CAPABILITY,
   isImageGenerationConfigured,
   type WebOperationImageArtifacts,
 } from './general-image-tool';
-import { webGeneralSources } from './general-turn-persistence';
+import {
+  webGeneralSources,
+  webResearchCheckpoints,
+} from './general-turn-persistence';
 import { createWebToolKernel } from '../turn-composition';
 
 const mcpRuntime = createMcpRuntimeFromEnvironment(undefined, {
@@ -55,9 +59,17 @@ export class WebOperationSources {
       operationId: string;
       maximumSources?: number;
       researchSource?: boolean;
+      onReading?: () => Promise<void>;
+      initialSources?: readonly PlatformOperationSourceSnapshot[];
     },
   ) {
     this.maximumSources = input.maximumSources ?? Number.POSITIVE_INFINITY;
+    for (const source of input.initialSources ?? []) {
+      const url = new URL(source.url);
+      url.hash = '';
+      this.byUrl.set(url.toString(), source);
+      this.maximumOrdinal = Math.max(this.maximumOrdinal, source.ordinal);
+    }
   }
 
   get sourceCount(): number {
@@ -65,6 +77,7 @@ export class WebOperationSources {
   }
 
   async persist(page: FetchedWebPage): Promise<{ citationMarker: number }> {
+    await this.input.onReading?.();
     const sourceUrl = new URL(page.url);
     sourceUrl.hash = '';
     const sourceKey = sourceUrl.toString();
@@ -115,7 +128,15 @@ export function createGeneralToolKernel(
   operationSources: WebOperationSources,
   operationArtifacts: WebOperationArtifacts,
   operationImages: WebOperationImageArtifacts,
-  options: { deepResearch?: boolean } = {},
+  options: {
+    deepResearch?: boolean;
+    researchCheckpoint?: ResearchCheckpointSnapshot;
+    researchScope?: {
+      operationId: string;
+      conversationId: string;
+      actorId: string;
+    };
+  } = {},
 ): {
   kernel: ToolKernelPort;
   staticCapabilities: readonly string[];
@@ -127,6 +148,34 @@ export function createGeneralToolKernel(
   );
   const searchTool = resolveWebSearchTool(undefined, undefined, {
     deepResearch: options.deepResearch,
+    ...(options.researchCheckpoint
+      ? {
+          initialProgress: {
+            completedQueries: options.researchCheckpoint.completedQueries,
+            candidateUrls: options.researchCheckpoint.candidateUrls,
+          },
+        }
+      : {}),
+    ...(options.researchScope
+      ? {
+          onSearching: async () => {
+            await webResearchCheckpoints.advancePhase({
+              ...options.researchScope!,
+              phase: 'searching',
+            });
+          },
+          onProgress: async (progress: {
+            completedQuery: string;
+            candidateUrls: readonly string[];
+          }) => {
+            await webResearchCheckpoints.mergeProgress({
+              ...options.researchScope!,
+              completedQueries: [progress.completedQuery],
+              candidateUrls: progress.candidateUrls,
+            });
+          },
+        }
+      : {}),
   });
   const localAdapters = [
     /* 无副作用的表达型工具：让模型能把「接下来打算做什么」变成一次可见的

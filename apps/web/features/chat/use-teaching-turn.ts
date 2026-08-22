@@ -13,20 +13,14 @@ import {
   teachingTurnReducer,
 } from './turn-state';
 import { resolveTurnFailureMessage } from './connection-status';
-import {
-  consumeTeachingTurnResponse,
-  type TeachingTurnEvent,
-  TurnStreamProtocolError,
-} from './turn-events';
-import {
-  terminalEventTypeToSendOutcome,
-  type InFlightTurn,
-} from './turn-send-outcome';
+import type { TeachingTurnEvent } from './turn-events';
+import { consumeTeachingTurnResponse } from './turn-stream-consumer';
+import type { InFlightTurn } from './turn-send-outcome';
 import { useDeepResearchProgress } from './use-deep-research-progress';
+import { useActiveTurnRecovery } from './use-active-turn-recovery';
+import { useTurnRecoveryRuntime } from './use-turn-recovery';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
-
-/** 本机是否在线；SSR 无 navigator 时假定在线。 */
 function isBrowserOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
@@ -35,6 +29,7 @@ export interface AgentTurnClientOptions {
   endpoint: string;
   assistantLabel: string;
   cancelEndpoint?: (turnId: string) => string;
+  eventsEndpoint?: (turnId: string) => string;
 }
 
 export interface AgentTurnClientCallbacks {
@@ -92,7 +87,12 @@ export function useAgentTurn(
   const [state, dispatch] = useReducer(
     teachingTurnReducer,
     initialMessages,
-    createTeachingTurnState,
+    (messages) =>
+      createTeachingTurnState(
+        messages,
+        options.assistantLabel,
+        Boolean(options.eventsEndpoint),
+      ),
   );
   const inFlight = useRef<InFlightTurn | null>(null);
   const callbacksRef = useRef(callbacks);
@@ -102,6 +102,7 @@ export function useAgentTurn(
     progress: researchProgress,
     begin: beginResearch,
     consume: consumeResearch,
+    restore: restoreResearch,
     statusText: researchStatusText,
   } = useDeepResearchProgress();
 
@@ -145,6 +146,26 @@ export function useAgentTurn(
     [cancelEndpoint],
   );
 
+  const { applyTurnEvent, recoverTurn } = useTurnRecoveryRuntime({
+    mounted,
+    inFlight,
+    callbacksRef,
+    dispatch,
+    setControlError,
+    cancelAcceptedTurn,
+    consumeResearch,
+    restoreResearch,
+    eventsEndpoint: options.eventsEndpoint,
+  });
+
+  useActiveTurnRecovery({
+    active: state.active,
+    mounted,
+    inFlight,
+    dispatch,
+    recoverTurn,
+  });
+
   useEffect(() => {
     callbacksRef.current = callbacks;
   }, [callbacks]);
@@ -179,6 +200,8 @@ export function useAgentTurn(
         terminalOutcome: null,
         stopConfirmed: false,
         cancelRequested: false,
+        recoveryAttempted: false,
+        nextSequence: 0,
       };
       inFlight.current = current;
       setControlError(null);
@@ -250,60 +273,12 @@ export function useAgentTurn(
 
         await consumeTeachingTurnResponse(
           response,
-          (event: TeachingTurnEvent) => {
-            if (!mounted.current || inFlight.current !== current) return;
-            if (current.terminalReceived) {
-              throw new TurnStreamProtocolError(
-                'turn stream emitted an event after its terminal event',
-              );
-            }
-            if (event.type === 'turn.accepted') {
-              if (current.turnId !== null) {
-                throw new TurnStreamProtocolError(
-                  'turn stream emitted duplicate acceptance',
-                );
-              }
-              current.turnId = event.turnId;
-              current.assistantMessageId = event.assistantMessageId;
-              if (current.cancelRequested) {
-                void cancelAcceptedTurn(current);
-              }
-            } else if (current.turnId === null) {
-              throw new TurnStreamProtocolError(
-                'turn stream emitted an event before acceptance',
-              );
-            } else if (current.turnId !== event.turnId) {
-              throw new TurnStreamProtocolError(
-                'turn stream changed its turn identity',
-              );
-            } else if (
-              'messageId' in event &&
-              current.assistantMessageId !== event.messageId
-            ) {
-              throw new TurnStreamProtocolError(
-                'turn stream changed its message identity',
-              );
-            }
-            if (
-              event.type === 'turn.completed' ||
-              event.type === 'turn.failed' ||
-              event.type === 'turn.cancelled'
-            ) {
-              current.terminalReceived = true;
-              current.terminalOutcome = terminalEventTypeToSendOutcome(
-                event.type,
-              );
-              setControlError(null);
-            }
-            if (
-              event.type === 'artifact.proposed' ||
-              event.type === 'artifact.created'
-            ) {
-              callbacksRef.current.onArtifactProposed?.(event);
-            }
-            consumeResearch(sendOptions.mode === 'deep_research', event);
-            dispatch({ type: 'stream.event', event });
-          },
+          (event: TeachingTurnEvent) =>
+            applyTurnEvent(
+              current,
+              event,
+              sendOptions.mode === 'deep_research',
+            ),
         );
 
         if (
@@ -312,6 +287,12 @@ export function useAgentTurn(
           !current.terminalReceived &&
           !current.stopConfirmed
         ) {
+          const recovered = current.turnId
+            ? await recoverTurn(current, sendOptions.mode === 'deep_research')
+            : false;
+          if (recovered || current.terminalReceived) {
+            return current.terminalOutcome ?? 'interrupted';
+          }
           /* 流未达终态就结束：本机离线时归因给网络，否则按意外中断 */
           const resolved = resolveTurnFailureMessage({
             online: isBrowserOnline(),
@@ -330,6 +311,25 @@ export function useAgentTurn(
       } catch (error) {
         const aborted =
           error instanceof DOMException && error.name === 'AbortError';
+        if (
+          mounted.current &&
+          inFlight.current === current &&
+          !current.stopConfirmed &&
+          current.turnId &&
+          !current.terminalReceived
+        ) {
+          try {
+            const recovered = await recoverTurn(
+              current,
+              sendOptions.mode === 'deep_research',
+            );
+            if (recovered || current.terminalReceived) {
+              return current.terminalOutcome ?? 'interrupted';
+            }
+          } catch {
+            // Fall through to the stable interrupted/connection message.
+          }
+        }
         if (
           mounted.current &&
           inFlight.current === current &&
@@ -357,9 +357,9 @@ export function useAgentTurn(
       }
     },
     [
-      cancelAcceptedTurn,
       beginResearch,
-      consumeResearch,
+      applyTurnEvent,
+      recoverTurn,
       options.assistantLabel,
       options.endpoint,
       safeConnectionError,

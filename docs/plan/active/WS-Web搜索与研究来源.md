@@ -235,7 +235,7 @@ WS00-WS07 → WS08 → WS09
 ### WS06：研究任务恢复与进度事实
 
 - 依赖：WS03、WS05
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：Operation/Message 事实、研究 checkpoint、Web 安全投影
 
 交付：
@@ -246,6 +246,18 @@ WS00-WS07 → WS08 → WS09
 - 取消、超时和重试继续使用现有 Operation 权威，不新建研究账本替代它。
 
 完成标准：刷新或短暂断线后继续同一 Operation；来源和引用不重复。
+
+实现证据（2026-08-22）：
+
+- Gateway `gateway_operation_events` 继续作为浏览器恢复的唯一事件账本；新增只读增量入口按 Actor 鉴权并使用 `afterSequence`，只投影既有安全 Turn 事件，不重新进入 Agent Loop 或 Tool Kernel；
+- Web SSE 断开不再等同于用户取消，后台继续完成同一 Operation；显式停止仍走既有取消事实与进程 Abort 注册表，未新增研究终态写入路径；
+- 新增 `research_checkpoints` 有界执行游标：固定协议、四个单调非终态阶段、最多 5 个规范化已完成查询与 15 个公开候选 URL；Operation、Source 与 Citation 继续由既有权威表唯一负责；
+- Deep Research 启动时恢复检查点与已有 `operation_sources`，搜索工具拒绝已完成查询并跳过已有候选，来源写入继续依靠 `(operation_id, locator_url)` 与 ordinal 唯一约束去重；
+- Gateway 安全投影新增单调 `sequence`；刷新从持久消息基线后的 sequence 0 重放，同页短断线只使用内存游标增量接续，既不丢失早期正文，也不重复应用 delta；
+- 浏览器恢复接口只返回阶段、查询/候选/来源计数、引用 ordinal、Operation 状态及安全 Tool/Message 事件，不返回原始查询、候选 URL、Prompt、Tool summary、Provider Body 或异常；
+- Deep Research 进度按 `planning/searching/reading/synthesizing/terminal` 单调推进，最多显示 5 次搜索；重复 Tool 终态与重复序号 fail closed，不重复累计来源或正文；
+- `@educanvas/web` 全量单测 1774/1774 通过（242 files），`@educanvas/db` 125/125 通过（14 files）；`pnpm lint`、`pnpm typecheck`、`pnpm file:check` 与 `git diff --check` clean；
+- Drizzle 迁移 `0060_funny_vengeance.sql` 由 `drizzle-kit generate` 生成；提交后历史不可变、记录完整性、`drizzle-kit check` 与无差异生成均通过。fresh/N-1 本地验证因 Docker daemon 未运行而未执行，必须由 PR 的 `migration-integration` lane 补齐。当前结论仅为 `IN_REVIEW`，尚未宣告 `PASS`。
 
 ### WS07：来源、引用与后续追问闭环
 

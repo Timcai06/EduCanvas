@@ -2,7 +2,6 @@
  * 数据访问包的公共入口；业务层应通过此处导入，避免绕过统一连接生命周期或绑定内部文件结构。
  * @packageDocumentation
  */
-
 // schema 表只按需显式导出（R04 起不再 `export *` 全量泄漏）；新表不得加入默认入口，
 // 应经 `@educanvas/db/internal` / `@educanvas/db/testing` 获取，见 src/import-boundary.test.ts。
 // `getDb` 只从受控 internal/testing subpath 导出，不属于业务默认 API。
@@ -519,3 +518,4 @@ export {
   type WebRuntimeRunSnapshot,
 } from './web-runtime-run-repository';
 export { DrizzleTurnUsageBudgetLedger } from './turn-usage-budget-repository';
+export * from './research-checkpoint-repository';

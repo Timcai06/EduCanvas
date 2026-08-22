@@ -28,13 +28,17 @@ import {
   WebOperationSources,
 } from './general-turn-tools';
 import {
+  webGeneralSources,
+  webResearchCheckpoints,
+} from './general-turn-persistence';
+import {
   createWebTurnApplication,
   createWebTurnLedgers,
   unavailableModelGateway,
 } from '../turn-composition';
 
 /** Web Gateway入口的统一Turn Application组合根；不再创建私有模型循环。 */
-export function beginGatewayGeneralTurnApplication(input: {
+export async function beginGatewayGeneralTurnApplication(input: {
   operationId: string;
   traceId: string;
   route: GatewayResolvedRoute;
@@ -44,7 +48,7 @@ export function beginGatewayGeneralTurnApplication(input: {
   signal: ModelAbortSignal;
   transportCapabilities: readonly string[];
   modelRuntime: ResolvedTurnModelRuntime | null;
-}): { events: AsyncIterable<TurnApplicationEvent> } {
+}): Promise<{ events: AsyncIterable<TurnApplicationEvent> }> {
   if (input.route.actorUserId !== input.identity.studentId) {
     throw new Error('web_general_actor_scope_mismatch');
   }
@@ -52,13 +56,46 @@ export function beginGatewayGeneralTurnApplication(input: {
     throw new Error('web_general_profile_unsupported');
   }
   const ledgers = createWebTurnLedgers();
+  const researchScope =
+    input.request.mode === 'deep_research'
+      ? {
+          operationId: input.operationId,
+          conversationId: input.route.conversationId,
+          actorId: input.route.actorUserId,
+        }
+      : null;
+  const researchCheckpoint = researchScope
+    ? (
+        await webResearchCheckpoints.createOrGet({
+          ...researchScope,
+          phase: 'planning',
+        })
+      ).checkpoint
+    : null;
+  const restoredSources = researchScope
+    ? await webGeneralSources.listOwnedOperationSources({
+        conversationId: input.route.conversationId,
+        trustedSubjectId: input.identity.studentId,
+        operationId: input.operationId,
+      })
+    : [];
   const operationSources = new WebOperationSources({
     identity: input.identity,
     conversationId: input.route.conversationId,
     spaceId: input.route.notebookId,
     operationId: input.operationId,
     ...(input.request.mode === 'deep_research'
-      ? { maximumSources: 8, researchSource: true }
+      ? {
+          maximumSources: 8,
+          researchSource: true,
+          initialSources: restoredSources,
+          onReading: async () => {
+            await webResearchCheckpoints.advancePhase({
+              ...researchScope!,
+              phase: 'reading',
+            });
+          },
+        }
       : {}),
   });
   const artifactSourceReferences = collectArtifactInputSourceReferences(
@@ -81,7 +118,11 @@ export function beginGatewayGeneralTurnApplication(input: {
     operationSources,
     operationArtifacts,
     operationImages,
-    { deepResearch: input.request.mode === 'deep_research' },
+    {
+      deepResearch: input.request.mode === 'deep_research',
+      ...(researchCheckpoint ? { researchCheckpoint } : {}),
+      ...(researchScope ? { researchScope } : {}),
+    },
   );
   const runtime = input.modelRuntime;
   /**

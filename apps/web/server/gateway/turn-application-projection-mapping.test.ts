@@ -321,6 +321,9 @@ describe('gatewayToLegacy canonical→legacy 表驱动映射', () => {
   ];
 
   it.each(cases)('$name', async ({ event, expected }) => {
-    expect(await collect(gatewayToLegacy(eventsOf([event])))).toEqual(expected);
+    const projected = await collect(gatewayToLegacy(eventsOf([event])));
+    expect(projected).toEqual(
+      expected.map((item) => ({ ...item, sequence: event.sequence })),
+    );
   });
 });

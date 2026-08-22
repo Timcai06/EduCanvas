@@ -181,7 +181,11 @@ export async function* gatewayToLegacy(
 ): AsyncGenerator<TeachingTurnEvent> {
   let assistantMessageId: string | null = null;
   for await (const event of events) {
-    const base = { schemaVersion: '1' as const, turnId: event.operationId };
+    const base = {
+      schemaVersion: '1' as const,
+      turnId: event.operationId,
+      sequence: event.sequence,
+    };
     switch (event.type) {
       case 'operation.accepted':
         break;
@@ -210,7 +214,9 @@ export async function* gatewayToLegacy(
           type: 'message.citation' as const,
           messageId: event.messageId,
           citationId: event.citation.citationId,
-          marker: event.citation.marker,
+          ...(event.citation.marker === undefined
+            ? {}
+            : { marker: event.citation.marker }),
           label: event.citation.label,
           pageStart:
             event.citation.target.kind === 'knowledge'

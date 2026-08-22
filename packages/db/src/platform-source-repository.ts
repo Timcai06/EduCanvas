@@ -155,6 +155,37 @@ export class DrizzlePlatformSourceRepository {
     return this.providedDatabase ?? getDb();
   }
 
+  async listOwnedOperationSources(input: {
+    conversationId: string;
+    trustedSubjectId: string;
+    operationId: string;
+  }): Promise<readonly PlatformOperationSourceSnapshot[]> {
+    const rows = await this.database
+      .select({ source: operationSources, assetId: assetVersions.assetId })
+      .from(operationSources)
+      .innerJoin(
+        agentOperations,
+        eq(agentOperations.id, operationSources.operationId),
+      )
+      .innerJoin(
+        conversations,
+        eq(conversations.id, agentOperations.conversationId),
+      )
+      .innerJoin(
+        assetVersions,
+        eq(assetVersions.id, operationSources.assetVersionId),
+      )
+      .where(
+        and(
+          eq(operationSources.operationId, input.operationId),
+          eq(agentOperations.conversationId, input.conversationId),
+          eq(conversations.ownerSubjectId, input.trustedSubjectId),
+        ),
+      )
+      .orderBy(asc(operationSources.ordinal));
+    return rows.map(toSource);
+  }
+
   async createOrGetWebSource(input: {
     conversationId: string;
     trustedSubjectId: string;

@@ -47,7 +47,13 @@ async function expectParity(script: readonly TurnApplicationEvent[]) {
     );
     return makeGatewayEvent(sequence, payload, operationId);
   });
-  expect(await collect(gatewayToLegacy(eventsOf(gateway)))).toEqual(web);
+  const projected = await collect(gatewayToLegacy(eventsOf(gateway)));
+  expect(
+    projected.map(({ sequence, ...event }) => {
+      void sequence;
+      return event;
+    }),
+  ).toEqual(web);
 }
 
 describe('Turn Application Web/Gateway golden parity', () => {

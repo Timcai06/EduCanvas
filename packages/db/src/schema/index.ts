@@ -28,3 +28,4 @@ export * from './account';
 export * from './web-runtime';
 export * from './annotation';
 export * from './surface-layout';
+export * from './research-checkpoint';
