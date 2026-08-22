@@ -14,8 +14,8 @@ E2E_DATABASE_URL ?= postgresql://educanvas:educanvas@127.0.0.1:$(EDUCANVAS_POSTG
 RUNTIME := node tooling/local-orchestrator.mjs
 LOG_FILTER_ENV := SERVICE=$(SERVICE) LEVEL=$(LEVEL) EVENT=$(EVENT) OP=$(OP) TRACE=$(TRACE) JOB=$(JOB)
 
-.PHONY: help doctor deps setup all all-verbose dev dev-ui tui pet status stop stop-core stop-db \
-	logs logs-json logs-errors check lint typecheck test build \
+.PHONY: help doctor deps setup all all-verbose dev dev-ui tui pet mineru mineru-status mineru-stop status \
+	stop stop-core stop-db logs logs-json logs-errors check lint typecheck test build \
 	db-up db-migrate db-logs db-integration-prepare db-e2e-prepare \
 	integration e2e
 
@@ -30,6 +30,9 @@ help:
 		'  make dev-ui       使用 Turbo TUI 观察原始 task 日志' \
 		'  make tui          启动所需服务并进入交互式 TUI' \
 		'  make pet          启动桌宠（先 make all，另开终端运行）' \
+		'  make mineru       启动 MinerU 结构化转换服务（GPU venv，独立于 orchestrator）' \
+		'  make mineru-status  查看 MinerU 服务状态' \
+		'  make mineru-stop  停止 MinerU 服务' \
 		'  make status       查看 Database/Gateway/Web/Worker/Runtime 状态' \
 		'  make logs         查看当前运行会话日志（SERVICE/LEVEL/EVENT/OP/TRACE/JOB 可过滤；TAIL=100 只看最近 N 条；NO_FOLLOW=1 首屏后退出）' \
 		'  make logs-json    原始 JSONL 输出' \
@@ -87,6 +90,18 @@ tui:
 pet:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }
 	@pnpm --dir apps/desktop dev
+
+# MinerU 是独立部署的 GPU 服务（venv 里 mineru-api），不在 orchestrator 进程树里，
+# `make stop` 管不到它；nohup 不跨重启存活，故单独提供启停/状态入口（tooling/local-mineru.mjs）。
+# 监听默认 127.0.0.1:8000，与 .env 的 MINERU_BASE_URL 对齐；部署见 docs/research/2026-08/03-MinerU部署手册.md
+mineru:
+	@node tooling/local-mineru.mjs start
+
+mineru-status:
+	@node tooling/local-mineru.mjs status
+
+mineru-stop:
+	@node tooling/local-mineru.mjs stop
 
 logs:
 	@test -f .env || { printf '%s\n' '缺少 .env，请复制 .env.example 后填写'; exit 1; }

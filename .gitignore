@@ -56,6 +56,7 @@ logs/
 tmp/
 temp/
 .educanvas-local.pid
+.educanvas-mineru-state.json
 .educanvas-migrate-state.json
 .omx/
 .omo/
