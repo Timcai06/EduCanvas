@@ -1,4 +1,8 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
+import {
+  linkTrafficKey,
+  linkTrafficLimiter,
+} from '@/server/assets/link-traffic-limiter';
 import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
 import {
   isTrustedSameOriginWrite,
@@ -69,8 +73,23 @@ function searchError(
   code: string,
   message: string,
   retryable: boolean,
+  retryAfterMs?: number,
 ): Response {
-  return jsonResponse({ error: { code, message, retryable } }, { status });
+  return jsonResponse(
+    { error: { code, message, retryable } },
+    {
+      status,
+      ...(retryAfterMs === undefined
+        ? {}
+        : {
+            headers: {
+              'retry-after': String(
+                Math.max(1, Math.ceil(retryAfterMs / 1_000)),
+              ),
+            },
+          }),
+    },
+  );
 }
 
 /** 浏览器搜索只接收 Provider-neutral 投影；Provider 身份、健康和原始响应留在服务端。 */
@@ -78,10 +97,22 @@ export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
   }
-  const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  let identity;
+  let conversation;
+  try {
+    identity = await readAnonymousIdentity();
+    if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+    conversation = await loadOwnedGeneralConversation(identity);
+    if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  } catch {
+    const failure = publicError.search_provider_unavailable;
+    return searchError(
+      failure.status,
+      'search_provider_unavailable',
+      failure.message,
+      true,
+    );
+  }
 
   let body: unknown;
   try {
@@ -90,7 +121,13 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof JsonRequestValidationError) {
       return jsonRequestErrorResponse(error);
     }
-    throw error;
+    const failure = publicError.search_provider_unavailable;
+    return searchError(
+      failure.status,
+      'search_provider_unavailable',
+      failure.message,
+      true,
+    );
   }
   const parsed = searchRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -101,7 +138,18 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const pipeline = resolveSearchCandidatePipeline(environment());
+  let pipeline;
+  try {
+    pipeline = resolveSearchCandidatePipeline(environment());
+  } catch {
+    const failure = publicError.search_provider_unavailable;
+    return searchError(
+      failure.status,
+      'search_provider_unavailable',
+      failure.message,
+      true,
+    );
+  }
   if (!pipeline) {
     const failure = publicError.search_not_configured;
     return searchError(
@@ -112,7 +160,21 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let lease;
   try {
+    lease = linkTrafficLimiter.acquire(
+      linkTrafficKey(identity.studentId, conversation.spaceId),
+    );
+    if (!lease.allowed) {
+      const failure = publicError.search_rate_limited;
+      return searchError(
+        failure.status,
+        'search_rate_limited',
+        failure.message,
+        true,
+        lease.retryAfterMs,
+      );
+    }
     const output = await pipeline.search(
       {
         query: parsed.data.query,
@@ -132,12 +194,17 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof SearchServiceError) {
-      const failure = publicError[error.code];
+      const failure =
+        publicError[error.code as keyof typeof publicError] ??
+        publicError.search_provider_unavailable;
+      const code = Object.hasOwn(publicError, error.code)
+        ? error.code
+        : 'search_provider_unavailable';
       return searchError(
         failure.status,
-        error.code,
+        code,
         failure.message,
-        error.retryable,
+        code === 'search_provider_unavailable' ? true : error.retryable,
       );
     }
     return searchError(
@@ -146,5 +213,7 @@ export async function POST(request: Request): Promise<Response> {
       publicError.search_provider_unavailable.message,
       true,
     );
+  } finally {
+    if (lease?.allowed) lease.release();
   }
 }

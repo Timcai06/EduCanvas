@@ -5,6 +5,7 @@ import {
   fetchWebPage,
   type FetchWebPageOptions,
 } from '@educanvas/asset-processing';
+import { nodeWebPageConnector } from '@educanvas/asset-processing/node';
 import type { SearchResult } from './search-contract';
 import { normalizePublicSearchResultUrl } from './search-url';
 
@@ -124,12 +125,31 @@ function mapWebPageError(error: WebPageError): SearchCandidatePreflightError {
 export async function preflightSearchCandidate(
   result: SearchResult,
   signal?: AbortSignal,
-  options: Pick<FetchWebPageOptions, 'request' | 'resolveHostname'> = {},
+  options: Pick<
+    FetchWebPageOptions,
+    'connector' | 'request' | 'resolveHostname'
+  > = {},
 ): Promise<CandidatePreflightSuccess> {
   try {
+    const connector = options.connector ?? nodeWebPageConnector;
     const page = await fetchWebPage(result.url, {
       ...options,
       allowEmptyText: true,
+      connector: async (url, init, approvedAddresses) => {
+        const connection = await connector(url, init, approvedAddresses);
+        if (
+          connection.response.status >= 400 &&
+          ![401, 403, 429, 451].includes(connection.response.status)
+        ) {
+          await connection.response.body?.cancel().catch(() => undefined);
+          throw new SearchCandidatePreflightError(
+            'candidate_http_error',
+            connection.response.status >= 500,
+          );
+        }
+        return connection;
+      },
+      signal,
       request: async (input, init) => {
         const response = await (options.request ?? fetch)(input, {
           ...init,

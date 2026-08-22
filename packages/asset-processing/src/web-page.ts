@@ -1,7 +1,17 @@
+import { isIP } from 'node:net';
+import { extractReadableHtml, type ReadableHtml } from './web-page-extraction';
+import {
+  createCombinedAbortSignal,
+  discardResponse,
+  readBoundedBody,
+} from './web-page-response';
+
 import {
   WebPageError,
   assertPublicHost,
   defaultResolveHostname,
+  isPublicIpAddress,
+  normalizeIpAddress,
   parsePublicHttpUrl,
 } from './web-page-security';
 
@@ -13,17 +23,15 @@ export {
   webPageFailureCodes,
   type WebPageFailureCode,
 } from './web-page-security';
+export {
+  WEB_PAGE_MAX_TEXT_CHARACTERS,
+  extractReadableHtml,
+  type ReadableHtml,
+} from './web-page-extraction';
 
 export const WEB_PAGE_DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 export const WEB_PAGE_DEFAULT_TIMEOUT_MS = 10_000;
 export const WEB_PAGE_MAX_REDIRECTS = 5;
-export const WEB_PAGE_MAX_TEXT_CHARACTERS = 120_000;
-
-export interface ReadableHtml {
-  title: string | null;
-  summary: string;
-  text: string;
-}
 
 export interface FetchedWebPage extends ReadableHtml {
   requestedUrl: string;
@@ -38,14 +46,33 @@ type Request = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+export interface WebPageConnection {
+  response: Response;
+  connectedAddress: string;
+}
+
+/**
+ * Performs a request while binding the connection to one of the reviewed DNS answers.
+ * Implementations must report the actual peer address after the connection is established.
+ */
+export type WebPageConnector = (
+  url: URL,
+  init: RequestInit,
+  approvedAddresses: readonly string[],
+) => Promise<WebPageConnection>;
+
 export interface FetchWebPageOptions {
+  /** Used for direct IP literals; DNS hostnames require a connector. */
   request?: Request;
+  /** Required for hostnames so the transport can bind and report the reviewed peer. */
+  connector?: WebPageConnector;
   resolveHostname?: (hostname: string) => Promise<readonly string[]>;
   maxBytes?: number;
   timeoutMs?: number;
   now?: () => Date;
   /** Import keeps an empty JS shell so the Worker can render it; preview stays strict. */
   allowEmptyText?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface FetchedWebScript {
@@ -54,100 +81,58 @@ export interface FetchedWebScript {
   bytes: Uint8Array;
 }
 
-async function readBoundedBody(
-  response: Response,
-  maxBytes: number,
-): Promise<Uint8Array> {
-  const declared = response.headers.get('content-length');
-  if (declared !== null && Number(declared) > maxBytes) {
-    throw new WebPageError('link_page_too_large');
+async function performWebPageRequest(
+  url: URL,
+  init: RequestInit,
+  approvedAddresses: readonly string[],
+  request: Request,
+  connector: WebPageConnector | undefined,
+  signal: AbortSignal,
+): Promise<Response> {
+  if (signal.aborted) {
+    throw (
+      signal.reason ??
+      new DOMException('The operation was aborted', 'AbortError')
+    );
   }
-  if (!response.body) return new Uint8Array();
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel();
-        throw new WebPageError('link_page_too_large');
-      }
-      chunks.push(value);
+  if (!connector) {
+    if (isIP(url.hostname) === 0) {
+      throw new WebPageError('link_network_unreachable');
     }
-  } finally {
-    reader.releaseLock();
+    return request(url, init);
   }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
-const HTML_ENTITY_MAP: Readonly<Record<string, string>> = {
-  amp: '&',
-  apos: "'",
-  gt: '>',
-  lt: '<',
-  nbsp: ' ',
-  quot: '"',
-};
-
-function decodeHtmlEntities(value: string): string {
-  return value.replace(
-    /&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/giu,
-    (matched, decimal: string, hexadecimal: string, named: string) => {
-      if (decimal) return String.fromCodePoint(Number(decimal));
-      if (hexadecimal)
-        return String.fromCodePoint(Number.parseInt(hexadecimal, 16));
-      return HTML_ENTITY_MAP[named.toLowerCase()] ?? matched;
-    },
-  );
-}
-
-function normalizeReadableText(value: string): string {
-  return decodeHtmlEntities(value)
-    .normalize('NFC')
-    .replace(/\u0000/gu, '')
-    .replace(/[ \t]+/gu, ' ')
-    .replace(/ *\n */gu, '\n')
-    .replace(/\n{3,}/gu, '\n\n')
-    .trim();
-}
-
-/** Dependency-free conservative HTML extraction for worker and preview paths. */
-export function extractReadableHtml(
-  html: string,
-  options: { allowEmptyText?: boolean } = {},
-): ReadableHtml {
-  const titleMatch = /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/iu.exec(html);
-  const title = titleMatch
-    ? normalizeReadableText(titleMatch[1]!.replace(/<[^>]*>/gu, ' ')).slice(
-        0,
-        300,
-      ) || null
-    : null;
-  const withoutNoise = html
-    .replace(/<!--[\s\S]*?-->/gu, ' ')
-    .replace(
-      /<(script|style|noscript|svg|canvas|template)(?:\s[^>]*)?>[\s\S]*?<\/\1>/giu,
-      ' ',
+  const connection = await new Promise<WebPageConnection>((resolve, reject) => {
+    const rejectForAbort = () =>
+      reject(
+        signal.reason ??
+          new DOMException('The operation was aborted', 'AbortError'),
+      );
+    if (signal.aborted) {
+      rejectForAbort();
+      return;
+    }
+    signal.addEventListener('abort', rejectForAbort, { once: true });
+    connector(url, init, approvedAddresses)
+      .then(resolve, reject)
+      .finally(() => {
+        signal.removeEventListener('abort', rejectForAbort);
+      });
+  });
+  if (
+    !connection ||
+    !(connection.response instanceof Response) ||
+    typeof connection.connectedAddress !== 'string' ||
+    !isPublicIpAddress(connection.connectedAddress) ||
+    !approvedAddresses.some(
+      (address) =>
+        normalizeIpAddress(address) ===
+        normalizeIpAddress(connection.connectedAddress),
     )
-    .replace(/<(nav|footer|aside)(?:\s[^>]*)?>[\s\S]*?<\/\1>/giu, ' ')
-    .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/article|\/section)>/giu, '\n')
-    .replace(/<[^>]+>/gu, ' ');
-  const text = [...normalizeReadableText(withoutNoise)]
-    .slice(0, WEB_PAGE_MAX_TEXT_CHARACTERS)
-    .join('');
-  if (!text && !options.allowEmptyText) {
-    throw new WebPageError('link_no_extractable_content');
+  ) {
+    await connection?.response?.body?.cancel().catch(() => undefined);
+    throw new WebPageError('link_blocked_host');
   }
-  return { title, summary: [...text].slice(0, 280).join(''), text };
+  return connection.response;
 }
 
 export async function fetchWebPage(
@@ -155,43 +140,67 @@ export async function fetchWebPage(
   options: FetchWebPageOptions = {},
 ): Promise<FetchedWebPage> {
   const request = options.request ?? fetch;
+  const connector = options.connector;
   const resolveHostname = options.resolveHostname ?? defaultResolveHostname;
   const maxBytes = options.maxBytes ?? WEB_PAGE_DEFAULT_MAX_BYTES;
   const timeoutMs = options.timeoutMs ?? WEB_PAGE_DEFAULT_TIMEOUT_MS;
   const requested = parsePublicHttpUrl(requestedUrl);
   let current = requested;
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  const { signal, cleanup } = createCombinedAbortSignal(
+    options.signal,
+    timeoutMs,
+  );
   try {
     for (let redirect = 0; redirect <= WEB_PAGE_MAX_REDIRECTS; redirect += 1) {
-      await assertPublicHost(current, resolveHostname);
+      const approvedAddresses = await assertPublicHost(
+        current,
+        resolveHostname,
+        signal,
+      );
       let response: Response;
       try {
-        response = await request(current, {
-          method: 'GET',
-          redirect: 'manual',
-          signal: abort.signal,
-          headers: {
-            accept: 'text/html,application/xhtml+xml;q=0.9',
-            'user-agent': 'EduCanvas-WebImporter/1.0',
+        response = await performWebPageRequest(
+          current,
+          {
+            method: 'GET',
+            redirect: 'manual',
+            signal,
+            headers: {
+              accept: 'text/html,application/xhtml+xml;q=0.9',
+              'user-agent': 'EduCanvas-WebImporter/1.0',
+            },
           },
-        });
+          approvedAddresses,
+          request,
+          connector,
+          signal,
+        );
       } catch (cause) {
+        if (cause instanceof WebPageError) throw cause;
         throw new WebPageError('link_network_unreachable', { cause });
       }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location');
         if (!location || redirect === WEB_PAGE_MAX_REDIRECTS) {
+          await discardResponse(response);
           throw new WebPageError('link_network_unreachable');
         }
+        await discardResponse(response);
         current = parsePublicHttpUrl(new URL(location, current).toString());
         continue;
       }
       if ([401, 403, 451].includes(response.status)) {
+        await discardResponse(response);
         throw new WebPageError('link_access_blocked');
       }
-      if (response.status === 429) throw new WebPageError('link_rate_limited');
-      if (!response.ok) throw new WebPageError('link_network_unreachable');
+      if (response.status === 429) {
+        await discardResponse(response);
+        throw new WebPageError('link_rate_limited');
+      }
+      if (!response.ok) {
+        await discardResponse(response);
+        throw new WebPageError('link_network_unreachable');
+      }
       const contentType = response.headers
         .get('content-type')
         ?.split(';', 1)[0]
@@ -201,9 +210,10 @@ export async function fetchWebPage(
         contentType !== 'text/html' &&
         contentType !== 'application/xhtml+xml'
       ) {
+        await discardResponse(response);
         throw new WebPageError('link_unsupported_format');
       }
-      const bytes = await readBoundedBody(response, maxBytes);
+      const bytes = await readBoundedBody(response, maxBytes, signal);
       const readable = extractReadableHtml(new TextDecoder().decode(bytes), {
         allowEmptyText: options.allowEmptyText,
       });
@@ -218,7 +228,7 @@ export async function fetchWebPage(
     }
     throw new WebPageError('link_network_unreachable');
   } finally {
-    clearTimeout(timer);
+    cleanup();
   }
 }
 
@@ -236,58 +246,83 @@ export async function fetchPublicWebScript(
   options: Omit<FetchWebPageOptions, 'allowEmptyText' | 'now'> = {},
 ): Promise<FetchedWebScript> {
   const request = options.request ?? fetch;
+  const connector = options.connector;
   const resolveHostname = options.resolveHostname ?? defaultResolveHostname;
   const maxBytes = options.maxBytes ?? 512 * 1024;
   const timeoutMs = options.timeoutMs ?? WEB_PAGE_DEFAULT_TIMEOUT_MS;
   let current = parsePublicHttpUrl(requestedUrl);
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  const { signal, cleanup } = createCombinedAbortSignal(
+    options.signal,
+    timeoutMs,
+  );
   try {
     for (let redirect = 0; redirect <= WEB_PAGE_MAX_REDIRECTS; redirect += 1) {
-      await assertPublicHost(current, resolveHostname);
+      const approvedAddresses = await assertPublicHost(
+        current,
+        resolveHostname,
+        signal,
+      );
       let response: Response;
       try {
-        response = await request(current, {
-          method: 'GET',
-          redirect: 'manual',
-          signal: abort.signal,
-          headers: {
-            accept: 'text/javascript,application/javascript;q=0.9',
-            'user-agent': 'EduCanvas-WebImporter/1.0',
+        response = await performWebPageRequest(
+          current,
+          {
+            method: 'GET',
+            redirect: 'manual',
+            signal,
+            headers: {
+              accept: 'text/javascript,application/javascript;q=0.9',
+              'user-agent': 'EduCanvas-WebImporter/1.0',
+            },
           },
-        });
+          approvedAddresses,
+          request,
+          connector,
+          signal,
+        );
       } catch (cause) {
+        if (cause instanceof WebPageError) throw cause;
         throw new WebPageError('link_network_unreachable', { cause });
       }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location');
         if (!location || redirect === WEB_PAGE_MAX_REDIRECTS) {
+          await discardResponse(response);
           throw new WebPageError('link_network_unreachable');
         }
+        await discardResponse(response);
         current = parsePublicHttpUrl(new URL(location, current).toString());
         continue;
       }
       if ([401, 403, 451].includes(response.status)) {
+        await discardResponse(response);
         throw new WebPageError('link_access_blocked');
       }
-      if (response.status === 429) throw new WebPageError('link_rate_limited');
-      if (!response.ok) throw new WebPageError('link_network_unreachable');
+      if (response.status === 429) {
+        await discardResponse(response);
+        throw new WebPageError('link_rate_limited');
+      }
+      if (!response.ok) {
+        await discardResponse(response);
+        throw new WebPageError('link_network_unreachable');
+      }
       const contentType = response.headers
         .get('content-type')
         ?.split(';', 1)[0]
         ?.trim()
         .toLowerCase();
       if (!contentType || !WEB_SCRIPT_CONTENT_TYPES.has(contentType)) {
+        await discardResponse(response);
         throw new WebPageError('link_unsupported_format');
       }
       return {
         finalUrl: current.toString(),
         contentType,
-        bytes: await readBoundedBody(response, maxBytes),
+        bytes: await readBoundedBody(response, maxBytes, signal),
       };
     }
     throw new WebPageError('link_network_unreachable');
   } finally {
-    clearTimeout(timer);
+    cleanup();
   }
 }

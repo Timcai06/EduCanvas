@@ -13,6 +13,7 @@ import {
   type NodeInvocationPersistencePort,
 } from '@educanvas/node-runtime';
 import { persistFetchedWebPageAsset } from '../assets/asset-upload';
+import { linkTrafficKey } from '../assets/link-traffic-limiter';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { createFetchWebPageTool, type FetchedWebPage } from '../tools/web-page';
 import {
@@ -74,6 +75,10 @@ export class WebOperationSources {
 
   get sourceCount(): number {
     return this.maximumOrdinal;
+  }
+
+  get trafficKey(): string {
+    return linkTrafficKey(this.input.identity.studentId, this.input.spaceId);
   }
 
   async persist(page: FetchedWebPage): Promise<{ citationMarker: number }> {
@@ -143,11 +148,16 @@ export function createGeneralToolKernel(
   nodeInvocations: NodeInvocationPersistencePort;
   searchProgress: WebSearchProgress;
 } {
-  const fetchTool = createFetchWebPageTool(undefined, (page) =>
-    operationSources.persist(page),
+  const fetchTool = createFetchWebPageTool(
+    undefined,
+    (page) => operationSources.persist(page),
+    undefined,
+    undefined,
+    operationSources.trafficKey,
   );
   const searchTool = resolveWebSearchTool(undefined, undefined, {
     deepResearch: options.deepResearch,
+    trafficKey: operationSources.trafficKey,
     ...(options.researchCheckpoint
       ? {
           initialProgress: {

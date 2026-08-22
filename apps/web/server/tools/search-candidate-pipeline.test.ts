@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { WebPageConnector } from '@educanvas/asset-processing';
+import { MetricsRegistry } from '@educanvas/telemetry';
 
 vi.mock('server-only', () => ({}));
 
@@ -40,6 +42,40 @@ function readable(result: SearchResult) {
 }
 
 describe('SearchCandidatePipeline', () => {
+  it('records bounded candidate, readable, failure and duration metrics', async () => {
+    const metrics = new MetricsRegistry();
+    const blocked = candidate(0, 'blocked.example.com');
+    const accepted = candidate(1, 'accepted.example.org');
+    const pipeline = new SearchCandidatePipeline(
+      searchService([blocked, accepted]),
+      async (result) => {
+        if (result.url === blocked.url) {
+          throw new SearchCandidatePreflightError(
+            'candidate_http_blocked',
+            false,
+          );
+        }
+        return readable(result);
+      },
+      {},
+      metrics,
+    );
+
+    await pipeline.search({ query: 'sensitive query', limit: 5 });
+
+    const snapshot = metrics.snapshot();
+    expect(snapshot.histograms.web_search_candidates?.sum).toBe(2);
+    expect(snapshot.histograms.web_search_readable_candidates?.sum).toBe(1);
+    expect(snapshot.counters['web_search_failures_total{category=http}']).toBe(
+      1,
+    );
+    expect(
+      snapshot.histograms['web_search_duration_ms{outcome=success}']?.count,
+    ).toBe(1);
+    expect(JSON.stringify(snapshot)).not.toContain('sensitive query');
+    expect(JSON.stringify(snapshot)).not.toContain('blocked.example.com');
+  });
+
   it('overfetches and fills five readable slots after the first five fail', async () => {
     const results = Array.from({ length: 10 }, (_, index) => candidate(index));
     const service = searchService(results);
@@ -252,15 +288,23 @@ describe('SearchCandidatePipeline', () => {
 
 describe('preflightSearchCandidate', () => {
   const publicDns = vi.fn().mockResolvedValue(['93.184.216.34']);
+  const connectorFor =
+    (request: typeof fetch): WebPageConnector =>
+    async (url, init, approvedAddresses) => ({
+      response: await request(url, init),
+      connectedAddress: approvedAddresses[0]!,
+    });
 
   it.each([
     [403, 'candidate_http_blocked'],
     [429, 'candidate_rate_limited'],
   ])('classifies HTTP %i', async (status, code) => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status }));
     await expect(
       preflightSearchCandidate(candidate(0), undefined, {
         resolveHostname: publicDns,
-        request: vi.fn().mockResolvedValue(new Response(null, { status })),
+        request,
+        connector: connectorFor(request as unknown as typeof fetch),
       }),
     ).rejects.toMatchObject({ code });
   });
@@ -271,10 +315,12 @@ describe('preflightSearchCandidate', () => {
   ])(
     'classifies HTTP %i separately from network failures',
     async (status, retryable) => {
+      const request = vi.fn().mockResolvedValue(new Response(null, { status }));
       await expect(
         preflightSearchCandidate(candidate(0), undefined, {
           resolveHostname: publicDns,
-          request: vi.fn().mockResolvedValue(new Response(null, { status })),
+          request,
+          connector: connectorFor(request as unknown as typeof fetch),
         }),
       ).rejects.toMatchObject({
         code: 'candidate_http_error',
@@ -284,15 +330,18 @@ describe('preflightSearchCandidate', () => {
   );
 
   it('classifies unsupported formats, login walls, empty pages and render shells', async () => {
-    const run = (body: string, contentType = 'text/html') =>
-      preflightSearchCandidate(candidate(0), undefined, {
+    const run = (body: string, contentType = 'text/html') => {
+      const request = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(body, { headers: { 'content-type': contentType } }),
+        );
+      return preflightSearchCandidate(candidate(0), undefined, {
         resolveHostname: publicDns,
-        request: vi
-          .fn()
-          .mockResolvedValue(
-            new Response(body, { headers: { 'content-type': contentType } }),
-          ),
+        request,
+        connector: connectorFor(request as unknown as typeof fetch),
       });
+    };
 
     await expect(run('%PDF', 'application/pdf')).rejects.toMatchObject({
       code: 'candidate_unsupported_format',
@@ -315,12 +364,14 @@ describe('preflightSearchCandidate', () => {
   });
 
   it('classifies timeout causes and blocked DNS addresses', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValue(new DOMException('aborted', 'AbortError'));
     await expect(
       preflightSearchCandidate(candidate(0), undefined, {
         resolveHostname: publicDns,
-        request: vi
-          .fn()
-          .mockRejectedValue(new DOMException('aborted', 'AbortError')),
+        request,
+        connector: connectorFor(request as unknown as typeof fetch),
       }),
     ).rejects.toMatchObject({ code: 'candidate_timeout', retryable: true });
 

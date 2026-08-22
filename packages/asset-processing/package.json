@@ -10,6 +10,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./node": "./src/node.ts",
     "./test-utils": "./src/mineru-fake-server.ts"
   },
   "scripts": {

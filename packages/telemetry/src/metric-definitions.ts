@@ -100,6 +100,69 @@ export const TURN_METRIC_DEFINITIONS: readonly MetricDefinition[] = [
   { name: 'worker_task_retry_total', kind: 'counter', labelKeys: ['task'] },
   { name: 'artifact_generation_failed_total', kind: 'counter', labelKeys: [] },
   {
+    name: 'web_search_provider_attempts_total',
+    kind: 'counter',
+    labelKeys: ['provider', 'outcome'],
+    labelValues: {
+      provider: ['tavily', 'searxng', 'unknown'],
+      outcome: ['success', 'failed', 'timeout', 'cancelled'],
+    },
+  },
+  {
+    name: 'web_search_duration_ms',
+    kind: 'histogram',
+    labelKeys: ['outcome'],
+    labelValues: { outcome: ['success', 'failed', 'cancelled'] },
+  },
+  { name: 'web_search_candidates', kind: 'histogram', labelKeys: [] },
+  {
+    name: 'web_search_readable_candidates',
+    kind: 'histogram',
+    labelKeys: [],
+  },
+  {
+    name: 'web_search_failures_total',
+    kind: 'counter',
+    labelKeys: ['category'],
+    labelValues: {
+      category: [
+        'blocked',
+        'http',
+        'access',
+        'content',
+        'timeout',
+        'rate_limited',
+        'render',
+        'network',
+        'cooled',
+        'unknown',
+      ],
+    },
+  },
+  {
+    name: 'web_search_rounds_total',
+    kind: 'counter',
+    labelKeys: ['phase'],
+    labelValues: { phase: ['broad', 'gap', 'deep', 'replacement'] },
+  },
+  { name: 'web_search_replacements_total', kind: 'counter', labelKeys: [] },
+  {
+    name: 'web_link_import_total',
+    kind: 'counter',
+    labelKeys: ['outcome'],
+    labelValues: {
+      outcome: ['success', 'failed', 'cancelled', 'rate_limited'],
+    },
+  },
+  {
+    name: 'web_link_import_duration_ms',
+    kind: 'histogram',
+    labelKeys: ['outcome'],
+    labelValues: {
+      outcome: ['success', 'failed', 'cancelled', 'rate_limited'],
+    },
+  },
+  {
     name: 'telemetry_exporter_health',
     kind: 'gauge',
     labelKeys: ['status'],

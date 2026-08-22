@@ -112,6 +112,15 @@ describe('MetricsRegistry（Q04）', () => {
     expect(names).toContain('worker_task_total'); // Worker 任务
     expect(names).toContain('worker_task_retry_total'); // Worker 重试
     expect(names).toContain('artifact_generation_failed_total'); // Artifact 生成失败
+    expect(names).toContain('web_search_provider_attempts_total');
+    expect(names).toContain('web_search_duration_ms');
+    expect(names).toContain('web_search_candidates');
+    expect(names).toContain('web_search_readable_candidates');
+    expect(names).toContain('web_search_failures_total');
+    expect(names).toContain('web_search_rounds_total');
+    expect(names).toContain('web_search_replacements_total');
+    expect(names).toContain('web_link_import_total');
+    expect(names).toContain('web_link_import_duration_ms');
     expect(names).toContain('telemetry_exporter_health'); // Exporter 健康
   });
 });

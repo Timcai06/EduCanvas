@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   trustedOrigin: vi.fn(),
   resolvePipeline: vi.fn(),
   search: vi.fn(),
+  trafficAcquire: vi.fn(),
+  release: vi.fn(),
 }));
 
 vi.mock('@/server/identity/anonymous-identity', () => ({
@@ -23,6 +25,11 @@ vi.mock('@/server/http/request-security', async (importOriginal) => {
 });
 vi.mock('@/server/tools/web-search', () => ({
   resolveSearchCandidatePipeline: mocks.resolvePipeline,
+}));
+vi.mock('@/server/assets/link-traffic-limiter', () => ({
+  linkTrafficKey: (subject: string, notebook: string) =>
+    `${subject}:${notebook}`,
+  linkTrafficLimiter: { acquire: mocks.trafficAcquire },
 }));
 
 import { SearchServiceError } from '@/server/tools/search-service';
@@ -43,6 +50,10 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     mocks.identity.mockResolvedValue({ studentId: 'student-1' });
     mocks.conversation.mockResolvedValue({ spaceId: 'space-1' });
     mocks.resolvePipeline.mockReturnValue({ search: mocks.search });
+    mocks.trafficAcquire.mockReturnValue({
+      allowed: true,
+      release: mocks.release,
+    });
   });
 
   it('returns only the browser-safe Provider-neutral projection', async () => {
@@ -65,6 +76,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     const response = await POST(request({ query: 'research topic' }));
 
     expect(response.status).toBe(200);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
     expect(await response.json()).toEqual({
       results: [
         {
@@ -96,6 +108,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     const response = await POST(request({ query: 'research topic' }));
 
     expect(response.status).toBe(503);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
     expect(await response.json()).toEqual({
       error: {
         code: 'search_provider_unavailable',
@@ -114,5 +127,44 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     expect(await response.json()).toMatchObject({
       error: { code: 'search_not_configured', retryable: false },
     });
+  });
+
+  it('shares a stable 429 response when the actor and Notebook budget is full', async () => {
+    mocks.trafficAcquire.mockReturnValue({
+      allowed: false,
+      reason: 'concurrency',
+      retryAfterMs: 1_000,
+    });
+
+    const response = await POST(request({ query: 'research topic' }));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('1');
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'search_rate_limited',
+        message: '网页搜索请求过于频繁。请稍后重试。',
+        retryable: true,
+      },
+    });
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it('maps unknown provider failures to a stable public error', async () => {
+    mocks.search.mockRejectedValue(new Error('secret provider body'));
+
+    const response = await POST(request({ query: 'research topic' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: {
+        code: 'search_provider_unavailable',
+        message: '网页搜索暂时不可用。请稍后重试。',
+        retryable: true,
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('secret provider body');
   });
 });

@@ -53,6 +53,26 @@ function ipv4Number(address: string): number {
     .reduce((value, part) => value * 256 + Number(part), 0);
 }
 
+export function normalizeIpAddress(address: string): string | null {
+  if (isIP(address) === 4) {
+    return address
+      .split('.')
+      .map((part) => String(Number(part)))
+      .join('.');
+  }
+  if (isIP(address) !== 6) return null;
+  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  if (normalized.startsWith('::ffff:')) {
+    const words = normalized.slice(7).split(':');
+    if (words.length === 2) {
+      const high = Number.parseInt(words[0]!, 16);
+      const low = Number.parseInt(words[1]!, 16);
+      return `${high >>> 8}.${high & 0xff}.${low >>> 8}.${low & 0xff}`;
+    }
+  }
+  return normalized;
+}
+
 function ipv4InCidr(address: string, base: string, bits: number): boolean {
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   return (ipv4Number(address) & mask) === (ipv4Number(base) & mask);
@@ -129,10 +149,45 @@ export async function defaultResolveHostname(
   );
 }
 
+async function resolveHostnameWithSignal(
+  hostname: string,
+  resolveHostname: (hostname: string) => Promise<readonly string[]>,
+  signal: AbortSignal | undefined,
+): Promise<readonly string[]> {
+  if (!signal) return resolveHostname(hostname);
+  if (signal.aborted) {
+    throw (
+      signal.reason ??
+      new DOMException('The operation was aborted', 'AbortError')
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(
+        signal.reason ??
+          new DOMException('The operation was aborted', 'AbortError'),
+      );
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    void resolveHostname(hostname)
+      .then(resolve, reject)
+      .finally(() => {
+        signal.removeEventListener('abort', onAbort);
+      });
+  });
+}
+
 export async function assertPublicHost(
   url: URL,
   resolveHostname: (hostname: string) => Promise<readonly string[]>,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<readonly string[]> {
+  if (signal?.aborted) {
+    throw (
+      signal.reason ??
+      new DOMException('The operation was aborted', 'AbortError')
+    );
+  }
   if (url.hostname.toLowerCase() === 'localhost') {
     throw new WebPageError('link_blocked_host');
   }
@@ -141,9 +196,18 @@ export async function assertPublicHost(
   try {
     addresses = isIpAddress
       ? [url.hostname]
-      : await resolveHostname(url.hostname);
+      : await resolveHostnameWithSignal(url.hostname, resolveHostname, signal);
   } catch (cause) {
+    if (signal?.aborted) {
+      throw signal.reason ?? cause;
+    }
     throw new WebPageError('link_network_unreachable', { cause });
+  }
+  if (signal?.aborted) {
+    throw (
+      signal.reason ??
+      new DOMException('The operation was aborted', 'AbortError')
+    );
   }
   if (addresses.length === 0) {
     throw new WebPageError('link_blocked_host');
@@ -157,6 +221,7 @@ export async function assertPublicHost(
   if (addresses.some((address) => !isPublicIpAddress(address))) {
     throw new WebPageError('link_blocked_host');
   }
+  return addresses;
 }
 
 /** Validate URL syntax plus every DNS answer immediately before a network hop. */

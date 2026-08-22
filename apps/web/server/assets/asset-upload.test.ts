@@ -136,6 +136,7 @@ describe('uploadOwnedAsset', () => {
   });
 
   it('网页导入保存原始 HTML 与安全溯源并异步入队', async () => {
+    const controller = new AbortController();
     const bytes = new TextEncoder().encode(
       '<html><head><title>研究页面</title></head><body><div id="app"></div></body></html>',
     );
@@ -155,10 +156,13 @@ describe('uploadOwnedAsset', () => {
       identity,
       spaceId: 'space-1',
       url: 'https://example.com/topic',
+      signal: controller.signal,
     });
 
     expect(fetchWebPage).toHaveBeenCalledWith('https://example.com/topic', {
       allowEmptyText: true,
+      connector: expect.any(Function),
+      signal: controller.signal,
     });
     expect(storeAssetBytes).toHaveBeenCalledWith(
       expect.objectContaining({

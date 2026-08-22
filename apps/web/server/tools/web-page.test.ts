@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { WebPageConnector } from '@educanvas/asset-processing';
 
 vi.mock('server-only', () => ({}));
 
@@ -15,6 +16,12 @@ const htmlResponse = (html: string, headers: Record<string, string> = {}) =>
     headers: { 'content-type': 'text/html; charset=utf-8', ...headers },
   });
 const resolvePublic = async () => ['93.184.216.34'];
+const connectorFor =
+  (request: typeof fetch): WebPageConnector =>
+  async (url, init, approvedAddresses) => ({
+    response: await request(url, init),
+    connectedAddress: approvedAddresses[0]!,
+  });
 
 describe('extractReadableText', () => {
   it('抽取标题与正文,去脚本样式,解码实体,收敛空白', () => {
@@ -67,6 +74,7 @@ describe('fetchReadableWebPage', () => {
         'https://example.com/page',
         fetchStub as unknown as typeof fetch,
         resolvePublic,
+        connectorFor(fetchStub as unknown as typeof fetch),
       ),
     ).rejects.toMatchObject({ code: 'blocked_host' });
   });
@@ -79,6 +87,7 @@ describe('fetchReadableWebPage', () => {
         'https://example.com/page',
         fetchStub,
         fakeIpResolver,
+        connectorFor(fetchStub),
       ),
     ).rejects.toMatchObject({ code: 'fake_ip_dns_detected' });
   });
@@ -98,6 +107,7 @@ describe('fetchReadableWebPage', () => {
         'https://example.com/page',
         fetchStub as unknown as typeof fetch,
         resolvePublic,
+        connectorFor(fetchStub as unknown as typeof fetch),
       ),
     ).rejects.toMatchObject({ code: 'blocked_host' });
   });
@@ -111,6 +121,7 @@ describe('fetchReadableWebPage', () => {
       'https://example.com/a',
       okStub,
       resolvePublic,
+      connectorFor(okStub),
     );
     expect(page.title).toBe('猫狗分类');
     expect(page.text).toContain('神经网络提取特征');
@@ -120,7 +131,12 @@ describe('fetchReadableWebPage', () => {
         headers: { 'content-type': 'application/pdf' },
       })) as unknown as typeof fetch;
     await expect(
-      fetchReadableWebPage('https://example.com/b', pdfStub, resolvePublic),
+      fetchReadableWebPage(
+        'https://example.com/b',
+        pdfStub,
+        resolvePublic,
+        connectorFor(pdfStub),
+      ),
     ).rejects.toMatchObject({ code: 'unsupported_content' });
 
     const hugeStub = (async () =>
@@ -128,7 +144,12 @@ describe('fetchReadableWebPage', () => {
         'content-length': String(10 * 1024 * 1024),
       })) as unknown as typeof fetch;
     await expect(
-      fetchReadableWebPage('https://example.com/c', hugeStub, resolvePublic),
+      fetchReadableWebPage(
+        'https://example.com/c',
+        hugeStub,
+        resolvePublic,
+        connectorFor(hugeStub),
+      ),
     ).rejects.toMatchObject({ code: 'too_large' });
   });
 
@@ -142,7 +163,12 @@ describe('fetchReadableWebPage', () => {
       expect(page.text.length).toBeGreaterThan(8_000);
       return { citationMarker: 2 };
     });
-    const tool = createFetchWebPageTool(fetchStub, onFetched, resolvePublic);
+    const tool = createFetchWebPageTool(
+      fetchStub,
+      onFetched,
+      resolvePublic,
+      connectorFor(fetchStub),
+    );
 
     const result = await tool.handler(
       { url: 'https://example.com/research' },
