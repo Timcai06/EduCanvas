@@ -19,7 +19,7 @@
     "node:runtime": "node tooling/quality/node-runtime-check.mjs",
     "env:check": "node tooling/local/env-check.mjs",
     "env:init": "node tooling/local/env-init.mjs",
-    "file:check": "node tooling/quality/file-governance.mjs && node tooling/quality/document-links.mjs",
+    "file:check": "node tooling/architecture/package-policy.mjs && node tooling/quality/file-governance.mjs && node tooling/quality/document-links.mjs",
     "setup:local": "pnpm install --frozen-lockfile && pnpm db:up && pnpm db:migrate",
     "start:local": "node tooling/local/local-orchestrator.mjs web",
     "test": "pnpm test:unit",
