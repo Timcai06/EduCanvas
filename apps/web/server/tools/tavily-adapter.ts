@@ -4,28 +4,35 @@ import type {
   SearchRequest,
   SearchResult,
 } from './search-contract';
-import { SearchProviderError } from './search-contract';
+import {
+  boundSearchResultLimit,
+  SearchProviderError,
+  SEARCH_PROVIDER_MAX_RESULTS,
+  SEARCH_RESULT_MAX_SNIPPET_LENGTH,
+  SEARCH_RESULT_MAX_TITLE_LENGTH,
+  SEARCH_RESULT_MAX_URL_LENGTH,
+} from './search-contract';
 import {
   normalizePublicSearchResultUrl,
   normalizeSearchProviderBaseUrl,
   toSearchResultFields,
 } from './search-url';
+import { readSearchProviderJson } from './search-provider-response';
 
 const tavilyResponseSchema = z.object({
   results: z
     .array(
       z.object({
-        title: z.string().optional(),
-        url: z.string(),
-        content: z.string().optional(),
+        title: z.string().max(SEARCH_RESULT_MAX_TITLE_LENGTH).optional(),
+        url: z.string().max(SEARCH_RESULT_MAX_URL_LENGTH),
+        content: z.string().max(SEARCH_RESULT_MAX_SNIPPET_LENGTH).optional(),
         score: z.number().optional(),
-        published_date: z.string().optional(),
+        published_date: z.string().max(128).optional(),
       }),
     )
+    .max(SEARCH_PROVIDER_MAX_RESULTS)
     .optional(),
 });
-
-const TAVILY_MAX_RESULTS = 20;
 
 export interface TavilyAdapterConfig {
   readonly apiKey: string;
@@ -59,13 +66,14 @@ export function createTavilyAdapter(
       if (signal?.aborted) abort.abort();
 
       try {
+        const resultLimit = boundSearchResultLimit(request.limit);
         const response = await fetchImpl(`${baseUrl}/search`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             api_key: config.apiKey,
             query: request.query,
-            max_results: Math.min(TAVILY_MAX_RESULTS, request.limit),
+            max_results: resultLimit,
             include_answer: false,
             include_raw_content: false,
           }),
@@ -79,9 +87,13 @@ export function createTavilyAdapter(
           throw new SearchProviderError('search_provider_unavailable', true);
         }
 
-        const payload = tavilyResponseSchema.parse(await response.json());
+        const payload = tavilyResponseSchema.parse(
+          await readSearchProviderJson(response, abort.signal),
+        );
         const results: SearchResult[] = [];
         const seen = new Set<string>();
+
+        if (resultLimit === 0) return results;
 
         for (const item of payload.results ?? []) {
           const url = normalizePublicSearchResultUrl(item.url);
@@ -98,7 +110,7 @@ export function createTavilyAdapter(
             publishedAt: item.published_date,
           });
 
-          if (results.length >= Math.min(TAVILY_MAX_RESULTS, request.limit)) {
+          if (results.length >= resultLimit) {
             break;
           }
         }

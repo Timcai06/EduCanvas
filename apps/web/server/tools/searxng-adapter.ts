@@ -4,24 +4,33 @@ import type {
   SearchRequest,
   SearchResult,
 } from './search-contract';
-import { SearchProviderError } from './search-contract';
+import {
+  boundSearchResultLimit,
+  SearchProviderError,
+  SEARCH_PROVIDER_MAX_RESULTS,
+  SEARCH_RESULT_MAX_SNIPPET_LENGTH,
+  SEARCH_RESULT_MAX_TITLE_LENGTH,
+  SEARCH_RESULT_MAX_URL_LENGTH,
+} from './search-contract';
 import {
   normalizePublicSearchResultUrl,
   normalizeSearchProviderBaseUrl,
   toSearchResultFields,
 } from './search-url';
+import { readSearchProviderJson } from './search-provider-response';
 
 const searxngResponseSchema = z.object({
   results: z
     .array(
       z.object({
-        title: z.string().optional(),
-        url: z.string(),
-        content: z.string().optional(),
-        publishedDate: z.string().optional(),
-        engine: z.string().optional(),
+        title: z.string().max(SEARCH_RESULT_MAX_TITLE_LENGTH).optional(),
+        url: z.string().max(SEARCH_RESULT_MAX_URL_LENGTH),
+        content: z.string().max(SEARCH_RESULT_MAX_SNIPPET_LENGTH).optional(),
+        publishedDate: z.string().max(128).optional(),
+        engine: z.string().max(128).optional(),
       }),
     )
+    .max(SEARCH_PROVIDER_MAX_RESULTS)
     .optional(),
   number_of_results: z.number().optional(),
 });
@@ -56,6 +65,7 @@ export function createSearXNGAdapter(
       if (signal?.aborted) abort.abort();
 
       try {
+        const resultLimit = boundSearchResultLimit(request.limit);
         const params = new URLSearchParams({
           q: request.query,
           format: 'json',
@@ -85,9 +95,13 @@ export function createSearXNGAdapter(
           throw new SearchProviderError('search_provider_unavailable', true);
         }
 
-        const payload = searxngResponseSchema.parse(await response.json());
+        const payload = searxngResponseSchema.parse(
+          await readSearchProviderJson(response, abort.signal),
+        );
         const results: SearchResult[] = [];
         const seen = new Set<string>();
+
+        if (resultLimit === 0) return results;
 
         for (const item of payload.results ?? []) {
           const url = normalizePublicSearchResultUrl(item.url);
@@ -103,7 +117,7 @@ export function createSearXNGAdapter(
             publishedAt: item.publishedDate,
           });
 
-          if (results.length >= request.limit) break;
+          if (results.length >= resultLimit) break;
         }
 
         return results;

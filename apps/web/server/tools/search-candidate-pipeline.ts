@@ -9,6 +9,11 @@ import {
 } from './search-candidate-preflight';
 import { SearchServiceError, type SearchService } from './search-service';
 import { normalizePublicSearchResultUrl } from './search-url';
+import {
+  NOOP_METRICS,
+  recordMetricSafely,
+  type MetricsPort,
+} from '@educanvas/telemetry';
 
 export type SearchCandidateContentKind =
   'article' | 'documentation' | 'institution' | 'other';
@@ -170,11 +175,46 @@ export class SearchCandidatePipeline {
     private readonly searchService: Pick<SearchService, 'search'>,
     private readonly preflight: SearchCandidatePreflight = preflightSearchCandidate,
     config: SearchCandidatePipelineConfig = {},
+    private readonly metrics: MetricsPort = NOOP_METRICS,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
   async search(
+    request: SearchRequest,
+    signal?: AbortSignal,
+  ): Promise<SearchCandidateOutput> {
+    const startedAt = Date.now();
+    try {
+      const output = await this.searchUnobserved(request, signal);
+      recordMetricSafely(() =>
+        this.metrics.record('web_search_duration_ms', Date.now() - startedAt, {
+          outcome: 'success',
+        }),
+      );
+      for (const failure of output.failures) {
+        recordMetricSafely(() =>
+          this.metrics.increment('web_search_failures_total', {
+            category: candidateFailureCategory(failure.code),
+          }),
+        );
+      }
+      return output;
+    } catch (error) {
+      recordMetricSafely(() =>
+        this.metrics.record('web_search_duration_ms', Date.now() - startedAt, {
+          outcome:
+            error instanceof SearchServiceError &&
+            error.code === 'search_cancelled'
+              ? 'cancelled'
+              : 'failed',
+        }),
+      );
+      throw error;
+    }
+  }
+
+  private async searchUnobserved(
     request: SearchRequest,
     signal?: AbortSignal,
   ): Promise<SearchCandidateOutput> {
@@ -200,6 +240,9 @@ export class SearchCandidatePipeline {
       });
       if (unique.length >= candidateLimit) break;
     }
+    recordMetricSafely(() =>
+      this.metrics.record('web_search_candidates', unique.length),
+    );
 
     const groups = new Map<string, SearchResult[]>();
     const priorRoundFailures: SearchCandidateFailure[] = [];
@@ -290,10 +333,51 @@ export class SearchCandidatePipeline {
       seenFinalUrls.add(candidate.url);
       readable.push(candidate);
     }
+    recordMetricSafely(() =>
+      this.metrics.record('web_search_readable_candidates', readable.length),
+    );
     return {
       results: diverseRank(readable, target, this.config.maxResultsPerDomain),
       failures,
       attemptedProviders: searched.attemptedProviders,
     };
   }
+}
+
+function candidateFailureCategory(
+  code: SearchCandidateFailureCode,
+):
+  | 'blocked'
+  | 'http'
+  | 'access'
+  | 'content'
+  | 'timeout'
+  | 'rate_limited'
+  | 'render'
+  | 'network'
+  | 'cooled'
+  | 'unknown' {
+  if (code === 'candidate_blocked_address') return 'blocked';
+  if (code === 'candidate_http_blocked' || code === 'candidate_http_error') {
+    return 'http';
+  }
+  if (code === 'candidate_login_wall') return 'access';
+  if (
+    code === 'candidate_empty_content' ||
+    code === 'candidate_unsupported_format' ||
+    code === 'candidate_too_large'
+  ) {
+    return 'content';
+  }
+  if (code === 'candidate_timeout') return 'timeout';
+  if (code === 'candidate_rate_limited') return 'rate_limited';
+  if (
+    code === 'candidate_render_required' ||
+    code === 'candidate_render_unavailable'
+  ) {
+    return 'render';
+  }
+  if (code === 'candidate_network_error') return 'network';
+  if (code === 'candidate_domain_cooled') return 'cooled';
+  return 'unknown';
 }

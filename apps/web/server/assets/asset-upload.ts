@@ -16,6 +16,7 @@ import {
   inspectSupportedAudioSource,
   supportsTextExtraction,
 } from '@educanvas/asset-processing';
+import { nodeWebPageConnector } from '@educanvas/asset-processing/node';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { loadOwnedTeachingGatewayTarget } from '../teaching/learning-session';
 import { type FetchedWebPage } from '../tools/web-page';
@@ -201,10 +202,15 @@ export async function importOwnedLinkAsset(input: {
   identity: AnonymousIdentity;
   spaceId: string;
   url: string;
+  signal?: AbortSignal;
 }): Promise<AssetSnapshot> {
   let page;
   try {
-    page = await fetchWebPage(input.url, { allowEmptyText: true });
+    page = await fetchWebPage(input.url, {
+      allowEmptyText: true,
+      connector: nodeWebPageConnector,
+      signal: input.signal,
+    });
   } catch (error) {
     throw new AssetUploadError(
       error instanceof WebPageError ? error.code : 'link_network_unreachable',

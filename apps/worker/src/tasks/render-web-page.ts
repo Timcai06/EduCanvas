@@ -3,6 +3,7 @@ import {
   fetchPublicWebScript,
   type FetchedWebScript,
 } from '@educanvas/asset-processing';
+import { nodeWebPageConnector } from '@educanvas/asset-processing/node';
 import { chromium } from 'playwright';
 
 const MAX_SCRIPT_COUNT = 12;
@@ -33,7 +34,7 @@ export async function renderReadableStoredHtml(
   html: string,
   baseUrl?: string,
   fetchScript: (url: string) => Promise<FetchedWebScript> = (url) =>
-    fetchPublicWebScript(url),
+    fetchPublicWebScript(url, { connector: nodeWebPageConnector }),
 ): Promise<string> {
   let browser;
   try {

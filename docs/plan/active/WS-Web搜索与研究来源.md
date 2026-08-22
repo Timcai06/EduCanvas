@@ -263,7 +263,7 @@ WS00-WS07 → WS08 → WS09
 ### WS07：来源、引用与后续追问闭环
 
 - 依赖：WS06
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：Source read model、Studio、Citation 和 Conversation hydration
 
 交付：
@@ -281,12 +281,12 @@ WS00-WS07 → WS08 → WS09
 - 来源删除仅在服务端 tombstone 成功后更新本地列表，并触发统一 Resource Dock reload；失败不乐观移除，并发删除去重，卸载后忽略迟到回调；
 - 删除接口将 repository 的 `false` 稳定映射为 `asset_not_found/404`，避免客户端误报删除成功后刷新复现；
 - 历史 Citation 继续保留冻结的 AssetVersion、ordinal、label 与原始 URL；恢复同一 Operation 时只选入仍为 ready/current 的来源，tombstoned 来源不会重新进入有效上下文；
-- Web 聚焦回归 20/20 通过，Web/DB typecheck、lint、文件治理与 diff 检查通过。DB tombstone/hydration 集成测试已补充，交由 PR 的 `db-integration` lane 执行；当前结论为 `IN_REVIEW`。
+- Web 聚焦回归 20/20 通过，Web/DB typecheck、lint、文件治理与 diff 检查通过；DB tombstone/hydration 集成测试与 PR #401 的静态、单元、DB 集成、Chromium E2E 和最终 checks 全绿；Codex 审核结论 CRITICAL 0、HIGH 0，合并提交 `51e2d005`，状态更新为 `PASS`。
 
 ### WS08：安全、观测与成本边界
 
 - 依赖：WS01-WS07
-- 状态：`PENDING`
+- 状态：`IN_REVIEW`
 - 文件边界：日志、指标、速率限制、Provider/抓取安全测试
 
 交付：
@@ -297,6 +297,16 @@ WS00-WS07 → WS08 → WS09
 - 覆盖凭据 URL、重定向到内网、DNS rebinding、超大正文、脚本资源预算和恶意 Provider 响应。
 
 完成标准：日志和浏览器响应不含 Key、Prompt、原始 Provider Body、网页正文或堆栈。
+
+实现证据（2026-08-22）：
+
+- 网页抓取每个 DNS hop 都先审核全部解析结果，再由 Node connector 将 socket 固定到其中一个审核 IP；HTTP Host 与 HTTPS SNI 保留原始域名，并核对实际 peer，重定向逐跳复审，DNS rebinding 不再依赖原生 `fetch` 的不可见连接状态；
+- 抓取继承外部取消并保留 10 秒、2 MiB、5 次重定向边界；Worker 脚本仍限制 12 个资源、单资源 512 KiB、总计 2 MiB，所有重定向、错误状态和格式拒绝路径都会主动取消响应流；
+- Tavily 与 SearXNG 响应改为 256 KiB 有界流读取、严格 UTF-8/JSON 与字段 schema，最多接收 20 个结果，URL/标题/摘要长度分别限制为 1024/200/400；取消和超时保持稳定分类，不读取或回传原始 Provider Body；
+- 浏览器搜索、直接导入与 Agent `web.search`/`web.fetch` 共享 actor + Notebook 的进程级边界：每分钟 20 次、最多 3 个并发、最多 10,000 个 key；全部 key 活跃时 fail closed，lease 在 `finally` 恰好释放，429 提供稳定错误和 `Retry-After`；当前部署契约是单 Web 进程，横向多实例前必须迁移到共享限流存储，不能把进程内计数宣称为集群全局事实；
+- 低基数指标覆盖固定 Provider、成功/失败结果、搜索耗时、候选/可读数量、闭集失败类别、研究轮次与补位次数、链接导入结果与耗时；指标注册表拒绝未声明标签，测试证明 query、URL、域名和自定义 Provider 名不会进入快照；Web 通过复用至少 32 字节的既有 Gateway internal token 提供只读 `/api/v1/internal/metrics`，未配置时 fail closed；
+- 浏览器路由只投影稳定 code、retryable 与固定操作建议；未知身份、解析、Provider、导入和异常路径不返回 Key、Prompt、Provider Body、网页正文、异常 message 或堆栈；
+- 聚焦与全量验证覆盖 asset-processing 网页/真实 socket connector、Web 搜索/候选/抓取/路由/限流、Worker 与 telemetry；相关包 typecheck、lint、文件治理与 diff 检查 clean。当前结论为 `IN_REVIEW`，等待 PR CI 与最终合并证据。
 
 ### WS09：电脑浏览器验收与收口
 

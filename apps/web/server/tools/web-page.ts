@@ -6,7 +6,12 @@ import {
   fetchWebPage as fetchSafeWebPage,
   type FetchWebPageOptions,
 } from '@educanvas/asset-processing';
+import { nodeWebPageConnector } from '@educanvas/asset-processing/node';
 import { z } from 'zod';
+import {
+  linkTrafficLimiter,
+  type LinkTrafficLease,
+} from '../assets/link-traffic-limiter';
 
 /**
  * 安全网页抓取核心(M3b-C)。服务端替用户/模型取回公开网页并抽取正文,
@@ -14,8 +19,8 @@ import { z } from 'zod';
  *
  * SSRF 防线(纵深一:主机名规则):只允许 http/https 默认端口,拒绝 IP 直连
  * 内网段、localhost、.local 与带凭据 URL;重定向手动跟随且每跳重检。
- * 已知残余风险:DNS 重绑定需在网络层(独立出口/代理)治理,属 production
- * hardening 非目标,在此明示不伪装已解决。
+ * Node 组合根使用 DNS 固定连接器，把 socket 绑定到刚审核的解析结果，并核对
+ * 实际 peer；自定义测试传输也必须显式实现同一 connector 契约。
  */
 
 const MAX_TEXT_CHARS = 60_000;
@@ -82,10 +87,12 @@ export async function fetchReadableWebPage(
   rawUrl: string,
   fetchImpl: typeof fetch = fetch,
   resolveHostname?: FetchWebPageOptions['resolveHostname'],
+  connector: FetchWebPageOptions['connector'] = nodeWebPageConnector,
 ): Promise<FetchedWebPage> {
   try {
     const page = await fetchSafeWebPage(rawUrl, {
       request: fetchImpl,
+      connector,
       ...(resolveHostname ? { resolveHostname } : {}),
     });
     return {
@@ -139,6 +146,8 @@ export function createFetchWebPageTool(
   fetchImpl: typeof fetch = fetch,
   onFetched?: WebPageFetchedHook,
   resolveHostname?: FetchWebPageOptions['resolveHostname'],
+  connector?: FetchWebPageOptions['connector'],
+  trafficKey?: string,
 ): AgentTool<
   z.infer<typeof fetchPageInputSchema>,
   z.infer<typeof fetchPageOutputSchema>
@@ -151,18 +160,29 @@ export function createFetchWebPageTool(
     outputSchema: fetchPageOutputSchema,
     timeoutMs: 12_000,
     handler: async (input) => {
-      const page = await fetchReadableWebPage(
-        input.url,
-        fetchImpl,
-        resolveHostname,
-      );
-      const persisted = await onFetched?.(page);
-      return {
-        url: page.url,
-        title: page.title,
-        content: [...page.text].slice(0, 8_000).join(''),
-        ...persisted,
-      };
+      let trafficLease: LinkTrafficLease | undefined;
+      try {
+        if (trafficKey) {
+          const acquired = linkTrafficLimiter.acquire(trafficKey);
+          if (!acquired.allowed) throw new WebPageFetchError('fetch_failed');
+          trafficLease = acquired;
+        }
+        const page = await fetchReadableWebPage(
+          input.url,
+          fetchImpl,
+          resolveHostname,
+          connector,
+        );
+        const persisted = await onFetched?.(page);
+        return {
+          url: page.url,
+          title: page.title,
+          content: [...page.text].slice(0, 8_000).join(''),
+          ...persisted,
+        };
+      } finally {
+        trafficLease?.release();
+      }
     },
   };
 }

@@ -17,6 +17,17 @@ export interface SearchResult {
   readonly sourceDomain?: string;
 }
 
+export const SEARCH_PROVIDER_MAX_RESPONSE_BYTES = 256 * 1024;
+export const SEARCH_PROVIDER_MAX_RESULTS = 20;
+export const SEARCH_RESULT_MAX_URL_LENGTH = 1_024;
+export const SEARCH_RESULT_MAX_TITLE_LENGTH = 200;
+export const SEARCH_RESULT_MAX_SNIPPET_LENGTH = 400;
+
+export function boundSearchResultLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return 0;
+  return Math.min(SEARCH_PROVIDER_MAX_RESULTS, Math.max(0, Math.floor(limit)));
+}
+
 export type SearchProviderFailureCode =
   | 'search_timeout'
   | 'search_cancelled'

@@ -1,10 +1,24 @@
 import 'server-only';
 
 import type { AgentTool } from '@educanvas/agent-runtime';
+import {
+  NOOP_METRICS,
+  recordMetricSafely,
+  type MetricsPort,
+} from '@educanvas/telemetry';
+import { getWebTelemetryRuntime } from '../telemetry/telemetry-runtime';
+import {
+  linkTrafficLimiter,
+  type LinkTrafficLease,
+} from '../assets/link-traffic-limiter';
 import { z } from 'zod';
 import type { SearchProvider, SearchResult } from './search-contract';
 import { SearchProviderRegistry } from './search-registry';
-import { SearchService, type SearchServiceConfig } from './search-service';
+import {
+  SearchService,
+  SearchServiceError,
+  type SearchServiceConfig,
+} from './search-service';
 import { normalizeSearchProviderBaseUrl } from './search-url';
 import { SearchCandidatePipeline } from './search-candidate-pipeline';
 import {
@@ -104,6 +118,8 @@ export interface WebSearchToolOptions {
     readonly completedQuery: string;
     readonly candidateUrls: readonly string[];
   }) => Promise<void>;
+  readonly metrics?: MetricsPort;
+  readonly trafficKey?: string;
 }
 
 function queryKey(query: string): string {
@@ -152,7 +168,24 @@ export function createWebSearchTool(
               : 'replacement';
       pendingQueries.add(key);
       searchAttempts += 1;
+      let trafficLease: LinkTrafficLease | undefined;
+      const metrics = options.metrics ?? NOOP_METRICS;
+      recordMetricSafely(() =>
+        metrics.increment('web_search_rounds_total', { phase }),
+      );
+      if (phase === 'replacement') {
+        recordMetricSafely(() =>
+          metrics.increment('web_search_replacements_total'),
+        );
+      }
       try {
+        if (options.trafficKey) {
+          const acquired = linkTrafficLimiter.acquire(options.trafficKey);
+          if (!acquired.allowed) {
+            throw new SearchServiceError('search_rate_limited', true);
+          }
+          trafficLease = acquired;
+        }
         await options.onSearching?.();
         const output = await service.search({ query: query.trim(), limit: 5 });
         const results: { title: string; url: string; snippet: string }[] = [];
@@ -207,6 +240,7 @@ export function createWebSearchTool(
           },
         };
       } finally {
+        trafficLease?.release();
         pendingQueries.delete(key);
       }
     },
@@ -218,6 +252,14 @@ export interface SearchEnvironment {
   SEARCH_BASE_URL?: string;
   SEARXNG_BASE_URL?: string;
   SEARXNG_API_KEY?: string;
+}
+
+function webSearchMetrics(): MetricsPort {
+  try {
+    return getWebTelemetryRuntime().metrics;
+  } catch {
+    return NOOP_METRICS;
+  }
 }
 
 export function resolveSearchProviders(
@@ -272,7 +314,11 @@ export function resolveSearchService(
     registry.register(provider);
   }
 
-  return new SearchService({ registry, config });
+  return new SearchService({
+    registry,
+    config,
+    metrics: webSearchMetrics(),
+  });
 }
 
 export function resolveWebSearchTool(
@@ -282,7 +328,11 @@ export function resolveWebSearchTool(
 ): OperationWebSearchTool | null {
   const service = resolveSearchService(env, fetchImpl);
   if (!service) return null;
-  return createWebSearchTool(new SearchCandidatePipeline(service), options);
+  const metrics = webSearchMetrics();
+  return createWebSearchTool(
+    new SearchCandidatePipeline(service, undefined, {}, metrics),
+    { ...options, metrics },
+  );
 }
 
 export function resolveSearchCandidatePipeline(
@@ -290,5 +340,7 @@ export function resolveSearchCandidatePipeline(
   fetchImpl?: typeof fetch,
 ): SearchCandidatePipeline | null {
   const service = resolveSearchService(env, fetchImpl);
-  return service ? new SearchCandidatePipeline(service) : null;
+  return service
+    ? new SearchCandidatePipeline(service, undefined, {}, webSearchMetrics())
+    : null;
 }

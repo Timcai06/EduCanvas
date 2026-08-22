@@ -91,7 +91,10 @@ function statusFor(code: PublicLinkErrorCode): number {
 }
 
 /** 路由只返回稳定错误投影，不接受异常 message 或上游 body。 */
-export function linkErrorResponse(error: LinkImportError): Response {
+export function linkErrorResponse(
+  error: LinkImportError,
+  retryAfterMs?: number,
+): Response {
   return jsonResponse(
     {
       error: {
@@ -100,6 +103,17 @@ export function linkErrorResponse(error: LinkImportError): Response {
         retryable: error.retryable,
       },
     },
-    { status: statusFor(error.code) },
+    {
+      status: statusFor(error.code),
+      ...(retryAfterMs === undefined
+        ? {}
+        : {
+            headers: {
+              'retry-after': String(
+                Math.max(1, Math.ceil(retryAfterMs / 1_000)),
+              ),
+            },
+          }),
+    },
   );
 }

@@ -12,6 +12,8 @@ const { SearchProviderError } = await import('./search-contract');
 const { SearchService } = await import('./search-service');
 const { SearchProviderRegistry } = await import('./search-registry');
 const { ProviderHealthTracker } = await import('./provider-health');
+const { MetricsRegistry } = await import('@educanvas/telemetry');
+const { createFetchWebPageTool } = await import('./web-page');
 
 const context = {
   traceId: 't',
@@ -108,6 +110,28 @@ describe('SearchProviderRegistry', () => {
 });
 
 describe('SearchService failover', () => {
+  it('records only closed provider labels and never query or URL values', async () => {
+    const { provider } = createMockProvider('tenant-provider-name', [
+      { title: 'result', url: 'https://secret.example/path', snippet: 'body' },
+    ]);
+    const registry = new SearchProviderRegistry();
+    registry.register(provider);
+    const metrics = new MetricsRegistry();
+
+    await new SearchService({ registry, metrics }).search({
+      query: 'private query text',
+      limit: 1,
+    });
+
+    const serialized = JSON.stringify(metrics.snapshot());
+    expect(serialized).toContain(
+      'web_search_provider_attempts_total{outcome=success,provider=unknown}',
+    );
+    expect(serialized).not.toContain('private query text');
+    expect(serialized).not.toContain('secret.example');
+    expect(serialized).not.toContain('tenant-provider-name');
+  });
+
   it('uses primary provider on success', async () => {
     const { provider: p1, search: s1 } = createMockProvider(
       'p1',
@@ -401,6 +425,59 @@ describe('Tavily adapter', () => {
       provider.search({ query: 'test', limit: 5 }),
     ).rejects.toMatchObject({ code: 'search_invalid_response' });
   });
+
+  it('reads a bounded stream and rejects oversized fields without raw payloads', async () => {
+    const { createTavilyAdapter: createAdapter } =
+      await import('./tavily-adapter');
+    const oversized = new Response(
+      JSON.stringify({
+        results: [
+          {
+            title: 'x'.repeat(201),
+            url: 'https://example.com/article',
+            content: 'safe',
+          },
+        ],
+      }),
+    );
+    const json = vi.spyOn(oversized, 'json');
+    const provider = createAdapter({
+      apiKey: 'key',
+      fetchImpl: (async () => oversized) as typeof fetch,
+    });
+
+    await expect(
+      provider.search({ query: 'test', limit: 5 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+    expect(json).not.toHaveBeenCalled();
+
+    const longUrlProvider = createAdapter({
+      apiKey: 'key',
+      fetchImpl: (async () =>
+        Response.json({
+          results: [
+            {
+              title: 'safe',
+              url: `https://example.com/${'x'.repeat(1_024)}`,
+              content: 'safe',
+            },
+          ],
+        })) as typeof fetch,
+    });
+    await expect(
+      longUrlProvider.search({ query: 'test', limit: 5 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+
+    const huge = new Uint8Array(256 * 1024 + 1);
+    huge.fill(65);
+    const hugeProvider = createAdapter({
+      apiKey: 'key',
+      fetchImpl: (async () => new Response(huge)) as typeof fetch,
+    });
+    await expect(
+      hugeProvider.search({ query: 'test', limit: 5 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+  });
 });
 
 describe('SearXNG adapter', () => {
@@ -452,6 +529,57 @@ describe('SearXNG adapter', () => {
     expect(capturedInit?.headers).toMatchObject({
       Authorization: 'Bearer searxng-secret',
     });
+  });
+
+  it('bounds response fields and result count before exposing them', async () => {
+    const { createSearXNGAdapter: createAdapter } =
+      await import('./searxng-adapter');
+    const oversized = new Response(
+      JSON.stringify({
+        results: [
+          {
+            title: 'ok',
+            url: 'https://example.com/article',
+            content: 'x'.repeat(401),
+          },
+        ],
+      }),
+    );
+    const provider = createAdapter({
+      baseUrl: 'https://search.example.test',
+      fetchImpl: (async () => oversized) as typeof fetch,
+    });
+
+    await expect(
+      provider.search({ query: 'test', limit: 5 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+
+    const tooMany = new Response(
+      JSON.stringify({
+        results: Array.from({ length: 21 }, (_, index) => ({
+          title: `Result ${index}`,
+          url: `https://example.com/${index}`,
+          content: 'safe',
+        })),
+      }),
+    );
+    const tooManyProvider = createAdapter({
+      baseUrl: 'https://search.example.test',
+      fetchImpl: (async () => tooMany) as typeof fetch,
+    });
+    await expect(
+      tooManyProvider.search({ query: 'test', limit: 50 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+
+    const huge = new Uint8Array(256 * 1024 + 1);
+    huge.fill(65);
+    const hugeProvider = createAdapter({
+      baseUrl: 'https://search.example.test',
+      fetchImpl: (async () => new Response(huge)) as typeof fetch,
+    });
+    await expect(
+      hugeProvider.search({ query: 'test', limit: 5 }),
+    ).rejects.toMatchObject({ code: 'search_invalid_response' });
   });
 });
 
@@ -510,6 +638,44 @@ describe('resolveWebSearchTool', () => {
       attemptedProviders: ['tavily', 'searxng'],
       results: [{ title: 'Backup result' }],
     });
+  });
+});
+
+describe('Agent web traffic boundary', () => {
+  it('shares the Notebook concurrency wall across search and page reads', async () => {
+    const resolvers: Array<(value: { results: readonly never[] }) => void> = [];
+    const service = {
+      search: vi.fn(
+        () =>
+          new Promise<{ results: readonly never[] }>((resolve) => {
+            resolvers.push(resolve);
+          }),
+      ),
+    };
+    const trafficKey = 'agent-subject\u0000agent-notebook-concurrency-test';
+    const searches = Array.from({ length: 3 }, () =>
+      createWebSearchTool(service, { trafficKey }),
+    );
+    const pending = searches.map((tool, index) =>
+      tool.handler({ query: `query-${index}` }, context),
+    );
+    await vi.waitFor(() => expect(service.search).toHaveBeenCalledTimes(3));
+
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const fetchTool = createFetchWebPageTool(
+      fetchImpl,
+      undefined,
+      undefined,
+      undefined,
+      trafficKey,
+    );
+    await expect(
+      fetchTool.handler({ url: 'https://example.com' }, context),
+    ).rejects.toMatchObject({ code: 'fetch_failed' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    for (const resolve of resolvers) resolve({ results: [] });
+    await expect(Promise.all(pending)).resolves.toHaveLength(3);
   });
 });
 
@@ -592,6 +758,7 @@ describe('createWebSearchTool budget', () => {
   });
 
   it('guides three research phases and permits two bounded replacement searches', async () => {
+    const metrics = new MetricsRegistry();
     let call = 0;
     const service = {
       search: vi.fn(async ({ query }: { query: string; limit: number }) => {
@@ -614,7 +781,10 @@ describe('createWebSearchTool budget', () => {
         };
       }),
     };
-    const tool = createWebSearchTool(service, { deepResearch: true });
+    const tool = createWebSearchTool(service, {
+      deepResearch: true,
+      metrics,
+    });
 
     const broad = await tool.handler({ query: 'broad' }, context);
     const gap = await tool.handler({ query: 'gap' }, context);
@@ -650,6 +820,13 @@ describe('createWebSearchTool budget', () => {
         (output) => output.results,
       ),
     ).toHaveLength(15);
+    expect(metrics.snapshot().counters).toMatchObject({
+      'web_search_rounds_total{phase=broad}': 1,
+      'web_search_rounds_total{phase=gap}': 1,
+      'web_search_rounds_total{phase=deep}': 1,
+      'web_search_rounds_total{phase=replacement}': 2,
+      web_search_replacements_total: 2,
+    });
     await expect(
       tool.handler({ query: 'over budget' }, context),
     ).rejects.toThrow('search_budget_exceeded');

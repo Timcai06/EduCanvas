@@ -6,7 +6,20 @@ import {
   fetchWebPage,
   isFakeIpAddress,
   isPublicIpAddress,
+  type WebPageConnector,
 } from './web-page';
+
+function connectorFor(
+  request: (
+    input: string | URL | globalThis.Request,
+    init?: RequestInit,
+  ) => Promise<Response>,
+): WebPageConnector {
+  return async (url, init, approvedAddresses) => ({
+    response: await request(url, init),
+    connectedAddress: approvedAddresses[0]!,
+  });
+}
 
 describe('web page processing', () => {
   it.each([
@@ -47,6 +60,22 @@ describe('web page processing', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('fails closed for DNS hostnames without a binding connector', async () => {
+    const request = vi.fn(
+      async () =>
+        new Response('<html><body>unbound</body></html>', {
+          headers: { 'content-type': 'text/html' },
+        }),
+    );
+    await expect(
+      fetchWebPage('https://public.example', {
+        request,
+        resolveHostname: async () => ['93.184.216.34'],
+      }),
+    ).rejects.toMatchObject({ code: 'link_network_unreachable' });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('validates every redirect target and blocks redirects to private hosts', async () => {
     const request = vi.fn(
       async () =>
@@ -58,6 +87,7 @@ describe('web page processing', () => {
     await expect(
       fetchWebPage('https://public.example/start', {
         request,
+        connector: connectorFor(request),
         resolveHostname: async () => ['93.184.216.34'],
       }),
     ).rejects.toMatchObject({ code: 'link_blocked_host' });
@@ -81,10 +111,33 @@ describe('web page processing', () => {
     await expect(
       fetchWebPage('https://public.example', {
         request,
+        connector: connectorFor(request),
         resolveHostname: async () => ['93.184.216.34'],
         maxBytes: 10,
       }),
     ).rejects.toMatchObject({ code: 'link_page_too_large' });
+  });
+
+  it('cancels a response rejected by the declared page byte budget', async () => {
+    const cancel = vi.fn();
+    const request = vi.fn(
+      async () =>
+        new Response(new ReadableStream({ cancel }), {
+          headers: {
+            'content-type': 'text/html',
+            'content-length': '11',
+          },
+        }),
+    );
+    await expect(
+      fetchWebPage('https://public.example', {
+        request,
+        connector: connectorFor(request),
+        resolveHostname: async () => ['93.184.216.34'],
+        maxBytes: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'link_page_too_large' });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it('classifies access walls and unsupported formats with stable codes', async () => {
@@ -93,6 +146,9 @@ describe('web page processing', () => {
       fetchWebPage('https://public.example', {
         resolveHostname,
         request: async () => new Response(null, { status: 403 }),
+        connector: connectorFor(
+          async () => new Response(null, { status: 403 }),
+        ),
       }),
     ).rejects.toEqual(new WebPageError('link_access_blocked'));
     await expect(
@@ -102,6 +158,12 @@ describe('web page processing', () => {
           new Response('binary', {
             headers: { 'content-type': 'application/octet-stream' },
           }),
+        connector: connectorFor(
+          async () =>
+            new Response('binary', {
+              headers: { 'content-type': 'application/octet-stream' },
+            }),
+        ),
       }),
     ).rejects.toMatchObject({ code: 'link_unsupported_format' });
   });
@@ -113,6 +175,10 @@ describe('web page processing', () => {
       resolveHostname: async () => ['93.184.216.34'],
       request: async () =>
         new Response(html, { headers: { 'content-type': 'text/html' } }),
+      connector: connectorFor(
+        async () =>
+          new Response(html, { headers: { 'content-type': 'text/html' } }),
+      ),
       allowEmptyText: true,
     });
 
@@ -130,6 +196,12 @@ describe('web page processing', () => {
           new Response('document.body.textContent = "rendered"', {
             headers: { 'content-type': 'application/javascript' },
           }),
+        connector: connectorFor(
+          async () =>
+            new Response('document.body.textContent = "rendered"', {
+              headers: { 'content-type': 'application/javascript' },
+            }),
+        ),
       }),
     ).resolves.toMatchObject({
       finalUrl: 'https://cdn.example/app.js',
@@ -144,6 +216,13 @@ describe('web page processing', () => {
             status: 302,
             headers: { location: 'http://127.0.0.1/private.js' },
           }),
+        connector: connectorFor(
+          async () =>
+            new Response(null, {
+              status: 302,
+              headers: { location: 'http://127.0.0.1/private.js' },
+            }),
+        ),
       }),
     ).rejects.toMatchObject({ code: 'link_blocked_host' });
   });
@@ -227,6 +306,7 @@ describe('web page processing', () => {
       await expect(
         fetchWebPage('https://public.example/start', {
           request,
+          connector: connectorFor(request),
           resolveHostname: async (hostname) =>
             hostname === 'public.example' ? ['93.184.216.34'] : ['198.19.5.6'],
         }),
@@ -255,6 +335,7 @@ describe('web page processing', () => {
       await expect(
         fetchWebPage('https://public.example/start', {
           request,
+          connector: connectorFor(request),
           resolveHostname: async () => ['93.184.216.34'],
         }),
       ).rejects.toMatchObject({ code: 'link_blocked_host' });
@@ -271,6 +352,7 @@ describe('web page processing', () => {
       await expect(
         fetchWebPage('https://public.example', {
           request,
+          connector: connectorFor(request),
           resolveHostname: async () => ['93.184.216.34', '93.184.216.35'],
         }),
       ).resolves.toMatchObject({
@@ -278,5 +360,63 @@ describe('web page processing', () => {
         finalUrl: 'https://public.example/',
       });
     });
+  });
+
+  it('combines external cancellation with the request timeout', async () => {
+    const controller = new AbortController();
+    const request = vi.fn(
+      (_input: string | URL | globalThis.Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () =>
+              reject(
+                init.signal?.reason ??
+                  new DOMException('aborted', 'AbortError'),
+              ),
+            { once: true },
+          );
+          controller.abort(new Error('cancelled by caller'));
+        }),
+    );
+    await expect(
+      fetchWebPage('https://public.example', {
+        connector: connectorFor(request),
+        resolveHostname: async () => ['93.184.216.34'],
+        signal: controller.signal,
+        timeoutMs: 1000,
+      }),
+    ).rejects.toMatchObject({ code: 'link_network_unreachable' });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when the connector reports an unreviewed peer address', async () => {
+    const connector: WebPageConnector = async () => ({
+      response: new Response('<html><body>private</body></html>', {
+        headers: { 'content-type': 'text/html' },
+      }),
+      connectedAddress: '10.0.0.1',
+    });
+    await expect(
+      fetchWebPage('https://public.example', {
+        connector,
+        resolveHostname: async () => ['93.184.216.34'],
+      }),
+    ).rejects.toMatchObject({ code: 'link_blocked_host' });
+  });
+
+  it('accepts an IPv4-mapped peer only when it matches the reviewed IPv4', async () => {
+    const connector: WebPageConnector = async () => ({
+      response: new Response('<html><body>public</body></html>', {
+        headers: { 'content-type': 'text/html' },
+      }),
+      connectedAddress: '::ffff:5db8:d822',
+    });
+    await expect(
+      fetchWebPage('https://public.example', {
+        connector,
+        resolveHostname: async () => ['93.184.216.34'],
+      }),
+    ).resolves.toMatchObject({ finalUrl: 'https://public.example/' });
   });
 });

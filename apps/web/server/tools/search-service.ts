@@ -6,6 +6,11 @@ import type {
 } from './search-contract';
 import { SearchProviderError } from './search-contract';
 import { SearchProviderRegistry } from './search-registry';
+import {
+  NOOP_METRICS,
+  recordMetricSafely,
+  type MetricsPort,
+} from '@educanvas/telemetry';
 
 export type SearchServiceFailureCode =
   | 'search_not_configured'
@@ -45,6 +50,25 @@ export interface SearchServiceDeps {
   readonly registry: SearchProviderRegistry;
   readonly config?: SearchServiceConfig;
   readonly now?: () => Date;
+  readonly metrics?: MetricsPort;
+}
+
+function providerMetricName(name: string): 'tavily' | 'searxng' | 'unknown' {
+  return name === 'tavily' || name === 'searxng' ? name : 'unknown';
+}
+
+function providerMetricOutcome(
+  error: unknown,
+): 'failed' | 'timeout' | 'cancelled' {
+  const code =
+    error instanceof SearchProviderError || error instanceof SearchServiceError
+      ? error.code
+      : null;
+  if (code === 'search_cancelled') return 'cancelled';
+  if (code === 'search_timeout' || code === 'search_budget_exhausted') {
+    return 'timeout';
+  }
+  return 'failed';
 }
 
 function classifyProviderError(error: unknown): {
@@ -80,6 +104,7 @@ export class SearchService {
   private readonly registry: SearchProviderRegistry;
   private readonly config: Required<SearchServiceConfig>;
   private readonly now: () => Date;
+  private readonly metrics: MetricsPort;
 
   constructor(deps: SearchServiceDeps) {
     this.registry = deps.registry;
@@ -88,6 +113,7 @@ export class SearchService {
       ...deps.config,
     };
     this.now = deps.now ?? (() => new Date());
+    this.metrics = deps.metrics ?? NOOP_METRICS;
   }
 
   async search(
@@ -157,12 +183,24 @@ export class SearchService {
           }
         }
         this.registry.recordSuccess(provider.name);
+        recordMetricSafely(() =>
+          this.metrics.increment('web_search_provider_attempts_total', {
+            provider: providerMetricName(provider.name),
+            outcome: 'success',
+          }),
+        );
         if (
           allResults.length >= Math.min(request.limit, this.config.maxResults)
         ) {
           break;
         }
       } catch (error) {
+        recordMetricSafely(() =>
+          this.metrics.increment('web_search_provider_attempts_total', {
+            provider: providerMetricName(provider.name),
+            outcome: providerMetricOutcome(error),
+          }),
+        );
         // Short-circuit: if the error is already a SearchServiceError (e.g. abort
         // signal rejection from executeWithTimeout), re-throw directly instead of
         // reclassifying — the code is already canonical.

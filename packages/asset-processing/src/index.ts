@@ -15,6 +15,8 @@ export {
   type FetchedWebScript,
   type FetchWebPageOptions,
   type ReadableHtml,
+  type WebPageConnection,
+  type WebPageConnector,
   type WebPageFailureCode,
 } from './web-page';
 
