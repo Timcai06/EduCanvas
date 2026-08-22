@@ -210,7 +210,7 @@ WS00-WS07 → WS08 → WS09
 ### WS05：Agent 自适应多轮研究
 
 - 依赖：WS04
-- 状态：`IN_REVIEW`
+- 状态：`PASS`
 - 文件边界：General profile、Tool budgets、Deep Research guard 与测试
 
 交付：
@@ -230,7 +230,7 @@ WS00-WS07 → WS08 → WS09
 - 研究搜索最多 5 次（前三轮 + 最多两轮替代），全 Operation 最多保留 15 个候选；来源读取仍由 `WebOperationSources` 限制为 8 个，Turn 总工具调用 16 次、单工具结果 8,000 tokens、上下文 128,000 字符；
 - 确定性输出闸门保持不变：少于 3 次成功搜索、5 个实际持久来源或 5 个有效引用时，返回 `RESEARCH_REQUIREMENTS_UNMET`，不会放行或伪造报告；
 - `pnpm --filter @educanvas/web test` — 1762/1762 通过（240 files）；搜索/候选/Profile 定向测试 67/67 通过；`@educanvas/agent-runtime` 118/118 通过；相关包 typecheck clean；
-- 状态保持 `IN_REVIEW`，待全仓静态门禁、PR CI 与集成合并后更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
+- Codex 审核结论：CRITICAL 0、HIGH 0；PR #397 的静态、单元、Agent Eval、Secret Scan、Chromium E2E 与最终 checks 全绿，合并提交 `e87f62e1`，状态更新为 `PASS`。真实 Provider 与电脑浏览器验证仍归 WS09。
 
 ### WS06：研究任务恢复与进度事实
 
