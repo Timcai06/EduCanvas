@@ -63,6 +63,7 @@ jobs:
           --base "$BASE_SHA"
           --head "$HEAD_SHA"
           --github-output "$GITHUB_OUTPUT"
+          --github-summary "$GITHUB_STEP_SUMMARY"
 
   dependency-review:
     # Q06：恶意/高风险依赖变更门禁（license + 漏洞，fail-on-severity: high）。

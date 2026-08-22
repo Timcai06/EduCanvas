@@ -23,10 +23,7 @@ const ALL = Object.fromEntries(LANES.map((lane) => [lane, true]));
 const NONE = Object.fromEntries(LANES.map((lane) => [lane, false]));
 const DOC_ONLY =
   /^docs\/.*\.md$|^(?:README|AGENTS|CLAUDE)\.md$|^(?:apps|packages|tooling)\/[^/]+\/README\.md$|^\.vscode\/(?:settings|extensions)\.json$|^\.github\/CODEOWNERS$/;
-// Root dependency graph and executable Actions changes can affect every lane.
-// Workspace-local manifests are routed by their owning product surface below;
-// treating every package.json as global made Desktop-only changes pay for DB,
-// Worker, Runtime and Web E2E without adding relevant evidence.
+// Only root dependency and Actions changes widen every lane; workspace manifests stay scoped.
 const GLOBAL_DEPENDENCY =
   /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$|^\.github\/(?:workflows|actions)\//;
 const SCOPED_PACKAGE_MANIFEST = /^(?:apps|packages)\/[^/]+\/package\.json$/;
@@ -42,9 +39,7 @@ export function classifyChangedPaths(
   paths,
   { eventName = 'pull_request' } = {},
 ) {
-  // Scheduled and manually dispatched runs are full-matrix evidence events.
-  // Do not let a missing comparison SHA turn that contract into an accidental
-  // fail-open: both events intentionally pay every lane.
+  // Scheduled/manual evidence intentionally pays the full matrix without a comparison SHA.
   if (eventName === 'schedule' || eventName === 'workflow_dispatch')
     return { ...ALL };
   if (paths.length === 0) return { ...ALL };
@@ -99,11 +94,7 @@ export function classifyChangedPaths(
 
   const result = { ...NONE, checks: true };
   result.release_evidence = releaseEvidenceAffected;
-  // D06：CI 套件级分流——原单一 integration lane 拆为三个语义独立的证据：
-  //   db_integration：packages/db（不含 drizzle）→ DB integration；
-  //   worker_integration：apps/worker + packages/asset-processing → Worker integration；
-  //   migration_integration：packages/db/drizzle/** 与 migration 治理 → Migration 证据。
-  // 纯 DB 内部改动不自动支付 Worker integration；纯 Worker 改动不自动运行 DB full。
+  // DB、Worker、Migration 各自只支付能证明该改动的独立 integration 证据。
   const dbAffected = matchesAny(paths, [
     /^packages\/db\//,
     /^tests\/integration\//,
@@ -140,9 +131,7 @@ export function classifyChangedPaths(
     /^tests\/e2e\/.*runtime/,
     /^tooling\/.*runtime/,
   ]);
-  // D06：e2e 只对浏览器可执行面触发——纯 DB/Worker/asset-processing 内部改动
-  // 不自动支付 Chromium E2E（路由原则 1/3/4）；其余 packages（browser-facing）
-  // 保持 E2E smoke；未知路径 fail open。
+  // 纯 DB/Worker/asset-processing 内部改动不支付 Chromium；浏览器面保持 E2E。
   const NON_BROWSER_ONLY =
     /^(?:apps\/worker\/|packages\/(?:db|asset-processing)\/|tests\/integration\/)/;
   const browserPatterns = [
@@ -169,6 +158,77 @@ export function classifyChangedPaths(
   result.dependency_review = matchesAny(paths, [SCOPED_PACKAGE_MANIFEST]);
   result.desktop = matchesAny(paths, [/^apps\/desktop\//]);
   return result;
+}
+
+const LANE_LABELS = {
+  checks: 'static and unit governance',
+  db_integration: 'database integration',
+  worker_integration: 'worker integration',
+  migration_integration: 'migration verification',
+  windows: 'Windows startup boundary',
+  runtime_pressure: 'runtime pressure',
+  e2e: 'browser E2E',
+  agent_eval: 'agent evaluation',
+  dependency_review: 'dependency review',
+  release_evidence: 'release evidence',
+  desktop: 'desktop build',
+};
+
+function laneReasons(lane, paths, eventName, failOpenReason) {
+  if (failOpenReason) return [`fail-open: ${failOpenReason}`];
+  if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
+    return [`${eventName} requires the full verification matrix`];
+  }
+  if (paths.length === 0)
+    return ['empty comparison requires fail-open verification'];
+  if (lane === 'db_integration')
+    return ['database implementation or integration surface changed'];
+  if (lane === 'migration_integration')
+    return ['schema, migration, or migration governance changed'];
+  if (lane === 'desktop') return ['desktop application surface changed'];
+  if (lane === 'checks')
+    return ['executable or governed repository content changed'];
+  return [`${LANE_LABELS[lane]} impact matched changed paths`];
+}
+
+export function ciImpactDecision(
+  paths,
+  { eventName = 'pull_request', failOpenReason } = {},
+) {
+  const impact = failOpenReason
+    ? { ...ALL }
+    : classifyChangedPaths(paths, { eventName });
+  return {
+    changed: [...paths],
+    required: LANES.filter((lane) => impact[lane]).map((lane) => ({
+      lane,
+      reasons: laneReasons(lane, paths, eventName, failOpenReason),
+    })),
+    skipped: LANES.filter((lane) => !impact[lane]).map((lane) => ({
+      lane,
+      reason: `${LANE_LABELS[lane]} was not affected by the changed paths`,
+    })),
+  };
+}
+
+export function ciImpactMarkdown(decision) {
+  const rows = (items, state) =>
+    items.map((item) =>
+      state === 'Required'
+        ? `| ${item.lane} | ${state} | ${item.reasons.join('; ')} |`
+        : `| ${item.lane} | ${state} | ${item.reason} |`,
+    );
+  return [
+    '## CI impact decision',
+    '',
+    `Changed: ${decision.changed.length ? decision.changed.map((path) => `\`${path}\``).join(', ') : '(none)'}`,
+    '',
+    '| Lane | Decision | Reason |',
+    '| --- | --- | --- |',
+    ...rows(decision.required, 'Required'),
+    ...rows(decision.skipped, 'Skipped'),
+    '',
+  ].join('\n');
 }
 
 export function requiredResultFailures({ eventName, expected, results }) {
@@ -294,17 +354,20 @@ function main() {
   const eventName =
     argument('--event') ?? process.env.GITHUB_EVENT_NAME ?? 'pull_request';
   let result;
+  let paths = [];
+  let failOpenReason;
   try {
     if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
       result = classifyChangedPaths([], { eventName });
       console.log(`${eventName} explicitly selects the full CI matrix.`);
     } else {
-      const paths = changedPaths(argument('--base'), argument('--head'));
+      paths = changedPaths(argument('--base'), argument('--head'));
       result = classifyChangedPaths(paths, { eventName });
       console.log(`Changed paths: ${paths.join(', ') || '(none; fail-open)'}`);
     }
   } catch (error) {
-    console.warn(`CI impact classification failed open: ${error.message}`);
+    failOpenReason = error.message;
+    console.warn(`CI impact classification failed open: ${failOpenReason}`);
     result = { ...ALL };
   }
   const output = `${Object.entries(result)
@@ -313,6 +376,14 @@ function main() {
   const githubOutput = argument('--github-output');
   if (githubOutput) appendFileSync(githubOutput, output);
   else process.stdout.write(output);
+  const summaryPath =
+    argument('--github-summary') ?? process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    appendFileSync(
+      summaryPath,
+      `${ciImpactMarkdown(ciImpactDecision(paths, { eventName, failOpenReason }))}\n`,
+    );
+  }
 }
 
 if (

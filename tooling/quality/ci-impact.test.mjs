@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import {
+  ciImpactDecision,
+  ciImpactMarkdown,
   classifyChangedPaths,
   comparisonRange,
   requiredResultFailures,
@@ -131,6 +133,33 @@ describe('CI impact classification', () => {
       release_evidence: false,
       desktop: false,
     });
+  });
+
+  it('explains required DB and migration lanes and explicit skipped lanes', () => {
+    const decision = ciImpactDecision([
+      'packages/db/src/schema/asset.ts',
+      'packages/db/drizzle/0001.sql',
+    ]);
+    assert.ok(
+      decision.required.some(
+        ({ lane, reasons }) =>
+          lane === 'db_integration' && reasons.join(' ').includes('database'),
+      ),
+    );
+    assert.ok(
+      decision.required.some(({ lane }) => lane === 'migration_integration'),
+    );
+    assert.ok(decision.skipped.some(({ lane }) => lane === 'desktop'));
+    assert.match(ciImpactMarkdown(decision), /\| desktop \| Skipped \|/);
+  });
+
+  it('makes schedule and classification failure full-matrix reasons explicit', () => {
+    const scheduled = ciImpactDecision([], { eventName: 'schedule' });
+    assert.equal(scheduled.required.length, 11);
+    assert.match(ciImpactMarkdown(scheduled), /full verification matrix/);
+    const failed = ciImpactDecision([], { failOpenReason: 'invalid SHA' });
+    assert.equal(failed.skipped.length, 0);
+    assert.match(ciImpactMarkdown(failed), /fail-open: invalid SHA/);
   });
 
   it('routes Windows and runtime changes independently', () => {
