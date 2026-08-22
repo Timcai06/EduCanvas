@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelGatewayInvocationError } from '@educanvas/agent-core';
-import { mindMapContentSchema } from '@educanvas/canvas-protocol';
-import { type MarkdownDocumentContent } from '../../../../packages/canvas-protocol/src/artifacts/markdown-document';
+import {
+  mindMapContentSchema,
+  type MarkdownDocumentContent,
+} from '@educanvas/canvas-protocol';
 import { buildConversationOutline } from './mind-map-outline';
 import { generateArtifact } from './generate-artifact';
 

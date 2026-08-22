@@ -2,27 +2,11 @@
 
 import { ArrowRight, Eye, EyeSlash } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
+import { publicErrorMessage } from '@/features/errors/public-error';
 import { assessPasswordRisk } from './password-strength';
 import { USERNAME_HTML_PATTERN } from './username-pattern';
 
 type Mode = 'login' | 'register';
-
-interface PublicError {
-  error?: { message?: unknown };
-}
-
-async function publicError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await response.json()) as PublicError;
-    if (typeof body.error?.message === 'string') return body.error.message;
-  } catch {
-    // Keep the browser on a stable public message.
-  }
-  return fallback;
-}
 
 /**
  * onSuccess：注册/登录成功后的收尾。抽屉里传入以「原地刷新 + 关抽屉」替代整页跳转；
@@ -67,7 +51,7 @@ export function AuthForm({
       );
       if (!response.ok) {
         throw new Error(
-          await publicError(
+          await publicErrorMessage(
             response,
             isRegister ? '暂时无法注册。' : '暂时无法登录。',
           ),

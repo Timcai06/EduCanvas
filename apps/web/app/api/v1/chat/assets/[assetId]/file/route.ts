@@ -33,15 +33,15 @@ export async function GET(
 ): Promise<Response> {
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) {
-    return jsonError(404, 'asset_not_found', '来源不存在。');
+    return jsonError(404, 'asset_not_found');
   }
   const download = downloadQuerySchema.safeParse(
     Object.fromEntries(new URL(request.url).searchParams),
   ).success;
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
   try {
     /* ADR-0026 决定 1：download=1 走原件下载（任意 MIME，校验 contentHash），
        其余请求保持内联预览语义（二进制白名单）。 */
@@ -53,7 +53,7 @@ export async function GET(
         resourceId: parsed.data.assetId,
       });
       if (!resource.allowedActions.includes('download')) {
-        return jsonError(403, 'forbidden', '这个来源不允许下载。');
+        return jsonError(403, 'forbidden');
       }
     }
     const file = download
@@ -77,19 +77,11 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof CanvasResourceAccessError) {
-      return jsonError(
-        error.status,
-        error.code,
-        error.status === 404 ? '来源不存在。' : '这个来源暂时不能下载。',
-      );
+      return jsonError(error.status, error.code);
     }
     if (error instanceof AssetPreviewError) {
-      return jsonError(
-        error.status,
-        error.code,
-        error.status === 404 ? '来源不存在。' : '这个来源暂时不能预览。',
-      );
+      return jsonError(error.status, error.code);
     }
-    return jsonError(503, 'preview_unavailable', '来源预览暂时不可用。');
+    return jsonError(503, 'preview_unavailable');
   }
 }

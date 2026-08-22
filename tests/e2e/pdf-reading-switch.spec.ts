@@ -39,11 +39,12 @@ async function createPdfStructuredFixture(page: Page) {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
   // getDb 自 R 线起只从 internal subpath 导出（`@educanvas/db/internal`），默认入口不承载。
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../packages/db/src/index.ts'),
-    import('../../packages/db/src/internal/index.ts'),
-    import('../../packages/db/node_modules/drizzle-orm/index.js'),
+  const [dbModule, testingDbModule] = await Promise.all([
+    import('@educanvas/db'),
+    import('@educanvas/db/testing'),
   ]);
+  const internalDbModule = testingDbModule;
+  const drizzleModule = testingDbModule;
   const [conversation] = await internalDbModule
     .getDb()
     .select()
@@ -150,19 +151,22 @@ test('@smoke PDF 结构化表示默认原件预览，显式切换结构化阅读
     sourceCanvas.getByRole('button', { name: '原件预览' }),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(sourceCanvas.locator('canvas')).toBeVisible({ timeout: 15_000 });
-  await expect(sourceCanvas.getByRole('button', { name: '结构化阅读' }))
-    .toBeVisible();
+  await expect(
+    sourceCanvas.getByRole('button', { name: '结构化阅读' }),
+  ).toBeVisible();
   await expect(sourceCanvas.getByText(MD_TEXT)).toHaveCount(0);
 
   /* 显式切换：provenance 标注 + 派生内容渲染。 */
   await sourceCanvas.getByRole('button', { name: '结构化阅读' }).click();
-  await expect(sourceCanvas.getByText(/结构化阅读 · .* · 派生表示/))
-    .toBeVisible();
+  await expect(
+    sourceCanvas.getByText(/结构化阅读 · .* · 派生表示/),
+  ).toBeVisible();
   await expect(
     sourceCanvas.getByRole('heading', { name: '网络编程讲义' }),
   ).toBeVisible();
-  await expect(sourceCanvas.getByText('MinerU 结构化阅读验收内容。'))
-    .toBeVisible();
+  await expect(
+    sourceCanvas.getByText('MinerU 结构化阅读验收内容。'),
+  ).toBeVisible();
 
   /* 返回原件预览：pdf.js 重新出现。 */
   await sourceCanvas.getByRole('button', { name: '返回原件预览' }).click();

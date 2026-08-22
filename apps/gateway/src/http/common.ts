@@ -14,6 +14,7 @@ import {
 import { ZodError } from 'zod';
 import type { GatewayObservability } from '../observability';
 import type { GatewayHttpDependencies } from './dependencies';
+import { publicErrorCode, publicErrorEnvelope } from '../public-error';
 
 /**
  * Gateway HTTP 路由的共享基元：请求体读取、响应写出、鉴权与错误映射。
@@ -43,12 +44,14 @@ export function writeJson(
   status: number,
   body: unknown,
 ): void {
+  const errorCode = status >= 400 ? publicErrorCode(body) : null;
+  const publicBody = errorCode === null ? body : publicErrorEnvelope(errorCode);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
-  response.end(JSON.stringify(body));
+  response.end(JSON.stringify(publicBody));
 }
 
 export function isAuthorized(request: IncomingMessage, token: string): boolean {

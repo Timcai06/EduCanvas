@@ -15,10 +15,10 @@ const MAX_FORM_BYTES = 4_096;
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readRegisteredSessionIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先登录。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const contentType = request.headers.get('content-type')?.split(';', 1)[0];
   const declaredLength = Number(request.headers.get('content-length') ?? '0');
   if (
@@ -27,7 +27,7 @@ export async function POST(request: Request): Promise<Response> {
     declaredLength < 0 ||
     declaredLength > MAX_FORM_BYTES
   ) {
-    return jsonError(400, 'invalid_request', '授权请求格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   let parsed: ReturnType<
     typeof gatewayDesktopAuthorizationQuerySchema.safeParse
@@ -35,16 +35,16 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const text = await request.text();
     if (Buffer.byteLength(text, 'utf8') > MAX_FORM_BYTES) {
-      return jsonError(400, 'invalid_request', '授权请求格式不正确。');
+      return jsonError(400, 'invalid_request');
     }
     parsed = gatewayDesktopAuthorizationQuerySchema.safeParse(
       Object.fromEntries(new URLSearchParams(text)),
     );
   } catch {
-    return jsonError(400, 'invalid_request', '授权请求格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '授权请求格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
 
   try {
@@ -53,7 +53,7 @@ export async function POST(request: Request): Promise<Response> {
     // id, while production resolves the registered id here.
     const runtimeIdentity = await readAnonymousIdentity();
     if (!runtimeIdentity) {
-      return jsonError(409, 'no_conversation', '请先在 Web 端开始一个对话。');
+      return jsonError(409, 'no_conversation');
     }
     const conversation = await loadOwnedGeneralConversation(runtimeIdentity);
     const grant = await getDesktopAuthService().issueAuthorizationCode({
@@ -78,6 +78,6 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch {
-    return jsonError(503, 'desktop_auth_unavailable', '桌面授权暂不可用。');
+    return jsonError(503, 'desktop_auth_unavailable');
   }
 }

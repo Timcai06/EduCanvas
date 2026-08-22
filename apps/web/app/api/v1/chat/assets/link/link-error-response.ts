@@ -1,4 +1,4 @@
-import { jsonResponse } from '@/server/http/request-security';
+import { jsonError } from '@/server/http/request-security';
 
 export type PublicLinkErrorCode =
   | 'link_invalid_url'
@@ -62,22 +62,6 @@ export function normalizePublicLinkError(code: string): LinkImportError {
   }
 }
 
-const messageByCode: Record<PublicLinkErrorCode, string> = {
-  link_invalid_url: '链接格式不正确。请输入完整的 HTTP(S) 地址。',
-  link_blocked_host: '该地址不允许访问。请更换公开网页地址。',
-  link_network_unreachable: '无法连接该网页。请检查网络后重试。',
-  link_access_blocked: '网页拒绝访问或需要登录。请保存为 PDF 后上传。',
-  link_rate_limited: '网页暂时限制了访问。请稍后重试。',
-  link_page_too_large: '网页内容超过大小限制。请保存正文或 PDF 后上传。',
-  link_no_extractable_content: '网页没有可提取的正文。请保存为 PDF 后上传。',
-  link_unsupported_format: '网页格式暂不支持。请上传受支持的文件。',
-  link_render_unavailable: '网页渲染服务暂不可用。请稍后重试或上传 PDF。',
-  link_render_failed: '网页渲染失败。请重试或上传 PDF。',
-  link_import_unavailable: '暂时无法导入该网页。请稍后重试。',
-  fake_ip_dns_detected:
-    '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
-};
-
 function statusFor(code: PublicLinkErrorCode): number {
   if (code === 'link_rate_limited') return 429;
   if (
@@ -95,25 +79,5 @@ export function linkErrorResponse(
   error: LinkImportError,
   retryAfterMs?: number,
 ): Response {
-  return jsonResponse(
-    {
-      error: {
-        code: error.code,
-        message: messageByCode[error.code],
-        retryable: error.retryable,
-      },
-    },
-    {
-      status: statusFor(error.code),
-      ...(retryAfterMs === undefined
-        ? {}
-        : {
-            headers: {
-              'retry-after': String(
-                Math.max(1, Math.ceil(retryAfterMs / 1_000)),
-              ),
-            },
-          }),
-    },
-  );
+  return jsonError(statusFor(error.code), error.code, { retryAfterMs });
 }

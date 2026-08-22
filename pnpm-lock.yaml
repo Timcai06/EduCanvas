@@ -12,6 +12,21 @@ importers:
 
   .:
     devDependencies:
+      '@educanvas/agent-core':
+        specifier: workspace:*
+        version: link:packages/agent-core
+      '@educanvas/canvas-protocol':
+        specifier: workspace:*
+        version: link:packages/canvas-protocol
+      '@educanvas/db':
+        specifier: workspace:*
+        version: link:packages/db
+      '@educanvas/model-gateway':
+        specifier: workspace:*
+        version: link:packages/model-gateway
+      '@educanvas/web-runtime':
+        specifier: workspace:*
+        version: link:apps/web-runtime
       '@playwright/test':
         specifier: ^1.61.1
         version: 1.61.1

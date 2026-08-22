@@ -163,7 +163,7 @@ describe('POST /v1/client/streaming-transcription/tickets', () => {
       notebookId: 'notebook:A',
     });
     expect(status).toBe(401);
-    expect(body).toEqual({ error: { code: 'UNAUTHENTICATED' } });
+    expect(body).toMatchObject({ error: { code: 'UNAUTHENTICATED' } });
   });
 
   it('合法请求签发绑定用户与 Notebook 的单次使用 ticket', async () => {
@@ -207,7 +207,7 @@ describe('POST /v1/client/streaming-transcription/tickets', () => {
       notebookId: 'notebook:B',
     });
     expect(status).toBe(404);
-    expect(body).toEqual({ error: { code: 'NOT_FOUND' } });
+    expect(body).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
 
   it('checkNotebookAccess 抛错 → 404（fail-closed）', async () => {
@@ -230,7 +230,7 @@ describe('POST /v1/client/streaming-transcription/tickets', () => {
       notebookId: '../etc/passwd',
     });
     expect(status).toBe(400);
-    expect(body).toEqual({ error: { code: 'INVALID_REQUEST' } });
+    expect(body).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
   });
 
   it('伪造额外字段（userId/role）→ 400（strict schema）', async () => {
@@ -251,7 +251,7 @@ describe('POST /v1/client/streaming-transcription/tickets', () => {
       notebookId: 'notebook:A',
     });
     expect(status).toBe(503);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       error: { code: 'STREAMING_TRANSCRIPTION_UNAVAILABLE' },
     });
   });

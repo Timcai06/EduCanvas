@@ -3,19 +3,7 @@
 import { Eye, EyeSlash } from '@phosphor-icons/react';
 import { useId, useMemo, useState } from 'react';
 import { assessPasswordRisk } from '@/features/auth/password-strength';
-
-async function publicError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await response.json()) as { error?: { message?: unknown } };
-    if (typeof body.error?.message === 'string') return body.error.message;
-  } catch {
-    // The stable fallback prevents raw server failures from entering the settings UI.
-  }
-  return fallback;
-}
+import { publicErrorMessage } from '@/features/errors/public-error';
 
 function PasswordField({
   label,
@@ -89,7 +77,9 @@ export function ChangePasswordForm() {
         body: JSON.stringify({ currentPassword, newPassword }),
       });
       if (!response.ok) {
-        throw new Error(await publicError(response, '暂时无法修改密码。'));
+        throw new Error(
+          await publicErrorMessage(response, '暂时无法修改密码。'),
+        );
       }
       setCurrentPassword('');
       setNewPassword('');

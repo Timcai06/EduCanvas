@@ -42,9 +42,9 @@ async function resolveIdentity() {
 
 function accessError(error: unknown): Response {
   if (error instanceof CanvasResourceAccessError) {
-    return jsonError(error.status, error.code, '资源不存在。');
+    return jsonError(error.status, error.code);
   }
-  return jsonError(503, 'annotation_unavailable', '批注暂时不可用。');
+  return jsonError(503, 'annotation_unavailable');
 }
 
 export async function GET(
@@ -53,10 +53,10 @@ export async function GET(
 ): Promise<Response> {
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) {
-    return jsonError(404, 'resource_not_found', '资源不存在。');
+    return jsonError(404, 'resource_not_found');
   }
   const resolved = await resolveIdentity();
-  if (!resolved) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!resolved) return jsonError(401, 'unauthorized');
   try {
     return jsonResponse({
       annotations: await listOwnedResourceAnnotations({
@@ -74,20 +74,20 @@ export async function POST(
   context: { params: Promise<{ resourceKind: string; resourceId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) {
-    return jsonError(404, 'resource_not_found', '资源不存在。');
+    return jsonError(404, 'resource_not_found');
   }
   const resolved = await resolveIdentity();
-  if (!resolved) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!resolved) return jsonError(401, 'unauthorized');
   try {
     const parsed = createCanvasAnnotationSchema.safeParse(
       await readLimitedJsonRequest(request, { maxBytes: 16 * 1024 }),
     );
     if (!parsed.success) {
-      return jsonError(400, 'invalid_annotation', '批注格式不正确。');
+      return jsonError(400, 'invalid_annotation');
     }
     const annotation = await createOwnedResourceAnnotation({
       ...resolved,
@@ -100,7 +100,7 @@ export async function POST(
       return jsonRequestErrorResponse(error);
     }
     if (error instanceof ResourceAnnotationValidationError) {
-      return jsonError(400, 'invalid_annotation', '批注格式不正确。');
+      return jsonError(400, 'invalid_annotation');
     }
     return accessError(error);
   }

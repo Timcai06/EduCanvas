@@ -104,8 +104,6 @@ describe('POST /api/v1/auth/login', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'auth_rate_limited',
-        message: '登录尝试过于频繁。',
-        retryAfterMs: 1_250,
       },
     });
     expect(response.headers.get('x-request-id')).toBeTruthy();

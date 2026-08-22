@@ -137,11 +137,12 @@ test('切换笔记本时 Sources 与 Studio 作为整体隔离', async ({ page }
 
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
   // getDb 自 R 线起只从 internal subpath 导出（`@educanvas/db/internal`），默认入口不承载。
-  const [dbModule, internalDbModule, drizzleModule] = await Promise.all([
-    import('../../packages/db/src/index.ts'),
-    import('../../packages/db/src/internal/index.ts'),
-    import('../../packages/db/node_modules/drizzle-orm/index.js'),
+  const [dbModule, testingDbModule] = await Promise.all([
+    import('@educanvas/db'),
+    import('@educanvas/db/testing'),
   ]);
+  const internalDbModule = testingDbModule;
+  const drizzleModule = testingDbModule;
   const [conversation] = await internalDbModule
     .getDb()
     .select()

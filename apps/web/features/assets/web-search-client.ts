@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { messageForPublicError } from '@/features/errors/public-error';
 
 export const webSearchResultSchema = z
   .object({
@@ -21,8 +22,7 @@ const webSearchErrorSchema = z
   .object({
     error: z.object({
       code: z.string(),
-      message: z.string().optional(),
-      retryable: z.boolean().optional(),
+      requestId: z.string(),
     }),
   })
   .strict();
@@ -64,12 +64,13 @@ export async function searchWebSources(
     );
     throw new WebSearchClientError(
       parsed.success ? parsed.data.error.code : 'search_unavailable',
-      parsed.success
-        ? (parsed.data.error.retryable ?? response.status >= 500)
-        : true,
-      parsed.success && parsed.data.error.message
-        ? parsed.data.error.message
-        : '网页搜索暂时不可用。请稍后重试。',
+      response.status === 408 ||
+        response.status === 429 ||
+        response.status >= 500,
+      messageForPublicError(
+        parsed.success ? parsed.data.error.code : 'search_unavailable',
+        '网页搜索暂时不可用。请稍后重试。',
+      ),
     );
   }
 

@@ -70,7 +70,7 @@ describe('cookie write request security', () => {
   });
 
   it('错误响应使用稳定 JSON、no-store 与 Retry-After', async () => {
-    const response = jsonError(429, 'rate_limited', '请稍后重试。', {
+    const response = jsonError(429, 'rate_limited', {
       retryAfterMs: 1_250,
       requestId: 'request-1',
     });
@@ -83,11 +83,17 @@ describe('cookie write request security', () => {
     expect(await response.json()).toEqual({
       error: {
         code: 'rate_limited',
-        message: '请稍后重试。',
         requestId: 'request-1',
-        retryAfterMs: 1_250,
       },
     });
+  });
+
+  it('恶意错误内容不会进入公共 envelope', async () => {
+    const secret = 'sk-provider-token SQL /Users/tim/private prompt stack';
+    const response = jsonError(500, secret, { requestId: secret });
+    const serialized = await response.text();
+    expect(serialized).toContain('internal_error');
+    expect(serialized).not.toContain(secret);
   });
 
   it('成功 JSON 响应同样使用私有 no-store 与请求 ID', async () => {

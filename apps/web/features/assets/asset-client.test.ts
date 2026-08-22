@@ -202,8 +202,7 @@ describe('asset browser client', () => {
           {
             error: {
               code: 'link_access_blocked',
-              message: '/internal/provider stack',
-              retryable: false,
+              requestId: 'request-1',
             },
           },
           { status: 422 },
@@ -242,8 +241,7 @@ describe('asset browser client', () => {
           {
             error: {
               code: 'fake_ip_dns_detected',
-              message: '/internal/dns/stack-trace-leak',
-              retryable: false,
+              requestId: 'request-2',
             },
           },
           { status: 422 },

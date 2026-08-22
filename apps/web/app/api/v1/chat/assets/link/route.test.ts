@@ -87,8 +87,6 @@ describe('POST /api/v1/chat/assets/link', () => {
     expect(await response.json()).toMatchObject({
       error: {
         code: 'link_no_extractable_content',
-        retryable: false,
-        message: '网页没有可提取的正文。请保存为 PDF 后上传。',
       },
     });
   });
@@ -105,9 +103,6 @@ describe('POST /api/v1/chat/assets/link', () => {
     expect(body).toMatchObject({
       error: {
         code: 'fake_ip_dns_detected',
-        retryable: false,
-        message:
-          '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
       },
     });
   });
@@ -123,11 +118,9 @@ describe('POST /api/v1/chat/assets/link', () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('10');
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: {
         code: 'link_rate_limited',
-        message: '网页暂时限制了访问。请稍后重试。',
-        retryable: true,
       },
     });
     expect(mocks.importAsset).not.toHaveBeenCalled();
@@ -141,11 +134,9 @@ describe('POST /api/v1/chat/assets/link', () => {
     const body = await response.json();
 
     expect(response.status).toBe(503);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       error: {
         code: 'link_import_unavailable',
-        message: '暂时无法导入该网页。请稍后重试。',
-        retryable: true,
       },
     });
     expect(JSON.stringify(body)).not.toContain('secret provider body');

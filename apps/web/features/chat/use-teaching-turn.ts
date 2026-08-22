@@ -19,6 +19,7 @@ import type { InFlightTurn } from './turn-send-outcome';
 import { useDeepResearchProgress } from './use-deep-research-progress';
 import { useActiveTurnRecovery } from './use-active-turn-recovery';
 import { useTurnRecoveryRuntime } from './use-turn-recovery';
+import { readPublicError } from '@/features/errors/public-error';
 
 const SAFE_INTERRUPTED_ERROR = '回答意外中断了，你可以重新发送这条问题。';
 function isBrowserOnline(): boolean {
@@ -55,26 +56,12 @@ const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
     `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
 };
 
-interface PublicRouteError {
-  error?: { code?: unknown; message?: unknown };
-}
-
 async function readPublicRouteError(
   response: Response,
   fallback: string,
 ): Promise<{ code: string; message: string }> {
-  try {
-    const body = (await response.json()) as PublicRouteError;
-    if (
-      typeof body.error?.code === 'string' &&
-      typeof body.error.message === 'string'
-    ) {
-      return { code: body.error.code, message: body.error.message };
-    }
-  } catch {
-    // The browser never exposes raw upstream errors; use the stable fallback.
-  }
-  return { code: 'turn_unavailable', message: fallback };
+  const error = await readPublicError(response, fallback);
+  return { code: error.code, message: error.message };
 }
 
 export function useAgentTurn(

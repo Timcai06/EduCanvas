@@ -31,17 +31,13 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   if (!authRateLimitDeploymentReady()) {
-    return jsonError(
-      503,
-      'auth_rate_limit_unavailable',
-      '当前部署尚未配置认证请求保护。',
-    );
+    return jsonError(503, 'auth_rate_limit_unavailable');
   }
   const identity = await readRegisteredSessionIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先登录。');
+  if (!identity) return jsonError(401, 'unauthorized');
   let raw: unknown;
   try {
     raw = await readLimitedJsonRequest(request);
@@ -53,12 +49,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   const parsed = passwordChangeInputSchema.safeParse(raw);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '密码格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   const attemptKey = `password:${identity.userId}`;
   const attempt = checkAuthAttempt(attemptKey);
   if (!attempt.allowed) {
-    return jsonError(429, 'auth_rate_limited', '密码验证尝试过于频繁。', {
+    return jsonError(429, 'auth_rate_limited', {
       retryAfterMs: attempt.retryAfterMs,
     });
   }
@@ -78,23 +74,19 @@ export async function POST(request: Request): Promise<Response> {
     return jsonResponse({ ok: true });
   } catch (error) {
     if (error instanceof PasswordValidationError) {
-      return jsonError(400, error.code, '新密码需为 8 至 128 位。');
+      return jsonError(400, error.code);
     }
     if (error instanceof AccountError) {
       if (error.code === 'invalid_current_password') {
         const failed = recordAuthFailure(attemptKey);
         if (!failed.allowed) {
-          return jsonError(429, 'auth_rate_limited', '密码验证尝试过于频繁。', {
+          return jsonError(429, 'auth_rate_limited', {
             retryAfterMs: failed.retryAfterMs,
           });
         }
       }
-      const message =
-        error.code === 'invalid_current_password'
-          ? '当前密码不正确。'
-          : '暂时无法修改密码。';
-      return jsonError(400, error.code, message);
+      return jsonError(400, error.code);
     }
-    return jsonError(503, 'password_change_unavailable', '暂时无法修改密码。');
+    return jsonError(503, 'password_change_unavailable');
   }
 }

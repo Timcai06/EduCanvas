@@ -54,9 +54,9 @@ const WEB_ARTIFACT_KINDS = [
  */
 export async function GET(request: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   try {
     const pagination = parseListPagination(request);
@@ -81,9 +81,9 @@ export async function GET(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof PaginationRequestError) {
-      return jsonError(400, error.code, '分页参数不正确。');
+      return jsonError(400, error.code);
     }
-    return jsonError(503, 'artifact_list_unavailable', '暂时无法读取产物。');
+    return jsonError(503, 'artifact_list_unavailable');
   }
 }
 
@@ -131,12 +131,12 @@ const createArtifactSchema = z.discriminatedUnion('kind', [
  */
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   let body: unknown;
   let idempotencyKey: string | null;
@@ -151,7 +151,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const parsed = createArtifactSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '产物参数不正确。');
+    return jsonError(400, 'invalid_request');
   }
   const requestFingerprint = idempotencyKey
     ? createHash('sha256')
@@ -172,11 +172,7 @@ export async function POST(request: Request): Promise<Response> {
           });
       } catch (error) {
         if (error instanceof AssetAccessError) {
-          return jsonError(
-            400,
-            'audio_sources_unavailable',
-            '部分来源已不可用，请重新选择。',
-          );
+          return jsonError(400, 'audio_sources_unavailable');
         }
         throw error;
       }
@@ -187,11 +183,7 @@ export async function POST(request: Request): Promise<Response> {
             !source.extractedText?.trim(),
         )
       ) {
-        return jsonError(
-          400,
-          'audio_source_not_supported',
-          '音频概览目前只支持已解析的 PDF 或网页来源。',
-        );
+        return jsonError(400, 'audio_source_not_supported');
       }
       params = { selectedSources: parsed.data.sources };
     }
@@ -267,13 +259,9 @@ export async function POST(request: Request): Promise<Response> {
     );
   } catch (error) {
     if (error instanceof ArtifactIdempotencyConflictError) {
-      return jsonError(
-        409,
-        'idempotency_conflict',
-        '这个幂等键已用于不同的产物请求。',
-      );
+      return jsonError(409, 'idempotency_conflict');
     }
-    return jsonError(503, 'artifact_create_unavailable', '暂时无法创建产物。');
+    return jsonError(503, 'artifact_create_unavailable');
   }
 }
 import { createHash } from 'node:crypto';

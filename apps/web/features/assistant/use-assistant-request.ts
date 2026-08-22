@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
+import { readPublicError } from '@/features/errors/public-error';
 
 export interface AssistantBubble {
   id: string;
@@ -75,11 +76,9 @@ export function useAssistantRequest() {
       });
 
       if (!response.ok) {
-        let errorMsg = '抱歉，暂时无法处理。';
-        try {
-          const err = await response.json();
-          if (err?.error?.message) errorMsg = err.error.message;
-        } catch {}
+        const errorMsg = (
+          await readPublicError(response, '抱歉，暂时无法处理。')
+        ).message;
         setBubbles((prev) =>
           prev.map((bubble) =>
             bubble.id === assistantBubble.id

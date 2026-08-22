@@ -1,85 +1,56 @@
-## Description
+## Goal
 
-<!-- Brief description of what this PR does -->
+<!-- What observable outcome does this PR deliver? -->
 
-## Type of Change
+## Boundary
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Refactoring (no functional changes)
-
-## Invariants
-
-<!-- What invariants does this change preserve? -->
-
-- [ ] Security boundaries remain closed
-- [ ] Data consistency maintained
-- [ ] API contracts preserved
-- [ ] No cross-tenant data leakage
-
-## Compatibility
-
-- [ ] Backward compatible
-- [ ] Forward compatible
-- [ ] Requires migration
-- [ ] Requires documentation update
-
-## Database Changes
-
-- [ ] No database changes
-- [ ] Schema migration added
-- [ ] Data migration required
-- [ ] Rollback plan documented
-
-## Permissions
-
-- [ ] No permission changes
-- [ ] New permissions added (document scope)
-- [ ] Permissions removed (document impact)
-
-## Failure Injection
-
-<!-- How was this change tested under failure conditions? -->
-
-- [ ] Network failure scenarios
-- [ ] Database unavailability
-- [ ] Provider timeout/error
-- [ ] Invalid input handling
+<!-- Packages, public contracts, data and users in scope. Name the logical Owner. -->
 
 ## Evidence
 
-<!-- What evidence supports this change? -->
-
-- [ ] Unit tests added/updated
-- [ ] Integration tests added/updated
-- [ ] E2E tests added/updated
-- [ ] Manual testing performed
-
-## Fallback
-
-- [ ] Feature flag available
-- [ ] Rollback plan documented
-- [ ] No fallback needed
-
-## Testing
-
-<!-- Describe the tests you ran to verify your changes -->
+<!-- Pin commands, exit codes, fixtures and any manual acceptance separately. -->
 
 ```bash
-# List test commands run
+pnpm file:check
 pnpm lint
 pnpm typecheck
 pnpm test:unit
+pnpm build
 ```
 
-## Checklist
+- [ ] Targeted unit/contract tests cover the changed behavior
+- [ ] Required integration/E2E/desktop lanes from CI impact were run
+- [ ] Manual evidence is labelled separately from automated evidence
 
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
+## Rollback
+
+<!-- Exact reversible unit, flags or compatibility path. -->
+
+## Non-goals
+
+<!-- What this PR deliberately does not change. -->
+
+## Review contract
+
+### Security and failure injection
+
+- [ ] Public responses contain no secrets, prompts, raw Provider bodies, stack traces or internal paths
+- [ ] Invalid input and relevant network, database and Provider failures were injected
+- [ ] Authorization and tenant/Notebook boundaries fail closed
+
+### Compatibility and protocols
+
+- [ ] Public entrypoints and API/protocol compatibility are preserved or explicitly versioned
+- [ ] `gateway.v1` events pass strict Schema and sequence validation
+- [ ] No second Agent Loop or Provider SDK boundary was introduced
+
+### Database
+
+- [ ] No database change
+- [ ] Or: Schema/migration, forward compatibility and rollback evidence are documented
+
+### Change hygiene
+
+- [ ] Package policy/Owner metadata matches the implementation
+- [ ] Comments explain causal constraints rather than obvious syntax
+- [ ] The diff contains no generated `.next`, `dist` or hand-edited migration output

@@ -28,22 +28,18 @@ export async function PATCH(
   context: { params: Promise<{ conversationId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const { conversationId } = await context.params;
   if (!isValidConversationId(conversationId)) {
-    return jsonError(400, 'invalid_conversation_id', '笔记本编号不正确。');
+    return jsonError(400, 'invalid_conversation_id');
   }
   const body = await request.json().catch(() => null);
   const parsed = renameConversationSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(
-      400,
-      'invalid_notebook_title',
-      '笔记本名称应为 1 到 120 个字符。',
-    );
+    return jsonError(400, 'invalid_notebook_title');
   }
   const repository = new DrizzlePlatformConversationRepository();
   const conversation = await repository.renameOwned({
@@ -52,7 +48,7 @@ export async function PATCH(
     title: parsed.data.title,
   });
   if (!conversation) {
-    return jsonError(404, 'conversation_not_found', '笔记本不存在。');
+    return jsonError(404, 'conversation_not_found');
   }
   return jsonResponse({
     conversation: { id: conversation.id, title: conversation.title },
@@ -65,13 +61,13 @@ export async function DELETE(
   context: { params: Promise<{ conversationId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const { conversationId } = await context.params;
   if (!isValidConversationId(conversationId)) {
-    return jsonError(400, 'invalid_conversation_id', '历史记录编号不正确。');
+    return jsonError(400, 'invalid_conversation_id');
   }
   const repository = new DrizzlePlatformConversationRepository();
   const archived = await repository.archiveOwned({
@@ -79,7 +75,7 @@ export async function DELETE(
     trustedSubjectId: identity.studentId,
   });
   if (!archived) {
-    return jsonError(404, 'conversation_not_found', '历史记录不存在。');
+    return jsonError(404, 'conversation_not_found');
   }
   const activeConversationId = await readActiveConversationId();
   if (activeConversationId !== conversationId) {

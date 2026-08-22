@@ -185,7 +185,7 @@ describe('Gateway Client Canvas resource access', () => {
       { headers: { authorization: `Bearer ${transport.token}` } },
     );
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: { code: 'resource_not_found' },
     });
   });

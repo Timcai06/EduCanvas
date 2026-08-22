@@ -276,7 +276,7 @@ describe('POST /api/v1/chat/turn', () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'invalid_json', message: '消息格式不正确。' },
+      error: { code: 'invalid_json' },
     });
 
     vi.mocked(beginWebGatewayTurn).mockRejectedValue(

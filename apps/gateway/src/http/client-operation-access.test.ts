@@ -132,5 +132,5 @@ it('returns 403 when current membership denies an approval decision', async () =
   );
 
   expect(response.status).toBe(403);
-  expect(await response.json()).toEqual({ error: { code: 'FORBIDDEN' } });
+  expect(await response.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
 });

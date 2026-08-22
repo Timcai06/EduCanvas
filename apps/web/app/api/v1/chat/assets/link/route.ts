@@ -37,15 +37,15 @@ const linkImportSchema = z
 /** 链接导入为来源:服务端抓取公开网页正文,落为 link 资产版本。 */
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   let identity;
   let conversation;
   try {
     identity = await readAnonymousIdentity();
-    if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+    if (!identity) return jsonError(401, 'unauthorized');
     conversation = await loadOwnedGeneralConversation(identity);
-    if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+    if (!conversation) return jsonError(401, 'unauthorized');
   } catch {
     return linkErrorResponse(
       new LinkImportError('link_import_unavailable', true),

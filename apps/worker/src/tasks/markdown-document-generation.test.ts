@@ -2,7 +2,7 @@ import type {
   StructuredModelGateway,
   StructuredModelRequest,
 } from '@educanvas/agent-core';
-import { markdownDocumentContentSchema } from '../../../../packages/canvas-protocol/src/artifacts/markdown-document';
+import { markdownDocumentContentSchema } from '@educanvas/canvas-protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   MARKDOWN_DOCUMENT_PROMPT_VERSION,

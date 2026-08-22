@@ -72,8 +72,7 @@ describe('web search browser client', () => {
           {
             error: {
               code: 'search_rate_limited',
-              message: '网页搜索请求过于频繁。请稍后重试。',
-              retryable: true,
+              requestId: 'request-1',
             },
           },
           { status: 429 },

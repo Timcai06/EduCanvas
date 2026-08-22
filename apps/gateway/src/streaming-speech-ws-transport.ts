@@ -14,6 +14,7 @@ import type { StreamingTranscriptionQuotaManager } from './streaming-transcripti
 import type { StreamingTranscriptionQuotas } from './streaming-transcription-quotas';
 import type { StreamingTranscriptionTicketStore } from './streaming-transcription-ticket';
 import { TICKET_SUBPROTOCOL_PREFIX } from './streaming-transcription-ws-transport';
+import { serializePublicError } from './public-error';
 
 export const STREAMING_SPEECH_WS_PATH = '/v1/client/streaming-speech' as const;
 
@@ -41,7 +42,7 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 };
 
 function rejectUpgrade(socket: Duplex, status: number, code: string): void {
-  const body = JSON.stringify({ error: { code } });
+  const body = serializePublicError(code);
   socket.write(
     `HTTP/1.1 ${status} ${HTTP_STATUS_TEXT[status] ?? 'Error'}\r\n` +
       'content-type: application/json\r\n' +

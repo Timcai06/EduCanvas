@@ -58,14 +58,14 @@ describe('GET /api/v1/me/activity', () => {
     expect(body.activity.masteryPercent).toBeNull();
   });
 
-  it('服务异常返回 500 activity_unavailable 和安全中文文案', async () => {
+  it('服务异常返回 500 activity_unavailable 且不泄漏内部信息', async () => {
     mockReadIdentity.mockResolvedValue({ studentId: 's1' });
     mockGetActivity.mockRejectedValue(new Error('DB DOWN'));
     const res = await GET();
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error?.code).toBe('activity_unavailable');
-    expect(body.error?.message).toBeTruthy();
+    expect(body.error?.requestId).toBeTruthy();
     const str = JSON.stringify(body);
     expect(str).not.toContain('DB DOWN');
     expect(str).not.toContain('stack');

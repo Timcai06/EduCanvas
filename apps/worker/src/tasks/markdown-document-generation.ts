@@ -5,7 +5,7 @@ import {
   MARKDOWN_DOCUMENT_MAX_CHARS,
   markdownDocumentContentSchema,
   type MarkdownDocumentContent,
-} from '../../../../packages/canvas-protocol/src/artifacts/markdown-document';
+} from '@educanvas/canvas-protocol';
 import type { OutlineSourceMessage } from './mind-map-outline.js';
 
 export const MARKDOWN_DOCUMENT_PROMPT_VERSION = 'artifact-markdown-document-v1';

@@ -9,6 +9,8 @@ import {
 describe('Gateway跨入口合规夹具', () => {
   it.each([
     'completed',
+    'toolCompleted',
+    'toolFailed',
     'approvalPending',
     'cancelled',
     'capabilityUnavailable',
@@ -64,4 +66,19 @@ describe('Gateway跨入口合规夹具', () => {
       ]),
     ).toBe(false);
   });
+
+  it.each(['message', 'stack', 'providerBody', 'prompt'])(
+    'operation.failed拒绝公共协议中的私有字段%s',
+    (field) => {
+      const failed = gatewayCrossEntryConformance.internalFailure.at(-1);
+      if (!failed)
+        throw new Error('internal failure fixture must not be empty');
+      expect(
+        gatewayOperationEventSchema.safeParse({
+          ...failed,
+          [field]: 'sk-secret /private/provider-response',
+        }).success,
+      ).toBe(false);
+    },
+  );
 });

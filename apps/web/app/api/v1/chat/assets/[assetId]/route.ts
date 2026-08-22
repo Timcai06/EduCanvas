@@ -50,16 +50,16 @@ export async function PATCH(
   context: { params: Promise<{ assetId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const parsedParams = paramsSchema.safeParse(await context.params);
   if (!parsedParams.success) {
-    return jsonError(404, 'asset_not_found', '来源不存在。');
+    return jsonError(404, 'asset_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
 
   let body: unknown;
   try {
@@ -68,11 +68,11 @@ export async function PATCH(
     if (error instanceof JsonRequestValidationError) {
       return jsonRequestErrorResponse(error);
     }
-    return jsonError(400, 'invalid_request', '请求内容不正确。');
+    return jsonError(400, 'invalid_request');
   }
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '请求内容不正确。');
+    return jsonError(400, 'invalid_request');
   }
 
   const repository = new DrizzleAssetRepository();
@@ -85,7 +85,7 @@ export async function PATCH(
         displayName: parsed.data.displayName,
       });
       /* 无权限与不存在统一回 404，不向客户端泄露「存在但你不能改」。 */
-      if (!renamed) return jsonError(404, 'asset_not_found', '来源不存在。');
+      if (!renamed) return jsonError(404, 'asset_not_found');
       return jsonResponse({ displayName: parsed.data.displayName });
     }
     const enabled = await repository.setSubjectAssetBinding({
@@ -96,11 +96,11 @@ export async function PATCH(
       mutationId: parsed.data.mutationId,
     });
     if (enabled === null) {
-      return jsonError(404, 'asset_not_found', '来源不存在。');
+      return jsonError(404, 'asset_not_found');
     }
     return jsonResponse({ enabled });
   } catch {
-    return jsonError(503, 'asset_update_unavailable', '暂时无法更新来源。');
+    return jsonError(503, 'asset_update_unavailable');
   }
 }
 
@@ -109,16 +109,16 @@ export async function DELETE(
   context: { params: Promise<{ assetId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) {
-    return jsonError(404, 'asset_not_found', '来源不存在。');
+    return jsonError(404, 'asset_not_found');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
   const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!conversation) return jsonError(401, 'unauthorized');
   try {
     const deleted = (await tombstoneOwnedAsset({
       identity,
@@ -126,13 +126,13 @@ export async function DELETE(
       assetId: parsed.data.assetId,
     })) as boolean | void;
     if (deleted === false) {
-      return jsonError(404, 'asset_not_found', '来源不存在。');
+      return jsonError(404, 'asset_not_found');
     }
     return new Response(null, { status: 204 });
   } catch (error) {
     if (error instanceof AssetPreviewError) {
-      return jsonError(error.status, error.code, '来源不存在。');
+      return jsonError(error.status, error.code);
     }
-    return jsonError(503, 'asset_delete_unavailable', '暂时无法删除来源。');
+    return jsonError(503, 'asset_delete_unavailable');
   }
 }

@@ -70,21 +70,41 @@ describe('repository file governance', () => {
 
   it('freezes existing large-file debt while allowing stable or smaller files', () => {
     assert.deepEqual(
-      largeSourceBaselineViolations(
-        { 'stable.ts': 400, 'smaller.ts': 450 },
-        { 'stable.ts': 400, 'smaller.ts': 500 },
-      ),
+      largeSourceBaselineViolations({ 'stable.ts': 400, 'smaller.ts': 450 }, [
+        debt('stable.ts', 400, '0001'),
+        debt('smaller.ts', 500, '0002'),
+      ]),
       [],
     );
     assert.deepEqual(
-      largeSourceBaselineViolations(
-        { 'grown.ts': 601, 'new.ts': 400 },
-        { 'grown.ts': 600 },
-      ),
+      largeSourceBaselineViolations({ 'grown.ts': 601, 'new.ts': 400 }, [
+        debt('grown.ts', 600, '0001'),
+      ]),
       [
         'grown.ts: grew from 600 to 601 lines',
         'new.ts: new 400-line source requires split or an explicit baseline decision',
       ],
     );
   });
+
+  it('rejects expired, duplicated, ownerless and stale debt records', () => {
+    const invalid = debt('old.ts', 500, '0001');
+    invalid.owner = '';
+    invalid.expiry = '2020-01-01';
+    assert.ok(
+      largeSourceBaselineViolations({}, [invalid, { ...invalid }]).length >= 4,
+    );
+  });
 });
+
+function debt(file, acceptedLines, sequence) {
+  return {
+    file,
+    owner: 'developer-productivity',
+    reason: 'Existing debt pending bounded extraction.',
+    targetLines: 400,
+    issue: `internal:ARCH-DEBT-${sequence}`,
+    expiry: '2027-02-28',
+    acceptedLines,
+  };
+}

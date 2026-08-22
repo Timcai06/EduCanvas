@@ -29,34 +29,13 @@ const searchRequestSchema = z
   .strict();
 
 const publicError = {
-  search_not_configured: {
-    status: 503,
-    message: '网页搜索尚未配置。请改用网页地址导入。',
-  },
-  search_timeout: {
-    status: 504,
-    message: '网页搜索超时。请重试或缩短检索词。',
-  },
-  search_rate_limited: {
-    status: 429,
-    message: '网页搜索请求过于频繁。请稍后重试。',
-  },
-  search_provider_unavailable: {
-    status: 503,
-    message: '网页搜索暂时不可用。请稍后重试。',
-  },
-  search_invalid_response: {
-    status: 502,
-    message: '网页搜索返回了无效结果。请重试。',
-  },
-  search_budget_exhausted: {
-    status: 504,
-    message: '网页搜索未能在限定时间内完成。请重试。',
-  },
-  search_cancelled: {
-    status: 499,
-    message: '网页搜索已取消。',
-  },
+  search_not_configured: { status: 503 },
+  search_timeout: { status: 504 },
+  search_rate_limited: { status: 429 },
+  search_provider_unavailable: { status: 503 },
+  search_invalid_response: { status: 502 },
+  search_budget_exhausted: { status: 504 },
+  search_cancelled: { status: 499 },
 } as const;
 
 function environment(): SearchEnvironment {
@@ -71,47 +50,26 @@ function environment(): SearchEnvironment {
 function searchError(
   status: number,
   code: string,
-  message: string,
-  retryable: boolean,
   retryAfterMs?: number,
 ): Response {
-  return jsonResponse(
-    { error: { code, message, retryable } },
-    {
-      status,
-      ...(retryAfterMs === undefined
-        ? {}
-        : {
-            headers: {
-              'retry-after': String(
-                Math.max(1, Math.ceil(retryAfterMs / 1_000)),
-              ),
-            },
-          }),
-    },
-  );
+  return jsonError(status, code, { retryAfterMs });
 }
 
 /** 浏览器搜索只接收 Provider-neutral 投影；Provider 身份、健康和原始响应留在服务端。 */
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   let identity;
   let conversation;
   try {
     identity = await readAnonymousIdentity();
-    if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+    if (!identity) return jsonError(401, 'unauthorized');
     conversation = await loadOwnedGeneralConversation(identity);
-    if (!conversation) return jsonError(401, 'unauthorized', '请先开始对话。');
+    if (!conversation) return jsonError(401, 'unauthorized');
   } catch {
     const failure = publicError.search_provider_unavailable;
-    return searchError(
-      failure.status,
-      'search_provider_unavailable',
-      failure.message,
-      true,
-    );
+    return searchError(failure.status, 'search_provider_unavailable');
   }
 
   let body: unknown;
@@ -122,20 +80,11 @@ export async function POST(request: Request): Promise<Response> {
       return jsonRequestErrorResponse(error);
     }
     const failure = publicError.search_provider_unavailable;
-    return searchError(
-      failure.status,
-      'search_provider_unavailable',
-      failure.message,
-      true,
-    );
+    return searchError(failure.status, 'search_provider_unavailable');
   }
   const parsed = searchRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(
-      400,
-      'search_invalid_query',
-      '检索词需包含 2 到 200 个字符。',
-    );
+    return jsonError(400, 'search_invalid_query');
   }
 
   let pipeline;
@@ -143,21 +92,11 @@ export async function POST(request: Request): Promise<Response> {
     pipeline = resolveSearchCandidatePipeline(environment());
   } catch {
     const failure = publicError.search_provider_unavailable;
-    return searchError(
-      failure.status,
-      'search_provider_unavailable',
-      failure.message,
-      true,
-    );
+    return searchError(failure.status, 'search_provider_unavailable');
   }
   if (!pipeline) {
     const failure = publicError.search_not_configured;
-    return searchError(
-      failure.status,
-      'search_not_configured',
-      failure.message,
-      false,
-    );
+    return searchError(failure.status, 'search_not_configured');
   }
 
   let lease;
@@ -170,8 +109,6 @@ export async function POST(request: Request): Promise<Response> {
       return searchError(
         failure.status,
         'search_rate_limited',
-        failure.message,
-        true,
         lease.retryAfterMs,
       );
     }
@@ -200,19 +137,9 @@ export async function POST(request: Request): Promise<Response> {
       const code = Object.hasOwn(publicError, error.code)
         ? error.code
         : 'search_provider_unavailable';
-      return searchError(
-        failure.status,
-        code,
-        failure.message,
-        code === 'search_provider_unavailable' ? true : error.retryable,
-      );
+      return searchError(failure.status, code);
     }
-    return searchError(
-      503,
-      'search_provider_unavailable',
-      publicError.search_provider_unavailable.message,
-      true,
-    );
+    return searchError(503, 'search_provider_unavailable');
   } finally {
     if (lease?.allowed) lease.release();
   }

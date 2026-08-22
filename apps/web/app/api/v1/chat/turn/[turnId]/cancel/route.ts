@@ -19,10 +19,10 @@ export async function POST(
   context: { params: Promise<{ turnId: string }> },
 ): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAnonymousIdentity();
-  if (!identity) return jsonError(401, 'unauthorized', '请先开始对话。');
+  if (!identity) return jsonError(401, 'unauthorized');
 
   const { turnId } = await context.params;
   try {
@@ -31,7 +31,7 @@ export async function POST(
       turnId,
     });
     if (!result.turn) {
-      return jsonError(404, 'turn_not_found', '回答不存在或不可访问。');
+      return jsonError(404, 'turn_not_found');
     }
     abortRegisteredTurn(turnId);
     return jsonResponse(
@@ -44,12 +44,8 @@ export async function POST(
     );
   } catch (error) {
     if (error instanceof PlatformTurnLifecycleError) {
-      return jsonError(400, 'invalid_turn', '回答标识无效。');
+      return jsonError(400, 'invalid_turn');
     }
-    return jsonError(
-      503,
-      'cancel_unavailable',
-      '暂时无法停止回答，请稍后重试。',
-    );
+    return jsonError(503, 'cancel_unavailable');
   }
 }

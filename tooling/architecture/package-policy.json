@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "name": "@educanvas/desktop",
+      "path": "apps/desktop",
+      "kind": "app",
+      "domain": "platform",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/gateway",
+      "path": "apps/gateway",
+      "kind": "app",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/node",
+      "path": "apps/node",
+      "kind": "app",
+      "domain": "platform",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/telegram",
+      "path": "apps/telegram",
+      "kind": "app",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/tui",
+      "path": "apps/tui",
+      "kind": "app",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/web",
+      "path": "apps/web",
+      "kind": "app",
+      "domain": "canvas",
+      "owner": "gateway",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/web-runtime",
+      "path": "apps/web-runtime",
+      "kind": "app",
+      "domain": "canvas",
+      "owner": "gateway",
+      "publicEntrypoints": [".", "./config", "./server"],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/worker",
+      "path": "apps/worker",
+      "kind": "app",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": [],
+      "allowedDependencyKinds": [
+        "app",
+        "core",
+        "runtime",
+        "adapter",
+        "protocol",
+        "tooling"
+      ],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/agent-core",
+      "path": "packages/agent-core",
+      "kind": "core",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/agent-runtime",
+      "path": "packages/agent-runtime",
+      "kind": "runtime",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/asset-processing",
+      "path": "packages/asset-processing",
+      "kind": "adapter",
+      "domain": "data",
+      "owner": "data",
+      "publicEntrypoints": [".", "./node", "./test-utils"],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/canvas-protocol",
+      "path": "packages/canvas-protocol",
+      "kind": "protocol",
+      "domain": "canvas",
+      "owner": "gateway",
+      "publicEntrypoints": [".", "./server"],
+      "allowedDependencyKinds": ["core", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/channel-telegram",
+      "path": "packages/channel-telegram",
+      "kind": "adapter",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/db",
+      "path": "packages/db",
+      "kind": "adapter",
+      "domain": "data",
+      "owner": "data",
+      "publicEntrypoints": [
+        ".",
+        "./asset-object-storage",
+        "./internal",
+        "./workspace-resource-summary",
+        "./testing",
+        "./package.json"
+      ],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/experiment-runtime",
+      "path": "packages/experiment-runtime",
+      "kind": "runtime",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/gateway-client",
+      "path": "packages/gateway-client",
+      "kind": "adapter",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/gateway-core",
+      "path": "packages/gateway-core",
+      "kind": "core",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/gateway-runtime",
+      "path": "packages/gateway-runtime",
+      "kind": "runtime",
+      "domain": "gateway",
+      "owner": "gateway",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/logging",
+      "path": "packages/logging",
+      "kind": "adapter",
+      "domain": "platform",
+      "owner": "developer-productivity",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/mcp-runtime",
+      "path": "packages/mcp-runtime",
+      "kind": "runtime",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/model-gateway",
+      "path": "packages/model-gateway",
+      "kind": "adapter",
+      "domain": "agent",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/node-host",
+      "path": "packages/node-host",
+      "kind": "adapter",
+      "domain": "platform",
+      "owner": "developer-productivity",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/node-runtime",
+      "path": "packages/node-runtime",
+      "kind": "runtime",
+      "domain": "platform",
+      "owner": "developer-productivity",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/teaching-core",
+      "path": "packages/teaching-core",
+      "kind": "core",
+      "domain": "teaching",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/teaching-runtime",
+      "path": "packages/teaching-runtime",
+      "kind": "runtime",
+      "domain": "teaching",
+      "owner": "agent-runtime",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "protocol"],
+      "forbiddenDependencies": []
+    },
+    {
+      "name": "@educanvas/telemetry",
+      "path": "packages/telemetry",
+      "kind": "adapter",
+      "domain": "platform",
+      "owner": "developer-productivity",
+      "publicEntrypoints": ["."],
+      "allowedDependencyKinds": ["core", "runtime", "adapter", "protocol"],
+      "forbiddenDependencies": []
+    }
+  ],
+  "allowlist": {
+    "dependencies": [
+      {
+        "consumer": "@educanvas/web",
+        "target": "@educanvas/db",
+        "specifier": "@educanvas/db/internal",
+        "reason": "Bootstrap composition roots still acquire the shared database handle through the compatibility entrypoint.",
+        "issue": "internal:ARCH-DEBT-0001",
+        "expiry": "2027-02-28"
+      },
+      {
+        "consumer": "@educanvas/gateway",
+        "target": "@educanvas/db",
+        "specifier": "@educanvas/db/internal",
+        "reason": "Gateway composition roots still acquire the shared database handle through the compatibility entrypoint.",
+        "issue": "internal:ARCH-DEBT-0002",
+        "expiry": "2027-02-28"
+      },
+      {
+        "consumer": "@educanvas/telegram",
+        "target": "@educanvas/db",
+        "specifier": "@educanvas/db/internal",
+        "reason": "Telegram bootstrap still acquires the shared database handle through the compatibility entrypoint.",
+        "issue": "internal:ARCH-DEBT-0003",
+        "expiry": "2027-02-28"
+      },
+      {
+        "consumer": "tooling/evals",
+        "target": "@educanvas/db",
+        "specifier": "@educanvas/db/internal",
+        "reason": "The isolated evaluation harness needs schema access without widening the browser-safe database root.",
+        "issue": "internal:ARCH-DEBT-0004",
+        "expiry": "2027-02-28"
+      }
+    ],
+    "entrypoints": []
+  }
+}

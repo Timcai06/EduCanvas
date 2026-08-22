@@ -109,11 +109,9 @@ describe('POST /api/v1/chat/assets/link/search', () => {
 
     expect(response.status).toBe(503);
     expect(mocks.release).toHaveBeenCalledTimes(1);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: {
         code: 'search_provider_unavailable',
-        message: '网页搜索暂时不可用。请稍后重试。',
-        retryable: true,
       },
     });
   });
@@ -125,7 +123,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
-      error: { code: 'search_not_configured', retryable: false },
+      error: { code: 'search_not_configured' },
     });
   });
 
@@ -140,11 +138,9 @@ describe('POST /api/v1/chat/assets/link/search', () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('1');
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: {
         code: 'search_rate_limited',
-        message: '网页搜索请求过于频繁。请稍后重试。',
-        retryable: true,
       },
     });
     expect(mocks.search).not.toHaveBeenCalled();
@@ -158,11 +154,9 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     const body = await response.json();
 
     expect(response.status).toBe(503);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       error: {
         code: 'search_provider_unavailable',
-        message: '网页搜索暂时不可用。请稍后重试。',
-        retryable: true,
       },
     });
     expect(JSON.stringify(body)).not.toContain('secret provider body');

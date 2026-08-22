@@ -6,6 +6,11 @@
   },
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./server": "./src/server.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --external:drizzle-orm --external:drizzle-orm/* --external:postgres --external:zod --outfile=dist/index.js",

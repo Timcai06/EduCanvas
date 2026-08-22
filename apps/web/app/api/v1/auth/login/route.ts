@@ -26,14 +26,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   if (!authRateLimitDeploymentReady()) {
-    return jsonError(
-      503,
-      'auth_rate_limit_unavailable',
-      '当前部署尚未配置认证请求保护。',
-    );
+    return jsonError(503, 'auth_rate_limit_unavailable');
   }
   let raw: unknown;
   try {
@@ -46,12 +42,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   const parsed = loginInputSchema.safeParse(raw);
   if (!parsed.success) {
-    return jsonError(400, 'invalid_request', '登录信息格式不正确。');
+    return jsonError(400, 'invalid_request');
   }
   const attemptKey = `login:${parsed.data.username.trim().toLowerCase()}`;
   const attempt = checkAuthAttempt(attemptKey);
   if (!attempt.allowed) {
-    return jsonError(429, 'auth_rate_limited', '登录尝试过于频繁。', {
+    return jsonError(429, 'auth_rate_limited', {
       retryAfterMs: attempt.retryAfterMs,
     });
   }
@@ -64,12 +60,12 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof AccountError) {
       const failed = recordAuthFailure(attemptKey);
       if (!failed.allowed) {
-        return jsonError(429, 'auth_rate_limited', '登录尝试过于频繁。', {
+        return jsonError(429, 'auth_rate_limited', {
           retryAfterMs: failed.retryAfterMs,
         });
       }
-      return jsonError(401, 'invalid_credentials', '用户名或密码不正确。');
+      return jsonError(401, 'invalid_credentials');
     }
-    return jsonError(503, 'login_unavailable', '暂时无法登录。');
+    return jsonError(503, 'login_unavailable');
   }
 }

@@ -123,7 +123,7 @@ describe('POST /api/v1/learn/turn', () => {
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('2');
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'turn_rate_limited', retryAfterMs: 1_250 },
+      error: { code: 'turn_rate_limited' },
     });
   });
 

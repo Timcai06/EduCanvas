@@ -1,74 +1,618 @@
 {
   "policy": "Review at 400 lines; split before 600 unless a named plan owns the debt.",
   "threshold": 400,
-  "files": {
-    "apps/desktop/src/main/assistant-proxy.ts": 465,
-    "apps/desktop/src/main/index.ts": 684,
-    "apps/desktop/src/renderer/src/App.tsx": 592,
-    "apps/desktop/src/renderer/src/pet-chat-panel.tsx": 499,
-    "apps/gateway/src/http/client-routes.ts": 658,
-    "apps/gateway/src/streaming-transcription-channel.ts": 549,
-    "apps/gateway/src/streaming-transcription-ws-transport.ts": 449,
-    "apps/tui/src/index.ts": 590,
-    "apps/web/app/api/v1/chat/artifacts/[artifactId]/route.ts": 478,
-    "apps/web/components/OptionWheel.tsx": 516,
-    "apps/web/features/canvas/animation-shell.tsx": 476,
-    "apps/web/features/canvas/artifact-client.ts": 438,
-    "apps/web/features/canvas/artifact-generation-flow.tsx": 544,
-    "apps/web/features/canvas/canvas-registry.tsx": 409,
-    "apps/web/features/canvas/mind-map-renderer.tsx": 488,
-    "apps/web/features/chat/turn-events.ts": 549,
-    "apps/web/features/chat/turn-state.ts": 476,
-    "apps/web/features/chat/use-teaching-turn.ts": 435,
-    "apps/web/features/studio/studio-resource-library.tsx": 401,
-    "apps/web/features/voice/capture/audio-capture.ts": 460,
-    "apps/web/features/voice/playback/use-live-speech-playback.ts": 471,
-    "apps/web/features/voice/transport/streaming-transcription-client.ts": 793,
-    "apps/web/features/voice/voice-composer.tsx": 577,
-    "apps/web/features/workspace/general/use-general-workspace-controller.ts": 579,
-    "apps/web/features/workspace/learning/learn-workspace.tsx": 648,
-    "apps/web/server/assets/asset-preview.ts": 439,
-    "apps/web/server/canvas/workspace-resource-read-model.ts": 402,
-    "apps/worker/src/tasks/generate-artifact.ts": 482,
-    "packages/agent-core/src/index.ts": 448,
-    "packages/agent-core/src/transcript-term-correction.ts": 580,
-    "packages/agent-runtime/src/agent-loop.ts": 635,
-    "packages/asset-processing/src/mineru-client.ts": 455,
-    "packages/asset-processing/src/mineru-fake-server.ts": 489,
-    "packages/db/src/agent-model-run-repository.ts": 516,
-    "packages/db/src/anonymous-data-lifecycle-deletions.ts": 596,
-    "packages/db/src/asset-repository.ts": 1673,
-    "packages/db/src/asset-video-repository.ts": 534,
-    "packages/db/src/audio-retention-repository.ts": 421,
-    "packages/db/src/chat-repository.ts": 686,
-    "packages/db/src/conversation-platform-repository.ts": 420,
-    "packages/db/src/gateway-connection-repository.ts": 427,
-    "packages/db/src/gateway/node-repository.ts": 576,
-    "packages/db/src/gateway/operation-store.ts": 589,
-    "packages/db/src/index.ts": 522,
-    "packages/db/src/k12-conversation-dual-write.ts": 563,
-    "packages/db/src/k12-conversation-parity.ts": 450,
-    "packages/db/src/knowledge-hybrid-retrieval.ts": 566,
-    "packages/db/src/knowledge-retrieval-repository.ts": 825,
-    "packages/db/src/knowledge-source-repository.ts": 405,
-    "packages/db/src/learning-session-repository.ts": 512,
-    "packages/db/src/model-run-repository.ts": 446,
-    "packages/db/src/platform-artifact-repository.ts": 1094,
-    "packages/db/src/platform-turn-repository.ts": 825,
-    "packages/db/src/platform-turn-settlement-repository.ts": 477,
-    "packages/db/src/schema/asset.ts": 496,
-    "packages/db/src/schema/conversation.ts": 424,
-    "packages/db/src/schema/turn.ts": 507,
-    "packages/db/src/study-plan-repository.ts": 425,
-    "packages/db/src/tool-call-repository.ts": 457,
-    "packages/db/src/turn-ledger-repository.ts": 657,
-    "packages/db/src/web-runtime-run-repository.ts": 423,
-    "packages/experiment-runtime/src/cpu-experiment-adapter.ts": 447,
-    "packages/gateway-client/src/client.ts": 670,
-    "packages/teaching-core/src/learning-projection.ts": 666,
-    "packages/teaching-core/src/safety-policy.ts": 446,
-    "packages/teaching-runtime/src/state-transition.ts": 472,
-    "tooling/quality/ai-product-evidence.mjs": 505,
-    "tooling/voice-lab/run-v02-v-matrix.mjs": 440
-  }
+  "files": [
+    {
+      "file": "apps/desktop/src/main/assistant-proxy.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0001",
+      "expiry": "2027-02-28",
+      "acceptedLines": 465
+    },
+    {
+      "file": "apps/desktop/src/main/index.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0002",
+      "expiry": "2026-11-30",
+      "acceptedLines": 684
+    },
+    {
+      "file": "apps/desktop/src/renderer/src/App.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0003",
+      "expiry": "2027-02-28",
+      "acceptedLines": 592
+    },
+    {
+      "file": "apps/desktop/src/renderer/src/pet-chat-panel.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0004",
+      "expiry": "2027-02-28",
+      "acceptedLines": 499
+    },
+    {
+      "file": "apps/gateway/src/http/client-routes.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0005",
+      "expiry": "2026-11-30",
+      "acceptedLines": 658
+    },
+    {
+      "file": "apps/gateway/src/streaming-transcription-channel.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0006",
+      "expiry": "2027-02-28",
+      "acceptedLines": 549
+    },
+    {
+      "file": "apps/gateway/src/streaming-transcription-ws-transport.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0007",
+      "expiry": "2027-02-28",
+      "acceptedLines": 449
+    },
+    {
+      "file": "apps/tui/src/index.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0008",
+      "expiry": "2027-02-28",
+      "acceptedLines": 590
+    },
+    {
+      "file": "apps/web/app/api/v1/chat/artifacts/[artifactId]/route.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0009",
+      "expiry": "2027-02-28",
+      "acceptedLines": 474
+    },
+    {
+      "file": "apps/web/components/OptionWheel.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0010",
+      "expiry": "2027-02-28",
+      "acceptedLines": 516
+    },
+    {
+      "file": "apps/web/features/canvas/animation-shell.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0011",
+      "expiry": "2027-02-28",
+      "acceptedLines": 476
+    },
+    {
+      "file": "apps/web/features/canvas/artifact-client.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0012",
+      "expiry": "2027-02-28",
+      "acceptedLines": 438
+    },
+    {
+      "file": "apps/web/features/canvas/artifact-generation-flow.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0013",
+      "expiry": "2027-02-28",
+      "acceptedLines": 544
+    },
+    {
+      "file": "apps/web/features/canvas/canvas-registry.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0014",
+      "expiry": "2027-02-28",
+      "acceptedLines": 409
+    },
+    {
+      "file": "apps/web/features/canvas/mind-map-renderer.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0015",
+      "expiry": "2027-02-28",
+      "acceptedLines": 488
+    },
+    {
+      "file": "apps/web/features/chat/turn-events.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0016",
+      "expiry": "2027-02-28",
+      "acceptedLines": 469
+    },
+    {
+      "file": "apps/web/features/chat/turn-state.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0017",
+      "expiry": "2027-02-28",
+      "acceptedLines": 414
+    },
+    {
+      "file": "apps/web/features/chat/use-teaching-turn.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0018",
+      "expiry": "2027-02-28",
+      "acceptedLines": 422
+    },
+    {
+      "file": "apps/web/features/studio/studio-resource-library.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0019",
+      "expiry": "2027-02-28",
+      "acceptedLines": 401
+    },
+    {
+      "file": "apps/web/features/voice/capture/audio-capture.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0020",
+      "expiry": "2027-02-28",
+      "acceptedLines": 460
+    },
+    {
+      "file": "apps/web/features/voice/playback/use-live-speech-playback.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0021",
+      "expiry": "2027-02-28",
+      "acceptedLines": 471
+    },
+    {
+      "file": "apps/web/features/voice/transport/streaming-transcription-client.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0022",
+      "expiry": "2026-11-30",
+      "acceptedLines": 793
+    },
+    {
+      "file": "apps/web/features/voice/voice-composer.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0023",
+      "expiry": "2027-02-28",
+      "acceptedLines": 577
+    },
+    {
+      "file": "apps/web/features/workspace/general/use-general-workspace-controller.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0024",
+      "expiry": "2027-02-28",
+      "acceptedLines": 579
+    },
+    {
+      "file": "apps/web/features/workspace/learning/learn-workspace.tsx",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0025",
+      "expiry": "2026-11-30",
+      "acceptedLines": 648
+    },
+    {
+      "file": "apps/web/server/assets/asset-preview.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0026",
+      "expiry": "2027-02-28",
+      "acceptedLines": 439
+    },
+    {
+      "file": "apps/web/server/canvas/workspace-resource-read-model.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0027",
+      "expiry": "2027-02-28",
+      "acceptedLines": 402
+    },
+    {
+      "file": "apps/worker/src/tasks/generate-artifact.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0028",
+      "expiry": "2027-02-28",
+      "acceptedLines": 482
+    },
+    {
+      "file": "packages/agent-core/src/index.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0029",
+      "expiry": "2027-02-28",
+      "acceptedLines": 448
+    },
+    {
+      "file": "packages/agent-core/src/transcript-term-correction.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0030",
+      "expiry": "2027-02-28",
+      "acceptedLines": 580
+    },
+    {
+      "file": "packages/agent-runtime/src/agent-loop.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0031",
+      "expiry": "2026-11-30",
+      "acceptedLines": 635
+    },
+    {
+      "file": "packages/asset-processing/src/mineru-client.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0032",
+      "expiry": "2027-02-28",
+      "acceptedLines": 455
+    },
+    {
+      "file": "packages/asset-processing/src/mineru-fake-server.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0033",
+      "expiry": "2027-02-28",
+      "acceptedLines": 489
+    },
+    {
+      "file": "packages/db/src/agent-model-run-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0034",
+      "expiry": "2027-02-28",
+      "acceptedLines": 516
+    },
+    {
+      "file": "packages/db/src/anonymous-data-lifecycle-deletions.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0035",
+      "expiry": "2027-02-28",
+      "acceptedLines": 596
+    },
+    {
+      "file": "packages/db/src/asset-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0036",
+      "expiry": "2026-11-30",
+      "acceptedLines": 1673
+    },
+    {
+      "file": "packages/db/src/asset-video-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0037",
+      "expiry": "2027-02-28",
+      "acceptedLines": 534
+    },
+    {
+      "file": "packages/db/src/audio-retention-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0038",
+      "expiry": "2027-02-28",
+      "acceptedLines": 421
+    },
+    {
+      "file": "packages/db/src/chat-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0039",
+      "expiry": "2026-11-30",
+      "acceptedLines": 686
+    },
+    {
+      "file": "packages/db/src/conversation-platform-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0040",
+      "expiry": "2027-02-28",
+      "acceptedLines": 420
+    },
+    {
+      "file": "packages/db/src/gateway-connection-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0041",
+      "expiry": "2027-02-28",
+      "acceptedLines": 427
+    },
+    {
+      "file": "packages/db/src/gateway/node-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0042",
+      "expiry": "2027-02-28",
+      "acceptedLines": 576
+    },
+    {
+      "file": "packages/db/src/gateway/operation-store.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0043",
+      "expiry": "2027-02-28",
+      "acceptedLines": 589
+    },
+    {
+      "file": "packages/db/src/index.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0044",
+      "expiry": "2027-02-28",
+      "acceptedLines": 522
+    },
+    {
+      "file": "packages/db/src/k12-conversation-dual-write.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0045",
+      "expiry": "2027-02-28",
+      "acceptedLines": 563
+    },
+    {
+      "file": "packages/db/src/k12-conversation-parity.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0046",
+      "expiry": "2027-02-28",
+      "acceptedLines": 450
+    },
+    {
+      "file": "packages/db/src/knowledge-hybrid-retrieval.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0047",
+      "expiry": "2027-02-28",
+      "acceptedLines": 566
+    },
+    {
+      "file": "packages/db/src/knowledge-retrieval-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0048",
+      "expiry": "2026-11-30",
+      "acceptedLines": 825
+    },
+    {
+      "file": "packages/db/src/knowledge-source-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0049",
+      "expiry": "2027-02-28",
+      "acceptedLines": 405
+    },
+    {
+      "file": "packages/db/src/learning-session-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0050",
+      "expiry": "2027-02-28",
+      "acceptedLines": 512
+    },
+    {
+      "file": "packages/db/src/model-run-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0051",
+      "expiry": "2027-02-28",
+      "acceptedLines": 446
+    },
+    {
+      "file": "packages/db/src/platform-artifact-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0052",
+      "expiry": "2026-11-30",
+      "acceptedLines": 1094
+    },
+    {
+      "file": "packages/db/src/platform-turn-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0053",
+      "expiry": "2026-11-30",
+      "acceptedLines": 825
+    },
+    {
+      "file": "packages/db/src/platform-turn-settlement-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0054",
+      "expiry": "2027-02-28",
+      "acceptedLines": 477
+    },
+    {
+      "file": "packages/db/src/schema/asset.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0055",
+      "expiry": "2027-02-28",
+      "acceptedLines": 496
+    },
+    {
+      "file": "packages/db/src/schema/conversation.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0056",
+      "expiry": "2027-02-28",
+      "acceptedLines": 424
+    },
+    {
+      "file": "packages/db/src/schema/turn.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0057",
+      "expiry": "2027-02-28",
+      "acceptedLines": 507
+    },
+    {
+      "file": "packages/db/src/study-plan-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0058",
+      "expiry": "2027-02-28",
+      "acceptedLines": 425
+    },
+    {
+      "file": "packages/db/src/tool-call-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0059",
+      "expiry": "2027-02-28",
+      "acceptedLines": 457
+    },
+    {
+      "file": "packages/db/src/turn-ledger-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0060",
+      "expiry": "2026-11-30",
+      "acceptedLines": 657
+    },
+    {
+      "file": "packages/db/src/web-runtime-run-repository.ts",
+      "owner": "data",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0061",
+      "expiry": "2027-02-28",
+      "acceptedLines": 423
+    },
+    {
+      "file": "packages/experiment-runtime/src/cpu-experiment-adapter.ts",
+      "owner": "developer-productivity",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0062",
+      "expiry": "2027-02-28",
+      "acceptedLines": 447
+    },
+    {
+      "file": "packages/gateway-client/src/client.ts",
+      "owner": "gateway",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0063",
+      "expiry": "2026-11-30",
+      "acceptedLines": 670
+    },
+    {
+      "file": "packages/teaching-core/src/learning-projection.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0064",
+      "expiry": "2026-11-30",
+      "acceptedLines": 666
+    },
+    {
+      "file": "packages/teaching-core/src/safety-policy.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0065",
+      "expiry": "2027-02-28",
+      "acceptedLines": 446
+    },
+    {
+      "file": "packages/teaching-runtime/src/state-transition.ts",
+      "owner": "agent-runtime",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0066",
+      "expiry": "2027-02-28",
+      "acceptedLines": 472
+    },
+    {
+      "file": "tooling/quality/ai-product-evidence.mjs",
+      "owner": "developer-productivity",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0067",
+      "expiry": "2027-02-28",
+      "acceptedLines": 505
+    },
+    {
+      "file": "tooling/voice-lab/run-v02-v-matrix.mjs",
+      "owner": "developer-productivity",
+      "reason": "Existing cohesive module pending bounded extraction.",
+      "targetLines": 400,
+      "issue": "internal:ARCH-DEBT-0068",
+      "expiry": "2027-02-28",
+      "acceptedLines": 440
+    }
+  ]
 }

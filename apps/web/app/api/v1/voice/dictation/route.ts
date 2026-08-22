@@ -79,14 +79,14 @@ function isSupportedWebm(bytes: Uint8Array): boolean {
 
 export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
-    return jsonError(403, 'forbidden_origin', '请求来源不受信任。');
+    return jsonError(403, 'forbidden_origin');
   }
   const identity = await readAuthenticatedRequestIdentity(request);
   if (!identity) {
-    return jsonError(401, 'unauthorized', '请先登录后使用语音。');
+    return jsonError(401, 'unauthorized');
   }
   if (identity.source === 'web' && (await readExperienceMode()) === null) {
-    return jsonError(409, 'experience_mode_required', '请先选择使用模式。');
+    return jsonError(409, 'experience_mode_required');
   }
   const contentType =
     request.headers
@@ -95,25 +95,21 @@ export async function POST(request: Request): Promise<Response> {
       ?.trim()
       .toLowerCase() ?? '';
   if (contentType !== 'audio/wav' && contentType !== 'audio/webm')
-    return jsonError(
-      415,
-      'unsupported_media_type',
-      '只接受 WAV 或 WebM 语音。',
-    );
+    return jsonError(415, 'unsupported_media_type');
   const bytes = await readLimitedBody(request);
   if (bytes === null) {
-    return jsonError(413, 'audio_too_large', '语音最长为 60 秒。');
+    return jsonError(413, 'audio_too_large');
   }
   const validAudio =
     contentType === 'audio/wav'
       ? isSupportedPcmWav(bytes)
       : isSupportedWebm(bytes);
   if (!validAudio) {
-    return jsonError(400, 'invalid_audio', '语音格式不正确。');
+    return jsonError(400, 'invalid_audio');
   }
   const gateway = resolveDictationGateway();
   if (!gateway) {
-    return jsonError(503, 'dictation_unavailable', '语音转文字暂不可用。');
+    return jsonError(503, 'dictation_unavailable');
   }
   const operationId = randomUUID();
   try {
@@ -129,6 +125,6 @@ export async function POST(request: Request): Promise<Response> {
     });
     return jsonResponse({ text: result.text.trim() });
   } catch {
-    return jsonError(503, 'dictation_failed', '语音转文字暂时失败，请重试。');
+    return jsonError(503, 'dictation_failed');
   }
 }
