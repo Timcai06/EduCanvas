@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
   conversation: vi.fn(),
   trustedOrigin: vi.fn(),
-  resolveService: vi.fn(),
+  resolvePipeline: vi.fn(),
   search: vi.fn(),
 }));
 
@@ -22,7 +22,7 @@ vi.mock('@/server/http/request-security', async (importOriginal) => {
   return { ...original, isTrustedSameOriginWrite: mocks.trustedOrigin };
 });
 vi.mock('@/server/tools/web-search', () => ({
-  resolveSearchService: mocks.resolveService,
+  resolveSearchCandidatePipeline: mocks.resolvePipeline,
 }));
 
 import { SearchServiceError } from '@/server/tools/search-service';
@@ -42,7 +42,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     mocks.trustedOrigin.mockReturnValue(true);
     mocks.identity.mockResolvedValue({ studentId: 'student-1' });
     mocks.conversation.mockResolvedValue({ spaceId: 'space-1' });
-    mocks.resolveService.mockReturnValue({ search: mocks.search });
+    mocks.resolvePipeline.mockReturnValue({ search: mocks.search });
   });
 
   it('returns only the browser-safe Provider-neutral projection', async () => {
@@ -55,6 +55,8 @@ describe('POST /api/v1/chat/assets/link/search', () => {
           snippet: 'A concise abstract.',
           score: 0.98,
           publishedAt: '2026-08-20',
+          accessibility: 'accessible',
+          contentKind: 'article',
         },
       ],
       attemptedProviders: ['private-provider-name'],
@@ -70,7 +72,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
           url: 'https://example.com/research',
           domain: 'example.com',
           snippet: 'A concise abstract.',
-          accessibility: 'unchecked',
+          accessibility: 'accessible',
           imported: false,
         },
       ],
@@ -104,7 +106,7 @@ describe('POST /api/v1/chat/assets/link/search', () => {
   });
 
   it('reports missing configuration as non-retryable', async () => {
-    mocks.resolveService.mockReturnValue(null);
+    mocks.resolvePipeline.mockReturnValue(null);
 
     const response = await POST(request({ query: 'research topic' }));
 

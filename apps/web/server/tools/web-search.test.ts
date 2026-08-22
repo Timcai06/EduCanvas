@@ -109,9 +109,14 @@ describe('SearchProviderRegistry', () => {
 
 describe('SearchService failover', () => {
   it('uses primary provider on success', async () => {
-    const { provider: p1, search: s1 } = createMockProvider('p1', [
-      { title: 't', url: 'https://a.com', snippet: 's' },
-    ]);
+    const { provider: p1, search: s1 } = createMockProvider(
+      'p1',
+      Array.from({ length: 5 }, (_, index) => ({
+        title: `t-${index}`,
+        url: `https://a.com/${index}`,
+        snippet: 's',
+      })),
+    );
     const { provider: p2 } = createMockProvider('p2', []);
 
     const registry = new SearchProviderRegistry();
@@ -121,9 +126,28 @@ describe('SearchService failover', () => {
     const service = new SearchService({ registry });
     const result = await service.search({ query: 'test', limit: 5 });
 
-    expect(result.results).toHaveLength(1);
+    expect(result.results).toHaveLength(5);
     expect(result.attemptedProviders).toEqual(['p1']);
     expect(s1).toHaveBeenCalled();
+  });
+
+  it('continues to the next provider when the first returns too few candidates', async () => {
+    const { provider: p1 } = createMockProvider('p1', [
+      { title: 'a', url: 'https://a.com/1', snippet: 's' },
+    ]);
+    const { provider: p2 } = createMockProvider('p2', [
+      { title: 'b', url: 'https://b.com/1', snippet: 's' },
+      { title: 'c', url: 'https://c.com/1', snippet: 's' },
+    ]);
+    const registry = new SearchProviderRegistry();
+    registry.register(p1);
+    registry.register(p2);
+    const service = new SearchService({ registry });
+
+    const output = await service.search({ query: 'test', limit: 3 });
+
+    expect(output.results).toHaveLength(3);
+    expect(output.attemptedProviders).toEqual(['p1', 'p2']);
   });
 
   it('fails over on timeout', async () => {
@@ -291,6 +315,30 @@ describe('SearchService failover', () => {
 });
 
 describe('Tavily adapter', () => {
+  it('overfetches up to the provider limit for candidate replacement', async () => {
+    let capturedBody = '';
+    const { createTavilyAdapter: createAdapter } =
+      await import('./tavily-adapter');
+    const provider = createAdapter({
+      apiKey: 'key',
+      fetchImpl: (async (_url, init) => {
+        capturedBody = String(init?.body);
+        return Response.json({
+          results: Array.from({ length: 15 }, (_, index) => ({
+            title: `Result ${index}`,
+            url: `https://source-${index}.example.com/article`,
+            content: 'Summary',
+          })),
+        });
+      }) as typeof fetch,
+    });
+
+    const results = await provider.search({ query: 'test', limit: 15 });
+
+    expect(JSON.parse(capturedBody)).toMatchObject({ max_results: 15 });
+    expect(results).toHaveLength(15);
+  });
+
   it('normalizes results and filters unsafe URLs', async () => {
     const { createTavilyAdapter: createAdapter } =
       await import('./tavily-adapter');

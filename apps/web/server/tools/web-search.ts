@@ -2,10 +2,11 @@ import 'server-only';
 
 import type { AgentTool } from '@educanvas/agent-runtime';
 import { z } from 'zod';
-import type { SearchProvider } from './search-contract';
+import type { SearchProvider, SearchResult } from './search-contract';
 import { SearchProviderRegistry } from './search-registry';
 import { SearchService, type SearchServiceConfig } from './search-service';
 import { normalizeSearchProviderBaseUrl } from './search-url';
+import { SearchCandidatePipeline } from './search-candidate-pipeline';
 import {
   createTavilyAdapter,
   type TavilyAdapterConfig,
@@ -66,12 +67,19 @@ export type OperationWebSearchTool = AgentTool<
 > &
   WebSearchProgress;
 
+interface WebSearchExecutor {
+  search(
+    request: { query: string; limit: number },
+    signal?: AbortSignal,
+  ): Promise<{ results: readonly SearchResult[] }>;
+}
+
 function queryKey(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
 export function createWebSearchTool(
-  service: SearchService,
+  service: WebSearchExecutor,
 ): OperationWebSearchTool {
   const completedQueries = new Set<string>();
   const pendingQueries = new Set<string>();
@@ -185,5 +193,13 @@ export function resolveWebSearchTool(
 ): OperationWebSearchTool | null {
   const service = resolveSearchService(env, fetchImpl);
   if (!service) return null;
-  return createWebSearchTool(service);
+  return createWebSearchTool(new SearchCandidatePipeline(service));
+}
+
+export function resolveSearchCandidatePipeline(
+  env: SearchEnvironment = process.env as SearchEnvironment,
+  fetchImpl?: typeof fetch,
+): SearchCandidatePipeline | null {
+  const service = resolveSearchService(env, fetchImpl);
+  return service ? new SearchCandidatePipeline(service) : null;
 }

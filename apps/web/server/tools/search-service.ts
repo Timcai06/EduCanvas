@@ -38,7 +38,7 @@ const DEFAULT_CONFIG: Required<SearchServiceConfig> = {
   providerTimeoutMs: 8_000,
   totalBudgetMs: 15_000,
   maxProviderAttempts: 2,
-  maxResults: 5,
+  maxResults: 15,
 };
 
 export interface SearchServiceDeps {
@@ -157,7 +157,11 @@ export class SearchService {
           }
         }
         this.registry.recordSuccess(provider.name);
-        break;
+        if (
+          allResults.length >= Math.min(request.limit, this.config.maxResults)
+        ) {
+          break;
+        }
       } catch (error) {
         // Short-circuit: if the error is already a SearchServiceError (e.g. abort
         // signal rejection from executeWithTimeout), re-throw directly instead of
@@ -189,7 +193,10 @@ export class SearchService {
     }
 
     return {
-      results: allResults.slice(0, this.config.maxResults),
+      results: allResults.slice(
+        0,
+        Math.min(request.limit, this.config.maxResults),
+      ),
       attemptedProviders: attempted,
     };
   }
