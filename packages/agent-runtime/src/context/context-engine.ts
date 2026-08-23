@@ -1,3 +1,4 @@
+/** Context composition and bounded segment selection. */
 import type {
   AgentTurnContextMaterial,
   AssetVersionRepresentationIdentity,

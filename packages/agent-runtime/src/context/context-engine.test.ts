@@ -1,3 +1,4 @@
+// Colocated with the context-composition boundary it verifies.
 import { describe, expect, it } from 'vitest';
 import {
   buildAgentContext,

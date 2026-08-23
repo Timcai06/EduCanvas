@@ -1,3 +1,4 @@
+// Colocated with the conversation-context selection boundary it verifies.
 import { describe, expect, it } from 'vitest';
 import { buildConversationContext } from './conversation-context';
 
