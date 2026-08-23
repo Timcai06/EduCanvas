@@ -54,6 +54,8 @@
 
 ### 学生端功能
 
+- `features/assistant/`：桌面管理助手的浏览器面板与请求状态；服务端分类、预算与模型调用归 `server/assistant/`。
+- `features/chat/`：跨通用与教学工作区复用的消息呈现、SSE Turn 状态和恢复；`features/composer/` 只拥有输入与能力入口。
 - `features/workspace/general/`：通用Chat入口与工作区编排。
 - `features/workspace/learning/`：K12 Chat、Canvas、Rail与抽屉编排。
 - `features/workspace/shared/`：两条工作区复用的品牌印章、批改笔迹、问候、Sheet和焦点管理。
@@ -68,12 +70,14 @@
 - `features/studio/option-wheel*`、`studio-workspace.tsx`：基于 React Bits OptionWheel 改造的受控两级轮盘，以及当前 Notebook 输入/输出工作台；`studio-drawer.tsx`仍服务待退休的独立学习页。
 - `features/progress/progress-drawer.tsx`：学习进度抽屉。
 - `features/settings/connection-settings.tsx`：渠道 provider、pending/active/revoked 与撤销界面。
-- `features/learning/learning-contracts.ts`：计划、诊断、学习页、Canvas 提交和 Progress 的浏览器公开 DTO。
-- `features/study/`：显式画像/目标表单和短诊断，不进行年龄或性格推断。
+- `features/learning/learning-contracts.ts`：计划、诊断、学习页、Canvas 提交和 Progress 的跨层浏览器安全 DTO。
+- `features/study/`：学习入口的显式画像、目标表单和短诊断 UI，不进行年龄或性格推断。
+- `features/voice/`：语音输入、实时语音会话、播放与 Live Voice 专属视觉；RippleDistortion 不是全局 UI primitive。
 
 ### 服务端组合根
 
 - `server/identity/`：匿名 Token 校验、哈希学生标识与 HttpOnly Cookie。
+- `server/assistant/`：桌面管理助手的服务端分类、模型预算与限流。
 - `server/http/`：同源写保护、请求/SSE边界和进程内取消注册表。
 - `server/assets/`：上传解析、私有存储、PDF解析与Provider上下文物化。
 - `server/model/`：Provider Runtime、审计Gateway与Prompt hash。

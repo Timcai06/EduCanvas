@@ -23,9 +23,9 @@ EduCanvas 将其作为产品内部视觉层使用，不把该组件作为独立�
 
 ## React Bits RippleDistortion
 
-`components/RippleDistortion.tsx` 与 `components/RippleDistortion.css` 由 shadcn
-registry 的 `@react-bits/RippleDistortion-TS-CSS` 安装；仅增加本仓库 strict TypeScript
-与 React ref lint 所需的等价适配：
+`features/voice/ripple-distortion/` 由 shadcn registry 的
+`@react-bits/RippleDistortion-TS-CSS` 安装；仅增加本仓库 strict TypeScript 与 React
+ref lint 所需的等价适配：
 
 - 项目：https://github.com/DavidHDev/react-bits
 - Registry：https://reactbits.dev/r/{name}.json

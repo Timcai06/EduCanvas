@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import RippleDistortion from '@/components/RippleDistortion';
 import type { LiveVoiceVisualPhase } from './live-voice-motion';
+import RippleDistortion from './ripple-distortion/RippleDistortion';
 
 interface LiveVoiceRipplePalette {
   readonly colorA: string;

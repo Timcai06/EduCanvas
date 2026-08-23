@@ -15,8 +15,8 @@ import {
   AssistantClassifyError,
   createAssistantClassifyDependencies,
   runClassifiedTurn,
-} from './assistant-classify';
-import type { classifyIntent } from './classify-intent';
+} from '@/server/assistant/assistant-classify';
+import type { classifyIntent } from '@/server/assistant/classify-intent';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 

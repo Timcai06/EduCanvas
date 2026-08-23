@@ -17,7 +17,7 @@ vi.mock('@/server/assistant/rate-limit', () => ({
   checkAssistantRateLimit: vi.fn(() => ({ allowed: true })),
   resetAssistantRateLimit: vi.fn(),
 }));
-vi.mock('./assistant-classify', () => ({
+vi.mock('@/server/assistant/assistant-classify', () => ({
   AssistantClassifyError: class AssistantClassifyError extends Error {
     constructor(readonly code: string) {
       super(code);
@@ -38,7 +38,7 @@ import { checkAssistantRateLimit } from '@/server/assistant/rate-limit';
 import {
   AssistantClassifyError,
   runClassifiedTurn,
-} from './assistant-classify';
+} from '@/server/assistant/assistant-classify';
 import { POST } from './route';
 
 const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
