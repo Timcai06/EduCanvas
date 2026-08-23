@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">EduCanvas 仓库地图</title>
+  <desc id="desc">EduCanvas 的 apps、packages、tooling、docs 与 tests 之间的职责关系。</desc>
+  <style>
+    .bg { fill: #ffffff; } .title { font: 700 30px Arial, sans-serif; fill: #111827; } .sub { font: 400 16px Arial, sans-serif; fill: #4b5563; }
+    .box { fill: #f9fafb; stroke: #374151; stroke-width: 2; rx: 16; } .head { font: 700 21px Arial, sans-serif; fill: #111827; } .body { font: 400 15px Arial, sans-serif; fill: #374151; }
+    .line { stroke: #6b7280; stroke-width: 2; fill: none; marker-end: url(#arrow); } .note { font: 600 14px Arial, sans-serif; fill: #374151; }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/></marker></defs>
+  <rect class="bg" width="1200" height="520"/>
+  <text x="60" y="62" class="title">EduCanvas · Repository Map</text>
+  <text x="60" y="91" class="sub">入口、稳定能力、工程工具与共同事实源各自独立，但由明确的依赖边界连接。</text>
+  <rect x="60" y="145" width="240" height="180" class="box"/><text x="88" y="187" class="head">apps/</text><text x="88" y="220" class="body">Web · Gateway · Worker</text><text x="88" y="246" class="body">TUI · channels · hosts</text><text x="88" y="285" class="note">可部署的组合入口</text>
+  <rect x="370" y="145" width="280" height="180" class="box"/><text x="398" y="187" class="head">packages/</text><text x="398" y="220" class="body">Agent Runtime · Model Gateway</text><text x="398" y="246" class="body">domain cores · protocol · db</text><text x="398" y="285" class="note">稳定能力与 Adapter 边界</text>
+  <rect x="720" y="145" width="200" height="180" class="box"/><text x="748" y="187" class="head">tooling/</text><text x="748" y="220" class="body">local · quality</text><text x="748" y="246" class="body">architecture · testing</text><text x="748" y="285" class="note">开发与质量门禁</text>
+  <rect x="990" y="145" width="150" height="180" class="box"/><text x="1018" y="187" class="head">docs/</text><text x="1018" y="220" class="body">product</text><text x="1018" y="246" class="body">architecture</text><text x="1018" y="272" class="body">ADRs</text><text x="1018" y="300" class="note">共同事实源</text>
+  <path d="M300 235 H370" class="line"/><path d="M650 210 H720" class="line"/><path d="M650 270 H990" class="line"/>
+  <rect x="370" y="390" width="280" height="72" class="box"/><text x="398" y="434" class="head">tests/</text><text x="500" y="434" class="body">跨系统 browser 与 integration journeys</text>
+  <path d="M510 325 V390" class="line"/>
+</svg>
