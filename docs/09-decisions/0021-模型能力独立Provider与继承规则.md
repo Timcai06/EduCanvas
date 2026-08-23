@@ -11,7 +11,7 @@
 
 当前限制：
 
-- `packages/model-gateway/src/config.ts` 已有主配置、Vision 配置和媒体 model alias，但没有统一的媒体 Provider override；
+- `packages/model-gateway/src/config/config.ts` 已有主配置、Vision 配置和媒体 model alias，但没有统一的媒体 Provider override；
 - Speech/Transcription/Image/Embedding 仍受主 Provider 和 openai-compatible 限制；
 - Vision 是唯一通过独立配置变量实现的 Provider 分离。
 

@@ -21,7 +21,7 @@ import {
 const { parseSpy } = vi.hoisted(() => ({ parseSpy: vi.fn() }));
 
 vi.mock(
-  '../../../packages/model-gateway/src/config',
+  '../../../packages/model-gateway/src/config/config',
   async (importOriginal) => {
     const original =
       await importOriginal<typeof import('@educanvas/model-gateway')>();

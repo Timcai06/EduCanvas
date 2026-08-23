@@ -6,7 +6,7 @@ import {
   type SpeechSynthesisRequest,
   type SpeechSynthesisResult,
 } from '@educanvas/agent-core';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 
 export interface OpenAICompatibleSpeechModelGatewayOptions {
   fetchImpl?: typeof fetch;

@@ -8,7 +8,7 @@ import {
   type NormalizedModelError,
   type ProviderCallMetadata,
 } from '@educanvas/agent-core';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 
 export interface OpenAICompatibleEmbeddingModelGatewayOptions {
   fetchImpl?: typeof fetch;

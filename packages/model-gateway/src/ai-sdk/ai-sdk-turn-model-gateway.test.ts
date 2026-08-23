@@ -4,7 +4,7 @@ import { MockLanguageModelV3 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { AiSdkTurnModelGateway } from './ai-sdk-turn-model-gateway';
 import { normalizeAiSdkError } from './ai-sdk-protocol';
-import { answerRequest } from './openai-compatible-turn-model-gateway.test-support';
+import { answerRequest } from '../openai-compatible-turn-model-gateway.test-support';
 
 type MockStreamResult = Awaited<ReturnType<MockLanguageModelV3['doStream']>>;
 type MockStreamPart =

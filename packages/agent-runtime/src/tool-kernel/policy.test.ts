@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ToolKernel } from './tool-kernel';
+import { ToolKernel } from '../tool-kernel';
 import {
   adapter,
   context,
   MemoryCallLedger,
   MemoryEffectLedger,
-} from './tool-kernel.test-support';
+} from './test-support';
 
 describe('Tool Kernel策略与Adapter边界', () => {
   it('模型可见Schema可由可信Adapter投影且不替代本地执行校验', async () => {

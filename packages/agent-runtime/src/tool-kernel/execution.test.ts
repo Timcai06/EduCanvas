@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ToolKernel } from './tool-kernel';
+import { ToolKernel } from '../tool-kernel';
 import {
   adapter,
   context,
   MemoryCallLedger,
   MemoryEffectLedger,
-} from './tool-kernel.test-support';
+} from './test-support';
 
 describe('Tool Kernel执行与副作用边界', () => {
   it('相同executionId只执行一次，语义漂移拒绝', async () => {

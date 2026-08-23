@@ -1,6 +1,6 @@
 import { PLATFORM_EMBEDDING_DIMENSIONS } from '@educanvas/agent-core';
 import { describe, expect, it, vi } from 'vitest';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleEmbeddingModelGateway } from './openai-compatible-embedding-model-gateway';
 
 const configuration: EnabledModelGatewayConfiguration = {

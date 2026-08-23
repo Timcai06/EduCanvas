@@ -20,8 +20,6 @@ const WEB_WORKSPACE_REVIEW_LIMIT = 620;
 const WEB_STYLES_REVIEW_LIMIT = 420;
 const TOOL_KERNEL_ROOT = 'packages/agent-runtime/src/tool-kernel';
 const TOOL_KERNEL_ENTRY = 'packages/agent-runtime/src/tool-kernel.ts';
-const TOOL_KERNEL_TEST_PATTERN =
-  /^tool-kernel(?:\..+)?\.test(?:-support)?\.ts$/;
 const TURN_APPLICATION_ROOT = 'packages/agent-runtime/src/turn-application';
 const TURN_APPLICATION_ENTRY = 'packages/agent-runtime/src/turn-application.ts';
 const TURN_APPLICATION_TEST_PATTERN =
@@ -123,20 +121,17 @@ function typescriptFiles(directory) {
 
 describe('Runtime module size boundary', () => {
   it('keeps Tool Kernel production responsibilities independently readable', () => {
-    const modules = readdirSync(TOOL_KERNEL_ROOT, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
-      .map((entry) => join(TOOL_KERNEL_ROOT, entry.name));
+    const modules = typescriptFiles(TOOL_KERNEL_ROOT).filter(
+      (path) =>
+        !path.endsWith('.test.ts') && !path.endsWith('/test-support.ts'),
+    );
     assertFilesWithinLimit([TOOL_KERNEL_ENTRY, ...modules], REVIEW_LIMIT);
   });
 
   it('keeps Tool Kernel tests independently readable', () => {
-    const tests = readdirSync('packages/agent-runtime/src', {
-      withFileTypes: true,
-    })
-      .filter(
-        (entry) => entry.isFile() && TOOL_KERNEL_TEST_PATTERN.test(entry.name),
-      )
-      .map((entry) => join('packages/agent-runtime/src', entry.name));
+    const tests = typescriptFiles(TOOL_KERNEL_ROOT).filter(
+      (path) => path.endsWith('.test.ts') || path.endsWith('/test-support.ts'),
+    );
     assertFilesWithinLimit(tests, REVIEW_LIMIT);
   });
 

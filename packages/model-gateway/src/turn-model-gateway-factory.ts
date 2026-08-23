@@ -1,11 +1,11 @@
 import type { TurnModelGateway } from '@educanvas/agent-core';
-import { createAiSdkTurnModelGateway } from './ai-sdk-provider-factory';
+import { createAiSdkTurnModelGateway } from './ai-sdk/ai-sdk-provider-factory';
 import {
   parseModelGatewayConfiguration,
   type EnabledModelGatewayConfiguration,
   type ModelGatewayEnvironment,
-} from './config';
-import { ModelGatewayConfigurationError } from './config-primitives';
+} from './config/config';
+import { ModelGatewayConfigurationError } from './config/config-primitives';
 import {
   OpenAICompatibleTurnModelGateway,
   type OpenAICompatibleTurnModelGatewayOptions,

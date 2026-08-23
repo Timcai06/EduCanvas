@@ -1,6 +1,6 @@
 import type { StreamAgentTextRequest } from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
-import { buildAiSdkPrompt, AiSdkProtocolError } from './ai-sdk-protocol';
+import { buildAiSdkPrompt, AiSdkProtocolError } from './ai-sdk/ai-sdk-protocol';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
 import {
   answerRequest,

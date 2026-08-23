@@ -9,7 +9,7 @@ import type {
   ToolKernelAdapter,
   ToolKernelTrustedContext,
   ToolSource,
-} from './tool-kernel';
+} from '../tool-kernel';
 
 export class MemoryCallLedger implements AgentToolCallLedgerPort {
   readonly calls = new Map<string, AgentToolCallSnapshot>();

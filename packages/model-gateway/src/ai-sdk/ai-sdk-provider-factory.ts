@@ -1,8 +1,8 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { TurnModelGateway } from '@educanvas/agent-core';
 import { AiSdkTurnModelGateway } from './ai-sdk-turn-model-gateway';
-import type { EnabledModelGatewayConfiguration } from './config';
-import type { OpenAICompatibleTurnModelGatewayOptions } from './openai-compatible-turn-model-gateway';
+import type { EnabledModelGatewayConfiguration } from '../config/config';
+import type { OpenAICompatibleTurnModelGatewayOptions } from '../openai-compatible-turn-model-gateway';
 
 /** 使用受控OpenAI-compatible Provider构造AI SDK Turn Adapter。 */
 export function createAiSdkTurnModelGateway(

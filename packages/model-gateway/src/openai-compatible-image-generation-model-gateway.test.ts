@@ -1,6 +1,6 @@
 import { ModelGatewayInvocationError } from '@educanvas/agent-core';
 import { describe, expect, it, vi } from 'vitest';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleImageGenerationModelGateway } from './openai-compatible-image-generation-model-gateway';
 
 const configuration: EnabledModelGatewayConfiguration = {
