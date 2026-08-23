@@ -48,6 +48,23 @@ const SHARED_VSCODE_FILES = new Set([
   '.vscode/extensions.json',
   '.vscode/settings.json',
 ]);
+const CANONICAL_DOC_DIRECTORIES = new Set([
+  '00-overview',
+  '01-product',
+  '02-architecture',
+  '03-ai',
+  '04-data',
+  '05-engineering',
+  '06-quality',
+  '07-operations',
+  '08-collaboration',
+  '09-decisions',
+]);
+const CANONICAL_DOC_ALIASES = new Set(
+  [...CANONICAL_DOC_DIRECTORIES].map((directory) =>
+    directory.replace(/^\d{2}-/, ''),
+  ),
+);
 const GENERATED_SEGMENTS = new Set([
   '.next',
   '.pnpm-store',
@@ -144,6 +161,15 @@ export function pathViolations(path) {
   }
   if (/^docs\/[^/]+$/.test(path) && path !== 'docs/README.md') {
     violations.push('loose docs-root file');
+  }
+  if (
+    parts[0] === 'docs' &&
+    CANONICAL_DOC_ALIASES.has(parts[1]) &&
+    !CANONICAL_DOC_DIRECTORIES.has(parts[1])
+  ) {
+    violations.push(
+      `parallel canonical docs directory: ${parts[1]} belongs under its numbered topic`,
+    );
   }
   if (path.startsWith('.vscode/') && !SHARED_VSCODE_FILES.has(path)) {
     violations.push('personal VS Code state must not be tracked');

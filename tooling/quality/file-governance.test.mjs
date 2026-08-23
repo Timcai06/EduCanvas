@@ -52,6 +52,16 @@ describe('repository file governance', () => {
     );
   });
 
+  it('rejects unnumbered directories that recreate a canonical docs topic', () => {
+    assert.ok(pathViolations('docs/engineering/ownership.md').length > 0);
+    assert.ok(pathViolations('docs/architecture/overview.md').length > 0);
+    assert.deepEqual(
+      pathViolations('docs/05-engineering/05-工程逻辑所有权.md'),
+      [],
+    );
+    assert.deepEqual(pathViolations('docs/research/00-研究说明.md'), []);
+  });
+
   it('keeps exactly eighteen justified repository-root files', () => {
     assert.equal(ROOT_FILE_POLICY.size, 18);
     assert.equal(
