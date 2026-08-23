@@ -27,7 +27,7 @@
 
 - 当前OpenAI-compatible文本Provider不能原生理解图片；图片Asset会保留不可变引用并返回明确的模态不支持错误，不静默降级；
 - T1非`ASSESS`节点的可信事件接线仍未完成，当前不会形成完整状态推进闭环；
-- 原生图片、音频和视频模型输入、统一 Context Engine 与正式 IdP 尚未接通；
+- 主 Provider 的原生音频/视频输入、长期 Memory 与正式 IdP 尚未接通；图片可由已验证的独立 Vision Provider 承接，Turn Application 已统一使用 Context Engine 并记录 Context Snapshot；
 - `ScriptedModelGateway` 与 Demo Teacher Script 只用于测试，不属于生产回答路径。
 
 因此，“Provider Adapter、SSE、账本、Asset/K1/T1首条纵切存在”不等于“真实Provider已完成线上验证”或“整节课Agent闭环已完成”。
