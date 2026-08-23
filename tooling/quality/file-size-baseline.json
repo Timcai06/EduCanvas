@@ -84,15 +84,6 @@
       "acceptedLines": 474
     },
     {
-      "file": "apps/web/components/OptionWheel.tsx",
-      "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0010",
-      "expiry": "2027-02-28",
-      "acceptedLines": 516
-    },
-    {
       "file": "apps/web/features/canvas/animation-shell.tsx",
       "owner": "gateway",
       "reason": "Existing cohesive module pending bounded extraction.",
