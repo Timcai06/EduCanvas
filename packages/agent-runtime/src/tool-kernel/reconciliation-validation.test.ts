@@ -3,7 +3,7 @@ import type {
   ToolEffectReconciliationPort,
 } from '@educanvas/agent-core';
 import { describe, expect, it, vi } from 'vitest';
-import { ToolEffectReconciler, type ToolEffectVerifier } from './tool-kernel';
+import { ToolEffectReconciler, type ToolEffectVerifier } from '../tool-kernel';
 
 const target = {
   operationId: '20000000-0000-4000-8000-000000000001',

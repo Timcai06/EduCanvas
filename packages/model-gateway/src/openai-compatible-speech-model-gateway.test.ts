@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleSpeechModelGateway } from './openai-compatible-speech-model-gateway';
 
 const configuration: EnabledModelGatewayConfiguration = {

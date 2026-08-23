@@ -14,10 +14,11 @@ Turn 默认使用原生 `fetch` + WHATWG Stream；可显式切到 AI SDK Adapter
 
 - `openai-compatible-protocol.ts` 只负责未知供应商 JSON 的校验、请求投影、usage、错误与终止原因映射；
 - `openai-compatible-turn-model-gateway.ts` 只负责原生网络调用、SSE 生命周期、取消和稳定事件输出；
-- `ai-sdk-protocol.ts`、`ai-sdk-turn-model-gateway.ts` 与`ai-sdk-provider-factory.ts`
+- `src/ai-sdk/` 内的 protocol、turn gateway 与 provider factory
   分别负责SDK消息/事件投影、流生命周期和Provider构造；
 - `turn-model-gateway-factory.ts` 是组合根唯一公共工厂，负责配置解析、Adapter 选择与视觉 Provider 投影；
-- `config-vision.ts` 只负责图片输入专用 Provider 的解析；它与主 Provider 不共享 Base URL 与 Key；
+- `src/config/` 共同拥有主配置、媒体能力、能力覆盖与视觉 Provider 解析；其中
+  `config-vision.ts` 的 Base URL 与 Key 不与主 Provider 共享；
 - 测试按文本流、工具流、失败/工厂与共享 fixture 拆分，避免单个测试文件掩盖协议职责。
 
 `tooling/architecture/runtime-module-size-boundary.test.mjs` 对该包全部 TypeScript 文件递归执行

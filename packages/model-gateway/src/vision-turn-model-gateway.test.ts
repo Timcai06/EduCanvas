@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelGatewayEnvironment } from './config';
+import type { ModelGatewayEnvironment } from './config/config';
 import {
   createTurnModelGatewayFromEnvironment,
   createVisionTurnModelGatewayFromEnvironment,

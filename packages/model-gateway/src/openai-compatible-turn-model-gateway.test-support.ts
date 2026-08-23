@@ -2,7 +2,7 @@ import type {
   StreamAgentTextRequest,
   TurnModelEvent,
 } from '@educanvas/agent-core';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
 
 export const config: EnabledModelGatewayConfiguration = {

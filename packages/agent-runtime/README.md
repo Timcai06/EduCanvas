@@ -10,7 +10,7 @@ EduCanvas 的通用 Agent 运行时。它把已验证的 Asset 版本转换成�
 - `buildConversationContext`：从按时间排序的持久化消息中选择最新完整消息，执行消息数/字符双预算，并返回版本、消息 ID、遗漏数和字符计数供审计账本保存。
 - `buildAgentContext`：统一选择Profile、Conversation、Source/Asset与Memory Segment，必需Profile超预算会失败，Tool Call/Result只成对保留，Memory未实现时显式返回unavailable；输出可直接交给Context Snapshot Ledger。
 - `resolveToolPolicy`：只接受服务端提供的实际可用能力与Actor、Notebook、Profile、Channel、Environment五维grant；逐维取交集、稳定去重排序，入口requested只能继续收窄Channel，审批也必须重新落在最终交集内。非法运行时形状返回`null`，合法空维保留为空策略。
-- `ToolKernel`：统一四类Adapter的五维能力交集、审批门、Schema、timeout/cancel、幂等和effect ledger；执行前已取消会在Adapter与effect intention之前稳定收敛，公开契约、策略、审批、执行控制、副作用结算和生命周期位于独立模块。
+- `ToolKernel`：统一四类Adapter的五维能力交集、审批门、Schema、timeout/cancel、幂等和effect ledger；执行前已取消会在Adapter与effect intention之前稳定收敛，公开 facade 保留在 `tool-kernel.ts`，实现与 colocated tests 位于 `tool-kernel/`。
 - `TurnApplicationService`：唯一固定启动、准备、Loop、完成与终态顺序；Context准备、模型循环投影、Tool批执行、Profile完成和replay/失败会话分别位于独立模块，Model Run只在供应商流通过Runtime校验后结算，replay不会再次调用Provider。
 
 Web 组合根已把 `buildConversationContext` 接入真实教学 Turn；选择结果以

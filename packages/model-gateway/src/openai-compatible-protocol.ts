@@ -6,7 +6,7 @@ import type {
   StreamAgentTextRequest,
   TurnModelEvent,
 } from '@educanvas/agent-core';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { SseProtocolError } from './sse';
 
 /** @internal 仅表示通过运行时对象形状检查后的供应商JSON对象。 */

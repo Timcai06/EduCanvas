@@ -1,12 +1,12 @@
 import type { TurnModelEvent } from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
 import { createAiSdkTurnModelGateway } from './ai-sdk-provider-factory';
-import type { EnabledModelGatewayConfiguration } from './config';
-import { answerRequest } from './openai-compatible-turn-model-gateway.test-support';
+import type { EnabledModelGatewayConfiguration } from '../config/config';
+import { answerRequest } from '../openai-compatible-turn-model-gateway.test-support';
 import {
   createFixtureResponse,
   textStreamChunks,
-} from './testing/openai-compatible-fixtures';
+} from '../testing/openai-compatible-fixtures';
 
 const configuration: EnabledModelGatewayConfiguration = {
   enabled: true,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createToolSemanticsHash } from './tool-kernel/semantics';
-import { adapter, context } from './tool-kernel.test-support';
+import { createToolSemanticsHash } from './semantics';
+import { adapter, context } from './test-support';
 
 describe('Tool Kernel语义摘要', () => {
   it('null绑定保持旧hash，非空绑定参与摘要并防止漂移', () => {

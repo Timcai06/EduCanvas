@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ToolKernel, toolPolicyDimensions } from './tool-kernel';
+import { ToolKernel, toolPolicyDimensions } from '../tool-kernel';
 import {
   adapter,
   context,
   MemoryCallLedger,
   MemoryEffectLedger,
-} from './tool-kernel.test-support';
+} from './test-support';
 
 describe('Tool Kernel审批边界', () => {
   it('五个权限维度逐一fail closed且L2必须先审批', async () => {

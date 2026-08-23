@@ -15,7 +15,7 @@ import {
   parseAiSdkEvent,
   stringifyAiSdkToolInput,
 } from './ai-sdk-protocol';
-import { failedEvent, logProviderFailure } from './openai-compatible-protocol';
+import { failedEvent, logProviderFailure } from '../openai-compatible-protocol';
 
 /** @internal SDK Adapter构造依赖；不得由Web、领域层或客户端直接组装。 */
 export interface AiSdkTurnModelGatewayOptions {

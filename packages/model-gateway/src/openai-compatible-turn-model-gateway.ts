@@ -6,7 +6,7 @@ import type {
   TurnModelEvent,
   TurnModelGateway,
 } from '@educanvas/agent-core';
-import { type EnabledModelGatewayConfiguration } from './config';
+import { type EnabledModelGatewayConfiguration } from './config/config';
 import {
   buildRequestBody,
   errorForHttpResponse,

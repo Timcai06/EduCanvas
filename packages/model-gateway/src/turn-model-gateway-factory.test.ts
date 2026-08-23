@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AiSdkTurnModelGateway } from './ai-sdk-turn-model-gateway';
+import { AiSdkTurnModelGateway } from './ai-sdk/ai-sdk-turn-model-gateway';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
 import {
   createTurnModelGateway,
   createTurnModelGatewayFromEnvironment,
   createVisionTurnModelGateway,
 } from './turn-model-gateway-factory';
-import type { EnabledModelGatewayConfiguration } from './config';
-import type { ModelGatewayEnvironment } from './config-primitives';
+import type { EnabledModelGatewayConfiguration } from './config/config';
+import type { ModelGatewayEnvironment } from './config/config-primitives';
 
 /**
  * R03：组合根只解析一次配置。用 spy 计数证明 Factory 的两种入口语义——
@@ -17,8 +17,8 @@ import type { ModelGatewayEnvironment } from './config-primitives';
  */
 const { parseSpy } = vi.hoisted(() => ({ parseSpy: vi.fn() }));
 
-vi.mock('./config', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./config')>();
+vi.mock('./config/config', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./config/config')>();
   return {
     ...original,
     parseModelGatewayConfiguration: (environment: ModelGatewayEnvironment) => {

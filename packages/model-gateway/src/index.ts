@@ -16,8 +16,8 @@ export {
   type ModelGatewayEnvironment,
   type OpenAICompatibleProvider,
   type TurnModelGatewayRuntime,
-} from './config';
-export type { VisionProviderConfiguration } from './config-vision';
+} from './config/config';
+export type { VisionProviderConfiguration } from './config/config-vision';
 export {
   overrideCapabilities,
   parseCapabilityConfiguration,
@@ -26,7 +26,7 @@ export {
   type CapabilityConfiguration,
   type CapabilityOverrideConfiguration,
   type OverrideCapability,
-} from './config-capability';
+} from './config/config-capability';
 export {
   OpenAICompatibleTurnModelGateway,
   type OpenAICompatibleTurnModelGatewayOptions,

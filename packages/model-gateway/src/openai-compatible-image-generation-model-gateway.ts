@@ -10,7 +10,7 @@ import {
   type ProviderCallMetadata,
   type SupportedGeneratedImageMimeType,
 } from '@educanvas/agent-core';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 
 export interface OpenAICompatibleImageGenerationModelGatewayOptions {
   fetchImpl?: typeof fetch;

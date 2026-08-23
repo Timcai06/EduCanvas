@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const sdkAdapterFiles = new Set([
-  'ai-sdk-protocol.ts',
-  'ai-sdk-provider-factory.ts',
-  'ai-sdk-turn-model-gateway.ts',
+  'ai-sdk/ai-sdk-protocol.ts',
+  'ai-sdk/ai-sdk-provider-factory.ts',
+  'ai-sdk/ai-sdk-turn-model-gateway.ts',
 ]);
 
 const productionTypescriptFiles = (directory: string): string[] =>

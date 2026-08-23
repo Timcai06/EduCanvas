@@ -8,9 +8,9 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleTurnModelGateway } from './openai-compatible-turn-model-gateway';
-import { AiSdkTurnModelGateway } from './ai-sdk-turn-model-gateway';
+import { AiSdkTurnModelGateway } from './ai-sdk/ai-sdk-turn-model-gateway';
 import {
   createFixtureResponse,
   textStreamChunks,

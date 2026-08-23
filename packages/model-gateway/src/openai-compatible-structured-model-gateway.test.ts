@@ -1,7 +1,7 @@
 import { ModelGatewayInvocationError } from '@educanvas/agent-core';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { EnabledModelGatewayConfiguration } from './config';
+import type { EnabledModelGatewayConfiguration } from './config/config';
 import { OpenAICompatibleStructuredModelGateway } from './openai-compatible-structured-model-gateway';
 
 const config: EnabledModelGatewayConfiguration = {

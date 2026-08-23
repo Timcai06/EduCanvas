@@ -11,7 +11,7 @@ import {
   type ToolEffectReconciliationTarget,
   type ToolEffectVerificationInput,
   type ToolEffectVerifier,
-} from './tool-kernel';
+} from '../tool-kernel';
 
 const effect: ToolEffectLedgerSnapshot = {
   id: '10000000-0000-4000-8000-000000000001',
