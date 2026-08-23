@@ -1,3 +1,4 @@
+/** Context materialization for trusted Asset versions. */
 import type {
   AssetKind,
   AssetVersionReference,

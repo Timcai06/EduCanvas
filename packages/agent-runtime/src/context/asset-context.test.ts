@@ -1,3 +1,4 @@
+// Colocated with the context materialization boundary it verifies.
 import { describe, expect, it } from 'vitest';
 import {
   UnsupportedAgentInputModalityError,

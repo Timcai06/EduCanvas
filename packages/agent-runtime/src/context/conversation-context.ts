@@ -1,5 +1,6 @@
 import type { ModelMessage } from '@educanvas/agent-core';
 
+/** Context selection for persisted conversation history. */
 export const CONVERSATION_CONTEXT_VERSION = 'conversation-context-v1' as const;
 
 export interface ConversationContextMessage {

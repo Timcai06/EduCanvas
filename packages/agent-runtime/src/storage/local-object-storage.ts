@@ -1,3 +1,4 @@
+/** Local object-storage adapter; the public contract remains in agent-core. */
 import { createHash } from 'node:crypto';
 import {
   access,

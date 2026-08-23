@@ -5,7 +5,7 @@ import type {
   TurnApplicationFailureCode,
 } from '@educanvas/agent-core';
 import { modelMessageText, w3cTraceCarrierSchema } from '@educanvas/agent-core';
-import type { ContextSegment } from '../context-engine';
+import type { ContextSegment } from '../context/context-engine';
 import type {
   TurnApplicationCancellationPort,
   TurnApplicationContextCandidate,

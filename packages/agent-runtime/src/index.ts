@@ -5,14 +5,14 @@ export {
   type AgentInputCapabilities,
   type BuiltAssetContext,
   type MaterializedAssetInput,
-} from './asset-context';
+} from './context/asset-context';
 export {
   CONVERSATION_CONTEXT_VERSION,
   buildConversationContext,
   type ConversationContextMessage,
   type ConversationContextOptions,
   type ConversationContextSnapshot,
-} from './conversation-context';
+} from './context/conversation-context';
 export {
   CONTEXT_ENGINE_VERSION,
   ContextEngineInputError,
@@ -21,8 +21,8 @@ export {
   type ContextMemoryInput,
   type ContextSegment,
   type ContextSegmentKind,
-} from './context-engine';
-export { LocalObjectStorage } from './local-object-storage';
+} from './context/context-engine';
+export { LocalObjectStorage } from './storage/local-object-storage';
 export { TurnUsageBudgetController } from './turn-usage-budget-controller';
 export {
   MAX_RESPONSE_CHARACTERS,

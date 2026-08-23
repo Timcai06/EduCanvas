@@ -2,7 +2,7 @@ import type {
   ModelToolDefinition,
   TurnApplicationCommand,
 } from '@educanvas/agent-core';
-import { buildAgentContext } from '../context-engine';
+import { buildAgentContext } from '../context/context-engine';
 import { candidates, modelMessages } from './helpers';
 import type { TurnApplicationDependencies } from './dependencies';
 import type {

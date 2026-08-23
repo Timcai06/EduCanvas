@@ -9,7 +9,7 @@ import type {
   TurnUsageBudget,
   W3cTraceCarrier,
 } from '@educanvas/agent-core';
-import type { ContextSegment } from '../context-engine';
+import type { ContextSegment } from '../context/context-engine';
 import type {
   ToolKernelExecuteRequest,
   ToolKernelPolicyContext,
