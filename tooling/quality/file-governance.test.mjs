@@ -52,8 +52,12 @@ describe('repository file governance', () => {
     );
   });
 
-  it('keeps exactly seventeen justified repository-root files', () => {
-    assert.equal(ROOT_FILE_POLICY.size, 17);
+  it('keeps exactly eighteen justified repository-root files', () => {
+    assert.equal(ROOT_FILE_POLICY.size, 18);
+    assert.equal(
+      ROOT_FILE_POLICY.get('CONTRIBUTING.md'),
+      'contributor workflow entrypoint',
+    );
     assert.ok(
       [...ROOT_FILE_POLICY.values()].every((reason) => reason.length > 0),
     );

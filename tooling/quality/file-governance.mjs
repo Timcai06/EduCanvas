@@ -19,6 +19,7 @@ export const ROOT_FILE_POLICY = new Map([
   ['.nvmrc', 'Node version discovery'],
   ['AGENTS.md', 'Codex instruction discovery'],
   ['CLAUDE.md', 'Claude instruction discovery'],
+  ['CONTRIBUTING.md', 'contributor workflow entrypoint'],
   ['Makefile', 'make command discovery'],
   ['README.md', 'repository documentation entrypoint'],
   ['Start EduCanvas.cmd', 'Windows double-click compatibility'],
