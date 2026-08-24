@@ -290,3 +290,16 @@
     animation: none;
   }
 }
+
+/*
+ * Topography 等高线氛围层：满铺、纯装饰、不参与命中。z-index:-1 使其绘制在
+ * 宿主「isolate」根层的背景之上、正文内容之下；宿主须为根节点建立隔离层叠上下文。
+ * reduced-motion 下组件直接不挂载 WebGL（见 components/Topography.tsx），无需降级规则。
+ */
+.topography-container {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}

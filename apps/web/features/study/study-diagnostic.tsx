@@ -8,6 +8,7 @@ import type {
 import { ArrowLeft, ArrowRight, CheckCircle } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
+import { BlurText } from '@/components/BlurText';
 import { TopBar } from '../workspace/learning/top-bar';
 
 /** 短诊断只保存选择；浏览器既看不到正确答案，也不能提交自报分数。 */
@@ -57,7 +58,12 @@ export function StudyDiagnostic({ data }: { data: StudyDiagnosticDTO }) {
             {answeredCount}/{data.diagnostic.questions.length} 已完成
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em]">
-            找到最适合你的起点
+            <BlurText
+              as="span"
+              text="找到最适合你的起点"
+              delay={0.35}
+              className=""
+            />
           </h1>
           <p className="mt-3 leading-7 text-ink-muted">
             目标：{data.desiredOutcome}
