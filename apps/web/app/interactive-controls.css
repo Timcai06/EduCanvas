@@ -130,3 +130,24 @@ button.bg-accent {
     transform: scale(0.975);
   }
 }
+
+/*
+ * 胶囊文本垂直居中（typography-1）：浏览器在文字上方加不可见空隙，导致胶囊内文字视觉
+ * 偏高/偏下。`text-box-trim` 直接以 cap→baseline 为界、去掉负 margin 补正。只在支持
+ * 的浏览器生效，不支持时原样。
+ */
+button.rounded-full,
+a.rounded-full {
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+/*
+ * 降低透明度偏好（accessibility）：`prefers-reduced-transparency` 下禁用所有 backdrop 模糊，
+ * 避免玻璃/过度透明表面降低可读性。目前仅为渐进增强，不支持的浏览器忽略。
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [class*='backdrop-blur'] {
+    backdrop-filter: none;
+  }
+}

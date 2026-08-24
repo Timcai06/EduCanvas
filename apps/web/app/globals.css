@@ -251,6 +251,8 @@ body:has([data-learning-workspace]) {
  */
 .no-scrollbar {
   scrollbar-width: none;
+  /* 横向滑动到边缘时不触发浏览器「返回」手势，避免误退（interactivity-14） */
+  overscroll-behavior-x: none;
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
