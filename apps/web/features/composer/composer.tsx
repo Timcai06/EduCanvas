@@ -188,6 +188,12 @@ export function Composer({
               !event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
+              /* interactivity-1：光标在 ``` 代码栅栏内时，Enter 插换行而非发送；
+                 否则 Enter 发送、Shift+Enter 换行。 */
+              const caret = event.currentTarget.selectionStart ?? 0;
+              const before = event.currentTarget.value.slice(0, caret);
+              const fenceCount = (before.match(/```/g) ?? []).length;
+              if (fenceCount % 2 === 1) return; // 在代码块内：让默认 Enter 插入换行
               event.preventDefault();
               submit();
             }

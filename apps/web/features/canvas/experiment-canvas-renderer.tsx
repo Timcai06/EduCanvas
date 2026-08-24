@@ -105,7 +105,7 @@ function ResourceBudgetTable({ budget }: { budget: ExperimentResourceBudget }) {
       role="region"
       aria-label="实验资源预算"
       tabIndex={0}
-      className="overflow-x-auto rounded-xl border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="overflow-x-auto overscroll-x-none rounded-xl border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <table className="w-full min-w-80 text-left text-xs">
         <caption className="sr-only">实验资源预算</caption>
