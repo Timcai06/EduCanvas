@@ -112,3 +112,21 @@
   mask-image: linear-gradient(to right, black 86%, transparent);
   -webkit-mask-image: linear-gradient(to right, black 86%, transparent);
 }
+
+/*
+ * 现代主按钮微交互：给所有墨紫高亮按钮一个极轻的按压缩放 + 更顺滑的过渡。
+ * 只作用于 `bg-accent` 按钮的按下态；配合原有的 hover 位移/扫光，让点击有「压下去」的
+ * 手感。reduced-motion 下取消按压位移，保留状态可感知。
+ */
+button.bg-accent {
+  transition:
+    transform var(--duration-fast) var(--ease-enter, cubic-bezier(0.16, 1, 0.3, 1)),
+    opacity var(--duration-fast) ease,
+    background-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button.bg-accent:not(:disabled):active {
+    transform: scale(0.975);
+  }
+}
