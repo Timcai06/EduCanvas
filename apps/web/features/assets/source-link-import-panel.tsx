@@ -3,7 +3,6 @@
 import {
   ArrowClockwise,
   CheckCircle,
-  LinkSimple,
   SpinnerGap,
   WarningCircle,
 } from '@phosphor-icons/react';
@@ -165,19 +164,6 @@ function DirectLinkImportPanel({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl border border-line bg-card p-5 shadow-[var(--shadow-float)]">
-        <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent">
-          <LinkSimple size={23} aria-hidden="true" />
-        </span>
-        <h3 className="mt-4 font-display text-lg font-semibold text-ink">
-          导入网页来源
-        </h3>
-        <p className="mt-1 text-sm leading-6 text-ink-muted">
-          每行或用逗号分隔一个公开网页，最多 10
-          个。网页会直接保存到当前笔记本并在后台提取正文。
-        </p>
-      </div>
-
       <label className="block" htmlFor="source-link-import-urls">
         <span className="mb-2 block text-sm font-medium text-ink">
           网页地址
@@ -189,7 +175,7 @@ function DirectLinkImportPanel({
           disabled={active}
           rows={4}
           placeholder={
-            'https://example.com/article\nhttps://example.org/report'
+            '粘贴网页地址；多个地址请换行\nhttps://example.com/article'
           }
           onChange={(event) => setValue(event.currentTarget.value)}
           className="ec-input w-full resize-y rounded-2xl px-4 py-3 text-sm text-ink"
@@ -203,7 +189,7 @@ function DirectLinkImportPanel({
           onClick={() => void beginImport()}
           className="min-h-12 w-full rounded-2xl bg-accent px-4 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
         >
-          开始导入
+          导入网页
         </button>
       ) : null}
 
@@ -283,10 +269,6 @@ function DirectLinkImportPanel({
           完成，已导入 {imported.length} 个来源
         </button>
       ) : null}
-
-      <p className="text-sm text-ink-muted">
-        每个链接独立处理；单项失败不会中断其他网页。
-      </p>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { normalizePublicSearchResultUrl } from './search-url';
 
 export type SearchCandidateFailureCode =
   | 'candidate_blocked_address'
+  | 'candidate_fake_ip_dns_detected'
   | 'candidate_http_blocked'
   | 'candidate_http_error'
   | 'candidate_login_wall'
@@ -95,9 +96,13 @@ function mapWebPageError(error: WebPageError): SearchCandidatePreflightError {
   switch (error.code) {
     case 'link_invalid_url':
     case 'link_blocked_host':
-    case 'fake_ip_dns_detected':
       return new SearchCandidatePreflightError(
         'candidate_blocked_address',
+        false,
+      );
+    case 'fake_ip_dns_detected':
+      return new SearchCandidatePreflightError(
+        'candidate_fake_ip_dns_detected',
         false,
       );
     case 'link_access_blocked':

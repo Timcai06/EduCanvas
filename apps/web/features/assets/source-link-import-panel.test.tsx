@@ -14,7 +14,9 @@ describe('SourceLinkImportPanel', () => {
     expect(html).toContain('role="tablist"');
     expect(html).toContain('输入网址');
     expect(html).toContain('搜索网页');
-    expect(html).toContain('开始导入');
+    expect(html).toContain('导入网页');
+    expect(html).not.toContain('每个链接独立处理');
+    expect(html).not.toContain('每行或用逗号分隔');
     expect(html).not.toContain('预览');
     expect(html).not.toContain('type="url"');
   });

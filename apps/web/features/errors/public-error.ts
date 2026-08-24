@@ -40,7 +40,7 @@ const messages: Readonly<Record<string, string>> = {
   link_render_failed: '网页渲染失败。请重试或上传 PDF。',
   link_import_unavailable: '暂时无法导入该网页。请稍后重试。',
   fake_ip_dns_detected:
-    '当前网络代理无法安全验证网页地址。请切换网络模式后重试。',
+    '当前网络无法安全解析该网页。请直接打开原网页，或稍后重试导入。',
   search_not_configured: '网页搜索尚未配置。请改用网页地址导入。',
   search_timeout: '网页搜索超时。请重试或缩短检索词。',
   search_rate_limited: '网页搜索请求过于频繁。请稍后重试。',

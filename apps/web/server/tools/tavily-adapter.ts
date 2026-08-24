@@ -8,8 +8,6 @@ import {
   boundSearchResultLimit,
   SearchProviderError,
   SEARCH_PROVIDER_MAX_RESULTS,
-  SEARCH_RESULT_MAX_SNIPPET_LENGTH,
-  SEARCH_RESULT_MAX_TITLE_LENGTH,
   SEARCH_RESULT_MAX_URL_LENGTH,
 } from './search-contract';
 import {
@@ -23,9 +21,9 @@ const tavilyResponseSchema = z.object({
   results: z
     .array(
       z.object({
-        title: z.string().max(SEARCH_RESULT_MAX_TITLE_LENGTH).optional(),
+        title: z.string().optional(),
         url: z.string().max(SEARCH_RESULT_MAX_URL_LENGTH),
-        content: z.string().max(SEARCH_RESULT_MAX_SNIPPET_LENGTH).optional(),
+        content: z.string().optional(),
         score: z.number().optional(),
         published_date: z.string().max(128).optional(),
       }),

@@ -10,18 +10,18 @@ import {
 import { SearchServiceError, type SearchService } from './search-service';
 import { normalizePublicSearchResultUrl } from './search-url';
 import {
+  rankReadableCandidates,
+  rankUncheckedCandidates,
+  searchCandidateContentKind,
+  searchCandidateDomain,
+  type SearchCandidateResult,
+  type UncheckedSearchCandidateResult,
+} from './search-candidate-ranking';
+import {
   NOOP_METRICS,
   recordMetricSafely,
   type MetricsPort,
 } from '@educanvas/telemetry';
-
-export type SearchCandidateContentKind =
-  'article' | 'documentation' | 'institution' | 'other';
-
-export interface SearchCandidateResult extends SearchResult {
-  readonly accessibility: 'accessible';
-  readonly contentKind: SearchCandidateContentKind;
-}
 
 export interface SearchCandidateFailure {
   readonly url: string;
@@ -32,6 +32,11 @@ export interface SearchCandidateFailure {
 
 export interface SearchCandidateOutput {
   readonly results: readonly SearchCandidateResult[];
+  /**
+   * Discovery-only candidates retained when Fake-IP DNS prevents safe
+   * reachability checks. Agent tools deliberately ignore this collection.
+   */
+  readonly uncheckedResults: readonly UncheckedSearchCandidateResult[];
   readonly failures: readonly SearchCandidateFailure[];
   readonly attemptedProviders: readonly string[];
 }
@@ -52,50 +57,6 @@ const DEFAULT_CONFIG: Required<SearchCandidatePipelineConfig> = {
   maxResultsPerDomain: 2,
 };
 
-function domainOf(url: string): string {
-  return new URL(url).hostname.toLowerCase().replace(/^www\./u, '');
-}
-
-function institutionOf(domain: string): string {
-  const labels = domain.split('.');
-  if (labels.length <= 2) return domain;
-  const suffix = labels.slice(-2).join('.');
-  if (
-    [
-      'ac.cn',
-      'com.cn',
-      'edu.cn',
-      'gov.cn',
-      'net.cn',
-      'org.cn',
-      'ac.uk',
-      'co.uk',
-      'org.uk',
-      'com.au',
-      'edu.au',
-      'org.au',
-    ].includes(suffix)
-  ) {
-    return labels.slice(-3).join('.');
-  }
-  return suffix;
-}
-
-function contentKindOf(result: SearchResult): SearchCandidateContentKind {
-  const value = `${result.title} ${new URL(result.url).pathname}`.toLowerCase();
-  const domain = domainOf(result.url);
-  if (/\.(?:edu|gov)(?:\.|$)|\.ac\.[a-z]{2}$/u.test(domain)) {
-    return 'institution';
-  }
-  if (/\b(?:docs?|documentation|manual|reference|guide)\b/u.test(value)) {
-    return 'documentation';
-  }
-  if (/\b(?:article|research|paper|report|journal|news|blog)\b/u.test(value)) {
-    return 'article';
-  }
-  return 'other';
-}
-
 async function mapWithConcurrency<Input, Output>(
   inputs: readonly Input[],
   concurrency: number,
@@ -114,57 +75,6 @@ async function mapWithConcurrency<Input, Output>(
     Array.from({ length: Math.min(concurrency, inputs.length) }, worker),
   );
   return outputs;
-}
-
-function diverseRank(
-  candidates: readonly SearchCandidateResult[],
-  limit: number,
-  maxResultsPerDomain: number,
-): SearchCandidateResult[] {
-  const remaining = candidates.map((candidate, index) => ({
-    candidate,
-    index,
-  }));
-  const selected: SearchCandidateResult[] = [];
-  const domains = new Map<string, number>();
-  const institutions = new Map<string, number>();
-  const kinds = new Map<SearchCandidateContentKind, number>();
-
-  while (selected.length < limit && remaining.length > 0) {
-    let bestIndex = -1;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    for (let index = 0; index < remaining.length; index += 1) {
-      const entry = remaining[index]!;
-      const domain = domainOf(entry.candidate.url);
-      const domainCount = domains.get(domain) ?? 0;
-      if (domainCount >= maxResultsPerDomain) continue;
-      const institutionCount = institutions.get(institutionOf(domain)) ?? 0;
-      const kindCount = kinds.get(entry.candidate.contentKind) ?? 0;
-      const relevance = entry.candidate.score ?? 1 / (entry.index + 1);
-      const score =
-        relevance -
-        domainCount * 0.35 -
-        institutionCount * 0.15 -
-        kindCount * 0.08;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = index;
-      }
-    }
-    if (bestIndex < 0) break;
-    const [entry] = remaining.splice(bestIndex, 1);
-    const candidate = entry!.candidate;
-    const domain = domainOf(candidate.url);
-    const institution = institutionOf(domain);
-    selected.push(candidate);
-    domains.set(domain, (domains.get(domain) ?? 0) + 1);
-    institutions.set(institution, (institutions.get(institution) ?? 0) + 1);
-    kinds.set(
-      candidate.contentKind,
-      (kinds.get(candidate.contentKind) ?? 0) + 1,
-    );
-  }
-  return selected;
 }
 
 export class SearchCandidatePipeline {
@@ -247,7 +157,7 @@ export class SearchCandidatePipeline {
     const groups = new Map<string, SearchResult[]>();
     const priorRoundFailures: SearchCandidateFailure[] = [];
     for (const candidate of unique) {
-      const domain = domainOf(candidate.url);
+      const domain = searchCandidateDomain(candidate.url);
       if (this.cooledDomains.has(domain)) {
         priorRoundFailures.push({
           url: candidate.url,
@@ -294,9 +204,12 @@ export class SearchCandidatePipeline {
               ...candidate,
               title: outcome.title?.trim() || candidate.title,
               url: finalUrl,
-              sourceDomain: domainOf(finalUrl),
+              sourceDomain: searchCandidateDomain(finalUrl),
               accessibility: 'accessible',
-              contentKind: contentKindOf({ ...candidate, url: finalUrl }),
+              contentKind: searchCandidateContentKind({
+                ...candidate,
+                url: finalUrl,
+              }),
             });
           } catch (error) {
             if (signal?.aborted) {
@@ -336,8 +249,23 @@ export class SearchCandidatePipeline {
     recordMetricSafely(() =>
       this.metrics.record('web_search_readable_candidates', readable.length),
     );
+    const fakeIpDnsDetected = failures.some(
+      (failure) => failure.code === 'candidate_fake_ip_dns_detected',
+    );
     return {
-      results: diverseRank(readable, target, this.config.maxResultsPerDomain),
+      results: rankReadableCandidates(
+        readable,
+        target,
+        this.config.maxResultsPerDomain,
+      ),
+      uncheckedResults:
+        readable.length === 0 && fakeIpDnsDetected
+          ? rankUncheckedCandidates(
+              unique,
+              target,
+              this.config.maxResultsPerDomain,
+            )
+          : [],
       failures,
       attemptedProviders: searched.attemptedProviders,
     };
@@ -357,7 +285,12 @@ function candidateFailureCategory(
   | 'network'
   | 'cooled'
   | 'unknown' {
-  if (code === 'candidate_blocked_address') return 'blocked';
+  if (
+    code === 'candidate_blocked_address' ||
+    code === 'candidate_fake_ip_dns_detected'
+  ) {
+    return 'blocked';
+  }
   if (code === 'candidate_http_blocked' || code === 'candidate_http_error') {
     return 'http';
   }
