@@ -298,3 +298,31 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 | `AnimatedList`| 与既有 MarginaliaNav（学习记录）与虚拟化资源库重复，且偏 demo 渐变样式 |
 | `Dock`        | macOS 式图标放大，与「安静课桌」气质冲突，压轻后价值有限               |
 | `ScrollStack` | lenis 劫持滚动，改造风险高，且学习概览无强需求                        |
+
+## 10. 现代 Apple/Shadcn 方向与细节批次
+
+> 在既有「两支笔」纸墨基线上，叠加了「现代 Apple/Shadcn 质感 + 重动效 + 克制细节」的演进方向。
+> 视觉仍走 token 与规范；动效双轨见第 9 节。以下记录本轮已落地的批次与依据。
+
+### 现代表面 / 动效基础
+| 项 | 位置 | 说明 |
+| --- | --- | --- |
+| lenis 平滑滚动 | `features/workspace/shared/use-lenis.ts` + `learning-rail.tsx` | 绑到指定滚动容器（非 window）、`reduced-motion` 不初始化、卸载销毁；仅用于非流式、非虚拟化列表 |
+| Sheet 磨砂玻璃纸 | `components/sheet.tsx` | 面板 `bg-card/85 + backdrop-blur-xl`，浮层透出背层 |
+| 光态阴影多层弥散 | `globals.css` | `--shadow-float/card-hover/sheet` 多层弥散、更柔；暗态不变 |
+| 主按钮按压缩放 | `interactive-controls.css` | `bg-accent` 按钮 `:active` 轻按压缩放 + 顺滑过渡；reduced-motion 显示但不位移 |
+| 资源选项卡滑动高亮 | `studio-resource-library.tsx` + `studio-workspace.css` | `.studio-tab-indicator` 随选中用 `left/width` 过渡；颜色平滑过渡 |
+
+### 细节批次
+| 项 | 依据 | 说明 |
+| --- | --- | --- |
+| 胶囊 `text-box-trim` 字居中 | typography-1 | `rounded-full` 按钮/胶囊以 cap→baseline 为界；不支持浏览器忽略 |
+| `prefers-reduced-transparency` 降级 | accessibility | 降低透明度偏好下禁用 `[class*=backdrop-blur]` 模糊 |
+| `overscroll-behavior-x:none` | interactivity-14 | 横向滚动容器防误触返回（`.no-scrollbar` 热力图等） |
+| 图标按钮命中区 ≥44px | interactivity-3 | Sheet 关闭、学习记录栏/顶栏图标 `size-10`→`size-11` |
+| 引用内文案统一 | copywriting | 「打开 Notebook Source」→「打开来源」 |
+| 轻彩蛋「落款」 | easter-egg | 空会话标题连点 5 次召唤印章；reduced-motion 无动画、静态显示 |
+
+### 无障碍自动化（未接入，另行处理）
+`@axe-core/react` **不支持 React 18+**（至 React 17），项目为 React 19，故未接入并已移除该依赖。
+后续无障碍自动化走 **`axe-core`（框架无关，经 Playwright / jest-axe）**，而非 `@axe-core/react`。
