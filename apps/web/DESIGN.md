@@ -322,6 +322,10 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 | 图标按钮命中区 ≥44px | interactivity-3 | Sheet 关闭、学习记录栏/顶栏图标 `size-10`→`size-11` |
 | 引用内文案统一 | copywriting | 「打开 Notebook Source」→「打开来源」 |
 | 轻彩蛋「落款」 | easter-egg | 空会话标题连点 5 次召唤印章；reduced-motion 无动画、静态显示 |
+| `overscroll-x-none` 铺满 | interactivity-14 | Canvas 产物横向滚动容器防误触返回（.no-scrollbar 之外） |
+| Composer Enter 上下文 | interactivity-1 | 光标处于 ``` 代码栅栏内时 Enter 插换行而非发送 |
+| 生成图懒加载 | performance | `<img>` 加 `loading=lazy` + `decoding=async` |
+| 页面进入过渡 | motion（B4 轻量） | `app/template.tsx`：路由切换极轻 opacity+y 入场，reduced-motion 免动画 |
 
 ### 无障碍自动化（未接入，另行处理）
 `@axe-core/react` **不支持 React 18+**（至 React 17），项目为 React 19，故未接入并已移除该依赖。
