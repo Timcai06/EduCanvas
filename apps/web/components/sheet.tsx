@@ -16,9 +16,13 @@ import {
  * 窄屏：底部抽屉。dialog 语义、Esc 与遮罩关闭、打开移焦进入、关闭归还焦点。
  * 同屏最多一个 Sheet，由调用方保证互斥。
  *
- * 版式身份（对齐「两支笔」/ ai-name）：英文小 eyebrow + 衬线大标题 + 克制留白；
- * 入场是遮罩淡入 + 纸页滑起 + 前缘墨紫竖线自上而下拉起 + 内容分条 stagger 浮现；
- * 关闭走同一条 timeline 反向播放再卸载。reduced-motion 下退化为瞬时开合。
+ * 表面（现代 Apple 方向）：面板用一层磨砂玻璃纸（bg-card/85 + backdrop-blur），
+ * 浮在已被遮罩模糊的内容之上，蓝透出一点背层，增强现代空气感；仍保留纸面暖白底色、
+ * 锋利边界（border-line/70）与墨紫签名线。
+ *
+ * 版式身份：英文小 eyebrow + 衬线大标题 + 克制留白；入场是遮罩淡入 + 纸页滑起 +
+ * 前缘墨紫竖线自上而下拉起 + 内容分条 stagger 浮现；关闭反向播放再卸载。
+ * reduced-motion 下退化为瞬时开合。
  *
  * 内容作者可给需要依次浮现的块加 `data-sheet-item`；没有时默认对页眉与正文两段做
  * stagger。关闭必须走 onClose（动画结束后才回调），触发关闭处不要自己立刻卸载面板。
@@ -197,7 +201,7 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className={`relative flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-line/70 bg-card shadow-[var(--shadow-sheet)] outline-none will-change-transform lg:max-h-[calc(100dvh-2.5rem)] lg:w-[27rem] lg:rounded-[1.75rem] ${
+        className={`relative flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-line/70 bg-card/85 shadow-[var(--shadow-sheet)] outline-none backdrop-blur-xl will-change-transform lg:max-h-[calc(100dvh-2.5rem)] lg:w-[27rem] lg:rounded-[1.75rem] ${
           stableHeight ? 'h-[86dvh] lg:h-[calc(100dvh-2.5rem)]' : ''
         }`}
       >
