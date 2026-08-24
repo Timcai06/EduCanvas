@@ -22,15 +22,29 @@ import { WebTeachingCancellation } from './turn-application/cancellation';
 import { WebTeachingLifecycle } from './turn-application/lifecycle';
 import { WebTeachingProfile } from './turn-application/profile';
 
+const studyPlanRepository = vi.hoisted(() => ({
+  getOwnedBySession: vi.fn(),
+}));
+
 vi.mock('server-only', () => ({}));
 vi.mock('../turn-composition', () => ({
-  createWebTurnApplication: vi.fn(),
+  createWebTurnApplication: vi.fn(() => ({ run: vi.fn(() => []) })),
+  createWebTurnLedgers: vi.fn(() => ({
+    contextLedger: {},
+    modelRunLedger: {},
+    usageBudgetLedger: {},
+    trace: {},
+  })),
+  createWebToolKernel: vi.fn(),
+  unavailableModelGateway: {},
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzleAgentModelRunRepository: vi.fn(),
   DrizzleAgentToolCallRepository: vi.fn(),
   DrizzleAgentTurnContextRepository: vi.fn(),
-  DrizzleStudyPlanRepository: vi.fn(),
+  DrizzleStudyPlanRepository: vi.fn(function DrizzleStudyPlanRepositoryMock() {
+    return studyPlanRepository;
+  }),
   DrizzleToolEffectRepository: vi.fn(),
 }));
 vi.mock('../assets/asset-materialization', () => ({
@@ -124,6 +138,47 @@ beforeEach(() => {
 });
 
 describe('Web Teaching 可信 Gateway 路由边界', () => {
+  it('向严格画像策略只投影声明字段，不透传持久化元数据', async () => {
+    studyPlanRepository.getOwnedBySession.mockResolvedValue({
+      profile: {
+        studentId: identity.studentId,
+        declaredByUserId: identity.studentId,
+        ageBand: 'under_13',
+        gradeBand: 'primary_school',
+        declarationSource: 'self_declared',
+        preferences: {
+          explanationOrder: 'example_first',
+          responseDepth: 'balanced',
+          guidance: 'step_by_step',
+          modality: 'mixed',
+          feedbackStyle: 'gentle',
+        },
+        version: 7,
+        updatedAt: '2026-08-24T00:00:00.000Z',
+      },
+    });
+
+    begin();
+    const loadAdaptation = vi.mocked(WebTeachingProfile).mock.calls[0]?.[5];
+
+    await expect(loadAdaptation?.()).resolves.toEqual({
+      ageBand: 'under_13',
+      gradeBand: 'primary_school',
+      minorSafetyRequired: true,
+      preferences: {
+        explanationOrder: 'example_first',
+        responseDepth: 'balanced',
+        guidance: 'step_by_step',
+        modality: 'mixed',
+        feedbackStyle: 'gentle',
+      },
+    });
+    expect(studyPlanRepository.getOwnedBySession).toHaveBeenCalledWith(
+      identity.studentId,
+      session.id,
+    );
+  });
+
   it('Actor 与当前身份不一致时同步拒绝且下游零调用', () => {
     expect(() =>
       begin({ route: { ...route, actorUserId: 'student-2' } }),

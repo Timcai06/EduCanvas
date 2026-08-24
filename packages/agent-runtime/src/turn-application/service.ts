@@ -25,6 +25,7 @@ import {
   settleTurnFailure,
   type TurnTerminalState,
 } from './session';
+import { turnApplicationFailureLogLine } from './failure-diagnostics';
 
 /**
  * Turn Application 主编排服务 — 固定五阶段管线。
@@ -92,7 +93,6 @@ export class TurnApplicationService implements TurnApplicationPort {
       entrypoint: command.entrypoint,
     });
     yield started;
-
     if (turn.replayed) {
       let replay;
       try {
@@ -110,7 +110,6 @@ export class TurnApplicationService implements TurnApplicationPort {
       trace.end(replay.status);
       return;
     }
-
     let cancellation: TurnApplicationCancellationHandle;
     try {
       cancellation = await (
@@ -139,7 +138,6 @@ export class TurnApplicationService implements TurnApplicationPort {
       };
       return;
     }
-
     let answer = '';
     const terminal: TurnTerminalState = { emitted: false };
     const executionController = new AbortController();
@@ -169,6 +167,7 @@ export class TurnApplicationService implements TurnApplicationPort {
         retryable,
       });
 
+    let stage = 'preflight';
     try {
       const preflight = await this.dependencies.profile.preflight?.({
         command,
@@ -193,12 +192,14 @@ export class TurnApplicationService implements TurnApplicationPort {
         command,
         turn,
       });
+      stage = 'prepare';
       trace.event('context.prepare');
       const prepared = await prepareTurnApplication({
         dependencies: this.dependencies,
         command,
         turn,
       });
+      stage = 'loop';
       const outcome = yield* runTurnLoop({
         dependencies: this.dependencies,
         command,
@@ -275,7 +276,14 @@ export class TurnApplicationService implements TurnApplicationPort {
         ? mapModelFailure(outcome.modelFailure)
         : { code: 'RUNTIME_FAILED' as const, retryable: true };
       yield await emitFailure(mapped.code, mapped.retryable);
-    } catch {
+    } catch (error) {
+      console.error(
+        turnApplicationFailureLogLine({
+          operationId: command.operationId,
+          stage,
+          error,
+        }),
+      );
       if (!terminal.emitted) {
         yield await emitFailure('RUNTIME_FAILED', true);
       }

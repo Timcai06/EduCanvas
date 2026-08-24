@@ -88,7 +88,14 @@ export function beginGatewayTeachingTurnApplication(input: {
         input.identity.studentId,
         input.session.id,
       );
-      return plan ? resolveLearnerAdaptationPolicy(plan.profile) : null;
+      if (!plan) return null;
+      // 持久化画像还包含所有权与版本元数据；领域策略只接受用户明确声明的闭集。
+      return resolveLearnerAdaptationPolicy({
+        ageBand: plan.profile.ageBand,
+        gradeBand: plan.profile.gradeBand,
+        declarationSource: plan.profile.declarationSource,
+        preferences: plan.profile.preferences,
+      });
     },
   );
   const adapters = createTeachingToolKernelAdapters((candidateIds) =>
