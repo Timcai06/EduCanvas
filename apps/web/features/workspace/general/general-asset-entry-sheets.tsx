@@ -20,7 +20,7 @@ export function GeneralAssetEntrySheets({
   if (active === 'image' || active === 'document') {
     return (
       <Sheet
-        label={active === 'image' ? '添加图片' : '添加文档来源'}
+        label={active === 'image' ? '上传图片' : '上传文件'}
         onClose={onClose}
       >
         <AssetUploadPanel
