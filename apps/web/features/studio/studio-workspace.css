@@ -143,6 +143,7 @@
 }
 
 .studio-resource-tabs {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   gap: 0.25rem;
@@ -152,23 +153,37 @@
   background: var(--color-surface);
 }
 
+/* motion-17：滑动高亮指示条，随选中 tab 用 left/width 过渡移动 */
+.studio-tab-indicator {
+  position: absolute;
+  top: 0.28rem;
+  bottom: 0.28rem;
+  left: 0;
+  width: 0;
+  border-radius: 0.65rem;
+  background: var(--color-ink);
+  box-shadow: var(--shadow-float);
+  transition:
+    left var(--duration-standard) var(--ease-enter),
+    width var(--duration-standard) var(--ease-enter);
+}
+
 .studio-resource-tabs button {
+  position: relative;
+  z-index: 1;
   min-height: 2.35rem;
   padding: 0 0.95rem;
   border-radius: 0.65rem;
   color: var(--color-ink-muted);
+  background: transparent;
   font-size: 0.77rem;
   font-weight: 650;
-  /* motion-2：选中态颜色/背景平滑过渡，而非硬切 */
-  transition:
-    color var(--duration-fast) ease,
-    background-color var(--duration-fast) ease;
+  /* motion-2：选中态颜色平滑过渡，而非硬切 */
+  transition: color var(--duration-fast) ease;
 }
 
 .studio-resource-tabs button[aria-selected='true'] {
   color: var(--color-card);
-  background: var(--color-ink);
-  box-shadow: var(--shadow-float);
 }
 
 .studio-resource-tabs button span {

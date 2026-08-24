@@ -12,7 +12,13 @@ import {
   VideoCamera,
 } from '@phosphor-icons/react';
 import type { WorkspaceResourceSummary } from '@educanvas/canvas-protocol';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   canOpenResourceLibraryItem,
@@ -249,6 +255,21 @@ export function StudioResourceLibrary({
   ).length;
   const currentResults =
     category === 'source' ? sourceResults : artifactResults;
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabIndicator, setTabIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
+  /* motion-17：滑动高亮随选中 tab 移动，从左/宽过渡而非硬跳 */
+  useLayoutEffect(() => {
+    const container = tabsRef.current;
+    if (!container) return;
+    const selected = container.querySelector<HTMLElement>(
+      '[role="tab"][aria-selected="true"]',
+    );
+    if (!selected) return;
+    setTabIndicator({ left: selected.offsetLeft, width: selected.offsetWidth });
+  }, [category]);
 
   return (
     <section
@@ -263,10 +284,16 @@ export function StudioResourceLibrary({
           <span>当前笔记本的输入、上下文与 AI 产物在同一处管理。</span>
         </div>
         <div
+          ref={tabsRef}
           className="studio-resource-tabs"
           role="tablist"
           aria-label="资源类型"
         >
+          <span
+            aria-hidden="true"
+            className="studio-tab-indicator"
+            style={{ left: tabIndicator.left, width: tabIndicator.width }}
+          />
           <button
             type="button"
             role="tab"
