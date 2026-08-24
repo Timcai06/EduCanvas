@@ -1,9 +1,10 @@
 'use client';
 
 import { AnimatePresence, motion } from 'motion/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { BlurText } from '@/components/BlurText';
 import { Topography } from '@/components/Topography';
+import { useLenis } from '@/features/workspace/shared/use-lenis';
 import { useReducedMotion } from '@/features/workspace/shared/use-reduced-motion';
 
 interface DemoQuestion {
@@ -132,6 +133,29 @@ function StepperDemo() {
   );
 }
 
+function LenisDemo() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useLenis(scrollRef, { duration: 1.1 });
+  const items = Array.from({ length: 30 }, (_, i) => `学习记录 ${i + 1}`);
+  return (
+    <div
+      ref={scrollRef}
+      className="h-52 overflow-y-auto rounded-2xl border border-line bg-surface p-3"
+    >
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <li
+            key={item}
+            className="rounded-xl border border-line bg-canvas px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-surface"
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ReactBitsPreview() {
   return (
     <div className="space-y-10">
@@ -163,6 +187,13 @@ export function ReactBitsPreview() {
           03 · Stepper
         </p>
         <StepperDemo />
+      </section>
+
+      <section className="space-y-3">
+        <p className="text-xs font-semibold tracking-[0.2em] text-accent-strong uppercase">
+          04 · Lenis
+        </p>
+        <LenisDemo />
       </section>
     </div>
   );
