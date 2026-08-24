@@ -43,13 +43,20 @@ export async function completeStudyOnboarding(page: Page): Promise<void> {
   });
   await expect(diagnosticHeading.or(composer)).toBeVisible();
   if (await composer.isVisible()) return;
-  const groups = page.locator('fieldset');
-  const count = await groups.count();
+  const questionSteps = page.getByRole('button', { name: /^第 \d+ 题/ });
+  const count = await questionSteps.count();
   for (let index = 0; index < count; index += 1) {
     /* 诊断只是共享 setup，不验证选项卡的指针动画。慢 runner 曾让 label 的
        Playwright 稳定性检测单次等待 28s；直接 check 原生 radio 仍触发真实
        change/React 状态，同时不把整条 smoke 的预算耗在无关的布局稳定性上。 */
-    await groups.nth(index).getByRole('radio').first().check({ force: true });
+    await page
+      .locator('fieldset:visible')
+      .getByRole('radio')
+      .first()
+      .check({ force: true });
+    if (index < count - 1) {
+      await page.getByRole('button', { name: '下一题' }).click();
+    }
   }
   await page.getByRole('button', { name: '提交并进入学习' }).click();
 
