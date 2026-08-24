@@ -60,11 +60,15 @@
     'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', 'PingFang SC', serif;
 
   --radius-pill: 1.75rem;
+  /* 现代 Apple 式多层弥散阴影：近处一层极浅 + 远处渐晕，比单层硬投影更柔和 */
   --shadow-float:
-    0 1px 2px rgb(72 60 34 / 0.05), 0 10px 32px rgb(72 60 34 / 0.1);
+    0 1px 2px rgb(48 42 24 / 0.04), 0 2px 6px rgb(48 42 24 / 0.04),
+    0 12px 32px rgb(48 42 24 / 0.07);
   --shadow-card-hover:
-    0 2px 4px rgb(72 60 34 / 0.06), 0 16px 40px rgb(72 60 34 / 0.14);
-  --shadow-sheet: 0 8px 40px rgb(58 48 26 / 0.22);
+    0 2px 6px rgb(48 42 24 / 0.06), 0 4px 12px rgb(48 42 24 / 0.05),
+    0 20px 52px rgb(48 42 24 / 0.1);
+  --shadow-sheet:
+    0 8px 20px rgb(48 38 22 / 0.1), 0 32px 72px rgb(48 38 22 / 0.18);
 
   /*
    * 字级阶梯：讲义排版的字号 token（Tailwind v4 同步生成 text-* 工具类）。
