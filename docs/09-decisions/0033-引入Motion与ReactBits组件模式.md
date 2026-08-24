@@ -1,4 +1,4 @@
-# ADR-0033：引入 Motion 与 Lenis，落地 React Bits 组件模式
+# ADR-0033：引入 Motion 与 React Bits 组件模式
 
 - 状态：`accepted`
 - 日期：2026-08-24
@@ -9,9 +9,8 @@
 
 EduCanvas 前端既往以 GSAP 作为唯一动效引擎（`features/theme/motion.ts` 统一消费 `--duration-*` token），
 并把「两支笔」（纸/墨/墨紫/朱砂）作为唯一视觉基线。若要引入 React Bits 这类已封装为
-`motion`(framer-motion)/`lenis` 的成品动效与交互组件，会出现第二套动效库与平滑滚动库，
-与既有 GSAP+token 体系并存。产品希望在保留最高质感的前提下引入新组件，并接受「为最佳效果
-适度放宽既有视觉表述」。
+`motion`(framer-motion) 的成品动效与交互组件，会出现第二套动效库与既有 GSAP+token 体系并存。
+产品希望在保留最高质感的前提下引入新组件，并接受「为最佳效果适度放宽既有视觉表述」。
 
 ## 候选方案
 
@@ -23,15 +22,15 @@ EduCanvas 前端既往以 GSAP 作为唯一动效引擎（`features/theme/motion
 
 ## 决定
 
-1. 新增两个依赖：`motion`（framer-motion 的成品名）、`lenis`（平滑滚动）。
+1. 新增依赖 `motion`（framer-motion 的成品名）。
 2. **动效双轨**：既有 GSAP 状态迁移仍走 `features/theme/motion.ts`；采用 `motion` 的组件
    （React Bits 或其重构版）用 motion 原生 API，但**颜色/字体/间距/投影/明暗/reduced-motion
    一律仍走项目 token 与规范**，不使用组件自带硬编码色值。
 3. **React Bits 组件接入准则**：只借「结构与动效机制」；视觉与交互按产品重做。默认排除
-   与「安静课桌」气冲突的霓虹/激光/金属类组件。是否接入以「是否真正提升体验」为准，
+   与「安静课桌」气质冲突的霓虹/激光/金属类组件。是否接入以「是否真正提升体验」为准，
    不因数量勉强塞入；不接的组件须在 DESIGN.md 记录取舍理由。
-4. **Lenis**：默认只对「有独立滚动容器且非流式」的页面启用平滑滚动；不给对话列（流式滚动
-   加平滑反而差）。适配内部滚动容器而非劫持 window；`prefers-reduced-motion` 下关闭。
+4. **Lenis（平滑滚动）**：评估后**不采纳**。ScrollStack 依赖 lenis 劫持 window 滚动，与项目
+   「内部容器各自滚动 + `html overflow:hidden`」的模型冲突，且当前无贴合落点；项目滚动维持现状。
 5. **WebGL 氛围层（如 Topography）**：沿用项目既有策略——reduced-motion 下不挂载（真省 GPU），
    `pointer-events:none`，只作纯装饰。
 6. **设计系统**：`DESIGN.md` 允许在「最佳效果需要」时对旧表述选择性放宽；放宽处更新 DESIGN.md。
@@ -39,7 +38,8 @@ EduCanvas 前端既往以 GSAP 作为唯一动效引擎（`features/theme/motion
 ## 后果
 
 - 动效链出现 GSAP 与 motion 两套实现，需在 DESIGN.md 明确各自适用范围，避免组件风格漂移。
-- `lenis` 引入滚动接管风险；须按容器隔离并尊重 reduced-motion，否则回退为普通滚动。
 - 新组件为客户端专用；服务器边界、测试与 lint/typecheck 须保持通过，组件不能引入服务端
   不兼容代码。
 - 视觉基线由「两支笔」演化为「产品克制质感 + 必要新组件」；DESIGN.md 相应更新。
+- `lenis` 未落地：不引入平滑滚动库，项目滚动体系维持现状，避免滚动接管风险。
+

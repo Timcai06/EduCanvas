@@ -262,10 +262,10 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 | 字级微调合并：PillNav 0.79rem、Studio 输入 0.8rem → `--text-note`(0.8125rem)；Studio 提示 0.68rem → `--text-overline`(0.6875rem)；时长 0.2s→220ms、0.26s→300ms | 对应 CSS                                        | 差异 ≤0.32px / ≤40ms，不可感知；合并才能形成 scale            | 已在本轮执行，记录备查 |
 | react-grab / react-scan / react-doctor 开发工具未安装                                                                                                          | 全 app                                          | 待用户确认引入开发依赖                                        | 下一轮开工前确认       |
 
-## 9. 新动效库与 React Bits 组件（见 [ADR-0033](../../docs/09-decisions/0033-引入Motion与Lenis落地ReactBits组件模式.md)）
+## 9. 新动效库与 React Bits 组件（见 [ADR-0033](../../docs/09-decisions/0033-引入Motion与ReactBits组件模式.md)）
 
 > 本节是对第 6 节「动效与交互」的补充：在既有 GSAP 体系之外，为落地 React Bits 组件引入了
-> `motion` 与 `lenis`。**第 6 节仍适用于 GSAP 状态迁移**；本节只定义新动效库的适用范围。
+> `motion`。**第 6 节仍适用于 GSAP 状态迁移**；本节只定义新动效库的适用范围。
 ### 双轨动效
 
 - 既有 GSAP 状态迁移仍经 `features/theme/motion.ts` 的 `motionDuration()` 消费时长 token。
@@ -277,10 +277,10 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 - 只借「结构与动效机制」，视觉与交互按产品重做；默认排除与「安静课桌」气质冲突的霓虹/激光/金属类。
 - 是否接入以「是否真正提升体验」为准，不因数量勉强塞入；不接的组件在此记录取舍理由。
 
-### Lenis 平滑滚动
+### Lenis 平滑滚动（未采纳）
 
-- 只对「有独立滚动容器且非流式」的页面启用；不给对话列（流式滚动加平滑反而差），
-  适配内部滚动容器而非劫持 window；`prefers-reduced-motion` 下关闭。
+- 评估过 `lenis`（ScrollStack 依赖），因其劫持 window 滚动、与项目「内部容器各自滚动 +
+  `html overflow:hidden`」模型冲突且无贴合落点，**决定不引入**；项目滚动体系维持现状。
 
 ### 已接入的组件
 
