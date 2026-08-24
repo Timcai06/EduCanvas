@@ -45,20 +45,27 @@ export async function completeStudyOnboarding(page: Page): Promise<void> {
   if (await composer.isVisible()) return;
   const questionSteps = page.getByRole('button', { name: /^第 \d+ 题/ });
   const count = await questionSteps.count();
+  const progress = page.getByRole('progressbar', { name: '诊断进度' });
   for (let index = 0; index < count; index += 1) {
     /* 诊断只是共享 setup，不验证选项卡的指针动画。慢 runner 曾让 label 的
        Playwright 稳定性检测单次等待 28s；直接 check 原生 radio 仍触发真实
        change/React 状态，同时不把整条 smoke 的预算耗在无关的布局稳定性上。 */
+    await expect(progress).toHaveAttribute('aria-valuenow', String(index + 1));
     await page
-      .locator('fieldset:visible')
+      .getByRole('group', { name: new RegExp(`^${index + 1}\\. `) })
       .getByRole('radio')
       .first()
       .check({ force: true });
+    await expect(
+      page.getByText(`${index + 1}/${count} 已完成`, { exact: true }),
+    ).toBeVisible();
     if (index < count - 1) {
       await page.getByRole('button', { name: '下一题' }).click();
     }
   }
-  await page.getByRole('button', { name: '提交并进入学习' }).click();
+  const submitButton = page.getByRole('button', { name: '提交并进入学习' });
+  await expect(submitButton).toBeEnabled();
+  await submitButton.click();
 
   await expect(composer).toBeVisible();
 }
