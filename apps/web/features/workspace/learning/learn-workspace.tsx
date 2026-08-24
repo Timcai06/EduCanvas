@@ -606,7 +606,7 @@ function LearnWorkspaceSession({
       ) : null}
       {uploadKind ? (
         <Sheet
-          label={uploadKind === 'image' ? '添加图片' : '添加PDF'}
+          label={uploadKind === 'image' ? '上传图片' : '上传文件'}
           onClose={() => setUploadKind(null)}
         >
           <AssetUploadPanel

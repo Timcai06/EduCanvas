@@ -129,7 +129,7 @@ async function ensureGeneralNotebook(page: Page) {
   await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
   await page
-    .getByRole('dialog', { name: '添加文档来源' })
+    .getByRole('dialog', { name: '上传文件' })
     .getByRole('button', { name: '关闭' })
     .click();
   await expect.poll(() => activeConversationId(page)).toBeTruthy();

@@ -1,19 +1,15 @@
 'use client';
 
-import { useGSAP } from '@gsap/react';
 import {
   FilePdf,
   Image as ImageIcon,
+  SpinnerGap,
   UploadSimple,
 } from '@phosphor-icons/react';
-import gsap from 'gsap';
 import { useRef, useState } from 'react';
-import { motionDuration } from '@/features/theme/motion';
 import { toClientError } from '../canvas/resource-error';
 import { uploadWorkspaceSource } from './source-intake';
 import type { AssetItem } from './assets-drawer';
-
-gsap.registerPlugin(useGSAP);
 
 /** 浏览器文件选择器使用标准 OOXML MIME，并保留扩展名兜底空 MIME 系统。 */
 export const DOCUMENT_UPLOAD_ACCEPT = [
@@ -48,7 +44,6 @@ export function AssetUploadPanel({
   endpoint?: string;
   fixedScope?: AssetItem['scope'];
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [scope, setScope] = useState<AssetItem['scope']>(fixedScope ?? 'turn');
   const [busy, setBusy] = useState(false);
@@ -58,65 +53,10 @@ export function AssetUploadPanel({
       ? 'image/png,image/jpeg,image/webp'
       : DOCUMENT_UPLOAD_ACCEPT;
 
-  useGSAP(
-    () => {
-      const root = rootRef.current;
-      if (!root) return;
-      const sections = root.querySelectorAll('[data-upload-section]');
-      const media = gsap.matchMedia();
-      media.add('(prefers-reduced-motion: no-preference)', () => {
-        gsap.fromTo(
-          sections,
-          { autoAlpha: 0, y: 10 },
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: motionDuration('emphasis'),
-            stagger: 0.055,
-            ease: 'power2.out',
-          },
-        );
-      });
-      media.add('(prefers-reduced-motion: reduce)', () => {
-        gsap.set(sections, { autoAlpha: 1, y: 0 });
-      });
-      return () => media.revert();
-    },
-    { scope: rootRef },
-  );
-
   return (
-    <div ref={rootRef} className="space-y-6">
-      <div
-        data-upload-section
-        className="relative overflow-hidden rounded-3xl border border-line bg-card p-5 shadow-[var(--shadow-float)]"
-      >
-        <span className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent">
-          {kind === 'image' ? <ImageIcon size={23} /> : <FilePdf size={23} />}
-        </span>
-        <h3 className="mt-4 font-display text-lg font-semibold text-ink">
-          {kind === 'image' ? '添加图片' : '添加文档来源'}
-        </h3>
-        <p className="mt-1 text-sm leading-6 text-ink-muted">
-          {kind === 'image'
-            ? fixedScope === 'space'
-              ? '支持PNG、JPEG和WebP，最大25MB。图片会保存为当前笔记本来源；能否被模型直接读取取决于当前所用模型，不支持时发送会明确提示。'
-              : '支持PNG、JPEG和WebP，最大25MB。图片会保存为Asset；当前模型仅支持文本，发送时会明确提示能力边界。'
-            : fixedScope === 'space'
-              ? '支持PDF、Word、PowerPoint、Excel、Markdown和TXT，最大25MB。内容会在服务端解析并成为当前笔记本的长期来源。'
-              : '支持PDF、Word、PowerPoint、Excel、Markdown和TXT，最大25MB。上传后内容会在服务端解析并作为受控附件进入对话。'}
-        </p>
-      </div>
-
-      {fixedScope ? (
-        <p
-          data-upload-section
-          className="rounded-2xl bg-surface px-4 py-3 text-sm text-ink-muted"
-        >
-          文件会保存到当前笔记本的来源中，切换笔记本不会带走。
-        </p>
-      ) : (
-        <fieldset data-upload-section>
+    <div className="space-y-5">
+      {!fixedScope ? (
+        <fieldset>
           <legend className="mb-2 text-sm font-medium text-ink">
             保存范围
           </legend>
@@ -138,12 +78,14 @@ export function AssetUploadPanel({
             ))}
           </div>
         </fieldset>
-      )}
+      ) : null}
 
       <input
         ref={inputRef}
         type="file"
         accept={accept}
+        aria-label={kind === 'image' ? '选择要上传的图片' : '选择要上传的文件'}
+        tabIndex={-1}
         className="sr-only"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
@@ -161,22 +103,42 @@ export function AssetUploadPanel({
             .finally(() => setBusy(false));
         }}
       />
-      <button
-        data-upload-section
-        type="button"
-        disabled={busy}
-        onClick={() => inputRef.current?.click()}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-      >
-        <UploadSimple size={20} />
-        {busy ? '正在安全处理…' : '选择文件'}
-      </button>
-      <p
-        data-upload-section
-        className={`min-h-5 text-sm ${error ? 'text-bad' : 'text-ink-muted'}`}
-      >
-        {error ?? '对象存储地址和模型密钥不会发送到浏览器。'}
-      </p>
+      <div className="rounded-2xl border border-dashed border-line px-5 py-6 text-center">
+        <span className="mx-auto grid size-10 place-items-center rounded-xl bg-surface text-ink-muted">
+          {kind === 'image' ? (
+            <ImageIcon size={21} aria-hidden="true" />
+          ) : (
+            <FilePdf size={21} aria-hidden="true" />
+          )}
+        </span>
+        <p className="mt-3 text-sm leading-6 text-ink-muted">
+          {kind === 'image'
+            ? 'PNG、JPEG 或 WebP，最大 25 MB'
+            : 'PDF、Word、PowerPoint、Excel、Markdown 或 TXT，最大 25 MB'}
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+        >
+          {busy ? (
+            <SpinnerGap
+              size={20}
+              className="animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+          ) : (
+            <UploadSimple size={20} aria-hidden="true" />
+          )}
+          {busy ? '正在上传…' : kind === 'image' ? '选择图片' : '选择文件'}
+        </button>
+      </div>
+      {error ? (
+        <p className="text-sm text-bad" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

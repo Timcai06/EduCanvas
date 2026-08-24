@@ -161,7 +161,7 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
   await expect(
-    page.getByRole('dialog', { name: '添加文档来源' }),
+    page.getByRole('dialog', { name: '上传文件' }),
   ).toBeVisible();
   await expect(
     page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
@@ -170,7 +170,7 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
     page.getByRole('navigation', { name: '工作区主导航' }),
   ).toHaveCount(0);
   await page
-    .getByRole('dialog', { name: '添加文档来源' })
+    .getByRole('dialog', { name: '上传文件' })
     .getByRole('button', { name: '关闭', exact: true })
     .click();
   await expect(
