@@ -51,7 +51,7 @@ export function TopBar({
           onClick={onOpenSessions}
           aria-label="打开学习记录"
           title="学习记录"
-          className="grid size-10 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+          className="grid size-11 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
         >
           <ClockCounterClockwise aria-hidden="true" size={20} />
         </button>

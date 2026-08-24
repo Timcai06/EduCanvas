@@ -152,7 +152,7 @@ export function LearningRail(props: LearningRailProps) {
           aria-expanded={deskOpen}
           aria-label="打开学习记录"
           onClick={() => setDeskOpen(true)}
-          className="mb-3 grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="mb-3 grid size-11 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ChatCircleDots aria-hidden="true" size={21} />
         </button>

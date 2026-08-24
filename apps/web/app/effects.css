@@ -303,3 +303,27 @@
   overflow: hidden;
   pointer-events: none;
 }
+
+/*
+ * 彩蛋：空会话标题连点 5 次的「落款」印章入场（easter-egg）。
+ * 轻微旋转 + 缩放 + 淡入；reduced-motion 下取消动画，仅静态显示后隐藏。
+ */
+@keyframes easter-stamp {
+  from {
+    opacity: 0;
+    transform: scale(0.8) rotate(-4deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+}
+.easter-stamp {
+  display: inline-block;
+  animation: easter-stamp var(--duration-standard) var(--ease-emphasis);
+}
+@media (prefers-reduced-motion: reduce) {
+  .easter-stamp {
+    animation: none;
+  }
+}

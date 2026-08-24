@@ -229,7 +229,7 @@ export function Sheet({
             type="button"
             aria-label="关闭"
             onClick={requestClose}
-            className="group grid size-10 shrink-0 place-items-center rounded-full border border-line text-ink-muted transition-colors hover:border-accent/45 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group grid size-11 shrink-0 place-items-center rounded-full border border-line text-ink-muted transition-colors hover:border-accent/45 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <X
               aria-hidden="true"

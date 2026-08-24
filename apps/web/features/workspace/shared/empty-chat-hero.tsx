@@ -3,12 +3,16 @@
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import type { ElementType, ReactNode } from 'react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { HeroGreeting } from './hero-greeting';
 import { HeroInkField } from './hero-ink-field';
 import { TechnologyBrandLoop } from './technology-brand-loop';
+import { SealStamp } from '@/components/two-pen-marks';
 
 gsap.registerPlugin(useGSAP);
+
+/** 彩蛋：连点标题 N 次，召唤一枚「落款」印章（easter-egg）。 */
+const STAMP_CLICKS = 5;
 
 /**
  * 空会话只呈现问题入口，不预先伪造教学对话或学习成果。
@@ -26,6 +30,18 @@ export function EmptyChatHero({
 }) {
   const rootRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const clickCountRef = useRef(0);
+  const stampTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showStamp, setShowStamp] = useState(false);
+
+  const onGreetingClick = () => {
+    clickCountRef.current += 1;
+    if (clickCountRef.current < STAMP_CLICKS) return;
+    clickCountRef.current = 0;
+    setShowStamp(true);
+    if (stampTimerRef.current) clearTimeout(stampTimerRef.current);
+    stampTimerRef.current = setTimeout(() => setShowStamp(false), 1800);
+  };
 
   useGSAP(
     () => {
@@ -61,7 +77,14 @@ export function EmptyChatHero({
     >
       <HeroInkField />
       <div className="relative z-10 w-full -translate-y-6 text-center sm:-translate-y-8">
-        <HeroGreeting nickname={nickname} />
+        <div onClick={onGreetingClick} className="cursor-default select-none">
+          <HeroGreeting nickname={nickname} />
+          {showStamp ? (
+            <span aria-hidden="true" className="easter-stamp mt-1 inline-block">
+              <SealStamp char="签" label="老师落款" />
+            </span>
+          ) : null}
+        </div>
         <div ref={contentRef}>{children}</div>
       </div>
       <TechnologyBrandLoop />

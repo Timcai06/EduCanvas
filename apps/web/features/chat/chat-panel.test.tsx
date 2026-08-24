@@ -49,7 +49,7 @@ describe('ChatPanel web citations', () => {
 
     expect(html).toContain('aria-label="打开来源 研究网页"');
     expect(html).toContain('title="在当前笔记本中打开来源"');
-    expect(html).toContain('打开 Notebook Source');
+    expect(html).toContain('打开来源');
     expect(html).toContain('href="https://example.com/research"');
     expect(html).toContain('aria-label="打开原网页 研究网页"');
     expect(html).toContain('title="打开原网页"');
@@ -58,7 +58,7 @@ describe('ChatPanel web citations', () => {
   it('缺少 Notebook Source 回调时仍保留安全的原网页外链', () => {
     const html = renderCitation();
 
-    expect(html).not.toContain('打开 Notebook Source');
+    expect(html).not.toContain('打开来源');
     expect(html).toContain('href="https://example.com/research"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
