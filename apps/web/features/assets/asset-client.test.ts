@@ -254,8 +254,7 @@ describe('asset browser client', () => {
     ).rejects.toMatchObject({
       code: 'fake_ip_dns_detected',
       retryable: false,
-      message:
-        '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
+      message: '当前网络无法安全解析该网页。请直接打开原网页，或稍后重试导入。',
     });
   });
 });

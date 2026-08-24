@@ -36,6 +36,7 @@ import {
 } from './first-prompt';
 import { TopBar } from './top-bar';
 import { LearningRail } from './learning-rail';
+import { Topography } from '@/components/Topography';
 
 interface RetryableSubmission {
   fingerprint: string;
@@ -415,8 +416,9 @@ function LearnWorkspaceSession({
   return (
     <div
       data-learning-workspace
-      className="flex h-dvh flex-col bg-canvas text-ink"
+      className="relative isolate flex h-dvh flex-col bg-canvas text-ink"
     >
+      <Topography />
       <TopBar
         courseTitle={initialData.study.topic}
         stageLabel={null}

@@ -143,6 +143,7 @@
 }
 
 .studio-resource-tabs {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   gap: 0.25rem;
@@ -152,19 +153,37 @@
   background: var(--color-surface);
 }
 
+/* motion-17：滑动高亮指示条，随选中 tab 用 left/width 过渡移动 */
+.studio-tab-indicator {
+  position: absolute;
+  top: 0.28rem;
+  bottom: 0.28rem;
+  left: 0;
+  width: 0;
+  border-radius: 0.65rem;
+  background: var(--color-ink);
+  box-shadow: var(--shadow-float);
+  transition:
+    left var(--duration-standard) var(--ease-enter),
+    width var(--duration-standard) var(--ease-enter);
+}
+
 .studio-resource-tabs button {
+  position: relative;
+  z-index: 1;
   min-height: 2.35rem;
   padding: 0 0.95rem;
   border-radius: 0.65rem;
   color: var(--color-ink-muted);
+  background: transparent;
   font-size: 0.77rem;
   font-weight: 650;
+  /* motion-2：选中态颜色平滑过渡，而非硬切 */
+  transition: color var(--duration-fast) ease;
 }
 
 .studio-resource-tabs button[aria-selected='true'] {
   color: var(--color-card);
-  background: var(--color-ink);
-  box-shadow: var(--shadow-sm);
 }
 
 .studio-resource-tabs button span {
@@ -315,17 +334,26 @@
 }
 
 .studio-resource-list {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow-y: auto;
 }
 
-.studio-resource-list > li:not(.studio-resource-empty) {
+.studio-resource-list > li:not(.studio-resource-empty):not(
+    .studio-resource-spacer
+  ) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 8rem;
   align-items: center;
   border-bottom: 1px solid
     color-mix(in srgb, var(--color-line) 72%, transparent);
+}
+
+.studio-resource-list > .studio-resource-spacer {
+  display: block;
+  margin: 0;
+  list-style: none;
 }
 
 .studio-resource-open {
@@ -519,7 +547,9 @@
     display: none;
   }
 
-  .studio-resource-list > li:not(.studio-resource-empty) {
+  .studio-resource-list > li:not(.studio-resource-empty):not(
+      .studio-resource-spacer
+    ) {
     grid-template-columns: minmax(0, 1fr);
   }
 

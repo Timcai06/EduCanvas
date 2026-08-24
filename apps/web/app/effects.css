@@ -290,3 +290,40 @@
     animation: none;
   }
 }
+
+/*
+ * Topography 等高线氛围层：满铺、纯装饰、不参与命中。z-index:-1 使其绘制在
+ * 宿主「isolate」根层的背景之上、正文内容之下；宿主须为根节点建立隔离层叠上下文。
+ * reduced-motion 下组件直接不挂载 WebGL（见 components/Topography.tsx），无需降级规则。
+ */
+.topography-container {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/*
+ * 彩蛋：空会话标题连点 5 次的「落款」印章入场（easter-egg）。
+ * 轻微旋转 + 缩放 + 淡入；reduced-motion 下取消动画，仅静态显示后隐藏。
+ */
+@keyframes easter-stamp {
+  from {
+    opacity: 0;
+    transform: scale(0.8) rotate(-4deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+}
+.easter-stamp {
+  display: inline-block;
+  animation: easter-stamp var(--duration-standard) var(--ease-emphasis);
+}
+@media (prefers-reduced-motion: reduce) {
+  .easter-stamp {
+    animation: none;
+  }
+}

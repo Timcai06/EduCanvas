@@ -237,6 +237,41 @@ describe('SearchCandidatePipeline', () => {
     );
   });
 
+  it('retains discovery-only candidates when Fake-IP DNS blocks every preflight', async () => {
+    const results = [
+      candidate(0, 'docs.example.com'),
+      candidate(1, 'docs.example.com'),
+      candidate(2, 'research.example.org'),
+    ];
+    const pipeline = new SearchCandidatePipeline(
+      searchService(results),
+      async () => {
+        throw new SearchCandidatePreflightError(
+          'candidate_fake_ip_dns_detected',
+          false,
+        );
+      },
+    );
+
+    const output = await pipeline.search({ query: 'topic', limit: 5 });
+
+    expect(output.results).toEqual([]);
+    expect(output.uncheckedResults).toEqual(
+      results.map((result) => ({
+        ...result,
+        sourceDomain: new URL(result.url).hostname,
+        accessibility: 'unchecked',
+      })),
+    );
+    expect(output.failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'candidate_fake_ip_dns_detected',
+        }),
+      ]),
+    );
+  });
+
   it('limits one domain and promotes institution and content-kind diversity', async () => {
     const results = [
       { ...candidate(0, 'news.example.com'), score: 1 },
@@ -381,6 +416,15 @@ describe('preflightSearchCandidate', () => {
       }),
     ).rejects.toMatchObject({
       code: 'candidate_blocked_address',
+      retryable: false,
+    });
+
+    await expect(
+      preflightSearchCandidate(candidate(0), undefined, {
+        resolveHostname: vi.fn().mockResolvedValue(['198.18.0.42']),
+      }),
+    ).rejects.toMatchObject({
+      code: 'candidate_fake_ip_dns_detected',
       retryable: false,
     });
   });

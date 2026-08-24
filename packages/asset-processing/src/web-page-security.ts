@@ -1,5 +1,5 @@
-import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { resolveHostnameWithDohFallback } from './web-page-dns';
 
 export const webPageFailureCodes = [
   'link_invalid_url',
@@ -144,9 +144,12 @@ export function isPublicIpAddress(address: string): boolean {
 export async function defaultResolveHostname(
   hostname: string,
 ): Promise<string[]> {
-  return (await lookup(hostname, { all: true, verbatim: true })).map(
-    (entry) => entry.address,
-  );
+  return [
+    ...(await resolveHostnameWithDohFallback(hostname, {
+      shouldUseFallback: (addresses) =>
+        addresses.length === 0 || addresses.every(isFakeIpAddress),
+    })),
+  ];
 }
 
 async function resolveHostnameWithSignal(

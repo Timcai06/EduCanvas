@@ -261,3 +261,68 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 | LineSidebar CSS 内含 React Bits 原生 hex 兜底默认值                                                                                                            | `components/LineSidebar.css`                    | 所有调用方都经 props 注入 token，画面上不出现；改动无视觉收益 | 组件重写时             |
 | 字级微调合并：PillNav 0.79rem、Studio 输入 0.8rem → `--text-note`(0.8125rem)；Studio 提示 0.68rem → `--text-overline`(0.6875rem)；时长 0.2s→220ms、0.26s→300ms | 对应 CSS                                        | 差异 ≤0.32px / ≤40ms，不可感知；合并才能形成 scale            | 已在本轮执行，记录备查 |
 | react-grab / react-scan / react-doctor 开发工具未安装                                                                                                          | 全 app                                          | 待用户确认引入开发依赖                                        | 下一轮开工前确认       |
+
+## 9. 新动效库与 React Bits 组件（见 [ADR-0033](../../docs/09-decisions/0033-引入Motion与ReactBits组件模式.md)）
+
+> 本节是对第 6 节「动效与交互」的补充：在既有 GSAP 体系之外，为落地 React Bits 组件引入了
+> `motion`。**第 6 节仍适用于 GSAP 状态迁移**；本节只定义新动效库的适用范围。
+### 双轨动效
+
+- 既有 GSAP 状态迁移仍经 `features/theme/motion.ts` 的 `motionDuration()` 消费时长 token。
+- 采用 `motion`（framer-motion）的组件用 motion 原生 API，但**颜色/字体/间距/投影/明暗/
+  reduced-motion 一律仍走 token 与规范**，禁止使用组件自带硬编码色值。
+
+### React Bits 组件接入准则
+
+- 只借「结构与动效机制」，视觉与交互按产品重做；默认排除与「安静课桌」气质冲突的霓虹/激光/金属类。
+- 是否接入以「是否真正提升体验」为准，不因数量勉强塞入；不接的组件在此记录取舍理由。
+
+### Lenis 平滑滚动（未采纳）
+
+- 评估过 `lenis`（ScrollStack 依赖），因其劫持 window 滚动、与项目「内部容器各自滚动 +
+  `html overflow:hidden`」模型冲突且无贴合落点，**决定不引入**；项目滚动体系维持现状。
+
+### 已接入的组件
+
+| 组件                      | 位置                                      | 说明                                                          |
+| ------------------------- | ----------------------------------------- | ------------------------------------------------------------- |
+| `BlurText`（柔焦落字）    | `components/BlurText.tsx`                 | 标题语义由调用方经 `as` 传入；reduced-motion 直显             |
+| `Topography`（等高线）    | `components/Topography.tsx` + `effects.css` | ogl 氛围层；reduced-motion 不挂载 WebGL、pointer-events:none   |
+| `Stepper`（逐步诊断）     | `features/study/study-diagnostic.tsx`     | 逐题推进；reduced-motion 静态渲染                             |
+
+### 不接的组件（记录取舍）
+
+| 组件          | 理由                                                                  |
+| ------------- | --------------------------------------------------------------------- |
+| `FlowingMenu` | 是整屏 marquee 菜单，与紧凑顶栏/学习工作区气质冲突                     |
+| `AnimatedList`| 与既有 MarginaliaNav（学习记录）与虚拟化资源库重复，且偏 demo 渐变样式 |
+| `Dock`        | macOS 式图标放大，与「安静课桌」气质冲突，压轻后价值有限               |
+| `ScrollStack` | lenis 劫持滚动，改造风险高，且学习概览无强需求                        |
+
+## 10. 现代 Apple/Shadcn 方向与细节批次
+
+> 在既有「两支笔」纸墨基线上，叠加了「现代 Apple/Shadcn 质感 + 重动效 + 克制细节」的演进方向。
+> 视觉仍走 token 与规范；动效双轨见第 9 节。以下记录本轮已落地的批次与依据。
+
+### 现代表面 / 动效基础
+| 项 | 位置 | 说明 |
+| --- | --- | --- |
+| lenis 平滑滚动 | `features/workspace/shared/use-lenis.ts` + `learning-rail.tsx` | 绑到指定滚动容器（非 window）、`reduced-motion` 不初始化、卸载销毁；仅用于非流式、非虚拟化列表 |
+| Sheet 磨砂玻璃纸 | `components/sheet.tsx` | 面板 `bg-card/85 + backdrop-blur-xl`，浮层透出背层 |
+| 光态阴影多层弥散 | `globals.css` | `--shadow-float/card-hover/sheet` 多层弥散、更柔；暗态不变 |
+| 主按钮按压缩放 | `interactive-controls.css` | `bg-accent` 按钮 `:active` 轻按压缩放 + 顺滑过渡；reduced-motion 显示但不位移 |
+| 资源选项卡滑动高亮 | `studio-resource-library.tsx` + `studio-workspace.css` | `.studio-tab-indicator` 随选中用 `left/width` 过渡；颜色平滑过渡 |
+
+### 细节批次
+| 项 | 依据 | 说明 |
+| --- | --- | --- |
+| 胶囊 `text-box-trim` 字居中 | typography-1 | `rounded-full` 按钮/胶囊以 cap→baseline 为界；不支持浏览器忽略 |
+| `prefers-reduced-transparency` 降级 | accessibility | 降低透明度偏好下禁用 `[class*=backdrop-blur]` 模糊 |
+| `overscroll-behavior-x:none` | interactivity-14 | 横向滚动容器防误触返回（`.no-scrollbar` 热力图等） |
+| 图标按钮命中区 ≥44px | interactivity-3 | Sheet 关闭、学习记录栏/顶栏图标 `size-10`→`size-11` |
+| 引用内文案统一 | copywriting | 「打开 Notebook Source」→「打开来源」 |
+| 轻彩蛋「落款」 | easter-egg | 空会话标题连点 5 次召唤印章；reduced-motion 无动画、静态显示 |
+
+### 无障碍自动化（未接入，另行处理）
+`@axe-core/react` **不支持 React 18+**（至 React 17），项目为 React 19，故未接入并已移除该依赖。
+后续无障碍自动化走 **`axe-core`（框架无关，经 Playwright / jest-axe）**，而非 `@axe-core/react`。

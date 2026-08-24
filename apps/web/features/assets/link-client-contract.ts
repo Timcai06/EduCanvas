@@ -46,5 +46,5 @@ export const linkErrorCopy: Readonly<Record<LinkClientErrorCode, string>> = {
   link_render_failed: '网页渲染失败。请重试或上传 PDF。',
   link_import_unavailable: '暂时无法导入该网页。请稍后重试。',
   fake_ip_dns_detected:
-    '当前网络代理使用 Fake-IP DNS，无法安全验证网页地址。请切换到 Redir-Host/真实 IP 模式后重试。',
+    '当前网络无法安全解析该网页。请直接打开原网页，或稍后重试导入。',
 };

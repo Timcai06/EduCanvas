@@ -100,3 +100,54 @@
       color-mix(in srgb, var(--color-accent) 16%, transparent);
   }
 }
+
+/*
+ * 固定宽度标签溢出：硬截断读作「被砍」，右端再叠一层墨色淡出让长标题溶解而不是折断（typography-2）。
+ * 保留 text-overflow: ellipsis，用户仍能读出「已截断」；mask 只作用于最右一段，不影响正文可读性。
+ */
+.fade-truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  mask-image: linear-gradient(to right, black 86%, transparent);
+  -webkit-mask-image: linear-gradient(to right, black 86%, transparent);
+}
+
+/*
+ * 现代主按钮微交互：给所有墨紫高亮按钮一个极轻的按压缩放 + 更顺滑的过渡。
+ * 只作用于 `bg-accent` 按钮的按下态；配合原有的 hover 位移/扫光，让点击有「压下去」的
+ * 手感。reduced-motion 下取消按压位移，保留状态可感知。
+ */
+button.bg-accent {
+  transition:
+    transform var(--duration-fast) var(--ease-enter, cubic-bezier(0.16, 1, 0.3, 1)),
+    opacity var(--duration-fast) ease,
+    background-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button.bg-accent:not(:disabled):active {
+    transform: scale(0.975);
+  }
+}
+
+/*
+ * 胶囊文本垂直居中（typography-1）：浏览器在文字上方加不可见空隙，导致胶囊内文字视觉
+ * 偏高/偏下。`text-box-trim` 直接以 cap→baseline 为界、去掉负 margin 补正。只在支持
+ * 的浏览器生效，不支持时原样。
+ */
+button.rounded-full,
+a.rounded-full {
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+/*
+ * 降低透明度偏好（accessibility）：`prefers-reduced-transparency` 下禁用所有 backdrop 模糊，
+ * 避免玻璃/过度透明表面降低可读性。目前仅为渐进增强，不支持的浏览器忽略。
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [class*='backdrop-blur'] {
+    backdrop-filter: none;
+  }
+}

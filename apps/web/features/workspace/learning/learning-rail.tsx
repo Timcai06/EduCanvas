@@ -7,12 +7,13 @@ import {
   MagnifyingGlass,
   Plus,
 } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   buildLearningSessionRailRows,
   getLearningRailCapabilities,
 } from './learning-rail-model';
 import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
+import { useLenis } from '../shared/use-lenis';
 import { Sheet } from '@/components/sheet';
 
 interface LearningRailProps {
@@ -67,6 +68,9 @@ function SessionList({
 }
 
 function RailContents(props: LearningRailProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 学习记录列表是非流式、非虚拟化的长列表 → 启用 lenis 平滑滚动；reduced-motion 关闭。
+  useLenis(scrollRef);
   const capabilities = getLearningRailCapabilities({
     searchEnabled: props.searchEnabled === true,
     hasSearchCallback: Boolean(props.onSearch),
@@ -102,7 +106,7 @@ function RailContents(props: LearningRailProps) {
           />
         </label>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <SessionList
           sessions={props.sessions}
           currentSessionId={props.currentSessionId}
@@ -148,7 +152,7 @@ export function LearningRail(props: LearningRailProps) {
           aria-expanded={deskOpen}
           aria-label="打开学习记录"
           onClick={() => setDeskOpen(true)}
-          className="mb-3 grid size-10 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="mb-3 grid size-11 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ChatCircleDots aria-hidden="true" size={21} />
         </button>

@@ -158,11 +158,11 @@
     {
       "file": "apps/web/features/studio/studio-resource-library.tsx",
       "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
+      "reason": "现代化批次增长：资源库虚拟化+选项卡滑动指示条；延续待拆分模块化债务。",
       "targetLines": 400,
       "issue": "internal:ARCH-DEBT-0019",
       "expiry": "2027-02-28",
-      "acceptedLines": 401
+      "acceptedLines": 462
     },
     {
       "file": "apps/web/features/voice/capture/audio-capture.ts",
@@ -212,11 +212,11 @@
     {
       "file": "apps/web/features/workspace/learning/learn-workspace.tsx",
       "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
+      "reason": "现代化批次增长：Topography 氛围层接入。",
       "targetLines": 400,
       "issue": "internal:ARCH-DEBT-0025",
       "expiry": "2026-11-30",
-      "acceptedLines": 648
+      "acceptedLines": 650
     },
     {
       "file": "apps/web/server/assets/asset-preview.ts",

@@ -44,7 +44,7 @@ export function ChatCitations({
                   onClick={() => onOpenSource(citation.assetId)}
                   className="text-xs text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
                 >
-                  打开 Notebook Source
+                  打开来源
                 </button>
               ) : null}
               <a

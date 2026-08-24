@@ -119,8 +119,13 @@ export async function POST(request: Request): Promise<Response> {
       },
       request.signal,
     );
+    // Browser discovery remains useful under VPN Fake-IP DNS. These fallback
+    // candidates are visibly unchecked and still pass the strict fetch/import
+    // boundary before any content is read or persisted.
+    const results =
+      output.results.length > 0 ? output.results : output.uncheckedResults;
     return jsonResponse({
-      results: output.results.map((result) => ({
+      results: results.map((result) => ({
         title: result.title,
         url: result.url,
         domain: result.sourceDomain ?? new URL(result.url).hostname,

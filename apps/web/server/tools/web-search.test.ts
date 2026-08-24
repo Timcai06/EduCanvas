@@ -426,7 +426,7 @@ describe('Tavily adapter', () => {
     ).rejects.toMatchObject({ code: 'search_invalid_response' });
   });
 
-  it('reads a bounded stream and rejects oversized fields without raw payloads', async () => {
+  it('clips provider display fields while retaining bounded response safety', async () => {
     const { createTavilyAdapter: createAdapter } =
       await import('./tavily-adapter');
     const oversized = new Response(
@@ -435,7 +435,7 @@ describe('Tavily adapter', () => {
           {
             title: 'x'.repeat(201),
             url: 'https://example.com/article',
-            content: 'safe',
+            content: 'y'.repeat(1_493),
           },
         ],
       }),
@@ -446,9 +446,12 @@ describe('Tavily adapter', () => {
       fetchImpl: (async () => oversized) as typeof fetch,
     });
 
-    await expect(
-      provider.search({ query: 'test', limit: 5 }),
-    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+    const results = await provider.search({ query: 'test', limit: 5 });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.title).toHaveLength(200);
+    expect(results[0]?.title.endsWith('…')).toBe(true);
+    expect(results[0]?.snippet).toHaveLength(400);
+    expect(results[0]?.snippet.endsWith('…')).toBe(true);
     expect(json).not.toHaveBeenCalled();
 
     const longUrlProvider = createAdapter({
@@ -531,16 +534,16 @@ describe('SearXNG adapter', () => {
     });
   });
 
-  it('bounds response fields and result count before exposing them', async () => {
+  it('clips display fields and rejects excessive result counts and payloads', async () => {
     const { createSearXNGAdapter: createAdapter } =
       await import('./searxng-adapter');
     const oversized = new Response(
       JSON.stringify({
         results: [
           {
-            title: 'ok',
+            title: 't'.repeat(201),
             url: 'https://example.com/article',
-            content: 'x'.repeat(401),
+            content: 'x'.repeat(1_493),
           },
         ],
       }),
@@ -550,9 +553,12 @@ describe('SearXNG adapter', () => {
       fetchImpl: (async () => oversized) as typeof fetch,
     });
 
-    await expect(
-      provider.search({ query: 'test', limit: 5 }),
-    ).rejects.toMatchObject({ code: 'search_invalid_response' });
+    const results = await provider.search({ query: 'test', limit: 5 });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.title).toHaveLength(200);
+    expect(results[0]?.title.endsWith('…')).toBe(true);
+    expect(results[0]?.snippet).toHaveLength(400);
+    expect(results[0]?.snippet.endsWith('…')).toBe(true);
 
     const tooMany = new Response(
       JSON.stringify({
@@ -755,6 +761,33 @@ describe('createWebSearchTool budget', () => {
       results: [],
     });
     expect(tool.successfulSearchCount).toBe(1);
+  });
+
+  it('does not expose discovery-only Fake-IP candidates to the Agent tool', async () => {
+    const service = {
+      search: vi.fn().mockResolvedValue({
+        results: [],
+        uncheckedResults: [
+          {
+            title: 'Unchecked result',
+            url: 'https://example.com/research',
+            snippet: 'Provider discovery text is not evidence.',
+            accessibility: 'unchecked',
+          },
+        ],
+        failures: [
+          {
+            domain: 'example.com',
+            code: 'candidate_fake_ip_dns_detected',
+          },
+        ],
+      }),
+    };
+    const tool = createWebSearchTool(service);
+
+    await expect(
+      tool.handler({ query: 'research topic' }, context),
+    ).resolves.toEqual({ results: [] });
   });
 
   it('guides three research phases and permits two bounded replacement searches', async () => {

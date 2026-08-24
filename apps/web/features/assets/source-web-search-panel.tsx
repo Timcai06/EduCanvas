@@ -10,6 +10,8 @@ import {
 } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import type { AssetItem } from './assets-drawer';
+import { LinkAssetClientError } from './link-client-contract';
+import { SourceWebSearchResultLink } from './source-web-search-result-link';
 import { importWorkspaceLink } from './source-intake';
 import {
   LINK_IMPORT_CONCURRENCY,
@@ -47,6 +49,12 @@ function searchFailure(error: unknown): {
     : { message: '网页搜索暂时不可用。请稍后重试。', retryable: true };
 }
 
+function importFailure(error: unknown): string {
+  return error instanceof LinkAssetClientError
+    ? error.message
+    : '该网页暂时无法导入。请重试或改用网址入口。';
+}
+
 function accessibilityCopy(
   accessibility: WebSearchResult['accessibility'],
 ): string {
@@ -68,6 +76,7 @@ export function SourceWebSearchPanel({
 }) {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<readonly SearchItem[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -83,11 +92,13 @@ export function SourceWebSearchPanel({
     const run = searchRunRef.current + 1;
     searchRunRef.current = run;
     setSearching(true);
+    setHasSearched(false);
     setSearchError(null);
     try {
       const results = await searchWebSources(normalized);
       if (searchRunRef.current === run) {
         setItems(results.map(toSearchItem));
+        setHasSearched(true);
         setCanRetrySearch(false);
       }
     } catch (error) {
@@ -130,11 +141,11 @@ export function SourceWebSearchPanel({
         error: null,
       }));
       onImported(asset);
-    } catch {
+    } catch (error) {
       updateItem(item.url, (current) => ({
         ...current,
         phase: 'failed',
-        error: '该网页未能导入。请重试或改用网址入口。',
+        error: importFailure(error),
       }));
     }
   };
@@ -159,6 +170,9 @@ export function SourceWebSearchPanel({
   const selectedCount = selectable.filter((item) => item.selected).length;
   const allSelected =
     selectable.length > 0 && selectedCount === selectable.length;
+  const hasUncheckedResults = items.some(
+    (item) => item.accessibility === 'unchecked',
+  );
 
   return (
     <div
@@ -208,7 +222,7 @@ export function SourceWebSearchPanel({
               ) : (
                 <MagnifyingGlass size={18} aria-hidden="true" />
               )}
-              搜索
+              {searching ? '搜索中…' : '搜索'}
             </button>
           </div>
         </label>
@@ -241,13 +255,20 @@ export function SourceWebSearchPanel({
             aria-hidden="true"
           />
           <p className="mt-2 text-sm text-ink-muted">
-            输入检索词，选择结果后直接导入当前笔记本。
+            {hasSearched
+              ? '没有找到可导入的网页。请调整检索词，或改用网址入口。'
+              : '输入检索词，选择结果后直接导入当前笔记本。'}
           </p>
         </div>
       ) : null}
 
       {items.length > 0 ? (
         <section aria-labelledby="source-web-search-results-title">
+          {hasUncheckedResults ? (
+            <p className="mb-3 text-xs leading-5 text-ink-muted" role="status">
+              当前网络无法预检网页，搜索结果将在导入时进行安全检查。
+            </p>
+          ) : null}
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3
               id="source-web-search-results-title"
@@ -295,12 +316,7 @@ export function SourceWebSearchPanel({
                     }}
                   />
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-semibold leading-5 text-ink">
-                      {item.title}
-                    </h4>
-                    <p className="mt-1 truncate text-xs text-ink-faint">
-                      {item.domain}
-                    </p>
+                    <SourceWebSearchResultLink result={item} />
                     <p className="mt-2 line-clamp-3 text-sm leading-5 text-ink-muted">
                       {item.snippet || '该结果没有摘要。导入后将提取网页正文。'}
                     </p>

@@ -91,6 +91,47 @@ describe('POST /api/v1/chat/assets/link/search', () => {
     });
   });
 
+  it('keeps browser discovery available when Fake-IP DNS blocks preflight', async () => {
+    mocks.search.mockResolvedValue({
+      results: [],
+      uncheckedResults: [
+        {
+          title: 'Research article',
+          url: 'https://example.com/research',
+          sourceDomain: 'example.com',
+          snippet: 'A concise abstract.',
+          accessibility: 'unchecked',
+        },
+      ],
+      failures: [
+        {
+          url: 'https://example.com/research',
+          domain: 'example.com',
+          code: 'candidate_fake_ip_dns_detected',
+          retryable: false,
+        },
+      ],
+      attemptedProviders: ['private-provider-name'],
+    });
+
+    const response = await POST(request({ query: 'research topic' }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      results: [
+        {
+          title: 'Research article',
+          url: 'https://example.com/research',
+          domain: 'example.com',
+          snippet: 'A concise abstract.',
+          accessibility: 'unchecked',
+          imported: false,
+        },
+      ],
+    });
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects untrusted writes before invoking search', async () => {
     mocks.trustedOrigin.mockReturnValue(false);
 

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 砚墨暗态：同一「两支笔」造型，墨紫/朱砂用亮色，纸底用深纸 -->
+  <rect width="64" height="64" rx="16" fill="#211e17"/>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="#322d20" stroke-width="2"/>
+  <path d="M20 26 C28 19 40 19 46 27" fill="none" stroke="#b79bd6" stroke-width="6" stroke-linecap="round"/>
+  <path d="M18 40 C27 34 39 34 47 42" fill="none" stroke="#e2795b" stroke-width="5" stroke-linecap="round"/>
+</svg>
