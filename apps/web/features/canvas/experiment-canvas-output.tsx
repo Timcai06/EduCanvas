@@ -31,7 +31,7 @@ function TablePreview({
       role="region"
       aria-label={`表格预览：${preview.caption}`}
       tabIndex={0}
-      className="mt-3 overflow-x-auto rounded-lg border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="mt-3 overflow-x-auto overscroll-x-none rounded-lg border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <table className="w-full min-w-max text-left text-xs">
         <caption className="px-3 py-2 text-left font-medium text-ink">

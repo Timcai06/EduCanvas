@@ -36,6 +36,8 @@ export function GeneratedImageViewer({
       <img
         src={media.url}
         alt={altText}
+        loading="lazy"
+        decoding="async"
         className="mx-auto max-h-full max-w-full rounded-2xl object-contain shadow-[var(--shadow-float)]"
         width={parseSizeDim(media.size, 0)}
         height={parseSizeDim(media.size, 1)}
