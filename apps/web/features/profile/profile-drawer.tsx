@@ -115,11 +115,11 @@ export function ProfileDrawer({
       <div className="flex flex-col gap-6">
         <div
           data-sheet-item
-          className="relative overflow-hidden rounded-3xl border border-line/70 bg-surface/55 p-4 shadow-[var(--shadow-sm)]"
+          className="relative overflow-hidden rounded-3xl border border-line/70 bg-surface/55 p-4 shadow-[var(--shadow-float)]"
         >
           <AuroraInk />
           <div className="relative flex items-center gap-4">
-            <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent shadow-[var(--shadow-sm)]">
+            <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent shadow-[var(--shadow-float)]">
               {user?.avatarAvailable ? (
                 <Image
                   src="/api/v1/me/avatar"

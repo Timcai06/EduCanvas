@@ -27,11 +27,32 @@ function resolveTheme(preference: ThemePreference): 'light' | 'dark' {
  * 媒体查询兜底（globals.css 用属性覆写而非 light-dark()，后者动态切换时 Chromium 不重算）。
  * 与 app/layout.tsx 的水合前脚本、theme-sync.tsx 的常驻监听同源。
  */
+/** 纸面/砚墨的画布背景色，用于同步 `<meta name="theme-color">`。 */
+const CANVAS_LIGHT = '#f7f4ec';
+const CANVAS_DARK = '#1a1712';
+
+/**
+ * 把 theme-color 同步到当前画布背景，让浏览器地址栏/主题条融入画面而不是露一条
+ * 系统默认色。meta 不存在时（SSR 已由 layout 的 viewport 输出，这里兜底）就地创建。
+ */
+function syncThemeColor(color: string): void {
+  let meta = document.querySelector<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  );
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = color;
+}
+
 export function applyThemePreference(preference: ThemePreference): void {
   const root = document.documentElement;
   const resolved = resolveTheme(preference);
   root.setAttribute('data-theme', resolved);
   root.style.colorScheme = resolved;
+  syncThemeColor(resolved === 'dark' ? CANVAS_DARK : CANVAS_LIGHT);
 }
 
 export function readThemePreference(): ThemePreference {

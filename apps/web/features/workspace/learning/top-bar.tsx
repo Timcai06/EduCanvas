@@ -39,7 +39,7 @@ export function TopBar({
             aria-hidden="true"
             className="hidden h-5 w-px bg-line sm:block"
           />
-          <p className="hidden min-w-0 truncate text-sm text-ink-muted sm:block">
+          <p className="fade-truncate hidden min-w-0 text-sm text-ink-muted sm:block">
             {courseTitle}
           </p>
         </>

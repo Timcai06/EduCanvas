@@ -44,7 +44,9 @@
     "db:migrate": "pnpm --filter @educanvas/db migrate",
     "test:integration:db": "turbo test:integration --filter=@educanvas/db",
     "test:integration:worker": "turbo test:integration --filter=@educanvas/worker",
-    "test:integration:migrations": "node tooling/quality/migration-integration.mjs"
+    "test:integration:migrations": "node tooling/quality/migration-integration.mjs",
+    "doctor": "react-doctor --no-telemetry",
+    "scan:web": "react-scan localhost:3000"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

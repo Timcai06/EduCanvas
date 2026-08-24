@@ -217,7 +217,7 @@ export function StudySetup() {
               onChange={(event) =>
                 setField('desiredOutcome', event.target.value)
               }
-              className="ec-input w-full resize-none rounded-2xl px-4 py-3.5 text-lg leading-7 text-ink shadow-sm"
+              className="ec-input w-full resize-none rounded-2xl px-4 py-3.5 text-lg leading-7 text-ink shadow-[var(--shadow-float)]"
             />
           </label>
 
@@ -225,7 +225,7 @@ export function StudySetup() {
           <div className="unfold-item mt-3 rounded-2xl border border-line bg-surface/50 p-4 sm:p-5">
             <div className="flex items-baseline justify-between">
               <p className="text-sm font-medium text-ink">当前学段</p>
-              <p className="text-xs text-ink-faint">拨到中间即选定</p>
+              <p className="text-xs text-ink-muted">拨到中间即选定</p>
             </div>
             <div className="relative mt-1 h-32">
               {/* 中线：选中位指示 */}
@@ -257,7 +257,7 @@ export function StudySetup() {
                 <span className="block font-medium text-ink">
                   年龄与讲解方式
                 </span>
-                <span className="block truncate text-xs text-ink-faint">
+                <span className="block truncate text-xs text-ink-muted">
                   {optionLabel(AGE_BANDS, input.ageBand)} ·{' '}
                   {optionLabel(GRADE_BANDS, input.gradeBand)} ·{' '}
                   {optionLabel(DECLARATION_SOURCES, input.declarationSource)}

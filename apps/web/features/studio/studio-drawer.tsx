@@ -115,14 +115,14 @@ export function StudioDrawer({
       </ul>
 
       <div>
-        <p className="mb-3 text-xs tracking-wide text-ink-faint">
+        <p className="mb-3 text-xs tracking-wide text-ink-muted">
           更多形态 · 即将开放
         </p>
         <ul className="grid grid-cols-3 gap-1.5">
           {UPCOMING_KINDS.map(({ icon: KindIcon, label }) => (
             <li
               key={label}
-              className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-ink-faint"
+              className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-ink-muted"
             >
               <KindIcon aria-hidden="true" size={22} weight="regular" />
               <span className="text-xs">{label}</span>

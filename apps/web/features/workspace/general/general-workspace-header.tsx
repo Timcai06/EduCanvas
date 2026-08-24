@@ -63,7 +63,7 @@ export function GeneralWorkspaceHeader({
         className="hidden h-4 w-px bg-line/80 sm:block"
         aria-hidden="true"
       />
-      <span className="hidden max-w-44 truncate text-xs font-medium text-ink-muted md:block xl:max-w-64">
+      <span className="fade-truncate hidden max-w-44 text-xs font-medium text-ink-muted md:block xl:max-w-64">
         {notebookTitle ?? '未命名笔记本'}
       </span>
       <span className="flex-1" />

@@ -100,3 +100,15 @@
       color-mix(in srgb, var(--color-accent) 16%, transparent);
   }
 }
+
+/*
+ * 固定宽度标签溢出：硬截断读作「被砍」，右端再叠一层墨色淡出让长标题溶解而不是折断（typography-2）。
+ * 保留 text-overflow: ellipsis，用户仍能读出「已截断」；mask 只作用于最右一段，不影响正文可读性。
+ */
+.fade-truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  mask-image: linear-gradient(to right, black 86%, transparent);
+  -webkit-mask-image: linear-gradient(to right, black 86%, transparent);
+}

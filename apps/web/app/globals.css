@@ -164,6 +164,19 @@ html {
 }
 
 /*
+ * 品牌选区：墨紫淡底 + 墨紫字（typography-5）。一笔带过的高频表面，消费现有 token
+ * 自动适配明暗，代入「两支笔」的墨紫身份而非浏览器默认蓝。暗态加深，保证选中态可读。
+ */
+::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 26%, transparent);
+  color: var(--color-accent-strong);
+}
+:root[data-theme='dark'] ::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
+  color: var(--color-accent-strong);
+}
+
+/*
  * General / Learning 都是 h-dvh 应用壳，页面本身不滚动，滚动责任在内部工作面。
  * 进入这两种壳时取消普通长页面的预留槽，避免 100vw 覆盖槽位引入横向溢出。
  */

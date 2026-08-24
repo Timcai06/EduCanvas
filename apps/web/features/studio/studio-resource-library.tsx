@@ -12,7 +12,8 @@ import {
   VideoCamera,
 } from '@phosphor-icons/react';
 import type { WorkspaceResourceSummary } from '@educanvas/canvas-protocol';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   canOpenResourceLibraryItem,
   getResourceLibraryActions,
@@ -76,6 +77,16 @@ function ResourceView({
   onOpen: (summary: WorkspaceResourceSummary) => void;
   renderActions?: (summary: WorkspaceResourceSummary) => ReactNode;
 }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  /* 资源库可长可短，用 @tanstack/react-virtual 窗口化：只渲染可视区资源行，
+     spacer 占满总高度保证滚动条真实，避免长库一次性 build 出全部行。 */
+  // eslint-disable-next-line react-hooks/incompatible-library -- useVirtualizer 返回不可被 React Compiler 安全记忆化的函数（库 API 特性）；窗口化需要最新滚动/尺寸回调，跳过记忆化是有意的性能取舍。
+  const virtualizer = useVirtualizer({
+    count: results.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
+  });
   return (
     <div className="studio-resource-view">
       <div className="studio-resource-table-head" aria-hidden="true">
@@ -84,57 +95,80 @@ function ResourceView({
         <span>更新时间</span>
         <span>操作</span>
       </div>
-      <ul aria-label={label} className="studio-resource-list">
-        {results.map((summary) => (
-          <li key={`${summary.resourceKind}:${summary.resourceId}`}>
-            <button
-              type="button"
-              disabled={!canOpenResourceLibraryItem(summary)}
-              onClick={() => onOpen(summary)}
-              className="studio-resource-open"
+      <ul aria-label={label} ref={listRef} className="studio-resource-list">
+        {/* 总高 spacer：撑起可滚动内容区，让绝对定位的行在视口内逐条显形 */}
+        <li
+          className="studio-resource-spacer"
+          style={{ height: virtualizer.getTotalSize() }}
+          aria-hidden="true"
+        />
+        {virtualizer.getVirtualItems().map((item) => {
+          const summary = results[item.index]!;
+          return (
+            <li
+              key={`${summary.resourceKind}:${summary.resourceId}`}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${item.start}px)`,
+              }}
             >
-              <span className="studio-resource-icon">
-                <ResourceIcon summary={summary} />
-              </span>
-              <span className="studio-resource-title">
-                <strong>{summary.title}</strong>
-                <small>
-                  {summary.renderer.rendererId.split('.').at(-1)?.toUpperCase()}
-                  {' · '}
-                  {versionLabel(summary)}
-                  {summary.resourceKind === 'source'
-                    ? summary.context.enabled
-                      ? ' · 已加入上下文'
-                      : ' · 未加入上下文'
-                    : ' · AI 输出'}
-                  {summary.resourceKind === 'source' &&
-                  summary.context.researchSource
-                    ? ' · 研究来源'
-                    : null}
-                </small>
-              </span>
-              <span
-                className="studio-resource-status"
-                data-status={summary.status}
+              <button
+                type="button"
+                disabled={!canOpenResourceLibraryItem(summary)}
+                onClick={() => onOpen(summary)}
+                className="studio-resource-open"
               >
-                <i aria-hidden="true" />
-                {statusLabels[summary.status]}
-              </span>
-              <time dateTime={summary.updatedAt}>
-                {formatUpdatedAt(summary.updatedAt)}
-              </time>
-            </button>
-            <div className="studio-resource-row-actions">
-              {renderActions?.(summary) ?? (
-                <span>
-                  {getResourceLibraryActions(summary).includes('view')
-                    ? '打开'
-                    : '只读'}
+                <span className="studio-resource-icon">
+                  <ResourceIcon summary={summary} />
                 </span>
-              )}
-            </div>
-          </li>
-        ))}
+                <span className="studio-resource-title">
+                  <strong>{summary.title}</strong>
+                  <small>
+                    {summary.renderer.rendererId
+                      .split('.')
+                      .at(-1)
+                      ?.toUpperCase()}
+                    {' · '}
+                    {versionLabel(summary)}
+                    {summary.resourceKind === 'source'
+                      ? summary.context.enabled
+                        ? ' · 已加入上下文'
+                        : ' · 未加入上下文'
+                      : ' · AI 输出'}
+                    {summary.resourceKind === 'source' &&
+                    summary.context.researchSource
+                      ? ' · 研究来源'
+                      : null}
+                  </small>
+                </span>
+                <span
+                  className="studio-resource-status"
+                  data-status={summary.status}
+                >
+                  <i aria-hidden="true" />
+                  {statusLabels[summary.status]}
+                </span>
+                <time dateTime={summary.updatedAt}>
+                  {formatUpdatedAt(summary.updatedAt)}
+                </time>
+              </button>
+              <div className="studio-resource-row-actions">
+                {renderActions?.(summary) ?? (
+                  <span>
+                    {getResourceLibraryActions(summary).includes('view')
+                      ? '打开'
+                      : '只读'}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
         {!loading && results.length === 0 ? (
           <li className="studio-resource-empty">
             <span>

@@ -34,7 +34,7 @@ export function PdfPreview({ fileUrl }: { fileUrl: string }) {
         const page = await doc.getPage(pageNum);
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
-        canvas.className = 'mx-auto shadow-sm rounded-lg';
+        canvas.className = 'mx-auto shadow-[var(--shadow-float)] rounded-lg';
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvas, viewport }).promise;

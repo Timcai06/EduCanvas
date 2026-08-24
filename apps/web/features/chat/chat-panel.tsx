@@ -102,7 +102,7 @@ function AnimatedMessage({
   return (
     <div
       ref={rootRef}
-      className={className}
+      className={`chat-message-row ${className}`}
       data-chat-message-id={messageId}
       data-chat-message-role={role}
       tabIndex={-1}

@@ -315,7 +315,7 @@ export function SourceLinkImportPanel({
           onClick={() => setMode('url')}
           className={`min-h-11 rounded-xl px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
             mode === 'url'
-              ? 'bg-card text-ink shadow-sm'
+              ? 'bg-card text-ink shadow-[var(--shadow-float)]'
               : 'text-ink-muted hover:text-ink'
           }`}
         >
@@ -330,7 +330,7 @@ export function SourceLinkImportPanel({
           onClick={() => setMode('search')}
           className={`min-h-11 rounded-xl px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
             mode === 'search'
-              ? 'bg-card text-ink shadow-sm'
+              ? 'bg-card text-ink shadow-[var(--shadow-float)]'
               : 'text-ink-muted hover:text-ink'
           }`}
         >

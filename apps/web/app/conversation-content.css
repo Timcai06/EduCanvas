@@ -4,6 +4,16 @@
  */
 
 /*
+ * 消息行渲染跳过：长对话只绘制视口附近的「纸片」，离屏消息不参与 paint/layout，
+ * 显著降低长会话的 DOM 开销。contain-intrinsic-size 提供稳定的估计高度，避免滚动条跳动；
+ * 刚追加的最后一条在视口内，仍会正常渲染与流式入场。
+ */
+.chat-message-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
+/*
  * 助手消息 Markdown 排版。中文正文行高 1.8；标题走衬线显示字体，
  * 这是「课堂讲义」的排版身份。全部取色自语义 token，禁止散写色值。
  */
