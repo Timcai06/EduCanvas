@@ -7,12 +7,13 @@ import {
   MagnifyingGlass,
   Plus,
 } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   buildLearningSessionRailRows,
   getLearningRailCapabilities,
 } from './learning-rail-model';
 import { MarginaliaNav, type MarginaliaItem } from '../shared/marginalia-nav';
+import { useLenis } from '../shared/use-lenis';
 import { Sheet } from '@/components/sheet';
 
 interface LearningRailProps {
@@ -67,6 +68,9 @@ function SessionList({
 }
 
 function RailContents(props: LearningRailProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 学习记录列表是非流式、非虚拟化的长列表 → 启用 lenis 平滑滚动；reduced-motion 关闭。
+  useLenis(scrollRef);
   const capabilities = getLearningRailCapabilities({
     searchEnabled: props.searchEnabled === true,
     hasSearchCallback: Boolean(props.onSearch),
@@ -102,7 +106,7 @@ function RailContents(props: LearningRailProps) {
           />
         </label>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <SessionList
           sessions={props.sessions}
           currentSessionId={props.currentSessionId}
