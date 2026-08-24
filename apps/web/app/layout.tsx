@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import 'katex/dist/katex.min.css';
 
 import '@fontsource-variable/inter';
@@ -61,7 +62,11 @@ export default async function RootLayout({
     // suppressHydrationWarning：内联脚本会在水合前改写 data-theme，属于预期的服务端/客户端差异
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* 主题初始化：用 beforeInteractive 而非内联 <script>，避免 React 的
+            「script 标签不进组件树」告警；在 hydration 前写 data-theme/theme-color（防 FOUC） */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
         {/* 「两支笔」favicon：纸面亮/砚墨暗两档，避免与 OS 页签底色冲突（design-9） */}
         <link
           rel="icon"
