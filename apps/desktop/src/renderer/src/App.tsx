@@ -75,7 +75,7 @@ export default function App({
     message,
     setMessage,
   });
-  const chatScroll = useChatFollow(history.conversationId, history.revision);
+  const chatScroll = useChatFollow(history.conversationId, history.messages);
   const { speechCacheRef, prepareSpeech, cancelSpeechPreparation } =
     useSpeechPreparation({
       latestMessageId: lastAssistantMessage?.id,

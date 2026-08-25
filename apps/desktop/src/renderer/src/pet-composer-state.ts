@@ -98,6 +98,7 @@ export function useConversationComposer(input: {
 
   useEffect(() => {
     const previousConversationId = activeConversationRef.current;
+    currentNotebookRef.current = currentNotebookId;
     if (previousConversationId === currentConversationId) return;
     if (previousConversationId) {
       draftStoreRef.current.save(previousConversationId, {
@@ -106,7 +107,6 @@ export function useConversationComposer(input: {
       });
     }
     activeConversationRef.current = currentConversationId;
-    currentNotebookRef.current = currentNotebookId;
     const draft = draftStoreRef.current.load(
       currentConversationId,
       currentNotebookId,
@@ -126,6 +126,10 @@ export function useConversationComposer(input: {
     try {
       const result = await window.desktopAttachment.pick();
       if (result.ok) {
+        if (result.attachment.notebookId !== notebookIdAtPick) {
+          setMessage('附件与原对话不匹配，请重新选择。');
+          return;
+        }
         if (conversationIdAtPick !== activeConversationRef.current) {
           if (conversationIdAtPick) {
             const draft = draftStoreRef.current.load(

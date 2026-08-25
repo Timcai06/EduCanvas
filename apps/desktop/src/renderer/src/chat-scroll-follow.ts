@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type UIEvent } from 'react';
+import type { DesktopChatMessage } from '../../shared/chat-history';
 
 const BOTTOM_THRESHOLD_PX = 36;
 
@@ -13,7 +14,10 @@ export function isChatHistoryNearBottom(input: {
   );
 }
 
-export function useChatFollow(conversationId: string | null, revision: number) {
+export function useChatFollow(
+  conversationId: string | null,
+  messages: readonly DesktopChatMessage[],
+) {
   const historyScrollRef = useRef<HTMLDivElement | null>(null);
   const historyEndRef = useRef<HTMLDivElement | null>(null);
   const followingRef = useRef(true);
@@ -33,7 +37,7 @@ export function useChatFollow(conversationId: string | null, revision: number) {
   useEffect(() => {
     if (followingRef.current) scrollToLatest();
     else setShowJumpToLatest(true);
-  }, [revision]);
+  }, [messages]);
 
   const onHistoryScroll = (event: UIEvent<HTMLDivElement>): void => {
     const nearBottom = isChatHistoryNearBottom(event.currentTarget);
