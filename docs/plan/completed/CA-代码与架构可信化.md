@@ -9,7 +9,7 @@
 - 计划编写工作区：`fix/live-voice-orb@a33c225398bd4dda069e79ed84d5fc02a3efff96`
 - 关联计划：[LC Live 与 Canvas 输出](LC-Live与Canvas输出产品化.md)、
   [RM 统一资源工作台](RM-统一资源工作台.md)、[KM 知识记忆](../active/KM-知识记忆.md)、
-  [O 删除队列](../active/O-删除队列.md)、[G 产品发布闭环](../active/G-产品发布闭环.md)
+  [O 删除队列](O-删除队列.md)、[G 产品发布闭环](../active/G-产品发布闭环.md)
 - 联合执行模式：同一分支、同一工作树、单一代码任务队列
 - 远端 PR 策略：本轮不审计、不合并、不依赖远端 PR；Desktop 主链任务延后
 

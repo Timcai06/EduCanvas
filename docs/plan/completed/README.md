@@ -32,3 +32,4 @@
 | 2026-08-12 | [`LC-Live与Canvas输出产品化.md`](LC-Live与Canvas输出产品化.md)                       | Live 增量语音、Canvas 三类纵切、联合 provenance 与真实产品验收收口；资源体验缺口转 RM  |
 | 2026-08-13 | [`RM-统一资源工作台.md`](RM-统一资源工作台.md)                                       | Source/Artifact 统一摘要、Composer 单链、Dock/资源库、Canvas/Live 与 provenance 闭环   |
 | 2026-08-13 | [`CA-代码与架构可信化.md`](CA-代码与架构可信化.md)                                   | Turn 终态、配置/E2E/CI、身份、消息切读和热点边界收口；CA06 Desktop 延后                |
+| 2026-08-25 | [`O-删除队列.md`](O-删除队列.md)                                                     | 对象删除 Outbox 的并发领取、租约恢复、幂等终态、双存储根与脱敏失败边界收口       |
