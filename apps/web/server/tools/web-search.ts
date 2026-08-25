@@ -30,6 +30,7 @@ import {
   isSearXNGConfigured,
   type SearXNGAdapterConfig,
 } from './searxng-adapter';
+import { WEB_SEARCH_TOOL_TIMEOUT_MS } from './search-budgets';
 
 const searchInputSchema = z
   .object({ query: z.string().trim().min(1).max(200) })
@@ -149,7 +150,7 @@ export function createWebSearchTool(
       : '搜索互联网获取时效性信息。输入检索词，返回最多5条候选结果；搜索摘要不可直接作为引用。',
     inputSchema: searchInputSchema,
     outputSchema: searchOutputSchema,
-    timeoutMs: 10_000,
+    timeoutMs: WEB_SEARCH_TOOL_TIMEOUT_MS,
     handler: async ({ query }) => {
       const key = queryKey(query);
       if (completedQueries.has(key) || pendingQueries.has(key)) {

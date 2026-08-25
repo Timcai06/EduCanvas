@@ -16,6 +16,7 @@ import {
   toSearchResultFields,
 } from './search-url';
 import { readSearchProviderJson } from './search-provider-response';
+import { SEARCH_PROVIDER_TIMEOUT_MS } from './search-budgets';
 
 const tavilyResponseSchema = z.object({
   results: z
@@ -49,7 +50,7 @@ export function createTavilyAdapter(
   if (!baseUrl) {
     throw new SearchProviderError('search_invalid_response', false);
   }
-  const timeoutMs = config.timeoutMs ?? 8_000;
+  const timeoutMs = config.timeoutMs ?? SEARCH_PROVIDER_TIMEOUT_MS;
 
   return {
     name: 'tavily',

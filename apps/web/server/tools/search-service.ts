@@ -11,6 +11,10 @@ import {
   recordMetricSafely,
   type MetricsPort,
 } from '@educanvas/telemetry';
+import {
+  SEARCH_PROVIDER_TIMEOUT_MS,
+  SEARCH_TOTAL_BUDGET_MS,
+} from './search-budgets';
 
 export type SearchServiceFailureCode =
   | 'search_not_configured'
@@ -40,8 +44,8 @@ export interface SearchServiceConfig {
 }
 
 const DEFAULT_CONFIG: Required<SearchServiceConfig> = {
-  providerTimeoutMs: 8_000,
-  totalBudgetMs: 15_000,
+  providerTimeoutMs: SEARCH_PROVIDER_TIMEOUT_MS,
+  totalBudgetMs: SEARCH_TOTAL_BUDGET_MS,
   maxProviderAttempts: 2,
   maxResults: 15,
 };

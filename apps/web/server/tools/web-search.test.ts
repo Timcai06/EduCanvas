@@ -14,6 +14,8 @@ const { SearchProviderRegistry } = await import('./search-registry');
 const { ProviderHealthTracker } = await import('./provider-health');
 const { MetricsRegistry } = await import('@educanvas/telemetry');
 const { createFetchWebPageTool } = await import('./web-page');
+const { SEARCH_PROVIDER_TIMEOUT_MS, WEB_SEARCH_TOOL_TIMEOUT_MS } =
+  await import('./search-budgets');
 
 const context = {
   traceId: 't',
@@ -339,6 +341,58 @@ describe('SearchService failover', () => {
 });
 
 describe('Tavily adapter', () => {
+  it('keeps the default provider window open beyond the former eight-second cutoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const { createTavilyAdapter: createAdapter } =
+        await import('./tavily-adapter');
+      const provider = createAdapter({
+        apiKey: 'key',
+        fetchImpl: vi.fn(
+          async (_url: string | URL | Request, init?: RequestInit) =>
+            await new Promise<Response>((resolve, reject) => {
+              const timer = setTimeout(
+                () =>
+                  resolve(
+                    Response.json({
+                      results: [
+                        {
+                          title: 'Result',
+                          url: 'https://example.com/article',
+                          content: 'Summary',
+                        },
+                      ],
+                    }),
+                  ),
+                9_000,
+              );
+              init?.signal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  reject(new DOMException('Aborted', 'AbortError'));
+                },
+                { once: true },
+              );
+            }),
+        ) as typeof fetch,
+      });
+
+      const registry = new SearchProviderRegistry();
+      registry.register(provider);
+      const service = new SearchService({ registry });
+      const pending = service.search({ query: 'test', limit: 1 });
+      await vi.advanceTimersByTimeAsync(9_000);
+
+      await expect(pending).resolves.toMatchObject({
+        results: [{ url: 'https://example.com/article' }],
+      });
+      expect(SEARCH_PROVIDER_TIMEOUT_MS).toBeGreaterThan(9_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('overfetches up to the provider limit for candidate replacement', async () => {
     let capturedBody = '';
     const { createTavilyAdapter: createAdapter } =
@@ -706,6 +760,15 @@ describe('legacy Tavily compatibility', () => {
 });
 
 describe('createWebSearchTool budget', () => {
+  it('allows provider discovery and candidate preflight to share one bounded window', () => {
+    const tool = createWebSearchTool({
+      search: vi.fn().mockResolvedValue({ results: [] }),
+    });
+
+    expect(tool.timeoutMs).toBe(WEB_SEARCH_TOOL_TIMEOUT_MS);
+    expect(tool.timeoutMs).toBeGreaterThan(SEARCH_PROVIDER_TIMEOUT_MS);
+  });
+
   it('enforces 3 queries and 15 candidates per operation', async () => {
     const provider = {
       name: 'mock',
