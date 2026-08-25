@@ -102,8 +102,9 @@ describe('MVP pet controls', () => {
     expect(replay).toContain('setCanStop(false);');
     expect(voiceCompletion).toContain("if (result.outcome === 'success')");
     expect(voiceCompletion).toContain(
-      'if (result.speechPlayed) setMessage(result.reply);',
+      "if (result.speechPlayed) setMessage('语音回答已完成。');",
     );
+    expect(voiceCompletion).not.toContain('setMessage(result.reply)');
   });
 
   it('hides the dialog content and renders a restore control when folded', () => {

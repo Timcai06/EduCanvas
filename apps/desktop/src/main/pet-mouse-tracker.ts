@@ -1,8 +1,6 @@
 import {
-  MVP_CHAT_HEIGHT,
-  MVP_CHAT_WIDTH,
-  MVP_PADDING,
   chatExpandRect,
+  petChatRect,
   petVisibleRect,
 } from '../shared/pet-mvp-layout';
 
@@ -15,6 +13,8 @@ interface WindowBounds extends Point {
   width: number;
   height: number;
 }
+
+const RESIZE_BORDER_SIZE = 6;
 
 interface PetMouseTrackerOptions<THandle> {
   readCursor(): Point;
@@ -37,6 +37,19 @@ function isWithin(
   );
 }
 
+function isWithinResizeBorder(point: Point, bounds: WindowBounds): boolean {
+  return (
+    point.x >= 0 &&
+    point.y >= 0 &&
+    point.x < bounds.width &&
+    point.y < bounds.height &&
+    (point.x < RESIZE_BORDER_SIZE ||
+      point.y < RESIZE_BORDER_SIZE ||
+      point.x >= bounds.width - RESIZE_BORDER_SIZE ||
+      point.y >= bounds.height - RESIZE_BORDER_SIZE)
+  );
+}
+
 export function isPetInteractiveScreenPoint(
   windowBounds: WindowBounds,
   cursor: Point,
@@ -46,15 +59,11 @@ export function isPetInteractiveScreenPoint(
     x: cursor.x - windowBounds.x,
     y: cursor.y - windowBounds.y,
   };
-  const chat = {
-    x: MVP_PADDING,
-    y: windowBounds.height - MVP_PADDING - MVP_CHAT_HEIGHT,
-    width: MVP_CHAT_WIDTH,
-    height: MVP_CHAT_HEIGHT,
-  };
-  const pet = petVisibleRect(windowBounds.height);
-  const chatExpand = chatExpandRect(windowBounds.height);
+  const chat = petChatRect(windowBounds.width, windowBounds.height);
+  const pet = petVisibleRect(windowBounds.width, windowBounds.height);
+  const chatExpand = chatExpandRect(windowBounds.width, windowBounds.height);
   return (
+    isWithinResizeBorder(local, windowBounds) ||
     (chatExpanded && isWithin(local, chat)) ||
     (!chatExpanded && isWithin(local, chatExpand)) ||
     isWithin(local, pet)

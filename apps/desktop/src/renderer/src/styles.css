@@ -1,7 +1,7 @@
 :root {
   color: #27332d;
   font-family:
-    "Segoe UI Variable Text", "Microsoft YaHei UI", system-ui, sans-serif;
+    'Segoe UI Variable Text', 'Microsoft YaHei UI', system-ui, sans-serif;
   font-synthesis: none;
   --surface: rgba(255, 253, 247, 0.98);
   --surface-solid: #fffdf7;
@@ -47,7 +47,7 @@ select:focus-visible {
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-columns: 300px 176px;
+  grid-template-columns: minmax(300px, 1fr) 176px;
   align-items: end;
   gap: 8px;
   padding: 8px;
@@ -58,7 +58,7 @@ select:focus-visible {
 .pet-chat {
   position: relative;
   display: grid;
-  height: 224px;
+  height: 100%;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 12px;
@@ -79,7 +79,7 @@ select:focus-visible {
   width: 18px;
   height: 18px;
   background: var(--surface-solid);
-  content: "";
+  content: '';
   transform: rotate(-45deg);
 }
 .pet-chat header {
@@ -289,7 +289,7 @@ select:focus-visible {
   opacity: 0.9;
 }
 .chat-message.is-streaming > p::after {
-  content: "▍";
+  content: '▍';
   animation: pet-stream-caret 1s step-end infinite;
 }
 .chat-message__speak {
@@ -304,6 +304,33 @@ select:focus-visible {
   background: rgba(57, 78, 68, 0.08);
   color: #526159;
   cursor: pointer;
+}
+.chat-message__speech-controls {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+.chat-message__speech-controls .chat-message__speak {
+  margin: 0 4px;
+}
+.chat-message__speaking {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 5px 2px;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 650;
+}
+.chat-message__speaking::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: '';
+  animation: pet-speaking-dot 1.2s ease-in-out infinite;
 }
 .chat-message__speak svg {
   width: 14px;
@@ -444,6 +471,13 @@ select:focus-visible {
   50% {
     box-shadow: 0 0 0 6px rgba(45, 138, 99, 0.08);
     transform: scale(0.88);
+  }
+}
+
+@keyframes pet-speaking-dot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
   }
 }
 
@@ -929,5 +963,8 @@ select:focus-visible {
   .pet-chat__dot.is-active {
     animation: none;
     transition: none;
+  }
+  .chat-message__speaking::before {
+    animation: none;
   }
 }

@@ -372,13 +372,15 @@ export default function App({
               setMessage('正在识别语音…');
             else if (snapshot.phase === 'thinking')
               setMessage('EduCanvas 正在思考…');
-            else if (snapshot.phase === 'speaking')
-              setMessage(snapshot.reply ?? '正在播报回答…');
+            else if (snapshot.phase === 'speaking') {
+              setSpeakingMessageId(snapshot.assistantMessageId ?? null);
+              setMessage('正在朗读…');
+            }
           },
         },
       );
       if (result.outcome === 'success') {
-        if (result.speechPlayed) setMessage(result.reply);
+        if (result.speechPlayed) setMessage('语音回答已完成。');
       } else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
       else if (result.code === 'interrupted') setPendingResume(voiceId);
@@ -386,6 +388,7 @@ export default function App({
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
       setCanStop(false);
+      setSpeakingMessageId(null);
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);
@@ -447,7 +450,7 @@ export default function App({
         speechBytes = speech.bytes;
         speechCacheRef.current = { key: cacheKey, bytes: speech.bytes };
       }
-      setMessage(reply);
+      setMessage('正在朗读…');
       const playback = await playSpeech(speechBytes, {
         signal: controller.signal,
       });
@@ -552,6 +555,7 @@ export default function App({
       canResume={pendingResume !== null}
       directory={directory}
       selectConversation={async (conversationId) => {
+        if (state === 'speaking') cancel();
         const next = await window.desktopConversation.select(conversationId);
         setDirectory(next);
         setMessage('已切换对话。');

@@ -40,6 +40,7 @@ describe('runVoiceSession', () => {
     const phases: string[] = [];
     const transcripts: string[] = [];
     const replies: string[] = [];
+    const speakingMessageIds: Array<string | undefined> = [];
     const deps = successfulDependencies();
 
     const result = await runVoiceSession(deps, {
@@ -48,6 +49,8 @@ describe('runVoiceSession', () => {
         phases.push(snapshot.phase);
         if (snapshot.transcript) transcripts.push(snapshot.transcript);
         if (snapshot.reply) replies.push(snapshot.reply);
+        if (snapshot.phase === 'speaking')
+          speakingMessageIds.push(snapshot.assistantMessageId);
       },
     });
 
@@ -68,6 +71,7 @@ describe('runVoiceSession', () => {
     ]);
     expect(transcripts).toContain('整理今天的数学笔记');
     expect(replies).toContain('好的，我来帮你整理。');
+    expect(speakingMessageIds).toEqual(['message:assistant:one']);
     expect(deps.synthesize).toHaveBeenCalledWith(
       '好的，我来帮你整理。',
       expect.any(String),

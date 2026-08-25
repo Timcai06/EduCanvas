@@ -120,7 +120,7 @@ export function PetChatComposer(props: {
           value={text}
           rows={expandedView ? 3 : 2}
           maxLength={4_000}
-          disabled={busy}
+          disabled={busy && state !== 'speaking'}
           placeholder={
             pendingAttachment ? '补充你想了解的内容…' : '问问我任何问题…'
           }

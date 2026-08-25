@@ -18,7 +18,7 @@ describe('desktop pet mouse tracker', () => {
     expect(isPetInteractiveScreenPoint(windowBounds, { x: 412, y: 220 })).toBe(
       false,
     );
-    expect(isPetInteractiveScreenPoint(windowBounds, { x: 594, y: 205 })).toBe(
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 594, y: 210 })).toBe(
       false,
     );
     expect(isPetInteractiveScreenPoint(windowBounds, { x: 450, y: 283 })).toBe(
@@ -65,6 +65,31 @@ describe('desktop pet mouse tracker', () => {
     expect(
       isPetInteractiveScreenPoint(windowBounds, { x: 500, y: 340 }, false),
     ).toBe(true);
+  });
+
+  it('keeps the enlarged chat surface interactive after resizing', () => {
+    const windowBounds = { x: 100, y: 200, width: 700, height: 420 };
+
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 570, y: 250 })).toBe(
+      true,
+    );
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 610, y: 250 })).toBe(
+      false,
+    );
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 730, y: 500 })).toBe(
+      true,
+    );
+  });
+
+  it('keeps the transparent native resize border interactive', () => {
+    const windowBounds = { x: 100, y: 200, width: 700, height: 420 };
+
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 101, y: 201 })).toBe(
+      true,
+    );
+    expect(isPetInteractiveScreenPoint(windowBounds, { x: 799, y: 400 })).toBe(
+      true,
+    );
   });
 
   it('keeps the visible restore-chat button clickable while the dialog is folded', () => {

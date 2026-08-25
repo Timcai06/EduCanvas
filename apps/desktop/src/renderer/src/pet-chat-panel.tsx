@@ -190,6 +190,13 @@ export function PetChatPanel(props: {
                 {item.attachment.displayName}
               </small>
             )}
+            {item.role === 'assistant' &&
+              state === 'speaking' &&
+              speakingMessageId === item.id && (
+                <span className="chat-message__speaking" role="status">
+                  正在朗读
+                </span>
+              )}
             <p>
               {item.content}
               {item.status === 'streaming' ? '▍' : ''}
@@ -201,24 +208,28 @@ export function PetChatPanel(props: {
                 const selected =
                   state === 'speaking' && speakingMessageId === item.id;
                 return (
-                  <button
-                    className={`chat-message__speak${selected ? ' is-active' : ''}`}
-                    type="button"
-                    aria-label={selected ? '停止朗读' : '朗读此回答'}
-                    title={selected ? '停止朗读' : '朗读此回答'}
-                    disabled={busy && !selected}
-                    onPointerEnter={() => prepareSpeech(item.id, item.content)}
-                    onPointerLeave={cancelSpeechPreparation}
-                    onFocus={() => prepareSpeech(item.id, item.content)}
-                    onBlur={cancelSpeechPreparation}
-                    onClick={() =>
-                      selected
-                        ? cancel()
-                        : void speakMessage(item.id, item.content)
-                    }
-                  >
-                    <SpeakerIcon />
-                  </button>
+                  <div className="chat-message__speech-controls">
+                    <button
+                      className={`chat-message__speak${selected ? ' is-active' : ''}`}
+                      type="button"
+                      aria-label={selected ? '停止朗读' : '朗读此回答'}
+                      title={selected ? '停止朗读' : '朗读此回答'}
+                      disabled={busy && !selected}
+                      onPointerEnter={() =>
+                        prepareSpeech(item.id, item.content)
+                      }
+                      onPointerLeave={cancelSpeechPreparation}
+                      onFocus={() => prepareSpeech(item.id, item.content)}
+                      onBlur={cancelSpeechPreparation}
+                      onClick={() =>
+                        selected
+                          ? cancel()
+                          : void speakMessage(item.id, item.content)
+                      }
+                    >
+                      <SpeakerIcon />
+                    </button>
+                  </div>
                 );
               })()}
             {item.role === 'assistant' && (
@@ -231,7 +242,8 @@ export function PetChatPanel(props: {
     </div>
   );
 
-  const statusLine = (history.messages.length === 0 || state !== 'ready') && (
+  const statusLine = (history.messages.length === 0 ||
+    (state !== 'ready' && state !== 'speaking')) && (
     <p className="pet-chat__status" role="status">
       {message}
     </p>
@@ -347,7 +359,7 @@ export function PetChatPanel(props: {
                       ? ' is-active'
                       : ''
                   }`}
-                  disabled={busy}
+                  disabled={busy && state !== 'speaking'}
                   aria-current={
                     item.conversationId === directory.currentConversationId
                       ? 'true'

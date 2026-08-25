@@ -36,7 +36,9 @@ describe('savePetPositionFile', () => {
     >;
     expect(saved.x).toBe(100);
     expect(saved.y).toBe(200);
-    expect(saved.version).toBe(2);
+    expect(saved.width).toBe(128);
+    expect(saved.height).toBe(128);
+    expect(saved.version).toBe(3);
   });
 
   it('父目录不存在时自动创建', () => {
@@ -46,11 +48,19 @@ describe('savePetPositionFile', () => {
     expect(existsSync(file)).toBe(true);
   });
 
-  it('ignores unversioned positions from the old 128px window layout', () => {
+  it('restores a saved size and keeps version 2 positions compatible', () => {
     const dir = tmpDir();
     const file = join(dir, 'pet-window.json');
     savePetPositionFile(file, { x: 10, y: 20, width: 500, height: 240 });
-    expect(loadPetPositionFile(file)).toEqual({ x: 10, y: 20 });
+    expect(loadPetPositionFile(file)).toEqual({
+      x: 10,
+      y: 20,
+      width: 500,
+      height: 240,
+    });
+
+    writeFileSync(file, JSON.stringify({ version: 2, x: 7, y: 8 }));
+    expect(loadPetPositionFile(file)).toEqual({ x: 7, y: 8 });
 
     writeFileSync(file, JSON.stringify({ x: 10, y: 20 }));
     expect(loadPetPositionFile(file)).toBeNull();
