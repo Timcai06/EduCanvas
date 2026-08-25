@@ -25,18 +25,20 @@ import { applyAssistantProjection } from './assistant-stream';
 import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
 import { openDesktopResult } from './result-actions';
 import {
+  findCurrentNotebookId,
   initialChatHistory,
   initialConversationDirectory,
-  useDesktopAttachment,
+  useConversationComposer,
   useSpeechPreparation,
 } from './pet-composer-state';
+import { useChatFollow } from './chat-scroll-follow';
+import { createOperationCompletionTracker } from './operation-completion';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
   view = 'pet',
 }: PetAppProps = {}) {
   const expandedView = view === 'chat';
-  const [text, setText] = useState('');
   const [chatCollapsed, setChatCollapsed] = useState(initialChatCollapsed);
   const [state, setState] = useState<PetUiState>('ready');
   const [visualState, setVisualState] = useState<PetUiState>('greeting');
@@ -58,8 +60,8 @@ export default function App({
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
   const submitGateRef = useRef(createPetSubmitGate());
+  const operationCompletionRef = useRef(createOperationCompletionTracker());
   const authStateRef = useRef<DesktopAuthStatus['state'] | null>(null);
-  const historyEndRef = useRef<HTMLDivElement | null>(null);
   const petVisual = petVisualForState(visualState);
   const petAsset = PET_VISUALS[petVisual];
   const lastAssistantMessage = history.messages.findLast(
@@ -67,12 +69,13 @@ export default function App({
   );
   const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
-  const currentNotebookId =
-    directory.conversations.find(
-      (item) => item.conversationId === directory.currentConversationId,
-    )?.notebookId ?? null;
-  const { pendingAttachment, attachmentBusy, pickAttachment, clearAttachment } =
-    useDesktopAttachment({ currentNotebookId, message, setMessage });
+  const composer = useConversationComposer({
+    currentConversationId: directory.currentConversationId,
+    currentNotebookId: findCurrentNotebookId(directory),
+    message,
+    setMessage,
+  });
+  const chatScroll = useChatFollow(history.conversationId, history.messages);
   const { speechCacheRef, prepareSpeech, cancelSpeechPreparation } =
     useSpeechPreparation({
       latestMessageId: lastAssistantMessage?.id,
@@ -217,10 +220,6 @@ export default function App({
     if (!expandedView) window.desktopPet.setChatExpanded(!chatCollapsed);
   }, [chatCollapsed, expandedView]);
 
-  useEffect(() => {
-    historyEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [history.messages.length]);
-
   const requireAuth = async (): Promise<boolean> => {
     const auth = await window.desktopAuth.getStatus();
     setAuthState(auth.state);
@@ -252,13 +251,17 @@ export default function App({
   };
 
   const submit = async (): Promise<void> => {
+    if (state === 'speaking') {
+      cancel();
+      await operationCompletionRef.current.wait();
+    }
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     setPendingResume(null);
     let leaseToken: string | null = null;
     try {
-      const prompt = text.trim();
-      if (!prompt && !pendingAttachment) {
+      const prompt = composer.text.trim();
+      if (!prompt && !composer.pendingAttachment) {
         setState('confused');
         publishVisual('confused');
         setMessage('请输入内容或选择附件。');
@@ -274,7 +277,7 @@ export default function App({
 
       const requestId = crypto.randomUUID();
       const clientMessageId = `desktop:${crypto.randomUUID()}`;
-      const attachment = pendingAttachment;
+      const attachment = composer.pendingAttachment;
       requestIdRef.current = requestId;
       setState('sending');
       publishVisual('sending');
@@ -296,9 +299,9 @@ export default function App({
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
-      if (attachment) clearAttachment();
+      if (attachment) composer.clearAttachment();
       if (result.ok) {
-        setText('');
+        composer.setText('');
         setState('ready');
         publishVisual(petUiStateForTurnAction(result.action));
         setMessage(result.reply);
@@ -337,6 +340,7 @@ export default function App({
       submitGateRef.current.leave(submitToken);
       return;
     }
+    const completeOperation = operationCompletionRef.current.begin();
     const controller = new AbortController();
     operationControllerRef.current = controller;
     setCanStop(true);
@@ -393,6 +397,7 @@ export default function App({
       publishVisual(terminalState);
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
+      completeOperation();
     }
   };
 
@@ -412,6 +417,7 @@ export default function App({
       submitGateRef.current.leave(submitToken);
       return;
     }
+    const completeOperation = operationCompletionRef.current.begin();
     const controller = new AbortController();
     operationControllerRef.current = controller;
     const requestId = crypto.randomUUID();
@@ -467,6 +473,7 @@ export default function App({
       publishVisual(terminalState);
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
+      completeOperation();
     }
   };
 
@@ -533,18 +540,15 @@ export default function App({
       authState={authState}
       message={message}
       history={history}
-      historyEndRef={historyEndRef}
-      text={text}
+      {...chatScroll}
+      {...composer}
       busy={busy}
       canStop={canStop}
       lastAssistantReply={lastAssistantReply}
       speakingMessageId={speakingMessageId}
-      setText={setText}
       collapse={() => setChatCollapsed(true)}
       submit={submit}
-      signIn={async () => {
-        await requireAuth();
-      }}
+      signIn={async () => void (await requireAuth())}
       startVoice={startVoice}
       speakLatest={speakLatest}
       speakMessage={speakMessage}
@@ -569,10 +573,6 @@ export default function App({
         setMessage(next.error ?? '新对话已创建。');
       }}
       openResult={(target) => openDesktopResult(target).then(setMessage)}
-      pendingAttachment={pendingAttachment}
-      attachmentBusy={attachmentBusy}
-      pickAttachment={pickAttachment}
-      clearAttachment={clearAttachment}
     />
   );
 

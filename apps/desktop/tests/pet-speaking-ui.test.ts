@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PetChatPanel } from '../src/renderer/src/pet-chat-panel';
 
-function renderSpeakingPanel(): string {
+function renderSpeakingPanel(showJumpToLatest = false): string {
   return renderToStaticMarkup(
     createElement(PetChatPanel as ComponentType<Record<string, unknown>>, {
       expandedView: false,
@@ -27,6 +27,10 @@ function renderSpeakingPanel(): string {
         loading: false,
       },
       historyEndRef: { current: null },
+      historyScrollRef: { current: null },
+      showJumpToLatest,
+      onHistoryScroll: () => undefined,
+      jumpToLatest: () => undefined,
       text: '播报时仍可继续输入',
       busy: true,
       canStop: true,
@@ -85,5 +89,20 @@ describe('desktop speech interaction', () => {
 
     expect(textarea).not.toContain('disabled');
     expect(html).toContain('>播报时仍可继续输入</textarea>');
+  });
+
+  it('keeps send available so a new message can interrupt playback', () => {
+    const html = renderSpeakingPanel();
+    const sendButton =
+      html.match(/<button[^>]*aria-label="发送消息"[^>]*>/)?.[0] ?? '';
+
+    expect(sendButton).not.toContain('disabled');
+  });
+
+  it('offers a keyboard-accessible way back after reading older messages', () => {
+    const html = renderSpeakingPanel(true);
+
+    expect(html).toContain('aria-label="回到最新消息"');
+    expect(html).toContain('>↓ 最新</button>');
   });
 });

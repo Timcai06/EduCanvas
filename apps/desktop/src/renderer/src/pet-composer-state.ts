@@ -24,43 +24,126 @@ export function initialConversationDirectory(): DesktopConversationDirectorySnap
   };
 }
 
-export function useDesktopAttachment(input: {
+export function findCurrentNotebookId(
+  directory: DesktopConversationDirectorySnapshot,
+): string | null {
+  return (
+    directory.conversations.find(
+      (item) => item.conversationId === directory.currentConversationId,
+    )?.notebookId ?? null
+  );
+}
+
+interface ConversationDraft {
+  text: string;
+  attachment: DesktopAttachmentRef | null;
+}
+
+export function createConversationDraftStore() {
+  const drafts = new Map<string, ConversationDraft>();
+  return {
+    save(conversationId: string, draft: ConversationDraft): void {
+      drafts.set(conversationId, draft);
+    },
+    load(
+      conversationId: string | null,
+      notebookId: string | null,
+    ): ConversationDraft {
+      const draft = conversationId ? drafts.get(conversationId) : undefined;
+      return {
+        text: draft?.text ?? '',
+        attachment:
+          draft?.attachment?.notebookId === notebookId
+            ? draft.attachment
+            : null,
+      };
+    },
+  };
+}
+
+export function useConversationComposer(input: {
+  currentConversationId: string | null;
   currentNotebookId: string | null;
   message: string;
   setMessage(message: string): void;
 }): {
+  text: string;
+  setText(value: string): void;
   pendingAttachment: DesktopAttachmentRef | null;
   attachmentBusy: boolean;
   pickAttachment(): Promise<void>;
   clearAttachment(): void;
 } {
-  const { currentNotebookId, message, setMessage } = input;
+  const { currentConversationId, currentNotebookId, message, setMessage } =
+    input;
+  const [text, setTextState] = useState('');
   const [pendingAttachment, setPendingAttachment] =
     useState<DesktopAttachmentRef | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const attachmentBusyRef = useRef(false);
+  const draftStoreRef = useRef(createConversationDraftStore());
+  const activeConversationRef = useRef(currentConversationId);
   const currentNotebookRef = useRef(currentNotebookId);
+  const textRef = useRef(text);
+  const attachmentRef = useRef(pendingAttachment);
 
-  // Assets are notebook-scoped. Clear a stale pick immediately on navigation;
-  // the server-side access check remains the fail-closed boundary.
+  const setText = (value: string): void => {
+    textRef.current = value;
+    setTextState(value);
+  };
+  const setAttachment = (attachment: DesktopAttachmentRef | null): void => {
+    attachmentRef.current = attachment;
+    setPendingAttachment(attachment);
+  };
+
   useEffect(() => {
-    if (currentNotebookRef.current === currentNotebookId) return;
+    const previousConversationId = activeConversationRef.current;
     currentNotebookRef.current = currentNotebookId;
-    setPendingAttachment((pending) =>
-      pending && pending.notebookId !== currentNotebookId ? null : pending,
+    if (previousConversationId === currentConversationId) return;
+    if (previousConversationId) {
+      draftStoreRef.current.save(previousConversationId, {
+        text: textRef.current,
+        attachment: attachmentRef.current,
+      });
+    }
+    activeConversationRef.current = currentConversationId;
+    const draft = draftStoreRef.current.load(
+      currentConversationId,
+      currentNotebookId,
     );
-  }, [currentNotebookId]);
+    setText(draft.text);
+    setAttachment(draft.attachment);
+  }, [currentConversationId, currentNotebookId]);
 
   const pickAttachment = async (): Promise<void> => {
     if (attachmentBusyRef.current) return;
     attachmentBusyRef.current = true;
     setAttachmentBusy(true);
     const messageBeforePick = message;
+    const conversationIdAtPick = activeConversationRef.current;
     const notebookIdAtPick = currentNotebookId;
     setMessage('正在选择并上传附件…');
     try {
       const result = await window.desktopAttachment.pick();
       if (result.ok) {
+        if (result.attachment.notebookId !== notebookIdAtPick) {
+          setMessage('附件与原对话不匹配，请重新选择。');
+          return;
+        }
+        if (conversationIdAtPick !== activeConversationRef.current) {
+          if (conversationIdAtPick) {
+            const draft = draftStoreRef.current.load(
+              conversationIdAtPick,
+              notebookIdAtPick,
+            );
+            draftStoreRef.current.save(conversationIdAtPick, {
+              ...draft,
+              attachment: result.attachment,
+            });
+          }
+          setMessage('附件已保存到原对话草稿。');
+          return;
+        }
         if (
           notebookIdAtPick !== currentNotebookRef.current ||
           result.attachment.notebookId !== currentNotebookRef.current
@@ -68,10 +151,11 @@ export function useDesktopAttachment(input: {
           setMessage('对话已切换，请重新选择附件。');
           return;
         }
-        setPendingAttachment(result.attachment);
+        setAttachment(result.attachment);
         setMessage('附件已就绪，可以发送。');
       } else if (result.message === '已取消选择附件。') {
-        setMessage(messageBeforePick);
+        if (conversationIdAtPick === activeConversationRef.current)
+          setMessage(messageBeforePick);
       } else {
         setMessage(result.message);
       }
@@ -84,10 +168,12 @@ export function useDesktopAttachment(input: {
   };
 
   return {
+    text,
+    setText,
     pendingAttachment,
     attachmentBusy,
     pickAttachment,
-    clearAttachment: () => setPendingAttachment(null),
+    clearAttachment: () => setAttachment(null),
   };
 }
 
