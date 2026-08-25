@@ -55,6 +55,11 @@ describe('DP11 Windows package configuration', () => {
   it('keeps the Windows benchmark inside the package process tree', () => {
     expect(benchmark).toContain('apps\\desktop\\dist');
     expect(benchmark).toContain('ConvertTo-Json');
+    expect(benchmark).toContain('Remember-RecordedProcessTree');
+    expect(benchmark).toContain('$recordedProcesses.Values');
+    expect(benchmark).toContain(
+      '$liveRecord.CreationDate -ne $record.CreationDate',
+    );
     expect(benchmark).toMatch(/Stop-Process -Id \$pidValue/);
     expect(benchmark).not.toMatch(/taskkill/i);
     expect(benchmark).not.toMatch(/Stop-Process[^\r\n]*-Name/i);

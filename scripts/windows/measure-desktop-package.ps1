@@ -84,17 +84,28 @@ function Hide-RecordedWindows($Records) {
   }
 }
 
+function Remember-RecordedProcessTree($Records, [hashtable]$RecordedProcesses) {
+  foreach ($record in $Records) {
+    $key = "{0}|{1:o}" -f $record.ProcessId, $record.CreationDate
+    if (-not $RecordedProcesses.ContainsKey($key)) {
+      $RecordedProcesses[$key] = $record
+    }
+  }
+}
+
 $startedAt = Get-Date
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $root = Start-Process -FilePath $ResolvedExecutable -PassThru -WindowStyle Hidden
 $readyMilliseconds = $null
 $readyProcessId = $null
 $result = $null
+$recordedProcesses = @{}
 
 try {
   $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
   do {
     $tree = Get-RecordedProcessTree $root.Id
+    Remember-RecordedProcessTree $tree $recordedProcesses
     foreach ($record in $tree) {
       try {
         $process = Get-Process -Id $record.ProcessId -ErrorAction Stop
@@ -116,6 +127,7 @@ try {
   }
 
   $tree = Get-RecordedProcessTree $root.Id
+  Remember-RecordedProcessTree $tree $recordedProcesses
   Hide-RecordedWindows $tree
   $cpuBefore = @{}
   foreach ($record in $tree) {
@@ -126,6 +138,7 @@ try {
   Start-Sleep -Seconds $IdleSampleSeconds
 
   $tree = Get-RecordedProcessTree $root.Id
+  Remember-RecordedProcessTree $tree $recordedProcesses
   Hide-RecordedWindows $tree
   $cpuDelta = 0.0
   $workingSetBytes = 0L
@@ -167,12 +180,15 @@ try {
   }
 } finally {
   if (-not $KeepRunning) {
-    $tree = Get-RecordedProcessTree $root.Id | Sort-Object Depth -Descending
-    foreach ($record in $tree) {
-      # Only stop the exact process tree created by this invocation. Creation time
-      # prevents a recycled PID from widening the cleanup boundary.
+    Remember-RecordedProcessTree (Get-RecordedProcessTree $root.Id) $recordedProcesses
+    $recordedTree = @($recordedProcesses.Values) | Sort-Object Depth -Descending
+    foreach ($record in $recordedTree) {
+      # Keep descendants observed before a short-lived portable launcher exits,
+      # while requiring the live PID to retain the recorded creation time.
       if ($record.CreationDate -lt $startedAt) { continue }
       $pidValue = [int]$record.ProcessId
+      $liveRecord = Get-CimInstance Win32_Process -Filter "ProcessId = $pidValue" -ErrorAction SilentlyContinue
+      if (-not $liveRecord -or $liveRecord.CreationDate -ne $record.CreationDate) { continue }
       Stop-Process -Id $pidValue -Force -ErrorAction SilentlyContinue
     }
   }
