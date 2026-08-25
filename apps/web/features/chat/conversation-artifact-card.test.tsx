@@ -19,8 +19,12 @@ describe('ConversationArtifactCard', () => {
   it('proposed 态渲染 spinner 与进度条，完成时只播放一次脉冲', () => {
     expect(source).toContain('CircleNotch');
     expect(source).toContain('animate-spin');
-    expect(source).toContain('role="progressbar"');
-    expect(source).toContain('aria-valuenow');
+    expect(source).toContain(
+      "import { Progress } from '@/components/ui/progress'",
+    );
+    expect(source).toContain('<Progress');
+    expect(source).toContain('value={progress}');
+    expect(source).toContain('生成进度`');
     expect(source).toContain('生成中 ');
     expect(source).toContain("previous !== 'proposed'");
     expect(source).toContain("artifact.status !== 'active'");
