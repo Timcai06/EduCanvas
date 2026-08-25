@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadMineruConfig, validateSubmitResponse } from './mineru-client';
+import { validateSubmitResponse } from './mineru-client';
+import { loadMineruConfig } from './mineru-config';
 
 describe('MinerU 服务端请求边界', () => {
   it.each([

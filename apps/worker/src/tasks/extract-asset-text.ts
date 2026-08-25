@@ -17,6 +17,7 @@ import {
   unpackMineruZip,
   validateMineruEntries,
   waitForMineruTask,
+  type MineruBackend,
 } from '@educanvas/asset-processing';
 import { LocalObjectStorage } from '@educanvas/agent-runtime';
 import type { Logger, Task } from 'graphile-worker';
@@ -77,6 +78,7 @@ async function tryStructuredExtraction(input: {
   mimeType: string;
   filename: string;
   baseUrl: string;
+  backend?: MineruBackend;
   storage: LocalObjectStorage;
   jobId: string;
   logger: Logger;
@@ -85,6 +87,7 @@ async function tryStructuredExtraction(input: {
   try {
     const submitted = await submitMineruTask({
       baseUrl: input.baseUrl,
+      ...(input.backend ? { backend: input.backend } : {}),
       filename: input.filename,
       fileBytes: input.bytes,
       contentType: input.mimeType,
@@ -227,7 +230,7 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
       const config = loadMineruConfig(process.env);
       if (config === null) {
         helpers.logger.warn(
-          `MinerU 未配置（MINERU_BASE_URL），文档降级纯文本抽取 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} mimeType=${pending.mimeType}`,
+          `MinerU 配置不可用（MINERU_BASE_URL/MINERU_BACKEND），文档降级纯文本抽取 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} mimeType=${pending.mimeType}`,
         );
       } else {
         const structured = await tryStructuredExtraction({
@@ -236,6 +239,7 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
           /* storageKey 保留原文件名（uploads/<owner>/<name>），取 basename 提交。 */
           filename: pending.storageKey.split('/').pop() ?? 'document',
           baseUrl: config.baseUrl,
+          ...(config.backend ? { backend: config.backend } : {}),
           storage,
           jobId: payload.jobId,
           logger: helpers.logger,
