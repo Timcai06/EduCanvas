@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { motionDuration } from '@/features/theme/motion';
+import { Badge } from '@/components/ui/badge';
 import {
   useCallback,
   useEffect,
@@ -392,9 +393,9 @@ export function AnimationShell({
             <span className="text-ink">{currentLabel}</span>
           </p>
           {reducedMotion ? (
-            <span className="shrink-0 rounded-full bg-accent-soft px-2 py-1 text-xs text-accent-strong">
+            <Badge variant="accent" className="shrink-0">
               减少动态
-            </span>
+            </Badge>
           ) : null}
         </div>
 
