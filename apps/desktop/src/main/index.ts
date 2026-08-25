@@ -23,6 +23,7 @@ import { toAssistantProjection } from './assistant-projection';
 import { createOperationRegistry } from './operation-registry';
 import { registerOperationIpc } from './operation-ipc';
 import { createVoiceProxy } from './voice-proxy';
+import { createSpeechReplayCache } from './speech-replay-cache';
 import { isAllowedVoicePermission } from './voice-permission';
 import { IpcAbortRegistry } from './ipc-abort-registry';
 import { createDesktopSessionStore } from './desktop-session-store';
@@ -37,7 +38,10 @@ import { createPetMouseTracker } from './pet-mouse-tracker';
 import { createExpandedChatWindow } from './chat-window';
 import { createChatHistoryStore } from './chat-history-store';
 import type { DesktopChatMessageInput } from '../shared/chat-history';
-import type { DesktopAttachmentRef } from '../shared/desktop-attachment';
+import {
+  isDesktopAssistantTurnInput,
+  isDesktopAttachmentRef,
+} from './assistant-turn-input';
 import { isPetVisualSignal } from '../shared/pet-visual-signal';
 import { createAttachmentUpload } from './attachment-upload';
 import { createOperationLease } from './operation-lease';
@@ -51,28 +55,6 @@ const WEB_BASE_URL =
 const GATEWAY_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_GATEWAY_URL'] ?? 'http://127.0.0.1:3200';
 
-/** renderer 提交的附件投影边界校验（DP10）：字段必须全部是非空短字符串。 */
-function isDesktopAttachmentRef(value: unknown): value is DesktopAttachmentRef {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.assetId === 'string' &&
-    record.assetId.length > 0 &&
-    record.assetId.length <= 160 &&
-    typeof record.versionId === 'string' &&
-    record.versionId.length > 0 &&
-    record.versionId.length <= 160 &&
-    typeof record.kind === 'string' &&
-    record.kind.length <= 64 &&
-    typeof record.mimeType === 'string' &&
-    record.mimeType.length <= 255 &&
-    typeof record.displayName === 'string' &&
-    record.displayName.length <= 300 &&
-    typeof record.notebookId === 'string' &&
-    record.notebookId.length > 0 &&
-    record.notebookId.length <= 160
-  );
-}
 // Electron deep-link registration and platform callbacks follow the official pattern:
 // https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
 if (process.defaultApp && process.argv[1]) {
@@ -118,6 +100,9 @@ if (!app.requestSingleInstanceLock()) {
   };
   const proxy = createAssistantProxy(authAccess);
   const voiceProxy = createVoiceProxy(authAccess);
+  const speechReplayCache = createSpeechReplayCache((input, signal) =>
+    voiceProxy.synthesize(input, signal),
+  );
   const abortRegistry = new IpcAbortRegistry();
   const chatHistory = createChatHistoryStore();
   const operationLease = createOperationLease();
@@ -318,6 +303,38 @@ if (!app.requestSingleInstanceLock()) {
       return snapshot;
     },
   );
+  ipcMain.on(
+    'voice:prefetch',
+    (
+      event,
+      payload: { text?: unknown; assistantMessageId?: unknown } | null,
+    ) => {
+      if (!isDesktopSender(event.sender.id)) return;
+      if (
+        !payload ||
+        typeof payload.text !== 'string' ||
+        !payload.text.trim() ||
+        payload.text.length > 3_500 ||
+        typeof payload.assistantMessageId !== 'string' ||
+        !payload.assistantMessageId ||
+        payload.assistantMessageId.length > 200
+      )
+        return;
+      const latestAssistant = chatHistory
+        .state()
+        .messages.findLast((message) => message.role === 'assistant');
+      if (
+        latestAssistant?.id !== payload.assistantMessageId ||
+        latestAssistant.content !== payload.text ||
+        latestAssistant.status !== 'completed'
+      )
+        return;
+      speechReplayCache.prefetch({
+        text: payload.text,
+        assistantMessageId: payload.assistantMessageId,
+      });
+    },
+  );
   ipcMain.handle(
     'conversation:create',
     async (event, input: DesktopConversationCreateInput) => {
@@ -406,100 +423,79 @@ if (!app.requestSingleInstanceLock()) {
       authCoordinator?.signOut() ?? Promise.resolve({ state: 'signed_out' })
     );
   });
-  ipcMain.handle(
-    'assistant:turn',
-    async (
-      event,
-      payload: {
-        requestId: string;
-        text: string;
-        source?: 'text' | 'voice';
-        clientMessageId?: string;
-        leaseToken: string;
-        attachment?: DesktopAttachmentRef;
-      },
-    ) => {
-      if (!isDesktopSender(event.sender.id))
-        throw new Error('Untrusted renderer');
-      if (
-        !payload ||
-        typeof payload.leaseToken !== 'string' ||
-        !operationLease.holds(event.sender.id, payload.leaseToken) ||
-        typeof payload.text !== 'string' ||
-        payload.text.length > 4_000 ||
-        !['text', 'voice'].includes(payload.source ?? 'text') ||
-        (payload.clientMessageId !== undefined &&
-          (typeof payload.clientMessageId !== 'string' ||
-            payload.clientMessageId.length > 200)) ||
-        !isDesktopAttachmentRef(payload.attachment)
-      )
-        throw new Error('Invalid assistant turn');
-      const signal = abortRegistry.begin(payload.requestId, event.sender.id);
-      const cursor = conversations.currentCursor();
-      const routeRevision = conversations.state().revision;
-      const clientMessageId = payload.clientMessageId;
-      const conversationId = cursor?.conversationId ?? null;
-      const publishProjection = (rawEvent: GatewayOperationEvent): void => {
-        if (!conversationId) return;
-        // 路由已切换：旧 operation 的迟到事件不得投影到新会话视图。
-        if (conversations.state().revision !== routeRevision) return;
-        const projection = toAssistantProjection(rawEvent, {
-          requestId: payload.requestId,
-          clientMessageId: clientMessageId ?? null,
-          conversationId,
-        });
-        if (projection) sendToDesktopRenderers('assistant:event', projection);
-      };
-      const tracker: TurnTracker = {
-        operationId: null,
-        lastSequence: -1,
-        onEvent: publishProjection,
-      };
+  ipcMain.handle('assistant:turn', async (event, payload: unknown) => {
+    if (!isDesktopSender(event.sender.id))
+      throw new Error('Untrusted renderer');
+    if (
+      !isDesktopAssistantTurnInput(payload) ||
+      !operationLease.holds(event.sender.id, payload.leaseToken)
+    )
+      throw new Error('Invalid assistant turn');
+    const signal = abortRegistry.begin(payload.requestId, event.sender.id);
+    const cursor = conversations.currentCursor();
+    const routeRevision = conversations.state().revision;
+    const clientMessageId = payload.clientMessageId;
+    const conversationId = cursor?.conversationId ?? null;
+    const publishProjection = (rawEvent: GatewayOperationEvent): void => {
+      if (!conversationId) return;
+      // 路由已切换：旧 operation 的迟到事件不得投影到新会话视图。
+      if (conversations.state().revision !== routeRevision) return;
+      const projection = toAssistantProjection(rawEvent, {
+        requestId: payload.requestId,
+        clientMessageId: clientMessageId ?? null,
+        conversationId,
+      });
+      if (projection) sendToDesktopRenderers('assistant:event', projection);
+    };
+    const tracker: TurnTracker = {
+      operationId: null,
+      lastSequence: -1,
+      onEvent: publishProjection,
+    };
+    if (clientMessageId) {
+      tracker.onAccepted = (operationId) =>
+        operationRegistry.accept(clientMessageId, operationId);
+      tracker.onSequence = (sequence) =>
+        operationRegistry.recordSequence(clientMessageId, sequence);
+      operationRegistry.begin(clientMessageId, {
+        conversationId,
+        ownerId: event.sender.id,
+      });
+    }
+    try {
+      const result = await proxy.turn(
+        {
+          text: payload.text,
+          cursor: cursor ?? undefined,
+          clientMessageId: payload.clientMessageId,
+          attachment: payload.attachment,
+        },
+        signal,
+        tracker,
+      );
       if (clientMessageId) {
-        tracker.onAccepted = (operationId) =>
-          operationRegistry.accept(clientMessageId, operationId);
-        tracker.onSequence = (sequence) =>
-          operationRegistry.recordSequence(clientMessageId, sequence);
-        operationRegistry.begin(clientMessageId, {
-          conversationId,
-          ownerId: event.sender.id,
-        });
+        if (!result.ok && result.code === 'interrupted') {
+          operationRegistry.markInterrupted(clientMessageId);
+        } else {
+          operationRegistry.remove(clientMessageId);
+        }
       }
-      try {
-        const result = await proxy.turn(
-          {
-            text: payload.text,
-            cursor: cursor ?? undefined,
-            clientMessageId: payload.clientMessageId,
-            attachment: payload.attachment,
-          },
-          signal,
-          tracker,
-        );
-        if (clientMessageId) {
-          if (!result.ok && result.code === 'interrupted') {
-            operationRegistry.markInterrupted(clientMessageId);
-          } else {
-            operationRegistry.remove(clientMessageId);
-          }
-        }
-        if (routeRevision !== conversations.state().revision) {
-          return {
-            ok: false as const,
-            code: 'aborted' as const,
-            message: '会话已切换。',
-          };
-        }
-        if (result.ok) {
-          // 用服务端 canonical Message 重建视图，乐观 User Message 按 clientMessageId 去重。
-          await reloadChatForConversation();
-        }
-        return result;
-      } finally {
-        abortRegistry.finish(payload.requestId, signal);
+      if (routeRevision !== conversations.state().revision) {
+        return {
+          ok: false as const,
+          code: 'aborted' as const,
+          message: '会话已切换。',
+        };
       }
-    },
-  );
+      if (result.ok) {
+        // 用服务端 canonical Message 重建视图，乐观 User Message 按 clientMessageId 去重。
+        await reloadChatForConversation();
+      }
+      return result;
+    } finally {
+      abortRegistry.finish(payload.requestId, signal);
+    }
+  });
   ipcMain.handle(
     'voice:transcribe',
     async (
@@ -556,7 +552,7 @@ if (!app.requestSingleInstanceLock()) {
         throw new Error('Invalid speech input');
       const signal = abortRegistry.begin(payload.requestId, event.sender.id);
       try {
-        return await voiceProxy.synthesize(
+        return await speechReplayCache.synthesize(
           {
             text: payload.text,
             assistantMessageId: payload.assistantMessageId,

@@ -49,13 +49,18 @@ export async function submitPetText(
   if (!text && !attachment) {
     return { ok: false, code: 'invalid_input', error: '请输入内容。' };
   }
-  const result = await turn(
-    text,
-    requestId,
-    'text',
-    clientMessageId,
-    attachment,
-  );
+  let result: TurnResult;
+  try {
+    result = await turn(text, requestId, 'text', clientMessageId, attachment);
+  } catch {
+    // IPC failures are not domain responses; keep raw Electron errors and stacks
+    // out of the renderer while returning the UI to an actionable state.
+    return {
+      ok: false,
+      code: 'backend_offline',
+      error: '暂时无法连接 EduCanvas，请稍后重试。',
+    };
+  }
   return result.ok
     ? { ok: true, action: result.action, reply: result.message }
     : { ok: false, code: result.code, error: result.message };
