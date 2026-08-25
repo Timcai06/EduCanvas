@@ -91,6 +91,7 @@ export async function startNewAnonymousLesson(
         preferences: context.plan.profile.preferences,
       },
       course: context.course,
+      knowledgePublication: context.knowledgePublication ?? undefined,
     });
   } catch (error) {
     let removed: boolean;

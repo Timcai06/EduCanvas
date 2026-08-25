@@ -1,10 +1,13 @@
 import {
+  DrizzleKnowledgeRetrievalRepository,
   DrizzleKnowledgeSourceRepository,
   type IngestKnowledgeDocumentInput,
 } from '@educanvas/db';
 import type { Task } from 'graphile-worker';
 import { z } from 'zod';
 import { KNOWLEDGE_EMBED_DOCUMENT_TASK } from './embed-knowledge-document.js';
+
+const KNOWLEDGE_INGEST_DOCUMENT_TASK = 'knowledge:ingest_document' as const;
 
 const sourceSchema = z
   .object({
@@ -70,7 +73,18 @@ const documentSchema = z
   .strict();
 
 const ingestPayloadSchema = z
-  .object({ source: sourceSchema, document: documentSchema })
+  .object({
+    source: sourceSchema,
+    document: documentSchema,
+    binding: z
+      .object({
+        trustedStudentId: z.string().min(1).max(256),
+        sessionId: z.uuid(),
+        mutationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+      })
+      .strict()
+      .optional(),
+  })
   .strict();
 
 interface KnowledgeSourceRepository {
@@ -88,8 +102,19 @@ interface KnowledgeSourceRepository {
   }>;
 }
 
+interface KnowledgeBindingRepository {
+  setSessionSourceBinding(input: {
+    trustedStudentId: string;
+    sessionId: string;
+    sourceId: string;
+    enabled: boolean;
+    mutationId: string;
+  }): Promise<unknown>;
+}
+
 export function createIngestKnowledgeDocumentTask(
   repository: KnowledgeSourceRepository = new DrizzleKnowledgeSourceRepository(),
+  bindings: KnowledgeBindingRepository = new DrizzleKnowledgeRetrievalRepository(),
 ): Task {
   return async (payload, helpers) => {
     const parsed = ingestPayloadSchema.parse(payload);
@@ -98,6 +123,13 @@ export function createIngestKnowledgeDocumentTask(
       sourceId: source.id,
       ...parsed.document,
     });
+    if (parsed.binding && result.document.parseStatus === 'ready') {
+      await bindings.setSessionSourceBinding({
+        ...parsed.binding,
+        sourceId: source.id,
+        enabled: true,
+      });
+    }
     helpers.logger.info(
       `课程资料摄取完成,source=${source.id},document=${result.document.id},version=${result.document.version},replayed=${result.replayed}`,
     );
@@ -121,3 +153,4 @@ export function createIngestKnowledgeDocumentTask(
 }
 
 export const ingestKnowledgeDocument = createIngestKnowledgeDocumentTask();
+export { KNOWLEDGE_INGEST_DOCUMENT_TASK };

@@ -84,6 +84,7 @@ const course = {
 const context = {
   sessionId: 'old-session',
   course,
+  knowledgePublication: null,
   artifact: {
     schemaVersion: '1',
     artifactId: 'math-fractions-practice',

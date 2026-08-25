@@ -41,18 +41,29 @@ import {
   middleRecommendationArtifact,
   middleRecommendationCourse,
 } from './secondary-ai-literacy';
+import {
+  createTrustedCourseKnowledge,
+  type TrustedCourseKnowledgePublication,
+} from './course-knowledge';
 
 export interface TrustedStudyCourseContent {
   course: StudyCourseDefinition;
   artifact: Artifact;
+  knowledgePublication: TrustedCourseKnowledgePublication | null;
 }
 
 function parseContent(
-  input: TrustedStudyCourseContent,
+  input: Pick<TrustedStudyCourseContent, 'course' | 'artifact'>,
+  options: { publishKnowledge?: boolean } = {},
 ): TrustedStudyCourseContent {
+  const course = studyCourseDefinitionSchema.parse(input.course);
   return {
-    course: studyCourseDefinitionSchema.parse(input.course),
+    course,
     artifact: artifactSchema.parse(input.artifact),
+    knowledgePublication:
+      options.publishKnowledge === false
+        ? null
+        : createTrustedCourseKnowledge(course),
   };
 }
 
@@ -108,7 +119,12 @@ const historicalContent = [
   legacyPrimaryHighImageAiCourse,
   legacyMiddleImageAiCourse,
   legacyHighImageAiCourse,
-].map((course) => parseContent({ course, artifact: legacyImageAiArtifact }));
+].map((course) =>
+  parseContent(
+    { course, artifact: legacyImageAiArtifact },
+    { publishKnowledge: false },
+  ),
+);
 
 function contentIdentity(course: StudyCourseDefinition): string {
   return `${course.gradeBand}:${course.courseSlug}:${course.version}`;

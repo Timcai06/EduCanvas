@@ -158,6 +158,69 @@ describe('受控后台任务边界', () => {
     });
   });
 
+  it('课程资料就绪后绑定到受信学习会话并排队向量化', async () => {
+    const sourceId = '04fb1704-5192-4ac1-b866-f1ad31243df0';
+    const documentId = '104fb170-5192-4ac1-b866-f1ad31243df0';
+    const setSessionSourceBinding = vi.fn().mockResolvedValue({});
+    const addJob = vi.fn().mockResolvedValue({});
+    const task = createIngestKnowledgeDocumentTask(
+      {
+        createOrGetSource: vi
+          .fn()
+          .mockResolvedValue({ source: { id: sourceId } }),
+        ingestDocument: vi.fn().mockResolvedValue({
+          replayed: false,
+          document: {
+            id: documentId,
+            version: 1,
+            parserVersion: 'trusted-course-markdown-v1',
+            parseStatus: 'ready',
+          },
+        }),
+      },
+      { setSessionSourceBinding },
+    );
+    const binding = {
+      trustedStudentId: 'student-1',
+      sessionId: '204fb170-5192-4ac1-b866-f1ad31243df0',
+      mutationId: `course-source:${'a'.repeat(32)}`,
+    };
+
+    await task(
+      {
+        source: {
+          gradeBand: 'middle_school',
+          courseSlug: 'biology',
+          sourceKey: 'course-notes-v1',
+          title: '生物课程讲义',
+          sourceType: 'text',
+        },
+        document: {
+          contentHash: 'a'.repeat(64),
+          objectKey: 'courses/middle_school/biology/v1/lesson.md',
+          parserVersion: 'trusted-course-markdown-v1',
+          outcome: { status: 'ready', chunks: [{ content: '细胞。' }] },
+        },
+        binding,
+      },
+      { logger: { info: vi.fn() }, addJob } as never,
+    );
+
+    expect(setSessionSourceBinding).toHaveBeenCalledWith({
+      ...binding,
+      sourceId,
+      enabled: true,
+    });
+    expect(addJob).toHaveBeenCalledWith(
+      'knowledge:embed_document',
+      {
+        documentId,
+        chunkingVersion: 'trusted-course-markdown-v1',
+      },
+      { jobKey: `knowledge-embed:${documentId}`, maxAttempts: 25 },
+    );
+  });
+
   it('拒绝公开URL和未声明字段', async () => {
     const task = createIngestKnowledgeDocumentTask({
       createOrGetSource: vi.fn(),
