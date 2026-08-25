@@ -3,6 +3,7 @@
 import { createStudyPlanAction } from '@/app/learn/actions';
 import type {
   CreateStudyPlanInputDTO,
+  StudyCourseOptionDTO,
   StudyActionResultDTO,
 } from '@/features/learning/learning-contracts';
 import { useGSAP } from '@gsap/react';
@@ -22,14 +23,6 @@ import {
 gsap.registerPlugin(useGSAP);
 
 // 目标为空，让入口回到「先写一句想学什么」的对话式起点，而不是先面对一张表单。
-const initialInput: CreateStudyPlanInputDTO = {
-  ageBand: 'unknown',
-  gradeBand: 'primary_low',
-  declarationSource: 'self_declared',
-  desiredOutcome: '',
-  preferences: getDefaultTeachingPreferencesForGradeBand('primary_low'),
-};
-
 type Option = { value: string; label: string };
 
 // 选项集中定义，避免每个 <select> 各自散写 <option>；顺序即界面呈现顺序。
@@ -120,8 +113,21 @@ function SelectField({
  * 但提交时仍是完整的 CreateStudyPlanInputDTO（默认值即最严格的未成年人策略），
  * 因此收起细节不改变服务端契约与安全语义。
  */
-export function StudySetup() {
-  const [input, setInput] = useState(initialInput);
+export function StudySetup({
+  courseOptions,
+}: {
+  courseOptions: readonly StudyCourseOptionDTO[];
+}) {
+  const [input, setInput] = useState<CreateStudyPlanInputDTO>(() => ({
+    ageBand: 'unknown',
+    gradeBand: 'primary_low',
+    courseSlug:
+      courseOptions.find((option) => option.gradeBand === 'primary_low')
+        ?.courseSlug ?? '',
+    declarationSource: 'self_declared',
+    desiredOutcome: '',
+    preferences: getDefaultTeachingPreferencesForGradeBand('primary_low'),
+  }));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const rootRef = useRef<HTMLElement>(null);
@@ -151,6 +157,9 @@ export function StudySetup() {
     setInput((current) => ({
       ...current,
       gradeBand,
+      courseSlug:
+        courseOptions.find((option) => option.gradeBand === gradeBand)
+          ?.courseSlug ?? '',
       preferences: getDefaultTeachingPreferencesForGradeBand(gradeBand),
     }));
 
@@ -184,7 +193,13 @@ export function StudySetup() {
     { scope: rootRef },
   );
 
-  const canSubmit = input.desiredOutcome.trim().length > 0 && !isPending;
+  const canSubmit =
+    input.desiredOutcome.trim().length > 0 &&
+    input.courseSlug.length > 0 &&
+    !isPending;
+  const visibleCourses = courseOptions.filter(
+    (option) => option.gradeBand === input.gradeBand,
+  );
 
   return (
     <main ref={rootRef} className="min-h-dvh bg-canvas text-ink">
@@ -256,6 +271,37 @@ export function StudySetup() {
               />
             </div>
           </div>
+
+          <fieldset className="unfold-item mt-3 rounded-2xl border border-line bg-surface/50 p-4 sm:p-5">
+            <legend className="px-1 text-sm font-medium text-ink">
+              选择学习主题
+            </legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {visibleCourses.map((course) => {
+                const selected = input.courseSlug === course.courseSlug;
+                return (
+                  <label
+                    key={course.courseSlug}
+                    className={`cursor-pointer rounded-xl border px-4 py-3 text-sm transition-colors ${
+                      selected
+                        ? 'border-accent bg-accent/8 text-ink'
+                        : 'border-line bg-canvas text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="courseSlug"
+                      value={course.courseSlug}
+                      checked={selected}
+                      onChange={() => setField('courseSlug', course.courseSlug)}
+                      className="sr-only"
+                    />
+                    <span className="font-medium">{course.title}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <details className="unfold-item group mt-3">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm text-ink-muted select-none marker:hidden hover:text-ink">

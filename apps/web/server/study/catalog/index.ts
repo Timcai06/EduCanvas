@@ -29,6 +29,18 @@ import {
   primaryLowImageAiArtifact,
   primaryLowImageAiCourse,
 } from './primary-image-ai';
+import {
+  primaryHighRecommendationArtifact,
+  primaryHighRecommendationCourse,
+  primaryLowAiSafetyArtifact,
+  primaryLowAiSafetyCourse,
+} from './primary-ai-literacy';
+import {
+  highGenerativeAiArtifact,
+  highGenerativeAiCourse,
+  middleRecommendationArtifact,
+  middleRecommendationCourse,
+} from './secondary-ai-literacy';
 
 export interface TrustedStudyCourseContent {
   course: StudyCourseDefinition;
@@ -46,24 +58,48 @@ function parseContent(
 
 const currentContentByGradeBand: Record<
   LearnerGradeBand,
-  TrustedStudyCourseContent
+  readonly TrustedStudyCourseContent[]
 > = {
-  primary_low: parseContent({
-    course: primaryLowImageAiCourse,
-    artifact: primaryLowImageAiArtifact,
-  }),
-  primary_high: parseContent({
-    course: primaryHighImageAiCourse,
-    artifact: primaryHighImageAiArtifact,
-  }),
-  middle_school: parseContent({
-    course: middleImageAiCourse,
-    artifact: middleImageAiArtifact,
-  }),
-  high_school: parseContent({
-    course: highImageAiCourse,
-    artifact: highImageAiArtifact,
-  }),
+  primary_low: [
+    parseContent({
+      course: primaryLowImageAiCourse,
+      artifact: primaryLowImageAiArtifact,
+    }),
+    parseContent({
+      course: primaryLowAiSafetyCourse,
+      artifact: primaryLowAiSafetyArtifact,
+    }),
+  ],
+  primary_high: [
+    parseContent({
+      course: primaryHighImageAiCourse,
+      artifact: primaryHighImageAiArtifact,
+    }),
+    parseContent({
+      course: primaryHighRecommendationCourse,
+      artifact: primaryHighRecommendationArtifact,
+    }),
+  ],
+  middle_school: [
+    parseContent({
+      course: middleImageAiCourse,
+      artifact: middleImageAiArtifact,
+    }),
+    parseContent({
+      course: middleRecommendationCourse,
+      artifact: middleRecommendationArtifact,
+    }),
+  ],
+  high_school: [
+    parseContent({
+      course: highImageAiCourse,
+      artifact: highImageAiArtifact,
+    }),
+    parseContent({
+      course: highGenerativeAiCourse,
+      artifact: highGenerativeAiArtifact,
+    }),
+  ],
 };
 
 /** 只用于恢复已持久化的 v1 Notebook；创建新计划时不会进入这个集合。 */
@@ -79,7 +115,7 @@ function contentIdentity(course: StudyCourseDefinition): string {
 }
 
 const registeredContent = [
-  ...Object.values(currentContentByGradeBand),
+  ...Object.values(currentContentByGradeBand).flat(),
   ...historicalContent,
 ];
 const registeredIdentities = registeredContent.map((content) =>
@@ -95,12 +131,31 @@ const contentByIdentity = new Map(
   ]),
 );
 
-/** 新计划只使用当前版本的完整课程内容包。 */
+/** 新计划只使用当前目录中的完整内容包；未指定主题时保留每学段原默认课程。 */
 export function getTrustedStudyContent(
   rawGradeBand: LearnerGradeBand,
+  rawCourseSlug?: string,
 ): TrustedStudyCourseContent {
   const gradeBand = learnerGradeBandSchema.parse(rawGradeBand);
-  return currentContentByGradeBand[gradeBand];
+  const contents = currentContentByGradeBand[gradeBand];
+  const content = rawCourseSlug
+    ? contents.find(
+        (candidate) => candidate.course.courseSlug === rawCourseSlug,
+      )
+    : contents[0];
+  if (!content) throw new Error('所选课程不属于当前学段或尚未进入受信目录');
+  return content;
+}
+
+/** 浏览器只接收当前课程的稳定标识与标题，不暴露目标图、诊断答案或 Artifact 答案。 */
+export function listTrustedStudyCourseOptions() {
+  return learnerGradeBandSchema.options.flatMap((gradeBand) =>
+    currentContentByGradeBand[gradeBand].map(({ course }) => ({
+      gradeBand,
+      courseSlug: course.courseSlug,
+      title: course.title,
+    })),
+  );
 }
 
 /** 恢复计划时按冻结身份解析当前或受控历史内容，绝不猜测最近版本。 */

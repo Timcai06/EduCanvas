@@ -38,9 +38,17 @@ export interface LearningPageDTO {
 export interface CreateStudyPlanInputDTO {
   ageBand: LearnerAgeBand;
   gradeBand: LearnerGradeBand;
+  courseSlug: string;
   declarationSource: Exclude<LearnerDeclarationSource, 'school_asserted'>;
   desiredOutcome: string;
   preferences: TeachingPreferences;
+}
+
+/** 学习入口可见的受信课程目录投影，不包含目标图、诊断答案或 Artifact 答案。 */
+export interface StudyCourseOptionDTO {
+  gradeBand: LearnerGradeBand;
+  courseSlug: string;
+  title: string;
 }
 
 export interface StudyObjectiveProgressDTO {

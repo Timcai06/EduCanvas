@@ -7,17 +7,25 @@ import {
   learnerGradeBandSchema,
   studyCourseDefinitionSchema,
 } from '@educanvas/teaching-core';
-import { getTrustedStudyContent, getTrustedStudyContentForGoal } from './index';
+import {
+  getTrustedStudyContent,
+  getTrustedStudyContentForGoal,
+  listTrustedStudyCourseOptions,
+} from './index';
 
 describe('trusted study course content catalog', () => {
-  it('provides one validated current course package for every grade band', () => {
-    const contents = learnerGradeBandSchema.options.map((gradeBand) =>
-      getTrustedStudyContent(gradeBand),
+  it('provides two validated current course packages for every grade band', () => {
+    const options = listTrustedStudyCourseOptions();
+    const contents = options.map((option) =>
+      getTrustedStudyContent(option.gradeBand, option.courseSlug),
     );
 
-    expect(contents.map((content) => content.course.gradeBand)).toEqual(
-      learnerGradeBandSchema.options,
-    );
+    expect(options).toHaveLength(8);
+    for (const gradeBand of learnerGradeBandSchema.options) {
+      expect(
+        options.filter((option) => option.gradeBand === gradeBand),
+      ).toHaveLength(2);
+    }
     expect(
       new Set(contents.map((content) => content.course.courseSlug)).size,
     ).toBe(contents.length);
@@ -31,6 +39,12 @@ describe('trusted study course content catalog', () => {
       expect(artifactSchema.safeParse(content.artifact).success).toBe(true);
       expect(content.artifact.artifactId).not.toBe('demo-cat-dog');
     }
+  });
+
+  it('rejects a topic that is not registered for the selected grade band', () => {
+    expect(() =>
+      getTrustedStudyContent('primary_low', 'generative-ai-high'),
+    ).toThrow('所选课程不属于当前学段');
   });
 
   it.each([
