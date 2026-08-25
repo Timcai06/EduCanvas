@@ -94,6 +94,15 @@ export function createPetWindow(): PetWindowController {
     }
   }
 
+  let positionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+  function schedulePositionSave(): void {
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
+    positionSaveTimer = setTimeout(() => {
+      positionSaveTimer = undefined;
+      savePosition();
+    }, 120);
+  }
+
   function recoverIfDisplayWasRemoved(): void {
     if (win.isDestroyed()) return;
     const current = win.getBounds();
@@ -136,11 +145,12 @@ export function createPetWindow(): PetWindowController {
     savePosition();
   });
   win.on('hide', savePosition);
-  win.on('resized', savePosition);
+  win.on('resize', schedulePositionSave);
   win.on('ready-to-show', () => showPetWindow(win));
   screen.on('display-removed', recoverIfDisplayWasRemoved);
   screen.on('display-metrics-changed', recoverIfDisplayWasRemoved);
   win.on('closed', () => {
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
     screen.removeListener('display-removed', recoverIfDisplayWasRemoved);
     screen.removeListener(
       'display-metrics-changed',

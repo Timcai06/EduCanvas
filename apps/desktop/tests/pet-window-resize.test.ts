@@ -9,7 +9,8 @@ describe('desktop pet bounded resizing', () => {
     expect(windowSource).toContain('resizable: true');
     expect(windowSource).toContain('minWidth: MVP_WINDOW_MIN_WIDTH');
     expect(windowSource).toContain('maxWidth: MVP_WINDOW_MAX_WIDTH');
-    expect(windowSource).toContain("win.on('resized', savePosition)");
+    expect(windowSource).toContain("win.on('resize', schedulePositionSave)");
+    expect(windowSource).toContain('savePetPositionFile(positionFile');
   });
 
   it('lets the original chat surface consume the resized window', () => {
