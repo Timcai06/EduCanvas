@@ -93,15 +93,17 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
   assert.equal(wouldViolate, true);
 });
 
-test('最新 migration 的 CREATE TABLE CHECK 与 schema 使用同一分类规则', () => {
-  // 0060 新增 4 个研究恢复游标 CHECK；phase 是封闭状态机，两个 JSON 数组
-  // 约束是开放形状/长度约束。协议版本在 schema AST 门禁中登记为 closed。
+test('最新 migration 的 CHECK 与 schema 使用同一分类规则', () => {
+  // 0061 重建画像与 Goal 的学段闭集；两者都是受信课程目录的封闭判别联合。
   const checks = extractLatestMigrationChecks();
-  assert.equal(checks.length, 4);
+  assert.equal(checks.length, 2);
   const closed = checks
     .filter((check) => isLiteralVocabularyClosure(check.body))
     .map((check) => check.name);
-  assert.deepEqual(closed, ['research_checkpoints_phase_check']);
+  assert.deepEqual(closed, [
+    'learner_profiles_grade_band_check',
+    'learning_goals_grade_band_check',
+  ]);
   for (const name of closed)
     assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
 });

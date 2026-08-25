@@ -48,7 +48,7 @@ export const learnerProfiles = pgTable(
     ),
     check(
       'learner_profiles_grade_band_check',
-      sql`${table.defaultGradeBand} in ('primary_school', 'middle_school', 'high_school')`,
+      sql`${table.defaultGradeBand} in ('primary_low', 'primary_high', 'middle_school', 'high_school')`,
     ),
     check(
       'learner_profiles_source_check',
@@ -116,7 +116,7 @@ export const learningGoals = pgTable(
     ),
     check(
       'learning_goals_grade_band_check',
-      sql`${table.gradeBand} in ('primary_school', 'middle_school', 'high_school')`,
+      sql`${table.gradeBand} in ('primary_low', 'primary_high', 'middle_school', 'high_school')`,
     ),
     check(
       'learning_goals_status_check',

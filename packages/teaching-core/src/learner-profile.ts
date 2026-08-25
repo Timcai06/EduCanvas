@@ -12,9 +12,10 @@ export const learnerAgeBands = [
 export const learnerAgeBandSchema = z.enum(learnerAgeBands);
 export type LearnerAgeBand = z.infer<typeof learnerAgeBandSchema>;
 
-/** P1 课程目录使用的三个稳定年级段；具体年级后续可作为课程元数据扩展。 */
+/** 课程目录使用的四个稳定学段；小学拆分用于匹配不同认知负担与交互偏好。 */
 export const learnerGradeBands = [
-  'primary_school',
+  'primary_low',
+  'primary_high',
   'middle_school',
   'high_school',
 ] as const;
@@ -59,6 +60,40 @@ export const defaultTeachingPreferences: Readonly<TeachingPreferences> =
     modality: 'mixed',
     feedbackStyle: 'balanced',
   });
+
+const gradeBandTeachingPreferences: Readonly<
+  Record<LearnerGradeBand, Readonly<TeachingPreferences>>
+> = Object.freeze({
+  primary_low: Object.freeze({
+    explanationOrder: 'example_first',
+    responseDepth: 'concise',
+    guidance: 'step_by_step',
+    modality: 'visual',
+    feedbackStyle: 'gentle',
+  }),
+  primary_high: Object.freeze({
+    explanationOrder: 'example_first',
+    responseDepth: 'balanced',
+    guidance: 'step_by_step',
+    modality: 'mixed',
+    feedbackStyle: 'gentle',
+  }),
+  middle_school: defaultTeachingPreferences,
+  high_school: Object.freeze({
+    explanationOrder: 'concept_first',
+    responseDepth: 'detailed',
+    guidance: 'independent_first',
+    modality: 'practice',
+    feedbackStyle: 'balanced',
+  }),
+});
+
+/** 选择学段时预填可修改的讲解偏好；该映射不推断能力，也不改变安全权限。 */
+export function getDefaultTeachingPreferencesForGradeBand(
+  gradeBand: LearnerGradeBand,
+): TeachingPreferences {
+  return { ...gradeBandTeachingPreferences[gradeBand] };
+}
 
 /** 创建或修订学习者画像时允许进入领域层的最小声明。 */
 export const learnerProfileDeclarationSchema = z

@@ -14,22 +14,20 @@ import { TopBar } from '../workspace/learning/top-bar';
 import { OptionWheel } from './option-wheel';
 import { celebrate } from '@/features/celebrate/ink-splash';
 import { motionDuration } from '@/features/theme/motion';
+import {
+  getDefaultTeachingPreferencesForGradeBand,
+  type LearnerGradeBand,
+} from '@educanvas/teaching-core';
 
 gsap.registerPlugin(useGSAP);
 
 // 目标为空，让入口回到「先写一句想学什么」的对话式起点，而不是先面对一张表单。
 const initialInput: CreateStudyPlanInputDTO = {
   ageBand: 'unknown',
-  gradeBand: 'primary_school',
+  gradeBand: 'primary_low',
   declarationSource: 'self_declared',
   desiredOutcome: '',
-  preferences: {
-    explanationOrder: 'example_first',
-    responseDepth: 'balanced',
-    guidance: 'step_by_step',
-    modality: 'mixed',
-    feedbackStyle: 'balanced',
-  },
+  preferences: getDefaultTeachingPreferencesForGradeBand('primary_low'),
 };
 
 type Option = { value: string; label: string };
@@ -43,7 +41,8 @@ const AGE_BANDS: Option[] = [
   { value: 'unknown', label: '暂不确定' },
 ];
 const GRADE_BANDS: Option[] = [
-  { value: 'primary_school', label: '小学' },
+  { value: 'primary_low', label: '小学低年级' },
+  { value: 'primary_high', label: '小学高年级' },
   { value: 'middle_school', label: '初中' },
   { value: 'high_school', label: '高中' },
 ];
@@ -148,6 +147,13 @@ export function StudySetup() {
       },
     }));
 
+  const setGradeBand = (gradeBand: LearnerGradeBand) =>
+    setInput((current) => ({
+      ...current,
+      gradeBand,
+      preferences: getDefaultTeachingPreferencesForGradeBand(gradeBand),
+    }));
+
   const submit = () => {
     setError(null);
     startTransition(async () => {
@@ -245,7 +251,7 @@ export function StudySetup() {
                 fontSize={1.6}
                 spacing={1.5}
                 onChange={(index) =>
-                  setField('gradeBand', GRADE_BANDS[index]!.value)
+                  setGradeBand(GRADE_BANDS[index]!.value as LearnerGradeBand)
                 }
               />
             </div>

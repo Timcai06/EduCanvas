@@ -9,7 +9,7 @@
     "timestamp": "2026-07-27T00:00:00Z"
   },
   "migration": {
-    "version": 61,
+    "version": 62,
     "fresh": { "status": "pending", "timestamp": "" },
     "upgrade": { "status": "pending", "timestamp": "" }
   },

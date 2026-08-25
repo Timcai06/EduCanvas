@@ -2,7 +2,7 @@ import 'server-only';
 
 /** 阶段一纵切的受信课程配置；浏览器不能覆盖这些教学身份字段或完整Artifact。 */
 export const demoLesson = {
-  gradeBand: 'primary_school',
+  gradeBand: 'primary_low',
   courseSlug: 'cat-dog-ai',
   courseTitle: '图像是怎么被认出来的',
   knowledgeNodeId: 'cat-dog-classification',
