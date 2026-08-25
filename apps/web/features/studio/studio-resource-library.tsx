@@ -27,6 +27,7 @@ import {
   type ResourceLibrarySortKey,
   type ResourceLibrarySortOrder,
 } from './resource-library-model';
+import { Badge } from '@/components/ui/badge';
 
 const statusLabels: Record<WorkspaceResourceSummary['status'], string> = {
   processing: '处理中',
@@ -34,6 +35,18 @@ const statusLabels: Record<WorkspaceResourceSummary['status'], string> = {
   failed: '失败',
   unavailable: '暂不可用',
   archived: '已归档',
+};
+
+/* 状态 → Badge 语义变体：处理中=藤黄(注意)、可用=松绿(成功)、失败=朱砂/错误、其余=中性。 */
+const statusVariant: Record<
+  WorkspaceResourceSummary['status'],
+  'warn' | 'good' | 'bad' | 'neutral'
+> = {
+  processing: 'warn',
+  ready: 'good',
+  failed: 'bad',
+  unavailable: 'neutral',
+  archived: 'neutral',
 };
 
 function versionLabel(summary: WorkspaceResourceSummary): string {
@@ -152,13 +165,9 @@ function ResourceView({
                       : null}
                   </small>
                 </span>
-                <span
-                  className="studio-resource-status"
-                  data-status={summary.status}
-                >
-                  <i aria-hidden="true" />
+                <Badge variant={statusVariant[summary.status]}>
                   {statusLabels[summary.status]}
-                </span>
+                </Badge>
                 <time dateTime={summary.updatedAt}>
                   {formatUpdatedAt(summary.updatedAt)}
                 </time>
