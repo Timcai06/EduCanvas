@@ -824,3 +824,23 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - Estimated scale: 每个研究 Operation 至多 1 行，两个 JSONB 数组分别上限 5 与 15。
 - 风险: 低——仓储逐项校验查询与公开 URL，浏览器投影只返回计数、阶段及派生的
   Source/Citation 序号，不返回原始查询或候选 URL。
+
+## 0061_four_grade_bands.sql
+
+- 状态: active（四学段学习画像，2026-08-25）
+- 语义: 将课程学段从小学/初中/高中三档扩展为小学低年级、小学高年级、初中、
+  高中四档；`learner_profiles` 与 `learning_goals` 的封闭 CHECK 同步更新。
+- 锁表: 四个有界 UPDATE 会短暂锁定命中的旧小学记录；两个 CHECK 重建会扫描
+  `learner_profiles` 与 `learning_goals`。上线前应核对表规模并安排短维护窗口。
+- 回滚: 应用回滚到只认识三档前，需通过后续 migration 将 `primary_low` 与
+  `primary_high` 合并回 `primary_school` 并恢复旧 CHECK；不可直接回滚应用代码。
+- N-1: 新值不被旧应用解析，因此本迁移与应用必须作为一个维护窗口部署，不支持
+  新旧版本长期并行写入。
+- Fresh install: 可重放；空库直接得到四档 CHECK。
+- Data migration: 历史 `primary_school` 确定性映射为 `primary_high`，因为现有受信
+  小学课程的抽象负担更接近高年级；画像、Goal、会话与知识来源同步更新，避免范围漂移。
+  知识来源的 metadata immutable trigger 仅在同一 migration 事务内暂停并立即恢复。
+- Estimated scale: 只更新四张表中旧小学范围的行；实际生产规模尚未验证。
+- 风险: 中——旧值无法无损推断低/高年级，选择高年级是显式兼容裁定；用户仍可在
+  学习入口重新声明学段，知识检索继续按精确学段 fail closed；迁移测试同时证明
+  immutable trigger 在更新后恢复生效。

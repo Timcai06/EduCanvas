@@ -8,10 +8,14 @@ import {
 } from '@educanvas/teaching-core';
 import { highImageAiCourse } from './high-image-ai';
 import { middleImageAiCourse } from './middle-image-ai';
-import { primaryImageAiCourse } from './primary-image-ai';
+import {
+  primaryHighImageAiCourse,
+  primaryLowImageAiCourse,
+} from './primary-image-ai';
 
 const courseByGradeBand: Record<LearnerGradeBand, StudyCourseDefinition> = {
-  primary_school: studyCourseDefinitionSchema.parse(primaryImageAiCourse),
+  primary_low: studyCourseDefinitionSchema.parse(primaryLowImageAiCourse),
+  primary_high: studyCourseDefinitionSchema.parse(primaryHighImageAiCourse),
   middle_school: studyCourseDefinitionSchema.parse(middleImageAiCourse),
   high_school: studyCourseDefinitionSchema.parse(highImageAiCourse),
 };

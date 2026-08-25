@@ -145,6 +145,7 @@ export {
 } from './safety-policy';
 export {
   defaultTeachingPreferences,
+  getDefaultTeachingPreferencesForGradeBand,
   learnerAgeBandSchema,
   learnerAdaptationPolicySchema,
   learnerAgeBands,

@@ -9,7 +9,7 @@ import {
 const course: StudyCourseDefinition = {
   courseSlug: 'cat-dog-ai',
   version: 'v1',
-  gradeBand: 'primary_school',
+  gradeBand: 'primary_low',
   title: '机器如何识别猫和狗',
   objectives: Array.from({ length: 6 }, (_value, index) => ({
     objectiveKey: `objective-${index + 1}`,

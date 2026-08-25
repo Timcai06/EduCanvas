@@ -60,7 +60,8 @@ export interface TeachingTurnPromptMessages {
 }
 
 const gradeBandLabels = {
-  primary_school: '小学',
+  primary_low: '小学低年级',
+  primary_high: '小学高年级',
   middle_school: '初中',
   high_school: '高中',
 } as const;

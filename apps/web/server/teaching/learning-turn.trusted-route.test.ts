@@ -144,7 +144,7 @@ describe('Web Teaching 可信 Gateway 路由边界', () => {
         studentId: identity.studentId,
         declaredByUserId: identity.studentId,
         ageBand: 'under_13',
-        gradeBand: 'primary_school',
+        gradeBand: 'primary_low',
         declarationSource: 'self_declared',
         preferences: {
           explanationOrder: 'example_first',
@@ -163,7 +163,7 @@ describe('Web Teaching 可信 Gateway 路由边界', () => {
 
     await expect(loadAdaptation?.()).resolves.toEqual({
       ageBand: 'under_13',
-      gradeBand: 'primary_school',
+      gradeBand: 'primary_low',
       minorSafetyRequired: true,
       preferences: {
         explanationOrder: 'example_first',

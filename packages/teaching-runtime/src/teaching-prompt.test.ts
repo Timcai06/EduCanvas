@@ -46,6 +46,31 @@ describe('Teaching Profile Prompt', () => {
     expect(prompts.answer[0]?.content).not.toContain('性格是');
   });
 
+  it.each([
+    ['primary_low', '小学低年级'],
+    ['primary_high', '小学高年级'],
+    ['middle_school', '初中'],
+    ['high_school', '高中'],
+  ] as const)('把学段 %s 明确注入教学 Prompt', (gradeBand, label) => {
+    const prompts = createTeachingTurnPromptMessages({
+      ...input,
+      adaptation: {
+        ageBand: 'unknown',
+        gradeBand,
+        minorSafetyRequired: true,
+        preferences: {
+          explanationOrder: 'example_first',
+          responseDepth: 'balanced',
+          guidance: 'step_by_step',
+          modality: 'mixed',
+          feedbackStyle: 'balanced',
+        },
+      },
+    });
+
+    expect(prompts.answer[0]?.content).toContain(`按${label}阶段`);
+  });
+
   it('历史位于系统策略之后和当前输入之前且拒绝system注入', () => {
     const prompts = createTeachingTurnPromptMessages({
       ...input,

@@ -214,6 +214,96 @@ describeWithDatabase('对话/Agent账本 additive migration', () => {
     });
   });
 
+  it('0061 将旧小学范围一致迁移为小学高年级', async () => {
+    await withTemporaryDatabase(async (connection) => {
+      const priorMigrations = (await readdir(migrationsFolder))
+        .filter((name) => /^\d{4}_.+\.sql$/.test(name) && name < '0061_')
+        .sort();
+      for (const migration of priorMigrations) {
+        await applyMigrationFile(connection, migration);
+      }
+
+      const studentId = 'migration-four-grade-bands-student';
+      await connection`
+        insert into platform_users (id, kind)
+        values (${studentId}, 'registered')
+      `;
+      const [space] = await connection<{ id: string }[]>`
+        insert into spaces (owner_subject_id, kind, title)
+        values (${studentId}, 'notebook', 'Four grade bands migration')
+        returning id
+      `;
+      await connection`
+        insert into learner_profiles (
+          student_id, age_band, default_grade_band, declaration_source,
+          declared_by_user_id, preferences
+        ) values (
+          ${studentId}, 'under_13', 'primary_school', 'self_declared',
+          ${studentId}, ${connection.json({
+            explanationOrder: 'example_first',
+            responseDepth: 'balanced',
+            guidance: 'step_by_step',
+            modality: 'mixed',
+            feedbackStyle: 'balanced',
+          })}
+        )
+      `;
+      await connection`
+        insert into learning_goals (
+          notebook_id, student_id, course_slug, course_version, grade_band,
+          topic, desired_outcome
+        ) values (
+          ${space!.id}, ${studentId}, 'image-ai-primary', 'v1',
+          'primary_school', '图像 AI', '理解图像分类'
+        )
+      `;
+      await connection`
+        insert into lesson_sessions (
+          student_id, grade_band, course_slug, state
+        ) values (
+          ${studentId}, 'primary_school', 'image-ai-primary', 'DIAGNOSE'
+        )
+      `;
+      await connection`
+        insert into knowledge_sources (
+          grade_band, course_slug, source_key, title, source_type
+        ) values (
+          'primary_school', 'image-ai-primary', 'migration-source',
+          'Migration source', 'text'
+        )
+      `;
+
+      await applyMigrationFile(connection, '0061_four_grade_bands.sql');
+
+      const scopes = await connection<
+        { table_name: string; grade_band: string }[]
+      >`
+        select 'knowledge_sources' as table_name, grade_band
+          from knowledge_sources
+        union all
+        select 'learner_profiles', default_grade_band from learner_profiles
+        union all
+        select 'learning_goals', grade_band from learning_goals
+        union all
+        select 'lesson_sessions', grade_band from lesson_sessions
+        order by table_name
+      `;
+      expect(scopes).toEqual([
+        { table_name: 'knowledge_sources', grade_band: 'primary_high' },
+        { table_name: 'learner_profiles', grade_band: 'primary_high' },
+        { table_name: 'learning_goals', grade_band: 'primary_high' },
+        { table_name: 'lesson_sessions', grade_band: 'primary_high' },
+      ]);
+      await expect(
+        connection`
+          update knowledge_sources
+          set title = 'Mutation must remain blocked'
+          where source_key = 'migration-source'
+        `,
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
   it('从0043升级时additive装入pgvector并保留既有FTS事实', async () => {
     await withTemporaryDatabase(async (connection) => {
       const priorMigrations = (await readdir(migrationsFolder))

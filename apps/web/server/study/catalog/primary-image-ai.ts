@@ -1,9 +1,8 @@
 import type { StudyCourseDefinition } from '@educanvas/teaching-core';
 
-export const primaryImageAiCourse = {
+const primaryImageAiCourse = {
   courseSlug: 'image-ai-primary',
   version: 'v1',
-  gradeBand: 'primary_school',
   title: '图像 AI 入门',
   objectives: [
     {
@@ -105,4 +104,14 @@ export const primaryImageAiCourse = {
       },
     ],
   },
-} satisfies StudyCourseDefinition;
+} satisfies Omit<StudyCourseDefinition, 'gradeBand'>;
+
+export const primaryLowImageAiCourse: StudyCourseDefinition = {
+  ...primaryImageAiCourse,
+  gradeBand: 'primary_low',
+};
+
+export const primaryHighImageAiCourse: StudyCourseDefinition = {
+  ...primaryImageAiCourse,
+  gradeBand: 'primary_high',
+};
