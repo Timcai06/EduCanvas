@@ -119,7 +119,11 @@ describe('OpenAI-compatible文本流', () => {
         choices: [
           {
             index: 0,
-            delta: { content: '你好', tool_calls: null, reasoning_content: null },
+            delta: {
+              content: '你好',
+              tool_calls: null,
+              reasoning_content: null,
+            },
             finish_reason: null,
           },
         ],
