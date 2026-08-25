@@ -5,6 +5,9 @@ directories:
 files:
   - out/**
   - assets/icon.png # 托盘图标在打包后仍需可用（asar 内 assets/ 下；build/ 是治理禁止段）
+  # main bundle 已内联 workspace runtime；保留 package 依赖声明供架构门禁使用，
+  # 但分发包不得再次携带 workspace 源码、coverage 或构建缓存。
+  - "!node_modules/**"
 protocols:
   - name: EduCanvas Desktop
     schemes:
@@ -12,9 +15,22 @@ protocols:
 win:
   icon: assets/icon.ico
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: portable
       arch:
         - x64
+nsis:
+  artifactName: EduCanvas-助手-Setup-${version}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: EduCanvas助手
+  # 用户主动退出登录才清理凭据；卸载不能静默删除或扩大到其他应用数据。
+  deleteAppDataOnUninstall: false
 portable:
   artifactName: EduCanvas-助手-${version}.exe
 npmRebuild: false
