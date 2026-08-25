@@ -21,12 +21,14 @@ import { z } from 'zod';
 import type {
   CreateStudyPlanInputDTO,
   StudyDiagnosticDTO,
+  StudyCourseOptionDTO,
   SubmitDiagnosticInputDTO,
 } from '@/features/learning/learning-contracts';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import {
   getTrustedStudyContent,
   getTrustedStudyContentForGoal,
+  listTrustedStudyCourseOptions,
 } from './catalog';
 
 const studyPlans = new DrizzleStudyPlanRepository();
@@ -38,6 +40,7 @@ const createStudyPlanInputSchema = z
   .object({
     ageBand: learnerProfileDeclarationSchema.shape.ageBand,
     gradeBand: learnerProfileDeclarationSchema.shape.gradeBand,
+    courseSlug: z.string().trim().min(1).max(128),
     // school_asserted 预留给未来已验证学校身份，匿名 Web 不能自授该来源。
     declarationSource: z.enum(['self_declared', 'guardian_declared']),
     desiredOutcome: z.string().trim().min(1).max(500),
@@ -56,6 +59,10 @@ export type StudyPageState =
   | { kind: 'setup' }
   | { kind: 'diagnostic'; data: StudyDiagnosticDTO }
   | { kind: 'workspace'; context: OwnedStudyContext };
+
+export function loadStudyCourseOptions(): readonly StudyCourseOptionDTO[] {
+  return listTrustedStudyCourseOptions();
+}
 
 function contentForPlan(plan: StudyPlanSnapshot) {
   return getTrustedStudyContentForGoal({
@@ -109,7 +116,7 @@ export async function bootstrapStudyPlan(
   rawInput: CreateStudyPlanInputDTO,
 ): Promise<StudyPlanSnapshot> {
   const input = createStudyPlanInputSchema.parse(rawInput);
-  const content = getTrustedStudyContent(input.gradeBand);
+  const content = getTrustedStudyContent(input.gradeBand, input.courseSlug);
   const { course } = content;
   const session = await learningSessions.bootstrap({
     studentId: identity.studentId,

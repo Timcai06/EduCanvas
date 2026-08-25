@@ -26,6 +26,11 @@ export async function completeStudyOnboarding(page: Page): Promise<void> {
     name: '今天想学会什么？',
   });
   if (await notebookSetupHeading.isVisible()) {
+    const topicChoices = page
+      .getByRole('group', { name: '选择学习主题' })
+      .getByRole('radio');
+    await expect(topicChoices).toHaveCount(2);
+    await expect(topicChoices.first()).toBeChecked();
     await page
       .getByRole('textbox', { name: '这次想学会什么' })
       .fill('理解图像 AI 如何根据特征完成分类');

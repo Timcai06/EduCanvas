@@ -2,7 +2,10 @@ import { LearnWorkspace } from '@/features/workspace/learning/learn-workspace';
 import { StudyDiagnostic } from '@/features/study/study-diagnostic';
 import { StudySetup } from '@/features/study/study-setup';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { loadStudyPageState } from '@/server/study/study-service';
+import {
+  loadStudyCourseOptions,
+  loadStudyPageState,
+} from '@/server/study/study-service';
 import { loadLearningPageData } from '@/server/teaching/learning-session';
 import {
   resumeAnonymousLessonAction,
@@ -18,7 +21,9 @@ export default async function LearnPage() {
   const identity = await readAnonymousIdentity();
   const state = await loadStudyPageState(identity);
 
-  if (state.kind === 'setup') return <StudySetup />;
+  if (state.kind === 'setup') {
+    return <StudySetup courseOptions={loadStudyCourseOptions()} />;
+  }
   if (state.kind === 'diagnostic') {
     return <StudyDiagnostic data={state.data} />;
   }
