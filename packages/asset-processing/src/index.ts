@@ -32,6 +32,12 @@ export {
 } from './text-extraction';
 
 export {
+  loadMineruConfig,
+  type MineruBackend,
+  type MineruConfig,
+} from './mineru-config';
+
+export {
   DEFAULT_MINERU_REQUEST_TIMEOUT_MS,
   MINERU_POLL_INTERVAL_MS,
   MINERU_POLL_MAX_INTERVAL_MS,
@@ -41,7 +47,6 @@ export {
   assertMineruZipBytes,
   classifyMineruFetchError,
   fetchMineruResult,
-  loadMineruConfig,
   mineruClientFailureCodes,
   submitMineruTask,
   validateStatusResponse,

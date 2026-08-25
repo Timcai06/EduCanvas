@@ -13,6 +13,8 @@
  * 瞬时失败（单次请求超时）允许调用方退避重试。
  */
 
+import type { MineruBackend } from './mineru-config';
+
 /** 单次 HTTP 请求的默认超时（毫秒）。上传/下载大文件时调用方可覆盖。 */
 export const DEFAULT_MINERU_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -22,34 +24,6 @@ export const MINERU_POLL_TIMEOUT_MS = 15 * 60 * 1000;
 export const MINERU_POLL_INTERVAL_MS = 1_000;
 /** 轮询间隔上限（指数退避封顶）。 */
 export const MINERU_POLL_MAX_INTERVAL_MS = 10_000;
-
-/**
- * 从环境变量读取 MinerU 服务配置（ADR-0026 决定 2：未配置时允许降级）。
- *
- * `MINERU_BASE_URL` 缺失/空白 = 未配置，返回 null，编排层直接走纯文本降级；
- * 非 http(s) 的值视为配置错误，同样返回 null（宁可降级也不带错误地址打请求）。
- */
-export function loadMineruConfig(
-  env: Record<string, string | undefined>,
-): { baseUrl: string } | null {
-  const baseUrl = env.MINERU_BASE_URL?.trim();
-  if (!baseUrl) return null;
-  try {
-    const parsed = new URL(baseUrl);
-    if (
-      !['http:', 'https:'].includes(parsed.protocol) ||
-      parsed.username !== '' ||
-      parsed.password !== '' ||
-      parsed.search !== '' ||
-      parsed.hash !== ''
-    ) {
-      return null;
-    }
-    return { baseUrl: parsed.href.replace(/\/$/, '') };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 稳定失败码。它们可能落进 asset_processing_jobs.failure_code 或结构化日志，
@@ -132,6 +106,8 @@ async function fetchWithTimeout(
 
 export interface MineruSubmitParams {
   baseUrl: string;
+  /** 解析后端；缺省使用精度优先的 hybrid-engine。 */
+  backend?: MineruBackend;
   /** 提交的文件名（MinerU 按文件名生成派生目录与 md 名）。 */
   filename: string;
   fileBytes: Uint8Array;
@@ -207,7 +183,7 @@ export function validateSubmitResponse(
 /**
  * 提交转换任务（三步协议第一步）。
  *
- * 统一提交 hybrid-engine + zip 格式（ADR-0026 决定 2/3：md + content_list +
+ * 统一提交受支持 backend + zip 格式（ADR-0026 决定 2/3：md + content_list +
  * images 一次取回）；office 文档任意 backend 都先走 office 解析器，
  * 无需按文件类型切换提交参数。
  */
@@ -222,7 +198,7 @@ export async function submitMineruTask(
     new Blob([new Uint8Array(params.fileBytes)], { type: params.contentType }),
     params.filename,
   );
-  form.append('backend', 'hybrid-engine');
+  form.append('backend', params.backend ?? 'hybrid-engine');
   form.append('parse_method', 'auto');
   form.append('effort', 'medium');
   form.append('formula_enable', String(params.options?.formulaEnable ?? false));

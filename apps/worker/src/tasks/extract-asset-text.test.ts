@@ -94,6 +94,7 @@ describe('assets:extract_text', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.MINERU_BASE_URL;
+    delete process.env.MINERU_BACKEND;
     read.mockResolvedValue(new Uint8Array([1]));
     put.mockResolvedValue(undefined);
     renderWebPage.mockReset();
@@ -295,6 +296,7 @@ describe('assets:extract_text', () => {
 
   it('MinerU 成功落 structured 质量与 Markdown 表示', async () => {
     process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
+    process.env.MINERU_BACKEND = 'pipeline';
     pending('application/pdf', 'uploads/fixture/讲义.pdf');
     submit.mockResolvedValue({
       taskId: 't1',
@@ -338,6 +340,7 @@ describe('assets:extract_text', () => {
       expect.objectContaining({
         filename: '讲义.pdf',
         contentType: 'application/pdf',
+        backend: 'pipeline',
       }),
     );
     expect(repo.settleTextExtraction).toHaveBeenCalledWith({
