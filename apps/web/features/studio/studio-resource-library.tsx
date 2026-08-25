@@ -27,27 +27,10 @@ import {
   type ResourceLibrarySortKey,
   type ResourceLibrarySortOrder,
 } from './resource-library-model';
-import { Badge } from '@/components/ui/badge';
-
-const statusLabels: Record<WorkspaceResourceSummary['status'], string> = {
-  processing: '处理中',
-  ready: '可用',
-  failed: '失败',
-  unavailable: '暂不可用',
-  archived: '已归档',
-};
-
-/* 状态 → Badge 语义变体：处理中=藤黄(注意)、可用=松绿(成功)、失败=朱砂/错误、其余=中性。 */
-const statusVariant: Record<
-  WorkspaceResourceSummary['status'],
-  'warn' | 'good' | 'bad' | 'neutral'
-> = {
-  processing: 'warn',
-  ready: 'good',
-  failed: 'bad',
-  unavailable: 'neutral',
-  archived: 'neutral',
-};
+import {
+  ResourceStatusBadge,
+  resourceStatusLabels,
+} from './resource-library-status';
 
 function versionLabel(summary: WorkspaceResourceSummary): string {
   if (!summary.version) return '暂无版本';
@@ -165,9 +148,7 @@ function ResourceView({
                       : null}
                   </small>
                 </span>
-                <Badge variant={statusVariant[summary.status]}>
-                  {statusLabels[summary.status]}
-                </Badge>
+                <ResourceStatusBadge status={summary.status} />
                 <time dateTime={summary.updatedAt}>
                   {formatUpdatedAt(summary.updatedAt)}
                 </time>
@@ -365,7 +346,7 @@ export function StudioResourceLibrary({
             onChange={(event) => setStatus(event.target.value as typeof status)}
           >
             <option value="all">全部状态</option>
-            {Object.entries(statusLabels).map(([value, label]) => (
+            {Object.entries(resourceStatusLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>

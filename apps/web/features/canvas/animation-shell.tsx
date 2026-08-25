@@ -74,8 +74,7 @@ function getServerReducedMotionSnapshot() {
 
 /**
  * Human-authored playback shell for registered templates. The model supplies
- * only semantic slots and copy; this component owns selectors, timing, easing,
- * keyboard behavior and lifecycle cleanup.
+ * semantic slots and copy; this component owns playback and lifecycle cleanup.
  */
 export function AnimationShell({
   steps,
