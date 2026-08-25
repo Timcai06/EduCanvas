@@ -5,8 +5,8 @@
 - 负责人：@Timcai06
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
-- 最后验证时间：2026-08-15
-- 当前领取任务：`无（DP07 已完成；DP08 等待领取）`
+- 最后验证时间：2026-08-25
+- 当前领取任务：`无（DP08-DP10 已完成；DP11 等待领取）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -243,8 +243,14 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 ### DP08：用户点击式精确 Web handoff
 
 - 依赖：DP07
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：Gateway handoff contract/repository、Web open route、desktop main/renderer
+
+证据：PR #389 已完成 Message、Artifact Version 与 CanvasResource 的精确目标契约、
+服务端签发并原子消费短期一次性凭证、消费时用户与资源归属重验、Desktop 受限 IPC 与
+系统浏览器打开，以及 Web `focus` 精确落点。非法目标、越权资源、过期、重放和跨用户消费
+均有 core/client/server/repository/desktop/web 负向测试；打开动作只由用户点击触发，不会
+重新执行 Turn 或 Tool。Windows 系统浏览器实机流程并入 DP11 验收。
 
 交付：
 
@@ -259,8 +265,14 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 ### DP09：语音链路与 Canonical Message 对齐
 
 - 依赖：DP03、DP05、DP08
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：desktop voice session/proxy、Web voice BFF、Turn request/message projection
+
+证据：PR #389 已将 ASR transcript 通过稳定 `clientMessageId` 提交到同一 Turn/Operation，
+并以服务端 canonical Message 校正历史；TTS 请求绑定 `assistantMessageId`，重播只调用语音
+合成和播放，不会重新执行 Agent。录音、ASR、Turn、TTS 与播放共享取消边界，持续视觉态与
+失败降级已有 Desktop 自动化覆盖。PR #455 进一步保留原模型音色并增加同音色预取、在途
+请求合并与重播缓存；真人中文麦克风和真实服务延迟并入 DP11 实机验收。
 
 交付：
 
@@ -275,8 +287,15 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 ### DP10：图片与 PDF 的统一 Asset 输入
 
 - 依赖：DP09
-- 状态：`PENDING`
+- 状态：`PASS`
 - 文件边界：desktop file picker/upload、Asset API、Turn MessagePart、能力探测
+
+证据：PR #393 已完成用户显式选择 PNG/JPEG/WebP/PDF、25MB 上限与 magic-byte 类型校验、
+Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引用、Notebook 权限重验
+和 `asset_ref` 物化；不支持能力会稳定返回 `CAPABILITY_UNAVAILABLE`，文件不会从 renderer
+直传 Provider。大小、类型、取消、处理失败、超时、越权、Notebook 切换隔离与纯附件 Turn
+均有跨 core/client/db/gateway/desktop 自动化覆盖。PR #455 修复可选附件 IPC 校验并重做上传
+反馈与附件预览；真实图片/PDF主流程并入 DP11 实机验收。
 
 交付：
 
@@ -357,9 +376,9 @@ DP03-A 证据：Gateway Core 新增 `conversation-messages` 契约（`gmh1` 游�
 | DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING` |
 | DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING` |
 | DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING` |
-| DP08 handoff    | token/authorization tests                                                     | 系统浏览器精确打开                 | `PENDING` |
-| DP09 语音对齐   | fake ASR/TTS/Turn tests                                                       | 真人中文麦克风                     | `PENDING` |
-| DP10 附件       | Asset/Part/permission tests                                                   | 图片/PDF 上传                      | `PENDING` |
+| DP08 handoff    | core/client/server/repository/desktop/web token 与授权测试                    | 系统浏览器精确打开并入 DP11        | `PASS`    |
+| DP09 语音对齐   | Desktop fake ASR/TTS/Turn、取消、messageId 与重播缓存测试                     | 真人中文麦克风并入 DP11            | `PASS`    |
+| DP10 附件       | core/client/db/gateway/desktop Asset、Part、权限与隔离测试                    | 真实图片/PDF 上传并入 DP11         | `PASS`    |
 | DP11 Windows    | build + desktop regression                                                    | Windows 11 实机                    | `PENDING` |
 | DP12 macOS      | build + platform tests                                                        | macOS 打包实机                     | `PENDING` |
 | DP13 收口       | link/lint/diff checks                                                         | 能力声明复核                       | `PENDING` |

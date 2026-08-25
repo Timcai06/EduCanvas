@@ -4,32 +4,13 @@ import type {
   DesktopChatMessage,
 } from '../../shared/chat-history';
 import type { PetUiState } from './pet-visual-state';
-import { ExpandIcon, MicIcon, SpeakerIcon } from './pet-view';
+import { ExpandIcon, SpeakerIcon } from './pet-view';
 import type { DesktopConversationDirectorySnapshot } from '../../shared/conversation-directory';
 import type { DesktopResultTarget } from '../../shared/chat-history';
 import { MessageResultCards } from './message-result-cards';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 import type { DesktopAttachmentRef } from '../../shared/desktop-attachment';
-
-function AttachmentIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <path
-        d="M21 12a9 9 0 1 1-9-9c2.52 0 4.6 1.04 6.1 2.9L21 12z"
-        strokeLinecap="round"
-      />
-      <path d="M21 12v0H13" strokeLinecap="round" />
-    </svg>
-  );
-}
+import { AttachmentIcon, PetChatComposer } from './pet-chat-composer';
 
 export function PetChatPanel(props: {
   expandedView: boolean;
@@ -50,6 +31,8 @@ export function PetChatPanel(props: {
   startVoice(): Promise<void>;
   speakLatest(): Promise<void>;
   speakMessage(messageId: string, text: string): Promise<void>;
+  prepareSpeech(messageId: string, text: string): void;
+  cancelSpeechPreparation(): void;
   cancel(): void;
   resume(): Promise<void>;
   canResume: boolean;
@@ -61,6 +44,7 @@ export function PetChatPanel(props: {
   ): Promise<void>;
   openResult(target: DesktopResultTarget): Promise<void> | void;
   pendingAttachment: DesktopAttachmentRef | null;
+  attachmentBusy: boolean;
   pickAttachment(): Promise<void>;
   clearAttachment(): void;
 }) {
@@ -83,6 +67,8 @@ export function PetChatPanel(props: {
     startVoice,
     speakLatest,
     speakMessage,
+    prepareSpeech,
+    cancelSpeechPreparation,
     cancel,
     resume,
     canResume,
@@ -91,6 +77,7 @@ export function PetChatPanel(props: {
     createConversation,
     openResult,
     pendingAttachment,
+    attachmentBusy,
     pickAttachment,
     clearAttachment,
   } = props;
@@ -121,7 +108,10 @@ export function PetChatPanel(props: {
 
   const header = (
     <header>
-      <span className="pet-chat__dot" aria-hidden="true" />
+      <span
+        className={`pet-chat__dot${busy ? ' is-active' : ''}`}
+        aria-hidden="true"
+      />
       <div>
         <strong>EduCanvas</strong>
         <span>{headerState}</span>
@@ -192,10 +182,21 @@ export function PetChatPanel(props: {
               <small className="chat-message__source">语音输入</small>
             )}
             {item.role === 'user' && item.attachment && (
-              <small className="chat-message__attachment">
-                📎 {item.attachment.displayName}
+              <small
+                className="chat-message__attachment"
+                title={item.attachment.displayName}
+              >
+                <AttachmentIcon />
+                {item.attachment.displayName}
               </small>
             )}
+            {item.role === 'assistant' &&
+              state === 'speaking' &&
+              speakingMessageId === item.id && (
+                <span className="chat-message__speaking" role="status">
+                  正在朗读
+                </span>
+              )}
             <p>
               {item.content}
               {item.status === 'streaming' ? '▍' : ''}
@@ -207,20 +208,28 @@ export function PetChatPanel(props: {
                 const selected =
                   state === 'speaking' && speakingMessageId === item.id;
                 return (
-                  <button
-                    className={`chat-message__speak${selected ? ' is-active' : ''}`}
-                    type="button"
-                    aria-label={selected ? '停止朗读' : '朗读此回答'}
-                    title={selected ? '停止朗读' : '朗读此回答'}
-                    disabled={busy && !selected}
-                    onClick={() =>
-                      selected
-                        ? cancel()
-                        : void speakMessage(item.id, item.content)
-                    }
-                  >
-                    <SpeakerIcon />
-                  </button>
+                  <div className="chat-message__speech-controls">
+                    <button
+                      className={`chat-message__speak${selected ? ' is-active' : ''}`}
+                      type="button"
+                      aria-label={selected ? '停止朗读' : '朗读此回答'}
+                      title={selected ? '停止朗读' : '朗读此回答'}
+                      disabled={busy && !selected}
+                      onPointerEnter={() =>
+                        prepareSpeech(item.id, item.content)
+                      }
+                      onPointerLeave={cancelSpeechPreparation}
+                      onFocus={() => prepareSpeech(item.id, item.content)}
+                      onBlur={cancelSpeechPreparation}
+                      onClick={() =>
+                        selected
+                          ? cancel()
+                          : void speakMessage(item.id, item.content)
+                      }
+                    >
+                      <SpeakerIcon />
+                    </button>
+                  </div>
                 );
               })()}
             {item.role === 'assistant' && (
@@ -233,120 +242,37 @@ export function PetChatPanel(props: {
     </div>
   );
 
-  const statusLine = (history.messages.length === 0 || state !== 'ready') && (
+  const statusLine = (history.messages.length === 0 ||
+    (state !== 'ready' && state !== 'speaking')) && (
     <p className="pet-chat__status" role="status">
       {message}
     </p>
   );
 
   const composer = (
-    <form
-      className="pet-chat__composer"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-    >
-      {pendingAttachment && (
-        <span className="attachment-chip" role="status">
-          <span
-            className="attachment-chip__name"
-            title={pendingAttachment.displayName}
-          >
-            📎 {pendingAttachment.displayName}
-          </span>
-          <button
-            type="button"
-            className="attachment-chip__remove"
-            aria-label="移除附件"
-            title="移除附件"
-            onClick={clearAttachment}
-          >
-            ×
-          </button>
-        </span>
-      )}
-      <textarea
-        aria-label="输入消息"
-        value={text}
-        rows={expandedView ? 3 : 2}
-        maxLength={4_000}
-        disabled={busy}
-        aria-disabled={!directory.currentConversationId || busy}
-        placeholder="输入一句话…"
-        onChange={(event) => setText(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-      />
-      <div className="pet-chat__actions">
-        <button
-          className="attach-action"
-          type="button"
-          aria-label="选择图片或 PDF"
-          title="选择图片或 PDF"
-          disabled={busy || !directory.currentConversationId}
-          onClick={() => void pickAttachment()}
-        >
-          <AttachmentIcon />
-        </button>
-        <button
-          className={`voice-action${state === 'listening' ? ' is-active' : ''}`}
-          type="button"
-          aria-label={state === 'listening' ? '停止语音输入' : '开始语音输入'}
-          title={state === 'listening' ? '停止语音输入' : '开始语音输入'}
-          disabled={busy && state !== 'listening'}
-          onClick={state === 'listening' ? cancel : () => void startVoice()}
-        >
-          <MicIcon />
-        </button>
-        <button
-          className={`voice-action${state === 'speaking' ? ' is-active' : ''}`}
-          type="button"
-          aria-label={state === 'speaking' ? '停止朗读' : '朗读最新回复'}
-          title={state === 'speaking' ? '停止朗读' : '朗读最新回复'}
-          disabled={!lastAssistantReply || (busy && state !== 'speaking')}
-          onClick={state === 'speaking' ? cancel : () => void speakLatest()}
-        >
-          <SpeakerIcon />
-        </button>
-        {busy && state !== 'authorizing' ? (
-          <button
-            className="send-action is-stop"
-            type="button"
-            disabled={!canStop}
-            onClick={cancel}
-          >
-            停止
-          </button>
-        ) : (
-          <>
-            {canResume && (
-              <button
-                className="send-action is-resume"
-                type="button"
-                onClick={() => void resume()}
-              >
-                续传
-              </button>
-            )}
-            <button
-              className="send-action"
-              type="submit"
-              disabled={
-                (!text.trim() && !pendingAttachment) ||
-                !directory.currentConversationId
-              }
-            >
-              发送
-            </button>
-          </>
-        )}
-      </div>
-    </form>
+    <PetChatComposer
+      expandedView={expandedView}
+      state={state}
+      history={history}
+      text={text}
+      busy={busy}
+      canStop={canStop}
+      lastAssistantReply={lastAssistantReply}
+      setText={setText}
+      submit={submit}
+      startVoice={startVoice}
+      speakLatest={speakLatest}
+      prepareSpeech={prepareSpeech}
+      cancelSpeechPreparation={cancelSpeechPreparation}
+      cancel={cancel}
+      resume={resume}
+      canResume={canResume}
+      directory={directory}
+      pendingAttachment={pendingAttachment}
+      attachmentBusy={attachmentBusy}
+      pickAttachment={pickAttachment}
+      clearAttachment={clearAttachment}
+    />
   );
 
   const authGate = (
@@ -433,7 +359,7 @@ export function PetChatPanel(props: {
                       ? ' is-active'
                       : ''
                   }`}
-                  disabled={busy}
+                  disabled={busy && state !== 'speaking'}
                   aria-current={
                     item.conversationId === directory.currentConversationId
                       ? 'true'
@@ -464,20 +390,25 @@ export function PetChatPanel(props: {
   const mainContent = (
     <>
       {header}
-      {!expandedView && (
-        <p className="conversation-current" title={current?.title ?? undefined}>
-          {current
-            ? `${current.notebookTitle} · ${current.title ?? '未命名对话'}`
-            : '尚未选择对话'}
-        </p>
-      )}
-      {!expandedView && directory.error && (
-        <p className="conversation-error" role="alert">
-          {directory.error}
-        </p>
-      )}
-      {historyList}
-      {statusLine}
+      <div className="pet-chat__body">
+        {!expandedView && (
+          <p
+            className="conversation-current"
+            title={current?.title ?? undefined}
+          >
+            {current
+              ? `${current.notebookTitle} · ${current.title ?? '未命名对话'}`
+              : '尚未选择对话'}
+          </p>
+        )}
+        {!expandedView && directory.error && (
+          <p className="conversation-error" role="alert">
+            {directory.error}
+          </p>
+        )}
+        {historyList}
+        {statusLine}
+      </div>
       {authState === 'signed_in' ? composer : authControl}
     </>
   );

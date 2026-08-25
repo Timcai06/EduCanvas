@@ -94,6 +94,20 @@ describe('桌宠 MVP 文本对话', () => {
     });
   });
 
+  it('IPC 调用异常时返回可恢复错误，不让界面停在回复中', async () => {
+    const turn = vi.fn(async () => {
+      throw new Error('Invalid assistant turn');
+    });
+
+    await expect(
+      submitPetText('你好', 'request:ipc-failure', turn),
+    ).resolves.toEqual({
+      ok: false,
+      code: 'backend_offline',
+      error: '暂时无法连接 EduCanvas，请稍后重试。',
+    });
+  });
+
   it('prevents a second submit until the active operation leaves', () => {
     const gate = createPetSubmitGate();
     const first = gate.enter();

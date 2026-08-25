@@ -2,7 +2,12 @@ import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import {
   MVP_WINDOW_HEIGHT,
+  MVP_WINDOW_MAX_HEIGHT,
+  MVP_WINDOW_MAX_WIDTH,
+  MVP_WINDOW_MIN_HEIGHT,
+  MVP_WINDOW_MIN_WIDTH,
   MVP_WINDOW_WIDTH,
+  constrainPetWindowSize,
   petVisibleRect,
 } from '../shared/pet-mvp-layout';
 import {
@@ -30,6 +35,10 @@ function currentDisplays() {
 export function createPetWindow(): PetWindowController {
   const positionFile = join(app.getPath('userData'), 'pet-window.json');
   const saved = loadPetPositionFile(positionFile);
+  const restoredSize = constrainPetWindowSize(
+    saved?.width ?? MVP_WINDOW_WIDTH,
+    saved?.height ?? MVP_WINDOW_HEIGHT,
+  );
   const workArea = screen.getPrimaryDisplay().workArea;
   const defaultPosition = {
     x: workArea.x + workArea.width - MVP_WINDOW_WIDTH - 24,
@@ -39,23 +48,27 @@ export function createPetWindow(): PetWindowController {
     {
       x: saved?.x ?? defaultPosition.x,
       y: saved?.y ?? defaultPosition.y,
-      width: MVP_WINDOW_WIDTH,
-      height: MVP_WINDOW_HEIGHT,
+      width: restoredSize.width,
+      height: restoredSize.height,
     },
-    petVisibleRect(MVP_WINDOW_HEIGHT),
+    petVisibleRect(restoredSize.width, restoredSize.height),
     currentDisplays(),
   );
 
   const win = new BrowserWindow({
-    width: MVP_WINDOW_WIDTH,
-    height: MVP_WINDOW_HEIGHT,
+    width: restored.width,
+    height: restored.height,
     x: Math.round(restored.x),
     y: Math.round(restored.y),
     useContentSize: true,
     ...PET_WINDOW_APPEARANCE,
     frame: false,
     hasShadow: false,
-    resizable: false,
+    resizable: true,
+    minWidth: MVP_WINDOW_MIN_WIDTH,
+    minHeight: MVP_WINDOW_MIN_HEIGHT,
+    maxWidth: MVP_WINDOW_MAX_WIDTH,
+    maxHeight: MVP_WINDOW_MAX_HEIGHT,
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
@@ -73,12 +86,21 @@ export function createPetWindow(): PetWindowController {
       savePetPositionFile(positionFile, {
         x: bounds.x,
         y: bounds.y,
-        width: MVP_WINDOW_WIDTH,
-        height: MVP_WINDOW_HEIGHT,
+        width: bounds.width,
+        height: bounds.height,
       });
     } catch {
       // 位置记忆失败不应影响桌宠运行或退出。
     }
+  }
+
+  let positionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+  function schedulePositionSave(): void {
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
+    positionSaveTimer = setTimeout(() => {
+      positionSaveTimer = undefined;
+      savePosition();
+    }, 120);
   }
 
   function recoverIfDisplayWasRemoved(): void {
@@ -86,7 +108,7 @@ export function createPetWindow(): PetWindowController {
     const current = win.getBounds();
     const recovered = recoverOffscreenRect(
       current,
-      petVisibleRect(current.height),
+      petVisibleRect(current.width, current.height),
       currentDisplays(),
     );
     if (recovered.x === current.x && recovered.y === current.y) return;
@@ -97,7 +119,7 @@ export function createPetWindow(): PetWindowController {
   win.on('will-move', (event, proposedBounds) => {
     const constrained = recoverOffscreenRect(
       proposedBounds,
-      petVisibleRect(proposedBounds.height),
+      petVisibleRect(proposedBounds.width, proposedBounds.height),
       currentDisplays(),
     );
     if (
@@ -123,10 +145,12 @@ export function createPetWindow(): PetWindowController {
     savePosition();
   });
   win.on('hide', savePosition);
+  win.on('resize', schedulePositionSave);
   win.on('ready-to-show', () => showPetWindow(win));
   screen.on('display-removed', recoverIfDisplayWasRemoved);
   screen.on('display-metrics-changed', recoverIfDisplayWasRemoved);
   win.on('closed', () => {
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
     screen.removeListener('display-removed', recoverIfDisplayWasRemoved);
     screen.removeListener(
       'display-metrics-changed',

@@ -36,6 +36,7 @@ export interface VoiceSessionSnapshot {
   phase: VoiceSessionPhase;
   transcript?: string;
   reply?: string;
+  assistantMessageId?: string;
   error?: string;
   notice?: string;
   level?: number;
@@ -99,7 +100,7 @@ export async function runVoiceSession(
   let reply: string | undefined;
   let assistantMessageId: string | undefined;
   const emit = (snapshot: VoiceSessionSnapshot): void =>
-    options.onChange({ ...snapshot, transcript, reply });
+    options.onChange({ ...snapshot, transcript, reply, assistantMessageId });
   const cancelled = (): VoiceSessionResult => {
     emit({ phase: 'cancelled' });
     return { outcome: 'cancelled' };

@@ -108,6 +108,7 @@ declare global {
         requestId: string,
         assistantMessageId?: string,
       ): Promise<VoiceSpeechResult>;
+      prefetch(text: string, assistantMessageId: string): void;
       cancel(requestId: string): void;
     };
   }
@@ -310,6 +311,9 @@ contextBridge.exposeInMainWorld('desktopVoice', {
       assistantMessageId,
       leaseToken: activeOperationLeaseToken,
     });
+  },
+  prefetch(text: string, assistantMessageId: string): void {
+    ipcRenderer.send('voice:prefetch', { text, assistantMessageId });
   },
   cancel(requestId: string): void {
     ipcRenderer.send('operation:cancel', requestId);

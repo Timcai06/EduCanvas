@@ -24,6 +24,12 @@ import type { DesktopConversationDirectorySnapshot } from '../../shared/conversa
 import { applyAssistantProjection } from './assistant-stream';
 import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
 import { openDesktopResult } from './result-actions';
+import {
+  initialChatHistory,
+  initialConversationDirectory,
+  useDesktopAttachment,
+  useSpeechPreparation,
+} from './pet-composer-state';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -40,25 +46,9 @@ export default function App({
   const [message, setMessage] = useState(
     '你好，我在这里。输入一句话和我聊聊吧。',
   );
-  const [history, setHistory] = useState<DesktopChatHistorySnapshot>({
-    revision: 0,
-    conversationId: null,
-    messages: [],
-    hasMore: false,
-    nextCursor: null,
-    loading: false,
-  });
-  const [directory, setDirectory] =
-    useState<DesktopConversationDirectorySnapshot>({
-      revision: 0,
-      loading: false,
-      conversations: [],
-      currentConversationId: null,
-      error: null,
-    });
+  const [history, setHistory] = useState(initialChatHistory);
+  const [directory, setDirectory] = useState(initialConversationDirectory);
   const [pendingResume, setPendingResume] = useState<string | null>(null);
-  const [pendingAttachment, setPendingAttachment] =
-    useState<DesktopAttachmentRef | null>(null);
   const [canStop, setCanStop] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
     null,
@@ -77,6 +67,17 @@ export default function App({
   );
   const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
+  const currentNotebookId =
+    directory.conversations.find(
+      (item) => item.conversationId === directory.currentConversationId,
+    )?.notebookId ?? null;
+  const { pendingAttachment, attachmentBusy, pickAttachment, clearAttachment } =
+    useDesktopAttachment({ currentNotebookId, message, setMessage });
+  const { speechCacheRef, prepareSpeech, cancelSpeechPreparation } =
+    useSpeechPreparation({
+      latestMessageId: lastAssistantMessage?.id,
+      busy,
+    });
 
   const publishVisual = (next: PetUiState): void => {
     setVisualState(next);
@@ -250,33 +251,6 @@ export default function App({
     if (operationLeaseRef.current === token) operationLeaseRef.current = null;
   };
 
-  const pickAttachment = async (): Promise<void> => {
-    const result = await window.desktopAttachment.pick();
-    if (result.ok) {
-      setPendingAttachment(result.attachment);
-      setMessage('已选择附件，点击发送。');
-    } else if (result.message !== '已取消选择附件。') {
-      setMessage(result.message);
-    }
-  };
-  const clearAttachment = (): void => setPendingAttachment(null);
-
-  // DP10：附件绑定 pick 时刻的 notebookId；切换 Notebook 后立即清空，
-  // 不把旧 notebook 资产泄漏进新会话（服务端 requireNotebookAccess 兜底）。
-  const currentNotebookId =
-    directory.conversations.find(
-      (item) => item.conversationId === directory.currentConversationId,
-    )?.notebookId ?? null;
-  const currentNotebookRef = useRef(currentNotebookId);
-  useEffect(() => {
-    if (currentNotebookRef.current !== currentNotebookId) {
-      currentNotebookRef.current = currentNotebookId;
-      setPendingAttachment((pending) =>
-        pending && pending.notebookId !== currentNotebookId ? null : pending,
-      );
-    }
-  }, [currentNotebookId]);
-
   const submit = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
@@ -322,7 +296,7 @@ export default function App({
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
-      if (attachment) setPendingAttachment(null);
+      if (attachment) clearAttachment();
       if (result.ok) {
         setText('');
         setState('ready');
@@ -335,6 +309,12 @@ export default function App({
         setMessage(result.error);
         if (result.code === 'interrupted') setPendingResume(clientMessageId);
       }
+    } catch {
+      requestIdRef.current = null;
+      setCanStop(false);
+      setState('backend-failed');
+      publishVisual('backend-failed');
+      setMessage('暂时无法连接 EduCanvas，请稍后重试。');
     } finally {
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
@@ -392,13 +372,15 @@ export default function App({
               setMessage('正在识别语音…');
             else if (snapshot.phase === 'thinking')
               setMessage('EduCanvas 正在思考…');
-            else if (snapshot.phase === 'speaking')
-              setMessage(snapshot.reply ?? '正在播报回答…');
+            else if (snapshot.phase === 'speaking') {
+              setSpeakingMessageId(snapshot.assistantMessageId ?? null);
+              setMessage('正在朗读…');
+            }
           },
         },
       );
       if (result.outcome === 'success') {
-        if (result.speechPlayed) setMessage(result.reply);
+        if (result.speechPlayed) setMessage('语音回答已完成。');
       } else if (result.outcome === 'cancelled')
         setMessage('已停止。你可以继续输入。');
       else if (result.code === 'interrupted') setPendingResume(voiceId);
@@ -406,6 +388,7 @@ export default function App({
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
       setCanStop(false);
+      setSpeakingMessageId(null);
       setState(terminalState);
       publishVisual(terminalState);
       releaseOperation(leaseToken);
@@ -438,29 +421,42 @@ export default function App({
     let terminalState: PetUiState = 'ready';
     setState('speaking');
     publishVisual('speaking');
-    setMessage(reply);
+    setMessage('正在准备语音…');
     try {
-      const speech = await window.desktopVoice.synthesize(
-        reply,
-        requestId,
-        assistantMessageId,
-      );
-      requestIdRef.current = null;
-      if (!speech.ok) {
-        if (speech.code === 'aborted' || controller.signal.aborted) return;
-        const failureState =
-          speech.code === 'unauthenticated' ? 'auth-failed' : 'backend-failed';
-        terminalState = failureState;
-        setState(failureState);
-        publishVisual(failureState);
-        setMessage(speech.message);
-        return;
+      const cacheKey = `${assistantMessageId}\u0000${reply}`;
+      let speechBytes =
+        speechCacheRef.current?.key === cacheKey
+          ? speechCacheRef.current.bytes
+          : null;
+      if (!speechBytes) {
+        const speech = await window.desktopVoice.synthesize(
+          reply,
+          requestId,
+          assistantMessageId,
+        );
+        requestIdRef.current = null;
+        if (!speech.ok) {
+          if (speech.code === 'aborted' || controller.signal.aborted) return;
+          const failureState =
+            speech.code === 'unauthenticated'
+              ? 'auth-failed'
+              : 'backend-failed';
+          terminalState = failureState;
+          setState(failureState);
+          publishVisual(failureState);
+          setMessage(speech.message);
+          return;
+        }
+        speechBytes = speech.bytes;
+        speechCacheRef.current = { key: cacheKey, bytes: speech.bytes };
       }
-      const playback = await playSpeech(speech.bytes, {
+      setMessage('正在朗读…');
+      const playback = await playSpeech(speechBytes, {
         signal: controller.signal,
       });
       if (playback === 'failed') setMessage('语音播报失败，文字回复仍可查看。');
     } finally {
+      if (requestIdRef.current === requestId) requestIdRef.current = null;
       if (operationControllerRef.current === controller)
         operationControllerRef.current = null;
       setCanStop(false);
@@ -552,11 +548,14 @@ export default function App({
       startVoice={startVoice}
       speakLatest={speakLatest}
       speakMessage={speakMessage}
+      prepareSpeech={prepareSpeech}
+      cancelSpeechPreparation={cancelSpeechPreparation}
       cancel={cancel}
       resume={resumePending}
       canResume={pendingResume !== null}
       directory={directory}
       selectConversation={async (conversationId) => {
+        if (state === 'speaking') cancel();
         const next = await window.desktopConversation.select(conversationId);
         setDirectory(next);
         setMessage('已切换对话。');
@@ -571,6 +570,7 @@ export default function App({
       }}
       openResult={(target) => openDesktopResult(target).then(setMessage)}
       pendingAttachment={pendingAttachment}
+      attachmentBusy={attachmentBusy}
       pickAttachment={pickAttachment}
       clearAttachment={clearAttachment}
     />
