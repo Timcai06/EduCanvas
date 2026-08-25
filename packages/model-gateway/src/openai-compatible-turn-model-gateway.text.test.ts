@@ -87,6 +87,84 @@ describe('OpenAI-compatible文本流', () => {
     expect(body).not.toHaveProperty('user_id');
   });
 
+  it('容忍MiMo风格显式 "tool_calls": null 的delta（null视同缺省，不进工具解析）', async () => {
+    // 回归：MiMo 等 OpenAI 兼容网关在每个 delta 中显式输出 tool_calls: null，
+    // 旧校验把 null 误判为"存在但非数组"并抛 SseProtocolError，导致整轮请重试。
+    const baseChunk = {
+      id: 'mimo-fixture-id',
+      created: 1_787_639_043,
+      model: 'configured-provider-model',
+      object: 'chat.completion.chunk',
+      system_fingerprint: 'fixture-fingerprint',
+      usage: null,
+    };
+    const chunks: readonly unknown[] = [
+      {
+        ...baseChunk,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: '',
+              role: 'assistant',
+              tool_calls: null,
+              reasoning_content: null,
+            },
+            finish_reason: null,
+          },
+        ],
+      },
+      {
+        ...baseChunk,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: '你好',
+              tool_calls: null,
+              reasoning_content: null,
+            },
+            finish_reason: null,
+          },
+        ],
+      },
+      {
+        ...baseChunk,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+      },
+      {
+        ...baseChunk,
+        choices: [],
+        usage: {
+          prompt_tokens: 5,
+          completion_tokens: 2,
+          total_tokens: 7,
+        },
+      },
+    ];
+    const gateway = new OpenAICompatibleTurnModelGateway(config, {
+      fetchImpl: oneResponseFetch(() => createFixtureResponse(chunks)),
+    });
+    const events = await collect(gateway);
+    expect(events.map((event) => event.type)).toEqual([
+      'text_delta',
+      'usage',
+      'completed',
+    ]);
+    expect(events[0]).toMatchObject({
+      type: 'text_delta',
+      phase: 'answer',
+      delta: '你好',
+    });
+    expect(JSON.stringify(events)).not.toContain('tool_calls');
+  });
+
   it('接受DeepSeek在终止choice中内联usage的SSE布局', async () => {
     const finishChunk = textStreamChunks.at(-2) as Record<string, unknown>;
     const usageChunk = textStreamChunks.at(-1) as Record<string, unknown>;
