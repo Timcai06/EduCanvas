@@ -21,11 +21,26 @@ import { composeArgs } from './local-compose.mjs';
 
 const MIGRATION_STATE_FILE = '.educanvas-migrate-state.json';
 
+export function resolveCommandInvocation(
+  command,
+  args,
+  { platform = process.platform, commandShell = process.env.ComSpec } = {},
+) {
+  if (platform === 'win32' && command === 'pnpm') {
+    return {
+      command: commandShell || 'cmd.exe',
+      args: ['/d', '/s', '/c', command, ...args],
+    };
+  }
+  return { command, args };
+}
+
 export const defaultRunCommand = (command, args, options = {}) =>
   new Promise((resolve) => {
+    const invocation = resolveCommandInvocation(command, args);
     execFile(
-      command,
-      args,
+      invocation.command,
+      invocation.args,
       { timeout: 120_000, ...options },
       (error, stdout, stderr) => {
         resolve({

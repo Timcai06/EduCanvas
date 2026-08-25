@@ -7,6 +7,7 @@ import { after, test } from 'node:test';
 import {
   computeMigrationFingerprint,
   readDatabaseIdentity,
+  resolveCommandInvocation,
   runMigrations,
   writeMigrationState,
 } from './local-db.mjs';
@@ -34,6 +35,28 @@ const fakeRunCommand = (responses) => async (command, args) => {
   if (handler) return handler(args);
   return { code: 1, stdout: '', stderr: 'unexpected command' };
 };
+
+test('Windows 通过 cmd.exe 执行 pnpm 脚本', () => {
+  assert.deepEqual(
+    resolveCommandInvocation('pnpm', ['db:migrate'], {
+      platform: 'win32',
+      commandShell: 'C:\\Windows\\System32\\cmd.exe',
+    }),
+    {
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'pnpm', 'db:migrate'],
+    },
+  );
+});
+
+test('非 pnpm 命令保持直接执行', () => {
+  assert.deepEqual(
+    resolveCommandInvocation('docker', ['compose', 'ps'], {
+      platform: 'win32',
+    }),
+    { command: 'docker', args: ['compose', 'ps'] },
+  );
+});
 
 test('computeMigrationFingerprint 基于源文件内容', async () => {
   const root = await makeTemporaryRoot();
