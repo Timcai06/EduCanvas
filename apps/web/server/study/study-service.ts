@@ -9,6 +9,7 @@ import {
   type StudyPlanSnapshot,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
+import type { Artifact } from '@educanvas/canvas-protocol/server';
 import {
   diagnosticSubmissionSchema,
   gradeDiagnostic,
@@ -23,8 +24,10 @@ import type {
   SubmitDiagnosticInputDTO,
 } from '@/features/learning/learning-contracts';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
-import { demoLesson } from '../teaching/demo-lesson';
-import { getTrustedStudyCourse, getTrustedStudyCourseForGoal } from './catalog';
+import {
+  getTrustedStudyContent,
+  getTrustedStudyContentForGoal,
+} from './catalog';
 
 const studyPlans = new DrizzleStudyPlanRepository();
 const diagnostics = new DrizzleStudyDiagnosticRepository();
@@ -45,6 +48,7 @@ const createStudyPlanInputSchema = z
 export interface OwnedStudyContext {
   plan: StudyPlanSnapshot;
   course: StudyCourseDefinition;
+  artifact: Artifact;
   sessionId: string;
 }
 
@@ -53,8 +57,8 @@ export type StudyPageState =
   | { kind: 'diagnostic'; data: StudyDiagnosticDTO }
   | { kind: 'workspace'; context: OwnedStudyContext };
 
-function courseForPlan(plan: StudyPlanSnapshot): StudyCourseDefinition | null {
-  return getTrustedStudyCourseForGoal({
+function contentForPlan(plan: StudyPlanSnapshot) {
+  return getTrustedStudyContentForGoal({
     gradeBand: plan.goal.gradeBand,
     courseSlug: plan.goal.courseSlug,
     courseVersion: plan.goal.courseVersion,
@@ -70,14 +74,14 @@ export async function loadOwnedStudyContext(
 ): Promise<OwnedStudyContext | null> {
   const latestPlan = await studyPlans.getActiveForStudent(identity.studentId);
   if (!latestPlan) return null;
-  const latestCourse = courseForPlan(latestPlan);
-  if (!latestCourse) return null;
+  const latestContent = contentForPlan(latestPlan);
+  if (!latestContent) return null;
   const currentSession = await learningSessions.getCurrentOwned({
     studentId: identity.studentId,
     gradeBand: latestPlan.goal.gradeBand,
     courseSlug: latestPlan.goal.courseSlug,
     // 课程定义已通过 6–12 个目标的受信 schema 校验。
-    knowledgeNodeId: latestCourse.objectives[0]!.knowledgeNodeId,
+    knowledgeNodeId: latestContent.course.objectives[0]!.knowledgeNodeId,
   });
   if (!currentSession) return null;
   const currentPlan = await studyPlans.getOwnedBySession(
@@ -85,11 +89,12 @@ export async function loadOwnedStudyContext(
     currentSession.sessionId,
   );
   if (!currentPlan) return null;
-  const currentCourse = courseForPlan(currentPlan);
-  return currentCourse
+  const currentContent = contentForPlan(currentPlan);
+  return currentContent
     ? {
         plan: currentPlan,
-        course: currentCourse,
+        course: currentContent.course,
+        artifact: currentContent.artifact,
         sessionId: currentSession.sessionId,
       }
     : null;
@@ -104,13 +109,14 @@ export async function bootstrapStudyPlan(
   rawInput: CreateStudyPlanInputDTO,
 ): Promise<StudyPlanSnapshot> {
   const input = createStudyPlanInputSchema.parse(rawInput);
-  const course = getTrustedStudyCourse(input.gradeBand);
+  const content = getTrustedStudyContent(input.gradeBand);
+  const { course } = content;
   const session = await learningSessions.bootstrap({
     studentId: identity.studentId,
     gradeBand: course.gradeBand,
     courseSlug: course.courseSlug,
     knowledgeNodeId: course.objectives[0]!.knowledgeNodeId,
-    completeArtifact: demoLesson.artifact,
+    completeArtifact: content.artifact,
   });
   try {
     return await studyPlans.bootstrap({

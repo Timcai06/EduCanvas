@@ -84,6 +84,25 @@ const course = {
 const context = {
   sessionId: 'old-session',
   course,
+  artifact: {
+    schemaVersion: '1',
+    artifactId: 'math-fractions-practice',
+    type: 'quiz',
+    title: '分数加法练习',
+    params: {
+      questions: [
+        {
+          id: 'fraction-1',
+          question: '二分之一加二分之一等于多少？',
+          options: [
+            { id: 'one', text: '1' },
+            { id: 'two', text: '2' },
+          ],
+          correctOptionId: 'one',
+        },
+      ],
+    },
+  },
   plan: {
     profile: {
       declaredByUserId: identity.studentId,
@@ -141,6 +160,14 @@ describe('startNewAnonymousLesson', () => {
         knowledgeNodeId: context.course.objectives[0]!.knowledgeNodeId,
       },
       context.sessionId,
+    );
+  });
+
+  it('新Notebook使用当前课程内容包拥有的Artifact', async () => {
+    await startNewAnonymousLesson(identity);
+
+    expect(learningSessions.startNew).toHaveBeenCalledWith(
+      expect.objectContaining({ completeArtifact: context.artifact }),
     );
   });
 
