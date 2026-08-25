@@ -6,11 +6,11 @@ on:
     branches: [main]
   schedule:
     # 完整稳定矩阵集中在 nightly；普通 PR / main push 只跑 Chromium smoke。
-    - cron: '17 1 * * *'
+    - cron: "17 1 * * *"
   workflow_dispatch:
     inputs:
       release_evidence:
-        description: 'Validate release evidence pack'
+        description: "Validate release evidence pack"
         required: false
         type: boolean
         default: false
@@ -344,12 +344,11 @@ jobs:
         run: pnpm --filter @educanvas/node-host test
 
   desktop-build:
-    # 桌面助手（apps/desktop）独立 lane：测试 + electron-vite build + 产物校验。
-    # 不打 portable 包（CI 只验证构建产物；打包在发布流程进行）。
+    # DP11：在真实 Windows runner 生成 installer + portable，并保留分发证据。
     needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -369,14 +368,46 @@ jobs:
       - name: Desktop typecheck
         run: pnpm --filter @educanvas/desktop typecheck
 
-      - name: Desktop build
-        run: pnpm --filter @educanvas/desktop build
+      - name: Desktop Windows package
+        run: pnpm --filter @educanvas/desktop package:windows
 
-      - name: Verify build artifacts
+      - name: Verify build and Windows distributables
+        shell: pwsh
         run: |
-          test -f apps/desktop/out/main/index.js
-          test -f apps/desktop/out/preload/index.js
-          test -f apps/desktop/out/renderer/index.html
+          $required = @(
+            'apps/desktop/out/main/index.js',
+            'apps/desktop/out/preload/index.js',
+            'apps/desktop/out/renderer/index.html'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Missing desktop build artifact: $path"
+            }
+          }
+          $installer = Get-ChildItem -LiteralPath 'apps/desktop/dist' -Filter 'EduCanvas-助手-Setup-*.exe' -File
+          $portable = Get-ChildItem -LiteralPath 'apps/desktop/dist' -Filter 'EduCanvas-助手-*.exe' -File |
+            Where-Object { $_.Name -notlike '*-Setup-*' }
+          if ($installer.Count -ne 1 -or $portable.Count -ne 1) {
+            throw 'Expected exactly one Windows installer and one portable executable.'
+          }
+          foreach ($artifact in @($installer) + @($portable)) {
+            if ($artifact.Length -le 0) { throw "Empty artifact: $($artifact.FullName)" }
+            $signature = Get-AuthenticodeSignature -LiteralPath $artifact.FullName
+            if ($signature.Status -notin @('Valid', 'NotSigned')) {
+              throw "Invalid Authenticode status for $($artifact.Name): $($signature.Status)"
+            }
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $artifact.FullName
+            "{0} size={1} sha256={2} signature={3}" -f $artifact.Name,$artifact.Length,$hash.Hash,$signature.Status |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Upload Windows distributables
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: educanvas-desktop-windows-${{ github.event.pull_request.head.sha || github.sha }}
+          path: apps/desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
 
   runtime-pressure:
     needs: [changes, quality-static, quality-tests]

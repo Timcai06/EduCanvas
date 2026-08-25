@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, extname, relative, resolve } from 'node:path';
+import { extname, posix, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
 const SOURCE_EXTENSIONS = new Set([
@@ -48,7 +48,11 @@ function packageEntrypoint(specifier, target) {
 
 function relativeTraversalTarget(sourcePath, specifier, workspaces) {
   if (!specifier.startsWith('.')) return undefined;
-  const resolved = resolve('/', dirname(sourcePath), specifier).slice(1);
+  // Repository paths are policy identifiers, not host filesystem paths. Keep
+  // them POSIX-normalized so Windows separators cannot bypass package scopes.
+  const resolved = posix
+    .normalize(posix.join('/', posix.dirname(sourcePath), specifier))
+    .slice(1);
   return workspaces.find(
     (workspace) =>
       resolved === workspace.path || resolved.startsWith(`${workspace.path}/`),
@@ -241,7 +245,7 @@ export function repositorySources(root, workspaces) {
   ];
   return roots.flatMap((directory) =>
     collectSourceFiles(directory).map((file) => ({
-      path: relative(root, file),
+      path: relative(root, file).replaceAll('\\', '/'),
       imports: parseModuleSpecifiers(readFileSync(file, 'utf8'), file),
     })),
   );

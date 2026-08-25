@@ -1,6 +1,8 @@
 {
   "name": "@educanvas/desktop",
   "version": "0.1.0",
+  "description": "EduCanvas first-party desktop companion",
+  "author": "EduCanvas Contributors",
   "engines": {
     "node": ">=24.18.0"
   },
@@ -17,9 +19,12 @@
     "test": "vitest run",
     "gen:pet-sprites": "node scripts/generate-pet-sprites.mjs",
     "typecheck": "tsc --noEmit",
-    "package:portable": "electron-vite build && electron-builder --win portable"
+    "audit:windows-package": "node scripts/audit-windows-package.mjs",
+    "package:portable": "electron-vite build && electron-builder --win portable && pnpm run audit:windows-package",
+    "package:windows": "electron-vite build && electron-builder --win nsis portable && pnpm run audit:windows-package"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

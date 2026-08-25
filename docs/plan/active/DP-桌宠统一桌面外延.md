@@ -6,7 +6,7 @@
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
 - 最后验证时间：2026-08-25
-- 当前领取任务：`无（DP08-DP10 已完成；DP11 等待领取）`
+- 当前领取任务：`DP11 Windows 打包、性能基线与实机验收（进行中）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -309,8 +309,9 @@ Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引�
 ### DP11：Windows 打包、性能基线与实机验收
 
 - 依赖：DP00-DP10
-- 状态：`PENDING`
+- 状态：`IN_PROGRESS`
 - 文件边界：desktop build config、Windows launcher、质量证据和发布说明
+- 证据：[DP11 Windows 打包与性能基线](../../06-quality/evidence/24-DP11-Windows打包与性能基线.md)
 
 交付：
 
@@ -366,22 +367,22 @@ Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引�
 
 ## 九、验证矩阵
 
-| 任务            | 自动化证据                                                                    | 人工/环境证据                      | 状态      |
-| --------------- | ----------------------------------------------------------------------------- | ---------------------------------- | --------- |
-| DP00 需求与决策 | 文档链接、矛盾扫描、Desktop/Gateway 基线                                      | 项目负责人已接受 ADR-0028          | `PASS`    |
-| DP01 身份解耦   | 45 个 auth/session 定向用例、14 个 Gateway 权限/会话用例、171 个 Desktop 回归 | 旧会话自动升级、撤销边界已自动验证 | `PASS`    |
-| DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`    |
-| DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`    |
-| DP04 恢复       | Desktop 187（registry/resume/interrupted/cancel/race）                        | 断网、休眠、关窗（待人工实机确认） | `PASS`    |
-| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING` |
-| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING` |
-| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING` |
-| DP08 handoff    | core/client/server/repository/desktop/web token 与授权测试                    | 系统浏览器精确打开并入 DP11        | `PASS`    |
-| DP09 语音对齐   | Desktop fake ASR/TTS/Turn、取消、messageId 与重播缓存测试                     | 真人中文麦克风并入 DP11            | `PASS`    |
-| DP10 附件       | core/client/db/gateway/desktop Asset、Part、权限与隔离测试                    | 真实图片/PDF 上传并入 DP11         | `PASS`    |
-| DP11 Windows    | build + desktop regression                                                    | Windows 11 实机                    | `PENDING` |
-| DP12 macOS      | build + platform tests                                                        | macOS 打包实机                     | `PENDING` |
-| DP13 收口       | link/lint/diff checks                                                         | 能力声明复核                       | `PENDING` |
+| 任务            | 自动化证据                                                                    | 人工/环境证据                      | 状态          |
+| --------------- | ----------------------------------------------------------------------------- | ---------------------------------- | ------------- |
+| DP00 需求与决策 | 文档链接、矛盾扫描、Desktop/Gateway 基线                                      | 项目负责人已接受 ADR-0028          | `PASS`        |
+| DP01 身份解耦   | 45 个 auth/session 定向用例、14 个 Gateway 权限/会话用例、171 个 Desktop 回归 | 旧会话自动升级、撤销边界已自动验证 | `PASS`        |
+| DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`        |
+| DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`        |
+| DP04 恢复       | Desktop 187（registry/resume/interrupted/cancel/race）                        | 断网、休眠、关窗（待人工实机确认） | `PASS`        |
+| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING`     |
+| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING`     |
+| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING`     |
+| DP08 handoff    | core/client/server/repository/desktop/web token 与授权测试                    | 系统浏览器精确打开并入 DP11        | `PASS`        |
+| DP09 语音对齐   | Desktop fake ASR/TTS/Turn、取消、messageId 与重播缓存测试                     | 真人中文麦克风并入 DP11            | `PASS`        |
+| DP10 附件       | core/client/db/gateway/desktop Asset、Part、权限与隔离测试                    | 真实图片/PDF 上传并入 DP11         | `PASS`        |
+| DP11 Windows    | installer/portable、包内容审计、Desktop 回归与性能测量脚本                    | Windows 11 主流程仍在验收          | `IN_PROGRESS` |
+| DP12 macOS      | build + platform tests                                                        | macOS 打包实机                     | `PENDING`     |
+| DP13 收口       | link/lint/diff checks                                                         | 能力声明复核                       | `PENDING`     |
 
 ## 十、预期事实回写
 
