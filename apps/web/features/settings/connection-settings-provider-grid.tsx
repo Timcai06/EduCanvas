@@ -5,6 +5,7 @@ import type {
   GatewayConnectionProvider,
 } from '@educanvas/gateway-core';
 import { CheckCircle, LinkSimple, PlugsConnected } from '@phosphor-icons/react';
+import { Badge } from '@/components/ui/badge';
 import { connectionStatusLabel } from './connection-settings-status';
 
 /** 只渲染可用渠道与连接入口；请求和状态归属仍由父级控制面持有。 */
@@ -66,14 +67,12 @@ export function ConnectionProviderGrid({
                     <PlugsConnected aria-hidden="true" size={21} />
                   </span>
                   {openConnection?.status === 'active' ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-good-soft px-2.5 py-1 text-xs font-medium text-good">
+                    <Badge variant="good">
                       <CheckCircle aria-hidden="true" size={13} weight="fill" />
                       已连接
-                    </span>
+                    </Badge>
                   ) : provider.experimental ? (
-                    <span className="rounded-full bg-warn-soft px-2.5 py-1 text-xs font-medium text-warn">
-                      实验性
-                    </span>
+                    <Badge variant="warn">实验性</Badge>
                   ) : null}
                 </div>
                 <h3 className="mt-5 font-display text-lg font-semibold text-ink">
