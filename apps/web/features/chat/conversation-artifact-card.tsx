@@ -14,6 +14,7 @@ import {
 import gsap from 'gsap';
 import { useRef, type ComponentType } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { Progress } from '@/components/ui/progress';
 import type { MessageArtifactDTO } from './messages';
 
 gsap.registerPlugin(useGSAP);
@@ -128,19 +129,11 @@ export function ConversationArtifactCard({
           {presentation.label} · {detail}
         </span>
         {generating && progress !== null ? (
-          <span
-            className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-surface-strong"
-            role="progressbar"
-            aria-label={`${artifact.title} 生成进度`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress}
-          >
-            <span
-              className="block h-full rounded-full bg-accent transition-[width] duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </span>
+          <Progress
+            value={progress}
+            label={`${artifact.title} 生成进度`}
+            className="mt-1.5"
+          />
         ) : null}
       </span>
       <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-accent">

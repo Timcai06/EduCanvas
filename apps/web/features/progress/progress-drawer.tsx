@@ -9,6 +9,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { Progress } from '@/components/ui/progress';
 
 gsap.registerPlugin(useGSAP);
 
@@ -101,20 +102,8 @@ export function ProgressDrawer({
             {masteryPercent}%
           </span>
         </div>
-        {/* 自绘进度条：<progress> 的 accent-color 在各浏览器表现不一致 */}
-        <div
-          role="progressbar"
-          aria-labelledby="mastery-progress-label"
-          aria-valuenow={masteryPercent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          className="h-2.5 w-full overflow-hidden rounded-full bg-surface-strong"
-        >
-          <div
-            className="h-full rounded-full bg-accent"
-            style={{ width: `${masteryPercent}%` }}
-          />
-        </div>
+        {/* 统一进度条基础件（原手绘 progressbar）；<progress> 的 accent-color 各浏览器不一致，故用自绘 */}
+        <Progress value={masteryPercent} label="当前掌握度" />
         {/* 计数退为一行次要注脚，不再抢占仪表盘位置 */}
         {progress ? (
           <p className="mt-2.5 text-xs text-ink-muted tabular-nums">
