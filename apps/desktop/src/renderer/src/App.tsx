@@ -24,6 +24,12 @@ import type { DesktopConversationDirectorySnapshot } from '../../shared/conversa
 import { applyAssistantProjection } from './assistant-stream';
 import type { DesktopAssistantProjection } from '../../shared/assistant-projection';
 import { openDesktopResult } from './result-actions';
+import {
+  initialChatHistory,
+  initialConversationDirectory,
+  useDesktopAttachment,
+  useSpeechPreparation,
+} from './pet-composer-state';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -40,26 +46,9 @@ export default function App({
   const [message, setMessage] = useState(
     '你好，我在这里。输入一句话和我聊聊吧。',
   );
-  const [history, setHistory] = useState<DesktopChatHistorySnapshot>({
-    revision: 0,
-    conversationId: null,
-    messages: [],
-    hasMore: false,
-    nextCursor: null,
-    loading: false,
-  });
-  const [directory, setDirectory] =
-    useState<DesktopConversationDirectorySnapshot>({
-      revision: 0,
-      loading: false,
-      conversations: [],
-      currentConversationId: null,
-      error: null,
-    });
+  const [history, setHistory] = useState(initialChatHistory);
+  const [directory, setDirectory] = useState(initialConversationDirectory);
   const [pendingResume, setPendingResume] = useState<string | null>(null);
-  const [pendingAttachment, setPendingAttachment] =
-    useState<DesktopAttachmentRef | null>(null);
-  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [canStop, setCanStop] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(
     null,
@@ -68,14 +57,6 @@ export default function App({
   const historyRef = useRef<DesktopChatHistorySnapshot>(history);
   const operationLeaseRef = useRef<string | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
-  const speechCacheRef = useRef<{
-    key: string;
-    bytes: Uint8Array;
-  } | null>(null);
-  const speechPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const attachmentBusyRef = useRef(false);
   const submitGateRef = useRef(createPetSubmitGate());
   const authStateRef = useRef<DesktopAuthStatus['state'] | null>(null);
   const historyEndRef = useRef<HTMLDivElement | null>(null);
@@ -86,6 +67,17 @@ export default function App({
   );
   const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
+  const currentNotebookId =
+    directory.conversations.find(
+      (item) => item.conversationId === directory.currentConversationId,
+    )?.notebookId ?? null;
+  const { pendingAttachment, attachmentBusy, pickAttachment, clearAttachment } =
+    useDesktopAttachment({ currentNotebookId, message, setMessage });
+  const { speechCacheRef, prepareSpeech, cancelSpeechPreparation } =
+    useSpeechPreparation({
+      latestMessageId: lastAssistantMessage?.id,
+      busy,
+    });
 
   const publishVisual = (next: PetUiState): void => {
     setVisualState(next);
@@ -173,8 +165,6 @@ export default function App({
   useEffect(
     () => () => {
       operationControllerRef.current?.abort();
-      if (speechPrefetchTimerRef.current)
-        clearTimeout(speechPrefetchTimerRef.current);
       const requestId = requestIdRef.current;
       if (requestId) {
         window.desktopAssistant.cancel(requestId);
@@ -261,55 +251,6 @@ export default function App({
     if (operationLeaseRef.current === token) operationLeaseRef.current = null;
   };
 
-  const pickAttachment = async (): Promise<void> => {
-    if (attachmentBusyRef.current) return;
-    attachmentBusyRef.current = true;
-    setAttachmentBusy(true);
-    const messageBeforePick = message;
-    setMessage('正在选择并上传附件…');
-    const notebookIdAtPick = currentNotebookId;
-    try {
-      const result = await window.desktopAttachment.pick();
-      if (result.ok) {
-        if (
-          notebookIdAtPick !== currentNotebookRef.current ||
-          result.attachment.notebookId !== currentNotebookRef.current
-        ) {
-          setMessage('对话已切换，请重新选择附件。');
-          return;
-        }
-        setPendingAttachment(result.attachment);
-        setMessage('附件已就绪，可以发送。');
-      } else if (result.message !== '已取消选择附件。') {
-        setMessage(result.message);
-      } else {
-        setMessage(messageBeforePick);
-      }
-    } catch {
-      setMessage('附件上传没有完成，请稍后重试。');
-    } finally {
-      attachmentBusyRef.current = false;
-      setAttachmentBusy(false);
-    }
-  };
-  const clearAttachment = (): void => setPendingAttachment(null);
-
-  // DP10：附件绑定 pick 时刻的 notebookId；切换 Notebook 后立即清空，
-  // 不把旧 notebook 资产泄漏进新会话（服务端 requireNotebookAccess 兜底）。
-  const currentNotebookId =
-    directory.conversations.find(
-      (item) => item.conversationId === directory.currentConversationId,
-    )?.notebookId ?? null;
-  const currentNotebookRef = useRef(currentNotebookId);
-  useEffect(() => {
-    if (currentNotebookRef.current !== currentNotebookId) {
-      currentNotebookRef.current = currentNotebookId;
-      setPendingAttachment((pending) =>
-        pending && pending.notebookId !== currentNotebookId ? null : pending,
-      );
-    }
-  }, [currentNotebookId]);
-
   const submit = async (): Promise<void> => {
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
@@ -355,7 +296,7 @@ export default function App({
       );
       if (requestIdRef.current !== requestId) return;
       requestIdRef.current = null;
-      if (attachment) setPendingAttachment(null);
+      if (attachment) clearAttachment();
       if (result.ok) {
         setText('');
         setState('ready');
@@ -524,27 +465,6 @@ export default function App({
       releaseOperation(leaseToken);
       submitGateRef.current.leave(submitToken);
     }
-  };
-
-  const prepareSpeech = (assistantMessageId: string, reply: string): void => {
-    if (
-      assistantMessageId !== lastAssistantMessage?.id ||
-      busy ||
-      speechCacheRef.current?.key === `${assistantMessageId}\u0000${reply}`
-    )
-      return;
-    if (speechPrefetchTimerRef.current)
-      clearTimeout(speechPrefetchTimerRef.current);
-    speechPrefetchTimerRef.current = setTimeout(() => {
-      speechPrefetchTimerRef.current = null;
-      window.desktopVoice.prefetch(reply, assistantMessageId);
-    }, 180);
-  };
-
-  const cancelSpeechPreparation = (): void => {
-    if (!speechPrefetchTimerRef.current) return;
-    clearTimeout(speechPrefetchTimerRef.current);
-    speechPrefetchTimerRef.current = null;
   };
 
   const speakLatest = async (): Promise<void> => {
