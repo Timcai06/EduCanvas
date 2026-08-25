@@ -19,7 +19,10 @@ import {
   KNOWLEDGE_EMBED_DOCUMENT_TASK,
 } from './embed-knowledge-document.js';
 import { generateArtifact } from './generate-artifact.js';
-import { ingestKnowledgeDocument } from './ingest-knowledge-document.js';
+import {
+  ingestKnowledgeDocument,
+  KNOWLEDGE_INGEST_DOCUMENT_TASK,
+} from './ingest-knowledge-document.js';
 import { purgeAnonymousSubjects } from './purge-anonymous-subjects.js';
 import { recoverOperationContinuations } from './recover-operation-continuations.js';
 import { reconcileToolApprovalIntents } from './reconcile-tool-approval-intents.js';
@@ -114,8 +117,8 @@ export function createTaskList(input: {
         input.terminalReconciliationMode ?? 'enabled',
       ),
     ),
-    'knowledge:ingest_document': wrap(
-      'knowledge:ingest_document',
+    [KNOWLEDGE_INGEST_DOCUMENT_TASK]: wrap(
+      KNOWLEDGE_INGEST_DOCUMENT_TASK,
       ingestKnowledgeDocument,
     ),
     [KNOWLEDGE_EMBED_DOCUMENT_TASK]: wrap(

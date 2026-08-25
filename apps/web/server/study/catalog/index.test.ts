@@ -38,7 +38,21 @@ describe('trusted study course content catalog', () => {
       ).toBe(true);
       expect(artifactSchema.safeParse(content.artifact).success).toBe(true);
       expect(content.artifact.artifactId).not.toBe('demo-cat-dog');
+      expect(content.knowledgePublication).toMatchObject({
+        parserVersion: 'trusted-course-markdown-v1',
+      });
+      expect(content.knowledgePublication?.contentHash).toMatch(
+        /^[a-f0-9]{64}$/,
+      );
+      expect(content.knowledgePublication?.chunks).toHaveLength(
+        content.course.objectives.length + 1,
+      );
     }
+    expect(
+      new Set(
+        contents.map((content) => content.knowledgePublication?.contentHash),
+      ).size,
+    ).toBe(contents.length);
   });
 
   it('rejects a topic that is not registered for the selected grade band', () => {
@@ -64,6 +78,7 @@ describe('trusted study course content catalog', () => {
 
       expect(historical?.artifact.artifactId).toBe('demo-cat-dog');
       expect(historical?.course.version).toBe('v1');
+      expect(historical?.knowledgePublication).toBeNull();
       expect(current.artifact.artifactId).not.toBe('demo-cat-dog');
       expect(current.course).not.toBe(historical?.course);
     },

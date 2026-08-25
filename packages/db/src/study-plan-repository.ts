@@ -7,6 +7,7 @@ import {
 } from '@educanvas/teaching-core';
 import { and, asc, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
+import { enqueueCourseKnowledgePublication } from './course-knowledge-publication';
 import {
   conversations,
   lessonSessions,
@@ -26,13 +27,11 @@ import {
   type DiagnosticAttemptSnapshot,
   type StudyPlanSnapshot,
 } from './study-repository-contracts';
-
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
   Parameters<Database['transaction']>[0]
 >[0];
 type DatabaseExecutor = Database | DatabaseTransaction;
-
 async function loadLatestDiagnostic(
   executor: DatabaseExecutor,
   goalId: string,
@@ -347,6 +346,7 @@ export class DrizzleStudyPlanRepository {
         );
       }
       if (!goalId) throw new Error('活动学习目标缺少ID');
+      await enqueueCourseKnowledgePublication(transaction, input, course);
       const snapshot = await loadPlanByGoal(
         transaction,
         input.trustedStudentId,

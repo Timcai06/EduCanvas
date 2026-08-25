@@ -30,6 +30,7 @@ import {
   getTrustedStudyContentForGoal,
   listTrustedStudyCourseOptions,
 } from './catalog';
+import type { TrustedCourseKnowledgePublication } from './catalog/course-knowledge';
 
 const studyPlans = new DrizzleStudyPlanRepository();
 const diagnostics = new DrizzleStudyDiagnosticRepository();
@@ -52,6 +53,7 @@ export interface OwnedStudyContext {
   plan: StudyPlanSnapshot;
   course: StudyCourseDefinition;
   artifact: Artifact;
+  knowledgePublication: TrustedCourseKnowledgePublication | null;
   sessionId: string;
 }
 
@@ -102,6 +104,7 @@ export async function loadOwnedStudyContext(
         plan: currentPlan,
         course: currentContent.course,
         artifact: currentContent.artifact,
+        knowledgePublication: currentContent.knowledgePublication,
         sessionId: currentSession.sessionId,
       }
     : null;
@@ -138,6 +141,7 @@ export async function bootstrapStudyPlan(
         preferences: input.preferences,
       },
       course,
+      knowledgePublication: content.knowledgePublication ?? undefined,
     });
   } catch (error) {
     if (session.created) {

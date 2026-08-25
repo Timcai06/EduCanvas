@@ -202,6 +202,57 @@ describeWithDatabase('学习计划与可信诊断仓储', () => {
     ).toHaveLength(0);
   });
 
+  it('在学习计划事务内排队课程资料发布与会话绑定', async () => {
+    const studentId = `knowledge-publication-${randomUUID()}`;
+    const session = await new DrizzleLearningSessionRepository(
+      getDatabase(),
+    ).bootstrap({
+      ...studyTestScope(studentId),
+      completeArtifact: artifact,
+    });
+    const contentHash = 'a'.repeat(64);
+
+    await new DrizzleStudyPlanRepository(getDatabase()).bootstrap({
+      trustedStudentId: studentId,
+      declaredByUserId: studentId,
+      sessionId: session.sessionId,
+      desiredOutcome: '使用课程讲义完成学习',
+      profile: {
+        ageBand: '13_to_15',
+        gradeBand: 'middle_school',
+        declarationSource: 'self_declared',
+        preferences: {
+          explanationOrder: 'example_first',
+          responseDepth: 'balanced',
+          guidance: 'step_by_step',
+          modality: 'mixed',
+          feedbackStyle: 'balanced',
+        },
+      },
+      course,
+      knowledgePublication: {
+        sourceKey: 'course-notes-v1',
+        title: '集成测试课程讲义',
+        contentHash,
+        objectKey: 'courses/middle_school/integration-study/v1/lesson.md',
+        parserVersion: 'trusted-course-markdown-v1',
+        chunks: [{ heading: '课程导读', content: '可信课程正文。' }],
+      },
+    });
+
+    await expect(
+      getDatabase().execute(sql`
+        select task_identifier
+        from graphile_worker.jobs
+        where key = ${`course-knowledge:${session.sessionId}:${contentHash}`}
+      `),
+    ).resolves.toEqual([
+      {
+        task_identifier: 'knowledge:ingest_document',
+      },
+    ]);
+  });
+
   it('拒绝过期owner Membership的bootstrap', async () => {
     await expectBootstrapRejectedAfterOwnershipMutation({
       studentId: 'expired-owner-test',

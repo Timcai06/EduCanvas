@@ -13,6 +13,17 @@ export interface BootstrapStudyPlanInput {
   desiredOutcome: string;
   profile: LearnerProfileDeclaration;
   course: StudyCourseDefinition;
+  knowledgePublication?: {
+    sourceKey: string;
+    title: string;
+    contentHash: string;
+    objectKey: string;
+    parserVersion: string;
+    chunks: readonly {
+      content: string;
+      heading?: string | null;
+    }[];
+  };
 }
 
 export interface LearnerProfileSnapshot extends LearnerProfileDeclaration {
