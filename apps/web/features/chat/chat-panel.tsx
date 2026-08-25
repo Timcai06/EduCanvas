@@ -10,6 +10,7 @@ import {
 import gsap from 'gsap';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import { InkDot } from '@/features/workspace/shared/ink-dot';
 import { motionDuration } from '@/features/theme/motion';
 import type { HtmlPreviewRequest } from './markdown';
@@ -281,20 +282,16 @@ export function ChatPanel({
               ) : null}
               {message.suggestsCanvas && !canvasOpen ? (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={onOpenCanvas}
-                    className="min-h-10 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-                  >
+                  <Button variant="primary" size="md" onClick={onOpenCanvas}>
                     打开互动演示
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={onContinueText}
-                    className="min-h-10 rounded-full border border-line bg-card px-5 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
                   >
                     继续文字讲解
-                  </button>
+                  </Button>
                 </div>
               ) : null}
               {message.outputCard ? (
