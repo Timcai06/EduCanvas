@@ -99,6 +99,29 @@
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--color-accent) 16%, transparent);
   }
+  /* 错误态：边框转朱砂批改色 + 错误柔光；配合 aria-invalid 供读屏/样式共用 */
+  .ec-input[aria-invalid='true'],
+  .ec-field[aria-invalid='true'] {
+    background:
+      linear-gradient(var(--color-card), var(--color-card)) padding-box,
+      linear-gradient(135deg, var(--color-cinnabar), var(--color-cinnabar-strong))
+        border-box;
+  }
+  .ec-input[aria-invalid='true']:focus,
+  .ec-input[aria-invalid='true']:focus-visible,
+  .ec-field[aria-invalid='true']:focus-within {
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-cinnabar) 16%, transparent);
+  }
+  /* 禁用态：去渐变、降为弱化纸面，避免与聚焦描边混同 */
+  .ec-input:disabled,
+  .ec-field:disabled {
+    background: var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-line) 60%, transparent);
+    color: var(--color-ink-faint);
+    cursor: not-allowed;
+    opacity: 0.8;
+  }
 }
 
 /*
