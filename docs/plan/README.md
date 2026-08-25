@@ -20,7 +20,6 @@
 
 当前任务以 [`active/README.md`](active/README.md) 为唯一分配索引：
 
-- [O 删除队列](active/O-删除队列.md)；
 - [KM 知识记忆](active/KM-知识记忆.md)；
 - [G 产品发布闭环](active/G-产品发布闭环.md)。
 - [DP 桌宠统一桌面外延](active/DP-桌宠统一桌面外延.md)。
@@ -29,9 +28,9 @@
 [A 账号会话](completed/A-账号会话.md)、[P 学习档案](completed/P-学习档案.md)、
 [F 画布界面](completed/F-画布界面.md)和[R 运行时收敛](completed/R-运行时事实收敛.md)
 、[Q 质量观测成本](completed/Q-质量观测成本.md)、[W 工作面画布](completed/W-工作面画布收敛.md)、
-[D 数据架构](completed/D-数据架构与扩展性收敛.md)与
-[UV 画布语音](completed/UV-画布语音.md)已完成归档。O 线完成 O03/O04 后再由 Codex
-联合审计。UV 的真人麦克风、课堂噪声、十分钟长流和受控并发作为非阻塞后续保留，
+[D 数据架构](completed/D-数据架构与扩展性收敛.md)、
+[O 删除队列](completed/O-删除队列.md)与
+[UV 画布语音](completed/UV-画布语音.md)已完成归档。UV 的真人麦克风、课堂噪声、十分钟长流和受控并发作为非阻塞后续保留，
 不得把自动化证据改称真人验收。
 [LC Live 与 Canvas 输出](completed/LC-Live与Canvas输出产品化.md)已完成真实产品验收并归档；
 生成 Markdown 质量、产物状态卡重复和多输入口径收敛已由

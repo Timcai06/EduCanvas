@@ -163,7 +163,7 @@ release evidence、secret scan 和最终 `checks` 聚合。普通 docs-only PR �
 | 生产 Experiment Artifact 数据源         | 否           | 后续产品纵切，不得用 U16 fixture 冒充         |
 | 真实 Provider 的课堂术语质量            | 否           | 后续模型评测与 Provider 选择                  |
 | 完整生产 IdP、外部 SLO 与 live 渠道凭据 | 否           | G 产品发布闭环及独立生产化任务                |
-| 对象删除崩溃恢复与定时任务              | 否           | [O 删除队列](../active/O-删除队列.md) O03/O04 |
+| 对象删除崩溃恢复与定时任务              | 否           | 已由 [O 删除队列](O-删除队列.md) 完成        |
 | 产品知识与三层 Memory                   | 否           | [KM 知识记忆](../active/KM-知识记忆.md)       |
 
 本计划不再返回 `active/`。上述后续如进入实现，应领取对应 active 计划或新建单一职责任务，
