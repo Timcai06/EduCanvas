@@ -21,8 +21,19 @@ test('@smoke 账号注册、资料更新、改密码和会话撤销走真实服�
     target.locator('button[aria-haspopup="dialog"]', {
       hasText: /^登录$/,
     });
+  // /register、/login 自 #203 抽屉化后仅重定向到 ?auth=*；真实入口是首页顶栏的
+  // 「登录/注册」按钮，它打开 AuthDrawer（Sheet 内嵌 AuthForm）。
+  const openAuth = async (target: typeof page, mode: 'login' | 'register') => {
+    await target.goto('/');
+    await target
+      .getByRole('button', {
+        name: mode === 'register' ? '注册' : '登录',
+        exact: true,
+      })
+      .click();
+  };
 
-  await page.goto('/register');
+  await openAuth(page, 'register');
   await page.getByLabel('用户名').fill(username);
   await page.getByLabel('昵称').fill(nickname);
   await page.getByLabel('密码', { exact: true }).fill(oldPassword);
@@ -36,7 +47,7 @@ test('@smoke 账号注册、资料更新、改密码和会话撤销走真实服�
   const secondContext = await browser.newContext();
   const secondPage = await secondContext.newPage();
   try {
-    await secondPage.goto('/login');
+    await openAuth(secondPage, 'login');
     await secondPage.getByLabel('用户名').fill(username);
     await secondPage.getByLabel('密码', { exact: true }).fill(oldPassword);
     await secondPage
@@ -78,7 +89,7 @@ test('@smoke 账号注册、资料更新、改密码和会话撤销走真实服�
     await page.getByRole('button', { name: '退出登录' }).click();
     await expect(loginTrigger(page)).toBeVisible();
 
-    await page.goto('/login');
+    await openAuth(page, 'login');
     await page.getByLabel('用户名').fill(username);
     await page.getByLabel('密码', { exact: true }).fill(oldPassword);
     const loginForm = page.locator('form');

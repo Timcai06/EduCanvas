@@ -46,31 +46,31 @@ export function UserMenu({
   }, [loadUser]);
 
   /*
-   * 旧路由 /login、/register 现改为重定向到带 ?auth= 的首页（见各自 page.tsx），这里读取
-   * 意图并自动弹开登录/注册抽屉，保住外链与书签的原意；随后清掉 query，避免刷新重复弹出。
-   * 弹开状态推到微任务里再置：既避免「effect 内同步 setState」的级联渲染，也让首帧在
-   * 服务端与客户端一致（抽屉初始都关闭），随后再按 URL 意图弹开，不产生水合不匹配。
+   * 旧路由 /login、/register 现改为重定向到带 ?auth= 的首页（见各自 page.tsx），这里读取意图并
+   * 自动弹开登录/注册抽屉，保住外链与书签的原意。
+   * 关键：不在这里 strip query，而是等到抽屉真正打开后（下方按 authMode/profileOpen 的 effect）
+   * 再清除——Suspense/水合导致的组件重挂载会重置组件 state，若提前 strip，重挂载后再读不到参数；
+   * 让参数存活到抽屉打开，重挂载就能重新读参并再次弹出。setState 用 setTimeout(0) 推迟到水合提交
+   * 结束后（queueMicrotask 在水合窗口内被吞、直接 setState 又会触发 react-hooks/set-state-in-effect），
+   * 且不在此 effect 内同步 strip，避免刷新重复弹出。
    */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get('auth');
     const profile = params.get('profile');
     if (auth === 'login' || auth === 'register') {
-      queueMicrotask(() => setAuthMode(auth));
-      params.delete('auth');
+      setTimeout(() => setAuthMode(auth), 0);
     } else if (profile === '1') {
-      queueMicrotask(() => setProfileOpen(true));
-      params.delete('profile');
-    } else {
-      return;
+      setTimeout(() => setProfileOpen(true), 0);
     }
-    const query = params.toString();
-    window.history.replaceState(
-      null,
-      '',
-      window.location.pathname + (query ? `?${query}` : ''),
-    );
   }, []);
+
+  // 抽屉真正打开后再清掉 query，避免刷新重复弹出；此时深链意图已被消费。
+  useEffect(() => {
+    if (authMode || profileOpen) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [authMode, profileOpen]);
 
   const logout = async () => {
     setLogoutBusy(true);
