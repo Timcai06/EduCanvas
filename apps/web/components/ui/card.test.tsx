@@ -16,7 +16,9 @@ describe('Card', () => {
     );
   });
 
-  it('glass 启用磨砂玻璃类', () => {
-    expect(renderToStaticMarkup(<Card glass>内容</Card>)).toContain('glass');
+  it('glass 启用磨砂玻璃类 + 半透明纸面', () => {
+    const html = renderToStaticMarkup(<Card glass>内容</Card>);
+    expect(html).toContain('glass');
+    expect(html).toContain('bg-card/85');
   });
 });

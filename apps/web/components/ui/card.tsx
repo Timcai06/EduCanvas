@@ -19,12 +19,13 @@ export function Card({
   hover?: boolean;
   children?: ReactNode;
 }) {
-  const base =
-    'rounded-2xl border border-line/70 bg-card shadow-[var(--shadow-float)]';
+  const base = glass
+    ? 'rounded-2xl border border-line/70 glass bg-card/85 shadow-[var(--shadow-float)]'
+    : 'rounded-2xl border border-line/70 bg-card shadow-[var(--shadow-float)]';
   const hoverCls = hover
     ? 'transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[var(--shadow-card-hover)]'
     : '';
-  const glassCls = glass ? 'glass' : '';
+  const glassCls = '';
   return (
     <div className={`${base} ${hoverCls} ${glassCls} ${className}`} {...rest}>
       {children}

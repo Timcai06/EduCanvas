@@ -312,6 +312,8 @@ CSS 关键字 `ease`/`linear` 保持原样可用。
 | 光态阴影多层弥散 | `globals.css` | `--shadow-float/card-hover/sheet` 多层弥散、更柔；暗态不变 |
 | 主按钮按压缩放 | `interactive-controls.css` | `bg-accent` 按钮 `:active` 轻按压缩放 + 顺滑过渡；reduced-motion 显示但不位移 |
 | 资源选项卡滑动高亮 | `studio-resource-library.tsx` + `studio-workspace.css` | `.studio-tab-indicator` 随选中用 `left/width` 过渡；颜色平滑过渡 |
+| 磨砂玻璃工具类 | `globals.css` + `card.tsx` | `.glass` / `.glass-strong` 统一 backdrop 模糊 + 增益；Card `glass` 走 `bg-card/85`；reduced-transparency 归零 |
+| 按钮可点击性 | `interactive-controls.css` | Tailwind v4 取消 button 的 pointer 光标，统一给可点元素 `cursor: pointer`（排除禁用） |
 
 ### 细节批次
 | 项 | 依据 | 说明 |
