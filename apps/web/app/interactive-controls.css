@@ -166,11 +166,24 @@ a.rounded-full {
 }
 
 /*
+ * 可点击可用性（Tailwind v4 取消了 button 的 pointer 默认光标）：统一让可点元素
+ * 显示手型，只排除禁用态与已禁用的 role=button，避免「看着能点、点了没反应」的困惑。
+ */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+/*
  * 降低透明度偏好（accessibility）：`prefers-reduced-transparency` 下禁用所有 backdrop 模糊，
  * 避免玻璃/过度透明表面降低可读性。目前仅为渐进增强，不支持的浏览器忽略。
+ * `.glass` / `.glass-strong` 是自定义磨砂工具类（globals.css），类名不含 backdrop-blur，
+ * 故显式一并归零，不与组件内联的 [class*='backdrop-blur'] 漏网。
  */
 @media (prefers-reduced-transparency: reduce) {
-  [class*='backdrop-blur'] {
+  [class*='backdrop-blur'],
+  .glass,
+  .glass-strong {
     backdrop-filter: none;
   }
 }

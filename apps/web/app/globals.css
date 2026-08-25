@@ -315,6 +315,20 @@ body:has([data-learning-workspace]) {
 }
 
 /*
+ * 磨砂玻璃表面（现代 Apple 方向）：统一的 backdrop 模糊 + 轻微增益，让浮层透出底层又保持可读。
+ * 只负责「模糊/增益」，不设背景色——半透明纸面由调用方用 `bg-card/NN`（如 bg-card/85）叠加，
+ * 这样避免与该工具类在背景色上抢占权重。reduced-transparency 下调 blur 归零（见 interactive-controls.css）。
+ */
+.glass {
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.glass-strong {
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+}
+
+/*
  * 纸纹肌理：feTurbulence 噪点，固定覆盖全屏。强度极低（<5%），
  * 只提供材质暗示，绝不参与信息表达；打印与截图上近似不可见。
  */
