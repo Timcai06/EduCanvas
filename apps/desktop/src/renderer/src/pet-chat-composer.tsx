@@ -146,7 +146,9 @@ export function PetChatComposer(props: {
             aria-label={attachmentBusy ? '正在上传附件' : '添加图片或 PDF'}
             title={attachmentBusy ? '正在上传附件' : '添加图片或 PDF'}
             disabled={
-              busy || attachmentBusy || !directory.currentConversationId
+              (busy && state !== 'speaking') ||
+              attachmentBusy ||
+              !directory.currentConversationId
             }
             onClick={() => void pickAttachment()}
           >
@@ -184,7 +186,7 @@ export function PetChatComposer(props: {
           >
             <SpeakerIcon />
           </button>
-          {busy && state !== 'authorizing' ? (
+          {busy && state !== 'authorizing' && state !== 'speaking' ? (
             <button
               className="send-action is-stop"
               type="button"

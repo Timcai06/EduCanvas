@@ -1,4 +1,4 @@
-import { useMemo, useState, type RefObject } from 'react';
+import { useMemo, useState, type RefObject, type UIEventHandler } from 'react';
 import type {
   DesktopChatHistorySnapshot,
   DesktopChatMessage,
@@ -19,6 +19,10 @@ export function PetChatPanel(props: {
   message: string;
   history: DesktopChatHistorySnapshot;
   historyEndRef: RefObject<HTMLDivElement | null>;
+  historyScrollRef: RefObject<HTMLDivElement | null>;
+  showJumpToLatest: boolean;
+  onHistoryScroll: UIEventHandler<HTMLDivElement>;
+  jumpToLatest(): void;
   text: string;
   busy: boolean;
   canStop: boolean;
@@ -55,6 +59,10 @@ export function PetChatPanel(props: {
     message,
     history,
     historyEndRef,
+    historyScrollRef,
+    showJumpToLatest,
+    onHistoryScroll,
+    jumpToLatest,
     text,
     busy,
     canStop,
@@ -154,91 +162,105 @@ export function PetChatPanel(props: {
   );
 
   const historyList = (
-    <div
-      className="pet-chat__history"
-      role="log"
-      aria-label="对话历史"
-      aria-live="polite"
-    >
-      {history.messages.length === 0 ? (
-        <p className="pet-chat__empty">还没有对话。</p>
-      ) : (
-        history.messages.map((item: DesktopChatMessage) => (
-          <article
-            className={`chat-message is-${item.role}${
-              item.status === 'streaming' ? ' is-streaming' : ''
-            }`}
-            key={item.id}
-            aria-hidden={item.status === 'streaming'}
-          >
-            <span>
-              {item.role === 'user'
-                ? '你'
-                : item.role === 'assistant'
-                  ? 'EduCanvas'
-                  : '提示'}
-            </span>
-            {item.role === 'user' && item.source === 'voice' && (
-              <small className="chat-message__source">语音输入</small>
-            )}
-            {item.role === 'user' && item.attachment && (
-              <small
-                className="chat-message__attachment"
-                title={item.attachment.displayName}
-              >
-                <AttachmentIcon />
-                {item.attachment.displayName}
-              </small>
-            )}
-            {item.role === 'assistant' &&
-              state === 'speaking' &&
-              speakingMessageId === item.id && (
-                <span className="chat-message__speaking" role="status">
-                  正在朗读
-                </span>
+    <div className="pet-chat__history-shell">
+      <div
+        ref={historyScrollRef}
+        className="pet-chat__history"
+        role="log"
+        aria-label="对话历史"
+        aria-live="polite"
+        onScroll={onHistoryScroll}
+      >
+        {history.messages.length === 0 ? (
+          <p className="pet-chat__empty">还没有对话。</p>
+        ) : (
+          history.messages.map((item: DesktopChatMessage) => (
+            <article
+              className={`chat-message is-${item.role}${
+                item.status === 'streaming' ? ' is-streaming' : ''
+              }`}
+              key={item.id}
+              aria-hidden={item.status === 'streaming'}
+            >
+              <span>
+                {item.role === 'user'
+                  ? '你'
+                  : item.role === 'assistant'
+                    ? 'EduCanvas'
+                    : '提示'}
+              </span>
+              {item.role === 'user' && item.source === 'voice' && (
+                <small className="chat-message__source">语音输入</small>
               )}
-            <p>
-              {item.content}
-              {item.status === 'streaming' ? '▍' : ''}
-            </p>
-            {item.role === 'assistant' &&
-              item.status === 'completed' &&
-              item.content.trim() &&
-              (() => {
-                const selected =
-                  state === 'speaking' && speakingMessageId === item.id;
-                return (
-                  <div className="chat-message__speech-controls">
-                    <button
-                      className={`chat-message__speak${selected ? ' is-active' : ''}`}
-                      type="button"
-                      aria-label={selected ? '停止朗读' : '朗读此回答'}
-                      title={selected ? '停止朗读' : '朗读此回答'}
-                      disabled={busy && !selected}
-                      onPointerEnter={() =>
-                        prepareSpeech(item.id, item.content)
-                      }
-                      onPointerLeave={cancelSpeechPreparation}
-                      onFocus={() => prepareSpeech(item.id, item.content)}
-                      onBlur={cancelSpeechPreparation}
-                      onClick={() =>
-                        selected
-                          ? cancel()
-                          : void speakMessage(item.id, item.content)
-                      }
-                    >
-                      <SpeakerIcon />
-                    </button>
-                  </div>
-                );
-              })()}
-            {item.role === 'assistant' && (
-              <MessageResultCards message={item} openResult={openResult} />
-            )}
-          </article>
-        ))
+              {item.role === 'user' && item.attachment && (
+                <small
+                  className="chat-message__attachment"
+                  title={item.attachment.displayName}
+                >
+                  <AttachmentIcon />
+                  {item.attachment.displayName}
+                </small>
+              )}
+              {item.role === 'assistant' &&
+                state === 'speaking' &&
+                speakingMessageId === item.id && (
+                  <span className="chat-message__speaking" role="status">
+                    正在朗读
+                  </span>
+                )}
+              <p>
+                {item.content}
+                {item.status === 'streaming' ? '▍' : ''}
+              </p>
+              {item.role === 'assistant' &&
+                item.status === 'completed' &&
+                item.content.trim() &&
+                (() => {
+                  const selected =
+                    state === 'speaking' && speakingMessageId === item.id;
+                  return (
+                    <div className="chat-message__speech-controls">
+                      <button
+                        className={`chat-message__speak${selected ? ' is-active' : ''}`}
+                        type="button"
+                        aria-label={selected ? '停止朗读' : '朗读此回答'}
+                        title={selected ? '停止朗读' : '朗读此回答'}
+                        disabled={busy && !selected}
+                        onPointerEnter={() =>
+                          prepareSpeech(item.id, item.content)
+                        }
+                        onPointerLeave={cancelSpeechPreparation}
+                        onFocus={() => prepareSpeech(item.id, item.content)}
+                        onBlur={cancelSpeechPreparation}
+                        onClick={() =>
+                          selected
+                            ? cancel()
+                            : void speakMessage(item.id, item.content)
+                        }
+                      >
+                        <SpeakerIcon />
+                      </button>
+                    </div>
+                  );
+                })()}
+              {item.role === 'assistant' && (
+                <MessageResultCards message={item} openResult={openResult} />
+              )}
+            </article>
+          ))
+        )}
+        <div ref={historyEndRef} />
+      </div>
+      {showJumpToLatest && (
+        <button
+          className="pet-chat__jump-latest"
+          type="button"
+          aria-label="回到最新消息"
+          onClick={jumpToLatest}
+        >
+          ↓ 最新
+        </button>
       )}
-      <div ref={historyEndRef} />
     </div>
   );
 

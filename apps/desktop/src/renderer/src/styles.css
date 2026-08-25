@@ -159,6 +159,7 @@ select:focus-visible {
 }
 
 .pet-chat__history {
+  height: 100%;
   min-height: 0;
   margin: 6px -4px;
   padding: 0 4px;
@@ -167,6 +168,29 @@ select:focus-visible {
   overscroll-behavior: contain;
   scrollbar-color: rgba(82, 97, 89, 0.34) transparent;
   scrollbar-width: thin;
+}
+.pet-chat__history-shell {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+.pet-chat__jump-latest {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  min-height: 30px;
+  border: 1px solid rgba(68, 104, 88, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: 0 5px 16px rgba(58, 74, 66, 0.14);
+  color: #32664f;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pet-chat__jump-latest:hover {
+  background: #f0f7f2;
 }
 .conversation-current {
   margin: 2px 5px 0 17px;
