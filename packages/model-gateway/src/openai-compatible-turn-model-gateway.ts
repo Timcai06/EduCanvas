@@ -205,7 +205,9 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           }
         }
 
-        if (delta.tool_calls !== undefined) {
+        // 部分 OpenAI 兼容网关（如 MiMo）在非工具 chunk 中显式输出
+        // "tool_calls": null；null 视同字段缺省，不得进入工具解析分支。
+        if (delta.tool_calls !== undefined && delta.tool_calls !== null) {
           if (request.phase !== 'answer' || !Array.isArray(delta.tool_calls)) {
             throw new SseProtocolError();
           }
