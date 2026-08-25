@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openLearningWorkspace } from './study-onboarding';
 
-const THREE_ANSWER_PROGRESS = /答对\s*\d+\/3/;
+const CURRENT_ARTIFACT_PROGRESS = /答对\s*\d+\/5/;
 
 /*
  * Chat-first 布局下 Canvas 与进度均按需打开：Canvas 经「+」菜单显式打开，
@@ -532,13 +532,13 @@ test('快速重复操作在界面只增加一次 Progress', async ({ page }) => 
   await page.keyboard.press('Escape');
   await expect(canvasRegion(page)).toHaveCount(0);
   const progress = await openProgress(page);
-  await expect(progress).toContainText(THREE_ANSWER_PROGRESS);
+  await expect(progress).toContainText(CURRENT_ARTIFACT_PROGRESS);
   await closeSheet(page);
 
   await page.reload();
   await ensureConversationUi(page);
   const progressAfterReload = await openProgress(page);
-  await expect(progressAfterReload).toContainText(THREE_ANSWER_PROGRESS);
+  await expect(progressAfterReload).toContainText(CURRENT_ARTIFACT_PROGRESS);
 });
 
 test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
@@ -592,7 +592,7 @@ test('篡改匿名 Cookie 后不能访问原会话', async ({ browser }) => {
     await ownerPage.reload();
     await ensureConversationUi(ownerPage);
     const ownerProgress = await openProgress(ownerPage);
-    await expect(ownerProgress).toContainText(THREE_ANSWER_PROGRESS);
+    await expect(ownerProgress).toContainText(CURRENT_ARTIFACT_PROGRESS);
   } finally {
     await ownerContext.close();
     await forgedContext.close();

@@ -1,6 +1,9 @@
+import 'server-only';
+
+import type { Artifact } from '@educanvas/canvas-protocol/server';
 import type { StudyCourseDefinition } from '@educanvas/teaching-core';
 
-export const highImageAiCourse = {
+export const legacyHighImageAiCourse = {
   courseSlug: 'image-ai-high',
   version: 'v1',
   gradeBand: 'high_school',
@@ -105,3 +108,53 @@ export const highImageAiCourse = {
     ],
   },
 } satisfies StudyCourseDefinition;
+
+export const highImageAiCourse: StudyCourseDefinition = {
+  ...legacyHighImageAiCourse,
+  version: 'v2',
+};
+
+export const highImageAiArtifact = {
+  schemaVersion: '1',
+  artifactId: 'image-ai-high-model-evaluation-v2',
+  type: 'quiz',
+  title: '模型评估与过拟合测验',
+  params: {
+    questions: [
+      {
+        id: 'validation-role',
+        question: '验证集在模型开发中的主要职责是什么？',
+        options: [
+          { id: 'tune', text: '选择模型与超参数' },
+          { id: 'train', text: '替代全部训练数据' },
+          { id: 'publish', text: '直接作为最终上线结论' },
+        ],
+        correctOptionId: 'tune',
+        explanation: '验证集服务于开发期选择；测试集应保留到最终评估。',
+      },
+      {
+        id: 'overfitting-signal',
+        question: '训练准确率 99%、验证准确率 68%，最值得优先检查什么？',
+        options: [
+          { id: 'overfit', text: '模型是否过拟合训练样本' },
+          { id: 'perfect', text: '模型是否已经完美泛化' },
+          { id: 'labels', text: '准确率是否应该超过 100%' },
+        ],
+        correctOptionId: 'overfit',
+        explanation: '训练与验证表现差距过大是典型的过拟合信号。',
+      },
+      {
+        id: 'confusion-matrix',
+        question: '真实为“狗”但模型预测为“猫”的样例应该记录在哪里？',
+        options: [
+          { id: 'confusion', text: '混淆矩阵的误分类项' },
+          { id: 'correct', text: '正确预测项' },
+          { id: 'ignored', text: '直接忽略，不参与评估' },
+        ],
+        correctOptionId: 'confusion',
+        explanation:
+          '混淆矩阵保留具体类别之间的错误方向，比单一准确率信息更多。',
+      },
+    ],
+  },
+} satisfies Artifact;

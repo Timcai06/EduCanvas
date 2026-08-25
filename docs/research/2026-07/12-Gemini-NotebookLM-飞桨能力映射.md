@@ -348,4 +348,4 @@ Provider dogfood。
 - [`@educanvas/web` 当前实现边界](../../../apps/web/README.md)
 - [`@educanvas/canvas-protocol` 当前实现边界](../../../packages/canvas-protocol/README.md)
 - [可信学习投影与下一节点推荐](../../../packages/teaching-core/src/learning-projection.ts)
-- [当前猫狗分类示范课](../../../apps/web/server/teaching/demo-lesson.ts)
+- [当前受信课程内容目录](../../../apps/web/server/study/catalog/index.ts)

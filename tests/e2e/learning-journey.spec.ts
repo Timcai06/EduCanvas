@@ -9,7 +9,7 @@ import {
   openCanvasFromChat,
   openProgress,
   startLearning,
-  THREE_ANSWER_PROGRESS,
+  CURRENT_ARTIFACT_PROGRESS,
 } from './helpers/journey-helpers';
 
 test('@smoke Learning 黄金旅程：安全输入', async ({ page }) => {
@@ -213,11 +213,11 @@ test('@smoke Learning 黄金旅程：Canvas 反馈与 Progress 持久化', async
   await expect(canvasRegion(page)).toHaveCount(0);
 
   const progress = await openProgress(page);
-  await expect(progress).toContainText(THREE_ANSWER_PROGRESS);
+  await expect(progress).toContainText(CURRENT_ARTIFACT_PROGRESS);
   await closeSheet(page);
 
   await page.reload();
   await ensureConversationUi(page);
   const progressAfterReload = await openProgress(page);
-  await expect(progressAfterReload).toContainText(THREE_ANSWER_PROGRESS);
+  await expect(progressAfterReload).toContainText(CURRENT_ARTIFACT_PROGRESS);
 });

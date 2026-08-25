@@ -1,6 +1,9 @@
+import 'server-only';
+
+import type { Artifact } from '@educanvas/canvas-protocol/server';
 import type { StudyCourseDefinition } from '@educanvas/teaching-core';
 
-export const middleImageAiCourse = {
+export const legacyMiddleImageAiCourse = {
   courseSlug: 'image-ai-middle',
   version: 'v1',
   gradeBand: 'middle_school',
@@ -105,3 +108,52 @@ export const middleImageAiCourse = {
     ],
   },
 } satisfies StudyCourseDefinition;
+
+export const middleImageAiCourse: StudyCourseDefinition = {
+  ...legacyMiddleImageAiCourse,
+  version: 'v2',
+};
+
+export const middleImageAiArtifact = {
+  schemaVersion: '1',
+  artifactId: 'image-ai-middle-evaluation-v2',
+  type: 'quiz',
+  title: '训练与评估小测验',
+  params: {
+    questions: [
+      {
+        id: 'unseen-test-data',
+        question: '为什么测试集应包含模型训练时没有见过的数据？',
+        options: [
+          { id: 'generalization', text: '检查模型是否能把规律用于新样例' },
+          { id: 'memorize', text: '帮助模型继续记住训练答案' },
+          { id: 'compress', text: '让模型文件自动变小' },
+        ],
+        correctOptionId: 'generalization',
+        explanation: '未见数据能更诚实地反映模型面对新输入时的表现。',
+      },
+      {
+        id: 'accuracy',
+        question: '模型在 40 张测试图片中判断正确 30 张，准确率是多少？',
+        options: [
+          { id: '25', text: '25%' },
+          { id: '75', text: '75%' },
+          { id: '120', text: '120%' },
+        ],
+        correctOptionId: '75',
+        explanation: '准确率 = 30 ÷ 40 = 75%。',
+      },
+      {
+        id: 'spurious-feature',
+        question: '训练图片中的猫都在室内、狗都在室外，模型可能错误学到什么？',
+        options: [
+          { id: 'background', text: '把室内外背景当作类别线索' },
+          { id: 'animal', text: '自动理解所有动物的生物学特征' },
+          { id: 'nothing', text: '数据分布不会影响模型' },
+        ],
+        correctOptionId: 'background',
+        explanation: '偶然相关的背景可能成为伪特征，导致换场景后判断失败。',
+      },
+    ],
+  },
+} satisfies Artifact;

@@ -24,7 +24,6 @@ import {
   loadOwnedStudyContext,
   type OwnedStudyContext,
 } from '../study/study-service';
-import { demoLesson } from './demo-lesson';
 import { webTeachingVisibleMessageHistory } from './message-history';
 import {
   gradeCanvasSubmissionService,
@@ -77,7 +76,7 @@ export async function startNewAnonymousLesson(
   if (!context) throw new Error('活动学习计划不存在');
   const session = await learningSessions.startNew({
     ...scopeFor(identity, context),
-    completeArtifact: demoLesson.artifact,
+    completeArtifact: context.artifact,
   });
   try {
     await studyPlans.bootstrap({
@@ -167,7 +166,7 @@ export async function loadLearningPageData(
 ): Promise<LearningPageDTO | null> {
   const snapshot = await learningSessions.getPageSnapshot(
     scopeFor(identity, context),
-    demoLesson.artifact.artifactId,
+    context.artifact.artifactId,
   );
   if (!snapshot) return null;
   const [history, recent] = await Promise.all([

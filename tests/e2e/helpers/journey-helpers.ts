@@ -110,7 +110,7 @@ export async function waitForUnavailableTurn(page: Page) {
 
 // ── Learning journey helpers (extracted from learning-flow.spec.ts) ──
 
-export const THREE_ANSWER_PROGRESS = /答对\s*\d+\/3/;
+export const CURRENT_ARTIFACT_PROGRESS = /答对\s*\d+\/5/;
 
 /*
  * Chat-first 布局下 Canvas 与进度均按需打开：Canvas 经「+」菜单显式打开，
