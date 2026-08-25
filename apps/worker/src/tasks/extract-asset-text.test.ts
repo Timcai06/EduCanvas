@@ -234,7 +234,7 @@ describe('assets:extract_text', () => {
     });
     /* B3：未配置是预期降级，warn 记原因但不带路径/密钥。 */
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('MinerU 未配置'),
+      expect.stringContaining('MinerU 配置不可用'),
     );
   });
 

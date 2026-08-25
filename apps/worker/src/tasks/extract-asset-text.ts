@@ -230,7 +230,7 @@ export const extractAssetText_: Task = async (rawPayload, helpers) => {
       const config = loadMineruConfig(process.env);
       if (config === null) {
         helpers.logger.warn(
-          `MinerU 未配置（MINERU_BASE_URL），文档降级纯文本抽取 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} mimeType=${pending.mimeType}`,
+          `MinerU 配置不可用（MINERU_BASE_URL/MINERU_BACKEND），文档降级纯文本抽取 jobId=${payload.jobId} assetVersionId=${pending.assetVersionId} mimeType=${pending.mimeType}`,
         );
       } else {
         const structured = await tryStructuredExtraction({
