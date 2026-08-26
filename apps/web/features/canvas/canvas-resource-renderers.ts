@@ -7,6 +7,7 @@ import { SlidesRenderer } from './slides-renderer';
 import { FlashcardsRenderer } from './flashcards-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
 import { GeneratedImageViewer } from './generated-image-viewer';
+import { MarkdownDocumentView } from './markdown-document-view';
 import { NoteRenderer } from './note-renderer';
 import type { ArtifactVersionData } from './artifact-client';
 import type { NoteContent } from '@educanvas/canvas-protocol';
@@ -67,10 +68,8 @@ function MarkdownDocumentResourceRenderer({
   ) {
     return unavailable('内容不可用', '缺少受控渲染数据。');
   }
-  return createElement(NoteRenderer, {
+  return createElement(MarkdownDocumentView, {
     content: data.content as NoteContent,
-    isLatest: true,
-    readOnly: true,
   });
 }
 
