@@ -153,6 +153,7 @@ describe('DELETE conversation', () => {
     expect(response.status).toBe(200);
     expect(listOwnedRecent).toHaveBeenCalledWith({
       trustedSubjectId: 'local:owner',
+      agentProfileId: 'general',
       limit: 1,
     });
     expect(writeActiveConversationCookie).toHaveBeenCalledWith(OTHER_ID);

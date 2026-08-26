@@ -85,24 +85,23 @@ export async function loadOwnedGeneralConversation(
 export async function loadOwnedGeneralConversationForSubject(
   ownerSubjectId: string,
 ): Promise<PlatformConversationSnapshot | null> {
+  const loadRecent = async () =>
+    (
+      await conversations.listOwnedRecent({
+        trustedSubjectId: ownerSubjectId,
+        agentProfileId: 'general',
+        limit: 1,
+      })
+    )[0] ?? null;
   const conversationId = await readActiveConversationId();
   if (!conversationId) {
-    if (!ownerSubjectId.startsWith('anon:')) {
-      return (
-        (
-          await conversations.listOwnedRecent({
-            trustedSubjectId: ownerSubjectId,
-            limit: 1,
-          })
-        )[0] ?? null
-      );
-    }
-    return null;
+    return ownerSubjectId.startsWith('anon:') ? null : loadRecent();
   }
-  return conversations.getOwned({
+  const active = await conversations.getOwned({
     conversationId,
     trustedSubjectId: ownerSubjectId,
   });
+  return active?.agentProfileId === 'general' ? active : loadRecent();
 }
 
 export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | null> {

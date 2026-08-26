@@ -17,11 +17,9 @@ import {
 } from './schema';
 
 type Database = ReturnType<typeof getDb>;
-type DatabaseTransaction = Parameters<
-  Parameters<Database['transaction']>[0]
->[0];
+type TransactionCallback = Parameters<Database['transaction']>[0];
+type DatabaseTransaction = Parameters<TransactionCallback>[0];
 type DatabaseExecutor = Database | DatabaseTransaction;
-
 export interface PlatformConversationSnapshot {
   id: string;
   spaceId: string;
@@ -138,6 +136,7 @@ export class DrizzlePlatformConversationRepository {
   async listOwnedRecent(input: {
     trustedSubjectId: string;
     limit?: number;
+    agentProfileId?: string;
   }): Promise<readonly PlatformConversationSnapshot[]> {
     return (await this.listAccessibleRecentPage(input)).items;
   }
@@ -146,6 +145,7 @@ export class DrizzlePlatformConversationRepository {
     trustedSubjectId: string;
     limit?: number;
     cursor?: TemporalIdCursor | null;
+    agentProfileId?: string;
   }): Promise<CursorPage<PlatformConversationSnapshot>> {
     const limit = boundedPageLimit(input.limit ?? 30);
     const cursorCondition = input.cursor
@@ -175,6 +175,9 @@ export class DrizzlePlatformConversationRepository {
             isNull(notebookMemberships.expiresAt),
             gt(notebookMemberships.expiresAt, new Date()),
           ),
+          input.agentProfileId
+            ? eq(conversations.agentProfileId, input.agentProfileId)
+            : undefined,
           cursorCondition,
         ),
       )
@@ -235,10 +238,7 @@ export class DrizzlePlatformConversationRepository {
     });
   }
 
-  /**
-   * 原子重命名一对一 Notebook 的 Space 与主 Conversation。
-   * 主体归属和 active 状态由数据库条件强制校验，避免侧栏标题与 Notebook 标题分叉。
-   */
+  /** 原子同步一对一 Notebook 与主 Conversation 标题，并强制校验主体归属。 */
   async renameOwned(input: {
     conversationId: string;
     trustedSubjectId: string;
