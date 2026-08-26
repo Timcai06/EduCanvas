@@ -114,6 +114,11 @@ export type CanvasSubmissionDraft =
           categoryId: string;
         }[];
       };
+    }
+  | {
+      type: 'code_completion_submitted';
+      artifactId: string;
+      payload: { source: string };
     };
 
 /** Server Action 接收的完整不可信交互；仍须在服务端重新运行协议校验。 */

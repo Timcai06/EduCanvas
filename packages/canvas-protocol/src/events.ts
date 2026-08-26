@@ -16,7 +16,7 @@ import { pipelineFlowSlotSchema } from './artifacts/pipeline-flow';
  * 服务端收到 Canvas 交互事件后做校验 + 判分，产出可信领域事件。
  * 这两个事件流有独立的 Schema 版本。
  *
- * ## 七种事件类型
+ * ## 事件类型
  *
  * | 事件 | 触发时机 | 来源 |
  * |------|---------|------|
@@ -27,6 +27,7 @@ import { pipelineFlowSlotSchema } from './artifacts/pipeline-flow';
  * | hint_requested | 学生点提示按钮 | quiz / classification_game / animation |
  * | quiz_answer_submitted | 学生提交单选题答案 | quiz |
  * | classification_submitted | 学生提交分类结果 | classification_game |
+ * | code_completion_submitted | 学生提交代码 | code_completion |
  */
 
 /** 客户端Canvas交互协议版本；领域事件拥有独立版本，不能复用此常量。 */
@@ -41,6 +42,7 @@ export const canvasInteractionEventTypes = [
   'hint_requested',
   'quiz_answer_submitted',
   'classification_submitted',
+  'code_completion_submitted',
 ] as const;
 
 const eventBaseShape = {
@@ -83,6 +85,17 @@ const classificationSubmissionPayloadSchema = z
  * 客户端不得提交isCorrect、masteryScore或目标状态；这些事实只能由服务端验证后生成。
  */
 export const canvasInteractionEventSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      ...eventBaseShape,
+      type: z.literal('code_completion_submitted'),
+      payload: z
+        .object({
+          source: z.string().min(1).max(10_000),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       ...eventBaseShape,

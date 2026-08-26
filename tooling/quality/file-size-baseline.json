@@ -111,15 +111,6 @@
       "acceptedLines": 544
     },
     {
-      "file": "apps/web/features/canvas/canvas-registry.tsx",
-      "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0014",
-      "expiry": "2027-02-28",
-      "acceptedLines": 409
-    },
-    {
       "file": "apps/web/features/canvas/mind-map-renderer.tsx",
       "owner": "gateway",
       "reason": "Existing cohesive module pending bounded extraction.",

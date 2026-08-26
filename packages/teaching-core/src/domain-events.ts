@@ -165,7 +165,7 @@ const stateTransitionPayloadSchema = z
 const assessmentPayloadSchema = z
   .object({
     artifactId: z.string().min(1).max(128),
-    assessmentType: z.enum(['quiz', 'classification_game']),
+    assessmentType: z.enum(['quiz', 'classification_game', 'code_completion']),
     attemptedItems: z.number().int().positive().max(100),
     correctItems: z.number().int().nonnegative().max(100),
     usedHint: z.boolean(),

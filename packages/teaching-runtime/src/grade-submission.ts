@@ -78,7 +78,12 @@ export type GradeCanvasSubmissionOutcome =
 
 type GradableEvent = Extract<
   CanvasInteractionEvent,
-  { type: 'quiz_answer_submitted' | 'classification_submitted' }
+  {
+    type:
+      | 'quiz_answer_submitted'
+      | 'classification_submitted'
+      | 'code_completion_submitted';
+  }
 >;
 
 function isGradableEvent(
@@ -86,7 +91,8 @@ function isGradableEvent(
 ): event is GradableEvent {
   return (
     event.type === 'quiz_answer_submitted' ||
-    event.type === 'classification_submitted'
+    event.type === 'classification_submitted' ||
+    event.type === 'code_completion_submitted'
   );
 }
 

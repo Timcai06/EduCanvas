@@ -22,6 +22,8 @@ import {
   AnimationShell,
   type AnimationClientObservation,
 } from './animation-shell';
+import { CodeCompletionRenderer } from './code-completion-renderer';
+import { QuizRenderer } from './quiz-renderer';
 
 type ArtifactOf<Type extends PublicArtifactType> = Extract<
   PublicArtifact,
@@ -42,99 +44,6 @@ type ArtifactRendererRegistry = {
     } & RendererInteractionProps
   >;
 };
-
-function QuizRenderer({
-  artifact,
-  disabled,
-  feedback,
-  onSubmit,
-}: {
-  artifact: ArtifactOf<'quiz'>;
-} & RendererInteractionProps) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-
-  return (
-    <div className="space-y-5">
-      {artifact.params.questions.map((question, questionIndex) => {
-        const selectedOptionId = answers[question.id];
-        const itemResult = feedback?.itemResults.find(
-          (result) => result.itemId === question.id,
-        );
-
-        return (
-          <fieldset
-            key={question.id}
-            className="rounded-2xl border border-line p-4"
-            disabled={disabled}
-          >
-            <legend className="px-2 font-medium text-ink">
-              {questionIndex + 1}. {question.question}
-            </legend>
-            <div className="mt-3 grid gap-2">
-              {question.options.map((option) => {
-                const selected = selectedOptionId === option.id;
-                return (
-                  <label
-                    key={option.id}
-                    className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-2 ${
-                      selected
-                        ? 'border-accent bg-accent-soft text-accent-strong'
-                        : 'border-line hover:border-ink-faint'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name={`quiz-${artifact.artifactId}-${question.id}`}
-                      value={option.id}
-                      checked={selected}
-                      onChange={() =>
-                        setAnswers((current) => ({
-                          ...current,
-                          [question.id]: option.id,
-                        }))
-                      }
-                      className="size-5 shrink-0 accent-accent"
-                    />
-                    <span>{option.text}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                disabled={disabled || !selectedOptionId}
-                onClick={() => {
-                  if (!selectedOptionId) return;
-                  onSubmit({
-                    type: 'quiz_answer_submitted',
-                    artifactId: artifact.artifactId,
-                    payload: {
-                      questionId: question.id,
-                      selectedOptionId,
-                    },
-                  });
-                }}
-                className="min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-card transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-ink-faint"
-              >
-                {disabled ? '正在提交…' : '提交本题'}
-              </button>
-              {itemResult ? (
-                <span className="inline-flex items-center gap-1.5 text-ink-muted">
-                  <GradeMark correct={itemResult.isCorrect} />
-                  {itemResult.isCorrect ? '回答正确' : '还可以再想一想'}
-                </span>
-              ) : null}
-            </div>
-          </fieldset>
-        );
-      })}
-      <p className="text-xs text-ink-muted">
-        答案由老师批改，做完每道题记得点提交。
-      </p>
-    </div>
-  );
-}
 
 function ClassificationGameRenderer({
   artifact,
@@ -346,15 +255,10 @@ export function PipelineFlowRenderer({
   );
 }
 
-/**
- * Canvas静态注册表：每新增一种协议类型，TypeScript都会要求同时注册人工审核的Renderer。
- * 注册值只能是本地React组件，模型输出无法提供组件、源码或GSAP指令。
- * 这是阶段一为了安全采用的编译期闭集，不等同于可插拔 Artifact Runtime；后续应由
- * 受信 ArtifactPlugin 同时注册 Schema、公开投影、Renderer 和可选 Grader，但仍禁止
- * 从模型输出或远程内容动态加载可执行代码。
- */
+/** 静态注册表只允许本地受审组件；模型不能注入组件、源码或动画指令。 */
 export const canvasArtifactRegistry = {
   classification_game: ClassificationGameRenderer,
+  code_completion: CodeCompletionRenderer,
   pipeline_flow: PipelineFlowRenderer,
   quiz: QuizRenderer,
 } satisfies ArtifactRendererRegistry;
@@ -370,6 +274,17 @@ export function CanvasArtifactRenderer({
   artifact: PublicArtifact;
 } & RendererInteractionProps) {
   switch (artifact.type) {
+    case 'code_completion': {
+      const Renderer = canvasArtifactRegistry.code_completion;
+      return (
+        <Renderer
+          artifact={artifact}
+          disabled={disabled}
+          feedback={feedback}
+          onSubmit={onSubmit}
+        />
+      );
+    }
     case 'classification_game': {
       const Renderer = canvasArtifactRegistry.classification_game;
       return (

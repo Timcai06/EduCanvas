@@ -83,6 +83,18 @@ export const publicArtifactSchema = z.discriminatedUnion('type', [
     .strict(),
   publicArtifactBaseSchema
     .extend({
+      type: z.literal('code_completion'),
+      params: z
+        .object({
+          language: z.literal('python'),
+          prompt: z.string().trim().min(1).max(400),
+          starterCode: z.string().min(1).max(10_000),
+        })
+        .strict(),
+    })
+    .strict(),
+  publicArtifactBaseSchema
+    .extend({
       type: z.literal('quiz'),
       params: z
         .object({
