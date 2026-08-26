@@ -57,7 +57,6 @@ export function MindMapRenderer({
   content: unknown;
   onAskNode?: OnAskNode;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const nodeRootRef = useRef<HTMLDivElement>(null);
   const activePointerRef = useRef<number | null>(null);
   const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
@@ -281,11 +280,18 @@ export function MindMapRenderer({
       offsetX: transform.offsetX,
       offsetY: transform.offsetY,
     };
-    rootRef.current?.setPointerCapture?.(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const stopDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    activePointerRef.current = null;
   };
 
   const handleDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (activePointerRef.current !== event.pointerId) return;
+    if (event.pointerType === 'mouse' && (event.buttons & 1) === 0)
+      return stopDrag(event);
     const deltaX = event.clientX - dragStart.current.x;
     const deltaY = event.clientY - dragStart.current.y;
     setTransform((previous) => ({
@@ -295,15 +301,8 @@ export function MindMapRenderer({
     }));
   };
 
-  const stopDrag = (event: PointerEvent<HTMLDivElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    activePointerRef.current = null;
-    rootRef.current?.releasePointerCapture?.(event.pointerId);
-  };
-
   return (
     <CanvasSurface
-      ref={rootRef}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       data-mind-map
     >
