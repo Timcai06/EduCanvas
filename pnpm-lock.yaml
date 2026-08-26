@@ -272,6 +272,9 @@ importers:
       '@educanvas/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@educanvas/experiment-runtime':
+        specifier: workspace:*
+        version: link:../../packages/experiment-runtime
       '@educanvas/gateway-core':
         specifier: workspace:*
         version: link:../../packages/gateway-core

@@ -15,6 +15,10 @@ import {
   highImageAiCourse,
   legacyHighImageAiCourse,
 } from './high-image-ai';
+import {
+  highPythonPracticeArtifact,
+  highPythonPracticeCourse,
+} from './high-python-practice';
 import { legacyImageAiArtifact } from './legacy-image-ai';
 import {
   legacyMiddleImageAiCourse,
@@ -109,6 +113,10 @@ const currentContentByGradeBand: Record<
     parseContent({
       course: highGenerativeAiCourse,
       artifact: highGenerativeAiArtifact,
+    }),
+    parseContent({
+      course: highPythonPracticeCourse,
+      artifact: highPythonPracticeArtifact,
     }),
   ],
 };

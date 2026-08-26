@@ -24,9 +24,9 @@ import type {
   CanvasSubmissionInput,
   LearningPageDTO,
 } from '@/features/learning/learning-contracts';
+import { createCanvasSubmissionInput } from '@/features/learning/canvas-submission';
 import { ProgressDrawer } from '@/features/progress/progress-drawer';
 import { StudioDrawer } from '@/features/studio/studio-drawer';
-import { CANVAS_INTERACTION_SCHEMA_VERSION } from '@educanvas/canvas-protocol';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Sheet } from '@/components/sheet';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
@@ -41,35 +41,6 @@ import { Topography } from '@/components/Topography';
 interface RetryableSubmission {
   fingerprint: string;
   input: CanvasSubmissionInput;
-}
-
-function createSubmissionInput(
-  draft: CanvasSubmissionDraft,
-): CanvasSubmissionInput {
-  const eventBase = {
-    schemaVersion: CANVAS_INTERACTION_SCHEMA_VERSION,
-    eventId: crypto.randomUUID(),
-    artifactId: draft.artifactId,
-    occurredAt: new Date().toISOString(),
-  };
-
-  if (draft.type === 'quiz_answer_submitted') {
-    return {
-      ...eventBase,
-      type: draft.type,
-      payload: { ...draft.payload },
-    };
-  }
-
-  return {
-    ...eventBase,
-    type: draft.type,
-    payload: {
-      assignments: draft.payload.assignments.map((assignment) => ({
-        ...assignment,
-      })),
-    },
-  };
 }
 
 type DrawerKind = 'assets' | 'studio' | 'progress' | 'sessions' | null;
@@ -329,7 +300,7 @@ function LearnWorkspaceSession({
     const input =
       previous?.fingerprint === fingerprint
         ? previous.input
-        : createSubmissionInput(draft);
+        : createCanvasSubmissionInput(draft);
 
     retryableSubmission.current = { fingerprint, input };
     setErrorMessage(null);

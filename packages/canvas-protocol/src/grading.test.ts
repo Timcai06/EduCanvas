@@ -63,6 +63,21 @@ const pipelineArtifact = {
   },
 } as const;
 
+const codeCompletionArtifact = {
+  schemaVersion: '1',
+  artifactId: 'code-1',
+  type: 'code_completion',
+  title: '补全平均值',
+  params: {
+    language: 'python',
+    prompt: '补全关键行',
+    starterCode: 'scores = [2, 4]\naverage = ___\nprint(average)',
+    requiredLine: 'average = sum(scores) / len(scores)',
+    expectedOutput: '3.0',
+    successMessage: '计算正确',
+  },
+} as const;
+
 const eventBase = {
   schemaVersion: '1',
   eventId: '11111111-1111-4111-8111-111111111111',
@@ -102,6 +117,21 @@ describe('公开Artifact与私有判分键', () => {
       pipelineArtifact,
     );
     expect(() => prepareArtifact(pipelineArtifact)).toThrow();
+  });
+
+  it('公开代码框架但不泄露关键行和预期输出', () => {
+    const prepared = prepareArtifact(codeCompletionArtifact);
+
+    expect(prepared.publicArtifact).toMatchObject({
+      type: 'code_completion',
+      params: { starterCode: expect.stringContaining('average = ___') },
+    });
+    expect(prepared.publicArtifact).not.toHaveProperty('params.requiredLine');
+    expect(prepared.publicArtifact).not.toHaveProperty('params.expectedOutput');
+    expect(prepared.gradingKey).toMatchObject({
+      type: 'code_completion',
+      requiredLine: 'average = sum(scores) / len(scores)',
+    });
   });
 });
 
@@ -176,5 +206,34 @@ describe('服务端确定性判分', () => {
         },
       }),
     ).toEqual({ ok: false, code: 'EVENT_TYPE_MISMATCH' });
+  });
+
+  it('按服务端保存的关键行确定性判分', () => {
+    const { gradingKey } = prepareArtifact(codeCompletionArtifact);
+    const correct = gradeCanvasSubmission(gradingKey, {
+      ...eventBase,
+      artifactId: 'code-1',
+      type: 'code_completion_submitted',
+      payload: {
+        source:
+          'scores = [2, 4]\naverage   =   sum(scores) / len(scores)\nprint(average)',
+      },
+    });
+    const incorrect = gradeCanvasSubmission(gradingKey, {
+      ...eventBase,
+      eventId: '22222222-2222-4222-8222-222222222222',
+      artifactId: 'code-1',
+      type: 'code_completion_submitted',
+      payload: { source: 'scores = [2, 4]\naverage = 0\nprint(average)' },
+    });
+
+    expect(correct).toMatchObject({
+      ok: true,
+      result: { attemptedItems: 1, correctItems: 1 },
+    });
+    expect(incorrect).toMatchObject({
+      ok: true,
+      result: { attemptedItems: 1, correctItems: 0 },
+    });
   });
 });

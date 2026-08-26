@@ -14,17 +14,17 @@ import {
 } from './index';
 
 describe('trusted study course content catalog', () => {
-  it('provides two validated current course packages for every grade band', () => {
+  it('provides validated current course packages for every grade band', () => {
     const options = listTrustedStudyCourseOptions();
     const contents = options.map((option) =>
       getTrustedStudyContent(option.gradeBand, option.courseSlug),
     );
 
-    expect(options).toHaveLength(8);
+    expect(options).toHaveLength(9);
     for (const gradeBand of learnerGradeBandSchema.options) {
       expect(
         options.filter((option) => option.gradeBand === gradeBand),
-      ).toHaveLength(2);
+      ).toHaveLength(gradeBand === 'high_school' ? 3 : 2);
     }
     expect(
       new Set(contents.map((content) => content.course.courseSlug)).size,

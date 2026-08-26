@@ -47,6 +47,16 @@ export const artifactGradingKeySchema = z.discriminatedUnion('type', [
     .object({
       schemaVersion: z.literal('1'),
       artifactId: z.string().min(1).max(128),
+      type: z.literal('code_completion'),
+      requiredLine: z.string().trim().min(1).max(300),
+      expectedOutput: z.string().trim().min(1).max(1_000),
+      successMessage: z.string().max(200).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      schemaVersion: z.literal('1'),
+      artifactId: z.string().min(1).max(128),
       type: z.literal('quiz'),
       questions: z
         .array(
@@ -97,9 +107,10 @@ export interface PreparedArtifact {
 /**
  * 提取浏览器安全投影 — 剥离正确答案和解析，只保留学生可见内容。
  *
- * 三类 Artifact 的提取策略不同：
+ * 各类 Artifact 的提取策略不同：
  * - quiz: 去掉 correctOptionId 和 explanation，只保留题干+选项
  * - classification_game: 去掉 correctCategoryId，只保留 item 的 id/label/emoji
+ * - code_completion: 去掉 requiredLine、expectedOutput，只保留题目与起始代码
  * - pipeline_flow: 渲染型模板，直接透传（无答案概念，无需剥离）
  */
 export function projectRenderableArtifact(input: unknown): PublicArtifact {
@@ -119,6 +130,19 @@ export function projectRenderableArtifact(input: unknown): PublicArtifact {
           question: question.question,
           options: question.options,
         })),
+      },
+    });
+  }
+  if (artifact.type === 'code_completion') {
+    return publicArtifactSchema.parse({
+      schemaVersion: artifact.schemaVersion,
+      artifactId: artifact.artifactId,
+      type: artifact.type,
+      title: artifact.title,
+      params: {
+        language: artifact.params.language,
+        prompt: artifact.params.prompt,
+        starterCode: artifact.params.starterCode,
       },
     });
   }
@@ -155,6 +179,20 @@ function prepareValidatedArtifact(
           correctOptionId: question.correctOptionId,
           explanation: question.explanation,
         })),
+      }),
+    };
+  }
+
+  if (artifact.type === 'code_completion') {
+    return {
+      publicArtifact: projectRenderableArtifact(artifact),
+      gradingKey: artifactGradingKeySchema.parse({
+        schemaVersion: artifact.schemaVersion,
+        artifactId: artifact.artifactId,
+        type: artifact.type,
+        requiredLine: artifact.params.requiredLine,
+        expectedOutput: artifact.params.expectedOutput,
+        successMessage: artifact.params.successMessage,
       }),
     };
   }
@@ -271,6 +309,30 @@ function gradeClassification(
   };
 }
 
+function normalizeCodeLine(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function gradeCodeCompletion(
+  key: Extract<ArtifactGradingKey, { type: 'code_completion' }>,
+  event: Extract<CanvasInteractionEvent, { type: 'code_completion_submitted' }>,
+): GradingDecision {
+  const requiredLine = normalizeCodeLine(key.requiredLine);
+  const isCorrect = event.payload.source
+    .split(/\r?\n/)
+    .some((line) => normalizeCodeLine(line) === requiredLine);
+  return {
+    ok: true,
+    result: {
+      assessmentType: 'code_completion',
+      attemptedItems: 1,
+      correctItems: isCorrect ? 1 : 0,
+      itemResults: [{ itemId: 'solution', isCorrect }],
+      feedback: isCorrect ? key.successMessage : undefined,
+    },
+  };
+}
+
 /**
  * 服务端判分唯一入口 — 使用保存的 GradingKey 验证客户端提交。
  *
@@ -304,6 +366,12 @@ export function gradeCanvasSubmission(
     event.type === 'classification_submitted'
   ) {
     return gradeClassification(key, event);
+  }
+  if (
+    key.type === 'code_completion' &&
+    event.type === 'code_completion_submitted'
+  ) {
+    return gradeCodeCompletion(key, event);
   }
   return { ok: false, code: 'EVENT_TYPE_MISMATCH' };
 }

@@ -19,6 +19,7 @@
     "@educanvas/asset-processing": "workspace:*",
     "@educanvas/canvas-protocol": "workspace:*",
     "@educanvas/db": "workspace:*",
+    "@educanvas/experiment-runtime": "workspace:*",
     "@educanvas/gateway-core": "workspace:*",
     "@educanvas/gateway-runtime": "workspace:*",
     "@educanvas/mcp-runtime": "workspace:*",

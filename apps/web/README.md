@@ -21,7 +21,7 @@
 - 头像档案抽屉内的通信方式设置、provider-neutral Connections BFF、Telegram pending 授权与撤销；微信/QQ 无资格时明确 disabled，旧 `/settings` 只作兼容重定向；
 - K1 PostgreSQL FTS、Turn快照、候选白名单、防伪引用持久化、SSE事件和引用UI；
 - Canvas服务端判分后的受控状态推进；只有可信当前状态为`ASSESS`时才提交完成信号；
-- 阶段一预置 `classification_game` 的公开渲染、服务端私有判分、掌握度更新和 Progress 回显；受控 `quiz` Renderer 与 render-only `pipeline_flow` Renderer 也已注册。
+- 阶段一预置 `classification_game` 的公开渲染、服务端私有判分、掌握度更新和 Progress 回显；受控 `quiz`、无网络 Python `code_completion` Renderer 与 render-only `pipeline_flow` Renderer 也已注册。
 
 尚未接通：
 
@@ -42,6 +42,7 @@
 - `app/learn/actions.ts`：计划创建、诊断、新建、恢复与 Canvas 提交的 Server Action 边界，只返回公开 DTO。
 - `server/study/`：代码内受信课程版本、Goal/诊断应用服务与浏览器安全投影。
 - `app/api/v1/learn/turn/route.ts`：校验同源请求和匿名身份，创建教学 Turn 并返回 SSE。
+- `app/api/v1/learn/code-runs/route.ts`：只为当前受信编程练习启动有界、无网络的 Python 沙箱。
 - `app/api/v1/assets/route.ts`：校验同源请求和匿名身份，上传或列出当前主体拥有的Asset。
 - `app/api/v1/learn/turn/[turnId]/cancel/route.ts`：学生显式停止当前回答的接口。
 - `app/design-qa/`：受环境闸门保护的设计验收页面，不是生产课程入口。
@@ -64,7 +65,8 @@
 - `features/chat/turn-events.ts` 与 `turn-state.ts`：浏览器 SSE 协议解析和 Turn 状态机。
 - `features/composer/composer.tsx` 与 `plus-menu.tsx`：提问输入、发送/停止与能力入口。
 - `features/canvas/canvas-panel.tsx`：桌面/移动端 Canvas 容器。
-- `features/canvas/canvas-registry.tsx`：`classification_game`、`quiz`、`pipeline_flow` 的静态 React Renderer 注册表。
+- `features/canvas/canvas-registry.tsx`：受控教学 Artifact 的静态 React Renderer 注册表。
+- `features/canvas/code-completion-renderer.tsx`：预置 Python 框架、运行结果与可信提交入口。
 - `features/canvas/animation-shell.tsx`：受控动画播放、暂停、步进、速度和 reduced-motion。
 - `features/assets/asset-client.ts`、`asset-upload-panel.tsx`与`assets-drawer.tsx`：真实Asset上传、选择和来源列表。
 - `features/studio/option-wheel*`、`studio-workspace.tsx`：基于 React Bits OptionWheel 改造的受控两级轮盘，以及当前 Notebook 输入/输出工作台；`studio-drawer.tsx`仍服务待退休的独立学习页。

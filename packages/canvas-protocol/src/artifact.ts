@@ -14,6 +14,7 @@
  * | 类型 | 分类 | 说明 |
  * |------|------|------|
  * | quiz | gradable | 单选题，有正确答案，可判分 |
+ * | code_completion | gradable | Python 填空练习，按服务端关键行判分 |
  * | classification_game | gradable | 分类拖拽，有正确答案，可判分 |
  * | pipeline_flow | render-only | 流程动画模板，只渲染不判分，无 GradingKey |
  *
@@ -29,6 +30,7 @@
 
 import { z } from 'zod';
 import { classificationGameParamsSchema } from './artifacts/classification-game';
+import { codeCompletionParamsSchema } from './artifacts/code-completion';
 import { quizParamsSchema } from './artifacts/quiz';
 import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
 
@@ -73,15 +75,24 @@ const pipelineFlowArtifactSchema = artifactBaseSchema
   })
   .strict();
 
-/** 可判分的 Artifact 子集 — quiz + classification_game。pipeline_flow 不在此列。 */
+const codeCompletionArtifactSchema = artifactBaseSchema
+  .extend({
+    type: z.literal('code_completion'),
+    params: codeCompletionParamsSchema,
+  })
+  .strict();
+
+/** 可判分 Artifact 子集；pipeline_flow 等纯展示类型不在此列。 */
 export const gradableArtifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
+  codeCompletionArtifactSchema,
   quizArtifactSchema,
 ]);
 
 /** 所有可渲染的 Artifact 联合 — 包含 render-only 类型（pipeline_flow）。 */
 export const artifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
+  codeCompletionArtifactSchema,
   quizArtifactSchema,
   pipelineFlowArtifactSchema,
 ]);
