@@ -9,6 +9,11 @@ import {
   ArrowBendDownRight,
   CaretDown,
   CaretRight,
+  CornersOut,
+  Lightning,
+  Minus,
+  Notepad,
+  Plus,
   Question,
 } from '@phosphor-icons/react';
 import {
@@ -38,6 +43,13 @@ const MIN_ZOOM = 0.12;
 const ZOOM_STEP = 0.15;
 const clampScale = (scale: number) =>
   Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
+
+/** semanticRole 的可视化徽标：图标 + 语义色 token；未标注角色不显示。 */
+const SEMANTIC_ROLE_ICONS = {
+  question: { Icon: Question, className: 'text-warn' },
+  annotation: { Icon: Notepad, className: 'text-accent' },
+  action: { Icon: Lightning, className: 'text-good' },
+} as const;
 
 type OnAskNode = (payload: {
   nodeId: string;
@@ -75,6 +87,13 @@ export function MindMapRenderer({
     offsetX: 0,
     offsetY: 0,
   });
+  /* 折叠锚定：记录点击节点的视口坐标，布局重算后把它拉回原位，
+     折叠/展开不再导致视野漂移（mind-elixir 的 drift 补偿）。 */
+  const pendingAnchorRef = useRef<{
+    nodeId: string;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
 
   const layout = useMemo(
     () =>
@@ -82,6 +101,10 @@ export function MindMapRenderer({
     [parsed, collapsedNodeIds],
   );
   const visibleNodeIds = useMemo(() => layout?.visibleNodeIds ?? [], [layout]);
+  const nodeById = useMemo(
+    () => new Map((layout?.nodes ?? []).map((node) => [node.id, node])),
+    [layout],
+  );
   const effectiveFocusedNodeId =
     focusedNodeId && visibleNodeIds.includes(focusedNodeId)
       ? focusedNodeId
@@ -124,6 +147,29 @@ export function MindMapRenderer({
       ?.focus();
   }, [effectiveFocusedNodeId, layout]);
 
+  /* 折叠/展开重排后执行：把锚定节点拉回点击前的视口位置。 */
+  useLayoutEffect(() => {
+    const anchor = pendingAnchorRef.current;
+    const section = nodeRootRef.current;
+    if (!anchor || !section) return;
+    pendingAnchorRef.current = null;
+    const element = section.querySelector<HTMLElement>(
+      `[data-mindmap-node="${anchor.nodeId}"]`,
+    );
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const dx =
+      anchor.offsetX - (rect.left - section.getBoundingClientRect().left);
+    const dy =
+      anchor.offsetY - (rect.top - section.getBoundingClientRect().top);
+    if (dx === 0 && dy === 0) return;
+    setTransform((previous) => ({
+      ...previous,
+      offsetX: previous.offsetX + dx,
+      offsetY: previous.offsetY + dy,
+    }));
+  }, [layout]);
+
   if (!parsed.success || layout === null) {
     return (
       <p role="alert" className="rounded-xl bg-bad-soft p-3 text-bad">
@@ -165,7 +211,33 @@ export function MindMapRenderer({
     });
   };
 
+  /* 控件缩放以视口中心为原点；滚轮/快捷键仍以光标为原点 */
+  const zoomFromViewportCenter = (nextScale: number) => {
+    const rect = nodeRootRef.current?.getBoundingClientRect();
+    if (!rect) {
+      requestZoom(nextScale);
+      return;
+    }
+    requestZoom(nextScale, {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+  };
+
   const toggleCollapse = (nodeId: string) => {
+    const section = nodeRootRef.current;
+    const element = section?.querySelector<HTMLElement>(
+      `[data-mindmap-node="${nodeId}"]`,
+    );
+    if (element && section) {
+      const rect = element.getBoundingClientRect();
+      const sectionRect = section.getBoundingClientRect();
+      pendingAnchorRef.current = {
+        nodeId,
+        offsetX: rect.left - sectionRect.left,
+        offsetY: rect.top - sectionRect.top,
+      };
+    }
     setCollapsedNodeIds((current) => {
       const next = new Set(current);
       if (next.has(nodeId)) next.delete(nodeId);
@@ -204,12 +276,8 @@ export function MindMapRenderer({
         moveFocus('left');
         return;
       }
-      if (node.hasChildren) {
-        setCollapsedNodeIds((current) => {
-          const next = new Set(current);
-          next.add(node.id);
-          return next;
-        });
+      if (node.hasChildren && !collapsedNodeIds.has(node.id)) {
+        toggleCollapse(node.id);
       }
       moveFocus('left');
       return;
@@ -220,11 +288,7 @@ export function MindMapRenderer({
         (item) => item.id === effectiveFocusedNodeId,
       );
       if (node?.hasChildren) {
-        setCollapsedNodeIds((current) => {
-          const next = new Set(current);
-          next.delete(node.id);
-          return next;
-        });
+        if (collapsedNodeIds.has(node.id)) toggleCollapse(node.id);
         if (node.children.length > 0) {
           setFocusedNodeId(node.children[0]!);
           return;
@@ -335,25 +399,30 @@ export function MindMapRenderer({
             height={layout.height}
             aria-hidden="true"
           >
-            {layout.edges.map((edge) => (
-              <path
-                key={`${edge.from}->${edge.to}`}
-                d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
-                stroke="currentColor"
-                strokeWidth={2}
-                fill="none"
-                strokeDasharray={
-                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
-                    ? '5 5'
-                    : undefined
-                }
-                className={
-                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
-                    ? 'text-ink-muted/45'
-                    : 'text-accent/45'
-                }
-              />
-            ))}
+            {layout.edges.map((edge) => {
+              /* 层级边继承目标节点的分支色；非层级语义边保持灰色虚线 */
+              const branchColor = nodeById.get(edge.to)?.branchColorVar;
+              const isSemantic =
+                edge.semanticRole && edge.semanticRole !== 'hierarchy';
+              return (
+                <path
+                  key={`${edge.from}->${edge.to}`}
+                  d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
+                  {...(isSemantic
+                    ? {
+                        stroke: 'currentColor',
+                        className: 'text-ink-muted/45',
+                        strokeDasharray: '5 5',
+                      }
+                    : {
+                        stroke: branchColor ?? 'var(--color-accent)',
+                        strokeOpacity: 0.45,
+                      })}
+                  strokeWidth={2}
+                  fill="none"
+                />
+              );
+            })}
           </svg>
           {layout.nodes.map((node) => {
             const isCollapsed = collapsedNodeIds.has(node.id);
@@ -383,21 +452,40 @@ export function MindMapRenderer({
                   minHeight: MIND_MAP_NODE_HEIGHT,
                 }}
               >
+                {/* 分支色条：一级取模分配、子树继承；root 用既有 accent 强调 */}
+                {node.depth > 0 && node.branchColorVar ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-2 bottom-2 left-1 w-[3px] rounded-full"
+                    style={{ backgroundColor: node.branchColorVar }}
+                  />
+                ) : null}
                 {node.hasChildren ? (
                   <button
                     type="button"
                     data-mindmap-control
                     aria-label={
-                      isCollapsed ? '展开节点子分支' : '折叠节点子分支'
+                      isCollapsed
+                        ? `展开节点子分支（${node.descendantCount} 个后代）`
+                        : '折叠节点子分支'
                     }
                     onClick={(event) => {
                       event.stopPropagation();
                       toggleCollapse(node.id);
                     }}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line/60 text-ink-muted transition hover:bg-line/20"
+                    className={`inline-flex shrink-0 items-center justify-center gap-0.5 border border-line/60 text-ink-muted transition hover:bg-line/20 ${
+                      isCollapsed
+                        ? 'h-5 min-w-9 rounded-full px-1'
+                        : 'size-5 rounded-full'
+                    }`}
                   >
                     {isCollapsed ? (
-                      <CaretRight size={12} />
+                      <>
+                        <CaretRight size={12} />
+                        <span className="text-[9px] leading-none">
+                          {node.descendantCount}
+                        </span>
+                      </>
                     ) : (
                       <CaretDown size={12} />
                     )}
@@ -405,6 +493,21 @@ export function MindMapRenderer({
                 ) : (
                   <span className="inline-flex h-5 w-5 shrink-0" />
                 )}
+                {(() => {
+                  const roleIcon =
+                    SEMANTIC_ROLE_ICONS[
+                      node.semanticRole as keyof typeof SEMANTIC_ROLE_ICONS
+                    ];
+                  if (!roleIcon) return null;
+                  const RoleIcon = roleIcon.Icon;
+                  return (
+                    <RoleIcon
+                      aria-hidden="true"
+                      size={13}
+                      className={`shrink-0 ${roleIcon.className}`}
+                    />
+                  );
+                })()}
                 <span className="inline-flex grow truncate text-left">
                   {node.label}
                 </span>
@@ -427,6 +530,37 @@ export function MindMapRenderer({
               </div>
             );
           })}
+        </div>
+        {/* 缩放控件浮层：不再依赖盲快捷键；data-mindmap-control 豁免画布拖拽 */}
+        <div
+          className="absolute right-3 bottom-3 z-10 flex flex-col gap-1.5"
+          data-mindmap-control
+        >
+          {[
+            {
+              label: '放大',
+              icon: Plus,
+              action: () => zoomFromViewportCenter(transform.scale + ZOOM_STEP),
+            },
+            {
+              label: '缩小',
+              icon: Minus,
+              action: () => zoomFromViewportCenter(transform.scale - ZOOM_STEP),
+            },
+            { label: '适应画布', icon: CornersOut, action: fitView },
+          ].map(({ label, icon: Icon, action }) => (
+            <button
+              key={label}
+              type="button"
+              data-mindmap-control
+              aria-label={label}
+              title={label}
+              onClick={action}
+              className="grid size-8 place-items-center rounded-full border border-line/70 bg-card/95 text-ink-muted shadow-sm backdrop-blur transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Icon aria-hidden="true" size={14} />
+            </button>
+          ))}
         </div>
       </section>
       <span className="sr-only">

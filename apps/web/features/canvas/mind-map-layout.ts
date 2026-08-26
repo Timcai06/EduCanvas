@@ -14,6 +14,15 @@ export const MIND_MAP_NODE_WIDTH = 188;
 export const MIND_MAP_NODE_HEIGHT = 52;
 const DEFAULT_PADDING = 56;
 
+/** 分支五色 token（globals.css --color-branch-1..5）：L1 取模分配、子树继承。 */
+export const MIND_MAP_BRANCH_COLOR_VARS = [
+  'var(--color-branch-1)',
+  'var(--color-branch-2)',
+  'var(--color-branch-3)',
+  'var(--color-branch-4)',
+  'var(--color-branch-5)',
+] as const;
+
 type ParsedNode = {
   id: string;
   label: string;
@@ -38,6 +47,10 @@ export type MindMapViewNode = {
   children: string[];
   hasChildren: boolean;
   parentId?: string;
+  /** 一级分支取模分配、子树继承的分支色（CSS 变量）；root 为 undefined。 */
+  branchColorVar?: string;
+  /** 主树后代总数（不受折叠影响）：折叠角标提示「点开有多大」。 */
+  descendantCount: number;
 };
 
 export type MindMapViewEdge = {
@@ -144,11 +157,46 @@ function buildLayoutFromVisible(
   visible: Array<{ id: string; depth: number }>,
   collapsedNodeIds: ReadonlySet<string>,
 ): MindMapLayout {
-  const visibleSet = new Set(visible.map((item) => item.id));
+  const visibleSet = new Set(visible.map((item) => String(item.id)));
   const primaryChildren = (nodeId: string) =>
     (parsed.outgoing[nodeId] ?? []).filter(
       (childId) => visibleSet.has(childId) && parsed.parent[childId] === nodeId,
     );
+
+  /* 分支色：一级子节点按出现顺序取模取色，后代继承父级色（mind-elixir 模式）。
+     用主树父级关系遍历，非 hierarchy 关联边不参与配色。 */
+  const branchColorById = new Map<string, string>();
+  const assignBranchColors = (nodeId: string, colorVar?: string) => {
+    if (colorVar) branchColorById.set(nodeId, colorVar);
+    let childSlot = 0;
+    for (const childId of parsed.outgoing[nodeId] ?? []) {
+      if (parsed.parent[childId] !== nodeId) continue;
+      assignBranchColors(
+        childId,
+        nodeId === parsed.rootId
+          ? MIND_MAP_BRANCH_COLOR_VARS[
+              childSlot % MIND_MAP_BRANCH_COLOR_VARS.length
+            ]
+          : colorVar,
+      );
+      childSlot += 1;
+    }
+  };
+  assignBranchColors(parsed.rootId);
+
+  /* 后代计数与折叠无关：折叠角标要回答「点开有多大」，必须算全量主树。 */
+  const descendantCountById = new Map<string, number>();
+  const countDescendants = (nodeId: string): number => {
+    let total = 0;
+    for (const childId of parsed.outgoing[nodeId] ?? []) {
+      if (parsed.parent[childId] !== nodeId) continue;
+      total += 1 + countDescendants(childId);
+    }
+    descendantCountById.set(nodeId, total);
+    return total;
+  };
+  countDescendants(parsed.rootId);
+
   const yById = new Map<string, number>();
   let nextLeaf = 0;
   const place = (nodeId: string): number => {
@@ -172,7 +220,7 @@ function buildLayoutFromVisible(
     const allChildren = parsed.outgoing[id] ?? [];
     return [
       {
-        id,
+        id: id,
         label: source.label,
         depth,
         semanticRole: source.semanticRole,
@@ -183,6 +231,8 @@ function buildLayoutFromVisible(
           (childId) => parsed.parent[childId] === id,
         ),
         parentId: parsed.parent[id],
+        branchColorVar: branchColorById.get(id),
+        descendantCount: descendantCountById.get(id) ?? 0,
       },
     ];
   });
