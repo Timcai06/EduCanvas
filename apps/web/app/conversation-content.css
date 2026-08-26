@@ -107,6 +107,81 @@
   color: var(--color-ink-muted);
 }
 
+/* Markdown 引用与 Callout 跨聊天、笔记和文档共用同一原生结构。 */
+[data-markdown-quote] {
+  margin-block: 0.85em;
+  border-inline-start: 2px solid
+    color-mix(in srgb, var(--color-accent) 45%, var(--color-line));
+  padding-inline-start: 0.95em;
+  color: var(--color-ink-muted);
+}
+
+[data-callout] {
+  --callout-color: var(--color-accent);
+  --callout-surface: var(--color-accent-soft);
+  margin-block: 1em;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in srgb, var(--callout-color) 42%, var(--color-line));
+  border-radius: 0.75rem;
+  background: color-mix(
+    in srgb,
+    var(--callout-surface) 72%,
+    var(--color-card)
+  );
+  color: var(--color-ink);
+}
+
+[data-callout='success'] {
+  --callout-color: var(--color-good);
+  --callout-surface: var(--color-good-soft);
+}
+
+[data-callout='warning'] {
+  --callout-color: var(--color-warn);
+  --callout-surface: var(--color-warn-soft);
+}
+
+[data-callout='danger'] {
+  --callout-color: var(--color-bad);
+  --callout-surface: var(--color-bad-soft);
+}
+
+[data-callout='example'] {
+  --callout-color: var(--color-ink-muted);
+  --callout-surface: var(--color-surface);
+}
+
+[data-callout-header] {
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.625rem 1rem;
+  color: var(--callout-color);
+  font-weight: 650;
+}
+
+summary[data-callout-header] {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary[data-callout-header]::-webkit-details-marker {
+  display: none;
+}
+
+summary[data-callout-header]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+[data-callout] > :not([data-callout-header]) {
+  margin-inline: 1rem;
+}
+
+[data-callout] > :last-child {
+  margin-bottom: 0.85rem;
+}
+
 .chat-prose hr {
   margin-block: 1.2em;
   border: 0;
