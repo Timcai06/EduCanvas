@@ -17,7 +17,7 @@ import { selectWebCanvasResourceRenderer } from './web-canvas-resource-registry'
 /**
  * Artifact Canvas 内容区分发（W04-3）。
  *
- * 内容驱动型（mind_map / slides / flashcards / audio_overview /
+ * 内容驱动型（mind_map / slides / flashcards / picturebook / audio_overview /
  * generated_image）改由 Registry 选择真实 Renderer 渲染；交互式产物
  * （note 编辑、dom_exploration 运行时）仍由本壳渲染——它们不是内容驱动，
  * Registry 里的对应占位只在未接住时给出明确提示。
@@ -27,11 +27,12 @@ type ArtifactRegistryViewKinds =
   | 'mind_map'
   | 'slides'
   | 'flashcards'
+  | 'picturebook'
   | 'audio_overview'
   | 'generated_image'
   | 'markdown_document';
 
-/** 走 Registry 的 5 类内容驱动分发结果。 */
+/** 走 Registry 的内容驱动分发结果。 */
 export type ArtifactRegistryContentView = Extract<
   ArtifactContentView,
   { kind: ArtifactRegistryViewKinds }
@@ -48,6 +49,7 @@ export function toArtifactVersionData(
     case 'mind_map':
     case 'slides':
     case 'flashcards':
+    case 'picturebook':
     case 'markdown_document':
       return { content: view.content, media: null };
     case 'audio_overview':
@@ -94,7 +96,8 @@ function ArtifactRegistryContent({
   const versionKey =
     view.kind === 'mind_map' ||
     view.kind === 'slides' ||
-    view.kind === 'flashcards'
+    view.kind === 'flashcards' ||
+    view.kind === 'picturebook'
       ? view.key
       : undefined;
   return (
@@ -129,6 +132,7 @@ export function ArtifactCanvasContent({
     case 'mind_map':
     case 'slides':
     case 'flashcards':
+    case 'picturebook':
     case 'audio_overview':
     case 'generated_image':
       return <ArtifactRegistryContent view={contentView} detail={detail} />;

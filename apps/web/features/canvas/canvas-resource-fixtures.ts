@@ -12,7 +12,8 @@ export function makeArtifactResource(
     | 'flashcards'
     | 'markdown_document'
     | 'audio_overview'
-    | 'generated_image',
+    | 'generated_image'
+    | 'picturebook',
   overrides: Partial<Parameters<typeof canvasResourceSchema.parse>[0]> = {},
 ) {
   const rendererByKind = {
@@ -31,6 +32,10 @@ export function makeArtifactResource(
       rendererId: 'artifact.generated-image',
       rendererVersion: 1,
     },
+    picturebook: {
+      rendererId: 'artifact.picturebook',
+      rendererVersion: 1,
+    },
   } as const;
   const mimeByKind = {
     mind_map: 'application/vnd.educanvas.mind-map+json',
@@ -39,6 +44,7 @@ export function makeArtifactResource(
     markdown_document: 'application/vnd.educanvas.markdown+text',
     audio_overview: 'audio/mpeg',
     generated_image: 'image/png',
+    picturebook: 'application/vnd.educanvas.picturebook+json',
   } as const;
   return canvasResourceSchema.parse({
     schemaVersion: 1,
@@ -60,7 +66,9 @@ export function makeArtifactResource(
     },
     renderer: rendererByKind[kind],
     trustTier:
-      kind === 'audio_overview' || kind === 'generated_image'
+      kind === 'audio_overview' ||
+      kind === 'generated_image' ||
+      kind === 'picturebook'
         ? 'tier2'
         : 'tier1',
     allowedActions: ['view'],

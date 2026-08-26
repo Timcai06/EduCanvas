@@ -163,6 +163,18 @@ export const WEB_REGISTRY_ENTRIES: readonly WebRegistryEntry[] = [
     },
   },
   {
+    rendererId: 'artifact.picturebook',
+    manifest: {
+      manifestVersion: 1,
+      rendererId: 'artifact.picturebook',
+      rendererVersion: 1,
+      representations: ['structured'],
+      trustTiers: ['tier2'],
+      runtimeKinds: ['none'],
+      supportedActions: ['view', 'annotate', 'delete'],
+    },
+  },
+  {
     rendererId: 'artifact.markdown-document',
     manifest: {
       manifestVersion: 1,

@@ -361,6 +361,50 @@ describe('artifact-resource-projection（markdown_document）', () => {
     );
   });
 
+  it('maps picturebook as a render-only tier2 resource', () => {
+    const resource = projectOwnedArtifactResource({
+      notebookId: artifactBase.spaceId,
+      artifact: {
+        ...artifactBase,
+        kind: 'picturebook',
+        trustTier: 'tier2',
+      },
+      version: {
+        ...version,
+        metadata: {
+          contentVersion: 1,
+          pageCount: 6,
+          totalImageBytes: 12_000,
+          image: {
+            provider: 'fixture-image',
+            resolvedModelId: 'fixture-image-v1',
+            totalLatencyMs: 42,
+          },
+        },
+      },
+      latestJob: null,
+      versionJob: null,
+      accessRole: 'owner',
+    });
+
+    expect(resource).toMatchObject({
+      trustTier: 'tier2',
+      representation: {
+        kind: 'structured',
+        mimeType: 'application/vnd.educanvas.picturebook+json',
+      },
+      renderer: { rendererId: 'artifact.picturebook', rendererVersion: 1 },
+      allowedActions: ['view', 'delete', 'annotate'],
+      provenance: {
+        generator: {
+          provider: 'fixture-image',
+          model: 'fixture-image-v1',
+          promptSummary: null,
+        },
+      },
+    });
+  });
+
   it('maps web_app as tier2 structured runtime artifact with runtime actions', () => {
     const resource = projectOwnedArtifactResource({
       notebookId: artifactBase.spaceId,

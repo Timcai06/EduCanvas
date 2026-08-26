@@ -4,7 +4,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export type ArtifactKind =
-  'mind_map' | 'slides' | 'flashcards' | 'note' | 'audio_overview';
+  | 'mind_map'
+  | 'slides'
+  | 'flashcards'
+  | 'note'
+  | 'audio_overview'
+  | 'picturebook';
 
 export type ArtifactApiKind = Exclude<ArtifactKind, 'audio_overview'>;
 
@@ -143,7 +148,8 @@ export async function createArtifactFixture(
     trustedSubjectId: conversation.ownerSubjectId,
     conversationId,
     kind,
-    trustTier: kind === 'audio_overview' ? 'tier2' : 'tier1',
+    trustTier:
+      kind === 'audio_overview' || kind === 'picturebook' ? 'tier2' : 'tier1',
     title,
   });
   return {
@@ -151,6 +157,60 @@ export async function createArtifactFixture(
     title,
     conversationId,
   };
+}
+
+export async function createPicturebookArtifactFixture(
+  page: Page,
+  title: string,
+): Promise<ArtifactFixture> {
+  const fixture = await createArtifactFixture(page, 'picturebook', title);
+  const imageBytes = await readFile(
+    path.resolve('tests/fixtures/sample-1x1.png'),
+  );
+  const captions = [
+    '森林里，小狐狸收集了三篮松果。',
+    '第一篮有 6 颗，第二篮有 9 颗，第三篮有 12 颗。',
+    '它把所有松果放在一起，一共数到 27 颗。',
+    '再把 27 颗松果平均分回 3 个篮子。',
+    '每个篮子都得到 9 颗，这就是平均数。',
+    '小狐狸发现：平均数能表示一组数据的大致水平。',
+  ];
+  const bundle = {
+    contentVersion: 1,
+    pages: captions.map((captionText, index) => ({
+      imagePrompt: `E2E 受控绘本第 ${index + 1} 页`,
+      captionText,
+      image: {
+        contentType: 'image/png',
+        byteSize: imageBytes.byteLength,
+        size: '512x512',
+        bytesBase64: imageBytes.toString('base64'),
+      },
+    })),
+  };
+  const bundleBytes = Buffer.from(JSON.stringify(bundle));
+  const objectKey = `artifacts/picturebook/${fixture.artifactId}/fixture.json`;
+  const storedPath = path.join(OBJECT_STORAGE_ROOT, objectKey);
+  await mkdir(path.dirname(storedPath), { recursive: true });
+  await writeFile(storedPath, bundleBytes);
+  await appendVersions(page, fixture.artifactId, [
+    {
+      objectKey,
+      checksum: createHash('sha256').update(bundleBytes).digest('hex'),
+      generatedBy: 'e2e:picturebook',
+      metadata: {
+        contentVersion: 1,
+        pageCount: captions.length,
+        totalImageBytes: imageBytes.byteLength * captions.length,
+        image: {
+          provider: 'fixture',
+          resolvedModelId: 'fixture-image',
+          totalLatencyMs: 1,
+        },
+      },
+    },
+  ]);
+  return fixture;
 }
 
 export async function appendVersions(

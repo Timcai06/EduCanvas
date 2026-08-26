@@ -1,13 +1,12 @@
 import { audioOverviewMetadataSchema } from './artifacts/audio-overview';
 import { generatedImageMetadataSchema } from './artifacts/generated-image';
-import {
-  canvasResourceSchema,
-  type CanvasRepresentationKind,
-  type CanvasResource,
-  type CanvasResourceAction,
-  type CanvasTrustTier,
-} from './resource';
+import { picturebookMetadataSchema } from './artifacts/picturebook';
+import { canvasResourceSchema, type CanvasResource } from './resource';
 import type { CanvasResourceErrorCode } from './resource-errors';
+import {
+  artifactRendererFor,
+  projectArtifactActions,
+} from './artifact-renderer-contracts';
 
 type CanvasAccessRole = 'owner' | 'editor' | 'contributor' | 'viewer';
 
@@ -73,6 +72,15 @@ function projectMediaGenerator(
       promptSummary: null,
     };
   }
+  if (kind === 'picturebook') {
+    const parsed = picturebookMetadataSchema.safeParse(metadata);
+    if (!parsed.success) return null;
+    return {
+      provider: parsed.data.image.provider,
+      model: parsed.data.image.resolvedModelId,
+      promptSummary: null,
+    };
+  }
   return null;
 }
 
@@ -120,87 +128,6 @@ function projectSourceReferences(
   });
 }
 
-// 各 Artifact 类型的协议声明：rendererId 与 W04 浏览器端注册表
-// （web-canvas-resource-registry-config.ts）一一对应；rendererVersion 是
-// 渲染器协议版本（v1），与 artifact 数据版本无关——服务端与浏览器端同批
-// 升级时才递增（#306 契约收口，2026-08-07）。
-const ARTIFACT_RENDERERS = {
-  mind_map: {
-    representation: 'structured',
-    mimeType: 'application/vnd.educanvas.mind-map+json',
-    rendererId: 'artifact.mind-map',
-    rendererVersion: 1,
-    trustTier: 'tier1',
-  },
-  slides: {
-    representation: 'structured',
-    mimeType: 'application/vnd.educanvas.slides+json',
-    rendererId: 'artifact.slides',
-    rendererVersion: 1,
-    trustTier: 'tier1',
-  },
-  flashcards: {
-    representation: 'structured',
-    mimeType: 'application/vnd.educanvas.flashcards+json',
-    rendererId: 'artifact.flashcards',
-    rendererVersion: 1,
-    trustTier: 'tier1',
-  },
-  note: {
-    representation: 'structured',
-    mimeType: 'application/vnd.educanvas.note+json',
-    rendererId: 'artifact.note',
-    rendererVersion: 1,
-    trustTier: 'tier1',
-  },
-  audio_overview: {
-    representation: 'audio',
-    mimeType: 'audio/mpeg',
-    rendererId: 'artifact.audio-overview',
-    rendererVersion: 1,
-    trustTier: 'tier2',
-  },
-  /* 生成位图不是判分型白名单内容，因此固定 tier2；MIME 只作为渲染声明，
-     实际字节的格式由读取面按落库 metadata 回答，浏览器不参与判断。 */
-  generated_image: {
-    representation: 'image',
-    mimeType: 'image/png',
-    rendererId: 'artifact.generated-image',
-    rendererVersion: 1,
-    trustTier: 'tier2',
-  },
-  markdown_document: {
-    representation: 'structured',
-    mimeType: 'application/vnd.educanvas.markdown+text',
-    rendererId: 'artifact.markdown-document',
-    rendererVersion: 1,
-    trustTier: 'tier1',
-  },
-  web_app: {
-    representation: 'interactive_app',
-    mimeType: 'application/vnd.educanvas.web-app+json',
-    rendererId: 'artifact.web-app',
-    rendererVersion: 1,
-    trustTier: 'tier2',
-  },
-  dom_exploration: {
-    representation: 'interactive_app',
-    mimeType: 'application/vnd.educanvas.dom-exploration+json',
-    rendererId: 'artifact.dom-exploration',
-    rendererVersion: 1,
-    trustTier: 'tier2',
-  },
-} as const satisfies Record<
-  string,
-  {
-    representation: CanvasRepresentationKind;
-    mimeType: string;
-    rendererId: string;
-    rendererVersion: number;
-    trustTier: CanvasTrustTier;
-  }
->;
-
 export class ArtifactResourceProjectionError extends Error {
   constructor(
     readonly code: CanvasResourceErrorCode,
@@ -244,48 +171,6 @@ function projectStatus(
   return 'unavailable';
 }
 
-function projectActions(
-  kind: keyof typeof ARTIFACT_RENDERERS,
-  status: CanvasResource['status'],
-  hasVersion: boolean,
-  accessRole: CanvasAccessRole,
-): CanvasResourceAction[] {
-  if (!hasVersion) return [];
-  if (status === 'processing' || status === 'archived') return ['view'];
-  if (status !== 'ready') return [];
-  if (accessRole === 'viewer' || accessRole === 'contributor') {
-    /* 只读角色可查看和下载媒体产物，但不可删除。 */
-    if (kind === 'audio_overview' || kind === 'generated_image')
-      return ['view', 'download', 'annotate'];
-    if (kind === 'markdown_document') return ['view', 'download'];
-    return kind === 'dom_exploration' || kind === 'web_app'
-      ? ['view', 'run', 'cancel', 'annotate']
-      : ['view', 'annotate'];
-  }
-  if (kind === 'markdown_document')
-    return ['view', 'edit', 'regenerate', 'download', 'delete'];
-  if (kind === 'dom_exploration')
-    return ['view', 'run', 'cancel', 'delete', 'annotate'];
-  if (kind === 'web_app')
-    return [
-      'view',
-      'run',
-      'cancel',
-      'regenerate',
-      'download',
-      'delete',
-      'annotate',
-    ];
-  if (kind === 'note')
-    return ['view', 'edit', 'regenerate', 'delete', 'annotate'];
-  /* 音频与图像的重新生成会重新计费且不复用基线版本，PATCH 修改通道也不接受
-     这两类；不开放 regenerate 才与实际后端能力一致。
-     删除与下载是受控服务端授权动作，由对应 route 再次校验身份和权限。 */
-  if (kind === 'audio_overview' || kind === 'generated_image')
-    return ['view', 'download', 'delete', 'annotate'];
-  return ['view', 'regenerate', 'delete', 'annotate'];
-}
-
 /**
  * 将已授权Artifact、不可变版本和任务状态投影为统一资源。
  * 私有版本内容、metadata、objectKey、任务参数与异常均不参与投影。
@@ -316,8 +201,8 @@ export function projectOwnedArtifactResource(input: {
   ) {
     throw new ArtifactResourceProjectionError('resource_invalid', 422);
   }
-  const kind = input.artifact.kind as keyof typeof ARTIFACT_RENDERERS;
-  const renderer = ARTIFACT_RENDERERS[kind];
+  const kind = input.artifact.kind;
+  const renderer = artifactRendererFor(kind);
   if (!renderer) {
     throw new ArtifactResourceProjectionError('renderer_not_found', 422);
   }
@@ -356,7 +241,7 @@ export function projectOwnedArtifactResource(input: {
       rendererVersion: renderer.rendererVersion,
     },
     trustTier: renderer.trustTier,
-    allowedActions: projectActions(
+    allowedActions: projectArtifactActions(
       kind,
       status,
       input.version !== null,

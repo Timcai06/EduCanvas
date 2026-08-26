@@ -111,6 +111,7 @@ export interface PreparedArtifact {
  * - quiz: 去掉 correctOptionId 和 explanation，只保留题干+选项
  * - classification_game: 去掉 correctCategoryId，只保留 item 的 id/label/emoji
  * - code_completion: 去掉 requiredLine、expectedOutput，只保留题目与起始代码
+ * - picturebook: 去掉逐页 imagePrompt，只保留文字与受控图片地址
  * - pipeline_flow: 渲染型模板，直接透传（无答案概念，无需剥离）
  */
 export function projectRenderableArtifact(input: unknown): PublicArtifact {
@@ -143,6 +144,20 @@ export function projectRenderableArtifact(input: unknown): PublicArtifact {
         language: artifact.params.language,
         prompt: artifact.params.prompt,
         starterCode: artifact.params.starterCode,
+      },
+    });
+  }
+  if (artifact.type === 'picturebook') {
+    return publicArtifactSchema.parse({
+      schemaVersion: artifact.schemaVersion,
+      artifactId: artifact.artifactId,
+      type: artifact.type,
+      title: artifact.title,
+      params: {
+        pages: artifact.params.pages.map((page) => ({
+          captionText: page.captionText,
+          imageUrl: page.imageUrl,
+        })),
       },
     });
   }

@@ -24,6 +24,7 @@ import {
 } from './animation-shell';
 import { CodeCompletionRenderer } from './code-completion-renderer';
 import { QuizRenderer } from './quiz-renderer';
+import { PicturebookRenderer } from './picturebook-renderer';
 
 type ArtifactOf<Type extends PublicArtifactType> = Extract<
   PublicArtifact,
@@ -44,6 +45,19 @@ type ArtifactRendererRegistry = {
     } & RendererInteractionProps
   >;
 };
+
+function PicturebookArtifactRenderer({
+  artifact,
+}: {
+  artifact: ArtifactOf<'picturebook'>;
+} & RendererInteractionProps) {
+  return (
+    <PicturebookRenderer
+      title={artifact.title}
+      content={{ contentVersion: 1, pages: artifact.params.pages }}
+    />
+  );
+}
 
 function ClassificationGameRenderer({
   artifact,
@@ -259,6 +273,7 @@ export function PipelineFlowRenderer({
 export const canvasArtifactRegistry = {
   classification_game: ClassificationGameRenderer,
   code_completion: CodeCompletionRenderer,
+  picturebook: PicturebookArtifactRenderer,
   pipeline_flow: PipelineFlowRenderer,
   quiz: QuizRenderer,
 } satisfies ArtifactRendererRegistry;
@@ -287,6 +302,17 @@ export function CanvasArtifactRenderer({
     }
     case 'classification_game': {
       const Renderer = canvasArtifactRegistry.classification_game;
+      return (
+        <Renderer
+          artifact={artifact}
+          disabled={disabled}
+          feedback={feedback}
+          onSubmit={onSubmit}
+        />
+      );
+    }
+    case 'picturebook': {
+      const Renderer = canvasArtifactRegistry.picturebook;
       return (
         <Renderer
           artifact={artifact}

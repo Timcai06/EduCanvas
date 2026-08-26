@@ -22,6 +22,7 @@
 import { z } from 'zod';
 import { ARTIFACT_SCHEMA_VERSION } from './artifact';
 import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
+import { publicPicturebookParamsSchema } from './artifacts/picturebook';
 
 const publicArtifactBaseSchema = z.object({
   schemaVersion: z.literal(ARTIFACT_SCHEMA_VERSION),
@@ -59,6 +60,12 @@ export const publicQuizQuestionSchema = z
 
 /** Canvas客户端唯一允许接收的Artifact联合，结构上排除全部私有判分信息。 */
 export const publicArtifactSchema = z.discriminatedUnion('type', [
+  publicArtifactBaseSchema
+    .extend({
+      type: z.literal('picturebook'),
+      params: publicPicturebookParamsSchema,
+    })
+    .strict(),
   publicArtifactBaseSchema
     .extend({
       type: z.literal('classification_game'),

@@ -10,6 +10,8 @@ import { GeneratedImageViewer } from './generated-image-viewer';
 import { NoteRenderer } from './note-renderer';
 import type { ArtifactVersionData } from './artifact-client';
 import type { NoteContent } from '@educanvas/canvas-protocol';
+import { picturebookContentSchema } from '@educanvas/canvas-protocol';
+import { PicturebookRenderer } from './picturebook-renderer';
 
 /**
  * W04（选项 1）：内容驱动型 Artifact 的真实 Renderer 迁入 Registry。
@@ -105,6 +107,21 @@ function GeneratedImageResourceRenderer({
   });
 }
 
+function PicturebookResourceRenderer({
+  resource,
+  content,
+}: CanvasResourceRendererProps) {
+  const data = content as ArtifactVersionData | undefined;
+  const parsed = picturebookContentSchema.safeParse(data?.content);
+  if (!parsed.success) {
+    return unavailable('绘本不可用', '绘本页面没有通过安全协议校验。');
+  }
+  return createElement(PicturebookRenderer, {
+    title: resource.title,
+    content: parsed.data,
+  });
+}
+
 function SourcePdfResourceRenderer({ resource }: CanvasResourceRendererProps) {
   return createElement(SourceResourceRendererBody, { resource });
 }
@@ -148,6 +165,7 @@ export {
   MarkdownDocumentResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
+  PicturebookResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,

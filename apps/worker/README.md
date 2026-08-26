@@ -25,12 +25,12 @@ EduCanvas 的持久任务 worker 进程（[ADR-0005](../../docs/09-decisions/000
   抽取各自独立成败——只要元数据拿到，版本就进入ready，两路各留自己的状态。ffmpeg /
   ffprobe只在本进程以固定argv数组spawn，带硬超时，临时目录无论成败都回收
   （[ADR-0016](../../docs/09-decisions/0016-视频来源派生与部分成功边界.md)）；
-- `src/tasks/generate-artifact.ts`：结构化产物、音频概览与生成图像的任务入口；两类
-  媒体产物都在对象写入后先保存checkpoint，重投时校验已有对象并继续提交版本，不重复
-  调用计费的供应商接口；
+- `src/tasks/generate-artifact.ts`：结构化产物与媒体产物的任务路由入口；
+- `src/tasks/audio-artifact-generation.ts`：音频对象写入、checkpoint 与版本提交；
 - `src/tasks/image-artifact-generation.ts`：图像产物版本追加；只接受闭集尺寸与已裁剪
   提示词，Provider原始响应止步于Adapter，落库元数据不含objectKey、checksum与Prompt全文
   （[ADR-0014](../../docs/09-decisions/0014-图像生成能力与产物信任边界.md)）；
+- `src/tasks/picturebook-generation.ts`：结构化模型编排 6–8 页，再复用图片 Gateway 逐页生成，最终只提交一个可完整回收的私有 bundle；
 - `src/tasks/continue-operation.ts`：消费只含continuation UUID的审批续跑任务，重算当前Agent/Notebook/approval范围，在恢复的W3C active子span内维护generation lease、调用Adapter并提交continuation与Operation终态；
 - `src/approval-continuation.integration.test.ts`：覆盖批准原子入队、队列隐私、Worker跨进程领取、终态原子性与Membership撤销后fail closed；
 - `src/tasks/audio-overview-generation.ts`：把1–8项已验证来源压成受限脚本；

@@ -151,10 +151,10 @@ export const ARTIFACT_KIND_LABELS: Record<ObservableArtifactKind, string> = {
   audio_overview: '音频概览',
   note: '笔记',
   generated_image: '生成图片',
+  picturebook: '知识绘本',
   markdown_document: 'Markdown 文档',
   web_app: 'Web App',
 };
-
 export interface ArtifactGenerationFlowOptions {
   /* 本地观察收敛到终态时回调；Dock 等只读列表借此保持最新，不负责重试语义。 */
   readonly onSettled?: () => void;

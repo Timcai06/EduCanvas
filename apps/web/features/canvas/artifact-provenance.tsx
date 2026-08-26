@@ -5,6 +5,7 @@ import {
   Headphones,
   PresentationChart,
   TreeStructure,
+  BookOpen,
   type Icon,
 } from '@phosphor-icons/react';
 import type { ArtifactDetail } from './artifact-client';
@@ -24,6 +25,7 @@ const KIND_META: Record<string, { label: string; Icon: Icon }> = {
   slides: { label: 'Slides', Icon: PresentationChart },
   flashcards: { label: '闪卡', Icon: Cards },
   audio_overview: { label: '音频概览', Icon: Headphones },
+  picturebook: { label: '知识绘本', Icon: BookOpen },
 };
 
 function formatUpdatedAt(iso: string): string {
