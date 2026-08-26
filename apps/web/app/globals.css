@@ -54,6 +54,18 @@
   --color-bad: #ab2f17;
   --color-bad-soft: #f6dcd2;
 
+  /*
+   * 分支五色（AR 线 AR01）：思维导图一级分支与 callout 类型的多色相需求。
+   * 取自同一传统颜料谱系：墨紫/黛蓝/松绿/藤黄/赭石；低饱和教育风，与
+   * good/warn/bad 状态语义解耦——分支色只表达「归属」，不表达「对错」。
+   * 消费方式见 mind-map-renderer（L1 取模分配、子树继承连线同色）。
+   */
+  --color-branch-1: #6a4a86;
+  --color-branch-2: #3e5f8a;
+  --color-branch-3: #47775a;
+  --color-branch-4: #9c7a1f;
+  --color-branch-5: #96502f;
+
   --font-sans:
     'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --font-display:
@@ -152,6 +164,13 @@
   --color-warn-soft: #372e14;
   --color-bad: #de6a4c;
   --color-bad-soft: #3d1d13;
+
+  /* 分支五色暗色（砚墨）：提亮到 ≥3:1 装饰层对比，soft 底色压深 */
+  --color-branch-1: #b79bd6;
+  --color-branch-2: #93aed2;
+  --color-branch-3: #8ab99c;
+  --color-branch-4: #cfb26d;
+  --color-branch-5: #c78f6c;
 
   --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.42);
   --shadow-card-hover:
