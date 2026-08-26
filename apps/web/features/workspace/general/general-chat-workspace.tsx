@@ -39,12 +39,14 @@ export function GeneralChatWorkspace({
   notebookTitle,
   nickname,
   focusTarget,
+  deepResearchUnavailableReason,
 }: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
   notebookId: string;
   notebookTitle: string | null;
   nickname?: string | null;
+  deepResearchUnavailableReason?: string | null;
   /** DP08 Web handoff 落点：`?focus=<kind>:<id>` 解析后的精确资源目标。 */
   focusTarget?: HomeFocusTarget | null;
 }) {
@@ -57,6 +59,7 @@ export function GeneralChatWorkspace({
     conversationId,
     notebookId,
     nickname,
+    deepResearchUnavailableReason,
     focusTarget,
     composerDockRef,
     scrollRef,

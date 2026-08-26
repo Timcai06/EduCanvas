@@ -11,6 +11,9 @@ const publicErrorEnvelopeSchema = z
   })
   .strict();
 
+export const DEEP_RESEARCH_UNAVAILABLE_MESSAGE =
+  '深度研究需要网页搜索支持，请先配置搜索服务。';
+
 const messages: Readonly<Record<string, string>> = {
   auth_rate_limited: '尝试过于频繁，请稍后重试。',
   invalid_credentials: '用户名或密码不正确。',
@@ -48,7 +51,10 @@ const messages: Readonly<Record<string, string>> = {
   search_invalid_response: '网页搜索结果格式不正确。请重试。',
   search_budget_exhausted: '网页搜索未能在限定时间内完成。请重试。',
   search_cancelled: '网页搜索已取消。',
+  deep_research_unavailable: DEEP_RESEARCH_UNAVAILABLE_MESSAGE,
 };
+
+const nonRetryableCodes = new Set(['deep_research_unavailable']);
 
 export interface BrowserPublicError {
   code: string;
@@ -74,9 +80,10 @@ export async function readPublicError(
     requestId: parsed.success ? parsed.data.error.requestId : null,
     message: messageForPublicError(code, fallback),
     retryable:
-      response.status === 408 ||
-      response.status === 429 ||
-      response.status >= 500,
+      !nonRetryableCodes.has(code) &&
+      (response.status === 408 ||
+        response.status === 429 ||
+        response.status >= 500),
   };
 }
 

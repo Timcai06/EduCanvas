@@ -30,4 +30,24 @@ describe('Composer Deep Research entry', () => {
     );
     expect(normalizeDeepResearchTopic('   ')).toBeNull();
   });
+
+  it('搜索能力未配置时保留入口并说明原因，但禁止启动研究', () => {
+    const html = renderToStaticMarkup(
+      <Composer
+        chips={[]}
+        busy={false}
+        statusText={null}
+        value=""
+        onValueChange={vi.fn()}
+        onSend={vi.fn()}
+        onRemoveChip={vi.fn()}
+        onMenuAction={vi.fn()}
+        deepResearchUnavailableReason="深度研究需要网页搜索支持，请先配置搜索服务。"
+      />,
+    );
+
+    expect(html).toContain('aria-label="深度研究"');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('深度研究需要网页搜索支持，请先配置搜索服务。');
+  });
 });

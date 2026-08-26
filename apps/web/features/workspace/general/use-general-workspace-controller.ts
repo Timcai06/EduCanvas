@@ -73,17 +73,15 @@ import { describeGenerationSettledToast } from './generation-toast';
 /**
  * `GeneralChatWorkspace` 的控制器（W02）。
  *
- * 聚合请求（turn/sources/studio 验证）、会话恢复（sessionStorage 三个 pending 键）、
- * 状态转换（surface 判别联合 + 各工作面详情），返回组合层需要的全部数据与动作，
- * 让主组件只负责 JSX 组装。DOM 引用（composerDock/scroll/nearBottom）由组合层创建
- * 后传入，供 send 的 Flip 捕获与滚动跟随使用；`flipStateRef` 由本控制器持有，
- * 组合层的 useGSAP 播放落地 → 对话位移。
+ * 聚合请求、会话恢复与工作面状态，返回组合层需要的数据和动作。
+ * DOM 引用由组合层传入；`flipStateRef` 由本控制器持有，播放落地 → 对话位移。
  */
 export function useGeneralWorkspaceController(options: {
   initialMessages: readonly InitialChatMessageDTO[];
   conversationId: string;
   notebookId: string;
   nickname?: string | null;
+  deepResearchUnavailableReason?: string | null;
   /** DP08 Web handoff 落点：`?focus=<kind>:<id>` 解析后的精确资源目标。 */
   focusTarget?: HomeFocusTarget | null;
   composerDockRef: RefObject<HTMLDivElement | null>;
@@ -95,6 +93,7 @@ export function useGeneralWorkspaceController(options: {
     conversationId,
     notebookId,
     nickname,
+    deepResearchUnavailableReason,
     focusTarget,
     composerDockRef,
     scrollRef,
@@ -491,6 +490,7 @@ export function useGeneralWorkspaceController(options: {
     onToolAction: () => undefined,
     onOutputPreferenceChange: handleOutputPreferenceChange,
     onDeepResearch: sendDeepResearch,
+    deepResearchUnavailableReason,
     onRetry: (messageId: string) => turn.retry(messageId),
     onPreviewHtml: (source: string) => workspace.openHtml(source),
     onOpenArtifact: (artifactId: string) =>
