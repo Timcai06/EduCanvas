@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 import {
   activeConversationId,
   appendVersions,
@@ -11,6 +11,40 @@ import {
   openStudioOutput,
   waitForGenerationJobSucceeded,
 } from './fixtures/general-artifact-fixture';
+
+async function expectMindMapDragStopsOnRelease(
+  page: Page,
+  canvas: Locator,
+) {
+  const viewport = canvas.locator('[data-mind-map-viewport]');
+  const map = viewport.locator('.mind-map-canvas');
+  const box = await viewport.boundingBox();
+  if (!box) throw new Error('思维导图 viewport 不可见');
+  const transformBefore = await map.evaluate(
+    (element) => element.style.transform,
+  );
+  const start = {
+    x: box.x + Math.min(32, box.width / 4),
+    y: box.y + Math.min(32, box.height / 4),
+  };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 56, start.y + 42);
+  const transformWhilePressed = await map.evaluate(
+    (element) => element.style.transform,
+  );
+  expect(transformWhilePressed).not.toBe(transformBefore);
+
+  await page.mouse.up();
+  const transformAfterRelease = await map.evaluate(
+    (element) => element.style.transform,
+  );
+  await page.mouse.move(start.x + 104, start.y + 78);
+  await expect
+    .poll(() => map.evaluate((element) => element.style.transform))
+    .toBe(transformAfterRelease);
+}
 
 test('@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复', async ({
   page,
@@ -38,6 +72,7 @@ test('@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复',
   await expect(
     canvas.locator('[data-mind-map]').getByText('对话思维导图'),
   ).toBeVisible();
+  await expectMindMapDragStopsOnRelease(page, canvas);
 
   await closeCanvasAndWaitForFold(page);
   await page.reload();
