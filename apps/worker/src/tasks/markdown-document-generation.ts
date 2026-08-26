@@ -8,7 +8,7 @@ import {
 } from '@educanvas/canvas-protocol';
 import type { OutlineSourceMessage } from './mind-map-outline.js';
 
-export const MARKDOWN_DOCUMENT_PROMPT_VERSION = 'artifact-markdown-document-v1';
+export const MARKDOWN_DOCUMENT_PROMPT_VERSION = 'artifact-markdown-document-v2';
 export const MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION =
   'artifact-markdown-document-revision-v1';
 export const RULE_GENERATOR = 'rule:markdown-document-v1';
@@ -156,6 +156,12 @@ export async function generateMarkdownDocumentContent(input: {
             : `你是课程文档与技术报告撰写助手。请基于对话记录生成一份结构清晰、可复核的 Markdown 报告（kind=${MARKDOWN_DOCUMENT_KIND}）。`,
           '要求只输出 Markdown 文本，不包含 Raw HTML 标签。',
           '使用标题（#/##/###）、列表和要点组织内容；',
+          /* callout 约定（Issue #477 AR08）：只在语义匹配时使用，宁缺毋滥；
+             类型集合与 remark-callout 支持面一致，未知类型会降级为普通引用块。 */
+          '关键结论、注意事项、常见错误可用 Obsidian 风格 callout 强调：',
+          '格式为「> [!类型] 可选标题」独占引用块首行，正文写在后续 > 行；',
+          '类型仅限 note/info/tip/success/question/warning/danger/example；',
+          '每份文档 callout 不超过 4 处，不嵌套，不放表格与代码块以外的大结构；',
           '保留关键信息链路，不得编造未出现的事实；',
           `contentVersion 固定为 ${MARKDOWN_DOCUMENT_CONTENT_VERSION}，总字符上限 ${MARKDOWN_DOCUMENT_MAX_CHARS}。`,
           input.revision
