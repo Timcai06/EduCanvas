@@ -139,7 +139,10 @@ async function tryStructuredExtraction(input: {
       status: 'ready',
       extractedText: markdown,
       derivedStorageKey: mdKey,
-      checksum: sha256Hex(new TextEncoder().encode(markdown)),
+      /* 校验和必须按实际存储的字节（原始 zip 条目）计算，而非 decodeMineruMarkdown
+         归一化后的字符串——Web 端 resolveStructuredMarkdown 按存储字节复算哈希，
+         CRLF/NFC/trim 差异会导致必然失配 → 结构化视图"暂不可用"。 */
+      checksum: sha256Hex(extracted.markdown.bytes),
       /* 结构化表示：质量 structured、MIME text/markdown（ADR-0026 决定 6）。 */
       quality: 'structured' as const,
       mimeType: 'text/markdown' as const,
