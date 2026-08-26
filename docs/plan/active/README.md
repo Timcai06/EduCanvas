@@ -9,6 +9,7 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [G 产品发布闭环](G-产品发布闭环.md)              | 项目负责人 | G00 待开始                               | 依赖已归档的 R/W/Q/UV，和 KM 关联                                           |
 | [DP 桌宠统一桌面外延](DP-桌宠统一桌面外延.md)    | @Timcai06  | DP00-DP02 PASS；DP03 PENDING             | 基于现有桌宠 MVP；依次收口统一会话、历史、Operation、结构化结果与双平台证据 |
 | [WS Web 搜索与研究来源](WS-Web搜索与研究来源.md) | @Timcai06  | WS00-WS08 PASS；WS09 IN_REVIEW           | 网页直接导入；内置搜索与唯一 Agent Loop 共用 SearchService；不做网页预览    |
+| [AR AI 产物显示优化](AR-AI产物显示优化.md)       | hzlgou     | AR00-AR09 PENDING                        | 五渲染器读体验增强；关键路径 AR01→AR07→AR08（callout=Issue #477）          |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
 [P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)、
