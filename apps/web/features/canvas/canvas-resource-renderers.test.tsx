@@ -215,6 +215,23 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
     expect(html).toContain('列表项 3');
   });
 
+  it('markdown_document：通过共享渲染边界呈现 callout', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({
+          contentVersion: 1,
+          markdown: '> [!warning] 复核\n> 不要跳过单位。',
+        })}
+      />,
+    );
+
+    expect(html).toContain('<aside');
+    expect(html).toContain('复核');
+    expect(html).toContain('不要跳过单位');
+    expect(html).not.toContain('[!warning]');
+  });
+
   it('正常 Markdown fixture 在 Source 与 Artifact 真实渲染器保持同一安全语义', () => {
     const sourceHtml = renderToStaticMarkup(
       <MessageMarkdown text={NORMAL_MARKDOWN_FIXTURE} />,

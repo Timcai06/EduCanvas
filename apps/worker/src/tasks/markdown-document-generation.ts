@@ -8,9 +8,9 @@ import {
 } from '@educanvas/canvas-protocol';
 import type { OutlineSourceMessage } from './mind-map-outline.js';
 
-export const MARKDOWN_DOCUMENT_PROMPT_VERSION = 'artifact-markdown-document-v1';
+export const MARKDOWN_DOCUMENT_PROMPT_VERSION = 'artifact-markdown-document-v2';
 export const MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION =
-  'artifact-markdown-document-revision-v1';
+  'artifact-markdown-document-revision-v2';
 export const RULE_GENERATOR = 'rule:markdown-document-v1';
 export const MODEL_GENERATOR = 'model:artifact.generate:markdown-document-v1';
 export const RULE_REVISION_GENERATOR = 'rule:markdown-document-revision-v1';
@@ -156,6 +156,7 @@ export async function generateMarkdownDocumentContent(input: {
             : `你是课程文档与技术报告撰写助手。请基于对话记录生成一份结构清晰、可复核的 Markdown 报告（kind=${MARKDOWN_DOCUMENT_KIND}）。`,
           '要求只输出 Markdown 文本，不包含 Raw HTML 标签。',
           '使用标题（#/##/###）、列表和要点组织内容；',
+          '需要突出提示时可使用 > [!note] 标题；类型只能从 note、info、tip、success、question、warning、danger、example 中选择，只有确有必要时才使用；',
           '保留关键信息链路，不得编造未出现的事实；',
           `contentVersion 固定为 ${MARKDOWN_DOCUMENT_CONTENT_VERSION}，总字符上限 ${MARKDOWN_DOCUMENT_MAX_CHARS}。`,
           input.revision

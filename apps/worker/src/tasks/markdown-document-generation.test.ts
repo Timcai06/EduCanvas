@@ -84,6 +84,8 @@ describe('generateMarkdownDocumentContent', () => {
     expect(request.taskAlias).toBe('artifact.generate');
     expect(request.modelAlias).toBe('structured');
     expect(request.promptVersion).toBe(MARKDOWN_DOCUMENT_PROMPT_VERSION);
+    expect(request.messages[0]?.content).toContain('> [!note] 标题');
+    expect(request.messages[0]?.content).toContain('warning、danger、example');
     expect(result.content.markdown).toContain('a=1');
   });
 

@@ -4,8 +4,8 @@ import {
   type NoteContent,
 } from '@educanvas/canvas-protocol';
 
-export const NOTE_PROMPT_VERSION = 'artifact-note-v1';
-export const NOTE_REVISION_PROMPT_VERSION = 'artifact-note-revision-v1';
+export const NOTE_PROMPT_VERSION = 'artifact-note-v2';
+export const NOTE_REVISION_PROMPT_VERSION = 'artifact-note-revision-v2';
 
 export const RULE_GENERATOR = 'rule:note-outline-v1';
 export const MODEL_GENERATOR = 'model:artifact.generate:note-v1';
@@ -93,6 +93,7 @@ export async function generateNoteContent(input: {
             : '你是知识整理助手。根据对话记录生成一份结构清晰的 Markdown 笔记。',
           '要求：使用标题层级（#, ##, ###）组织内容；提炼关键概念而非逐字照抄；',
           '使用列表、引用、代码块等 Markdown 语法增强可读性；',
+          '需要突出提示时可使用 > [!note] 标题；类型只能从 note、info、tip、success、question、warning、danger、example 中选择，只有确有必要时才使用；',
           '总长度不超过 3000 字；不要编造对话中不存在的内容。',
           input.revision
             ? '保留未被要求改变的部分结构；不要只返回差异或解释。'
