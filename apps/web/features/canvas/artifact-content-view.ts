@@ -23,6 +23,7 @@ export type ArtifactContentView =
   | { kind: 'mind_map'; content: unknown; key: number }
   | { kind: 'slides'; content: unknown; key: number }
   | { kind: 'flashcards'; content: unknown; key: number }
+  | { kind: 'picturebook'; content: unknown; key: number }
   | {
       kind: 'markdown_document';
       content: unknown;
@@ -77,6 +78,13 @@ export function resolveArtifactContentView(
   if (detail.artifact.kind === 'flashcards' && detail.version) {
     return {
       kind: 'flashcards',
+      content: detail.version.content,
+      key: displayedVersion,
+    };
+  }
+  if (detail.artifact.kind === 'picturebook' && detail.version) {
+    return {
+      kind: 'picturebook',
       content: detail.version.content,
       key: displayedVersion,
     };

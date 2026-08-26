@@ -13,6 +13,7 @@ import {
   MarkdownDocumentResourceRenderer,
   AudioOverviewResourceRenderer,
   GeneratedImageResourceRenderer,
+  PicturebookResourceRenderer,
   SourcePdfResourceRenderer,
   SourceImageResourceRenderer,
   SourceMarkdownResourceRenderer,
@@ -40,6 +41,7 @@ const COMPONENT_MAP: Record<
   'artifact.markdown-document': MarkdownDocumentResourceRenderer,
   'artifact.audio-overview': AudioOverviewResourceRenderer,
   'artifact.generated-image': GeneratedImageResourceRenderer,
+  'artifact.picturebook': PicturebookResourceRenderer,
 };
 
 /**

@@ -10,6 +10,7 @@ import {
   Note,
   PresentationChart,
   TreeStructure,
+  BookOpen,
 } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import { useRef, type ComponentType } from 'react';
@@ -28,6 +29,7 @@ const KIND_PRESENTATION: Record<
   flashcards: { label: '闪卡', icon: Cards },
   audio_overview: { label: '音频概览', icon: Headphones },
   generated_image: { label: '生成图片', icon: Image },
+  picturebook: { label: '知识绘本', icon: BookOpen },
   note: { label: '笔记', icon: Note },
 };
 

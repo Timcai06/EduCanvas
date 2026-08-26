@@ -158,6 +158,7 @@ describe('GET /api/v1/chat/artifacts', () => {
           'note',
           'audio_overview',
           'generated_image',
+          'picturebook',
           'dom_exploration',
           'web_app',
         ],

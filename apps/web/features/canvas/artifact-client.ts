@@ -239,9 +239,9 @@ export type CreatableArtifactKind =
   | 'web_app'
   | 'note';
 
-/** Agent 工具可产生、UI 可观察的种类；generated_image 不开放手动 POST 创建。 */
-export type ObservableArtifactKind = CreatableArtifactKind | 'generated_image';
-
+/** Agent 工具可产生、UI 可观察的种类；图片与绘本不开放手动 POST 创建。 */
+export type ObservableArtifactKind =
+  CreatableArtifactKind | 'generated_image' | 'picturebook';
 export function isCreatableArtifactKind(
   kind: string,
 ): kind is CreatableArtifactKind {

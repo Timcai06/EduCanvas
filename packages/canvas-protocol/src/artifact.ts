@@ -16,6 +16,7 @@
  * | quiz | gradable | 单选题，有正确答案，可判分 |
  * | code_completion | gradable | Python 填空练习，按服务端关键行判分 |
  * | classification_game | gradable | 分类拖拽，有正确答案，可判分 |
+ * | picturebook | render-only | 6–8 页受控图文绘本，不执行模型代码 |
  * | pipeline_flow | render-only | 流程动画模板，只渲染不判分，无 GradingKey |
  *
  * ## 加入新类型检查清单
@@ -33,6 +34,7 @@ import { classificationGameParamsSchema } from './artifacts/classification-game'
 import { codeCompletionParamsSchema } from './artifacts/code-completion';
 import { quizParamsSchema } from './artifacts/quiz';
 import { pipelineFlowParamsSchema } from './artifacts/pipeline-flow';
+import { picturebookParamsSchema } from './artifacts/picturebook';
 
 /**
  * 协议版本随Artifact持久化，为未来兼容路由保留依据；当前只注册v1校验器。
@@ -82,6 +84,13 @@ const codeCompletionArtifactSchema = artifactBaseSchema
   })
   .strict();
 
+const picturebookArtifactSchema = artifactBaseSchema
+  .extend({
+    type: z.literal('picturebook'),
+    params: picturebookParamsSchema,
+  })
+  .strict();
+
 /** 可判分 Artifact 子集；pipeline_flow 等纯展示类型不在此列。 */
 export const gradableArtifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
@@ -93,6 +102,7 @@ export const gradableArtifactSchema = z.discriminatedUnion('type', [
 export const artifactSchema = z.discriminatedUnion('type', [
   classificationGameArtifactSchema,
   codeCompletionArtifactSchema,
+  picturebookArtifactSchema,
   quizArtifactSchema,
   pipelineFlowArtifactSchema,
 ]);

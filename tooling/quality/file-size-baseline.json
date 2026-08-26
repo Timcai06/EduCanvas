@@ -228,15 +228,6 @@
       "acceptedLines": 402
     },
     {
-      "file": "apps/worker/src/tasks/generate-artifact.ts",
-      "owner": "agent-runtime",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0028",
-      "expiry": "2027-02-28",
-      "acceptedLines": 482
-    },
-    {
       "file": "packages/agent-core/src/index.ts",
       "owner": "agent-runtime",
       "reason": "Existing cohesive module pending bounded extraction.",

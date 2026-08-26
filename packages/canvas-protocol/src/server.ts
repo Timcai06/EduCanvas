@@ -27,6 +27,14 @@ export {
 } from './artifacts/classification-game';
 export { quizParamsSchema, type QuizParams } from './artifacts/quiz';
 export {
+  picturebookBundleSchema,
+  picturebookParamsSchema,
+  picturebookPlanSchema,
+  type PicturebookBundle,
+  type PicturebookParams,
+  type PicturebookPlan,
+} from './artifacts/picturebook';
+export {
   pipelineFlowParamsSchema,
   pipelineFlowSlotSchema,
   pipelineFlowSlots,

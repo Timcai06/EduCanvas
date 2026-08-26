@@ -19,14 +19,14 @@ import {
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
 import {
-  audioOverviewMetadataSchema,
-  generatedImageMetadataSchema,
   MARKDOWN_DOCUMENT_MAX_CHARS,
   markdownDocumentContentSchema,
   mindMapContentSchema,
   NOTE_MARKDOWN_MAX_CHARS,
   noteContentSchema,
 } from '@educanvas/canvas-protocol';
+import { PicturebookBundleError } from '@/server/canvas/picturebook-bundle';
+import { projectArtifactVersionForBrowser } from '@/server/canvas/artifact-version-projection';
 import { webAppContentSchema } from '@educanvas/canvas-protocol/server';
 import {
   ArtifactResourceProjectionError,
@@ -104,14 +104,6 @@ export async function GET(
       artifactId,
       trustedSubjectId: identity.studentId,
     });
-    const audioMetadata =
-      detail.artifact.kind === 'audio_overview' && selectedVersion
-        ? audioOverviewMetadataSchema.safeParse(selectedVersion.metadata)
-        : null;
-    const imageMetadata =
-      detail.artifact.kind === 'generated_image' && selectedVersion
-        ? generatedImageMetadataSchema.safeParse(selectedVersion.metadata)
-        : null;
     /* 首版前只返回 latestJob；没有不可变版本就不构造 CanvasResource。 */
     const canvasResource = selectedVersion
       ? projectOwnedArtifactResource({
@@ -125,29 +117,14 @@ export async function GET(
       : null;
     const canDownload =
       canvasResource?.allowedActions.includes('download') ?? false;
-    /* 媒体只暴露授权 URL 与公开 metadata；download URL 由服务端权限决定。 */
-    const media =
-      audioMetadata?.success === true
-        ? {
-            url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/audio`,
-            ...(canDownload
-              ? {
-                  downloadUrl: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/download`,
-                }
-              : {}),
-            ...audioMetadata.data,
-          }
-        : imageMetadata?.success === true
-          ? {
-              url: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/image`,
-              ...(canDownload
-                ? {
-                    downloadUrl: `/api/v1/chat/artifacts/${encodeURIComponent(artifactId)}/download`,
-                  }
-                : {}),
-              ...imageMetadata.data,
-            }
-          : null;
+    const projectedVersion = selectedVersion
+      ? await projectArtifactVersionForBrowser({
+          artifactId,
+          kind: detail.artifact.kind,
+          version: selectedVersion,
+          canDownload,
+        })
+      : null;
     return jsonResponse({
       artifact: {
         id: detail.artifact.id,
@@ -165,8 +142,8 @@ export async function GET(
         ? {
             id: selectedVersion.id,
             version: selectedVersion.version,
-            content: selectedVersion.content,
-            media,
+            content: projectedVersion!.content,
+            media: projectedVersion!.media,
           }
         : null,
       versions: versions.map((version) => ({
@@ -192,6 +169,9 @@ export async function GET(
     if (error instanceof ArtifactResourceProjectionError) {
       const status = error.code === 'resource_not_found' ? 404 : error.status;
       return jsonError(status, error.code);
+    }
+    if (error instanceof PicturebookBundleError) {
+      return jsonError(422, 'resource_invalid');
     }
     return jsonError(503, 'artifact_detail_unavailable');
   }

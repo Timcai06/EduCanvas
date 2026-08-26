@@ -62,6 +62,20 @@ export {
   type GeneratedImageMetadata,
 } from './artifacts/generated-image';
 export {
+  PICTUREBOOK_CONTENT_VERSION,
+  PICTUREBOOK_MIN_PAGES,
+  PICTUREBOOK_MAX_PAGES,
+  picturebookContentSchema,
+  picturebookMetadataSchema,
+  picturebookPlanPageSchema,
+  picturebookPlanSchema,
+  publicPicturebookPageSchema,
+  publicPicturebookParamsSchema,
+  type PicturebookContent,
+  type PicturebookMetadata,
+  type PicturebookPlan,
+} from './artifacts/picturebook';
+export {
   NOTE_MARKDOWN_MAX_CHARS,
   NOTE_CONTENT_VERSION,
   noteContentSchema,

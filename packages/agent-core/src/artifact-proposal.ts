@@ -6,6 +6,7 @@ export const artifactProposalKinds = [
   'mind_map',
   'slides',
   'flashcards',
+  'picturebook',
   'note',
   'web_app',
 ] as const;

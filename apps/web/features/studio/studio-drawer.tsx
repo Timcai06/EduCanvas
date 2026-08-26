@@ -12,6 +12,7 @@ import {
   Slideshow,
   PresentationChart,
   Image,
+  BookOpen,
   type Icon,
 } from '@phosphor-icons/react';
 
@@ -39,6 +40,7 @@ const kindIcons: Record<string, Icon> = {
   flashcards: Cards,
   audio_overview: Headphones,
   generated_image: Image,
+  picturebook: BookOpen,
 };
 
 /**

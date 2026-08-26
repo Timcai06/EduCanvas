@@ -22,11 +22,11 @@ const WEB_ARTIFACT_KINDS = [
   'note',
   'audio_overview',
   'generated_image',
+  'picturebook',
   'dom_exploration',
   'web_app',
 ] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 type ResourceFilter = 'all' | 'source' | 'artifact';
 type WebDataOwnerKind = 'local' | 'registered' | 'anonymous';
 export interface WorkspaceResourceSummaryCursor {
