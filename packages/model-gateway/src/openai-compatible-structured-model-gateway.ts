@@ -121,6 +121,15 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       try {
         payload = await response.json();
       } catch (cause) {
+        /* 响应头到达后 body 仍可能因超时/外部中止被打断；此时错误发生在
+           传输阶段而非协议解析，必须沿用 fetch 阶段的归类，否则真实超时
+           会被记成 retryable invalid_response 并耗尽重试窗口。 */
+        if (timedOut) {
+          throw invocationError({ code: 'timeout', retryable: true }, cause);
+        }
+        if (request.signal?.aborted === true) {
+          throw invocationError({ code: 'aborted', retryable: false }, cause);
+        }
         throw invocationError(
           { code: 'invalid_response', retryable: true },
           cause,
