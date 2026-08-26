@@ -8,7 +8,6 @@ import { FlashcardsRenderer } from './flashcards-renderer';
 import { AudioOverviewPlayer } from './audio-overview-player';
 import { GeneratedImageViewer } from './generated-image-viewer';
 import { MarkdownDocumentView } from './markdown-document-view';
-import { NoteRenderer } from './note-renderer';
 import type { ArtifactVersionData } from './artifact-client';
 import type { NoteContent } from '@educanvas/canvas-protocol';
 import { picturebookContentSchema } from '@educanvas/canvas-protocol';

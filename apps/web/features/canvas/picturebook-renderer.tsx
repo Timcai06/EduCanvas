@@ -7,7 +7,6 @@ import gsap from 'gsap';
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
-import { CanvasSurface } from './canvas-surface';
 import { useSwipeGesture } from './use-swipe-gesture';
 
 gsap.registerPlugin(useGSAP);

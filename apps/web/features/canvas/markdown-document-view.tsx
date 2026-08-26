@@ -1,7 +1,7 @@
 'use client';
 
 import type { NoteContent } from '@educanvas/canvas-protocol';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { NoteRenderer } from './note-renderer';
 import { CanvasProgressBar } from './canvas-progress-bar';
 import {
@@ -91,13 +91,13 @@ export function MarkdownDocumentView({ content }: { content: NoteContent }) {
     };
   }, [content]);
 
-  const jumpTo = (id: string) => {
+  const jumpTo = useCallback((id: string) => {
     const element = document.getElementById(id);
     if (!element) return;
     spyPauseUntilRef.current = Date.now() + SPY_PAUSE_MS;
     setActiveId(id);
     element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  }, []);
 
   return (
     <div ref={wrapperRef} className="relative flex min-h-0 flex-1">

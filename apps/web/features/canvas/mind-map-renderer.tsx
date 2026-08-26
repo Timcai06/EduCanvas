@@ -3,17 +3,11 @@
 import {
   mindMapContentSchema,
   type MindMapContent,
-  type MindMapNode,
 } from '@educanvas/canvas-protocol';
 import {
   ArrowBendDownRight,
   CaretDown,
   CaretRight,
-  CornersOut,
-  Lightning,
-  Minus,
-  Notepad,
-  Plus,
   Question,
 } from '@phosphor-icons/react';
 import {
@@ -28,6 +22,10 @@ import {
   type WheelEvent,
 } from 'react';
 import { CanvasSurface } from './canvas-surface';
+import { MindMapEdgeLayer } from './mind-map-edge-layer';
+import { MindMapZoomControls } from './mind-map-zoom-controls';
+import { RoleBadge } from './mind-map-role-badge';
+import { useCollapseAnchoring } from './mind-map-collapse-anchoring';
 import {
   MIND_MAP_ASK_NODE_EVENT,
   MIND_MAP_NODE_HEIGHT,
@@ -45,12 +43,6 @@ const clampScale = (scale: number) =>
   Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
 
 /** semanticRole 的可视化徽标：图标 + 语义色 token；未标注角色不显示。 */
-const SEMANTIC_ROLE_ICONS = {
-  question: { Icon: Question, className: 'text-warn' },
-  annotation: { Icon: Notepad, className: 'text-accent' },
-  action: { Icon: Lightning, className: 'text-good' },
-} as const;
-
 type OnAskNode = (payload: {
   nodeId: string;
   nodeLabel: string;
@@ -87,13 +79,6 @@ export function MindMapRenderer({
     offsetX: 0,
     offsetY: 0,
   });
-  /* 折叠锚定：记录点击节点的视口坐标，布局重算后把它拉回原位，
-     折叠/展开不再导致视野漂移（mind-elixir 的 drift 补偿）。 */
-  const pendingAnchorRef = useRef<{
-    nodeId: string;
-    offsetX: number;
-    offsetY: number;
-  } | null>(null);
 
   const layout = useMemo(
     () =>
@@ -147,28 +132,63 @@ export function MindMapRenderer({
       ?.focus();
   }, [effectiveFocusedNodeId, layout]);
 
-  /* 折叠/展开重排后执行：把锚定节点拉回点击前的视口位置。 */
-  useLayoutEffect(() => {
-    const anchor = pendingAnchorRef.current;
-    const section = nodeRootRef.current;
-    if (!anchor || !section) return;
-    pendingAnchorRef.current = null;
-    const element = section.querySelector<HTMLElement>(
-      `[data-mindmap-node="${anchor.nodeId}"]`,
-    );
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
-    const dx =
-      anchor.offsetX - (rect.left - section.getBoundingClientRect().left);
-    const dy =
-      anchor.offsetY - (rect.top - section.getBoundingClientRect().top);
-    if (dx === 0 && dy === 0) return;
+  /* 折叠/展开的视口锚定补偿：细节在 useCollapseAnchoring，transform 归本组件 */
+  const applyDrift = useCallback((dx: number, dy: number) => {
     setTransform((previous) => ({
       ...previous,
       offsetX: previous.offsetX + dx,
       offsetY: previous.offsetY + dy,
     }));
-  }, [layout]);
+  }, []);
+  const { captureAnchor } = useCollapseAnchoring(
+    nodeRootRef,
+    layout,
+    applyDrift,
+  );
+
+  const requestZoom = useCallback(
+    (nextScale: number, origin?: { x: number; y: number }) => {
+      setTransform((previous) => {
+        const to = clampScale(nextScale);
+        if (origin && nodeRootRef.current) {
+          const rect = nodeRootRef.current.getBoundingClientRect();
+          const cursorX = origin.x - rect.left;
+          const cursorY = origin.y - rect.top;
+          const worldX = (cursorX - previous.offsetX) / previous.scale;
+          const worldY = (cursorY - previous.offsetY) / previous.scale;
+          const offsetX = cursorX - worldX * to;
+          const offsetY = cursorY - worldY * to;
+          return { scale: to, offsetX, offsetY };
+        }
+        return { ...previous, scale: to };
+      });
+    },
+    [],
+  );
+
+  /* 控件缩放以视口中心为原点；滚轮/快捷键仍以光标为原点 */
+  const zoomFromViewportCenter = useCallback(
+    (nextScale: number) => {
+      const rect = nodeRootRef.current?.getBoundingClientRect();
+      if (!rect) {
+        requestZoom(nextScale);
+        return;
+      }
+      requestZoom(nextScale, {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    },
+    [requestZoom],
+  );
+  const handleZoomIn = useCallback(
+    () => zoomFromViewportCenter(transform.scale + ZOOM_STEP),
+    [transform.scale, zoomFromViewportCenter],
+  );
+  const handleZoomOut = useCallback(
+    () => zoomFromViewportCenter(transform.scale - ZOOM_STEP),
+    [transform.scale, zoomFromViewportCenter],
+  );
 
   if (!parsed.success || layout === null) {
     return (
@@ -191,53 +211,8 @@ export function MindMapRenderer({
     );
   };
 
-  const requestZoom = (
-    nextScale: number,
-    origin?: { x: number; y: number },
-  ) => {
-    setTransform((previous) => {
-      const to = clampScale(nextScale);
-      if (origin && nodeRootRef.current) {
-        const rect = nodeRootRef.current.getBoundingClientRect();
-        const cursorX = origin.x - rect.left;
-        const cursorY = origin.y - rect.top;
-        const worldX = (cursorX - previous.offsetX) / previous.scale;
-        const worldY = (cursorY - previous.offsetY) / previous.scale;
-        const offsetX = cursorX - worldX * to;
-        const offsetY = cursorY - worldY * to;
-        return { scale: to, offsetX, offsetY };
-      }
-      return { ...previous, scale: to };
-    });
-  };
-
-  /* 控件缩放以视口中心为原点；滚轮/快捷键仍以光标为原点 */
-  const zoomFromViewportCenter = (nextScale: number) => {
-    const rect = nodeRootRef.current?.getBoundingClientRect();
-    if (!rect) {
-      requestZoom(nextScale);
-      return;
-    }
-    requestZoom(nextScale, {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    });
-  };
-
   const toggleCollapse = (nodeId: string) => {
-    const section = nodeRootRef.current;
-    const element = section?.querySelector<HTMLElement>(
-      `[data-mindmap-node="${nodeId}"]`,
-    );
-    if (element && section) {
-      const rect = element.getBoundingClientRect();
-      const sectionRect = section.getBoundingClientRect();
-      pendingAnchorRef.current = {
-        nodeId,
-        offsetX: rect.left - sectionRect.left,
-        offsetY: rect.top - sectionRect.top,
-      };
-    }
+    captureAnchor(nodeId);
     setCollapsedNodeIds((current) => {
       const next = new Set(current);
       if (next.has(nodeId)) next.delete(nodeId);
@@ -393,37 +368,12 @@ export function MindMapRenderer({
             transformOrigin: '0 0',
           }}
         >
-          <svg
-            className="pointer-events-none"
+          <MindMapEdgeLayer
+            edges={layout.edges}
+            nodeById={nodeById}
             width={layout.width}
             height={layout.height}
-            aria-hidden="true"
-          >
-            {layout.edges.map((edge) => {
-              /* 层级边继承目标节点的分支色；非层级语义边保持灰色虚线 */
-              const branchColor = nodeById.get(edge.to)?.branchColorVar;
-              const isSemantic =
-                edge.semanticRole && edge.semanticRole !== 'hierarchy';
-              return (
-                <path
-                  key={`${edge.from}->${edge.to}`}
-                  d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
-                  {...(isSemantic
-                    ? {
-                        stroke: 'currentColor',
-                        className: 'text-ink-muted/45',
-                        strokeDasharray: '5 5',
-                      }
-                    : {
-                        stroke: branchColor ?? 'var(--color-accent)',
-                        strokeOpacity: 0.45,
-                      })}
-                  strokeWidth={2}
-                  fill="none"
-                />
-              );
-            })}
-          </svg>
+          />
           {layout.nodes.map((node) => {
             const isCollapsed = collapsedNodeIds.has(node.id);
             const isFocused = node.id === effectiveFocusedNodeId;
@@ -493,21 +443,7 @@ export function MindMapRenderer({
                 ) : (
                   <span className="inline-flex h-5 w-5 shrink-0" />
                 )}
-                {(() => {
-                  const roleIcon =
-                    SEMANTIC_ROLE_ICONS[
-                      node.semanticRole as keyof typeof SEMANTIC_ROLE_ICONS
-                    ];
-                  if (!roleIcon) return null;
-                  const RoleIcon = roleIcon.Icon;
-                  return (
-                    <RoleIcon
-                      aria-hidden="true"
-                      size={13}
-                      className={`shrink-0 ${roleIcon.className}`}
-                    />
-                  );
-                })()}
+                <RoleBadge role={node.semanticRole} />
                 <span className="inline-flex grow truncate text-left">
                   {node.label}
                 </span>
@@ -532,36 +468,11 @@ export function MindMapRenderer({
           })}
         </div>
         {/* 缩放控件浮层：不再依赖盲快捷键；data-mindmap-control 豁免画布拖拽 */}
-        <div
-          className="absolute right-3 bottom-3 z-10 flex flex-col gap-1.5"
-          data-mindmap-control
-        >
-          {[
-            {
-              label: '放大',
-              icon: Plus,
-              action: () => zoomFromViewportCenter(transform.scale + ZOOM_STEP),
-            },
-            {
-              label: '缩小',
-              icon: Minus,
-              action: () => zoomFromViewportCenter(transform.scale - ZOOM_STEP),
-            },
-            { label: '适应画布', icon: CornersOut, action: fitView },
-          ].map(({ label, icon: Icon, action }) => (
-            <button
-              key={label}
-              type="button"
-              data-mindmap-control
-              aria-label={label}
-              title={label}
-              onClick={action}
-              className="grid size-8 place-items-center rounded-full border border-line/70 bg-card/95 text-ink-muted shadow-sm backdrop-blur transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Icon aria-hidden="true" size={14} />
-            </button>
-          ))}
-        </div>
+        <MindMapZoomControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onFit={fitView}
+        />
       </section>
       <span className="sr-only">
         {contentVersion === 1
@@ -569,52 +480,5 @@ export function MindMapRenderer({
           : 'mind map v2 图结构格式'}
       </span>
     </CanvasSurface>
-  );
-}
-
-const DEPTH_STYLES = [
-  'text-lg font-semibold text-ink',
-  'text-body font-medium text-ink',
-  'text-sm text-ink-muted',
-  'text-sm text-ink-muted',
-] as const;
-
-/**
- * v1 回退展示兼容：保留仅对树渲染器场景的导出，避免其他上下文误用。
- */
-export function MindMapBranch({
-  node,
-  depth,
-}: {
-  node: MindMapNode;
-  depth: number;
-}) {
-  return (
-    <div className={depth === 0 ? '' : 'border-l border-line/70 pl-4'}>
-      <p
-        className={`mind-map-node flex min-h-8 items-center gap-2 py-1 ${
-          DEPTH_STYLES[Math.min(depth, DEPTH_STYLES.length - 1)]
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className={`size-1.5 shrink-0 rounded-full ${
-            depth === 0
-              ? 'bg-accent'
-              : depth === 1
-                ? 'bg-accent/60'
-                : 'bg-ink-faint'
-          }`}
-        />
-        {node.label}
-      </p>
-      {node.children && node.children.length > 0 ? (
-        <div className="ml-[3px] space-y-0.5">
-          {node.children.map((child) => (
-            <MindMapBranch key={child.id} node={child} depth={depth + 1} />
-          ))}
-        </div>
-      ) : null}
-    </div>
   );
 }
