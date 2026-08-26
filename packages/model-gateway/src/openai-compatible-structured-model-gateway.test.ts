@@ -161,4 +161,54 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
       normalized: { code: 'output_limit', retryable: false },
     });
   });
+
+  /* 模拟真实 fetch：响应头立即可用，body 流挂起不结束；请求被中止时流
+     随之被打断——直接构造 Response 不会自动接线，测试必须自己模拟。 */
+  const hangingBodyFetch = async (
+    _input: string | URL | Request,
+    init?: RequestInit,
+  ) => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"choices":['));
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            try {
+              controller.error(new Error('The operation was aborted'));
+            } catch {
+              /* 流已关闭时 error() 会抛出；中止语义已达成，无需处理。 */
+            }
+          },
+          { once: true },
+        );
+      },
+    });
+    return new Response(stream, { status: 200 });
+  };
+
+  it('响应头到达后 body 未在预算内完成，归一为可重试 timeout 而非 invalid_response', async () => {
+    const gateway = new OpenAICompatibleStructuredModelGateway(
+      { ...config, timeoutMs: 20 },
+      { fetchImpl: hangingBodyFetch },
+    );
+    await expect(gateway.generateStructured(request)).rejects.toMatchObject({
+      normalized: { code: 'timeout', retryable: true },
+    });
+  });
+
+  it('外部中止打断 body 读取时归一为不可重试 aborted', async () => {
+    const external = new AbortController();
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      fetchImpl: hangingBodyFetch,
+    });
+    const pending = gateway.generateStructured({
+      ...request,
+      signal: external.signal,
+    });
+    setTimeout(() => external.abort(), 10);
+    await expect(pending).rejects.toMatchObject({
+      normalized: { code: 'aborted', retryable: false },
+    });
+  });
 });
