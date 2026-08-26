@@ -4,6 +4,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Schema } from 'hast-util-sanitize';
+import { remarkCallout } from './remark-callout';
 
 /**
  * 统一的数学 Markdown 插件配置。MessageMarkdown 与 NoteRenderer 共用，
@@ -13,7 +14,7 @@ import type { Schema } from 'hast-util-sanitize';
  * 兜底，不会导致整条消息或 Canvas 崩溃。
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- unified plugin 类型由 react-markdown 内部约束
-export const mathRemarkPlugins: any[] = [remarkGfm, remarkMath];
+export const mathRemarkPlugins: any[] = [remarkGfm, remarkMath, remarkCallout];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const mathRehypePlugins: any[] = [

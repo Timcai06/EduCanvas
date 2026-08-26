@@ -5,6 +5,7 @@ import { CodeBlock, Play } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { isCitationAnchor, linkifyCitationMarkers } from './citation-links';
+import { MarkdownCalloutBlockquote } from './markdown-callout';
 import {
   mathRemarkPlugins,
   mathRehypePlugins,
@@ -55,6 +56,7 @@ export function MessageMarkdown({
           allowRawHtml ? structuredReadingRehypePlugins : mathRehypePlugins
         }
         components={{
+          blockquote: MarkdownCalloutBlockquote,
           a: ({ href, children }) => {
             if (isCitationAnchor(href)) {
               return (

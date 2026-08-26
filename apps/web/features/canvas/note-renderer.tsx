@@ -7,6 +7,7 @@ import {
 } from '@/features/chat/math-markdown';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { MarkdownCalloutBlockquote } from '../chat/markdown-callout';
 import {
   ArrowCounterClockwise,
   Check,
@@ -221,6 +222,7 @@ export function NoteRenderer({
                 <ReactMarkdown
                   remarkPlugins={mathRemarkPlugins}
                   rehypePlugins={mathRehypePlugins}
+                  components={{ blockquote: MarkdownCalloutBlockquote }}
                 >
                   {markdown}
                 </ReactMarkdown>
@@ -246,6 +248,7 @@ export function NoteRenderer({
               <ReactMarkdown
                 remarkPlugins={mathRemarkPlugins}
                 rehypePlugins={mathRehypePlugins}
+                components={{ blockquote: MarkdownCalloutBlockquote }}
               >
                 {markdown}
               </ReactMarkdown>
