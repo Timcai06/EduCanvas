@@ -57,6 +57,7 @@ export interface ConversationPaneProps {
   onToolAction: () => void;
   onOutputPreferenceChange: (preference: OutputPreference) => void;
   onDeepResearch?: (topic: string) => void;
+  deepResearchUnavailableReason?: string | null;
   onRetry: (messageId: string) => void;
   onPreviewHtml: (source: string) => void;
   onOpenArtifact: (artifactId: string) => void;
@@ -140,6 +141,7 @@ export function ConversationPane({
   onToolAction,
   onOutputPreferenceChange,
   onDeepResearch,
+  deepResearchUnavailableReason,
   onRetry,
   onPreviewHtml,
   onOpenArtifact,
@@ -240,6 +242,7 @@ export function ConversationPane({
     outputPreference,
     onOutputPreferenceChange,
     onDeepResearch,
+    deepResearchUnavailableReason,
   };
 
   if (isLanding) {

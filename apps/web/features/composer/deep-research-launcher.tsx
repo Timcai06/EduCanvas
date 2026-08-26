@@ -1,7 +1,7 @@
 'use client';
 
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 export function normalizeDeepResearchTopic(value: string): string | null {
   const normalized = value.trim();
@@ -12,15 +12,19 @@ export function normalizeDeepResearchTopic(value: string): string | null {
 export function DeepResearchLauncher({
   busy,
   onSubmit,
+  unavailableReason,
 }: {
   busy: boolean;
-  onSubmit: (topic: string) => void;
+  onSubmit?: (topic: string) => void;
+  unavailableReason?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState('');
+  const unavailableDescriptionId = useId();
+  const unavailable = Boolean(unavailableReason) || !onSubmit;
   const submit = () => {
     const normalized = normalizeDeepResearchTopic(topic);
-    if (!normalized || busy) return;
+    if (!normalized || busy || unavailable || !onSubmit) return;
     setTopic('');
     setOpen(false);
     onSubmit(normalized);
@@ -32,13 +36,24 @@ export function DeepResearchLauncher({
         <button
           type="button"
           aria-label="深度研究"
-          disabled={busy}
+          aria-describedby={
+            unavailableReason ? unavailableDescriptionId : undefined
+          }
+          disabled={busy || unavailable}
           onClick={() => setOpen(true)}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line bg-surface/75 px-3 text-xs font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           <MagnifyingGlass aria-hidden="true" size={15} />
           深度研究
         </button>
+        {unavailableReason ? (
+          <p
+            id={unavailableDescriptionId}
+            className="ml-2 self-center text-xs text-ink-muted"
+          >
+            {unavailableReason}
+          </p>
+        ) : null}
       </div>
       {open ? (
         <div

@@ -56,14 +56,6 @@ const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
     `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
 };
 
-async function readPublicRouteError(
-  response: Response,
-  fallback: string,
-): Promise<{ code: string; message: string }> {
-  const error = await readPublicError(response, fallback);
-  return { code: error.code, message: error.message };
-}
-
 export function useAgentTurn(
   initialMessages: readonly InitialChatMessageDTO[],
   options: AgentTurnClientOptions,
@@ -242,7 +234,7 @@ export function useAgentTurn(
           signal: current.controller.signal,
         });
         if (!response.ok) {
-          const routeError = await readPublicRouteError(
+          const routeError = await readPublicError(
             response,
             safeConnectionError,
           );
@@ -252,7 +244,7 @@ export function useAgentTurn(
               status: 'failed',
               code: routeError.code,
               message: routeError.message,
-              retryable: response.status >= 500 || response.status === 429,
+              retryable: routeError.retryable,
             });
           }
           return 'rejected' as const;

@@ -75,6 +75,7 @@ export function Composer({
   outputPreference,
   onOutputPreferenceChange,
   onDeepResearch,
+  deepResearchUnavailableReason,
 }: {
   chips: readonly ContextChip[];
   /** 老师回复或判分进行中：发送键停用，状态行出现。 */
@@ -101,6 +102,8 @@ export function Composer({
   onOutputPreferenceChange?: (preference: OutputPreference) => void;
   /** 打开独立研究主题入口；研究仍通过同一 Turn API/Agent Loop 提交。 */
   onDeepResearch?: (topic: string) => void;
+  /** 服务端确认搜索能力不可用时，保留入口并诚实说明约束。 */
+  deepResearchUnavailableReason?: string | null;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hydrated = useSyncExternalStore(
@@ -298,8 +301,12 @@ export function Composer({
           })}
         </div>
       ) : null}
-      {onDeepResearch ? (
-        <DeepResearchLauncher busy={busy} onSubmit={onDeepResearch} />
+      {onDeepResearch || deepResearchUnavailableReason ? (
+        <DeepResearchLauncher
+          busy={busy}
+          onSubmit={onDeepResearch}
+          unavailableReason={deepResearchUnavailableReason}
+        />
       ) : null}
       {onOutputPreferenceChange && outputPreference ? (
         <label className="mt-2 inline-flex items-center gap-2 px-1 text-xs text-ink-muted">

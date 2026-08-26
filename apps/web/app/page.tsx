@@ -3,6 +3,8 @@ import { GeneralChatWorkspace } from '@/features/workspace/general/general-chat-
 import { parseHomeFocusParam } from '@/features/workspace/general/home-focus';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import { loadGeneralChatPageData } from '@/server/platform/general-conversation';
+import { isWebSearchConfigured } from '@/server/tools/web-search';
+import { DEEP_RESEARCH_UNAVAILABLE_MESSAGE } from '@/features/errors/public-error';
 
 /**
  * 保持首页为低认知负担的单入口，让首次使用的学生直接进入学习主流程。
@@ -31,6 +33,9 @@ export default async function HomePage({
       notebookTitle={data.conversation.title}
       nickname={user?.nickname}
       focusTarget={focusTarget}
+      deepResearchUnavailableReason={
+        isWebSearchConfigured() ? null : DEEP_RESEARCH_UNAVAILABLE_MESSAGE
+      }
     />
   ) : (
     <GeneralChatEntry nickname={user?.nickname} />
