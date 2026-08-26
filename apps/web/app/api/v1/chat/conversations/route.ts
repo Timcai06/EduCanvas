@@ -19,6 +19,7 @@ export async function GET(request: Request): Promise<Response> {
     const repository = new DrizzlePlatformConversationRepository();
     const page = await repository.listAccessibleRecentPage({
       trustedSubjectId: identity.studentId,
+      agentProfileId: 'general',
       ...pagination,
     });
     return jsonResponse({

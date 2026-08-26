@@ -86,6 +86,7 @@ export async function DELETE(
   }
   const [next] = await repository.listOwnedRecent({
     trustedSubjectId: identity.studentId,
+    agentProfileId: 'general',
     limit: 1,
   });
   if (next) await writeActiveConversationCookie(next.id);

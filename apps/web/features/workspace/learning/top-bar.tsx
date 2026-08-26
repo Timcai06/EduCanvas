@@ -1,15 +1,16 @@
 'use client';
 
 import {
+  ArrowLeft,
   ChartDonut,
   ClockCounterClockwise,
   SquaresFour,
 } from '@phosphor-icons/react';
 import { ProductMark } from '@/components/ProductMark';
+import Link from 'next/link';
 
 /**
- * 顶栏只保留必要上下文。quiet 空态严格只显示品牌；阶段徽章只有服务端传入
- * 可信状态时才出现，UI 不再使用硬编码阶段暗示教学状态已经推进。
+ * 顶栏保留明确的笔记本返回路径；阶段徽章只有服务端传入可信状态时才出现。
  */
 export function TopBar({
   courseTitle,
@@ -33,6 +34,14 @@ export function TopBar({
     <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
       {/* 结构化学习是统一 Agent 的工作流，品牌返回同一 Agent 的主对话。 */}
       <ProductMark href="/" />
+      <Link
+        href="/"
+        aria-label="返回笔记本"
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <ArrowLeft aria-hidden="true" size={18} />
+        返回笔记本
+      </Link>
       {!quiet && courseTitle ? (
         <>
           <span
