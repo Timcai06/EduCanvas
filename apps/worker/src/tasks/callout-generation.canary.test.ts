@@ -54,7 +54,7 @@ suite('callout 生成端联测（真实模型）', () => {
       ].map((match) => match[1]!.toLowerCase());
       expect(
         markers.length,
-        `应产出 callout，实际：${content.markdown.slice(0, 400)}`,
+        '模型输出应包含至少一个受支持的 callout 标记',
       ).toBeGreaterThan(0);
 
       const supported = new Set([
@@ -72,7 +72,7 @@ suite('callout 生成端联测（真实模型）', () => {
         'quote',
       ]);
       const unknown = markers.filter((type) => !supported.has(type));
-      expect(unknown, `未知 callout 类型：${unknown.join(', ')}`).toEqual([]);
+      expect(unknown, '模型输出不应包含未知 callout 类型').toEqual([]);
     },
   );
 
