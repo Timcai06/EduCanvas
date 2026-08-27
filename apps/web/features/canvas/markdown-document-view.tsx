@@ -1,5 +1,3 @@
-'use client';
-
 import type { NoteContent } from '@educanvas/canvas-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NoteRenderer } from './note-renderer';
