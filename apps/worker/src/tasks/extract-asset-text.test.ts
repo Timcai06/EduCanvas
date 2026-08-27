@@ -62,6 +62,7 @@ import {
   MineruClientError,
 } from '@educanvas/asset-processing';
 import { extractAssetTextTask } from './extract-asset-text';
+import { sha256Hex } from './asset-task-storage';
 import { WebRenderError } from './render-web-page';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
@@ -361,6 +362,43 @@ describe('assets:extract_text', () => {
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining(`quality=structured mimeType=text/markdown`),
     );
+  });
+
+  it('校验和按实际存储字节计算（真实MinerU的CRLF+尾空白不再失配）', async () => {
+    /* 回归：真实 MinerU 输出的 md 带 CRLF 与尾换行；decodeMineruMarkdown 会
+       归一化为 LF+trim，若校验和对归一化字符串计算，Web 端按存储原始字节复算
+       哈希必然失配 → 结构化视图显示"暂不可用"。校验和必须等于存储字节的哈希。 */
+    process.env.MINERU_BASE_URL = 'http://127.0.0.1:8001';
+    pending('application/pdf', 'uploads/fixture/讲义.pdf');
+    submit.mockResolvedValue({
+      taskId: 't1',
+      statusUrl: 'u1',
+      resultUrl: 'r1',
+    });
+    wait.mockResolvedValue({ taskId: 't1', status: 'completed' });
+    fetchResult.mockResolvedValue(new Uint8Array([0x50, 0x4b]));
+
+    const rawBytes = new TextEncoder().encode('# 标题\r\n\r\n正文。\r\n');
+    const mdEntry = { name: 'index.md', bytes: rawBytes };
+    const jpgEntry = { name: 'images/001.jpg', bytes: new Uint8Array([1]) };
+    unpack.mockReturnValue([mdEntry, jpgEntry]);
+    validate.mockReturnValue({ markdown: mdEntry, images: [jpgEntry] });
+    decode.mockReturnValue('# 标题\n\n正文。');
+
+    await run();
+
+    const storedMd = put.mock.calls.find(([c]) =>
+      c.key.endsWith('index.md'),
+    )?.[0];
+    expect(new TextDecoder().decode(storedMd?.bytes)).toContain('\r\n');
+    expect(repo.settleTextExtraction).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      outcome: expect.objectContaining({
+        status: 'ready',
+        checksum: sha256Hex(rawBytes),
+        extractedText: '# 标题\n\n正文。',
+      }),
+    });
   });
 
   it('结构化对象写入失败是瞬时错误，抛给队列重试而不是降级', async () => {
