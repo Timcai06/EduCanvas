@@ -34,9 +34,9 @@ suite('callout 生成端联测（真实模型）', () => {
         {
           role: 'assistant' as const,
           content:
-            '默认参数在函数定义时求值一次并绑定到函数对象，可变默认值会被所有调用共享。'
-            + '常见正确写法是默认 None，函数体内 x = x if x is not None else []。'
-            + '这个坑在配置对象、缓存字典场景尤其隐蔽。',
+            '默认参数在函数定义时求值一次并绑定到函数对象，可变默认值会被所有调用共享。' +
+            '常见正确写法是默认 None，函数体内 x = x if x is not None else []。' +
+            '这个坑在配置对象、缓存字典场景尤其隐蔽。',
         },
       ];
 
@@ -49,14 +49,27 @@ suite('callout 生成端联测（真实模型）', () => {
       });
 
       /* Schema 已由 generateStructured 内部校验；这里只验证 callout 语义 */
-      const markers = [...content.markdown.matchAll(
-        /^>?[ \t]*\[!([a-zA-Z]+)\]/gm,
-      )].map((match) => match[1]!.toLowerCase());
-      expect(markers.length, `应产出 callout，实际：${content.markdown.slice(0, 400)}`).toBeGreaterThan(0);
+      const markers = [
+        ...content.markdown.matchAll(/^>?[ \t]*\[!([a-zA-Z]+)\]/gm),
+      ].map((match) => match[1]!.toLowerCase());
+      expect(
+        markers.length,
+        `应产出 callout，实际：${content.markdown.slice(0, 400)}`,
+      ).toBeGreaterThan(0);
 
       const supported = new Set([
-        'note', 'info', 'todo', 'tip', 'success', 'question',
-        'warning', 'danger', 'failure', 'bug', 'example', 'quote',
+        'note',
+        'info',
+        'todo',
+        'tip',
+        'success',
+        'question',
+        'warning',
+        'danger',
+        'failure',
+        'bug',
+        'example',
+        'quote',
       ]);
       const unknown = markers.filter((type) => !supported.has(type));
       expect(unknown, `未知 callout 类型：${unknown.join(', ')}`).toEqual([]);
