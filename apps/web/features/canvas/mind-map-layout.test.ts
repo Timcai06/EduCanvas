@@ -91,4 +91,30 @@ describe('mind-map-layout', () => {
     expect(nextVisibleNode(list, 'n2', 'down')).toBe('n2');
     expect(nextVisibleNode(list, 'n2', 'up')).toBe('n1');
   });
+
+  it('分支色按 L1 取模分配、子树继承；root 不着色', () => {
+    const parsed = mindMapContentSchema.parse(v2Content);
+    const layout = buildMindMapLayout(parsed);
+    const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+
+    expect(byId.get('root')?.branchColorVar).toBeUndefined();
+    expect(byId.get('a')?.branchColorVar).toBe('var(--color-branch-1)');
+    expect(byId.get('b')?.branchColorVar).toBe('var(--color-branch-2)');
+    /* a1 继承父分支 a 的色，不重新取模 */
+    expect(byId.get('a1')?.branchColorVar).toBe(byId.get('a')?.branchColorVar);
+  });
+
+  it('后代计数不受折叠影响（角标回答「点开有多大」）', () => {
+    const parsed = mindMapContentSchema.parse(v2Content);
+
+    const expanded = buildMindMapLayout(parsed);
+    const expandedById = new Map(expanded.nodes.map((n) => [n.id, n]));
+    expect(expandedById.get('a')?.descendantCount).toBe(1);
+    expect(expandedById.get('a1')?.descendantCount).toBe(0);
+    expect(expandedById.get('root')?.descendantCount).toBe(3);
+
+    const collapsed = buildMindMapLayout(parsed, new Set(['a']));
+    const collapsedById = new Map(collapsed.nodes.map((n) => [n.id, n]));
+    expect(collapsedById.get('a')?.descendantCount).toBe(1);
+  });
 });

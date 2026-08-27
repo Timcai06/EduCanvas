@@ -3,7 +3,6 @@
 import {
   mindMapContentSchema,
   type MindMapContent,
-  type MindMapNode,
 } from '@educanvas/canvas-protocol';
 import {
   ArrowBendDownRight,
@@ -23,6 +22,10 @@ import {
   type WheelEvent,
 } from 'react';
 import { CanvasSurface } from './canvas-surface';
+import { MindMapEdgeLayer } from './mind-map-edge-layer';
+import { MindMapZoomControls } from './mind-map-zoom-controls';
+import { RoleBadge } from './mind-map-role-badge';
+import { useCollapseAnchoring } from './mind-map-collapse-anchoring';
 import {
   MIND_MAP_ASK_NODE_EVENT,
   MIND_MAP_NODE_HEIGHT,
@@ -39,6 +42,7 @@ const ZOOM_STEP = 0.15;
 const clampScale = (scale: number) =>
   Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
 
+/** semanticRole 的可视化徽标：图标 + 语义色 token；未标注角色不显示。 */
 type OnAskNode = (payload: {
   nodeId: string;
   nodeLabel: string;
@@ -82,6 +86,10 @@ export function MindMapRenderer({
     [parsed, collapsedNodeIds],
   );
   const visibleNodeIds = useMemo(() => layout?.visibleNodeIds ?? [], [layout]);
+  const nodeById = useMemo(
+    () => new Map((layout?.nodes ?? []).map((node) => [node.id, node])),
+    [layout],
+  );
   const effectiveFocusedNodeId =
     focusedNodeId && visibleNodeIds.includes(focusedNodeId)
       ? focusedNodeId
@@ -124,6 +132,64 @@ export function MindMapRenderer({
       ?.focus();
   }, [effectiveFocusedNodeId, layout]);
 
+  /* 折叠/展开的视口锚定补偿：细节在 useCollapseAnchoring，transform 归本组件 */
+  const applyDrift = useCallback((dx: number, dy: number) => {
+    setTransform((previous) => ({
+      ...previous,
+      offsetX: previous.offsetX + dx,
+      offsetY: previous.offsetY + dy,
+    }));
+  }, []);
+  const { captureAnchor } = useCollapseAnchoring(
+    nodeRootRef,
+    layout,
+    applyDrift,
+  );
+
+  const requestZoom = useCallback(
+    (nextScale: number, origin?: { x: number; y: number }) => {
+      setTransform((previous) => {
+        const to = clampScale(nextScale);
+        if (origin && nodeRootRef.current) {
+          const rect = nodeRootRef.current.getBoundingClientRect();
+          const cursorX = origin.x - rect.left;
+          const cursorY = origin.y - rect.top;
+          const worldX = (cursorX - previous.offsetX) / previous.scale;
+          const worldY = (cursorY - previous.offsetY) / previous.scale;
+          const offsetX = cursorX - worldX * to;
+          const offsetY = cursorY - worldY * to;
+          return { scale: to, offsetX, offsetY };
+        }
+        return { ...previous, scale: to };
+      });
+    },
+    [],
+  );
+
+  /* 控件与键盘缩放以视口中心为原点；滚轮以光标为原点。 */
+  const zoomFromViewportCenter = useCallback(
+    (nextScale: number) => {
+      const rect = nodeRootRef.current?.getBoundingClientRect();
+      if (!rect) {
+        requestZoom(nextScale);
+        return;
+      }
+      requestZoom(nextScale, {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    },
+    [requestZoom],
+  );
+  const handleZoomIn = useCallback(
+    () => zoomFromViewportCenter(transform.scale + ZOOM_STEP),
+    [transform.scale, zoomFromViewportCenter],
+  );
+  const handleZoomOut = useCallback(
+    () => zoomFromViewportCenter(transform.scale - ZOOM_STEP),
+    [transform.scale, zoomFromViewportCenter],
+  );
+
   if (!parsed.success || layout === null) {
     return (
       <p role="alert" className="rounded-xl bg-bad-soft p-3 text-bad">
@@ -145,27 +211,8 @@ export function MindMapRenderer({
     );
   };
 
-  const requestZoom = (
-    nextScale: number,
-    origin?: { x: number; y: number },
-  ) => {
-    setTransform((previous) => {
-      const to = clampScale(nextScale);
-      if (origin && nodeRootRef.current) {
-        const rect = nodeRootRef.current.getBoundingClientRect();
-        const cursorX = origin.x - rect.left;
-        const cursorY = origin.y - rect.top;
-        const worldX = (cursorX - previous.offsetX) / previous.scale;
-        const worldY = (cursorY - previous.offsetY) / previous.scale;
-        const offsetX = cursorX - worldX * to;
-        const offsetY = cursorY - worldY * to;
-        return { scale: to, offsetX, offsetY };
-      }
-      return { ...previous, scale: to };
-    });
-  };
-
   const toggleCollapse = (nodeId: string) => {
+    captureAnchor(nodeId);
     setCollapsedNodeIds((current) => {
       const next = new Set(current);
       if (next.has(nodeId)) next.delete(nodeId);
@@ -204,12 +251,8 @@ export function MindMapRenderer({
         moveFocus('left');
         return;
       }
-      if (node.hasChildren) {
-        setCollapsedNodeIds((current) => {
-          const next = new Set(current);
-          next.add(node.id);
-          return next;
-        });
+      if (node.hasChildren && !collapsedNodeIds.has(node.id)) {
+        toggleCollapse(node.id);
       }
       moveFocus('left');
       return;
@@ -220,11 +263,7 @@ export function MindMapRenderer({
         (item) => item.id === effectiveFocusedNodeId,
       );
       if (node?.hasChildren) {
-        setCollapsedNodeIds((current) => {
-          const next = new Set(current);
-          next.delete(node.id);
-          return next;
-        });
+        if (collapsedNodeIds.has(node.id)) toggleCollapse(node.id);
         if (node.children.length > 0) {
           setFocusedNodeId(node.children[0]!);
           return;
@@ -244,18 +283,12 @@ export function MindMapRenderer({
     }
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      requestZoom(transform.scale + ZOOM_STEP, {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      zoomFromViewportCenter(transform.scale + ZOOM_STEP);
       return;
     }
     if (event.key === '-') {
       event.preventDefault();
-      requestZoom(transform.scale - ZOOM_STEP, {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      zoomFromViewportCenter(transform.scale - ZOOM_STEP);
       return;
     }
     if (event.key === '0') {
@@ -329,32 +362,12 @@ export function MindMapRenderer({
             transformOrigin: '0 0',
           }}
         >
-          <svg
-            className="pointer-events-none"
+          <MindMapEdgeLayer
+            edges={layout.edges}
+            nodeById={nodeById}
             width={layout.width}
             height={layout.height}
-            aria-hidden="true"
-          >
-            {layout.edges.map((edge) => (
-              <path
-                key={`${edge.from}->${edge.to}`}
-                d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
-                stroke="currentColor"
-                strokeWidth={2}
-                fill="none"
-                strokeDasharray={
-                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
-                    ? '5 5'
-                    : undefined
-                }
-                className={
-                  edge.semanticRole && edge.semanticRole !== 'hierarchy'
-                    ? 'text-ink-muted/45'
-                    : 'text-accent/45'
-                }
-              />
-            ))}
-          </svg>
+          />
           {layout.nodes.map((node) => {
             const isCollapsed = collapsedNodeIds.has(node.id);
             const isFocused = node.id === effectiveFocusedNodeId;
@@ -383,21 +396,40 @@ export function MindMapRenderer({
                   minHeight: MIND_MAP_NODE_HEIGHT,
                 }}
               >
+                {/* 分支色条：一级取模分配、子树继承；root 用既有 accent 强调 */}
+                {node.depth > 0 && node.branchColorVar ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-2 bottom-2 left-1 w-[3px] rounded-full"
+                    style={{ backgroundColor: node.branchColorVar }}
+                  />
+                ) : null}
                 {node.hasChildren ? (
                   <button
                     type="button"
                     data-mindmap-control
                     aria-label={
-                      isCollapsed ? '展开节点子分支' : '折叠节点子分支'
+                      isCollapsed
+                        ? `展开节点子分支（${node.descendantCount} 个后代）`
+                        : '折叠节点子分支'
                     }
                     onClick={(event) => {
                       event.stopPropagation();
                       toggleCollapse(node.id);
                     }}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line/60 text-ink-muted transition hover:bg-line/20"
+                    className={`inline-flex shrink-0 items-center justify-center gap-0.5 border border-line/60 text-ink-muted transition hover:bg-line/20 ${
+                      isCollapsed
+                        ? 'h-5 min-w-9 rounded-full px-1'
+                        : 'size-5 rounded-full'
+                    }`}
                   >
                     {isCollapsed ? (
-                      <CaretRight size={12} />
+                      <>
+                        <CaretRight size={12} />
+                        <span className="text-[9px] leading-none">
+                          {node.descendantCount}
+                        </span>
+                      </>
                     ) : (
                       <CaretDown size={12} />
                     )}
@@ -405,6 +437,7 @@ export function MindMapRenderer({
                 ) : (
                   <span className="inline-flex h-5 w-5 shrink-0" />
                 )}
+                <RoleBadge role={node.semanticRole} />
                 <span className="inline-flex grow truncate text-left">
                   {node.label}
                 </span>
@@ -428,6 +461,12 @@ export function MindMapRenderer({
             );
           })}
         </div>
+        {/* 缩放控件浮层：不再依赖盲快捷键；data-mindmap-control 豁免画布拖拽 */}
+        <MindMapZoomControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onFit={fitView}
+        />
       </section>
       <span className="sr-only">
         {contentVersion === 1
@@ -435,52 +474,5 @@ export function MindMapRenderer({
           : 'mind map v2 图结构格式'}
       </span>
     </CanvasSurface>
-  );
-}
-
-const DEPTH_STYLES = [
-  'text-lg font-semibold text-ink',
-  'text-body font-medium text-ink',
-  'text-sm text-ink-muted',
-  'text-sm text-ink-muted',
-] as const;
-
-/**
- * v1 回退展示兼容：保留仅对树渲染器场景的导出，避免其他上下文误用。
- */
-export function MindMapBranch({
-  node,
-  depth,
-}: {
-  node: MindMapNode;
-  depth: number;
-}) {
-  return (
-    <div className={depth === 0 ? '' : 'border-l border-line/70 pl-4'}>
-      <p
-        className={`mind-map-node flex min-h-8 items-center gap-2 py-1 ${
-          DEPTH_STYLES[Math.min(depth, DEPTH_STYLES.length - 1)]
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className={`size-1.5 shrink-0 rounded-full ${
-            depth === 0
-              ? 'bg-accent'
-              : depth === 1
-                ? 'bg-accent/60'
-                : 'bg-ink-faint'
-          }`}
-        />
-        {node.label}
-      </p>
-      {node.children && node.children.length > 0 ? (
-        <div className="ml-[3px] space-y-0.5">
-          {node.children.map((child) => (
-            <MindMapBranch key={child.id} node={child} depth={depth + 1} />
-          ))}
-        </div>
-      ) : null}
-    </div>
   );
 }

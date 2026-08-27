@@ -91,12 +91,15 @@ export function NoteRenderer({
   content,
   isLatest,
   readOnly = false,
+  showChrome = true,
   onSave,
   saving = false,
 }: {
   content: NoteContent;
   isLatest: boolean;
   readOnly?: boolean;
+  /** false 时隐藏底部操作栏：纯查看器（如 markdown_document）不留空占位。 */
+  showChrome?: boolean;
   onSave?: (markdown: string) => void;
   saving?: boolean;
 }) {
@@ -251,38 +254,42 @@ export function NoteRenderer({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2">
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              editing
-                ? 'bg-accent text-card hover:bg-accent-strong'
-                : 'bg-surface-strong text-ink hover:bg-line'
-            }`}
-          >
-            {editing ? (
-              <>
-                <Check size={14} />
-                完成编辑
-              </>
-            ) : (
-              <>
-                <PencilSimple size={14} />
-                编辑
-              </>
-            )}
-          </button>
-        ) : null}
-        {!isLatest ? (
-          <span className="text-xs text-ink-muted">
-            <ArrowCounterClockwise size={14} className="inline" />{' '}
-            历史版本（只读）
-          </span>
-        ) : null}
-        {readOnly ? <span className="text-xs text-ink-muted">只读</span> : null}
-      </div>
+      {showChrome ? (
+        <div className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2">
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                editing
+                  ? 'bg-accent text-card hover:bg-accent-strong'
+                  : 'bg-surface-strong text-ink hover:bg-line'
+              }`}
+            >
+              {editing ? (
+                <>
+                  <Check size={14} />
+                  完成编辑
+                </>
+              ) : (
+                <>
+                  <PencilSimple size={14} />
+                  编辑
+                </>
+              )}
+            </button>
+          ) : null}
+          {!isLatest ? (
+            <span className="text-xs text-ink-muted">
+              <ArrowCounterClockwise size={14} className="inline" />{' '}
+              历史版本（只读）
+            </span>
+          ) : null}
+          {readOnly ? (
+            <span className="text-xs text-ink-muted">只读</span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
