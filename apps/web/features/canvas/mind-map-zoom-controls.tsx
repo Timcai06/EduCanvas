@@ -1,5 +1,3 @@
-'use client';
-
 import { CornersOut, Minus, Plus, type Icon } from '@phosphor-icons/react';
 
 interface ZoomAction {

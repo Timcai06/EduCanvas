@@ -166,7 +166,7 @@ export function MindMapRenderer({
     [],
   );
 
-  /* 控件缩放以视口中心为原点；滚轮/快捷键仍以光标为原点 */
+  /* 控件与键盘缩放以视口中心为原点；滚轮以光标为原点。 */
   const zoomFromViewportCenter = useCallback(
     (nextScale: number) => {
       const rect = nodeRootRef.current?.getBoundingClientRect();
@@ -283,18 +283,12 @@ export function MindMapRenderer({
     }
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      requestZoom(transform.scale + ZOOM_STEP, {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      zoomFromViewportCenter(transform.scale + ZOOM_STEP);
       return;
     }
     if (event.key === '-') {
       event.preventDefault();
-      requestZoom(transform.scale - ZOOM_STEP, {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      zoomFromViewportCenter(transform.scale - ZOOM_STEP);
       return;
     }
     if (event.key === '0') {

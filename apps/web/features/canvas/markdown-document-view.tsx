@@ -92,7 +92,12 @@ export function MarkdownDocumentView({ content }: { content: NoteContent }) {
   }, [content]);
 
   const jumpTo = useCallback((id: string) => {
-    const element = document.getElementById(id);
+    const wrapper = wrapperRef.current;
+    const element = wrapper
+      ? Array.from(
+          wrapper.querySelectorAll<HTMLElement>(HEADING_SELECTOR),
+        ).find((heading) => heading.id === id)
+      : undefined;
     if (!element) return;
     spyPauseUntilRef.current = Date.now() + SPY_PAUSE_MS;
     setActiveId(id);

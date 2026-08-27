@@ -1,5 +1,3 @@
-'use client';
-
 import { Notepad, Question, Lightning } from '@phosphor-icons/react';
 
 /**

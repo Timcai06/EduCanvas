@@ -1,5 +1,3 @@
-'use client';
-
 import type { PointerEvent } from 'react';
 import { useRef } from 'react';
 

@@ -1,5 +1,3 @@
-'use client';
-
 import type { MindMapViewEdge } from './mind-map-layout';
 
 /**
