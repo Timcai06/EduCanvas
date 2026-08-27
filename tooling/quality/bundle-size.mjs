@@ -172,10 +172,12 @@ for (const route of stats.routes) {
 const lines = [
   '### Bundle / Route Size（Q05）',
   '',
-  `JS 总量 ${(stats.totalBytes / 1024).toFixed(1)}KB | 最大 chunk ${stats.entry ? `${(stats.entry.bytes / 1024).toFixed(1)}KB` : '-'} | 路由 ${stats.routes.length} 个`,
+  `JS 总量 ${(stats.totalBytes / 1024).toFixed(1)}KB（${stats.totalBytes}B） | 最大 chunk ${stats.entry ? `${(stats.entry.bytes / 1024).toFixed(1)}KB（${stats.entry.bytes}B，${stats.entry.path}）` : '-'} | 路由 ${stats.routes.length} 个`,
   ...stats.routes
     .slice(0, 8)
-    .map((r) => `- ${r.route}: ${(r.bytes / 1024).toFixed(1)}KB`),
+    .map(
+      (r) => `- ${r.route}: ${(r.bytes / 1024).toFixed(1)}KB（${r.bytes}B）`,
+    ),
 ];
 if (failures.length) {
   lines.push(
