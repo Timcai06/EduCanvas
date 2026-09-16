@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  STUDIO_TRIGGER_NAME,
   createMindMapArtifactFixture,
   ensureGeneralNotebook,
   openStudioOutput,
@@ -38,7 +37,13 @@ async function generateMindMap(page: Page) {
   ).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
+  /* Studio 打开后其触发入口已不在 DOM，再点一次并不能收起面板，
+     用例会一直等一个永不可点的按钮。用资源控制台自身的返回入口关闭，
+     与 journey-helpers.closeStudio 保持同一口径。 */
+  await page.getByRole('button', { name: '返回对话页面' }).click();
+  await expect(
+    page.getByRole('region', { name: '当前笔记本的资源控制台' }),
+  ).toHaveCount(0);
 }
 
 test('Canvas 打开产物时同一资源 URL 只请求一轮，关闭重开不累积重复', async ({
