@@ -206,11 +206,16 @@ export function ConversationSidebar({
         aria-hidden={!open}
         inert={!open}
         style={sidebarResize.style}
+        /* 窄屏抽屉的位移由 use-conversation-sidebar-motion 的 GSAP 独占。
+           `-translate-x-full` 此前无条件生效，只有 `lg:translate-x-0` 在桌面端
+           撤销它，于是窄屏展开时 GSAP 已把 xPercent 动画回 0、Tailwind 仍额外
+           推出一个身位，抽屉整体停在屏幕外（412px 视口实测 x=-288、width=288），
+           用户只看到遮罩。这里只保留收起态作为水合前的初始位置。 */
         className={`z-40 shrink-0 overflow-hidden border-line/60 bg-canvas ${
           open
             ? 'w-72 border-r lg:w-[var(--sidebar-width)]'
-            : 'w-72 border-r-0 lg:w-0'
-        } fixed inset-y-0 left-0 -translate-x-full lg:static lg:inset-auto lg:translate-x-0`}
+            : 'w-72 -translate-x-full border-r-0 lg:w-0'
+        } fixed inset-y-0 left-0 lg:static lg:inset-auto lg:translate-x-0`}
       >
         <div
           ref={panelRef}
