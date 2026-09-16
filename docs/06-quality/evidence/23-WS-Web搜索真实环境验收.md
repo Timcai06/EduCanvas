@@ -29,6 +29,32 @@ WS09 完整 Chromium 文件 3/3 通过。这些用例使用固定 fixture，仍�
 - 测试 Notebook 不包含需要保留的生产资料；
 - 不在记录中粘贴 API Key、Prompt、Provider Body、网页正文或 Cookie。
 
+## 2.1 真实 Provider 连通性（自动化已验证，2026-09-16）
+
+B、C 两节都以「真实 Search Provider 可用」为前提。该前提此前没有任何记录，
+演示当天才发现不通就来不及了，因此固化成一条可随时重跑的探针：
+
+```bash
+pnpm search:canary               # 默认跑 WS09 指定的「光合作用的研究进展」
+pnpm search:canary "自定义查询"
+```
+
+2026-09-16 本机实测结果：
+
+| 项 | 值 |
+| --- | --- |
+| Provider | Tavily（`SEARCH_API_KEY` 已配置，不记录 Key） |
+| 查询 | 光合作用的研究进展 |
+| 返回结果 | 5 条 |
+| 往返耗时 | 1,709 / 1,805 / 1,941 ms（三次） |
+| 来源域名 | plant-ecology.com、hanspub.org、leadingtec.cn、chinbullbotany.com、cas.cn |
+
+结论：**真实 Provider 可达，且对 C 节指定查询能返回够 5 个真实来源**。探针在
+结果不足 5 条时以非零码退出，作为演示阻断信号。
+
+该探针只证明 Provider 连通与结果数量，不证明第 3 节任何一项人工验收——检索
+结果质量、网页可读性、引用定位与桌面视觉结论仍必须由项目负责人执行并签署。
+
 ## 3. 项目负责人检查表
 
 ### A. 五链接批量导入
