@@ -9,7 +9,6 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 | [G 产品发布闭环](G-产品发布闭环.md)              | 项目负责人 | G00 待开始                                          | 依赖已归档的 R/W/Q/UV，和 KM 关联                                        |
 | [DP 桌宠统一桌面外延](DP-桌宠统一桌面外延.md)    | @Timcai06  | DP00-DP10 PASS；DP11 IN_PROGRESS；DP12/DP13 PENDING | 基于现有桌宠 MVP；DP11/DP12 等平台实机证据，DP13 依赖其后                |
 | [WS Web 搜索与研究来源](WS-Web搜索与研究来源.md) | @Timcai06  | WS00-WS08 PASS；WS09 IN_REVIEW                      | 网页直接导入；内置搜索与唯一 Agent Loop 共用 SearchService；不做网页预览 |
-| [AR AI 产物显示优化](AR-AI产物显示优化.md)       | hzlgou     | AR00-AR08 已合并；AR09 IN_PROGRESS                  | 五渲染器读体验增强；#487/#488 已修，走查已脚本化，AR09 待合并收口        |
 
 [F 画布界面](../completed/F-画布界面.md)、[A 账号会话](../completed/A-账号会话.md)、
 [P 学习档案](../completed/P-学习档案.md)、[C 模型配置](../completed/C-模型配置.md)、
@@ -20,6 +19,9 @@ active 目录只保留仍需要开发或验收的任务线。文件名用于分�
 [UV 画布语音](../completed/UV-画布语音.md)均已完成归档，不再作为待分配任务。
 [LC Live 与 Canvas 输出](../completed/LC-Live与Canvas输出产品化.md)已由项目负责人完成
 C08 人工签署并归档；非阻塞的生成 Markdown、产物状态卡重复与多输入口径统一转入 RM。
+[AR AI 产物显示优化](../completed/AR-AI产物显示优化.md)已于 2026-09-17 归档：
+AR00-AR09 全部合并，五渲染器走查改为可复现脚本 `pnpm test:walkthrough`，
+合并后暴露的 #487/#488 已修复。
 [RM 统一资源工作台](../completed/RM-统一资源工作台.md)与
 [CA 代码与架构可信化](../completed/CA-代码与架构可信化.md)已由唯一 reviewer 完成联合验收、
 本地集成与归档；CA06 Desktop 主链保持后续 `DEFERRED`，不属于本轮已交付范围。
