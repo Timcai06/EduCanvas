@@ -760,10 +760,32 @@ export async function waitForAudiblePlaybackStart(page: Page): Promise<void> {
   );
 }
 
-export async function waitForAudiblePlaybackSilence(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    window.__EDUCANVAS_E2E_LIVE_VOICE__!.waitForAudiblePlaybackSilence(),
-  );
+/**
+ * 等播放器自己回到静音。这是一个**同步点，不是断言**——真正的断言是调用方
+ * 紧随其后的「正在聆听」。
+ *
+ * 页面侧的 waiter 只在播放源真正 stop 时被唤醒；若某个 AudioBufferSourceNode
+ * 的 ended 没有如期触发，原实现会一直挂到 Playwright 的 30s 用例超时，把一个
+ * 时序波动变成用例失败（本机单文件运行可稳定复现，chromium 也中招）。
+ *
+ * 这里给它一个上界：超时就返回，让后续那条带自己超时的可见状态断言去判定
+ * 成败。同步点不该决定用例结论。
+ *
+ * 上界取 20s 而不是更短：有真实音频设备的开发机上播放是真实耗时的，而 CI 的
+ * headless 浏览器里几乎瞬时完成。20s + 后续断言自己的 8s 仍小于用例 30s 超时，
+ * 既不缩短任何环境下的有效等待，又保证失败时报的是「正在聆听没出现」而不是
+ * 一个无从归因的 evaluate 超时。
+ */
+export async function waitForAudiblePlaybackSilence(
+  page: Page,
+  timeoutMs = 20_000,
+): Promise<void> {
+  await page.evaluate(async (limit) => {
+    await Promise.race([
+      window.__EDUCANVAS_E2E_LIVE_VOICE__!.waitForAudiblePlaybackSilence(),
+      new Promise<void>((resolve) => setTimeout(resolve, limit)),
+    ]);
+  }, timeoutMs);
 }
 
 export async function setSpeechTransportMode(
