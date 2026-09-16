@@ -20,6 +20,7 @@ function harness(overrides?: {
   let stored: StoredDesktopSession | null = null;
   const opened: string[] = [];
   const statuses: string[] = [];
+  let expireAuthorization: (() => void) | null = null;
   const fetchImpl = vi.fn<typeof fetch>(
     overrides?.fetchImpl ?? (async () => Response.json(grant, { status: 200 })),
   );
@@ -46,6 +47,13 @@ function harness(overrides?: {
     fetchImpl,
     revokeSession: revoke,
     revokeTimeoutMs: overrides?.revokeTimeoutMs,
+    scheduleAuthExpiry(callback) {
+      expireAuthorization = callback;
+      return 1 as unknown as ReturnType<typeof setTimeout>;
+    },
+    cancelAuthExpiry() {
+      expireAuthorization = null;
+    },
     onStatus(status) {
       statuses.push(status.state);
     },
@@ -57,6 +65,7 @@ function harness(overrides?: {
     fetchImpl,
     revoke,
     stored: () => stored,
+    expireAuthorization: () => expireAuthorization?.(),
   };
 }
 
@@ -71,6 +80,19 @@ describe('desktop auth coordinator', () => {
       /^https:\/\/learn\.educanvas\.example\/desktop\/authorize\?/,
     );
     expect(statuses).toContain('authorizing');
+  });
+
+  it('leaves authorizing state when the browser callback never arrives', async () => {
+    const { coordinator, expireAuthorization, statuses } = harness();
+    await coordinator.signIn();
+
+    expireAuthorization();
+
+    await expect(coordinator.getStatus()).resolves.toEqual({
+      state: 'error',
+      message: '登录请求已超时，请重新登录。',
+    });
+    expect(statuses.at(-1)).toBe('error');
   });
 
   it('validates callback state, exchanges code and persists the bearer', async () => {

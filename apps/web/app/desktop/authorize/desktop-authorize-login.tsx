@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { AuthForm } from '@/features/auth/auth-form';
 
-export function DesktopAuthorizeLogin() {
+export function DesktopAuthorizeLogin({ returnTo }: { returnTo: string }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   return (
     <div className="mt-6">
-      <AuthForm mode={mode} onSuccess={() => window.location.reload()} />
+      <AuthForm
+        mode={mode}
+        onSuccess={() => window.location.assign(returnTo)}
+      />
       <button
         type="button"
         onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
