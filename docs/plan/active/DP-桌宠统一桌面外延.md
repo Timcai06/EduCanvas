@@ -375,9 +375,9 @@ Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引�
 | DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`        |
 | DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`        |
 | DP04 恢复       | Desktop 187（registry/resume/interrupted/cancel/race）                        | 断网、休眠、关窗（待人工实机确认） | `PASS`        |
-| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING`     |
-| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING`     |
-| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING`     |
+| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察并入 DP11/DP12  | `PASS`        |
+| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PASS`        |
+| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact 并入 DP11/DP12 | `PASS`     |
 | DP08 handoff    | core/client/server/repository/desktop/web token 与授权测试                    | 系统浏览器精确打开并入 DP11        | `PASS`        |
 | DP09 语音对齐   | Desktop fake ASR/TTS/Turn、取消、messageId 与重播缓存测试                     | 真人中文麦克风并入 DP11            | `PASS`        |
 | DP10 附件       | core/client/db/gateway/desktop Asset、Part、权限与隔离测试                    | 真实图片/PDF 上传并入 DP11         | `PASS`        |
