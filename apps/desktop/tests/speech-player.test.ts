@@ -8,9 +8,11 @@ function harness() {
   let ended: (() => void) | null = null;
   let stopped = 0;
   let closed = 0;
+  let playedVolume: number | null = null;
   const dependencies: SpeechPlayerDependencies = {
     decode: async () => ({ duration: 1 }),
-    play: (_buffer, onEnded) => {
+    play: (_buffer, onEnded, volume) => {
+      playedVolume = volume;
       ended = onEnded;
       return { stop: () => (stopped += 1) };
     },
@@ -21,7 +23,7 @@ function harness() {
   return {
     dependencies,
     finish: () => ended?.(),
-    counts: () => ({ stopped, closed }),
+    counts: () => ({ stopped, closed, playedVolume }),
   };
 }
 
@@ -33,7 +35,7 @@ describe('playSpeech', () => {
     h.finish();
 
     await expect(pending).resolves.toBe('finished');
-    expect(h.counts()).toEqual({ stopped: 0, closed: 1 });
+    expect(h.counts()).toEqual({ stopped: 0, closed: 1, playedVolume: 1 });
   });
 
   it('取消会停止 source、关闭 AudioContext 并返回 aborted', async () => {
@@ -49,7 +51,21 @@ describe('playSpeech', () => {
     controller.abort();
 
     await expect(pending).resolves.toBe('aborted');
-    expect(h.counts()).toEqual({ stopped: 1, closed: 1 });
+    expect(h.counts()).toEqual({ stopped: 1, closed: 1, playedVolume: 1 });
+  });
+
+  it('将用户音量限制在安全范围并传给播放器', async () => {
+    const h = harness();
+    const pending = playSpeech(
+      Uint8Array.from([1, 2, 3]),
+      { volume: 1.7 },
+      h.dependencies,
+    );
+    await Promise.resolve();
+    h.finish();
+
+    await expect(pending).resolves.toBe('finished');
+    expect(h.counts().playedVolume).toBe(1);
   });
 
   it('解码失败收敛为 failed 且仍释放上下文', async () => {

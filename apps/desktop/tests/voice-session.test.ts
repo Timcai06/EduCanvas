@@ -107,6 +107,25 @@ describe('runVoiceSession', () => {
     });
   });
 
+  it('静音时保留 canonical 回复且不请求或播放 TTS', async () => {
+    const deps = successfulDependencies();
+    const snapshots: Array<{ phase: string; notice?: string }> = [];
+
+    const result = await runVoiceSession(deps, {
+      signal: new AbortController().signal,
+      speechEnabled: false,
+      onChange: (snapshot) => snapshots.push(snapshot),
+    });
+
+    expect(result).toMatchObject({ outcome: 'success', speechPlayed: false });
+    expect(deps.synthesize).not.toHaveBeenCalled();
+    expect(deps.play).not.toHaveBeenCalled();
+    expect(snapshots.at(-1)).toMatchObject({
+      phase: 'success',
+      notice: '已静音，文字回复仍可查看',
+    });
+  });
+
   it('取消活动中的远端请求并进入 cancelled，不继续后续步骤', async () => {
     const controller = new AbortController();
     let release!: (value: {

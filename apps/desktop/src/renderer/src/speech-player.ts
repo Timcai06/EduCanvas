@@ -1,6 +1,6 @@
 export interface SpeechPlayerDependencies {
   decode(bytes: Uint8Array): Promise<unknown>;
-  play(buffer: unknown, onEnded: () => void): { stop(): void };
+  play(buffer: unknown, onEnded: () => void, volume: number): { stop(): void };
   close(): Promise<void>;
 }
 
@@ -10,10 +10,13 @@ function browserDependencies(): SpeechPlayerDependencies {
   const context = new AudioContext();
   return {
     decode: (bytes) => context.decodeAudioData(bytes.slice().buffer),
-    play: (buffer, onEnded) => {
+    play: (buffer, onEnded, volume) => {
       const source = context.createBufferSource();
+      const gain = context.createGain();
       source.buffer = buffer as AudioBuffer;
-      source.connect(context.destination);
+      gain.gain.value = volume;
+      source.connect(gain);
+      gain.connect(context.destination);
       source.onended = onEnded;
       source.start();
       return { stop: () => source.stop() };
@@ -25,7 +28,7 @@ function browserDependencies(): SpeechPlayerDependencies {
 /** 解码并播放一段 MP3；取消和失败都保证关闭 AudioContext。 */
 export async function playSpeech(
   bytes: Uint8Array,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; volume?: number } = {},
   dependencies: SpeechPlayerDependencies = browserDependencies(),
 ): Promise<'finished' | 'aborted' | 'failed'> {
   let closed = false;
@@ -53,7 +56,12 @@ export async function playSpeech(
         options.signal?.removeEventListener('abort', onAbort);
         void close().then(() => resolve(result));
       };
-      const source = dependencies.play(buffer, () => finish('finished'));
+      const volume = Math.min(1, Math.max(0, options.volume ?? 1));
+      const source = dependencies.play(
+        buffer,
+        () => finish('finished'),
+        volume,
+      );
       const onAbort = (): void => {
         try {
           source.stop();

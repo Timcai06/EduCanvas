@@ -5,6 +5,7 @@ import { gatewayDesktopAuthorizationQuerySchema } from '@educanvas/gateway-core'
 import { ProductMark } from '@/components/ProductMark';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import { DesktopAuthorizeLogin } from './desktop-authorize-login';
+import { buildDesktopAuthorizeReturnPath } from './desktop-authorize-return';
 
 export const metadata: Metadata = { title: '连接桌宠 · EduCanvas' };
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,9 @@ export default async function DesktopAuthorizePage({
     code_challenge_method: single(raw.code_challenge_method),
   });
   const user = request.success ? await readCurrentWebUser() : null;
+  const returnTo = request.success
+    ? buildDesktopAuthorizeReturnPath(request.data)
+    : null;
 
   return (
     <main className="min-h-dvh bg-canvas px-5 py-8 text-ink sm:py-12">
@@ -107,7 +111,7 @@ export default async function DesktopAuthorizePage({
               <p className="mt-4 text-sm leading-7 text-ink-muted">
                 请先登录 EduCanvas。登录成功后会留在本页，由你确认是否连接桌宠。
               </p>
-              <DesktopAuthorizeLogin />
+              <DesktopAuthorizeLogin returnTo={returnTo!} />
             </>
           )}
         </section>

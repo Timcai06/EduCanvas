@@ -180,6 +180,7 @@ export function useConversationComposer(input: {
 export function useSpeechPreparation(input: {
   latestMessageId: string | undefined;
   busy: boolean;
+  enabled?: boolean;
 }): {
   speechCacheRef: MutableRefObject<{
     key: string;
@@ -188,7 +189,7 @@ export function useSpeechPreparation(input: {
   prepareSpeech(messageId: string, reply: string): void;
   cancelSpeechPreparation(): void;
 } {
-  const { latestMessageId, busy } = input;
+  const { latestMessageId, busy, enabled = true } = input;
   const speechCacheRef = useRef<{ key: string; bytes: Uint8Array } | null>(
     null,
   );
@@ -204,12 +205,16 @@ export function useSpeechPreparation(input: {
     },
     [],
   );
+  useEffect(() => {
+    if (!enabled) cancelSpeechPreparation();
+  }, [enabled]);
 
   const prepareSpeech = (messageId: string, reply: string): void => {
     const key = `${messageId}\u0000${reply}`;
     if (
       messageId !== latestMessageId ||
       busy ||
+      !enabled ||
       speechCacheRef.current?.key === key
     )
       return;
