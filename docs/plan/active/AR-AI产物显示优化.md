@@ -94,14 +94,32 @@ PR 合并进 `main`，只剩 AR09 收口。对照如下。
 | AR06 MD 只读路径 | 已合并 | [#481](https://github.com/Timcai06/EduCanvas/pull/481) |
 | AR07 Callout 渲染 | 已合并 | [#483](https://github.com/Timcai06/EduCanvas/pull/483) |
 | AR08 Callout 生成端 | 已合并 | [#484](https://github.com/Timcai06/EduCanvas/pull/484) |
-| AR09 全量收口 | `PENDING` | — |
+| AR09 全量收口 | `IN_PROGRESS` | 走查脚本 [#498](https://github.com/Timcai06/EduCanvas/pull/498)；缺陷 #487 [#491](https://github.com/Timcai06/EduCanvas/pull/491)、#488 [#497](https://github.com/Timcai06/EduCanvas/pull/497) |
+
+### AR09 进度（2026-09-16）
+
+「五渲染器手动走查」已改成可复现脚本 `pnpm test:walkthrough`（[#498](https://github.com/Timcai06/EduCanvas/pull/498)）：
+用既有 DB fixture 把五个产物种进同一 Notebook，逐个在 Canvas 打开并截图到
+`output/renderer-walkthrough/`。人工走查留不下证据也无法在每次改动后重跑，而
+#487 与 #488 正是合并后才由用户发现的——脚本化后这类缺陷在改动当下即可复现。
+
+断言只保留「确实渲染出内容」的底线加两条回归线（代码块语言标识、长标签不截断），
+视觉好坏仍由人看图判断，不把主观审美写成断言。
+
+本机 5/5 通过，人工核对截图：思维导图长标签完整、分支配色与角色徽标齐备；
+Markdown 标题层级分明、callout 成框、代码块带 `PYTHON` 角标；闪卡翻面可用；
+Slides 与绘本正常。
 
 AR09 收口前必须先关闭合并后暴露的三个显示缺陷，它们都落在本线已交付的渲染器上：
 
 - [#487](https://github.com/Timcai06/EduCanvas/issues/487) markdown_document 标题无层级、
-  代码块无结构与语言标识——AR06 的只读路径把排版挂在未安装的 Tailwind `prose` 上；
+  代码块无结构与语言标识——AR06 的只读路径把排版挂在未安装的 Tailwind `prose` 上。
+  已由 [#491](https://github.com/Timcai06/EduCanvas/pull/491) 改为复用既有 `.chat-prose`
+  与 `features/chat/markdown` 渲染边界修复，不新增依赖；
 - [#488](https://github.com/Timcai06/EduCanvas/issues/488) 思维导图折叠/展开缩放跳动与
-  节点文字截断——AR05 的缩放控件与折叠锚定；
+  节点文字截断——AR05 的缩放控件与折叠锚定。已由
+  [#497](https://github.com/Timcai06/EduCanvas/pull/497) 修复：自适应只在首次执行，
+  节点加宽到 260×60 并允许两行；
 - [#489](https://github.com/Timcai06/EduCanvas/issues/489) web_app 产物启动失败——不属于
   本线范围（web-runtime 未接入开发启动流程），但与产物显示验收同屏出现。
 
