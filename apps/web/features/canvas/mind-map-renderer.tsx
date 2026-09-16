@@ -95,6 +95,13 @@ export function MindMapRenderer({
       ? focusedNodeId
       : (visibleNodeIds[0] ?? null);
 
+  /* ResizeObserver 回调里要读最新 scale，但不能把 transform 放进 effect 依赖
+     （否则每次平移/缩放都重建 observer）。用 ref 旁路读取。 */
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
+
   const fitView = useCallback(() => {
     if (!layout || !nodeRootRef.current) return;
     const rect = nodeRootRef.current.getBoundingClientRect();
@@ -112,16 +119,29 @@ export function MindMapRenderer({
     });
   }, [layout]);
 
+  /* fitView 会整体覆写 transform（含 scale）。折叠/展开会重算 layout，
+     进而让 fitView 引用变化——此前这个 effect 每次都重跑，用户手动放大的
+     倍率被直接打回 fit-to-view，点一次折叠按钮画面就跳一下。这里只在首次拿到
+     layout 时自适应一次；此后缩放归用户所有，折叠位移由 useCollapseAnchoring
+     单独补偿。ResizeObserver 同理：只有用户没手动缩放（scale===1）时才重新
+     适配容器，否则保留用户视角。 */
+  const didFitRef = useRef(false);
   useLayoutEffect(() => {
-    fitView();
+    if (!layout) return;
+    if (!didFitRef.current) {
+      didFitRef.current = true;
+      fitView();
+    }
 
     const viewport = nodeRootRef.current;
     if (!viewport || typeof ResizeObserver === 'undefined') return;
 
-    const resizeObserver = new ResizeObserver(() => fitView());
+    const resizeObserver = new ResizeObserver(() => {
+      if (transformRef.current.scale === 1) fitView();
+    });
     resizeObserver.observe(viewport);
     return () => resizeObserver.disconnect();
-  }, [fitView]);
+  }, [fitView, layout]);
 
   useEffect(() => {
     if (!effectiveFocusedNodeId || !nodeRootRef.current) return;
@@ -438,7 +458,13 @@ export function MindMapRenderer({
                   <span className="inline-flex h-5 w-5 shrink-0" />
                 )}
                 <RoleBadge role={node.semanticRole} />
-                <span className="inline-flex grow truncate text-left">
+                {/* 单行 truncate 在 188px 宽的节点里只剩约 98px 给文字（折叠按钮、
+                    RoleBadge、提问按钮都是 shrink-0），十个汉字只显示得下七个。
+                    节点已加宽，这里再允许折到两行，并保留 title 兜住超长标签。 */}
+                <span
+                  className="line-clamp-2 grow text-left break-words"
+                  title={node.label}
+                >
                   {node.label}
                 </span>
                 <button
