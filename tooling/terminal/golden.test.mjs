@@ -186,17 +186,22 @@ test('golden: 状态卡保持历史契约子串', () => {
     gateway: false,
     web: true,
     worker: false,
+    webRuntime: false,
     latest: { state: 'none' },
     dbPort: '5435',
     webUrl: 'http://127.0.0.1:3000',
     gatewayUrl: 'http://127.0.0.1:3200',
+    runtimeOrigin: 'http://localhost:3300',
     colorEnabled: false,
   });
+  /* 按内容匹配而不是写死行号：卡片增删一行不应让无关断言失效。 */
+  const card = rows.join('\n');
   assert.match(rows[0], /Database/);
   assert.match(rows[0], /127\.0\.0\.1:5435/);
-  assert.match(rows[1], /Gateway\s+stopped/);
-  assert.match(rows[3], /Worker\s+down/);
-  assert.match(rows[4], /Runtime\s+none/);
+  assert.match(card, /Gateway\s+stopped/);
+  assert.match(card, /Worker\s+down/);
+  assert.match(card, /Web Runtime\s+stopped/);
+  assert.match(card, /Session\s+none/);
   assert.ok(rows.every((line) => !line.includes('\x1b[')));
 });
 
@@ -206,6 +211,7 @@ test('golden: 状态卡全就绪显示 running + pid', () => {
     gateway: true,
     web: true,
     worker: true,
+    webRuntime: true,
     latest: {
       state: 'running',
       runId: 'local-x',
@@ -214,11 +220,14 @@ test('golden: 状态卡全就绪显示 running + pid', () => {
     dbPort: '5434',
     webUrl: 'http://127.0.0.1:3000',
     gatewayUrl: 'http://127.0.0.1:3200',
+    runtimeOrigin: 'http://localhost:3300',
     colorEnabled: true,
   });
-  assert.match(rows[1], /Gateway\s+ready\s+http:\/\/127\.0\.0\.1:3200/);
-  assert.match(rows[3], /Worker\s+ready\s+pid=4242/);
-  assert.match(rows[4], /Runtime\s+running\s+local-x/);
+  const card = rows.join('\n');
+  assert.match(card, /Gateway\s+ready\s+http:\/\/127\.0\.0\.1:3200/);
+  assert.match(card, /Worker\s+ready\s+pid=4242/);
+  assert.match(card, /Web Runtime\s+ready\s+http:\/\/localhost:3300/);
+  assert.match(card, /Session\s+running\s+local-x/);
   assert.match(rows[0], /\x1b\[32m✓\x1b\[0m/);
 });
 

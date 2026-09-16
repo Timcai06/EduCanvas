@@ -46,9 +46,12 @@ if (!profile || !SUPPORTED_PROFILES.has(profile)) {
 }
 
 loadWorkspaceEnvFiles();
-const { port, gatewayPort } = applyResolvedLocalPorts(process.env);
+const { port, gatewayPort, runtimePort, runtimeOrigin } =
+  applyResolvedLocalPorts(process.env);
 const webUrl = `http://127.0.0.1:${port}`;
 const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
+/* Runtime 对外是 runtimeOrigin（跨站需要 localhost），但健康探测走绑定地址。 */
+const runtimeHealthUrl = `http://127.0.0.1:${runtimePort}/health`;
 
 // 颜色语义单一决策点（NO_COLOR/FORCE_COLOR/non-TTY），与 log-viewer 一致。
 const { colorEnabled } = detectTerminalCapabilities({
@@ -86,7 +89,13 @@ async function runLogs() {
 
 async function main() {
   if (profile === 'status') {
-    process.exitCode = (await runStatus({ webUrl, gatewayUrl, colorEnabled }))
+    process.exitCode = (await runStatus({
+      webUrl,
+      gatewayUrl,
+      runtimeHealthUrl,
+      runtimeOrigin,
+      colorEnabled,
+    }))
       ? 0
       : 1;
     return;
@@ -106,6 +115,8 @@ async function main() {
   const runtime = await runStartup({
     webUrl,
     gatewayUrl,
+    runtimeHealthUrl,
+    runtimeOrigin,
     verbose,
     colorEnabled,
     out,

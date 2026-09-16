@@ -19,6 +19,17 @@
  * 所有外部命令通过注入的 runCommand 执行，便于测试注入假输出。
  */
 import { execFile } from 'node:child_process';
+import {
+  DEFAULT_LOGS_ROOT,
+  readLatest,
+  readRunMeta,
+  runDirectoryFor,
+} from './local-run-session.mjs';
+import {
+  killOwnedProcessTree,
+  pidAlive,
+  verifyRecordedProcesses,
+} from './local-process-identity.mjs';
 
 const REPO_PATTERN = /edu[-_ ]?canvas/i;
 
@@ -186,4 +197,60 @@ export async function cleanupStaleCore(
     );
   }
   return { killed };
+}
+
+export function gatewayPortOf(url) {
+  return Number(new URL(url).port);
+}
+
+export function webPortOf(url) {
+  return Number(new URL(url).port);
+}
+
+/**
+ * 清理半个 core：先停旧会话 run.json 记录在案的进程（含 worker——worker
+ * 不监听端口，纯端口扫描找不到它，这正是「第二次 make all 残留旧 worker」
+ * 的根源），再按端口清 Gateway/Web 残留（pnpm/next 孙进程可能未随记录
+ * PID 退出）。返回 { killed }。
+ *
+ * 记录 PID 一律先做 ownership 验证（local-process-identity）：PID 可能被
+ * 操作系统复用，命令行不含 EduCanvas 特征或无法读取的一律跳过并提示，
+ * 绝不误杀无关进程。
+ */
+export async function cleanupStaleRuntime({
+  webUrl,
+  gatewayUrl,
+  runtimeHealthUrl,
+  out = () => {},
+}) {
+  const killedPids = new Set();
+  const latest = await readLatest(DEFAULT_LOGS_ROOT);
+  if (latest?.runId) {
+    const meta = await readRunMeta(
+      runDirectoryFor(DEFAULT_LOGS_ROOT, latest.runId),
+    );
+    const { owned, skipped } = await verifyRecordedProcesses(meta);
+    for (const skip of skipped) {
+      if (skip.reason === 'unowned' || skip.reason === 'unknown') {
+        out(`[local] 跳过 PID ${skip.pid}：无法确认属于当前 EduCanvas runtime`);
+      }
+    }
+    for (const { pid } of owned) {
+      killedPids.add(pid);
+      await killOwnedProcessTree(pid, 'SIGTERM');
+    }
+    // 给优雅退出一点时间（旧 orchestrator 会顺带停自己的服务），未退出的强杀。
+    if (killedPids.size > 0) await defaultSleep(1_500);
+    for (const pid of [...killedPids]) {
+      if (pidAlive(pid)) await killOwnedProcessTree(pid, 'SIGKILL');
+    }
+  }
+  const { killed: portKilled } = await cleanupStaleCore(
+    [
+      gatewayPortOf(gatewayUrl),
+      webPortOf(webUrl),
+      runtimeHealthUrl ? Number(new URL(runtimeHealthUrl).port) : null,
+    ].filter((value) => Number.isInteger(value)),
+  );
+  return { killed: killedPids.size + portKilled };
 }

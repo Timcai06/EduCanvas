@@ -56,7 +56,24 @@ if (mode === 'fatal') {
   emit({ schema: 'educanvas.log.v1', ts: new Date().toISOString(), level: 'fatal', service, event: 'service.failed', message: '模拟启动失败', error: { code: 'FAKE_BOOTSTRAP_FAILED', message: '模拟启动失败' } });
   setInterval(() => {}, 1000);
 }
-if (service === 'gateway' || service === 'web') {
+if (service === 'web-runtime') {
+  if (mode === 'hang') {
+    setInterval(() => {}, 1000);
+  } else {
+    const server = createServer((req, res) => {
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ status: 'ok', isolationRequirement: 'cross-site-configured' }));
+        return;
+      }
+      res.end('ok');
+    });
+    server.listen(Number(process.env.EDUCANVAS_WEB_RUNTIME_PORT), '127.0.0.1', () => {
+      emit({ schema: 'educanvas.log.v1', ts: new Date().toISOString(), level: 'info', service, event: 'service.ready', message: 'fake runtime ready' });
+      scheduleCrashAfterReady();
+    });
+  }
+} else if (service === 'gateway' || service === 'web') {
   if (mode === 'hang') {
     setInterval(() => {}, 1000);
   } else {
@@ -92,7 +109,7 @@ import path from 'node:path';
 import process from 'node:process';
 const joined = process.argv.slice(2).join(' ');
 if (joined === 'db:migrate') process.exit(0);
-const match = joined.match(/--filter @educanvas\\/(\\w+) dev/);
+const match = joined.match(/--filter @educanvas\\/([\\w-]+) dev/);
 if (match) {
   const service = match[1];
   const child = spawn(process.execPath, [path.join(process.env.FAKE_DIR, 'fake-service.mjs'), service], { stdio: 'inherit', env: process.env });
@@ -311,7 +328,7 @@ test('status reports stopped services without starting processes', async () => {
   assert.equal(result.code, 1);
   assert.match(result.stdout, /Gateway\s+stopped/);
   assert.match(result.stdout, /Web\s+stopped/);
-  assert.match(result.stdout, /Runtime\s+none/);
+  assert.match(result.stdout, /Session\s+none/);
 });
 
 test('propagates resolved default ports to spawned core services', () => {
@@ -319,18 +336,42 @@ test('propagates resolved default ports to spawned core services', () => {
   assert.deepEqual(applyResolvedLocalPorts(env), {
     port: 3000,
     gatewayPort: 3200,
+    runtimePort: 3300,
+    webOrigin: 'http://127.0.0.1:3000',
+    runtimeOrigin: 'http://localhost:3300',
   });
   assert.equal(env.PORT, '3000');
   assert.equal(env.EDUCANVAS_GATEWAY_PORT, '3200');
+  assert.equal(env.EDUCANVAS_WEB_RUNTIME_PORT, '3300');
+  /* web_app 沙箱依赖跨站边界：默认站点对必须是 127.0.0.1 与 localhost，
+     只换端口不构成边界（端口不参与 site 判定）。 */
+  assert.equal(env.EDUCANVAS_WEB_PUBLIC_ORIGIN, 'http://127.0.0.1:3000');
+  assert.equal(
+    env.EDUCANVAS_WEB_RUNTIME_PUBLIC_ORIGIN,
+    'http://localhost:3300',
+  );
 });
 
 test('preserves validated custom ports for spawned core services', () => {
-  const env = { PORT: '4101', EDUCANVAS_GATEWAY_PORT: '4200' };
+  const env = {
+    PORT: '4101',
+    EDUCANVAS_GATEWAY_PORT: '4200',
+    EDUCANVAS_WEB_RUNTIME_PORT: '4300',
+  };
   assert.deepEqual(applyResolvedLocalPorts(env), {
     port: 4101,
     gatewayPort: 4200,
+    runtimePort: 4300,
+    webOrigin: 'http://127.0.0.1:4101',
+    runtimeOrigin: 'http://localhost:4300',
   });
-  assert.deepEqual(env, { PORT: '4101', EDUCANVAS_GATEWAY_PORT: '4200' });
+  assert.deepEqual(env, {
+    PORT: '4101',
+    EDUCANVAS_GATEWAY_PORT: '4200',
+    EDUCANVAS_WEB_RUNTIME_PORT: '4300',
+    EDUCANVAS_WEB_PUBLIC_ORIGIN: 'http://127.0.0.1:4101',
+    EDUCANVAS_WEB_RUNTIME_PUBLIC_ORIGIN: 'http://localhost:4300',
+  });
 });
 
 test('全部服务 ready 才宣布 runtime ready，run.json 与 JSONL 正确', async () => {
