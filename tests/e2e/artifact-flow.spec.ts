@@ -12,10 +12,7 @@ import {
   waitForGenerationJobSucceeded,
 } from './fixtures/general-artifact-fixture';
 
-async function expectMindMapDragStopsOnRelease(
-  page: Page,
-  canvas: Locator,
-) {
+async function expectMindMapDragStopsOnRelease(page: Page, canvas: Locator) {
   const viewport = canvas.locator('[data-mind-map-viewport]');
   const map = viewport.locator('.mind-map-canvas');
   const box = await viewport.boundingBox();
@@ -195,9 +192,7 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   ).toHaveCount(0);
   await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
-  await expect(
-    page.getByRole('dialog', { name: '上传文件' }),
-  ).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '上传文件' })).toBeVisible();
   /* 笔记本归属说明已被有意移除（见 asset-upload-panel.test.tsx
      「以紧凑入口展示文档格式，不重复笔记本归属说明」）。这里改断言紧凑入口
      本身：固定 space 作用域时只给格式提示与选择入口，且不出现「保存范围」——

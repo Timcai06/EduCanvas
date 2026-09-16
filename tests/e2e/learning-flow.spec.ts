@@ -415,7 +415,14 @@ test('「+」菜单开放真实上传能力，并跳过尚未接入的动作', a
 test('首次进入时保留「+」菜单动作并直接打开受控 Canvas', async ({ page }) => {
   await startLearning(page);
   const opener = await openCanvasFromChat(page);
-  await expect(opener).toBeVisible();
+  /* 移动端 Canvas 是全屏模态：打开后 [data-learning-workspace] > header 被置为
+     inert，入口按钮按预期退出可访问性树（同一事实由「@ui 移动 Canvas 使用模态
+     语义、隔离背景并约束焦点」断言）。因此入口仍可见只在并排布局下成立；
+     模态布局下继续断言它可见，等于要求背景在模态打开时仍可操作。 */
+  const viewport = page.viewportSize();
+  if (viewport !== null && viewport.width >= 1024) {
+    await expect(opener).toBeVisible();
+  }
 
   await expect(canvasRegion(page)).toBeVisible();
 });
