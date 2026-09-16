@@ -1,12 +1,12 @@
 'use client';
 
 import type { NoteContent } from '@educanvas/canvas-protocol';
-import {
-  mathRemarkPlugins,
-  mathRehypePlugins,
-} from '@/features/chat/math-markdown';
+/* 与消息流共用同一 Markdown 渲染边界：`.chat-prose` 排版、代码围栏语言标签、
+   引用/Callout 原生结构与链接安全策略只有一处实现。此前这里自持一份裸
+   ReactMarkdown 并挂 Tailwind `prose` 类，而仓库未装 @tailwindcss/typography，
+   该类恒为空选择器，标题层级与代码块结构全部丢失（#487）。 */
+import { MessageMarkdown } from '@/features/chat/markdown';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import {
   ArrowCounterClockwise,
   Check,
@@ -217,14 +217,7 @@ export function NoteRenderer({
               />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <article className="prose prose-sm max-w-none dark:prose-invert">
-                <ReactMarkdown
-                  remarkPlugins={mathRemarkPlugins}
-                  rehypePlugins={mathRehypePlugins}
-                >
-                  {markdown}
-                </ReactMarkdown>
-              </article>
+              <MessageMarkdown text={markdown} />
             </div>
           </div>
         ) : editing ? (
@@ -242,14 +235,7 @@ export function NoteRenderer({
           />
         ) : (
           <div className="h-full overflow-y-auto p-4">
-            <article className="prose prose-sm max-w-none dark:prose-invert">
-              <ReactMarkdown
-                remarkPlugins={mathRemarkPlugins}
-                rehypePlugins={mathRehypePlugins}
-              >
-                {markdown}
-              </ReactMarkdown>
-            </article>
+            <MessageMarkdown text={markdown} />
           </div>
         )}
       </div>

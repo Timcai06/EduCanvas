@@ -35,6 +35,11 @@ export function createDesktopAuthCoordinator(options: {
   fetchImpl?: typeof fetch;
   now?: () => Date;
   randomBytes?: (size: number) => Buffer;
+  scheduleAuthExpiry?: (
+    callback: () => void,
+    delayMs: number,
+  ) => ReturnType<typeof setTimeout>;
+  cancelAuthExpiry?: (handle: ReturnType<typeof setTimeout>) => void;
   revokeSession?(session: StoredDesktopSession): Promise<void>;
   revokeTimeoutMs?: number;
 }) {
@@ -46,6 +51,7 @@ export function createDesktopAuthCoordinator(options: {
     codeVerifier: string;
     createdAtMs: number;
   } | null = null;
+  let pendingExpiry: ReturnType<typeof setTimeout> | undefined;
   let status: DesktopAuthStatus = { state: 'signed_out' };
   let sessionGeneration = 0;
 
@@ -53,6 +59,12 @@ export function createDesktopAuthCoordinator(options: {
     status = next;
     options.onStatus?.(next);
     return next;
+  };
+
+  const cancelPendingExpiry = (): void => {
+    if (pendingExpiry === undefined) return;
+    (options.cancelAuthExpiry ?? clearTimeout)(pendingExpiry);
+    pendingExpiry = undefined;
   };
 
   const loadSession = async (): Promise<StoredDesktopSession | null> => {
@@ -66,6 +78,7 @@ export function createDesktopAuthCoordinator(options: {
   const clearSession = async (): Promise<void> => {
     cachedSession = null;
     pending = null;
+    cancelPendingExpiry();
     await options.sessionStore.clear();
   };
 
@@ -78,6 +91,8 @@ export function createDesktopAuthCoordinator(options: {
     getSession: loadSession,
 
     async signIn(): Promise<DesktopAuthStatus> {
+      if (await loadSession()) return status;
+      cancelPendingExpiry();
       const pkce = createDesktopPkceRequest(options.randomBytes);
       pending = {
         state: pkce.state,
@@ -86,11 +101,21 @@ export function createDesktopAuthCoordinator(options: {
       };
       const url = buildDesktopAuthorizationUrl(options.webBaseUrl, pkce);
       publish({ state: 'authorizing' });
+      pendingExpiry = (options.scheduleAuthExpiry ?? setTimeout)(() => {
+        pendingExpiry = undefined;
+        if (!pending || pending.state !== pkce.state) return;
+        pending = null;
+        publish({
+          state: 'error',
+          message: '登录请求已超时，请重新登录。',
+        });
+      }, PENDING_AUTH_TTL_MS);
       try {
         await options.openExternal(url.toString());
         return status;
       } catch {
         pending = null;
+        cancelPendingExpiry();
         return publish({
           state: 'error',
           message: '无法打开系统浏览器，请稍后重试。',
@@ -105,6 +130,7 @@ export function createDesktopAuthCoordinator(options: {
         now().getTime() - current.createdAtMs > PENDING_AUTH_TTL_MS
       ) {
         pending = null;
+        cancelPendingExpiry();
         return publish({
           state: 'error',
           message: '登录请求已失效，请重新发起。',
@@ -115,6 +141,7 @@ export function createDesktopAuthCoordinator(options: {
         code = parseDesktopAuthCallback(raw, current.state).code;
       } catch {
         pending = null;
+        cancelPendingExpiry();
         return publish({
           state: 'error',
           message: '登录回调校验失败，请重新发起。',
@@ -122,6 +149,7 @@ export function createDesktopAuthCoordinator(options: {
       }
       // Callback credential is single-use from this point even when the network fails.
       pending = null;
+      cancelPendingExpiry();
       const exchangeGeneration = sessionGeneration;
       try {
         const response = await fetchImpl(

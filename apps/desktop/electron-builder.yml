@@ -22,6 +22,7 @@ win:
       arch:
         - x64
 nsis:
+  include: assets/installer.nsh
   artifactName: EduCanvas-助手-Setup-${version}.${ext}
   oneClick: false
   perMachine: false
@@ -33,4 +34,24 @@ nsis:
   deleteAppDataOnUninstall: false
 portable:
   artifactName: EduCanvas-助手-${version}.exe
+mac:
+  icon: assets/icon.png
+  category: public.app-category.education
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: EduCanvas 仅在你点击麦克风按钮后录制语音问题。
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+dmg:
+  artifactName: EduCanvas-助手-${version}-${arch}.${ext}
 npmRebuild: false

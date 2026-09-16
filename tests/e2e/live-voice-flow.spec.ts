@@ -121,7 +121,10 @@ test('Live Voice 插话取消 Turn，再用不可变 Asset 快照恢复', async 
 }) => {
   const dialog = await enterLiveWorkspace(page);
   await setSpeechTransportMode(page, 'fallback');
-  const contextRail = dialog.getByRole('list', { name: 'Live 上下文' });
+  /* 资料轨的可访问名在 #382「unify Live Voice and resource workspace」中
+     由「Live 上下文」改为「Live 资料」（live-voice-visual-stage.tsx），
+     此处断言未跟进，长期以 element(s) not found 失败。 */
+  const contextRail = dialog.getByRole('list', { name: 'Live 资料' });
   await expect(
     contextRail.getByRole('listitem').filter({ hasText: '电路图.png' }),
   ).toBeVisible();

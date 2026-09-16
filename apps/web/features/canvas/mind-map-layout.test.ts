@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildMindMapLayout, nextVisibleNode } from './mind-map-layout';
+import {
+  buildMindMapLayout,
+  nextVisibleNode,
+  MIND_MAP_NODE_HEIGHT,
+  MIND_MAP_NODE_WIDTH,
+} from './mind-map-layout';
 import { mindMapContentSchema } from '@educanvas/canvas-protocol';
 
 const v1Content = {
@@ -116,5 +121,32 @@ describe('mind-map-layout', () => {
     const collapsed = buildMindMapLayout(parsed, new Set(['a']));
     const collapsedById = new Map(collapsed.nodes.map((n) => [n.id, n]));
     expect(collapsedById.get('a')?.descendantCount).toBe(1);
+  });
+});
+
+/* #488：节点加宽后若忘了同步层级步进与同级间距，相邻节点会重叠。
+   这是一个纯几何不变量，比截图或交互测试便宜得多，也更难被误改。 */
+describe('布局几何不变量', () => {
+  it('相邻层级与相邻兄弟的矩形不重叠', () => {
+    const parsed = mindMapContentSchema.parse(v1Content);
+    const layout = buildMindMapLayout(parsed, new Set());
+    const boxes = layout.nodes.map((node) => ({
+      id: node.id,
+      left: node.x,
+      right: node.x + MIND_MAP_NODE_WIDTH,
+      top: node.y,
+      bottom: node.y + MIND_MAP_NODE_HEIGHT,
+    }));
+    for (const a of boxes) {
+      for (const b of boxes) {
+        if (a.id === b.id) continue;
+        const overlaps =
+          a.left < b.right &&
+          b.left < a.right &&
+          a.top < b.bottom &&
+          b.top < a.bottom;
+        expect(overlaps, `${a.id} 与 ${b.id} 重叠`).toBe(false);
+      }
+    }
   });
 });

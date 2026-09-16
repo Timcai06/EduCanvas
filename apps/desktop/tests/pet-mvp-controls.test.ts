@@ -32,6 +32,13 @@ describe('MVP pet controls', () => {
     expect(html).toContain('aria-label="放大对话框"');
   });
 
+  it('exposes the desktop pet preferences', () => {
+    const html = renderToStaticMarkup(createElement(App));
+
+    expect(html).toContain('aria-label="桌宠设置"');
+    expect(html).toContain('aria-expanded="false"');
+  });
+
   it('keeps transient pet behavior outside the conversation history log', () => {
     const source = readFileSync(
       new URL('../src/renderer/src/pet-chat-panel.tsx', import.meta.url),

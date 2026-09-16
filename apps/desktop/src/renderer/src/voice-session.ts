@@ -92,6 +92,7 @@ export async function runVoiceSession(
   dependencies: VoiceSessionDependencies,
   options: {
     signal: AbortSignal;
+    speechEnabled?: boolean;
     onChange(snapshot: VoiceSessionSnapshot): void;
   },
 ): Promise<VoiceSessionResult> {
@@ -161,6 +162,17 @@ export async function runVoiceSession(
     if (options.signal.aborted) return cancelled();
     reply = turn.message.trim() || '已经处理好了';
     assistantMessageId = turn.assistantMessageId;
+
+    if (options.speechEnabled === false) {
+      emit({ phase: 'success', notice: '已静音，文字回复仍可查看' });
+      return {
+        outcome: 'success',
+        transcript,
+        reply,
+        assistantMessageId,
+        speechPlayed: false,
+      };
+    }
 
     emit({ phase: 'speaking' });
     if (options.signal.aborted) return cancelled();

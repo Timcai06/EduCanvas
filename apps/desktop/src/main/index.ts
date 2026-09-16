@@ -1,5 +1,5 @@
 import { promises as fileSystem } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import {
   app,
   BrowserWindow,
@@ -48,6 +48,7 @@ import { createOperationLease } from './operation-lease';
 import { createConversationCoordinator } from './conversation-coordinator';
 import type { DesktopConversationCreateInput } from '../shared/conversation-directory';
 import { registerDesktopResultActions } from './result-opener';
+import { registerDesktopProtocolClient } from './desktop-protocol-registration';
 const WEB_BASE_URL =
   process.env['EDUCANVAS_DESKTOP_WEB_URL'] ??
   process.env['EDUCANVAS_DESKTOP_API_BASE'] ??
@@ -57,13 +58,7 @@ const GATEWAY_BASE_URL =
 
 // Electron deep-link registration and platform callbacks follow the official pattern:
 // https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
-if (process.defaultApp && process.argv[1]) {
-  app.setAsDefaultProtocolClient(gatewayDesktopProtocol, process.execPath, [
-    resolve(process.argv[1]),
-  ]);
-} else {
-  app.setAsDefaultProtocolClient(gatewayDesktopProtocol);
-}
+registerDesktopProtocolClient(gatewayDesktopProtocol);
 let authCoordinator: DesktopAuthCoordinator | null = null;
 let queuedDeepLink: string | null = null;
 let petController: PetWindowController | null = null;

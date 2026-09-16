@@ -5,8 +5,8 @@
 - 负责人：@Timcai06
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
 - 代码审核与最终验收：Codex；平台实机证据需人工确认
-- 最后验证时间：2026-08-25
-- 当前领取任务：`DP11 Windows 打包、性能基线与实机验收（进行中）`
+- 最后验证时间：2026-09-16
+- 当前领取任务：`DP11 Windows 发布收口与 DP12 macOS 打包准备（进行中）`
 - 产品需求：[桌宠第一方桌面外延项目需求](../../01-product/04-桌宠第一方桌面外延需求.md)
 - 关键决策：[ADR-0028](../../09-decisions/0028-桌宠作为统一EduCanvas系统的第一方桌面外延.md)
 
@@ -326,8 +326,9 @@ Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引�
 ### DP12：macOS 同流程适配与验收
 
 - 依赖：DP11
-- 状态：`PENDING`
+- 状态：`IN_PROGRESS`
 - 文件边界：desktop platform adapter、entitlements、build config、质量证据
+- 证据：[DP12 macOS 打包准备](../../06-quality/evidence/25-DP12-macOS打包准备.md)
 
 交付：
 
@@ -374,14 +375,14 @@ Gateway 统一 Asset 上传、ready-wait、不可变 `assetId + versionId` 引�
 | DP02 目录切换   | Desktop 175、Core 28、Client 16、Gateway HTTP 11；Desktop build               | Web/桌宠交叉切换仍需人工实机确认   | `PASS`        |
 | DP03 历史       | repository/API/UI tests                                                       | 重启、删缓存、长历史               | `PASS`        |
 | DP04 恢复       | Desktop 187（registry/resume/interrupted/cancel/race）                        | 断网、休眠、关窗（待人工实机确认） | `PASS`        |
-| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察                | `PENDING`     |
-| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PENDING`     |
-| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact             | `PENDING`     |
+| DP05 流式       | event bridge/UI tests                                                         | 首 delta 与切窗观察并入 DP11/DP12  | `PASS`        |
+| DP06 能力       | core/client/server conformance                                                | 版本降级                           | `PASS`        |
+| DP07 结果卡     | component/accessibility tests                                                 | 真实 Citation/Artifact 并入 DP11/DP12 | `PASS`     |
 | DP08 handoff    | core/client/server/repository/desktop/web token 与授权测试                    | 系统浏览器精确打开并入 DP11        | `PASS`        |
 | DP09 语音对齐   | Desktop fake ASR/TTS/Turn、取消、messageId 与重播缓存测试                     | 真人中文麦克风并入 DP11            | `PASS`        |
 | DP10 附件       | core/client/db/gateway/desktop Asset、Part、权限与隔离测试                    | 真实图片/PDF 上传并入 DP11         | `PASS`        |
 | DP11 Windows    | installer/portable、包内容审计、Desktop 回归与性能测量脚本                    | Windows 11 主流程仍在验收          | `IN_PROGRESS` |
-| DP12 macOS      | build + platform tests                                                        | macOS 打包实机                     | `PENDING`     |
+| DP12 macOS      | 双架构 build config、entitlements、原生 CI                                    | macOS 签名、公证与实机主流程待执行 | `IN_PROGRESS` |
 | DP13 收口       | link/lint/diff checks                                                         | 能力声明复核                       | `PENDING`     |
 
 ## 十、预期事实回写

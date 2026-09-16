@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { createPetSubmitGate, submitPetText } from './pet-mvp-text';
 import {
   petTransientResetDelay,
-  petUiStateForAuthTransition,
   petUiStateForFailureCode,
   petUiStateForTurnAction,
   petVisualForState,
@@ -14,7 +13,6 @@ import { recordVoice } from './voice-recorder';
 import { playSpeech } from './speech-player';
 import { bindVoiceTurn, runVoiceSession } from './voice-session';
 import { isBusyState, voiceSnapshotState } from './voice-view-state';
-import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 import type { DesktopAttachmentRef } from '../../shared/desktop-attachment';
 import type {
   DesktopChatHistorySnapshot,
@@ -33,6 +31,8 @@ import {
 } from './pet-composer-state';
 import { useChatFollow } from './chat-scroll-follow';
 import { createOperationCompletionTracker } from './operation-completion';
+import { useDesktopPreferences } from './desktop-preferences';
+import { useDesktopAuthGate } from './desktop-auth-gate';
 import './styles.css';
 export default function App({
   initialChatCollapsed = false,
@@ -42,9 +42,6 @@ export default function App({
   const [chatCollapsed, setChatCollapsed] = useState(initialChatCollapsed);
   const [state, setState] = useState<PetUiState>('ready');
   const [visualState, setVisualState] = useState<PetUiState>('greeting');
-  const [authState, setAuthState] = useState<
-    DesktopAuthStatus['state'] | 'checking'
-  >('checking');
   const [message, setMessage] = useState(
     '你好，我在这里。输入一句话和我聊聊吧。',
   );
@@ -61,7 +58,6 @@ export default function App({
   const operationControllerRef = useRef<AbortController | null>(null);
   const submitGateRef = useRef(createPetSubmitGate());
   const operationCompletionRef = useRef(createOperationCompletionTracker());
-  const authStateRef = useRef<DesktopAuthStatus['state'] | null>(null);
   const petVisual = petVisualForState(visualState);
   const petAsset = PET_VISUALS[petVisual];
   const lastAssistantMessage = history.messages.findLast(
@@ -69,6 +65,7 @@ export default function App({
   );
   const lastAssistantReply = lastAssistantMessage?.content ?? '';
   const busy = isBusyState(state);
+  const { preferences, updatePreferences } = useDesktopPreferences();
   const composer = useConversationComposer({
     currentConversationId: directory.currentConversationId,
     currentNotebookId: findCurrentNotebookId(directory),
@@ -80,12 +77,22 @@ export default function App({
     useSpeechPreparation({
       latestMessageId: lastAssistantMessage?.id,
       busy,
+      enabled: !preferences.muted,
     });
+
+  useEffect(() => {
+    document.documentElement.dataset.motion = preferences.animationIntensity;
+  }, [preferences.animationIntensity]);
 
   const publishVisual = (next: PetUiState): void => {
     setVisualState(next);
     window.desktopPet.setVisual(next);
   };
+  const { authState, requireAuth, restartSignIn } = useDesktopAuthGate({
+    setState,
+    publishVisual,
+    setMessage,
+  });
   const appendHistory = async (
     role: 'user' | 'assistant' | 'system',
     content: string,
@@ -180,32 +187,6 @@ export default function App({
   );
 
   useEffect(() => {
-    const accept = (status: DesktopAuthStatus): void => {
-      setAuthState(status.state);
-      const previousAuthState = authStateRef.current;
-      authStateRef.current = status.state;
-      if (status.state === 'signed_in') {
-        setState('ready');
-        const authVisual = petUiStateForAuthTransition(
-          previousAuthState,
-          status.state,
-        );
-        if (authVisual) publishVisual(authVisual);
-        setMessage('已经连接 EduCanvas，可以开始聊天。');
-      } else if (status.state === 'error') {
-        setState('auth-failed');
-        publishVisual('auth-failed');
-        setMessage(status.message);
-      }
-    };
-    const unsubscribe = window.desktopAuth.onStatus(accept);
-    void window.desktopAuth.getStatus().then(accept);
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
     const delay = petTransientResetDelay(visualState);
     if (delay === null) return;
     const timeout = setTimeout(() => {
@@ -219,20 +200,6 @@ export default function App({
   useEffect(() => {
     if (!expandedView) window.desktopPet.setChatExpanded(!chatCollapsed);
   }, [chatCollapsed, expandedView]);
-
-  const requireAuth = async (): Promise<boolean> => {
-    const auth = await window.desktopAuth.getStatus();
-    setAuthState(auth.state);
-    if (auth.state === 'signed_in') return true;
-    setState('authorizing');
-    publishVisual('authorizing');
-    setMessage('请在浏览器完成登录与授权，然后回到这里继续。');
-    if (auth.state !== 'authorizing') {
-      const next = await window.desktopAuth.signIn();
-      setAuthState(next.state);
-    }
-    return false;
-  };
 
   const acquireOperation = async (): Promise<string | null> => {
     const result = await window.desktopOperation.acquire();
@@ -354,7 +321,8 @@ export default function App({
           turn: bindVoiceTurn(window.desktopAssistant.turn, voiceId),
           synthesize: (text, requestId, assistantMessageId) =>
             window.desktopVoice.synthesize(text, requestId, assistantMessageId),
-          play: (bytes, signal) => playSpeech(bytes, { signal }),
+          play: (bytes, signal) =>
+            playSpeech(bytes, { signal, volume: preferences.volume }),
           cancelRemote: (requestId) => {
             window.desktopVoice.cancel(requestId);
             window.desktopAssistant.cancel(requestId);
@@ -363,6 +331,7 @@ export default function App({
         },
         {
           signal: controller.signal,
+          speechEnabled: !preferences.muted,
           onChange(snapshot) {
             const nextState = voiceSnapshotState(snapshot);
             if (snapshot.phase === 'error') terminalState = nextState;
@@ -406,6 +375,10 @@ export default function App({
     reply: string,
   ): Promise<void> => {
     if (!reply.trim()) return;
+    if (preferences.muted) {
+      setMessage('当前已静音，请在设置中开启声音。');
+      return;
+    }
     const submitToken = submitGateRef.current.enter();
     if (!submitToken) return;
     if (!(await requireAuth())) {
@@ -459,6 +432,7 @@ export default function App({
       setMessage('正在朗读…');
       const playback = await playSpeech(speechBytes, {
         signal: controller.signal,
+        volume: preferences.volume,
       });
       if (playback === 'failed') setMessage('语音播报失败，文字回复仍可查看。');
     } finally {
@@ -548,7 +522,7 @@ export default function App({
       speakingMessageId={speakingMessageId}
       collapse={() => setChatCollapsed(true)}
       submit={submit}
-      signIn={async () => void (await requireAuth())}
+      signIn={restartSignIn}
       startVoice={startVoice}
       speakLatest={speakLatest}
       speakMessage={speakMessage}
@@ -573,6 +547,8 @@ export default function App({
         setMessage(next.error ?? '新对话已创建。');
       }}
       openResult={(target) => openDesktopResult(target).then(setMessage)}
+      preferences={preferences}
+      updatePreferences={updatePreferences}
     />
   );
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { PetChatPanel } from '../src/renderer/src/pet-chat-panel';
 
 function renderPanel(
-  authState: 'checking' | 'signed_out' | 'signed_in',
+  authState: 'checking' | 'signed_out' | 'authorizing' | 'signed_in',
 ): string {
   return renderToStaticMarkup(
     createElement(PetChatPanel as ComponentType<Record<string, unknown>>, {
@@ -64,6 +64,13 @@ describe('desktop unauthenticated chat gate', () => {
     expect(html).toContain('>请先登录</button>');
     expect(html).not.toContain('aria-label="输入消息"');
     expect(html).not.toContain('>发送</button>');
+  });
+
+  it('allows the user to reopen a stalled browser authorization request', () => {
+    const html = renderPanel('authorizing');
+
+    expect(html).toContain('>重新打开登录</button>');
+    expect(html).not.toContain('disabled=""');
   });
 
   it('shows the composer after the user signs in', () => {

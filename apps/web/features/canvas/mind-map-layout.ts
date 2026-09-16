@@ -8,10 +8,17 @@ type MindMapContentNode = MindMapContentV1['root'] & {
   children?: MindMapContentV1['root']['children'];
 };
 
-const VERTICAL_GAP = 82;
-const HORIZONTAL_GAP = 248;
-export const MIND_MAP_NODE_WIDTH = 188;
-export const MIND_MAP_NODE_HEIGHT = 52;
+/* 两个 GAP 是「同级间距」与「层级步进」，必须大于对应的节点尺寸，
+   否则相邻层级会重叠。节点加宽到 260 后同步放大，保持原本约 60px 的
+   连线呼吸区与约 30px 的纵向间隙。 */
+const VERTICAL_GAP = 92;
+const HORIZONTAL_GAP = 320;
+/* 节点内是一行 flex：折叠按钮、RoleBadge、提问按钮都是 shrink-0，只有标签
+   可伸缩。188px 时扣掉 px-3 与三个固定元素后只剩约 98px 给文字，text-sm 下
+   十个汉字显示不全（#488）。加宽到 260px 让常见标签一行放得下，配合渲染层的
+   line-clamp-2 兜住更长的标签。 */
+export const MIND_MAP_NODE_WIDTH = 260;
+export const MIND_MAP_NODE_HEIGHT = 60;
 const DEFAULT_PADDING = 56;
 
 /** 分支五色 token（globals.css --color-branch-1..5）：L1 取模分配、子树继承。 */

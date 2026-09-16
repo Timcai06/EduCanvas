@@ -17,8 +17,7 @@ build/
 coverage/
 .turbo/
 .pnpm-store/
-/output/playwright/
-/output/provider-canary/
+/output/
 /.playwright-mcp/
 /current-profile.png
 

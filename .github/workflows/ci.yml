@@ -344,11 +344,19 @@ jobs:
         run: pnpm --filter @educanvas/node-host test
 
   desktop-build:
-    # DP11：在真实 Windows runner 生成 installer + portable，并保留分发证据。
+    # DP11/DP12：在原生 runner 生成 Windows 与 macOS 分发包并保留证据。
     needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
-    runs-on: windows-latest
-    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 tag
 
@@ -369,9 +377,17 @@ jobs:
         run: pnpm --filter @educanvas/desktop typecheck
 
       - name: Desktop Windows package
+        if: matrix.target == 'windows'
         run: pnpm --filter @educanvas/desktop package:windows
 
+      - name: Desktop macOS package
+        if: matrix.target == 'macos'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm --filter @educanvas/desktop package:macos
+
       - name: Verify build and Windows distributables
+        if: matrix.target == 'windows'
         shell: pwsh
         run: |
           $required = @(
@@ -402,10 +418,34 @@ jobs:
           }
 
       - name: Upload Windows distributables
+        if: matrix.target == 'windows'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
         with:
           name: educanvas-desktop-windows-${{ github.event.pull_request.head.sha || github.sha }}
           path: apps/desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Verify macOS distributables
+        if: matrix.target == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s apps/desktop/out/main/index.js
+          test -s apps/desktop/out/preload/index.js
+          test -s apps/desktop/out/renderer/index.html
+          test "$(find apps/desktop/dist -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" -eq 2
+          test "$(find apps/desktop/dist -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" -eq 2
+          shasum -a 256 apps/desktop/dist/*.dmg apps/desktop/dist/*.zip >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload macOS distributables
+        if: matrix.target == 'macos'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
+        with:
+          name: educanvas-desktop-macos-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
           if-no-files-found: error
           retention-days: 7
 

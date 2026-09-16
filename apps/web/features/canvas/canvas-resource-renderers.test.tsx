@@ -210,9 +210,34 @@ describe('Canvas Artifact 内容适配器（W04 选项 1）', () => {
         })}
       />,
     );
-    expect(html).toContain('prose');
+    // `chat-prose` 是仓库自有排版类；此前这里挂的是 Tailwind `prose`，
+    // 而 @tailwindcss/typography 并未安装，断言 'prose' 子串恒真却无样式（#487）。
+    expect(html).toContain('chat-prose');
     expect(html).toContain('测试文档');
     expect(html).toContain('列表项 3');
+  });
+
+  it('markdown_document：标题保留层级、围栏代码块带语言标识（#487）', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownDocumentResourceRenderer
+        resource={makeResource('artifact.markdown-document')}
+        content={versionData({
+          contentVersion: 1,
+          markdown:
+            '# 一级\n\n## 二级\n\n### 三级\n\n```java\nint x = 1;\n```\n',
+        })}
+      />,
+    );
+
+    // 标题必须落到真实 h1/h2/h3，而不是被压成同一无差别字号。
+    expect(html).toContain('<h1>一级</h1>');
+    expect(html).toContain('<h2>二级</h2>');
+    expect(html).toContain('<h3>三级</h3>');
+    // 代码块必须有结构容器与语言标识，而不是裸 <pre>。
+    expect(html).toContain('chat-prose__code-block');
+    expect(html).toContain('chat-prose__code-lang');
+    expect(html).toContain('java');
+    expect(html).toContain('int x = 1;');
   });
 
   it('markdown_document：通过共享渲染边界呈现 callout', () => {

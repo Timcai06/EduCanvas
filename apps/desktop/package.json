@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "audit:windows-package": "node scripts/audit-windows-package.mjs",
     "package:portable": "electron-vite build && electron-builder --win portable && pnpm run audit:windows-package",
-    "package:windows": "electron-vite build && electron-builder --win nsis portable && pnpm run audit:windows-package"
+    "package:windows": "electron-vite build && electron-builder --win nsis portable && pnpm run audit:windows-package",
+    "package:macos": "electron-vite build && electron-builder --mac dmg zip --x64 --arm64"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",

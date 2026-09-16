@@ -11,6 +11,8 @@ import { MessageResultCards } from './message-result-cards';
 import type { DesktopAuthStatus } from '../../shared/desktop-auth';
 import type { DesktopAttachmentRef } from '../../shared/desktop-attachment';
 import { AttachmentIcon, PetChatComposer } from './pet-chat-composer';
+import type { DesktopPreferences } from './desktop-preferences';
+import { DesktopPreferencesPanel } from './desktop-preferences-panel';
 
 export function PetChatPanel(props: {
   expandedView: boolean;
@@ -51,6 +53,8 @@ export function PetChatPanel(props: {
   attachmentBusy: boolean;
   pickAttachment(): Promise<void>;
   clearAttachment(): void;
+  preferences: DesktopPreferences;
+  updatePreferences(update: Partial<DesktopPreferences>): void;
 }) {
   const {
     expandedView,
@@ -88,9 +92,12 @@ export function PetChatPanel(props: {
     attachmentBusy,
     pickAttachment,
     clearAttachment,
+    preferences,
+    updatePreferences,
   } = props;
   const [creating, setCreating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const current = directory.conversations.find(
     (item) => item.conversationId === directory.currentConversationId,
   );
@@ -124,6 +131,16 @@ export function PetChatPanel(props: {
         <strong>EduCanvas</strong>
         <span>{headerState}</span>
       </div>
+      <button
+        className="pet-chat__icon"
+        type="button"
+        aria-label="桌宠设置"
+        aria-expanded={settingsOpen}
+        title="声音与动画设置"
+        onClick={() => setSettingsOpen((open) => !open)}
+      >
+        ⚙
+      </button>
       {!expandedView && (
         <button
           className="pet-chat__icon"
@@ -302,10 +319,9 @@ export function PetChatPanel(props: {
       <button
         className="send-action pet-chat__login"
         type="button"
-        disabled={authState === 'authorizing'}
         onClick={() => void signIn()}
       >
-        {authState === 'authorizing' ? '登录中…' : '请先登录'}
+        {authState === 'authorizing' ? '重新打开登录' : '请先登录'}
       </button>
     </div>
   );
@@ -412,6 +428,12 @@ export function PetChatPanel(props: {
   const mainContent = (
     <>
       {header}
+      {settingsOpen && (
+        <DesktopPreferencesPanel
+          preferences={preferences}
+          updatePreferences={updatePreferences}
+        />
+      )}
       <div className="pet-chat__body">
         {!expandedView && (
           <p
@@ -437,7 +459,7 @@ export function PetChatPanel(props: {
 
   return (
     <section
-      className={`pet-chat${expandedView ? ' is-expanded-window' : ''}`}
+      className={`pet-chat${expandedView ? ' is-expanded-window' : ''}${settingsOpen ? ' has-settings' : ''}`}
       aria-label="桌宠聊天"
     >
       {sidebar}
