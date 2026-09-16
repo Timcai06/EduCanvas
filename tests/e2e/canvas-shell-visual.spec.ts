@@ -19,6 +19,9 @@ import {
  */
 
 const MIND_MAP_TITLE = '对话思维导图';
+/* 与 canvas-resource-access / general-chat-flow 同名常量保持一致：
+   资源 Dock 的「全部资源」入口是 Canvas 关闭后的焦点锚点。 */
+const STUDIO_TRIGGER_NAME = '打开全部资源';
 
 async function isDesktop(page: Page): Promise<boolean> {
   const viewport = page.viewportSize();
@@ -76,7 +79,12 @@ test.describe('@ui Canvas shell 键盘焦点', () => {
   test('关闭按钮关闭后焦点回到页面可聚焦元素', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const canvas = await openCanvasViaMindMap(page);
-    const opener = page.getByRole('button', { name: '打开', exact: true });
+    /* Canvas 入口已收敛到资源 Dock 的「全部资源」（W06-1，见 canvas-host.tsx
+       的焦点归还 effect）：关闭后焦点回到这个稳定锚点，而不是某个已随 Studio
+       面板卸载的列表项。此前断言的 `{ name: '打开', exact: true }` 是入口收敛
+       之前的遗留定位器，精确匹配不到「打开全部资源」，用例长期以
+       element(s) not found 失败。 */
+    const opener = page.getByRole('button', { name: STUDIO_TRIGGER_NAME });
 
     await canvas.getByRole('button', { name: /关闭/ }).click();
     await expect(canvas).not.toBeVisible();
