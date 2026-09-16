@@ -21,7 +21,7 @@ export function useConversationSidebarMotion(input: {
       previousOpenRef.current = input.open;
       const media = gsap.matchMedia();
       media.add('(prefers-reduced-motion: reduce)', () => {
-        gsap.set(sidebar, { xPercent: input.open ? 0 : -100 });
+        gsap.set(sidebar, { xPercent: input.open ? 0 : -100, x: 0 });
         gsap.set(panel, { autoAlpha: input.open ? 1 : 0, x: 0 });
       });
       media.add(
@@ -92,13 +92,29 @@ export function useConversationSidebarMotion(input: {
         '(max-width: 1023px) and (prefers-reduced-motion: no-preference)',
         () => {
           gsap.killTweensOf(sidebar);
-          gsap.to(sidebar, {
-            xPercent: input.open ? 0 : -100,
-            duration: input.open ? 0.26 : 0.2,
-            ease: input.open ? 'power3.out' : 'power2.in',
-            willChange: 'transform',
-            onComplete: () => gsap.set(sidebar, { clearProps: 'willChange' }),
-          });
+          /* useGSAP 的 revertOnUpdate 每次依赖变化都会重建 context，内联
+             transform 被还原，`to` 的起点因此不确定：窄屏展开时抽屉会停在
+             xPercent -100 不动，用户只看到遮罩、笔记本列表始终在屏幕外。
+             桌面端分支早就用 wasOpen 区分「状态真的变了」与「仅重建」，
+             这里对齐同一写法——未变化时直接落到终点，变化时从明确起点动画。 */
+          if (wasOpen === input.open) {
+            gsap.set(sidebar, { xPercent: input.open ? 0 : -100, x: 0 });
+            gsap.set(panel, { autoAlpha: 1, x: 0 });
+            return;
+          }
+          gsap.fromTo(
+            sidebar,
+            { xPercent: input.open ? -100 : 0, x: 0 },
+            {
+              xPercent: input.open ? 0 : -100,
+              x: 0,
+              duration: input.open ? 0.26 : 0.2,
+              ease: input.open ? 'power3.out' : 'power2.in',
+              overwrite: 'auto',
+              willChange: 'transform',
+              onComplete: () => gsap.set(sidebar, { clearProps: 'willChange' }),
+            },
+          );
           gsap.set(panel, { autoAlpha: 1, x: 0 });
         },
       );
