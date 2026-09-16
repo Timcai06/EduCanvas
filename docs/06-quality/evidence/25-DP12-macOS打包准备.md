@@ -15,6 +15,16 @@ macOS 实机、Apple 签名和公证证据，因此不得标记为 PASS。
 - Desktop CI 使用 Windows/macOS 原生 runner 矩阵，macOS 校验双架构产物并记录 SHA-256；
 - 现有 `open-url`、单实例和受信 renderer 边界继续由 Desktop 自动化保护。
 
+## CI 原生构建证据
+
+2026-09-16 的 [GitHub Actions CI #35053823136](https://github.com/Timcai06/EduCanvas/actions/runs/35053823136)
+已在 `macos-latest` 原生 runner 通过 `desktop-build (macos-latest, macos)`：执行 Desktop
+测试、类型检查和 `package:macos`，随后确认生成 2 个 DMG 与 2 个 ZIP，并上传 7 天诊断
+artifact。同一工作流的 Windows desktop-build 也通过。
+
+该任务显式关闭证书自动发现，因此只证明 x64/arm64 工程构建与产物集合成立，不构成
+Developer ID 签名、公证、stapling 或真实用户设备启动证据。
+
 ## 外部条件与实机矩阵
 
 - [ ] Apple Developer ID Application 证书；
