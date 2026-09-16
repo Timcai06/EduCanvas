@@ -526,7 +526,10 @@ jobs:
       - name: Full browser E2E (Chromium desktop + mobile + Firefox)
         id: browser_e2e_full
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: pnpm exec playwright test
+        # 必须显式指定 config：裸 `playwright test` 会退回默认发现规则，
+        # 把全仓 vitest *.test.ts 当作 e2e spec 加载并直接失败，
+        # 导致完整矩阵实际从未运行（2026-08-28 起 nightly 连续红）。
+        run: pnpm test:e2e
 
       # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，
       # 这里把 retry 次数与 flaky 名单写入 CI Summary，不得完全隐藏）。
