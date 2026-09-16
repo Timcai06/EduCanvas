@@ -20,14 +20,22 @@ const [, , resultsPath = 'output/playwright/results.json'] = process.argv;
 const writeSummary = process.argv.includes('--summary');
 const resultsRequired = process.env.PLAYWRIGHT_RESULTS_REQUIRED === 'true';
 const evidenceScope = process.env.PLAYWRIGHT_EVIDENCE_SCOPE ?? 'affected';
+/*
+ * 每个 lane 声明自己应当产出的 project 覆盖。`ui` 是视觉 QA lane：它按设计
+ * 只跑 @ui 用例、只装 chromium + firefox，既没有 chromium-pr-smoke，也不含
+ * 黄金旅程（那是产品闭环证据，归 affected/nightly）。此前 ui.yml 不设 scope
+ * 而落到默认的 affected，于是永远缺 chromium-pr-smoke——该门禁在 @ui 用例
+ * 本身失败时被 PLAYWRIGHT_RESULTS_REQUIRED=false 关掉，用例修绿后才暴露。
+ */
 const EXPECTED_PROJECTS = {
   affected: ['chromium-pr-smoke'],
+  ui: ['chromium', 'firefox'],
   full: ['chromium', 'chromium-mobile', 'firefox'],
   nightly: ['chromium', 'chromium-mobile', 'firefox'],
 };
 if (!(evidenceScope in EXPECTED_PROJECTS)) {
   process.stderr.write(
-    'PLAYWRIGHT_EVIDENCE_SCOPE must be affected, full, or nightly.\n',
+    'PLAYWRIGHT_EVIDENCE_SCOPE must be affected, ui, full, or nightly.\n',
   );
   process.exit(1);
 }

@@ -67,7 +67,7 @@ describe('Playwright summary evidence semantics', () => {
       'unknown',
     );
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /must be affected, full, or nightly/);
+    assert.match(result.stderr, /must be affected, ui, full, or nightly/);
     assert.doesNotMatch(result.stderr, /\n\s+at\s/);
   });
 
@@ -141,5 +141,26 @@ describe('Playwright summary evidence semantics', () => {
       result.stdout,
       /firefox ✓|firefox[^\n]*(?:已覆盖|covered)/i,
     );
+  });
+});
+
+describe('UI 视觉 QA lane 的证据口径', () => {
+  it('ui 口径只要求 chromium + firefox，不要求 chromium-pr-smoke', () => {
+    const directory = temporaryDirectory();
+    const resultsPath = writeResults(directory, ['chromium', 'firefox']);
+    const result = runSummary(resultsPath, true, 'ui');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /chromium ✓/);
+    assert.match(result.stdout, /firefox ✓/);
+  });
+
+  it('同一份 ui 结果在默认 affected 口径下会失败', () => {
+    /* 这正是 ui.yml 未声明 scope 时的行为：永远缺 chromium-pr-smoke。
+       本用例锁住「ui lane 必须显式声明自己的口径」这条结论。 */
+    const directory = temporaryDirectory();
+    const resultsPath = writeResults(directory, ['chromium', 'firefox']);
+    const result = runSummary(resultsPath, true, 'affected');
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /chromium-pr-smoke ✗/);
   });
 });
