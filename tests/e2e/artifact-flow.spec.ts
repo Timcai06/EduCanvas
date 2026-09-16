@@ -12,10 +12,7 @@ import {
   waitForGenerationJobSucceeded,
 } from './fixtures/general-artifact-fixture';
 
-async function expectMindMapDragStopsOnRelease(
-  page: Page,
-  canvas: Locator,
-) {
+async function expectMindMapDragStopsOnRelease(page: Page, canvas: Locator) {
   const viewport = canvas.locator('[data-mind-map-viewport]');
   const map = viewport.locator('.mind-map-canvas');
   const box = await viewport.boundingBox();
@@ -195,12 +192,18 @@ test('上传从空白入口建立笔记本来源，不把来源伪装成 Compose
   ).toHaveCount(0);
   await page.getByRole('button', { name: '添加来源' }).click();
   await page.getByRole('menuitem', { name: '上传文件' }).click();
+  await expect(page.getByRole('dialog', { name: '上传文件' })).toBeVisible();
+  /* 笔记本归属说明已被有意移除（见 asset-upload-panel.test.tsx
+     「以紧凑入口展示文档格式，不重复笔记本归属说明」）。这里改断言紧凑入口
+     本身：固定 space 作用域时只给格式提示与选择入口，且不出现「保存范围」——
+     后者才是本用例要防的「把来源伪装成 Composer 本轮工具」。 */
+  const uploadDialog = page.getByRole('dialog', { name: '上传文件' });
   await expect(
-    page.getByRole('dialog', { name: '上传文件' }),
+    uploadDialog.getByText(
+      'PDF、Word、PowerPoint、Excel、Markdown 或 TXT，最大 25 MB',
+    ),
   ).toBeVisible();
-  await expect(
-    page.getByText('文件会保存到当前笔记本的来源中，切换笔记本不会带走。'),
-  ).toBeVisible();
+  await expect(uploadDialog.getByText('保存范围')).toHaveCount(0);
   await expect(
     page.getByRole('navigation', { name: '工作区主导航' }),
   ).toHaveCount(0);

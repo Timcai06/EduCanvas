@@ -101,6 +101,11 @@ export default defineConfig({
       EDUCANVAS_ENABLE_DESIGN_QA: 'true',
       MODEL_GATEWAY_PROVIDER: '',
       MODEL_GATEWAY_API_KEY: '',
+      /* 深度研究入口按 isWebSearchConfigured() 在 SSR 阶段决定可用性（#479
+         让不可用状态诚实地禁用按钮）。E2E 的搜索与 turn 流量全部由
+         page.route 拦截，这里只需要打开能力门，不会产生真实检索请求；
+         缺了它，WS09 深度研究用例会点击一个永远 disabled 的按钮。 */
+      SEARCH_API_KEY: 'e2e-placeholder-search-key',
       /* E2E 的原始 Asset 与 Worker 派生物共用同一个隔离根；否则 Web 读取
          默认 uploads、Worker 读取 OBJECT_STORAGE_ROOT，会让真实预览链断开。 */
       ASSET_STORAGE_ROOT: objectStorageRoot,
