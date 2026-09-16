@@ -12,7 +12,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { gatewayProbe, probe } from './local-health-probe.mjs';
+import { gatewayProbe, probe, webRuntimeProbe } from './local-health-probe.mjs';
 import {
   killOwnedProcessTree,
   pidAlive,
@@ -36,16 +36,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * 状态卡片渲染（纯函数，测试友好）。返回行数组（不含标题）。
  * 状态词保持历史契约：ready/stopped/down/none，detail 含 dbPort/urls/pid。
+ * 行标签：末行由 Runtime 改名为 Session（见下方注释），其余不变。
  */
 export function renderStatusCard({
   database,
   gateway,
   web,
   worker,
+  webRuntime,
   latest,
   dbPort,
   webUrl,
   gatewayUrl,
+  runtimeOrigin,
   colorEnabled,
 }) {
   const rows = [
@@ -57,7 +60,11 @@ export function renderStatusCard({
       worker ? 'ready' : 'down',
       worker ? `pid=${latest?.services?.worker?.pid ?? '-'}` : '',
     ],
-    ['Runtime', latest?.state ?? 'none', latest?.runId ?? ''],
+    ['Web Runtime', webRuntime ? 'ready' : 'stopped', runtimeOrigin ?? ''],
+    /* 这一行是编排「会话」状态与 runId，不是某个服务。原标签叫 Runtime，
+       与上面真正的 web-runtime 服务同名，两行并排时无法分辨，故改名 Session；
+       状态词 ready/stopped/down/none 的历史契约不变。 */
+    ['Session', latest?.state ?? 'none', latest?.runId ?? ''],
   ];
   return rows.map(([name, state, detail]) => {
     const mark =
@@ -67,14 +74,22 @@ export function renderStatusCard({
 }
 
 /** 输出当前状态表；返回是否全部就绪。 */
-export async function runStatus({ webUrl, gatewayUrl, colorEnabled }) {
-  const [gateway, web, worker, latest, database] = await Promise.all([
-    gatewayProbe(gatewayUrl),
-    probe(webUrl),
-    workerRunning(),
-    readLatest(DEFAULT_LOGS_ROOT),
-    isDatabaseRunning(),
-  ]);
+export async function runStatus({
+  webUrl,
+  gatewayUrl,
+  runtimeHealthUrl,
+  runtimeOrigin,
+  colorEnabled,
+}) {
+  const [gateway, web, worker, webRuntime, latest, database] =
+    await Promise.all([
+      gatewayProbe(gatewayUrl),
+      probe(webUrl),
+      workerRunning(),
+      runtimeHealthUrl ? webRuntimeProbe(runtimeHealthUrl) : false,
+      readLatest(DEFAULT_LOGS_ROOT),
+      isDatabaseRunning(),
+    ]);
   // Makefile 通过 EDUCANVAS_POSTGRES_PORT 覆盖本地 Compose 宿主端口映射，
   // 这里必须读同一环境变量，不能写死（默认 5434）。
   const dbPort = process.env.EDUCANVAS_POSTGRES_PORT ?? '5434';
@@ -88,15 +103,17 @@ export async function runStatus({ webUrl, gatewayUrl, colorEnabled }) {
     gateway,
     web,
     worker,
+    webRuntime,
     latest,
     dbPort,
     webUrl,
     gatewayUrl,
+    runtimeOrigin,
     colorEnabled,
   })) {
     out(line);
   }
-  return gateway && web && worker && latest?.state === 'running';
+  return gateway && web && worker && webRuntime && latest?.state === 'running';
 }
 
 /**

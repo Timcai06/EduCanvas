@@ -90,7 +90,7 @@ Windows 请先阅读[运行文档](docs/07-operations/)，并使用根目录的 
 ```bash
 make doctor       # 检查 Node、pnpm、Docker 与 .env
 make dev          # 启动 Web 验证环境
-make all          # 启动 Database、Gateway、Web、Worker
+make all          # 启动 Database、Gateway、Web、Worker、Web Runtime
 make status       # 查看本地服务状态
 make stop         # 优雅停止当前 core 与本地数据库
 

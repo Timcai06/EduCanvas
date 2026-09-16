@@ -16,6 +16,27 @@ export async function probe(url) {
   }
 }
 
+/**
+ * web-runtime 是否就绪。与 Gateway 同样校验响应体而不只是 2xx：
+ * `isolationRequirement` 证明这确实是隔离 Runtime 在应答，而不是同端口上
+ * 恰好起了别的服务。探针走绑定地址（127.0.0.1），不是对外的 publicOrigin。
+ */
+export async function webRuntimeProbe(runtimeHealthUrl) {
+  try {
+    const response = await fetch(runtimeHealthUrl, {
+      signal: AbortSignal.timeout(1_000),
+    });
+    if (!response.ok) return false;
+    const body = await response.json();
+    return (
+      body?.status === 'ok' &&
+      body?.isolationRequirement === 'cross-site-configured'
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Gateway 是否按健康协议就绪（service + protocol 双字段校验）。 */
 export async function gatewayProbe(gatewayUrl) {
   try {
