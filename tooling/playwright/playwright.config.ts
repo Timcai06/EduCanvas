@@ -28,6 +28,8 @@ export default defineConfig({
   testIgnore: [
     '**/web-runtime-composition.spec.ts',
     '**/web-runtime-stress.spec.ts',
+    /* 渲染器走查只产出证据截图，不做视觉断言，按需运行而不占 CI 时间。 */
+    '**/renderer-walkthrough.spec.ts',
   ],
   globalSetup: path.join(repoRoot, 'tests/e2e/global-setup.ts'),
   fullyParallel: false,
