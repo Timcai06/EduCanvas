@@ -13,7 +13,6 @@ import {
 import {
   useEffect,
   useCallback,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +25,7 @@ import { MindMapEdgeLayer } from './mind-map-edge-layer';
 import { MindMapZoomControls } from './mind-map-zoom-controls';
 import { RoleBadge } from './mind-map-role-badge';
 import { useCollapseAnchoring } from './mind-map-collapse-anchoring';
+import { ZOOM_STEP, useMindMapViewport } from './mind-map-viewport';
 import {
   MIND_MAP_ASK_NODE_EVENT,
   MIND_MAP_NODE_HEIGHT,
@@ -35,12 +35,6 @@ import {
   nextVisibleNode,
   type MindMapKeyDirection,
 } from './mind-map-layout';
-
-const MAX_ZOOM = 2.4;
-const MIN_ZOOM = 0.12;
-const ZOOM_STEP = 0.15;
-const clampScale = (scale: number) =>
-  Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
 
 /** semanticRole 的可视化徽标：图标 + 语义色 token；未标注角色不显示。 */
 type OnAskNode = (payload: {
@@ -74,11 +68,6 @@ export function MindMapRenderer({
     new Set(),
   );
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
-  const [transform, setTransform] = useState({
-    scale: 1,
-    offsetX: 0,
-    offsetY: 0,
-  });
 
   const layout = useMemo(
     () =>
@@ -95,53 +84,14 @@ export function MindMapRenderer({
       ? focusedNodeId
       : (visibleNodeIds[0] ?? null);
 
-  /* ResizeObserver 回调里要读最新 scale，但不能把 transform 放进 effect 依赖
-     （否则每次平移/缩放都重建 observer）。用 ref 旁路读取。 */
-  const transformRef = useRef(transform);
-  useEffect(() => {
-    transformRef.current = transform;
-  }, [transform]);
-
-  const fitView = useCallback(() => {
-    if (!layout || !nodeRootRef.current) return;
-    const rect = nodeRootRef.current.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const scale = clampScale(
-      Math.min(
-        (rect.width - 32) / layout.width,
-        (rect.height - 32) / layout.height,
-      ),
-    );
-    setTransform({
-      scale,
-      offsetX: (rect.width - layout.width * scale) / 2,
-      offsetY: (rect.height - layout.height * scale) / 2,
-    });
-  }, [layout]);
-
-  /* fitView 会整体覆写 transform（含 scale）。折叠/展开会重算 layout，
-     进而让 fitView 引用变化——此前这个 effect 每次都重跑，用户手动放大的
-     倍率被直接打回 fit-to-view，点一次折叠按钮画面就跳一下。这里只在首次拿到
-     layout 时自适应一次；此后缩放归用户所有，折叠位移由 useCollapseAnchoring
-     单独补偿。ResizeObserver 同理：只有用户没手动缩放（scale===1）时才重新
-     适配容器，否则保留用户视角。 */
-  const didFitRef = useRef(false);
-  useLayoutEffect(() => {
-    if (!layout) return;
-    if (!didFitRef.current) {
-      didFitRef.current = true;
-      fitView();
-    }
-
-    const viewport = nodeRootRef.current;
-    if (!viewport || typeof ResizeObserver === 'undefined') return;
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (transformRef.current.scale === 1) fitView();
-    });
-    resizeObserver.observe(viewport);
-    return () => resizeObserver.disconnect();
-  }, [fitView, layout]);
+  const {
+    transform,
+    setTransform,
+    applyDrift,
+    fitView,
+    requestZoom,
+    zoomFromViewportCenter,
+  } = useMindMapViewport(nodeRootRef, layout);
 
   useEffect(() => {
     if (!effectiveFocusedNodeId || !nodeRootRef.current) return;
@@ -152,55 +102,13 @@ export function MindMapRenderer({
       ?.focus();
   }, [effectiveFocusedNodeId, layout]);
 
-  /* 折叠/展开的视口锚定补偿：细节在 useCollapseAnchoring，transform 归本组件 */
-  const applyDrift = useCallback((dx: number, dy: number) => {
-    setTransform((previous) => ({
-      ...previous,
-      offsetX: previous.offsetX + dx,
-      offsetY: previous.offsetY + dy,
-    }));
-  }, []);
+  /* 折叠/展开的视口锚定补偿：细节在 useCollapseAnchoring，位移应用归视口 hook */
   const { captureAnchor } = useCollapseAnchoring(
     nodeRootRef,
     layout,
     applyDrift,
   );
 
-  const requestZoom = useCallback(
-    (nextScale: number, origin?: { x: number; y: number }) => {
-      setTransform((previous) => {
-        const to = clampScale(nextScale);
-        if (origin && nodeRootRef.current) {
-          const rect = nodeRootRef.current.getBoundingClientRect();
-          const cursorX = origin.x - rect.left;
-          const cursorY = origin.y - rect.top;
-          const worldX = (cursorX - previous.offsetX) / previous.scale;
-          const worldY = (cursorY - previous.offsetY) / previous.scale;
-          const offsetX = cursorX - worldX * to;
-          const offsetY = cursorY - worldY * to;
-          return { scale: to, offsetX, offsetY };
-        }
-        return { ...previous, scale: to };
-      });
-    },
-    [],
-  );
-
-  /* 控件与键盘缩放以视口中心为原点；滚轮以光标为原点。 */
-  const zoomFromViewportCenter = useCallback(
-    (nextScale: number) => {
-      const rect = nodeRootRef.current?.getBoundingClientRect();
-      if (!rect) {
-        requestZoom(nextScale);
-        return;
-      }
-      requestZoom(nextScale, {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      });
-    },
-    [requestZoom],
-  );
   const handleZoomIn = useCallback(
     () => zoomFromViewportCenter(transform.scale + ZOOM_STEP),
     [transform.scale, zoomFromViewportCenter],
