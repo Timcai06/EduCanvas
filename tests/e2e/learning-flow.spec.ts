@@ -455,9 +455,17 @@ test('@ui 移动 Canvas 使用模态语义、隔离背景并约束焦点', async
   });
   await expect(closeButton).toBeFocused();
 
-  /* close 向前循环到最后一个 radio group，最后一项再向后回到 close。 */
+  /* close 向前循环到最后一个 radio group，最后一项再向后回到 close。
+     原生 radio group 里只有首项参与 Tab 序列，所以回绕落在最后一个 group
+     的首项。按 group name 推导而不是写死序号：演示课题目数量增加后，旧的
+     nth(2) 指向的已不是最后一个 group，用例长期以 inactive 失败。 */
+  const radios = dialog.getByRole('radio');
+  const lastGroupName = await radios.last().getAttribute('name');
+  const lastGroupEntry = dialog
+    .locator(`input[type="radio"][name="${lastGroupName}"]`)
+    .first();
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByRole('radio').nth(2)).toBeFocused();
+  await expect(lastGroupEntry).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(closeButton).toBeFocused();
 
