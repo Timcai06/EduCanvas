@@ -30,6 +30,8 @@ export default defineConfig({
     '**/web-runtime-stress.spec.ts',
     /* 渲染器走查只产出证据截图，不做视觉断言，按需运行而不占 CI 时间。 */
     '**/renderer-walkthrough.spec.ts',
+    /* 演示路径走查同理：录像前跑一次确认路径不翻车，不进 CI。 */
+    '**/demo-walkthrough.spec.ts',
   ],
   globalSetup: path.join(repoRoot, 'tests/e2e/global-setup.ts'),
   fullyParallel: false,
