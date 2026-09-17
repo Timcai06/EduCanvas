@@ -68,6 +68,9 @@ jobs:
         if: always()
         env:
           PLAYWRIGHT_RESULTS_REQUIRED: ${{ steps.ui_review.outcome == 'success' }}
+          # 视觉 QA lane 只跑 @ui 用例、只装 chromium + firefox；用默认的
+          # affected 口径会永远缺 chromium-pr-smoke 与黄金旅程。
+          PLAYWRIGHT_EVIDENCE_SCOPE: ui
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
