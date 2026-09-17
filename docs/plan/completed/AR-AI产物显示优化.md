@@ -1,10 +1,11 @@
 # AI 产物显示优化
 
 - 任务分配名：`AR AI 产物显示优化`
-- 状态：`active`
+- 状态：`completed`
 - 负责人：hzlgou
 - 实现执行：项目负责人 + 协作 Agent，每次只领取一个原子任务
-- 最后验证时间：2026-09-16
+- 最后验证时间：2026-09-17
+- 归档时间：2026-09-17
 - 参考依据：[docs/research/2026-08/04-08 外部实现参考调研](../../research/00-研究说明.md)、[Issue #477](https://github.com/Timcai06/EduCanvas/issues/477)
 - 文档 PR：[#478](https://github.com/Timcai06/EduCanvas/pull/478)（不阻塞实施）
 
@@ -94,9 +95,9 @@ PR 合并进 `main`，只剩 AR09 收口。对照如下。
 | AR06 MD 只读路径 | 已合并 | [#481](https://github.com/Timcai06/EduCanvas/pull/481) |
 | AR07 Callout 渲染 | 已合并 | [#483](https://github.com/Timcai06/EduCanvas/pull/483) |
 | AR08 Callout 生成端 | 已合并 | [#484](https://github.com/Timcai06/EduCanvas/pull/484) |
-| AR09 全量收口 | `IN_PROGRESS` | 走查脚本 [#498](https://github.com/Timcai06/EduCanvas/pull/498)；缺陷 #487 [#491](https://github.com/Timcai06/EduCanvas/pull/491)、#488 [#497](https://github.com/Timcai06/EduCanvas/pull/497) |
+| AR09 全量收口 | 已合并 | 走查脚本 [#498](https://github.com/Timcai06/EduCanvas/pull/498)；缺陷修复 [#491](https://github.com/Timcai06/EduCanvas/pull/491)、[#497](https://github.com/Timcai06/EduCanvas/pull/497) |
 
-### AR09 进度（2026-09-16）
+### AR09 收口（2026-09-17 完成）
 
 「五渲染器手动走查」已改成可复现脚本 `pnpm test:walkthrough`（[#498](https://github.com/Timcai06/EduCanvas/pull/498)）：
 用既有 DB fixture 把五个产物种进同一 Notebook，逐个在 Canvas 打开并截图到
@@ -110,7 +111,7 @@ PR 合并进 `main`，只剩 AR09 收口。对照如下。
 Markdown 标题层级分明、callout 成框、代码块带 `PYTHON` 角标；闪卡翻面可用；
 Slides 与绘本正常。
 
-AR09 收口前必须先关闭合并后暴露的三个显示缺陷，它们都落在本线已交付的渲染器上：
+合并后暴露的三个显示缺陷已全部关闭，它们都落在本线已交付的渲染器上：
 
 - [#487](https://github.com/Timcai06/EduCanvas/issues/487) markdown_document 标题无层级、
   代码块无结构与语言标识——AR06 的只读路径把排版挂在未安装的 Tailwind `prose` 上。
@@ -132,3 +133,33 @@ AR09 收口前必须先关闭合并后暴露的三个显示缺陷，它们都落
 - `prefers-reduced-motion: reduce` 下所有新动画降级可用（人工核验一次）；
 - 键盘流不抢输入框焦点、不同屏面板互不干扰；
 - Schema 校验失败仍显示错误态而非崩溃（既有纪律回归）。
+
+## 七、归档结论（2026-09-17）
+
+AR00-AR09 全部合并进 `main`。交付范围与计划一致：五个内容驱动渲染器的读体验
+补齐、callout 渲染与生成端闭环、共享交互基元与分支色板 token。
+
+### 实际偏差
+
+- **走查方式**：计划写的是「五渲染器手动走查」，实际改为可复现脚本
+  `pnpm test:walkthrough`。理由是人工走查留不下证据、无法在每次改动后重跑，
+  而 #487/#488 恰恰是第一批合并后才由用户发现的读体验缺陷。
+- **三个后置缺陷**：#487（Markdown 标题无层级、代码块无语言标识）、
+  #488（思维导图折叠重置缩放 + 长标签截断）在第一批合并后才暴露，已分别由
+  #491、#497 修复。#489（web_app 产物启动失败）不属于本线范围，由
+  [#500](https://github.com/Timcai06/EduCanvas/pull/500) 单独关闭。
+- **约束维持**：「不引入新依赖」在 #487 的修复中继续成立——排版复用既有
+  `.chat-prose` 与 `features/chat/markdown` 渲染边界，而不是补装
+  `@tailwindcss/typography`。
+
+### 未完成项去向
+
+- 走查截图只作为人看的证据，不做像素级快照基线（字体与渲染差异会造成假失败），
+  这是刻意取舍，不列为遗留；
+- 移动端视口的渲染器适配不在本线范围，也不作为后续重点。
+
+### 验收证据
+
+- `pnpm test:walkthrough` 5/5，产出 `output/renderer-walkthrough/` 六张截图；
+- 合并后的 `main` 上完整 E2E 矩阵 159/159；
+- `apps/web` typecheck、lint、Prettier 与 `features/canvas` 单测通过。
