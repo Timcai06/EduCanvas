@@ -10,6 +10,25 @@ import {
   waitForAudiblePlaybackStart,
 } from './fixtures/live-voice-fixture';
 
+/*
+ * Live Voice 的可见状态由「播放时钟」驱动：`正在回答` 只在 use-live-speech-playback
+ * 的 onFirstAudio 真正听到第一段 PCM 后才 dispatch('start')。这是刻意设计——
+ * 回答状态必须对应真实播放，而不是收到响应就先宣称在说话。
+ *
+ * 代价是这三个用例依赖可用的音频输出。CI 的 headless Firefox 没有音频设备，
+ * AudioContext 起不来，onFirstAudio 永不触发，断言必然失败（2026-09-16 完整矩阵
+ * run 35119976720：156 passed / 3 failed，三个全在 firefox 且全在本文件）。
+ * chromium 与 chromium-mobile 均正常通过，行为覆盖并未丢失。
+ *
+ * 因此显式跳过 firefox 并写明原因，而不是放宽断言去迁就环境——后者会让
+ * 「按播放时钟呈现回答」这条产品约束失去回归保护。Firefox 上的真实播放行为
+ * 归人工验收（见 docs/06-quality/10-UV真实环境验收.md）。
+ */
+test.skip(
+  ({ browserName }) => browserName === 'firefox',
+  'CI headless Firefox 无音频设备，播放时钟驱动的 `正在回答` 状态无法到达',
+);
+
 async function enterLiveWorkspace(page: Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
