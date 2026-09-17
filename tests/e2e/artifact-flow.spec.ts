@@ -6,6 +6,7 @@ import {
   createArtifactFixture,
   createArtifactViaApi,
   createAudioOverviewFixture,
+  createMindMapArtifactFixture,
   ensureGeneralNotebook,
   openArtifactAndExpectLatest,
   openStudioOutput,
@@ -378,4 +379,39 @@ test('音频概览在恢复后可播放与文字稿', async ({ page }) => {
       .getByRole('dialog', { name: '产物Canvas' })
       .locator('audio[aria-label="播放音频概览"]'),
   ).toBeVisible();
+});
+
+test('G03-11 删除产物后刷新不再可用，Studio 列表与 Canvas 均不复现', async ({
+  page,
+}) => {
+  /* G03 端到端验收第 11 步「删除/撤权后内容不再可用」。此前只有单测与 API 层
+     覆盖，没有端到端证据：删除若只清了前端状态而服务端仍可读，刷新即复现。
+     这里走真实 UI 路径（二次确认）并以刷新后的服务端事实为准。 */
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await ensureGeneralNotebook(page);
+  const fixture = await createMindMapArtifactFixture(page, '待删除思维导图');
+  await page.reload();
+
+  await openArtifactAndExpectLatest(page, fixture.title);
+  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await expect(canvas).toBeVisible();
+
+  await canvas.getByRole('button', { name: '删除', exact: true }).click();
+  await expect(canvas.getByText('确认删除？')).toBeVisible();
+  await canvas.getByRole('button', { name: '确认', exact: true }).click();
+
+  // 删除后 Canvas 关闭，产物不再出现在输出列表
+  await expect(canvas).toHaveCount(0);
+  const studio = await openStudioOutput(page);
+  await expect(studio.getByRole('button', { name: fixture.title })).toHaveCount(
+    0,
+  );
+
+  // 刷新后以服务端事实复核：不是只清了前端状态
+  await page.reload();
+  const studioAfterReload = await openStudioOutput(page);
+  await expect(
+    studioAfterReload.getByRole('button', { name: fixture.title }),
+  ).toHaveCount(0);
 });
