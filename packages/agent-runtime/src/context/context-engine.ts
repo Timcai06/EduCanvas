@@ -62,6 +62,14 @@ export interface BuiltAgentContext {
 
 export class ContextEngineInputError extends Error {
   readonly code = 'invalid_context_engine_input';
+
+  constructor(
+    message: string,
+    readonly reason:
+      'invalid_input' | 'required_budget_exceeded' = 'invalid_input',
+  ) {
+    super(message);
+  }
 }
 
 function validateVersion(value: string): boolean {
@@ -247,7 +255,10 @@ export function buildAgentContext(input: {
      */
     if (!fits) {
       if (unit.some((item) => item.segment.required)) {
-        throw new ContextEngineInputError('必需Profile Context超过预算');
+        throw new ContextEngineInputError(
+          '必需Context超过预算',
+          'required_budget_exceeded',
+        );
       }
       continue;
     }

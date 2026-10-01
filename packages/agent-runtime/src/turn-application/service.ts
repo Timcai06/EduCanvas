@@ -9,6 +9,7 @@ import { completeTurnApplication } from './completion';
 import type { TurnApplicationDependencies } from './dependencies';
 import {
   mapModelFailure,
+  mapPreparationFailure,
   NOOP_CANCELLATION,
   NOOP_TRACE,
   startTraceSafely,
@@ -25,7 +26,7 @@ import {
   settleTurnFailure,
   type TurnTerminalState,
 } from './session';
-import { turnApplicationFailureLogLine } from './failure-diagnostics';
+import { logTurnApplicationFailure } from './failure-diagnostics';
 
 /**
  * Turn Application 主编排服务 — 固定五阶段管线。
@@ -277,15 +278,14 @@ export class TurnApplicationService implements TurnApplicationPort {
         : { code: 'RUNTIME_FAILED' as const, retryable: true };
       yield await emitFailure(mapped.code, mapped.retryable);
     } catch (error) {
-      console.error(
-        turnApplicationFailureLogLine({
-          operationId: command.operationId,
-          stage,
-          error,
-        }),
-      );
+      logTurnApplicationFailure({
+        operationId: command.operationId,
+        stage,
+        error,
+      });
       if (!terminal.emitted) {
-        yield await emitFailure('RUNTIME_FAILED', true);
+        const failure = mapPreparationFailure(error, stage);
+        yield await emitFailure(failure.code, failure.retryable);
       }
     } finally {
       cancellation.signal?.removeEventListener('abort', forwardCancellation);

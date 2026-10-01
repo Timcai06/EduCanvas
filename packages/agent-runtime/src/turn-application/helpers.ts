@@ -1,3 +1,4 @@
+import { ContextEngineInputError } from '../context/context-engine';
 import { createHash } from 'node:crypto';
 import type {
   ModelMessage,
@@ -183,4 +184,19 @@ export function executionId(
   return createHash('sha256')
     .update(`${operationId}:${round}:${callId}`, 'utf8')
     .digest('hex');
+}
+
+/** 已知输入预算拒绝不可原样重试；非法上下文和未知错误保持运行失败语义。 */
+export function mapPreparationFailure(
+  error: unknown,
+  stage: string,
+): { code: 'BUDGET_EXCEEDED' | 'RUNTIME_FAILED'; retryable: boolean } {
+  const exceeded =
+    stage === 'prepare' &&
+    error instanceof ContextEngineInputError &&
+    error.reason === 'required_budget_exceeded';
+  return {
+    code: exceeded ? 'BUDGET_EXCEEDED' : 'RUNTIME_FAILED',
+    retryable: !exceeded,
+  };
 }
