@@ -13,6 +13,31 @@ const detail = {
 } as ArtifactDetail;
 
 describe('ArtifactStatusCard revision outcome', () => {
+  it('输出截断说明缩小范围，不承诺原样重试可恢复', () => {
+    const html = renderToStaticMarkup(
+      <ArtifactStatusCard
+        generation={{
+          phase: 'failed',
+          outcome: 'failed',
+          kind: 'mind_map',
+          title: '长产物',
+          detail: {
+            ...detail,
+            latestJob: {
+              id: 'job-1',
+              status: 'failed',
+              progress: null,
+              failureCode: 'model_output_limit',
+            },
+          } as ArtifactDetail,
+        }}
+        onOpen={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(html).toContain('生成内容超过输出上限，请缩小范围或分章节生成。');
+    expect(html).not.toContain('可稍后从产物列表重试');
+  });
   it('初次生成达到总轮询上限时显示可恢复提示', () => {
     const html = renderToStaticMarkup(
       <ArtifactStatusCard

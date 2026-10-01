@@ -109,7 +109,10 @@ export function ArtifactStatusCard({
                     generation.detail.artifact.latestVersion > 1
                     ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
                     : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-                  : '生成失败，可稍后从产物列表重试';
+                  : generation.detail?.latestJob?.failureCode ===
+                      'model_output_limit'
+                    ? '生成内容超过输出上限，请缩小范围或分章节生成。'
+                    : '生成失败，可稍后从产物列表重试';
   return (
     <div
       role="status"
