@@ -137,7 +137,7 @@ export const mapFinishReason = (
     case 'length':
       return {
         finishReason: 'length',
-        failure: { code: 'output_limit', retryable: true },
+        failure: { code: 'output_limit', retryable: false },
       };
     case 'content_filter':
       return {

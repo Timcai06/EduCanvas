@@ -118,7 +118,7 @@ describe('OpenAI-compatible失败边界', () => {
     });
   });
 
-  it('length保留usage并映射可重试不完整终态', async () => {
+  it('length保留usage并映射不可重试不完整终态', async () => {
     const chunks = textStreamChunks.map((chunk) => {
       if (
         typeof chunk === 'object' &&
@@ -141,7 +141,7 @@ describe('OpenAI-compatible失败边界', () => {
     );
     expect(length.at(-1)).toMatchObject({
       type: 'failed',
-      error: { code: 'output_limit', retryable: true },
+      error: { code: 'output_limit', retryable: false },
       metadata: { finishReason: 'length' },
     });
   });

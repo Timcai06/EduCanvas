@@ -84,7 +84,8 @@ describe('Turn Application Web/Gateway golden parity', () => {
     ).toMatchObject({
       type: 'turn.failed',
       retryable: false,
-      message: '本轮内容超过处理上限，请缩小提问或减少附带来源后再发送。',
+      message:
+        '本轮内容超过处理上限，请缩小提问、减少附带来源或分章节生成后再发送。',
     });
   });
 

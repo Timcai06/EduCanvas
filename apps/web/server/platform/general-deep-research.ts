@@ -54,7 +54,7 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
       return {
         kind: 'block' as const,
         publicContent:
-          '研究材料不足，尚未达到至少三轮搜索、五个已读取来源和五个有效引用。请重试或调整研究主题。',
+          '研究材料不足：本轮未达到三轮搜索、五个已读来源和五个有效引用的要求。请补充来源或缩小主题后发起新研究。',
         failureCode: 'RESEARCH_REQUIREMENTS_UNMET' as const,
       };
     }

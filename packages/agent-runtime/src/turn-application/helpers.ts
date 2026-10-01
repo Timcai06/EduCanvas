@@ -162,6 +162,9 @@ export function mapModelFailure(error: NormalizedModelError): {
   code: TurnApplicationFailureCode;
   retryable: boolean;
 } {
+  if (error.code === 'output_limit') {
+    return { code: 'BUDGET_EXCEEDED', retryable: false };
+  }
   return {
     code: error.code === 'rate_limit' ? 'RATE_LIMITED' : 'MODEL_FAILED',
     retryable: error.retryable,

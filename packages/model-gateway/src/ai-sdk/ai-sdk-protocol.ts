@@ -131,7 +131,7 @@ export function mapAiSdkFinish(reason: string): {
     case 'length':
       return {
         finishReason: 'length',
-        failure: { code: 'output_limit', retryable: true },
+        failure: { code: 'output_limit', retryable: false },
       };
     case 'content-filter':
       return {
