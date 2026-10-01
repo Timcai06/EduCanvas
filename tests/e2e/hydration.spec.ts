@@ -70,6 +70,10 @@ test.describe('hydration 与客户端运行时健康', () => {
         }
       });
 
+      // /login 与 /register 重定向到带 WebGL 背景的首页。CI trace 显示
+      // 抽屉已可见、无 hydration 错误，但动画/截图占满 runner 的测试预算。
+      // 与匿名首页同样用产品支持的减少动态模式，仍以真实交互证明事件绑定。
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(route, { waitUntil: 'load' });
       await proveClientReady(page, route);
 
