@@ -1,3 +1,4 @@
+import type { AgentLoopCommand } from '../agent-loop-contracts';
 import type {
   ModelAbortSignal,
   ModelMessage,
@@ -149,6 +150,11 @@ export type TurnApplicationOutputGuardFinishResult = Exclude<
  * 返回 block，后续正文不会再公开，Turn Application 会中止当前模型运行。
  */
 export interface TurnApplicationOutputGuardPort {
+  /** 由可信 Profile 提供，不能由浏览器或 Provider 声明。 */
+  completionRequirement?: AgentLoopCommand<
+    never,
+    never
+  >['completionRequirement'];
   push(delta: string): Promise<TurnApplicationOutputGuardPushResult>;
   finish(): Promise<TurnApplicationOutputGuardFinishResult>;
 }

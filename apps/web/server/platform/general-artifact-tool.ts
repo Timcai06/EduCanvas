@@ -26,7 +26,7 @@ import {
 
 const createCanvasArtifactInputSchema = artifactProposalSchema;
 
-const createCanvasArtifactOutputSchema = z
+export const createCanvasArtifactOutputSchema = z
   .object({
     artifactId: z.uuid(),
     jobId: z.uuid(),
