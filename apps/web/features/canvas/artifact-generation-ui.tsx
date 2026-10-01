@@ -241,7 +241,10 @@ export function ArtifactCanvas({
           className={
             detail.artifact.kind === 'mind_map'
               ? 'flex min-h-0 flex-1 overflow-hidden p-2 lg:p-3'
-              : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
+              : detail.artifact.kind === 'note' ||
+                  detail.artifact.kind === 'markdown_document'
+                ? 'flex min-h-0 flex-1 overflow-hidden p-4 lg:p-5'
+                : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
           }
         >
           <ArtifactCanvasContent

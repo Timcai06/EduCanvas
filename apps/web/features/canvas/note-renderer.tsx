@@ -6,7 +6,13 @@ import type { NoteContent } from '@educanvas/canvas-protocol';
    ReactMarkdown 并挂 Tailwind `prose` 类，而仓库未装 @tailwindcss/typography，
    该类恒为空选择器，标题层级与代码块结构全部丢失（#487）。 */
 import { MessageMarkdown } from '@/features/chat/markdown';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   ArrowCounterClockwise,
   Check,
@@ -108,6 +114,14 @@ export function NoteRenderer({
   const [preview, setPreview] = useState(false);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const readingRef = useRef<HTMLDivElement>(null);
+  const readingScrollTop = useRef(0);
+
+  useLayoutEffect(() => {
+    if (!editing && readingRef.current) {
+      readingRef.current.scrollTop = readingScrollTop.current;
+    }
+  }, [editing]);
 
   useEffect(
     () => () => {
@@ -199,7 +213,7 @@ export function NoteRenderer({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {editing && preview ? (
           <div className="flex h-full divide-x divide-line">
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -211,7 +225,7 @@ export function NoteRenderer({
                   setMarkdown(e.target.value);
                   triggerAutosave(e.target.value);
                 }}
-                className="h-full w-full resize-none bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint"
+                className="block h-full w-full resize-none bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint"
                 placeholder="用 Markdown 写笔记…"
                 aria-label="笔记编辑区"
               />
@@ -229,12 +243,18 @@ export function NoteRenderer({
               setMarkdown(e.target.value);
               triggerAutosave(e.target.value);
             }}
-            className="h-full w-full resize-none bg-transparent p-4 font-mono text-sm text-ink outline-none placeholder:text-ink-faint"
+            className="block h-full w-full resize-none bg-transparent p-4 font-mono text-sm text-ink outline-none placeholder:text-ink-faint"
             placeholder="用 Markdown 写笔记…"
             aria-label="笔记编辑区"
           />
         ) : (
-          <div className="h-full overflow-y-auto p-4">
+          <div
+            ref={readingRef}
+            onScroll={(event) => {
+              readingScrollTop.current = event.currentTarget.scrollTop;
+            }}
+            className="h-full overflow-y-auto p-4"
+          >
             <MessageMarkdown text={markdown} />
           </div>
         )}
