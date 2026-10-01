@@ -26,6 +26,11 @@ const messages: Readonly<Record<string, string>> = {
   invalid_request: '请求格式不正确。',
   invalid_upload: '上传参数不完整。',
   asset_too_large: '文件超过大小限制。',
+  asset_not_available: '附件不可访问，请移除失效来源或重新上传后发送。',
+  unsupported_asset_modality:
+    '当前模型无法读取这类附件，请改用提取文本或受支持的文件。',
+  native_asset_budget_exceeded:
+    '本轮图片数量或大小超过限制，请减少图片后发送。',
   avatar_too_large: '头像不能超过 2MB。',
   invalid_avatar: '请选择有效的头像文件。',
   turn_rate_limited: '提问太频繁，请稍后再试。',
