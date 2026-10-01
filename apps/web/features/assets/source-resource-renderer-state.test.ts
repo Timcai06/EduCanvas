@@ -79,6 +79,25 @@ describe('source resource transition guards', () => {
 });
 
 describe('resolveSourceRendererState', () => {
+  it('网页未提取到正文时显示诚实空态', () => {
+    expect(
+      resolveSourceRendererState(
+        makeResource(),
+        {
+          kind: 'text',
+          fileName: '网页',
+          mimeType: 'text/plain',
+          content: '',
+          provenance: 'webpage_text',
+        },
+        null,
+      ),
+    ).toMatchObject({
+      state: 'empty',
+      errorMessage: '该网页未提取到可预览正文。',
+    });
+  });
+
   it.each([
     ['forbidden', 'forbidden', '没有权限'],
     ['not_found', 'not_found', '不存在'],

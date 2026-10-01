@@ -132,9 +132,16 @@ export function SourcePreviewPanel({
               <MessageMarkdown text={preview.content} />
             </article>
           ) : preview.kind === 'text' && preview.content ? (
-            <pre className="mx-auto max-w-3xl whitespace-pre-wrap break-words rounded-2xl bg-card p-5 font-mono text-sm leading-6 text-ink shadow-[var(--shadow-float)]">
-              {preview.content}
-            </pre>
+            <div className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
+              {preview.provenance === 'webpage_text' ? (
+                <p className="mb-3 text-xs text-ink-muted">
+                  网页正文（提取文本）
+                </p>
+              ) : null}
+              <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-ink">
+                {preview.content}
+              </pre>
+            </div>
           ) : preview.kind === 'audio' ? (
             <div className="m-4 space-y-4">
               <audio

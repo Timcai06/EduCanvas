@@ -59,6 +59,8 @@ export const assetPreviewSchema = z.discriminatedUnion('kind', [
       fileName: fileNameSchema,
       mimeType: z.literal('text/plain'),
       content: z.string().max(120_000),
+      /** 导入网页只呈现提取正文，不冒充原始页面。 */
+      provenance: z.literal('webpage_text').optional(),
     })
     .strict(),
   z

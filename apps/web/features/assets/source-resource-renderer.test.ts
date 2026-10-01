@@ -108,6 +108,22 @@ function render(
 }
 
 describe('SourceResourceRendererContent', () => {
+  it('网页正文明确标注派生文本并转义HTML，不执行原网页', () => {
+    const html = render({
+      preview: {
+        kind: 'text',
+        fileName: '网页',
+        mimeType: 'text/plain',
+        provenance: 'webpage_text',
+        content: '<script>alert(1)</script><img src=x onerror=alert(2)>',
+      },
+    });
+    expect(html).toContain('网页正文（提取文本）');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<img src=x');
+  });
+
   it('CanvasHost 渲染 registry 选出的本地 Renderer', () => {
     const resource = makeResource();
     const SelectedRenderer = ({

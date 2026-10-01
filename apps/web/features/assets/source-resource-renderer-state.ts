@@ -101,7 +101,10 @@ export function resolveSourceRendererState(
     return {
       state: 'empty',
       error: null,
-      errorMessage: '这个来源没有可预览内容。',
+      errorMessage:
+        preview.kind === 'text' && preview.provenance === 'webpage_text'
+          ? '该网页未提取到可预览正文。'
+          : '这个来源没有可预览内容。',
     };
   }
   /* DOCX structured 时服务端不跑 mammoth（content 为空是预期），只要派生文本
