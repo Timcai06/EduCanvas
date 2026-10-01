@@ -133,7 +133,7 @@ export function SourcePreviewPanel({
             </article>
           ) : preview.kind === 'text' && preview.content ? (
             <div className="mx-auto max-w-3xl rounded-2xl bg-card p-5 shadow-[var(--shadow-float)]">
-              {preview.provenance === 'webpage_text' ? (
+              {asset.kind === 'link' ? (
                 <p className="mb-3 text-xs text-ink-muted">
                   网页正文（提取文本）
                 </p>

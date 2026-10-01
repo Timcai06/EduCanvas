@@ -102,7 +102,7 @@ export function resolveSourceRendererState(
       state: 'empty',
       error: null,
       errorMessage:
-        preview.kind === 'text' && preview.provenance === 'webpage_text'
+        preview.kind === 'text' && resource.provenance.origin === 'url_import'
           ? '该网页未提取到可预览正文。'
           : '这个来源没有可预览内容。',
     };

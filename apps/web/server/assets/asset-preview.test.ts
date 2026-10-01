@@ -117,8 +117,13 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
       fileName: '讲义.docx',
       mimeType: 'text/plain',
       content: '网页正文'.repeat(40_000).slice(0, 120_000),
-      provenance: 'webpage_text',
     });
+    expect(Object.keys(preview).sort()).toEqual([
+      'content',
+      'fileName',
+      'kind',
+      'mimeType',
+    ]);
     expect(readStoredAssetBytes).not.toHaveBeenCalled();
   });
 
@@ -169,7 +174,7 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
           assetId: ASSET_ID,
         })
       ).preview,
-    ).toMatchObject({ kind: 'text', content: '', provenance: 'webpage_text' });
+    ).toMatchObject({ kind: 'text', content: '' });
   });
 
   it('结构化表示可用时跳过 mammoth，投影图片引用并保留原件下载', async () => {

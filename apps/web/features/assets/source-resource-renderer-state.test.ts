@@ -82,13 +82,14 @@ describe('resolveSourceRendererState', () => {
   it('网页未提取到正文时显示诚实空态', () => {
     expect(
       resolveSourceRendererState(
-        makeResource(),
+        makeResource({
+          provenance: { ...makeResource().provenance, origin: 'url_import' },
+        }),
         {
           kind: 'text',
           fileName: '网页',
           mimeType: 'text/plain',
           content: '',
-          provenance: 'webpage_text',
         },
         null,
       ),

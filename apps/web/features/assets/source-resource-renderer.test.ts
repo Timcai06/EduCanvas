@@ -110,11 +110,13 @@ function render(
 describe('SourceResourceRendererContent', () => {
   it('网页正文明确标注派生文本并转义HTML，不执行原网页', () => {
     const html = render({
+      resource: makeResource({
+        provenance: { ...makeResource().provenance, origin: 'url_import' },
+      }),
       preview: {
         kind: 'text',
         fileName: '网页',
         mimeType: 'text/plain',
-        provenance: 'webpage_text',
         content: '<script>alert(1)</script><img src=x onerror=alert(2)>',
       },
     });

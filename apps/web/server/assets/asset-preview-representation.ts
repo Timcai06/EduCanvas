@@ -84,6 +84,5 @@ export async function projectWebpageTextPreview(
     fileName: version.displayName,
     mimeType: 'text/plain',
     content: content.slice(0, 120_000),
-    provenance: 'webpage_text',
   };
 }
