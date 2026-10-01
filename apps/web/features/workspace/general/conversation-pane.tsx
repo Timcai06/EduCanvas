@@ -16,6 +16,7 @@ import {
   ArtifactStatusCard,
   type GenerationState,
 } from '@/features/canvas/artifact-generation-flow';
+import { projectObservedConversationArtifact } from './conversation-artifact-observation';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GENERAL_MENU_ACTIONS } from './general-chat-config';
 import type { AssetItem } from '@/features/assets/assets-drawer';
@@ -86,15 +87,8 @@ export function projectArtifactGenerationIntoMessages(
     generation.detail?.artifact.latestVersion ?? 0,
   );
   const status: MessageArtifactDTO['status'] =
-    generation.outcome === 'cancelled'
-      ? 'cancelled'
-      : generation.phase === 'failed'
-        ? 'failed'
-        : generation.phase === 'ready'
-          ? 'active'
-          : latestVersion > 0
-            ? 'active'
-            : 'proposed';
+    projectObservedConversationArtifact(generation)?.status ??
+    (latestVersion > 0 ? 'active' : 'proposed');
   let matched = false;
   const projected = messages.map((message) => {
     if (message.role !== 'assistant' || !message.artifacts) return message;

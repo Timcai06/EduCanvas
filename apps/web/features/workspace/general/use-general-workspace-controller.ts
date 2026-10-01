@@ -20,6 +20,7 @@ import {
 } from '@/features/canvas/artifact-client';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
+import { projectObservedConversationArtifact } from './conversation-artifact-observation';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
@@ -56,7 +57,7 @@ import {
   restorePendingGeneralTurn,
 } from './pending-general-turn';
 import { useAgentArtifactEvents } from './use-agent-artifact-events';
-import { shouldOpenArtifactSurface } from './artifact-detail-surface-sync';
+import { useArtifactSurfaceSync } from './artifact-detail-surface-sync';
 import {
   ResourceClientError,
   toClientError,
@@ -144,6 +145,14 @@ export function useGeneralWorkspaceController(options: {
     onArtifactProposed: handleArtifactProposed,
   });
 
+  const { observeArtifact } = turn;
+  useEffect(() => {
+    const observed = projectObservedConversationArtifact(
+      artifactFlow.generation,
+    );
+    if (observed) observeArtifact(observed);
+  }, [artifactFlow.generation, observeArtifact]);
+
   const studioOpenActions = useStudioOpenActions({
     scopeKey: conversationId,
     onSourceValid: (resource, Renderer) => {
@@ -168,17 +177,7 @@ export function useGeneralWorkspaceController(options: {
     openArtifact: studioOpenActions.actions.openArtifact,
   });
 
-  /* Artifact 详情新打开时同步 surface：`artifactFlow.confirm`（openWhenReady）与
-     `observeProposedArtifact` 只在 artifactFlow 内部 setOpenDetail，不会 dispatch
-     surface；这里补上单一资源打开语义，避免 openDetail 有值但 surface 未进入 artifact。 */
-  const prevOpenDetailRef = useRef<ArtifactDetail | null>(null);
-  useEffect(() => {
-    const detail = artifactFlow.openDetail;
-    if (shouldOpenArtifactSurface(prevOpenDetailRef.current, detail)) {
-      workspace.openArtifact(detail.artifact.id);
-    }
-    prevOpenDetailRef.current = detail;
-  }, [artifactFlow.openDetail, workspace]);
+  useArtifactSurfaceSync(artifactFlow.openDetail, workspace.openArtifact);
 
   /* DP08 Web handoff 落点：mount 时按 `?focus=<kind>:<id>` 打开精确资源并清掉 URL
      参数（ref 防 StrictMode 双发；openSource/openArtifact 是稳定 useCallback，只跑一次；

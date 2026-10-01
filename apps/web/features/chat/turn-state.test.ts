@@ -18,6 +18,63 @@ function accepted(turnId = 'turn-1') {
 }
 
 describe('teaching turn browser state machine', () => {
+  it('聊天终态后只更新既有卡片，不创建产物或回退版本', () => {
+    const state = createTeachingTurnState([
+      {
+        id: 'assistant-1',
+        turnId: 'turn-1',
+        clientMessageId: 'client-1',
+        role: 'assistant',
+        status: 'completed',
+        content: '任务已创建',
+        failureCode: null,
+        createdAt: '2026-10-01T00:00:00Z',
+        completedAt: '2026-10-01T00:00:01Z',
+        artifacts: [
+          {
+            id: 'artifact-1',
+            kind: 'note',
+            title: '笔记',
+            status: 'proposed',
+            latestVersion: 0,
+          },
+        ],
+      },
+    ]);
+    const observed = {
+      id: 'artifact-1',
+      kind: 'note',
+      title: '笔记',
+      status: 'failed' as const,
+      latestVersion: 0,
+    };
+    const failed = teachingTurnReducer(state, {
+      type: 'artifact.observed',
+      artifact: observed,
+    });
+    expect(failed.active).toBeNull();
+    expect(failed.messages[0]).toMatchObject({
+      status: 'completed',
+      artifacts: [observed],
+    });
+    expect(
+      teachingTurnReducer(failed, {
+        type: 'artifact.observed',
+        artifact: { ...observed, id: 'unknown' },
+      }).messages,
+    ).toEqual(failed.messages);
+    const active = teachingTurnReducer(failed, {
+      type: 'artifact.observed',
+      artifact: { ...observed, status: 'active', latestVersion: 2 },
+    });
+    expect(
+      teachingTurnReducer(active, {
+        type: 'artifact.observed',
+        artifact: observed,
+      }).messages,
+    ).toEqual(active.messages);
+  });
+
   it('advances pending -> streaming -> completed and ignores a late delta', () => {
     let state = teachingTurnReducer(createTeachingTurnState([]), {
       type: 'send.started',
