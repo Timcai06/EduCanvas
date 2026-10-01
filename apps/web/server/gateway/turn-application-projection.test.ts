@@ -57,6 +57,37 @@ async function expectParity(script: readonly TurnApplicationEvent[]) {
 }
 
 describe('Turn Application Web/Gateway golden parity', () => {
+  it('不可重试模型失败不再引导稍后原样重试', () => {
+    expect(
+      projectTurnApplicationEventToWeb({
+        ...base,
+        type: 'turn.failed',
+        messageId: 'message:assistant:1',
+        code: 'MODEL_FAILED',
+        retryable: false,
+      }),
+    ).toMatchObject({
+      retryable: false,
+      message: '这轮回答未能完成，请调整问题或附带来源后重新发送。',
+    });
+  });
+
+  it('上下文预算超限提示减少来源而非重试', () => {
+    expect(
+      projectTurnApplicationEventToWeb({
+        ...base,
+        type: 'turn.failed',
+        messageId: 'message:assistant:1',
+        code: 'BUDGET_EXCEEDED',
+        retryable: false,
+      }),
+    ).toMatchObject({
+      type: 'turn.failed',
+      retryable: false,
+      message: '本轮内容超过处理上限，请缩小提问或减少附带来源后再发送。',
+    });
+  });
+
   it('keeps text, citation, tool and completed semantics equivalent', async () => {
     await expectParity([
       started,

@@ -94,7 +94,7 @@ describe('gatewayToLegacy 流序语义', () => {
       type: 'turn.failed',
       messageId: 'message:assistant:1',
       code: 'CANCELLED',
-      message: 'AI 暂时无法回答，请稍后重试。',
+      message: '这轮回答未能完成，请调整问题或附带来源后重新发送。',
       retryable: false,
     });
   });

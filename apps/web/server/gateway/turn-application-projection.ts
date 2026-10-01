@@ -8,12 +8,19 @@ import type { TeachingTurnEvent } from '@/features/chat/turn-events';
 function safeFailureMessage(
   code: string,
   audience: 'general' | 'teaching',
+  retryable: boolean,
 ): string {
+  if (code === 'BUDGET_EXCEEDED') {
+    return '本轮内容超过处理上限，请缩小提问或减少附带来源后再发送。';
+  }
   if (code === 'RATE_LIMITED') return '请求较多，请稍后重试。';
   if (code === 'POLICY_BLOCKED') return '这轮内容已由安全规则停止。';
   if (code === 'CAPABILITY_UNAVAILABLE') return '当前能力暂时不可用。';
   if (code === 'RESEARCH_REQUIREMENTS_UNMET') {
     return '研究材料不足，尚未达到完整报告所需的搜索、来源和引用数量。请重试或调整研究主题。';
+  }
+  if (!retryable) {
+    return '这轮回答未能完成，请调整问题或附带来源后重新发送。';
   }
   if (audience === 'teaching') {
     return 'AI 老师暂时无法连接，请稍后重试。';
@@ -165,7 +172,7 @@ export function projectTurnApplicationEventToWeb(
         type: 'turn.failed',
         messageId: event.messageId,
         code,
-        message: safeFailureMessage(code, audience),
+        message: safeFailureMessage(code, audience, event.retryable),
         retryable: event.retryable,
       };
     }
@@ -263,7 +270,7 @@ export async function* gatewayToLegacy(
           type: 'turn.failed',
           messageId: assistantMessageId ?? event.operationId,
           code: event.code,
-          message: safeFailureMessage(event.code, audience),
+          message: safeFailureMessage(event.code, audience, event.retryable),
           retryable: event.retryable,
         };
         break;
