@@ -90,13 +90,16 @@ export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
     isSatisfied(results: readonly ModelToolResult[]): boolean;
   };
   /**
-   * One bounded extra model call after an answer contains no tool calls.
+   * One bounded extra model call after a tool-free answer, unless the profile
+   * confirms its current output already meets the profile's requirements.
    * Unlike completionRequirement, this remediation does not end the loop after
    * a tool result; the profile can continue gathering evidence and then answer.
    */
   toolRemediation?: {
     tool: string;
     prompt: string;
+    /** Optional profile gate for cases where a tool-free answer can already be complete. */
+    shouldAttempt?: () => boolean;
   };
   executeTools(
     calls: readonly ParsedToolCall[],

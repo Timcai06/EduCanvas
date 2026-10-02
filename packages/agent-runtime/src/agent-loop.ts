@@ -345,7 +345,9 @@ export class AgentLoopEngine {
           !remediationAttempted &&
           remediationTool &&
           remediationPrompt &&
-          command.answer.tools.some((tool) => tool.name === remediationTool)
+          command.answer.tools.some((tool) => tool.name === remediationTool) &&
+          (requirement !== undefined ||
+            command.toolRemediation?.shouldAttempt?.() !== false)
         ) {
           remediationAttempted = true;
           remediationPending = true;

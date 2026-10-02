@@ -103,6 +103,73 @@ function loopCommand(
   };
 }
 
+function researchFixture() {
+  const progress = { successfulSearchCount: 0, sourceCount: 0 };
+  const guard = new DeepResearchOutputGuard({
+    get successfulSearchCount() {
+      return progress.successfulSearchCount;
+    },
+    get sourceCount() {
+      return progress.sourceCount;
+    },
+    hasPersistedCitation(url, citationMarker) {
+      return (
+        url === `https://example.com/${citationMarker}` &&
+        citationMarker <= progress.sourceCount
+      );
+    },
+  });
+  let toolCallCount = 0;
+  const executeTools: AgentLoopCommand<null, string>['executeTools'] = async (
+    calls,
+  ) => ({
+    ok: true,
+    results: calls.map((call) => {
+      toolCallCount += 1;
+      const citationMarker =
+        call.tool === 'fetchWebPage' ? progress.sourceCount + 1 : null;
+      if (call.tool === 'webSearch') progress.successfulSearchCount += 3;
+      if (citationMarker !== null) progress.sourceCount = citationMarker;
+      const modelResult: ModelToolResult = {
+        callId: call.callId,
+        tool: call.tool,
+        arguments: call.arguments,
+        output:
+          citationMarker === null
+            ? { completedQueries: ['broad', 'gap', 'focused'] }
+            : {
+                url: `https://example.com/${citationMarker}`,
+                title: `Source ${citationMarker}`,
+                content: `Fetched body ${citationMarker}`,
+                citationMarker,
+              },
+      };
+      return { call, modelResult, detail: null };
+    }),
+  });
+  return { guard, progress, executeTools, toolCallCount: () => toolCallCount };
+}
+
+async function runGuardedLoop(
+  guard: DeepResearchOutputGuard,
+  gateway: TurnModelGateway,
+  executeTools: AgentLoopCommand<null, string>['executeTools'],
+  maxToolRounds = 3,
+) {
+  const events: AgentLoopEvent<null, string>[] = [];
+  for await (const event of new AgentLoopEngine(gateway).stream(
+    loopCommand(guard, executeTools, maxToolRounds),
+  )) {
+    events.push(event);
+    if (event.type === 'model' && event.event.type === 'text_delta') {
+      await guard.push(event.event.delta);
+    } else if (event.type === 'tool.result') {
+      guard.onToolResult(event.result.call.tool, event.result.modelResult);
+    }
+  }
+  return events;
+}
+
 describe('DeepResearchOutputGuard evidence gates', () => {
   it('holds generated text and emits no report when no research tools ran', async () => {
     const report = '# 摘要\n内部草稿，不应泄漏。[1][2][3][4][5]';
@@ -322,6 +389,109 @@ describe('DeepResearchOutputGuard evidence gates', () => {
     await expect(guard.finish()).resolves.toEqual({
       kind: 'emit',
       safeDeltas: [report],
+    });
+  });
+
+  it('does not remediate a valid tool-free final report after research', async () => {
+    const report =
+      '# 摘要\n结论一[1]，结论二[2]，结论三[3]，结论四[4]，结论五[5]。';
+    const fixture = researchFixture();
+    const requests: StreamTurnTextRequest[] = [];
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        requests.push(request);
+        const events =
+          requests.length === 1
+            ? toolEvents(request, [{ name: 'webSearch', callId: 'search_1' }])
+            : requests.length === 2
+              ? toolEvents(
+                  request,
+                  [1, 2, 3, 4].map((number) => ({
+                    name: 'fetchWebPage',
+                    callId: `fetch_${number}`,
+                  })),
+                )
+              : requests.length === 3
+                ? toolEvents(request, [
+                    { name: 'fetchWebPage', callId: 'fetch_5' },
+                  ])
+                : textEvents(request, report);
+        for (const event of events) yield event;
+      },
+    };
+
+    const events = await runGuardedLoop(
+      fixture.guard,
+      gateway,
+      fixture.executeTools,
+      4,
+    );
+
+    expect(requests).toHaveLength(4);
+    expect(requests[3]?.messages.at(-1)?.content).not.toBe(
+      fixture.guard.toolRemediation.prompt,
+    );
+    expect(requests[3]?.toolResults).toHaveLength(6);
+    expect(fixture.toolCallCount()).toBe(6);
+    expect(fixture.progress).toEqual({
+      successfulSearchCount: 3,
+      sourceCount: 5,
+    });
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+    await expect(fixture.guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [report],
+    });
+  });
+
+  it('uses one bounded remediation when a final tool-free report misses 3/5/5', async () => {
+    const report = '# 摘要\n结论一[1]，结论二[2]，结论三[3]，结论四[4]。';
+    const fixture = researchFixture();
+    const requests: StreamTurnTextRequest[] = [];
+    const gateway: TurnModelGateway = {
+      async *streamTurnText(request) {
+        requests.push(request);
+        const events =
+          requests.length === 1
+            ? toolEvents(request, [{ name: 'webSearch', callId: 'search_1' }])
+            : requests.length === 2
+              ? toolEvents(
+                  request,
+                  [1, 2, 3, 4].map((number) => ({
+                    name: 'fetchWebPage',
+                    callId: `fetch_${number}`,
+                  })),
+                )
+              : textEvents(request, report);
+        for (const event of events) yield event;
+      },
+    };
+
+    const events = await runGuardedLoop(
+      fixture.guard,
+      gateway,
+      fixture.executeTools,
+    );
+
+    expect(requests).toHaveLength(4);
+    expect(requests[2]?.messages.at(-1)?.content).not.toBe(
+      fixture.guard.toolRemediation.prompt,
+    );
+    expect(requests[3]?.messages.at(-1)).toEqual({
+      role: 'system',
+      content: fixture.guard.toolRemediation.prompt,
+    });
+    expect(requests[3]?.toolResults).toHaveLength(5);
+    expect(fixture.toolCallCount()).toBe(5);
+    expect(fixture.progress).toEqual({
+      successfulSearchCount: 3,
+      sourceCount: 4,
+    });
+    expect(events.at(-1)).toMatchObject({ type: 'completed' });
+    await expect(fixture.guard.finish()).resolves.toMatchObject({
+      kind: 'block',
+      failureCode: 'RESEARCH_REQUIREMENTS_UNMET',
+      publicContent: insufficientEvidenceMessage,
     });
   });
 
