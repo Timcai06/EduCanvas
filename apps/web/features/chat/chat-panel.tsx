@@ -16,7 +16,10 @@ import { motionDuration } from '@/features/theme/motion';
 import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
+import type { AgentTurnSendOutcome } from './turn-send-outcome';
 import { ConversationArtifactCard } from './conversation-artifact-card';
+import { ArtifactConfirmationCard } from '@/features/workspace/general/artifact-confirmation-card';
+import type { ArtifactProposalKind } from '@educanvas/agent-core';
 import { ChatCitations } from './chat-citations';
 import { StreamShimmer } from './stream-shimmer';
 import { ToolTrace } from './tool-trace';
@@ -146,6 +149,7 @@ export function ChatPanel({
   onPreviewHtml,
   onOpenArtifact,
   onOpenSource,
+  onArtifactConfirmation,
   assistantLabel = 'AI 老师',
 }: {
   messages: readonly ChatMessage[];
@@ -160,6 +164,11 @@ export function ChatPanel({
   onOpenArtifact?: (artifactId: string) => void;
   /** 网页引用优先回到当前 Notebook 的 Source，而不是直接离开产品。 */
   onOpenSource?: (assetId: string) => void;
+  onArtifactConfirmation?: (input: {
+    confirmationId: string;
+    kind: ArtifactProposalKind;
+    clientMessageId: string;
+  }) => Promise<AgentTurnSendOutcome> | void;
   assistantLabel?: string;
 }) {
   return (
@@ -279,6 +288,18 @@ export function ChatPanel({
                     />
                   ))}
                 </div>
+              ) : null}
+              {message.artifactConfirmation && onArtifactConfirmation ? (
+                <ArtifactConfirmationCard
+                  confirmation={message.artifactConfirmation}
+                  onConfirm={(confirmationId, kind, clientMessageId) =>
+                    onArtifactConfirmation({
+                      confirmationId,
+                      kind,
+                      clientMessageId,
+                    })
+                  }
+                />
               ) : null}
               {message.suggestsCanvas && !canvasOpen ? (
                 <div className="flex flex-wrap gap-2 pt-1">

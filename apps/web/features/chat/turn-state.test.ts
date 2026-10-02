@@ -18,6 +18,74 @@ function accepted(turnId = 'turn-1') {
 }
 
 describe('teaching turn browser state machine', () => {
+  it('stores a proposed artifact confirmation on the assistant message', () => {
+    let state = teachingTurnReducer(createTeachingTurnState([]), {
+      type: 'send.started',
+      clientMessageId: 'client-1',
+      text: '请保存成思维导图',
+    });
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: accepted(),
+    });
+    state = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'artifact.confirmation_required',
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        confirmationId: '11111111-1111-4111-8111-111111111111',
+        kind: 'mind_map',
+        title: '思维导图',
+      },
+    });
+    expect(state.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      artifactConfirmation: {
+        id: '11111111-1111-4111-8111-111111111111',
+        kind: 'mind_map',
+        title: '思维导图',
+      },
+    });
+  });
+
+  it('a late proposal event does not downgrade the persisted confirmed kind', () => {
+    const state = createTeachingTurnState([
+      {
+        id: 'assistant-1',
+        turnId: 'turn-1',
+        clientMessageId: 'client-1',
+        role: 'assistant',
+        status: 'completed',
+        content: '已确认',
+        failureCode: null,
+        createdAt: '2026-10-01T00:00:00Z',
+        completedAt: '2026-10-01T00:00:01Z',
+        artifactConfirmation: {
+          id: '11111111-1111-4111-8111-111111111111',
+          kind: 'slides',
+          title: 'Slides',
+          status: 'confirmed',
+        },
+      },
+    ]);
+    const replayed = teachingTurnReducer(state, {
+      type: 'stream.event',
+      event: {
+        type: 'artifact.confirmation_required',
+        schemaVersion: '1',
+        turnId: 'turn-1',
+        confirmationId: '11111111-1111-4111-8111-111111111111',
+        kind: 'mind_map',
+        title: '思维导图',
+      },
+    });
+    expect(replayed.messages[0]).toMatchObject({
+      role: 'assistant',
+      artifactConfirmation: { kind: 'slides', status: 'confirmed' },
+    });
+  });
+
   it('聊天终态后只更新既有卡片，不创建产物或回退版本', () => {
     const state = createTeachingTurnState([
       {

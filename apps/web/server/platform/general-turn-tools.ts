@@ -77,6 +77,22 @@ export class WebOperationSources {
     return this.maximumOrdinal;
   }
 
+  /** Resolve a citation only against this operation's persisted URL ledger. */
+  hasPersistedCitation(url: string, citationMarker: number): boolean {
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(url);
+    } catch {
+      return false;
+    }
+    sourceUrl.hash = '';
+    const source = this.byUrl.get(sourceUrl.toString());
+    return (
+      source?.operationId === this.input.operationId &&
+      source.ordinal === citationMarker
+    );
+  }
+
   get trafficKey(): string {
     return linkTrafficKey(this.input.identity.studentId, this.input.spaceId);
   }
@@ -135,6 +151,8 @@ export function createGeneralToolKernel(
   operationImages: WebOperationImageArtifacts,
   options: {
     deepResearch?: boolean;
+    allowArtifactWrites?: boolean;
+    allowArtifactConfirmation?: boolean;
     researchCheckpoint?: ResearchCheckpointSnapshot;
     researchScope?: {
       operationId: string;
@@ -196,11 +214,33 @@ export function createGeneralToolKernel(
       effect: 'read',
       modelInputSchema: planNoteModelInputSchema,
     }),
-    adaptAgentTool(operationArtifacts.createTool(), {
-      capability: 'artifact.create',
-      risk: 'l1',
-      effect: 'write',
-    }),
+    ...(options.allowArtifactWrites
+      ? [
+          adaptAgentTool(operationArtifacts.createTool(), {
+            capability: 'artifact.create',
+            risk: 'l1',
+            effect: 'write',
+          }),
+        ]
+      : []),
+    ...(options.allowArtifactConfirmation
+      ? [
+          adaptAgentTool(operationArtifacts.requestConfirmationTool(), {
+            capability: 'artifact.confirmation.propose',
+            risk: 'l0',
+            effect: 'read',
+          }),
+        ]
+      : []),
+    ...(!options.deepResearch
+      ? [
+          adaptAgentTool(operationArtifacts.getStatusTool(), {
+            capability: 'artifact.read',
+            risk: 'l0',
+            effect: 'read',
+          }),
+        ]
+      : []),
     adaptAgentTool(fetchTool, {
       capability: 'web.fetch',
       risk: 'l1',

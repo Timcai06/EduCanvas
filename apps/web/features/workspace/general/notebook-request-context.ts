@@ -4,7 +4,7 @@ export interface NotebookRequestContext {
 }
 
 const SCOPED_ENDPOINT =
-  /^\/api\/v1\/(?:chat\/(?:turn|assets|artifacts)(?:\/|$)|canvas(?:\/|$)|learn\/(?:turn|code-runs)(?:\/|$)|assistant\/turn(?:\/|$)|desktop-auth\/authorize(?:\/|$))/;
+  /^\/api\/v1\/(?:chat\/(?:turn|assets|artifacts|artifact-confirmations)(?:\/|$)|canvas(?:\/|$)|learn\/(?:turn|code-runs)(?:\/|$)|assistant\/turn(?:\/|$)|desktop-auth\/authorize(?:\/|$))/;
 
 /** 每次发送时读取本标签 URL；不使用共享 Cookie 或跨导航的全局身份缓存。 */
 export function readNotebookRequestContext(): NotebookRequestContext | null {

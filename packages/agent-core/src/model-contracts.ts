@@ -281,12 +281,18 @@ export type NormalizedModelError = z.infer<typeof normalizedModelErrorSchema>;
 /** 供应商适配器显式上报归一化错误的异常类型。 */
 export class ModelGatewayInvocationError extends Error {
   override readonly name = 'ModelGatewayInvocationError';
+  /** 仅适配器确认请求被拒绝且未执行时使用；不进入公开归一化错误。 */
+  readonly executionOutcome: 'not_executed' | 'unknown';
 
   constructor(
     readonly normalized: NormalizedModelError,
-    options?: { cause?: unknown },
+    options?: {
+      cause?: unknown;
+      executionOutcome?: 'not_executed' | 'unknown';
+    },
   ) {
     super(normalized.code, options);
+    this.executionOutcome = options?.executionOutcome ?? 'unknown';
   }
 }
 

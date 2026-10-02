@@ -277,6 +277,22 @@ describe('teaching turn SSE protocol', () => {
     const base = { schemaVersion: '1', turnId: 'turn-1' };
     expect(
       parseTeachingTurnEvent(
+        'artifact.confirmation_required',
+        JSON.stringify({
+          ...base,
+          type: 'artifact.confirmation_required',
+          confirmationId: 'confirmation-1',
+          kind: 'mind_map',
+          title: '思维导图',
+        }),
+      ),
+    ).toMatchObject({
+      type: 'artifact.confirmation_required',
+      kind: 'mind_map',
+    });
+
+    expect(
+      parseTeachingTurnEvent(
         'artifact.proposed',
         JSON.stringify({
           ...base,

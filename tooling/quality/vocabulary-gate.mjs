@@ -157,6 +157,10 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'notebook_chapters_locator_check',
   'notebook_plans_source_check',
   'notebook_plans_status_check',
+  // Artifact confirmation stores only renderable artifact kinds and a finite
+  // pending/confirmed/cancelled lifecycle with mutually consistent receipts.
+  'artifact_confirmation_requests_kind_check',
+  'artifact_confirmation_requests_status_check',
 ]);
 
 const SCHEMA_SOURCES = [

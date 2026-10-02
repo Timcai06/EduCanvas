@@ -110,6 +110,14 @@ const assetContext: MaterializedAssetPlan = {
 async function begin(
   routeOverride: GatewayResolvedRoute,
   requestOverride: TeachingTurnRequestBody = request,
+  confirmedArtifactKind?:
+    | 'markdown_document'
+    | 'mind_map'
+    | 'slides'
+    | 'flashcards'
+    | 'picturebook'
+    | 'note'
+    | 'web_app',
 ): Promise<void> {
   await beginGatewayGeneralTurnApplication({
     operationId: 'operation-1',
@@ -121,6 +129,7 @@ async function begin(
     signal: new AbortController().signal,
     transportCapabilities: [],
     modelRuntime: null,
+    ...(confirmedArtifactKind ? { confirmedArtifactKind } : {}),
   });
 }
 
@@ -150,6 +159,43 @@ beforeEach(() => {
 });
 
 describe('Web General可信Gateway路由边界', () => {
+  it('确认续跑注册真实写工具并把确认类型交给输出门禁', async () => {
+    await begin(
+      route,
+      {
+        ...request,
+        clientMessageId: 'artifact-confirm-message-1',
+        outputPreference: 'interactive_artifact',
+        supportsArtifactConfirmation: true,
+        artifactConfirmationId: '11111111-1111-4111-8111-111111111111',
+      },
+      'slides',
+    );
+
+    expect(createGeneralToolKernel).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        allowArtifactWrites: true,
+        allowArtifactConfirmation: false,
+      }),
+    );
+    expect(WebGeneralProfile).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      'interactive_artifact',
+      expect.anything(),
+      expect.anything(),
+      'owner',
+      expect.anything(),
+      false,
+      'slides',
+    );
+  });
+
   it('在Actor与当前身份不一致时同步拒绝且不进入运行时组合', async () => {
     await expect(
       begin({ ...route, actorUserId: 'student-2' }),

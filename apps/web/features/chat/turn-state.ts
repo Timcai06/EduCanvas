@@ -10,6 +10,7 @@ import type { TeachingTurnEvent } from './turn-events';
 import { applyObservedArtifact, updateAssistant } from './turn-state-messages';
 export { getRetryAssetParts } from './turn-state-messages';
 import { reconcileToolSteps } from './tool-step-continuity';
+import { applyArtifactConfirmation } from './artifact-confirmation-state';
 
 export interface ActiveTeachingTurn {
   clientMessageId: string;
@@ -269,6 +270,9 @@ export function teachingTurnReducer(
             ],
       })),
     };
+  }
+  if (event.type === 'artifact.confirmation_required') {
+    return applyArtifactConfirmation(state, assistantId, event);
   }
   if (
     event.type === 'artifact.version_added' ||

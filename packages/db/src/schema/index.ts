@@ -16,6 +16,7 @@ export * from './agent-runtime';
 export * from './asset';
 export * from './asset-web-snapshot';
 export * from './turn';
+export * from './artifact-confirmation';
 export * from './knowledge';
 export * from './retrieval';
 export * from './learning';

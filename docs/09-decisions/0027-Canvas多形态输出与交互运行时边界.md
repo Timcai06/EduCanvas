@@ -53,6 +53,18 @@ Composer、Canvas 或 Agent 工具可表达以下输出偏好：
 ### 2. Markdown 文档是知识输出，不是任意运行时
 
 - 报告、教案、笔记、学习总结和可导出文档使用 `document.markdown` Artifact。
+- 长 Markdown 生成按计划顺序分为最多 3 个正文段落，连同计划最多调用 4 次模型；全任务累计输出
+  上限为 32768 tokens（不含输入 token）。每次调用前先持久预留其 `maxOutputTokens`，返回后按
+  provider usage 结算；有界非空 JSON 的输出用量必须是正有限整数且不超过实际发送的 `max_tokens`；
+  缺失、零值、负值、小数或超上限时失败并保留预留。结果状态不确定时
+  保留预留并拒绝重复调用。仅适配器明确确认 HTTP 429 拒绝执行时释放该次预留，允许退避后继续；
+  429 仍计入最多 4 次调用，剩余次数不足时失败。网络、5xx 与解析失败不证明未执行。调用级上限
+  受部署和模型上限约束，未知模型沿用现有部署上限。
+- 累计输出预算依赖 Provider 正确执行 `max_tokens` 并如实返回 usage。适配器验证基本一致性，
+  无法独立测量 Provider 内部生成的 token，也不承诺检测任意伪报的正数用量；未知结果保留完整预留。
+- 每段结果按 generation job 检查点保存并以稳定 operation ID 恢复；同一 job 的每个 worker execution
+  都领取数据库单调递增的 generation fence，只有当前 fence 可写检查点、终态或版本。所有段落完成后
+  统一校验完整文档，再原子写入一个 Artifact Version。预算耗尽、结果不确定或文档无效时不发布部分版本。
 - Markdown 原文是可编辑的 canonical content；Renderer 将其解析为受信任组件，不执行
   `rehype-raw`、内联脚本、事件属性或任意网络资源。
   - 受控例外：ADR-0026 派生表示的结构化阅读视图经 [ADR-0030](./0030-受控表格HTML渲染边界.md)

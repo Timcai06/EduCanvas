@@ -13,6 +13,10 @@ import {
 } from '../model-runtime.js';
 import { reportGenerationProgress } from './generation-progress.js';
 import {
+  ArtifactGenerationExecution,
+  isExecutionFenceError,
+} from './artifact-generation-execution.js';
+import {
   appendGeneratedImageVersion,
   ImageArtifactGenerationFailure,
 } from './image-artifact-generation.js';
@@ -25,7 +29,10 @@ import { generateMindMapContent } from './mind-map-generation.js';
 import { generateFlashcardsContent } from './flashcards-generation.js';
 import { generateSlidesContent } from './slides-generation.js';
 import { generateNoteContent } from './note-generation.js';
-import { generateMarkdownDocumentContent } from './markdown-document-generation.js';
+import {
+  generateMarkdownDocumentContent,
+  MarkdownDocumentGenerationFailure,
+} from './markdown-document-generation.js';
 import { generateWebAppContent } from './web-app-generation.js';
 import { PicturebookGenerationFailure } from './picturebook-generation.js';
 import { runPicturebookGenerationTask } from './picturebook-task.js';
@@ -50,34 +57,38 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
   const artifacts = new DrizzlePlatformArtifactRepository();
   const turns = new DrizzlePlatformTurnRepository();
 
-  const failJob = async (code: string) => {
-    try {
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'failed',
-        failureCode: code,
-      });
-      return;
-    } catch (error) {
-      if (error instanceof ArtifactJobLifecycleError) {
-        helpers.logger.warn(
-          `任务 ${payload.jobId} 无法写 failed(${code}),已进入终态 ${error.message}`,
-        );
-        return;
-      }
-      throw error;
-    }
-  };
+  const execution = new ArtifactGenerationExecution(
+    artifacts,
+    payload,
+    helpers.logger,
+  );
+  const failJob = (code: string) => execution.fail(code);
 
+  let artifactAtStart: Awaited<ReturnType<typeof artifacts.getArtifact>>;
+  let jobAtStart: Awaited<ReturnType<typeof artifacts.getGenerationJob>>;
   try {
-    await artifacts.transitionGenerationJob({
+    jobAtStart = await artifacts.getGenerationJob({
       jobId: payload.jobId,
       trustedSubjectId: payload.subjectId,
-      to: 'running',
-      progress: 5,
     });
+    if (
+      jobAtStart.status === 'succeeded' ||
+      jobAtStart.status === 'failed' ||
+      jobAtStart.status === 'cancelled'
+    ) {
+      helpers.logger.warn(`任务 ${payload.jobId} 已进入终态，跳过重复投递`);
+      return;
+    }
+    artifactAtStart = await artifacts.getArtifact({
+      artifactId: payload.artifactId,
+      trustedSubjectId: payload.subjectId,
+    });
+    await execution.start(artifactAtStart.kind);
   } catch (error) {
+    if (isExecutionFenceError(error)) {
+      helpers.logger.warn(`任务 ${payload.jobId} execution 已过期，跳过旧投递`);
+      return;
+    }
     if (error instanceof ArtifactJobLifecycleError) {
       /* 重复投递(如 job_key 冲突后的重放):任务已被处理过,幂等跳过。 */
       helpers.logger.warn(`任务 ${payload.jobId} 非 queued 态,跳过重复执行`);
@@ -87,10 +98,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
   }
 
   try {
-    const artifact = await artifacts.getArtifact({
-      artifactId: payload.artifactId,
-      trustedSubjectId: payload.subjectId,
-    });
+    const artifact = artifactAtStart;
     const existingVersion = await artifacts.findVersionByGenerationJob({
       jobId: payload.jobId,
       trustedSubjectId: payload.subjectId,
@@ -102,6 +110,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
           trustedSubjectId: payload.subjectId,
           to: 'succeeded',
           progress: 100,
+          executionGeneration: execution.generation,
         });
       } catch (error) {
         if (error instanceof ArtifactJobLifecycleError) {
@@ -138,10 +147,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       return;
     }
 
-    const job = await artifacts.getGenerationJob({
-      jobId: payload.jobId,
-      trustedSubjectId: payload.subjectId,
-    });
+    const job = jobAtStart;
     // R03：任务级一次解析环境。structured/speech/image 三个能力共用同一
     // 已验证配置（惰性：只走一个 kind 分支，至多解析一次）。
     let runtime: WorkerModelRuntime | null = null;
@@ -257,7 +263,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             }
           : undefined,
     };
-    const { content, generatedBy } =
+    const generation =
       artifact.kind === 'mind_map'
         ? await generateMindMapContent(generatorInput)
         : artifact.kind === 'slides'
@@ -265,10 +271,31 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
           : artifact.kind === 'flashcards'
             ? await generateFlashcardsContent(generatorInput)
             : artifact.kind === 'markdown_document'
-              ? await generateMarkdownDocumentContent(generatorInput)
+              ? await generateMarkdownDocumentContent({
+                  ...generatorInput,
+                  checkpoint: execution.checkpoint,
+                  saveCheckpoint: (checkpoint) =>
+                    execution.saveMarkdownCheckpoint(checkpoint),
+                })
               : artifact.kind === 'web_app'
                 ? await generateWebAppContent(generatorInput)
                 : await generateNoteContent(generatorInput);
+    const { content, generatedBy } = generation;
+    const generationUsage = (
+      generation as {
+        usage?: {
+          calls: number;
+          inputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+        };
+      }
+    ).usage;
+    if (generationUsage) {
+      helpers.logger.info(
+        `长文分块完成: artifact=${payload.artifactId} calls=${generationUsage.calls} inputTokens=${generationUsage.inputTokens} outputTokens=${generationUsage.outputTokens} totalTokens=${generationUsage.totalTokens}`,
+      );
+    }
 
     await reportGenerationProgress(artifacts, payload, 85, helpers.logger);
 
@@ -283,6 +310,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         generationIntent.kind === 'revision'
           ? generationIntent.baseVersion
           : undefined,
+      executionGeneration: execution.generation,
     });
     helpers.logger.info(
       `产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
@@ -293,6 +321,27 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       error.normalized.retryable &&
       helpers.job.attempts < helpers.job.max_attempts
     ) {
+      if (execution.generation !== undefined) {
+        try {
+          await artifacts.transitionGenerationJob({
+            jobId: payload.jobId,
+            trustedSubjectId: payload.subjectId,
+            to: 'running',
+            executionGeneration: execution.generation,
+          });
+        } catch (fenceError) {
+          if (
+            isExecutionFenceError(fenceError) ||
+            fenceError instanceof ArtifactJobLifecycleError
+          ) {
+            helpers.logger.warn(
+              `任务 ${payload.jobId} execution 已过期，不再触发重试`,
+            );
+            return;
+          }
+          throw fenceError;
+        }
+      }
       /* 只对重试窗口抛错；失败到达终态时必须落稳定码，禁止把 provider 异常正文
          或请求参数写进 artifact 领域日志。 */
       /* 可重试的限流、超时与暂时不可用必须交回 Graphile 退避；提前结算 failed
@@ -303,7 +352,8 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     const code =
       error instanceof AudioArtifactGenerationFailure ||
       error instanceof ImageArtifactGenerationFailure ||
-      error instanceof PicturebookGenerationFailure
+      error instanceof PicturebookGenerationFailure ||
+      error instanceof MarkdownDocumentGenerationFailure
         ? error.code
         : error instanceof ModelGatewayInvocationError
           ? error.normalized.retryable
@@ -311,6 +361,10 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             : `model_${error.normalized.code}`
           : 'generation_failed';
     helpers.logger.error(`产物 ${payload.artifactId} 生成失败: ${code}`);
+    if (isExecutionFenceError(error)) {
+      helpers.logger.warn(`任务 ${payload.jobId} execution 已过期，忽略旧结果`);
+      return;
+    }
     await failJob(code);
   }
 };

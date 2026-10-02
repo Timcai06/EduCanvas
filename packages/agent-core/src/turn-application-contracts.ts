@@ -26,6 +26,7 @@
 
 import { z } from 'zod';
 import { agentMessageInputSchema } from './message-contracts';
+import { artifactProposalKindSchema } from './artifact-proposal';
 
 export const turnApplicationProtocolVersion = 'educanvas.turn.v2' as const;
 
@@ -230,6 +231,15 @@ export const turnApplicationEventSchema = z.discriminatedUnion('type', [
       artifactKind: capabilityNameSchema,
       trustTier: z.enum(['tier1', 'tier2']),
       title: z.string().trim().min(1).max(300),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBase,
+      type: z.literal('artifact.confirmation_required'),
+      confirmationId: opaqueIdSchema,
+      artifactKind: artifactProposalKindSchema,
+      title: z.string().trim().min(1).max(120),
     })
     .strict(),
   z

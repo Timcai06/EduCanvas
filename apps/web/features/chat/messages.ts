@@ -1,4 +1,12 @@
 import type { AgentMessagePart, TurnMode } from '@educanvas/agent-core';
+import type { ArtifactProposalKind } from '@educanvas/agent-core';
+
+export interface ArtifactConfirmationDTO {
+  id: string;
+  kind: ArtifactProposalKind;
+  title: string;
+  status: 'pending' | 'confirmed';
+}
 
 export type ChatMessageStatus =
   | 'pending'
@@ -35,6 +43,7 @@ export interface InitialChatMessageDTO {
   content: string;
   parts?: readonly AgentMessagePart[];
   artifacts?: readonly MessageArtifactDTO[];
+  artifactConfirmation?: ArtifactConfirmationDTO;
   citations?: readonly MessageCitationDTO[];
   failureCode: string | null;
   createdAt: string;
@@ -118,6 +127,7 @@ export interface AssistantMessage extends ChatMessageBase {
   cite?: string;
   citations?: readonly MessageCitationDTO[];
   artifacts?: readonly MessageArtifactDTO[];
+  artifactConfirmation?: ArtifactConfirmationDTO;
   suggestsCanvas?: boolean;
   outputCard?: boolean;
 }

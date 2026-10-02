@@ -120,6 +120,27 @@ describe('teaching turn request boundary', () => {
     ).rejects.toMatchObject({ code: 'invalid_request' });
   });
 
+  it('仅对声明支持确认的客户端接受确认续接请求', async () => {
+    const base = {
+      clientMessageId: 'artifact.confirm.1234567890abcdef',
+      text: '确认创建',
+      artifactConfirmationId: '11111111-1111-4111-8111-111111111111',
+    };
+    await expect(
+      parseTeachingTurnRequest(request(JSON.stringify(base))),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({ ...base, supportsArtifactConfirmation: true }),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      supportsArtifactConfirmation: true,
+      artifactConfirmationId: base.artifactConfirmationId,
+    });
+  });
+
   it('接受 provider-neutral outputPreference 枚举并拒绝不可信值', async () => {
     await expect(
       parseTeachingTurnRequest(

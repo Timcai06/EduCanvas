@@ -25,8 +25,9 @@ export interface OpenAICompatibleStructuredModelGatewayOptions {
 const invocationError = (
   normalized: NormalizedModelError,
   cause?: unknown,
+  executionOutcome: 'not_executed' | 'unknown' = 'unknown',
 ): ModelGatewayInvocationError =>
-  new ModelGatewayInvocationError(normalized, { cause });
+  new ModelGatewayInvocationError(normalized, { cause, executionOutcome });
 
 const errorForHttpStatus = (status: number): NormalizedModelError => {
   if (status === 429) return { code: 'rate_limit', retryable: true };
@@ -61,19 +62,22 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       this.config.modelIds[request.modelAlias] ?? this.config.modelIds.primary;
 
     let body: string;
+    let maxOutputTokens: number;
     try {
       const jsonSchema = JSON.stringify(z.toJSONSchema(request.schema));
+      maxOutputTokens = structuredOutputBudget(
+        this.config,
+        modelId,
+        this.options.outputBudget === 'long_artifact' &&
+          request.taskAlias === 'artifact.generate' &&
+          request.modelAlias === 'structured',
+        request.maxOutputTokens,
+      );
       body = JSON.stringify({
         model: modelId,
         stream: false,
         response_format: { type: 'json_object' },
-        max_tokens: structuredOutputBudget(
-          this.config,
-          modelId,
-          this.options.outputBudget === 'long_artifact' &&
-            request.taskAlias === 'artifact.generate' &&
-            request.modelAlias === 'structured',
-        ),
+        max_tokens: maxOutputTokens,
         ...(this.config.provider === 'deepseek'
           ? { thinking: { type: 'disabled' } }
           : {}),
@@ -146,7 +150,12 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       diagnostic.status = response.status;
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        throw invocationError(errorForHttpStatus(response.status));
+        // 429 明确拒绝执行；5xx 等状态不能证明模型调用未发生。
+        throw invocationError(
+          errorForHttpStatus(response.status),
+          undefined,
+          response.status === 429 ? 'not_executed' : 'unknown',
+        );
       }
       diagnostic.stage = 'response_parse';
 
@@ -204,6 +213,17 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       }
 
       const usage = parsedPayload.data.usage;
+      const outputTokens = usage?.completion_tokens;
+      // 非空 JSON 不能有零输出用量；仅结算正整数且不超过实际发送上限的报告。
+      if (
+        request.maxOutputTokens !== undefined &&
+        (outputTokens === undefined ||
+          !Number.isSafeInteger(outputTokens) ||
+          outputTokens < 1 ||
+          outputTokens > maxOutputTokens)
+      ) {
+        throw invocationError({ code: 'invalid_response', retryable: false });
+      }
       const metadata: ProviderCallMetadata = {
         providerResponseId: parsedPayload.data.id ?? null,
         provider: this.config.provider,

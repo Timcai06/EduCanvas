@@ -16,6 +16,25 @@ import {
 import { archiveOwnedArtifactTransaction } from './platform-artifact-archive';
 import { loadArtifactDetailRows } from './platform-artifact-detail-read';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
+import {
+  ArtifactOwnershipError,
+  ArtifactVersionConflictError,
+  ArtifactIdempotencyConflictError,
+  ArtifactRevisionConflictError,
+  ArtifactJobLifecycleError,
+  ArtifactExecutionFenceError,
+} from './platform-artifact-errors';
+import { claimArtifactGenerationExecution } from './platform-artifact-generation-execution';
+import { readPlatformArtifactGenerationReceipt } from './platform-artifact-generation-receipt';
+import type {
+  ArtifactJobStatus,
+  ArtifactStatus,
+  ArtifactTrustTier,
+  PlatformArtifact,
+  PlatformArtifactGenerationReceipt,
+  PlatformArtifactJob,
+  PlatformArtifactVersion,
+} from './platform-artifact-types';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -40,110 +59,26 @@ async function requireArtifactNotebookAccess(
   });
 }
 
-/** 主体不拥有目标 Space/Artifact 时抛出;与查无此物同错,避免所有权探测。 */
-export class ArtifactOwnershipError extends Error {
-  readonly code = 'artifact_ownership';
-
-  constructor() {
-    super('产物不存在或不属于当前主体');
-    this.name = 'ArtifactOwnershipError';
-  }
-}
-
-/** 版本号并发冲突(同一产物同一版本被同时写入)。 */
-export class ArtifactVersionConflictError extends Error {
-  readonly code = 'artifact_version_conflict';
-
-  constructor() {
-    super('产物版本写入冲突,请重试');
-    this.name = 'ArtifactVersionConflictError';
-  }
-}
-
-/**
- * 幂等键已存在但请求指纹不一致。同一键只能绑定同一个创建请求，
- * 否则客户端复用键重放会静默拿到另一请求的结果，必须显式拒绝。
- */
-export class ArtifactIdempotencyConflictError extends Error {
-  readonly code = 'artifact_idempotency_conflict';
-
-  constructor() {
-    super('相同幂等键已绑定不同的产物创建请求');
-    this.name = 'ArtifactIdempotencyConflictError';
-  }
-}
-
-/** Canvas 修改基于过期版本或目标已有运行中任务时拒绝，防止覆盖更新。 */
-export class ArtifactRevisionConflictError extends Error {
-  readonly code = 'artifact_revision_conflict';
-
-  constructor(readonly reason: 'stale_version' | 'job_in_progress') {
-    super(
-      reason === 'stale_version'
-        ? '产物已经产生新版本，请刷新后再修改'
-        : '产物仍有修改任务在运行',
-    );
-    this.name = 'ArtifactRevisionConflictError';
-  }
-}
-
-/** 生成任务状态机拒绝非法转移。 */
-export class ArtifactJobLifecycleError extends Error {
-  readonly code = 'artifact_job_lifecycle';
-
-  constructor(from: string, to: string) {
-    super(`生成任务不允许从 ${from} 转移到 ${to}`);
-    this.name = 'ArtifactJobLifecycleError';
-  }
-}
+export {
+  ArtifactOwnershipError,
+  ArtifactVersionConflictError,
+  ArtifactIdempotencyConflictError,
+  ArtifactRevisionConflictError,
+  ArtifactJobLifecycleError,
+  ArtifactExecutionFenceError,
+} from './platform-artifact-errors';
+export type {
+  ArtifactJobStatus,
+  ArtifactStatus,
+  ArtifactTrustTier,
+  PlatformArtifact,
+  PlatformArtifactGenerationReceipt,
+  PlatformArtifactJob,
+  PlatformArtifactVersion,
+} from './platform-artifact-types';
 
 /** 产物生成任务在 graphile 队列中的标识;web 入队与 worker 注册共用,防止拼写漂移。 */
 export const ARTIFACT_GENERATE_TASK = 'artifact:generate' as const;
-
-export type ArtifactTrustTier = 'tier1' | 'tier2';
-export type ArtifactStatus = 'proposed' | 'active' | 'archived';
-export type ArtifactJobStatus =
-  'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-
-export interface PlatformArtifact {
-  id: string;
-  spaceId: string;
-  conversationId: string | null;
-  ownerSubjectId: string;
-  kind: string;
-  trustTier: ArtifactTrustTier;
-  title: string;
-  status: ArtifactStatus;
-  latestVersion: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PlatformArtifactVersion {
-  id: string;
-  artifactId: string;
-  version: number;
-  content: unknown;
-  metadata: unknown;
-  objectKey: string | null;
-  checksum: string | null;
-  createdByOperationId: string | null;
-  generatedBy: string | null;
-  generationJobId: string | null;
-  createdAt: string;
-}
-
-export interface PlatformArtifactJob {
-  id: string;
-  artifactId: string;
-  operationId: string | null;
-  status: ArtifactJobStatus;
-  progress: number | null;
-  failureCode: string | null;
-  params: Record<string, unknown>;
-  checkpoint: Record<string, unknown>;
-  queueJobKey: string | null;
-}
 
 /** 生成任务合法转移表;terminal 态无出边,cancelled 可从任何非 terminal 态进入。 */
 const JOB_TRANSITIONS: Record<ArtifactJobStatus, readonly ArtifactJobStatus[]> =
@@ -230,6 +165,23 @@ export class DrizzlePlatformArtifactRepository {
       permission: 'notebook.read',
     });
     return toArtifact(row);
+  }
+
+  /**
+   * Read an artifact's latest generation job only when its owner, Notebook, and
+   * Conversation all match the trusted current-turn scope. A missing or
+   * out-of-scope artifact returns the same null result so this tool cannot probe
+   * another tenant's artifacts. The returned receipt deliberately omits params,
+   * checkpoints, and failure details; a committed version is joined in the same
+   * statement as job status.
+   */
+  async getGenerationReceipt(input: {
+    artifactId: string;
+    spaceId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactGenerationReceipt | null> {
+    return readPlatformArtifactGenerationReceipt(this.database, input);
   }
 
   /**
@@ -431,6 +383,8 @@ export class DrizzlePlatformArtifactRepository {
     createdByOperationId?: string | null;
     /** Canvas 共创的乐观并发基线；首版生成不传。 */
     expectedLatestVersion?: number;
+    /** 仅当前 execution generation 可完成长 Markdown 任务。 */
+    executionGeneration?: number;
     progress?: number | null;
   }): Promise<PlatformArtifactVersion> {
     try {
@@ -459,6 +413,7 @@ export class DrizzlePlatformArtifactRepository {
             id: artifactGenerationJobs.id,
             status: artifactGenerationJobs.status,
             startedAt: artifactGenerationJobs.startedAt,
+            executionGeneration: artifactGenerationJobs.executionGeneration,
           })
           .from(artifactGenerationJobs)
           .where(
@@ -474,6 +429,12 @@ export class DrizzlePlatformArtifactRepository {
         }
         if (job.status !== 'running') {
           throw new ArtifactJobLifecycleError(job.status, 'succeeded');
+        }
+        if (
+          input.executionGeneration !== undefined &&
+          job.executionGeneration !== input.executionGeneration
+        ) {
+          throw new ArtifactExecutionFenceError();
         }
 
         if (
@@ -656,6 +617,7 @@ export class DrizzlePlatformArtifactRepository {
     to: Exclude<ArtifactJobStatus, 'queued'>;
     progress?: number | null;
     failureCode?: string | null;
+    executionGeneration?: number;
   }): Promise<PlatformArtifactJob> {
     return await this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -665,6 +627,7 @@ export class DrizzlePlatformArtifactRepository {
           progress: artifactGenerationJobs.progress,
           startedAt: artifactGenerationJobs.startedAt,
           spaceId: artifacts.spaceId,
+          executionGeneration: artifactGenerationJobs.executionGeneration,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -684,6 +647,12 @@ export class DrizzlePlatformArtifactRepository {
       });
 
       const from = row.status as ArtifactJobStatus;
+      if (
+        input.executionGeneration !== undefined &&
+        row.executionGeneration !== input.executionGeneration
+      ) {
+        throw new ArtifactExecutionFenceError();
+      }
       if (!JOB_TRANSITIONS[from].includes(input.to)) {
         throw new ArtifactJobLifecycleError(from, input.to);
       }
@@ -746,6 +715,7 @@ export class DrizzlePlatformArtifactRepository {
     jobId: string;
     trustedSubjectId: string;
     checkpoint: Record<string, unknown>;
+    executionGeneration?: number;
   }): Promise<PlatformArtifactJob> {
     return await this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -772,6 +742,12 @@ export class DrizzlePlatformArtifactRepository {
       if (row.job.status !== 'running') {
         throw new ArtifactJobLifecycleError(row.job.status, 'running');
       }
+      if (
+        input.executionGeneration !== undefined &&
+        row.job.executionGeneration !== input.executionGeneration
+      ) {
+        throw new ArtifactExecutionFenceError();
+      }
       const [updated] = await tx
         .update(artifactGenerationJobs)
         .set({ checkpoint: input.checkpoint })
@@ -779,6 +755,17 @@ export class DrizzlePlatformArtifactRepository {
         .returning();
       return toJob(updated!);
     });
+  }
+
+  /** 原子启动或重投任务，领取 fence 和同一锁内的最新 checkpoint。 */
+  async claimGenerationJobExecution(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<{
+    executionGeneration: number;
+    checkpoint: Record<string, unknown>;
+  }> {
+    return claimArtifactGenerationExecution(this.database, input);
   }
 
   /** generationJobId 唯一对应一次版本提交；用于 crash 后识别“已写版本未终态”。 */

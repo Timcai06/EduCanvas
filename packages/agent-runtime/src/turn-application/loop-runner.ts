@@ -131,6 +131,7 @@ export async function* runTurnLoop(input: {
     maxToolRounds: prepared.model.maxToolRounds,
     signal: input.controller.signal,
     completionRequirement: input.outputGuard?.completionRequirement,
+    toolRemediation: input.outputGuard?.toolRemediation,
     modelRunLifecycle: modelLifecycle,
     usageBudget: usageBudget ?? undefined,
     executeTools: (calls, context) => tools.execute(calls, context),
@@ -201,6 +202,16 @@ export async function* runTurnLoop(input: {
       };
     } else if (event.type === 'tool.result') {
       if (outputBlocked || outputGuardFailed) continue;
+      try {
+        await input.outputGuard?.onToolResult?.(
+          event.result.call.tool,
+          event.result.modelResult,
+        );
+      } catch {
+        outputGuardFailed = true;
+        input.controller.abort('profile_output_guard_failed');
+        continue;
+      }
       yield {
         protocol: turnApplicationProtocolVersion,
         operationId: command.operationId,

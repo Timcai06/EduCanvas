@@ -127,7 +127,7 @@ describe('历史产物服务端事实上下文', () => {
     expect(candidate?.message.content).toContain('"generation":"failed"');
     expect(candidate?.message.content).not.toContain('UNTRUSTED_TITLE');
     expect(plan.context.maxCharacters).toBe(128_000);
-    expect(plan.model.promptVersion).toBe('general-chat-v10');
+    expect(plan.model.promptVersion).toBe('general-chat-v11');
   });
   it('只查询本轮历史的operation、conversation与可信主体，不把模型标题注入system', async () => {
     vi.mocked(

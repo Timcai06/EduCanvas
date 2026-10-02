@@ -93,4 +93,46 @@ describe('long artifact output budget', () => {
       expect(config.maxOutputTokens).toBe(2048);
     },
   );
+
+  it('调用级上限不会抬高已配置或已核实的模型上限', async () => {
+    const config = parseModelGatewayConfiguration({
+      EDUCANVAS_DEPLOYMENT_ENV: 'test',
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_API_KEY: 'fixture-key',
+      MODEL_GATEWAY_BASE_URL: 'https://proxy.example',
+      MODEL_GATEWAY_PRIMARY_MODEL: 'proxy-model',
+      MODEL_GATEWAY_STRUCTURED_MODEL: 'proxy-model',
+      MODEL_GATEWAY_STRUCTURED_MAX_OUTPUT_TOKENS: '4096',
+    });
+    if (!config.enabled) throw new Error('fixture unavailable');
+    const captured: number[] = [];
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      outputBudget: 'long_artifact',
+      fetchImpl: async (_url, init) => {
+        captured.push(JSON.parse(String(init?.body)).max_tokens as number);
+        return Response.json({
+          choices: [
+            { finish_reason: 'stop', message: { content: '{"answer":"ok"}' } },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        });
+      },
+    });
+    const common = {
+      taskAlias: 'artifact.generate' as const,
+      modelAlias: 'structured' as const,
+      messages: [{ role: 'user' as const, content: 'fixture' }],
+      schema: z.object({ answer: z.string() }).strict(),
+      promptVersion: 'test-v1',
+      traceId: 'trace',
+      operationId: 'op',
+    };
+    await gateway.generateStructured({ ...common, maxOutputTokens: 1024 });
+    await gateway.generateStructured({ ...common, maxOutputTokens: 8192 });
+    expect(captured).toEqual([1024, 4096]);
+
+    await expect(
+      gateway.generateStructured({ ...common, maxOutputTokens: 0 }),
+    ).rejects.toMatchObject({ normalized: { code: 'invalid_response' } });
+  });
 });

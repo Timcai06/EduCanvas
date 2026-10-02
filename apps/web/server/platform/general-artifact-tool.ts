@@ -8,6 +8,7 @@ import type {
 import {
   artifactProposalKindSchema,
   artifactProposalSchema,
+  type ArtifactProposalKind,
   type AssetVersionReference,
   type AssetVersionRepresentationIdentity,
 } from '@educanvas/agent-core';
@@ -15,16 +16,23 @@ import {
   ARTIFACT_GENERATE_TASK,
   DrizzlePlatformArtifactRepository,
   type PlatformArtifact,
+  type PlatformArtifactGenerationReceipt,
   type PlatformArtifactJob,
 } from '@educanvas/db';
+import { DrizzleArtifactConfirmationRepository } from '@educanvas/db';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
+import {
+  getCanvasArtifactStatusInputSchema,
+  getCanvasArtifactStatusOutputSchema,
+  toCanvasArtifactStatusOutput,
+} from './general-artifact-status';
 import {
   generalTurnArtifactIdempotency,
   type GeneralTurnArtifactSemanticRequest,
 } from './operation-artifact-idempotency';
 
-const createCanvasArtifactInputSchema = artifactProposalSchema;
+type CreateCanvasArtifactInput = z.infer<typeof artifactProposalSchema>;
 
 export const createCanvasArtifactOutputSchema = z
   .object({
@@ -59,6 +67,15 @@ interface ArtifactGenerationRepository {
     job: PlatformArtifactJob;
     replayed?: boolean;
   }>;
+}
+
+interface ArtifactStatusRepository {
+  getGenerationReceipt(input: {
+    artifactId: string;
+    spaceId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactGenerationReceipt | null>;
 }
 
 export interface ArtifactInputSourceReference {
@@ -113,6 +130,10 @@ export function collectArtifactInputSourceReferences(input: {
  */
 export class WebOperationArtifacts {
   private readonly proposed = new Map<string, TurnApplicationProfileEvent>();
+  private confirmationProposal: {
+    kind: z.infer<typeof artifactProposalKindSchema>;
+    title: string;
+  } | null = null;
 
   constructor(
     private readonly input: {
@@ -120,6 +141,7 @@ export class WebOperationArtifacts {
       conversationId: string;
       spaceId: string;
       operationId: string;
+      confirmedArtifactKind?: ArtifactProposalKind;
       /**
        * 只能由已物化的服务端 Asset plan 注入。模型和浏览器都不能声明 Artifact
        * provenance；所有输入段在 General Profile 中是 required，因此这里与随后
@@ -128,17 +150,23 @@ export class WebOperationArtifacts {
       sourceReferences?: readonly ArtifactInputSourceReference[];
     },
     private readonly repository: ArtifactGenerationRepository = new DrizzlePlatformArtifactRepository(),
+    private readonly statusRepository: ArtifactStatusRepository = new DrizzlePlatformArtifactRepository(),
   ) {}
 
   createTool(): AgentTool<
-    z.infer<typeof createCanvasArtifactInputSchema>,
+    CreateCanvasArtifactInput,
     z.infer<typeof createCanvasArtifactOutputSchema>
   > {
+    const inputSchema = this.input.confirmedArtifactKind
+      ? artifactProposalSchema.extend({
+          kind: z.literal(this.input.confirmedArtifactKind),
+        })
+      : artifactProposalSchema;
     return {
       name: 'createCanvasArtifact',
       description:
         '在当前 Notebook 的 Canvas 中提议持久产物。只选择契约闭集中的 Markdown 文档、思维导图、Slides、闪卡、低龄知识绘本、笔记或 Web App；instruction 必须概括用户要求；返回 proposed 只表示服务端已原子创建任务，不代表已完成。',
-      inputSchema: createCanvasArtifactInputSchema,
+      inputSchema,
       outputSchema: createCanvasArtifactOutputSchema,
       timeoutMs: 15_000,
       handler: async (toolInput, context) =>
@@ -146,12 +174,116 @@ export class WebOperationArtifacts {
     };
   }
 
+  getStatusTool(): AgentTool<
+    z.infer<typeof getCanvasArtifactStatusInputSchema>,
+    z.infer<typeof getCanvasArtifactStatusOutputSchema>
+  > {
+    return {
+      name: 'getCanvasArtifactStatus',
+      description:
+        '只读查询当前 Notebook 与会话中单个产物的最新生成任务。传入历史产物状态里的 artifactId；proposed 表示已提交排队，running 表示正在生成。只有最新任务为 succeeded 且该 job 对应的不可变产物版本已落库，才会返回 succeeded。缺失或不属于当前用户、Notebook、会话的产物都返回 not_found；不返回生成参数或错误细节。每次调用只读取一次当前服务端状态，不会等待或自动轮询。',
+      inputSchema: getCanvasArtifactStatusInputSchema,
+      outputSchema: getCanvasArtifactStatusOutputSchema,
+      timeoutMs: 5_000,
+      handler: async (toolInput, context) => {
+        if (
+          context.subjectId !== this.input.identity.studentId ||
+          context.conversationId !== this.input.conversationId
+        ) {
+          throw new Error('canvas_artifact_scope_mismatch');
+        }
+        const receipt = await this.statusRepository.getGenerationReceipt({
+          artifactId: toolInput.artifactId,
+          spaceId: this.input.spaceId,
+          conversationId: this.input.conversationId,
+          trustedSubjectId: this.input.identity.studentId,
+        });
+        return toCanvasArtifactStatusOutput(toolInput.artifactId, receipt);
+      },
+    };
+  }
+
+  /** Model-only semantic proposal. It keeps only a bounded candidate in memory;
+   * durable state is written later by finalize, after the whole Turn succeeds. */
+  requestConfirmationTool(): AgentTool<
+    { kind: z.infer<typeof artifactProposalKindSchema>; title: string },
+    {
+      kind: z.infer<typeof artifactProposalKindSchema>;
+      title: string;
+      status: 'awaiting_confirmation';
+    }
+  > {
+    const inputSchema = z
+      .object({
+        kind: artifactProposalKindSchema,
+        title: z.string().trim().min(1).max(120),
+      })
+      .strict();
+    const outputSchema = z
+      .object({
+        kind: artifactProposalKindSchema,
+        title: z.string().trim().min(1).max(120),
+        status: z.literal('awaiting_confirmation'),
+      })
+      .strict();
+    return {
+      name: 'proposeCanvasArtifact',
+      description:
+        '为用户明确要求的持久 Canvas 产物提出一个建议类型和标题；此工具不会创建 Artifact、Generation Job 或后台任务。普通聊天、解释、摘要、草稿和没有明确持久化要求的请求不要调用。',
+      inputSchema,
+      outputSchema,
+      timeoutMs: 2_000,
+      handler: async (input, context) => {
+        if (
+          context.subjectId !== this.input.identity.studentId ||
+          context.conversationId !== this.input.conversationId
+        )
+          throw new Error('canvas_artifact_scope_mismatch');
+        this.confirmationProposal = { kind: input.kind, title: input.title };
+        return {
+          ...this.confirmationProposal,
+          status: 'awaiting_confirmation',
+        };
+      },
+    };
+  }
+
+  async finalizeConfirmation(input: {
+    userMessageId: string;
+    actorUserId: string;
+  }): Promise<TurnApplicationProfileEvent | null> {
+    const proposal = this.confirmationProposal;
+    if (!proposal) return null;
+    const pending =
+      await new DrizzleArtifactConfirmationRepository().createPending({
+        operationId: this.input.operationId,
+        userMessageId: input.userMessageId,
+        actorUserId: input.actorUserId,
+        notebookId: this.input.spaceId,
+        conversationId: this.input.conversationId,
+        artifactKind: proposal.kind,
+        title: proposal.title,
+      });
+    return {
+      protocol: 'educanvas.turn.v2',
+      operationId: this.input.operationId,
+      type: 'artifact.confirmation_required',
+      confirmationId: pending.id,
+      artifactKind: pending.artifactKind,
+      title: pending.title,
+    };
+  }
+
+  confirmationProposalSnapshot() {
+    return this.confirmationProposal ? { ...this.confirmationProposal } : null;
+  }
+
   events(): readonly TurnApplicationProfileEvent[] {
     return [...this.proposed.values()];
   }
 
   private async createArtifact(
-    toolInput: z.infer<typeof createCanvasArtifactInputSchema>,
+    toolInput: CreateCanvasArtifactInput,
     context: AgentToolContext,
   ): Promise<z.infer<typeof createCanvasArtifactOutputSchema>> {
     if (
@@ -159,6 +291,12 @@ export class WebOperationArtifacts {
       context.conversationId !== this.input.conversationId
     ) {
       throw new Error('canvas_artifact_scope_mismatch');
+    }
+    if (
+      this.input.confirmedArtifactKind &&
+      toolInput.kind !== this.input.confirmedArtifactKind
+    ) {
+      throw new Error('artifact_confirmation_kind_mismatch');
     }
     const created = await this.repository.createArtifactWithGenerationJob({
       spaceId: this.input.spaceId,

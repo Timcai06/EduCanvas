@@ -74,6 +74,23 @@ export function ArtifactConfirmSheet({
   );
 }
 
+function initialGenerationFailureLabel(failureCode: string | null | undefined) {
+  switch (failureCode) {
+    case 'model_output_limit':
+      return '生成内容超过输出上限，请缩小范围或分章节生成。';
+    case 'model_outcome_unknown':
+      return '本次调用结果无法确认。请先在资源库核实任务或产物状态，不要原样重试。';
+    case 'model_attempts_exhausted':
+      return '自动重试次数已用完。请先核实任务状态；确认仍失败后，再考虑重新发起。';
+    case 'model_invalid_response':
+      return '模型返回内容未通过校验，当前任务未能完成。请调整要求后再重新生成。';
+    case 'invalid_output':
+      return '生成内容未通过校验，当前任务未能完成。请调整要求后再重新生成。';
+    default:
+      return '生成失败，请从资源库查看任务状态。';
+  }
+}
+
 export function ArtifactStatusCard({
   generation,
   onOpen,
@@ -109,10 +126,9 @@ export function ArtifactStatusCard({
                     generation.detail.artifact.latestVersion > 1
                     ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
                     : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-                  : generation.detail?.latestJob?.failureCode ===
-                      'model_output_limit'
-                    ? '生成内容超过输出上限，请缩小范围或分章节生成。'
-                    : '生成失败，可稍后从产物列表重试';
+                  : initialGenerationFailureLabel(
+                      generation.detail?.latestJob?.failureCode,
+                    );
   return (
     <div
       role="status"

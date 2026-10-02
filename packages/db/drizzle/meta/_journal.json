@@ -449,6 +449,34 @@
       "when": 1790910225216,
       "tag": "0063_notebook_lesson_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790951406658,
+      "tag": "0064_artifact_generation_execution_fence",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790954426569,
+      "tag": "0065_artifact_confirmations",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790956056199,
+      "tag": "0066_artifact_confirmation_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790962366674,
+      "tag": "0067_artifact_confirmation_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

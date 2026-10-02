@@ -868,3 +868,51 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - Data migration: 只有已有 Conversation 可证明的 SpaceId 回填，不迁移空间、不复制教学事实、不变原 ID/状态/掌握度。原 conversation_id=null 的历史行保留 notebook_id=null。
 - Estimated scale: 回填与 Session 行数线性增长；三个索引覆盖绑定/未绑定当前行及Notebook FK；生产规模尚未验证。
 - 风险: 中——改变 active 范围及锁的粒度，但不改教学状态转移；多个 Notebook 同课可并行，显式 Notebook 操作不再归档他本。需要与应用一起切换并验证精确 Goal/Session/Conversation 绑定。
+
+## 0064_artifact_generation_execution_fence.sql
+
+- 状态: active（#509 长文生成执行 fencing，2026-10-02）
+- 语义: 为 `artifact_generation_jobs` 增加单调递增的 `execution_generation`，并约束其非负；Worker 领取或重投生成任务时递增 fence，checkpoint、失败终态和版本提交均校验当前 generation，避免过期的重叠执行覆盖新 checkpoint 或提交结果。
+- 锁表: 新增常量默认值为 0 的非空整数列，并验证非负 CHECK；ALTER 持有短时表锁，CHECK 验证扫描既有生成任务行。上线前按实际任务表规模确认维护窗口。
+- 回滚: 先停用 generation-aware Worker 并排空在途任务；旧 Worker 不校验 fence，禁止与新 Worker 并行处理同一生成任务。保留该列和计数，不回退历史 SQL；如需移除列，应另出前向迁移。
+- N-1: 旧应用可忽略默认值为 0 的新列，但不具备过期执行 fencing。迁移与 Worker 版本须作为同一发布单元切换，滚动期间避免旧、新 Worker 对同一任务并发执行。
+- Fresh install: 可重放；空表上的新任务从 generation 0 开始，首次领取原子递增后执行。
+- Data migration: none——既有任务统一使用默认 generation 0，不重写 checkpoint、状态或版本内容。
+- Estimated scale: 每条生成任务新增 4 字节计数；CHECK 验证扫描现存任务表，实际生产规模与锁时长尚未验证。
+- 风险: 中——新增执行 fence 不改变 Artifact/Version 事实，但要求 Worker 发布期间避免旧、新执行重叠；checkpoint 与版本写入仍由仓储事务校验终态和当前 generation。
+
+## 0065_artifact_confirmations.sql
+
+- 状态: active（issue 518 auto 产物确认）
+- 语义: 持久化模型提出、用户尚未确认的产物类型；每个原始 Operation 至多一条，绑定 Actor、Notebook、Conversation 与原始用户消息。确认/修改/取消均为条件状态迁移；表中不存 Prompt 或 Provider 输出。
+- 锁表: 只新增空叶子表、FK、唯一索引和普通索引；不扫描/回填既有业务表。
+- 回滚: 回滚应用后保留待确认记录，后续可重新部署继续处理；移除表前须另出迁移。
+- N-1: 旧客户端不声明确认能力时不会得到该事件，也不会注册产物写工具。
+- Fresh install: 可重放。
+- Data migration: none。
+- Estimated scale: 每个模型明确提议的 auto Turn 最多一行。
+- 风险: 低——新增状态仅覆盖 auto 产物确认；旧产物和生成任务账本不变。
+
+## 0066_artifact_confirmation_attempts.sql
+
+- 状态: active（issue 518 confirmed execution retry）
+- 语义: 为确认记录保存当前执行尝试序号。Gateway 幂等键对同一尝试稳定；仅上一尝试已终态失败/取消/中断且该 Operation 未创建 Artifact Generation Job 时，服务端才原子分配下一序号/键。
+- 锁表: 增加带默认值的整数列与范围 CHECK；既有确认行以 attempt 1 初始化，不扫描其他业务表。
+- 回滚: 回滚新应用后继续使用确认流程原稳定键；删除 attempt_number 前须确认没有新 attempt ID 正在执行。
+- N-1: 旧应用忽略该列但不能安全恢复 terminal attempt；部署应用与迁移作为一个发布单元。
+- Fresh install: 可重放。
+- Data migration: existing rows default to attempt 1; no other data changes.
+- Estimated scale: confirmation 表单列更新；无行数增长。
+- 风险: 低——尝试递增受行锁与 Gateway operation terminal fact 限制，最多 1000 次。
+
+## 0067_artifact_confirmation_fk_indexes.sql
+
+- 状态: active（issue 518 Artifact Confirmation 删除路径索引复核）
+- 语义: 为 `artifact_confirmation_requests.notebook_id` 与 `user_message_id` 增加外键支撑索引，分别覆盖 `spaces` 与 `conversation_messages` 删除时的级联查找。
+- 锁表: 新建两个普通 B-tree 索引会扫描确认表并短暂阻塞写入；每个 auto Turn 最多创建一行，实际生产规模尚未验证。
+- 回滚: 先停用确认写入和关联删除流程，再移除这两个索引；保留外键与确认数据。
+- N-1: 旧应用可忽略新增索引；不改变约束、行格式或读取行为。
+- Fresh install: 可重放。
+- Data migration: none。
+- Estimated scale: 每条确认记录各新增一个索引项；确认表约一条/auto Turn。
+- 风险: 低——只缩短两条真实级联删除路径对子表的查找，不改变删除策略。

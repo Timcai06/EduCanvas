@@ -4,6 +4,7 @@ import type { TurnApplicationEvent } from '@educanvas/agent-core';
 import type { GatewayOperationEvent } from '@educanvas/gateway-core';
 import { toGatewayFailureCode } from '@educanvas/gateway-runtime';
 import type { TeachingTurnEvent } from '@/features/chat/turn-events';
+import { DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE } from '../platform/general-deep-research-message';
 
 function safeFailureMessage(
   code: string,
@@ -17,7 +18,7 @@ function safeFailureMessage(
   if (code === 'POLICY_BLOCKED') return '这轮内容已由安全规则停止。';
   if (code === 'CAPABILITY_UNAVAILABLE') return '当前能力暂时不可用。';
   if (code === 'RESEARCH_REQUIREMENTS_UNMET') {
-    return '研究材料不足：本轮未达到三轮搜索、五个已读来源和五个有效引用的要求。请补充来源或缩小主题后发起新研究。';
+    return DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE;
   }
   if (!retryable) {
     return '这轮回答未能完成，请调整问题或附带来源后重新发送。';
@@ -138,6 +139,14 @@ export function projectTurnApplicationEventToWeb(
         artifactId: event.artifactId,
         kind: event.artifactKind,
         trustTier: event.trustTier,
+        title: event.title,
+      };
+    case 'artifact.confirmation_required':
+      return {
+        ...base,
+        type: 'artifact.confirmation_required',
+        confirmationId: event.confirmationId,
+        kind: event.artifactKind,
         title: event.title,
       };
     case 'artifact.version_added':
@@ -288,6 +297,15 @@ export async function* gatewayToLegacy(
           artifactId: event.artifactId,
           kind: event.artifactKind,
           trustTier: 'tier1',
+          title: event.title,
+        };
+        break;
+      case 'artifact.confirmation_required':
+        yield {
+          ...base,
+          type: 'artifact.confirmation_required',
+          confirmationId: event.confirmationId,
+          kind: event.artifactKind,
           title: event.title,
         };
         break;

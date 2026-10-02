@@ -22,6 +22,15 @@ export {
   toolApprovalIntents,
 } from './schema';
 export {
+  ArtifactConfirmationNotFoundError,
+  ArtifactConfirmationRetryLimitError,
+  DrizzleArtifactConfirmationRepository,
+  artifactConfirmationMessageId,
+  isRetryableArtifactConfirmationFailure,
+  type ArtifactConfirmationScope,
+  type ArtifactConfirmationSnapshot,
+} from './artifact-confirmation-repository';
+export {
   AssetAccessError,
   AssetPersistenceError,
   ASSET_EXTRACT_TEXT_TASK,
@@ -158,6 +167,7 @@ export {
   type ArtifactStatus,
   type ArtifactTrustTier,
   type PlatformArtifact,
+  type PlatformArtifactGenerationReceipt,
   type PlatformArtifactJob,
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';

@@ -10,7 +10,10 @@ import type {
 } from '@educanvas/agent-runtime';
 import type { NodeInvocationPersistencePort } from '@educanvas/node-runtime';
 import { describe, expect, it, vi } from 'vitest';
-import { ArtifactOutputGuard } from './general-artifact-output-guard';
+import {
+  ArtifactOutputGuard,
+  AutoArtifactConfirmationOutputGuard,
+} from './general-artifact-output-guard';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import type { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
@@ -54,6 +57,35 @@ function artifacts(events: readonly TurnApplicationProfileEvent[]) {
 }
 
 describe('ArtifactOutputGuard 对抗性真实性校验', () => {
+  it('proposal 存在时用固定待确认文案替代模型声称已创建的正文', async () => {
+    const guard = new AutoArtifactConfirmationOutputGuard({
+      confirmationProposalSnapshot: () => ({
+        kind: 'mind_map',
+        title: '思维导图',
+      }),
+    } as unknown as WebOperationArtifacts);
+    await expect(guard.push('已经为你创建好了。')).resolves.toEqual({
+      kind: 'hold',
+    });
+    await expect(guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [
+        '我建议把「思维导图」保存为持久产物。请在下方确认或修改类型；确认后才会开始创建。',
+      ],
+    });
+  });
+
+  it('没有 proposal 的普通 auto 对话保留模型回答', async () => {
+    const guard = new AutoArtifactConfirmationOutputGuard({
+      confirmationProposalSnapshot: () => null,
+    } as unknown as WebOperationArtifacts);
+    await guard.push('这是普通回答。');
+    await expect(guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: ['这是普通回答。'],
+    });
+  });
+
   it.each(['markdown_document', 'interactive_artifact', 'web_app'] as const)(
     '%s 丢弃模型自述、正文与分片 JSON，未有事实时稳定失败',
     async (preference) => {
@@ -200,6 +232,45 @@ describe('ArtifactOutputGuard 对抗性真实性校验', () => {
       });
     },
   );
+
+  it('确认后只接受确认的精确类型和真实工具回执', () => {
+    const guard = new ArtifactOutputGuard(
+      'interactive_artifact',
+      artifacts([{ ...proposed, artifactKind: 'slides' }]),
+      operationId,
+      'slides',
+    );
+    const wrongKind = {
+      ...result,
+      output: { ...(result.output as object), kind: 'mind_map' },
+    };
+    expect(guard.completionRequirement.isSatisfied([wrongKind])).toBe(false);
+    expect(
+      guard.completionRequirement.isSatisfied([
+        { ...result, output: { ...(result.output as object), kind: 'slides' } },
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe('confirmed artifact output', () => {
+  it('requires the exact Slides receipt and emits only factual status', async () => {
+    const guard = new ArtifactOutputGuard(
+      'interactive_artifact',
+      artifacts([{ ...proposed, artifactKind: 'slides' }]),
+      operationId,
+      'slides',
+    );
+    expect(
+      guard.completionRequirement.isSatisfied([
+        { ...result, output: { ...(result.output as object), kind: 'slides' } },
+      ]),
+    ).toBe(true);
+    await expect(guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [safeSubmission],
+    });
+  });
 });
 
 const command: TurnApplicationCommand = {

@@ -5,7 +5,14 @@ export function structuredOutputBudget(
   config: EnabledModelGatewayConfiguration,
   modelId: string,
   longArtifact: boolean,
+  requestedMaximum?: number,
 ): number {
+  if (
+    requestedMaximum !== undefined &&
+    (!Number.isSafeInteger(requestedMaximum) || requestedMaximum < 1)
+  ) {
+    throw new Error('INVALID_REQUESTED_OUTPUT_BUDGET');
+  }
   const configured = config.structuredMaxOutputTokens ?? config.maxOutputTokens;
   // 官方 /models 在 2026-10-01 声明这两个模型支持 393216 output tokens。
   // 仅把已核实的长产物目标提高到 32768，不改变其他任务或兼容代理的预算。
@@ -15,7 +22,10 @@ export function structuredOutputBudget(
     new URL(config.baseUrl).hostname === 'api.deepseek.com' &&
     ['deepseek-v4-pro', 'deepseek-flash'].includes(modelId)
   ) {
-    return Math.max(configured, 32_768);
+    return Math.min(
+      requestedMaximum ?? Number.POSITIVE_INFINITY,
+      Math.max(configured, 32_768),
+    );
   }
-  return configured;
+  return Math.min(requestedMaximum ?? Number.POSITIVE_INFINITY, configured);
 }

@@ -39,6 +39,8 @@ export interface StructuredModelRequest<Output> {
   promptVersion: string;
   traceId: string;
   operationId: string;
+  /** 可选的调用级输出上限；适配器必须将其限制在部署/模型有效上限内。 */
+  maxOutputTokens?: number;
   signal?: ModelAbortSignal;
 }
 

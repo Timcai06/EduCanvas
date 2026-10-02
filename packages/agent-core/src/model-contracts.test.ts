@@ -159,4 +159,16 @@ describe('agent model contracts', () => {
       retryable: false,
     });
   });
+
+  it('内部未执行证据默认未知且不改变公开归一化错误', () => {
+    const normalized = { code: 'rate_limit' as const, retryable: true };
+    expect(new ModelGatewayInvocationError(normalized).executionOutcome).toBe(
+      'unknown',
+    );
+    const rejected = new ModelGatewayInvocationError(normalized, {
+      executionOutcome: 'not_executed',
+    });
+    expect(rejected.executionOutcome).toBe('not_executed');
+    expect(normalizeModelGatewayError(rejected)).toEqual(normalized);
+  });
 });

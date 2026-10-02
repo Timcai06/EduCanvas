@@ -27,13 +27,17 @@ import type { PlusMenuActionId } from '@/features/composer/plus-menu';
 import {
   MAX_LIVE_CONTEXT_ASSETS,
   type LiveVoiceContextAsset,
-  type LiveVoiceContextSnapshot,
 } from '@/features/voice/live-voice-context';
 import {
   formatLiveVoiceLetterMarkdown,
   type LiveVoiceExitPayload,
 } from '@/features/voice/live-voice-bring-back';
 import { useNotebookSources } from './use-notebook-sources';
+import {
+  createArtifactConfirmationSendOptions,
+  useGeneralSendHandlers,
+  type ConfirmationAction,
+} from './use-general-send-handlers';
 import { useWorkspaceSurface } from './use-workspace-surface';
 import type { HomeFocusTarget } from './home-focus';
 import {
@@ -67,7 +71,6 @@ import { useSurfacePositionPersistence } from './use-surface-position-persistenc
 import { useResourceDock } from './use-resource-dock';
 import { showToast } from '@/components/ui/toast';
 import { buildTurnContextSnapshot } from '@/features/chat/turn-context-snapshot';
-import { MIND_MAP_ASK_NODE_EVENT } from '@/features/canvas/mind-map-layout';
 import { shouldConsumeTurnScopedInputs } from './turn-input-consumption';
 import { describeGenerationSettledToast } from './generation-toast';
 
@@ -255,6 +258,7 @@ export function useGeneralWorkspaceController(options: {
       frozenAssets?: readonly LiveVoiceContextAsset[],
       preference = outputPreference,
       mode: 'chat' | 'deep_research' = 'chat',
+      confirmation?: ConfirmationAction,
     ) => {
       setError(null);
       setSourceNotice(null);
@@ -270,24 +274,33 @@ export function useGeneralWorkspaceController(options: {
         label: snapshot.included[index]!.label,
       }));
       activeTurnOutputPreferenceRef.current = preference;
-      void turn
-        .send(text, undefined, selected, {
-          outputPreference: preference,
-          mode,
-        })
+      const confirmationOptions = createArtifactConfirmationSendOptions(
+        preference,
+        mode,
+        confirmation,
+      );
+      return turn
+        .send(
+          text,
+          confirmation?.clientMessageId,
+          selected,
+          confirmationOptions,
+        )
         .then((outcome) => {
-          if (!shouldConsumeTurnScopedInputs(outcome)) return;
-          setOutputPreference('auto');
-          activeTurnOutputPreferenceRef.current = 'auto';
-          setAssets((current) =>
-            current.map((asset) =>
-              asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
-            ),
-          );
-          /* W03：发送后刷新来源失败不静默吞掉——上报结构化错误，保留服务端已确认的数据。 */
-          void refreshAssets().catch((reason: unknown) => {
-            setError(toClientError(reason, '发送后刷新来源失败。'));
-          });
+          if (shouldConsumeTurnScopedInputs(outcome)) {
+            setOutputPreference('auto');
+            activeTurnOutputPreferenceRef.current = 'auto';
+            setAssets((current) =>
+              current.map((asset) =>
+                asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
+              ),
+            );
+            /* W03：发送后刷新来源失败不静默吞掉——上报结构化错误，保留服务端已确认的数据。 */
+            void refreshAssets().catch((reason: unknown) => {
+              setError(toClientError(reason, '发送后刷新来源失败。'));
+            });
+          }
+          return outcome;
         });
     },
     [
@@ -299,34 +312,8 @@ export function useGeneralWorkspaceController(options: {
       turn,
     ],
   );
-  const sendLive = useCallback(
-    (text: string, context: LiveVoiceContextSnapshot) =>
-      send(text, context.assets),
-    [send],
-  );
-  const sendDeepResearch = useCallback(
-    (topic: string) => send(topic, undefined, 'auto', 'deep_research'),
-    [send],
-  );
-
-  useEffect(() => {
-    const askNode = (event: Event) => {
-      const detail = (event as CustomEvent<unknown>).detail;
-      if (!detail || typeof detail !== 'object') return;
-      const node = detail as Record<string, unknown>;
-      if (
-        typeof node.nodeId !== 'string' ||
-        typeof node.nodeLabel !== 'string' ||
-        node.nodeId.length > 64 ||
-        node.nodeLabel.length > 120
-      ) {
-        return;
-      }
-      send(`请围绕思维导图节点“${node.nodeLabel}”进一步讲解。`);
-    };
-    window.addEventListener(MIND_MAP_ASK_NODE_EVENT, askNode);
-    return () => window.removeEventListener(MIND_MAP_ASK_NODE_EVENT, askNode);
-  }, [send]);
+  const { sendLive, onArtifactConfirmation, sendDeepResearch } =
+    useGeneralSendHandlers(send);
 
   /* 出室带回：会话转录装订成 note 信笺落库，成功后摆上工作面。
      失败只上报错误——退场动画不依赖这次写库（门槛设计 §4）。 */
@@ -484,6 +471,7 @@ export function useGeneralWorkspaceController(options: {
     onSend: send,
     onLiveSend: sendLive,
     onLiveExit: handleLiveExit,
+    onArtifactConfirmation,
     onStop: () => void turn.stop(),
     onMenuAction: handleMenuAction,
     onToolAction: () => undefined,

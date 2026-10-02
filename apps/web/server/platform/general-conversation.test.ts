@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   listMessages: vi.fn(),
   listCitations: vi.fn(),
   listReferences: vi.fn(),
+  listConfirmations: vi.fn(),
 }));
 vi.mock('@educanvas/db', () => ({
   DrizzlePlatformConversationRepository: class {
@@ -18,6 +19,9 @@ vi.mock('@educanvas/db', () => ({
   },
   DrizzlePlatformArtifactTurnReferenceRepository: class {
     listForOperations = mocks.listReferences;
+  },
+  DrizzleArtifactConfirmationRepository: class {
+    listRecoverable = mocks.listConfirmations;
   },
 }));
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
@@ -43,8 +47,112 @@ beforeEach(() => {
   mocks.listMessages.mockResolvedValue([]);
   mocks.listCitations.mockResolvedValue([]);
   mocks.listReferences.mockResolvedValue([]);
+  mocks.listConfirmations.mockResolvedValue([]);
 });
 describe('explicit Notebook page projection', () => {
+  it('refresh restores a consumed confirmation when runtime start failed before artifacts exist', async () => {
+    const confirmationId = '11111111-1111-4111-8111-111111111111';
+    mocks.listMessages.mockResolvedValue([
+      {
+        id: 'assistant-proposal',
+        operationId: 'operation-proposal',
+        clientMessageId: 'proposal-message',
+        role: 'assistant',
+        status: 'completed',
+        content: '建议创建Slides',
+        parts: [],
+        failureCode: null,
+        createdAt: new Date(0),
+        completedAt: new Date(0),
+      },
+    ]);
+    mocks.listConfirmations.mockResolvedValue([
+      {
+        id: confirmationId,
+        operationId: 'operation-proposal',
+        userMessageId: 'proposal-user',
+        actorUserId: 'owner',
+        notebookId: 'notebook-a',
+        conversationId: 'chat-a',
+        artifactKind: 'mind_map',
+        title: 'Slides建议',
+        status: 'confirmed',
+        confirmedKind: 'slides',
+        confirmationMessageId: `artifact.confirm.${confirmationId.replaceAll('-', '')}`,
+        createdAt: new Date(0).toISOString(),
+      },
+    ]);
+
+    const data = await loadGeneralChatPageData({
+      notebookId: 'notebook-a',
+      conversationId: 'chat-a',
+    });
+
+    expect(data?.initialMessages[0]?.artifactConfirmation).toEqual({
+      id: confirmationId,
+      kind: 'slides',
+      title: 'Slides建议',
+      status: 'confirmed',
+    });
+  });
+
+  it('hides the recovered card once the idempotent execution has an artifact receipt', async () => {
+    const confirmationId = '11111111-1111-4111-8111-111111111111';
+    const clientMessageId = `artifact.confirm.${confirmationId.replaceAll('-', '')}`;
+    mocks.listMessages.mockResolvedValue([
+      {
+        id: 'assistant-proposal',
+        operationId: 'operation-proposal',
+        clientMessageId: 'proposal-message',
+        role: 'assistant',
+        status: 'completed',
+        content: '建议创建Slides',
+        parts: [],
+        failureCode: null,
+        createdAt: new Date(0),
+        completedAt: new Date(0),
+      },
+      {
+        id: 'execution-user',
+        operationId: 'operation-execution',
+        clientMessageId,
+        role: 'user',
+        status: 'completed',
+        content: '确认创建',
+        parts: [],
+        failureCode: null,
+        createdAt: new Date(0),
+        completedAt: new Date(0),
+      },
+    ]);
+    mocks.listReferences.mockResolvedValue([
+      { operationId: 'operation-execution' },
+    ]);
+    mocks.listConfirmations.mockResolvedValue([
+      {
+        id: confirmationId,
+        operationId: 'operation-proposal',
+        userMessageId: 'proposal-user',
+        actorUserId: 'owner',
+        notebookId: 'notebook-a',
+        conversationId: 'chat-a',
+        artifactKind: 'mind_map',
+        title: 'Slides建议',
+        status: 'confirmed',
+        confirmedKind: 'slides',
+        confirmationMessageId: clientMessageId,
+        createdAt: new Date(0).toISOString(),
+      },
+    ]);
+
+    const data = await loadGeneralChatPageData({
+      notebookId: 'notebook-a',
+      conversationId: 'chat-a',
+    });
+
+    expect(data?.initialMessages[0]?.artifactConfirmation).toBeUndefined();
+  });
+
   it('loads the exact authorized conversation independent of the legacy cookie', async () => {
     const data = await loadGeneralChatPageData({
       notebookId: 'notebook-a',

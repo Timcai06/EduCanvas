@@ -5,6 +5,7 @@ import {
   DrizzlePlatformArtifactTurnReferenceRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleArtifactConfirmationRepository,
   type PlatformConversationSnapshot,
 } from '@educanvas/db';
 import { cookies } from 'next/headers';
@@ -25,6 +26,7 @@ const conversations = new DrizzlePlatformConversationRepository();
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
 const artifactReferences = new DrizzlePlatformArtifactTurnReferenceRepository();
+const artifactConfirmations = new DrizzleArtifactConfirmationRepository();
 
 export interface GeneralChatPageData {
   conversation: PlatformConversationSnapshot;
@@ -146,6 +148,25 @@ export async function loadGeneralChatPageData(explicit?: {
       reference,
     ]);
   }
+  const recoverableConfirmations = await artifactConfirmations.listRecoverable({
+    actorUserId: identity.studentId,
+    notebookId: conversation.spaceId,
+    conversationId: conversation.id,
+  });
+  const confirmationsByOperation = new Map(
+    recoverableConfirmations
+      .filter((confirmation) => {
+        if (confirmation.status !== 'confirmed') return true;
+        const execution = messages.find(
+          (message) =>
+            message.clientMessageId === confirmation.confirmationMessageId,
+        );
+        return (
+          !execution || !artifactsByOperation.get(execution.operationId)?.length
+        );
+      })
+      .map((confirmation) => [confirmation.operationId, confirmation]),
+  );
   const citationsByMessage = new Map<string, typeof citations>();
   for (const citation of citations) {
     citationsByMessage.set(citation.assistantMessageId, [
@@ -179,6 +200,26 @@ export async function loadGeneralChatPageData(explicit?: {
                 latestVersion: artifact.latestVersion,
               }),
             )
+          : undefined,
+      artifactConfirmation:
+        message.role === 'assistant'
+          ? (() => {
+              const confirmation = confirmationsByOperation.get(
+                message.operationId,
+              );
+              return confirmation
+                ? {
+                    id: confirmation.id,
+                    kind:
+                      confirmation.confirmedKind ?? confirmation.artifactKind,
+                    title: confirmation.title,
+                    status:
+                      confirmation.status === 'confirmed'
+                        ? 'confirmed'
+                        : 'pending',
+                  }
+                : undefined;
+            })()
           : undefined,
       citations:
         message.role === 'assistant'

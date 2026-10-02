@@ -14,6 +14,8 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import { applyResolvedLocalPorts } from './local-orchestrator-config.mjs';
 
+const simulatedEduCanvasRoot = '/workspace/EduCanvas';
+
 const temporaryDirectories = [];
 
 async function makeTemporaryDirectory(prefix) {
@@ -567,7 +569,7 @@ test('auto-clears a half core and proceeds to start the core', async () => {
 
   const { directory } = await makeFakeRuntimeBinaries();
   const logsRoot = await makeLogsRoot();
-  const repoPath = process.cwd();
+  const repoPath = simulatedEduCanvasRoot;
   const result = await run(['web'], {
     PORT: String(webPort),
     EDUCANVAS_GATEWAY_PORT: String(gatewayPort),
@@ -767,7 +769,7 @@ test('partial core 清理会连带停止旧会话记录的 worker 进程', async
   );
 
   const { directory } = await makeFakeRuntimeBinaries();
-  const repoPath = process.cwd();
+  const repoPath = simulatedEduCanvasRoot;
   const child = spawn(
     process.execPath,
     ['tooling/local/local-orchestrator.mjs', 'all'],
@@ -876,7 +878,7 @@ test('recorded PID 被无关进程复用 → 清理跳过而非误杀（fail clo
   );
 
   const { directory } = await makeFakeRuntimeBinaries();
-  const repoPath = process.cwd();
+  const repoPath = simulatedEduCanvasRoot;
   let result;
   try {
     result = await run(['all'], {

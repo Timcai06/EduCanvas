@@ -86,6 +86,7 @@ const ASSET_OBJECT_STORAGE_PRODUCTION_ALLOWLIST = new Map([
 // R04 台账 R04.2：默认入口按需保留的 schema 表（曾经 export * 全量泄漏）。生产引用基线为 0。
 const SCHEMA_TABLE_DENYLIST = new Set([
   'agentOperations',
+  'artifactConfirmationRequests',
   'artifactVersions',
   'assets',
   'assetVersions',

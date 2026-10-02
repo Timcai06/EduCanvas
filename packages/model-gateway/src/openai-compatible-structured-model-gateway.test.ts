@@ -144,6 +144,119 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
     });
     await expect(gateway.generateStructured(request)).rejects.toMatchObject({
       normalized: { code },
+      executionOutcome: status === 429 ? 'not_executed' : 'unknown',
+    });
+  });
+
+  it.each([undefined, { prompt_tokens: 10 }])(
+    '有界请求缺少输出用量时失败，不把 %j 当作零用量',
+    async (usage) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            ...(usage === undefined ? {} : { usage }),
+          }),
+        ),
+      });
+      await expect(
+        gateway.generateStructured({ ...request, maxOutputTokens: 1_024 }),
+      ).rejects.toMatchObject({
+        normalized: { code: 'invalid_response', retryable: false },
+        executionOutcome: 'unknown',
+      });
+    },
+  );
+
+  it.each([0, -1, 1.5, 1_025, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity])(
+    '有界非空JSON拒绝不可信输出用量 %s，执行结果仍未知',
+    async (completionTokens) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            usage: { completion_tokens: completionTokens },
+          }),
+        ),
+      });
+      await expect(
+        gateway.generateStructured({ ...request, maxOutputTokens: 1_024 }),
+      ).rejects.toMatchObject({
+        normalized: { code: 'invalid_response' },
+        executionOutcome: 'unknown',
+      });
+    },
+  );
+
+  it.each([1, 8_000])(
+    '有界JSON可结算正整数用量 %s（含实际配置上界）',
+    async (completionTokens) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            usage: { completion_tokens: completionTokens },
+          }),
+        ),
+      });
+      const result = await gateway.generateStructured({
+        ...request,
+        maxOutputTokens: 16_000,
+      });
+      expect(result.metadata.usage.outputTokens).toBe(completionTokens);
+    },
+  );
+
+  it('按实际发送的配置上限校验用量，而非较大的调用方请求', async () => {
+    let sentMaximum = 0;
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      fetchImpl: fetchStub((init) => {
+        sentMaximum = JSON.parse(String(init.body)).max_tokens;
+        return Response.json({
+          choices: [
+            { finish_reason: 'stop', message: { content: '{"answer":"42"}' } },
+          ],
+          usage: { completion_tokens: 8_001 },
+        });
+      }),
+    });
+    await expect(
+      gateway.generateStructured({ ...request, maxOutputTokens: 16_000 }),
+    ).rejects.toMatchObject({
+      normalized: { code: 'invalid_response', retryable: false },
+      executionOutcome: 'unknown',
+    });
+    expect(sentMaximum).toBe(8_000);
+  });
+
+  it.each([
+    () => {
+      throw new Error('network interruption');
+    },
+    () => new Response('{', { status: 200 }),
+    () => Response.json({ choices: [] }),
+    () => Response.json({ choices: [{ message: { content: '{' } }] }),
+  ])('网络和解析失败不声明请求未执行', async (handler) => {
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      fetchImpl: fetchStub(handler),
+    });
+    await expect(gateway.generateStructured(request)).rejects.toMatchObject({
+      executionOutcome: 'unknown',
     });
   });
 

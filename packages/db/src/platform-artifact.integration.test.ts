@@ -17,6 +17,7 @@ import {
   vi,
 } from 'vitest';
 import {
+  ArtifactExecutionFenceError,
   ArtifactJobLifecycleError,
   ArtifactIdempotencyConflictError,
   ArtifactOwnershipError,
@@ -815,6 +816,96 @@ describeWithDatabase('平台 Artifact 仓储', () => {
         checkpoint: { stage: 'invalid_after_terminal' },
       }),
     ).rejects.toBeInstanceOf(ArtifactJobLifecycleError);
+  });
+
+  it('新 execution fence 使旧 worker 的 checkpoint、失败终态和版本提交失效', async () => {
+    const artifact = await createArtifact();
+    const job = await repository.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      params: { kind: 'markdown_document' },
+    });
+    const oldExecution = await repository.claimGenerationJobExecution({
+      jobId: job.id,
+      trustedSubjectId: owner,
+    });
+    expect(oldExecution.executionGeneration).toBe(1);
+    expect(oldExecution.checkpoint).toEqual({});
+    await repository.updateGenerationJobCheckpoint({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      executionGeneration: oldExecution.executionGeneration,
+      checkpoint: { stage: 'old', completedSections: [0], outputTokens: 900 },
+    });
+
+    const currentExecution = await repository.claimGenerationJobExecution({
+      jobId: job.id,
+      trustedSubjectId: owner,
+    });
+    expect(currentExecution.executionGeneration).toBe(
+      oldExecution.executionGeneration + 1,
+    );
+    expect(currentExecution.checkpoint).toMatchObject({
+      stage: 'old',
+      completedSections: [0],
+      outputTokens: 900,
+    });
+    await repository.updateGenerationJobCheckpoint({
+      jobId: job.id,
+      trustedSubjectId: owner,
+      executionGeneration: currentExecution.executionGeneration,
+      checkpoint: {
+        stage: 'current',
+        completedSections: [0, 1],
+        outputTokens: 2_100,
+      },
+    });
+
+    await expect(
+      repository.updateGenerationJobCheckpoint({
+        jobId: job.id,
+        trustedSubjectId: owner,
+        executionGeneration: oldExecution.executionGeneration,
+        checkpoint: { stage: 'old', completedSections: [], outputTokens: 0 },
+      }),
+    ).rejects.toBeInstanceOf(ArtifactExecutionFenceError);
+    await expect(
+      repository.transitionGenerationJob({
+        jobId: job.id,
+        trustedSubjectId: owner,
+        to: 'failed',
+        failureCode: 'stale_worker',
+        executionGeneration: oldExecution.executionGeneration,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactExecutionFenceError);
+    await expect(
+      repository.appendVersionAndCompleteGenerationJob({
+        jobId: job.id,
+        artifactId: artifact.id,
+        trustedSubjectId: owner,
+        content: { markdown: '# stale' },
+        executionGeneration: oldExecution.executionGeneration,
+      }),
+    ).rejects.toBeInstanceOf(ArtifactExecutionFenceError);
+
+    await expect(
+      repository.getGenerationJob({ jobId: job.id, trustedSubjectId: owner }),
+    ).resolves.toMatchObject({
+      checkpoint: {
+        stage: 'current',
+        completedSections: [0, 1],
+        outputTokens: 2_100,
+      },
+      status: 'running',
+    });
+    const version = await repository.appendVersionAndCompleteGenerationJob({
+      jobId: job.id,
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      content: { markdown: '# complete' },
+      executionGeneration: currentExecution.executionGeneration,
+    });
+    expect(version.version).toBe(1);
   });
 
   it('同一生成任务只允许追加一版; 同一个 generationJobId 二次追加会被幂等拒绝', async () => {

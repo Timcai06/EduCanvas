@@ -13,6 +13,7 @@ import {
   gatewayToLegacy,
   projectTurnApplicationEventToWeb,
 } from './turn-application-projection';
+import { DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE } from '../platform/general-deep-research-message';
 import {
   collect,
   eventsOf,
@@ -100,8 +101,7 @@ describe('output_limit public projection', () => {
       type: 'turn.failed',
       code: 'RESEARCH_REQUIREMENTS_UNMET',
       retryable: false,
-      message:
-        '研究材料不足：本轮未达到三轮搜索、五个已读来源和五个有效引用的要求。请补充来源或缩小主题后发起新研究。',
+      message: DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE,
     });
   });
 });
