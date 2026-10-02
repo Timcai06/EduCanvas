@@ -16,6 +16,15 @@ import {
 import { archiveOwnedArtifactTransaction } from './platform-artifact-archive';
 import { loadArtifactDetailRows } from './platform-artifact-detail-read';
 import { ownsArtifactConversationScope } from './platform-artifact-scope';
+import {
+  ArtifactOwnershipError,
+  ArtifactVersionConflictError,
+  ArtifactIdempotencyConflictError,
+  ArtifactRevisionConflictError,
+  ArtifactJobLifecycleError,
+  ArtifactExecutionFenceError,
+} from './platform-artifact-errors';
+import { claimArtifactGenerationExecution } from './platform-artifact-generation-execution';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -40,72 +49,14 @@ async function requireArtifactNotebookAccess(
   });
 }
 
-/** 主体不拥有目标 Space/Artifact 时抛出;与查无此物同错,避免所有权探测。 */
-export class ArtifactOwnershipError extends Error {
-  readonly code = 'artifact_ownership';
-
-  constructor() {
-    super('产物不存在或不属于当前主体');
-    this.name = 'ArtifactOwnershipError';
-  }
-}
-
-/** 版本号并发冲突(同一产物同一版本被同时写入)。 */
-export class ArtifactVersionConflictError extends Error {
-  readonly code = 'artifact_version_conflict';
-
-  constructor() {
-    super('产物版本写入冲突,请重试');
-    this.name = 'ArtifactVersionConflictError';
-  }
-}
-
-/**
- * 幂等键已存在但请求指纹不一致。同一键只能绑定同一个创建请求，
- * 否则客户端复用键重放会静默拿到另一请求的结果，必须显式拒绝。
- */
-export class ArtifactIdempotencyConflictError extends Error {
-  readonly code = 'artifact_idempotency_conflict';
-
-  constructor() {
-    super('相同幂等键已绑定不同的产物创建请求');
-    this.name = 'ArtifactIdempotencyConflictError';
-  }
-}
-
-/** Canvas 修改基于过期版本或目标已有运行中任务时拒绝，防止覆盖更新。 */
-export class ArtifactRevisionConflictError extends Error {
-  readonly code = 'artifact_revision_conflict';
-
-  constructor(readonly reason: 'stale_version' | 'job_in_progress') {
-    super(
-      reason === 'stale_version'
-        ? '产物已经产生新版本，请刷新后再修改'
-        : '产物仍有修改任务在运行',
-    );
-    this.name = 'ArtifactRevisionConflictError';
-  }
-}
-
-/** 生成任务状态机拒绝非法转移。 */
-export class ArtifactJobLifecycleError extends Error {
-  readonly code = 'artifact_job_lifecycle';
-
-  constructor(from: string, to: string) {
-    super(`生成任务不允许从 ${from} 转移到 ${to}`);
-    this.name = 'ArtifactJobLifecycleError';
-  }
-}
-
-/** 过期 worker execution 已被后续 generation fence 取代。 */
-export class ArtifactExecutionFenceError extends Error {
-  readonly code = 'artifact_execution_fenced';
-
-  constructor() {
-    super('生成任务执行权已交给更新的 worker');
-    this.name = 'ArtifactExecutionFenceError';
-  }
-}
+export {
+  ArtifactOwnershipError,
+  ArtifactVersionConflictError,
+  ArtifactIdempotencyConflictError,
+  ArtifactRevisionConflictError,
+  ArtifactJobLifecycleError,
+  ArtifactExecutionFenceError,
+} from './platform-artifact-errors';
 
 /** 产物生成任务在 graphile 队列中的标识;web 入队与 worker 注册共用,防止拼写漂移。 */
 export const ARTIFACT_GENERATE_TASK = 'artifact:generate' as const;
@@ -886,10 +837,7 @@ export class DrizzlePlatformArtifactRepository {
     });
   }
 
-  /**
-   * 原子启动或重投任务并领取单调 generation fence。重叠的 Graphile execution
-   * 后到者会使旧 execution 的 checkpoint、失败终态和版本提交全部失效。
-   */
+  /** 原子启动或重投任务，领取 fence 和同一锁内的最新 checkpoint。 */
   async claimGenerationJobExecution(input: {
     jobId: string;
     trustedSubjectId: string;
@@ -897,46 +845,7 @@ export class DrizzlePlatformArtifactRepository {
     executionGeneration: number;
     checkpoint: Record<string, unknown>;
   }> {
-    return await this.database.transaction(async (tx) => {
-      const [row] = await tx
-        .select({
-          job: artifactGenerationJobs,
-          spaceId: artifacts.spaceId,
-        })
-        .from(artifactGenerationJobs)
-        .innerJoin(
-          artifacts,
-          eq(artifactGenerationJobs.artifactId, artifacts.id),
-        )
-        .where(eq(artifactGenerationJobs.id, input.jobId))
-        .for('update', { of: artifactGenerationJobs })
-        .limit(1);
-      if (!row) throw new ArtifactOwnershipError();
-      await requireArtifactNotebookAccess(tx, {
-        spaceId: row.spaceId,
-        trustedSubjectId: input.trustedSubjectId,
-        permission: 'artifact.write',
-      });
-      if (row.job.status !== 'queued' && row.job.status !== 'running') {
-        throw new ArtifactJobLifecycleError(row.job.status, 'running');
-      }
-      const [updated] = await tx
-        .update(artifactGenerationJobs)
-        .set({
-          status: 'running',
-          startedAt: sql`COALESCE(${artifactGenerationJobs.startedAt}, now())`,
-          progress: sql`GREATEST(COALESCE(${artifactGenerationJobs.progress}, 0), 5)`,
-          executionGeneration: sql`${artifactGenerationJobs.executionGeneration} + 1`,
-        })
-        .where(eq(artifactGenerationJobs.id, input.jobId))
-        .returning({
-          executionGeneration: artifactGenerationJobs.executionGeneration,
-        });
-      return {
-        executionGeneration: updated!.executionGeneration,
-        checkpoint: row.job.checkpoint as Record<string, unknown>,
-      };
-    });
+    return claimArtifactGenerationExecution(this.database, input);
   }
 
   /** generationJobId 唯一对应一次版本提交；用于 crash 后识别“已写版本未终态”。 */

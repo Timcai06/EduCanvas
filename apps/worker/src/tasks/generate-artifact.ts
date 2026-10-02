@@ -13,6 +13,10 @@ import {
 } from '../model-runtime.js';
 import { reportGenerationProgress } from './generation-progress.js';
 import {
+  ArtifactGenerationExecution,
+  isExecutionFenceError,
+} from './artifact-generation-execution.js';
+import {
   appendGeneratedImageVersion,
   ImageArtifactGenerationFailure,
 } from './image-artifact-generation.js';
@@ -28,7 +32,6 @@ import { generateNoteContent } from './note-generation.js';
 import {
   generateMarkdownDocumentContent,
   MarkdownDocumentGenerationFailure,
-  type MarkdownLongformCheckpoint,
 } from './markdown-document-generation.js';
 import { generateWebAppContent } from './web-app-generation.js';
 import { PicturebookGenerationFailure } from './picturebook-generation.js';
@@ -42,12 +45,6 @@ const payloadSchema = z
   })
   .strict();
 
-const isExecutionFenceError = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  (error as { code?: unknown }).code === 'artifact_execution_fenced';
-
 /**
  * 产物生成任务(M1 PR-J5)。账本(artifact_generation_jobs)是事实源:
  * 任何失败都先落 failed + failureCode 再吞掉异常——已记账的失败不再让
@@ -60,37 +57,15 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
   const artifacts = new DrizzlePlatformArtifactRepository();
   const turns = new DrizzlePlatformTurnRepository();
 
-  let executionGeneration: number | undefined;
-  const failJob = async (code: string) => {
-    try {
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'failed',
-        failureCode: code,
-        executionGeneration,
-      });
-      return;
-    } catch (error) {
-      if (isExecutionFenceError(error)) {
-        helpers.logger.warn(
-          `任务 ${payload.jobId} execution 已过期，忽略旧失败状态`,
-        );
-        return;
-      }
-      if (error instanceof ArtifactJobLifecycleError) {
-        helpers.logger.warn(
-          `任务 ${payload.jobId} 无法写 failed(${code}),已进入终态 ${error.message}`,
-        );
-        return;
-      }
-      throw error;
-    }
-  };
+  const execution = new ArtifactGenerationExecution(
+    artifacts,
+    payload,
+    helpers.logger,
+  );
+  const failJob = (code: string) => execution.fail(code);
 
   let artifactAtStart: Awaited<ReturnType<typeof artifacts.getArtifact>>;
   let jobAtStart: Awaited<ReturnType<typeof artifacts.getGenerationJob>>;
-  let generationCheckpoint: Record<string, unknown> = {};
   try {
     jobAtStart = await artifacts.getGenerationJob({
       jobId: payload.jobId,
@@ -108,21 +83,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       artifactId: payload.artifactId,
       trustedSubjectId: payload.subjectId,
     });
-    if (artifactAtStart.kind === 'markdown_document') {
-      const claimed = await artifacts.claimGenerationJobExecution({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-      });
-      executionGeneration = claimed.executionGeneration;
-      generationCheckpoint = claimed.checkpoint;
-    } else {
-      await artifacts.transitionGenerationJob({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        to: 'running',
-        progress: 5,
-      });
-    }
+    await execution.start(artifactAtStart.kind);
   } catch (error) {
     if (isExecutionFenceError(error)) {
       helpers.logger.warn(`任务 ${payload.jobId} execution 已过期，跳过旧投递`);
@@ -149,7 +110,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
           trustedSubjectId: payload.subjectId,
           to: 'succeeded',
           progress: 100,
-          executionGeneration,
+          executionGeneration: execution.generation,
         });
       } catch (error) {
         if (error instanceof ArtifactJobLifecycleError) {
@@ -187,10 +148,6 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     }
 
     const job = jobAtStart;
-    generationCheckpoint =
-      artifact.kind === 'markdown_document'
-        ? generationCheckpoint
-        : job.checkpoint;
     // R03：任务级一次解析环境。structured/speech/image 三个能力共用同一
     // 已验证配置（惰性：只走一个 kind 分支，至多解析一次）。
     let runtime: WorkerModelRuntime | null = null;
@@ -306,26 +263,6 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             }
           : undefined,
     };
-    const saveMarkdownCheckpoint = async (
-      checkpoint: MarkdownLongformCheckpoint,
-    ) => {
-      await artifacts.updateGenerationJobCheckpoint({
-        jobId: payload.jobId,
-        trustedSubjectId: payload.subjectId,
-        checkpoint,
-        executionGeneration,
-      });
-      const completed = checkpoint.completedSections.length;
-      const sectionCount = checkpoint.sections.length;
-      await reportGenerationProgress(
-        artifacts,
-        payload,
-        sectionCount === 0
-          ? 20
-          : Math.min(80, 20 + Math.floor((60 * completed) / sectionCount)),
-        helpers.logger,
-      );
-    };
     const generation =
       artifact.kind === 'mind_map'
         ? await generateMindMapContent(generatorInput)
@@ -336,8 +273,9 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             : artifact.kind === 'markdown_document'
               ? await generateMarkdownDocumentContent({
                   ...generatorInput,
-                  checkpoint: generationCheckpoint,
-                  saveCheckpoint: saveMarkdownCheckpoint,
+                  checkpoint: execution.checkpoint,
+                  saveCheckpoint: (checkpoint) =>
+                    execution.saveMarkdownCheckpoint(checkpoint),
                 })
               : artifact.kind === 'web_app'
                 ? await generateWebAppContent(generatorInput)
@@ -372,7 +310,7 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
         generationIntent.kind === 'revision'
           ? generationIntent.baseVersion
           : undefined,
-      executionGeneration,
+      executionGeneration: execution.generation,
     });
     helpers.logger.info(
       `产物 ${payload.artifactId} 生成完成,版本 v${version.version}`,
@@ -383,13 +321,13 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       error.normalized.retryable &&
       helpers.job.attempts < helpers.job.max_attempts
     ) {
-      if (executionGeneration !== undefined) {
+      if (execution.generation !== undefined) {
         try {
           await artifacts.transitionGenerationJob({
             jobId: payload.jobId,
             trustedSubjectId: payload.subjectId,
             to: 'running',
-            executionGeneration,
+            executionGeneration: execution.generation,
           });
         } catch (fenceError) {
           if (
