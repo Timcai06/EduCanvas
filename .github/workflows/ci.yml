@@ -608,10 +608,8 @@ jobs:
             output/playwright/golden-journey-evidence.json
           if-no-files-found: ignore
 
-      # Q05 bundle/route size gate：放在全部测试之后执行——gate 失败仍让 job 红，
-      # 但不再跳过 E2E 测试本身（#310：此前 gate 在测试前失败会 skip 全部 E2E，
-      # 掩盖真实回归；构建产物已由上方 Build 生成）。
-      - name: Bundle / route size gate
+      # Q05 bundle/route size is a non-blocking report; it never substitutes for functional CI.
+      - name: Bundle / route size report
         run: node tooling/quality/bundle-size.mjs --root apps/web
 
   agent-eval:
