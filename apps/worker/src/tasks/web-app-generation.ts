@@ -41,7 +41,7 @@ const BUDGET = {
   maxOutputBytes: 64 * 1024,
   maxDurationMs: 5_000,
   maxConcurrentInstances: 1,
-  maxQueueDepth: 10,
+  maxQueueDepth: 8,
   maxMessagesPerSecond: 5,
 } as const;
 

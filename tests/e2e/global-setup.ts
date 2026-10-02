@@ -48,7 +48,7 @@ function structuredFixture(schemaPrompt: string, prompt: string): unknown {
         maxOutputBytes: 16_000,
         maxDurationMs: 5000,
         maxConcurrentInstances: 1,
-        maxQueueDepth: 10,
+        maxQueueDepth: 8,
         maxMessagesPerSecond: 5,
       },
       diagnostics: [{ code: 'build_succeeded' }],

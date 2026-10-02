@@ -135,6 +135,7 @@ describe('generateWebAppContent', () => {
       maxInputBytes: 8_192,
       maxMessageBytes: 8_192,
       maxOutputBytes: 64 * 1024,
+      maxQueueDepth: 8,
     });
     expect(result.content.diagnostics).toMatchObject([
       { code: 'build_succeeded' },
