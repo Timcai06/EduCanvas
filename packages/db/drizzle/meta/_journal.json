@@ -463,6 +463,13 @@
       "when": 1790954426569,
       "tag": "0065_artifact_confirmations",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790956056199,
+      "tag": "0066_artifact_confirmation_attempts",
+      "breakpoints": true
     }
   ]
 }

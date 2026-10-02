@@ -892,3 +892,15 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - Data migration: none。
 - Estimated scale: 每个模型明确提议的 auto Turn 最多一行。
 - 风险: 低——新增状态仅覆盖 auto 产物确认；旧产物和生成任务账本不变。
+
+## 0066_artifact_confirmation_attempts.sql
+
+- 状态: active（issue 518 confirmed execution retry）
+- 语义: 为确认记录保存当前执行尝试序号。Gateway 幂等键对同一尝试稳定；仅上一尝试已终态失败/取消/中断且该 Operation 未创建 Artifact Generation Job 时，服务端才原子分配下一序号/键。
+- 锁表: 增加带默认值的整数列与范围 CHECK；既有确认行以 attempt 1 初始化，不扫描其他业务表。
+- 回滚: 回滚新应用后继续使用确认流程原稳定键；删除 attempt_number 前须确认没有新 attempt ID 正在执行。
+- N-1: 旧应用忽略该列但不能安全恢复 terminal attempt；部署应用与迁移作为一个发布单元。
+- Fresh install: 可重放。
+- Data migration: existing rows default to attempt 1; no other data changes.
+- Estimated scale: confirmation 表单列更新；无行数增长。
+- 风险: 低——尝试递增受行锁与 Gateway operation terminal fact 限制，最多 1000 次。

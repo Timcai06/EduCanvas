@@ -1,0 +1,2 @@
+ALTER TABLE "artifact_confirmation_requests" ADD COLUMN "attempt_number" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "artifact_confirmation_requests" ADD CONSTRAINT "artifact_confirmation_requests_attempt_check" CHECK ("artifact_confirmation_requests"."attempt_number" between 1 and 1000);

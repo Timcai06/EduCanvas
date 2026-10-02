@@ -2,6 +2,7 @@ import {
   check,
   foreignKey,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -42,6 +43,7 @@ export const artifactConfirmationRequests = pgTable(
     status: text('status').notNull().default('pending'),
     confirmedKind: text('confirmed_kind'),
     confirmationMessageId: text('confirmation_message_id'),
+    attemptNumber: integer('attempt_number').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -73,6 +75,10 @@ export const artifactConfirmationRequests = pgTable(
     check(
       'artifact_confirmation_requests_title_check',
       sql`char_length(btrim(${table.title})) between 1 and 120`,
+    ),
+    check(
+      'artifact_confirmation_requests_attempt_check',
+      sql`${table.attemptNumber} between 1 and 1000`,
     ),
     foreignKey({
       columns: [table.conversationId, table.notebookId],

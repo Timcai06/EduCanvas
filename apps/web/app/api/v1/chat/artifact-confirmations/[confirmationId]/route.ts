@@ -1,6 +1,7 @@
 import { artifactProposalKindSchema } from '@educanvas/agent-core';
 import {
   ArtifactConfirmationNotFoundError,
+  ArtifactConfirmationRetryLimitError,
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
 } from '@educanvas/db';
@@ -77,9 +78,14 @@ export async function POST(
     return jsonResponse({
       status: result.status,
       kind: result.confirmedKind ?? result.artifactKind,
-      clientMessageId: artifactConfirmationMessageId(result.id),
+      clientMessageId: artifactConfirmationMessageId(
+        result.id,
+        result.attemptNumber,
+      ),
     });
   } catch (error) {
+    if (error instanceof ArtifactConfirmationRetryLimitError)
+      return jsonError(409, 'artifact_confirmation_retry_limit');
     if (error instanceof ArtifactConfirmationNotFoundError) {
       return jsonError(404, 'artifact_confirmation_not_found');
     }

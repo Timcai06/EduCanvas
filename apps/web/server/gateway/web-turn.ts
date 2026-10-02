@@ -271,6 +271,7 @@ export async function beginWebGatewayTurn(
       await confirmationRepository.confirm({
         ...confirmationScope,
         artifactKind: confirmedArtifactKind,
+        clientMessageId: request.clientMessageId,
       });
     } catch (error) {
       await service

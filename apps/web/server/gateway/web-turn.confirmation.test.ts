@@ -114,6 +114,7 @@ describe('confirmed artifact startup contract', () => {
       notebookId: 'notebook-1',
       conversationId: 'conversation-1',
       artifactKind: 'slides',
+      clientMessageId: request.clientMessageId,
     });
   });
 });

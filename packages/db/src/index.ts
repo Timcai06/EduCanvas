@@ -23,8 +23,10 @@ export {
 } from './schema';
 export {
   ArtifactConfirmationNotFoundError,
+  ArtifactConfirmationRetryLimitError,
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
+  isRetryableArtifactConfirmationFailure,
   type ArtifactConfirmationScope,
   type ArtifactConfirmationSnapshot,
 } from './artifact-confirmation-repository';

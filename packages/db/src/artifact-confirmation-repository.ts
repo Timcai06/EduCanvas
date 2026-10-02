@@ -2,6 +2,7 @@ import type { ArtifactProposalKind } from '@educanvas/agent-core';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from './client';
 import {
+  artifactGenerationJobs,
   agentOperations,
   artifactConfirmationRequests,
   conversationMessages,
@@ -24,6 +25,7 @@ export interface ArtifactConfirmationSnapshot {
   status: 'pending' | 'confirmed' | 'cancelled';
   confirmedKind: ArtifactProposalKind | null;
   confirmationMessageId: string | null;
+  attemptNumber: number;
   createdAt: string;
 }
 
@@ -47,12 +49,35 @@ function snapshot(
     status: row.status as ArtifactConfirmationSnapshot['status'],
     confirmedKind: row.confirmedKind as ArtifactProposalKind | null,
     confirmationMessageId: row.confirmationMessageId,
+    attemptNumber: row.attemptNumber,
     createdAt: row.createdAt.toISOString(),
   };
 }
 
-export function artifactConfirmationMessageId(confirmationId: string): string {
-  return `artifact.confirm.${confirmationId.replaceAll('-', '')}`;
+export function artifactConfirmationMessageId(
+  confirmationId: string,
+  attemptNumber = 1,
+): string {
+  const base = `artifact.confirm.${confirmationId.replaceAll('-', '')}`;
+  return attemptNumber === 1 ? base : `${base}.attempt.${attemptNumber}`;
+}
+
+export class ArtifactConfirmationRetryLimitError extends Error {
+  readonly code = 'artifact_confirmation_retry_limit';
+  constructor() {
+    super('Artifact confirmation retry limit reached');
+    this.name = 'ArtifactConfirmationRetryLimitError';
+  }
+}
+
+export function isRetryableArtifactConfirmationFailure(
+  operationStatus: string,
+  hasArtifactJob: boolean,
+): boolean {
+  return (
+    !hasArtifactJob &&
+    ['failed', 'cancelled', 'interrupted'].includes(operationStatus)
+  );
 }
 
 /** Durable one-shot user confirmation, always read and mutated through its full scope. */
@@ -176,37 +201,83 @@ export class DrizzleArtifactConfirmationRepository {
       artifactKind: ArtifactProposalKind;
     },
   ): Promise<ArtifactConfirmationSnapshot> {
-    const [row] = await this.database
-      .update(artifactConfirmationRequests)
-      .set({ artifactKind: input.artifactKind, updatedAt: new Date() })
-      .where(
-        and(
-          eq(artifactConfirmationRequests.id, input.confirmationId),
-          eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
-          eq(artifactConfirmationRequests.notebookId, input.notebookId),
-          eq(artifactConfirmationRequests.conversationId, input.conversationId),
-          eq(artifactConfirmationRequests.status, 'pending'),
-        ),
-      )
-      .returning();
-    if (row) return snapshot(row);
-    // A retry after a lost response must not reopen or alter an already consumed
-    // confirmation. Return its committed kind so the caller can replay safely.
-    const [confirmed] = await this.database
-      .select()
-      .from(artifactConfirmationRequests)
-      .where(
-        and(
-          eq(artifactConfirmationRequests.id, input.confirmationId),
-          eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
-          eq(artifactConfirmationRequests.notebookId, input.notebookId),
-          eq(artifactConfirmationRequests.conversationId, input.conversationId),
-          eq(artifactConfirmationRequests.status, 'confirmed'),
-        ),
-      )
-      .limit(1);
-    if (!confirmed) throw new ArtifactConfirmationNotFoundError();
-    return snapshot(confirmed);
+    return this.database.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(artifactConfirmationRequests)
+        .where(
+          and(
+            eq(artifactConfirmationRequests.id, input.confirmationId),
+            eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
+            eq(artifactConfirmationRequests.notebookId, input.notebookId),
+            eq(artifactConfirmationRequests.conversationId, input.conversationId),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (!current || current.status === 'cancelled')
+        throw new ArtifactConfirmationNotFoundError();
+      if (current.status === 'pending') {
+        const [updated] = await tx
+          .update(artifactConfirmationRequests)
+          .set({ artifactKind: input.artifactKind, updatedAt: new Date() })
+          .where(
+            and(
+              eq(artifactConfirmationRequests.id, current.id),
+              eq(artifactConfirmationRequests.status, 'pending'),
+            ),
+          )
+          .returning();
+        if (!updated) throw new ArtifactConfirmationNotFoundError();
+        return snapshot(updated);
+      }
+
+      // Repeated clicks for an active attempt retain its key. Allocate a new
+      // durable key only after the previous operation is terminal and created
+      // no generation job; the row lock serializes concurrent retry requests.
+      const [operation] = await tx
+        .select({ id: agentOperations.id, status: agentOperations.status })
+        .from(agentOperations)
+        .where(
+          and(
+            eq(agentOperations.conversationId, input.conversationId),
+            eq(agentOperations.actorUserId, input.actorUserId),
+            eq(agentOperations.kind, 'turn'),
+            eq(agentOperations.idempotencyKey, current.confirmationMessageId!),
+          ),
+        )
+        .limit(1);
+      if (!operation) return snapshot(current);
+      const [job] = await tx
+        .select({ id: artifactGenerationJobs.id })
+        .from(artifactGenerationJobs)
+        .where(eq(artifactGenerationJobs.operationId, operation.id))
+        .limit(1);
+      if (!isRetryableArtifactConfirmationFailure(operation.status, !!job))
+        return snapshot(current);
+      if (current.attemptNumber >= 1000)
+        throw new ArtifactConfirmationRetryLimitError();
+      const attemptNumber = current.attemptNumber + 1;
+      const [updated] = await tx
+        .update(artifactConfirmationRequests)
+        .set({
+          attemptNumber,
+          confirmationMessageId: artifactConfirmationMessageId(
+            current.id,
+            attemptNumber,
+          ),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(artifactConfirmationRequests.id, current.id),
+            eq(artifactConfirmationRequests.status, 'confirmed'),
+          ),
+        )
+        .returning();
+      if (!updated) throw new ArtifactConfirmationNotFoundError();
+      return snapshot(updated);
+    });
   }
 
   async cancel(
@@ -247,6 +318,7 @@ export class DrizzleArtifactConfirmationRepository {
     input: ArtifactConfirmationScope & {
       confirmationId: string;
       artifactKind?: ArtifactProposalKind;
+      clientMessageId: string;
     },
   ): Promise<ArtifactConfirmationSnapshot> {
     return this.database.transaction(async (tx) => {
@@ -267,11 +339,20 @@ export class DrizzleArtifactConfirmationRepository {
         .limit(1)
         .for('update');
       if (!current) throw new ArtifactConfirmationNotFoundError();
-      if (current.status === 'confirmed') return snapshot(current);
+      if (current.status === 'confirmed') {
+        if (current.confirmationMessageId !== input.clientMessageId)
+          throw new ArtifactConfirmationNotFoundError();
+        return snapshot(current);
+      }
       if (current.status !== 'pending')
         throw new ArtifactConfirmationNotFoundError();
       const confirmedKind = input.artifactKind ?? current.artifactKind;
-      const confirmationMessageId = artifactConfirmationMessageId(current.id);
+      const confirmationMessageId = artifactConfirmationMessageId(
+        current.id,
+        current.attemptNumber,
+      );
+      if (confirmationMessageId !== input.clientMessageId)
+        throw new ArtifactConfirmationNotFoundError();
       const [updated] = await tx
         .update(artifactConfirmationRequests)
         .set({

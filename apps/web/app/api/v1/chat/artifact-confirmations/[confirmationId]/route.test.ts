@@ -16,7 +16,8 @@ vi.mock('@educanvas/db', async () => {
     DrizzleArtifactConfirmationRepository: vi.fn(function () {
       return repository;
     }),
-    artifactConfirmationMessageId: (id: string) => `confirm:${id}`,
+    artifactConfirmationMessageId: (id: string, attempt = 1) =>
+      attempt === 1 ? `confirm:${id}` : `confirm:${id}:attempt:${attempt}`,
   };
 });
 vi.mock('@/server/identity/anonymous-identity', () => ({
@@ -96,6 +97,44 @@ describe('auto artifact confirmation action', () => {
     expect(await first.json()).toEqual({ status: 'cancelled' });
     expect(await retry.json()).toEqual({ status: 'cancelled' });
     expect(repository.cancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns one durable next-attempt key after a terminal failure and reuses it on double submit', async () => {
+    repository.updateKind
+      .mockResolvedValueOnce({
+        id: confirmationId,
+        status: 'confirmed',
+        artifactKind: 'slides',
+        confirmedKind: 'slides',
+        attemptNumber: 2,
+      })
+      .mockResolvedValueOnce({
+        id: confirmationId,
+        status: 'confirmed',
+        artifactKind: 'slides',
+        confirmedKind: 'slides',
+        attemptNumber: 2,
+      });
+
+    const first = await POST(
+      actionRequest({ action: 'select', kind: 'slides' }),
+      context,
+    );
+    const duplicate = await POST(
+      actionRequest({ action: 'select', kind: 'slides' }),
+      context,
+    );
+
+    const expectedAttemptKey = `confirm:${confirmationId}:attempt:2`;
+    expect(await first.json()).toMatchObject({
+      status: 'confirmed',
+      kind: 'slides',
+      clientMessageId: expectedAttemptKey,
+    });
+    expect(await duplicate.json()).toMatchObject({
+      status: 'confirmed',
+      clientMessageId: expectedAttemptKey,
+    });
   });
 
   it('rejects cross-origin mutations before touching pending state', async () => {
