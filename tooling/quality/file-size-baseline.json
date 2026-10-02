@@ -93,15 +93,6 @@
       "acceptedLines": 476
     },
     {
-      "file": "apps/web/features/canvas/artifact-client.ts",
-      "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0012",
-      "expiry": "2027-02-28",
-      "acceptedLines": 438
-    },
-    {
       "file": "apps/web/features/canvas/artifact-generation-flow.tsx",
       "owner": "gateway",
       "reason": "Existing cohesive module pending bounded extraction.",
@@ -219,15 +210,6 @@
       "acceptedLines": 439
     },
     {
-      "file": "apps/web/server/canvas/workspace-resource-read-model.ts",
-      "owner": "gateway",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0027",
-      "expiry": "2027-02-28",
-      "acceptedLines": 402
-    },
-    {
       "file": "packages/agent-core/src/index.ts",
       "owner": "agent-runtime",
       "reason": "Existing cohesive module pending bounded extraction.",
@@ -325,15 +307,6 @@
       "issue": "internal:ARCH-DEBT-0039",
       "expiry": "2026-11-30",
       "acceptedLines": 686
-    },
-    {
-      "file": "packages/db/src/conversation-platform-repository.ts",
-      "owner": "data",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0040",
-      "expiry": "2027-02-28",
-      "acceptedLines": 420
     },
     {
       "file": "packages/db/src/gateway-connection-repository.ts",
@@ -487,15 +460,6 @@
       "issue": "internal:ARCH-DEBT-0057",
       "expiry": "2027-02-28",
       "acceptedLines": 507
-    },
-    {
-      "file": "packages/db/src/study-plan-repository.ts",
-      "owner": "data",
-      "reason": "Existing cohesive module pending bounded extraction.",
-      "targetLines": 400,
-      "issue": "internal:ARCH-DEBT-0058",
-      "expiry": "2027-02-28",
-      "acceptedLines": 425
     },
     {
       "file": "packages/db/src/tool-call-repository.ts",

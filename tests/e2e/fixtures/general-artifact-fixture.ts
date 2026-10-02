@@ -95,7 +95,7 @@ export async function closeCanvasAndWaitForFold(page: Page) {
   const folded = page.waitForResponse((response) => {
     if (
       response.request().method() !== 'PUT' ||
-      !response.url().endsWith('/api/v1/canvas/surface-layout') ||
+      new URL(response.url()).pathname !== '/api/v1/canvas/surface-layout' ||
       !response.ok()
     ) {
       return false;

@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
  */
 test('@smoke ```html 代码块经预览卡在沙箱 iframe 中运行', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.route('**/api/v1/chat/turn', async (route) => {
+  await page.route(/\/api\/v1\/chat\/turn(?:\?.*)?$/, async (route) => {
     const encoder = new TextEncoder();
     const turnId = 'sandbox-turn-e2e';
     const messageId = 'sandbox-assistant-e2e';

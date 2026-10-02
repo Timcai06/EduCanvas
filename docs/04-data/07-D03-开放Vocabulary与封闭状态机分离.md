@@ -46,7 +46,7 @@
 | `turn_usage_budget_outcomes.breach_reason`                         | 低基数联合账本与指标维度，新增值需要 runtime/reader/metrics 同步评审                                                  |
 | `mcp_tool_intents.capability`                                      | 该表专用于 `external.mcp.invoke`；等值约束是安全和兼容边界，不是通用 capability Registry                              |
 
-其余 lifecycle status、terminal authority、security outcome、approval risk、consent purpose、tool effect、RBAC、协议版本、信任等级等继续由数据库 hard CHECK 强制。
+其余 lifecycle status、terminal authority、security outcome、approval risk、consent purpose、tool effect、RBAC、协议版本、信任等级等继续由数据库 hard CHECK 强制。0062 的 Notebook Chapter/Plan 协议闭集也按此规则登记：`notebook_chapters_origin_check` 固定用户确认的分组来源，`notebook_chapters_locator_check` 固定 renderer 可读的 `whole/pages/text` 定位判别联合；`notebook_plans_source_check` 固定来源形状，`notebook_plans_status_check` 固定生命周期。未知值无法被既有读取/呈现路径安全解释，因此不能作为开放 Extension Identifier。
 
 ## 4. Authority 与生产接线
 
@@ -79,7 +79,7 @@
 - 审计最新 journal 指向的 Migration `ADD CONSTRAINT ... CHECK`，防止手写 SQL 绕过 Schema 门禁。
 - 白名单外新增成员闭集直接失败；新增真正 closed 约束必须同步登记并写明安全/生命周期理由。
 
-`tooling/vocabulary-gate.test.mjs` 固化：231/231 提取、注释/换行防绕过、IN/等值识别、表达式不误判、当前 Schema 零违规、最新 0052 的 13 个 CHECK、正反白名单用例。
+`tooling/vocabulary-gate.test.mjs` 固化：原始 231 个 CHECK 的历史审计、当前 Schema 全量提取、注释/换行防绕过、IN/等值识别、表达式不误判、当前 Schema 零违规、最新 Migration CHECK 解析、正反白名单用例。
 
 ### 6.1 后继扩展：Live Voice 私人纸面语义（0054–0055）
 
@@ -89,7 +89,7 @@
 - 两张新表另有 4 个坐标、长度与 JSON shape CHECK，继续按开放格式约束处理。
 - 门禁现会解析最新 Migration 中 `CREATE TABLE ... CONSTRAINT ... CHECK` 和
   `ALTER TABLE ... ADD CONSTRAINT ... CHECK` 两种形态，避免新表内联 CHECK 绕过审计。
-- 当前 Schema 共 249 个 CHECK；该数字用于 AST 提取完整性回归，不改变 D03 原始
+- 截至 0055 的 Schema 共 249 个 CHECK；该数字用于 AST 提取完整性回归，不改变 D03 原始
   231 个 CHECK 的历史审计结论。
 
 ### 6.2 后继扩展：Deep Research 恢复游标（0060）
@@ -98,8 +98,14 @@
   安全解释未知值，因此登记为 closed，扩展时必须同步迁移、仓储与浏览器投影。
 - `completed_queries` 与 `candidate_urls` 只约束 JSON 数组形状和有界长度，不把查询
   或 URL 内容建成数据库 vocabulary；应用层继续负责规范化与公开地址校验。
-- 当前 Schema 共 258 个 CHECK；最新 0060 Migration 含 4 个 CHECK，其中仅 phase
+- 截至 0060 的 Schema 共 258 个 CHECK；0060 Migration 含 4 个 CHECK，其中仅 phase
   被 SQL 迁移提取器识别为字面量成员闭集，协议版本同时由 Schema AST 门禁覆盖。
+
+### 6.3 后继扩展：Notebook Plan 与 Session 作用域（0062–0063）
+
+- 0062 新增 6 个 Chapter/Plan CHECK：标题与说明长度、locator JSON 形状继续是格式/shape 约束；`origin`、`locator.kind`、`source_kind` 和 Plan `status` 是应用读取与呈现协议的封闭值，已同步登记到 `CLOSED_VOCABULARY_CONSTRAINTS`。
+- 0063 新增 1 个 `lesson_sessions_notebook_pair_check`，只约束 `conversation_id` 与 `notebook_id` 同为空或同时存在的配对形状，不构成成员闭集。
+- 当前 Schema 共 265 个 CHECK（258 + 0062 的 6 个 + 0063 的 1 个）；最新 Migration 提取断言只针对 0063 的配对 shape。0061 的学段闭集解析另有历史回归，避免后续 migration 推进后丢失旧闭集判定证据。
 
 ## 7. 可执行回退 SQL
 

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   auditVocabularyClosures,
   CLOSED_VOCABULARY_CONSTRAINTS,
   extractCheckCalls,
   extractLatestMigrationChecks,
+  extractSqlCheckConstraints,
   isLiteralVocabularyClosure,
   loadSchemaCheckCalls,
 } from './vocabulary-gate.mjs';
@@ -67,14 +69,25 @@ test('check 调用提取', () => {
 /* ---------- 门禁正反用例 ---------- */
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
-  // M2/M3 新增 12 个纸面批注与私人案面 CHECK，总数从 237 → 249；
-  // ADR-0026 新增 2 个 quality 约束（249 → 251）；网页快照新增 2 个形状约束；
-  // DP08 新增 handoff target 形状 CHECK（253 → 254）；WS06 新增研究恢复游标
-  // 的协议、阶段与两个有界 JSON shape CHECK（254 → 258）。
+  // 0060 的研究恢复游标累计后为 258；0062 新增 6 个 Plan/Chapter CHECK，
+  // 0063 新增 1 个 Session Notebook-pair CHECK，共 265。
   // 其中协议判别联合登记为 closed，坐标/长度/形状仍是开放格式约束。
-  assert.equal(loadSchemaCheckCalls().length, 258);
+  assert.equal(loadSchemaCheckCalls().length, 265);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
+});
+
+test('Plan/Chapter 的 source、status、origin 与 locator 协议保持 closed', () => {
+  const names = new Set(loadSchemaCheckCalls().map((call) => call.name));
+  for (const name of [
+    'notebook_chapters_origin_check',
+    'notebook_chapters_locator_check',
+    'notebook_plans_source_check',
+    'notebook_plans_status_check',
+  ]) {
+    assert.equal(names.has(name), true, name);
+    assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
+  }
 });
 
 test('反向：白名单外的成员闭集被拒绝（新增开放字段不得写死 IN 闭集）', () => {
@@ -93,19 +106,41 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
   assert.equal(wouldViolate, true);
 });
 
-test('最新 migration 的 CHECK 与 schema 使用同一分类规则', () => {
-  // 0061 重建画像与 Goal 的学段闭集；两者都是受信课程目录的封闭判别联合。
+test('最新 0063 migration 的 Notebook/Session 配对 CHECK 使用 shape 规则', () => {
   const checks = extractLatestMigrationChecks();
-  assert.equal(checks.length, 2);
-  const closed = checks
-    .filter((check) => isLiteralVocabularyClosure(check.body))
-    .map((check) => check.name);
-  assert.deepEqual(closed, [
-    'learner_profiles_grade_band_check',
-    'learning_goals_grade_band_check',
-  ]);
-  for (const name of closed)
-    assert.equal(CLOSED_VOCABULARY_CONSTRAINTS.has(name), true, name);
+  assert.deepEqual(
+    checks.map((check) => check.name),
+    ['lesson_sessions_notebook_pair_check'],
+  );
+  assert.equal(isLiteralVocabularyClosure(checks[0].body), false);
+});
+
+test('0061 历史学段 CHECK 仍解析为 closed 闭集', () => {
+  const source = readFileSync(
+    new URL(
+      '../../packages/db/drizzle/0061_four_grade_bands.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const checks = source
+    .split('--> statement-breakpoint')
+    .flatMap(extractSqlCheckConstraints);
+  const gradeChecks = checks.filter((check) =>
+    check.name.endsWith('_grade_band_check'),
+  );
+  assert.deepEqual(
+    gradeChecks.map((check) => check.name),
+    ['learner_profiles_grade_band_check', 'learning_goals_grade_band_check'],
+  );
+  for (const check of gradeChecks) {
+    assert.equal(isLiteralVocabularyClosure(check.body), true, check.name);
+    assert.equal(
+      CLOSED_VOCABULARY_CONSTRAINTS.has(check.name),
+      true,
+      check.name,
+    );
+  }
 });
 
 test('反向：closed 状态机约束即使含 IN 闭集也被允许（白名单命中）', () => {

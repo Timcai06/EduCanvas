@@ -9,12 +9,18 @@ const e2eRoot = resolve(repoRoot, 'tests/e2e');
 function smokeFiles() {
   return readdirSync(e2eRoot)
     .filter((name) => name.endsWith('.spec.ts'))
-    .filter((name) =>
-      /test\(\s*['"]@smoke\b/.test(
-        readFileSync(resolve(e2eRoot, name), 'utf8'),
-      ),
+    .filter(
+      (name) =>
+        smokeTestTitles(readFileSync(resolve(e2eRoot, name), 'utf8')).length >
+        0,
     )
     .sort();
+}
+
+function smokeTestTitles(source) {
+  return [...source.matchAll(/\btest\(\s*(['"])(.*?)\1/g)]
+    .map((match) => match[2])
+    .filter((title) => /@smoke\b/.test(title));
 }
 
 describe('E2E suite routing', () => {
@@ -35,7 +41,7 @@ describe('E2E suite routing', () => {
     ]);
     const count = files.reduce((total, name) => {
       const source = readFileSync(resolve(e2eRoot, name), 'utf8');
-      return total + (source.match(/test\(\s*['"]@smoke\b/g)?.length ?? 0);
+      return total + smokeTestTitles(source).length;
     }, 0);
     assert.ok(count >= 6 && count <= 15, `PR smoke budget is ${count}`);
     assert.deepEqual(
@@ -52,6 +58,32 @@ describe('E2E suite routing', () => {
         'live-voice-flow.spec.ts',
       ],
     );
+  });
+
+  it('keeps protocol-backed recommendation and Notebook flows in the regular E2E matrix', () => {
+    const baseConfig = readFileSync(
+      resolve(repoRoot, 'tooling/playwright/playwright.config.ts'),
+      'utf8',
+    );
+    const prConfig = readFileSync(
+      resolve(repoRoot, 'tooling/playwright/playwright.pr.config.ts'),
+      'utf8',
+    );
+    for (const name of [
+      'learning-recommendation.spec.ts',
+      'notebook-navigation-plans.spec.ts',
+    ]) {
+      const story = readFileSync(resolve(e2eRoot, name), 'utf8');
+      assert.equal(
+        smokeTestTitles(story).length,
+        0,
+        `${name} stays out of PR smoke`,
+      );
+      assert.doesNotMatch(story, /@ui\b/);
+      assert.doesNotMatch(baseConfig, new RegExp(name.replaceAll('.', '\\.')));
+    }
+    assert.match(prConfig, /grep: \/@smoke\//);
+    assert.match(baseConfig, /testDir:[\s\S]*tests\/e2e/);
   });
 
   it('routes PRs to smoke while keeping UI review nightly or manual', () => {
