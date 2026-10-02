@@ -137,10 +137,19 @@ export function PersistentWebRuntime({
       context,
     )
       .then(async (response) => {
-        if (!response.ok) throw new Error('runtime_unavailable');
+        if (!response.ok) {
+          if (!disposed) {
+            setState(response.status === 503 ? 'unavailable' : 'failed');
+          }
+          if (disposed) {
+            void cancelRequest(requestId, context).catch(() => undefined);
+          }
+          return null;
+        }
         return runResponseSchema.parse(await response.json());
       })
       .then((run) => {
+        if (!run) return;
         if (disposed) {
           void writeCancellation(run.runId, context).catch(() => undefined);
           return;
@@ -169,9 +178,9 @@ export function PersistentWebRuntime({
         };
         setIframeUrl(`${run.runtimeOrigin}/host`);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!disposed) {
-          setState('failed');
+          setState(error instanceof TypeError ? 'offline' : 'failed');
           return;
         }
         void cancelRequest(requestId, context).catch(() => undefined);
@@ -300,10 +309,18 @@ export function PersistentWebRuntime({
       data-runtime-instance={instance}
     >
       <div className="flex items-center justify-between gap-3 text-sm">
-        <span aria-live="polite">
+        <span aria-live="polite" data-testid="runtime-status-message">
           {state === 'starting'
             ? '正在启动隔离运行环境…'
-            : `运行状态：${state}`}
+            : state === 'running'
+              ? '运行状态：运行中'
+              : state === 'offline'
+                ? '无法连接隔离运行环境，请检查网络或本地服务后重试。'
+                : state === 'unavailable'
+                  ? '隔离运行环境暂不可用，请确认服务已启动后重试。'
+                  : state === 'failed'
+                    ? '运行未能完成，可重新加载后重试。'
+                    : `运行状态：${state}`}
         </span>
         <div className="flex gap-2">
           <button
@@ -314,7 +331,11 @@ export function PersistentWebRuntime({
             className="ec-button-secondary min-h-9 px-3 motion-reduce:transition-none"
           >
             <ArrowClockwise aria-hidden />
-            重新加载
+            {state === 'offline' ||
+            state === 'unavailable' ||
+            state === 'failed'
+              ? '重试运行'
+              : '重新加载'}
           </button>
           <button
             type="button"

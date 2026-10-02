@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '打开全部资源';
@@ -84,6 +85,82 @@ async function createRuntimeFixture(
   };
 }
 
+async function createGeneratedWebAppFixture(
+  page: Page,
+  title: string,
+): Promise<RuntimeFixture> {
+  const conversationId = await activeConversationId(page);
+  process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
+  const [dbModule, testingDbModule] = await Promise.all([
+    import('@educanvas/db'),
+    import('@educanvas/db/testing'),
+  ]);
+  const [conversation] = await testingDbModule
+    .getDb()
+    .select()
+    .from(dbModule.conversations)
+    .where(testingDbModule.eq(dbModule.conversations.id, conversationId))
+    .limit(1);
+  if (!conversation) throw new Error('E2E 当前会话行不存在');
+
+  const repository = new dbModule.DrizzlePlatformArtifactRepository();
+  const artifact = await repository.createArtifact({
+    spaceId: conversation.spaceId,
+    conversationId,
+    trustedSubjectId: conversation.ownerSubjectId,
+    kind: 'web_app',
+    trustTier: 'tier2',
+    title,
+  });
+  const html = '<main id="runtime-result">Synthetic Web App 已执行</main>';
+  const script =
+    'window.educanvasRuntime.output("synthetic-web-app-ready"); setTimeout(() => window.educanvasRuntime.succeed(), 1_000);';
+  const version = await repository.appendVersion({
+    artifactId: artifact.id,
+    trustedSubjectId: conversation.ownerSubjectId,
+    generatedBy: 'e2e:web-runtime-offline-recovery:v1',
+    content: {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          {
+            path: 'index.html',
+            mediaType: 'text/html',
+            content: html,
+            hash: createHash('sha256').update(html, 'utf8').digest('hex'),
+          },
+          {
+            path: 'app.js',
+            mediaType: 'text/javascript',
+            content: script,
+            hash: createHash('sha256').update(script, 'utf8').digest('hex'),
+          },
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation', 'css-render', 'javascript-runtime'],
+      budget: {
+        maxInputBytes: 1024,
+        maxMessageBytes: 2048,
+        maxOutputBytes: 4096,
+        maxDurationMs: 10_000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 1,
+        maxMessagesPerSecond: 10,
+      },
+      diagnostics: [{ code: 'build_succeeded' }],
+      sourceConversationId: conversationId,
+      generatedByModel: true,
+    },
+  });
+  return {
+    artifactId: artifact.id,
+    artifactVersionId: version.id,
+    conversationId,
+  };
+}
+
 async function openStudioOutput(page: Page) {
   await page.getByRole('button', { name: STUDIO_TRIGGER_NAME }).click();
   const studio = page.getByRole('region', {
@@ -117,6 +194,65 @@ async function createRun(
 }
 
 test.describe('Runtime Composition: real Web, Runtime and PostgreSQL', () => {
+  test('生成的 Web App 在离线/Runtime 不可用时给出恢复指引并可重试执行', async ({
+    page,
+  }) => {
+    await ensureGeneralNotebook(page);
+    const title = `U12 Runtime Recovery ${Date.now()}`;
+    await createGeneratedWebAppFixture(page, title);
+    let admissions = 0;
+    await page.route('**/api/v1/canvas/runtime/runs*', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      admissions += 1;
+      if (admissions === 1) {
+        await route.abort('failed');
+        return;
+      }
+      if (admissions === 2) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'runtime_unavailable' } }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.reload();
+
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: title }).click();
+    const runtime = page.getByTestId('persistent-web-runtime');
+    const status = page.getByTestId('runtime-status-message');
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'offline');
+    await expect(status).toHaveText(
+      '无法连接隔离运行环境，请检查网络或本地服务后重试。',
+    );
+    await runtime.getByRole('button', { name: '重试运行' }).click();
+
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'unavailable');
+    await expect(status).toHaveText(
+      '隔离运行环境暂不可用，请确认服务已启动后重试。',
+    );
+    await runtime.getByRole('button', { name: '重试运行' }).click();
+
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'running', {
+      timeout: 30_000,
+    });
+    await expect(
+      page
+        .frameLocator('iframe[title="持久 Web Runtime"]')
+        .frameLocator('iframe')
+        .getByText('Synthetic Web App 已执行'),
+    ).toBeVisible();
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'succeeded', {
+      timeout: 30_000,
+    });
+  });
+
   test('真实 Web 打开不可变 Artifact Version，并由独立 Runtime 写入权威终态', async ({
     page,
   }) => {
