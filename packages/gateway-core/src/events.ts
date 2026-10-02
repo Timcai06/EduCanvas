@@ -29,6 +29,7 @@ import {
 import {
   gatewayApprovalDecisionSchema,
   gatewayApprovalRequestSchema,
+  type GatewayCapability,
 } from './capabilities';
 import { gatewayCitationSchema } from './citations';
 import { artifactProposalKindSchema } from '@educanvas/agent-core';
@@ -191,6 +192,69 @@ export const gatewayOperationEventSchema = z.discriminatedUnion('type', [
 ]);
 
 export type GatewayOperationEvent = z.infer<typeof gatewayOperationEventSchema>;
+
+/**
+ * Additive Operation-event contracts are negotiated independently from the
+ * strict `gateway.v1` base union. The suffix is the event extension version,
+ * matched against the same versioned capability in the inbound manifest.
+ */
+export const gatewayOperationEventExtensionSchema = z.enum([
+  'artifact.confirmation@1',
+]);
+export type GatewayOperationEventExtension = z.infer<
+  typeof gatewayOperationEventExtensionSchema
+>;
+
+export const gatewayOperationEventExtensionsSchema = z
+  .array(gatewayOperationEventExtensionSchema)
+  .max(64)
+  .superRefine((extensions, context) => {
+    if (new Set(extensions).size !== extensions.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Event extensions must be unique',
+      });
+    }
+  });
+
+const gatewayOperationEventRequirements: Partial<
+  Record<
+    GatewayOperationEvent['type'],
+    readonly GatewayOperationEventExtension[]
+  >
+> = {
+  'artifact.confirmation_required': ['artifact.confirmation@1'],
+};
+
+/** Resolve the event extensions advertised by a versioned capability manifest. */
+export function gatewayOperationEventExtensionsForCapabilities(
+  capabilities: readonly Pick<GatewayCapability, 'name' | 'version'>[],
+): readonly GatewayOperationEventExtension[] {
+  const supported = new Set<GatewayOperationEventExtension>();
+  for (const capability of capabilities) {
+    const extension = gatewayOperationEventExtensionSchema.safeParse(
+      `${capability.name}@${capability.version}`,
+    );
+    if (extension.success) supported.add(extension.data);
+  }
+  return [...supported];
+}
+
+/** Find required, versioned extensions missing from a receiving client's declaration. */
+export function missingGatewayOperationEventExtensions(
+  events: readonly Pick<GatewayOperationEvent, 'type'>[],
+  supportedExtensions: readonly GatewayOperationEventExtension[],
+): readonly GatewayOperationEventExtension[] {
+  const supported = new Set(supportedExtensions);
+  const missing = new Set<GatewayOperationEventExtension>();
+  for (const event of events) {
+    for (const extension of gatewayOperationEventRequirements[event.type] ??
+      []) {
+      if (!supported.has(extension)) missing.add(extension);
+    }
+  }
+  return [...missing];
+}
 
 export const gatewayResumeCursorSchema = z
   .object({

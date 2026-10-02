@@ -105,6 +105,23 @@ describe('GatewayClient', () => {
     expect(seenUrl).toContain('/operations/operation-1/cancel');
   });
 
+  it('does not advertise unsupported artifact confirmation when resuming', async () => {
+    let seenUrl = '';
+    const client = new GatewayClient(
+      'http://127.0.0.1:3200',
+      't'.repeat(32),
+      async (input) => {
+        seenUrl = String(input);
+        return Response.json({ events: [] });
+      },
+    );
+
+    await expect(client.resume('operation:1')).resolves.toEqual([]);
+    const url = new URL(seenUrl);
+    expect(url.searchParams.get('after')).toBe('-1');
+    expect(url.searchParams.getAll('extension')).toEqual([]);
+  });
+
   it('reads an image preview through the bearer session without exposing its token in the URL', async () => {
     let seenUrl = '';
     let seenHeaders: HeadersInit | undefined;

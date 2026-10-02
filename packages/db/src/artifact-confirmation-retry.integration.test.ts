@@ -8,6 +8,7 @@ import {
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
 } from './artifact-confirmation-repository';
+import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 import { agentOperations } from './schema';
@@ -31,6 +32,30 @@ const database = connection ? drizzle(connection, { schema }) : null;
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
   return database;
+}
+
+async function createProposalSource(owner: string, spaceId: string) {
+  const source = await new DrizzleAssetRepository(getDatabase()).createUploaded(
+    {
+      ownerSubjectId: owner,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      displayName: '已选择的来源.txt',
+      mimeType: 'text/plain',
+      byteSize: 24,
+      contentHash: 'a'.repeat(64),
+      storageKey: `artifact-confirmation/${owner}/source.txt`,
+      extractedText: '用于产物确认回归的原始来源。',
+      outcome: { status: 'ready' },
+    },
+  );
+  if (!source.version) throw new Error('proposal_source_version_missing');
+  return {
+    assetId: source.descriptor.assetId,
+    versionId: source.version.versionId,
+    kind: 'document' as const,
+  };
 }
 
 describeWithDatabase('artifact confirmation retry attempts', () => {
@@ -68,11 +93,26 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
         spaceKind: 'notebook',
         spaceTitle: '确认重试测试',
       });
+      const sourceReference = await createProposalSource(
+        owner,
+        conversation.spaceId,
+      );
+      const proposalParts = [
+        {
+          type: 'text' as const,
+          text: '请依据上传的 PDF 和所选来源制作课件。',
+        },
+        {
+          type: 'asset_ref' as const,
+          reference: sourceReference,
+          usage: 'attachment' as const,
+        },
+      ];
       const proposalTurn = await turns.createOrGetTurn({
         conversationId: conversation.id,
         trustedSubjectId: owner,
         clientMessageId: `proposal-${terminalStatus}`,
-        text: '提议创建Slides',
+        parts: proposalParts,
       });
       await getDatabase()
         .update(agentOperations)
@@ -87,14 +127,32 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
         artifactKind: 'slides',
         title: '课程Slides',
       });
+      await confirmations.updateKind({
+        actorUserId: owner,
+        notebookId: conversation.spaceId,
+        conversationId: conversation.id,
+        confirmationId: confirmation.id,
+        artifactKind: 'mind_map',
+      });
       const firstKey = artifactConfirmationMessageId(confirmation.id, 1);
       await confirmations.confirm({
         actorUserId: owner,
         notebookId: conversation.spaceId,
         conversationId: conversation.id,
         confirmationId: confirmation.id,
-        artifactKind: 'slides',
+        artifactKind: 'mind_map',
         clientMessageId: firstKey,
+      });
+      const firstExecution = await confirmations.getForExecution({
+        actorUserId: owner,
+        notebookId: conversation.spaceId,
+        conversationId: conversation.id,
+        confirmationId: confirmation.id,
+      });
+      expect(firstExecution).toMatchObject({
+        artifactKind: 'mind_map',
+        confirmedKind: 'mind_map',
+        proposalParts,
       });
       const failedAttempt = await turns.createOrGetTurn({
         conversationId: conversation.id,
@@ -121,6 +179,13 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
       if (!retry || !duplicateClick)
         throw new Error('confirmation_retry_result_missing');
 
+      const retriedExecution = await confirmations.getForExecution({
+        actorUserId: owner,
+        notebookId: conversation.spaceId,
+        conversationId: conversation.id,
+        confirmationId: confirmation.id,
+      });
+
       expect(retry.attemptNumber).toBe(2);
       expect(retry.confirmationMessageId).toBe(
         artifactConfirmationMessageId(confirmation.id, 2),
@@ -128,6 +193,71 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
       expect(duplicateClick.confirmationMessageId).toBe(
         retry.confirmationMessageId,
       );
+      expect(retriedExecution.proposalParts).toEqual(proposalParts);
     },
   );
+
+  it('only exposes proposal parts to the active confirmation under its complete scope', async () => {
+    const owner = 'confirmation-source-scope';
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const confirmations = new DrizzleArtifactConfirmationRepository(
+      getDatabase(),
+    );
+    const conversation = await conversations.create({
+      ownerSubjectId: owner,
+      spaceKind: 'notebook',
+      spaceTitle: '来源范围测试',
+    });
+    const sourceReference = await createProposalSource(
+      owner,
+      conversation.spaceId,
+    );
+    const proposalParts = [
+      { type: 'text' as const, text: '基于已选择的 Notebook 来源创建产物。' },
+      {
+        type: 'asset_ref' as const,
+        reference: sourceReference,
+        usage: 'attachment' as const,
+      },
+    ];
+    const proposalTurn = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: owner,
+      clientMessageId: 'proposal-source-scope',
+      parts: proposalParts,
+    });
+    const confirmation = await confirmations.createPending({
+      actorUserId: owner,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      operationId: proposalTurn.turnId,
+      userMessageId: proposalTurn.studentMessage.id,
+      artifactKind: 'slides',
+      title: 'Notebook 来源产物',
+    });
+    const scope = {
+      actorUserId: owner,
+      notebookId: conversation.spaceId,
+      conversationId: conversation.id,
+      confirmationId: confirmation.id,
+    };
+
+    await expect(
+      confirmations.getForExecution({ ...scope, actorUserId: 'other-owner' }),
+    ).rejects.toMatchObject({ code: 'artifact_confirmation_not_found' });
+    await expect(
+      confirmations.getForExecution({
+        ...scope,
+        notebookId: '99999999-9999-4999-8999-999999999999',
+      }),
+    ).rejects.toMatchObject({ code: 'artifact_confirmation_not_found' });
+
+    await confirmations.cancel(scope);
+    await expect(confirmations.getForExecution(scope)).rejects.toMatchObject({
+      code: 'artifact_confirmation_not_found',
+    });
+  });
 });

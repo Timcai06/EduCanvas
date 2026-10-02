@@ -166,7 +166,7 @@ describe('Web General可信Gateway路由边界', () => {
         ...request,
         clientMessageId: 'artifact-confirm-message-1',
         outputPreference: 'interactive_artifact',
-        supportsArtifactConfirmation: true,
+        eventExtensions: ['artifact.confirmation@1'],
         artifactConfirmationId: '11111111-1111-4111-8111-111111111111',
       },
       'slides',

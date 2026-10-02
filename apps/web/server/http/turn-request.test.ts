@@ -120,7 +120,7 @@ describe('teaching turn request boundary', () => {
     ).rejects.toMatchObject({ code: 'invalid_request' });
   });
 
-  it('仅对声明支持确认的客户端接受确认续接请求', async () => {
+  it('仅对明确声明确认事件扩展 v1 的客户端接受确认续接请求', async () => {
     const base = {
       clientMessageId: 'artifact.confirm.1234567890abcdef',
       text: '确认创建',
@@ -132,13 +132,33 @@ describe('teaching turn request boundary', () => {
     await expect(
       parseTeachingTurnRequest(
         request(
-          JSON.stringify({ ...base, supportsArtifactConfirmation: true }),
+          JSON.stringify({
+            ...base,
+            eventExtensions: ['artifact.confirmation@1'],
+          }),
         ),
       ),
     ).resolves.toMatchObject({
-      supportsArtifactConfirmation: true,
+      eventExtensions: ['artifact.confirmation@1'],
       artifactConfirmationId: base.artifactConfirmationId,
     });
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({
+            ...base,
+            eventExtensions: ['artifact.confirmation@2'],
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+    await expect(
+      parseTeachingTurnRequest(
+        request(
+          JSON.stringify({ ...base, supportsArtifactConfirmation: true }),
+        ),
+      ),
+    ).resolves.toMatchObject({ eventExtensions: ['artifact.confirmation@1'] });
   });
 
   it('接受 provider-neutral outputPreference 枚举并拒绝不可信值', async () => {

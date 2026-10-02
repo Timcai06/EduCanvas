@@ -1,4 +1,5 @@
 import { isGatewayTerminalEvent } from '@educanvas/gateway-core';
+import { gatewayOperationEventExtensionsSchema } from '@educanvas/gateway-core';
 import { ResearchCheckpointOwnershipError } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { resumeWebGatewayTurn } from '@/server/gateway/web-turn';
@@ -53,7 +54,14 @@ export async function GET(
 
   const { turnId } = await context.params;
   const afterSequence = parseAfter(request);
-  if (!TURN_ID_PATTERN.test(turnId) || afterSequence === null) {
+  const eventExtensions = gatewayOperationEventExtensionsSchema.safeParse(
+    new URL(request.url).searchParams.getAll('extension'),
+  );
+  if (
+    !TURN_ID_PATTERN.test(turnId) ||
+    afterSequence === null ||
+    !eventExtensions.success
+  ) {
     return jsonError(400, 'invalid_request');
   }
 
@@ -64,6 +72,7 @@ export async function GET(
     const gatewayEvents = await resumeWebGatewayTurn(identity, {
       turnId,
       afterSequence,
+      eventExtensions: eventExtensions.data,
       ...(hasGeneralRequestContext(request) && conversation
         ? { conversationId: conversation.id }
         : {}),
@@ -96,6 +105,9 @@ export async function GET(
     }
     if (hasStableErrorCode(error, 'operation_not_found')) {
       return jsonError(404, 'turn_not_found');
+    }
+    if (hasStableErrorCode(error, 'CAPABILITY_UNAVAILABLE')) {
+      return jsonError(409, 'CAPABILITY_UNAVAILABLE');
     }
     return jsonError(503, 'events_unavailable');
   }

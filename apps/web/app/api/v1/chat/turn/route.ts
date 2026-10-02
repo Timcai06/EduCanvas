@@ -61,6 +61,9 @@ export async function POST(request: Request): Promise<Response> {
     if (hasStableErrorCode(error, 'deep_research_unavailable')) {
       return jsonError(503, 'deep_research_unavailable');
     }
+    if (hasStableErrorCode(error, 'CAPABILITY_UNAVAILABLE')) {
+      return jsonError(409, 'CAPABILITY_UNAVAILABLE');
+    }
     if (error instanceof PlatformMessageIdConflictError) {
       return jsonError(409, error.code);
     }

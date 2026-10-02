@@ -4,6 +4,7 @@ export class GatewayRuntimeError extends Error {
       | 'FORBIDDEN'
       | 'ROUTE_NOT_FOUND'
       | 'IDEMPOTENCY_CONFLICT'
+      | 'CAPABILITY_UNAVAILABLE'
       | 'INVALID_EVENT_SEQUENCE'
       | 'OPERATION_NOT_FOUND',
     message: string,

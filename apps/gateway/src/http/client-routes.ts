@@ -20,6 +20,7 @@ import { readBearerToken } from '../client-auth';
 import { GatewayCanvasResourceError } from '../canvas-resource-service';
 import { GatewayImagePreviewError } from '../asset-image-preview-service';
 import { handleAssetRoutes } from './asset-routes';
+import { handleClientOperationEvents } from './client-operation-events';
 import { handleDesktopRevoke, resolveClientAuth } from './client-request-auth';
 import {
   decodeConversationDirectoryCursor,
@@ -628,25 +629,7 @@ export async function handleClientRoutes(
       return HANDLED;
     }
 
-    const operationMatch =
-      request.method === 'GET'
-        ? url.pathname.match(
-            /^\/v1\/client\/operations\/([A-Za-z0-9._:-]+)\/events$/,
-          )
-        : null;
-    if (operationMatch) {
-      const after = Number(url.searchParams.get('after') ?? '-1');
-      if (!Number.isInteger(after) || after < -1) {
-        writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
-        return HANDLED;
-      }
-      writeJson(response, 200, {
-        events: await deps.service.resume({
-          operationId: operationMatch[1]!,
-          afterSequence: after,
-          principalUserId: identity.userId,
-        }),
-      });
+    if ((await handleClientOperationEvents(ctx, identity.userId)).handled) {
       return HANDLED;
     }
 

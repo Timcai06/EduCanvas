@@ -9,6 +9,10 @@ import {
   type OutputPreference,
   type TurnMode,
 } from '@educanvas/agent-core';
+import {
+  gatewayOperationEventExtensionsSchema,
+  type GatewayOperationEventExtension,
+} from '@educanvas/gateway-core';
 
 const MAX_TURN_REQUEST_BYTES = 64 * 1024;
 const MAX_STUDENT_MESSAGE_CHARACTERS = 4_000;
@@ -37,7 +41,7 @@ export interface TeachingTurnRequestBody {
    * `canvas` 为旧别名，服务端已归一化为 `interactive_artifact`。
    */
   outputPreference?: OutputPreference;
-  supportsArtifactConfirmation?: boolean;
+  eventExtensions?: readonly GatewayOperationEventExtension[];
   artifactConfirmationId?: string;
   /** Workflow selection only; capability grants remain server-owned. */
   mode?: TurnMode;
@@ -128,6 +132,19 @@ export async function parseTeachingTurnRequest(
   ) {
     throw new TurnRequestValidationError('invalid_request');
   }
+  const parsedEventExtensions = gatewayOperationEventExtensionsSchema.safeParse(
+    record.eventExtensions ?? [],
+  );
+  if (!parsedEventExtensions.success) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
+  const eventExtensions = new Set(parsedEventExtensions.data);
+  /* `supportsArtifactConfirmation` remains a v1 compatibility alias for clients
+     shipped with the original Web confirmation card. New clients declare the
+     exact extension version instead. */
+  if (record.supportsArtifactConfirmation === true) {
+    eventExtensions.add('artifact.confirmation@1');
+  }
   const artifactConfirmationId =
     record.artifactConfirmationId === undefined
       ? undefined
@@ -143,7 +160,7 @@ export async function parseTeachingTurnRequest(
   }
   if (
     artifactConfirmationId !== undefined &&
-    record.supportsArtifactConfirmation !== true
+    !eventExtensions.has('artifact.confirmation@1')
   ) {
     throw new TurnRequestValidationError('invalid_request');
   }
@@ -162,6 +179,7 @@ export async function parseTeachingTurnRequest(
         key !== 'outputPreference' &&
         key !== 'mode' &&
         key !== 'supportsArtifactConfirmation' &&
+        key !== 'eventExtensions' &&
         key !== 'artifactConfirmationId',
     )
     .sort()
@@ -192,8 +210,8 @@ export async function parseTeachingTurnRequest(
     text,
     parts,
     ...(outputPreference ? { outputPreference } : {}),
-    ...(record.supportsArtifactConfirmation === true
-      ? { supportsArtifactConfirmation: true }
+    ...(eventExtensions.size > 0
+      ? { eventExtensions: [...eventExtensions] }
       : {}),
     ...(artifactConfirmationId ? { artifactConfirmationId } : {}),
     ...(mode ? { mode } : {}),

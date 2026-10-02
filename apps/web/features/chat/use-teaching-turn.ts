@@ -127,6 +127,7 @@ export function useAgentTurn(
     consumeResearch,
     restoreResearch,
     eventsEndpoint: options.eventsEndpoint,
+    eventExtensions: options.eventExtensions,
   });
 
   useActiveTurnRecovery({
@@ -225,8 +226,8 @@ export function useAgentTurn(
               ...(sendOptions.mode === 'deep_research'
                 ? { mode: sendOptions.mode }
                 : {}),
-              ...(options.supportsArtifactConfirmation
-                ? { supportsArtifactConfirmation: true }
+              ...(options.eventExtensions?.length
+                ? { eventExtensions: options.eventExtensions }
                 : {}),
               ...(sendOptions.artifactConfirmationId
                 ? { artifactConfirmationId: sendOptions.artifactConfirmationId }
@@ -344,7 +345,7 @@ export function useAgentTurn(
       recoverTurn,
       options.assistantLabel,
       options.endpoint,
-      options.supportsArtifactConfirmation,
+      options.eventExtensions,
       safeConnectionError,
     ],
   );

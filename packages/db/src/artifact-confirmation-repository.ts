@@ -1,4 +1,7 @@
-import type { ArtifactProposalKind } from '@educanvas/agent-core';
+import type {
+  AgentMessagePart,
+  ArtifactProposalKind,
+} from '@educanvas/agent-core';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from './client';
 import {
@@ -7,6 +10,7 @@ import {
   artifactConfirmationRequests,
   conversationMessages,
 } from './schema';
+import { selectArtifactConfirmationExecution } from './artifact-confirmation-execution';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -27,6 +31,11 @@ export interface ArtifactConfirmationSnapshot {
   confirmationMessageId: string | null;
   attemptNumber: number;
   createdAt: string;
+}
+
+interface ArtifactConfirmationExecutionSnapshot extends ArtifactConfirmationSnapshot {
+  /** Server-persisted proposal parts; callers must rematerialize asset refs per attempt. */
+  proposalParts: readonly AgentMessagePart[];
 }
 
 export class ArtifactConfirmationNotFoundError extends Error {
@@ -180,25 +189,13 @@ export class DrizzleArtifactConfirmationRepository {
 
   async getForExecution(
     input: ArtifactConfirmationScope & { confirmationId: string },
-  ): Promise<ArtifactConfirmationSnapshot> {
-    const [row] = await this.database
-      .select()
-      .from(artifactConfirmationRequests)
-      .where(
-        and(
-          eq(artifactConfirmationRequests.id, input.confirmationId),
-          eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
-          eq(artifactConfirmationRequests.notebookId, input.notebookId),
-          eq(artifactConfirmationRequests.conversationId, input.conversationId),
-          inArray(artifactConfirmationRequests.status, [
-            'pending',
-            'confirmed',
-          ]),
-        ),
-      )
-      .limit(1);
+  ): Promise<ArtifactConfirmationExecutionSnapshot> {
+    const row = await selectArtifactConfirmationExecution(this.database, input);
     if (!row) throw new ArtifactConfirmationNotFoundError();
-    return snapshot(row);
+    return {
+      ...snapshot(row.confirmation),
+      proposalParts: row.proposalParts,
+    };
   }
 
   async updateKind(
