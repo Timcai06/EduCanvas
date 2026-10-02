@@ -18,6 +18,7 @@ import {
 } from '@/features/canvas/resource-error';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import type { LiveVoiceAnnotationDraft } from './live-voice-bring-back';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 
 export type LiveVoicePreviewTarget =
   | {
@@ -52,6 +53,7 @@ export function LiveVoiceResourcePreview({
   readonly onAnnotateAsset?: (draft: LiveVoiceAnnotationDraft) => void;
   readonly onClose: () => void;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [reloadSequence, setReloadSequence] = useState(0);
   const [state, setState] = useState<PreviewState>({ status: 'loading' });
   const [annotating, setAnnotating] = useState(false);
@@ -63,12 +65,14 @@ export function LiveVoiceResourcePreview({
     const request =
       target.kind === 'source'
         ? fetchCanvasResource('source', target.id, {
+            requestContext,
             signal: controller.signal,
           }).then((resource) => ({
             status: 'source' as const,
             resource,
           }))
         : fetchCanvasResource('artifact', target.id, {
+            requestContext,
             signal: controller.signal,
           }).then(async (resource) => {
             const shellRendered = isShellRenderedArtifactResource(resource);
@@ -80,6 +84,7 @@ export function LiveVoiceResourcePreview({
               } satisfies ResourceError;
             }
             const detail = await fetchArtifactDetail(target.id, undefined, {
+              requestContext,
               signal: controller.signal,
             });
             return {
@@ -106,7 +111,7 @@ export function LiveVoiceResourcePreview({
       active = false;
       controller.abort();
     };
-  }, [reloadSequence, scopeKey, target.id, target.kind]);
+  }, [reloadSequence, scopeKey, target.id, target.kind, requestContext]);
 
   const sourceSelection =
     state.status === 'source'

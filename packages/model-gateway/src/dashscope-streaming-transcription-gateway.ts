@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
+  ModelGatewayInvocationError,
   StreamingTranscriptionStateError,
   streamingTranscriptionEventSchema,
   streamingTranscriptionPcmChunkSchema,
   streamingTranscriptionProtocolVersion,
   type StreamingTranscriptionEvent,
+  type NormalizedModelError,
   type StreamingTranscriptionGateway,
   type StreamingTranscriptionPcmChunk,
   type StreamingTranscriptionRequest,
@@ -21,6 +23,10 @@ import {
   type DashScopeSocket,
   type DashScopeSocketFactory,
 } from './dashscope-websocket';
+import {
+  logProviderFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
 
 export interface DashScopeStreamingTranscriptionGatewayOptions {
   configuration: DashScopeSpeechConfiguration;
@@ -33,7 +39,7 @@ class Session
     AsyncIterable<StreamingTranscriptionEvent>
 {
   readonly events: AsyncIterable<StreamingTranscriptionEvent> = this;
-  private readonly socket: DashScopeSocket;
+  private readonly socket?: DashScopeSocket;
   private readonly taskId = randomUUID();
   private readonly queue: StreamingTranscriptionEvent[] = [];
   private readonly waiters: Array<() => void> = [];
@@ -55,15 +61,41 @@ class Session
     ) {
       throw new StreamingTranscriptionStateError('UNKNOWN');
     }
-    this.socket = (options.socketFactory ?? createDashScopeSocket)(
-      options.configuration,
-    );
-    this.socket.on('open', () => this.runTask());
-    this.socket.on('message', (data: unknown, isBinary?: boolean) => {
+    if (request.signal?.aborted) {
+      this.fail('CANCELLED', undefined, {
+        stage: 'precondition',
+        failureClass: 'cancelled',
+      });
+      return;
+    }
+    try {
+      this.socket = (options.socketFactory ?? createDashScopeSocket)(
+        options.configuration,
+      );
+    } catch {
+      if (request.signal?.aborted) {
+        this.fail('CANCELLED', undefined, {
+          stage: 'precondition',
+          failureClass: 'cancelled',
+        });
+        return;
+      }
+      const normalized: NormalizedModelError = {
+        code: 'unavailable',
+        retryable: true,
+      };
+      logProviderFailure('dashscope', normalized, undefined, {
+        capability: 'streaming_transcription',
+        stage: 'provider_call',
+      });
+      throw new ModelGatewayInvocationError(normalized);
+    }
+    this.socket?.on('open', () => this.runTask());
+    this.socket?.on('message', (data: unknown, isBinary?: boolean) => {
       if (!isBinary) this.handleMessage(data);
     });
-    this.socket.on('error', () => this.fail('MODEL_FAILED'));
-    this.socket.on('close', () => {
+    this.socket?.on('error', () => this.fail('MODEL_FAILED'));
+    this.socket?.on('close', () => {
       if (!this.terminal) this.fail('MODEL_FAILED');
     });
     request.signal?.addEventListener('abort', () => this.cancel(), {
@@ -96,7 +128,7 @@ class Session
     }
     this.inputSequence += 1;
     const bytes = chunk.pcmBytes.slice();
-    if (this.started) this.socket.send(bytes);
+    if (this.started) this.socket?.send(bytes);
     else this.audioQueue.push(bytes);
   }
 
@@ -112,11 +144,11 @@ class Session
   cancel(): void {
     if (this.terminal) return;
     this.fail('CANCELLED');
-    this.socket.close();
+    this.socket?.close();
   }
 
   private runTask(): void {
-    this.socket.send(
+    this.socket?.send(
       JSON.stringify({
         header: {
           action: 'run-task',
@@ -145,7 +177,7 @@ class Session
   }
 
   private finishTask(): void {
-    this.socket.send(
+    this.socket?.send(
       JSON.stringify({
         header: {
           action: 'finish-task',
@@ -158,40 +190,42 @@ class Session
   }
 
   private handleMessage(raw: unknown): void {
+    if (this.terminal) return;
     const body = parseDashScopeEnvelope(raw);
     if (body === null) {
-      this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.fail('MODEL_FAILED', { code: 'invalid_response', retryable: false });
+      this.socket?.close();
       return;
     }
     if (body.header.task_id !== this.taskId) return;
     const event = body.header.event;
     if (event === 'task-started') {
       this.started = true;
-      for (const bytes of this.audioQueue.splice(0)) this.socket.send(bytes);
+      for (const bytes of this.audioQueue.splice(0)) this.socket?.send(bytes);
       if (this.finishing) this.finishTask();
       return;
     }
     if (event === 'task-failed') {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[model-gateway] provider_failed', {
-          provider: 'dashscope',
-          capability: 'streaming_transcription',
-          code: dashScopeFailureCode(body),
-        });
-      }
-      this.fail('MODEL_FAILED');
+      this.fail(
+        'MODEL_FAILED',
+        { code: 'unavailable', retryable: false },
+        { providerErrorCode: dashScopeFailureCode(body) },
+      );
       return;
     }
     if (event === 'task-finished') {
-      if (!this.terminal) this.fail('MODEL_FAILED');
+      if (!this.terminal)
+        this.fail('MODEL_FAILED', {
+          code: 'invalid_response',
+          retryable: false,
+        });
       return;
     }
     if (event !== 'result-generated') return;
     const result = parseDashScopeTranscriptionResult(body);
     if (result === null) {
-      this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.fail('MODEL_FAILED', { code: 'invalid_response', retryable: false });
+      this.socket?.close();
       return;
     }
     const sentence = result.payload.output.sentence;
@@ -210,7 +244,7 @@ class Session
       this.emit({ type: 'final', text });
       this.terminal = true;
       this.wake();
-      this.socket.close();
+      this.socket?.close();
     } else {
       this.emit({ type: 'partial', text });
     }
@@ -228,7 +262,7 @@ class Session
     };
     const parsed = streamingTranscriptionEventSchema.safeParse(candidate);
     if (!parsed.success) {
-      this.fail('MODEL_FAILED');
+      this.fail('MODEL_FAILED', { code: 'invalid_response', retryable: false });
       return;
     }
     this.eventSequence += 1;
@@ -236,7 +270,11 @@ class Session
     this.wake();
   }
 
-  private fail(failureCode: 'MODEL_FAILED' | 'CANCELLED'): void {
+  private fail(
+    failureCode: 'MODEL_FAILED' | 'CANCELLED',
+    error: NormalizedModelError = { code: 'unavailable', retryable: true },
+    diagnostic: ProviderFailureDiagnostic = {},
+  ): void {
     if (this.terminal) return;
     const event = streamingTranscriptionEventSchema.parse({
       protocolVersion: streamingTranscriptionProtocolVersion,
@@ -248,6 +286,14 @@ class Session
     });
     this.queue.push(event);
     this.terminal = true;
+    logProviderFailure(
+      'dashscope',
+      failureCode === 'CANCELLED'
+        ? { code: 'aborted', retryable: false }
+        : error,
+      undefined,
+      { capability: 'streaming_transcription', stage: 'stream', ...diagnostic },
+    );
     this.wake();
   }
 

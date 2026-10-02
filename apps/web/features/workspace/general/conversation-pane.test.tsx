@@ -33,6 +33,39 @@ vi.mock('@/features/chat/assistant-message-projection', () => ({
 }));
 
 describe('ConversationPane 与 Composer 输出偏好回调', () => {
+  it('Canvas 尚在观察不能回退聊天已确认的失败终态', () => {
+    const messages: readonly ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        turnId: 'turn-1',
+        clientMessageId: 'client-1',
+        role: 'assistant',
+        status: 'completed',
+        text: '',
+        attachments: [],
+        artifacts: [
+          {
+            id: 'artifact-1',
+            kind: 'note',
+            title: '笔记',
+            status: 'failed',
+            latestVersion: 0,
+          },
+        ],
+      },
+    ];
+    const projected = projectArtifactGenerationIntoMessages(messages, {
+      artifactId: 'artifact-1',
+      kind: 'note',
+      title: '笔记',
+      phase: 'generating',
+      outcome: 'pending',
+      progress: 50,
+    });
+    expect(
+      projected[0]?.role === 'assistant' && projected[0].artifacts?.[0]?.status,
+    ).toBe('failed');
+  });
   it('本地停止观察不能把后台任务投影为取消终态', () => {
     const messages: readonly ChatMessage[] = [
       {

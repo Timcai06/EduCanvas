@@ -12,6 +12,11 @@ import {
 } from '@educanvas/agent-core';
 import type { EnabledModelGatewayConfiguration } from './config/config';
 
+import {
+  logProviderInvocationFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
+
 export interface OpenAICompatibleImageGenerationModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -123,7 +128,15 @@ export class OpenAICompatibleImageGenerationModelGateway implements ImageGenerat
       request.count !== 1 ||
       !supportedGeneratedImageSizes.includes(request.size)
     ) {
-      throw invocationError({ code: 'output_limit', retryable: false });
+      const failure = invocationError({
+        code: 'output_limit',
+        retryable: false,
+      });
+      logProviderInvocationFailure(this.config.provider, failure, {
+        capability: 'image',
+        stage: 'precondition',
+      });
+      throw failure;
     }
 
     const controller = new AbortController();
@@ -141,6 +154,10 @@ export class OpenAICompatibleImageGenerationModelGateway implements ImageGenerat
 
     const modelId = this.config.modelIds.image!;
     const startedAt = this.now();
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'image',
+      stage: 'provider_call',
+    };
     try {
       let response: Response;
       try {
@@ -172,9 +189,12 @@ export class OpenAICompatibleImageGenerationModelGateway implements ImageGenerat
         throw invocationError({ code: 'unavailable', retryable: true }, cause);
       }
 
+      diagnostic.status = response.status;
       if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
         throw invocationError(errorForHttpStatus(response.status));
       }
+      diagnostic.stage = 'response_parse';
 
       let body: unknown;
       try {
@@ -206,6 +226,9 @@ export class OpenAICompatibleImageGenerationModelGateway implements ImageGenerat
         traceId: request.traceId,
       };
       return { images: [image], metadata };
+    } catch (cause) {
+      logProviderInvocationFailure(this.config.provider, cause, diagnostic);
+      throw cause;
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);

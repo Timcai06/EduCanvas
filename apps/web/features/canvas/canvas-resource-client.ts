@@ -1,4 +1,8 @@
 import {
+  notebookScopedFetch,
+  type NotebookRequestContext,
+} from '@/features/workspace/general/notebook-request-context';
+import {
   validateCanvasResource,
   type CanvasResource,
 } from '@educanvas/canvas-protocol';
@@ -21,24 +25,31 @@ export type CanvasResourceClientError = ResourceError;
  * 内容仍通过既有的 preview/file/Artifact detail 端点读取。
  *
  * 安全边界：
- * - 不接受调用方传入 Notebook ID；归属由服务端从 cookie 解析。
+ * - 显式范围由服务端逐次验证；无范围的兼容入口保留 Cookie 恢复。
  * - 不信任浏览器自行构造的 CanvasResource；所有响应经协议校验。
  * - 不把服务端原始 body、堆栈或内部错误对象传给 UI。
  */
 export async function fetchCanvasResource(
   resourceKind: 'source' | 'artifact',
   resourceId: string,
-  options: { signal?: AbortSignal } = {},
+  options: {
+    signal?: AbortSignal;
+    requestContext?: NotebookRequestContext | null;
+  } = {},
 ): Promise<CanvasResource> {
   const url = `${RESOURCES_ENDPOINT}/${encodeURIComponent(resourceKind)}/${encodeURIComponent(resourceId)}`;
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: 'GET',
-      cache: 'no-store',
-      signal: options.signal,
-    });
+    response = await notebookScopedFetch(
+      url,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        signal: options.signal,
+      },
+      options.requestContext,
+    );
   } catch (error: unknown) {
     /* 取消（AbortError）不是失败，调用方应忽略过期请求；网络层失败统一判为 offline。 */
     throw canvasResourceClientError(

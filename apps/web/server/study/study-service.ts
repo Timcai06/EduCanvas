@@ -6,6 +6,7 @@ import {
   DrizzleStudyBootstrapCompensator,
   DrizzleStudyDiagnosticRepository,
   DrizzleStudyPlanRepository,
+  requireNotebookAccess,
   type StudyPlanSnapshot,
 } from '@educanvas/db';
 import { getDb } from '@educanvas/db/internal';
@@ -110,6 +111,45 @@ export async function loadOwnedStudyContext(
     : null;
 }
 
+/** Resolve the exact Notebook's existing course without changing teaching state or ownership. */
+export async function loadOwnedStudyContextForNotebook(
+  identity: AnonymousIdentity,
+  notebookId: string,
+  conversationId?: string,
+  includeArchived = false,
+): Promise<OwnedStudyContext | null> {
+  await requireNotebookAccess(getDb(), {
+    notebookId,
+    trustedSubjectId: identity.studentId,
+    requiredPermission: 'notebook.read',
+  });
+  const plan = await studyPlans.getActiveForNotebook(
+    identity.studentId,
+    notebookId,
+    conversationId,
+    includeArchived,
+  );
+  if (!plan) return null;
+  const content = contentForPlan(plan);
+  return content
+    ? {
+        plan,
+        course: content.course,
+        artifact: content.artifact,
+        knowledgePublication: content.knowledgePublication,
+        sessionId: plan.goal.sessionId,
+      }
+    : null;
+}
+
+export async function loadStudyPageStateForNotebook(
+  identity: AnonymousIdentity,
+  notebookId: string,
+): Promise<StudyPageState> {
+  const context = await loadOwnedStudyContextForNotebook(identity, notebookId);
+  return studyPageStateForContext(context);
+}
+
 /**
  * 创建 Session 后写 Notebook Goal；Goal 失败时只补偿删除本次新建且仍无 Goal 的 Notebook。
  * 调用方仍必须在两者都成功后才写身份 Cookie。
@@ -117,10 +157,45 @@ export async function loadOwnedStudyContext(
 export async function bootstrapStudyPlan(
   identity: AnonymousIdentity,
   rawInput: CreateStudyPlanInputDTO,
+  notebookId?: string,
 ): Promise<StudyPlanSnapshot> {
   const input = createStudyPlanInputSchema.parse(rawInput);
   const content = getTrustedStudyContent(input.gradeBand, input.courseSlug);
   const { course } = content;
+  if (notebookId) {
+    // Session/Goal creation in an existing Notebook is atomic; failure never deletes the user's Notebook.
+    return getDb().transaction(async (transaction) => {
+      await requireNotebookAccess(transaction, {
+        notebookId,
+        trustedSubjectId: identity.studentId,
+        requiredPermission: 'notebook.manage',
+      });
+      const session = await new DrizzleLearningSessionRepository(
+        transaction,
+      ).bootstrap({
+        studentId: identity.studentId,
+        gradeBand: course.gradeBand,
+        courseSlug: course.courseSlug,
+        knowledgeNodeId: course.objectives[0]!.knowledgeNodeId,
+        completeArtifact: content.artifact,
+        notebookId,
+      });
+      return new DrizzleStudyPlanRepository(transaction).bootstrap({
+        trustedStudentId: identity.studentId,
+        declaredByUserId: identity.studentId,
+        sessionId: session.sessionId,
+        desiredOutcome: input.desiredOutcome,
+        profile: {
+          ageBand: input.ageBand,
+          gradeBand: input.gradeBand,
+          declarationSource: input.declarationSource,
+          preferences: input.preferences,
+        },
+        course,
+        knowledgePublication: content.knowledgePublication ?? undefined,
+      });
+    });
+  }
   const session = await learningSessions.bootstrap({
     studentId: identity.studentId,
     gradeBand: course.gradeBand,
@@ -167,6 +242,12 @@ export async function loadStudyPageState(
 ): Promise<StudyPageState> {
   if (!identity) return { kind: 'setup' };
   const context = await loadOwnedStudyContext(identity);
+  return studyPageStateForContext(context);
+}
+
+async function studyPageStateForContext(
+  context: OwnedStudyContext | null,
+): Promise<StudyPageState> {
   if (!context) return { kind: 'setup' };
   if (context.plan.latestDiagnostic) {
     return { kind: 'workspace', context };
@@ -184,6 +265,8 @@ export async function loadStudyPageState(
     data: {
       topic: context.plan.goal.topic,
       desiredOutcome: context.plan.goal.desiredOutcome,
+      sessionId: context.sessionId,
+      goalId: context.plan.goal.id,
       diagnostic: projectPublicDiagnostic(context.course),
     },
   };
@@ -193,10 +276,21 @@ export async function loadStudyPageState(
 export async function submitStudyDiagnostic(
   identity: AnonymousIdentity,
   rawInput: SubmitDiagnosticInputDTO,
+  notebookId?: string,
+  expected?: { sessionId: string; goalId: string },
 ) {
   const submission = diagnosticSubmissionSchema.parse(rawInput);
-  const context = await loadOwnedStudyContext(identity);
-  if (!context) return { ok: false as const, code: 'STUDY_PLAN_NOT_FOUND' };
+  const context = notebookId
+    ? await loadOwnedStudyContextForNotebook(identity, notebookId)
+    : await loadOwnedStudyContext(identity);
+  if (
+    !context ||
+    (notebookId &&
+      (!expected ||
+        context.sessionId !== expected.sessionId ||
+        context.plan.goal.id !== expected.goalId))
+  )
+    return { ok: false as const, code: 'STUDY_PLAN_NOT_FOUND' };
   const decision = gradeDiagnostic(context.course, submission);
   if (!decision.ok) return decision;
   const persisted = await diagnostics.submit({
@@ -207,4 +301,14 @@ export async function submitStudyDiagnostic(
     graded: decision.result,
   });
   return { ok: true as const, result: persisted };
+}
+
+export function readNotebookStudyResumeCandidate(
+  identity: AnonymousIdentity,
+  notebookId: string,
+) {
+  return studyPlans.readNotebookStudyResumeCandidate(
+    identity.studentId,
+    notebookId,
+  );
 }

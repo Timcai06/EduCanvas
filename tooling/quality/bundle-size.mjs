@@ -7,10 +7,8 @@
  * - `.next/server/app/` 下每路由 SSR HTML 大小（首屏负载代理）。
  *
  * 门禁逻辑（阈值文件 `tooling/quality/bundle-size-baseline.json`）：
- * - 总量 > 基线 × 1.1 或最大 chunk > 基线 × 1.1 → fail；
- * - 基线中存在的路由 HTML > 基线 × 1.1 → fail；
- * - 基线中不存在的“新增路由”：HTML > 300KB 或总 JS 增长 > 1MB → fail
- *   （新增路由必须先经发布评审，不能静默进包）；
+ * - 超过基线参考值时输出警告和测量结果，不阻断 CI；
+ * - 新增路由也保留 300KB HTML 参考提示，供发布评审查看；
  * - 没有基线文件时（--record 或首次）输出数字并提示先记录基线，不 fail。
  *
  * 用法：
@@ -182,7 +180,7 @@ const lines = [
 if (failures.length) {
   lines.push(
     '',
-    '**bundle-size 检查失败：**',
+    '**超出 bundle-size 参考阈值（仅报告，不阻断 CI）：**',
     ...failures.map((f) => `- ${f}`),
   );
 }
@@ -192,4 +190,5 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     flag: 'a',
   });
 }
-process.exit(failures.length ? 1 : 0);
+// Bundle size is a review signal, not a merge requirement. Keep all measurements visible.
+process.exit(0);

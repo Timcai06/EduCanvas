@@ -1,5 +1,8 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -56,8 +59,12 @@ const WEB_ARTIFACT_KINDS = [
 export async function GET(request: Request): Promise<Response> {
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized');
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized');
+  const conversation = await loadOwnedGeneralConversation(identity, request);
+  if (!conversation)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
 
   try {
     const pagination = parseListPagination(request);
@@ -136,8 +143,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized');
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized');
+  const conversation = await loadOwnedGeneralConversation(identity, request);
+  if (!conversation)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
 
   let body: unknown;
   let idempotencyKey: string | null;

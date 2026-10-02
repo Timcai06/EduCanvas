@@ -844,3 +844,27 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - 风险: 中——旧值无法无损推断低/高年级，选择高年级是显式兼容裁定；用户仍可在
   学习入口重新声明学段，知识检索继续按精确学段 fail closed；迁移测试同时证明
   immutable trigger 在更新后恢复生效。
+
+## 0062_notebook_source_plans.sql
+
+- 状态: active（#475 来源计划，2026-10-02）
+- 语义: 新增 `notebook_plans` 与 `notebook_chapters`；保存显式对话/章节/目的计划，章节冻结资料版本和用户分组范围。保留现有每 Notebook 唯一 active Goal。
+- 锁表: 新叶子表初始为空；资产与版本复合唯一索引扫描既有表并阻塞并发写入，FK 验证涉及父表；上线前按实测规模安排窗口。新生成 SQL 将唯一索引置于复合 FK 前，避免 Drizzle 默认顺序引用尚未建立的索引。
+- 回滚: 先回滚应用读取/写入到旧版本，保留新增用户计划数据；若后续移除新表须另出迁移并备份新数据，不手改历史迁移。
+- N-1: 旧应用忽略新空表和复合索引；course/Goal/Session 及消息、资源原 ID 与归属不变。
+- Fresh install: 可重放；复合唯一索引在引用它们的外键前建立。
+- Data migration: none——不回填章节、不自动合并课程、不复制 Goal 或学习账本。
+- Estimated scale: 新表初始 0 行；每份显式计划/分组一行；新增索引与 Asset/Version 数线性增长，生产规模尚未验证。
+- 风险: 中——新增复合 FK 防跨 Notebook 来源漂移；主要运维风险是既有资产表建索引锁窗口。总 Goal/诊断/教学状态机/掌握度逻辑不变。
+
+## 0063_notebook_lesson_scope.sql
+
+- 状态: active（#475 Notebook 教学 Session 隔离，2026-10-02）
+- 语义: 新增 nullable `lesson_sessions.notebook_id`；仅从既有 Conversation 的 Space 确定性回填。active 唯一范围加入 Notebook，旧 unbound/null Session 保持旧课程范围唯一；新增同 Notebook Conversation 复合 FK、绑定成对 CHECK 及数据库派生/不可搬移 trigger。
+- 锁表: ALTER、CHECK 验证和创建 Session 索引会扫描既有 Session；确定性回填锁定已有绑定行。上线按实测规模安排维护窗口。
+- 回滚: 先停新写入并回滚到兼容 Notebook scope 的应用；保留新列与多个 Notebook 的 active 行。不能直接恢复旧 global 唯一索引，它可能拒绝已经合法并存的记录；需要另出有审计的迁移，不能自动归档学习记录。
+- N-1: 数据 additive 且旧 writer 省略 notebook_id 时 trigger 从 Conversation 派生；旧应用 global archive 语义不安全，禁止新旧应用长期混写。部署该迁移与 Notebook scope 应用作为一个发布单元。
+- Fresh install: 可重放；先新增列并按已有归属回填，再验证新 FK/CHECK、建立唯一索引与兼容 trigger。
+- Data migration: 只有已有 Conversation 可证明的 SpaceId 回填，不迁移空间、不复制教学事实、不变原 ID/状态/掌握度。原 conversation_id=null 的历史行保留 notebook_id=null。
+- Estimated scale: 回填与 Session 行数线性增长；三个索引覆盖绑定/未绑定当前行及Notebook FK；生产规模尚未验证。
+- 风险: 中——改变 active 范围及锁的粒度，但不改教学状态转移；多个 Notebook 同课可并行，显式 Notebook 操作不再归档他本。需要与应用一起切换并验证精确 Goal/Session/Conversation 绑定。

@@ -17,6 +17,8 @@ export interface MessageArtifactDTO {
   latestVersion: number;
   /** 服务端 generation job 的百分比进度（0-100）；仅 proposed 期间有意义。 */
   progress?: number;
+  /** Client observation window ended; never a durable job status or SSE field. */
+  observationTimedOut?: boolean;
 }
 
 /**

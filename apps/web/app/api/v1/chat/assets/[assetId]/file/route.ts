@@ -1,6 +1,9 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { jsonError } from '@/server/http/request-security';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   AssetPreviewError,
   readOwnedAssetDownload,
@@ -35,13 +38,20 @@ export async function GET(
   if (!parsed.success) {
     return jsonError(404, 'asset_not_found');
   }
+  const fileQuery = new URL(request.url).searchParams;
+  fileQuery.delete('requestNotebookId');
+  fileQuery.delete('requestConversationId');
   const download = downloadQuerySchema.safeParse(
-    Object.fromEntries(new URL(request.url).searchParams),
+    Object.fromEntries(fileQuery),
   ).success;
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized');
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation) return jsonError(401, 'unauthorized');
+  const conversation = await loadOwnedGeneralConversation(identity, request);
+  if (!conversation)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     /* ADR-0026 决定 1：download=1 走原件下载（任意 MIME，校验 contentHash），
        其余请求保持内联预览语义（二进制白名单）。 */

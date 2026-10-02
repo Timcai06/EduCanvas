@@ -14,11 +14,10 @@ import {
   DrizzleEventStore,
   DrizzleMasteryRepository,
 } from './teaching-adapters';
-import { conversations, lessonSessions } from './schema';
+import { requireStudyDiagnosticScope } from './study-diagnostic-scope';
 import {
   diagnosticAttempts,
   diagnosticResponses,
-  learningGoals,
   learningObjectives,
 } from './schema/study';
 import {
@@ -93,6 +92,7 @@ export class DrizzleStudyDiagnosticRepository {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`diagnostic-attempt:${input.graded.attemptId}`}, 0))`,
       );
+      await requireStudyDiagnosticScope(transaction, input, course);
       const [existing] = await transaction
         .select()
         .from(diagnosticAttempts)
@@ -119,42 +119,6 @@ export class DrizzleStudyDiagnosticRepository {
         };
       }
 
-      const [ownedGoal] = await transaction
-        .select({
-          courseSlug: learningGoals.courseSlug,
-          courseVersion: learningGoals.courseVersion,
-          gradeBand: learningGoals.gradeBand,
-          notebookId: learningGoals.notebookId,
-        })
-        .from(learningGoals)
-        .innerJoin(
-          conversations,
-          eq(conversations.spaceId, learningGoals.notebookId),
-        )
-        .innerJoin(
-          lessonSessions,
-          eq(lessonSessions.conversationId, conversations.id),
-        )
-        .where(
-          and(
-            eq(learningGoals.id, input.goalId),
-            eq(learningGoals.studentId, input.trustedStudentId),
-            eq(learningGoals.status, 'active'),
-            eq(lessonSessions.id, input.sessionId),
-            eq(lessonSessions.studentId, input.trustedStudentId),
-            eq(lessonSessions.status, 'active'),
-          ),
-        )
-        .limit(1);
-      if (
-        !ownedGoal ||
-        ownedGoal.courseSlug !== course.courseSlug ||
-        ownedGoal.courseVersion !== course.version ||
-        ownedGoal.gradeBand !== course.gradeBand ||
-        input.graded.definitionVersion !== course.diagnostic.version
-      ) {
-        throw new StudyPlanNotFoundError();
-      }
       const objectiveRows = await transaction
         .select()
         .from(learningObjectives)

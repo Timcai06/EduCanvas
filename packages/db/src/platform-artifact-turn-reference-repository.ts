@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from './client';
 import { artifactGenerationJobs, artifacts } from './schema';
 import type {
@@ -42,10 +43,17 @@ export class DrizzlePlatformArtifactTurnReferenceRepository {
       throw new Error('artifact_turn_reference_operation_limit_exceeded');
     }
 
+    const latestJob = alias(artifactGenerationJobs, 'latest_artifact_job');
+    const latestStatus = this.database
+      .select({ status: latestJob.status })
+      .from(latestJob)
+      .where(eq(latestJob.artifactId, artifacts.id))
+      .orderBy(desc(latestJob.createdAt), desc(latestJob.id))
+      .limit(1);
     const rows = await this.database
       .select({
         operationId: artifactGenerationJobs.operationId,
-        generationStatus: artifactGenerationJobs.status,
+        generationStatus: sql<ArtifactJobStatus>`(${latestStatus})`,
         artifact: artifacts,
       })
       .from(artifactGenerationJobs)

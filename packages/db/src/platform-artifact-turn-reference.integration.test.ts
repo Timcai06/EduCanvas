@@ -135,4 +135,82 @@ describeWithDatabase('Agent Turn 产物引用', () => {
       }),
     ).rejects.toThrow('artifact_turn_reference_operation_limit_exceeded');
   });
+
+  it('历史引用读取当前最新job，手动重试不被原Turn的失败态覆盖', async () => {
+    const owner = 'artifact-retry-owner';
+    const conversations = new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    );
+    const turns = new DrizzlePlatformTurnRepository(getDatabase());
+    const artifacts = new DrizzlePlatformArtifactRepository(getDatabase());
+    const references = new DrizzlePlatformArtifactTurnReferenceRepository(
+      getDatabase(),
+    );
+    const conversation = await conversations.create({
+      ownerSubjectId: owner,
+      spaceKind: 'notebook',
+      spaceTitle: '重试笔记本',
+    });
+    const turn = await turns.createOrGetTurn({
+      conversationId: conversation.id,
+      trustedSubjectId: owner,
+      clientMessageId: 'retry-turn',
+      text: '生成笔记',
+    });
+    const artifact = await artifacts.createArtifact({
+      spaceId: conversation.spaceId,
+      conversationId: conversation.id,
+      trustedSubjectId: owner,
+      kind: 'note',
+      trustTier: 'tier1',
+      title: '笔记',
+    });
+    const oldJob = await artifacts.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+      operationId: turn.turnId,
+    });
+    await artifacts.transitionGenerationJob({
+      jobId: oldJob.id,
+      trustedSubjectId: owner,
+      to: 'running',
+    });
+    await artifacts.transitionGenerationJob({
+      jobId: oldJob.id,
+      trustedSubjectId: owner,
+      to: 'failed',
+      failureCode: 'model_output_limit',
+    });
+    const retry = await artifacts.createGenerationJob({
+      artifactId: artifact.id,
+      trustedSubjectId: owner,
+    });
+    await artifacts.transitionGenerationJob({
+      jobId: retry.id,
+      trustedSubjectId: owner,
+      to: 'running',
+    });
+    const input = {
+      conversationId: conversation.id,
+      trustedSubjectId: owner,
+      operationIds: [turn.turnId],
+    };
+    await expect(references.listForOperations(input)).resolves.toMatchObject([
+      { operationId: turn.turnId, generationStatus: 'running' },
+    ]);
+    await artifacts.transitionGenerationJob({
+      jobId: retry.id,
+      trustedSubjectId: owner,
+      to: 'cancelled',
+    });
+    await expect(references.listForOperations(input)).resolves.toMatchObject([
+      { operationId: turn.turnId, generationStatus: 'cancelled' },
+    ]);
+    await expect(
+      references.listForOperations({
+        ...input,
+        conversationId: crypto.randomUUID(),
+      }),
+    ).resolves.toEqual([]);
+  });
 });

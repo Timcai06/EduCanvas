@@ -1,4 +1,5 @@
 'use client';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 
 import type {
   CanvasFeedbackDTO,
@@ -25,6 +26,7 @@ export function CodeCompletionRenderer({
   feedback: CanvasFeedbackDTO | null;
   onSubmit: (draft: CanvasSubmissionDraft) => void;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [source, setSource] = useState(artifact.params.starterCode);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<{
@@ -41,10 +43,13 @@ export function CodeCompletionRenderer({
     setRunning(true);
     setRunError(null);
     try {
-      const result = await runCodeExercise({
-        artifactId: artifact.artifactId,
-        source,
-      });
+      const result = await runCodeExercise(
+        {
+          artifactId: artifact.artifactId,
+          source,
+        },
+        requestContext,
+      );
       setRunResult({
         stdout: result.stdout,
         stderr: result.stderr,

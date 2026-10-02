@@ -9,6 +9,10 @@ import {
   jsonResponse,
 } from '@/server/http/request-security';
 import { abortRegisteredTurn } from '@/server/http/turn-abort-registry';
+import {
+  hasGeneralRequestContext,
+  loadOwnedGeneralRequestConversation,
+} from '@/server/platform/general-request-conversation-context';
 
 export const runtime = 'nodejs';
 
@@ -26,9 +30,15 @@ export async function POST(
 
   const { turnId } = await context.params;
   try {
+    const explicit = hasGeneralRequestContext(request);
+    const conversation = explicit
+      ? await loadOwnedGeneralRequestConversation(identity, request)
+      : null;
+    if (explicit && !conversation) return jsonError(404, 'turn_not_found');
     const result = await turns.requestTurnCancellation({
       trustedSubjectId: identity.studentId,
       turnId,
+      ...(conversation ? { conversationId: conversation.id } : {}),
     });
     if (!result.turn) {
       return jsonError(404, 'turn_not_found');

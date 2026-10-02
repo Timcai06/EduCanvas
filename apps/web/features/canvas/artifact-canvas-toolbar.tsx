@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { notebookScopedUrl } from '@/features/workspace/general/notebook-request-context';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 import {
   deleteArtifact,
   restoreArtifactVersion,
@@ -44,6 +46,7 @@ export function ArtifactCanvasToolbar({
   onDeleted: (artifactId: string) => void;
   onRestored: (artifactId: string) => void;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
@@ -60,7 +63,10 @@ export function ArtifactCanvasToolbar({
   const canDelete = allowedActions.includes('delete');
   const canDownload = allowedActions.includes('download');
   const downloadUrl = canDownload
-    ? `/api/v1/chat/artifacts/${detail.artifact.id}/download?version=${displayedVersion}`
+    ? notebookScopedUrl(
+        `/api/v1/chat/artifacts/${detail.artifact.id}/download?version=${displayedVersion}`,
+        requestContext,
+      )
     : null;
 
   return (
@@ -104,7 +110,7 @@ export function ArtifactCanvasToolbar({
               setDeleting(true);
               setDeleteFailed(false);
               try {
-                await deleteArtifact(detail.artifact.id);
+                await deleteArtifact(detail.artifact.id, requestContext);
                 onDeleted(detail.artifact.id);
               } catch {
                 setDeleting(false);
@@ -138,6 +144,7 @@ export function ArtifactCanvasToolbar({
                 detail.artifact.id,
                 displayedVersion,
                 detail.artifact.latestVersion,
+                requestContext,
               );
               onRestored(detail.artifact.id);
             } catch {

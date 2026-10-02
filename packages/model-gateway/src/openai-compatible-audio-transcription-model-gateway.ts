@@ -8,6 +8,11 @@ import {
 } from '@educanvas/agent-core';
 import type { EnabledModelGatewayConfiguration } from './config/config';
 
+import {
+  logProviderInvocationFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
+
 export interface OpenAICompatibleAudioTranscriptionModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -50,12 +55,28 @@ export class OpenAICompatibleAudioTranscriptionModelGateway implements AudioTran
     request: AudioTranscriptionRequest,
   ): Promise<AudioTranscriptionResult> {
     if (request.audioBytes.byteLength === 0) {
-      throw invocationError({ code: 'invalid_response', retryable: false });
+      const failure = invocationError({
+        code: 'invalid_response',
+        retryable: false,
+      });
+      logProviderInvocationFailure(this.config.provider, failure, {
+        capability: 'transcription',
+        stage: 'precondition',
+      });
+      throw failure;
     }
     if (
       request.audioBytes.byteLength > this.config.transcriptionMaxInputBytes
     ) {
-      throw invocationError({ code: 'output_limit', retryable: false });
+      const failure = invocationError({
+        code: 'output_limit',
+        retryable: false,
+      });
+      logProviderInvocationFailure(this.config.provider, failure, {
+        capability: 'transcription',
+        stage: 'precondition',
+      });
+      throw failure;
     }
 
     const controller = new AbortController();
@@ -73,6 +94,10 @@ export class OpenAICompatibleAudioTranscriptionModelGateway implements AudioTran
 
     const modelId = this.config.modelIds.transcription!;
     const startedAt = this.now();
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'transcription',
+      stage: 'provider_call',
+    };
     try {
       const mimeToExt: Record<string, string> = {
         'audio/mpeg': 'mp3',
@@ -118,9 +143,12 @@ export class OpenAICompatibleAudioTranscriptionModelGateway implements AudioTran
         throw invocationError({ code: 'unavailable', retryable: true }, cause);
       }
 
+      diagnostic.status = response.status;
       if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
         throw invocationError(errorForHttpStatus(response.status));
       }
+      diagnostic.stage = 'response_parse';
 
       let body: unknown;
       try {
@@ -185,6 +213,9 @@ export class OpenAICompatibleAudioTranscriptionModelGateway implements AudioTran
         durationSeconds,
         metadata,
       };
+    } catch (cause) {
+      logProviderInvocationFailure(this.config.provider, cause, diagnostic);
+      throw cause;
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);

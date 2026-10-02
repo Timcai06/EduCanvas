@@ -44,6 +44,7 @@ export async function findCurrentOperationAccess(
     requiredPermission: NotebookPermission;
     now: Date;
     mutation?: boolean;
+    conversationId?: string;
   },
 ): Promise<GatewayCurrentOperationAccess | null> {
   const query = database
@@ -68,6 +69,9 @@ export async function findCurrentOperationAccess(
     .where(
       and(
         eq(agentOperations.id, input.operationId),
+        input.conversationId
+          ? eq(agentOperations.conversationId, input.conversationId)
+          : undefined,
         eq(agentOperations.actorUserId, input.actorUserId),
         eq(conversations.spaceId, agentOperations.notebookId),
         eq(conversations.status, 'active'),

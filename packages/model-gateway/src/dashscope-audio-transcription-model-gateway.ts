@@ -12,6 +12,11 @@ import {
   readBoundedJson,
 } from './dashscope-http';
 
+import {
+  logProviderInvocationFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
+
 export interface DashScopeAudioTranscriptionModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -54,13 +59,18 @@ export class DashScopeAudioTranscriptionModelGateway implements AudioTranscripti
       request.audioBytes.byteLength === 0 ||
       request.audioBytes.byteLength > MAX_AUDIO_BYTES
     ) {
-      throw invocationError({
+      const failure = invocationError({
         code:
           request.audioBytes.byteLength === 0
             ? 'invalid_response'
             : 'output_limit',
         retryable: false,
       });
+      logProviderInvocationFailure('dashscope', failure, {
+        capability: 'transcription',
+        stage: 'precondition',
+      });
+      throw failure;
     }
     const controller = new AbortController();
     let timedOut = false;
@@ -72,6 +82,10 @@ export class DashScopeAudioTranscriptionModelGateway implements AudioTranscripti
     request.signal?.addEventListener('abort', abort, { once: true });
     if (request.signal?.aborted) controller.abort();
     const startedAt = this.now();
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'transcription',
+      stage: 'provider_call',
+    };
     try {
       const endpoint = `https://${this.configuration.workspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`;
       const response = await this.fetchImpl(endpoint, {
@@ -101,7 +115,12 @@ export class DashScopeAudioTranscriptionModelGateway implements AudioTranscripti
         signal: controller.signal,
         redirect: 'error',
       });
-      if (!response.ok) throw httpError(response.status);
+      diagnostic.status = response.status;
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw httpError(response.status);
+      }
+      diagnostic.stage = 'response_parse';
       const body = await readBoundedJson(response, MAX_JSON_BYTES);
       const record = body as {
         choices?: Array<{
@@ -150,17 +169,24 @@ export class DashScopeAudioTranscriptionModelGateway implements AudioTranscripti
       };
       return { text, language, durationSeconds, metadata };
     } catch (cause) {
-      if (cause instanceof ModelGatewayInvocationError) throw cause;
-      if (timedOut)
-        throw invocationError({ code: 'timeout', retryable: true }, cause);
-      if (request.signal?.aborted)
-        throw invocationError({ code: 'aborted', retryable: false }, cause);
-      if (cause instanceof DashScopeInvalidResponseError)
-        throw invocationError(
-          { code: 'invalid_response', retryable: false },
-          cause,
-        );
-      throw invocationError({ code: 'unavailable', retryable: true }, cause);
+      const failure =
+        cause instanceof ModelGatewayInvocationError
+          ? cause
+          : timedOut
+            ? invocationError({ code: 'timeout', retryable: true }, cause)
+            : request.signal?.aborted
+              ? invocationError({ code: 'aborted', retryable: false }, cause)
+              : cause instanceof DashScopeInvalidResponseError
+                ? invocationError(
+                    { code: 'invalid_response', retryable: false },
+                    cause,
+                  )
+                : invocationError(
+                    { code: 'unavailable', retryable: true },
+                    cause,
+                  );
+      logProviderInvocationFailure('dashscope', failure, diagnostic);
+      throw failure;
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', abort);

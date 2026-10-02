@@ -24,7 +24,7 @@ function aiUnavailableMessage(page: Page) {
 }
 
 async function mockUnavailableTurn(page: Page) {
-  await page.route('**/api/v1/learn/turn', async (route) => {
+  await page.route(/\/api\/v1\/learn\/turn(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 503,
       contentType: 'application/json',

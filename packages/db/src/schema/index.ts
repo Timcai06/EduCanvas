@@ -29,3 +29,4 @@ export * from './web-runtime';
 export * from './annotation';
 export * from './surface-layout';
 export * from './research-checkpoint';
+export * from './notebook-plan';

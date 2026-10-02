@@ -1,3 +1,4 @@
+import { requestPlatformTurnCancellation } from './platform-turn-cancellation';
 import { randomUUID } from 'node:crypto';
 import type { AgentMessagePart } from '@educanvas/agent-core';
 import type { NotebookPermission } from '@educanvas/gateway-core';
@@ -498,57 +499,13 @@ export class DrizzlePlatformTurnRepository {
   async requestTurnCancellation(input: {
     trustedSubjectId: string;
     turnId: string;
+    conversationId?: string;
     now?: Date;
   }): Promise<{ turn: PlatformTurnSnapshot | null; accepted: boolean }> {
-    if (!/^[0-9a-f-]{36}$/i.test(input.turnId)) {
-      throw new PlatformTurnLifecycleError('turnId格式无效');
-    }
-    const now = input.now ?? new Date();
-    return this.database.transaction(async (transaction) => {
-      const [owned] = await transaction
-        .select({
-          id: agentOperations.id,
-          status: agentOperations.status,
-          cancelRequestedAt: agentOperations.cancelRequestedAt,
-        })
-        .from(agentOperations)
-        .innerJoin(
-          conversations,
-          eq(conversations.id, agentOperations.conversationId),
-        )
-        .where(
-          and(
-            eq(agentOperations.id, input.turnId),
-            eq(agentOperations.kind, 'turn'),
-            or(
-              eq(agentOperations.actorUserId, input.trustedSubjectId),
-              and(
-                isNull(agentOperations.actorUserId),
-                eq(conversations.ownerSubjectId, input.trustedSubjectId),
-              ),
-            ),
-          ),
-        )
-        .limit(1);
-      if (!owned) return { turn: null, accepted: false };
-      const [updated] = await transaction
-        .update(agentOperations)
-        .set({ cancelRequestedAt: now })
-        .where(
-          and(
-            eq(agentOperations.id, input.turnId),
-            inArray(agentOperations.status, ['pending', 'running']),
-            isNull(agentOperations.cancelRequestedAt),
-          ),
-        )
-        .returning({ id: agentOperations.id });
-      return {
-        turn: await loadTurn(transaction, input.turnId, false),
-        accepted:
-          Boolean(updated) ||
-          (['pending', 'running'].includes(owned.status) &&
-            owned.cancelRequestedAt !== null),
-      };
+    return requestPlatformTurnCancellation(input, {
+      database: this.database,
+      loadTurn,
+      lifecycleError: (message) => new PlatformTurnLifecycleError(message),
     });
   }
 

@@ -1,6 +1,12 @@
 'use client';
 
 import {
+  notebookScopedFetch,
+  type NotebookRequestContext,
+} from '@/features/workspace/general/notebook-request-context';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
+
+import {
   createWebRuntimeSession,
   reduceWebRuntimeMessage,
   sandboxToHostMessageSchema,
@@ -14,8 +20,13 @@ import { ArrowClockwise, Stop } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import {
+  writeCancellation,
+  persistObservedTerminal,
+  cancelRequest,
+  type ObservedTerminal,
+} from './persistent-web-runtime-client';
+import {
   resolveCancelFailure,
-  runtimeRequestCancelPath,
   shouldIgnoreRuntimeEvent,
   type PersistentRuntimeState,
 } from './persistent-web-runtime-model';
@@ -28,13 +39,6 @@ const runResponseSchema = z
     binding: webRuntimeBindingSchema.omit({ channelId: true }),
   })
   .strict();
-const terminalResponseSchema = z
-  .object({
-    runId: z.string().uuid(),
-    status: z.enum(['succeeded', 'failed', 'cancelled']),
-    terminalAuthority: z.literal('client_observed'),
-  })
-  .strict();
 const bridgeFailureSchema = z
   .object({
     type: z.literal('educanvas.runtime.bridge_failed'),
@@ -43,55 +47,12 @@ const bridgeFailureSchema = z
   .strict();
 
 interface ActiveRun {
+  context: NotebookRequestContext | null;
   runId: string;
   bootstrapToken: string;
   runtimeOrigin: string;
   startMessage: HostToSandboxMessage;
   session: WebRuntimeSessionState;
-}
-
-async function writeTerminal(
-  runId: string,
-  body: { status: 'succeeded' } | { status: 'failed'; failureCode: string },
-): Promise<z.infer<typeof terminalResponseSchema>> {
-  const response = await fetch(
-    `/api/v1/canvas/runtime/runs/${encodeURIComponent(runId)}/terminal`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  );
-  if (!response.ok) throw new Error('terminal_unavailable');
-  return terminalResponseSchema.parse(await response.json());
-}
-
-async function writeCancellation(
-  runId: string,
-): Promise<z.infer<typeof terminalResponseSchema>> {
-  const response = await fetch(
-    `/api/v1/canvas/runtime/runs/${encodeURIComponent(runId)}/cancel`,
-    {
-      method: 'POST',
-    },
-  );
-  if (!response.ok) throw new Error('cancel_unavailable');
-  return terminalResponseSchema.parse(await response.json());
-}
-
-type ObservedTerminal =
-  | { status: 'succeeded' }
-  | { status: 'failed'; failureCode: WebRuntimeFailureCode }
-  | { status: 'cancelled' };
-
-async function persistObservedTerminal(
-  runId: string,
-  terminal: ObservedTerminal,
-): Promise<z.infer<typeof terminalResponseSchema>> {
-  if (terminal.status === 'cancelled') {
-    return writeCancellation(runId);
-  }
-  return writeTerminal(runId, terminal);
 }
 
 function postDestroy(frame: HTMLIFrameElement | null, run: ActiveRun | null) {
@@ -101,12 +62,6 @@ function postDestroy(frame: HTMLIFrameElement | null, run: ActiveRun | null) {
   );
 }
 
-async function cancelRequest(requestId: string): Promise<void> {
-  await fetch(runtimeRequestCancelPath(requestId), {
-    method: 'POST',
-  });
-}
-
 export function PersistentWebRuntime({
   artifactId,
   artifactVersionId,
@@ -114,6 +69,7 @@ export function PersistentWebRuntime({
   artifactId: string;
   artifactVersionId: string;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [state, setState] = useState<PersistentRuntimeState>('starting');
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [instance, setInstance] = useState(0);
@@ -135,7 +91,11 @@ export function PersistentWebRuntime({
     async (run: ActiveRun, terminal: ObservedTerminal) => {
       detachFrame();
       try {
-        const result = await persistObservedTerminal(run.runId, terminal);
+        const result = await persistObservedTerminal(
+          run.runId,
+          terminal,
+          run.context,
+        );
         if (active.current === run) setState(result.status);
       } catch {
         /*
@@ -163,21 +123,26 @@ export function PersistentWebRuntime({
   useEffect(() => {
     let disposed = false;
     const requestId = crypto.randomUUID();
+    const context = requestContext;
     queueMicrotask(() => {
       if (!disposed) setState('starting');
     });
-    void fetch('/api/v1/canvas/runtime/runs', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ requestId, artifactId, artifactVersionId }),
-    })
+    void notebookScopedFetch(
+      '/api/v1/canvas/runtime/runs',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ requestId, artifactId, artifactVersionId }),
+      },
+      context,
+    )
       .then(async (response) => {
         if (!response.ok) throw new Error('runtime_unavailable');
         return runResponseSchema.parse(await response.json());
       })
       .then((run) => {
         if (disposed) {
-          void writeCancellation(run.runId).catch(() => undefined);
+          void writeCancellation(run.runId, context).catch(() => undefined);
           return;
         }
         const binding = {
@@ -198,6 +163,7 @@ export function PersistentWebRuntime({
         if (!started.ok) throw new Error('runtime_rejected');
         active.current = {
           ...run,
+          context,
           startMessage,
           session: started.state,
         };
@@ -208,14 +174,14 @@ export function PersistentWebRuntime({
           setState('failed');
           return;
         }
-        void cancelRequest(requestId).catch(() => undefined);
+        void cancelRequest(requestId, context).catch(() => undefined);
       });
     return () => {
       disposed = true;
-      void cancelRequest(requestId).catch(() => undefined);
+      void cancelRequest(requestId, context).catch(() => undefined);
       destroy();
     };
-  }, [artifactId, artifactVersionId, destroy, instance]);
+  }, [artifactId, artifactVersionId, destroy, instance, requestContext]);
 
   useEffect(() => {
     const listener = (event: MessageEvent<unknown>) => {
@@ -317,7 +283,7 @@ export function PersistentWebRuntime({
     }
     try {
       detachFrame();
-      const result = await writeCancellation(run.runId);
+      const result = await writeCancellation(run.runId, run.context);
       setState(result.status);
     } catch {
       setState(resolveCancelFailure);

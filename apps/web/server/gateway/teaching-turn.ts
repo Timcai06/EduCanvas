@@ -110,10 +110,19 @@ class TeachingTurnApplicationRunner implements GatewayTurnRunnerPort {
 export async function beginTeachingGatewayTurn(
   identity: AnonymousIdentity,
   request: TeachingTurnRequestBody,
+  scope?: { notebookId: string; conversationId?: string },
 ): Promise<{ events: AsyncIterable<TeachingTurnEvent> }> {
-  const target = await loadOwnedTeachingGatewayTarget(identity);
+  const target = await (scope
+    ? loadOwnedTeachingGatewayTarget(
+        identity,
+        scope.notebookId,
+        scope.conversationId,
+      )
+    : loadOwnedTeachingGatewayTarget(identity));
   if (!target) throw new LearningSessionOwnershipError();
-  const session = await loadOwnedTeachingSession(identity);
+  const session = await (scope
+    ? loadOwnedTeachingSession(identity, scope.notebookId, scope.conversationId)
+    : loadOwnedTeachingSession(identity));
   if (!session || session.id !== target.sessionId) {
     throw new LearningSessionOwnershipError();
   }

@@ -241,6 +241,11 @@ export async function readFollowed(reader) {
   return buffer.toString('utf8', 0, bytesRead);
 }
 
+/** Close the file descriptor owned by a follow reader. */
+export async function closeFollowReader(reader) {
+  await reader.handle.close();
+}
+
 function outputRecord(line, options) {
   let record;
   try {
@@ -296,11 +301,20 @@ async function main() {
         if (line.trim() !== '') outputRecord(line, options);
       }
     };
+    let timer;
+    let stopping = false;
+    const stop = async () => {
+      if (stopping) return;
+      stopping = true;
+      if (timer) clearInterval(timer);
+      if (reader !== null) await closeFollowReader(reader);
+      process.exit(0);
+    };
     for (const signal of ['SIGINT', 'SIGTERM']) {
-      process.once(signal, () => process.exit(0));
+      process.once(signal, () => void stop());
     }
     await tick();
-    const timer = setInterval(() => void tick(), 500);
+    timer = setInterval(() => void tick(), 500);
     // 注意：不可 unref——unref 后若 pending promise 是唯一存活句柄，Node
     // 会在首屏后立即退出，follow 永不生效。
     await new Promise(() => undefined);

@@ -1,11 +1,7 @@
 'use client';
 
 import type { RefObject } from 'react';
-import type {
-  AssistantMessage,
-  ChatMessage,
-  MessageArtifactDTO,
-} from '@/features/chat/messages';
+import type { AssistantMessage, ChatMessage } from '@/features/chat/messages';
 import { ChatPanel } from '@/features/chat/chat-panel';
 import { ChatMinimap } from '@/features/chat/chat-minimap';
 import { useAssistantMessageProjection } from '@/features/chat/assistant-message-projection';
@@ -17,6 +13,7 @@ import {
   type GenerationState,
 } from '@/features/canvas/artifact-generation-flow';
 import { projectObservedConversationArtifact } from './conversation-artifact-observation';
+import { notebookScopedUrl } from './notebook-request-context';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
 import { GENERAL_MENU_ACTIONS } from './general-chat-config';
 import type { AssetItem } from '@/features/assets/assets-drawer';
@@ -86,15 +83,21 @@ export function projectArtifactGenerationIntoMessages(
     ),
     generation.detail?.artifact.latestVersion ?? 0,
   );
-  const status: MessageArtifactDTO['status'] =
-    projectObservedConversationArtifact(generation)?.status ??
-    (latestVersion > 0 ? 'active' : 'proposed');
+  const observed = projectObservedConversationArtifact(generation);
   let matched = false;
   const projected = messages.map((message) => {
     if (message.role !== 'assistant' || !message.artifacts) return message;
     const artifacts = message.artifacts.map((artifact) => {
       if (artifact.id !== generation.artifactId) return artifact;
       matched = true;
+      // The message observer owns no-version job terminal facts. An older
+      // Canvas snapshot cannot replace them or hide a newly started retry.
+      const status =
+        observed &&
+        observed.latestVersion > 0 &&
+        observed.latestVersion >= artifact.latestVersion
+          ? observed.status
+          : artifact.status;
       return {
         ...artifact,
         title: generation.title || artifact.title,
@@ -203,7 +206,9 @@ export function ConversationPane({
     selectable: asset.selectable,
     previewUrl:
       asset.kind === 'image' && asset.status === 'ready'
-        ? `/api/v1/chat/assets/${encodeURIComponent(asset.id)}/file`
+        ? notebookScopedUrl(
+            `/api/v1/chat/assets/${encodeURIComponent(asset.id)}/file`,
+          )
         : null,
   }));
   const liveTranscript = messages

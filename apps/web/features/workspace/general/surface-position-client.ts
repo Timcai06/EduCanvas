@@ -1,5 +1,8 @@
 'use client';
 
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
+import type { NotebookRequestContext } from './notebook-request-context';
+
 import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
@@ -81,6 +84,7 @@ function surfaceLayoutUrl(cursor: string | null): string {
 
 export async function fetchSurfacePositions(
   signal?: AbortSignal,
+  context?: NotebookRequestContext,
 ): Promise<readonly SurfacePosition[]> {
   const positions: SurfacePosition[] = [];
   const identities = new Set<string>();
@@ -90,11 +94,15 @@ export async function fetchSurfacePositions(
   do {
     let response: Response;
     try {
-      response = await fetch(surfaceLayoutUrl(cursor), {
-        credentials: 'same-origin',
-        cache: 'no-store',
-        signal,
-      });
+      response = await notebookScopedFetch(
+        surfaceLayoutUrl(cursor),
+        {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal,
+        },
+        context,
+      );
     } catch (error) {
       if (signal?.aborted) throw error;
       throw new SurfacePositionClientError('surface_layout_load_failed');
@@ -134,15 +142,20 @@ export async function fetchSurfacePositions(
 
 export async function saveSurfacePosition(
   position: SaveSurfacePosition,
+  context?: NotebookRequestContext,
 ): Promise<SurfacePosition> {
   let response: Response;
   try {
-    response = await fetch('/api/v1/canvas/surface-layout', {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(position),
-    });
+    response = await notebookScopedFetch(
+      '/api/v1/canvas/surface-layout',
+      {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(position),
+      },
+      context,
+    );
   } catch {
     throw new SurfacePositionClientError('surface_layout_save_failed');
   }

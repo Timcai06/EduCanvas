@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@/features/workspace/general/notebook-request-scope', () => ({
+  useNotebookRequestScope: () => null,
+}));
 
 const hooks = vi.hoisted(() => {
   let cursor = 0;

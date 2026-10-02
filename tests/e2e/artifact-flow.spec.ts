@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   activeConversationId,
   appendVersions,
@@ -11,13 +11,13 @@ import {
   openArtifactAndExpectLatest,
   openStudioOutput,
   waitForGenerationJobSucceeded,
-} from './fixtures/general-artifact-fixture';
+} from "./fixtures/general-artifact-fixture";
 
 async function expectMindMapDragStopsOnRelease(page: Page, canvas: Locator) {
-  const viewport = canvas.locator('[data-mind-map-viewport]');
-  const map = viewport.locator('.mind-map-canvas');
+  const viewport = canvas.locator("[data-mind-map-viewport]");
+  const map = viewport.locator(".mind-map-canvas");
   const box = await viewport.boundingBox();
-  if (!box) throw new Error('思维导图 viewport 不可见');
+  if (!box) throw new Error("思维导图 viewport 不可见");
   const transformBefore = await map.evaluate(
     (element) => element.style.transform,
   );
@@ -44,20 +44,20 @@ async function expectMindMapDragStopsOnRelease(page: Page, canvas: Locator) {
     .toBe(transformAfterRelease);
 }
 
-test('@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复', async ({
+test("@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
-  const fixture = await createArtifactFixture(page, 'mind_map', '对话思维导图');
+  const fixture = await createArtifactFixture(page, "mind_map", "对话思维导图");
   await appendVersions(page, fixture.artifactId, [
     {
       content: {
         contentVersion: 1,
         root: {
-          id: 'root',
-          label: '对话思维导图',
+          id: "root",
+          label: "对话思维导图",
         },
       },
     },
@@ -65,10 +65,10 @@ test('@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复',
   await page.reload();
 
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible();
   await expect(
-    canvas.locator('[data-mind-map]').getByText('对话思维导图'),
+    canvas.locator("[data-mind-map]").getByText("对话思维导图"),
   ).toBeVisible();
   await expectMindMapDragStopsOnRelease(page, canvas);
 
@@ -76,50 +76,105 @@ test('@smoke 通过 Fixture 验证思维导图在 Canvas 打开与断连恢复',
   await page.reload();
   const studio = await openStudioOutput(page);
   await expect(studio.getByText(fixture.title)).toBeVisible();
-  await expect(studio.getByText('v1')).toBeVisible();
+  await expect(studio.getByText("v1")).toBeVisible();
 });
 
-test('API 创建产物链路由真实 worker 完成并可从 Studio 打开', async ({
+test("@ui 思维导图手动放大后折叠分支保留缩放", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await ensureGeneralNotebook(page);
+  const fixture = await createArtifactFixture(
+    page,
+    "mind_map",
+    "手动缩放折叠回归",
+  );
+  await appendVersions(page, fixture.artifactId, [
+    {
+      content: {
+        contentVersion: 1,
+        root: {
+          id: "root",
+          label: "图像分类知识结构",
+          children: [
+            {
+              id: "training",
+              label: "训练数据与输入特征",
+              children: [
+                { id: "examples", label: "带标签的训练例子" },
+                { id: "features", label: "用可观察特征进行判断" },
+              ],
+            },
+            { id: "evaluation", label: "用新图片检查分类结果" },
+          ],
+        },
+      },
+    },
+  ]);
+  await page.reload();
+  await openArtifactAndExpectLatest(page, fixture.title);
+
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
+  const viewport = canvas.locator("[data-mind-map-viewport]");
+  const map = viewport.locator(".mind-map-canvas");
+  const readScale = () =>
+    map.evaluate((element) => {
+      const match = element.style.transform.match(/scale\(([^)]+)\)/);
+      if (!match) throw new Error("思维导图缩放值缺失");
+      return Number(match[1]);
+    });
+  const initialScale = await readScale();
+
+  await canvas.getByRole("button", { name: "放大" }).click();
+  await expect.poll(readScale).not.toBe(initialScale);
+  const manuallyChosenScale = await readScale();
+
+  const root = viewport.locator('[data-mindmap-node="root"]');
+  await root.getByRole("button", { name: "折叠节点子分支" }).click();
+  await expect(root).toHaveAttribute("aria-expanded", "false");
+  await expect.poll(readScale).toBe(manuallyChosenScale);
+});
+
+test("API 创建产物链路由真实 worker 完成并可从 Studio 打开", async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto("/");
   await ensureGeneralNotebook(page);
   const title = `API 产物链路 ${Date.now()}`;
-  const fixture = await createArtifactViaApi(page, 'mind_map', title);
+  const fixture = await createArtifactViaApi(page, "mind_map", title);
   expect(fixture.jobId).toBeTruthy();
   expect(fixture.jobStatus).toBeTruthy();
   await waitForGenerationJobSucceeded(page, fixture.jobId);
 
   await page.reload();
   const studio = await openStudioOutput(page);
-  await expect(studio.getByRole('button', { name: title })).toBeVisible({
+  await expect(studio.getByRole("button", { name: title })).toBeVisible({
     timeout: 40_000,
   });
-  await studio.getByRole('button', { name: title }).click();
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  await studio.getByRole("button", { name: title }).click();
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible({ timeout: 40_000 });
-  await expect(canvas.getByRole('heading', { name: title })).toBeVisible({
+  await expect(canvas.getByRole("heading", { name: title })).toBeVisible({
     timeout: 20_000,
   });
   await expect(
-    canvas.locator('[data-mind-map]').getByText('对话思维导图'),
+    canvas.locator("[data-mind-map]").getByText("对话思维导图"),
   ).toBeVisible({
     timeout: 20_000,
   });
 });
 
-test('Studio 可切换意图并打开 Artifact 工作流', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("Studio 可切换意图并打开 Artifact 工作流", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
-  const fixture = await createArtifactFixture(page, 'mind_map', '入口意图图谱');
+  const fixture = await createArtifactFixture(page, "mind_map", "入口意图图谱");
   await appendVersions(page, fixture.artifactId, [
     {
       content: {
         contentVersion: 1,
         root: {
-          id: 'root',
-          label: '入口意图图谱',
+          id: "root",
+          label: "入口意图图谱",
         },
       },
     },
@@ -127,104 +182,104 @@ test('Studio 可切换意图并打开 Artifact 工作流', async ({ page }) => {
   await page.reload();
 
   const studio = await openStudioOutput(page);
-  const artifact = studio.getByRole('button', { name: /入口意图图谱/ });
+  const artifact = studio.getByRole("button", { name: /入口意图图谱/ });
   await expect(artifact).toBeVisible();
   await artifact.click();
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible();
   await expect(
-    canvas.locator('[data-mind-map]').getByText('入口意图图谱'),
+    canvas.locator("[data-mind-map]").getByText("入口意图图谱"),
   ).toBeVisible();
 });
 
-test('Canvas 可跨版本切换并验证历史可读', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("Canvas 可跨版本切换并验证历史可读", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
   const fixture = await createArtifactFixture(
     page,
-    'mind_map',
-    '版本可回退导图',
+    "mind_map",
+    "版本可回退导图",
   );
   await appendVersions(page, fixture.artifactId, [
     {
       content: {
         contentVersion: 1,
-        root: { id: 'root', label: '第一版：对话主题' },
+        root: { id: "root", label: "第一版：对话主题" },
       },
     },
     {
       content: {
         contentVersion: 1,
-        root: { id: 'root', label: '第二版：对话主题（修订）' },
+        root: { id: "root", label: "第二版：对话主题（修订）" },
       },
     },
   ]);
   await page.reload();
 
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
-  const versionSelect = canvas.getByRole('combobox', { name: 'Canvas版本' });
-  await expect(versionSelect).toHaveValue('2');
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
+  const versionSelect = canvas.getByRole("combobox", { name: "Canvas版本" });
+  await expect(versionSelect).toHaveValue("2");
   await expect(
-    canvas.locator('[data-mind-map]').getByText('第二版：对话主题（修订）'),
+    canvas.locator("[data-mind-map]").getByText("第二版：对话主题（修订）"),
   ).toBeVisible();
-  await versionSelect.selectOption('1');
+  await versionSelect.selectOption("1");
   await expect(
-    canvas.locator('[data-mind-map]').getByText('第一版：对话主题'),
+    canvas.locator("[data-mind-map]").getByText("第一版：对话主题"),
   ).toBeVisible();
-  await versionSelect.selectOption('2');
+  await versionSelect.selectOption("2");
   await expect(
-    canvas.locator('[data-mind-map]').getByText('第二版：对话主题（修订）'),
+    canvas.locator("[data-mind-map]").getByText("第二版：对话主题（修订）"),
   ).toBeVisible();
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   const studio = await openStudioOutput(page);
-  await expect(studio.getByText('v2')).toBeVisible();
+  await expect(studio.getByText("v2")).toBeVisible();
 });
 
-test('上传从空白入口建立笔记本来源，不把来源伪装成 Composer 工具', async ({
+test("上传从空白入口建立笔记本来源，不把来源伪装成 Composer 工具", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await expect(
-    page.getByRole('button', { name: '来源', exact: true }),
+    page.getByRole("button", { name: "来源", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole('button', { name: '添加来源' }).click();
-  await page.getByRole('menuitem', { name: '上传文件' }).click();
-  await expect(page.getByRole('dialog', { name: '上传文件' })).toBeVisible();
+  await page.getByRole("button", { name: "添加来源" }).click();
+  await page.getByRole("menuitem", { name: "上传文件" }).click();
+  await expect(page.getByRole("dialog", { name: "上传文件" })).toBeVisible();
   /* 笔记本归属说明已被有意移除（见 asset-upload-panel.test.tsx
      「以紧凑入口展示文档格式，不重复笔记本归属说明」）。这里改断言紧凑入口
      本身：固定 space 作用域时只给格式提示与选择入口，且不出现「保存范围」——
      后者才是本用例要防的「把来源伪装成 Composer 本轮工具」。 */
-  const uploadDialog = page.getByRole('dialog', { name: '上传文件' });
+  const uploadDialog = page.getByRole("dialog", { name: "上传文件" });
   await expect(
     uploadDialog.getByText(
-      'PDF、Word、PowerPoint、Excel、Markdown 或 TXT，最大 25 MB',
+      "PDF、Word、PowerPoint、Excel、Markdown 或 TXT，最大 25 MB",
     ),
   ).toBeVisible();
-  await expect(uploadDialog.getByText('保存范围')).toHaveCount(0);
+  await expect(uploadDialog.getByText("保存范围")).toHaveCount(0);
   await expect(
-    page.getByRole('navigation', { name: '工作区主导航' }),
+    page.getByRole("navigation", { name: "工作区主导航" }),
   ).toHaveCount(0);
   await page
-    .getByRole('dialog', { name: '上传文件' })
-    .getByRole('button', { name: '关闭', exact: true })
+    .getByRole("dialog", { name: "上传文件" })
+    .getByRole("button", { name: "关闭", exact: true })
     .click();
   await expect(
-    page.getByRole('navigation', { name: '工作区主导航' }),
+    page.getByRole("navigation", { name: "工作区主导航" }),
   ).toBeVisible();
 });
 
-test('Studio 打开 Slides fixture 后可分页浏览', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("Studio 打开 Slides fixture 后可分页浏览", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
   const fixture = await createArtifactFixture(
     page,
-    'slides',
-    '对话小结 Slides',
+    "slides",
+    "对话小结 Slides",
   );
   await appendVersions(page, fixture.artifactId, [
     {
@@ -232,14 +287,14 @@ test('Studio 打开 Slides fixture 后可分页浏览', async ({ page }) => {
         contentVersion: 1,
         slides: [
           {
-            id: 's1',
-            title: '对话小结 Slides',
-            bullets: ['要点一', '要点二'],
+            id: "s1",
+            title: "对话小结 Slides",
+            bullets: ["要点一", "要点二"],
           },
           {
-            id: 's2',
-            title: '行动建议',
-            bullets: ['复习与巩固'],
+            id: "s2",
+            title: "行动建议",
+            bullets: ["复习与巩固"],
           },
         ],
       },
@@ -248,28 +303,28 @@ test('Studio 打开 Slides fixture 后可分页浏览', async ({ page }) => {
   await page.reload();
 
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible();
   await expect(
-    canvas.getByRole('heading', { level: 3, name: '对话小结 Slides' }),
+    canvas.getByRole("heading", { level: 3, name: "对话小结 Slides" }),
   ).toBeVisible();
-  await expect(canvas.getByText('1 / 2')).toBeVisible();
+  await expect(canvas.getByText("1 / 2")).toBeVisible();
 });
 
-test('Studio 打开闪卡 fixture 后可翻面自评且自评不上行', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("Studio 打开闪卡 fixture 后可翻面自评且自评不上行", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
-  const fixture = await createArtifactFixture(page, 'flashcards', '对话闪卡');
+  const fixture = await createArtifactFixture(page, "flashcards", "对话闪卡");
   await appendVersions(page, fixture.artifactId, [
     {
       content: {
         contentVersion: 1,
         cards: [
           {
-            id: 'card-1',
-            front: '什么是思维导图？',
-            back: '用于归纳和组织知识点的树状结构图。',
+            id: "card-1",
+            front: "什么是思维导图？",
+            back: "用于归纳和组织知识点的树状结构图。",
           },
         ],
       },
@@ -278,116 +333,116 @@ test('Studio 打开闪卡 fixture 后可翻面自评且自评不上行', async (
   await page.reload();
 
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
-  await expect(canvas.getByText('这次对话还没有可整理的问答')).toBeHidden();
-  const versionSelect = canvas.getByRole('combobox', { name: 'Canvas版本' });
-  await expect(versionSelect).toHaveValue('1');
-  const card = canvas.getByText('什么是思维导图？');
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
+  await expect(canvas.getByText("这次对话还没有可整理的问答")).toBeHidden();
+  const versionSelect = canvas.getByRole("combobox", { name: "Canvas版本" });
+  await expect(versionSelect).toHaveValue("1");
+  const card = canvas.getByText("什么是思维导图？");
   await expect(card).toBeVisible();
-  await canvas.getByRole('button', { name: '显示答案' }).click();
+  await canvas.getByRole("button", { name: "显示答案" }).click();
   await expect(
-    canvas.getByText('用于归纳和组织知识点的树状结构图。'),
+    canvas.getByText("用于归纳和组织知识点的树状结构图。"),
   ).toBeVisible();
-  await canvas.getByRole('button', { name: '记住了' }).click();
+  await canvas.getByRole("button", { name: "记住了" }).click();
   await expect(
     canvas.getByText(/本轮完成[:：]\s*记住\s*1\s*\/\s*1/),
   ).toBeVisible();
   await expect(
-    canvas.getByText('自评只保存在本页,不影响学习进度记录。'),
+    canvas.getByText("自评只保存在本页,不影响学习进度记录。"),
   ).toBeVisible();
 });
 
-test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("Studio 可管理、编辑并恢复不可变版本笔记", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
 
   await ensureGeneralNotebook(page);
-  const fixture = await createArtifactFixture(page, 'note', '未命名笔记');
+  const fixture = await createArtifactFixture(page, "note", "未命名笔记");
   await appendVersions(page, fixture.artifactId, [
     {
       content: {
         contentVersion: 1,
-        markdown: '',
+        markdown: "",
         sourceConversationId: fixture.conversationId,
         generatedByModel: false,
       },
-      generatedBy: 'user:manual',
+      generatedBy: "user:manual",
     },
     {
       content: {
         contentVersion: 1,
         markdown:
-          '# 勾股定理\n\n' + '直角三角形满足 $a^2+b^2=c^2$。\n\n'.repeat(80),
+          "# 勾股定理\n\n" + "直角三角形满足 $a^2+b^2=c^2$。\n\n".repeat(80),
         sourceConversationId: fixture.conversationId,
         generatedByModel: false,
       },
-      generatedBy: 'user:manual',
+      generatedBy: "user:manual",
     },
   ]);
   const studio = await openStudioOutput(page);
-  const createdNote = studio.getByRole('button', { name: /^未命名笔记/ });
-  await expect(createdNote).toContainText('v2');
+  const createdNote = studio.getByRole("button", { name: /^未命名笔记/ });
+  await expect(createdNote).toContainText("v2");
   await createdNote.click();
 
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible();
-  await expect(canvas.getByText('勾股定理')).toBeVisible();
+  await expect(canvas.getByText("勾股定理")).toBeVisible();
   // 长文编辑必须占满宿主剩余空间，退出编辑须回到此前阅读位置（#511）。
-  const region = canvas.getByRole('region', { name: 'Canvas 内容' });
-  const reading = region.locator('.chat-prose').locator('..');
+  const region = canvas.getByRole("region", { name: "Canvas 内容" });
+  const reading = region.locator(".chat-prose").locator("..");
   const scrollTop = await reading.evaluate((element) => {
     element.scrollTop = 300;
-    element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
     return element.scrollTop;
   });
   expect(scrollTop).toBe(300);
-  await canvas.getByRole('button', { name: '编辑', exact: true }).click();
-  const editor = canvas.getByRole('textbox', { name: '笔记编辑区' });
+  await canvas.getByRole("button", { name: "编辑", exact: true }).click();
+  const editor = canvas.getByRole("textbox", { name: "笔记编辑区" });
   await expect(editor).toBeVisible();
   const regionBox = await region.boundingBox();
   const editorBox = await editor.boundingBox();
   expect(regionBox).not.toBeNull();
   expect(editorBox).not.toBeNull();
   expect(editorBox!.height).toBeGreaterThan(regionBox!.height * 0.55);
-  await canvas.getByRole('button', { name: '开启预览' }).click();
+  await canvas.getByRole("button", { name: "开启预览" }).click();
   expect((await editor.boundingBox())!.height).toBeGreaterThan(
     regionBox!.height * 0.55,
   );
-  await canvas.getByRole('button', { name: '完成编辑' }).click();
+  await canvas.getByRole("button", { name: "完成编辑" }).click();
   await expect
     .poll(() => reading.evaluate((element) => element.scrollTop))
     .toBe(300);
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   const outputStudio = await openStudioOutput(page);
-  const updatedNote = outputStudio.getByRole('button', { name: /^未命名笔记/ });
-  await expect(updatedNote).toContainText('v2');
+  const updatedNote = outputStudio.getByRole("button", { name: /^未命名笔记/ });
+  await expect(updatedNote).toContainText("v2");
 });
 
-test('音频概览在恢复后可播放与文字稿', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+test("音频概览在恢复后可播放与文字稿", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
   const fixture = await createAudioOverviewFixture(page);
 
   await page.reload();
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   const audio = canvas.locator('audio[aria-label="播放音频概览"]');
   await expect(audio).toBeVisible();
-  await expect(canvas.getByLabel('音频文字稿')).toContainText(
-    '神经网络由多层神经元组成。',
+  await expect(canvas.getByLabel("音频文字稿")).toContainText(
+    "神经网络由多层神经元组成。",
   );
 
-  const sourceUrl = await audio.getAttribute('src');
+  const sourceUrl = await audio.getAttribute("src");
   expect(sourceUrl).toBeTruthy();
   const rangeResult = await page.evaluate(async (url) => {
     const response = await fetch(url!, {
-      headers: { range: 'bytes=0-2' },
+      headers: { range: "bytes=0-2" },
     });
     return {
       status: response.status,
-      contentRange: response.headers.get('content-range'),
+      contentRange: response.headers.get("content-range"),
       byteLength: (await response.arrayBuffer()).byteLength,
     };
   }, sourceUrl);
@@ -399,38 +454,38 @@ test('音频概览在恢复后可播放与文字稿', async ({ page }) => {
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   await openStudioOutput(page);
-  await page.getByRole('button', { name: '音频来源概览' }).click();
+  await page.getByRole("button", { name: "音频来源概览" }).click();
   await expect(
     page
-      .getByRole('dialog', { name: '产物Canvas' })
+      .getByRole("dialog", { name: "产物Canvas" })
       .locator('audio[aria-label="播放音频概览"]'),
   ).toBeVisible();
 });
 
-test('G03-11 删除产物后刷新不再可用，Studio 列表与 Canvas 均不复现', async ({
+test("G03-11 删除产物后刷新不再可用，Studio 列表与 Canvas 均不复现", async ({
   page,
 }) => {
   /* G03 端到端验收第 11 步「删除/撤权后内容不再可用」。此前只有单测与 API 层
      覆盖，没有端到端证据：删除若只清了前端状态而服务端仍可读，刷新即复现。
      这里走真实 UI 路径（二次确认）并以刷新后的服务端事实为准。 */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
   await ensureGeneralNotebook(page);
-  const fixture = await createMindMapArtifactFixture(page, '待删除思维导图');
+  const fixture = await createMindMapArtifactFixture(page, "待删除思维导图");
   await page.reload();
 
   await openArtifactAndExpectLatest(page, fixture.title);
-  const canvas = page.getByRole('dialog', { name: '产物Canvas' });
+  const canvas = page.getByRole("dialog", { name: "产物Canvas" });
   await expect(canvas).toBeVisible();
 
-  await canvas.getByRole('button', { name: '删除', exact: true }).click();
-  await expect(canvas.getByText('确认删除？')).toBeVisible();
-  await canvas.getByRole('button', { name: '确认', exact: true }).click();
+  await canvas.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(canvas.getByText("确认删除？")).toBeVisible();
+  await canvas.getByRole("button", { name: "确认", exact: true }).click();
 
   // 删除后 Canvas 关闭，产物不再出现在输出列表
   await expect(canvas).toHaveCount(0);
   const studio = await openStudioOutput(page);
-  await expect(studio.getByRole('button', { name: fixture.title })).toHaveCount(
+  await expect(studio.getByRole("button", { name: fixture.title })).toHaveCount(
     0,
   );
 
@@ -438,6 +493,6 @@ test('G03-11 删除产物后刷新不再可用，Studio 列表与 Canvas 均不�
   await page.reload();
   const studioAfterReload = await openStudioOutput(page);
   await expect(
-    studioAfterReload.getByRole('button', { name: fixture.title }),
+    studioAfterReload.getByRole("button", { name: fixture.title }),
   ).toHaveCount(0);
 });

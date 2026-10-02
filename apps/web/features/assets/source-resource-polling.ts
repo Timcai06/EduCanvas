@@ -1,5 +1,9 @@
 import type { CanvasResource } from '@educanvas/canvas-protocol';
 import { fetchCanvasResource } from '../canvas/canvas-resource-client';
+import {
+  readNotebookRequestContext,
+  type NotebookRequestContext,
+} from '@/features/workspace/general/notebook-request-context';
 
 function waitForNextPoll(signal: AbortSignal, delayMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -22,15 +26,20 @@ function waitForNextPoll(signal: AbortSignal, delayMs: number): Promise<void> {
  * 再决定是否懒加载正文。Abort 会同时停止计时器与当前 fetch。
  */
 export async function pollSourceResource(input: {
+  requestContext?: NotebookRequestContext | null;
   resourceId: string;
   signal: AbortSignal;
   delayMs?: number;
   load?: (resourceId: string, signal: AbortSignal) => Promise<CanvasResource>;
 }): Promise<CanvasResource> {
+  const requestContext =
+    input.requestContext === undefined
+      ? readNotebookRequestContext()
+      : input.requestContext;
   const load =
     input.load ??
     ((resourceId, signal) =>
-      fetchCanvasResource('source', resourceId, { signal }));
+      fetchCanvasResource('source', resourceId, { signal, requestContext }));
   while (true) {
     await waitForNextPoll(input.signal, input.delayMs ?? 2_000);
     const resource = await load(input.resourceId, input.signal);

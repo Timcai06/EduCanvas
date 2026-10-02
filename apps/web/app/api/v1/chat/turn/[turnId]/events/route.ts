@@ -8,7 +8,10 @@ import {
   jsonResponse,
   isTrustedSameOriginWrite,
 } from '@/server/http/request-security';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedGeneralRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import { webResearchCheckpoints } from '@/server/platform/general-turn-persistence';
 
 export const runtime = 'nodejs';
@@ -55,11 +58,16 @@ export async function GET(
   }
 
   try {
+    const conversation = await loadOwnedGeneralConversation(identity, request);
+    if (hasGeneralRequestContext(request) && !conversation)
+      return jsonError(404, 'turn_not_found');
     const gatewayEvents = await resumeWebGatewayTurn(identity, {
       turnId,
       afterSequence,
+      ...(hasGeneralRequestContext(request) && conversation
+        ? { conversationId: conversation.id }
+        : {}),
     });
-    const conversation = await loadOwnedGeneralConversation(identity);
     const research = conversation
       ? await webResearchCheckpoints.getPublicSnapshot({
           operationId: turnId,

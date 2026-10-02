@@ -1,3 +1,4 @@
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
 import {
   workspaceResourceSummarySchema,
   type WorkspaceResourceSummary,
@@ -46,7 +47,7 @@ export async function fetchWorkspaceResourcePage(
     query.set('filter', options.filter);
   if (options.limit !== undefined) query.set('limit', String(options.limit));
   const suffix = query.toString();
-  const response = await fetch(
+  const response = await notebookScopedFetch(
     `/api/v1/canvas/resources${suffix ? `?${suffix}` : ''}`,
     {
       method: 'GET',

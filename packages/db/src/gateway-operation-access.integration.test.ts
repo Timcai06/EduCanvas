@@ -21,6 +21,7 @@ import {
   truncateGatewayTables,
 } from './gateway-repository.integration-support';
 import { findCurrentOperationAccess } from './gateway/operation-access';
+import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 
 const accessNow = new Date(now.getTime() + 2_000);
 
@@ -148,6 +149,49 @@ describeWithDatabase('Gateway current Operation access', () => {
   beforeAll(migrateGatewaySchema);
   beforeEach(truncateGatewayTables);
   afterAll(closeGatewayConnection);
+
+  it('binds explicit Web replay and cancellation to the selected Conversation', async () => {
+    const fixture = await seedPendingOperation();
+    const other = await new DrizzlePlatformConversationRepository(
+      getDatabase(),
+    ).create({
+      ownerSubjectId: 'user:owner',
+      spaceKind: 'notebook',
+      spaceTitle: '其他标签',
+      now,
+    });
+    await expect(
+      fixture.store.listEvents(
+        fixture.operation.operationId,
+        -1,
+        fixture.owner.userId,
+        accessNow,
+        fixture.conversation.id,
+      ),
+    ).resolves.toHaveLength(1);
+    await expect(
+      fixture.store.listEvents(
+        fixture.operation.operationId,
+        -1,
+        fixture.owner.userId,
+        accessNow,
+        other.id,
+      ),
+    ).rejects.toMatchObject({ code: 'operation_not_found' });
+    await expect(
+      new DrizzlePlatformTurnRepository(getDatabase()).requestTurnCancellation({
+        trustedSubjectId: fixture.owner.userId,
+        turnId: fixture.operation.operationId,
+        conversationId: other.id,
+        now: accessNow,
+      }),
+    ).resolves.toEqual({ turn: null, accepted: false });
+    const [operation] = await getDatabase()
+      .select({ cancelRequestedAt: agentOperations.cancelRequestedAt })
+      .from(agentOperations)
+      .where(eq(agentOperations.id, fixture.operation.operationId));
+    expect(operation?.cancelRequestedAt).toBeNull();
+  });
 
   it('removes replay, cancellation and approval access after membership revocation', async () => {
     const fixture = await seedPendingOperation();

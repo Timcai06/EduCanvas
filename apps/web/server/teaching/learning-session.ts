@@ -1,4 +1,5 @@
 import 'server-only';
+import { scopeFor, toProgressDTO } from './learning-session-projections';
 
 import { canvasInteractionEventSchema } from '@educanvas/canvas-protocol';
 import {
@@ -22,11 +23,13 @@ import {
 } from '../identity/anonymous-identity';
 import {
   loadOwnedStudyContext,
+  loadOwnedStudyContextForNotebook,
   type OwnedStudyContext,
 } from '../study/study-service';
 import { webTeachingVisibleMessageHistory } from './message-history';
 import {
   gradeCanvasSubmissionService,
+  createNotebookTeachingRuntime,
   progressTeachingStateService,
 } from './teaching-runtime';
 
@@ -34,34 +37,6 @@ const learningSessions = new DrizzleLearningSessionRepository();
 const knowledgeRetrieval = new DrizzleKnowledgeRetrievalRepository();
 const studyPlans = new DrizzleStudyPlanRepository();
 const bootstrapCompensator = new DrizzleStudyBootstrapCompensator();
-
-function scopeFor(identity: AnonymousIdentity, context: OwnedStudyContext) {
-  return {
-    studentId: identity.studentId,
-    gradeBand: context.plan.goal.gradeBand,
-    courseSlug: context.plan.goal.courseSlug,
-    // 受信课程目录保证至少六个目标。
-    knowledgeNodeId: context.course.objectives[0]!.knowledgeNodeId,
-  };
-}
-
-function toProgressDTO(input: {
-  knowledgeNodeId: string;
-  masteryScore: number;
-  attemptCount: number;
-  correctCount: number;
-  hintCount: number;
-  nextReviewAt: string | null;
-}): ProgressDTO {
-  return {
-    knowledgeNodeId: input.knowledgeNodeId,
-    masteryPercent: Math.round(input.masteryScore * 100),
-    attemptedItems: input.attemptCount,
-    correctItems: input.correctCount,
-    hintCount: input.hintCount,
-    nextReviewAt: input.nextReviewAt,
-  };
-}
 
 /**
  * 显式创建新的学习记录，并把同一可信课程与目标复制到新 Notebook。
@@ -127,21 +102,41 @@ export async function startNewAnonymousLesson(
 export async function resumeOwnedAnonymousLesson(
   identity: AnonymousIdentity,
   sessionId: string,
+  notebookId?: string,
 ): Promise<void> {
-  const context = await loadOwnedStudyContext(identity);
+  const context = notebookId
+    ? await loadOwnedStudyContextForNotebook(
+        identity,
+        notebookId,
+        undefined,
+        true,
+      )
+    : await loadOwnedStudyContext(identity);
   if (!context) throw new Error('活动学习计划不存在');
-  await learningSessions.resume(scopeFor(identity, context), sessionId);
+  await learningSessions.resume(
+    { ...scopeFor(identity, context), ...(notebookId ? { notebookId } : {}) },
+    sessionId,
+  );
 }
 
 /** Agent runtime 只从可信 Cookie + 当前 Notebook 计划恢复完整会话游标。 */
 export async function loadOwnedTeachingSession(
   identity: AnonymousIdentity,
+  notebookId?: string,
+  conversationId?: string,
 ): Promise<LessonSessionSnapshot | null> {
-  const context = await loadOwnedStudyContext(identity);
+  const context = notebookId
+    ? await loadOwnedStudyContextForNotebook(
+        identity,
+        notebookId,
+        conversationId,
+      )
+    : await loadOwnedStudyContext(identity);
   if (!context) return null;
-  const owned = await learningSessions.getCurrentOwned(
-    scopeFor(identity, context),
-  );
+  const owned = await learningSessions.getCurrentOwned({
+    ...scopeFor(identity, context),
+    ...(notebookId ? { notebookId, sessionId: context.sessionId } : {}),
+  });
   if (!owned) return null;
   const session = await new DrizzleSessionRepository(getDb()).getById(
     owned.sessionId,
@@ -152,12 +147,21 @@ export async function loadOwnedTeachingSession(
 
 export async function loadOwnedTeachingGatewayTarget(
   identity: AnonymousIdentity,
+  notebookId?: string,
+  conversationId?: string,
 ) {
-  const context = await loadOwnedStudyContext(identity);
+  const context = notebookId
+    ? await loadOwnedStudyContextForNotebook(
+        identity,
+        notebookId,
+        conversationId,
+      )
+    : await loadOwnedStudyContext(identity);
   if (!context) return null;
-  return learningSessions.getCurrentOwnedGatewayTarget(
-    scopeFor(identity, context),
-  );
+  return learningSessions.getCurrentOwnedGatewayTarget({
+    ...scopeFor(identity, context),
+    ...(notebookId ? { notebookId, sessionId: context.sessionId } : {}),
+  });
 }
 
 /** 页面只得到公共Artifact和公开进度，不得到session、student或判分键。 */
@@ -166,10 +170,20 @@ export async function loadLearningPageData(
   context: OwnedStudyContext,
 ): Promise<LearningPageDTO | null> {
   const snapshot = await learningSessions.getPageSnapshot(
-    scopeFor(identity, context),
+    {
+      ...scopeFor(identity, context),
+      notebookId: context.plan.goal.notebookId,
+      sessionId: context.sessionId,
+    },
     context.artifact.artifactId,
   );
   if (!snapshot) return null;
+  const target = await learningSessions.getCurrentOwnedGatewayTarget({
+    ...scopeFor(identity, context),
+    notebookId: context.plan.goal.notebookId,
+    sessionId: context.sessionId,
+  });
+  if (!target) return null;
   const [history, recent] = await Promise.all([
     webTeachingVisibleMessageHistory.listHistory({
       sessionId: snapshot.sessionId,
@@ -181,6 +195,7 @@ export async function loadLearningPageData(
         studentId: identity.studentId,
         gradeBand: context.plan.goal.gradeBand,
         courseSlug: context.plan.goal.courseSlug,
+        notebookId: context.plan.goal.notebookId,
       },
       { limit: 20 },
     ),
@@ -229,6 +244,8 @@ export async function loadLearningPageData(
   );
   return {
     notebookId: context.plan.goal.notebookId,
+    goalId: context.plan.goal.id,
+    conversationId: target.conversationId,
     artifact: snapshot.artifact,
     progress: snapshot.mastery
       ? toProgressDTO({
@@ -290,6 +307,8 @@ export type OwnedCanvasSubmissionOutcome =
 /** Action没有session参数；当前会话完全由可信Cookie身份和固定课程范围恢复。 */
 export async function submitOwnedCanvas(
   input: CanvasSubmissionInput,
+  notebookId?: string,
+  expected?: { sessionId: string; goalId: string },
 ): Promise<OwnedCanvasSubmissionOutcome> {
   const parsed = canvasInteractionEventSchema.safeParse(input);
   if (!parsed.success) {
@@ -300,14 +319,36 @@ export async function submitOwnedCanvas(
   }
   const identity = await readAnonymousIdentity();
   if (!identity) return { authenticated: false };
-  const context = await loadOwnedStudyContext(identity);
+  const context = notebookId
+    ? await loadOwnedStudyContextForNotebook(identity, notebookId)
+    : await loadOwnedStudyContext(identity);
   if (!context) return { authenticated: false };
-  const session = await learningSessions.getCurrentOwned(
-    scopeFor(identity, context),
-  );
+  if (
+    notebookId &&
+    (!expected ||
+      context.sessionId !== expected.sessionId ||
+      context.plan.goal.id !== expected.goalId)
+  )
+    return {
+      authenticated: true,
+      outcome: { ok: false, code: 'SESSION_NOT_FOUND' },
+    };
+  const session = await learningSessions.getCurrentOwned({
+    ...scopeFor(identity, context),
+    ...(notebookId ? { notebookId, sessionId: context.sessionId } : {}),
+  });
   if (!session) return { authenticated: false };
 
-  const outcome = await gradeCanvasSubmissionService.execute({
+  const runtime =
+    notebookId && expected
+      ? createNotebookTeachingRuntime({
+          notebookId,
+          trustedStudentId: identity.studentId,
+          sessionId: expected.sessionId,
+          goalId: expected.goalId,
+        })
+      : { gradeCanvasSubmissionService, progressTeachingStateService };
+  const outcome = await runtime.gradeCanvasSubmissionService.execute({
     trustedStudentId: identity.studentId,
     sessionId: session.sessionId,
     clientEvent: parsed.data,
@@ -318,7 +359,7 @@ export async function submitOwnedCanvas(
       session.sessionId,
     );
     if (current?.state === 'ASSESS') {
-      const progression = await progressTeachingStateService.execute({
+      const progression = await runtime.progressTeachingStateService.execute({
         trustedStudentId: identity.studentId,
         sessionId: session.sessionId,
         causationId: outcome.event.eventId,

@@ -16,6 +16,7 @@ import { extractCitationMarkers } from '../teaching/citation-markers';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import { ArtifactOutputGuard } from './general-artifact-output-guard';
 import { nativeImageCandidates } from './general-turn-native-image-context';
+import { loadGeneralArtifactStatusContext } from './general-turn-artifact-context';
 import {
   IMAGE_GENERATION_CAPABILITY,
   type WebOperationImageArtifacts,
@@ -31,7 +32,7 @@ import {
 } from './general-deep-research';
 import type { WebSearchProgress } from '../tools/web-search';
 
-const PROMPT_VERSION = 'general-chat-v9';
+const PROMPT_VERSION = 'general-chat-v10';
 
 /**
  * 图像工具说明只在本轮确实注册了该能力时才拼进 System Prompt。
@@ -127,6 +128,14 @@ ${deepResearch ? DEEP_RESEARCH_SYSTEM_GUIDANCE : outputPreferenceHint}`;
             message.content.trim().length > 0),
       )
       .slice(-24);
+    const artifactStatusContext = await loadGeneralArtifactStatusContext({
+      conversationId: input.command.notebook.conversationId,
+      notebookId: input.command.notebook.notebookId,
+      trustedSubjectId: input.command.actor.actorId,
+      operationIds: selected
+        .map((message) => message.operationId)
+        .filter((operationId) => operationId !== input.turn.operationId),
+    });
     const currentText =
       extractAgentMessageText(input.command.input.parts).trim() ||
       '请分析我提供的资料。';
@@ -154,11 +163,11 @@ ${deepResearch ? DEEP_RESEARCH_SYSTEM_GUIDANCE : outputPreferenceHint}`;
     });
     return {
       context: {
-        profileVersion: 'web-general-v6',
+        profileVersion: 'web-general-v7',
         profile: [
           {
             segment: {
-              id: 'profile:web-general-v6',
+              id: 'profile:web-general-v7',
               kind: 'profile' as const,
               content: systemPrompt,
               priority: 100,
@@ -169,6 +178,23 @@ ${deepResearch ? DEEP_RESEARCH_SYSTEM_GUIDANCE : outputPreferenceHint}`;
               content: systemPrompt,
             },
           },
+          ...(artifactStatusContext
+            ? [
+                {
+                  segment: {
+                    id: 'profile:artifact-status',
+                    kind: 'profile' as const,
+                    content: artifactStatusContext,
+                    priority: 100,
+                    required: true,
+                  },
+                  message: {
+                    role: 'system' as const,
+                    content: artifactStatusContext,
+                  },
+                },
+              ]
+            : []),
         ],
         conversation: selected.map((message, index) => {
           const content =

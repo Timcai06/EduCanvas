@@ -33,7 +33,11 @@ async function proveClientReady(
     const switchedLabel =
       route === '/login' ? '已有账号？返回登录' : '第一次来？创建账号';
     await expect(initialSwitch).toBeVisible();
-    await initialSwitch.click();
+    // The CI trace stalls in pointer stability despite the control being present;
+    // native keyboard activation still proves the hydrated event handler works.
+    await initialSwitch.focus();
+    await expect(initialSwitch).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(
       page.getByRole('button', { name: switchedLabel }),
     ).toBeVisible();

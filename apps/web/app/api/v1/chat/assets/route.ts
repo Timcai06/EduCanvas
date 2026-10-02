@@ -8,7 +8,10 @@ import {
   assetUploadErrorResponse,
   parseAssetUploadRequest,
 } from '@/server/assets/asset-upload-http';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -43,16 +46,20 @@ function resolveEnabled(
   );
 }
 
-async function loadContext() {
+async function loadContext(request: Request) {
   const identity = await readAnonymousIdentity();
   if (!identity) return null;
-  const conversation = await loadOwnedGeneralConversation(identity);
+  const conversation = await loadOwnedGeneralConversation(identity, request);
   return conversation ? { identity, conversation } : null;
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const context = await loadContext();
-  if (!context) return jsonError(401, 'unauthorized');
+  const context = await loadContext(request);
+  if (!context)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     const pagination = parseListPagination(request);
     const page = await listOwnedSpaceAssetsPage(
@@ -93,8 +100,12 @@ export async function POST(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin');
   }
-  const context = await loadContext();
-  if (!context) return jsonError(401, 'unauthorized');
+  const context = await loadContext(request);
+  if (!context)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     const upload = await parseAssetUploadRequest(request);
     if (upload instanceof Response) return upload;

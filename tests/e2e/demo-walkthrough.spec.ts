@@ -46,7 +46,7 @@ const DEMO_ANSWER =
  * 渲染、Canvas、判分与掌握度仍走真实产品路径——被替换的只有模型本身。
  */
 async function stubTeacherAnswer(page: Page): Promise<void> {
-  await page.route('**/api/v1/learn/turn', async (route) => {
+  await page.route(/\/api\/v1\/learn\/turn(?:\?.*)?$/, async (route) => {
     const turnId = 'demo-turn';
     const messageId = 'demo-assistant';
     const frame = (type: string, data: Record<string, unknown>) =>

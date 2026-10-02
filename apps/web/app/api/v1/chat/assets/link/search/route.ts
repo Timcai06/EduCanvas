@@ -3,7 +3,10 @@ import {
   linkTrafficKey,
   linkTrafficLimiter,
 } from '@/server/assets/link-traffic-limiter';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -65,8 +68,12 @@ export async function POST(request: Request): Promise<Response> {
   try {
     identity = await readAnonymousIdentity();
     if (!identity) return jsonError(401, 'unauthorized');
-    conversation = await loadOwnedGeneralConversation(identity);
-    if (!conversation) return jsonError(401, 'unauthorized');
+    conversation = await loadOwnedGeneralConversation(identity, request);
+    if (!conversation)
+      return jsonError(
+        hasGeneralRequestContext(request) ? 404 : 401,
+        'unauthorized',
+      );
   } catch {
     const failure = publicError.search_provider_unavailable;
     return searchError(failure.status, 'search_provider_unavailable');

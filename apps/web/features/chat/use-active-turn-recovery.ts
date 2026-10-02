@@ -1,4 +1,5 @@
 'use client';
+import { readNotebookRequestContext } from '@/features/workspace/general/notebook-request-context';
 
 import { useEffect, type Dispatch, type RefObject } from 'react';
 import type { ActiveTeachingTurn, TeachingTurnAction } from './turn-state';
@@ -27,6 +28,7 @@ export function useActiveTurnRecovery(input: {
   useEffect(() => {
     if (!active?.turnId || inFlightRef.current) return;
     const current: InFlightTurn = {
+      notebookRequestContext: readNotebookRequestContext(),
       clientMessageId: active.clientMessageId,
       controller: new AbortController(),
       turnId: active.turnId,

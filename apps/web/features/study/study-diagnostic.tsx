@@ -14,7 +14,15 @@ import { useReducedMotion } from '@/features/workspace/shared/use-reduced-motion
 import { TopBar } from '../workspace/learning/top-bar';
 
 /** 短诊断只保存选择；浏览器既看不到正确答案，也不能提交自报分数。 */
-export function StudyDiagnostic({ data }: { data: StudyDiagnosticDTO }) {
+export function StudyDiagnostic({
+  data,
+  notebookId,
+  submitAction = submitDiagnosticAction,
+}: {
+  data: StudyDiagnosticDTO;
+  notebookId?: string;
+  submitAction?: typeof submitDiagnosticAction;
+}) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -44,7 +52,7 @@ export function StudyDiagnostic({ data }: { data: StudyDiagnosticDTO }) {
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const result: StudyActionResultDTO = await submitDiagnosticAction({
+      const result: StudyActionResultDTO = await submitAction({
         attemptId: crypto.randomUUID(),
         answers: questions.map((question) => ({
           questionId: question.questionId,
@@ -64,13 +72,14 @@ export function StudyDiagnostic({ data }: { data: StudyDiagnosticDTO }) {
   return (
     <main className="min-h-dvh bg-canvas text-ink">
       <TopBar
+        notebookId={notebookId}
         courseTitle={data.topic}
         stageLabel="短诊断"
         masteryPercent={null}
       />
       <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:py-12">
         <Link
-          href="/"
+          href={notebookId ? `/notebook/${notebookId}/plans` : '/'}
           className="mb-6 inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
         >
           <ArrowLeft aria-hidden="true" size={16} />

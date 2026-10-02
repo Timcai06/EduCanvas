@@ -220,7 +220,7 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
     ).rejects.toBeInstanceOf(PlatformConversationOwnershipError);
   });
 
-  it('重命名在同一事务同步Notebook和主Conversation且拒绝跨主体', async () => {
+  it('Conversation重命名保持Notebook标题且拒绝跨主体', async () => {
     const repository = new DrizzlePlatformConversationRepository(getDatabase());
     const conversation = await repository.create({
       ownerSubjectId: 'rename-owner',
@@ -241,17 +241,16 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
       .from(schema.spaces)
       .where(eq(schema.spaces.id, conversation.spaceId))
       .limit(1);
-    expect(notebook?.title).toBe('分数函数复习');
+    expect(notebook?.title).toBe('未命名笔记本');
     await expect(
       getDatabase().select().from(schema.securityAuditEvents),
     ).resolves.toMatchObject([
       {
         actorUserId: 'rename-owner',
-        eventType: 'notebook.renamed',
-        resourceType: 'notebook',
-        resourceId: conversation.spaceId,
+        eventType: 'conversation.renamed',
+        resourceType: 'conversation',
+        resourceId: conversation.id,
         outcome: 'succeeded',
-        metadata: { conversation_id: conversation.id },
       },
     ]);
 
@@ -268,6 +267,81 @@ describeWithDatabase('通用Space/Conversation骨架', () => {
         trustedSubjectId: 'rename-owner',
       }),
     ).resolves.toMatchObject({ title: '分数函数复习' });
+  });
+
+  it('同Notebook可创建多Conversation、分别命名归档并隔离跨本访问', async () => {
+    const repository = new DrizzlePlatformConversationRepository(getDatabase());
+    const first = await repository.create({
+      ownerSubjectId: 'multi-owner',
+      spaceKind: 'notebook',
+      spaceTitle: '数学',
+      conversationTitle: '分数',
+    });
+    const second = await repository.createInNotebook({
+      notebookId: first.spaceId,
+      trustedSubjectId: 'multi-owner',
+      title: '几何',
+    });
+    const other = await repository.create({
+      ownerSubjectId: 'multi-owner',
+      spaceKind: 'course',
+      spaceTitle: '旧课程',
+      agentProfileId: 'k12',
+    });
+    expect(second.spaceId).toBe(first.spaceId);
+    expect(
+      (await repository.listNotebooks({ trustedSubjectId: 'multi-owner' }))
+        .map((item) => item.id)
+        .sort(),
+    ).toEqual([first.spaceId, other.spaceId].sort());
+    expect(
+      await repository.listInNotebook({
+        notebookId: first.spaceId,
+        trustedSubjectId: 'multi-owner',
+      }),
+    ).toHaveLength(2);
+    await repository.renameNotebook({
+      notebookId: first.spaceId,
+      trustedSubjectId: 'multi-owner',
+      title: '数学复习',
+    });
+    expect(
+      await repository.getOwned({
+        conversationId: first.id,
+        trustedSubjectId: 'multi-owner',
+      }),
+    ).toMatchObject({ title: '分数' });
+    await repository.archiveOwned({
+      conversationId: first.id,
+      trustedSubjectId: 'multi-owner',
+    });
+    expect(
+      await repository.listInNotebook({
+        notebookId: first.spaceId,
+        trustedSubjectId: 'multi-owner',
+      }),
+    ).toMatchObject([{ id: second.id, title: '几何' }]);
+    expect(
+      await repository.getNotebook({
+        notebookId: first.spaceId,
+        trustedSubjectId: 'multi-owner',
+      }),
+    ).toMatchObject({ title: '数学复习' });
+    await expect(
+      repository.createInNotebook({
+        notebookId: first.spaceId,
+        trustedSubjectId: 'intruder',
+      }),
+    ).rejects.toThrow();
+    expect(
+      await repository.getNotebook({
+        notebookId: first.spaceId,
+        trustedSubjectId: 'intruder',
+      }),
+    ).toBeNull();
+    expect(await getDatabase().select().from(schema.lessonSessions)).toEqual(
+      [],
+    );
   });
 
   it('通用Turn幂等持久化并在终态后恢复，不创建教学Session', async () => {

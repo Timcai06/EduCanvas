@@ -29,6 +29,7 @@ export async function GET(request: Request): Promise<Response> {
   const cursor = url.searchParams.get('cursor');
   try {
     const page = await listWorkspaceResourceSummaries({
+      request,
       dataOwnerKind: subject.dataOwnerKind,
       dataOwnerId: subject.dataOwnerId,
       cursor,

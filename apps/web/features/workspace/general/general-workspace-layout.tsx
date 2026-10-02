@@ -52,6 +52,7 @@ export interface GeneralWorkspaceLayoutProps {
   readonly notebookId: string;
   readonly sidebarOpen: boolean;
   readonly onToggleSidebar: () => void;
+  readonly onCloseSidebar: () => void;
   readonly mainRef: RefObject<HTMLElement | null>;
   readonly resourceOpenStatus: ReactNode | null;
 }
@@ -63,6 +64,7 @@ export function GeneralWorkspaceLayout({
   notebookId,
   sidebarOpen,
   onToggleSidebar,
+  onCloseSidebar,
   mainRef,
   resourceOpenStatus,
 }: GeneralWorkspaceLayoutProps) {
@@ -73,6 +75,7 @@ export function GeneralWorkspaceLayout({
       <GeneralWorkspaceHeader
         notebookTitle={notebookTitle}
         conversationId={conversationId}
+        notebookId={notebookId}
         sidebarOpen={sidebarOpen}
         studioOpen={surface.type === 'studio'}
         onToggleSidebar={onToggleSidebar}
@@ -82,8 +85,9 @@ export function GeneralWorkspaceLayout({
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
           open={sidebarOpen}
-          onClose={onToggleSidebar}
+          onClose={onCloseSidebar}
           activeConversationId={conversationId}
+          notebookId={notebookId}
           onNewNotebook={() => void startNewGeneralChatAction()}
         />
         {/* isolate 堆叠上下文会困住内部 z-40 的 modal，压不过兄弟 header 的 z-20：main 抬到 z-30（同落地态，见组合层全屏 Canvas 注释）。 */}

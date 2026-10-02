@@ -14,6 +14,7 @@ import Link from 'next/link';
  */
 export function TopBar({
   courseTitle,
+  notebookId,
   stageLabel,
   masteryPercent,
   onOpenStudio,
@@ -22,6 +23,7 @@ export function TopBar({
   quiet = false,
 }: {
   courseTitle: string;
+  notebookId?: string;
   stageLabel: string | null;
   masteryPercent: number | null;
   onOpenStudio?: () => void;
@@ -35,7 +37,7 @@ export function TopBar({
       {/* 结构化学习是统一 Agent 的工作流，品牌返回同一 Agent 的主对话。 */}
       <ProductMark href="/" />
       <Link
-        href="/"
+        href={notebookId ? `/notebook/${notebookId}/plans` : '/'}
         aria-label="返回笔记本"
         className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >

@@ -4,7 +4,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
-import { openFollowReader, readFollowed } from './local-log-viewer.mjs';
+import {
+  closeFollowReader,
+  openFollowReader,
+  readFollowed,
+} from './local-log-viewer.mjs';
 
 const temporaryDirectories = [];
 
@@ -311,12 +315,16 @@ test('readFollowed 只消费追加字节（大日志不全量重读）', async (
   await writeFile(file, initial, 'utf8');
 
   const reader = await openFollowReader(file);
-  assert.ok(reader.offset >= 1_000_000, '起始偏移应为首屏文件大小');
+  try {
+    assert.ok(reader.offset >= 1_000_000, '起始偏移应为首屏文件大小');
 
-  await writeFile(file, `${initial}{"appended":true}\n`, 'utf8');
-  const slice = await readFollowed(reader);
-  assert.equal(slice, '{"appended":true}\n', '只应返回追加字节');
-  assert.equal(await readFollowed(reader), '', '无新增时返回空');
+    await writeFile(file, `${initial}{"appended":true}\n`, 'utf8');
+    const slice = await readFollowed(reader);
+    assert.equal(slice, '{"appended":true}\n', '只应返回追加字节');
+    assert.equal(await readFollowed(reader), '', '无新增时返回空');
+  } finally {
+    await closeFollowReader(reader);
+  }
 });
 
 test('--tail=N 只显示最近 N 条', async () => {

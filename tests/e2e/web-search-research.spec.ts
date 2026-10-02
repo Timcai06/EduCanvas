@@ -274,7 +274,7 @@ test('WS09 深度研究显示五源五引与综合进度', async ({ page }) => {
   await page.route('**/api/v1/chat/assets**', (route) =>
     routeAssetApis(route, state),
   );
-  await page.route('**/api/v1/chat/turn', async (route) => {
+  await page.route(/\/api\/v1\/chat\/turn(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'text/event-stream; charset=utf-8',
       body: researchStream(),

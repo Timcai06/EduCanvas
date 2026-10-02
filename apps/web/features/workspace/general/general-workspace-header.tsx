@@ -14,6 +14,7 @@ import { UserMenu } from '@/features/auth/user-menu';
 export function GeneralWorkspaceHeader({
   notebookTitle,
   conversationId,
+  notebookId,
   sidebarOpen,
   studioOpen,
   onToggleSidebar,
@@ -21,6 +22,7 @@ export function GeneralWorkspaceHeader({
 }: {
   notebookTitle: string | null;
   conversationId: string;
+  notebookId?: string;
   sidebarOpen: boolean;
   studioOpen: boolean;
   onToggleSidebar: () => void;
@@ -49,11 +51,11 @@ export function GeneralWorkspaceHeader({
       {
         id: 'learning-plan',
         label: '学习计划',
-        href: '/learn',
+        href: notebookId ? `/notebook/${notebookId}/plans` : '/learn',
         icon: <GraduationCap size={17} weight="duotone" />,
       },
     ],
-    [onOpenStudio, onToggleSidebar, sidebarOpen, studioOpen],
+    [notebookId, onOpenStudio, onToggleSidebar, sidebarOpen, studioOpen],
   );
 
   return (

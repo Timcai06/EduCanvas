@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('输出截断保留部分正文并提示缩小范围，不提供原样重试', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.route('**/api/v1/chat/turn', async (route) => {
+  await page.route(/\/api\/v1\/chat\/turn(?:\?.*)?$/, async (route) => {
     const turnId = 'output-limit-turn';
     const messageId = 'output-limit-assistant';
     const frame = (type: string, data: Record<string, unknown>) =>

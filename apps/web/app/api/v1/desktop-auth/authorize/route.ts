@@ -2,7 +2,10 @@ import { gatewayDesktopAuthorizationQuerySchema } from '@educanvas/gateway-core'
 import { readRegisteredSessionIdentity } from '@/server/auth/session';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import { getDesktopAuthService } from '@/server/desktop-auth/server-service';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedGeneralRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -55,7 +58,12 @@ export async function POST(request: Request): Promise<Response> {
     if (!runtimeIdentity) {
       return jsonError(409, 'no_conversation');
     }
-    const conversation = await loadOwnedGeneralConversation(runtimeIdentity);
+    const conversation = await loadOwnedGeneralConversation(
+      runtimeIdentity,
+      request,
+    );
+    if (hasGeneralRequestContext(request) && !conversation)
+      return jsonError(404, 'conversation_not_found');
     const grant = await getDesktopAuthService().issueAuthorizationCode({
       userId: runtimeIdentity.studentId,
       codeChallenge: parsed.data.code_challenge,

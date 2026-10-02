@@ -1,4 +1,5 @@
 'use client';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 
 import { CanvasHost } from '@/features/canvas/canvas-host';
 import { CanvasShellStatus } from '@/features/canvas/canvas-shell-status';
@@ -78,6 +79,7 @@ function SourceResourceLoader({
 }: {
   initialResource: CanvasResource;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [retrySequence, setRetrySequence] = useState(0);
   const [currentResource, setCurrentResource] = useState(initialResource);
   const resourceId = currentResource.resourceId;
@@ -94,7 +96,11 @@ function SourceResourceLoader({
     if (resourceStatus !== 'processing') return;
     const controller = new AbortController();
     let active = true;
-    void pollSourceResource({ resourceId, signal: controller.signal })
+    void pollSourceResource({
+      resourceId,
+      signal: controller.signal,
+      requestContext,
+    })
       .then((next) => {
         if (active) setCurrentResource(next);
       })
@@ -111,12 +117,12 @@ function SourceResourceLoader({
       active = false;
       controller.abort();
     };
-  }, [resourceId, resourceStatus, loadKey]);
+  }, [resourceId, resourceStatus, loadKey, requestContext]);
 
   useEffect(() => {
     if (!canLoadPreview) return;
     let active = true;
-    void loadAssetPreview(resourceId)
+    void loadAssetPreview(resourceId, requestContext)
       .then((value) => {
         if (active) setResult({ loadKey, preview: value, error: null });
       })
@@ -133,7 +139,7 @@ function SourceResourceLoader({
     return () => {
       active = false;
     };
-  }, [canLoadPreview, resourceId, loadKey]);
+  }, [canLoadPreview, resourceId, loadKey, requestContext]);
 
   const preview = result.loadKey === loadKey ? result.preview : null;
   const previewError = result.loadKey === loadKey ? result.error : null;

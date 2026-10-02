@@ -151,6 +151,12 @@ export const CLOSED_VOCABULARY_CONSTRAINTS = new Set([
   'notebook_surface_positions_resource_kind_check',
   'notebook_surface_positions_zone_check',
   'notebook_surface_positions_rest_state_check',
+  // Notebook Plan/Chapter enums are persisted UI/provenance protocols; an
+  // unknown origin, locator kind, source kind or lifecycle cannot be read safely.
+  'notebook_chapters_origin_check',
+  'notebook_chapters_locator_check',
+  'notebook_plans_source_check',
+  'notebook_plans_status_check',
 ]);
 
 const SCHEMA_SOURCES = [
@@ -234,7 +240,7 @@ export function isLiteralVocabularyClosure(body) {
   return /\$\{[^}]+\}(?:\s*->>\s*'[^']+')?\s*=\s*'[^']*'/i.test(body);
 }
 
-function extractSqlCheckConstraints(statement) {
+export function extractSqlCheckConstraints(statement) {
   const checks = [];
   const pattern = /(?:ADD\s+)?CONSTRAINT\s+"([^"]+)"\s+CHECK\s*\(/gi;
   for (const match of statement.matchAll(pattern)) {

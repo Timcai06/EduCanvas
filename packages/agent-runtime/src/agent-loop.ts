@@ -368,32 +368,32 @@ export class AgentLoopEngine {
         return;
       }
       for (const call of outcome.toolCalls) {
+        if (isAborted(command.signal)) {
+          yield {
+            type: 'failed',
+            code: 'MODEL_ABORTED',
+            error: { code: 'aborted', retryable: false },
+          };
+          return;
+        }
+        // 逐个启动并公开已验证结果，后续失败不能抹掉已经提交的调用事实。
         yield { type: 'tool.started', run, call };
-      }
-      const executed = await command.executeTools(outcome.toolCalls, {
-        round: run,
-        traceId: command.traceId,
-        turnId: command.turnId,
-        modelRun,
-      });
-      if (!executed.ok) {
-        yield { type: 'tool.failed', failure: executed.failure };
-        return;
-      }
-      if (executed.results.length !== outcome.toolCalls.length) {
-        yield {
-          type: 'failed',
-          code: 'INVALID_MODEL_STREAM',
-          error: { code: 'invalid_response', retryable: false },
-        };
-        return;
-      }
-      for (const [index, result] of executed.results.entries()) {
-        const expected = outcome.toolCalls[index];
+        const executed = await command.executeTools([call], {
+          round: run,
+          traceId: command.traceId,
+          turnId: command.turnId,
+          modelRun,
+        });
+        if (!executed.ok) {
+          yield { type: 'tool.failed', failure: executed.failure };
+          return;
+        }
+        const result = executed.results[0];
         if (
-          expected === undefined ||
-          result.call.callId !== expected.callId ||
-          result.call.tool !== expected.tool
+          executed.results.length !== 1 ||
+          result === undefined ||
+          result.call.callId !== call.callId ||
+          result.call.tool !== call.tool
         ) {
           yield {
             type: 'failed',

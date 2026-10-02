@@ -21,7 +21,7 @@ import {
 
 /** 产物详情与资源验证的核心 URL 形态（打开资源的真实数据请求）。 */
 const RESOURCE_REQUEST_PATTERN =
-  /\/api\/v1\/chat\/artifacts\/[0-9a-f-]+$|\/api\/v1\/canvas\/resources\/artifact\/[0-9a-f-]+$/i;
+  /\/api\/v1\/(?:chat\/artifacts|canvas\/resources\/artifact)\/[0-9a-f-]+(?:\?.*)?$/i;
 const MIND_MAP_TITLE = '对话思维导图';
 
 async function generateMindMap(page: Page) {

@@ -17,6 +17,7 @@ import {
   type ModelMessage,
   type UserModelMessage,
 } from 'ai';
+import type { ProviderFailureDiagnostic } from '../provider-failure-diagnostics';
 
 /** @internal 标记由SDK输出或Adapter投影违反稳定协议，不携带原始值。 */
 export class AiSdkProtocolError extends Error {
@@ -203,6 +204,27 @@ const retryAfterMs = (
   const date = Date.parse(value);
   return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
 };
+
+/** @internal 只消费 SDK 已解析的标识字段；不读取 responseBody、message 或请求值。 */
+export function aiSdkFailureDiagnostic(
+  error: unknown,
+): ProviderFailureDiagnostic {
+  if (!APICallError.isInstance(error)) return {};
+  const data = error.data;
+  const parsedError =
+    typeof data === 'object' && data !== null
+      ? (data as { error?: unknown }).error
+      : undefined;
+  const identifiers =
+    typeof parsedError === 'object' && parsedError !== null
+      ? (parsedError as { code?: unknown; type?: unknown })
+      : undefined;
+  return {
+    status: error.statusCode,
+    providerErrorCode: identifiers?.code,
+    providerErrorType: identifiers?.type,
+  };
+}
 
 /** @internal 只读取SDK错误类型、状态与响应头，绝不转发正文、URL或请求值。 */
 export function normalizeAiSdkError(

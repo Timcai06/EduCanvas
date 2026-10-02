@@ -1,30 +1,29 @@
 import { prepareArtifact } from '@educanvas/canvas-protocol/server';
-import {
-  publicArtifactSchema,
-  type PublicArtifact,
-} from '@educanvas/canvas-protocol';
+import { type PublicArtifact } from '@educanvas/canvas-protocol';
 import { and, desc, eq, gt, gte, lt, or } from 'drizzle-orm';
 import { ensurePreparedArtifact } from './artifact-repository';
 import { getDb } from './client';
+import {
+  learningOwnedSessionCondition as scopeCondition,
+  learningSessionCourseCondition as courseScopeCondition,
+  learningSessionNotebookCondition as scopeNotebookCondition,
+  resolveLearningSessionNotebookScope,
+  lockLearningNotebookAuthority,
+} from './learning-session-notebook-scope';
+import { readLearningPageSnapshot } from './learning-page-snapshot';
 import { isUuid } from './internal/identifiers';
 import {
   archiveActiveLearningSessionScope,
   insertActiveLearningSession,
 } from './learning-session-active-lifecycle';
 import { restoreArchivedSessionIfScopeVacant } from './learning-session-compensation';
-import {
-  learningSessionScopeCondition,
-  lockLearningSessionScope,
-} from './learning-session-locks';
-import {
-  canvasArtifacts,
-  chatMessages,
-  conversations,
-  lessonSessions,
-  masteryStates,
-} from './schema';
+import { lockLearningSessionScope } from './learning-session-locks';
+import { chatMessages, conversations, lessonSessions } from './schema';
 
 type Database = ReturnType<typeof getDb>;
+type DatabaseTransaction = Parameters<
+  Parameters<Database['transaction']>[0]
+>[0];
 
 /** 匿名演示会话的服务端有效期；Cookie过期不能替代数据库侧的重放限制。 */
 export const ANONYMOUS_LEARNING_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -38,6 +37,8 @@ export interface LearningSessionCourseScope {
   studentId: string;
   gradeBand: string;
   courseSlug: string;
+  notebookId?: string;
+  sessionId?: string;
 }
 
 export interface LearningSessionScope extends LearningSessionCourseScope {
@@ -108,16 +109,6 @@ export class LearningSessionNotFoundError extends Error {
   }
 }
 
-const scopeCondition = learningSessionScopeCondition;
-
-function courseScopeCondition(scope: LearningSessionCourseScope) {
-  return and(
-    eq(lessonSessions.studentId, scope.studentId),
-    eq(lessonSessions.gradeBand, scope.gradeBand),
-    eq(lessonSessions.courseSlug, scope.courseSlug),
-  );
-}
-
 function toSessionSummary(
   row: typeof lessonSessions.$inferSelect,
   hasInterruptedTurn = false,
@@ -143,9 +134,11 @@ function toSessionSummary(
  * 并把Session、公开Artifact与私有判分键作为一个原子提交。
  */
 export class DrizzleLearningSessionRepository {
-  constructor(private readonly providedDatabase?: Database) {}
+  constructor(
+    private readonly providedDatabase?: Database | DatabaseTransaction,
+  ) {}
 
-  private get database(): Database {
+  private get database(): Database | DatabaseTransaction {
     return this.providedDatabase ?? getDb();
   }
 
@@ -155,6 +148,13 @@ export class DrizzleLearningSessionRepository {
     const prepared = prepareArtifact(input.completeArtifact);
 
     return this.database.transaction(async (transaction) => {
+      if (input.notebookId)
+        await lockLearningNotebookAuthority(
+          transaction,
+          input.notebookId,
+          input.studentId,
+          'notebook.manage',
+        );
       await lockLearningSessionScope(transaction, input);
       const [existingSession] = await transaction
         .select({ id: lessonSessions.id })
@@ -175,7 +175,12 @@ export class DrizzleLearningSessionRepository {
         const now = new Date();
         // 过期 active 行仍会命中部分唯一索引，必须先显式归档再新建。
         await archiveActiveLearningSessionScope(transaction, input, now);
-        sessionId = await insertActiveLearningSession(transaction, input, now);
+        sessionId = await insertActiveLearningSession(
+          transaction,
+          input,
+          now,
+          input.notebookId,
+        );
         created = true;
       }
 
@@ -205,6 +210,7 @@ export class DrizzleLearningSessionRepository {
           eq(lessonSessions.studentId, scope.studentId),
           eq(lessonSessions.gradeBand, scope.gradeBand),
           eq(lessonSessions.courseSlug, scope.courseSlug),
+          scopeNotebookCondition(scope),
           eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
           eq(lessonSessions.status, 'active'),
           gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
@@ -237,6 +243,7 @@ export class DrizzleLearningSessionRepository {
           eq(lessonSessions.studentId, scope.studentId),
           eq(lessonSessions.gradeBand, scope.gradeBand),
           eq(lessonSessions.courseSlug, scope.courseSlug),
+          scopeNotebookCondition(scope),
           eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
           eq(lessonSessions.status, 'active'),
           eq(conversations.status, 'active'),
@@ -257,51 +264,12 @@ export class DrizzleLearningSessionRepository {
     scope: LearningSessionScope,
     artifactId: string,
   ): Promise<LearningPageSnapshot | null> {
-    const session = await this.getCurrentOwned(scope);
-    if (!session) return null;
-
-    const [artifactRow] = await this.database
-      .select()
-      .from(canvasArtifacts)
-      .where(
-        and(
-          eq(canvasArtifacts.sessionId, session.sessionId),
-          eq(canvasArtifacts.artifactId, artifactId),
-        ),
-      )
-      .limit(1);
-    if (!artifactRow) return null;
-
-    const [masteryRow] = await this.database
-      .select()
-      .from(masteryStates)
-      .where(
-        and(
-          eq(masteryStates.studentId, scope.studentId),
-          eq(masteryStates.knowledgeNodeId, scope.knowledgeNodeId),
-        ),
-      )
-      .limit(1);
-
-    return {
-      ...session,
-      artifact: publicArtifactSchema.parse({
-        schemaVersion: artifactRow.schemaVersion,
-        artifactId: artifactRow.artifactId,
-        type: artifactRow.type,
-        title: artifactRow.title,
-        params: artifactRow.params,
-      }),
-      mastery: masteryRow
-        ? {
-            masteryScore: masteryRow.masteryScore,
-            attemptCount: masteryRow.attemptCount,
-            correctCount: masteryRow.correctCount,
-            hintCount: masteryRow.hintCount,
-            nextReviewAt: masteryRow.nextReviewAt?.toISOString() ?? null,
-          }
-        : null,
-    };
+    return readLearningPageSnapshot(
+      this.database,
+      (input) => this.getCurrentOwned(input),
+      scope,
+      artifactId,
+    );
   }
 
   /** 显式新建学习会话：在同一事务中归档旧 active，再创建新 active。 */
@@ -311,12 +279,20 @@ export class DrizzleLearningSessionRepository {
     const prepared = prepareArtifact(input.completeArtifact);
     const now = new Date();
     return this.database.transaction(async (transaction) => {
+      if (input.notebookId)
+        await lockLearningNotebookAuthority(
+          transaction,
+          input.notebookId,
+          input.studentId,
+          'notebook.manage',
+        );
       await lockLearningSessionScope(transaction, input);
       await archiveActiveLearningSessionScope(transaction, input, now);
       const sessionId = await insertActiveLearningSession(
         transaction,
         input,
         now,
+        input.notebookId,
       );
       await ensurePreparedArtifact(transaction, sessionId, prepared);
       return {
@@ -336,24 +312,32 @@ export class DrizzleLearningSessionRepository {
   ): Promise<LearningSessionSummary> {
     const now = new Date();
     return this.database.transaction(async (transaction) => {
-      await lockLearningSessionScope(transaction, scope);
+      const selectedScope = await resolveLearningSessionNotebookScope(
+        transaction,
+        scope,
+        sessionId,
+        true,
+      );
+      if (!selectedScope) throw new LearningSessionNotFoundError();
+      await lockLearningSessionScope(transaction, selectedScope);
       const [target] = await transaction
         .select()
         .from(lessonSessions)
         .where(
           and(
             eq(lessonSessions.id, sessionId),
-            scopeCondition(scope),
+            scopeCondition(selectedScope),
             gte(lessonSessions.lastActivityAt, activeSessionCutoff()),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!target) throw new LearningSessionNotFoundError();
       if (target.status === 'active') return toSessionSummary(target);
 
       await archiveActiveLearningSessionScope(
         transaction,
-        scope,
+        selectedScope,
         now,
         sessionId,
       );
@@ -400,12 +384,22 @@ export class DrizzleLearningSessionRepository {
   ): Promise<LearningSessionSummary> {
     const now = new Date();
     return this.database.transaction(async (transaction) => {
-      await lockLearningSessionScope(transaction, scope);
+      const selectedScope = await resolveLearningSessionNotebookScope(
+        transaction,
+        scope,
+        sessionId,
+        true,
+      );
+      if (!selectedScope) throw new LearningSessionNotFoundError();
+      await lockLearningSessionScope(transaction, selectedScope);
       const [existing] = await transaction
         .select()
         .from(lessonSessions)
-        .where(and(eq(lessonSessions.id, sessionId), scopeCondition(scope)))
-        .limit(1);
+        .where(
+          and(eq(lessonSessions.id, sessionId), scopeCondition(selectedScope)),
+        )
+        .limit(1)
+        .for('update');
       if (!existing) throw new LearningSessionNotFoundError();
       if (existing.status === 'archived') return toSessionSummary(existing);
       const [archived] = await transaction
@@ -465,6 +459,7 @@ export class DrizzleLearningSessionRepository {
       .select({
         id: lessonSessions.id,
         conversationId: lessonSessions.conversationId,
+        notebookId: lessonSessions.notebookId,
         studentId: lessonSessions.studentId,
         gradeBand: lessonSessions.gradeBand,
         courseSlug: lessonSessions.courseSlug,

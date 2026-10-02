@@ -1,3 +1,4 @@
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
 import { z } from 'zod';
 import { messageForPublicError } from '@/features/errors/public-error';
 
@@ -45,7 +46,7 @@ export async function searchWebSources(
 ): Promise<readonly WebSearchResult[]> {
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await notebookScopedFetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: query.trim() }),

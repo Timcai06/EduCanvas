@@ -435,6 +435,20 @@
       "when": 1787649569758,
       "tag": "0061_four_grade_bands",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790909152828,
+      "tag": "0062_notebook_source_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790910225216,
+      "tag": "0063_notebook_lesson_scope",
+      "breakpoints": true
     }
   ]
 }
