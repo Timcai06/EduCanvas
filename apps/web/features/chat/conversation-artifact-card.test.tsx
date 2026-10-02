@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { clampProgress } from './conversation-artifact-card';
+import { ConversationArtifactCard } from './conversation-artifact-card';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const source = readFileSync(
   fileURLToPath(new URL('./conversation-artifact-card.tsx', import.meta.url)),
@@ -9,6 +11,24 @@ const source = readFileSync(
 );
 
 describe('ConversationArtifactCard', () => {
+  it('本地窗口结束表示结果暂未确认且停止无限spinner', () => {
+    const markup = renderToStaticMarkup(
+      <ConversationArtifactCard
+        artifact={{
+          id: 'A',
+          kind: 'note',
+          title: 'A',
+          status: 'proposed',
+          latestVersion: 0,
+          observationTimedOut: true,
+        }}
+        onOpen={() => {}}
+      />,
+    );
+    expect(markup).toContain('暂未确认结果，返回页面后继续检查');
+    expect(markup).not.toContain('animate-spin');
+    expect(markup).not.toContain('生成失败');
+  });
   it('clampProgress 把服务端进度夹到 0-100', () => {
     expect(clampProgress(42)).toBe(42);
     expect(clampProgress(-3)).toBe(0);

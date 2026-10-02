@@ -17,6 +17,7 @@ const AGENT_ARTIFACT_KINDS = new Set<ObservableArtifactKind>([
   'web_app',
   'audio_overview',
   'generated_image',
+  'picturebook',
 ]);
 
 function isAgentArtifactKind(kind: string): kind is ObservableArtifactKind {

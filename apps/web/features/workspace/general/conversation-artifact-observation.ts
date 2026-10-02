@@ -1,5 +1,6 @@
 import type { GenerationState } from '@/features/canvas/artifact-generation-flow';
 import type { MessageArtifactDTO } from '@/features/chat/messages';
+import type { ArtifactDetail } from '@/features/canvas/artifact-client';
 
 /** 同一轮询事实更新聊天卡片；网络失败或本地停止观察不能冒充后台任务失败。 */
 export function projectObservedConversationArtifact(
@@ -10,6 +11,13 @@ export function projectObservedConversationArtifact(
   if (generation.outcome === 'pending' || generation.outcome === 'timed_out') {
     return null;
   }
+  return projectConversationArtifactDetail(detail);
+}
+
+/** Project durable detail facts even when no Canvas generation is selected. */
+export function projectConversationArtifactDetail(
+  detail: ArtifactDetail,
+): MessageArtifactDTO | null {
   const artifact = detail.artifact;
   const failed = detail.latestJob?.status === 'failed';
   const cancelled = detail.latestJob?.status === 'cancelled';

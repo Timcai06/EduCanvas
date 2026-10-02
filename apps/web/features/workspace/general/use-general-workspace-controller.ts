@@ -20,7 +20,7 @@ import {
 } from '@/features/canvas/artifact-client';
 import { useStudioOpenActions } from '@/features/canvas/use-studio-open-actions';
 import { useOnlineStatus } from '@/features/chat/use-online-status';
-import { projectObservedConversationArtifact } from './conversation-artifact-observation';
+import { useConversationArtifactObservation } from './use-conversation-artifact-observation';
 import { useAgentTurn } from '@/features/chat/use-teaching-turn';
 import type { InitialChatMessageDTO } from '@/features/chat/messages';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
@@ -146,12 +146,11 @@ export function useGeneralWorkspaceController(options: {
   });
 
   const { observeArtifact } = turn;
-  useEffect(() => {
-    const observed = projectObservedConversationArtifact(
-      artifactFlow.generation,
-    );
-    if (observed) observeArtifact(observed);
-  }, [artifactFlow.generation, observeArtifact]);
+  useConversationArtifactObservation(
+    turn.messages,
+    observeArtifact,
+    artifactFlow.generation,
+  );
 
   const studioOpenActions = useStudioOpenActions({
     scopeKey: conversationId,

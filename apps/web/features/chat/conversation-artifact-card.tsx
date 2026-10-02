@@ -59,7 +59,8 @@ export function ConversationArtifactCard({
     icon: PresentationChart,
   };
   const Icon = presentation.icon;
-  const generating = artifact.status === 'proposed';
+  const generating =
+    artifact.status === 'proposed' && !artifact.observationTimedOut;
   const failed =
     artifact.status === 'failed' || artifact.status === 'cancelled';
   const progress =
@@ -71,9 +72,11 @@ export function ConversationArtifactCard({
         ? '生成失败'
         : artifact.status === 'cancelled'
           ? '已取消'
-          : progress !== null
-            ? `生成中 ${progress}%`
-            : '正在生成';
+          : artifact.observationTimedOut
+            ? '暂未确认结果，返回页面后继续检查'
+            : progress !== null
+              ? `生成中 ${progress}%`
+              : '正在生成';
 
   useGSAP(
     () => {
