@@ -7,12 +7,18 @@ import type { MaterializedAssetPlan } from '../assets/asset-materialization';
 import type { NodeInvocationPersistencePort } from '@educanvas/node-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webGeneralTurns } from './general-turn-persistence';
+import { loadGeneralArtifactStatusContext } from './general-turn-artifact-context';
 import type { WebOperationArtifacts } from './general-artifact-tool';
 import type { WebOperationImageArtifacts } from './general-image-tool';
 import { WebGeneralProfile } from './general-turn-profile';
 import type { WebOperationSources } from './general-turn-tools';
 
 vi.mock('server-only', () => ({}));
+vi.mock('./general-turn-artifact-context', () => ({
+  loadGeneralArtifactStatusContext: vi
+    .fn()
+    .mockResolvedValue('historical artifact status snapshot'),
+}));
 
 const assetContext: MaterializedAssetPlan = {
   text: '',
@@ -90,6 +96,7 @@ function createProfile(input?: {
 
 beforeEach(() => {
   vi.spyOn(webGeneralTurns, 'listMessages').mockResolvedValue([]);
+  vi.mocked(loadGeneralArtifactStatusContext).mockClear();
   process.env.EDUCANVAS_DEPLOYMENT_ENV = 'test';
 });
 
@@ -100,7 +107,9 @@ afterEach(() => {
 
 describe('WebGeneralProfile trusted Tool Policy', () => {
   it('Deep Research 复用同一 Profile Port，并为失败补位保留 6 个工具轮次', async () => {
-    const plan = await createProfile().prepare({
+    const plan = await createProfile({
+      staticToolCapabilities: ['artifact.read'],
+    }).prepare({
       command: { ...command, mode: 'deep_research' },
       turn,
     });
@@ -110,11 +119,13 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     expect(plan.context.maxCharacters).toBe(128_000);
     expect(plan.model.usageBudget?.maxToolCalls).toBe(16);
     expect(plan.model.usageBudget?.maxToolResultTokens).toBe(8_000);
+    expect(loadGeneralArtifactStatusContext).not.toHaveBeenCalled();
     expect(prompt).toContain('至少完成三轮');
     expect(prompt).toContain('分析证据缺口');
     expect(prompt).toContain('最多两轮替代查询');
     expect(prompt).toContain('关键结论与证据');
     expect(prompt).toContain('不得引用搜索摘要');
+    expect(prompt).not.toContain('getCanvasArtifactStatus');
   });
 
   it('有历史 artifactId 时要求用只读状态工具刷新，不依据旧快照判断完成', async () => {
@@ -127,6 +138,7 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     expect(prompt).toContain('只按本轮回执回答');
     expect(prompt).toContain('inconsistent');
     expect(plan.toolPolicy?.capabilities.actor).toContain('artifact.read');
+    expect(loadGeneralArtifactStatusContext).toHaveBeenCalledTimes(1);
   });
 
   it('Deep Research 仅在三轮搜索、五个来源和五个有效引用都满足时放行报告', async () => {

@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import type { AgentTool } from '@educanvas/agent-runtime';
+import type { WebOperationArtifacts } from './general-artifact-tool';
+import type { WebOperationImageArtifacts } from './general-image-tool';
 
 vi.mock('server-only', () => ({}));
 
@@ -15,7 +19,8 @@ vi.mock('./general-turn-persistence', () => ({
   webGeneralSources: { createOrGetWebSource: mocks.createSource },
 }));
 
-const { WebOperationSources } = await import('./general-turn-tools');
+const { WebOperationSources, createGeneralToolKernel } =
+  await import('./general-turn-tools');
 
 const identity = { token: '', studentId: 'actor-1' };
 const page = (index: number) => ({
@@ -161,5 +166,49 @@ describe('WebOperationSources research budget', () => {
     expect(mocks.persistAsset).toHaveBeenCalledWith(
       expect.objectContaining({ researchSource: true }),
     );
+  });
+});
+
+function tool(name: string): AgentTool<{ value: string }, { result: string }> {
+  return {
+    name,
+    description: `Test ${name} tool`,
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    timeoutMs: 1_000,
+    handler: async () => ({ result: 'ok' }),
+  };
+}
+
+describe('General turn artifact status tool mode', () => {
+  it('registers status reads for ordinary chat and leaves them out of deep research', () => {
+    const createTool = vi.fn(() => tool('createCanvasArtifact'));
+    const getStatusTool = vi.fn(() => tool('getCanvasArtifactStatus'));
+    const artifacts = {
+      createTool,
+      getStatusTool,
+    } as unknown as WebOperationArtifacts;
+    const sources = {
+      trafficKey: 'test-traffic-key',
+      persist: vi.fn(),
+    } as unknown as Parameters<typeof createGeneralToolKernel>[0];
+    const images = {
+      createTool: () => tool('generateCanvasImage'),
+    } as unknown as WebOperationImageArtifacts;
+
+    const ordinary = createGeneralToolKernel(sources, artifacts, images, {
+      deepResearch: false,
+    });
+    expect(ordinary.staticCapabilities).toContain('artifact.read');
+    expect(ordinary.staticCapabilities).toContain('artifact.create');
+    expect(getStatusTool).toHaveBeenCalledTimes(1);
+
+    getStatusTool.mockClear();
+    const research = createGeneralToolKernel(sources, artifacts, images, {
+      deepResearch: true,
+    });
+    expect(research.staticCapabilities).not.toContain('artifact.read');
+    expect(research.staticCapabilities).toContain('artifact.create');
+    expect(getStatusTool).not.toHaveBeenCalled();
   });
 });
