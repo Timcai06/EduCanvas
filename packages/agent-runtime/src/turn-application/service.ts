@@ -273,6 +273,10 @@ export class TurnApplicationService implements TurnApplicationPort {
         );
         return;
       }
+      if (outcome.runtimeFailure) {
+        yield await emitFailure('RUNTIME_FAILED', true);
+        return;
+      }
       const mapped = outcome.modelFailure
         ? mapModelFailure(outcome.modelFailure)
         : { code: 'RUNTIME_FAILED' as const, retryable: true };

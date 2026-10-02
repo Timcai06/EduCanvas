@@ -34,6 +34,7 @@ export interface TurnLoopOutcome {
   answer: string;
   completed: boolean;
   modelFailure: NormalizedModelError | null;
+  runtimeFailure: boolean;
   toolFailure: TurnToolFailure | null;
   outputBlocked: TurnApplicationFailureCode | null;
   outputGuardFailed: boolean;
@@ -95,6 +96,7 @@ export async function* runTurnLoop(input: {
   let answer = '';
   let completed = false;
   let modelFailure: NormalizedModelError | null = null;
+  let runtimeFailure = false;
   let toolFailure: TurnToolFailure | null = null;
   let outputBlocked: TurnApplicationFailureCode | null = null;
   let outputGuardFailed = false;
@@ -224,7 +226,8 @@ export async function* runTurnLoop(input: {
         budgetFailure = event.budgetReason;
         continue;
       }
-      modelFailure = event.error;
+      if (event.code === 'RUNTIME_FAILED') runtimeFailure = true;
+      else modelFailure = event.error;
     } else if (event.type === 'completed') {
       completed = true;
     }
@@ -254,6 +257,7 @@ export async function* runTurnLoop(input: {
     answer,
     completed,
     modelFailure,
+    runtimeFailure,
     toolFailure,
     outputBlocked,
     outputGuardFailed,
