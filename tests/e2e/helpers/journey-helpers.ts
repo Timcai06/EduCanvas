@@ -90,19 +90,25 @@ export async function createNotebook(
     })
     .not.toBe(previousConversationId);
 
+  const conversationId = await activeConversationId(page);
+  if (!conversationId) throw new Error("活动会话 Cookie 在笔记本切换后缺失");
+  await expect(page).toHaveURL(
+    new RegExp(`/notebook/[^/]+/conversation/${conversationId}(?:$|[/?])`),
+    { timeout: 15_000 },
+  );
   await expect(previousConversationContent).toHaveCount(0, {
     timeout: 15_000,
   });
 
+  /* 先退出 Notebook 导航面板，确认返回焦点后再验证主区控件可访问。 */
+  await closeNotebookSidebar(page);
   const composer = page.getByRole("textbox", { name: "向 EduCanvas 提问" });
+  await expect(composer).toBeVisible();
   await expect(composer).toBeEnabled();
   await expect(composer).toHaveValue("");
   await expect(
     page.getByRole("region", { name: "EduCanvas 技术栈" }),
   ).toBeVisible();
-  /* 切换会话若未触发整页重载，窄屏抽屉仍会展开：幂等收起，
-     避免遮罩拦截后续主区交互。 */
-  await closeNotebookSidebar(page);
 }
 
 export async function waitForUnavailableTurn(page: Page) {
