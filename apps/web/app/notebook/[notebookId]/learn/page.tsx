@@ -4,7 +4,7 @@ import { parseHomeFocusParam } from '@/features/workspace/general/home-focus';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
-import { LearnWorkspace } from '@/features/workspace/learning/learn-workspace';
+import { LearnWorkspaceLoader } from '@/features/workspace/learning/learn-workspace-loader';
 import { StudySetup } from '@/features/study/study-setup';
 import { StudyDiagnostic } from '@/features/study/study-diagnostic';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
@@ -155,7 +155,7 @@ export default async function NotebookLearnPage({
       </main>,
     );
   return withResourceFocus(
-    <LearnWorkspace
+    <LearnWorkspaceLoader
       initialData={data}
       submitCanvas={submitNotebookCanvasAction.bind(
         null,

@@ -52,7 +52,7 @@ type DrawerKind = 'assets' | 'studio' | 'progress' | 'sessions' | null;
  * 该组件不是平台级 PlatformShell。通用 Chat、Space、Studio 与 Agent 切换应在独立
  * Shell 中组合；K12 特有能力通过 Vertical Agent slot 注入。
  */
-interface LearnWorkspaceProps {
+export interface LearnWorkspaceProps {
   initialData: LearningPageDTO;
   submitCanvas?: typeof submitCanvasAction;
   sessionActions?: {

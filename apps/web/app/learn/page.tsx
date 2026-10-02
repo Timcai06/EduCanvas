@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { LearnWorkspace } from '@/features/workspace/learning/learn-workspace';
+import { LearnWorkspaceLoader } from '@/features/workspace/learning/learn-workspace-loader';
 import { StudyDiagnostic } from '@/features/study/study-diagnostic';
 import { StudySetup } from '@/features/study/study-setup';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
@@ -55,7 +55,7 @@ export default async function LearnPage() {
   }
 
   return (
-    <LearnWorkspace
+    <LearnWorkspaceLoader
       initialData={learningData}
       sessionActions={{
         onNewSession: startNewAnonymousLessonAction,
