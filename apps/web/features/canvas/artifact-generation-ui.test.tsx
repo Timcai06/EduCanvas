@@ -38,6 +38,78 @@ describe('ArtifactStatusCard revision outcome', () => {
     expect(html).toContain('生成内容超过输出上限，请缩小范围或分章节生成。');
     expect(html).not.toContain('可稍后从产物列表重试');
   });
+
+  it.each([
+    [
+      'model_outcome_unknown',
+      '本次调用结果无法确认。请先在资源库核实任务或产物状态，不要原样重试。',
+    ],
+    [
+      'model_attempts_exhausted',
+      '自动重试次数已用完。请先核实任务状态；确认仍失败后，再考虑重新发起。',
+    ],
+    [
+      'model_invalid_response',
+      '模型返回内容未通过校验，当前任务未能完成。请调整要求后再重新生成。',
+    ],
+    [
+      'invalid_output',
+      '生成内容未通过校验，当前任务未能完成。请调整要求后再重新生成。',
+    ],
+  ])('按 %s 的结局显示具体恢复指引', (failureCode, guidance) => {
+    const html = renderToStaticMarkup(
+      <ArtifactStatusCard
+        generation={{
+          phase: 'failed',
+          outcome: 'failed',
+          kind: 'mind_map',
+          title: '长产物',
+          detail: {
+            ...detail,
+            latestJob: {
+              id: 'job-1',
+              status: 'failed',
+              progress: null,
+              failureCode,
+            },
+          } as ArtifactDetail,
+        }}
+        onOpen={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain(guidance);
+    expect(html).not.toContain('可稍后从产物列表重试');
+  });
+
+  it('不把 invalid_response 归因为费用未知', () => {
+    const html = renderToStaticMarkup(
+      <ArtifactStatusCard
+        generation={{
+          phase: 'failed',
+          outcome: 'failed',
+          kind: 'mind_map',
+          title: '长产物',
+          detail: {
+            ...detail,
+            latestJob: {
+              id: 'job-1',
+              status: 'failed',
+              progress: null,
+              failureCode: 'model_invalid_response',
+            },
+          } as ArtifactDetail,
+        }}
+        onOpen={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(html).not.toContain('费用');
+    expect(html).not.toContain('稍后重试');
+  });
+
   it('初次生成达到总轮询上限时显示可恢复提示', () => {
     const html = renderToStaticMarkup(
       <ArtifactStatusCard
