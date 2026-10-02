@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { openNotebookSidebar } from "./helpers/journey-helpers";
 
 const ACTIVE_CONVERSATION_COOKIE = "__Host-educanvas_active_conversation";
 const STUDIO_TRIGGER_NAME = "打开全部资源";
@@ -14,23 +15,6 @@ async function activeConversationId(page: Page): Promise<string> {
   )?.value;
   if (!value) throw new Error("E2E 当前会话 Cookie 不存在");
   return value;
-}
-
-/* 用 DOM 属性定位而非 getByRole：抽屉收起时 aria-hidden+inert 会把 aside
-   移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
-function notebookSidebar(page: Page) {
-  return page.locator('aside[aria-label="笔记本侧栏"]');
-}
-
-async function openNotebookSidebar(page: Page) {
-  const sidebar = notebookSidebar(page);
-  if ((await sidebar.getAttribute("aria-hidden")) === "true") {
-    const openButton = page.getByRole("button", { name: "打开笔记本列表" });
-    /* route hydration may expand the sidebar after the attribute read */
-    if (await openButton.isVisible()) await openButton.click();
-  }
-  await expect(sidebar).toHaveAttribute("aria-hidden", "false");
-  return sidebar;
 }
 
 async function openStudio(page: Page, kind: "source" | "artifact") {
@@ -224,7 +208,64 @@ test("@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
   await expect
     .poll(() => activeConversationId(page))
     .not.toBe(previousConversationId);
+  const createdNotebookId = new URL(page.url()).pathname.split("/")[2];
+  if (!createdNotebookId) throw new Error("新 Notebook 路由缺少 ID");
+
+  const createdNotebookSidebar = await openNotebookSidebar(page);
+  const restoredLayoutResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === "/api/v1/canvas/surface-layout" &&
+      response.request().method() === "GET" &&
+      url.searchParams.get("requestNotebookId") === fixture.notebookId &&
+      url.searchParams.get("requestConversationId") === fixture.conversationId
+    );
+  });
+  await createdNotebookSidebar
+    .getByRole("combobox", { name: "当前笔记本" })
+    .selectOption(fixture.notebookId);
+  await expect(page).toHaveURL(
+    new RegExp(`/notebook/${fixture.notebookId}(?:$|[/?])`),
+  );
+  const selectedNotebookSidebar = await openNotebookSidebar(page);
+  const targetConversation = selectedNotebookSidebar.getByRole("link", {
+    name: new RegExp(notebookTitle),
+  });
+  await expect(targetConversation).toBeVisible();
+  await targetConversation.click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/notebook/${fixture.notebookId}/conversation/${fixture.conversationId}(?:$|[/?])`,
+    ),
+  );
+  await expect
+    .poll(() => activeConversationId(page))
+    .toBe(fixture.conversationId);
+  const restoredLayout = await restoredLayoutResponse;
+  expect(restoredLayout.status()).toBe(200);
+  const layout = (await restoredLayout.json()) as {
+    positions: Array<{
+      resourceKind: string;
+      resourceId: string;
+      restState: string;
+    }>;
+  };
+  expect(
+    layout.positions.find(
+      (position) =>
+        position.resourceKind === "artifact" &&
+        position.resourceId === fixture.artifactId,
+    ),
+  ).toMatchObject({ restState: "folded" });
   await expect(page.locator('[aria-label="产物Canvas"]')).toHaveCount(0);
+
+  const currentNotebookSidebar = await openNotebookSidebar(page);
+  await currentNotebookSidebar
+    .getByRole("combobox", { name: "当前笔记本" })
+    .selectOption(createdNotebookId);
+  await expect(page).toHaveURL(
+    new RegExp(`/notebook/${createdNotebookId}(?:$|[/?])`),
+  );
   const crossNotebookStatuses = {
     sourceResource: await responseStatus(
       page,
@@ -271,26 +312,5 @@ test("@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
     await strangerContext.close();
   }
 
-  const firstNotebook = await openNotebookSidebar(page);
-  await firstNotebook
-    .getByRole("combobox", { name: "当前笔记本" })
-    .selectOption(fixture.notebookId);
-  await expect(page).toHaveURL(
-    new RegExp(`/notebook/${fixture.notebookId}(?:$|[/?])`),
-  );
-  const selectedNotebookSidebar = await openNotebookSidebar(page);
-  const targetConversation = selectedNotebookSidebar.getByRole("link", {
-    name: new RegExp(notebookTitle),
-  });
-  await expect(targetConversation).toBeVisible();
-  await targetConversation.click();
-  await expect
-    .poll(() => activeConversationId(page))
-    .toBe(fixture.conversationId);
-  expect(
-    await responseStatus(
-      page,
-      `/api/v1/canvas/resources/artifact/${fixture.artifactId}`,
-    ),
-  ).toBe(200);
+
 });

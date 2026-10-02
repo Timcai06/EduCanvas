@@ -1,9 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createSurfacePositionPersistenceScheduler,
+  createSurfacePositionWriteQueue,
   getSurfacePositionTarget,
   restoreSurfacePositions,
 } from './use-surface-position-persistence';
-import type { SurfacePosition } from './surface-position-client';
+import type {
+  SaveSurfacePosition,
+  SurfacePosition,
+} from './surface-position-client';
+import type { NotebookRequestContext } from './notebook-request-context';
+
+afterEach(() => vi.useRealTimers());
 
 describe('getSurfacePositionTarget', () => {
   it('只为可摆放的资料与作品生成位置身份', () => {
@@ -42,6 +50,152 @@ function position(
     updatedAt,
   };
 }
+
+function context(notebookId: string): NotebookRequestContext {
+  return { notebookId, conversationId: `${notebookId}-conversation` };
+}
+
+function saveInput(resourceId: string, restState: 'open' | 'folded') {
+  return {
+    resourceKind: 'artifact' as const,
+    resourceId,
+    zone: restState === 'open' ? ('center' as const) : ('periphery' as const),
+    x: restState === 'open' ? 0.5 : 0.88,
+    y: restState === 'open' ? 0.5 : 0.18,
+    z: restState === 'open' ? 10 : 0,
+    restState,
+  };
+}
+
+describe('surface position persistence scheduling', () => {
+  it('closes immediately, cancels the pending open, and keeps the old notebook scope', () => {
+    vi.useFakeTimers();
+    const saves: Array<{
+      context: NotebookRequestContext;
+      position: SaveSurfacePosition;
+    }> = [];
+    const scheduler = createSurfacePositionPersistenceScheduler(
+      (scope, value) => saves.push({ context: scope, position: value }),
+    );
+    const oldScope = context('notebook-old');
+
+    scheduler.update(
+      oldScope,
+      { type: 'artifact', artifactId: 'artifact-id', full: false },
+      [],
+    );
+    vi.advanceTimersByTime(300);
+    scheduler.update(oldScope, { type: 'none' }, []);
+    scheduler.update(context('notebook-new'), { type: 'none' }, []);
+    vi.advanceTimersByTime(400);
+
+    expect(saves).toEqual([
+      {
+        context: oldScope,
+        position: saveInput('artifact-id', 'folded'),
+      },
+    ]);
+    scheduler.dispose();
+  });
+
+  it('closing a pinned surface preserves its saved placement', () => {
+    const saves: SaveSurfacePosition[] = [];
+    const scheduler = createSurfacePositionPersistenceScheduler(
+      (_scope, value) => saves.push(value),
+    );
+    const scope = context('notebook-pinned');
+    const pinned: SurfacePosition = {
+      resourceKind: 'artifact',
+      resourceId: 'artifact-pinned',
+      zone: 'margin',
+      x: 0.22,
+      y: 0.74,
+      z: 4,
+      restState: 'pinned',
+      updatedAt: '2026-10-02T00:00:00.000Z',
+    };
+
+    scheduler.update(
+      scope,
+      { type: 'artifact', artifactId: pinned.resourceId, full: false },
+      [pinned],
+    );
+    scheduler.update(scope, { type: 'none' }, [pinned]);
+
+    expect(saves).toEqual([
+      {
+        resourceKind: pinned.resourceKind,
+        resourceId: pinned.resourceId,
+        zone: pinned.zone,
+        x: pinned.x,
+        y: pinned.y,
+        z: pinned.z,
+        restState: 'pinned',
+      },
+    ]);
+    scheduler.dispose();
+  });
+
+  it('orders in-flight open before close and blocks return GET until the close is saved', async () => {
+    const oldScope = context('notebook-old');
+    const otherScope = context('notebook-other');
+    const writes: Array<{ scope: NotebookRequestContext; restState: string }> =
+      [];
+    let finishOpen!: (value: SurfacePosition) => void;
+    const queue = createSurfacePositionWriteQueue((scope, value) => {
+      writes.push({ scope, restState: value.restState });
+      if (
+        scope.notebookId === oldScope.notebookId &&
+        value.restState === 'open'
+      ) {
+        return new Promise<SurfacePosition>((resolve) => {
+          finishOpen = resolve;
+        });
+      }
+      return Promise.resolve({
+        ...value,
+        updatedAt: '2026-10-02T00:00:00.000Z',
+      });
+    });
+
+    const openWrite = queue.enqueue(oldScope, saveInput('artifact-id', 'open'));
+    await Promise.resolve();
+    const closeWrite = queue.enqueue(
+      oldScope,
+      saveInput('artifact-id', 'folded'),
+    );
+    let returnedGetReady = false;
+    const returnGet = queue
+      .waitForNotebook(oldScope.notebookId)
+      .then(() => (returnedGetReady = true));
+    const isolatedWrite = queue.enqueue(
+      otherScope,
+      saveInput('other-artifact-id', 'open'),
+    );
+
+    await Promise.resolve();
+    expect(writes).toContainEqual({
+      scope: otherScope,
+      restState: 'open',
+    });
+    expect(writes.filter((write) => write.scope === oldScope)).toEqual([
+      { scope: oldScope, restState: 'open' },
+    ]);
+    expect(returnedGetReady).toBe(false);
+
+    finishOpen({
+      ...saveInput('artifact-id', 'open'),
+      updatedAt: '2026-10-02T00:00:00.000Z',
+    });
+    await Promise.all([openWrite, closeWrite, isolatedWrite, returnGet]);
+
+    expect(writes.filter((write) => write.scope === oldScope)).toEqual([
+      { scope: oldScope, restState: 'open' },
+      { scope: oldScope, restState: 'folded' },
+    ]);
+    expect(returnedGetReady).toBe(true);
+  });
+});
 
 describe('restoreSurfacePositions', () => {
   it('只恢复最近的 open，并让其余陈旧 open 重新可见', () => {

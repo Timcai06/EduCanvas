@@ -5,6 +5,7 @@ import {
   saveSurfacePosition,
   SurfacePositionClientError,
 } from './surface-position-client';
+import type { NotebookRequestContext } from './notebook-request-context';
 
 function position(index: number) {
   return {
@@ -55,6 +56,41 @@ describe('surface position response', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/canvas/surface-layout');
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
       '/api/v1/canvas/surface-layout?cursor=page-2',
+    );
+  });
+
+  it('保存请求使用创建该状态时捕获的 Notebook/Conversation 上下文', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          position: {
+            ...position(9),
+            restState: 'folded',
+          },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const context: NotebookRequestContext = {
+      notebookId: 'notebook-before-navigation',
+      conversationId: 'conversation-before-navigation',
+    };
+
+    await saveSurfacePosition(
+      {
+        resourceKind: 'source',
+        resourceId: position(9).resourceId,
+        zone: 'periphery',
+        x: 0.8,
+        y: 0.2,
+        z: 0,
+        restState: 'folded',
+      },
+      context,
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/v1/canvas/surface-layout?requestNotebookId=notebook-before-navigation&requestConversationId=conversation-before-navigation',
     );
   });
 

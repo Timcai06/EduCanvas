@@ -11,15 +11,18 @@ const STORAGE_KEY = 'educanvas.sidebar';
  */
 export function useSidebarState(): {
   open: boolean;
+  initialized: boolean;
   toggle: () => void;
   close: () => void;
 } {
   const [open, setOpen] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     const resolve = () => {
       const stored = localStorage.getItem(STORAGE_KEY);
       setOpen(window.innerWidth >= 1024 ? stored !== '0' : false);
+      setInitialized(true);
     };
     resolve();
   }, []);
@@ -37,5 +40,5 @@ export function useSidebarState(): {
     setOpen(false);
   }, []);
 
-  return { open, toggle, close };
+  return { open, initialized, toggle, close };
 }

@@ -69,6 +69,7 @@ export function GeneralChatWorkspace({
   useAssistantArtifacts(ctrl.studioOpenActions.actions);
   const {
     open: sidebarOpen,
+    initialized: sidebarInitialized,
     toggle: toggleSidebar,
     close: closeSidebar,
   } = useSidebarState();
@@ -115,6 +116,7 @@ export function GeneralChatWorkspace({
   return (
     <div
       data-general-workspace
+      data-sidebar-initialized={String(sidebarInitialized)}
       className="flex h-dvh flex-col bg-canvas text-ink"
     >
       <GeneralWorkspaceLayout

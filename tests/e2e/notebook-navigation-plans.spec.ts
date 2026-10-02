@@ -7,6 +7,7 @@ import {
   appendVersions,
 } from './fixtures/general-artifact-fixture';
 import { completeStudyOnboarding } from './study-onboarding';
+import { openNotebookSidebar } from './helpers/journey-helpers';
 
 interface ConversationDirectory {
   conversations: { id: string; spaceId: string; agentProfileId: string }[];
@@ -247,6 +248,8 @@ test('two learning notebooks freeze their own request scope across shared cookie
   );
   const notebookB = new URL(page.url()).pathname.split('/')[2]!;
   expect(notebookB).not.toBe(notebookA);
+  // URL 先于 Server Action 重定向完成更新；待新工作区挂载后再发起下一次导航。
+  await openNotebookSidebar(page);
   await page.goto(`/notebook/${notebookB}/learn`);
   await completeStudyOnboarding(page);
   const tabA = await page.context().newPage();

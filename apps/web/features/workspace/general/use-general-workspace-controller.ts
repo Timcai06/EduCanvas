@@ -171,6 +171,7 @@ export function useGeneralWorkspaceController(options: {
     error: surfacePositionError,
   } = useSurfacePositionPersistence({
     notebookId,
+    conversationId,
     surface,
     openSource: studioOpenActions.actions.openSource,
     openArtifact: studioOpenActions.actions.openArtifact,

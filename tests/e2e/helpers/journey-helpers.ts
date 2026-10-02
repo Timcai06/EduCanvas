@@ -14,18 +14,26 @@ export function notebookSidebar(page: Page) {
   return page.locator('aside[aria-label="笔记本侧栏"]');
 }
 
+/* 初始收起只用于首帧；路由 DOM 和 Cookie 就绪时，桌面持久化校正仍可能未提交。
+   必须等侧栏初始化后再决定是否点击，不能把首帧的 aria-hidden 当成最终状态。 */
+export async function waitForSidebarInitialization(page: Page) {
+  await expect(
+    page.locator('[data-sidebar-initialized="true"]'),
+  ).toHaveCount(1);
+}
+
 /*
  * 窄屏（<lg）笔记本列表是覆盖抽屉：初始收起并带 inert/aria-hidden，
  * 桌面端挂载后自动展开。交互前必须展开（幂等），否则定位与点击全部落空。
  */
 export async function openNotebookSidebar(page: Page) {
+  await waitForSidebarInitialization(page);
   const sidebar = notebookSidebar(page);
   if ((await sidebar.getAttribute("aria-hidden")) === "true") {
     const openButton = page.getByRole("button", {
       name: "打开笔记本列表",
     });
-    /* route hydration may expand the sidebar after the attribute read */
-    if (await openButton.isVisible()) await openButton.click();
+    await openButton.click();
   }
   await expect(sidebar).toHaveAttribute("aria-hidden", "false");
   return sidebar;
@@ -33,6 +41,7 @@ export async function openNotebookSidebar(page: Page) {
 
 /* 收起抽屉：展开状态下遮罩会拦截主区指针事件（桌面端抽屉在流内无遮罩）。 */
 export async function closeNotebookSidebar(page: Page) {
+  await waitForSidebarInitialization(page);
   const sidebar = notebookSidebar(page);
   if ((await sidebar.getAttribute("aria-hidden")) === "false") {
     await page.getByRole("button", { name: "收起列表" }).click();
@@ -83,6 +92,7 @@ export async function createNotebook(
   const previousConversationId = await activeConversationId(page);
   expect(previousConversationId).toBeDefined();
 
+  await waitForSidebarInitialization(page);
   await trigger.click();
   await expect
     .poll(() => activeConversationId(page), {

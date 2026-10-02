@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  openNotebookSidebar,
+  closeNotebookSidebar,
+  waitForSidebarInitialization,
+} from "./helpers/journey-helpers";
+
 const ACTIVE_CONVERSATION_COOKIE = "__Host-educanvas_active_conversation";
 const STUDIO_TRIGGER_NAME = "打开全部资源";
 
@@ -10,31 +16,6 @@ const STUDIO_TRIGGER_NAME = "打开全部资源";
    移出可访问性树，role 定位器计数为 0（实验已验证），状态探测全部落空。 */
 function notebookSidebar(page: Page) {
   return page.locator('aside[aria-label="笔记本侧栏"]');
-}
-
-/*
- * 窄屏（<lg）笔记本列表是覆盖抽屉：初始收起并带 inert/aria-hidden，
- * 桌面端挂载后自动展开。交互前必须展开（幂等），否则定位与点击全部落空。
- */
-async function openNotebookSidebar(page: Page) {
-  const sidebar = notebookSidebar(page);
-  if ((await sidebar.getAttribute("aria-hidden")) === "true") {
-    const openButton = page.getByRole("button", {
-      name: "打开笔记本列表",
-    });
-    if (await openButton.count()) await openButton.click();
-  }
-  await expect(sidebar).toHaveAttribute("aria-hidden", "false");
-  return sidebar;
-}
-
-/* 收起抽屉：展开状态下遮罩会拦截主区指针事件（桌面端抽屉在流内无遮罩）。 */
-async function closeNotebookSidebar(page: Page) {
-  const sidebar = notebookSidebar(page);
-  if ((await sidebar.getAttribute("aria-hidden")) === "false") {
-    await page.getByRole("button", { name: "收起列表" }).click();
-  }
-  await expect(sidebar).toHaveAttribute("aria-hidden", "true");
 }
 
 async function openStudioInput(page: Page) {
@@ -80,6 +61,7 @@ async function createNotebook(
   const previousConversationId = await activeConversationId(page);
   expect(previousConversationId).toBeDefined();
 
+  await waitForSidebarInitialization(page);
   await trigger.click();
   await expect
     .poll(() => activeConversationId(page), {
