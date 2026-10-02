@@ -33,7 +33,7 @@ vi.mock('@/features/chat/assistant-message-projection', () => ({
 }));
 
 describe('ConversationPane 与 Composer 输出偏好回调', () => {
-  it('用同一 Artifact ID 原位投影生成终态且不追加完成卡', () => {
+  it('本地停止观察不能把后台任务投影为取消终态', () => {
     const messages: readonly ChatMessage[] = [
       {
         id: 'assistant-1',
@@ -69,7 +69,7 @@ describe('ConversationPane 与 Composer 输出偏好回调', () => {
     ).toEqual([
       expect.objectContaining({
         id: 'artifact-1',
-        status: 'cancelled',
+        status: 'proposed',
         latestVersion: 0,
       }),
     ]);

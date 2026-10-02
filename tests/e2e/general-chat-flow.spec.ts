@@ -101,7 +101,11 @@ async function createNotebook(
 }
 
 async function waitForUnavailableTurn(page: Page) {
-  await expect(page.getByText('AI 暂时无法回答，请稍后重试。')).toBeVisible({
+  await expect(
+    page.getByText('这轮回答未能完成，请调整问题或附带来源后重新发送。', {
+      exact: true,
+    }),
+  ).toBeVisible({
     timeout: 30_000,
   });
 }

@@ -19,7 +19,11 @@ import { projectOwnedSourceResource } from '../canvas/source-resource-adapter';
 import { readStoredAssetBytes } from './asset-storage';
 import type { AssetPreview } from '@/features/assets/asset-preview-contract';
 import type { CanvasResource } from '@educanvas/canvas-protocol';
-import { projectTextRepresentation } from './asset-preview-representation';
+import {
+  projectTextRepresentation,
+  projectWebpageTextPreview,
+  resolveTranscriptionText,
+} from './asset-preview-representation';
 
 const assets = new DrizzleAssetRepository();
 const BINARY_PREVIEW_MIME_TYPES = new Set([
@@ -43,32 +47,6 @@ const transcriptionMetadataSchema = z
     durationSeconds: z.number().finite().positive().max(3_600),
   })
   .passthrough();
-
-/**
- * D04：转录文本读取——内容权威是 transcription representation 的对象存储
- * （旧列仅保留兼容镜像）；仅有旧字段、对象缺失或校验失败时按冻结规则回退
- * transcriptionText。对象读取失败不向浏览器泄露内部路径或错误细节。
- */
-async function resolveTranscriptionText(
-  version: OwnedStoredAssetVersion,
-): Promise<string | null> {
-  const representation = version.transcriptionRepresentation;
-  if (representation && representation.status === 'ready') {
-    try {
-      const bytes = await readStoredAssetBytes(
-        representation.derivedStorageKey,
-      );
-      const checksum = createHash('sha256').update(bytes).digest('hex');
-      if (checksum !== representation.checksum) {
-        throw new Error('asset_representation_checksum_mismatch');
-      }
-      return new TextDecoder().decode(bytes);
-    } catch {
-      return version.transcriptionText;
-    }
-  }
-  return version.transcriptionText;
-}
 
 /**
  * ADR-0026 决定 3/6：读取默认 text 表示的派生 Markdown，图片引用投影为
@@ -241,6 +219,12 @@ export async function loadOwnedAssetPreviewDetail(input: {
         mimeType: 'text/plain',
         content: (version.extractedText ?? '').slice(0, 120_000),
       },
+      canvasResource,
+    };
+  }
+  if (version.mimeType === 'text/html') {
+    return {
+      preview: await projectWebpageTextPreview(version),
       canvasResource,
     };
   }

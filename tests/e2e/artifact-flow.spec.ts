@@ -316,7 +316,8 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
     {
       content: {
         contentVersion: 1,
-        markdown: '# 勾股定理\n\n直角三角形满足 $a^2+b^2=c^2$。',
+        markdown:
+          '# 勾股定理\n\n' + '直角三角形满足 $a^2+b^2=c^2$。\n\n'.repeat(80),
         sourceConversationId: fixture.conversationId,
         generatedByModel: false,
       },
@@ -331,6 +332,31 @@ test('Studio 可管理、编辑并恢复不可变版本笔记', async ({ page })
   const canvas = page.getByRole('dialog', { name: '产物Canvas' });
   await expect(canvas).toBeVisible();
   await expect(canvas.getByText('勾股定理')).toBeVisible();
+  // 长文编辑必须占满宿主剩余空间，退出编辑须回到此前阅读位置（#511）。
+  const region = canvas.getByRole('region', { name: 'Canvas 内容' });
+  const reading = region.locator('.chat-prose').locator('..');
+  const scrollTop = await reading.evaluate((element) => {
+    element.scrollTop = 300;
+    element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    return element.scrollTop;
+  });
+  expect(scrollTop).toBe(300);
+  await canvas.getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = canvas.getByRole('textbox', { name: '笔记编辑区' });
+  await expect(editor).toBeVisible();
+  const regionBox = await region.boundingBox();
+  const editorBox = await editor.boundingBox();
+  expect(regionBox).not.toBeNull();
+  expect(editorBox).not.toBeNull();
+  expect(editorBox!.height).toBeGreaterThan(regionBox!.height * 0.55);
+  await canvas.getByRole('button', { name: '开启预览' }).click();
+  expect((await editor.boundingBox())!.height).toBeGreaterThan(
+    regionBox!.height * 0.55,
+  );
+  await canvas.getByRole('button', { name: '完成编辑' }).click();
+  await expect
+    .poll(() => reading.evaluate((element) => element.scrollTop))
+    .toBe(300);
   await closeCanvasAndWaitForFold(page);
   await page.reload();
   const outputStudio = await openStudioOutput(page);

@@ -8,10 +8,13 @@ import {
 } from '@educanvas/agent-core';
 import { z } from 'zod';
 import type { EnabledModelGatewayConfiguration } from './config/config';
+import { structuredOutputBudget } from './structured-output-budget';
 
 export interface OpenAICompatibleStructuredModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
+  /** 只供 Worker 长产物组合根选择；不会提高未核实 Provider 的上限。 */
+  outputBudget?: 'configured' | 'long_artifact';
 }
 
 const invocationError = (
@@ -40,7 +43,7 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
 
   constructor(
     private readonly config: EnabledModelGatewayConfiguration,
-    options: OpenAICompatibleStructuredModelGatewayOptions = {},
+    private readonly options: OpenAICompatibleStructuredModelGatewayOptions = {},
   ) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? Date.now;
@@ -57,8 +60,13 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       model: modelId,
       stream: false,
       response_format: { type: 'json_object' },
-      max_tokens:
-        this.config.structuredMaxOutputTokens ?? this.config.maxOutputTokens,
+      max_tokens: structuredOutputBudget(
+        this.config,
+        modelId,
+        this.options.outputBudget === 'long_artifact' &&
+          request.taskAlias === 'artifact.generate' &&
+          request.modelAlias === 'structured',
+      ),
       ...(this.config.provider === 'deepseek'
         ? { thinking: { type: 'disabled' } }
         : {}),

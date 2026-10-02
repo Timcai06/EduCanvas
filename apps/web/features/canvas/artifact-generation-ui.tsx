@@ -109,7 +109,10 @@ export function ArtifactStatusCard({
                     generation.detail.artifact.latestVersion > 1
                     ? `${ARTIFACT_KIND_LABELS[generation.kind]}已更新至 v${generation.detail.artifact.latestVersion}`
                     : `${ARTIFACT_KIND_LABELS[generation.kind]}已生成`
-                  : '生成失败，可稍后从产物列表重试';
+                  : generation.detail?.latestJob?.failureCode ===
+                      'model_output_limit'
+                    ? '生成内容超过输出上限，请缩小范围或分章节生成。'
+                    : '生成失败，可稍后从产物列表重试';
   return (
     <div
       role="status"
@@ -238,7 +241,10 @@ export function ArtifactCanvas({
           className={
             detail.artifact.kind === 'mind_map'
               ? 'flex min-h-0 flex-1 overflow-hidden p-2 lg:p-3'
-              : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
+              : detail.artifact.kind === 'note' ||
+                  detail.artifact.kind === 'markdown_document'
+                ? 'flex min-h-0 flex-1 overflow-hidden p-4 lg:p-5'
+                : 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-5'
           }
         >
           <ArtifactCanvasContent

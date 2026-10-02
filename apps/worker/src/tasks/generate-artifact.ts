@@ -147,7 +147,12 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     let runtime: WorkerModelRuntime | null = null;
     const getRuntime = (): WorkerModelRuntime => {
       if (runtime === null) {
-        runtime = createWorkerModelRuntime(readModelGatewayEnvironment());
+        runtime = createWorkerModelRuntime(
+          readModelGatewayEnvironment(),
+          ['markdown_document', 'slides', 'web_app'].includes(artifact.kind)
+            ? 'long_artifact'
+            : 'configured',
+        );
       }
       return runtime;
     };

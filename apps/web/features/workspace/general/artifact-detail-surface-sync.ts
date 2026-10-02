@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ArtifactDetail } from '@/features/canvas/artifact-client';
 
 /**
@@ -15,4 +16,17 @@ export function shouldOpenArtifactSurface(
   nextDetail: ArtifactDetail | null,
 ): nextDetail is ArtifactDetail {
   return prevDetail === null && nextDetail !== null;
+}
+
+/** 详情首次打开时同步唯一 surface；版本切换不重新打开。 */
+export function useArtifactSurfaceSync(
+  detail: ArtifactDetail | null,
+  openArtifact: (id: string) => void,
+): void {
+  const previous = useRef<ArtifactDetail | null>(null);
+  useEffect(() => {
+    if (shouldOpenArtifactSurface(previous.current, detail))
+      openArtifact(detail.artifact.id);
+    previous.current = detail;
+  }, [detail, openArtifact]);
 }

@@ -6,7 +6,7 @@ import type {
   AgentMessagePart,
   OutputPreference,
 } from '@educanvas/agent-core';
-import type { InitialChatMessageDTO } from './messages';
+import type { InitialChatMessageDTO, MessageArtifactDTO } from './messages';
 import {
   createTeachingTurnState,
   getRetryAssetParts,
@@ -379,6 +379,10 @@ export function useAgentTurn(
     [send, state.messages],
   );
 
+  const observeArtifact = useCallback((artifact: MessageArtifactDTO) => {
+    dispatch({ type: 'artifact.observed', artifact });
+  }, []);
+
   const activeStatus = state.active?.status ?? null;
   const statusText = controlError
     ? controlError
@@ -394,6 +398,7 @@ export function useAgentTurn(
 
   return {
     messages: state.messages,
+    observeArtifact,
     announcement: state.announcement,
     activeStatus,
     statusText,

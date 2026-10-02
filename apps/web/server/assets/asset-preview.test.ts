@@ -99,6 +99,84 @@ describe('loadOwnedAssetPreviewDetail docx 分支（ADR-0026 决定 2/6）', () 
     });
   });
 
+  it('网页来源回退为有界提取正文，绝不读取原始 HTML', async () => {
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({
+        mimeType: 'text/html',
+        origin: 'url_import',
+        extractedText: '网页正文'.repeat(40_000),
+      }),
+    );
+    const { preview } = await loadOwnedAssetPreviewDetail({
+      identity,
+      spaceId,
+      assetId: ASSET_ID,
+    });
+    expect(preview).toEqual({
+      kind: 'text',
+      fileName: '讲义.docx',
+      mimeType: 'text/plain',
+      content: '网页正文'.repeat(40_000).slice(0, 120_000),
+    });
+    expect(Object.keys(preview).sort()).toEqual([
+      'content',
+      'fileName',
+      'kind',
+      'mimeType',
+    ]);
+    expect(readStoredAssetBytes).not.toHaveBeenCalled();
+  });
+
+  it('网页优先读取校验过的纯文本派生，缺失或损坏时回退正文', async () => {
+    const text = '派生网页正文';
+    const representation = {
+      ...textRepresentation('degraded_plain_text'),
+      mimeType: 'text/plain',
+      checksum: createHash('sha256').update(text).digest('hex'),
+    };
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({
+        mimeType: 'text/html',
+        origin: 'url_import',
+        extractedText: '旧正文',
+        textRepresentation: representation,
+      }),
+    );
+    readStoredAssetBytes.mockResolvedValue(Buffer.from(text));
+    const input = { identity, spaceId, assetId: ASSET_ID };
+    expect((await loadOwnedAssetPreviewDetail(input)).preview).toMatchObject({
+      kind: 'text',
+      content: text,
+    });
+    readStoredAssetBytes.mockResolvedValue(
+      Buffer.from('<script>unsafe()</script>'),
+    );
+    expect((await loadOwnedAssetPreviewDetail(input)).preview).toMatchObject({
+      kind: 'text',
+      content: '旧正文',
+    });
+    readStoredAssetBytes.mockRejectedValue(new Error('missing'));
+    expect((await loadOwnedAssetPreviewDetail(input)).preview).toMatchObject({
+      kind: 'text',
+      content: '旧正文',
+    });
+  });
+
+  it('未提取正文的网页返回空文本预览供客户端呈现空态', async () => {
+    loadOwnedCurrentStoredVersion.mockResolvedValue(
+      version({ mimeType: 'text/html', origin: 'url_import' }),
+    );
+    expect(
+      (
+        await loadOwnedAssetPreviewDetail({
+          identity,
+          spaceId,
+          assetId: ASSET_ID,
+        })
+      ).preview,
+    ).toMatchObject({ kind: 'text', content: '' });
+  });
+
   it('结构化表示可用时跳过 mammoth，投影图片引用并保留原件下载', async () => {
     loadOwnedCurrentStoredVersion.mockResolvedValue(
       version({ textRepresentation: textRepresentation('structured') }),

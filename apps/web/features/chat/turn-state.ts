@@ -2,10 +2,13 @@ import type {
   AssistantMessage,
   ChatMessage,
   ChatMessageStatus,
+  MessageArtifactDTO,
   StudentMessage,
 } from './messages';
-import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
+import type { AgentMessagePart } from '@educanvas/agent-core';
 import type { TeachingTurnEvent } from './turn-events';
+import { applyObservedArtifact, updateAssistant } from './turn-state-messages';
+export { getRetryAssetParts } from './turn-state-messages';
 import { reconcileToolSteps } from './tool-step-continuity';
 
 export interface ActiveTeachingTurn {
@@ -54,6 +57,7 @@ export type TeachingTurnAction =
       message: string;
       retryable: boolean;
     }
+  | { type: 'artifact.observed'; artifact: MessageArtifactDTO }
   | { type: 'stop.confirmed' };
 
 export {
@@ -70,15 +74,6 @@ function announce(
     announcement: { id: nextSequence, text },
     announcementSequence: nextSequence,
   };
-}
-
-/** 从失败消息恢复服务端可验证的附件引用，不重建浏览器临时上传对象。 */
-export function getRetryAssetParts(
-  message: AssistantMessage,
-): readonly AgentAssetPart[] {
-  return (message.retryParts ?? []).filter(
-    (part): part is AgentAssetPart => part.type === 'asset_ref',
-  );
 }
 
 /**
@@ -102,18 +97,6 @@ function applyToolStep(
   };
 }
 
-function updateAssistant(
-  messages: readonly ChatMessage[],
-  id: string,
-  update: (message: AssistantMessage) => AssistantMessage,
-): readonly ChatMessage[] {
-  return messages.map((message) =>
-    message.role === 'assistant' && message.id === id
-      ? update(message)
-      : message,
-  );
-}
-
 function eventMatchesActive(
   event: TeachingTurnEvent,
   active: ActiveTeachingTurn,
@@ -128,6 +111,12 @@ export function teachingTurnReducer(
   state: TeachingTurnState,
   action: TeachingTurnAction,
 ): TeachingTurnState {
+  if (action.type === 'artifact.observed') {
+    return {
+      ...state,
+      messages: applyObservedArtifact(state.messages, action.artifact),
+    };
+  }
   if (action.type === 'send.started') {
     if (state.active) return state;
     const assistantLabel = action.assistantLabel ?? 'AI 老师';

@@ -109,31 +109,7 @@ export const errorForHttpResponse = (
   return { code: 'unavailable', retryable: false };
 };
 
-/**
- * Emit a development-only diagnostic that is safe to search in local logs.
- * The browser still receives only NormalizedModelError; this helper deliberately
- * excludes the API key, URL, response body, prompt, and provider stack trace.
- */
-export const logProviderFailure = (
-  provider: string,
-  error: NormalizedModelError,
-  status?: number,
-): void => {
-  if (process.env.NODE_ENV !== 'development') return;
-  const code =
-    status === 401 || status === 403
-      ? 'provider_unauthorized'
-      : error.code === 'timeout'
-        ? 'provider_timeout'
-        : error.code === 'invalid_response'
-          ? 'provider_invalid_response'
-          : `provider_${error.code}`;
-  console.warn(`[model-gateway] ${code}`, {
-    provider,
-    ...(status === undefined ? {} : { status }),
-    normalizedCode: error.code,
-  });
-};
+export { logProviderFailure } from './provider-failure-diagnostics';
 
 /** @internal 构造稳定失败事件；可选元数据必须已经完成脱敏。 */
 export const failedEvent = (
@@ -161,7 +137,7 @@ export const mapFinishReason = (
     case 'length':
       return {
         finishReason: 'length',
-        failure: { code: 'output_limit', retryable: true },
+        failure: { code: 'output_limit', retryable: false },
       };
     case 'content_filter':
       return {

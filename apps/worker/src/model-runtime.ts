@@ -198,6 +198,7 @@ export interface WorkerModelRuntime {
 
 export function createWorkerModelRuntime(
   environment: ModelGatewayEnvironment,
+  structuredOutputBudget: 'configured' | 'long_artifact' = 'configured',
 ): WorkerModelRuntime {
   const primaryConfiguration = parsePrimaryConfiguration(environment);
   const resolveMedia = (
@@ -228,7 +229,9 @@ export function createWorkerModelRuntime(
 
   return {
     structured: primaryConfiguration
-      ? new OpenAICompatibleStructuredModelGateway(primaryConfiguration)
+      ? new OpenAICompatibleStructuredModelGateway(primaryConfiguration, {
+          outputBudget: structuredOutputBudget,
+        })
       : null,
     speech: media('speech', OpenAICompatibleSpeechModelGateway),
     transcription: media(

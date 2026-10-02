@@ -1,3 +1,5 @@
+import { ContextEngineInputError } from '../context/context-engine';
+
 interface FailureDiagnosticInput {
   operationId: string;
   stage: string;
@@ -62,7 +64,15 @@ export function turnApplicationFailureLogLine(
     error: {
       name: error instanceof Error ? error.name : 'UnknownError',
       code: stableIdentifier(rawCode, 'unclassified'),
+      ...(error instanceof ContextEngineInputError
+        ? { reason: error.reason }
+        : {}),
       ...(issues ? { issues } : {}),
     },
   });
+}
+
+/** 失败日志只通过上面的白名单投影进入输出。 */
+export function logTurnApplicationFailure(input: FailureDiagnosticInput): void {
+  console.error(turnApplicationFailureLogLine(input));
 }

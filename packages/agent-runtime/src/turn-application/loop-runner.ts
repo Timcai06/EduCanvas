@@ -128,6 +128,7 @@ export async function* runTurnLoop(input: {
     },
     maxToolRounds: prepared.model.maxToolRounds,
     signal: input.controller.signal,
+    completionRequirement: input.outputGuard?.completionRequirement,
     modelRunLifecycle: modelLifecycle,
     usageBudget: usageBudget ?? undefined,
     executeTools: (calls, context) => tools.execute(calls, context),

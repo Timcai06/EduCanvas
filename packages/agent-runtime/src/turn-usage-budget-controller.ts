@@ -188,6 +188,11 @@ export class TurnUsageBudgetController {
     /* 失败尝试的 token/成本也必须进入账本，但终态仍由原模型错误决定。 */
     if (!input.ok) return null;
 
+    return this.checkBeforeCompletion();
+  }
+
+  /** 工具耗时也受预算约束；终态复查不重复记账模型 usage。 */
+  checkBeforeCompletion(): BudgetBreachReason | null {
     if (this.inputTokens > this.budget.maxInputTokens) {
       return 'max_input_tokens';
     }

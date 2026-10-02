@@ -264,7 +264,7 @@ async function* validateModelRun(
     return invalidModelStream();
   }
   if (terminalMetadata.finishReason === 'length') {
-    return modelFailure({ code: 'output_limit', retryable: true });
+    return modelFailure({ code: 'output_limit', retryable: false });
   }
   if (!['stop', 'tool_calls'].includes(terminalMetadata.finishReason)) {
     return invalidModelStream();

@@ -50,7 +50,7 @@ async function expireContinuation(continuationId: string) {
 describe('Continuation恢复仓储', () => {
   installApprovalContinuationIntegrationHooks();
 
-  it('跳过活跃lease，并发扫描仍只保留一个稳定key的可运行job', async () => {
+  it('跳过活跃lease和并发持有的锁，解锁后重复扫描只保留一个稳定key的job', async () => {
     const { fixture, continuations } = await approveAndClaim();
     const recovery = new DrizzleOperationContinuationRecoveryRepository(
       database,
@@ -68,10 +68,40 @@ describe('Continuation恢复仓储', () => {
     ).resolves.toMatchObject({ runningActive: 1, runningExpired: 0 });
 
     await expireContinuation(fixture.continuationId);
-    const results = await Promise.all([
-      recovery.requeueExpiredForExecution({ limit: 10, now: recoveryNow }),
-      recovery.requeueExpiredForExecution({ limit: 10, now: recoveryNow }),
-    ]);
+    // 用真实事务屏障固定锁重叠；Promise.all 的调度不能保证两次扫描均读到行。
+    let notifyLocked!: () => void;
+    let releaseLock!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      notifyLocked = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const holdingLock = database.transaction(async (transaction) => {
+      await transaction.execute(sql`select id from operation_continuations
+        where id = ${fixture.continuationId}::uuid for update`);
+      notifyLocked();
+      await released;
+    });
+    try {
+      await Promise.race([locked, holdingLock]);
+      await expect(
+        recovery.requeueExpiredForExecution({ limit: 10, now: recoveryNow }),
+      ).resolves.toEqual({ examined: 0, requeued: 0, generationExhausted: 0 });
+    } finally {
+      releaseLock();
+      await holdingLock;
+    }
+    const results = [
+      await recovery.requeueExpiredForExecution({
+        limit: 10,
+        now: recoveryNow,
+      }),
+      await recovery.requeueExpiredForExecution({
+        limit: 10,
+        now: recoveryNow,
+      }),
+    ];
     expect(results.map((result) => result.requeued)).toEqual([1, 1]);
     expect(await listContinuationJobs()).toEqual([
       expect.objectContaining({
