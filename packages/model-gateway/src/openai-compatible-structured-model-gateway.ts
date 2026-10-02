@@ -73,6 +73,7 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
           this.options.outputBudget === 'long_artifact' &&
             request.taskAlias === 'artifact.generate' &&
             request.modelAlias === 'structured',
+          request.maxOutputTokens,
         ),
         ...(this.config.provider === 'deepseek'
           ? { thinking: { type: 'disabled' } }

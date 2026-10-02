@@ -25,7 +25,11 @@ import { generateMindMapContent } from './mind-map-generation.js';
 import { generateFlashcardsContent } from './flashcards-generation.js';
 import { generateSlidesContent } from './slides-generation.js';
 import { generateNoteContent } from './note-generation.js';
-import { generateMarkdownDocumentContent } from './markdown-document-generation.js';
+import {
+  generateMarkdownDocumentContent,
+  MarkdownDocumentGenerationFailure,
+  type MarkdownLongformCheckpoint,
+} from './markdown-document-generation.js';
 import { generateWebAppContent } from './web-app-generation.js';
 import { PicturebookGenerationFailure } from './picturebook-generation.js';
 import { runPicturebookGenerationTask } from './picturebook-task.js';
@@ -257,7 +261,24 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
             }
           : undefined,
     };
-    const { content, generatedBy } =
+    const saveMarkdownCheckpoint = async (
+      checkpoint: MarkdownLongformCheckpoint,
+    ) => {
+      await artifacts.updateGenerationJobCheckpoint({
+        jobId: payload.jobId,
+        trustedSubjectId: payload.subjectId,
+        checkpoint,
+      });
+      const completed = checkpoint.completedSections.length;
+      const sectionCount = checkpoint.sections.length;
+      await reportGenerationProgress(
+        artifacts,
+        payload,
+        Math.min(80, 20 + Math.floor((60 * completed) / sectionCount)),
+        helpers.logger,
+      );
+    };
+    const generation =
       artifact.kind === 'mind_map'
         ? await generateMindMapContent(generatorInput)
         : artifact.kind === 'slides'
@@ -265,10 +286,30 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
           : artifact.kind === 'flashcards'
             ? await generateFlashcardsContent(generatorInput)
             : artifact.kind === 'markdown_document'
-              ? await generateMarkdownDocumentContent(generatorInput)
+              ? await generateMarkdownDocumentContent({
+                  ...generatorInput,
+                  checkpoint: job.checkpoint,
+                  saveCheckpoint: saveMarkdownCheckpoint,
+                })
               : artifact.kind === 'web_app'
                 ? await generateWebAppContent(generatorInput)
                 : await generateNoteContent(generatorInput);
+    const { content, generatedBy } = generation;
+    const generationUsage = (
+      generation as {
+        usage?: {
+          calls: number;
+          inputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+        };
+      }
+    ).usage;
+    if (generationUsage) {
+      helpers.logger.info(
+        `长文分块完成: artifact=${payload.artifactId} calls=${generationUsage.calls} inputTokens=${generationUsage.inputTokens} outputTokens=${generationUsage.outputTokens} totalTokens=${generationUsage.totalTokens}`,
+      );
+    }
 
     await reportGenerationProgress(artifacts, payload, 85, helpers.logger);
 
@@ -303,7 +344,8 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
     const code =
       error instanceof AudioArtifactGenerationFailure ||
       error instanceof ImageArtifactGenerationFailure ||
-      error instanceof PicturebookGenerationFailure
+      error instanceof PicturebookGenerationFailure ||
+      error instanceof MarkdownDocumentGenerationFailure
         ? error.code
         : error instanceof ModelGatewayInvocationError
           ? error.normalized.retryable

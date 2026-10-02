@@ -9,6 +9,7 @@ const { artifacts, turns, environment, version } = vi.hoisted(() => ({
     getArtifact: vi.fn(),
     findVersionByGenerationJob: vi.fn(),
     getGenerationJob: vi.fn(),
+    updateGenerationJobCheckpoint: vi.fn(),
     appendVersionAndCompleteGenerationJob: vi.fn(),
   },
   turns: { listMessages: vi.fn() },
@@ -83,7 +84,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('generateArtifact selects a task-scoped output budget', () => {
   it.each([
-    ['markdown_document', 'long_artifact', 32768],
+    ['markdown_document', 'long_artifact', 1024],
     ['slides', 'long_artifact', 32768],
     ['web_app', 'long_artifact', 32768],
     ['mind_map', 'configured', 8192],
@@ -133,6 +134,83 @@ describe('generateArtifact selects a task-scoped output budget', () => {
       expect.objectContaining({
         to: 'failed',
         failureCode: 'model_output_limit',
+      }),
+    );
+  });
+
+  it('分段内容checkpoint可恢复，且只提交完整聚合版本', async () => {
+    artifacts.getArtifact.mockResolvedValue({
+      id: ARTIFACT_ID,
+      kind: 'markdown_document',
+      title: '长文测试',
+      conversationId: '33333333-3333-4333-8333-333333333333',
+      latestVersion: 0,
+    });
+    const responses = [
+      {
+        sourceSummary: '函数定义来源',
+        sections: [
+          { title: '函数定义', focus: '变量与函数值' },
+          { title: '实例', focus: '代入示例' },
+        ],
+      },
+      { markdown: '- f(x)=x+1', continuationSummary: '已定义函数并给出表达式' },
+      { markdown: '- 当 x=2 时 f(x)=3', continuationSummary: '实例已完成' },
+    ];
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      const output = responses.shift();
+      if (!output) throw new Error('unexpected provider call');
+      return Response.json({
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: { content: JSON.stringify(output) },
+          },
+        ],
+        usage: { prompt_tokens: 30, completion_tokens: 15 },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateArtifact(
+      { jobId: JOB_ID, artifactId: ARTIFACT_ID, subjectId: 'fixture-subject' },
+      {
+        job: { attempts: 1, max_attempts: 3 },
+        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      } as never,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(
+      fetchMock.mock.calls.map(
+        (call) => JSON.parse(String(call[1]?.body)).max_tokens,
+      ),
+    ).toEqual([1024, 8192, 8192]);
+    expect(artifacts.updateGenerationJobCheckpoint).toHaveBeenCalledTimes(3);
+    expect(artifacts.updateGenerationJobCheckpoint).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          stage: 'markdown-longform-v1',
+          completedSections: [
+            expect.objectContaining({ index: 0, markdown: '- f(x)=x+1' }),
+            expect.objectContaining({
+              index: 1,
+              markdown: '- 当 x=2 时 f(x)=3',
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(
+      artifacts.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      artifacts.appendVersionAndCompleteGenerationJob,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          markdown: expect.stringContaining('## 实例\n\n- 当 x=2 时 f(x)=3'),
+        }),
       }),
     );
   });

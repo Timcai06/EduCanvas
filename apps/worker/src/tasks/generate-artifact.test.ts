@@ -17,6 +17,7 @@ const {
   generateMarkdownDocumentContent,
   generateWebAppContent,
   ImageArtifactGenerationFailure,
+  MarkdownDocumentGenerationFailure,
   artifactGateway,
   ArtifactJobLifecycleError,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
     getArtifact: vi.fn(),
     findVersionByGenerationJob: vi.fn(),
     getGenerationJob: vi.fn(),
+    updateGenerationJobCheckpoint: vi.fn(),
     appendVersion: vi.fn(),
     appendVersionAndCompleteGenerationJob: vi.fn(),
   },
@@ -39,6 +41,13 @@ const {
     constructor(code: string) {
       super(code);
       this.name = 'ImageArtifactGenerationFailure';
+      this.code = code;
+    }
+  },
+  MarkdownDocumentGenerationFailure: class MarkdownDocumentGenerationFailure extends Error {
+    readonly code: string;
+    constructor(code: string) {
+      super(code);
       this.code = code;
     }
   },
@@ -90,6 +99,7 @@ vi.mock('./image-artifact-generation.js', () => ({
 }));
 vi.mock('./markdown-document-generation.js', () => ({
   generateMarkdownDocumentContent,
+  MarkdownDocumentGenerationFailure,
 }));
 vi.mock('./web-app-generation.js', () => ({
   generateWebAppContent,
