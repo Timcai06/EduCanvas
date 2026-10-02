@@ -278,16 +278,11 @@ test("@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
   await expect(page).toHaveURL(
     new RegExp(`/notebook/${fixture.notebookId}(?:$|[/?])`),
   );
-  await expect(
-    (await openNotebookSidebar(page)).getByRole("link", {
-      name: new RegExp(notebookTitle),
-    }),
-  ).toBeVisible();
-  await (
-    await openNotebookSidebar(page)
-  )
-    .getByRole("link", { name: new RegExp(notebookTitle) })
-    .click();
+  const targetConversation = firstNotebook.getByRole("link", {
+    name: new RegExp(notebookTitle),
+  });
+  await expect(targetConversation).toBeVisible();
+  await targetConversation.click();
   await expect
     .poll(() => activeConversationId(page))
     .toBe(fixture.conversationId);
