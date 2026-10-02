@@ -136,7 +136,10 @@ async function settleInvocationFailure(input: {
         : input.error instanceof ToolCancelledError
           ? 'tool_cancelled'
           : 'tool_failed',
-    retryable: !uncertainWrite,
+    retryable:
+      !uncertainWrite &&
+      (input.error instanceof ToolTimeoutError ||
+        input.error instanceof ToolCancelledError),
     durationMs: Date.now() - input.startedAt,
   });
   if (uncertainWrite) {
