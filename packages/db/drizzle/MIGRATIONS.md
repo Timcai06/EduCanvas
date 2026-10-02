@@ -880,3 +880,15 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - Data migration: none——既有任务统一使用默认 generation 0，不重写 checkpoint、状态或版本内容。
 - Estimated scale: 每条生成任务新增 4 字节计数；CHECK 验证扫描现存任务表，实际生产规模与锁时长尚未验证。
 - 风险: 中——新增执行 fence 不改变 Artifact/Version 事实，但要求 Worker 发布期间避免旧、新执行重叠；checkpoint 与版本写入仍由仓储事务校验终态和当前 generation。
+
+## 0065_artifact_confirmations.sql
+
+- 状态: active（issue 518 auto 产物确认）
+- 语义: 持久化模型提出、用户尚未确认的产物类型；每个原始 Operation 至多一条，绑定 Actor、Notebook、Conversation 与原始用户消息。确认/修改/取消均为条件状态迁移；表中不存 Prompt 或 Provider 输出。
+- 锁表: 只新增空叶子表、FK、唯一索引和普通索引；不扫描/回填既有业务表。
+- 回滚: 回滚应用后保留待确认记录，后续可重新部署继续处理；移除表前须另出迁移。
+- N-1: 旧客户端不声明确认能力时不会得到该事件，也不会注册产物写工具。
+- Fresh install: 可重放。
+- Data migration: none。
+- Estimated scale: 每个模型明确提议的 auto Turn 最多一行。
+- 风险: 低——新增状态仅覆盖 auto 产物确认；旧产物和生成任务账本不变。
