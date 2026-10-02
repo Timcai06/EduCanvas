@@ -13,7 +13,7 @@ import {
   RULE_REVISION_GENERATOR,
   generateMarkdownDocumentContent,
   MARKDOWN_LONGFORM_MAX_CALLS,
-  MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET,
+  MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET,
 } from './markdown-document-generation';
 
 const messages = [
@@ -106,7 +106,7 @@ describe('generateMarkdownDocumentContent', () => {
     );
     expect(request.maxOutputTokens).toBe(1_024);
     expect(generateStructured).toHaveBeenCalledTimes(2);
-    expect(generateStructured.mock.calls[1]?.[0].maxOutputTokens).toBe(8_192);
+    expect(generateStructured.mock.calls[1]?.[0].maxOutputTokens).toBe(32_748);
     expect(result.usage).toEqual({
       calls: 2,
       inputTokens: 100,
@@ -270,7 +270,7 @@ describe('generateMarkdownDocumentContent', () => {
             { title: '第三章', focus: '第三部分' },
           ],
         },
-        metadata: { usage: { inputTokens: 1, outputTokens: 1 } },
+        metadata: { usage: { inputTokens: 40_000, outputTokens: 1 } },
       })
       .mockResolvedValue({
         output: {
@@ -306,8 +306,11 @@ describe('generateMarkdownDocumentContent', () => {
     expect(result.content.markdown.indexOf('## 第二章')).toBeLessThan(
       result.content.markdown.indexOf('## 第三章'),
     );
-    expect(result.usage?.totalTokens).toBeLessThanOrEqual(
-      MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET,
+    expect(result.usage?.outputTokens).toBeLessThanOrEqual(
+      MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET,
+    );
+    expect(result.usage?.totalTokens).toBeGreaterThan(
+      MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET,
     );
   });
 
@@ -343,8 +346,17 @@ describe('generateMarkdownDocumentContent', () => {
 
   it('重投复用checkpoint中的已完成段，只续跑下一段且调用ID稳定', async () => {
     let checkpoint: Record<string, unknown> | undefined;
+    let interrupted = false;
     const saveCheckpoint = vi.fn(async (next: Record<string, unknown>) => {
       checkpoint = structuredClone(next);
+      if (
+        !interrupted &&
+        Array.isArray(next.completedSections) &&
+        next.completedSections.length === 1
+      ) {
+        interrupted = true;
+        throw new Error('simulated interruption after durable checkpoint');
+      }
     });
     const first = vi
       .fn()
@@ -363,7 +375,9 @@ describe('generateMarkdownDocumentContent', () => {
         output: { markdown: '- 第一段', continuationSummary: '一段结论' },
         metadata: { usage: { inputTokens: 5, outputTokens: 20 } },
       })
-      .mockRejectedValueOnce(new Error('worker interrupted'));
+      .mockImplementation(async () => {
+        throw new Error('unexpected extra provider call');
+      });
     const args = {
       title: '重投文档',
       messages,
@@ -378,10 +392,11 @@ describe('generateMarkdownDocumentContent', () => {
         } as unknown as StructuredModelGateway,
         saveCheckpoint,
       }),
-    ).rejects.toThrow('worker interrupted');
-    expect(saveCheckpoint).toHaveBeenCalledTimes(2);
+    ).rejects.toThrow('simulated interruption after durable checkpoint');
     expect(checkpoint).toMatchObject({
-      stage: 'markdown-longform-v1',
+      stage: 'markdown-longform-v2',
+      pendingCall: null,
+      callsStarted: 2,
       completedSections: [
         { index: 0, markdown: '- 第一段', continuationSummary: '一段结论' },
       ],
@@ -412,5 +427,58 @@ describe('generateMarkdownDocumentContent', () => {
       outputTokens: 38,
       totalTokens: 61,
     });
+  });
+
+  it('结果不确定时保留完整输出预留并拒绝跨 attempt 再次调用', async () => {
+    let checkpoint: Record<string, unknown> | undefined;
+    const saveCheckpoint = vi.fn(async (next: Record<string, unknown>) => {
+      checkpoint = structuredClone(next);
+    });
+    const failedCall = vi.fn(async () => {
+      expect(checkpoint).toMatchObject({
+        callsStarted: 1,
+        reservedOutputTokens: 1_024,
+        pendingCall: {
+          operationId: 'job-unknown:longform:plan',
+          maxOutputTokens: 1_024,
+        },
+      });
+      throw new Error('provider timeout');
+    });
+    const args = {
+      title: '不确定结果',
+      messages,
+      traceId: 'trace-unknown',
+      operationId: 'job-unknown',
+      saveCheckpoint,
+    };
+    await expect(
+      generateMarkdownDocumentContent({
+        ...args,
+        gateway: {
+          generateStructured: failedCall,
+        } as unknown as StructuredModelGateway,
+      }),
+    ).rejects.toThrow('provider timeout');
+    expect(checkpoint).toMatchObject({
+      callsStarted: 1,
+      reservedOutputTokens: 1_024,
+      pendingCall: {
+        operationId: 'job-unknown:longform:plan',
+        maxOutputTokens: 1_024,
+      },
+    });
+
+    const retryCall = vi.fn();
+    await expect(
+      generateMarkdownDocumentContent({
+        ...args,
+        checkpoint,
+        gateway: {
+          generateStructured: retryCall,
+        } as unknown as StructuredModelGateway,
+      }),
+    ).rejects.toMatchObject({ code: 'model_outcome_unknown' });
+    expect(retryCall).not.toHaveBeenCalled();
   });
 });

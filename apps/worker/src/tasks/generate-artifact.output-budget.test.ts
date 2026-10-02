@@ -10,6 +10,10 @@ const { artifacts, turns, environment, version } = vi.hoisted(() => ({
     findVersionByGenerationJob: vi.fn(),
     getGenerationJob: vi.fn(),
     updateGenerationJobCheckpoint: vi.fn(),
+    claimGenerationJobExecution: vi.fn(async () => ({
+      executionGeneration: 1,
+      checkpoint: {},
+    })),
     appendVersionAndCompleteGenerationJob: vi.fn(),
   },
   turns: { listMessages: vi.fn() },
@@ -75,6 +79,10 @@ beforeEach(() => {
     id: JOB_ID,
     params: {},
     operationId: null,
+  });
+  artifacts.claimGenerationJobExecution.mockResolvedValue({
+    executionGeneration: 1,
+    checkpoint: {},
   });
   turns.listMessages.mockResolvedValue([
     { role: 'user', content: 'fixture topic' },
@@ -181,16 +189,23 @@ describe('generateArtifact selects a task-scoped output budget', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(artifacts.claimGenerationJobExecution).toHaveBeenCalledOnce();
     expect(
       fetchMock.mock.calls.map(
         (call) => JSON.parse(String(call[1]?.body)).max_tokens,
       ),
-    ).toEqual([1024, 8192, 8192]);
-    expect(artifacts.updateGenerationJobCheckpoint).toHaveBeenCalledTimes(3);
+    ).toEqual([1024, 16_376, 32_738]);
+    expect(artifacts.updateGenerationJobCheckpoint).toHaveBeenCalledTimes(6);
+    expect(
+      artifacts.updateGenerationJobCheckpoint.mock.calls.every(
+        ([input]) => input.executionGeneration === 1,
+      ),
+    ).toBe(true);
     expect(artifacts.updateGenerationJobCheckpoint).toHaveBeenLastCalledWith(
       expect.objectContaining({
         checkpoint: expect.objectContaining({
-          stage: 'markdown-longform-v1',
+          stage: 'markdown-longform-v2',
+          usage: expect.objectContaining({ outputTokens: 45 }),
           completedSections: [
             expect.objectContaining({ index: 0, markdown: '- f(x)=x+1' }),
             expect.objectContaining({
@@ -208,6 +223,7 @@ describe('generateArtifact selects a task-scoped output budget', () => {
       artifacts.appendVersionAndCompleteGenerationJob,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
+        executionGeneration: 1,
         content: expect.objectContaining({
           markdown: expect.stringContaining('## 实例\n\n- 当 x=2 时 f(x)=3'),
         }),

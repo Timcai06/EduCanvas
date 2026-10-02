@@ -119,6 +119,7 @@ export const artifactGenerationJobs = pgTable(
     failureCode: text('failure_code'),
     params: jsonb('params').notNull().default({}),
     checkpoint: jsonb('checkpoint').notNull().default({}),
+    executionGeneration: integer('execution_generation').notNull().default(0),
     queueJobKey: text('queue_job_key'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -148,6 +149,10 @@ export const artifactGenerationJobs = pgTable(
     check(
       'artifact_generation_jobs_progress_check',
       sql`${table.progress} is null or (${table.progress} between 0 and 100)`,
+    ),
+    check(
+      'artifact_generation_jobs_execution_generation_check',
+      sql`${table.executionGeneration} >= 0`,
     ),
     check(
       'artifact_generation_jobs_failure_shape_check',

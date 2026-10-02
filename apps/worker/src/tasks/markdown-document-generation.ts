@@ -21,11 +21,10 @@ export const MODEL_REVISION_GENERATOR =
 
 /** Longform is deliberately bounded: one plan and at most three ordered sections. */
 export const MARKDOWN_LONGFORM_MAX_CALLS = 4;
-export const MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET = 32_768;
-export const MARKDOWN_LONGFORM_CHECKPOINT_VERSION = 'markdown-longform-v1';
-const MARKDOWN_LONGFORM_MAX_SECTION_OUTPUT_TOKENS = 8_192;
+/** Hard cap applies to provider-reported output tokens across the job's lifetime. */
+export const MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET = 32_768;
+export const MARKDOWN_LONGFORM_CHECKPOINT_VERSION = 'markdown-longform-v2';
 const MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS = 1_024;
-const MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS = 512;
 
 export interface ArtifactRevisionContext {
   instruction: string;
@@ -34,15 +33,15 @@ export interface ArtifactRevisionContext {
 
 const MAX_TRANSCRIPT_CHARS = 12_000;
 
+const longformSectionPlanSchema = z.object({
+  title: z.string().min(1).max(120),
+  focus: z.string().min(1).max(800),
+});
+
 const longformPlanSchema = z.object({
   sourceSummary: z.string().min(1).max(1_200),
   sections: z
-    .array(
-      z.object({
-        title: z.string().min(1).max(120),
-        focus: z.string().min(1).max(800),
-      }),
-    )
+    .array(longformSectionPlanSchema)
     .min(1)
     .max(MARKDOWN_LONGFORM_MAX_CALLS - 1),
 });
@@ -52,12 +51,16 @@ const longformSectionSchema = z.object({
   continuationSummary: z.string().min(1).max(1_200),
 });
 
+const checkpointSectionsSchema = z
+  .array(longformSectionPlanSchema)
+  .max(MARKDOWN_LONGFORM_MAX_CALLS - 1);
+
 const longformCheckpointSchema = z
   .object({
     stage: z.literal(MARKDOWN_LONGFORM_CHECKPOINT_VERSION),
     inputFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    sourceSummary: z.string().min(1).max(1_200),
-    sections: longformPlanSchema.shape.sections,
+    sourceSummary: z.string().max(1_200),
+    sections: checkpointSectionsSchema,
     completedSections: z
       .array(
         z.object({
@@ -78,13 +81,30 @@ const longformCheckpointSchema = z
         .number()
         .int()
         .nonnegative()
-        .max(MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET),
-      totalTokens: z
-        .number()
-        .int()
-        .nonnegative()
-        .max(MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET),
+        .max(MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET),
+      totalTokens: z.number().int().nonnegative(),
     }),
+    callsStarted: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(MARKDOWN_LONGFORM_MAX_CALLS),
+    reservedOutputTokens: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET),
+    pendingCall: z
+      .object({
+        operationId: z.string().min(1).max(300),
+        maxOutputTokens: z
+          .number()
+          .int()
+          .positive()
+          .max(MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET),
+      })
+      .nullable(),
+    revisionMarkdown: z.string().max(MARKDOWN_DOCUMENT_MAX_CHARS).nullable(),
   })
   .strict();
 
@@ -100,7 +120,10 @@ type LongformUsage = {
 };
 
 export class MarkdownDocumentGenerationFailure extends Error {
-  constructor(readonly code: 'model_output_limit' | 'invalid_output') {
+  constructor(
+    readonly code:
+      'model_output_limit' | 'model_outcome_unknown' | 'invalid_output',
+  ) {
     super(code);
     this.name = 'MarkdownDocumentGenerationFailure';
   }
@@ -113,18 +136,6 @@ function mergeUsage(total: LongformUsage, usage: LongformUsage): LongformUsage {
     outputTokens: total.outputTokens + usage.outputTokens,
     totalTokens: total.totalTokens + usage.totalTokens,
   };
-}
-
-function estimateStructuredInputTokens<Output>(input: {
-  messages: readonly {
-    role: 'system' | 'user' | 'assistant';
-    content: string;
-  }[];
-  schema: z.ZodType<Output>;
-}): number {
-  const serialized = `${JSON.stringify(input.messages)}${JSON.stringify(z.toJSONSchema(input.schema))}`;
-  // Conservative mixed Chinese/English estimate; provider-reported use is checked after each call.
-  return Math.ceil(Buffer.byteLength(serialized, 'utf8') / 3) + 128;
 }
 
 function buildSectionMessages(input: {
@@ -284,6 +295,8 @@ export async function generateMarkdownDocumentContent(input: {
       traceId: input.traceId,
       operationId: input.operationId,
       revision: input.revision,
+      checkpoint: input.checkpoint,
+      saveCheckpoint: input.saveCheckpoint,
     });
     return {
       content: content.content,
@@ -312,6 +325,8 @@ async function generateMarkdownRevision(input: {
   traceId: string;
   operationId: string;
   revision: ArtifactRevisionContext;
+  checkpoint?: Record<string, unknown>;
+  saveCheckpoint?: (checkpoint: MarkdownLongformCheckpoint) => Promise<void>;
 }): Promise<{ content: MarkdownDocumentContent; usage: LongformUsage }> {
   const base = markdownDocumentContentSchema.parse(input.revision.baseContent);
   const transcript = buildTranscript(input.messages);
@@ -331,25 +346,94 @@ async function generateMarkdownRevision(input: {
       content: `标题：${input.title}\n\n当前文档：\n${base.markdown}\n\n修改要求：\n${clip(input.revision.instruction, 4_000)}\n\n对话记录：\n${transcript}`,
     },
   ];
-  const estimatedInputTokens = estimateStructuredInputTokens({
-    messages,
-    schema: markdownDocumentContentSchema,
-  });
-  const maxOutputTokens = Math.min(
-    MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET - estimatedInputTokens,
-    MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET,
-  );
-  if (maxOutputTokens < MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS) {
+  const inputFingerprint = createHash('sha256')
+    .update(
+      JSON.stringify([
+        input.title,
+        transcript,
+        base.markdown,
+        input.revision.instruction,
+        MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION,
+      ]),
+    )
+    .digest('hex');
+  let checkpoint: MarkdownLongformCheckpoint | null = null;
+  if (
+    input.checkpoint?.stage === 'markdown-longform-v1' ||
+    input.checkpoint?.stage === 'markdown-revision-v1'
+  ) {
+    throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
+  }
+  if (
+    input.checkpoint &&
+    Object.keys(input.checkpoint).length > 0 &&
+    input.checkpoint.stage !== MARKDOWN_LONGFORM_CHECKPOINT_VERSION
+  ) {
+    throw new MarkdownDocumentGenerationFailure('invalid_output');
+  }
+  if (input.checkpoint?.stage === MARKDOWN_LONGFORM_CHECKPOINT_VERSION) {
+    const parsed = longformCheckpointSchema.safeParse(input.checkpoint);
+    if (!parsed.success || parsed.data.inputFingerprint !== inputFingerprint) {
+      throw new MarkdownDocumentGenerationFailure('invalid_output');
+    }
+    checkpoint = parsed.data;
+    if (checkpoint.pendingCall) {
+      throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
+    }
+    if (checkpoint.revisionMarkdown !== null) {
+      const cached = markdownDocumentContentSchema.parse({
+        contentVersion: MARKDOWN_DOCUMENT_CONTENT_VERSION,
+        markdown: checkpoint.revisionMarkdown,
+        generatedByModel: true,
+      });
+      return { content: cached, usage: checkpoint.usage };
+    }
+  }
+  const callsStarted = checkpoint?.callsStarted ?? 0;
+  if (callsStarted >= MARKDOWN_LONGFORM_MAX_CALLS) {
     throw new MarkdownDocumentGenerationFailure('model_output_limit');
   }
+  const outputReserve = MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET;
+  if (
+    checkpoint &&
+    checkpoint.usage.outputTokens +
+      checkpoint.reservedOutputTokens +
+      outputReserve >
+      MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET
+  ) {
+    throw new MarkdownDocumentGenerationFailure('model_output_limit');
+  }
+  const pendingOperationId = `${input.operationId}:revision`;
+  const beforeCall = longformCheckpointSchema.parse({
+    stage: MARKDOWN_LONGFORM_CHECKPOINT_VERSION,
+    inputFingerprint,
+    sourceSummary: '',
+    sections: [],
+    completedSections: [],
+    usage: checkpoint?.usage ?? {
+      calls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    },
+    callsStarted: callsStarted + 1,
+    reservedOutputTokens:
+      (checkpoint?.reservedOutputTokens ?? 0) + outputReserve,
+    pendingCall: {
+      operationId: pendingOperationId,
+      maxOutputTokens: outputReserve,
+    },
+    revisionMarkdown: null,
+  });
+  await input.saveCheckpoint?.(beforeCall);
   const result = await input.gateway.generateStructured({
     taskAlias: 'artifact.generate',
     modelAlias: 'structured',
     schema: markdownDocumentContentSchema,
     promptVersion: MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION,
     traceId: input.traceId,
-    operationId: `${input.operationId}:revision`,
-    maxOutputTokens,
+    operationId: pendingOperationId,
+    maxOutputTokens: outputReserve,
     messages,
   });
   const usage: LongformUsage = {
@@ -359,12 +443,23 @@ async function generateMarkdownRevision(input: {
     totalTokens:
       result.metadata.usage.inputTokens + result.metadata.usage.outputTokens,
   };
-  if (usage.totalTokens > MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET) {
+  if (
+    usage.outputTokens > outputReserve ||
+    usage.outputTokens > MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET
+  ) {
     throw new MarkdownDocumentGenerationFailure('model_output_limit');
   }
   if (hasCollapsedMarkdownBlocks(result.output.markdown)) {
     throw new MarkdownDocumentGenerationFailure('invalid_output');
   }
+  const savedResult = longformCheckpointSchema.parse({
+    ...beforeCall,
+    usage,
+    reservedOutputTokens: 0,
+    pendingCall: null,
+    revisionMarkdown: result.output.markdown,
+  });
+  await input.saveCheckpoint?.(savedResult);
   return {
     content: { ...result.output, generatedByModel: true },
     usage,
@@ -404,6 +499,19 @@ async function generateMarkdownLongform(args: {
     )
     .digest('hex');
   let checkpoint: MarkdownLongformCheckpoint | null = null;
+  if (
+    input.checkpoint?.stage === 'markdown-longform-v1' ||
+    input.checkpoint?.stage === 'markdown-revision-v1'
+  ) {
+    throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
+  }
+  if (
+    input.checkpoint &&
+    Object.keys(input.checkpoint).length > 0 &&
+    input.checkpoint.stage !== MARKDOWN_LONGFORM_CHECKPOINT_VERSION
+  ) {
+    throw new MarkdownDocumentGenerationFailure('invalid_output');
+  }
   if (input.checkpoint?.stage === MARKDOWN_LONGFORM_CHECKPOINT_VERSION) {
     const parsed = longformCheckpointSchema.safeParse(input.checkpoint);
     if (!parsed.success) {
@@ -413,6 +521,9 @@ async function generateMarkdownLongform(args: {
       throw new MarkdownDocumentGenerationFailure('invalid_output');
     }
     checkpoint = parsed.data;
+    if (checkpoint.pendingCall) {
+      throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
+    }
     if (
       checkpoint.sections.length === 0 ||
       checkpoint.completedSections.some(
@@ -446,76 +557,31 @@ async function generateMarkdownLongform(args: {
         .join('\n\n'),
     },
   ];
-  const plannedSectionReserve = Math.min(
-    MARKDOWN_LONGFORM_MAX_CALLS - 1,
-    checkpoint?.sections.length ?? MARKDOWN_LONGFORM_MAX_CALLS - 1,
-  );
-  const worstCaseSectionInput = estimateStructuredInputTokens({
-    schema: longformSectionSchema,
-    messages: buildSectionMessages({
-      title: input.title,
-      index: MARKDOWN_LONGFORM_MAX_CALLS - 1,
-      total: MARKDOWN_LONGFORM_MAX_CALLS - 1,
-      sectionTitle: 'x'.repeat(120),
-      focus: 'x'.repeat(800),
-      sourceSummary: 'x'.repeat(1_200),
-      precedingSummary: 'x'.repeat(1_200),
-    }),
-  });
-  const planInputEstimate = estimateStructuredInputTokens({
-    schema: longformPlanSchema,
-    messages: planMessages,
-  });
-  if (
-    !checkpoint &&
-    planInputEstimate +
-      MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS +
-      plannedSectionReserve *
-        (worstCaseSectionInput + MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS) >
-      MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET
-  ) {
-    throw new MarkdownDocumentGenerationFailure('model_output_limit');
+  if (checkpoint?.pendingCall) {
+    throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
   }
-
-  const plan = checkpoint
-    ? null
-    : await gateway.generateStructured({
-        taskAlias: 'artifact.generate',
-        modelAlias: 'structured',
-        schema: longformPlanSchema,
-        promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:plan-v1`,
-        traceId: input.traceId,
-        operationId: `${input.operationId}:longform:plan`,
-        maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
-        messages: planMessages,
-      });
+  if (
+    checkpoint &&
+    (checkpoint.sections.length === 0 || checkpoint.revisionMarkdown !== null)
+  ) {
+    throw new MarkdownDocumentGenerationFailure('invalid_output');
+  }
 
   let usage: LongformUsage = checkpoint?.usage ?? {
-    calls: plan ? 1 : 0,
-    inputTokens: plan?.metadata.usage.inputTokens ?? 0,
-    outputTokens: plan?.metadata.usage.outputTokens ?? 0,
-    totalTokens:
-      (plan?.metadata.usage.inputTokens ?? 0) +
-      (plan?.metadata.usage.outputTokens ?? 0),
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
   };
-  if (usage.totalTokens > MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET) {
-    throw new MarkdownDocumentGenerationFailure('model_output_limit');
-  }
-  const sourceSummary = checkpoint?.sourceSummary ?? plan!.output.sourceSummary;
-  const sectionPlan = checkpoint?.sections ?? plan!.output.sections;
+  let callsStarted = checkpoint?.callsStarted ?? 0;
+  let reservedOutputTokens = checkpoint?.reservedOutputTokens ?? 0;
+  let sourceSummary = checkpoint?.sourceSummary ?? '';
+  let sectionPlan = checkpoint?.sections ?? [];
   const completedSections = [...(checkpoint?.completedSections ?? [])];
-  const remainingPlannedSections =
-    sectionPlan.length - completedSections.length;
-  if (
-    usage.totalTokens +
-      remainingPlannedSections *
-        (worstCaseSectionInput + MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS) >
-    MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET
-  ) {
-    throw new MarkdownDocumentGenerationFailure('model_output_limit');
-  }
 
-  const persistCheckpoint = async () => {
+  const persistCheckpoint = async (
+    pendingCall: MarkdownLongformCheckpoint['pendingCall'],
+  ) => {
     const next = longformCheckpointSchema.parse({
       stage: MARKDOWN_LONGFORM_CHECKPOINT_VERSION,
       inputFingerprint,
@@ -523,10 +589,63 @@ async function generateMarkdownLongform(args: {
       sections: sectionPlan,
       completedSections,
       usage,
+      callsStarted,
+      reservedOutputTokens,
+      pendingCall,
+      revisionMarkdown: null,
     });
     await input.saveCheckpoint?.(next);
   };
-  if (!checkpoint) await persistCheckpoint();
+
+  if (!checkpoint) {
+    if (
+      callsStarted >= MARKDOWN_LONGFORM_MAX_CALLS ||
+      MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS >
+        MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET
+    ) {
+      throw new MarkdownDocumentGenerationFailure('model_output_limit');
+    }
+    const planOperationId = `${input.operationId}:longform:plan`;
+    callsStarted += 1;
+    reservedOutputTokens += MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS;
+    await persistCheckpoint({
+      operationId: planOperationId,
+      maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
+    });
+    const plan = await gateway.generateStructured({
+      taskAlias: 'artifact.generate',
+      modelAlias: 'structured',
+      schema: longformPlanSchema,
+      promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:plan-v1`,
+      traceId: input.traceId,
+      operationId: planOperationId,
+      maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
+      messages: planMessages,
+    });
+    if (
+      plan.metadata.usage.outputTokens >
+      MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS
+    ) {
+      throw new MarkdownDocumentGenerationFailure('model_output_limit');
+    }
+    usage = mergeUsage(usage, {
+      calls: 1,
+      inputTokens: plan.metadata.usage.inputTokens,
+      outputTokens: plan.metadata.usage.outputTokens,
+      totalTokens:
+        plan.metadata.usage.inputTokens + plan.metadata.usage.outputTokens,
+    });
+    reservedOutputTokens -= MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS;
+    sourceSummary = plan.output.sourceSummary;
+    sectionPlan = plan.output.sections;
+    await persistCheckpoint(null);
+  }
+  if (
+    usage.outputTokens + reservedOutputTokens >
+    MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET
+  ) {
+    throw new MarkdownDocumentGenerationFailure('model_output_limit');
+  }
 
   let precedingSummary = sourceSummary;
   for (const [index, section] of sectionPlan.entries()) {
@@ -547,33 +666,34 @@ async function generateMarkdownLongform(args: {
       sourceSummary,
       precedingSummary,
     });
-    const estimatedInput = estimateStructuredInputTokens({
-      messages: sectionMessages,
-      schema: longformSectionSchema,
-    });
-    const remainingSections = sectionPlan.length - index - 1;
-    const minimumFutureReserve =
-      remainingSections *
-      (worstCaseSectionInput + MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS);
-    const availableOutputTokens =
-      MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET -
-      usage.totalTokens -
-      estimatedInput -
-      minimumFutureReserve;
+    const remainingSections = sectionPlan.length - index;
+    const remainingOutputBudget =
+      MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET -
+      usage.outputTokens -
+      reservedOutputTokens;
     const maxOutputTokens = Math.min(
-      MARKDOWN_LONGFORM_MAX_SECTION_OUTPUT_TOKENS,
-      availableOutputTokens,
+      MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET,
+      Math.floor(remainingOutputBudget / remainingSections),
     );
-    if (maxOutputTokens < MARKDOWN_LONGFORM_MIN_SECTION_OUTPUT_TOKENS) {
+    if (
+      callsStarted >= MARKDOWN_LONGFORM_MAX_CALLS ||
+      maxOutputTokens < 1 ||
+      usage.outputTokens + reservedOutputTokens + maxOutputTokens >
+        MARKDOWN_LONGFORM_OUTPUT_TOKEN_BUDGET
+    ) {
       throw new MarkdownDocumentGenerationFailure('model_output_limit');
     }
+    const operationId = `${input.operationId}:longform:section:${index + 1}`;
+    callsStarted += 1;
+    reservedOutputTokens += maxOutputTokens;
+    await persistCheckpoint({ operationId, maxOutputTokens });
     const result = await gateway.generateStructured({
       taskAlias: 'artifact.generate',
       modelAlias: 'structured',
       schema: longformSectionSchema,
       promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:section-v1`,
       traceId: input.traceId,
-      operationId: `${input.operationId}:longform:section:${index + 1}`,
+      operationId,
       maxOutputTokens,
       messages: sectionMessages,
     });
@@ -584,19 +704,17 @@ async function generateMarkdownLongform(args: {
       totalTokens:
         result.metadata.usage.inputTokens + result.metadata.usage.outputTokens,
     });
-    if (
-      usage.totalTokens > MARKDOWN_LONGFORM_TOTAL_TOKEN_BUDGET ||
-      usage.calls > MARKDOWN_LONGFORM_MAX_CALLS
-    ) {
+    if (result.metadata.usage.outputTokens > maxOutputTokens) {
       throw new MarkdownDocumentGenerationFailure('model_output_limit');
     }
+    reservedOutputTokens -= maxOutputTokens;
     completedSections.push({
       index,
       markdown: result.output.markdown.trim(),
       continuationSummary: result.output.continuationSummary,
     });
     precedingSummary = result.output.continuationSummary;
-    await persistCheckpoint();
+    await persistCheckpoint(null);
   }
 
   const markdown = [

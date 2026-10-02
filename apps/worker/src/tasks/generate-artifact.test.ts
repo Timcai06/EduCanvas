@@ -27,6 +27,10 @@ const {
     findVersionByGenerationJob: vi.fn(),
     getGenerationJob: vi.fn(),
     updateGenerationJobCheckpoint: vi.fn(),
+    claimGenerationJobExecution: vi.fn(async () => ({
+      executionGeneration: 1,
+      checkpoint: {},
+    })),
     appendVersion: vi.fn(),
     appendVersionAndCompleteGenerationJob: vi.fn(),
   },
@@ -205,6 +209,10 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
       checkpoint: {},
       queueJobKey: 'artifact-generate',
     });
+    repository.claimGenerationJobExecution.mockResolvedValue({
+      executionGeneration: 1,
+      checkpoint: {},
+    });
     appendGeneratedImageVersion.mockResolvedValue({
       id: 'v1',
       artifactId: ARTIFACT_ID,
@@ -264,7 +272,7 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
       }),
     );
     expect(appendGeneratedImageVersion).not.toHaveBeenCalled();
-    expect(repository.getGenerationJob).not.toHaveBeenCalled();
+    expect(repository.getGenerationJob).toHaveBeenCalledOnce();
   });
 
   it('媒体 helper 已原子提交版本与成功终态，外层不再二次追加', async () => {
@@ -280,17 +288,15 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
   });
 
   it('终态重放不再执行，不重复写版本', async () => {
-    repository.transitionGenerationJob.mockRejectedValueOnce(
-      new ArtifactJobLifecycleError('succeeded', 'running'),
-    );
+    repository.getGenerationJob.mockResolvedValueOnce({
+      status: 'succeeded',
+      checkpoint: {},
+    });
 
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     await runTask(1, 3, logger);
 
-    expect(repository.transitionGenerationJob).toHaveBeenCalledTimes(1);
-    expect(repository.transitionGenerationJob).toHaveBeenCalledWith(
-      expect.objectContaining({ jobId: JOB_ID, to: 'running' }),
-    );
+    expect(repository.transitionGenerationJob).not.toHaveBeenCalled();
     expect(appendGeneratedImageVersion).not.toHaveBeenCalled();
     expect(repository.getArtifact).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
@@ -472,7 +478,7 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
     );
   });
 
-  it('结构化生成按阶段推进进度档：running 5 → 15 → 85（100 由版本事务原子提交）', async () => {
+  it('结构化生成按阶段推进进度档：claim 5 → 15 → 85（100 由版本事务原子提交）', async () => {
     repository.getArtifact.mockResolvedValue({
       ...artifactBase,
       kind: 'markdown_document',
@@ -512,7 +518,8 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
       repository.transitionGenerationJob.mock.calls.map(
         (call) => (call[0] as { progress?: number | null }).progress,
       ),
-    ).toEqual([5, 15, 85]);
+    ).toEqual([15, 85]);
+    expect(repository.claimGenerationJobExecution).toHaveBeenCalledOnce();
   });
 
   it('支持 web_app 使用 web_app 生成器产出版本', async () => {

@@ -1,0 +1,2 @@
+ALTER TABLE "artifact_generation_jobs" ADD COLUMN "execution_generation" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "artifact_generation_jobs" ADD CONSTRAINT "artifact_generation_jobs_execution_generation_check" CHECK ("artifact_generation_jobs"."execution_generation" >= 0);

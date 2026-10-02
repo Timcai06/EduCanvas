@@ -97,6 +97,16 @@ export class ArtifactJobLifecycleError extends Error {
   }
 }
 
+/** 过期 worker execution 已被后续 generation fence 取代。 */
+export class ArtifactExecutionFenceError extends Error {
+  readonly code = 'artifact_execution_fenced';
+
+  constructor() {
+    super('生成任务执行权已交给更新的 worker');
+    this.name = 'ArtifactExecutionFenceError';
+  }
+}
+
 /** 产物生成任务在 graphile 队列中的标识;web 入队与 worker 注册共用,防止拼写漂移。 */
 export const ARTIFACT_GENERATE_TASK = 'artifact:generate' as const;
 
@@ -502,6 +512,8 @@ export class DrizzlePlatformArtifactRepository {
     createdByOperationId?: string | null;
     /** Canvas 共创的乐观并发基线；首版生成不传。 */
     expectedLatestVersion?: number;
+    /** 仅当前 execution generation 可完成长 Markdown 任务。 */
+    executionGeneration?: number;
     progress?: number | null;
   }): Promise<PlatformArtifactVersion> {
     try {
@@ -530,6 +542,7 @@ export class DrizzlePlatformArtifactRepository {
             id: artifactGenerationJobs.id,
             status: artifactGenerationJobs.status,
             startedAt: artifactGenerationJobs.startedAt,
+            executionGeneration: artifactGenerationJobs.executionGeneration,
           })
           .from(artifactGenerationJobs)
           .where(
@@ -545,6 +558,12 @@ export class DrizzlePlatformArtifactRepository {
         }
         if (job.status !== 'running') {
           throw new ArtifactJobLifecycleError(job.status, 'succeeded');
+        }
+        if (
+          input.executionGeneration !== undefined &&
+          job.executionGeneration !== input.executionGeneration
+        ) {
+          throw new ArtifactExecutionFenceError();
         }
 
         if (
@@ -727,6 +746,7 @@ export class DrizzlePlatformArtifactRepository {
     to: Exclude<ArtifactJobStatus, 'queued'>;
     progress?: number | null;
     failureCode?: string | null;
+    executionGeneration?: number;
   }): Promise<PlatformArtifactJob> {
     return await this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -736,6 +756,7 @@ export class DrizzlePlatformArtifactRepository {
           progress: artifactGenerationJobs.progress,
           startedAt: artifactGenerationJobs.startedAt,
           spaceId: artifacts.spaceId,
+          executionGeneration: artifactGenerationJobs.executionGeneration,
         })
         .from(artifactGenerationJobs)
         .innerJoin(
@@ -755,6 +776,12 @@ export class DrizzlePlatformArtifactRepository {
       });
 
       const from = row.status as ArtifactJobStatus;
+      if (
+        input.executionGeneration !== undefined &&
+        row.executionGeneration !== input.executionGeneration
+      ) {
+        throw new ArtifactExecutionFenceError();
+      }
       if (!JOB_TRANSITIONS[from].includes(input.to)) {
         throw new ArtifactJobLifecycleError(from, input.to);
       }
@@ -817,6 +844,7 @@ export class DrizzlePlatformArtifactRepository {
     jobId: string;
     trustedSubjectId: string;
     checkpoint: Record<string, unknown>;
+    executionGeneration?: number;
   }): Promise<PlatformArtifactJob> {
     return await this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -843,12 +871,71 @@ export class DrizzlePlatformArtifactRepository {
       if (row.job.status !== 'running') {
         throw new ArtifactJobLifecycleError(row.job.status, 'running');
       }
+      if (
+        input.executionGeneration !== undefined &&
+        row.job.executionGeneration !== input.executionGeneration
+      ) {
+        throw new ArtifactExecutionFenceError();
+      }
       const [updated] = await tx
         .update(artifactGenerationJobs)
         .set({ checkpoint: input.checkpoint })
         .where(eq(artifactGenerationJobs.id, input.jobId))
         .returning();
       return toJob(updated!);
+    });
+  }
+
+  /**
+   * 原子启动或重投任务并领取单调 generation fence。重叠的 Graphile execution
+   * 后到者会使旧 execution 的 checkpoint、失败终态和版本提交全部失效。
+   */
+  async claimGenerationJobExecution(input: {
+    jobId: string;
+    trustedSubjectId: string;
+  }): Promise<{
+    executionGeneration: number;
+    checkpoint: Record<string, unknown>;
+  }> {
+    return await this.database.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          job: artifactGenerationJobs,
+          spaceId: artifacts.spaceId,
+        })
+        .from(artifactGenerationJobs)
+        .innerJoin(
+          artifacts,
+          eq(artifactGenerationJobs.artifactId, artifacts.id),
+        )
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .for('update', { of: artifactGenerationJobs })
+        .limit(1);
+      if (!row) throw new ArtifactOwnershipError();
+      await requireArtifactNotebookAccess(tx, {
+        spaceId: row.spaceId,
+        trustedSubjectId: input.trustedSubjectId,
+        permission: 'artifact.write',
+      });
+      if (row.job.status !== 'queued' && row.job.status !== 'running') {
+        throw new ArtifactJobLifecycleError(row.job.status, 'running');
+      }
+      const [updated] = await tx
+        .update(artifactGenerationJobs)
+        .set({
+          status: 'running',
+          startedAt: sql`COALESCE(${artifactGenerationJobs.startedAt}, now())`,
+          progress: sql`GREATEST(COALESCE(${artifactGenerationJobs.progress}, 0), 5)`,
+          executionGeneration: sql`${artifactGenerationJobs.executionGeneration} + 1`,
+        })
+        .where(eq(artifactGenerationJobs.id, input.jobId))
+        .returning({
+          executionGeneration: artifactGenerationJobs.executionGeneration,
+        });
+      return {
+        executionGeneration: updated!.executionGeneration,
+        checkpoint: row.job.checkpoint as Record<string, unknown>,
+      };
     });
   }
 
