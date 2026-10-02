@@ -25,8 +25,9 @@ export interface OpenAICompatibleStructuredModelGatewayOptions {
 const invocationError = (
   normalized: NormalizedModelError,
   cause?: unknown,
+  executionOutcome: 'not_executed' | 'unknown' = 'unknown',
 ): ModelGatewayInvocationError =>
-  new ModelGatewayInvocationError(normalized, { cause });
+  new ModelGatewayInvocationError(normalized, { cause, executionOutcome });
 
 const errorForHttpStatus = (status: number): NormalizedModelError => {
   if (status === 429) return { code: 'rate_limit', retryable: true };
@@ -147,7 +148,12 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       diagnostic.status = response.status;
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        throw invocationError(errorForHttpStatus(response.status));
+        // 429 明确拒绝执行；5xx 等状态不能证明模型调用未发生。
+        throw invocationError(
+          errorForHttpStatus(response.status),
+          undefined,
+          response.status === 429 ? 'not_executed' : 'unknown',
+        );
       }
       diagnostic.stage = 'response_parse';
 
@@ -205,6 +211,13 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       }
 
       const usage = parsedPayload.data.usage;
+      // 有界调用必须有实际输出用量；缺失不能按 0 结算并释放调用方预留。
+      if (
+        request.maxOutputTokens !== undefined &&
+        usage?.completion_tokens === undefined
+      ) {
+        throw invocationError({ code: 'invalid_response', retryable: false });
+      }
       const metadata: ProviderCallMetadata = {
         providerResponseId: parsedPayload.data.id ?? null,
         provider: this.config.provider,

@@ -144,6 +144,66 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
     });
     await expect(gateway.generateStructured(request)).rejects.toMatchObject({
       normalized: { code },
+      executionOutcome: status === 429 ? 'not_executed' : 'unknown',
+    });
+  });
+
+  it.each([undefined, { prompt_tokens: 10 }])(
+    '有界请求缺少输出用量时失败，不把 %j 当作零用量',
+    async (usage) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            ...(usage === undefined ? {} : { usage }),
+          }),
+        ),
+      });
+      await expect(
+        gateway.generateStructured({ ...request, maxOutputTokens: 1_024 }),
+      ).rejects.toMatchObject({
+        normalized: { code: 'invalid_response', retryable: false },
+        executionOutcome: 'unknown',
+      });
+    },
+  );
+
+  it('显式报告的零输出用量仍是可结算结果', async () => {
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      fetchImpl: fetchStub(() =>
+        Response.json({
+          choices: [
+            { finish_reason: 'stop', message: { content: '{"answer":"42"}' } },
+          ],
+          usage: { completion_tokens: 0 },
+        }),
+      ),
+    });
+    const result = await gateway.generateStructured({
+      ...request,
+      maxOutputTokens: 1_024,
+    });
+    expect(result.metadata.usage.outputTokens).toBe(0);
+  });
+
+  it.each([
+    () => {
+      throw new Error('network interruption');
+    },
+    () => new Response('{', { status: 200 }),
+    () => Response.json({ choices: [] }),
+    () => Response.json({ choices: [{ message: { content: '{' } }] }),
+  ])('网络和解析失败不声明请求未执行', async (handler) => {
+    const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+      fetchImpl: fetchStub(handler),
+    });
+    await expect(gateway.generateStructured(request)).rejects.toMatchObject({
+      executionOutcome: 'unknown',
     });
   });
 

@@ -1,6 +1,7 @@
-import type {
-  StructuredModelGateway,
-  StructuredModelRequest,
+import {
+  ModelGatewayInvocationError,
+  type StructuredModelGateway,
+  type StructuredModelRequest,
 } from '@educanvas/agent-core';
 import { markdownDocumentContentSchema } from '@educanvas/canvas-protocol';
 import { describe, expect, it, vi } from 'vitest';
@@ -480,5 +481,95 @@ describe('generateMarkdownDocumentContent', () => {
       }),
     ).rejects.toMatchObject({ code: 'model_outcome_unknown' });
     expect(retryCall).not.toHaveBeenCalled();
+  });
+
+  it('明确429拒绝仍消耗总调用上限，四次后不再发送请求', async () => {
+    let checkpoint: Record<string, unknown> | undefined;
+    const gateway = {
+      generateStructured: vi.fn(async () => {
+        throw new ModelGatewayInvocationError(
+          { code: 'rate_limit', retryable: true },
+          { executionOutcome: 'not_executed' },
+        );
+      }),
+    } as StructuredModelGateway;
+    const args = {
+      title: '持续拒绝',
+      messages,
+      gateway,
+      traceId: 'trace-rate-limit',
+      operationId: 'job-rate-limit',
+      saveCheckpoint: async (next: Record<string, unknown>) => {
+        checkpoint = structuredClone(next);
+      },
+    };
+    for (
+      let attempt = 1;
+      attempt <= MARKDOWN_LONGFORM_MAX_CALLS;
+      attempt += 1
+    ) {
+      await expect(
+        generateMarkdownDocumentContent({ ...args, checkpoint }),
+      ).rejects.toMatchObject({ normalized: { code: 'rate_limit' } });
+      expect(checkpoint).toMatchObject({
+        callsStarted: attempt,
+        reservedOutputTokens: 0,
+        pendingCall: null,
+      });
+    }
+    await expect(
+      generateMarkdownDocumentContent({ ...args, checkpoint }),
+    ).rejects.toMatchObject({ code: 'model_output_limit' });
+    expect(gateway.generateStructured).toHaveBeenCalledTimes(
+      MARKDOWN_LONGFORM_MAX_CALLS,
+    );
+  });
+
+  it('revision被429拒绝后保留完整32768输出能力并恢复', async () => {
+    let checkpoint: Record<string, unknown> | undefined;
+    const { gateway, generateStructured } = fixtureGateway('# 完整修订');
+    generateStructured.mockRejectedValueOnce(
+      new ModelGatewayInvocationError(
+        { code: 'rate_limit', retryable: true },
+        { executionOutcome: 'not_executed' },
+      ),
+    );
+    const args = {
+      title: '修订文档',
+      messages,
+      gateway,
+      traceId: 'trace-revision-429',
+      operationId: 'job-revision-429',
+      revision: {
+        instruction: '补充结论',
+        baseContent: {
+          contentVersion: 1,
+          markdown: '# 旧稿',
+          generatedByModel: true,
+        },
+      },
+      saveCheckpoint: async (next: Record<string, unknown>) => {
+        checkpoint = structuredClone(next);
+      },
+    };
+    await expect(generateMarkdownDocumentContent(args)).rejects.toMatchObject({
+      normalized: { code: 'rate_limit' },
+    });
+    expect(checkpoint).toMatchObject({
+      callsStarted: 1,
+      reservedOutputTokens: 0,
+      pendingCall: null,
+    });
+    const result = await generateMarkdownDocumentContent({
+      ...args,
+      checkpoint,
+    });
+    expect(result.content.markdown).toBe('# 完整修订');
+    expect(
+      generateStructured.mock.calls.map(([request]) => request.maxOutputTokens),
+    ).toEqual([32_768, 32_768]);
+    expect(
+      generateStructured.mock.calls.map(([request]) => request.operationId),
+    ).toEqual(['job-revision-429:revision', 'job-revision-429:revision']);
   });
 });

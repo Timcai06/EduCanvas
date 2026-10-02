@@ -1,4 +1,9 @@
-import type { StructuredModelGateway } from '@educanvas/agent-core';
+import {
+  ModelGatewayInvocationError,
+  type StructuredModelGateway,
+  type StructuredModelRequest,
+  type StructuredModelResult,
+} from '@educanvas/agent-core';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -136,6 +141,27 @@ function mergeUsage(total: LongformUsage, usage: LongformUsage): LongformUsage {
     outputTokens: total.outputTokens + usage.outputTokens,
     totalTokens: total.totalTokens + usage.totalTokens,
   };
+}
+
+async function invokeReservedModel<Output>(
+  gateway: StructuredModelGateway,
+  request: StructuredModelRequest<Output>,
+  releaseRejectedReservation: () => Promise<void>,
+): Promise<StructuredModelResult<Output>> {
+  try {
+    return await gateway.generateStructured(request);
+  } catch (error) {
+    if (
+      error instanceof ModelGatewayInvocationError &&
+      error.normalized.code === 'rate_limit' &&
+      error.normalized.retryable &&
+      error.executionOutcome === 'not_executed'
+    ) {
+      // 保留 callsStarted；拒绝也消耗有限调用次数，但不会消耗输出预算。
+      await releaseRejectedReservation();
+    }
+    throw error;
+  }
 }
 
 function buildSectionMessages(input: {
@@ -426,16 +452,26 @@ async function generateMarkdownRevision(input: {
     revisionMarkdown: null,
   });
   await input.saveCheckpoint?.(beforeCall);
-  const result = await input.gateway.generateStructured({
-    taskAlias: 'artifact.generate',
-    modelAlias: 'structured',
-    schema: markdownDocumentContentSchema,
-    promptVersion: MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION,
-    traceId: input.traceId,
-    operationId: pendingOperationId,
-    maxOutputTokens: outputReserve,
-    messages,
-  });
+  const result = await invokeReservedModel(
+    input.gateway,
+    {
+      taskAlias: 'artifact.generate',
+      modelAlias: 'structured',
+      schema: markdownDocumentContentSchema,
+      promptVersion: MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION,
+      traceId: input.traceId,
+      operationId: pendingOperationId,
+      maxOutputTokens: outputReserve,
+      messages,
+    },
+    async () => {
+      await input.saveCheckpoint?.({
+        ...beforeCall,
+        reservedOutputTokens: beforeCall.reservedOutputTokens - outputReserve,
+        pendingCall: null,
+      });
+    },
+  );
   const usage: LongformUsage = {
     calls: 1,
     inputTokens: result.metadata.usage.inputTokens,
@@ -525,7 +561,10 @@ async function generateMarkdownLongform(args: {
       throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
     }
     if (
-      checkpoint.sections.length === 0 ||
+      (checkpoint.sections.length === 0 &&
+        (checkpoint.usage.calls !== 0 ||
+          checkpoint.completedSections.length !== 0 ||
+          checkpoint.sourceSummary !== '')) ||
       checkpoint.completedSections.some(
         (section, index) =>
           section.index !== index ||
@@ -560,10 +599,7 @@ async function generateMarkdownLongform(args: {
   if (checkpoint?.pendingCall) {
     throw new MarkdownDocumentGenerationFailure('model_outcome_unknown');
   }
-  if (
-    checkpoint &&
-    (checkpoint.sections.length === 0 || checkpoint.revisionMarkdown !== null)
-  ) {
+  if (checkpoint && checkpoint.revisionMarkdown !== null) {
     throw new MarkdownDocumentGenerationFailure('invalid_output');
   }
 
@@ -597,7 +633,7 @@ async function generateMarkdownLongform(args: {
     await input.saveCheckpoint?.(next);
   };
 
-  if (!checkpoint) {
+  if (sectionPlan.length === 0) {
     if (
       callsStarted >= MARKDOWN_LONGFORM_MAX_CALLS ||
       MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS >
@@ -612,16 +648,23 @@ async function generateMarkdownLongform(args: {
       operationId: planOperationId,
       maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
     });
-    const plan = await gateway.generateStructured({
-      taskAlias: 'artifact.generate',
-      modelAlias: 'structured',
-      schema: longformPlanSchema,
-      promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:plan-v1`,
-      traceId: input.traceId,
-      operationId: planOperationId,
-      maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
-      messages: planMessages,
-    });
+    const plan = await invokeReservedModel(
+      gateway,
+      {
+        taskAlias: 'artifact.generate',
+        modelAlias: 'structured',
+        schema: longformPlanSchema,
+        promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:plan-v1`,
+        traceId: input.traceId,
+        operationId: planOperationId,
+        maxOutputTokens: MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS,
+        messages: planMessages,
+      },
+      async () => {
+        reservedOutputTokens -= MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS;
+        await persistCheckpoint(null);
+      },
+    );
     if (
       plan.metadata.usage.outputTokens >
       MARKDOWN_LONGFORM_MAX_PLAN_OUTPUT_TOKENS
@@ -687,16 +730,23 @@ async function generateMarkdownLongform(args: {
     callsStarted += 1;
     reservedOutputTokens += maxOutputTokens;
     await persistCheckpoint({ operationId, maxOutputTokens });
-    const result = await gateway.generateStructured({
-      taskAlias: 'artifact.generate',
-      modelAlias: 'structured',
-      schema: longformSectionSchema,
-      promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:section-v1`,
-      traceId: input.traceId,
-      operationId,
-      maxOutputTokens,
-      messages: sectionMessages,
-    });
+    const result = await invokeReservedModel(
+      gateway,
+      {
+        taskAlias: 'artifact.generate',
+        modelAlias: 'structured',
+        schema: longformSectionSchema,
+        promptVersion: `${input.revision ? MARKDOWN_DOCUMENT_REVISION_PROMPT_VERSION : MARKDOWN_DOCUMENT_PROMPT_VERSION}:section-v1`,
+        traceId: input.traceId,
+        operationId,
+        maxOutputTokens,
+        messages: sectionMessages,
+      },
+      async () => {
+        reservedOutputTokens -= maxOutputTokens;
+        await persistCheckpoint(null);
+      },
+    );
     usage = mergeUsage(usage, {
       calls: 1,
       inputTokens: result.metadata.usage.inputTokens,

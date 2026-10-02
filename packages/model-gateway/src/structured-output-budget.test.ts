@@ -114,6 +114,7 @@ describe('long artifact output budget', () => {
           choices: [
             { finish_reason: 'stop', message: { content: '{"answer":"ok"}' } },
           ],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
         });
       },
     });

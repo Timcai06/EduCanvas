@@ -59,6 +59,13 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
   let speechCalls = 0;
   let imageCalls = 0;
   let imageGenerationDelayMs = 0;
+  let markdownResponses: Array<{
+    status?: number;
+    output?: unknown;
+    usage?: { prompt_tokens: number; completion_tokens?: number };
+  }> | null = null;
+  let markdownCalls = 0;
+  let markdownCeilings: number[] = [];
 
   beforeAll(async () => {
     await migrate(database, {
@@ -75,6 +82,33 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     providerServer = createServer((request, response) => {
       const handle = async () => {
         if (request.url === '/v1/chat/completions') {
+          if (markdownResponses !== null) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of request) chunks.push(Buffer.from(chunk));
+            markdownCalls += 1;
+            markdownCeilings.push(
+              JSON.parse(Buffer.concat(chunks).toString()).max_tokens,
+            );
+            const fixture = markdownResponses.shift();
+            if (!fixture) throw new Error('unexpected markdown provider call');
+            response.writeHead(fixture.status ?? 200, {
+              'content-type': 'application/json',
+            });
+            response.end(
+              JSON.stringify({
+                choices: [
+                  {
+                    finish_reason: 'stop',
+                    message: { content: JSON.stringify(fixture.output) },
+                  },
+                ],
+                ...(fixture.usage === undefined
+                  ? {}
+                  : { usage: fixture.usage }),
+              }),
+            );
+            return;
+          }
           response.writeHead(200, { 'content-type': 'application/json' });
           response.end(
             JSON.stringify({
@@ -180,6 +214,9 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
     speechCalls = 0;
     imageCalls = 0;
     imageGenerationDelayMs = 0;
+    markdownResponses = null;
+    markdownCalls = 0;
+    markdownCeilings = [];
   });
 
   afterAll(async () => {
@@ -234,6 +271,157 @@ describe('产物生成后端全链路(创建→原子入队→worker 消费→�
       .where(eq(artifactVersions.artifactId, artifactId));
     return rows.length;
   };
+
+  const markdownPlan = {
+    sourceSummary: '讲义中的函数定义和代入实例',
+    sections: [
+      { title: '定义', focus: '解释函数定义' },
+      { title: '实例', focus: '解释代入实例' },
+    ],
+  };
+  const fixtureUsage = { prompt_tokens: 30, completion_tokens: 15 };
+  const makeMarkdownJob = () =>
+    repository.createArtifactWithGenerationJob({
+      spaceId,
+      conversationId,
+      trustedSubjectId: owner,
+      kind: 'markdown_document',
+      trustTier: 'tier1',
+      title: '分块文档',
+      taskIdentifier: ARTIFACT_GENERATE_TASK,
+    });
+  const makeRetryDue = (jobId: string) =>
+    database.execute(
+      sql`update graphile_worker._private_jobs set run_at = now() where payload->>'jobId' = ${jobId}`,
+    );
+
+  it('Markdown HTTP429跨Graphile attempt恢复，仅提交完整版本且fence递增', async () => {
+    enableFixtureProvider();
+    markdownResponses = [
+      { output: markdownPlan, usage: fixtureUsage },
+      { status: 429 },
+      {
+        output: { markdown: '- 定义正文', continuationSummary: '定义已完成' },
+        usage: fixtureUsage,
+      },
+      {
+        output: { markdown: '- 实例正文', continuationSummary: '实例已完成' },
+        usage: fixtureUsage,
+      },
+    ];
+    const created = await makeMarkdownJob();
+    await runOnce({ connectionString, taskList });
+    const first = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(first.latestJob?.status).toBe('running');
+    expect(first.latestJob?.checkpoint).toMatchObject({
+      callsStarted: 2,
+      reservedOutputTokens: 0,
+      pendingCall: null,
+      usage: { outputTokens: 15 },
+      completedSections: [],
+    });
+    expect(await countVersions(created.artifact.id)).toBe(0);
+    const execution = await database.execute(
+      sql`select execution_generation from artifact_generation_jobs where id = ${created.job.id}`,
+    );
+    expect(execution[0]?.execution_generation).toBe(1);
+    await makeRetryDue(created.job.id);
+    await runOnce({ connectionString, taskList });
+    const complete = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(complete.latestJob?.status).toBe('succeeded');
+    expect(complete.latestJob?.checkpoint).toMatchObject({
+      callsStarted: 4,
+      reservedOutputTokens: 0,
+      pendingCall: null,
+      usage: { calls: 3, outputTokens: 45 },
+      completedSections: [{ index: 0 }, { index: 1 }],
+    });
+    expect(complete.latestVersion?.content).toMatchObject({
+      markdown: expect.stringContaining('## 实例\n\n- 实例正文'),
+    });
+    expect(await countVersions(created.artifact.id)).toBe(1);
+    expect(markdownCalls).toBe(4);
+    // 未知 fixture 模型保持现有8192部署cap，调用方预留不扩大Provider上限。
+    expect(markdownCeilings).toEqual([1_024, 8_192, 8_192, 8_192]);
+    const current = await database.execute(
+      sql`select execution_generation from artifact_generation_jobs where id = ${created.job.id}`,
+    );
+    expect(current[0]?.execution_generation).toBe(2);
+    await runOnce({ connectionString, taskList });
+    expect(markdownCalls).toBe(4);
+    expect(await countVersions(created.artifact.id)).toBe(1);
+  });
+
+  it.each([undefined, { prompt_tokens: 30 }])(
+    'Markdown缺失输出usage %j时数据库保留预算且无部分版本',
+    async (usage) => {
+      enableFixtureProvider();
+      markdownResponses = [
+        { output: markdownPlan, usage: fixtureUsage },
+        {
+          output: { markdown: '- 用量未知', continuationSummary: '未知' },
+          usage,
+        },
+      ];
+      const created = await makeMarkdownJob();
+      await runOnce({ connectionString, taskList });
+      const detail = await repository.getArtifactDetail({
+        artifactId: created.artifact.id,
+        trustedSubjectId: owner,
+      });
+      expect(detail.latestJob?.status).toBe('failed');
+      expect(detail.latestJob?.failureCode).toBe('model_invalid_response');
+      expect(detail.latestJob?.checkpoint).toMatchObject({
+        callsStarted: 2,
+        reservedOutputTokens: 16_376,
+        pendingCall: {
+          operationId: `${created.job.id}:longform:section:1`,
+          maxOutputTokens: 16_376,
+        },
+        completedSections: [],
+        usage: { outputTokens: 15 },
+      });
+      expect(await countVersions(created.artifact.id)).toBe(0);
+      await runOnce({ connectionString, taskList });
+      expect(markdownCalls).toBe(2);
+      expect(await countVersions(created.artifact.id)).toBe(0);
+    },
+  );
+
+  it('Markdown HTTP503结果未知跨attempt保留pending，不再次请求Provider', async () => {
+    enableFixtureProvider();
+    markdownResponses = [
+      { output: markdownPlan, usage: fixtureUsage },
+      { status: 503 },
+    ];
+    const created = await makeMarkdownJob();
+    await runOnce({ connectionString, taskList });
+    const first = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(first.latestJob?.status).toBe('running');
+    expect(first.latestJob?.checkpoint).toMatchObject({
+      reservedOutputTokens: 16_376,
+      pendingCall: { maxOutputTokens: 16_376 },
+    });
+    await makeRetryDue(created.job.id);
+    await runOnce({ connectionString, taskList });
+    const failed = await repository.getArtifactDetail({
+      artifactId: created.artifact.id,
+      trustedSubjectId: owner,
+    });
+    expect(failed.latestJob?.status).toBe('failed');
+    expect(failed.latestJob?.failureCode).toBe('model_outcome_unknown');
+    expect(markdownCalls).toBe(2);
+    expect(await countVersions(created.artifact.id)).toBe(0);
+  });
 
   it('产物/账本/队列三行同事务落库,runOnce 消费后版本 v1 通过公开 Schema', async () => {
     const created = await repository.createArtifactWithGenerationJob({

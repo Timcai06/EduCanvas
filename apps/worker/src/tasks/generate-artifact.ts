@@ -320,7 +320,9 @@ export const generateArtifact: Task = async (rawPayload, helpers) => {
       await reportGenerationProgress(
         artifacts,
         payload,
-        Math.min(80, 20 + Math.floor((60 * completed) / sectionCount)),
+        sectionCount === 0
+          ? 20
+          : Math.min(80, 20 + Math.floor((60 * completed) / sectionCount)),
         helpers.logger,
       );
     };

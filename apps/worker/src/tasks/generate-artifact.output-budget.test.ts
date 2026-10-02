@@ -74,6 +74,8 @@ const ARTIFACT_ID = '22222222-2222-4222-8222-222222222222';
 beforeEach(() => {
   vi.clearAllMocks();
   artifacts.transitionGenerationJob.mockResolvedValue({});
+  artifacts.updateGenerationJobCheckpoint.mockResolvedValue({});
+  artifacts.appendVersionAndCompleteGenerationJob.mockResolvedValue(version);
   artifacts.findVersionByGenerationJob.mockResolvedValue(null);
   artifacts.getGenerationJob.mockResolvedValue({
     id: JOB_ID,
@@ -230,4 +232,185 @@ describe('generateArtifact selects a task-scoped output budget', () => {
       }),
     );
   });
+
+  it.each([1, 2, 3])(
+    '第 %i 次调用被429拒绝后，跨attempt续写且不重做已完成段',
+    async (rejectedCall) => {
+      artifacts.getArtifact.mockResolvedValue({
+        id: ARTIFACT_ID,
+        kind: 'markdown_document',
+        title: '恢复文档',
+        conversationId: '33333333-3333-4333-8333-333333333333',
+        latestVersion: 0,
+      });
+      let checkpoint: Record<string, unknown> = {};
+      let executionGeneration = 0;
+      artifacts.claimGenerationJobExecution.mockImplementation(async () => ({
+        executionGeneration: ++executionGeneration,
+        checkpoint: structuredClone(checkpoint),
+      }));
+      artifacts.updateGenerationJobCheckpoint.mockImplementation(
+        async (input) => {
+          checkpoint = structuredClone(input.checkpoint);
+        },
+      );
+      const outputs = [
+        {
+          sourceSummary: '来源摘要',
+          sections: [
+            { title: '定义', focus: '定义' },
+            { title: '实例', focus: '实例' },
+          ],
+        },
+        { markdown: '- 第一段', continuationSummary: '第一段已完成' },
+        { markdown: '- 第二段', continuationSummary: '第二段已完成' },
+      ];
+      let calls = 0;
+      const fetchMock = vi.fn<typeof fetch>(async () => {
+        calls += 1;
+        if (calls === rejectedCall) return new Response('', { status: 429 });
+        return Response.json({
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: JSON.stringify(outputs.shift()) },
+            },
+          ],
+          usage: { prompt_tokens: 30, completion_tokens: 15 },
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const payload = {
+        jobId: JOB_ID,
+        artifactId: ARTIFACT_ID,
+        subjectId: 'fixture-subject',
+      };
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      await expect(
+        generateArtifact(payload, {
+          job: { attempts: 1, max_attempts: 3 },
+          logger,
+        } as never),
+      ).rejects.toMatchObject({ normalized: { code: 'rate_limit' } });
+      expect(checkpoint).toMatchObject({
+        callsStarted: rejectedCall,
+        reservedOutputTokens: 0,
+        pendingCall: null,
+      });
+      expect(
+        artifacts.appendVersionAndCompleteGenerationJob,
+      ).not.toHaveBeenCalled();
+      await generateArtifact(payload, {
+        job: { attempts: 2, max_attempts: 3 },
+        logger,
+      } as never);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      const ceilings = fetchMock.mock.calls.map(
+        (call) => JSON.parse(String(call[1]?.body)).max_tokens,
+      );
+      expect(ceilings[rejectedCall - 1]).toBe(ceilings[rejectedCall]);
+      expect(checkpoint).toMatchObject({
+        callsStarted: 4,
+        reservedOutputTokens: 0,
+        pendingCall: null,
+        usage: { calls: 3, outputTokens: 45 },
+        completedSections: [{ index: 0 }, { index: 1 }],
+      });
+      expect(
+        artifacts.appendVersionAndCompleteGenerationJob,
+      ).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ executionGeneration: 2 }),
+      );
+      expect(
+        artifacts.transitionGenerationJob.mock.calls.every(
+          ([input]) =>
+            input.progress === undefined || Number.isFinite(input.progress),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([undefined, { prompt_tokens: 30 }])(
+    '缺少输出用量 %j 时保留预留，重投不重复调用或发布半稿',
+    async (usage) => {
+      artifacts.getArtifact.mockResolvedValue({
+        id: ARTIFACT_ID,
+        kind: 'markdown_document',
+        title: '用量未知文档',
+        conversationId: '33333333-3333-4333-8333-333333333333',
+        latestVersion: 0,
+      });
+      let checkpoint: Record<string, unknown> = {};
+      artifacts.claimGenerationJobExecution.mockImplementation(async () => ({
+        executionGeneration: 1,
+        checkpoint: structuredClone(checkpoint),
+      }));
+      artifacts.updateGenerationJobCheckpoint.mockImplementation(
+        async (input) => {
+          checkpoint = structuredClone(input.checkpoint);
+        },
+      );
+      const outputs = [
+        {
+          sourceSummary: '来源摘要',
+          sections: [{ title: '正文', focus: '定义' }],
+        },
+        { markdown: '- 未知用量内容', continuationSummary: '摘要' },
+      ];
+      const fetchMock = vi.fn<typeof fetch>(async () => {
+        const output = outputs.shift();
+        const reportedUsage =
+          outputs.length === 1
+            ? { prompt_tokens: 30, completion_tokens: 15 }
+            : usage;
+        return Response.json({
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: JSON.stringify(output) },
+            },
+          ],
+          ...(reportedUsage === undefined ? {} : { usage: reportedUsage }),
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const payload = {
+        jobId: JOB_ID,
+        artifactId: ARTIFACT_ID,
+        subjectId: 'fixture-subject',
+      };
+      const helpers = {
+        job: { attempts: 1, max_attempts: 3 },
+        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      };
+      await generateArtifact(payload, helpers as never);
+      expect(checkpoint).toMatchObject({
+        callsStarted: 2,
+        reservedOutputTokens: 32_753,
+        pendingCall: { maxOutputTokens: 32_753 },
+        completedSections: [],
+        usage: { outputTokens: 15 },
+      });
+      expect(artifacts.transitionGenerationJob).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          to: 'failed',
+          failureCode: 'model_invalid_response',
+        }),
+      );
+      await generateArtifact(payload, {
+        ...helpers,
+        job: { attempts: 2, max_attempts: 3 },
+      } as never);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(
+        artifacts.appendVersionAndCompleteGenerationJob,
+      ).not.toHaveBeenCalled();
+      expect(artifacts.transitionGenerationJob).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          to: 'failed',
+          failureCode: 'model_outcome_unknown',
+        }),
+      );
+    },
+  );
 });
