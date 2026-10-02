@@ -33,7 +33,10 @@ import {
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
 } from '@educanvas/db';
-import type { ArtifactProposalKind } from '@educanvas/agent-core';
+import type {
+  AgentMessagePart,
+  ArtifactProposalKind,
+} from '@educanvas/agent-core';
 import { loadOwnedGeneralRequestConversation } from '../platform/general-request-conversation-context';
 import { gatewayToLegacy } from './turn-application-projection';
 
@@ -123,6 +126,7 @@ export async function beginWebGatewayTurn(
     throw new PlatformTurnOwnershipError();
   }
   let confirmedArtifactKind: ArtifactProposalKind | undefined;
+  let confirmationSourceParts: readonly AgentMessagePart[] | undefined;
   let confirmationRepository: DrizzleArtifactConfirmationRepository | null =
     null;
   let confirmationScope: {
@@ -152,6 +156,7 @@ export async function beginWebGatewayTurn(
       });
     }
     confirmedArtifactKind = confirmed.confirmedKind ?? confirmed.artifactKind;
+    confirmationSourceParts = confirmed.proposalParts;
     request = {
       ...request,
       text: '请根据前一条请求创建我刚确认的持久产物。',
@@ -176,7 +181,9 @@ export async function beginWebGatewayTurn(
   const assetContext = await prepareGatewayGeneralTurnContext({
     identity,
     spaceId: conversation.spaceId,
-    request,
+    request: confirmationSourceParts
+      ? { ...request, parts: [...confirmationSourceParts] }
+      : request,
     modelRuntime,
   });
   const principal = identity.studentId.startsWith('anon:')
