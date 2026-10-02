@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  StreamingSpeechEvent,
-  StreamingSpeechGateway,
-  StreamingSpeechRequest,
-  StreamingSpeechSession,
-  StreamingSpeechSessionRequest,
-  StreamingSpeechTextInput,
+import {
+  ModelGatewayInvocationError,
+  type NormalizedModelError,
+  type StreamingSpeechEvent,
+  type StreamingSpeechGateway,
+  type StreamingSpeechRequest,
+  type StreamingSpeechSession,
+  type StreamingSpeechSessionRequest,
+  type StreamingSpeechTextInput,
 } from '@educanvas/agent-core';
 import type { DashScopeSpeechConfiguration } from './dashscope-speech-config';
 import {
   copyDashScopeBinaryFrame,
+  dashScopeFailureCode,
   parseDashScopeEnvelope,
 } from './dashscope-protocol';
 import {
@@ -17,6 +20,10 @@ import {
   type DashScopeSocket,
   type DashScopeSocketFactory,
 } from './dashscope-websocket';
+import {
+  logProviderFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
 
 export interface DashScopeStreamingSpeechGatewayOptions {
   configuration: DashScopeSpeechConfiguration;
@@ -30,7 +37,7 @@ const SPEECH_TASK_TIMEOUT_MS = 60_000;
 
 class DashScopeSpeechSession implements StreamingSpeechSession {
   readonly events: AsyncIterable<StreamingSpeechEvent>;
-  private readonly socket: DashScopeSocket;
+  private readonly socket?: DashScopeSocket;
   private readonly taskId = randomUUID();
   private readonly queue: StreamingSpeechEvent[] = [];
   private readonly waiters: Array<() => void> = [];
@@ -43,7 +50,7 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
   private nextAudioSequence = 0;
   private totalCharacters = 0;
   private queuedAudioBytes = 0;
-  private readonly timeout: ReturnType<typeof setTimeout>;
+  private readonly timeout?: ReturnType<typeof setTimeout>;
   private readonly abort = () => this.cancel();
 
   constructor(
@@ -51,12 +58,38 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
     private readonly options: DashScopeStreamingSpeechGatewayOptions,
   ) {
     this.events = this.iterateEvents();
-    this.socket = (options.socketFactory ?? createDashScopeSocket)(
-      options.configuration,
-    );
+    if (request.signal?.aborted) {
+      this.fail('CANCELLED', undefined, {
+        stage: 'precondition',
+        failureClass: 'cancelled',
+      });
+      return;
+    }
+    try {
+      this.socket = (options.socketFactory ?? createDashScopeSocket)(
+        options.configuration,
+      );
+    } catch {
+      if (request.signal?.aborted) {
+        this.fail('CANCELLED', undefined, {
+          stage: 'precondition',
+          failureClass: 'cancelled',
+        });
+        return;
+      }
+      const normalized: NormalizedModelError = {
+        code: 'unavailable',
+        retryable: true,
+      };
+      logProviderFailure('dashscope', normalized, undefined, {
+        capability: 'streaming_speech',
+        stage: 'provider_call',
+      });
+      throw new ModelGatewayInvocationError(normalized);
+    }
     this.timeout = setTimeout(() => {
-      this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.fail('MODEL_FAILED', { code: 'timeout', retryable: true });
+      this.socket?.close();
     }, SPEECH_TASK_TIMEOUT_MS);
     this.timeout.unref?.();
     this.attachSocket();
@@ -75,8 +108,12 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
       characters > MAX_TEXT_CHARACTERS_PER_SUBMISSION ||
       this.totalCharacters + characters > MAX_TEXT_CHARACTERS_PER_SESSION
     ) {
-      this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.fail(
+        'MODEL_FAILED',
+        { code: 'output_limit', retryable: false },
+        { stage: 'precondition' },
+      );
+      this.socket?.close();
       return;
     }
     this.nextInputSequence += 1;
@@ -89,8 +126,12 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
     if (this.terminal || this.finishRequested) return;
     this.finishRequested = true;
     if (this.totalCharacters === 0) {
-      this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.fail(
+        'MODEL_FAILED',
+        { code: 'invalid_response', retryable: false },
+        { stage: 'precondition' },
+      );
+      this.socket?.close();
       return;
     }
     this.flushText();
@@ -100,7 +141,7 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
     if (this.terminal) return;
     if (this.providerStarted) {
       try {
-        this.socket.send(
+        this.socket?.send(
           JSON.stringify({
             header: {
               action: 'finish-task',
@@ -115,11 +156,11 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
       }
     }
     this.fail('CANCELLED');
-    this.socket.close();
+    this.socket?.close();
   }
 
   private attachSocket(): void {
-    this.socket.on('open', () => {
+    this.socket?.on('open', () => {
       if (this.terminal) return;
       this.send({
         header: {
@@ -142,12 +183,15 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
         },
       });
     });
-    this.socket.on('message', (data: unknown, isBinary?: boolean) => {
+    this.socket?.on('message', (data: unknown, isBinary?: boolean) => {
       if (this.terminal) return;
       if (isBinary) {
         if (!this.providerStarted) {
-          this.fail('MODEL_FAILED');
-          this.socket.close();
+          this.fail('MODEL_FAILED', {
+            code: 'invalid_response',
+            retryable: false,
+          });
+          this.socket?.close();
           return;
         }
         const bytes = copyDashScopeBinaryFrame(data);
@@ -156,8 +200,11 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
           bytes.byteLength % 2 !== 0 ||
           this.queuedAudioBytes + bytes.byteLength > MAX_QUEUED_AUDIO_BYTES
         ) {
-          this.fail('MODEL_FAILED');
-          this.socket.close();
+          this.fail('MODEL_FAILED', {
+            code: 'invalid_response',
+            retryable: false,
+          });
+          this.socket?.close();
           return;
         }
         this.queuedAudioBytes += bytes.byteLength;
@@ -171,30 +218,40 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
       }
       const envelope = parseDashScopeEnvelope(data);
       if (envelope === null || envelope.header.task_id !== this.taskId) {
-        this.fail('MODEL_FAILED');
-        this.socket.close();
+        this.fail('MODEL_FAILED', {
+          code: 'invalid_response',
+          retryable: false,
+        });
+        this.socket?.close();
         return;
       }
       if (envelope.header.event === 'task-started') {
         if (this.providerStarted) {
-          this.fail('MODEL_FAILED');
-          this.socket.close();
+          this.fail('MODEL_FAILED', {
+            code: 'invalid_response',
+            retryable: false,
+          });
+          this.socket?.close();
           return;
         }
         this.providerStarted = true;
         this.flushText();
       } else if (envelope.header.event === 'task-finished') {
         this.succeed();
-        this.socket.close();
+        this.socket?.close();
       } else if (envelope.header.event === 'task-failed') {
-        this.fail('MODEL_FAILED');
-        this.socket.close();
+        this.fail(
+          'MODEL_FAILED',
+          { code: 'unavailable', retryable: false },
+          { providerErrorCode: dashScopeFailureCode(envelope) },
+        );
+        this.socket?.close();
       }
       // result-generated is provider progress only; raw metadata does not cross
       // the adapter boundary.
     });
-    this.socket.on('error', () => this.fail('MODEL_FAILED'));
-    this.socket.on('close', () => {
+    this.socket?.on('error', () => this.fail('MODEL_FAILED'));
+    this.socket?.on('close', () => {
       if (!this.terminal) this.fail('MODEL_FAILED');
     });
   }
@@ -233,10 +290,10 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
   private send(message: unknown): void {
     if (this.terminal) return;
     try {
-      this.socket.send(JSON.stringify(message));
+      this.socket?.send(JSON.stringify(message));
     } catch {
       this.fail('MODEL_FAILED');
-      this.socket.close();
+      this.socket?.close();
     }
   }
 
@@ -248,9 +305,21 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
     this.wake();
   }
 
-  private fail(failureCode: 'MODEL_FAILED' | 'CANCELLED'): void {
+  private fail(
+    failureCode: 'MODEL_FAILED' | 'CANCELLED',
+    error: NormalizedModelError = { code: 'unavailable', retryable: true },
+    diagnostic: ProviderFailureDiagnostic = {},
+  ): void {
     if (this.terminal) return;
     this.terminal = true;
+    logProviderFailure(
+      'dashscope',
+      failureCode === 'CANCELLED'
+        ? { code: 'aborted', retryable: false }
+        : error,
+      undefined,
+      { capability: 'streaming_speech', stage: 'stream', ...diagnostic },
+    );
     this.queue.push({ type: 'failed', failureCode });
     this.cleanup();
     this.wake();
@@ -280,7 +349,7 @@ class DashScopeSpeechSession implements StreamingSpeechSession {
       }
     } finally {
       if (!this.terminal) this.cancel();
-      this.socket.close();
+      this.socket?.close();
     }
   }
 }

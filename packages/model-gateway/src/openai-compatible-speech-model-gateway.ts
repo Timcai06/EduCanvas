@@ -8,6 +8,11 @@ import {
 } from '@educanvas/agent-core';
 import type { EnabledModelGatewayConfiguration } from './config/config';
 
+import {
+  logProviderInvocationFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
+
 export interface OpenAICompatibleSpeechModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -55,7 +60,15 @@ export class OpenAICompatibleSpeechModelGateway implements SpeechModelGateway {
       input.length > this.config.speechMaxInputChars ||
       request.format !== 'mp3'
     ) {
-      throw invocationError({ code: 'output_limit', retryable: false });
+      const failure = invocationError({
+        code: 'output_limit',
+        retryable: false,
+      });
+      logProviderInvocationFailure(this.config.provider, failure, {
+        capability: 'speech',
+        stage: 'precondition',
+      });
+      throw failure;
     }
 
     const controller = new AbortController();
@@ -73,6 +86,10 @@ export class OpenAICompatibleSpeechModelGateway implements SpeechModelGateway {
 
     const modelId = this.config.modelIds.speech!;
     const startedAt = this.now();
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'speech',
+      stage: 'provider_call',
+    };
     try {
       let response: Response;
       try {
@@ -100,9 +117,12 @@ export class OpenAICompatibleSpeechModelGateway implements SpeechModelGateway {
         throw invocationError({ code: 'unavailable', retryable: true }, cause);
       }
 
+      diagnostic.status = response.status;
       if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
         throw invocationError(errorForHttpStatus(response.status));
       }
+      diagnostic.stage = 'response_parse';
       const responseContentType =
         response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
       if (
@@ -155,6 +175,9 @@ export class OpenAICompatibleSpeechModelGateway implements SpeechModelGateway {
         voice: this.config.speechVoice,
         metadata,
       };
+    } catch (cause) {
+      logProviderInvocationFailure(this.config.provider, cause, diagnostic);
+      throw cause;
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);

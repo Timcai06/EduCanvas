@@ -20,6 +20,7 @@ import {
   requiredString,
 } from './openai-compatible-protocol';
 import { readSseData, SseProtocolError } from './sse';
+import type { ProviderFailureDiagnostic } from './provider-failure-diagnostics';
 
 interface ToolCallState {
   callId: string;
@@ -49,6 +50,12 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
   ): AsyncIterable<TurnModelEvent> {
     const modelId = this.config.modelIds[request.modelAlias];
     if (modelId === undefined) {
+      logProviderFailure(
+        this.config.provider,
+        { code: 'unavailable', retryable: false },
+        undefined,
+        { capability: 'turn', stage: 'precondition' },
+      );
       yield failedEvent(request.phase, {
         code: 'unavailable',
         retryable: false,
@@ -62,6 +69,12 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
     try {
       body = JSON.stringify(buildRequestBody(request, this.config, modelId));
     } catch {
+      logProviderFailure(
+        this.config.provider,
+        { code: 'invalid_response', retryable: false },
+        undefined,
+        { capability: 'turn', stage: 'request_build' },
+      );
       yield failedEvent(request.phase, {
         code: 'invalid_response',
         retryable: false,
@@ -87,6 +100,10 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
       controller.abort();
     }, this.config.timeoutMs);
 
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'turn',
+      stage: 'provider_call',
+    };
     try {
       const response = await this.fetchImpl(
         `${this.config.baseUrl}/chat/completions`,
@@ -101,14 +118,21 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           signal: controller.signal,
         },
       );
+      diagnostic.status = response.status;
       // HTTP 失败不保留响应体；只映射状态码与 Retry-After 到稳定错误码。
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
         const normalized = errorForHttpResponse(response, this.now());
-        logProviderFailure(this.config.provider, normalized, response.status);
+        logProviderFailure(
+          this.config.provider,
+          normalized,
+          response.status,
+          diagnostic,
+        );
         yield failedEvent(request.phase, normalized);
         return;
       }
+      diagnostic.stage = 'response_parse';
       if (
         !response.headers
           .get('content-type')
@@ -117,6 +141,12 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
         response.body === null
       ) {
         await response.body?.cancel().catch(() => undefined);
+        logProviderFailure(
+          this.config.provider,
+          { code: 'invalid_response', retryable: false },
+          undefined,
+          diagnostic,
+        );
         yield failedEvent(request.phase, {
           code: 'invalid_response',
           retryable: false,
@@ -326,6 +356,12 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
         traceId: request.traceId,
       };
       if (finish.failure !== undefined) {
+        logProviderFailure(
+          this.config.provider,
+          finish.failure,
+          undefined,
+          diagnostic,
+        );
         yield failedEvent(request.phase, finish.failure, metadata);
       } else {
         yield { type: 'completed', phase: request.phase, metadata };
@@ -341,7 +377,12 @@ export class OpenAICompatibleTurnModelGateway implements TurnModelGateway {
           : error instanceof SseProtocolError
             ? { code: 'invalid_response', retryable: false }
             : { code: 'unavailable', retryable: true };
-      logProviderFailure(this.config.provider, normalized);
+      logProviderFailure(
+        this.config.provider,
+        normalized,
+        undefined,
+        diagnostic,
+      );
       yield failedEvent(request.phase, normalized);
     } finally {
       clearTimeout(timeout);

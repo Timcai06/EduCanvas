@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NormalizedModelError } from '@educanvas/agent-core';
 import { errorForHttpResponse } from './openai-compatible-protocol';
 import { logProviderFailure } from './provider-failure-diagnostics';
+import type { ProviderFailureDiagnostic } from './provider-failure-diagnostics';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -47,6 +48,19 @@ describe('safe Provider diagnostics', () => {
       'provider_invalid_response',
     );
   });
+  it('其他HTTP拒绝不会因旧归一化码被误记为响应解析失败', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    logProviderFailure(
+      'dashscope',
+      { code: 'invalid_response', retryable: false },
+      401,
+    );
+    expect(JSON.parse(warn.mock.calls[0]![0])).toMatchObject({
+      event: 'provider_unauthorized',
+      failureClass: 'provider_failure',
+      status: 401,
+    });
+  });
   it('未知provider、状态与错误属性不能泄漏原值', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     logProviderFailure(
@@ -64,6 +78,28 @@ describe('safe Provider diagnostics', () => {
       normalizedCode: 'unknown',
     });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-');
+    expect(JSON.parse(warn.mock.calls[0]![0])).not.toHaveProperty('status');
+  });
+  it('内部上下文也必须收敛到有限集合，格式合法的秘密不能进日志', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    logProviderFailure(
+      'dashscope',
+      { code: 'invalid_response', retryable: false },
+      undefined,
+      {
+        capability: 'SECRET_CAPABILITY',
+        stage: 'SECRET_STAGE',
+        failureClass: 'SECRET_CLASS',
+        providerErrorCode: 'SECRET_API_KEY',
+        providerErrorType: 'SECRET_ERROR_TYPE',
+        status: 99,
+      } as unknown as ProviderFailureDiagnostic,
+    );
+    expect(JSON.parse(warn.mock.calls[0]![0])).toMatchObject({
+      provider: 'dashscope',
+      failureClass: 'response_invalid',
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('SECRET_');
     expect(JSON.parse(warn.mock.calls[0]![0])).not.toHaveProperty('status');
   });
 });

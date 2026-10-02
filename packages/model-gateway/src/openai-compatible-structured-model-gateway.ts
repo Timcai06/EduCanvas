@@ -10,6 +10,11 @@ import { z } from 'zod';
 import type { EnabledModelGatewayConfiguration } from './config/config';
 import { structuredOutputBudget } from './structured-output-budget';
 
+import {
+  logProviderInvocationFailure,
+  type ProviderFailureDiagnostic,
+} from './provider-failure-diagnostics';
+
 export interface OpenAICompatibleStructuredModelGatewayOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -55,32 +60,45 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
     const modelId =
       this.config.modelIds[request.modelAlias] ?? this.config.modelIds.primary;
 
-    const jsonSchema = JSON.stringify(z.toJSONSchema(request.schema));
-    const body = JSON.stringify({
-      model: modelId,
-      stream: false,
-      response_format: { type: 'json_object' },
-      max_tokens: structuredOutputBudget(
-        this.config,
-        modelId,
-        this.options.outputBudget === 'long_artifact' &&
-          request.taskAlias === 'artifact.generate' &&
-          request.modelAlias === 'structured',
-      ),
-      ...(this.config.provider === 'deepseek'
-        ? { thinking: { type: 'disabled' } }
-        : {}),
-      messages: [
-        ...request.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-        {
-          role: 'system',
-          content: `你必须只输出一个 JSON 对象,不含任何其他文本或代码围栏,且严格符合以下 JSON Schema:\n${jsonSchema}`,
-        },
-      ],
-    });
+    let body: string;
+    try {
+      const jsonSchema = JSON.stringify(z.toJSONSchema(request.schema));
+      body = JSON.stringify({
+        model: modelId,
+        stream: false,
+        response_format: { type: 'json_object' },
+        max_tokens: structuredOutputBudget(
+          this.config,
+          modelId,
+          this.options.outputBudget === 'long_artifact' &&
+            request.taskAlias === 'artifact.generate' &&
+            request.modelAlias === 'structured',
+        ),
+        ...(this.config.provider === 'deepseek'
+          ? { thinking: { type: 'disabled' } }
+          : {}),
+        messages: [
+          ...request.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          {
+            role: 'system',
+            content: `你必须只输出一个 JSON 对象,不含任何其他文本或代码围栏,且严格符合以下 JSON Schema:\n${jsonSchema}`,
+          },
+        ],
+      });
+    } catch {
+      const failure = invocationError({
+        code: 'invalid_response',
+        retryable: false,
+      });
+      logProviderInvocationFailure(this.config.provider, failure, {
+        capability: 'structured',
+        stage: 'request_build',
+      });
+      throw failure;
+    }
 
     const controller = new AbortController();
     let timedOut = false;
@@ -96,6 +114,10 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       });
 
     const startedAt = this.now();
+    const diagnostic: ProviderFailureDiagnostic = {
+      capability: 'structured',
+      stage: 'provider_call',
+    };
     try {
       let response: Response;
       try {
@@ -121,9 +143,12 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
         throw invocationError({ code: 'unavailable', retryable: true }, cause);
       }
 
+      diagnostic.status = response.status;
       if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
         throw invocationError(errorForHttpStatus(response.status));
       }
+      diagnostic.stage = 'response_parse';
 
       let payload: unknown;
       try {
@@ -198,6 +223,9 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
         traceId: request.traceId,
       };
       return { output: output.data, metadata };
+    } catch (cause) {
+      logProviderInvocationFailure(this.config.provider, cause, diagnostic);
+      throw cause;
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);

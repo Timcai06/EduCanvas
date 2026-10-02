@@ -1,5 +1,6 @@
 import {
   type ModelAlias,
+  type NormalizedModelError,
   type ProviderCallMetadata,
   type StreamAgentTextRequest,
   type TurnModelEvent,
@@ -8,6 +9,7 @@ import {
 import { jsonSchema, streamText, tool, type LanguageModel } from 'ai';
 import {
   AiSdkProtocolError,
+  aiSdkFailureDiagnostic,
   buildAiSdkPrompt,
   mapAiSdkFinish,
   mapAiSdkUsage,
@@ -16,6 +18,7 @@ import {
   stringifyAiSdkToolInput,
 } from './ai-sdk-protocol';
 import { failedEvent, logProviderFailure } from '../openai-compatible-protocol';
+import type { ProviderFailureDiagnostic } from '../provider-failure-diagnostics';
 
 /** @internal SDK Adapter构造依赖；不得由Web、领域层或客户端直接组装。 */
 export interface AiSdkTurnModelGatewayOptions {
@@ -38,16 +41,33 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
   async *streamTurnText(
     request: StreamAgentTextRequest,
   ): AsyncIterable<TurnModelEvent> {
+    const fail = (
+      error: NormalizedModelError,
+      diagnostic: ProviderFailureDiagnostic = {},
+      metadata?: ProviderCallMetadata,
+    ): TurnModelEvent => {
+      logProviderFailure(this.options.provider, error, undefined, {
+        capability: 'turn',
+        ...diagnostic,
+      });
+      return failedEvent(request.phase, error, metadata);
+    };
     if (request.signal?.aborted === true) {
-      yield failedEvent(request.phase, { code: 'aborted', retryable: false });
+      yield fail(
+        { code: 'aborted', retryable: false },
+        { stage: 'precondition' },
+      );
       return;
     }
     const resolvedModelId = this.options.modelIds[request.modelAlias];
     if (resolvedModelId === undefined) {
-      yield failedEvent(request.phase, {
-        code: 'unavailable',
-        retryable: false,
-      });
+      yield fail(
+        {
+          code: 'unavailable',
+          retryable: false,
+        },
+        { stage: 'precondition' },
+      );
       return;
     }
 
@@ -63,6 +83,7 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
       controller.abort('timeout');
     }, this.options.timeoutMs);
 
+    let stage: ProviderFailureDiagnostic['stage'] = 'request_build';
     try {
       // 供应商 SDK 对象不越过该适配器：prompt 与 tool schema 在这里重建，
       // 只向下游提供经过本层约束的模型输入。
@@ -92,6 +113,7 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         // logProviderFailure's closed provider/code/retryable fields below.
         onError: () => undefined,
       });
+      stage = 'stream';
 
       let toolCallCount = 0;
       for await (const part of result.fullStream) {
@@ -106,10 +128,13 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         }
         if (part.type === 'tool-call') {
           if (request.phase !== 'answer') {
-            yield failedEvent(request.phase, {
-              code: 'invalid_response',
-              retryable: false,
-            });
+            yield fail(
+              {
+                code: 'invalid_response',
+                retryable: false,
+              },
+              { stage },
+            );
             return;
           }
           toolCallCount += 1;
@@ -132,10 +157,13 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
           continue;
         }
         if (part.type === 'abort') {
-          yield failedEvent(request.phase, {
-            code: timedOut ? 'timeout' : 'aborted',
-            retryable: timedOut,
-          });
+          yield fail(
+            {
+              code: timedOut ? 'timeout' : 'aborted',
+              retryable: timedOut,
+            },
+            { stage },
+          );
           return;
         }
         if (part.type === 'error') {
@@ -145,8 +173,10 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
             timedOut,
             this.now(),
           );
-          logProviderFailure(this.options.provider, normalized);
-          yield failedEvent(request.phase, normalized);
+          yield fail(normalized, {
+            stage,
+            ...aiSdkFailureDiagnostic(part.error),
+          });
           return;
         }
         if (part.type !== 'finish-step') continue;
@@ -182,14 +212,17 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
               phase: request.phase,
               metadata,
             })
-          : failedEvent(request.phase, finish.failure, metadata);
+          : fail(finish.failure, { stage }, metadata);
         return;
       }
 
-      yield failedEvent(request.phase, {
-        code: 'invalid_response',
-        retryable: false,
-      });
+      yield fail(
+        {
+          code: 'invalid_response',
+          retryable: false,
+        },
+        { stage },
+      );
     } catch (error) {
       // 捕获 AI SDK/网络/JSON 等异物后统一走 normalizeAiSdkError，统一错误边界。
       const normalized = normalizeAiSdkError(
@@ -198,8 +231,7 @@ export class AiSdkTurnModelGateway implements TurnModelGateway {
         timedOut,
         this.now(),
       );
-      logProviderFailure(this.options.provider, normalized);
-      yield failedEvent(request.phase, normalized);
+      yield fail(normalized, { stage, ...aiSdkFailureDiagnostic(error) });
     } finally {
       clearTimeout(timeout);
       request.signal?.removeEventListener('abort', onExternalAbort);
