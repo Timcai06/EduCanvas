@@ -173,22 +173,75 @@ describe('OpenAICompatibleStructuredModelGateway', () => {
     },
   );
 
-  it('显式报告的零输出用量仍是可结算结果', async () => {
+  it.each([0, -1, 1.5, 1_025, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity])(
+    '有界非空JSON拒绝不可信输出用量 %s，执行结果仍未知',
+    async (completionTokens) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            usage: { completion_tokens: completionTokens },
+          }),
+        ),
+      });
+      await expect(
+        gateway.generateStructured({ ...request, maxOutputTokens: 1_024 }),
+      ).rejects.toMatchObject({
+        normalized: { code: 'invalid_response' },
+        executionOutcome: 'unknown',
+      });
+    },
+  );
+
+  it.each([1, 8_000])(
+    '有界JSON可结算正整数用量 %s（含实际配置上界）',
+    async (completionTokens) => {
+      const gateway = new OpenAICompatibleStructuredModelGateway(config, {
+        fetchImpl: fetchStub(() =>
+          Response.json({
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: { content: '{"answer":"42"}' },
+              },
+            ],
+            usage: { completion_tokens: completionTokens },
+          }),
+        ),
+      });
+      const result = await gateway.generateStructured({
+        ...request,
+        maxOutputTokens: 16_000,
+      });
+      expect(result.metadata.usage.outputTokens).toBe(completionTokens);
+    },
+  );
+
+  it('按实际发送的配置上限校验用量，而非较大的调用方请求', async () => {
+    let sentMaximum = 0;
     const gateway = new OpenAICompatibleStructuredModelGateway(config, {
-      fetchImpl: fetchStub(() =>
-        Response.json({
+      fetchImpl: fetchStub((init) => {
+        sentMaximum = JSON.parse(String(init.body)).max_tokens;
+        return Response.json({
           choices: [
             { finish_reason: 'stop', message: { content: '{"answer":"42"}' } },
           ],
-          usage: { completion_tokens: 0 },
-        }),
-      ),
+          usage: { completion_tokens: 8_001 },
+        });
+      }),
     });
-    const result = await gateway.generateStructured({
-      ...request,
-      maxOutputTokens: 1_024,
+    await expect(
+      gateway.generateStructured({ ...request, maxOutputTokens: 16_000 }),
+    ).rejects.toMatchObject({
+      normalized: { code: 'invalid_response', retryable: false },
+      executionOutcome: 'unknown',
     });
-    expect(result.metadata.usage.outputTokens).toBe(0);
+    expect(sentMaximum).toBe(8_000);
   });
 
   it.each([

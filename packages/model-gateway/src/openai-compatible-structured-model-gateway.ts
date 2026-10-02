@@ -62,20 +62,22 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       this.config.modelIds[request.modelAlias] ?? this.config.modelIds.primary;
 
     let body: string;
+    let maxOutputTokens: number;
     try {
       const jsonSchema = JSON.stringify(z.toJSONSchema(request.schema));
+      maxOutputTokens = structuredOutputBudget(
+        this.config,
+        modelId,
+        this.options.outputBudget === 'long_artifact' &&
+          request.taskAlias === 'artifact.generate' &&
+          request.modelAlias === 'structured',
+        request.maxOutputTokens,
+      );
       body = JSON.stringify({
         model: modelId,
         stream: false,
         response_format: { type: 'json_object' },
-        max_tokens: structuredOutputBudget(
-          this.config,
-          modelId,
-          this.options.outputBudget === 'long_artifact' &&
-            request.taskAlias === 'artifact.generate' &&
-            request.modelAlias === 'structured',
-          request.maxOutputTokens,
-        ),
+        max_tokens: maxOutputTokens,
         ...(this.config.provider === 'deepseek'
           ? { thinking: { type: 'disabled' } }
           : {}),
@@ -211,10 +213,14 @@ export class OpenAICompatibleStructuredModelGateway implements StructuredModelGa
       }
 
       const usage = parsedPayload.data.usage;
-      // 有界调用必须有实际输出用量；缺失不能按 0 结算并释放调用方预留。
+      const outputTokens = usage?.completion_tokens;
+      // 非空 JSON 不能有零输出用量；仅结算正整数且不超过实际发送上限的报告。
       if (
         request.maxOutputTokens !== undefined &&
-        usage?.completion_tokens === undefined
+        (outputTokens === undefined ||
+          !Number.isSafeInteger(outputTokens) ||
+          outputTokens < 1 ||
+          outputTokens > maxOutputTokens)
       ) {
         throw invocationError({ code: 'invalid_response', retryable: false });
       }

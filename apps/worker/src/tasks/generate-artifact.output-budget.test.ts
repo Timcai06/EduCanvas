@@ -70,6 +70,14 @@ vi.mock('./picturebook-task.js', () => ({
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const ARTIFACT_ID = '22222222-2222-4222-8222-222222222222';
+const INVALID_REPORTED_OUTPUT_USAGE_CASES = [
+  undefined,
+  { prompt_tokens: 30 },
+  { prompt_tokens: 30, completion_tokens: 0 },
+  { prompt_tokens: 30, completion_tokens: -1 },
+  { prompt_tokens: 30, completion_tokens: 1.5 },
+  { prompt_tokens: 30, completion_tokens: 32_754 },
+];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -330,8 +338,8 @@ describe('generateArtifact selects a task-scoped output budget', () => {
     },
   );
 
-  it.each([undefined, { prompt_tokens: 30 }])(
-    '缺少输出用量 %j 时保留预留，重投不重复调用或发布半稿',
+  it.each(INVALID_REPORTED_OUTPUT_USAGE_CASES)(
+    '无效输出用量 %j 时保留预留，重投不重复调用或发布半稿',
     async (usage) => {
       artifacts.getArtifact.mockResolvedValue({
         id: ARTIFACT_ID,
@@ -383,7 +391,25 @@ describe('generateArtifact selects a task-scoped output budget', () => {
         job: { attempts: 1, max_attempts: 3 },
         logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       };
-      await generateArtifact(payload, helpers as never);
+      const firstAttempt = generateArtifact(payload, helpers as never);
+      if (
+        usage?.completion_tokens !== undefined &&
+        (usage.completion_tokens < 0 ||
+          !Number.isInteger(usage.completion_tokens))
+      ) {
+        await expect(firstAttempt).rejects.toMatchObject({
+          normalized: { code: 'invalid_response' },
+          executionOutcome: 'unknown',
+        });
+      } else {
+        await firstAttempt;
+        expect(artifacts.transitionGenerationJob).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            to: 'failed',
+            failureCode: 'model_invalid_response',
+          }),
+        );
+      }
       expect(checkpoint).toMatchObject({
         callsStarted: 2,
         reservedOutputTokens: 32_753,
@@ -391,12 +417,6 @@ describe('generateArtifact selects a task-scoped output budget', () => {
         completedSections: [],
         usage: { outputTokens: 15 },
       });
-      expect(artifacts.transitionGenerationJob).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          to: 'failed',
-          failureCode: 'model_invalid_response',
-        }),
-      );
       await generateArtifact(payload, {
         ...helpers,
         job: { attempts: 2, max_attempts: 3 },
