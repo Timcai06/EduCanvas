@@ -1,7 +1,9 @@
 import 'server-only';
 
+import type { ModelToolResult } from '@educanvas/agent-core';
 import type { TurnApplicationOutputGuardPort } from '@educanvas/agent-runtime';
 import { extractCitationMarkers } from '../teaching/citation-markers';
+import { DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE } from './general-deep-research-message';
 
 export const DEEP_RESEARCH_MAX_TOOL_ROUNDS = 6;
 const MAX_HELD_REPORT_CHARACTERS = 128_000;
@@ -9,6 +11,7 @@ const MAX_HELD_REPORT_CHARACTERS = 128_000;
 export interface DeepResearchEvidenceProgress {
   readonly successfulSearchCount: number;
   readonly sourceCount: number;
+  hasPersistedCitation?(url: string, citationMarker: number): boolean;
 }
 
 export function createPassThroughOutputGuard(): TurnApplicationOutputGuardPort {
@@ -26,10 +29,48 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
   private readonly held: string[] = [];
   private heldCharacters = 0;
 
+  readonly toolRemediation = {
+    tool: 'webSearch',
+    prompt:
+      '深度研究刚才生成了回答，但没有调用任何外部研究工具。请先调用 webSearch 开始检索，并只依据后续实际搜索与读取结果撰写研究报告；如果搜索工具不可用或返回失败，说明无法完成研究。',
+  };
+
+  onToolResult(tool: string, result: ModelToolResult) {
+    if (tool !== 'fetchWebPage' || result.tool !== tool) return;
+    const output = result.output;
+    if (
+      typeof output !== 'object' ||
+      output === null ||
+      !('url' in output) ||
+      typeof output.url !== 'string' ||
+      !('content' in output) ||
+      typeof output.content !== 'string' ||
+      !('citationMarker' in output) ||
+      typeof output.citationMarker !== 'number' ||
+      !Number.isInteger(output.citationMarker) ||
+      output.citationMarker < 1 ||
+      output.citationMarker > 99 ||
+      output.citationMarker > this.progress.sourceCount ||
+      this.progress.hasPersistedCitation?.(
+        output.url,
+        output.citationMarker,
+      ) !== true
+    ) {
+      return;
+    }
+    // A page fetch without this turn's persisted citation is not research evidence.
+    this.held.length = 0;
+    this.heldCharacters = 0;
+  }
+
   constructor(private readonly progress: DeepResearchEvidenceProgress) {}
 
   async push(delta: string) {
-    this.heldCharacters += delta.length;
+    // AgentLoop inserts a run separator even if an earlier draft was cleared.
+    const safeDelta =
+      this.heldCharacters === 0 ? delta.replace(/^\n+/u, '') : delta;
+    if (safeDelta.length === 0) return { kind: 'hold' as const };
+    this.heldCharacters += safeDelta.length;
     if (this.heldCharacters > MAX_HELD_REPORT_CHARACTERS) {
       return {
         kind: 'block' as const,
@@ -37,7 +78,7 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
         failureCode: 'BUDGET_EXCEEDED' as const,
       };
     }
-    this.held.push(delta);
+    this.held.push(safeDelta);
     return { kind: 'hold' as const };
   }
 
@@ -53,8 +94,7 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
     ) {
       return {
         kind: 'block' as const,
-        publicContent:
-          '研究材料不足：本轮未达到三轮搜索、五个已读来源和五个有效引用的要求。请补充来源或缩小主题后发起新研究。',
+        publicContent: DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE,
         failureCode: 'RESEARCH_REQUIREMENTS_UNMET' as const,
       };
     }

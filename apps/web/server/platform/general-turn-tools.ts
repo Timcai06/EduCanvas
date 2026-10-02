@@ -77,6 +77,22 @@ export class WebOperationSources {
     return this.maximumOrdinal;
   }
 
+  /** Resolve a citation only against this operation's persisted URL ledger. */
+  hasPersistedCitation(url: string, citationMarker: number): boolean {
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(url);
+    } catch {
+      return false;
+    }
+    sourceUrl.hash = '';
+    const source = this.byUrl.get(sourceUrl.toString());
+    return (
+      source?.operationId === this.input.operationId &&
+      source.ordinal === citationMarker
+    );
+  }
+
   get trafficKey(): string {
     return linkTrafficKey(this.input.identity.studentId, this.input.spaceId);
   }

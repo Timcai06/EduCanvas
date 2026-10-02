@@ -10,7 +10,6 @@ import {
   isAborted,
   validateModelRun,
   type ModelRunResult,
-  type ParsedToolCall,
 } from './turn-engine';
 
 import type { AgentLoopCommand, AgentLoopEvent } from './agent-loop-contracts';
@@ -161,9 +160,13 @@ export class AgentLoopEngine {
     let textCharacters = 0; // 跨轮累积文本字符数，answer + synthesis 共享预算
     let hadAnyText = false; // 之前是否产出过文本，决定 synthesis 前是否补空行
     let run = 0;
-    let remediation = false;
+    let remediationAttempted = false;
+    let remediationPending = false;
     const requirement = command.completionRequirement;
     let requirementSatisfied = false;
+    const remediationTool = requirement?.tool ?? command.toolRemediation?.tool;
+    const remediationPrompt =
+      requirement?.remediationPrompt ?? command.toolRemediation?.prompt;
 
     // ═══ 段 1：Answer 循环 — 模型 ↔ 工具交互 ═══
     // 任何一次调用要么产出唯一终态(run结束/失败/取消)，要么抛到上游，
@@ -172,13 +175,13 @@ export class AgentLoopEngine {
       run += 1;
       const request: StreamTurnTextRequest = {
         ...command.answer,
-        ...(remediation && requirement
+        ...(remediationPending && remediationPrompt
           ? {
               messages: [
                 ...command.answer.messages,
                 {
                   role: 'system' as const,
-                  content: requirement.remediationPrompt,
+                  content: remediationPrompt,
                 },
               ],
             }
@@ -191,14 +194,19 @@ export class AgentLoopEngine {
       };
       let modelRun: TModelRunContext | undefined;
       let outcome!: ModelRunResult;
+      const currentCallIsRemediation = remediationPending;
+      remediationPending = false;
       // 重试循环只覆盖 validateModelRun 未通过后的临时失败；一旦命令已被取消或
       // 已收到终态，当前 run 即终止，不会再触发额外工具副作用。
       for (
         let attempt = 0;
-        attempt <= (remediation ? 0 : MAX_MODEL_RETRIES);
+        attempt <= (currentCallIsRemediation ? 0 : MAX_MODEL_RETRIES);
         attempt += 1
       ) {
-        if ((attempt > 0 || remediation) && isAborted(command.signal)) {
+        if (
+          (attempt > 0 || currentCallIsRemediation) &&
+          isAborted(command.signal)
+        ) {
           yield {
             type: 'failed',
             code: 'MODEL_ABORTED',
@@ -334,12 +342,13 @@ export class AgentLoopEngine {
           return;
         }
         if (
-          !remediation &&
-          requirement &&
-          !requirementSatisfied &&
-          command.answer.tools.some((tool) => tool.name === requirement.tool)
+          !remediationAttempted &&
+          remediationTool &&
+          remediationPrompt &&
+          command.answer.tools.some((tool) => tool.name === remediationTool)
         ) {
-          remediation = true;
+          remediationAttempted = true;
+          remediationPending = true;
           round -= 1;
           continue;
         }
@@ -413,7 +422,7 @@ export class AgentLoopEngine {
         yield { type: 'tool.result', run, result };
       }
       if (requirement) {
-        if (remediation || requirementSatisfied) {
+        if (remediationAttempted || requirementSatisfied) {
           if (isAborted(command.signal)) {
             yield {
               type: 'failed',
@@ -436,7 +445,8 @@ export class AgentLoopEngine {
           round === maxToolRounds &&
           command.answer.tools.some((tool) => tool.name === requirement.tool)
         ) {
-          remediation = true;
+          remediationAttempted = true;
+          remediationPending = true;
           round -= 1;
         }
       }

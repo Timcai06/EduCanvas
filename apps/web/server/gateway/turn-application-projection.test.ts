@@ -165,7 +165,7 @@ describe('Turn Application Web/Gateway golden parity', () => {
     ).toMatchObject({
       type: 'turn.failed',
       code: 'RESEARCH_REQUIREMENTS_UNMET',
-      message: expect.stringContaining('研究材料不足'),
+      message: expect.stringContaining('未达到可核验报告要求'),
       retryable: false,
     });
   });

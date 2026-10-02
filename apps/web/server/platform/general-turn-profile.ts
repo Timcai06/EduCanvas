@@ -85,6 +85,12 @@ export class WebGeneralProfile implements TurnApplicationProfilePort {
         get sourceCount() {
           return operationSources.sourceCount;
         },
+        hasPersistedCitation(url: string, citationMarker: number) {
+          return (
+            operationSources.hasPersistedCitation?.(url, citationMarker) ??
+            false
+          );
+        },
       });
     }
     return this.outputPreference === 'auto'

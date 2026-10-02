@@ -89,6 +89,15 @@ export interface AgentLoopCommand<TDetail, TFailure, TModelRunContext = never> {
     remediationPrompt: string;
     isSatisfied(results: readonly ModelToolResult[]): boolean;
   };
+  /**
+   * One bounded extra model call after an answer contains no tool calls.
+   * Unlike completionRequirement, this remediation does not end the loop after
+   * a tool result; the profile can continue gathering evidence and then answer.
+   */
+  toolRemediation?: {
+    tool: string;
+    prompt: string;
+  };
   executeTools(
     calls: readonly ParsedToolCall[],
     context: {

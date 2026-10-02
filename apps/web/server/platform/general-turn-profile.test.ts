@@ -126,6 +126,10 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
       command: { ...command, mode: 'deep_research' },
       turn,
     });
+    expect('toolRemediation' in guard).toBe(true);
+    if ('toolRemediation' in guard) {
+      expect(guard.toolRemediation).toMatchObject({ tool: 'webSearch' });
+    }
     const report =
       '# 摘要\n结论一[1]，结论二[2]，结论三[3]，结论四[4]，结论五[5]。';
 
@@ -156,7 +160,7 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     await expect(guard.finish()).resolves.toMatchObject({
       kind: 'block',
       failureCode: 'RESEARCH_REQUIREMENTS_UNMET',
-      publicContent: expect.stringContaining('研究材料不足'),
+      publicContent: expect.stringContaining('未达到可核验报告要求'),
     });
   });
 

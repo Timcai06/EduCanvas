@@ -2,6 +2,7 @@ import type { AgentLoopCommand } from '../agent-loop-contracts';
 import type {
   ModelAbortSignal,
   ModelMessage,
+  ModelToolResult,
   ModelToolDefinition,
   StreamingTaskAlias,
   TurnApplicationCommand,
@@ -155,6 +156,10 @@ export interface TurnApplicationOutputGuardPort {
     never,
     never
   >['completionRequirement'];
+  /** Profile-only, one-shot tool recovery after a model answers without tools. */
+  toolRemediation?: AgentLoopCommand<never, never>['toolRemediation'];
+  /** Notifies the gate after a validated result has been recorded. */
+  onToolResult?(tool: string, result: ModelToolResult): void | Promise<void>;
   push(delta: string): Promise<TurnApplicationOutputGuardPushResult>;
   finish(): Promise<TurnApplicationOutputGuardFinishResult>;
 }
