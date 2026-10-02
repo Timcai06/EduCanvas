@@ -216,9 +216,9 @@ afterEach(() => {
 describe('TurnApplication + WebGeneralProfile + ToolKernel 产物真实性', () => {
   it('确认续跑实际调用Writer并仅以已验证Slides回执完成', async () => {
     const result = await run('confirmed');
-    expect(result.repository.createArtifactWithGenerationJob).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'slides' }),
-    );
+    expect(
+      result.repository.createArtifactWithGenerationJob,
+    ).toHaveBeenCalledWith(expect.objectContaining({ kind: 'slides' }));
     expect(result.artifacts.events()).toMatchObject([
       { type: 'artifact.proposed', artifactKind: 'slides' },
     ]);

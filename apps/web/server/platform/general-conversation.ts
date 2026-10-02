@@ -162,8 +162,7 @@ export async function loadGeneralChatPageData(explicit?: {
             message.clientMessageId === confirmation.confirmationMessageId,
         );
         return (
-          !execution ||
-          !(artifactsByOperation.get(execution.operationId)?.length)
+          !execution || !artifactsByOperation.get(execution.operationId)?.length
         );
       })
       .map((confirmation) => [confirmation.operationId, confirmation]),
@@ -211,7 +210,8 @@ export async function loadGeneralChatPageData(explicit?: {
               return confirmation
                 ? {
                     id: confirmation.id,
-                    kind: confirmation.confirmedKind ?? confirmation.artifactKind,
+                    kind:
+                      confirmation.confirmedKind ?? confirmation.artifactKind,
                     title: confirmation.title,
                     status:
                       confirmation.status === 'confirmed'

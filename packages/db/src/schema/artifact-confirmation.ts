@@ -55,10 +55,16 @@ export const artifactConfirmationRequests = pgTable(
     uniqueIndex('artifact_confirmation_requests_operation_unique').on(
       table.operationId,
     ),
+    index('artifact_confirmation_requests_notebook_fk_idx').on(
+      table.notebookId,
+    ),
     index('artifact_confirmation_requests_conversation_status_idx').on(
       table.conversationId,
       table.status,
       table.createdAt,
+    ),
+    index('artifact_confirmation_requests_user_message_fk_idx').on(
+      table.userMessageId,
     ),
     check(
       'artifact_confirmation_requests_scope_check',

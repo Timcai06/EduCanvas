@@ -25,7 +25,7 @@ type GeneralTurnSender = (
   preference?: OutputPreference,
   mode?: 'chat' | 'deep_research',
   confirmation?: ConfirmationAction,
-  ) => Promise<AgentTurnSendOutcome>;
+) => Promise<AgentTurnSendOutcome>;
 
 export function createArtifactConfirmationSendOptions(
   preference: OutputPreference,

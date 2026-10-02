@@ -4,7 +4,10 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { DrizzleArtifactConfirmationRepository, artifactConfirmationMessageId } from './artifact-confirmation-repository';
+import {
+  DrizzleArtifactConfirmationRepository,
+  artifactConfirmationMessageId,
+} from './artifact-confirmation-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 import { agentOperations } from './schema';
@@ -21,7 +24,9 @@ function resolveTestDatabaseUrl() {
 
 const testDatabaseUrl = resolveTestDatabaseUrl();
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
-const connection = testDatabaseUrl ? postgres(testDatabaseUrl, { max: 4 }) : null;
+const connection = testDatabaseUrl
+  ? postgres(testDatabaseUrl, { max: 4 })
+  : null;
 const database = connection ? drizzle(connection, { schema }) : null;
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
@@ -51,9 +56,13 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
     'allocates exactly one fresh idempotency key after a post-start %s with no artifact',
     async (terminalStatus) => {
       const owner = `confirmation-retry-${terminalStatus}`;
-      const conversations = new DrizzlePlatformConversationRepository(getDatabase());
+      const conversations = new DrizzlePlatformConversationRepository(
+        getDatabase(),
+      );
       const turns = new DrizzlePlatformTurnRepository(getDatabase());
-      const confirmations = new DrizzleArtifactConfirmationRepository(getDatabase());
+      const confirmations = new DrizzleArtifactConfirmationRepository(
+        getDatabase(),
+      );
       const conversation = await conversations.create({
         ownerSubjectId: owner,
         spaceKind: 'notebook',

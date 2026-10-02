@@ -123,15 +123,14 @@ export async function beginWebGatewayTurn(
     throw new PlatformTurnOwnershipError();
   }
   let confirmedArtifactKind: ArtifactProposalKind | undefined;
-  let confirmationRepository: DrizzleArtifactConfirmationRepository | null = null;
-  let confirmationScope:
-    | {
-        confirmationId: string;
-        actorUserId: string;
-        notebookId: string;
-        conversationId: string;
-      }
-    | null = null;
+  let confirmationRepository: DrizzleArtifactConfirmationRepository | null =
+    null;
+  let confirmationScope: {
+    confirmationId: string;
+    actorUserId: string;
+    notebookId: string;
+    conversationId: string;
+  } | null = null;
   if (confirmation || request.artifactConfirmationId) {
     confirmationRepository = new DrizzleArtifactConfirmationRepository();
     confirmationScope = {
@@ -141,9 +140,8 @@ export async function beginWebGatewayTurn(
       notebookId: conversation.spaceId,
       conversationId: conversation.id,
     };
-    const confirmed = await confirmationRepository.getForExecution(
-      confirmationScope,
-    );
+    const confirmed =
+      await confirmationRepository.getForExecution(confirmationScope);
     if (
       request.clientMessageId !==
       (confirmed.confirmationMessageId ??

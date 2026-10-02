@@ -110,7 +110,14 @@ const assetContext: MaterializedAssetPlan = {
 async function begin(
   routeOverride: GatewayResolvedRoute,
   requestOverride: TeachingTurnRequestBody = request,
-  confirmedArtifactKind?: 'markdown_document' | 'mind_map' | 'slides' | 'flashcards' | 'picturebook' | 'note' | 'web_app',
+  confirmedArtifactKind?:
+    | 'markdown_document'
+    | 'mind_map'
+    | 'slides'
+    | 'flashcards'
+    | 'picturebook'
+    | 'note'
+    | 'web_app',
 ): Promise<void> {
   await beginGatewayGeneralTurnApplication({
     operationId: 'operation-1',

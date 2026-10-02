@@ -5,7 +5,6 @@ import {
   auditVocabularyClosures,
   CLOSED_VOCABULARY_CONSTRAINTS,
   extractCheckCalls,
-  extractLatestMigrationChecks,
   extractSqlCheckConstraints,
   isLiteralVocabularyClosure,
   loadSchemaCheckCalls,
@@ -70,9 +69,10 @@ test('check 调用提取', () => {
 
 test('正向：当前 schema 的全部成员闭集都在 closed 白名单内（无违规）', () => {
   // 0060 的研究恢复游标累计后为 258；0062 新增 6 个 Plan/Chapter CHECK，
-  // 0063 新增 1 个 Session Notebook-pair CHECK，共 265。
+  // 0063 新增 1 个 Session Notebook-pair CHECK，0064–0066 新增 6 个 Artifact
+  // generation/confirmation CHECK，共 271。
   // 其中协议判别联合登记为 closed，坐标/长度/形状仍是开放格式约束。
-  assert.equal(loadSchemaCheckCalls().length, 265);
+  assert.equal(loadSchemaCheckCalls().length, 271);
   const violations = auditVocabularyClosures();
   assert.deepEqual(violations, []);
 });
@@ -106,11 +106,38 @@ test('反向：白名单外的成员闭集被拒绝（新增开放字段不得�
   assert.equal(wouldViolate, true);
 });
 
-test('最新 0063 migration 的 Notebook/Session 配对 CHECK 使用 shape 规则', () => {
-  const checks = extractLatestMigrationChecks();
+test('0063 migration 的 Notebook/Session 配对 CHECK 使用 shape 规则', () => {
+  const source = readFileSync(
+    new URL(
+      '../../packages/db/drizzle/0063_notebook_lesson_scope.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const checks = source
+    .split('--> statement-breakpoint')
+    .flatMap(extractSqlCheckConstraints);
   assert.deepEqual(
     checks.map((check) => check.name),
     ['lesson_sessions_notebook_pair_check'],
+  );
+  assert.equal(isLiteralVocabularyClosure(checks[0].body), false);
+});
+
+test('0066 attempt CHECK 是 numeric range，不是成员闭集', () => {
+  const source = readFileSync(
+    new URL(
+      '../../packages/db/drizzle/0066_artifact_confirmation_attempts.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const checks = source
+    .split('--> statement-breakpoint')
+    .flatMap(extractSqlCheckConstraints);
+  assert.deepEqual(
+    checks.map((check) => check.name),
+    ['artifact_confirmation_requests_attempt_check'],
   );
   assert.equal(isLiteralVocabularyClosure(checks[0].body), false);
 });

@@ -168,7 +168,10 @@ export class DrizzleArtifactConfirmationRepository {
           eq(artifactConfirmationRequests.actorUserId, scope.actorUserId),
           eq(artifactConfirmationRequests.notebookId, scope.notebookId),
           eq(artifactConfirmationRequests.conversationId, scope.conversationId),
-          inArray(artifactConfirmationRequests.status, ['pending', 'confirmed']),
+          inArray(artifactConfirmationRequests.status, [
+            'pending',
+            'confirmed',
+          ]),
         ),
       )
       .orderBy(desc(artifactConfirmationRequests.createdAt));
@@ -187,7 +190,10 @@ export class DrizzleArtifactConfirmationRepository {
           eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
           eq(artifactConfirmationRequests.notebookId, input.notebookId),
           eq(artifactConfirmationRequests.conversationId, input.conversationId),
-          inArray(artifactConfirmationRequests.status, ['pending', 'confirmed']),
+          inArray(artifactConfirmationRequests.status, [
+            'pending',
+            'confirmed',
+          ]),
         ),
       )
       .limit(1);
@@ -210,7 +216,10 @@ export class DrizzleArtifactConfirmationRepository {
             eq(artifactConfirmationRequests.id, input.confirmationId),
             eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
             eq(artifactConfirmationRequests.notebookId, input.notebookId),
-            eq(artifactConfirmationRequests.conversationId, input.conversationId),
+            eq(
+              artifactConfirmationRequests.conversationId,
+              input.conversationId,
+            ),
           ),
         )
         .limit(1)

@@ -10,6 +10,8 @@ import {
   parseWindowsNetstatListeners,
 } from './local-core-cleanup.mjs';
 
+const simulatedEduCanvasRoot = '/workspace/EduCanvas';
+
 /* ---------- 单元：netstat 输出解析 ---------- */
 
 test('parses windows netstat listeners with IPv4 and IPv6 local addresses', () => {
@@ -159,7 +161,7 @@ test('cleans up a stale EduCanvas process holding a core port', async () => {
   const runCommand = makeFakeRunCommand({
     portToPid: { [port]: child.pid },
     pidToCommandLine: {
-      [child.pid]: `node ${process.cwd()}/tooling/local/local-core-cleanup.fixture.mjs`,
+      [child.pid]: `node ${simulatedEduCanvasRoot}/tooling/local/local-core-cleanup.fixture.mjs`,
     },
   });
   const result = await cleanupStaleCore([port], { runCommand });

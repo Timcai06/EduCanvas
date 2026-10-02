@@ -11,7 +11,7 @@
 
 - TypeScript AST 完整解析 `packages/db/src/schema.ts` 与 `packages/db/src/schema/`：共 **231 个 CHECK**，与 D00 基线一致；注释、换行和混合 shape CHECK 不会被漏过。
 - 本轮实际开放 **13 个 CHECK，分布于 11 张表**；均是扩展标识或派生类型，数据库只保留稳定格式，生产入口继续由应用层 Registry/validator 限定。
-- 当前 Schema 中有 **109 个字面量成员闭集 CHECK**；全部命中 `CLOSED_VOCABULARY_CONSTRAINTS`。白名单共 110 个约束名，额外包含不以简单字面量成员闭集表达、但仍需保持封闭身份语义的 `mcp_tool_intents_identity_check`。
+- 原始 D03 审计基线中有 **109 个字面量成员闭集 CHECK**；全部命中 `CLOSED_VOCABULARY_CONSTRAINTS`。白名单共 110 个约束名，额外包含不以简单字面量成员闭集表达、但仍需保持封闭身份语义的 `mcp_tool_intents_identity_check`。
 - 以下七类原方案放宽已撤销：教学学段、教学偏好、消息 part type、模型 finish reason、预算 breach reason、MCP 专用 intent capability。它们分别承担结构分支、平台归一化终态、低基数账本、安全兼容或当前应用可读性契约，不属于可直接开放的扩展标识。
 - Migration 只替换 13 个 CHECK，无数据迁移、无 FK/INDEX/UNIQUE 变化，CHECK 总数保持 231。
 
@@ -105,7 +105,13 @@
 
 - 0062 新增 6 个 Chapter/Plan CHECK：标题与说明长度、locator JSON 形状继续是格式/shape 约束；`origin`、`locator.kind`、`source_kind` 和 Plan `status` 是应用读取与呈现协议的封闭值，已同步登记到 `CLOSED_VOCABULARY_CONSTRAINTS`。
 - 0063 新增 1 个 `lesson_sessions_notebook_pair_check`，只约束 `conversation_id` 与 `notebook_id` 同为空或同时存在的配对形状，不构成成员闭集。
-- 当前 Schema 共 265 个 CHECK（258 + 0062 的 6 个 + 0063 的 1 个）；最新 Migration 提取断言只针对 0063 的配对 shape。0061 的学段闭集解析另有历史回归，避免后续 migration 推进后丢失旧闭集判定证据。
+- 截至 0063 的 Schema 共 265 个 CHECK（258 + 0062 的 6 个 + 0063 的 1 个）；0063 的配对 shape 保留独立历史回归。0061 的学段闭集解析另有历史回归，避免后续 migration 推进后丢失旧闭集判定证据。
+
+### 6.4 后继扩展：Artifact Confirmation（0064–0066）
+
+- 0064–0066 新增 6 个 CHECK，当前 Schema 共 271 个 CHECK。`artifact_confirmation_requests_kind_check` 只接受支持的产物类型，`artifact_confirmation_requests_status_check` 固定 pending/confirmed/cancelled 及其回执字段组合；两者无法由未知值安全渲染或恢复，已登记为 closed。
+- scope、title 长度、generation 非负与 attempt 范围 CHECK 只约束格式或数值边界，不定义成员 Vocabulary。
+- 当前最新 Migration 0066 的 attempt 范围 CHECK 保留独立提取回归；0063 Notebook/Session 配对 shape 继续由历史 Migration 回归覆盖。
 
 ## 7. 可执行回退 SQL
 

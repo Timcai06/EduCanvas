@@ -292,9 +292,7 @@ export function useGeneralWorkspaceController(options: {
             activeTurnOutputPreferenceRef.current = 'auto';
             setAssets((current) =>
               current.map((asset) =>
-                asset.scope === 'turn'
-                  ? { ...asset, enabled: false }
-                  : asset,
+                asset.scope === 'turn' ? { ...asset, enabled: false } : asset,
               ),
             );
             /* W03：发送后刷新来源失败不静默吞掉——上报结构化错误，保留服务端已确认的数据。 */

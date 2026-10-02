@@ -25,6 +25,16 @@ import {
   ArtifactExecutionFenceError,
 } from './platform-artifact-errors';
 import { claimArtifactGenerationExecution } from './platform-artifact-generation-execution';
+import { readPlatformArtifactGenerationReceipt } from './platform-artifact-generation-receipt';
+import type {
+  ArtifactJobStatus,
+  ArtifactStatus,
+  ArtifactTrustTier,
+  PlatformArtifact,
+  PlatformArtifactGenerationReceipt,
+  PlatformArtifactJob,
+  PlatformArtifactVersion,
+} from './platform-artifact-types';
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<
@@ -57,66 +67,18 @@ export {
   ArtifactJobLifecycleError,
   ArtifactExecutionFenceError,
 } from './platform-artifact-errors';
+export type {
+  ArtifactJobStatus,
+  ArtifactStatus,
+  ArtifactTrustTier,
+  PlatformArtifact,
+  PlatformArtifactGenerationReceipt,
+  PlatformArtifactJob,
+  PlatformArtifactVersion,
+} from './platform-artifact-types';
 
 /** 产物生成任务在 graphile 队列中的标识;web 入队与 worker 注册共用,防止拼写漂移。 */
 export const ARTIFACT_GENERATE_TASK = 'artifact:generate' as const;
-
-export type ArtifactTrustTier = 'tier1' | 'tier2';
-export type ArtifactStatus = 'proposed' | 'active' | 'archived';
-export type ArtifactJobStatus =
-  'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-
-export interface PlatformArtifact {
-  id: string;
-  spaceId: string;
-  conversationId: string | null;
-  ownerSubjectId: string;
-  kind: string;
-  trustTier: ArtifactTrustTier;
-  title: string;
-  status: ArtifactStatus;
-  latestVersion: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PlatformArtifactVersion {
-  id: string;
-  artifactId: string;
-  version: number;
-  content: unknown;
-  metadata: unknown;
-  objectKey: string | null;
-  checksum: string | null;
-  createdByOperationId: string | null;
-  generatedBy: string | null;
-  generationJobId: string | null;
-  createdAt: string;
-}
-
-export interface PlatformArtifactJob {
-  id: string;
-  artifactId: string;
-  operationId: string | null;
-  status: ArtifactJobStatus;
-  progress: number | null;
-  failureCode: string | null;
-  params: Record<string, unknown>;
-  checkpoint: Record<string, unknown>;
-  queueJobKey: string | null;
-}
-
-/** A scope-bound, content-free read receipt for one artifact generation job. */
-export interface PlatformArtifactGenerationReceipt {
-  jobId: string;
-  artifactId: string;
-  jobStatus: ArtifactJobStatus;
-  progress: number | null;
-  artifactStatus: ArtifactStatus;
-  kind: string;
-  title: string;
-  committedVersion: { version: number } | null;
-}
 
 /** 生成任务合法转移表;terminal 态无出边,cancelled 可从任何非 terminal 态进入。 */
 const JOB_TRANSITIONS: Record<ArtifactJobStatus, readonly ArtifactJobStatus[]> =
@@ -219,49 +181,7 @@ export class DrizzlePlatformArtifactRepository {
     conversationId: string;
     trustedSubjectId: string;
   }): Promise<PlatformArtifactGenerationReceipt | null> {
-    const [row] = await this.database
-      .select({
-        jobId: artifactGenerationJobs.id,
-        artifactId: artifacts.id,
-        jobStatus: artifactGenerationJobs.status,
-        progress: artifactGenerationJobs.progress,
-        artifactStatus: artifacts.status,
-        kind: artifacts.kind,
-        title: artifacts.title,
-        committedVersion: artifactVersions.version,
-      })
-      .from(artifactGenerationJobs)
-      .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
-      .leftJoin(
-        artifactVersions,
-        and(
-          eq(artifactVersions.artifactId, artifacts.id),
-          eq(artifactVersions.generationJobId, artifactGenerationJobs.id),
-        ),
-      )
-      .where(
-        and(
-          eq(artifacts.id, input.artifactId),
-          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
-          eq(artifacts.spaceId, input.spaceId),
-          eq(artifacts.conversationId, input.conversationId),
-        ),
-      )
-      .orderBy(
-        desc(artifactGenerationJobs.createdAt),
-        desc(artifactGenerationJobs.id),
-      )
-      .limit(1);
-    if (!row) return null;
-    return {
-      ...row,
-      jobStatus: row.jobStatus as ArtifactJobStatus,
-      artifactStatus: row.artifactStatus as ArtifactStatus,
-      committedVersion:
-        row.committedVersion === null
-          ? null
-          : { version: row.committedVersion },
-    };
+    return readPlatformArtifactGenerationReceipt(this.database, input);
   }
 
   /**

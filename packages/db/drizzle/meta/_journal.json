@@ -470,6 +470,13 @@
       "when": 1790956056199,
       "tag": "0066_artifact_confirmation_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790962366674,
+      "tag": "0067_artifact_confirmation_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

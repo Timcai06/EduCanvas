@@ -10,9 +10,7 @@ import {
 const MAX_AUTO_CONFIRMATION_OUTPUT_CHARACTERS = 128_000;
 
 /** Replace any model completion accompanying a proposal with a factual prompt. */
-export class AutoArtifactConfirmationOutputGuard
-  implements TurnApplicationOutputGuardPort
-{
+export class AutoArtifactConfirmationOutputGuard implements TurnApplicationOutputGuardPort {
   private readonly held: string[] = [];
   private heldCharacters = 0;
 

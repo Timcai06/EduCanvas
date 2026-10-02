@@ -167,6 +167,7 @@ export {
   type ArtifactStatus,
   type ArtifactTrustTier,
   type PlatformArtifact,
+  type PlatformArtifactGenerationReceipt,
   type PlatformArtifactJob,
   type PlatformArtifactVersion,
 } from './platform-artifact-repository';

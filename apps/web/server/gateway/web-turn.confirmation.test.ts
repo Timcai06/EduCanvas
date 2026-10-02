@@ -25,10 +25,16 @@ vi.mock('@educanvas/db', () => ({
   artifactConfirmationMessageId: (id: string) =>
     `artifact.confirm.${id.replaceAll('-', '')}`,
 }));
-vi.mock('@educanvas/gateway-core', () => ({ gatewayProtocolVersion: 'gateway.v1' }));
+vi.mock('@educanvas/gateway-core', () => ({
+  gatewayProtocolVersion: 'gateway.v1',
+}));
 vi.mock('@educanvas/gateway-runtime', () => ({
   GatewayService: class {
-    constructor(_routes: unknown, _operations: unknown, runner: { operationId: string | null }) {
+    constructor(
+      _routes: unknown,
+      _operations: unknown,
+      runner: { operationId: string | null },
+    ) {
       runner.operationId = 'operation-confirmed';
       mocks.gatewayService();
     }
@@ -42,7 +48,9 @@ vi.mock('@educanvas/gateway-runtime', () => ({
   projectTurnApplicationEventToGateway: vi.fn(),
   Sha256GatewayRequestFingerprint: class {},
 }));
-vi.mock('../model/model-runtime', () => ({ resolveTurnModelRuntime: () => null }));
+vi.mock('../model/model-runtime', () => ({
+  resolveTurnModelRuntime: () => null,
+}));
 vi.mock('../tools/web-search', () => ({ isWebSearchConfigured: () => true }));
 vi.mock('../platform/general-turn', () => ({
   beginGatewayGeneralTurnApplication: mocks.beginTurn,
@@ -58,7 +66,9 @@ vi.mock('../platform/general-request-conversation-context', () => ({
     agentProfileId: 'general',
   })),
 }));
-vi.mock('./turn-application-projection', () => ({ gatewayToLegacy: (events: unknown) => events }));
+vi.mock('./turn-application-projection', () => ({
+  gatewayToLegacy: (events: unknown) => events,
+}));
 
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import { beginWebGatewayTurn } from './web-turn';
@@ -82,7 +92,10 @@ beforeEach(() => {
     confirmedKind: null,
     confirmationMessageId: null,
   });
-  mocks.confirm.mockResolvedValue({ status: 'confirmed', confirmedKind: 'slides' });
+  mocks.confirm.mockResolvedValue({
+    status: 'confirmed',
+    confirmedKind: 'slides',
+  });
   mocks.prepareContext.mockResolvedValue({
     text: '',
     textSegments: [],

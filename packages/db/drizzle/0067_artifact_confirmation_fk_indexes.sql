@@ -1,0 +1,2 @@
+CREATE INDEX "artifact_confirmation_requests_notebook_fk_idx" ON "artifact_confirmation_requests" USING btree ("notebook_id");--> statement-breakpoint
+CREATE INDEX "artifact_confirmation_requests_user_message_fk_idx" ON "artifact_confirmation_requests" USING btree ("user_message_id");

@@ -11,7 +11,7 @@ import { resolveDictationGateway } from '@/server/voice/dictation-gateway';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export const DICTATION_MAX_BYTES = 2 * 1024 * 1024;
+const DICTATION_MAX_BYTES = 2 * 1024 * 1024;
 const WAV_HEADER_BYTES = 44;
 const PCM_BYTES_PER_SECOND = 16_000 * 2;
 const WEBM_MAGIC = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3]);

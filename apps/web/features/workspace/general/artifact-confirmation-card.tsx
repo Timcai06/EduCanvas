@@ -100,7 +100,7 @@ export function ArtifactConfirmationCard({
       <label className="mt-3 block text-sm text-ink">
         类型
         <select
-          className="mt-1 block min-h-10 w-full rounded-lg border border-line bg-card px-3"
+          className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-card px-3"
           value={kind}
           onChange={(event) =>
             setKind(event.currentTarget.value as ArtifactProposalKind)
@@ -121,11 +121,7 @@ export function ArtifactConfirmationCard({
           disabled={busy}
           onClick={() => void postAction('select')}
         >
-          {busy
-            ? '处理中…'
-            : confirmed
-              ? '继续创建'
-              : '确认并创建'}
+          {busy ? '处理中…' : confirmed ? '继续创建' : '确认并创建'}
         </Button>
         <Button
           variant="secondary"

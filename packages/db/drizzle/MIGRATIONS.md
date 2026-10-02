@@ -904,3 +904,15 @@ selected_asset_representations`（jsonb，DEFAULT '[]' NOT NULL）按
 - Data migration: existing rows default to attempt 1; no other data changes.
 - Estimated scale: confirmation 表单列更新；无行数增长。
 - 风险: 低——尝试递增受行锁与 Gateway operation terminal fact 限制，最多 1000 次。
+
+## 0067_artifact_confirmation_fk_indexes.sql
+
+- 状态: active（issue 518 Artifact Confirmation 删除路径索引复核）
+- 语义: 为 `artifact_confirmation_requests.notebook_id` 与 `user_message_id` 增加外键支撑索引，分别覆盖 `spaces` 与 `conversation_messages` 删除时的级联查找。
+- 锁表: 新建两个普通 B-tree 索引会扫描确认表并短暂阻塞写入；每个 auto Turn 最多创建一行，实际生产规模尚未验证。
+- 回滚: 先停用确认写入和关联删除流程，再移除这两个索引；保留外键与确认数据。
+- N-1: 旧应用可忽略新增索引；不改变约束、行格式或读取行为。
+- Fresh install: 可重放。
+- Data migration: none。
+- Estimated scale: 每条确认记录各新增一个索引项；确认表约一条/auto Turn。
+- 风险: 低——只缩短两条真实级联删除路径对子表的查找，不改变删除策略。
