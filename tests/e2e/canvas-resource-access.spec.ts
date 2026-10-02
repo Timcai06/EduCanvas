@@ -208,6 +208,7 @@ test("@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
   await expect
     .poll(() => activeConversationId(page))
     .not.toBe(previousConversationId);
+  const createdNotebookConversationId = await activeConversationId(page);
   const createdNotebookId = new URL(page.url()).pathname.split("/")[2];
   if (!createdNotebookId) throw new Error("新 Notebook 路由缺少 ID");
 
@@ -266,6 +267,9 @@ test("@smoke 统一 endpoint 打开 Source/Artifact，并隔离 Notebook、用�
   await expect(page).toHaveURL(
     new RegExp(`/notebook/${createdNotebookId}(?:$|[/?])`),
   );
+  await expect
+    .poll(() => activeConversationId(page))
+    .toBe(createdNotebookConversationId);
   const crossNotebookStatuses = {
     sourceResource: await responseStatus(
       page,
