@@ -124,34 +124,44 @@ async function settleInvocationFailure(input: {
   // as a known failure.
   const uncertainWrite =
     input.adapter.effect === 'write' && input.invocationStarted;
+  // Settle both ledgers independently: one unavailable store must not prevent
+  // the other from recording the known or uncertain outcome.
   if (input.effect) {
-    await input.effectLedger.settle({
-      ...input.common,
-      effectId: input.effect.effect.id,
-      status: uncertainWrite ? 'outcome_unknown' : 'failed',
-      code: uncertainWrite ? 'write_outcome_unknown' : 'ledger_unavailable',
-    });
+    try {
+      await input.effectLedger.settle({
+        ...input.common,
+        effectId: input.effect.effect.id,
+        status: uncertainWrite ? 'outcome_unknown' : 'failed',
+        code: uncertainWrite ? 'write_outcome_unknown' : 'ledger_unavailable',
+      });
+    } catch {
+      // The result below remains conservative even when durable settlement fails.
+    }
   }
-  await input.callLedger.settle({
-    ...input.common,
-    toolCallId: input.call.id,
-    status: uncertainWrite ? 'outcome_unknown' : 'failed',
-    code: uncertainWrite
-      ? 'write_outcome_unknown'
-      : !input.invocationStarted
-        ? 'ledger_unavailable'
-        : input.error instanceof ToolTimeoutError
-          ? 'tool_timeout'
-          : input.error instanceof ToolCancelledError
-            ? 'tool_cancelled'
-            : 'tool_failed',
-    retryable:
-      input.invocationStarted &&
-      !uncertainWrite &&
-      (input.error instanceof ToolTimeoutError ||
-        input.error instanceof ToolCancelledError),
-    durationMs: Date.now() - input.startedAt,
-  });
+  try {
+    await input.callLedger.settle({
+      ...input.common,
+      toolCallId: input.call.id,
+      status: uncertainWrite ? 'outcome_unknown' : 'failed',
+      code: uncertainWrite
+        ? 'write_outcome_unknown'
+        : !input.invocationStarted
+          ? 'ledger_unavailable'
+          : input.error instanceof ToolTimeoutError
+            ? 'tool_timeout'
+            : input.error instanceof ToolCancelledError
+              ? 'tool_cancelled'
+              : 'tool_failed',
+      retryable:
+        input.invocationStarted &&
+        !uncertainWrite &&
+        (input.error instanceof ToolTimeoutError ||
+          input.error instanceof ToolCancelledError),
+      durationMs: Date.now() - input.startedAt,
+    });
+  } catch {
+    // Never let ledger availability turn a dispatched write into a retryable result.
+  }
   if (uncertainWrite) {
     return toolFailure(
       input.adapter.name,
