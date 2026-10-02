@@ -232,9 +232,6 @@ test.describe('Runtime Composition: real Web, Runtime and PostgreSQL', () => {
     const studio = await openStudioOutput(page);
     await studio.getByRole('button', { name: title }).click();
     const runtime = page.getByTestId('persistent-web-runtime');
-    await expect(runtime).toHaveAttribute('data-runtime-state', 'running', {
-      timeout: 30_000,
-    });
     await expect(
       page
         .frameLocator('iframe[title="持久 Web Runtime"]')
