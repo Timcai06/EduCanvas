@@ -25,7 +25,9 @@ test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认�
     await page.evaluate(() => localStorage.getItem("educanvas.sidebar")),
   ).toBe("0");
 
-  await page.reload();
+  // Notebook routes may stream their loading fallback before completing the
+  // document response. The initialized marker below is the app-ready boundary.
+  await page.reload({ waitUntil: "commit" });
   await expect(page.locator('[data-sidebar-initialized="true"]')).toHaveCount(
     1,
   );
@@ -39,7 +41,7 @@ test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认�
   expect(
     await page.evaluate(() => localStorage.getItem("educanvas.sidebar")),
   ).toBe("1");
-  await page.reload();
+  await page.reload({ waitUntil: "commit" });
   await expect(page.locator('[data-sidebar-initialized="true"]')).toHaveCount(
     1,
   );
