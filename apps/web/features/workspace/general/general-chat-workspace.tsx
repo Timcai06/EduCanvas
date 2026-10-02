@@ -67,7 +67,11 @@ export function GeneralChatWorkspace({
   });
   /* 桌面助手与 Dock/资源库共用 fresh CanvasResource view gate。 */
   useAssistantArtifacts(ctrl.studioOpenActions.actions);
-  const { open: sidebarOpen, toggle: toggleSidebar } = useSidebarState();
+  const {
+    open: sidebarOpen,
+    toggle: toggleSidebar,
+    close: closeSidebar,
+  } = useSidebarState();
   const deskPresence = deriveDeskAgentPresence(
     ctrl.turn.messages,
     ctrl.turn.busy,
@@ -120,6 +124,7 @@ export function GeneralChatWorkspace({
         notebookId={notebookId}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}
+        onCloseSidebar={closeSidebar}
         mainRef={mainRef}
         resourceOpenStatus={resourceOpenStatus}
       />

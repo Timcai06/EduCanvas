@@ -9,7 +9,11 @@ const STORAGE_KEY = 'educanvas.sidebar';
  * （抽屉按需覆盖，切换会话重载后不残留遮罩）。SSR/首帧一律收起，挂载后再按
  * localStorage 与视口校正，避免水合错位。
  */
-export function useSidebarState(): { open: boolean; toggle: () => void } {
+export function useSidebarState(): {
+  open: boolean;
+  toggle: () => void;
+  close: () => void;
+} {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -28,5 +32,10 @@ export function useSidebarState(): { open: boolean; toggle: () => void } {
     });
   }, []);
 
-  return { open, toggle };
+  const close = useCallback(() => {
+    localStorage.setItem(STORAGE_KEY, '0');
+    setOpen(false);
+  }, []);
+
+  return { open, toggle, close };
 }

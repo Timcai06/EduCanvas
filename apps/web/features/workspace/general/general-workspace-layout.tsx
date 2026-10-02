@@ -52,6 +52,7 @@ export interface GeneralWorkspaceLayoutProps {
   readonly notebookId: string;
   readonly sidebarOpen: boolean;
   readonly onToggleSidebar: () => void;
+  readonly onCloseSidebar: () => void;
   readonly mainRef: RefObject<HTMLElement | null>;
   readonly resourceOpenStatus: ReactNode | null;
 }
@@ -63,6 +64,7 @@ export function GeneralWorkspaceLayout({
   notebookId,
   sidebarOpen,
   onToggleSidebar,
+  onCloseSidebar,
   mainRef,
   resourceOpenStatus,
 }: GeneralWorkspaceLayoutProps) {
@@ -83,7 +85,7 @@ export function GeneralWorkspaceLayout({
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
           open={sidebarOpen}
-          onClose={onToggleSidebar}
+          onClose={onCloseSidebar}
           activeConversationId={conversationId}
           notebookId={notebookId}
           onNewNotebook={() => void startNewGeneralChatAction()}
