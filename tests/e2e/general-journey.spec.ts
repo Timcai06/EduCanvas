@@ -3,6 +3,7 @@ import {
   activeConversationId,
   closeNotebookSidebar,
   createNotebook,
+  notebookSidebar,
   openNotebookSidebar,
   openStudioInput,
   closeStudio,
@@ -114,6 +115,16 @@ test("@smoke General 黄金旅程：历史恢复", async ({ page }) => {
     notebooks.getByRole("button", { name: "新建笔记本" }),
     firstConversationContent,
   );
+
+  const createdNotebookSidebar = notebookSidebar(page);
+  await expect(createdNotebookSidebar).toHaveAttribute("aria-hidden", "true");
+  const openCreatedNotebookSidebar = await openNotebookSidebar(page);
+  const repeatedCloseButton = openCreatedNotebookSidebar
+    .locator("button")
+    .filter({ hasText: "收起列表" });
+  await repeatedCloseButton.click();
+  await repeatedCloseButton.dispatchEvent("click");
+  await expect(createdNotebookSidebar).toHaveAttribute("aria-hidden", "true");
 
   await page
     .getByRole("textbox", { name: "向 EduCanvas 提问" })
