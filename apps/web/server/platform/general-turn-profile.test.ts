@@ -117,6 +117,18 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     expect(prompt).toContain('不得引用搜索摘要');
   });
 
+  it('有历史 artifactId 时要求用只读状态工具刷新，不依据旧快照判断完成', async () => {
+    const plan = await createProfile({
+      staticToolCapabilities: ['artifact.read'],
+    }).prepare({ command, turn });
+    const prompt = plan.context.profile[0]?.message.content ?? '';
+
+    expect(prompt).toContain('getCanvasArtifactStatus');
+    expect(prompt).toContain('只按本轮回执回答');
+    expect(prompt).toContain('inconsistent');
+    expect(plan.toolPolicy?.capabilities.actor).toContain('artifact.read');
+  });
+
   it('Deep Research 仅在三轮搜索、五个来源和五个有效引用都满足时放行报告', async () => {
     const profile = createProfile({
       operationSources: { sourceCount: 5 } as WebOperationSources,

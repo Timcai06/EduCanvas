@@ -217,6 +217,11 @@ export function createGeneralToolKernel(
       risk: 'l1',
       effect: 'write',
     }),
+    adaptAgentTool(operationArtifacts.getStatusTool(), {
+      capability: 'artifact.read',
+      risk: 'l0',
+      effect: 'read',
+    }),
     adaptAgentTool(fetchTool, {
       capability: 'web.fetch',
       risk: 'l1',

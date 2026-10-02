@@ -218,6 +218,174 @@ describe('WebOperationArtifacts', () => {
     ]);
   });
 
+  it.each([
+    ['queued', null, 'proposed'],
+    ['running', null, 'running'],
+    ['succeeded', { version: 1 }, 'succeeded'],
+    ['failed', null, 'failed'],
+    ['cancelled', null, 'cancelled'],
+    ['succeeded', null, 'inconsistent'],
+    ['running', { version: 1 }, 'inconsistent'],
+  ] as const)(
+    '从当前数据库回执将 %s + %s 映射为安全状态 %s',
+    async (jobStatus, committedVersion, expectedStatus) => {
+      const receipt = {
+        jobId: job.id,
+        artifactId: artifact.id,
+        jobStatus,
+        progress: jobStatus === 'running' ? 45 : null,
+        artifactStatus: jobStatus === 'succeeded' ? 'active' : 'proposed',
+        kind: artifact.kind,
+        title: artifact.title,
+        committedVersion,
+      };
+      const createRepository = { createArtifactWithGenerationJob: vi.fn() };
+      const statusRepository = {
+        getGenerationReceipt: vi.fn().mockResolvedValue(receipt),
+      };
+      const operationArtifacts = new WebOperationArtifacts(
+        {
+          identity,
+          conversationId: context.conversationId,
+          spaceId: artifact.spaceId,
+          operationId: 'operation-1',
+        },
+        createRepository,
+        statusRepository,
+      );
+
+      const result = await operationArtifacts
+        .getStatusTool()
+        .handler({ artifactId: artifact.id }, context);
+
+      expect(result).toMatchObject({
+        jobId: job.id,
+        artifactId: artifact.id,
+        status: expectedStatus,
+        committedVersion: committedVersion?.version ?? null,
+      });
+      expect(statusRepository.getGenerationReceipt).toHaveBeenCalledWith({
+        artifactId: artifact.id,
+        spaceId: artifact.spaceId,
+        conversationId: context.conversationId,
+        trustedSubjectId: identity.studentId,
+      });
+      expect(result).not.toHaveProperty('failureCode');
+      expect(result).not.toHaveProperty('params');
+      expect(result).not.toHaveProperty('checkpoint');
+    },
+  );
+
+  it('对不存在和跨主体、Notebook、Conversation 的 job 使用相同 not_found 回执', async () => {
+    const statusRepository = {
+      getGenerationReceipt: vi.fn().mockResolvedValue(null),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      { createArtifactWithGenerationJob: vi.fn() },
+      statusRepository,
+    );
+
+    await expect(
+      operationArtifacts
+        .getStatusTool()
+        .handler({ artifactId: artifact.id }, context),
+    ).resolves.toEqual({ artifactId: artifact.id, status: 'not_found' });
+    expect(statusRepository.getGenerationReceipt).toHaveBeenCalledWith({
+      artifactId: artifact.id,
+      spaceId: artifact.spaceId,
+      conversationId: context.conversationId,
+      trustedSubjectId: identity.studentId,
+    });
+  });
+
+  it('拒绝当前主体或会话上下文不符的状态查询', async () => {
+    const statusRepository = {
+      getGenerationReceipt: vi.fn(),
+    };
+    const tool = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      { createArtifactWithGenerationJob: vi.fn() },
+      statusRepository,
+    ).getStatusTool();
+
+    await expect(
+      tool.handler(
+        { artifactId: artifact.id },
+        { ...context, subjectId: 'other-student' },
+      ),
+    ).rejects.toThrow('canvas_artifact_scope_mismatch');
+    await expect(
+      tool.handler(
+        { artifactId: artifact.id },
+        { ...context, conversationId: 'other-conversation' },
+      ),
+    ).rejects.toThrow('canvas_artifact_scope_mismatch');
+    expect(statusRepository.getGenerationReceipt).not.toHaveBeenCalled();
+  });
+
+  it('每次读取最新回执，不缓存旧的 proposed 状态', async () => {
+    const baseReceipt = {
+      jobId: job.id,
+      artifactId: artifact.id,
+      progress: null,
+      artifactStatus: 'proposed' as const,
+      kind: artifact.kind,
+      title: artifact.title,
+    };
+    const statusRepository = {
+      getGenerationReceipt: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ...baseReceipt,
+          jobStatus: 'queued',
+          committedVersion: null,
+        })
+        .mockResolvedValueOnce({
+          ...baseReceipt,
+          jobStatus: 'running',
+          committedVersion: null,
+        })
+        .mockResolvedValueOnce({
+          ...baseReceipt,
+          jobStatus: 'succeeded',
+          committedVersion: { version: 1 },
+        }),
+    };
+    const tool = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      { createArtifactWithGenerationJob: vi.fn() },
+      statusRepository,
+    ).getStatusTool();
+
+    const results = [];
+    for (let index = 0; index < 3; index += 1) {
+      results.push(await tool.handler({ artifactId: artifact.id }, context));
+    }
+
+    expect(results.map((result) => result.status)).toEqual([
+      'proposed',
+      'running',
+      'succeeded',
+    ]);
+    expect(statusRepository.getGenerationReceipt).toHaveBeenCalledTimes(3);
+  });
+
   it('拒绝 Tool Kernel 注入范围与组合根不一致', async () => {
     const repository = {
       createArtifactWithGenerationJob: vi.fn(),

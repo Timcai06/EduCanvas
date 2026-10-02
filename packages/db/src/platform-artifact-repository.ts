@@ -145,6 +145,18 @@ export interface PlatformArtifactJob {
   queueJobKey: string | null;
 }
 
+/** A scope-bound, content-free read receipt for one artifact generation job. */
+export interface PlatformArtifactGenerationReceipt {
+  jobId: string;
+  artifactId: string;
+  jobStatus: ArtifactJobStatus;
+  progress: number | null;
+  artifactStatus: ArtifactStatus;
+  kind: string;
+  title: string;
+  committedVersion: { version: number } | null;
+}
+
 /** 生成任务合法转移表;terminal 态无出边,cancelled 可从任何非 terminal 态进入。 */
 const JOB_TRANSITIONS: Record<ArtifactJobStatus, readonly ArtifactJobStatus[]> =
   {
@@ -230,6 +242,65 @@ export class DrizzlePlatformArtifactRepository {
       permission: 'notebook.read',
     });
     return toArtifact(row);
+  }
+
+  /**
+   * Read an artifact's latest generation job only when its owner, Notebook, and
+   * Conversation all match the trusted current-turn scope. A missing or
+   * out-of-scope artifact returns the same null result so this tool cannot probe
+   * another tenant's artifacts. The returned receipt deliberately omits params,
+   * checkpoints, and failure details; a committed version is joined in the same
+   * statement as job status.
+   */
+  async getGenerationReceipt(input: {
+    artifactId: string;
+    spaceId: string;
+    conversationId: string;
+    trustedSubjectId: string;
+  }): Promise<PlatformArtifactGenerationReceipt | null> {
+    const [row] = await this.database
+      .select({
+        jobId: artifactGenerationJobs.id,
+        artifactId: artifacts.id,
+        jobStatus: artifactGenerationJobs.status,
+        progress: artifactGenerationJobs.progress,
+        artifactStatus: artifacts.status,
+        kind: artifacts.kind,
+        title: artifacts.title,
+        committedVersion: artifactVersions.version,
+      })
+      .from(artifactGenerationJobs)
+      .innerJoin(artifacts, eq(artifactGenerationJobs.artifactId, artifacts.id))
+      .leftJoin(
+        artifactVersions,
+        and(
+          eq(artifactVersions.artifactId, artifacts.id),
+          eq(artifactVersions.generationJobId, artifactGenerationJobs.id),
+        ),
+      )
+      .where(
+        and(
+          eq(artifacts.id, input.artifactId),
+          eq(artifacts.ownerSubjectId, input.trustedSubjectId),
+          eq(artifacts.spaceId, input.spaceId),
+          eq(artifacts.conversationId, input.conversationId),
+        ),
+      )
+      .orderBy(
+        desc(artifactGenerationJobs.createdAt),
+        desc(artifactGenerationJobs.id),
+      )
+      .limit(1);
+    if (!row) return null;
+    return {
+      ...row,
+      jobStatus: row.jobStatus as ArtifactJobStatus,
+      artifactStatus: row.artifactStatus as ArtifactStatus,
+      committedVersion:
+        row.committedVersion === null
+          ? null
+          : { version: row.committedVersion },
+    };
   }
 
   /**
