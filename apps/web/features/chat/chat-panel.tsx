@@ -16,6 +16,7 @@ import { motionDuration } from '@/features/theme/motion';
 import type { HtmlPreviewRequest } from './markdown';
 import { MessageMarkdown } from './markdown';
 import type { ChatMessage } from './messages';
+import type { AgentTurnSendOutcome } from './turn-send-outcome';
 import { ConversationArtifactCard } from './conversation-artifact-card';
 import { ArtifactConfirmationCard } from '@/features/workspace/general/artifact-confirmation-card';
 import type { ArtifactProposalKind } from '@educanvas/agent-core';
@@ -167,7 +168,7 @@ export function ChatPanel({
     confirmationId: string;
     kind: ArtifactProposalKind;
     clientMessageId: string;
-  }) => Promise<void> | void;
+  }) => Promise<AgentTurnSendOutcome> | void;
   assistantLabel?: string;
 }) {
   return (

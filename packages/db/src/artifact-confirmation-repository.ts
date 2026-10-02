@@ -1,5 +1,5 @@
 import type { ArtifactProposalKind } from '@educanvas/agent-core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   agentOperations,
@@ -132,7 +132,7 @@ export class DrizzleArtifactConfirmationRepository {
     });
   }
 
-  async listPending(
+  async listRecoverable(
     scope: ArtifactConfirmationScope,
   ): Promise<readonly ArtifactConfirmationSnapshot[]> {
     const rows = await this.database
@@ -143,11 +143,31 @@ export class DrizzleArtifactConfirmationRepository {
           eq(artifactConfirmationRequests.actorUserId, scope.actorUserId),
           eq(artifactConfirmationRequests.notebookId, scope.notebookId),
           eq(artifactConfirmationRequests.conversationId, scope.conversationId),
-          eq(artifactConfirmationRequests.status, 'pending'),
+          inArray(artifactConfirmationRequests.status, ['pending', 'confirmed']),
         ),
       )
       .orderBy(desc(artifactConfirmationRequests.createdAt));
     return rows.map(snapshot);
+  }
+
+  async getForExecution(
+    input: ArtifactConfirmationScope & { confirmationId: string },
+  ): Promise<ArtifactConfirmationSnapshot> {
+    const [row] = await this.database
+      .select()
+      .from(artifactConfirmationRequests)
+      .where(
+        and(
+          eq(artifactConfirmationRequests.id, input.confirmationId),
+          eq(artifactConfirmationRequests.actorUserId, input.actorUserId),
+          eq(artifactConfirmationRequests.notebookId, input.notebookId),
+          eq(artifactConfirmationRequests.conversationId, input.conversationId),
+          inArray(artifactConfirmationRequests.status, ['pending', 'confirmed']),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new ArtifactConfirmationNotFoundError();
+    return snapshot(row);
   }
 
   async updateKind(

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ArtifactProposalKind } from '@educanvas/agent-core';
+import type { AgentTurnSendOutcome } from '@/features/chat/turn-send-outcome';
 import { Button } from '@/components/ui/button';
 import { notebookScopedFetch } from './notebook-request-context';
 
@@ -19,14 +20,22 @@ export function ArtifactConfirmationCard({
   confirmation,
   onConfirm,
 }: {
-  confirmation: { id: string; kind: ArtifactProposalKind; title: string };
+  confirmation: {
+    id: string;
+    kind: ArtifactProposalKind;
+    title: string;
+    status: 'pending' | 'confirmed';
+  };
   onConfirm: (
     confirmationId: string,
     kind: ArtifactProposalKind,
     clientMessageId: string,
-  ) => Promise<void> | void;
+  ) => Promise<AgentTurnSendOutcome> | void;
 }) {
   const [kind, setKind] = useState(confirmation.kind);
+  const [confirmed, setConfirmed] = useState(
+    confirmation.status === 'confirmed',
+  );
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,19 +63,24 @@ export function ArtifactConfirmationCard({
       const result = (await response.json()) as {
         clientMessageId?: unknown;
         kind?: unknown;
+        status?: unknown;
       };
       if (
         typeof result.clientMessageId !== 'string' ||
         typeof result.kind !== 'string' ||
+        (result.status !== 'pending' && result.status !== 'confirmed') ||
         !KINDS.some((item) => item.value === result.kind)
       ) {
         throw new Error('artifact_confirmation_failed');
       }
-      await onConfirm(
+      setKind(result.kind as ArtifactProposalKind);
+      setConfirmed(result.status === 'confirmed');
+      const outcome = await onConfirm(
         confirmation.id,
         result.kind as ArtifactProposalKind,
         result.clientMessageId,
       );
+      if (outcome !== 'completed') throw new Error('artifact_turn_incomplete');
       setDismissed(true);
     } catch {
       setError('操作未完成，请重试。');
@@ -91,7 +105,7 @@ export function ArtifactConfirmationCard({
           onChange={(event) =>
             setKind(event.currentTarget.value as ArtifactProposalKind)
           }
-          disabled={busy}
+          disabled={busy || confirmed}
         >
           {KINDS.map((item) => (
             <option key={item.value} value={item.value}>
@@ -107,12 +121,16 @@ export function ArtifactConfirmationCard({
           disabled={busy}
           onClick={() => void postAction('select')}
         >
-          {busy ? '处理中…' : '确认并创建'}
+          {busy
+            ? '处理中…'
+            : confirmed
+              ? '继续创建'
+              : '确认并创建'}
         </Button>
         <Button
           variant="secondary"
           size="md"
-          disabled={busy}
+          disabled={busy || confirmed}
           onClick={() => void postAction('cancel')}
         >
           取消

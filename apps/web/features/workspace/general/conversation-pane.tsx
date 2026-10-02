@@ -69,7 +69,7 @@ export interface ConversationPaneProps {
     confirmationId: string;
     kind: ArtifactProposalKind;
     clientMessageId: string;
-  }) => Promise<void> | void;
+  }) => Promise<import('@/features/chat/turn-send-outcome').AgentTurnSendOutcome> | void;
   /** Live 出室瞬间回调（EXIT 时同步触发）：信笺等带回写库与退场动画并行。 */
   onLiveExit?: (payload: LiveVoiceExitPayload) => void;
 }

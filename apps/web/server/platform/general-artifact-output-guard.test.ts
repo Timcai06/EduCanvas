@@ -253,6 +253,26 @@ describe('ArtifactOutputGuard 对抗性真实性校验', () => {
   });
 });
 
+describe('confirmed artifact output', () => {
+  it('requires the exact Slides receipt and emits only factual status', async () => {
+    const guard = new ArtifactOutputGuard(
+      'interactive_artifact',
+      artifacts([{ ...proposed, artifactKind: 'slides' }]),
+      operationId,
+      'slides',
+    );
+    expect(
+      guard.completionRequirement.isSatisfied([
+        { ...result, output: { ...(result.output as object), kind: 'slides' } },
+      ]),
+    ).toBe(true);
+    await expect(guard.finish()).resolves.toEqual({
+      kind: 'emit',
+      safeDeltas: [safeSubmission],
+    });
+  });
+});
+
 const command: TurnApplicationCommand = {
   protocol: 'educanvas.turn.v2',
   operationId,

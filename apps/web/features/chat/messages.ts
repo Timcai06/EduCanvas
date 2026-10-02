@@ -5,6 +5,7 @@ export interface ArtifactConfirmationDTO {
   id: string;
   kind: ArtifactProposalKind;
   title: string;
+  status: 'pending' | 'confirmed';
 }
 
 export type ChatMessageStatus =

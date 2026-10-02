@@ -138,17 +138,6 @@ export async function loadGeneralChatPageData(explicit?: {
     trustedSubjectId: identity.studentId,
     operationIds: messages.map((message) => message.operationId),
   });
-  const pendingConfirmations = await artifactConfirmations.listPending({
-    actorUserId: identity.studentId,
-    notebookId: conversation.spaceId,
-    conversationId: conversation.id,
-  });
-  const confirmationsByOperation = new Map(
-    pendingConfirmations.map((confirmation) => [
-      confirmation.operationId,
-      confirmation,
-    ]),
-  );
   const artifactsByOperation = new Map<
     string,
     (typeof referencedArtifacts)[number][]
@@ -159,6 +148,26 @@ export async function loadGeneralChatPageData(explicit?: {
       reference,
     ]);
   }
+  const recoverableConfirmations = await artifactConfirmations.listRecoverable({
+    actorUserId: identity.studentId,
+    notebookId: conversation.spaceId,
+    conversationId: conversation.id,
+  });
+  const confirmationsByOperation = new Map(
+    recoverableConfirmations
+      .filter((confirmation) => {
+        if (confirmation.status !== 'confirmed') return true;
+        const execution = messages.find(
+          (message) =>
+            message.clientMessageId === confirmation.confirmationMessageId,
+        );
+        return (
+          !execution ||
+          !(artifactsByOperation.get(execution.operationId)?.length)
+        );
+      })
+      .map((confirmation) => [confirmation.operationId, confirmation]),
+  );
   const citationsByMessage = new Map<string, typeof citations>();
   for (const citation of citations) {
     citationsByMessage.set(citation.assistantMessageId, [
@@ -202,8 +211,12 @@ export async function loadGeneralChatPageData(explicit?: {
               return confirmation
                 ? {
                     id: confirmation.id,
-                    kind: confirmation.artifactKind,
+                    kind: confirmation.confirmedKind ?? confirmation.artifactKind,
                     title: confirmation.title,
+                    status:
+                      confirmation.status === 'confirmed'
+                        ? 'confirmed'
+                        : 'pending',
                   }
                 : undefined;
             })()

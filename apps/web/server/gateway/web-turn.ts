@@ -29,7 +29,10 @@ import {
   prepareGatewayGeneralTurnContext,
 } from '../platform/general-turn';
 import { webResearchCheckpoints } from '../platform/general-turn-persistence';
-import { DrizzleArtifactConfirmationRepository } from '@educanvas/db';
+import {
+  DrizzleArtifactConfirmationRepository,
+  artifactConfirmationMessageId,
+} from '@educanvas/db';
 import type { ArtifactProposalKind } from '@educanvas/agent-core';
 import { loadOwnedGeneralRequestConversation } from '../platform/general-request-conversation-context';
 import { gatewayToLegacy } from './turn-application-projection';
@@ -120,26 +123,37 @@ export async function beginWebGatewayTurn(
     throw new PlatformTurnOwnershipError();
   }
   let confirmedArtifactKind: ArtifactProposalKind | undefined;
+  let confirmationRepository: DrizzleArtifactConfirmationRepository | null = null;
+  let confirmationScope:
+    | {
+        confirmationId: string;
+        actorUserId: string;
+        notebookId: string;
+        conversationId: string;
+      }
+    | null = null;
   if (confirmation || request.artifactConfirmationId) {
-    const confirmationRepository = new DrizzleArtifactConfirmationRepository();
-    const confirmed = await confirmationRepository.confirm({
+    confirmationRepository = new DrizzleArtifactConfirmationRepository();
+    confirmationScope = {
       confirmationId:
         confirmation?.confirmationId ?? request.artifactConfirmationId!,
       actorUserId: identity.studentId,
       notebookId: conversation.spaceId,
       conversationId: conversation.id,
-    });
-    if (request.clientMessageId !== confirmed.confirmationMessageId) {
+    };
+    const confirmed = await confirmationRepository.getForExecution(
+      confirmationScope,
+    );
+    if (
+      request.clientMessageId !==
+      (confirmed.confirmationMessageId ??
+        artifactConfirmationMessageId(confirmed.id))
+    ) {
       throw Object.assign(new Error('artifact_confirmation_message_mismatch'), {
         code: 'artifact_confirmation_message_mismatch' as const,
       });
     }
-    if (!confirmed.confirmedKind) {
-      throw Object.assign(new Error('artifact_confirmation_not_ready'), {
-        code: 'artifact_confirmation_not_ready' as const,
-      });
-    }
-    confirmedArtifactKind = confirmed.confirmedKind;
+    confirmedArtifactKind = confirmed.confirmedKind ?? confirmed.artifactKind;
     request = {
       ...request,
       text: '请根据前一条请求创建我刚确认的持久产物。',
@@ -252,6 +266,19 @@ export async function beginWebGatewayTurn(
   }
   const operationId = runner.operationId;
   if (!operationId) throw new Error('gateway_turn_operation_missing');
+  if (confirmationRepository && confirmationScope) {
+    try {
+      await confirmationRepository.confirm({
+        ...confirmationScope,
+        artifactKind: confirmedArtifactKind,
+      });
+    } catch (error) {
+      await service
+        .requestCancel({ operationId, principalUserId: principal.userId })
+        .catch(() => undefined);
+      throw error;
+    }
+  }
   async function* primed(): AsyncGenerator<GatewayOperationEvent> {
     yield* prefix;
     while (true) {

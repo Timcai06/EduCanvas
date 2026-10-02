@@ -122,8 +122,7 @@ export async function beginGatewayGeneralTurnApplication(input: {
     {
       deepResearch: input.request.mode === 'deep_research',
       allowArtifactWrites:
-        (input.request.outputPreference ?? 'auto') !== 'auto' &&
-        input.request.artifactConfirmationId === undefined,
+        (input.request.outputPreference ?? 'auto') !== 'auto',
       allowArtifactConfirmation:
         (input.request.outputPreference ?? 'auto') === 'auto' &&
         input.request.supportsArtifactConfirmation === true &&

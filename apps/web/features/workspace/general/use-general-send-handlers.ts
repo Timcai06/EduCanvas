@@ -6,6 +6,7 @@ import type {
   OutputPreference,
 } from '@educanvas/agent-core';
 import type { AgentTurnSendOptions } from '@/features/chat/turn-client-types';
+import type { AgentTurnSendOutcome } from '@/features/chat/turn-send-outcome';
 import type {
   LiveVoiceContextAsset,
   LiveVoiceContextSnapshot,
@@ -24,7 +25,7 @@ type GeneralTurnSender = (
   preference?: OutputPreference,
   mode?: 'chat' | 'deep_research',
   confirmation?: ConfirmationAction,
-) => void;
+  ) => Promise<AgentTurnSendOutcome>;
 
 export function createArtifactConfirmationSendOptions(
   preference: OutputPreference,
@@ -54,7 +55,7 @@ export function useGeneralSendHandlers(send: GeneralTurnSender) {
           : confirmation.kind === 'web_app'
             ? 'web_app'
             : 'interactive_artifact';
-      send(
+      return send(
         '请根据前一条请求创建我确认的持久产物。',
         undefined,
         preference,

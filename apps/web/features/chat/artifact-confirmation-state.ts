@@ -10,13 +10,22 @@ export function applyArtifactConfirmation(
 ): TeachingTurnState {
   return {
     ...state,
-    messages: updateAssistant(state.messages, assistantId, (message) => ({
-      ...message,
-      artifactConfirmation: {
-        id: event.confirmationId,
-        kind: event.kind as ArtifactProposalKind,
-        title: event.title,
-      },
-    })),
+    messages: updateAssistant(state.messages, assistantId, (message) => {
+      const existing = message.artifactConfirmation;
+      if (
+        existing?.id === event.confirmationId &&
+        existing.status === 'confirmed'
+      )
+        return message;
+      return {
+        ...message,
+        artifactConfirmation: {
+          id: event.confirmationId,
+          kind: event.kind as ArtifactProposalKind,
+          title: event.title,
+          status: 'pending',
+        },
+      };
+    }),
   };
 }
